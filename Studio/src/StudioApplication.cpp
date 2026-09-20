@@ -256,10 +256,16 @@ namespace
             if (!IsVisible())
                 return;
             const bool hovered = state == wi::gui::FOCUS || state == wi::gui::ACTIVE;
-            const wi::Color border = activeStage_ || hovered
-                ? wi::Color(207, 120, 71, 255) : wi::Color(42, 54, 64, 255);
+            // Match the approved inspector hierarchy: orange is a restrained
+            // selection cue, never a full-card warning state.
+            const wi::Color border = activeStage_
+                ? wi::Color(66, 80, 91, 255)
+                : hovered ? wi::Color(86, 102, 114, 255)
+                : wi::Color(42, 54, 64, 255);
             const wi::Color fill = activeStage_
-                ? wi::Color(44, 35, 29, 255) : wi::Color(18, 26, 33, 255);
+                ? wi::Color(43, 36, 31, 255)
+                : hovered ? wi::Color(27, 37, 46, 255)
+                : wi::Color(21, 29, 36, 255);
             wi::image::Params outer(translation.x, translation.y, scale.x, scale.y, border);
             outer.blendFlag = wi::enums::BLENDMODE_ALPHA;
             outer.enableCornerRounding();
@@ -273,7 +279,7 @@ namespace
             wi::image::Draw(nullptr, inner, cmd);
             wi::font::Params title(translation.x + 15.0f, translation.y + 12.0f, 11,
                 wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
-                activeStage_ ? wi::Color(255, 181, 133, 255) : wi::Color(231, 238, 242, 255),
+                activeStage_ ? wi::Color(247, 181, 133, 255) : wi::Color(231, 238, 242, 255),
                 wi::Color::Transparent());
             title.spacingX = 0.22f; title.bolden = 0.18f;
             wi::font::Draw(GetText(), title, cmd);
@@ -11644,21 +11650,23 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             std::abs(bounds.maximum.x - bounds.minimum.x) * scale.x,
             std::abs(bounds.maximum.y - bounds.minimum.y) * scale.y,
             std::abs(bounds.maximum.z - bounds.minimum.z) * scale.z);
-        const float radius = std::max(
-            0.25f,
-            0.5f * std::sqrt(
-                extents.x * extents.x +
-                extents.y * extents.y +
-                extents.z * extents.z));
-
-        // A longer, neutral preview lens avoids the exaggerated near/far
-        // proportions produced by the editor camera when it is placed close
-        // to a character. Distance follows the measured, scaled bounds so a
-        // boot, head or large prop cannot accidentally fill the near plane.
+        // Frame from the viewport axes, not a bounding sphere. A T-pose's
+        // outstretched arms made the old sphere distance dominate, leaving a
+        // character tiny in the preview. The vertical silhouette is the
+        // primary importer presentation; width is still respected so geometry
+        // is not unexpectedly cropped.
+        const float halfVertical = std::max(0.15f, extents.y * 0.5f);
+        const float halfHorizontal = std::max(0.15f, extents.x * 0.5f);
+        constexpr float PreviewAspect = 1.65f; // available preview area
         camera->fov = CreatorImportPreviewFov;
+        const float halfFovTangent =
+            std::tan(CreatorImportPreviewFov * 0.5f);
+        const float distanceForHeight = halfVertical / halfFovTangent;
+        const float distanceForWidth =
+            halfHorizontal / (halfFovTangent * PreviewAspect);
         const float distance = std::max(
-            2.5f,
-            radius / std::sin(CreatorImportPreviewFov * 0.5f) * 1.2f);
+            2.15f,
+            std::max(distanceForHeight, distanceForWidth) * 1.06f);
         const XMVECTOR target = XMLoadFloat3(&center);
         const XMVECTOR viewDirection = XMVector3Normalize(
             XMVectorSet(0.32f, 0.12f, -1.0f, 0.0f));

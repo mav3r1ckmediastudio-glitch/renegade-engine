@@ -242,3 +242,11 @@ Next: verify Studio is saved/closed before relinking the Release Studio executab
 - A separate older Studio process remains running from the protected historical importer worktree. This build used the dedicated UI-fidelity worktree and did not overwrite, relink, or terminate the running executable.
 - Routine UI work remains local-build first. The failed GitHub job is an integration signal, not a blocker to local iteration; do not trigger further GitHub Actions for ordinary UI adjustments. Before integration/merge, the exact pushed PR head must receive full Windows Debug/Release CI.
 - Next action: commit and push this verified visibility correction, update PR #172 with the exact SHA and CI explanation, then launch/inspect the dedicated local Release Studio build when safe. The supplied 1.82 m male FBX is still unintegrated and must not be committed publicly without the owner's explicit permission.
+
+
+### 20 September 2026 — visual-pass correction in progress
+
+- Owner rejected the first native visual pass: it remained recognisably the old importer, with a white reference block, weak camera framing, a leaked AUDIO marker and over-bright orange stage treatment. Do not describe that checkpoint as mockup fidelity.
+- Source-only local correction now compiles: camera framing uses vertical and horizontal viewport axes rather than the full bounding sphere, so T-pose arm span no longer makes the character tiny; active inspector cards use the approved restrained dark selection hierarchy rather than warning-orange borders.
+- Exact command: `MSBuild BUILD/renegade/Studio/RenegadeStudio.vcxproj /t:ClCompile /p:Configuration=Release /p:Platform=x64 /m:2 /v:minimal` — PASS (exit 0; pre-existing C4834 warning). The local UI-fidelity Studio instance remains open, so this change is deliberately not linked over its executable.
+- Next action: replace the white billboard with a real fixed 1.82 m reference in the transient preview, remove the actual AUDIO chrome source, then close/relink only after the owner exits the dedicated UI-fidelity Studio process. Continue local-first and push each coherent checkpoint.
