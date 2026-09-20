@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <commdlg.h>
 #include <cmath>
 #include <cstring>
 #include <cfloat>
@@ -5080,46 +5081,46 @@ namespace renegade::studio
                 creatorModelImporter.committing)
             {
                 creatorImportExternalAnimationStatus.SetText(
-                    "FILE PICKER UNAVAILABLE // no active, editable Character preview.");
+                    "FILE PICKER UNAVAILABLE // no editable Character preview.");
                 return;
             }
-            creatorImportExternalAnimationStatus.SetText(
-                "OPENING WINDOWS FILE PICKER // select FBX, GLTF or GLB; Esc cancels.");
+            // The engine's detached dialog has no owner and can appear behind
+            // Studio. Use an owned, single-file Windows dialog on the UI thread.
+            // A user can add additional sources with repeated selections.
+            creatorImportExternalAnimationStatus.SetText("OPENING WINDOWS FILE PICKER...");
             const auto previewIdentity = creatorModelImporter.previewScene;
             const auto sourceIdentity = creatorModelImporter.sourcePath;
-            wi::helper::FileDialogParams params;
-            params.type = wi::helper::FileDialogParams::OPEN;
-            params.description = "External humanoid animation (FBX, GLTF, GLB, WISCENE, VRM, VRMA)";
-            params.extensions = {"fbx", "gltf", "glb", "wiscene", "vrm", "vrma"};
-            params.multiselect = true;
-            wi::helper::FileDialog(params,
-                [previewIdentity, sourceIdentity](const std::string& path)
+            std::array<wchar_t, 8192> fileBuffer = {};
+            OPENFILENAMEW dialog = {};
+            dialog.lStructSize = sizeof(dialog);
+            dialog.hwndOwner = GetActiveWindow();
+            dialog.lpstrFile = fileBuffer.data();
+            dialog.nMaxFile = static_cast<DWORD>(fileBuffer.size());
+
+            dialog.lpstrFilter =
+                L"Animation files\0*.fbx;*.gltf;*.glb;*.wiscene;*.vrm;*.vrma\0"
+                L"All files\0*.*\0";
+            dialog.nFilterIndex = 1;
+            dialog.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST |
+                OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+            if (!GetOpenFileNameW(&dialog))
+            {
+                const DWORD error = CommDlgExtendedError();
+                creatorImportExternalAnimationStatus.SetText(error == 0
+                    ? "FILE PICKER CANCELLED // no changes made."
+                    : "FILE PICKER FAILED // Windows code " + std::to_string(error));
+                return;
+            }
+            const std::string path = fs::path(fileBuffer.data()).generic_u8string();
+            wi::eventhandler::Subscribe_Once(
+                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [previewIdentity, sourceIdentity, path](std::uint64_t)
                 {
-                    if (path.empty())
+                    if (!creatorModelImporter.active || creatorModelImporter.committing ||
+                        creatorModelImporter.previewScene.get() != previewIdentity.get() ||
+                        creatorModelImporter.sourcePath != sourceIdentity)
                         return;
-                    wi::eventhandler::Subscribe_Once(
-                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                        [previewIdentity, sourceIdentity, path](std::uint64_t)
-                        {
-                            if (!creatorModelImporter.active ||
-                                creatorModelImporter.committing ||
-                                creatorModelImporter.previewScene.get() != previewIdentity.get() ||
-                                creatorModelImporter.sourcePath != sourceIdentity)
-                                return;
-                            QueueCreatorExternalAnimation(path);
-                        });
-                },
-                [previewIdentity, sourceIdentity]()
-                {
-                    wi::eventhandler::Subscribe_Once(
-                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                        [previewIdentity, sourceIdentity](std::uint64_t)
-                        {
-                            if (creatorModelImporter.active &&
-                                creatorModelImporter.previewScene.get() == previewIdentity.get() &&
-                                creatorModelImporter.sourcePath == sourceIdentity)
-                                RefreshCreatorExternalAnimationQueue();
-                        });
+                    QueueCreatorExternalAnimation(path);
                 });
         };
         creatorImportExternalAnimationAdd.OnClick(openExternalAnimationPicker);
@@ -5339,6 +5340,13 @@ namespace renegade::studio
             group.SetShadowRadius(0.0f);
             importScalePanel_.AddWidget(&group);
         }
+        // Importer dropdowns use one shared popup hitbox/render layout;
+        // Wicked's scrolling Window cannot reliably own their native popups.
+        for (auto* combo : {&creatorImportDimensionPreset, &importScaleModeCombo_,
+            &creatorImportMaterialCombo, &creatorImportTextureSlotCombo,
+            &creatorImportLightingPreset, &creatorImportAnimationCombo,
+            &creatorImportAnimationEnabled})
+            combo->SetImporterPopupMode(true);
         importScalePanel_.InitializeInspectorShell();
         // Hide only after all child controls have inherited an enabled parent.
         importScalePanel_.SetVisible(false);
