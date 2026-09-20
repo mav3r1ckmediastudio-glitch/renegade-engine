@@ -294,6 +294,57 @@ namespace
         bool activeStage_ = false;
     };
 
+    // The footer is intentionally one real button, not a synthetic timeline.
+    // It presents the existing selected-clip operation as a persistent
+    // transport strip without claiming a playhead that the importer does not
+    // own.
+    class CreatorImportPlaybackFooter final : public renegade::studio::RenegadeButton
+    {
+    public:
+        void Render(const wi::Canvas&, const wi::graphics::CommandList cmd) const override
+        {
+            if (!IsVisible())
+                return;
+            const bool engaged = state == wi::gui::FOCUS || state == wi::gui::ACTIVE;
+            const wi::Color border = engaged ? wi::Color(207, 120, 71, 255)
+                : wi::Color(51, 63, 72, 255);
+            const wi::Color fill = IsEnabled() ? wi::Color(13, 20, 25, 242)
+                : wi::Color(13, 18, 22, 215);
+            wi::image::Params outer(translation.x, translation.y, scale.x, scale.y, border);
+            outer.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            outer.enableCornerRounding();
+            for (auto& corner : outer.corners_rounding) { corner.radius = 7.0f; corner.segments = 8; }
+            wi::image::Draw(nullptr, outer, cmd);
+            wi::image::Params inner(translation.x + 1.0f, translation.y + 1.0f,
+                scale.x - 2.0f, scale.y - 2.0f, fill);
+            inner.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            inner.enableCornerRounding();
+            for (auto& corner : inner.corners_rounding) { corner.radius = 6.0f; corner.segments = 8; }
+            wi::image::Draw(nullptr, inner, cmd);
+            const wi::Color accent = IsEnabled() ? wi::Color(237, 143, 83, 255)
+                : wi::Color(93, 104, 112, 255);
+            wi::image::Params play(translation.x + 8.0f, translation.y + 7.0f, 20.0f, 20.0f, accent);
+            play.enableCornerRounding();
+            for (auto& corner : play.corners_rounding) { corner.radius = 10.0f; corner.segments = 10; }
+            wi::image::Draw(nullptr, play, cmd);
+            wi::font::Params icon(translation.x + 15.0f, translation.y + 9.0f, 8,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                wi::Color(20, 23, 25, 255), wi::Color::Transparent());
+            wi::font::Draw("▶", icon, cmd);
+            wi::font::Params title(translation.x + 36.0f, translation.y + 7.0f, 9,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                IsEnabled() ? wi::Color(225, 232, 236, 255) : wi::Color(125, 139, 149, 255),
+                wi::Color::Transparent());
+            title.spacingX = 0.18f; title.bolden = 0.15f;
+            wi::font::Draw("PLAYBACK // " + GetText(), title, cmd);
+            wi::font::Params detail(translation.x + 36.0f, translation.y + 19.0f, 7,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                IsEnabled() ? wi::Color(129, 150, 163, 255) : wi::Color(91, 104, 113, 255),
+                wi::Color::Transparent());
+            wi::font::Draw(IsEnabled() ? "USES THE SELECTED NATIVE CLIP" : "SELECT A CHARACTER CLIP IN ANIMATIONS", detail, cmd);
+        }
+    };
+
 
     struct CreatorThumbnailWeatherSnapshot
     {
@@ -673,7 +724,7 @@ namespace
     renegade::studio::RenegadeButton creatorImportZoomIn;
     renegade::studio::RenegadeButton creatorImportPreviousStage;
     renegade::studio::RenegadeButton creatorImportNextStage;
-    renegade::studio::RenegadeButton creatorImportPlaybackToggle;
+    CreatorImportPlaybackFooter creatorImportPlaybackToggle;
     wi::gui::Label creatorImportActionBar;
     wi::gui::Image creatorImportThumbnailPreview;
     wi::Resource creatorImportThumbnailPreviewResource;
@@ -4890,7 +4941,7 @@ namespace renegade::studio
         creatorImportNextStage.SetText("NEXT STAGE →");
         creatorImportNextStage.OnClick([moveStage](const wi::gui::EventArgs&) { moveStage(1); });
         creatorImportPlaybackToggle.Create("Importer Playback Toggle");
-        creatorImportPlaybackToggle.SetText("▶ PLAY SELECTED CLIP");
+        creatorImportPlaybackToggle.SetText("PLAY SELECTED CLIP");
         creatorImportPlaybackToggle.OnClick([](const wi::gui::EventArgs&)
         {
             PreviewSelectedCreatorImportAnimation(true, false);
@@ -6160,9 +6211,9 @@ namespace renegade::studio
         const float workflowY = height - 52.0f;
         creatorImportPreviousStage.SetPos(XMFLOAT2(20.0f, workflowY));
         creatorImportPreviousStage.SetSize(XMFLOAT2(142.0f, 34.0f));
-        creatorImportPlaybackToggle.SetPos(XMFLOAT2(
-            std::max(170.0f, (previewRight - 170.0f) * 0.5f), workflowY));
-        creatorImportPlaybackToggle.SetSize(XMFLOAT2(170.0f, 34.0f));
+        creatorImportPlaybackToggle.SetPos(XMFLOAT2(170.0f, workflowY));
+        creatorImportPlaybackToggle.SetSize(XMFLOAT2(
+            std::max(190.0f, previewRight - 340.0f), 34.0f));
         creatorImportNextStage.SetPos(XMFLOAT2(
             std::max(176.0f, previewRight - 158.0f), workflowY));
         creatorImportNextStage.SetSize(XMFLOAT2(142.0f, 34.0f));

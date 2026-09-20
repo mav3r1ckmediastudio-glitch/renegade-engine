@@ -24,8 +24,9 @@
 
 - A root-level `PLAY SELECTED CLIP` control now occupies the importer preview footer between the existing Previous/Next stage controls. It calls `PreviewSelectedCreatorImportAnimation(true, false)`, the same real native clip-preview path used by the existing Animations-stage Play control; it does not emulate the HTML animation or create a second animation system.
 - It is deliberately disabled for Model imports and for Character imports with no native animation entities. It is shown only while the importer is open and is hidden again on Cancel and governed commit handback. Existing Model stage skips and Character navigation remain unchanged.
+- The footer now has its own native renderer: a restrained dark strip, orange Play affordance, real selected-clip call-to-action and an explicit disabled-state explanation. Its width expands between Previous/Next without overlapping either control. It deliberately has no fabricated elapsed-time or waveform display.
 - Pending verification: source compile, PR CI, a native visual check of the exact remote head, and the Character/external-animation save/reopen/Test Game acceptance. No bridge/import/persistence/retarget source or Wicked pin was changed.
-- Next concrete action after this commit: style the real playback footer as a persistent strip without simulating clip time, then compare each expanded native stage against the supplied reference screenshots and polish only controls backed by real importer data.
+- Next concrete action after this commit: compare each expanded native stage against the supplied reference screenshots and polish only controls backed by real importer data.
 
 **Historical status below:** earlier local-branch notes are retained for provenance only. This file must be updated by Codex after every meaningful implementation checkpoint. A different assistant should read this file, inspect `git log`/`git status` and source, and continue the existing work—not restart it.
 
