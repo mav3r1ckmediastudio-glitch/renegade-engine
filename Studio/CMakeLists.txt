@@ -147,7 +147,6 @@ target_link_libraries(RenegadeStudio
         mf
         mfuuid
         evr
-        comdlg32
         strmiids
         ole32
 )

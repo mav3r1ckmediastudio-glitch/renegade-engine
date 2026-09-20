@@ -16,7 +16,6 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <commdlg.h>
 #include <cmath>
 #include <cstring>
 #include <cfloat>
@@ -976,7 +975,8 @@ namespace
                     childTransform->world._43);
                 segment.color_start = XMFLOAT4(0.20f, 0.91f, 0.96f, 0.97f);
                 segment.color_end = XMFLOAT4(1.0f, 0.64f, 0.32f, 0.97f);
-                wi::renderer::DrawLine(segment, true);
+                // Rig inspection must remain visible through the source mesh.
+                wi::renderer::DrawLine(segment, false);
             }
         }
     }
@@ -5081,46 +5081,46 @@ namespace renegade::studio
                 creatorModelImporter.committing)
             {
                 creatorImportExternalAnimationStatus.SetText(
-                    "FILE PICKER UNAVAILABLE // no editable Character preview.");
+                    "FILE PICKER UNAVAILABLE // no active, editable Character preview.");
                 return;
             }
-            // The engine's detached dialog has no owner and can appear behind
-            // Studio. Use an owned, single-file Windows dialog on the UI thread.
-            // A user can add additional sources with repeated selections.
-            creatorImportExternalAnimationStatus.SetText("OPENING WINDOWS FILE PICKER...");
+            creatorImportExternalAnimationStatus.SetText(
+                "OPENING WINDOWS FILE PICKER // select FBX, GLTF or GLB; Esc cancels.");
             const auto previewIdentity = creatorModelImporter.previewScene;
             const auto sourceIdentity = creatorModelImporter.sourcePath;
-            std::array<wchar_t, 8192> fileBuffer = {};
-            OPENFILENAMEW dialog = {};
-            dialog.lStructSize = sizeof(dialog);
-            dialog.hwndOwner = GetActiveWindow();
-            dialog.lpstrFile = fileBuffer.data();
-            dialog.nMaxFile = static_cast<DWORD>(fileBuffer.size());
-
-            dialog.lpstrFilter =
-                L"Animation files\0*.fbx;*.gltf;*.glb;*.wiscene;*.vrm;*.vrma\0"
-                L"All files\0*.*\0";
-            dialog.nFilterIndex = 1;
-            dialog.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST |
-                OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
-            if (!GetOpenFileNameW(&dialog))
-            {
-                const DWORD error = CommDlgExtendedError();
-                creatorImportExternalAnimationStatus.SetText(error == 0
-                    ? "FILE PICKER CANCELLED // no changes made."
-                    : "FILE PICKER FAILED // Windows code " + std::to_string(error));
-                return;
-            }
-            const std::string path = fs::path(fileBuffer.data()).generic_u8string();
-            wi::eventhandler::Subscribe_Once(
-                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                [previewIdentity, sourceIdentity, path](std::uint64_t)
+            wi::helper::FileDialogParams params;
+            params.type = wi::helper::FileDialogParams::OPEN;
+            params.description = "External humanoid animation (FBX, GLTF, GLB, WISCENE, VRM, VRMA)";
+            params.extensions = {"fbx", "gltf", "glb", "wiscene", "vrm", "vrma"};
+            params.multiselect = true;
+            wi::helper::FileDialog(params,
+                [previewIdentity, sourceIdentity](const std::string& path)
                 {
-                    if (!creatorModelImporter.active || creatorModelImporter.committing ||
-                        creatorModelImporter.previewScene.get() != previewIdentity.get() ||
-                        creatorModelImporter.sourcePath != sourceIdentity)
+                    if (path.empty())
                         return;
-                    QueueCreatorExternalAnimation(path);
+                    wi::eventhandler::Subscribe_Once(
+                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                        [previewIdentity, sourceIdentity, path](std::uint64_t)
+                        {
+                            if (!creatorModelImporter.active ||
+                                creatorModelImporter.committing ||
+                                creatorModelImporter.previewScene.get() != previewIdentity.get() ||
+                                creatorModelImporter.sourcePath != sourceIdentity)
+                                return;
+                            QueueCreatorExternalAnimation(path);
+                        });
+                },
+                [previewIdentity, sourceIdentity]()
+                {
+                    wi::eventhandler::Subscribe_Once(
+                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                        [previewIdentity, sourceIdentity](std::uint64_t)
+                        {
+                            if (creatorModelImporter.active &&
+                                creatorModelImporter.previewScene.get() == previewIdentity.get() &&
+                                creatorModelImporter.sourcePath == sourceIdentity)
+                                RefreshCreatorExternalAnimationQueue();
+                        });
                 });
         };
         creatorImportExternalAnimationAdd.OnClick(openExternalAnimationPicker);
@@ -5340,13 +5340,6 @@ namespace renegade::studio
             group.SetShadowRadius(0.0f);
             importScalePanel_.AddWidget(&group);
         }
-        // Importer dropdowns use one shared popup hitbox/render layout;
-        // Wicked's scrolling Window cannot reliably own their native popups.
-        for (auto* combo : {&creatorImportDimensionPreset, &importScaleModeCombo_,
-            &creatorImportMaterialCombo, &creatorImportTextureSlotCombo,
-            &creatorImportLightingPreset, &creatorImportAnimationCombo,
-            &creatorImportAnimationEnabled})
-            combo->SetImporterPopupMode(true);
         importScalePanel_.InitializeInspectorShell();
         // Hide only after all child controls have inherited an enabled parent.
         importScalePanel_.SetVisible(false);
@@ -12349,22 +12342,15 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 std::string(creatorImportTransformExpanded[index] ? "-  " : "+  ") +
                 transformGroupNames[index]);
         }
+        // Layout runs every frame. Apply each widget's final visibility only:
+        // hide-then-show resets ACTIVE/DEACTIVATING and cancels dropdowns,
+        // button releases, text editing and slider drags.
         creatorImportTransformLabel.SetVisible(false);
-        for (wi::gui::Widget* widget : {
-            static_cast<wi::gui::Widget*>(&creatorImportTransformLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportPositionX),
-            static_cast<wi::gui::Widget*>(&creatorImportPositionY),
-            static_cast<wi::gui::Widget*>(&creatorImportPositionZ),
-            static_cast<wi::gui::Widget*>(&creatorImportRotationX),
-            static_cast<wi::gui::Widget*>(&creatorImportRotationY),
-            static_cast<wi::gui::Widget*>(&creatorImportRotationZ),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleX),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleY),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleZ),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleLinked),
-            static_cast<wi::gui::Widget*>(&creatorImportDimensionPreset),
-            static_cast<wi::gui::Widget*>(&importScaleModeCombo_)})
-            widget->SetVisible(false);
+        creatorImportMaterialLabel.SetVisible(false);
+        creatorImportMaterialReadout.SetVisible(false);
+        creatorImportTextureHelp.SetVisible(false);
+        creatorImportMaterialScalarLabel.SetVisible(false);
+        creatorImportAnimationLabel.SetVisible(false);
         const auto showTransform = [section](const bool expanded,
             std::initializer_list<wi::gui::Widget*> widgets)
         {
@@ -12381,24 +12367,6 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         showTransform(creatorImportTransformExpanded[3],
             {&creatorImportDimensionPreset, &importScaleModeCombo_});
 
-        for (wi::gui::Widget* widget : {
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialCombo),
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialReadout),
-            static_cast<wi::gui::Widget*>(&creatorImportTexturePreviews),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureHelp),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureSlotCombo),
-            static_cast<wi::gui::Widget*>(&creatorImportTexturePath),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureBrowse),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureClear),
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialScalarLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportRoughness),
-            static_cast<wi::gui::Widget*>(&creatorImportMetalness),
-            static_cast<wi::gui::Widget*>(&creatorImportReflectance),
-            static_cast<wi::gui::Widget*>(&creatorImportNormalStrength),
-            static_cast<wi::gui::Widget*>(&creatorImportAoStrength),
-            static_cast<wi::gui::Widget*>(&creatorImportEmissiveStrength)})
-            widget->SetVisible(false);
         constexpr const char* materialGroupNames[] = {
             "MATERIAL ASSIGNMENTS", "TEXTURE MAPS", "PBR VALUES"};
         for (std::size_t index = 0; index < creatorImportMaterialGroups.size(); ++index)
@@ -12436,24 +12404,6 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             static_cast<wi::gui::Widget*>(&creatorImportMannequinVisible)})
             widget->SetVisible(section == 1 && creatorImportTransformExpanded[4]);
 
-        for (wi::gui::Widget* widget : {
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationCombo),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationName),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationStart),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnd),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationSpeed),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationPlay),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationPause),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationStop),
-            static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationAdd),
-            static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationRemove),
-            static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationStatus),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout)})
-            widget->SetVisible(false);
         constexpr const char* animationGroupNames[] = {
             "ANIMATION CLIPS", "EXTERNAL ANIMATION FILES"};
         for (std::size_t index = 0; index < creatorImportAnimationGroups.size(); ++index)

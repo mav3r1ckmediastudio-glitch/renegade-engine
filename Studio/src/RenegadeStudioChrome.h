@@ -59,17 +59,11 @@ namespace renegade::studio
     {
     public:
         void SetRenderTextSize(int size) noexcept;
-        void SetImporterPopupMode(bool enabled) noexcept;
-        void Update(const wi::Canvas& canvas, float dt) override;
         void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const override;
         const char* GetWidgetTypeName() const override { return "RenegadeComboBox"; }
 
     private:
-        float ImporterPopupTop(const wi::Canvas& canvas) const noexcept;
-        int ImporterVisibleItems() const noexcept;
         int renderTextSize_ = 10;
-        bool importerPopupMode_ = false;
-        bool importerPopupOpen_ = false;
     };
 
     class RenegadeSlider : public wi::gui::Slider

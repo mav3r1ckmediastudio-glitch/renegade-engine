@@ -466,105 +466,6 @@ namespace renegade::studio
         renderTextSize_ = std::clamp(size, 8, 18);
     }
 
-    void RenegadeComboBox::SetImporterPopupMode(const bool enabled) noexcept
-    {
-        importerPopupMode_ = enabled;
-        importerPopupOpen_ = false;
-        state = wi::gui::IDLE;
-    }
-
-    int RenegadeComboBox::ImporterVisibleItems() const noexcept
-    {
-        return std::min(static_cast<int>(items.size()),
-            std::max(1, maxVisibleItemCount));
-    }
-
-    float RenegadeComboBox::ImporterPopupTop(const wi::Canvas& canvas) const noexcept
-    {
-        constexpr float rowHeight = 28.0f;
-        const float totalHeight = ImporterVisibleItems() * rowHeight;
-        const float below = translation.y + scale.y + 3.0f;
-        return below + totalHeight + 6.0f <= canvas.GetLogicalHeight()
-            ? below : std::max(4.0f, translation.y - totalHeight - 3.0f);
-    }
-
-    void RenegadeComboBox::Update(const wi::Canvas& canvas, const float dt)
-    {
-        if (!importerPopupMode_)
-        {
-            wi::gui::ComboBox::Update(canvas, dt);
-            return;
-        }
-        if (!IsVisible())
-        {
-            importerPopupOpen_ = false;
-            state = wi::gui::IDLE;
-            return;
-        }
-        wi::gui::Widget::Update(canvas, dt);
-        if (dt <= 0.0f)
-            return;
-        if (!IsEnabled())
-        {
-            importerPopupOpen_ = false;
-            state = wi::gui::IDLE;
-            return;
-        }
-        constexpr float rowHeight = 28.0f;
-        const auto pointer = wi::input::GetPointer();
-        const wi::primitive::Hitbox2D rawPointer(
-            XMFLOAT2(pointer.x, pointer.y), XMFLOAT2(1.0f, 1.0f));
-        const bool pressed = wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
-        const bool headerHit = GetPointerHitbox().intersects(hitBox);
-        const int count = ImporterVisibleItems();
-        const float popupTop = ImporterPopupTop(canvas);
-        const wi::primitive::Hitbox2D popup(
-            XMFLOAT2(translation.x, popupTop),
-            XMFLOAT2(scale.x, count * rowHeight));
-        if (importerPopupOpen_)
-        {
-            if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
-            {
-                importerPopupOpen_ = false;
-                state = wi::gui::IDLE;
-                return;
-            }
-            hovered = -1;
-            if (rawPointer.intersects(popup) && count > 0)
-            {
-                const int maxScroll = std::max(0,
-                    static_cast<int>(items.size()) - count);
-                if (pointer.z != 0.0f)
-                    firstItemVisible = std::clamp(firstItemVisible -
-                        static_cast<int>(pointer.z), 0, maxScroll);
-                const int slot = static_cast<int>((pointer.y - popupTop) / rowHeight);
-                if (slot >= 0 && slot < count)
-                    hovered = firstItemVisible + slot;
-            }
-            if (pressed)
-            {
-                const int chosen = hovered;
-                importerPopupOpen_ = false;
-                // Consume this press before updating the neighbouring controls.
-                state = wi::gui::ACTIVE;
-                if (chosen >= 0 && chosen < static_cast<int>(items.size()))
-                    SetSelected(chosen);
-            }
-            else
-            {
-                state = wi::gui::ACTIVE;
-            }
-            return;
-        }
-        hovered = -1;
-        state = headerHit ? wi::gui::FOCUS : wi::gui::IDLE;
-        if (pressed && headerHit && !items.empty())
-        {
-            importerPopupOpen_ = true;
-            firstItemVisible = 0;
-            Activate();
-        }
-    }
     void RenegadeComboBox::Render(
         const wi::Canvas& canvas,
         const wi::graphics::CommandList cmd) const
@@ -573,7 +474,7 @@ namespace renegade::studio
         {
             return;
         }
-        const bool open = importerPopupMode_ ? importerPopupOpen_ : state == wi::gui::ACTIVE;
+        const bool open = state == wi::gui::ACTIVE;
         DrawBorderedRect(
             translation.x,
             translation.y,
@@ -606,36 +507,6 @@ namespace renegade::studio
             cmd);
         if (!open)
         {
-            return;
-        }
-
-        if (importerPopupMode_)
-        {
-            // The same geometry is used by Update() for pointer selection.
-            wi::graphics::Rect full = {};
-            full.right = static_cast<int32_t>(canvas.GetLogicalWidth());
-            full.bottom = static_cast<int32_t>(canvas.GetLogicalHeight());
-            ApplyScissor(canvas, full, cmd, false);
-            constexpr float rowHeight = 28.0f;
-            const float top = ImporterPopupTop(canvas);
-            const int count = ImporterVisibleItems();
-            for (int slot = 0; slot < count; ++slot)
-            {
-                const int index = firstItemVisible + slot;
-                if (index >= static_cast<int>(items.size()))
-                    break;
-                const float y = top + slot * rowHeight;
-                DrawBorderedRect(translation.x, y, scale.x, rowHeight,
-                    index == hovered ? Surface2 : Surface0,
-                    index == hovered ? Forge : BorderSoft, cmd);
-                DrawText(ElideText(items[index].name, scale.x - 20.0f,
-                        renderTextSize_),
-                    translation.x + 9.0f, y + 7.0f, renderTextSize_,
-                    index == hovered ? TextStrong : TextSecondary, cmd);
-            }
-            // All popup choices are painted above the scrolling inspector.
-            ApplyScissor(canvas, parent != nullptr ? parent->scissorRect : scissorRect,
-                cmd, false);
             return;
         }
 
