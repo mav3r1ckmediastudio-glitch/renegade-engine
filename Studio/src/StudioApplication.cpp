@@ -1,6 +1,7 @@
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
 #include "StudioUserPreferences.h"
+#include <ModelImporter.h>
 
 #include "renegade/bridge/TestLevelSnapshotService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
@@ -11853,7 +11854,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                         // Normalize the retained in-memory asset before cloning
                         // so preview and committed Character share the same pose.
                         auto* isolated = state->prepared.PeekMutableScene();
-                        (void)bridge::DisableDefaultHumanoidLookAt(*isolated);
+                        // Import preview has no authored look-at target. Disable
+                        // every native humanoid look-at BEFORE cloning and commit:
+                        // nonzero stale target vectors otherwise animate the head.
+                        for (std::size_t i = 0; i < isolated->humanoids.GetCount(); ++i)
+                            isolated->humanoids[i].SetLookAtEnabled(false);
                         creatorModelImporter = {};
                         creatorModelImporter.active = true;
                         creatorModelImporter.sourcePath = state->sourcePath;
@@ -12020,9 +12025,13 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                             fs::is_regular_file(referencePath))
                         {
                             wi::scene::Scene referenceScene;
-                            const auto referenceRoot = wi::scene::LoadModel(
-                                referenceScene, referencePath.generic_u8string(),
-                                XMMatrixIdentity(), true);
+                            // LoadModel reads WISCENE archives, never FBX. Convert the
+                            // reference using the same native FBX backend as source models.
+                            ImportModel_FBX(referencePath.generic_u8string(), referenceScene);
+                            const auto referenceRoot = referenceScene.transforms.GetCount() > 0
+                                ? referenceScene.transforms.GetEntity(0)
+                                : wi::ecs::INVALID_ENTITY;
+                            (void)bridge::ImportService::RebuildHierarchyAwareModelBounds(referenceScene);
                             const auto referenceBounds =
                                 bridge::ImportService::MeasureModelBounds(referenceScene);
                             const float nativeHeight = referenceBounds.valid
