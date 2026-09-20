@@ -276,9 +276,10 @@ namespace renegade::bridge
                         error = "Each creator animation recipe requires source index, name, start, end and enabled.";
                         return false;
                     }
-                    if (item.size() != 5)
+                    if (item.size() != 5 + (item.contains("speed") ? 1 : 0) ||
+                        (item.contains("speed") && !item.at("speed").is_number()))
                     {
-                        error = "Creator animation recipe contains unsupported fields.";
+                        error = "Creator animation recipe contains unsupported fields or speed.";
                         return false;
                     }
                     CreatorAnimationImportRecipe animation;
@@ -287,7 +288,14 @@ namespace renegade::bridge
                     animation.name = item.at("name").get<std::string>();
                     animation.start = item.at("start").get<float>();
                     animation.end = item.at("end").get<float>();
+                    animation.speed = item.value("speed", 1.0f);
                     animation.enabled = item.at("enabled").get<bool>();
+                    if (!std::isfinite(animation.speed) ||
+                        animation.speed < 0.1f || animation.speed > 4.0f)
+                    {
+                        error = "Creator animation clip speed must be between 0.1x and 4x.";
+                        return false;
+                    }
                     if (!std::isfinite(animation.start) ||
                         !std::isfinite(animation.end) ||
                         animation.end < animation.start)
@@ -385,13 +393,23 @@ namespace renegade::bridge
                     optionsJson.clear();
                     return false;
                 }
-                animations.push_back({
+                if (!std::isfinite(animation.speed) ||
+                    animation.speed < 0.1f || animation.speed > 4.0f)
+                {
+                    error = "Creator animation clip speed must be between 0.1x and 4x.";
+                    optionsJson.clear();
+                    return false;
+                }
+                nlohmann::json entry = {
                     {"enabled", animation.enabled},
                     {"end", animation.end},
                     {"name", animation.name},
                     {"source_animation_index", animation.sourceAnimationIndex},
                     {"start", animation.start},
-                });
+                };
+                if (animation.speed != 1.0f)
+                    entry["speed"] = animation.speed;
+                animations.push_back(std::move(entry));
             }
             root["animations"] = std::move(animations);
         }
@@ -546,6 +564,7 @@ namespace renegade::bridge
                 animation = source.animation;
                 animation.start = clip.start;
                 animation.end = clip.end;
+                animation.speed = clip.speed;
                 auto* name = scene.names.GetComponent(target);
                 if (name == nullptr)
                     name = &scene.names.Create(target);

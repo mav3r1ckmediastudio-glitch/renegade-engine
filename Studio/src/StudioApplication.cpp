@@ -529,6 +529,7 @@ namespace
     }
 
     void ApplyCreatorImportPreviewLighting();
+    void ApplyCreatorImportReferenceVisibility();
     struct CreatorModelImportWorkspaceState
     {
         bool active = false;
@@ -539,6 +540,9 @@ namespace
         wi::ecs::Entity previewRoot = wi::ecs::INVALID_ENTITY;
         // Fixed-height reference is part of the transient importer scene only.
         wi::ecs::Entity referenceRoot = wi::ecs::INVALID_ENTITY;
+        float referenceScale = 1.0f;
+        std::size_t importedArmatureCount = 0; // Exclude the separate 1.82m reference's armature.
+        bool boneOverlayVisible = false;
         wi::ecs::Entity previewLight = wi::ecs::INVALID_ENTITY;
         wi::scene::TransformComponent cameraBefore;
         float cameraFovBefore = XM_PIDIV4;
@@ -558,6 +562,7 @@ namespace
             std::string sourcePath;
             std::uint64_t sourceHash = 0;
             std::size_t clipCount = 0;
+            std::size_t firstSourceIndex = 0;
             std::unique_ptr<renegade::bridge::RetargetHumanoidAnimationsCommand> command;
         };
         std::vector<ExternalAnimation> externalAnimations;
@@ -661,6 +666,7 @@ namespace
         creatorModelImporter.lightElevation = 35.0f;
         creatorModelImporter.ambientBrightness = 0.35f;
         creatorModelImporter.thumbnailPresentationOverridden = true;
+        ApplyCreatorImportReferenceVisibility(); // Never put the measurement model in the asset icon.
         ApplyCreatorImportPreviewLighting();
     }
 
@@ -695,6 +701,7 @@ namespace
         creatorModelImporter.ambientBrightness =
             creatorModelImporter.thumbnailRestoreAmbientBrightness;
         creatorModelImporter.thumbnailPresentationOverridden = false;
+        ApplyCreatorImportReferenceVisibility();
         ApplyCreatorImportPreviewLighting();
     }
     renegade::studio::RenegadeComboBox creatorImportMaterialCombo;
@@ -712,6 +719,7 @@ namespace
     renegade::studio::RenegadeTextInputField creatorImportAnimationName;
     renegade::studio::RenegadeTextInputField creatorImportAnimationStart;
     renegade::studio::RenegadeTextInputField creatorImportAnimationEnd;
+    renegade::studio::RenegadeTextInputField creatorImportAnimationSpeed;
     renegade::studio::RenegadeComboBox creatorImportAnimationEnabled;
     renegade::studio::RenegadeButton creatorImportAnimationAdd;
     renegade::studio::RenegadeButton creatorImportAnimationDelete;
@@ -733,6 +741,10 @@ namespace
     renegade::studio::RenegadeButton creatorImportModelChoice;
     renegade::studio::RenegadeButton creatorImportCharacterChoice;
     wi::gui::Label creatorImportRigReadout;
+    renegade::studio::RenegadeButton creatorImportRigAutoMap;
+    renegade::studio::RenegadeCheckBox creatorImportRigBoneOverlay;
+    renegade::studio::RenegadeButton creatorImportRigRetarget;
+    renegade::studio::RenegadeButton creatorImportRigPreview;
     renegade::studio::RenegadeTextInputField creatorImportAssetName;
     renegade::studio::RenegadeTextInputField creatorImportDestination;
     renegade::studio::RenegadeSlider creatorImportPositionX;
@@ -927,6 +939,46 @@ namespace
             XMFLOAT3(rulerX + CapHalfWidth, CreatorImportStageHeight + ReferenceHeight, z));
     }
 
+    void QueueCreatorImportBoneOverlay()
+    {
+        if (!creatorModelImporter.active || !creatorModelImporter.importAsCharacter ||
+            !creatorModelImporter.boneOverlayVisible ||
+            creatorModelImporter.thumbnailCapturePending ||
+            !creatorModelImporter.previewScene.IsValid())
+            return;
+        const auto& preview = *creatorModelImporter.previewScene;
+        for (std::size_t rigIndex = 0;
+            rigIndex < std::min(creatorModelImporter.importedArmatureCount,
+                preview.armatures.GetCount()); ++rigIndex)
+        {
+            const auto& armature = preview.armatures[rigIndex];
+            for (const auto bone : armature.boneCollection)
+            {
+                const auto* hierarchy = preview.hierarchy.GetComponent(bone);
+                if (hierarchy == nullptr ||
+                    std::find(armature.boneCollection.begin(),
+                        armature.boneCollection.end(), hierarchy->parentID) ==
+                            armature.boneCollection.end())
+                    continue;
+                const auto* childTransform = preview.transforms.GetComponent(bone);
+                const auto* parentTransform = preview.transforms.GetComponent(
+                    hierarchy->parentID);
+                if (childTransform == nullptr || parentTransform == nullptr)
+                    continue;
+                wi::renderer::RenderableLine segment;
+                segment.start = XMFLOAT3(
+                    parentTransform->world._41, parentTransform->world._42,
+                    parentTransform->world._43);
+                segment.end = XMFLOAT3(
+                    childTransform->world._41, childTransform->world._42,
+                    childTransform->world._43);
+                segment.color_start = XMFLOAT4(0.20f, 0.91f, 0.96f, 0.97f);
+                segment.color_end = XMFLOAT4(1.0f, 0.64f, 0.32f, 0.97f);
+                wi::renderer::DrawLine(segment, true);
+            }
+        }
+    }
+
     void ApplyCreatorImportPreviewTransform()
     {
         auto* session = renegade::bridge::StudioSession::Current();
@@ -963,9 +1015,10 @@ namespace
             return;
         // The model stays at a fixed 1.82 m reference scale; visibility never
         // inherits or responds to the imported asset's Transform stage.
-        transform->scale_local = creatorModelImporter.mannequinVisible
-            ? XMFLOAT3(1.82f, 1.82f, 1.82f)
-            : XMFLOAT3(0.0f, 0.0f, 0.0f);
+        const float scale = creatorModelImporter.mannequinVisible &&
+            !creatorModelImporter.thumbnailPresentationOverridden
+            ? creatorModelImporter.referenceScale : 0.0f;
+        transform->scale_local = XMFLOAT3(scale, scale, scale);
         transform->SetDirty();
         transform->UpdateTransform();
     }
@@ -1213,6 +1266,7 @@ namespace
             creatorImportAnimationName.SetValue("");
             creatorImportAnimationStart.SetValue(0.0f);
             creatorImportAnimationEnd.SetValue(0.0f);
+            creatorImportAnimationSpeed.SetValue(1.0f);
             creatorImportAnimationEnabled.SetSelectedWithoutCallback(-1);
             creatorImportAnimationReadout.SetText("No animation actions detected.");
             return;
@@ -1225,11 +1279,13 @@ namespace
         creatorImportAnimationName.SetValue(clip.name);
         creatorImportAnimationStart.SetValue(clip.start);
         creatorImportAnimationEnd.SetValue(clip.end);
+        creatorImportAnimationSpeed.SetValue(clip.speed);
         creatorImportAnimationEnabled.SetSelectedWithoutCallback(clip.enabled ? 0 : 1);
         std::ostringstream out;
         out.precision(3);
         out << std::fixed << "Source action " << clip.sourceAnimationIndex + 1
             << " // " << clip.start << " - " << clip.end
+            << " // " << clip.speed << "x speed"
             << " // " << (clip.enabled ? "INCLUDED" : "EXCLUDED");
         if (creatorModelImporter.previewScene.IsValid() &&
             clip.sourceAnimationIndex < creatorModelImporter.animationEntities.size())
@@ -1283,6 +1339,7 @@ namespace
             StopCreatorImportPreviewAnimations();
             animation->start = clip.start;
             animation->end = clip.end;
+            animation->speed = clip.speed;
             (void)renegade::bridge::PlayAnimation(preview, entity, true);
         }
         else if (pause)
@@ -1333,6 +1390,12 @@ namespace
             creatorModelImporter.committing || path.empty())
             return;
         auto& preview = *creatorModelImporter.previewScene;
+        if (creatorModelImporter.importedArmatureCount == 0)
+        {
+            creatorImportExternalAnimationStatus.SetText(
+                "RETARGET UNAVAILABLE // the imported asset has no armature.");
+            return;
+        }
         std::string error;
         if (!renegade::bridge::EnsureHumanoidAnimationSourceMapping(preview, error))
         {
@@ -1340,7 +1403,9 @@ namespace
             return;
         }
         wi::ecs::Entity target = wi::ecs::INVALID_ENTITY;
-        for (std::size_t index = 0; index < preview.armatures.GetCount(); ++index)
+        for (std::size_t index = 0;
+            index < std::min(creatorModelImporter.importedArmatureCount,
+                preview.armatures.GetCount()); ++index)
         {
             const auto candidate = preview.armatures.GetEntity(index);
             if (renegade::bridge::IsHumanoidMappingValid(
@@ -1400,6 +1465,8 @@ namespace
                 return;
             }
         }
+        const std::size_t firstSourceIndex =
+            creatorModelImporter.animationEntities.size();
         for (const auto entity : created)
         {
             const auto* animation = preview.animations.GetComponent(entity);
@@ -1420,6 +1487,7 @@ namespace
         source.sourcePath = path;
         source.sourceHash = sourceHash;
         source.clipCount = created.size();
+        source.firstSourceIndex = firstSourceIndex;
         source.command = std::move(command);
         creatorModelImporter.externalAnimations.push_back(std::move(source));
         StopCreatorImportPreviewAnimations();
@@ -1437,13 +1505,30 @@ namespace
         StopCreatorImportPreviewAnimations();
         auto& last = creatorModelImporter.externalAnimations.back();
         const std::size_t count = last.clipCount;
+        const std::size_t first = last.firstSourceIndex;
         if (last.command)
             last.command->Undo();
-        for (std::size_t i = 0; i < count; ++i)
+        // Clip duplication, trimming and deletion change the recipe length;
+        // remove by stable source range, never pop unrelated authored clips.
+        creatorModelImporter.animationRecipe.erase(
+            std::remove_if(creatorModelImporter.animationRecipe.begin(),
+                creatorModelImporter.animationRecipe.end(),
+                [first, count](const renegade::bridge::CreatorAnimationImportRecipe& clip)
+                {
+                    return clip.sourceAnimationIndex >= first &&
+                        clip.sourceAnimationIndex - first < count;
+                }), creatorModelImporter.animationRecipe.end());
+        if (first <= creatorModelImporter.animationEntities.size() &&
+            count <= creatorModelImporter.animationEntities.size() - first &&
+            first <= creatorModelImporter.animationSourceRanges.size() &&
+            count <= creatorModelImporter.animationSourceRanges.size() - first)
         {
-            creatorModelImporter.animationEntities.pop_back();
-            creatorModelImporter.animationSourceRanges.pop_back();
-            creatorModelImporter.animationRecipe.pop_back();
+            creatorModelImporter.animationEntities.erase(
+                creatorModelImporter.animationEntities.begin() + first,
+                creatorModelImporter.animationEntities.begin() + first + count);
+            creatorModelImporter.animationSourceRanges.erase(
+                creatorModelImporter.animationSourceRanges.begin() + first,
+                creatorModelImporter.animationSourceRanges.begin() + first + count);
         }
         creatorModelImporter.externalAnimations.pop_back();
         creatorModelImporter.selectedAnimation = 0;
@@ -4476,6 +4561,64 @@ namespace renegade::studio
         });
         creatorImportRigReadout.Create("");
         creatorImportRigReadout.SetFitTextEnabled(true);
+        creatorImportRigAutoMap.Create("Importer Auto Map Humanoid Rig");
+        creatorImportRigAutoMap.SetText("AUTO-MAP HUMANOID RIG");
+        creatorImportRigAutoMap.OnClick([](const wi::gui::EventArgs&)
+        {
+            if (!creatorModelImporter.active || !creatorModelImporter.importAsCharacter ||
+                !creatorModelImporter.previewScene.IsValid()) return;
+            auto& preview = *creatorModelImporter.previewScene;
+            if (creatorModelImporter.importedArmatureCount == 0)
+            {
+                creatorImportRigReadout.SetText(
+                    "AUTO-MAP UNAVAILABLE // the imported asset has no armature.");
+                return;
+            }
+            std::string error;
+            if (!bridge::EnsureHumanoidAnimationSourceMapping(preview, error))
+            {
+                creatorImportRigReadout.SetText("AUTO-MAP FAILED // " + error);
+                return;
+            }
+            bool importedRigMapped = false;
+            for (std::size_t index = 0;
+                index < std::min(creatorModelImporter.importedArmatureCount,
+                    preview.armatures.GetCount()); ++index)
+                importedRigMapped |= bridge::IsHumanoidMappingValid(
+                    bridge::CaptureHumanoidMapping(preview,
+                        preview.armatures.GetEntity(index)));
+            if (!importedRigMapped)
+            {
+                creatorImportRigReadout.SetText(
+                    "AUTO-MAP INCOMPLETE // missing source-character bone mapping.");
+                return;
+            }
+            creatorImportRigReadout.SetText(
+                "AUTO-MAP APPLIED // native humanoid mapping available. "
+                "Toggle SHOW BONES to inspect the asset, or add an external "
+                "animation to retarget it onto this character.");
+        });
+        creatorImportRigBoneOverlay.Create("Show Import Skeleton Bones");
+        creatorImportRigBoneOverlay.SetText("SHOW ACTUAL SKELETON BONES");
+        creatorImportRigBoneOverlay.SetCheck(false);
+        creatorImportRigBoneOverlay.OnClick([](const wi::gui::EventArgs& args)
+        {
+            creatorModelImporter.boneOverlayVisible = args.bValue;
+        });
+        creatorImportRigRetarget.Create("Importer Retarget External Animation");
+        creatorImportRigRetarget.SetText("ADD & RETARGET EXTERNAL ANIMATION...");
+        creatorImportRigPreview.Create("Importer Preview Retargeted Animation");
+        creatorImportRigPreview.SetText("PREVIEW SELECTED CLIP ON CHARACTER");
+        creatorImportRigPreview.OnClick([](const wi::gui::EventArgs&)
+        {
+            if (creatorModelImporter.animationRecipe.empty())
+            {
+                creatorImportRigReadout.SetText(
+                    "NO PREVIEW CLIP // add and retarget an external animation first.");
+                return;
+            }
+            PreviewSelectedCreatorImportAnimation(true, false);
+        });
 
         creatorImportAssetName.Create("Creator Asset Name");
         creatorImportAssetName.SetPlaceholder("ASSET NAME");
@@ -4860,6 +5003,20 @@ namespace renegade::studio
             clip.end = std::max(args.fValue, clip.start);
             RefreshCreatorImportAnimationEditor();
         });
+        creatorImportAnimationSpeed.Create("Animation Playback Speed");
+        creatorImportAnimationSpeed.SetDescription("SPEED (0.1-4x): ");
+        creatorImportAnimationSpeed.OnInputAccepted([](const wi::gui::EventArgs& args)
+        {
+            if (creatorModelImporter.animationRecipe.empty()) return;
+            if (!std::isfinite(args.fValue) || args.fValue < 0.1f || args.fValue > 4.0f)
+            {
+                creatorImportAnimationReadout.SetText("Speed must be between 0.1x and 4x.");
+                return;
+            }
+            StopCreatorImportPreviewAnimations();
+            creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation].speed = args.fValue;
+            RefreshCreatorImportAnimationEditor();
+        });
         creatorImportAnimationEnabled.Create("Animation Included");
         creatorImportAnimationEnabled.AddItem("INCLUDE");
         creatorImportAnimationEnabled.AddItem("EXCLUDE");
@@ -4915,18 +5072,25 @@ namespace renegade::studio
         });
         creatorImportExternalAnimationAdd.Create("Queue External Character Animation");
         creatorImportExternalAnimationAdd.SetText("ADD EXTERNAL FBX / GLTF / GLB...");
-        creatorImportExternalAnimationAdd.OnClick([](const wi::gui::EventArgs&)
+        const auto openExternalAnimationPicker = [](const wi::gui::EventArgs&)
         {
             if (!creatorModelImporter.active || !creatorModelImporter.importAsCharacter ||
                 !creatorModelImporter.previewScene.IsValid() ||
                 creatorModelImporter.committing)
+            {
+                creatorImportExternalAnimationStatus.SetText(
+                    "FILE PICKER UNAVAILABLE // no active, editable Character preview.");
                 return;
+            }
+            creatorImportExternalAnimationStatus.SetText(
+                "OPENING WINDOWS FILE PICKER // select FBX, GLTF or GLB; Esc cancels.");
             const auto previewIdentity = creatorModelImporter.previewScene;
             const auto sourceIdentity = creatorModelImporter.sourcePath;
             wi::helper::FileDialogParams params;
             params.type = wi::helper::FileDialogParams::OPEN;
             params.description = "External humanoid animation (FBX, GLTF, GLB, WISCENE, VRM, VRMA)";
             params.extensions = {"fbx", "gltf", "glb", "wiscene", "vrm", "vrma"};
+            params.multiselect = true;
             wi::helper::FileDialog(params,
                 [previewIdentity, sourceIdentity](const std::string& path)
                 {
@@ -4943,8 +5107,22 @@ namespace renegade::studio
                                 return;
                             QueueCreatorExternalAnimation(path);
                         });
+                },
+                [previewIdentity, sourceIdentity]()
+                {
+                    wi::eventhandler::Subscribe_Once(
+                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                        [previewIdentity, sourceIdentity](std::uint64_t)
+                        {
+                            if (creatorModelImporter.active &&
+                                creatorModelImporter.previewScene.get() == previewIdentity.get() &&
+                                creatorModelImporter.sourcePath == sourceIdentity)
+                                RefreshCreatorExternalAnimationQueue();
+                        });
                 });
-        });
+        };
+        creatorImportExternalAnimationAdd.OnClick(openExternalAnimationPicker);
+        creatorImportRigRetarget.OnClick(openExternalAnimationPicker);
         creatorImportExternalAnimationRemove.Create("Remove Last External Animation Source");
         creatorImportExternalAnimationRemove.SetText("REMOVE LAST SOURCE");
         creatorImportExternalAnimationRemove.OnClick([](const wi::gui::EventArgs&)
@@ -5073,6 +5251,10 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAssetName),
             static_cast<wi::gui::Widget*>(&creatorImportDestination),
             static_cast<wi::gui::Widget*>(&creatorImportRigReadout),
+            static_cast<wi::gui::Widget*>(&creatorImportRigAutoMap),
+            static_cast<wi::gui::Widget*>(&creatorImportRigBoneOverlay),
+            static_cast<wi::gui::Widget*>(&creatorImportRigRetarget),
+            static_cast<wi::gui::Widget*>(&creatorImportRigPreview),
             static_cast<wi::gui::Widget*>(&creatorImportTransformLabel),
             static_cast<wi::gui::Widget*>(&creatorImportPositionX),
             static_cast<wi::gui::Widget*>(&creatorImportPositionY),
@@ -5115,6 +5297,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAnimationName),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationStart),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationEnd),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationSpeed),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
@@ -5555,6 +5738,7 @@ namespace renegade::studio
                 GetLogicalHeight());
             HandleViewportNavigation(dt, wi::input::GetPointer());
             QueueCreatorImportScaleRuler();
+            QueueCreatorImportBoneOverlay();
             if (pendingAction_ != EditorAction::None)
                 ProcessPendingAction();
             diagnosticInput.StopAt("import_workspace");
@@ -6213,7 +6397,17 @@ namespace renegade::studio
         creatorImportCharacterChoice.SetPos(XMFLOAT2(16.0f + (importScalePanelWidth - 28.0f) * 0.5f, 274.0f));
         creatorImportCharacterChoice.SetSize(XMFLOAT2((importScalePanelWidth - 28.0f) * 0.5f, 44.0f));
         creatorImportRigReadout.SetPos(XMFLOAT2(12.0f, 190.0f));
-        creatorImportRigReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 130.0f));
+        creatorImportRigReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 138.0f));
+        const auto rigRow = [importScalePanelWidth](wi::gui::Widget& widget,
+            const float y)
+        {
+            widget.SetPos(XMFLOAT2(12.0f, y));
+            widget.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
+        };
+        rigRow(creatorImportRigAutoMap, 338.0f);
+        rigRow(creatorImportRigBoneOverlay, 378.0f);
+        rigRow(creatorImportRigRetarget, 418.0f);
+        rigRow(creatorImportRigPreview, 458.0f);
 
         creatorImportTransformLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
         creatorImportTransformLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
@@ -6282,9 +6476,6 @@ namespace renegade::studio
             {
                 layoutFullRow(creatorImportMaterialCombo, materialY);
                 materialY += 34.0f;
-                creatorImportMaterialReadout.SetPos(XMFLOAT2(12.0f, materialY));
-                creatorImportMaterialReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 56.0f));
-                materialY += 64.0f;
             }
             else if (group == 1)
             {
@@ -6398,6 +6589,7 @@ namespace renegade::studio
         creatorImportAnimationStart.SetSize(XMFLOAT2(120.0f, 28.0f));
         creatorImportAnimationEnd.SetPos(XMFLOAT2(136.0f, 282.0f));
         creatorImportAnimationEnd.SetSize(XMFLOAT2(120.0f, 28.0f));
+        layoutFullRow(creatorImportAnimationSpeed, 314.0f);
         creatorImportAnimationEnabled.SetPos(XMFLOAT2(260.0f, 282.0f));
         creatorImportAnimationEnabled.SetSize(XMFLOAT2(importScalePanelWidth - 272.0f, 28.0f));
         creatorImportAnimationAdd.SetPos(XMFLOAT2(12.0f, 318.0f));
@@ -6441,6 +6633,8 @@ namespace renegade::studio
                 creatorImportAnimationStart.SetSize(XMFLOAT2(trimWidth, 28.0f));
                 creatorImportAnimationEnd.SetSize(XMFLOAT2(trimWidth, 28.0f));
                 animationY += 36.0f;
+                layoutFullRow(creatorImportAnimationSpeed, animationY);
+                animationY += 36.0f;
                 layoutFullRow(creatorImportAnimationEnabled, animationY);
                 animationY += 36.0f;
                 creatorImportAnimationAdd.SetPos(XMFLOAT2(12.0f, animationY));
@@ -6478,20 +6672,31 @@ namespace renegade::studio
         const float animationBodyHeight = animationY - 184.0f + 8.0f;
         creatorImportActionBar.SetPos(XMFLOAT2(12.0f, 178.0f));
         creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
+        // Review owns explicit layout rather than an Update-time widget-name
+        // reflow. Asset name and destination finish at y=262; the title and
+        // thumbnail therefore have dedicated non-overlapping rows.
         const float thumbnailPreviewSide = std::min(
             244.0f, importScalePanelWidth - 48.0f);
+        const float reviewTitleY = 284.0f;
+        const float reviewPreviewY = 330.0f;
+        const float reviewCaptureY = reviewPreviewY + thumbnailPreviewSide + 14.0f;
+        const float reviewStatusY = reviewCaptureY + 48.0f;
+        const float reviewConfirmY = reviewStatusY + 46.0f;
+        const float reviewCancelY = reviewConfirmY + 52.0f;
+        creatorImportActionBar.SetPos(XMFLOAT2(12.0f, reviewTitleY));
+        creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
         creatorImportThumbnailPreview.SetPos(XMFLOAT2(
             (importScalePanelWidth - thumbnailPreviewSide) * 0.5f,
-            214.0f));
+            reviewPreviewY));
         creatorImportThumbnailPreview.SetSize(XMFLOAT2(
             thumbnailPreviewSide, thumbnailPreviewSide));
-        creatorImportThumbnailCapture.SetPos(XMFLOAT2(12.0f, 468.0f));
+        creatorImportThumbnailCapture.SetPos(XMFLOAT2(12.0f, reviewCaptureY));
         creatorImportThumbnailCapture.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 40.0f));
-        creatorImportThumbnailStatus.SetPos(XMFLOAT2(12.0f, 516.0f));
+        creatorImportThumbnailStatus.SetPos(XMFLOAT2(12.0f, reviewStatusY));
         creatorImportThumbnailStatus.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 38.0f));
-        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 564.0f));
+        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, reviewConfirmY));
         importScaleApplyButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 44.0f));
-        importScaleDismissButton_.SetPos(XMFLOAT2(12.0f, 618.0f));
+        importScaleDismissButton_.SetPos(XMFLOAT2(12.0f, reviewCancelY));
         importScaleDismissButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
         LayoutCreatorImportStageHeadings(
             importScalePanelWidth, transformBodyHeight,
@@ -11708,7 +11913,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                                 if (isolated->armatures.GetCount() > 1)
                                     rigStatus << "\nMultiple armatures: inspected the first only.";
                             }
-                            rigStatus << "\nMapping is diagnostic only; retarget preview is not ready.";
+                            rigStatus << "\nUse AUTO-MAP, SHOW BONES and ADD & RETARGET below.";
                             creatorModelImporter.rigDiagnostic = rigStatus.str();
                         }
                         creatorModelImporter.sourceBounds = bridge::ImportService::MeasureModelBounds(*isolated);
@@ -11791,14 +11996,68 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                             }
                         }
 
-                        // The supplied mannequin lives beside the imported asset in
-                        // the transient scene. It is never staged, serialised or
-                        // added to the governed .rasset.
-                        creatorModelImporter.referenceRoot = wi::scene::LoadModel(
-                            preview,
-                            "Content/importer/male_reference.fbx",
-                            XMMatrixTranslation(-1.15f, CreatorImportStageHeight, 0.0f),
-                            true);
+                        // Record ONLY the actual source model's rigs. The
+                        // separate preview reference must never be selected
+                        // for retargeting or drawn by the rig overlay.
+                        creatorModelImporter.importedArmatureCount =
+                            preview.armatures.GetCount();
+
+                        // Import the owner's real FBX from the executable's
+                        // Content directory, NOT the process working directory:
+                        // opening a Windows file picker may change that directory.
+                        // Measure it in isolation, then merge into PREVIEW ONLY.
+                        // This keeps its measured height at exactly 1.82 metres
+                        // regardless of the source FBX units or asset transform.
+                        wchar_t studioModule[MAX_PATH] = {};
+                        const DWORD moduleLength = GetModuleFileNameW(
+                            nullptr, studioModule, MAX_PATH);
+                        const fs::path referencePath = moduleLength > 0 &&
+                            moduleLength < MAX_PATH
+                            ? fs::path(studioModule).parent_path() /
+                                "Content" / "importer" / "male_reference.fbx"
+                            : fs::path();
+                        if (!referencePath.empty() &&
+                            fs::is_regular_file(referencePath))
+                        {
+                            wi::scene::Scene referenceScene;
+                            const auto referenceRoot = wi::scene::LoadModel(
+                                referenceScene, referencePath.generic_u8string(),
+                                XMMatrixIdentity(), true);
+                            const auto referenceBounds =
+                                bridge::ImportService::MeasureModelBounds(referenceScene);
+                            const float nativeHeight = referenceBounds.valid
+                                ? referenceBounds.maximum.y - referenceBounds.minimum.y
+                                : 0.0f;
+                            if (referenceRoot != wi::ecs::INVALID_ENTITY &&
+                                std::isfinite(nativeHeight) && nativeHeight > 0.000001f)
+                            {
+                                const float referenceScale = 1.82f / nativeHeight;
+                                preview.Merge(referenceScene);
+                                creatorModelImporter.referenceRoot = referenceRoot;
+                                creatorModelImporter.referenceScale = referenceScale;
+                                if (auto* referenceTransform =
+                                    preview.transforms.GetComponent(referenceRoot))
+                                {
+                                    const float leftEdge = creatorModelImporter.sourceBounds.valid
+                                        ? creatorModelImporter.sourceBounds.minimum.x
+                                        : -1.0f;
+                                    referenceTransform->translation_local = XMFLOAT3(
+                                        leftEdge - 0.68f,
+                                        CreatorImportStageHeight -
+                                            referenceBounds.minimum.y * referenceScale,
+                                        -0.4f);
+                                    referenceTransform->SetDirty();
+                                    referenceTransform->UpdateTransform();
+                                }
+                                wi::backlog::post("[IMPORT-REF] real 1.82 m male FBX loaded; native height=" +
+                                    std::to_string(nativeHeight) + " scale=" +
+                                    std::to_string(referenceScale));
+                            }
+                            else
+                                wi::backlog::post("[IMPORT-REF] FBX could not produce a valid reference mesh.");
+                        }
+                        else
+                            wi::backlog::post("[IMPORT-REF] reference FBX missing beside Studio executable.");
                         ApplyCreatorImportReferenceVisibility();
 
                         // Wicked's placement command auto-plays imported clips;
@@ -11864,14 +12123,16 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         importScaleModeCombo_.SetSelectedWithoutCallback(0);
         creatorModelImporter.workspaceSection = 0;
         creatorImportTransformExpanded.fill(false);
-        creatorImportMaterialExpanded.fill(false);
-        creatorImportAnimationExpanded.fill(false);
+        creatorImportMaterialExpanded = {true, true, false};
+        creatorImportAnimationExpanded = {true, true};
         creatorModelImporter.importAsCharacter = false;
         importScaleTitleLabel_.SetText("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
         creatorImportAssetName.SetValue(creatorModelImporter.assetName);
         creatorImportDestination.SetValue(creatorModelImporter.destinationFolder);
         creatorImportRigReadout.SetText(creatorModelImporter.rigDiagnostic);
         creatorImportRigReadout.SetTooltip(creatorModelImporter.rigDiagnostic);
+        creatorImportRigBoneOverlay.SetCheck(false);
+        creatorModelImporter.boneOverlayVisible = false;
         creatorModelImporter.positionOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
         creatorModelImporter.rotationDegrees = XMFLOAT3(0.0f, 0.0f, 0.0f);
         creatorImportPositionX.SetValue(0.0f);
@@ -12003,7 +12264,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         RefreshCreatorImportWorkspaceSection();
         const std::array<float, 6> bodyHeights = {
             168.0f, transformBodyHeight, materialBodyHeight,
-            150.0f, animationBodyHeight, 606.0f};
+            340.0f, animationBodyHeight, 606.0f};
         float rowY = 146.0f;
         float contentOffset = 0.0f;
         float activeBodyTop = 0.0f;
@@ -12054,8 +12315,13 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             ? "✓ CHARACTER" : "CHARACTER");
         creatorImportAssetName.SetVisible(section == 0 || section == 5);
         creatorImportDestination.SetVisible(section == 0 || section == 5);
-        creatorImportRigReadout.SetVisible(section == 3 &&
-            creatorModelImporter.importAsCharacter);
+        for (wi::gui::Widget* rigControl : {
+            static_cast<wi::gui::Widget*>(&creatorImportRigReadout),
+            static_cast<wi::gui::Widget*>(&creatorImportRigAutoMap),
+            static_cast<wi::gui::Widget*>(&creatorImportRigBoneOverlay),
+            static_cast<wi::gui::Widget*>(&creatorImportRigRetarget),
+            static_cast<wi::gui::Widget*>(&creatorImportRigPreview)})
+            rigControl->SetVisible(section == 3 && creatorModelImporter.importAsCharacter);
 
         constexpr const char* transformGroupNames[] = {
             "POSITION", "ROTATION", "SCALE", "SIZE & UNITS", "PREVIEW LIGHTING"};
@@ -12132,7 +12398,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 widget->SetVisible(section == 2 && expanded);
         };
         showMaterial(creatorImportMaterialExpanded[0],
-            {&creatorImportMaterialCombo, &creatorImportMaterialReadout});
+            {&creatorImportMaterialCombo});
         showMaterial(creatorImportMaterialExpanded[1],
             {&creatorImportTexturePreviews, &creatorImportTextureSlotCombo,
              &creatorImportTexturePath, &creatorImportTextureBrowse,
@@ -12159,6 +12425,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             static_cast<wi::gui::Widget*>(&creatorImportAnimationName),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationStart),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationEnd),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationSpeed),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
@@ -12189,7 +12456,8 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         showAnimation(creatorImportAnimationExpanded[0],
             {&creatorImportAnimationCombo, &creatorImportAnimationName,
              &creatorImportAnimationStart, &creatorImportAnimationEnd,
-             &creatorImportAnimationEnabled, &creatorImportAnimationAdd,
+             &creatorImportAnimationSpeed, &creatorImportAnimationEnabled,
+             &creatorImportAnimationAdd,
              &creatorImportAnimationDelete, &creatorImportAnimationPlay,
              &creatorImportAnimationPause, &creatorImportAnimationStop,
              &creatorImportAnimationReadout});

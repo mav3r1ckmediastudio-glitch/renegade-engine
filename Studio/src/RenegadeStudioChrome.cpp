@@ -510,6 +510,16 @@ namespace renegade::studio
             return;
         }
 
+        // Popups are not regular scroll content: clipping them to their
+        // inspector's scroll area hides choices that extend below a group.
+        // Wicked's ComboBox hit testing already allows the popup outside its
+        // parent. Match that hit region in our native renderer without
+        // changing the pinned engine or the closed control's clipping.
+        wi::graphics::Rect popupScissor = {};
+        popupScissor.right = static_cast<int32_t>(canvas.GetLogicalWidth());
+        popupScissor.bottom = static_cast<int32_t>(canvas.GetLogicalHeight());
+        ApplyScissor(canvas, popupScissor, cmd, false);
+
         // Wicked's ComboBox interaction code owns a fixed 20 px item hitbox
         // plus its 20 px filter row. Render against those exact native
         // coordinates rather than stretching visible rows to this widget's
@@ -586,6 +596,9 @@ namespace renegade::studio
                 0.2f,
                 0.16f);
         }
+        // Do not let the popup's full-canvas scissor affect later widgets.
+        ApplyScissor(canvas, parent != nullptr ? parent->scissorRect : scissorRect,
+            cmd, false);
     }
 
     void RenegadeSlider::Create(

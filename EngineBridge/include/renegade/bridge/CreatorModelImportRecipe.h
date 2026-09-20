@@ -31,6 +31,7 @@ namespace renegade::bridge
         std::string name;
         float start = 0.0f;
         float end = 0.0f;
+        float speed = 1.0f; // Native playback multiplier, 0.1x..4x.
         bool enabled = true;
     };
 
