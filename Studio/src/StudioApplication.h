@@ -71,6 +71,7 @@ namespace renegade::studio
         void RefreshStatus();
         void RefreshHierarchy();
         void RefreshInspector();
+        [[nodiscard]] bool DiagnosticImportActive() const;
         void QueueInspectorRefresh() noexcept;
         void RefreshProjectHub();
         void RefreshAssetBrowser();
@@ -751,7 +752,6 @@ namespace renegade::studio
             std::function<void()> continuation);
 
         bridge::StudioSession* session_ = nullptr;
-        bool DiagnosticImportActive() const;
         void InitializeLiveDiagnostics();
         void RequestDiagnosticAction(EditorAction action);
         void TraceDiagnosticAction(EditorAction action, const char* stage);
