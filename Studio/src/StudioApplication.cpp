@@ -1385,10 +1385,8 @@ namespace
     {
         std::ostringstream status;
         status << "EXTERNAL SOURCES: " << creatorModelImporter.externalAnimations.size();
-        for (const auto& source : creatorModelImporter.externalAnimations)
-            status << "\n" << fs::u8path(source.sourcePath).filename().generic_u8string()
-                << " // " << source.clipCount << " native clip(s)";
-        status << "\nPREVIEW ONLY // CONFIRM ATTEMPTS GOVERNED COMMIT.";
+        status << " // Imported actions appear in the table above."
+               << "\nPREVIEW ONLY // CONFIRM ATTEMPTS GOVERNED COMMIT.";
         creatorImportExternalAnimationStatus.SetText(status.str());
         creatorImportExternalAnimationRemove.SetEnabled(
             !creatorModelImporter.externalAnimations.empty());
