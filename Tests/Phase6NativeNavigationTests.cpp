@@ -1,6 +1,8 @@
 #include "renegade/bridge/NavigationService.h"
 #include "renegade/bridge/IdentityService.h"
 
+#include <wiBacklog.h>
+
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -9,6 +11,20 @@
 namespace
 {
     using namespace renegade::bridge;
+
+    struct TestRuntimeCleanup
+    {
+        ~TestRuntimeCleanup()
+        {
+            // Finish workers and drain their logs before CRT static destruction,
+            // including on early failure returns. Wicked's async writer lazily
+            // registers a static queue destructor; doing that during exit can
+            // deadlock against the main thread joining the writer under the
+            // CRT on-exit lock.
+            wi::jobsystem::ShutDown();
+            wi::backlog::Flush();
+        }
+    };
 
     int Fail(const std::string& message)
     {
@@ -36,6 +52,8 @@ int main()
 {
     using namespace renegade::bridge;
 
+    // Declared first so scene/command teardown also precedes the final flush.
+    const TestRuntimeCleanup runtimeCleanup;
     wi::scene::Scene scene;
     NavigationGridSettings gridSettings;
     gridSettings.resolutionX = 24;
