@@ -1387,7 +1387,7 @@ namespace renegade::studio
     }
 
     void RenegadeStudioChrome::OnHierarchySelected(
-        std::function<void(std::uint64_t)> callback)
+        std::function<void(std::uint64_t, bool)> callback)
     {
         hierarchySelected_ = std::move(callback);
     }
@@ -2089,7 +2089,8 @@ namespace renegade::studio
                         }
                         if (hierarchySelected_)
                         {
-                            hierarchySelected_(row.entity);
+                            hierarchySelected_(row.entity,
+                                x >= disclosureRight && wi::input::IsDoubleClicked());
                         }
                     }
                     consumed = true;

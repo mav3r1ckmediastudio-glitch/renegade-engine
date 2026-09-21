@@ -4027,7 +4027,7 @@ namespace renegade::studio
         // a behavioural reference, not used as the finished presentation.
         studioChrome_.Create();
         studioChrome_.OnHierarchySelected(
-            [this](const std::uint64_t entity)
+            [this](const std::uint64_t entity, const bool frameWholeObject)
         {
             if (session_ == nullptr)
             {
@@ -4040,6 +4040,8 @@ namespace renegade::studio
             RefreshHierarchy();
             RefreshInspector();
             RefreshStatus();
+            if (frameWholeObject)
+                FocusSelection();
         });
         studioChrome_.OnToolSelected([this](const int tool)
         {
@@ -8202,16 +8204,39 @@ namespace renegade::studio
 
         XMVECTOR center = transform->GetPositionV();
         float distance = 5.0f;
-        if (scene.objects.Contains(entity))
+        wi::primitive::AABB aggregateBounds;
+        bool hasBounds = false;
+        // The selected logical Character/asset root is usually a transform
+        // wrapper, not a mesh. Frame its complete rendered hierarchy rather
+        // than just the wrapper's origin or an arbitrary single child mesh.
+        for (std::size_t index = 0;
+             index < scene.objects.GetCount() && index < scene.aabb_objects.size();
+             ++index)
         {
-            const auto index = scene.objects.GetIndex(entity);
-            if (index < scene.aabb_objects.size())
+            const auto candidate = scene.objects.GetEntity(index);
+            if (candidate != entity && !scene.Entity_IsDescendant(candidate, entity))
+                continue;
+            const auto& objectBounds = scene.aabb_objects[index];
+            const XMFLOAT3 minimum = objectBounds.getMin();
+            const XMFLOAT3 maximum = objectBounds.getMax();
+            if (!std::isfinite(minimum.x) || !std::isfinite(minimum.y) ||
+                !std::isfinite(minimum.z) || !std::isfinite(maximum.x) ||
+                !std::isfinite(maximum.y) || !std::isfinite(maximum.z) ||
+                minimum.x > maximum.x || minimum.y > maximum.y ||
+                minimum.z > maximum.z)
             {
-                const auto& bounds = scene.aabb_objects[index];
-                const XMFLOAT3 boundsCenter = bounds.getCenter();
-                center = XMLoadFloat3(&boundsCenter);
-                distance = std::max(2.5f, bounds.getRadius() * 2.5f);
+                continue;
             }
+            aggregateBounds = hasBounds
+                ? wi::primitive::AABB::Merge(aggregateBounds, objectBounds)
+                : objectBounds;
+            hasBounds = true;
+        }
+        if (hasBounds)
+        {
+            const XMFLOAT3 boundsCenter = aggregateBounds.getCenter();
+            center = XMLoadFloat3(&boundsCenter);
+            distance = std::max(2.5f, aggregateBounds.getRadius() * 2.5f);
         }
 
         const XMVECTOR forward = XMVector3Normalize(camera->GetAt());

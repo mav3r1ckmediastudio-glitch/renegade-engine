@@ -43,6 +43,13 @@ namespace
         {
             return Category::Lights;
         }
+        // A promoted Character is represented by its native Wicked controller on
+        // the reusable-asset wrapper, while mesh/rig descendants may carry
+        // different native components. The logical root must win categorisation.
+        if (scene.characters.Contains(entity))
+        {
+            return Category::Characters;
+        }
         if (scene.humanoids.Contains(entity))
         {
             return Category::Characters;

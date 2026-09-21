@@ -21,6 +21,7 @@ namespace renegade::runtime
     {
         Idle = 0,
         Locomotion,
+        Run,
         Attack,
         Reload,
         Hit,
@@ -38,6 +39,7 @@ namespace renegade::runtime
         {
         case CharacterAnimationSemantic::Idle: return "Idle";
         case CharacterAnimationSemantic::Locomotion: return "Locomotion";
+        case CharacterAnimationSemantic::Run: return "Run";
         case CharacterAnimationSemantic::Attack: return "Attack";
         case CharacterAnimationSemantic::Reload: return "Reload";
         case CharacterAnimationSemantic::Hit: return "Hit";
@@ -123,8 +125,10 @@ namespace renegade::runtime
         {
             return CharacterAnimationSemantic::Attack;
         }
+        if (AnimationNameContains(name, {"run", "sprint", "jog"}))
+            return CharacterAnimationSemantic::Run;
         if (AnimationNameContains(name, {
-                "walk", "run", "jog", "move", "locomotion", "strafe"}))
+                "walk", "move", "locomotion", "strafe"}))
         {
             return CharacterAnimationSemantic::Locomotion;
         }
@@ -223,9 +227,13 @@ namespace renegade::runtime
         const CharacterAnimationSemantic semantic) noexcept
     {
         record.lastRequest = CharacterAnimationSemanticName(semantic);
-        const auto& variants =
-            record.clips[CharacterAnimationIndex(semantic)];
-        if (variants.empty())
+        const auto* variants =
+            &record.clips[CharacterAnimationIndex(semantic)];
+        // Run is optional in an authored asset: fall back to walk without
+        // suppressing Chase/Flee animation when no running clip is present.
+        if (semantic == CharacterAnimationSemantic::Run && variants->empty())
+            variants = &record.clips[CharacterAnimationIndex(CharacterAnimationSemantic::Locomotion)];
+        if (variants->empty())
         {
             record.resolvedClipName.clear();
             ++record.missingRequests;
@@ -233,8 +241,8 @@ namespace renegade::runtime
             return false;
         }
 
-        const RuntimeAnimationClip& next = variants[
-            record.variantSequence++ % variants.size()];
+        const RuntimeAnimationClip& next = (*variants)[
+            record.variantSequence++ % variants->size()];
         auto* active = scene.animations.GetComponent(record.activeClip);
         if (record.activeClip == next.entity &&
             record.activeSemantic == semantic &&
@@ -259,7 +267,8 @@ namespace renegade::runtime
         }
 
         if (semantic == CharacterAnimationSemantic::Idle ||
-            semantic == CharacterAnimationSemantic::Locomotion)
+            semantic == CharacterAnimationSemantic::Locomotion ||
+            semantic == CharacterAnimationSemantic::Run)
         {
             animation->SetLooped(true);
         }
@@ -335,12 +344,27 @@ namespace renegade::runtime
                 requested = CharacterAnimationSemantic::Reload;
                 requestPlayback = true;
             }
-            else if (decision->intent == CharacterIntent::Patrol ||
-                decision->intent == CharacterIntent::Chase ||
-                decision->intent == CharacterIntent::Investigate ||
-                decision->intent == CharacterIntent::Search ||
+            else if ((record->activeSemantic == CharacterAnimationSemantic::Attack ||
+                record->activeSemantic == CharacterAnimationSemantic::Reload ||
+                record->activeSemantic == CharacterAnimationSemantic::Hit) &&
+                scene.animations.GetComponent(record->activeClip) != nullptr &&
+                scene.animations.GetComponent(record->activeClip)->IsPlaying() &&
+                scene.animations.GetComponent(record->activeClip)->IsPlayingOnce())
+            {
+                // Finish authored one-shot actions before choosing Idle/Run.
+                requested = record->activeSemantic;
+                requestPlayback = false;
+            }
+            else if (decision->intent == CharacterIntent::Chase ||
                 decision->intent == CharacterIntent::Retreat ||
                 decision->intent == CharacterIntent::Flee)
+            {
+                requested = CharacterAnimationSemantic::Run;
+                requestPlayback = record->activeSemantic != requested;
+            }
+            else if (decision->intent == CharacterIntent::Patrol ||
+                decision->intent == CharacterIntent::Investigate ||
+                decision->intent == CharacterIntent::Search)
             {
                 requested = CharacterAnimationSemantic::Locomotion;
                 requestPlayback = record->activeSemantic != requested;

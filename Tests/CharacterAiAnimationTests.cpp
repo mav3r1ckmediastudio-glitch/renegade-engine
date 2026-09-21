@@ -39,7 +39,9 @@ int main()
         InferCharacterAnimationSemantic("Death_Back") !=
         CharacterAnimationSemantic::Death ||
         InferCharacterAnimationSemantic("Walk_Forward") !=
-        CharacterAnimationSemantic::Locomotion)
+        CharacterAnimationSemantic::Locomotion ||
+        InferCharacterAnimationSemantic("Mutant_Run_Forward") !=
+        CharacterAnimationSemantic::Run)
     {
         return Fail("native clip semantic inference");
     }
@@ -47,6 +49,8 @@ int main()
     const wi::ecs::Entity idle = AddClip(scene, character, "Idle_Breathe");
     const wi::ecs::Entity attack = AddClip(scene, character, "Claw_Attack_01");
     const wi::ecs::Entity attackTwo = AddClip(scene, character, "Claw_Attack_02");
+    const wi::ecs::Entity walk = AddClip(scene, character, "Walk_Forward");
+    const wi::ecs::Entity run = AddClip(scene, character, "Run_Forward");
 
     RuntimeCharacterSystemState characters;
     RuntimeCharacterRecord authored;
@@ -112,7 +116,38 @@ int main()
         return Fail("attack variants must cycle deterministically");
     }
 
-    const std::uint64_t missingBefore = state.missingRequests;
+    RuntimeCharacterDecisionState decisions;
+    CharacterDecisionRecord chasing;
+    chasing.characterId = authored.stableEntityId;
+    chasing.intent = CharacterIntent::Chase;
+    decisions.characters.push_back(chasing);
+    combat.characters.front().shotsFired = 1;
+    UpdateRuntimeCharacterAnimations(scene, characters, decisions, combat, state);
+    if (record->activeSemantic != CharacterAnimationSemantic::Attack)
+        return Fail("a combat shot must request a native attack clip");
+    const wi::ecs::Entity shotClip = record->activeClip;
+    UpdateRuntimeCharacterAnimations(scene, characters, decisions, combat, state);
+    if (record->activeClip != shotClip ||
+        record->activeSemantic != CharacterAnimationSemantic::Attack)
+        return Fail("attack play-once interrupted by chase on next frame");
+    (void)renegade::bridge::StopAnimation(scene, shotClip);
+    UpdateRuntimeCharacterAnimations(scene, characters, decisions, combat, state);
+    const auto* runAnimation = scene.animations.GetComponent(run);
+    if (record->activeSemantic != CharacterAnimationSemantic::Run ||
+        record->activeClip != run || runAnimation == nullptr || !runAnimation->IsLooped())
+        return Fail("chase must run after authored attack finishes");
+    decisions.characters.front().intent = CharacterIntent::Patrol;
+    UpdateRuntimeCharacterAnimations(scene, characters, decisions, combat, state);
+    if (record->activeSemantic != CharacterAnimationSemantic::Locomotion ||
+        record->activeClip != walk)
+        return Fail("patrol must use authored walk clip");
+    record->clips[CharacterAnimationIndex(CharacterAnimationSemantic::Run)].clear();
+    decisions.characters.front().intent = CharacterIntent::Chase;
+    UpdateRuntimeCharacterAnimations(scene, characters, decisions, combat, state);
+    if (record->activeSemantic != CharacterAnimationSemantic::Run ||
+        record->activeClip != walk || !scene.animations.GetComponent(walk)->IsLooped())
+        return Fail("run must safely fall back to walk when no run clip exists");
+
     if (RequestCharacterAnimation(
             scene, state, *record, CharacterAnimationSemantic::Reload) ||
         state.missingRequests != missingBefore + 1)
@@ -120,6 +155,6 @@ int main()
         return Fail("missing optional animation must fail safely");
     }
 
-    std::cout << "AI06_PASS semantic-native-playback-variants-missing-fallback\n";
+    std::cout << "AI06_PASS semantic-native-playback-variants-action-run-fallback\n";
     return 0;
 }

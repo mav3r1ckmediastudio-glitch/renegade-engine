@@ -523,7 +523,45 @@ int main()
     scenes.GetScene().transforms.Create(hierarchyCharacter);
     scenes.GetScene().humanoids.Create(hierarchyCharacter);
 
+    // An imported Character's wrapper owns the native controller, while its
+    // presentation mesh and humanoid rig are separate descendants. Only the
+    // wrapper is a logical Character; neither descendant is a selectable asset.
+    const auto importedCharacterRoot = wi::ecs::CreateEntity();
+    scenes.GetScene().names.Create(importedCharacterRoot) = "Imported Character Root";
+    scenes.GetScene().transforms.Create(importedCharacterRoot);
+    scenes.GetScene().characters.Create(importedCharacterRoot);
+    const auto importedMesh = wi::ecs::CreateEntity();
+    scenes.GetScene().names.Create(importedMesh) = "Imported Mesh";
+    scenes.GetScene().transforms.Create(importedMesh);
+    scenes.GetScene().objects.Create(importedMesh);
+    scenes.GetScene().Component_Attach(importedMesh, importedCharacterRoot);
+    const auto importedRig = wi::ecs::CreateEntity();
+    scenes.GetScene().names.Create(importedRig) = "Imported Rig";
+    scenes.GetScene().transforms.Create(importedRig);
+    scenes.GetScene().humanoids.Create(importedRig);
+    scenes.GetScene().Component_Attach(importedRig, importedCharacterRoot);
     const auto creatorEntities = scenes.ListEntities();
+    const auto logicalCharacter = std::find_if(
+        creatorEntities.begin(), creatorEntities.end(),
+        [importedCharacterRoot](const renegade::bridge::SceneEntity& item)
+        {
+            return item.entity == importedCharacterRoot;
+        });
+    if (logicalCharacter == creatorEntities.end() ||
+        !logicalCharacter->logicalAsset || logicalCharacter->depth != 0 ||
+        logicalCharacter->category != renegade::bridge::SceneEntityCategory::Characters)
+    {
+        return Fail("imported Character wrapper was not one logical Character root");
+    }
+    for (const auto& item : creatorEntities)
+    {
+        if ((item.entity == importedMesh || item.entity == importedRig) &&
+            (item.logicalAsset || item.depth != 1 ||
+             item.category != renegade::bridge::SceneEntityCategory::Characters))
+        {
+            return Fail("imported Character descendants leaked as logical assets");
+        }
+    }
     if (creatorEntities.size() >= scenes.EntityCount())
     {
         return Fail("generated grid internals leaked into the hierarchy");

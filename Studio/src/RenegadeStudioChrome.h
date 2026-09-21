@@ -371,7 +371,7 @@ namespace renegade::studio
         {
             return activeMenu_ >= 0 || activeViewportMenu_ >= 0;
         }
-        void OnHierarchySelected(std::function<void(std::uint64_t)> callback);
+        void OnHierarchySelected(std::function<void(std::uint64_t, bool)> callback);
         void OnToolSelected(std::function<void(int)> callback);
         void OnAction(std::function<void(Action)> callback);
         void OnDrawerChanged(std::function<void(int)> callback);
@@ -532,7 +532,7 @@ namespace renegade::studio
         float fpsSampleTime_ = 0.0f;
         float displayedFps_ = 0.0f;
         std::uint32_t fpsSampleFrames_ = 0;
-        std::function<void(std::uint64_t)> hierarchySelected_;
+        std::function<void(std::uint64_t, bool)> hierarchySelected_;
         std::function<void(int)> toolSelected_;
         std::function<void(Action)> action_;
         std::function<void(int)> drawerChanged_;
