@@ -34,6 +34,7 @@ set_tests_properties(
     RenegadePhase6NativeNavigationTests
     PROPERTIES
         LABELS "Phase6;Navigation"
+        TIMEOUT 60
 )
 
 add_test(

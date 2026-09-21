@@ -130,6 +130,7 @@ namespace
         walk.name = "Walk";
         walk.start = 2.0f;
         walk.end = 18.0f;
+        walk.speed = 1.5f;
         walk.enabled = true;
         recipe.animations.push_back(walk);
 
@@ -180,9 +181,31 @@ namespace
             !Require(decoded.animations[0].name == "Walk" &&
                 decoded.animations[0].start == 2.0f &&
                 decoded.animations[0].end == 18.0f &&
+                decoded.animations[0].speed == 1.5f &&
                 decoded.animations[0].enabled &&
                 !decoded.animations[1].enabled,
                 "creator animation clip data did not round-trip"))
+            return false;
+
+        // Older recipes omit speed; preserve their original canonical shape.
+        CreatorModelImportRecipe legacy;
+        if (!Require(ParseCreatorModelImportOptions(
+                "{\"animations\":[{\"enabled\":true,\"end\":1.0,\"name\":\"Legacy\",\"source_animation_index\":0,\"start\":0.0}]}",
+                legacy, error) && legacy.animations.size() == 1 &&
+                legacy.animations[0].speed == 1.0f,
+                "legacy animation speed default did not parse"))
+            return false;
+
+        CreatorModelImportRecipe invalidSpeed = recipe;
+        invalidSpeed.animations[0].speed = 0.0f;
+        if (!Require(!SerializeCreatorModelImportOptions(invalidSpeed, encoded, error) &&
+                error.find("speed") != std::string::npos,
+                "creator clip speed below 0.1x was accepted"))
+            return false;
+        invalidSpeed.animations[0].speed = 4.1f;
+        if (!Require(!SerializeCreatorModelImportOptions(invalidSpeed, encoded, error) &&
+                error.find("speed") != std::string::npos,
+                "creator clip speed above 4x was accepted"))
             return false;
 
         CreatorModelImportRecipe invalid;

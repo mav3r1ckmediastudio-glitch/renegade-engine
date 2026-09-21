@@ -71,6 +71,7 @@ namespace renegade::studio
         void RefreshStatus();
         void RefreshHierarchy();
         void RefreshInspector();
+        [[nodiscard]] bool DiagnosticImportActive() const;
         void QueueInspectorRefresh() noexcept;
         void RefreshProjectHub();
         void RefreshAssetBrowser();
@@ -546,7 +547,8 @@ namespace renegade::studio
         void ApplyImportScaleMode(bridge::ModelScaleMode mode);
         void DismissImportScalePanel();
         void RefreshCreatorImportWorkspaceSection();
-        void LayoutCreatorImportStageHeadings(float inspectorWidth);
+        void LayoutCreatorImportStageHeadings(float inspectorWidth, float transformBodyHeight,
+            float materialBodyHeight, float animationBodyHeight);
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,
@@ -751,7 +753,6 @@ namespace renegade::studio
             std::function<void()> continuation);
 
         bridge::StudioSession* session_ = nullptr;
-        bool DiagnosticImportActive() const;
         void InitializeLiveDiagnostics();
         void RequestDiagnosticAction(EditorAction action);
         void TraceDiagnosticAction(EditorAction action, const char* stage);
@@ -1114,6 +1115,7 @@ namespace renegade::studio
         CreatorImportPreviewWindow importScalePanel_;
         float importInspectorWidth_ = 500.0f;
         bool importInspectorLayoutInProgress_ = false;
+        bool importAudioWorkspaceWasVisible_ = false;
         wi::gui::Label importScaleTitleLabel_;
         wi::gui::Label importScaleReadoutLabel_;
         RenegadeComboBox importScaleModeCombo_;

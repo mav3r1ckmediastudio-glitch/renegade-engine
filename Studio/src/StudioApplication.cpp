@@ -1,6 +1,7 @@
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
 #include "StudioUserPreferences.h"
+#include <ModelImporter.h>
 
 #include "renegade/bridge/TestLevelSnapshotService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
@@ -235,6 +236,155 @@ namespace
     constexpr float CreatorImportStageHeight = 2048.0f;
     constexpr float CreatorImportPreviewFov = 32.0f * XM_PI / 180.0f;
 
+    // Importer v3's six headings are not generic buttons: they are the
+    // persistent stage navigator from the approved workflow.  Keep Wicked's
+    // focus/click behaviour, but own the visible card hierarchy here.
+    class CreatorImportStageButton final : public renegade::studio::RenegadeButton
+    {
+    public:
+        void SetStageIndex(const std::size_t value) noexcept
+        {
+            stageIndex_ = value;
+        }
+
+        void SetStageDetails(std::string value)
+        {
+            details_ = std::move(value);
+        }
+
+        void SetStageActive(const bool value) noexcept
+        {
+            activeStage_ = value;
+        }
+
+        void Render(const wi::Canvas&, const wi::graphics::CommandList cmd) const override
+        {
+            if (!IsVisible())
+                return;
+            const bool hovered = state == wi::gui::FOCUS || state == wi::gui::ACTIVE;
+            // Match the approved inspector hierarchy: orange is a restrained
+            // selection cue, never a full-card warning state.
+            const wi::Color border = activeStage_
+                ? wi::Color(66, 80, 91, 255)
+                : hovered ? wi::Color(86, 102, 114, 255)
+                : wi::Color(42, 54, 64, 255);
+            const wi::Color fill = activeStage_
+                ? wi::Color(43, 36, 31, 255)
+                : hovered ? wi::Color(27, 37, 46, 255)
+                : wi::Color(21, 29, 36, 255);
+            wi::image::Params outer(translation.x, translation.y, scale.x, scale.y, border);
+            outer.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            outer.enableCornerRounding();
+            for (auto& corner : outer.corners_rounding) { corner.radius = 8.0f; corner.segments = 8; }
+            wi::image::Draw(nullptr, outer, cmd);
+            wi::image::Params inner(translation.x + 1.0f, translation.y + 1.0f,
+                scale.x - 2.0f, scale.y - 2.0f, fill);
+            inner.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            inner.enableCornerRounding();
+            for (auto& corner : inner.corners_rounding) { corner.radius = 7.0f; corner.segments = 8; }
+            wi::image::Draw(nullptr, inner, cmd);
+            // A numbered step reads as navigation, not an orange warning.
+            wi::image::Params numberPlate(translation.x + 12.0f,
+                translation.y + 14.0f, 28.0f, 28.0f,
+                activeStage_ ? wi::Color(181, 109, 64, 255)
+                             : wi::Color(43, 58, 70, 255));
+            numberPlate.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            numberPlate.enableCornerRounding();
+            for (auto& corner : numberPlate.corners_rounding)
+            {
+                corner.radius = 6.0f;
+                corner.segments = 8;
+            }
+            wi::image::Draw(nullptr, numberPlate, cmd);
+            wi::font::Params number(translation.x + 19.0f,
+                translation.y + 20.0f, 11,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                activeStage_ ? wi::Color(20, 24, 28, 255)
+                             : wi::Color(170, 188, 201, 255),
+                wi::Color::Transparent());
+            number.bolden = 0.2f;
+            wi::font::Draw(std::to_string(stageIndex_ + 1), number, cmd);
+            if (activeStage_)
+            {
+                wi::image::Draw(nullptr, wi::image::Params(
+                    translation.x + 1.0f, translation.y + 8.0f,
+                    3.0f, scale.y - 16.0f, wi::Color(221, 135, 83, 255)), cmd);
+            }
+            wi::font::Params title(translation.x + 49.0f, translation.y + 12.0f, 12,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                activeStage_ ? wi::Color(247, 181, 133, 255) : wi::Color(231, 238, 242, 255),
+                wi::Color::Transparent());
+            title.spacingX = 0.22f; title.bolden = 0.18f;
+            wi::font::Draw(GetText(), title, cmd);
+            wi::font::Params sub(translation.x + 49.0f, translation.y + 32.0f, 9,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                wi::Color(143, 161, 173, 255), wi::Color::Transparent());
+            sub.bolden = 0.12f;
+            wi::font::Draw(details_, sub, cmd);
+            wi::font::Params arrow(translation.x + scale.x - 20.0f, translation.y + 20.0f, 13,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                activeStage_ ? wi::Color(255, 181, 133, 255) : wi::Color(161, 177, 187, 255),
+                wi::Color::Transparent());
+            wi::font::Draw(activeStage_ ? "⌄" : "›", arrow, cmd);
+        }
+
+    private:
+        std::string details_;
+        std::size_t stageIndex_ = 0;
+        bool activeStage_ = false;
+    };
+
+    // The footer is intentionally one real button, not a synthetic timeline.
+    // It presents the existing selected-clip operation as a persistent
+    // transport strip without claiming a playhead that the importer does not
+    // own.
+    class CreatorImportPlaybackFooter final : public renegade::studio::RenegadeButton
+    {
+    public:
+        void Render(const wi::Canvas&, const wi::graphics::CommandList cmd) const override
+        {
+            if (!IsVisible())
+                return;
+            const bool engaged = state == wi::gui::FOCUS || state == wi::gui::ACTIVE;
+            const wi::Color border = engaged ? wi::Color(207, 120, 71, 255)
+                : wi::Color(51, 63, 72, 255);
+            const wi::Color fill = IsEnabled() ? wi::Color(13, 20, 25, 242)
+                : wi::Color(13, 18, 22, 215);
+            wi::image::Params outer(translation.x, translation.y, scale.x, scale.y, border);
+            outer.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            outer.enableCornerRounding();
+            for (auto& corner : outer.corners_rounding) { corner.radius = 7.0f; corner.segments = 8; }
+            wi::image::Draw(nullptr, outer, cmd);
+            wi::image::Params inner(translation.x + 1.0f, translation.y + 1.0f,
+                scale.x - 2.0f, scale.y - 2.0f, fill);
+            inner.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            inner.enableCornerRounding();
+            for (auto& corner : inner.corners_rounding) { corner.radius = 6.0f; corner.segments = 8; }
+            wi::image::Draw(nullptr, inner, cmd);
+            const wi::Color accent = IsEnabled() ? wi::Color(237, 143, 83, 255)
+                : wi::Color(93, 104, 112, 255);
+            wi::image::Params play(translation.x + 8.0f, translation.y + 7.0f, 20.0f, 20.0f, accent);
+            play.enableCornerRounding();
+            for (auto& corner : play.corners_rounding) { corner.radius = 10.0f; corner.segments = 10; }
+            wi::image::Draw(nullptr, play, cmd);
+            wi::font::Params icon(translation.x + 15.0f, translation.y + 9.0f, 8,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                wi::Color(20, 23, 25, 255), wi::Color::Transparent());
+            wi::font::Draw("▶", icon, cmd);
+            wi::font::Params title(translation.x + 36.0f, translation.y + 7.0f, 9,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                IsEnabled() ? wi::Color(225, 232, 236, 255) : wi::Color(125, 139, 149, 255),
+                wi::Color::Transparent());
+            title.spacingX = 0.18f; title.bolden = 0.15f;
+            wi::font::Draw("PLAYBACK // " + GetText(), title, cmd);
+            wi::font::Params detail(translation.x + 36.0f, translation.y + 19.0f, 7,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                IsEnabled() ? wi::Color(129, 150, 163, 255) : wi::Color(91, 104, 113, 255),
+                wi::Color::Transparent());
+            wi::font::Draw(IsEnabled() ? "USES THE SELECTED NATIVE CLIP" : "SELECT A CHARACTER CLIP IN ANIMATIONS", detail, cmd);
+        }
+    };
+
 
     struct CreatorThumbnailWeatherSnapshot
     {
@@ -380,6 +530,7 @@ namespace
     }
 
     void ApplyCreatorImportPreviewLighting();
+    void ApplyCreatorImportReferenceVisibility();
     struct CreatorModelImportWorkspaceState
     {
         bool active = false;
@@ -388,6 +539,11 @@ namespace
         std::size_t undoBaseline = 0;
         wi::allocator::shared_ptr<wi::scene::Scene> previewScene;
         wi::ecs::Entity previewRoot = wi::ecs::INVALID_ENTITY;
+        // Fixed-height reference is part of the transient importer scene only.
+        wi::ecs::Entity referenceRoot = wi::ecs::INVALID_ENTITY;
+        float referenceScale = 1.0f;
+        std::size_t importedArmatureCount = 0; // Exclude the separate 1.82m reference's armature.
+        bool boneOverlayVisible = false;
         wi::ecs::Entity previewLight = wi::ecs::INVALID_ENTITY;
         wi::scene::TransformComponent cameraBefore;
         float cameraFovBefore = XM_PIDIV4;
@@ -407,6 +563,7 @@ namespace
             std::string sourcePath;
             std::uint64_t sourceHash = 0;
             std::size_t clipCount = 0;
+            std::size_t firstSourceIndex = 0;
             std::unique_ptr<renegade::bridge::RetargetHumanoidAnimationsCommand> command;
         };
         std::vector<ExternalAnimation> externalAnimations;
@@ -510,6 +667,7 @@ namespace
         creatorModelImporter.lightElevation = 35.0f;
         creatorModelImporter.ambientBrightness = 0.35f;
         creatorModelImporter.thumbnailPresentationOverridden = true;
+        ApplyCreatorImportReferenceVisibility(); // Never put the measurement model in the asset icon.
         ApplyCreatorImportPreviewLighting();
     }
 
@@ -544,10 +702,12 @@ namespace
         creatorModelImporter.ambientBrightness =
             creatorModelImporter.thumbnailRestoreAmbientBrightness;
         creatorModelImporter.thumbnailPresentationOverridden = false;
+        ApplyCreatorImportReferenceVisibility();
         ApplyCreatorImportPreviewLighting();
     }
     renegade::studio::RenegadeComboBox creatorImportMaterialCombo;
     renegade::studio::RenegadeComboBox creatorImportAnimationCombo;
+    renegade::studio::RenegadeAnimationClipTable creatorImportAnimationTable;
     wi::gui::Label creatorImportMaterialLabel;
     wi::gui::Label creatorImportMaterialReadout;
     wi::gui::Label creatorImportTextureHelp;
@@ -561,6 +721,7 @@ namespace
     renegade::studio::RenegadeTextInputField creatorImportAnimationName;
     renegade::studio::RenegadeTextInputField creatorImportAnimationStart;
     renegade::studio::RenegadeTextInputField creatorImportAnimationEnd;
+    renegade::studio::RenegadeTextInputField creatorImportAnimationSpeed;
     renegade::studio::RenegadeComboBox creatorImportAnimationEnabled;
     renegade::studio::RenegadeButton creatorImportAnimationAdd;
     renegade::studio::RenegadeButton creatorImportAnimationDelete;
@@ -572,10 +733,20 @@ namespace
     wi::gui::Label creatorImportExternalAnimationStatus;
     wi::gui::Label creatorImportAnimationReadout;
     wi::gui::Label creatorImportTransformLabel;
-    std::array<renegade::studio::RenegadeButton, 6> creatorImportStageButtons;
+    std::array<CreatorImportStageButton, 6> creatorImportStageButtons;
+    std::array<renegade::studio::RenegadeButton, 5> creatorImportTransformGroups;
+    std::array<bool, 5> creatorImportTransformExpanded{};
+    std::array<renegade::studio::RenegadeButton, 3> creatorImportMaterialGroups;
+    std::array<bool, 3> creatorImportMaterialExpanded{};
+    std::array<renegade::studio::RenegadeButton, 2> creatorImportAnimationGroups;
+    std::array<bool, 2> creatorImportAnimationExpanded{};
     renegade::studio::RenegadeButton creatorImportModelChoice;
     renegade::studio::RenegadeButton creatorImportCharacterChoice;
     wi::gui::Label creatorImportRigReadout;
+    renegade::studio::RenegadeButton creatorImportRigAutoMap;
+    renegade::studio::RenegadeCheckBox creatorImportRigBoneOverlay;
+    renegade::studio::RenegadeButton creatorImportRigRetarget;
+    renegade::studio::RenegadeButton creatorImportRigPreview;
     renegade::studio::RenegadeTextInputField creatorImportAssetName;
     renegade::studio::RenegadeTextInputField creatorImportDestination;
     renegade::studio::RenegadeSlider creatorImportPositionX;
@@ -605,6 +776,16 @@ namespace
     renegade::studio::RenegadeButton creatorImportLightingReset;
     renegade::studio::RenegadeCheckBox creatorImportMannequinVisible;
     wi::gui::Label creatorImportHelpLabel;
+    // Root-level importer chrome deliberately sits outside the docked Window:
+    // it belongs to the large preview workspace, not to the inspector's
+    // scroll/clipping rectangle.
+    renegade::studio::RenegadeButton creatorImportResetView;
+    renegade::studio::RenegadeButton creatorImportReferenceToggle;
+    renegade::studio::RenegadeButton creatorImportZoomOut;
+    renegade::studio::RenegadeButton creatorImportZoomIn;
+    renegade::studio::RenegadeButton creatorImportPreviousStage;
+    renegade::studio::RenegadeButton creatorImportNextStage;
+    CreatorImportPlaybackFooter creatorImportPlaybackToggle;
     wi::gui::Label creatorImportActionBar;
     wi::gui::Image creatorImportThumbnailPreview;
     wi::Resource creatorImportThumbnailPreviewResource;
@@ -760,6 +941,47 @@ namespace
             XMFLOAT3(rulerX + CapHalfWidth, CreatorImportStageHeight + ReferenceHeight, z));
     }
 
+    void QueueCreatorImportBoneOverlay()
+    {
+        if (!creatorModelImporter.active || !creatorModelImporter.importAsCharacter ||
+            !creatorModelImporter.boneOverlayVisible ||
+            creatorModelImporter.thumbnailCapturePending ||
+            !creatorModelImporter.previewScene.IsValid())
+            return;
+        const auto& preview = *creatorModelImporter.previewScene;
+        for (std::size_t rigIndex = 0;
+            rigIndex < std::min(creatorModelImporter.importedArmatureCount,
+                preview.armatures.GetCount()); ++rigIndex)
+        {
+            const auto& armature = preview.armatures[rigIndex];
+            for (const auto bone : armature.boneCollection)
+            {
+                const auto* hierarchy = preview.hierarchy.GetComponent(bone);
+                if (hierarchy == nullptr ||
+                    std::find(armature.boneCollection.begin(),
+                        armature.boneCollection.end(), hierarchy->parentID) ==
+                            armature.boneCollection.end())
+                    continue;
+                const auto* childTransform = preview.transforms.GetComponent(bone);
+                const auto* parentTransform = preview.transforms.GetComponent(
+                    hierarchy->parentID);
+                if (childTransform == nullptr || parentTransform == nullptr)
+                    continue;
+                wi::renderer::RenderableLine segment;
+                segment.start = XMFLOAT3(
+                    parentTransform->world._41, parentTransform->world._42,
+                    parentTransform->world._43);
+                segment.end = XMFLOAT3(
+                    childTransform->world._41, childTransform->world._42,
+                    childTransform->world._43);
+                segment.color_start = XMFLOAT4(0.20f, 0.91f, 0.96f, 0.97f);
+                segment.color_end = XMFLOAT4(1.0f, 0.64f, 0.32f, 0.97f);
+                // Rig inspection must remain visible through the source mesh.
+                wi::renderer::DrawLine(segment, false);
+            }
+        }
+    }
+
     void ApplyCreatorImportPreviewTransform()
     {
         auto* session = renegade::bridge::StudioSession::Current();
@@ -783,6 +1005,25 @@ namespace
         transform->SetDirty();
         transform->UpdateTransform();
         UpdateCreatorImportScaleReferenceLabel();
+    }
+
+    void ApplyCreatorImportReferenceVisibility()
+    {
+        if (!creatorModelImporter.previewScene.IsValid() ||
+            creatorModelImporter.referenceRoot == wi::ecs::INVALID_ENTITY)
+            return;
+        auto* transform = CreatorImportActiveScene().transforms.GetComponent(
+            creatorModelImporter.referenceRoot);
+        if (transform == nullptr)
+            return;
+        // The model stays at a fixed 1.82 m reference scale; visibility never
+        // inherits or responds to the imported asset's Transform stage.
+        const float scale = creatorModelImporter.mannequinVisible &&
+            !creatorModelImporter.thumbnailPresentationOverridden
+            ? creatorModelImporter.referenceScale : 0.0f;
+        transform->scale_local = XMFLOAT3(scale, scale, scale);
+        transform->SetDirty();
+        transform->UpdateTransform();
     }
 
     void ApplyCreatorImportPreviewLighting()
@@ -1028,6 +1269,7 @@ namespace
             creatorImportAnimationName.SetValue("");
             creatorImportAnimationStart.SetValue(0.0f);
             creatorImportAnimationEnd.SetValue(0.0f);
+            creatorImportAnimationSpeed.SetValue(1.0f);
             creatorImportAnimationEnabled.SetSelectedWithoutCallback(-1);
             creatorImportAnimationReadout.SetText("No animation actions detected.");
             return;
@@ -1040,11 +1282,13 @@ namespace
         creatorImportAnimationName.SetValue(clip.name);
         creatorImportAnimationStart.SetValue(clip.start);
         creatorImportAnimationEnd.SetValue(clip.end);
+        creatorImportAnimationSpeed.SetValue(clip.speed);
         creatorImportAnimationEnabled.SetSelectedWithoutCallback(clip.enabled ? 0 : 1);
         std::ostringstream out;
         out.precision(3);
         out << std::fixed << "Source action " << clip.sourceAnimationIndex + 1
             << " // " << clip.start << " - " << clip.end
+            << " // " << clip.speed << "x speed"
             << " // " << (clip.enabled ? "INCLUDED" : "EXCLUDED");
         if (creatorModelImporter.previewScene.IsValid() &&
             clip.sourceAnimationIndex < creatorModelImporter.animationEntities.size())
@@ -1098,6 +1342,7 @@ namespace
             StopCreatorImportPreviewAnimations();
             animation->start = clip.start;
             animation->end = clip.end;
+            animation->speed = clip.speed;
             (void)renegade::bridge::PlayAnimation(preview, entity, true);
         }
         else if (pause)
@@ -1109,6 +1354,14 @@ namespace
 
     void RebuildCreatorImportAnimationCombo()
     {
+        std::vector<renegade::studio::RenegadeAnimationClipTable::Row> tableRows;
+        for (const auto& clip : creatorModelImporter.animationRecipe)
+            tableRows.push_back({clip.name, clip.start, clip.end,
+                std::any_of(creatorModelImporter.externalAnimations.begin(),
+                    creatorModelImporter.externalAnimations.end(),
+                    [&clip](const auto& source) { return clip.sourceAnimationIndex >= source.firstSourceIndex &&
+                        clip.sourceAnimationIndex - source.firstSourceIndex < source.clipCount; })});
+        creatorImportAnimationTable.SetRows(std::move(tableRows), creatorModelImporter.selectedAnimation);
         creatorImportAnimationCombo.ClearItems();
         for (std::size_t index = 0; index < creatorModelImporter.animationRecipe.size(); ++index)
         {
@@ -1132,10 +1385,8 @@ namespace
     {
         std::ostringstream status;
         status << "EXTERNAL SOURCES: " << creatorModelImporter.externalAnimations.size();
-        for (const auto& source : creatorModelImporter.externalAnimations)
-            status << "\n" << fs::u8path(source.sourcePath).filename().generic_u8string()
-                << " // " << source.clipCount << " native clip(s)";
-        status << "\nPREVIEW ONLY // CONFIRM ATTEMPTS GOVERNED COMMIT.";
+        status << " // Imported actions appear in the table above."
+               << "\nPREVIEW ONLY // CONFIRM ATTEMPTS GOVERNED COMMIT.";
         creatorImportExternalAnimationStatus.SetText(status.str());
         creatorImportExternalAnimationRemove.SetEnabled(
             !creatorModelImporter.externalAnimations.empty());
@@ -1148,6 +1399,12 @@ namespace
             creatorModelImporter.committing || path.empty())
             return;
         auto& preview = *creatorModelImporter.previewScene;
+        if (creatorModelImporter.importedArmatureCount == 0)
+        {
+            creatorImportExternalAnimationStatus.SetText(
+                "RETARGET UNAVAILABLE // the imported asset has no armature.");
+            return;
+        }
         std::string error;
         if (!renegade::bridge::EnsureHumanoidAnimationSourceMapping(preview, error))
         {
@@ -1155,7 +1412,9 @@ namespace
             return;
         }
         wi::ecs::Entity target = wi::ecs::INVALID_ENTITY;
-        for (std::size_t index = 0; index < preview.armatures.GetCount(); ++index)
+        for (std::size_t index = 0;
+            index < std::min(creatorModelImporter.importedArmatureCount,
+                preview.armatures.GetCount()); ++index)
         {
             const auto candidate = preview.armatures.GetEntity(index);
             if (renegade::bridge::IsHumanoidMappingValid(
@@ -1215,6 +1474,8 @@ namespace
                 return;
             }
         }
+        const std::size_t firstSourceIndex =
+            creatorModelImporter.animationEntities.size();
         for (const auto entity : created)
         {
             const auto* animation = preview.animations.GetComponent(entity);
@@ -1235,6 +1496,7 @@ namespace
         source.sourcePath = path;
         source.sourceHash = sourceHash;
         source.clipCount = created.size();
+        source.firstSourceIndex = firstSourceIndex;
         source.command = std::move(command);
         creatorModelImporter.externalAnimations.push_back(std::move(source));
         StopCreatorImportPreviewAnimations();
@@ -1252,13 +1514,30 @@ namespace
         StopCreatorImportPreviewAnimations();
         auto& last = creatorModelImporter.externalAnimations.back();
         const std::size_t count = last.clipCount;
+        const std::size_t first = last.firstSourceIndex;
         if (last.command)
             last.command->Undo();
-        for (std::size_t i = 0; i < count; ++i)
+        // Clip duplication, trimming and deletion change the recipe length;
+        // remove by stable source range, never pop unrelated authored clips.
+        creatorModelImporter.animationRecipe.erase(
+            std::remove_if(creatorModelImporter.animationRecipe.begin(),
+                creatorModelImporter.animationRecipe.end(),
+                [first, count](const renegade::bridge::CreatorAnimationImportRecipe& clip)
+                {
+                    return clip.sourceAnimationIndex >= first &&
+                        clip.sourceAnimationIndex - first < count;
+                }), creatorModelImporter.animationRecipe.end());
+        if (first <= creatorModelImporter.animationEntities.size() &&
+            count <= creatorModelImporter.animationEntities.size() - first &&
+            first <= creatorModelImporter.animationSourceRanges.size() &&
+            count <= creatorModelImporter.animationSourceRanges.size() - first)
         {
-            creatorModelImporter.animationEntities.pop_back();
-            creatorModelImporter.animationSourceRanges.pop_back();
-            creatorModelImporter.animationRecipe.pop_back();
+            creatorModelImporter.animationEntities.erase(
+                creatorModelImporter.animationEntities.begin() + first,
+                creatorModelImporter.animationEntities.begin() + first + count);
+            creatorModelImporter.animationSourceRanges.erase(
+                creatorModelImporter.animationSourceRanges.begin() + first,
+                creatorModelImporter.animationSourceRanges.begin() + first + count);
         }
         creatorModelImporter.externalAnimations.pop_back();
         creatorModelImporter.selectedAnimation = 0;
@@ -1677,12 +1956,22 @@ namespace renegade::studio
                 ? CreatorImportStageHeight + 0.02f
                 : gridPlaneHeight);
 
-        // Ice-blue is the approved interaction colour. Unlike Wicked's helper,
-        // every line including the two axes is Renegade's to choose.
-        constants.minorColor = XMFLOAT4(0.36f, 0.84f, 1.0f, 0.28f);
-        constants.majorColor = XMFLOAT4(0.46f, 0.90f, 1.0f, 0.50f);
-        constants.axisColorX = XMFLOAT4(1.00f, 0.42f, 0.06f, 0.70f);
-        constants.axisColorZ = XMFLOAT4(0.30f, 0.78f, 1.00f, 0.70f);
+        // The authored editor uses ice-blue interaction lines. Importer
+        // preview keeps the same native grid pass, but deliberately reduces
+        // it to a neutral studio floor so it cannot read as level-editing UI.
+        const bool importerPreview = creatorModelImporter.active;
+        constants.minorColor = importerPreview
+            ? XMFLOAT4(0.34f, 0.46f, 0.52f, 0.10f)
+            : XMFLOAT4(0.36f, 0.84f, 1.0f, 0.28f);
+        constants.majorColor = importerPreview
+            ? XMFLOAT4(0.42f, 0.57f, 0.63f, 0.18f)
+            : XMFLOAT4(0.46f, 0.90f, 1.0f, 0.50f);
+        constants.axisColorX = importerPreview
+            ? XMFLOAT4(0.42f, 0.57f, 0.63f, 0.18f)
+            : XMFLOAT4(1.00f, 0.42f, 0.06f, 0.70f);
+        constants.axisColorZ = importerPreview
+            ? XMFLOAT4(0.42f, 0.57f, 0.63f, 0.18f)
+            : XMFLOAT4(0.30f, 0.78f, 1.00f, 0.70f);
 
         // Fade start/end, base spacing, master opacity. The fade window keeps
         // the horizon from turning into an aliased smear.
@@ -4188,16 +4477,7 @@ namespace renegade::studio
     {
         importScalePanel_.Create(
             "Model Import Workspace",
-            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR |
-            wi::gui::Window::WindowControls::RESIZE_LEFT);
-        importScalePanel_.OnResize([this]()
-        {
-            if (importInspectorLayoutInProgress_)
-                return;
-            importInspectorWidth_ = std::clamp(
-                importScalePanel_.GetSize().x, 310.0f, 680.0f);
-            ResizeLayout();
-        });
+            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
         // Registration is deferred until every importer page is attached.
 
         importScaleTitleLabel_.Create("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
@@ -4209,11 +4489,17 @@ namespace renegade::studio
         constexpr const char* stageNames[] = {
             "ASSET SETUP", "TRANSFORM & SCALE", "MATERIALS & TEXTURES",
             "RIG & RETARGETING", "ANIMATIONS", "REVIEW & IMPORT"};
+        constexpr const char* stageDetails[] = {
+            "Name, type and destination", "Model only · reference stays fixed",
+            "Inspect surface assignments", "Skeleton compatibility & diagnostics",
+            "Browse clips · inspect · preview", "Clear outcome and destination"};
         for (std::size_t index = 0; index < creatorImportStageButtons.size(); ++index)
         {
             auto& heading = creatorImportStageButtons[index];
             heading.Create(std::string("Importer Stage ") + stageNames[index]);
             heading.SetText(stageNames[index]);
+            heading.SetStageIndex(index);
+            heading.SetStageDetails(stageDetails[index]);
             heading.OnClick([this, index](const wi::gui::EventArgs&)
             {
                 if (!creatorModelImporter.importAsCharacter &&
@@ -4221,6 +4507,22 @@ namespace renegade::studio
                     return;
                 creatorModelImporter.workspaceSection = index;
                 importScalePanel_.scrollbar_vertical.SetOffset(0.0f);
+                RefreshCreatorImportWorkspaceSection();
+                ResizeLayout();
+            });
+        }
+        // Independent, stateful accordions inside the Transform stage. They
+        // reveal the existing live controls instead of drawing dummy rows.
+        constexpr const char* transformGroupNames[] = {
+            "POSITION", "ROTATION", "SCALE", "SIZE & UNITS", "PREVIEW LIGHTING"};
+        for (std::size_t index = 0; index < creatorImportTransformGroups.size(); ++index)
+        {
+            auto& group = creatorImportTransformGroups[index];
+            group.Create(std::string("Import Transform Group ") + transformGroupNames[index]);
+            group.SetText(std::string("+  ") + transformGroupNames[index]);
+            group.OnClick([this, index](const wi::gui::EventArgs&)
+            {
+                creatorImportTransformExpanded[index] = !creatorImportTransformExpanded[index];
                 RefreshCreatorImportWorkspaceSection();
                 ResizeLayout();
             });
@@ -4240,6 +4542,7 @@ namespace renegade::studio
             creatorModelImporter.destinationFolder = "Content/Models";
             creatorImportDestination.SetValue(creatorModelImporter.destinationFolder);
             importScaleTitleLabel_.SetText("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
+            creatorImportPlaybackToggle.SetEnabled(false);
             RefreshCreatorImportWorkspaceSection();
             ResizeLayout();
         });
@@ -4251,11 +4554,71 @@ namespace renegade::studio
             creatorModelImporter.destinationFolder = "Content/Characters";
             creatorImportDestination.SetValue(creatorModelImporter.destinationFolder);
             importScaleTitleLabel_.SetText("CHARACTER IMPORTER // RIG REVIEW REQUIRED");
+            creatorImportPlaybackToggle.SetEnabled(
+                !creatorModelImporter.animationEntities.empty());
             RefreshCreatorImportWorkspaceSection();
             ResizeLayout();
         });
         creatorImportRigReadout.Create("");
         creatorImportRigReadout.SetFitTextEnabled(true);
+        creatorImportRigAutoMap.Create("Importer Auto Map Humanoid Rig");
+        creatorImportRigAutoMap.SetText("AUTO-MAP HUMANOID RIG");
+        creatorImportRigAutoMap.OnClick([](const wi::gui::EventArgs&)
+        {
+            if (!creatorModelImporter.active || !creatorModelImporter.importAsCharacter ||
+                !creatorModelImporter.previewScene.IsValid()) return;
+            auto& preview = *creatorModelImporter.previewScene;
+            if (creatorModelImporter.importedArmatureCount == 0)
+            {
+                creatorImportRigReadout.SetText(
+                    "AUTO-MAP UNAVAILABLE // the imported asset has no armature.");
+                return;
+            }
+            std::string error;
+            if (!bridge::EnsureHumanoidAnimationSourceMapping(preview, error))
+            {
+                creatorImportRigReadout.SetText("AUTO-MAP FAILED // " + error);
+                return;
+            }
+            bool importedRigMapped = false;
+            for (std::size_t index = 0;
+                index < std::min(creatorModelImporter.importedArmatureCount,
+                    preview.armatures.GetCount()); ++index)
+                importedRigMapped |= bridge::IsHumanoidMappingValid(
+                    bridge::CaptureHumanoidMapping(preview,
+                        preview.armatures.GetEntity(index)));
+            if (!importedRigMapped)
+            {
+                creatorImportRigReadout.SetText(
+                    "AUTO-MAP INCOMPLETE // missing source-character bone mapping.");
+                return;
+            }
+            creatorImportRigReadout.SetText(
+                "AUTO-MAP APPLIED // native humanoid mapping available. "
+                "Toggle SHOW BONES to inspect the asset, or add an external "
+                "animation to retarget it onto this character.");
+        });
+        creatorImportRigBoneOverlay.Create("Show Import Skeleton Bones");
+        creatorImportRigBoneOverlay.SetText("SHOW ACTUAL SKELETON BONES");
+        creatorImportRigBoneOverlay.SetCheck(false);
+        creatorImportRigBoneOverlay.OnClick([](const wi::gui::EventArgs& args)
+        {
+            creatorModelImporter.boneOverlayVisible = args.bValue;
+        });
+        creatorImportRigRetarget.Create("Importer Retarget External Animation");
+        creatorImportRigRetarget.SetText("ADD & RETARGET EXTERNAL ANIMATION...");
+        creatorImportRigPreview.Create("Importer Preview Retargeted Animation");
+        creatorImportRigPreview.SetText("PREVIEW SELECTED CLIP ON CHARACTER");
+        creatorImportRigPreview.OnClick([](const wi::gui::EventArgs&)
+        {
+            if (creatorModelImporter.animationRecipe.empty())
+            {
+                creatorImportRigReadout.SetText(
+                    "NO PREVIEW CLIP // add and retarget an external animation first.");
+                return;
+            }
+            PreviewSelectedCreatorImportAnimation(true, false);
+        });
 
         creatorImportAssetName.Create("Creator Asset Name");
         creatorImportAssetName.SetPlaceholder("ASSET NAME");
@@ -4395,6 +4758,20 @@ namespace renegade::studio
             importScaleAppliedFactor_ = factor;
         });
 
+        constexpr const char* materialGroupNames[] = {
+            "MATERIAL ASSIGNMENTS", "TEXTURE MAPS", "PBR VALUES"};
+        for (std::size_t index = 0; index < creatorImportMaterialGroups.size(); ++index)
+        {
+            auto& group = creatorImportMaterialGroups[index];
+            group.Create(std::string("Import Material Group ") + materialGroupNames[index]);
+            group.SetText(std::string("+  ") + materialGroupNames[index]);
+            group.OnClick([this, index](const wi::gui::EventArgs&)
+            {
+                creatorImportMaterialExpanded[index] = !creatorImportMaterialExpanded[index];
+                RefreshCreatorImportWorkspaceSection();
+                ResizeLayout();
+            });
+        }
         creatorImportMaterialLabel.Create("MATERIALS // DETECTED MAPS");
         creatorImportMaterialCombo.Create("Material Slot");
         creatorImportMaterialCombo.OnSelect([](const wi::gui::EventArgs& args)
@@ -4415,6 +4792,17 @@ namespace renegade::studio
             creatorImportTextureSlotCombo.SetSelectedWithoutCallback(
                 static_cast<int>(index));
             RefreshCreatorImportTextureEditor();
+        });
+        creatorImportTexturePreviews.OnRemoveRequested([](const std::size_t index)
+        {
+            if (!creatorModelImporter.active) return;
+            creatorImportTextureSlot = index;
+            auto& choice = SelectedCreatorTextureChoice();
+            choice.overridden = true;
+            choice.path.clear();
+            ApplyCreatorPreviewTextureChoice({});
+            RefreshCreatorImportTextureEditor();
+            RefreshCreatorImportMaterialReadout();
         });
         creatorImportTexturePreviews.OnBrowseRequested([](const std::size_t index)
         {
@@ -4530,11 +4918,12 @@ namespace renegade::studio
         creatorImportMannequinVisible.Create("Human Scale Reference");
         creatorImportMannequinVisible.SetText("SHOW 1.82 M MALE REFERENCE");
         creatorImportMannequinVisible.SetCheck(true);
-        creatorImportHumanReference = wi::resourcemanager::Load(
-            "Content/ui/creator-human-reference.png");
+        // The old 2D ruler billboard is intentionally not loaded. The
+        // fixed-height reference is a real FBX in the transient preview scene.
         creatorImportMannequinVisible.OnClick([](const wi::gui::EventArgs& args)
         {
             creatorModelImporter.mannequinVisible = args.bValue;
+            ApplyCreatorImportReferenceVisibility();
         });
 
         const auto applyLightingPreset = [](const int preset)
@@ -4576,7 +4965,29 @@ namespace renegade::studio
             applyLightingPreset(0);
         });
 
+        constexpr const char* animationGroupNames[] = {
+            "ANIMATION ACTIONS", "EXTERNAL ANIMATION FILES"};
+        for (std::size_t index = 0; index < creatorImportAnimationGroups.size(); ++index)
+        {
+            auto& group = creatorImportAnimationGroups[index];
+            group.Create(std::string("Import Animation Group ") + animationGroupNames[index]);
+            group.SetText(std::string("+  ") + animationGroupNames[index]);
+            group.OnClick([this, index](const wi::gui::EventArgs&)
+            {
+                creatorImportAnimationExpanded[index] = !creatorImportAnimationExpanded[index];
+                RefreshCreatorImportWorkspaceSection();
+                ResizeLayout();
+            });
+        }
         creatorImportAnimationLabel.Create("ANIMATIONS // EDITABLE CLIPS");
+        creatorImportAnimationTable.SetName("Unified animation actions");
+        creatorImportAnimationTable.OnSelected([](std::size_t index)
+        {
+            StopCreatorImportPreviewAnimations();
+            creatorModelImporter.selectedAnimation = index;
+            creatorImportAnimationCombo.SetSelectedWithoutCallback(static_cast<int>(index));
+            RefreshCreatorImportAnimationEditor();
+        });
         creatorImportAnimationCombo.Create("Animation Action");
         creatorImportAnimationCombo.OnSelect([](const wi::gui::EventArgs& args)
         {
@@ -4600,7 +5011,7 @@ namespace renegade::studio
             if (creatorModelImporter.animationRecipe.empty()) return;
             auto& clip = creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation];
             clip.start = std::min(args.fValue, clip.end);
-            RefreshCreatorImportAnimationEditor();
+            RebuildCreatorImportAnimationCombo();
         });
         creatorImportAnimationEnd.Create("Animation End");
         creatorImportAnimationEnd.SetDescription("END: ");
@@ -4609,6 +5020,20 @@ namespace renegade::studio
             if (creatorModelImporter.animationRecipe.empty()) return;
             auto& clip = creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation];
             clip.end = std::max(args.fValue, clip.start);
+            RebuildCreatorImportAnimationCombo();
+        });
+        creatorImportAnimationSpeed.Create("Animation Playback Speed");
+        creatorImportAnimationSpeed.SetDescription("SPEED (0.1-4x): ");
+        creatorImportAnimationSpeed.OnInputAccepted([](const wi::gui::EventArgs& args)
+        {
+            if (creatorModelImporter.animationRecipe.empty()) return;
+            if (!std::isfinite(args.fValue) || args.fValue < 0.1f || args.fValue > 4.0f)
+            {
+                creatorImportAnimationReadout.SetText("Speed must be between 0.1x and 4x.");
+                return;
+            }
+            StopCreatorImportPreviewAnimations();
+            creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation].speed = args.fValue;
             RefreshCreatorImportAnimationEditor();
         });
         creatorImportAnimationEnabled.Create("Animation Included");
@@ -4666,18 +5091,25 @@ namespace renegade::studio
         });
         creatorImportExternalAnimationAdd.Create("Queue External Character Animation");
         creatorImportExternalAnimationAdd.SetText("ADD EXTERNAL FBX / GLTF / GLB...");
-        creatorImportExternalAnimationAdd.OnClick([](const wi::gui::EventArgs&)
+        const auto openExternalAnimationPicker = [](const wi::gui::EventArgs&)
         {
             if (!creatorModelImporter.active || !creatorModelImporter.importAsCharacter ||
                 !creatorModelImporter.previewScene.IsValid() ||
                 creatorModelImporter.committing)
+            {
+                creatorImportExternalAnimationStatus.SetText(
+                    "FILE PICKER UNAVAILABLE // no active, editable Character preview.");
                 return;
+            }
+            creatorImportExternalAnimationStatus.SetText(
+                "OPENING WINDOWS FILE PICKER // select FBX, GLTF or GLB; Esc cancels.");
             const auto previewIdentity = creatorModelImporter.previewScene;
             const auto sourceIdentity = creatorModelImporter.sourcePath;
             wi::helper::FileDialogParams params;
             params.type = wi::helper::FileDialogParams::OPEN;
             params.description = "External humanoid animation (FBX, GLTF, GLB, WISCENE, VRM, VRMA)";
             params.extensions = {"fbx", "gltf", "glb", "wiscene", "vrm", "vrma"};
+            params.multiselect = true;
             wi::helper::FileDialog(params,
                 [previewIdentity, sourceIdentity](const std::string& path)
                 {
@@ -4694,8 +5126,22 @@ namespace renegade::studio
                                 return;
                             QueueCreatorExternalAnimation(path);
                         });
+                },
+                [previewIdentity, sourceIdentity]()
+                {
+                    wi::eventhandler::Subscribe_Once(
+                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                        [previewIdentity, sourceIdentity](std::uint64_t)
+                        {
+                            if (creatorModelImporter.active &&
+                                creatorModelImporter.previewScene.get() == previewIdentity.get() &&
+                                creatorModelImporter.sourcePath == sourceIdentity)
+                                RefreshCreatorExternalAnimationQueue();
+                        });
                 });
-        });
+        };
+        creatorImportExternalAnimationAdd.OnClick(openExternalAnimationPicker);
+        creatorImportRigRetarget.OnClick(openExternalAnimationPicker);
         creatorImportExternalAnimationRemove.Create("Remove Last External Animation Source");
         creatorImportExternalAnimationRemove.SetText("REMOVE LAST SOURCE");
         creatorImportExternalAnimationRemove.OnClick([](const wi::gui::EventArgs&)
@@ -4743,6 +5189,73 @@ namespace renegade::studio
         creatorImportActionBar.SetText("THUMBNAIL & IMPORT");
         creatorImportActionBar.SetShadowRadius(0.0f);
 
+        creatorImportResetView.Create("Importer Reset View");
+        creatorImportResetView.SetText("RESET VIEW");
+        creatorImportResetView.OnClick([this](const wi::gui::EventArgs&)
+        {
+            FrameCreatorImportPreviewCamera();
+        });
+        creatorImportReferenceToggle.Create("Importer Reference Toggle");
+        creatorImportReferenceToggle.OnClick([](const wi::gui::EventArgs&)
+        {
+            creatorModelImporter.mannequinVisible = !creatorModelImporter.mannequinVisible;
+            creatorImportMannequinVisible.SetCheck(creatorModelImporter.mannequinVisible);
+            ApplyCreatorImportReferenceVisibility();
+            creatorImportReferenceToggle.SetText(creatorModelImporter.mannequinVisible
+                ? "1.82 M REFERENCE" : "REFERENCE HIDDEN");
+        });
+        creatorImportZoomOut.Create("Importer Zoom Out");
+        creatorImportZoomOut.SetText("−");
+        creatorImportZoomOut.OnClick([this](const wi::gui::EventArgs&)
+        {
+            if (camera != nullptr)
+            {
+                camera->fov = std::clamp(camera->fov * 1.12f,
+                    12.0f * XM_PI / 180.0f, 68.0f * XM_PI / 180.0f);
+                camera->UpdateCamera();
+            }
+        });
+        creatorImportZoomIn.Create("Importer Zoom In");
+        creatorImportZoomIn.SetText("+");
+        creatorImportZoomIn.OnClick([this](const wi::gui::EventArgs&)
+        {
+            if (camera != nullptr)
+            {
+                camera->fov = std::clamp(camera->fov / 1.12f,
+                    12.0f * XM_PI / 180.0f, 68.0f * XM_PI / 180.0f);
+                camera->UpdateCamera();
+            }
+        });
+        const auto moveStage = [this](const int direction)
+        {
+            const std::size_t current = creatorModelImporter.workspaceSection;
+            for (int candidate = static_cast<int>(current) + direction;
+                candidate >= 0 && candidate < static_cast<int>(creatorImportStageButtons.size());
+                candidate += direction)
+            {
+                if (!creatorModelImporter.importAsCharacter &&
+                    (candidate == 3 || candidate == 4))
+                    continue;
+                creatorModelImporter.workspaceSection = static_cast<std::size_t>(candidate);
+                importScalePanel_.scrollbar_vertical.SetOffset(0.0f);
+                RefreshCreatorImportWorkspaceSection();
+                ResizeLayout();
+                return;
+            }
+        };
+        creatorImportPreviousStage.Create("Importer Previous Stage");
+        creatorImportPreviousStage.SetText("← PREVIOUS STAGE");
+        creatorImportPreviousStage.OnClick([moveStage](const wi::gui::EventArgs&) { moveStage(-1); });
+        creatorImportNextStage.Create("Importer Next Stage");
+        creatorImportNextStage.SetText("NEXT STAGE →");
+        creatorImportNextStage.OnClick([moveStage](const wi::gui::EventArgs&) { moveStage(1); });
+        creatorImportPlaybackToggle.Create("Importer Playback Toggle");
+        creatorImportPlaybackToggle.SetText("PLAY SELECTED CLIP");
+        creatorImportPlaybackToggle.OnClick([](const wi::gui::EventArgs&)
+        {
+            PreviewSelectedCreatorImportAnimation(true, false);
+        });
+
         // Commit is the final workflow page, matching the other sections and
         // leaving this page available for a future batch-import queue.
         importScaleApplyButton_.SetShadowRadius(0.0f);
@@ -4757,6 +5270,10 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAssetName),
             static_cast<wi::gui::Widget*>(&creatorImportDestination),
             static_cast<wi::gui::Widget*>(&creatorImportRigReadout),
+            static_cast<wi::gui::Widget*>(&creatorImportRigAutoMap),
+            static_cast<wi::gui::Widget*>(&creatorImportRigBoneOverlay),
+            static_cast<wi::gui::Widget*>(&creatorImportRigRetarget),
+            static_cast<wi::gui::Widget*>(&creatorImportRigPreview),
             static_cast<wi::gui::Widget*>(&creatorImportTransformLabel),
             static_cast<wi::gui::Widget*>(&creatorImportPositionX),
             static_cast<wi::gui::Widget*>(&creatorImportPositionY),
@@ -4795,10 +5312,12 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportLightingReset),
             static_cast<wi::gui::Widget*>(&creatorImportMannequinVisible),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationLabel),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationTable),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationCombo),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationName),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationStart),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationEnd),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationSpeed),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
@@ -4807,8 +5326,6 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAnimationStop),
             static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationAdd),
             static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationRemove),
-            static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationStatus),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout),
             static_cast<wi::gui::Widget*>(&creatorImportActionBar),
             static_cast<wi::gui::Widget*>(&creatorImportThumbnailPreview),
             static_cast<wi::gui::Widget*>(&creatorImportThumbnailCapture),
@@ -4824,9 +5341,38 @@ namespace renegade::studio
             heading.SetShadowRadius(0.0f);
             importScalePanel_.AddWidget(&heading);
         }
+        for (auto& group : creatorImportTransformGroups)
+        {
+            group.SetShadowRadius(0.0f);
+            importScalePanel_.AddWidget(&group);
+        }
+        for (auto& group : creatorImportMaterialGroups)
+        {
+            group.SetShadowRadius(0.0f);
+            importScalePanel_.AddWidget(&group);
+        }
+        for (auto& group : creatorImportAnimationGroups)
+        {
+            group.SetShadowRadius(0.0f);
+            importScalePanel_.AddWidget(&group);
+        }
+        importScalePanel_.InitializeInspectorShell();
         // Hide only after all child controls have inherited an enabled parent.
         importScalePanel_.SetVisible(false);
         GetGUI().AddWidget(&importScalePanel_);
+        for (wi::gui::Widget* widget : {
+            static_cast<wi::gui::Widget*>(&creatorImportResetView),
+            static_cast<wi::gui::Widget*>(&creatorImportReferenceToggle),
+            static_cast<wi::gui::Widget*>(&creatorImportZoomOut),
+            static_cast<wi::gui::Widget*>(&creatorImportZoomIn),
+            static_cast<wi::gui::Widget*>(&creatorImportPreviousStage),
+            static_cast<wi::gui::Widget*>(&creatorImportNextStage),
+            static_cast<wi::gui::Widget*>(&creatorImportPlaybackToggle)})
+        {
+            widget->SetShadowRadius(0.0f);
+            widget->SetVisible(false);
+            GetGUI().AddWidget(widget);
+        }
     }
 
     void StudioRenderPath::ApplyRenegadeTheme()
@@ -4900,8 +5446,9 @@ namespace renegade::studio
         // inspectorPanel_'s per-instance override, only the global theme.
         importScalePanel_.SetColor(wi::Color::Transparent());
         importScalePanel_.SetColor(
-            HologramPanel,
+            wi::Color(15, 23, 29, 255),
             wi::gui::WIDGET_ID_WINDOW_BASE);
+        importScalePanel_.SetShadowRadius(0.0f);
 
         const auto ownLabel = [](wi::gui::Label& label)
         {
@@ -4935,6 +5482,10 @@ namespace renegade::studio
         ownLabel(oceanLabel_);
         ownLabel(importScaleTitleLabel_);
         ownLabel(importScaleReadoutLabel_);
+        importScaleTitleLabel_.SetColor(wi::Color::Transparent());
+        importScaleTitleLabel_.font.params.color = wi::Color(235, 241, 245, 255);
+        importScaleReadoutLabel_.SetColor(wi::Color::Transparent());
+        importScaleReadoutLabel_.font.params.color = wi::Color(150, 170, 184, 255);
         ownLabel(creatorImportActionBar);
         ownLabel(creatorImportThumbnailStatus);
 
@@ -5093,7 +5644,8 @@ namespace renegade::studio
         {
             // The Window owns child transforms while it processes scrolling and
             // pointer state. Never relayout its children from the frame loop.
-            renderWorkspacePanel_.SetVisible(!projectHubVisible_);
+            renderWorkspacePanel_.SetVisible(
+                !projectHubVisible_ && !creatorModelImporter.active);
             inspectorPanel_.SetVisible(false);
             TickGate8BakeControls();
         }
@@ -5204,6 +5756,7 @@ namespace renegade::studio
                 GetLogicalHeight());
             HandleViewportNavigation(dt, wi::input::GetPointer());
             QueueCreatorImportScaleRuler();
+            QueueCreatorImportBoneOverlay();
             if (pendingAction_ != EditorAction::None)
                 ProcessPendingAction();
             diagnosticInput.StopAt("import_workspace");
@@ -5862,7 +6415,17 @@ namespace renegade::studio
         creatorImportCharacterChoice.SetPos(XMFLOAT2(16.0f + (importScalePanelWidth - 28.0f) * 0.5f, 274.0f));
         creatorImportCharacterChoice.SetSize(XMFLOAT2((importScalePanelWidth - 28.0f) * 0.5f, 44.0f));
         creatorImportRigReadout.SetPos(XMFLOAT2(12.0f, 190.0f));
-        creatorImportRigReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 130.0f));
+        creatorImportRigReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 138.0f));
+        const auto rigRow = [importScalePanelWidth](wi::gui::Widget& widget,
+            const float y)
+        {
+            widget.SetPos(XMFLOAT2(12.0f, y));
+            widget.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
+        };
+        rigRow(creatorImportRigAutoMap, 338.0f);
+        rigRow(creatorImportRigBoneOverlay, 378.0f);
+        rigRow(creatorImportRigRetarget, 418.0f);
+        rigRow(creatorImportRigPreview, 458.0f);
 
         creatorImportTransformLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
         creatorImportTransformLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
@@ -5918,6 +6481,56 @@ namespace renegade::studio
         layoutSliderRow(creatorImportAoStrength, 862.0f);
         layoutSliderRow(creatorImportEmissiveStrength, 900.0f);
 
+        float materialY = 184.0f;
+        for (std::size_t group = 0; group < creatorImportMaterialGroups.size(); ++group)
+        {
+            auto& heading = creatorImportMaterialGroups[group];
+            heading.SetPos(XMFLOAT2(12.0f, materialY));
+            heading.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
+            materialY += 42.0f;
+            if (!creatorImportMaterialExpanded[group])
+                continue;
+            if (group == 0)
+            {
+                layoutFullRow(creatorImportMaterialCombo, materialY);
+                materialY += 34.0f;
+            }
+            else if (group == 1)
+            {
+                creatorImportTexturePreviews.SetPos(XMFLOAT2(12.0f, materialY));
+                const float tileWidth = (importScalePanelWidth - 24.0f) * 0.5f;
+                const float tileGridHeight = 4.0f * (tileWidth + 54.0f);
+                creatorImportTexturePreviews.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, tileGridHeight));
+                materialY += tileGridHeight + 8.0f;
+                creatorImportTextureSlotCombo.SetPos(XMFLOAT2(12.0f, materialY));
+                creatorImportTextureSlotCombo.SetSize(XMFLOAT2(150.0f, 28.0f));
+                creatorImportTexturePath.SetPos(XMFLOAT2(166.0f, materialY));
+                creatorImportTexturePath.SetSize(XMFLOAT2(importScalePanelWidth - 178.0f, 28.0f));
+                materialY += 36.0f;
+                creatorImportTextureBrowse.SetPos(XMFLOAT2(12.0f, materialY));
+                creatorImportTextureBrowse.SetSize(XMFLOAT2(120.0f, 28.0f));
+                creatorImportTextureClear.SetPos(XMFLOAT2(136.0f, materialY));
+                creatorImportTextureClear.SetSize(XMFLOAT2(100.0f, 28.0f));
+                materialY += 36.0f;
+            }
+            else
+            {
+                for (wi::gui::Widget* field : {
+                    static_cast<wi::gui::Widget*>(&creatorImportRoughness),
+                    static_cast<wi::gui::Widget*>(&creatorImportMetalness),
+                    static_cast<wi::gui::Widget*>(&creatorImportReflectance),
+                    static_cast<wi::gui::Widget*>(&creatorImportNormalStrength),
+                    static_cast<wi::gui::Widget*>(&creatorImportAoStrength),
+                    static_cast<wi::gui::Widget*>(&creatorImportEmissiveStrength)})
+                {
+                    layoutSliderRow(*field, materialY);
+                    materialY += 38.0f;
+                }
+            }
+            materialY += 8.0f;
+        }
+        const float materialBodyHeight = materialY - 184.0f + 8.0f;
+
         creatorImportLightingLabel.SetPos(XMFLOAT2(12.0f, 688.0f));
         creatorImportLightingLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
         layoutSliderRow(creatorImportLightIntensity, 718.0f);
@@ -5927,6 +6540,64 @@ namespace renegade::studio
         layoutFullRow(creatorImportLightingPreset, 878.0f);
         layoutFullRow(creatorImportLightingReset, 914.0f);
         layoutFullRow(creatorImportMannequinVisible, 958.0f);
+
+        // Derive the active inspector height from actual expanded content,
+        // not the old fixed 820px slab. Every group is independently collapsible.
+        float transformY = 184.0f;
+        const auto transformSlider = [&](wi::gui::Widget& field)
+        {
+            layoutSliderRow(field, transformY);
+            transformY += 38.0f;
+        };
+        const auto transformRow = [&](wi::gui::Widget& field)
+        {
+            layoutFullRow(field, transformY);
+            transformY += 36.0f;
+        };
+        for (std::size_t group = 0; group < creatorImportTransformGroups.size(); ++group)
+        {
+            auto& heading = creatorImportTransformGroups[group];
+            heading.SetPos(XMFLOAT2(12.0f, transformY));
+            heading.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
+            transformY += 42.0f;
+            if (!creatorImportTransformExpanded[group])
+                continue;
+            switch (group)
+            {
+            case 0:
+                transformSlider(creatorImportPositionX);
+                transformSlider(creatorImportPositionY);
+                transformSlider(creatorImportPositionZ);
+                break;
+            case 1:
+                transformSlider(creatorImportRotationX);
+                transformSlider(creatorImportRotationY);
+                transformSlider(creatorImportRotationZ);
+                break;
+            case 2:
+                transformRow(creatorImportScaleLinked);
+                transformSlider(creatorImportScaleX);
+                transformSlider(creatorImportScaleY);
+                transformSlider(creatorImportScaleZ);
+                break;
+            case 3:
+                transformRow(creatorImportDimensionPreset);
+                transformRow(importScaleModeCombo_);
+                break;
+            case 4:
+                transformSlider(creatorImportLightIntensity);
+                transformSlider(creatorImportLightAzimuth);
+                transformSlider(creatorImportLightElevation);
+                transformSlider(creatorImportAmbientBrightness);
+                transformRow(creatorImportLightingPreset);
+                transformRow(creatorImportLightingReset);
+                transformRow(creatorImportMannequinVisible);
+                break;
+            default: break;
+            }
+            transformY += 8.0f;
+        }
+        const float transformBodyHeight = transformY - 184.0f + 8.0f;
 
         creatorImportAnimationLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
         creatorImportAnimationLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
@@ -5938,6 +6609,7 @@ namespace renegade::studio
         creatorImportAnimationStart.SetSize(XMFLOAT2(120.0f, 28.0f));
         creatorImportAnimationEnd.SetPos(XMFLOAT2(136.0f, 282.0f));
         creatorImportAnimationEnd.SetSize(XMFLOAT2(120.0f, 28.0f));
+        layoutFullRow(creatorImportAnimationSpeed, 314.0f);
         creatorImportAnimationEnabled.SetPos(XMFLOAT2(260.0f, 282.0f));
         creatorImportAnimationEnabled.SetSize(XMFLOAT2(importScalePanelWidth - 272.0f, 28.0f));
         creatorImportAnimationAdd.SetPos(XMFLOAT2(12.0f, 318.0f));
@@ -5959,24 +6631,124 @@ namespace renegade::studio
         creatorImportExternalAnimationRemove.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 30.0f));
         creatorImportExternalAnimationStatus.SetPos(XMFLOAT2(12.0f, 532.0f));
         creatorImportExternalAnimationStatus.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 112.0f));
+
+        float animationY = 184.0f;
+        for (std::size_t group = 0; group < creatorImportAnimationGroups.size(); ++group)
+        {
+            auto& heading = creatorImportAnimationGroups[group];
+            heading.SetPos(XMFLOAT2(12.0f, animationY));
+            heading.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
+            animationY += 42.0f;
+            if (!creatorImportAnimationExpanded[group])
+                continue;
+            if (group == 0)
+            {
+                creatorImportAnimationTable.SetPos(XMFLOAT2(12.0f, animationY));
+                const float tableHeight = 51.0f + 32.0f * static_cast<float>(
+                    std::min<std::size_t>(6, std::max<std::size_t>(2, creatorModelImporter.animationRecipe.size())));
+                creatorImportAnimationTable.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, tableHeight));
+                animationY += tableHeight + 8.0f;
+                layoutFullRow(creatorImportAnimationName, animationY);
+                animationY += 36.0f;
+                const float trimWidth = (importScalePanelWidth - 28.0f) * 0.5f;
+                creatorImportAnimationStart.SetPos(XMFLOAT2(12.0f, animationY));
+                creatorImportAnimationEnd.SetPos(XMFLOAT2(16.0f + trimWidth, animationY));
+                creatorImportAnimationStart.SetSize(XMFLOAT2(trimWidth, 28.0f));
+                creatorImportAnimationEnd.SetSize(XMFLOAT2(trimWidth, 28.0f));
+                animationY += 36.0f;
+                layoutFullRow(creatorImportAnimationSpeed, animationY);
+                animationY += 36.0f;
+                layoutFullRow(creatorImportAnimationEnabled, animationY);
+                animationY += 36.0f;
+                creatorImportAnimationAdd.SetPos(XMFLOAT2(12.0f, animationY));
+                creatorImportAnimationDelete.SetPos(XMFLOAT2(16.0f + trimWidth, animationY));
+                creatorImportAnimationAdd.SetSize(XMFLOAT2(trimWidth, 28.0f));
+                creatorImportAnimationDelete.SetSize(XMFLOAT2(trimWidth, 28.0f));
+                animationY += 36.0f;
+                const float clipButtonWidth = (importScalePanelWidth - 32.0f) / 3.0f;
+                for (std::size_t i = 0; i < 3; ++i)
+                {
+                    wi::gui::Widget* control = i == 0
+                        ? static_cast<wi::gui::Widget*>(&creatorImportAnimationPlay)
+                        : i == 1 ? static_cast<wi::gui::Widget*>(&creatorImportAnimationPause)
+                                 : static_cast<wi::gui::Widget*>(&creatorImportAnimationStop);
+                    control->SetPos(XMFLOAT2(12.0f + i * (clipButtonWidth + 4.0f), animationY));
+                    control->SetSize(XMFLOAT2(clipButtonWidth, 34.0f));
+                }
+                animationY += 42.0f;
+                creatorImportExternalAnimationAdd.SetPos(XMFLOAT2(12.0f, animationY));
+                creatorImportExternalAnimationAdd.SetSize(XMFLOAT2(trimWidth, 34.0f));
+                creatorImportExternalAnimationRemove.SetPos(XMFLOAT2(16.0f + trimWidth, animationY));
+                creatorImportExternalAnimationRemove.SetSize(XMFLOAT2(trimWidth, 34.0f));
+                animationY += 42.0f;
+            }
+            else
+            {
+                layoutFullRow(creatorImportExternalAnimationAdd, animationY);
+                animationY += 40.0f;
+                layoutFullRow(creatorImportExternalAnimationRemove, animationY);
+                animationY += 38.0f;
+                creatorImportExternalAnimationStatus.SetPos(XMFLOAT2(12.0f, animationY));
+                creatorImportExternalAnimationStatus.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 112.0f));
+                animationY += 120.0f;
+            }
+            animationY += 8.0f;
+        }
+        const float animationBodyHeight = animationY - 184.0f + 8.0f;
         creatorImportActionBar.SetPos(XMFLOAT2(12.0f, 178.0f));
         creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
+        // Review owns explicit layout rather than an Update-time widget-name
+        // reflow. Asset name and destination finish at y=262; the title and
+        // thumbnail therefore have dedicated non-overlapping rows.
         const float thumbnailPreviewSide = std::min(
             244.0f, importScalePanelWidth - 48.0f);
+        const float reviewTitleY = 284.0f;
+        const float reviewPreviewY = 330.0f;
+        const float reviewCaptureY = reviewPreviewY + thumbnailPreviewSide + 14.0f;
+        const float reviewStatusY = reviewCaptureY + 48.0f;
+        const float reviewConfirmY = reviewStatusY + 46.0f;
+        const float reviewCancelY = reviewConfirmY + 52.0f;
+        creatorImportActionBar.SetPos(XMFLOAT2(12.0f, reviewTitleY));
+        creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
         creatorImportThumbnailPreview.SetPos(XMFLOAT2(
             (importScalePanelWidth - thumbnailPreviewSide) * 0.5f,
-            214.0f));
+            reviewPreviewY));
         creatorImportThumbnailPreview.SetSize(XMFLOAT2(
             thumbnailPreviewSide, thumbnailPreviewSide));
-        creatorImportThumbnailCapture.SetPos(XMFLOAT2(12.0f, 468.0f));
+        creatorImportThumbnailCapture.SetPos(XMFLOAT2(12.0f, reviewCaptureY));
         creatorImportThumbnailCapture.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 40.0f));
-        creatorImportThumbnailStatus.SetPos(XMFLOAT2(12.0f, 516.0f));
+        creatorImportThumbnailStatus.SetPos(XMFLOAT2(12.0f, reviewStatusY));
         creatorImportThumbnailStatus.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 38.0f));
-        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 564.0f));
+        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, reviewConfirmY));
         importScaleApplyButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 44.0f));
-        importScaleDismissButton_.SetPos(XMFLOAT2(12.0f, 618.0f));
+        importScaleDismissButton_.SetPos(XMFLOAT2(12.0f, reviewCancelY));
         importScaleDismissButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
-        LayoutCreatorImportStageHeadings(importScalePanelWidth);
+        LayoutCreatorImportStageHeadings(
+            importScalePanelWidth, transformBodyHeight,
+            materialBodyHeight, animationBodyHeight);
+
+        // Preview chrome mirrors the approved workspace: camera/reference
+        // controls live above the large preview and workflow navigation stays
+        // pinned to its lower edge while the inspector scrolls independently.
+        const float previewRight = importScalePanelX - 14.0f;
+        const float toolbarY = 18.0f;
+        creatorImportZoomIn.SetPos(XMFLOAT2(previewRight - 34.0f, toolbarY));
+        creatorImportZoomIn.SetSize(XMFLOAT2(30.0f, 30.0f));
+        creatorImportZoomOut.SetPos(XMFLOAT2(previewRight - 68.0f, toolbarY));
+        creatorImportZoomOut.SetSize(XMFLOAT2(30.0f, 30.0f));
+        creatorImportReferenceToggle.SetPos(XMFLOAT2(previewRight - 210.0f, toolbarY));
+        creatorImportReferenceToggle.SetSize(XMFLOAT2(136.0f, 30.0f));
+        creatorImportResetView.SetPos(XMFLOAT2(previewRight - 326.0f, toolbarY));
+        creatorImportResetView.SetSize(XMFLOAT2(110.0f, 30.0f));
+        const float workflowY = height - 52.0f;
+        creatorImportPreviousStage.SetPos(XMFLOAT2(20.0f, workflowY));
+        creatorImportPreviousStage.SetSize(XMFLOAT2(142.0f, 34.0f));
+        creatorImportPlaybackToggle.SetPos(XMFLOAT2(170.0f, workflowY));
+        creatorImportPlaybackToggle.SetSize(XMFLOAT2(
+            std::max(190.0f, previewRight - 340.0f), 34.0f));
+        creatorImportNextStage.SetPos(XMFLOAT2(
+            std::max(176.0f, previewRight - 158.0f), workflowY));
+        creatorImportNextStage.SetSize(XMFLOAT2(142.0f, 34.0f));
 
         const float hubMargin = std::clamp(width * 0.025f, 24.0f, 40.0f);
         const float hubGap = 18.0f;
@@ -11106,7 +11878,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                         // Normalize the retained in-memory asset before cloning
                         // so preview and committed Character share the same pose.
                         auto* isolated = state->prepared.PeekMutableScene();
-                        (void)bridge::DisableDefaultHumanoidLookAt(*isolated);
+                        // Import preview has no authored look-at target. Disable
+                        // every native humanoid look-at BEFORE cloning and commit:
+                        // nonzero stale target vectors otherwise animate the head.
+                        for (std::size_t i = 0; i < isolated->humanoids.GetCount(); ++i)
+                            isolated->humanoids[i].SetLookAtEnabled(false);
                         creatorModelImporter = {};
                         creatorModelImporter.active = true;
                         creatorModelImporter.sourcePath = state->sourcePath;
@@ -11166,7 +11942,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                                 if (isolated->armatures.GetCount() > 1)
                                     rigStatus << "\nMultiple armatures: inspected the first only.";
                             }
-                            rigStatus << "\nMapping is diagnostic only; retarget preview is not ready.";
+                            rigStatus << "\nUse AUTO-MAP, SHOW BONES and ADD & RETARGET below.";
                             creatorModelImporter.rigDiagnostic = rigStatus.str();
                         }
                         creatorModelImporter.sourceBounds = bridge::ImportService::MeasureModelBounds(*isolated);
@@ -11249,6 +12025,74 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                             }
                         }
 
+                        // Record ONLY the actual source model's rigs. The
+                        // separate preview reference must never be selected
+                        // for retargeting or drawn by the rig overlay.
+                        creatorModelImporter.importedArmatureCount =
+                            preview.armatures.GetCount();
+
+                        // Import the owner's real FBX from the executable's
+                        // Content directory, NOT the process working directory:
+                        // opening a Windows file picker may change that directory.
+                        // Measure it in isolation, then merge into PREVIEW ONLY.
+                        // This keeps its measured height at exactly 1.82 metres
+                        // regardless of the source FBX units or asset transform.
+                        wchar_t studioModule[MAX_PATH] = {};
+                        const DWORD moduleLength = GetModuleFileNameW(
+                            nullptr, studioModule, MAX_PATH);
+                        const fs::path referencePath = moduleLength > 0 &&
+                            moduleLength < MAX_PATH
+                            ? fs::path(studioModule).parent_path() /
+                                "Content" / "importer" / "male_reference.fbx"
+                            : fs::path();
+                        if (!referencePath.empty() &&
+                            fs::is_regular_file(referencePath))
+                        {
+                            wi::scene::Scene referenceScene;
+                            // LoadModel reads WISCENE archives, never FBX. Convert the
+                            // reference using the same native FBX backend as source models.
+                            ImportModel_FBX(referencePath.generic_u8string(), referenceScene);
+                            const auto referenceRoot = referenceScene.transforms.GetCount() > 0
+                                ? referenceScene.transforms.GetEntity(0)
+                                : wi::ecs::INVALID_ENTITY;
+                            (void)bridge::ImportService::RebuildHierarchyAwareModelBounds(referenceScene);
+                            const auto referenceBounds =
+                                bridge::ImportService::MeasureModelBounds(referenceScene);
+                            const float nativeHeight = referenceBounds.valid
+                                ? referenceBounds.maximum.y - referenceBounds.minimum.y
+                                : 0.0f;
+                            if (referenceRoot != wi::ecs::INVALID_ENTITY &&
+                                std::isfinite(nativeHeight) && nativeHeight > 0.000001f)
+                            {
+                                const float referenceScale = 1.82f / nativeHeight;
+                                preview.Merge(referenceScene);
+                                creatorModelImporter.referenceRoot = referenceRoot;
+                                creatorModelImporter.referenceScale = referenceScale;
+                                if (auto* referenceTransform =
+                                    preview.transforms.GetComponent(referenceRoot))
+                                {
+                                    const float leftEdge = creatorModelImporter.sourceBounds.valid
+                                        ? creatorModelImporter.sourceBounds.minimum.x
+                                        : -1.0f;
+                                    referenceTransform->translation_local = XMFLOAT3(
+                                        leftEdge - 0.68f,
+                                        CreatorImportStageHeight -
+                                            referenceBounds.minimum.y * referenceScale,
+                                        -0.4f);
+                                    referenceTransform->SetDirty();
+                                    referenceTransform->UpdateTransform();
+                                }
+                                wi::backlog::post("[IMPORT-REF] real 1.82 m male FBX loaded; native height=" +
+                                    std::to_string(nativeHeight) + " scale=" +
+                                    std::to_string(referenceScale));
+                            }
+                            else
+                                wi::backlog::post("[IMPORT-REF] FBX could not produce a valid reference mesh.");
+                        }
+                        else
+                            wi::backlog::post("[IMPORT-REF] reference FBX missing beside Studio executable.");
+                        ApplyCreatorImportReferenceVisibility();
+
                         // Wicked's placement command auto-plays imported clips;
                         // importer playback must instead be explicit and singular.
                         StopCreatorImportPreviewAnimations();
@@ -11311,12 +12155,17 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         importScaleReadoutLabel_.SetText(readout.str());
         importScaleModeCombo_.SetSelectedWithoutCallback(0);
         creatorModelImporter.workspaceSection = 0;
+        creatorImportTransformExpanded.fill(false);
+        creatorImportMaterialExpanded = {true, true, false};
+        creatorImportAnimationExpanded = {true, true};
         creatorModelImporter.importAsCharacter = false;
         importScaleTitleLabel_.SetText("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
         creatorImportAssetName.SetValue(creatorModelImporter.assetName);
         creatorImportDestination.SetValue(creatorModelImporter.destinationFolder);
         creatorImportRigReadout.SetText(creatorModelImporter.rigDiagnostic);
         creatorImportRigReadout.SetTooltip(creatorModelImporter.rigDiagnostic);
+        creatorImportRigBoneOverlay.SetCheck(false);
+        creatorModelImporter.boneOverlayVisible = false;
         creatorModelImporter.positionOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
         creatorModelImporter.rotationDegrees = XMFLOAT3(0.0f, 0.0f, 0.0f);
         creatorImportPositionX.SetValue(0.0f);
@@ -11360,6 +12209,10 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         creatorImportAmbientBrightness.SetValue(creatorModelImporter.ambientBrightness);
         creatorImportLightingPreset.SetSelectedWithoutCallback(0);
         creatorImportMannequinVisible.SetCheck(creatorModelImporter.mannequinVisible);
+        creatorImportReferenceToggle.SetText("1.82 M REFERENCE");
+        creatorImportPlaybackToggle.SetEnabled(
+            creatorModelImporter.importAsCharacter &&
+            !creatorModelImporter.animationEntities.empty());
         creatorModelImporter.thumbnailCapturePath.clear();
         creatorModelImporter.thumbnailCaptureRevision = 0;
         creatorImportThumbnailPreviewResource = {};
@@ -11369,7 +12222,23 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             "THUMBNAIL // CAPTURE, REVIEW SQUARE PREVIEW, RETAKE IF NEEDED");
         importScaleApplyButton_.SetEnabled(false);
         UpdateCreatorImportScaleReferenceLabel();
+        // An importer is a dedicated native workspace: old editor panels must
+        // not become visible when the right inspector is resized or scrolled.
+        importAudioWorkspaceWasVisible_ =
+            studioChrome_.AudioWorkspace().IsVisible();
+        studioChrome_.AudioWorkspace().SetVisible(false);
+        renderWorkspacePanel_.SetVisible(false);
+        inspectorPanel_.SetVisible(false);
         importScalePanel_.SetVisible(true);
+        for (wi::gui::Widget* widget : {
+            static_cast<wi::gui::Widget*>(&creatorImportResetView),
+            static_cast<wi::gui::Widget*>(&creatorImportReferenceToggle),
+            static_cast<wi::gui::Widget*>(&creatorImportZoomOut),
+            static_cast<wi::gui::Widget*>(&creatorImportZoomIn),
+            static_cast<wi::gui::Widget*>(&creatorImportPreviousStage),
+            static_cast<wi::gui::Widget*>(&creatorImportNextStage),
+            static_cast<wi::gui::Widget*>(&creatorImportPlaybackToggle)})
+            widget->SetVisible(true);
         importScalePanel_.scrollbar_vertical.SetOffset(0.0f);
         RefreshCreatorImportWorkspaceSection();
         ResizeLayout();
@@ -11391,21 +12260,23 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             std::abs(bounds.maximum.x - bounds.minimum.x) * scale.x,
             std::abs(bounds.maximum.y - bounds.minimum.y) * scale.y,
             std::abs(bounds.maximum.z - bounds.minimum.z) * scale.z);
-        const float radius = std::max(
-            0.25f,
-            0.5f * std::sqrt(
-                extents.x * extents.x +
-                extents.y * extents.y +
-                extents.z * extents.z));
-
-        // A longer, neutral preview lens avoids the exaggerated near/far
-        // proportions produced by the editor camera when it is placed close
-        // to a character. Distance follows the measured, scaled bounds so a
-        // boot, head or large prop cannot accidentally fill the near plane.
+        // Frame from the viewport axes, not a bounding sphere. A T-pose's
+        // outstretched arms made the old sphere distance dominate, leaving a
+        // character tiny in the preview. The vertical silhouette is the
+        // primary importer presentation; width is still respected so geometry
+        // is not unexpectedly cropped.
+        const float halfVertical = std::max(0.15f, extents.y * 0.5f);
+        const float halfHorizontal = std::max(0.15f, extents.x * 0.5f);
+        constexpr float PreviewAspect = 1.65f; // available preview area
         camera->fov = CreatorImportPreviewFov;
+        const float halfFovTangent =
+            std::tan(CreatorImportPreviewFov * 0.5f);
+        const float distanceForHeight = halfVertical / halfFovTangent;
+        const float distanceForWidth =
+            halfHorizontal / (halfFovTangent * PreviewAspect);
         const float distance = std::max(
-            2.5f,
-            radius / std::sin(CreatorImportPreviewFov * 0.5f) * 1.2f);
+            2.15f,
+            std::max(distanceForHeight, distanceForWidth) * 1.06f);
         const XMVECTOR target = XMLoadFloat3(&center);
         const XMVECTOR viewDirection = XMVector3Normalize(
             XMVectorSet(0.32f, 0.12f, -1.0f, 0.0f));
@@ -11420,28 +12291,36 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     }
 
     void StudioRenderPath::LayoutCreatorImportStageHeadings(
-        const float inspectorWidth)
+        const float inspectorWidth, const float transformBodyHeight,
+        const float materialBodyHeight, const float animationBodyHeight)
     {
         RefreshCreatorImportWorkspaceSection();
-        constexpr std::array<float, 6> bodyHeights = {
-            168.0f, 820.0f, 790.0f, 150.0f, 520.0f, 570.0f};
+        const std::array<float, 6> bodyHeights = {
+            168.0f, transformBodyHeight, materialBodyHeight,
+            340.0f, animationBodyHeight, 606.0f};
         float rowY = 146.0f;
         float contentOffset = 0.0f;
+        float activeBodyTop = 0.0f;
+        float activeBodyHeight = 0.0f;
         for (std::size_t index = 0; index < creatorImportStageButtons.size(); ++index)
         {
             auto& heading = creatorImportStageButtons[index];
             if (!heading.IsVisible())
                 continue;
             heading.SetPos(XMFLOAT2(12.0f, rowY));
-            heading.SetSize(XMFLOAT2(inspectorWidth - 24.0f, 52.0f));
-            rowY += 62.0f;
+            heading.SetSize(XMFLOAT2(inspectorWidth - 24.0f, 58.0f));
+            rowY += 68.0f;
             if (index == creatorModelImporter.workspaceSection)
             {
                 contentOffset = rowY - 184.0f;
+                activeBodyTop = rowY;
+                activeBodyHeight = bodyHeights[index] - 8.0f;
                 rowY += bodyHeights[index];
             }
         }
         importScalePanel_.OffsetVisibleStageContent(contentOffset);
+        importScalePanel_.LayoutInspectorShell(
+            inspectorWidth, activeBodyTop, activeBodyHeight);
     }
 
     void StudioRenderPath::RefreshCreatorImportWorkspaceSection()
@@ -11456,10 +12335,10 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             auto& heading = creatorImportStageButtons[index];
             heading.SetVisible(creatorModelImporter.importAsCharacter ||
                 (index != 3 && index != 4));
-            heading.SetText(std::string(index == section ? "▸ " : "  ") +
-                std::array<const char*, 6>{"ASSET SETUP", "TRANSFORM & SCALE",
-                    "MATERIALS & TEXTURES", "RIG & RETARGETING", "ANIMATIONS",
-                    "REVIEW & IMPORT"}[index]);
+            heading.SetText(std::array<const char*, 6>{"ASSET SETUP", "TRANSFORM & SCALE",
+                "MATERIALS & TEXTURES", "RIG & RETARGETING", "ANIMATIONS",
+                "REVIEW & IMPORT"}[index]);
+            heading.SetStageActive(index == section);
         }
         creatorImportModelChoice.SetVisible(section == 0);
         creatorImportCharacterChoice.SetVisible(section == 0);
@@ -11469,43 +12348,71 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             ? "✓ CHARACTER" : "CHARACTER");
         creatorImportAssetName.SetVisible(section == 0 || section == 5);
         creatorImportDestination.SetVisible(section == 0 || section == 5);
-        creatorImportRigReadout.SetVisible(section == 3 &&
-            creatorModelImporter.importAsCharacter);
+        for (wi::gui::Widget* rigControl : {
+            static_cast<wi::gui::Widget*>(&creatorImportRigReadout),
+            static_cast<wi::gui::Widget*>(&creatorImportRigAutoMap),
+            static_cast<wi::gui::Widget*>(&creatorImportRigBoneOverlay),
+            static_cast<wi::gui::Widget*>(&creatorImportRigRetarget),
+            static_cast<wi::gui::Widget*>(&creatorImportRigPreview)})
+            rigControl->SetVisible(section == 3 && creatorModelImporter.importAsCharacter);
 
-        for (wi::gui::Widget* widget : {
-            static_cast<wi::gui::Widget*>(&creatorImportTransformLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportPositionX),
-            static_cast<wi::gui::Widget*>(&creatorImportPositionY),
-            static_cast<wi::gui::Widget*>(&creatorImportPositionZ),
-            static_cast<wi::gui::Widget*>(&creatorImportRotationX),
-            static_cast<wi::gui::Widget*>(&creatorImportRotationY),
-            static_cast<wi::gui::Widget*>(&creatorImportRotationZ),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleX),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleY),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleZ),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleLinked),
-            static_cast<wi::gui::Widget*>(&creatorImportDimensionPreset),
-            static_cast<wi::gui::Widget*>(&importScaleModeCombo_)})
-            widget->SetVisible(section == 1);
+        constexpr const char* transformGroupNames[] = {
+            "POSITION", "ROTATION", "SCALE", "SIZE & UNITS", "PREVIEW LIGHTING"};
+        for (std::size_t index = 0; index < creatorImportTransformGroups.size(); ++index)
+        {
+            creatorImportTransformGroups[index].SetVisible(section == 1);
+            creatorImportTransformGroups[index].SetText(
+                std::string(creatorImportTransformExpanded[index] ? "-  " : "+  ") +
+                transformGroupNames[index]);
+        }
+        // Layout runs every frame. Apply each widget's final visibility only:
+        // hide-then-show resets ACTIVE/DEACTIVATING and cancels dropdowns,
+        // button releases, text editing and slider drags.
+        creatorImportTransformLabel.SetVisible(false);
+        creatorImportMaterialLabel.SetVisible(false);
+        creatorImportMaterialReadout.SetVisible(false);
+        creatorImportTextureHelp.SetVisible(false);
+        creatorImportMaterialScalarLabel.SetVisible(false);
+        creatorImportAnimationLabel.SetVisible(false);
+        const auto showTransform = [section](const bool expanded,
+            std::initializer_list<wi::gui::Widget*> widgets)
+        {
+            for (auto* widget : widgets)
+                widget->SetVisible(section == 1 && expanded);
+        };
+        showTransform(creatorImportTransformExpanded[0],
+            {&creatorImportPositionX, &creatorImportPositionY, &creatorImportPositionZ});
+        showTransform(creatorImportTransformExpanded[1],
+            {&creatorImportRotationX, &creatorImportRotationY, &creatorImportRotationZ});
+        showTransform(creatorImportTransformExpanded[2],
+            {&creatorImportScaleLinked, &creatorImportScaleX,
+             &creatorImportScaleY, &creatorImportScaleZ});
+        showTransform(creatorImportTransformExpanded[3],
+            {&creatorImportDimensionPreset, &importScaleModeCombo_});
 
-        for (wi::gui::Widget* widget : {
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialCombo),
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialReadout),
-            static_cast<wi::gui::Widget*>(&creatorImportTexturePreviews),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureHelp),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureSlotCombo),
-            static_cast<wi::gui::Widget*>(&creatorImportTexturePath),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureBrowse),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureClear),
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialScalarLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportRoughness),
-            static_cast<wi::gui::Widget*>(&creatorImportMetalness),
-            static_cast<wi::gui::Widget*>(&creatorImportReflectance),
-            static_cast<wi::gui::Widget*>(&creatorImportNormalStrength),
-            static_cast<wi::gui::Widget*>(&creatorImportAoStrength),
-            static_cast<wi::gui::Widget*>(&creatorImportEmissiveStrength)})
-            widget->SetVisible(section == 2);
+        constexpr const char* materialGroupNames[] = {
+            "MATERIAL ASSIGNMENTS", "TEXTURE MAPS", "PBR VALUES"};
+        for (std::size_t index = 0; index < creatorImportMaterialGroups.size(); ++index)
+        {
+            creatorImportMaterialGroups[index].SetVisible(section == 2);
+            creatorImportMaterialGroups[index].SetText(
+                std::string(creatorImportMaterialExpanded[index] ? "-  " : "+  ") +
+                materialGroupNames[index]);
+        }
+        const auto showMaterial = [section](const bool expanded,
+            std::initializer_list<wi::gui::Widget*> widgets)
+        {
+            for (auto* widget : widgets)
+                widget->SetVisible(section == 2 && expanded);
+        };
+        showMaterial(creatorImportMaterialExpanded[0],
+            {&creatorImportMaterialCombo});
+        showMaterial(creatorImportMaterialExpanded[1],
+            {&creatorImportTexturePreviews});
+        showMaterial(creatorImportMaterialExpanded[2],
+            {&creatorImportRoughness, &creatorImportMetalness,
+             &creatorImportReflectance, &creatorImportNormalStrength,
+             &creatorImportAoStrength, &creatorImportEmissiveStrength});
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportLightingLabel),
@@ -11516,26 +12423,33 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             static_cast<wi::gui::Widget*>(&creatorImportLightingPreset),
             static_cast<wi::gui::Widget*>(&creatorImportLightingReset),
             static_cast<wi::gui::Widget*>(&creatorImportMannequinVisible)})
-            widget->SetVisible(section == 1);
+            widget->SetVisible(section == 1 && creatorImportTransformExpanded[4]);
 
-        for (wi::gui::Widget* widget : {
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationCombo),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationName),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationStart),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnd),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationPlay),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationPause),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationStop),
-            static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationAdd),
-            static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationRemove),
-            static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationStatus),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout)})
-            widget->SetVisible(section == 4 &&
-                creatorModelImporter.importAsCharacter);
+        constexpr const char* animationGroupNames[] = {
+            "ANIMATION CLIPS", "EXTERNAL ANIMATION FILES"};
+        for (std::size_t index = 0; index < creatorImportAnimationGroups.size(); ++index)
+        {
+            creatorImportAnimationGroups[index].SetVisible(
+                section == 4 && creatorModelImporter.importAsCharacter && index == 0);
+            creatorImportAnimationGroups[index].SetText(
+                std::string(creatorImportAnimationExpanded[index] ? "-  " : "+  ") +
+                animationGroupNames[index]);
+        }
+        const auto showAnimation = [section](const bool expanded,
+            std::initializer_list<wi::gui::Widget*> widgets)
+        {
+            for (auto* widget : widgets)
+                widget->SetVisible(section == 4 && creatorModelImporter.importAsCharacter && expanded);
+        };
+        showAnimation(creatorImportAnimationExpanded[0],
+            {&creatorImportAnimationTable, &creatorImportAnimationName,
+             &creatorImportAnimationStart, &creatorImportAnimationEnd,
+             &creatorImportAnimationSpeed, &creatorImportAnimationEnabled,
+             &creatorImportAnimationAdd,
+             &creatorImportAnimationDelete, &creatorImportAnimationPlay,
+             &creatorImportAnimationPause, &creatorImportAnimationStop});
+        showAnimation(creatorImportAnimationExpanded[0],
+            {&creatorImportExternalAnimationAdd, &creatorImportExternalAnimationRemove});
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportActionBar),
@@ -11880,9 +12794,21 @@ wi::eventhandler::Subscribe_Once(
                                 handbackStarted - packageFinished).count()));
                         importScalePanel_.SetEnabled(true);
                         importScalePanel_.SetVisible(false);
+                        for (wi::gui::Widget* widget : {
+                            static_cast<wi::gui::Widget*>(&creatorImportResetView),
+                            static_cast<wi::gui::Widget*>(&creatorImportReferenceToggle),
+                            static_cast<wi::gui::Widget*>(&creatorImportZoomOut),
+                            static_cast<wi::gui::Widget*>(&creatorImportZoomIn),
+                            static_cast<wi::gui::Widget*>(&creatorImportPreviousStage),
+                            static_cast<wi::gui::Widget*>(&creatorImportNextStage),
+                            static_cast<wi::gui::Widget*>(&creatorImportPlaybackToggle)})
+                            widget->SetVisible(false);
                         importScalePanel_.SetPreviewScene(nullptr);
                         scene = &session_->Scenes().GetScene();
                         studioChrome_.SetVisible(true);
+                        studioChrome_.AudioWorkspace().SetVisible(
+                            importAudioWorkspaceWasVisible_);
+                        importAudioWorkspaceWasVisible_ = false;
                         inspectorPanel_.SetVisible(true);
                         hierarchySearch_.SetVisible(true);
                         importScaleApplyButton_.SetText("CONFIRM IMPORT");
@@ -11982,6 +12908,15 @@ wi::eventhandler::Subscribe_Once(
     void StudioRenderPath::DismissImportScalePanel()
     {
         importScalePanel_.SetVisible(false);
+        for (wi::gui::Widget* widget : {
+            static_cast<wi::gui::Widget*>(&creatorImportResetView),
+            static_cast<wi::gui::Widget*>(&creatorImportReferenceToggle),
+            static_cast<wi::gui::Widget*>(&creatorImportZoomOut),
+            static_cast<wi::gui::Widget*>(&creatorImportZoomIn),
+            static_cast<wi::gui::Widget*>(&creatorImportPreviousStage),
+            static_cast<wi::gui::Widget*>(&creatorImportNextStage),
+            static_cast<wi::gui::Widget*>(&creatorImportPlaybackToggle)})
+            widget->SetVisible(false);
         if (session_ != nullptr && creatorModelImporter.active)
         {
             RestoreCreatorImportPreviewEnvironment();
@@ -12005,6 +12940,8 @@ wi::eventhandler::Subscribe_Once(
         creatorModelImporter = {};
         importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
         studioChrome_.SetVisible(true);
+        studioChrome_.AudioWorkspace().SetVisible(importAudioWorkspaceWasVisible_);
+        importAudioWorkspaceWasVisible_ = false;
         inspectorPanel_.SetVisible(true);
         hierarchySearch_.SetVisible(true);
         studioChrome_.SetStatusText("IMPORT MODEL // CANCELLED // PROJECT UNCHANGED");
