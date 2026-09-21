@@ -148,6 +148,8 @@ int main()
         record->activeClip != walk || !scene.animations.GetComponent(walk)->IsLooped())
         return Fail("run must safely fall back to walk when no run clip exists");
 
+    const std::uint64_t missingBefore = state.missingRequests;
+
     if (RequestCharacterAnimation(
             scene, state, *record, CharacterAnimationSemantic::Reload) ||
         state.missingRequests != missingBefore + 1)
