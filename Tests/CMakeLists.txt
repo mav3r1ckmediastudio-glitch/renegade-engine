@@ -702,3 +702,25 @@ add_dependencies(
     RenegadeTestLevelRuntimeHandshakeTests
     RenegadeRuntime
 )
+
+
+add_executable(RenegadeCharacterAiAnimationTests
+    CharacterAiAnimationTests.cpp
+)
+target_link_libraries(
+    RenegadeCharacterAiAnimationTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+target_include_directories(
+    RenegadeCharacterAiAnimationTests
+    PRIVATE
+        "${CMAKE_SOURCE_DIR}/Runtime/src"
+)
+set_target_properties(RenegadeCharacterAiAnimationTests PROPERTIES
+    FOLDER "Renegade/Tests"
+)
+add_test(
+    NAME RenegadeCharacterAiAnimationTests
+    COMMAND RenegadeCharacterAiAnimationTests
+)

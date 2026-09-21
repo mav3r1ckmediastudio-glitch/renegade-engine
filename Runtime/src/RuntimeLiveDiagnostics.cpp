@@ -49,6 +49,7 @@ namespace renegade::runtime
             RuntimeCharacterPerceptionState resolvedPerception;
             RuntimeCharacterDecisionState resolvedDecision;
             RuntimeCombatState resolvedCombat;
+            RuntimeCharacterAnimationState resolvedAnimation;
             std::string characterError;
             if (!bridge::InitializeRuntimeCharacters(
                     scenes_.GetScene(), discoveredCharacters, characterError))
@@ -144,6 +145,28 @@ namespace renegade::runtime
                         characterError,
                     wi::backlog::LogLevel::Error);
             }
+            else if (!InitializeRuntimeCharacterAnimations(
+                         scenes_.GetScene(), resolvedCharacters,
+                         resolvedCombat, resolvedAnimation, characterError))
+            {
+                bridge::ResetRuntimeCharacters(
+                    scenes_.GetScene(), discoveredCharacters);
+                ResetRuntimeCharacterSystem(resolvedCharacters);
+                ResetRuntimeCharacterPerception(resolvedPerception);
+                ResetRuntimeCharacterDecision(resolvedDecision);
+                ResetRuntimeCombat(resolvedCombat);
+                ResetRuntimeCharacterAnimations(resolvedAnimation);
+                characterSceneSyncFailed_ = true;
+                diagnosticService_.Record(
+                    bridge::DiagnosticSeverity::Error,
+                    "runtime.ai",
+                    "character.animation.failed",
+                    characterError);
+                wi::backlog::post(
+                    "Renegade Runtime: Character animation setup failed: " +
+                        characterError,
+                    wi::backlog::LogLevel::Error);
+            }
             else
             {
                 characterState_ = std::move(discoveredCharacters);
@@ -151,6 +174,7 @@ namespace renegade::runtime
                 characterPerceptionState_ = std::move(resolvedPerception);
                 characterDecisionState_ = std::move(resolvedDecision);
                 combatState_ = std::move(resolvedCombat);
+                characterAnimationState_ = std::move(resolvedAnimation);
                 characterSceneRevision_ = sceneRevision;
                 if (!characterState_.characters.empty())
                 {
@@ -170,7 +194,8 @@ namespace renegade::runtime
             playerSceneRevision_ == sceneRevision &&
             characterPerceptionState_.characters.size() == characterAiState_.characters.size() &&
             characterDecisionState_.characters.size() == characterAiState_.characters.size() &&
-            combatState_.characters.size() == characterAiState_.characters.size())
+            combatState_.characters.size() == characterAiState_.characters.size() &&
+            characterAnimationState_.characters.size() == characterAiState_.characters.size())
         {
             // UpdateLiveDiagnostics runs before SyncPlayerForScene(). Requiring
             // matching scene revisions prevents a stale transient player ECS
@@ -217,6 +242,12 @@ namespace renegade::runtime
                 characterDecisionState_,
                 simulationDt,
                 false);
+            UpdateRuntimeCharacterAnimations(
+                scenes_.GetScene(),
+                characterAiState_,
+                characterDecisionState_,
+                combatState_,
+                characterAnimationState_);
         }
 
         if (navigationSceneRevision_ != sceneRevision ||
