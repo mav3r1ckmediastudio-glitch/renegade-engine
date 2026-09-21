@@ -161,7 +161,7 @@ namespace
         const fs::path& projectRoot,
         const fs::path& staticFixture,
         const fs::path& animatedFixture,
-        const fs::path& externalWalk)
+        const std::vector<fs::path>& externalSources)
     {
         using namespace renegade::bridge;
         if (!Require(PrepareProject(projectRoot), "project setup failed"))
@@ -266,7 +266,7 @@ namespace
                     preparedCharacter.Result().error))
             return false;
         std::size_t originalCharacterClipCount = 0;
-        if (!externalWalk.empty())
+        if (!externalSources.empty())
         {
             auto* destinationScene = preparedCharacter.PeekMutableScene();
             if (!Require(destinationScene != nullptr, "prepared Character scene missing"))
@@ -285,20 +285,26 @@ namespace
             }
             if (!Require(destination != wi::ecs::INVALID_ENTITY,
                     "external Character destination rig missing")) return false;
-            const auto retargetStarted = std::chrono::steady_clock::now();
-            RetargetHumanoidAnimationsCommand external(*destinationScene, destination,
-                externalWalk.generic_u8string(), true);
-            if (!Require(external.Execute(),
-                    "external walking retarget failed: " + external.Result().error)) return false;
-            std::cout << "EXTERNAL WALK RETARGET MS=" <<
-                std::chrono::duration<double, std::milli>(
-                    std::chrono::steady_clock::now()-retargetStarted).count() << '\n';
+            for (const auto& externalSource : externalSources)
+            {
+                const auto retargetStarted = std::chrono::steady_clock::now();
+                RetargetHumanoidAnimationsCommand external(*destinationScene, destination,
+                    externalSource.generic_u8string(), true);
+                if (!Require(external.Execute(),
+                        "external animation retarget failed for " +
+                            externalSource.filename().generic_u8string() +
+                            ": " + external.Result().error)) return false;
+                std::cout << "EXTERNAL ANIMATION RETARGET // "
+                    << externalSource.filename().generic_u8string() << " // MS=" <<
+                    std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now()-retargetStarted).count() << '\n';
+            }
         }
         const auto workflowStarted = std::chrono::steady_clock::now();
         auto character = workflow.ImportModel(projectRoot.generic_u8string(), ProjectId,
             animatedFixture.generic_u8string(), "{}", sharedStem,
             "Content/Characters", std::move(preparedCharacter), {});
-        if (!externalWalk.empty())
+        if (!externalSources.empty())
             std::cout << "EXTERNAL CHARACTER GOVERNED PACKAGE MS=" <<
                 std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now()-workflowStarted).count() << '\n';
@@ -342,11 +348,23 @@ namespace
             return false;
         auto reopenedCharacter = workflow.PrepareModelPlacement(
             projectRoot.generic_u8string(), ProjectId, character.asset.assetId);
-        if (!externalWalk.empty() &&
+        if (!externalSources.empty() &&
             !Require(reopenedCharacter.IsReady() &&
-                     reopenedCharacter.PeekScene()->animations.GetCount() >
-                         originalCharacterClipCount,
-                     "external walk was not persisted in reopened Character")) return false;
+                     reopenedCharacter.PeekScene()->animations.GetCount() >=
+                         originalCharacterClipCount + externalSources.size(),
+                     "all external actions were not persisted in reopened Character")) return false;
+        if (!externalSources.empty() && reopenedCharacter.IsReady())
+        {
+            const auto& scene = *reopenedCharacter.PeekScene();
+            std::cout << "PERSISTED CHARACTER ANIMATIONS //";
+            for (std::size_t index = 0; index < scene.animations.GetCount(); ++index)
+            {
+                const auto entity = scene.animations.GetEntity(index);
+                const auto* name = scene.names.GetComponent(entity);
+                std::cout << " [" << (name == nullptr ? "<unnamed>" : name->name) << "]";
+            }
+            std::cout << '\n';
+        }
         if (!Require(reopenedCharacter.IsReady() &&
                     FindKeyedNativeAnimation(*reopenedCharacter.PeekScene()) !=
                         wi::ecs::INVALID_ENTITY,
@@ -573,10 +591,10 @@ namespace
 
 int main(int argc, char** argv)
 {
-    if (argc != 4 && argc != 5)
+    if (argc < 4)
     {
         std::cerr << "Usage: RenegadeCreatorAssetWorkflowGraphicsProof "
-            << "<static.fbx> <skinned-animated.fbx> <output-directory> [external-walk.fbx]\n";
+            << "<static.fbx> <skinned-animated.fbx> <output-directory> [external-animation.fbx ...]\n";
         return 2;
     }
 
@@ -587,6 +605,16 @@ int main(int argc, char** argv)
         !Require(fs::is_regular_file(animatedFixture),
             "skinned/animated FBX fixture missing"))
         return 3;
+
+    std::vector<fs::path> externalSources;
+    for (int index = 4; index < argc; ++index)
+    {
+        const fs::path source = fs::weakly_canonical(fs::u8path(argv[index]));
+        if (!Require(fs::is_regular_file(source),
+                "external animation source missing: " + source.generic_u8string()))
+            return 3;
+        externalSources.push_back(source);
+    }
 
     const HINSTANCE instance = GetModuleHandleW(nullptr);
     WNDCLASSEXW windowClass = {};
@@ -612,8 +640,7 @@ int main(int argc, char** argv)
             exitCode = 5;
         }
         else if (!RunLifecycle(outputRoot / "creator-asset-project",
-                staticFixture, animatedFixture,
-                argc == 5 ? fs::weakly_canonical(fs::u8path(argv[4])) : fs::path{}))
+                staticFixture, animatedFixture, externalSources))
         {
             exitCode = 6;
         }

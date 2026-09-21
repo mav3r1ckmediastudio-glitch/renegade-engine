@@ -6723,11 +6723,11 @@ namespace renegade::studio
         creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
         // Review owns explicit layout rather than an Update-time widget-name
         // reflow. Asset name and destination finish at y=262; the title and
-        // thumbnail therefore have dedicated non-overlapping rows.
+        // thumbnail now begin after the destination ends at y=298.
         const float thumbnailPreviewSide = std::min(
             244.0f, importScalePanelWidth - 48.0f);
-        const float reviewTitleY = 284.0f;
-        const float reviewPreviewY = 330.0f;
+        const float reviewTitleY = 312.0f;
+        const float reviewPreviewY = 358.0f;
         const float reviewCaptureY = reviewPreviewY + thumbnailPreviewSide + 14.0f;
         const float reviewStatusY = reviewCaptureY + 48.0f;
         const float reviewConfirmY = reviewStatusY + 46.0f;
@@ -12346,7 +12346,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         RefreshCreatorImportWorkspaceSection();
         const std::array<float, 6> bodyHeights = {
             168.0f, transformBodyHeight, materialBodyHeight,
-            340.0f, animationBodyHeight, 606.0f};
+            340.0f, animationBodyHeight, 640.0f};
         float rowY = 146.0f;
         float contentOffset = 0.0f;
         float activeBodyTop = 0.0f;

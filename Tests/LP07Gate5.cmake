@@ -56,7 +56,7 @@ if(EXISTS "${LP07_GATE5_STATIC_FBX_FIXTURE}" AND
         COMMAND RenegadeCreatorAssetWorkflowGraphicsProof
             "${LP07_GATE5_STATIC_FBX_FIXTURE}"
             "${LP07_GATE5_SKINNED_ANIMATED_FBX_FIXTURE}"
-            "${CMAKE_BINARY_DIR}/lp07-gate5-creator-asset-proof-output"
+            "${CMAKE_BINARY_DIR}/lp07-g5"
         CONFIGURATIONS Release
     )
     set_tests_properties(

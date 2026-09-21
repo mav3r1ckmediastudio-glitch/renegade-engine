@@ -121,7 +121,7 @@ namespace renegade::runtime
             return CharacterAnimationSemantic::Hit;
         if (AnimationNameContains(name, {
                 "attack", "fire", "shoot", "punch", "kick", "claw", "bite",
-                "swing", "slash", "melee"}))
+                "swing", "slash", "swipe", "swiping", "melee"}))
         {
             return CharacterAnimationSemantic::Attack;
         }

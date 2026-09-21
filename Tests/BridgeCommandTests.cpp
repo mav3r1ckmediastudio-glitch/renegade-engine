@@ -540,7 +540,50 @@ int main()
     scenes.GetScene().transforms.Create(importedRig);
     scenes.GetScene().humanoids.Create(importedRig);
     scenes.GetScene().Component_Attach(importedRig, importedCharacterRoot);
+    // Wicked creates a visible "chunks" group with many generated children.
+    // Those native renderer entities must not become independently selectable
+    // editor assets, even though they are retained in the real scene.
+    const auto terrainRoot = wi::ecs::CreateEntity();
+    scenes.GetScene().names.Create(terrainRoot) = "Authored Terrain Root";
+    scenes.GetScene().transforms.Create(terrainRoot);
+    auto& hierarchyTerrain = scenes.GetScene().terrains.Create(terrainRoot);
+    hierarchyTerrain.terrainEntity = terrainRoot;
+    hierarchyTerrain.scene = &scenes.GetScene();
+    const auto terrainGroup = wi::ecs::CreateEntity();
+    scenes.GetScene().names.Create(terrainGroup) = "chunks";
+    scenes.GetScene().transforms.Create(terrainGroup);
+    scenes.GetScene().Component_Attach(terrainGroup, terrainRoot);
+    hierarchyTerrain.chunkGroupEntity = terrainGroup;
+    std::vector<wi::ecs::Entity> nativeTerrainChunks;
+    for (int index = 0; index < 48; ++index)
+    {
+        const auto chunk = wi::ecs::CreateEntity();
+        scenes.GetScene().names.Create(chunk) = "Terrain Chunk " + std::to_string(index);
+        scenes.GetScene().transforms.Create(chunk);
+        scenes.GetScene().Component_Attach(chunk, terrainGroup);
+        nativeTerrainChunks.push_back(chunk);
+    }
     const auto creatorEntities = scenes.ListEntities();
+    const auto authoredTerrainRoot = std::find_if(
+        creatorEntities.begin(), creatorEntities.end(),
+        [terrainRoot](const renegade::bridge::SceneEntity& item)
+        {
+            return item.entity == terrainRoot;
+        });
+    if (authoredTerrainRoot == creatorEntities.end() ||
+        !authoredTerrainRoot->logicalAsset || authoredTerrainRoot->depth != 0 ||
+        authoredTerrainRoot->category != renegade::bridge::SceneEntityCategory::Terrain)
+        return Fail("authored Terrain root disappeared from hierarchy");
+    if (std::any_of(creatorEntities.begin(), creatorEntities.end(),
+            [terrainGroup, &nativeTerrainChunks](const renegade::bridge::SceneEntity& item)
+            {
+                return item.entity == terrainGroup ||
+                    std::find(nativeTerrainChunks.begin(), nativeTerrainChunks.end(),
+                        item.entity) != nativeTerrainChunks.end();
+            }))
+        return Fail("Wicked generated terrain chunks leaked into creator hierarchy");
+    if (!scenes.GetScene().hierarchy.Contains(nativeTerrainChunks.front()))
+        return Fail("hierarchy presentation illegally removed native terrain chunks");
     const auto logicalCharacter = std::find_if(
         creatorEntities.begin(), creatorEntities.end(),
         [importedCharacterRoot](const renegade::bridge::SceneEntity& item)

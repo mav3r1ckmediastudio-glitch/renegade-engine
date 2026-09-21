@@ -30,8 +30,19 @@ namespace
         const wi::ecs::Entity entity)
     {
         const auto* name = scene.names.GetComponent(entity);
-        return name == nullptr ||
-            name->name.rfind(InternalEntityPrefix, 0) != 0;
+        if (name != nullptr && name->name.rfind(InternalEntityPrefix, 0) == 0)
+            return false;
+        // Wicked's generated terrain group, chunks, grass and prop containers
+        // are renderer internals, not 448 independently authored assets.
+        // Keep the authored Terrain root visible and its native data intact.
+        for (std::size_t index = 0; index < scene.terrains.GetCount(); ++index)
+        {
+            const auto group = scene.terrains[index].chunkGroupEntity;
+            if (group != wi::ecs::INVALID_ENTITY &&
+                (entity == group || scene.Entity_IsDescendant(entity, group)))
+                return false;
+        }
+        return true;
     }
 
     renegade::bridge::SceneEntityCategory CategoryForEntity(

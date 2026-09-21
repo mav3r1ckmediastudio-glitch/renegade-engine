@@ -34,7 +34,9 @@ int main()
     wi::scene::Scene scene;
     const wi::ecs::Entity character = scene.Entity_CreateTransform("Mutant");
 
-    if (InferCharacterAnimationSemantic("Mutant_Attack_02") !=
+    if (InferCharacterAnimationSemantic("mutant swiping") !=
+        CharacterAnimationSemantic::Attack ||
+        InferCharacterAnimationSemantic("Mutant_Attack_02") !=
         CharacterAnimationSemantic::Attack ||
         InferCharacterAnimationSemantic("Death_Back") !=
         CharacterAnimationSemantic::Death ||

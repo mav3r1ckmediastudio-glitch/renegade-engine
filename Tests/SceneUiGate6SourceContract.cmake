@@ -141,3 +141,6 @@ require_text(gate_document
 
 message(STATUS
     "Scene UI Gate 6 consolidated whole-editor source contract passed")
+
+# Independently assert Review layout keeps thumbnail capture and commit reachable.
+include("${RENEGADE_SOURCE_DIR}/Tests/CreatorImporterReviewLayoutSourceContract.cmake")
