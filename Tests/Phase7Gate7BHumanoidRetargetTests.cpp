@@ -99,6 +99,25 @@ int main()
     if (!Require(renegade::bridge::IsHumanoidMappingValid(
             renegade::bridge::CaptureHumanoidMapping(scene, rig)),
             "source mapping must create a valid native HumanoidComponent")) return 1;
+
+    // A logical character selection can be the rendered mesh while Wicked
+    // stores the armature in a separate branch. The mesh's native armatureID
+    // is the authoritative association used by character inspectors.
+    {
+        wi::scene::Scene selectionScene;
+        const auto linkedRig = wi::ecs::CreateEntity();
+        selectionScene.transforms.Create(linkedRig);
+        selectionScene.armatures.Create(linkedRig);
+        const auto characterPresentation = wi::ecs::CreateEntity();
+        selectionScene.names.Create(characterPresentation).name = "MutantMesh";
+        selectionScene.transforms.Create(characterPresentation);
+        selectionScene.meshes.Create(characterPresentation).armatureID = linkedRig;
+        if (!Require(
+                renegade::bridge::FindHumanoidRigEntity(
+                    selectionScene, characterPresentation) == linkedRig,
+                "logical character mesh selection must resolve its linked rig")) return 1;
+    }
+
     // An imported FBX has no authored look-at target. Wicked enables look-at
     // by default, which turns the head toward world origin on the first tick.
     auto* importedHumanoid = scene.humanoids.GetComponent(rig);

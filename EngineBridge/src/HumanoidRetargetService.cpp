@@ -169,6 +169,28 @@ namespace renegade::bridge
             }
             cursor = hierarchy->parentID;
         }
+        // Imported character presentation roots are often mesh entities.
+        // Wicked keeps their rig association in MeshComponent::armatureID, and
+        // that relationship remains valid even when the renderer and armature
+        // live in separate hierarchy branches. Prefer it before falling back
+        // to hierarchy traversal so selecting the logical character root keeps
+        // the character-level inspectors available.
+        for (std::size_t i = 0; i < scene.meshes.GetCount(); ++i)
+        {
+            const auto meshEntity = scene.meshes.GetEntity(i);
+            if (meshEntity != selected &&
+                !scene.Entity_IsDescendant(meshEntity, selected))
+            {
+                continue;
+            }
+            const auto* mesh = scene.meshes.GetComponent(meshEntity);
+            if (mesh != nullptr &&
+                mesh->armatureID != wi::ecs::INVALID_ENTITY &&
+                scene.armatures.Contains(mesh->armatureID))
+            {
+                return mesh->armatureID;
+            }
+        }
         for (std::size_t i = 0; i < scene.armatures.GetCount(); ++i)
         {
             const auto entity = scene.armatures.GetEntity(i);

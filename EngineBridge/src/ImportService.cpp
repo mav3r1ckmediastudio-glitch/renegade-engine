@@ -794,24 +794,17 @@ namespace renegade::bridge
                 transform->SetDirty();
             }
 
-            // wi::scene::AnimationComponent defaults to LOOPED but not
-            // PLAYING -- Wicked's own GLTF importer creates the component
-            // and leaves it paused; RunAnimationUpdateSystem only advances
-            // an animation's timer once IsPlaying() is true. Without this,
-            // an imported model's armature/animation data is present and
-            // correct (as Gate 1 already proved) but sits frozen at frame
-            // zero forever. Every animation entity the importer creates is
-            // Component_Attach'd under the import root (ModelImporter_GLTF.cpp),
-            // so this loop only reaches animations that belong to this
-            // import, never a pre-existing one already in the target scene,
-            // and Play() being called before the snapshot below means
-            // Undo/Redo restores the playing state exactly like any other
-            // authored value.
-            for (std::size_t index = animationCountBefore;
-                index < scene_->animations.GetCount();
-                ++index)
+            // A single imported action retains the useful native default of
+            // starting on placement. A character library can contain dozens of
+            // mutually exclusive clips, however: playing every one evaluates
+            // and blends every channel each frame, corrupts the rest pose and
+            // causes a severe frame-rate drop. Leave multi-action imports
+            // paused until the character animation controls choose one.
+            const std::size_t importedAnimationCount =
+                scene_->animations.GetCount() - animationCountBefore;
+            if (importedAnimationCount == 1)
             {
-                scene_->animations[index].Play();
+                scene_->animations[animationCountBefore].Play();
             }
 
             snapshot_.SetReadModeAndResetPos(false);

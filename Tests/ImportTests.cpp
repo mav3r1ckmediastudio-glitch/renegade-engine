@@ -497,6 +497,32 @@ int main()
         }
     }
 
+    // Character libraries carry mutually exclusive actions. Placement must not
+    // start every imported action, otherwise every channel is evaluated and
+    // blended concurrently.
+    {
+        wi::scene::Scene target;
+        auto prepared = wi::allocator::make_shared_single<wi::scene::Scene>();
+        const auto root = wi::ecs::CreateEntity();
+        prepared->transforms.Create(root);
+        for (const char* name : {"Idle", "Walk"})
+        {
+            const auto animationEntity = wi::ecs::CreateEntity();
+            prepared->names.Create(animationEntity) = name;
+            prepared->Component_Attach(animationEntity, root);
+            prepared->animations.Create(animationEntity);
+        }
+        renegade::bridge::PlaceImportedModelCommand place(
+            target, std::move(prepared), XMFLOAT3{}, 1.0f);
+        if (!place.Execute())
+            return Fail("multi-action character placement failed");
+        for (std::size_t index = 0; index < target.animations.GetCount(); ++index)
+        {
+            if (target.animations[index].IsPlaying())
+                return Fail("multi-action character placement auto-played a clip");
+        }
+    }
+
     std::cout << "RenegadeImportTests passed\n";
     return 0;
 }
