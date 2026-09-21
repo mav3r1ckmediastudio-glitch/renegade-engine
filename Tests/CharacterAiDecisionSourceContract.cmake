@@ -32,6 +32,8 @@ read_required("Runtime/src/RuntimeLiveDiagnostics.cpp" runtime)
 read_required("Studio/src/AIPatrolRouteInspector.cpp" patrol_inspector)
 read_required("Studio/src/Phase7Gate7AAnimationInspector.h" inspector_stack)
 read_required("Studio/MarkerIcons.cmake" studio_sources)
+read_required("CMakeLists.txt" root_build_sources)
+string(APPEND studio_sources "${root_build_sources}")
 read_required("Tests/CharacterAiDecisionTests.cpp" tests)
 
 require_text("${route}" "PatrolRouteMetadataKey" "persistent Patrol Route metadata")
