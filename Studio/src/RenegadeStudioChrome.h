@@ -310,6 +310,7 @@ namespace renegade::studio
             int depth = 0;
             bool selected = false;
             std::uint64_t entity = 0;
+            bool logicalAsset = false;
             HierarchyCategory category = HierarchyCategory::Other;
         };
 

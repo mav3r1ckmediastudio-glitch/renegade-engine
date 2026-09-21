@@ -33,6 +33,10 @@ namespace renegade::bridge
         std::string name;
         int depth = 0;
         bool hasTransform = false;
+        // True only for a user-facing root object. Descendants remain in the
+        // projection for explicit expansion, but never contribute to category
+        // counts or generic asset selection.
+        bool logicalAsset = false;
         SceneEntityCategory category = SceneEntityCategory::Other;
     };
 

@@ -1,5 +1,31 @@
 # Renegade Engine — Current Handoff
 
+## Editor logical hierarchy and selector repair — 21 September 2026
+
+**Branch:** `feature/editor-logical-hierarchy-selection`
+**Worktree:** `C:\\Users\\paulw\\source\\repos\\renegade-editor-hierarchy-selection`
+**Base:** `origin/main` at `57086b61dce0bfef22606a6707d6cafd74e82cfe`
+
+### Completed implementation
+
+- `SceneService::ListEntities()` now labels only hierarchy roots as logical editor assets while retaining every descendant for intentional hierarchy expansion.
+- Category headers count logical assets only, fixing internal terrain chunks and imported character payload nodes inflating category counts.
+- Generic scene-reference selectors exclude non-logical descendants, preventing internal terrain chunks and imported child entities from being offered as authoring targets.
+- Hierarchy expansion/collapse responds only on its chevron hit area; clicking the row performs selection without unexpectedly changing disclosure.
+- The native ComboBox filter input is rendered directly, restoring caret, keyboard focus, typed text and native filtering visibility.
+
+### Validation
+
+- `cmake --build BUILD\\hierarchy --config Release --target RenegadeBridgeTests --parallel 4` passed (full first build; 807.97 s).
+- `cmake --build BUILD\\hierarchy --config Release --target RenegadeStudio --parallel 2` passed (270.12 s).
+- `ctest --test-dir BUILD\\hierarchy -C Release -R '^RenegadeBridgeTests$' --output-on-failure` passed 1/1.
+- `git diff --check` passed.
+
+### Required owner confirmation
+
+Open the freshly built `BUILD\\hierarchy\\Studio\\Release\\RenegadeStudio.exe` and validate an existing Terrain and imported `Mutant.fbx` scene: one logical root/count per object; chevron-only expansion; viewport-to-root reveal; double-click framing; character/weapon selector eligibility; and filter keyboard/caret interaction. No merge is authorised.
+
+
 ## Studio custom marker icons — 21 September 2026
 
 Branch `codex/studio-custom-icons` starts at importer acceptance commit `bc11c845d81f402ff35bae2d27f7932ddbe64cd0`. The owner-provided `editor.zip` was extracted into `Studio/Content` with its `editor/markericons/*.png` paths preserved. `Studio/MarkerIcons.cmake` now copies those 17 loose PNG files into the compiled Studio `Content/editor/markericons` folder, and the shared local/CI Studio packaging script verifies the same complete set in both compiled and packaged Content. The marker source contract validates the exact file set and PNG signatures. No ZIP is copied into a build or package.

@@ -110,7 +110,12 @@ namespace renegade::bridge
             std::unordered_set<StableId> seen;
             for (const auto& item : scenes.ListEntities())
             {
+                // Scene selectors are for intentional, user-facing objects.
+                // Imported payload entities and streaming terrain chunks remain
+                // reachable through the hierarchy's explicit expansion, but
+                // are never valid generic selection targets.
                 if (item.entity == wi::ecs::INVALID_ENTITY ||
+                    !item.logicalAsset ||
                     !scenes.IsHierarchyVisible(item.entity))
                 {
                     continue;
