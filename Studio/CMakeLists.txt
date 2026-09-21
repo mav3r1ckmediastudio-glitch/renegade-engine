@@ -224,6 +224,11 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/creator-human-reference.png"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/creator-human-reference.png"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/importer"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/importer/male_reference.fbx"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/importer/male_reference.fbx"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/package/BuildInputs"
         "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs"

@@ -201,6 +201,21 @@ namespace renegade::studio
         }
     };
 
+    class RenegadeAnimationClipTable final : public wi::gui::Widget
+    {
+    public:
+        struct Row { std::string name; float start = 0; float end = 0; bool external = false; };
+        void SetRows(std::vector<Row> rows, std::size_t selected);
+        void OnSelected(std::function<void(std::size_t)> callback);
+        void Update(const wi::Canvas& canvas, float dt) override;
+        void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const override;
+        const char* GetWidgetTypeName() const override { return "RenegadeAnimationClipTable"; }
+    private:
+        std::vector<Row> rows_;
+        std::size_t selected_ = 0, first_ = 0, hovered_ = 1000000;
+        std::function<void(std::size_t)> selectedCallback_;
+    };
+
     class RenegadeTextureMapList final : public wi::gui::Widget
     {
     public:
@@ -214,6 +229,7 @@ namespace renegade::studio
         void SetSelectedSlot(std::size_t index);
         void OnSlotSelected(std::function<void(std::size_t)> callback);
         void OnBrowseRequested(std::function<void(std::size_t)> callback);
+        void OnRemoveRequested(std::function<void(std::size_t)> callback);
         void Update(const wi::Canvas& canvas, float dt) override;
         void Render(
             const wi::Canvas& canvas,
@@ -230,6 +246,7 @@ namespace renegade::studio
         std::size_t hoveredSlot_ = SlotCount;
         std::function<void(std::size_t)> slotSelected_;
         std::function<void(std::size_t)> browseRequested_;
+        std::function<void(std::size_t)> removeRequested_;
     };
 
     class RenegadeStudioChrome : public wi::gui::Widget

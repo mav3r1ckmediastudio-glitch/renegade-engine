@@ -510,6 +510,16 @@ namespace renegade::studio
             return;
         }
 
+        // Popups are not regular scroll content: clipping them to their
+        // inspector's scroll area hides choices that extend below a group.
+        // Wicked's ComboBox hit testing already allows the popup outside its
+        // parent. Match that hit region in our native renderer without
+        // changing the pinned engine or the closed control's clipping.
+        wi::graphics::Rect popupScissor = {};
+        popupScissor.right = static_cast<int32_t>(canvas.GetLogicalWidth());
+        popupScissor.bottom = static_cast<int32_t>(canvas.GetLogicalHeight());
+        ApplyScissor(canvas, popupScissor, cmd, false);
+
         // Wicked's ComboBox interaction code owns a fixed 20 px item hitbox
         // plus its 20 px filter row. Render against those exact native
         // coordinates rather than stretching visible rows to this widget's
@@ -586,6 +596,9 @@ namespace renegade::studio
                 0.2f,
                 0.16f);
         }
+        // Do not let the popup's full-canvas scissor affect later widgets.
+        ApplyScissor(canvas, parent != nullptr ? parent->scissorRect : scissorRect,
+            cmd, false);
     }
 
     void RenegadeSlider::Create(
@@ -754,6 +767,75 @@ namespace renegade::studio
             0.18f);
     }
 
+    void RenegadeAnimationClipTable::SetRows(std::vector<Row> rows, std::size_t selected)
+    {
+        rows_ = std::move(rows);
+        selected_ = selected;
+        if (selected_ < first_) first_ = selected_;
+        if (selected_ >= first_ + 6) first_ = selected_ - 5;
+    }
+    void RenegadeAnimationClipTable::OnSelected(std::function<void(std::size_t)> callback)
+    {
+        selectedCallback_ = std::move(callback);
+    }
+    void RenegadeAnimationClipTable::Update(const wi::Canvas& canvas, float dt)
+    {
+        Widget::Update(canvas, dt);
+        hovered_ = 1000000;
+        if (!IsVisible() || !IsEnabled()) return;
+        const auto pointer = wi::input::GetPointer();
+        if (pointer.x < translation.x || pointer.x >= translation.x + scale.x ||
+            pointer.y < translation.y || pointer.y >= translation.y + scale.y) return;
+        const float localY = pointer.y - translation.y;
+        if (localY < 27.0f) return;
+        if (localY >= scale.y - 24.0f)
+        {
+            if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) && !rows_.empty())
+                first_ = first_ + 6 < rows_.size() ? first_ + 6 : 0;
+            return;
+        }
+        const std::size_t index = first_ + static_cast<std::size_t>((localY - 27.0f) / 32.0f);
+        if (index >= rows_.size() || index >= first_ + 6) return;
+        hovered_ = index;
+        if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            selected_ = index;
+            if (selectedCallback_) selectedCallback_(index);
+        }
+    }
+
+    void RenegadeAnimationClipTable::Render(const wi::Canvas& canvas,
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!IsVisible()) return;
+        ApplyScissor(canvas, scissorRect, cmd);
+        DrawBorderedRect(translation.x, translation.y, scale.x, scale.y,
+            Surface0, Border, cmd);
+        DrawText("ACTION / SOURCE", translation.x + 7.0f,
+            translation.y + 8.0f, 12, TextSecondary, cmd);
+        DrawText("START - END", translation.x + scale.x - 120.0f,
+            translation.y + 8.0f, 11, TextSecondary, cmd);
+        for (std::size_t i = first_; i < rows_.size() && i < first_ + 6; ++i)
+        {
+            const float y = translation.y + 27.0f + (i - first_) * 32.0f;
+            DrawBorderedRect(translation.x + 3.0f, y, scale.x - 6.0f, 30.0f,
+                i == selected_ ? Surface2 : Surface0,
+                i == selected_ ? Forge : i == hovered_ ? HoverEdge : BorderSoft, cmd);
+            const auto& row = rows_[i];
+            DrawText(Ellipsize((row.external ? "EXT  " : "SRC  ") +
+                (row.name.empty() ? "Untitled action" : row.name), 24),
+                translation.x + 8.0f, y + 8.0f, 12, TextStrong, cmd);
+            char range[64];
+            std::snprintf(range, sizeof(range), "%.1f  -  %.1f", row.start, row.end);
+            DrawText(range, translation.x + scale.x - 112.0f, y + 9.0f, 11,
+                TextSecondary, cmd);
+
+        }
+        DrawText(rows_.empty() ? "NO CLIPS // LOAD AN ANIMATION FILE" :
+            rows_.size() > 6 ? "NEXT PAGE / BACK TO FIRST" : "SELECT AN ACTION TO EDIT", translation.x + 8.0f,
+            translation.y + scale.y - 19.0f, 9, TextSecondary, cmd);
+    }
+
     void RenegadeTextureMapList::ClearSlots()
     {
         resources_ = {};
@@ -790,6 +872,11 @@ namespace renegade::studio
         browseRequested_ = std::move(callback);
     }
 
+    void RenegadeTextureMapList::OnRemoveRequested(std::function<void(std::size_t)> callback)
+    {
+        removeRequested_ = std::move(callback);
+    }
+
     void RenegadeTextureMapList::Update(
         const wi::Canvas& canvas,
         const float dt)
@@ -806,27 +893,23 @@ namespace renegade::studio
         {
             return;
         }
-        const float rowHeight = scale.y / static_cast<float>(SlotCount);
-        const std::size_t index = std::min(
-            SlotCount - 1,
-            static_cast<std::size_t>((pointer.y - translation.y) / rowHeight));
+        constexpr std::size_t columns = 2;
+        constexpr std::size_t rows = (SlotCount + columns - 1) / columns;
+        const float cellWidth = scale.x / static_cast<float>(columns);
+        const float cellHeight = scale.y / static_cast<float>(rows);
+        const std::size_t column = std::min(columns - 1, static_cast<std::size_t>((pointer.x - translation.x) / cellWidth));
+        const std::size_t row = std::min(rows - 1, static_cast<std::size_t>((pointer.y - translation.y) / cellHeight));
+        const std::size_t index = row * columns + column;
+        if (index >= SlotCount) return;
         hoveredSlot_ = index;
-        SetTooltip(paths_[index].empty()
-            ? std::string("No texture assigned")
-            : paths_[index]);
-        if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
-        {
-            return;
-        }
+        SetTooltip(paths_[index].empty() ? std::string("No texture assigned") : paths_[index]);
+        if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) return;
         selectedSlot_ = index;
-        if (slotSelected_)
-        {
-            slotSelected_(index);
-        }
-        if (pointer.x >= translation.x + scale.x - 30.0f && browseRequested_)
-        {
-            browseRequested_(index);
-        }
+        if (slotSelected_) slotSelected_(index);
+        const float localX = pointer.x - translation.x - static_cast<float>(column) * cellWidth;
+        const float localY = pointer.y - translation.y - static_cast<float>(row) * cellHeight;
+        if (localY >= cellHeight - 30.0f && localX >= cellWidth * 0.5f && removeRequested_) removeRequested_(index);
+        else if (localY >= cellHeight - 30.0f && browseRequested_) browseRequested_(index);
     }
 
     void RenegadeTextureMapList::Render(
@@ -840,99 +923,33 @@ namespace renegade::studio
         ApplyScissor(canvas, scissorRect, cmd);
 
         constexpr std::array<const char*, SlotCount> labels = {
-            "BASE COLOR", "NORMAL", "SURFACE", "ROUGHNESS",
-            "METALNESS", "AO", "EMISSIVE"};
-        const float rowHeight = scale.y / static_cast<float>(SlotCount);
-        const float thumbnail = std::max(18.0f, rowHeight - 17.0f);
-
+            "BASE COLOR", "NORMAL", "SURFACE", "ROUGHNESS", "METALNESS", "AO", "EMISSIVE"};
+        constexpr std::size_t columns = 2;
+        constexpr std::size_t rows = (SlotCount + columns - 1) / columns;
+        const float cellWidth = scale.x / static_cast<float>(columns);
+        const float cellHeight = scale.y / static_cast<float>(rows);
         for (std::size_t index = 0; index < SlotCount; ++index)
         {
-            const float y = translation.y + static_cast<float>(index) * rowHeight;
-            DrawBorderedRect(
-                translation.x,
-                y,
-                scale.x,
-                rowHeight - 3.0f,
-                wi::Color(6, 10, 12, 255),
-                index == selectedSlot_
-                    ? Forge
-                    : index == hoveredSlot_ ? HoverEdge : Border,
-                cmd);
-            DrawText(
-                labels[index],
-                translation.x + 5.0f,
-                y + 3.0f,
-                8,
-                index == selectedSlot_ ? TextStrong : TextSecondary,
-                cmd,
-                0.0f,
-                0.14f);
-
+            const float x = translation.x + static_cast<float>(index % columns) * cellWidth;
+            const float y = translation.y + static_cast<float>(index / columns) * cellHeight;
+            const float w = cellWidth - 5.0f;
+            const float h = cellHeight - 5.0f;
+            DrawBorderedRect(x, y, w, h, Surface0,
+                index == selectedSlot_ ? Forge : index == hoveredSlot_ ? HoverEdge : Border, cmd);
             const auto& resource = resources_[index];
             if (resource.IsValid() && resource.GetTexture().IsValid())
             {
-                wi::image::Params image(
-                    translation.x + 5.0f,
-                    y + 14.0f,
-                    thumbnail,
-                    thumbnail);
+                const float side = std::min(w - 8.0f, h - 51.0f);
+                wi::image::Params image(x + (w - side) * 0.5f, y + 4.0f, side, side);
                 image.blendFlag = wi::enums::BLENDMODE_ALPHA;
                 image.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
                 wi::image::Draw(&resource.GetTexture(), image, cmd);
             }
-            else
-            {
-                DrawText(
-                    "--",
-                    translation.x + 10.0f,
-                    y + 20.0f,
-                    9,
-                    Muted,
-                    cmd);
-            }
-
-            const float pathX = translation.x + thumbnail + 12.0f;
-            DrawBorderedRect(
-                pathX,
-                y + 14.0f,
-                scale.x - thumbnail - 47.0f,
-                thumbnail,
-                Surface0,
-                BorderSoft,
-                cmd);
-            std::string displayedPath = "<NONE>";
-            if (!paths_[index].empty())
-            {
-                const std::filesystem::path path =
-                    std::filesystem::u8path(paths_[index]);
-                // The slot row is for identifying the assigned map, so keep
-                // the filename readable instead of showing an unusable slice
-                // of a long absolute path. Hovering the row and the editable
-                // selected-slot field both expose the complete source path.
-                displayedPath = path.filename().generic_u8string();
-            }
-            DrawText(
-                Ellipsize(displayedPath, 36),
-                pathX + 5.0f,
-                y + 20.0f,
-                8,
-                paths_[index].empty() ? Muted : TextStrong,
-                cmd);
-            DrawBorderedRect(
-                translation.x + scale.x - 30.0f,
-                y + 14.0f,
-                25.0f,
-                thumbnail,
-                Surface2,
-                index == selectedSlot_ ? Forge : Border,
-                cmd);
-            DrawText(
-                "...",
-                translation.x + scale.x - 25.0f,
-                y + 20.0f,
-                9,
-                TextStrong,
-                cmd);
+            else DrawText("+ ADD TEXTURE", x + 10.0f, y + 42.0f, 12, Muted, cmd);
+            DrawText(labels[index], x + 7.0f, y + h - 43.0f, 12,
+                index == selectedSlot_ ? TextStrong : TextSecondary, cmd);
+            DrawText("REPLACE", x + 7.0f, y + h - 19.0f, 11, Forge, cmd);
+            DrawText("REMOVE", x + w * 0.5f + 5.0f, y + h - 19.0f, 11, TextSecondary, cmd);
         }
     }
 

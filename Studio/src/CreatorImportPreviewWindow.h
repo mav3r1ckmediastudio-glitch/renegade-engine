@@ -9,6 +9,64 @@
 
 namespace renegade::studio
 {
+    // Decorative native shell behind the real stage controls. It is attached
+    // last so Wicked renders it first; it never participates in hit testing.
+    class CreatorImportInspectorShell final : public wi::gui::Widget
+    {
+    public:
+        CreatorImportInspectorShell()
+        {
+            SetName("Importer Inspector Shell");
+            SetShadowRadius(0.0f);
+        }
+
+        void SetBodyBounds(const float top, const float height) noexcept
+        {
+            bodyTop_ = top;
+            bodyHeight_ = height;
+        }
+
+        void Render(const wi::Canvas&, const wi::graphics::CommandList cmd) const override
+        {
+            if (!IsVisible())
+                return;
+            const float x = translation.x;
+            const float y = translation.y;
+            const float width = scale.x;
+            const auto draw = [cmd](const float left, const float top,
+                const float w, const float h, const wi::Color color)
+            {
+                if (w <= 0.0f || h <= 0.0f)
+                    return;
+                wi::image::Params params(left, top, w, h, color);
+                params.blendFlag = wi::enums::BLENDMODE_ALPHA;
+                wi::image::Draw(nullptr, params, cmd);
+            };
+
+            // The title, status and help text remain genuine native labels.
+            draw(x + 1.0f, y + 1.0f, width - 2.0f, 141.0f,
+                wi::Color(13, 20, 26, 255));
+            draw(x + 1.0f, y + 1.0f, 3.0f, 141.0f,
+                wi::Color(209, 125, 73, 255));
+            draw(x + 12.0f, y + 141.0f, width - 24.0f, 1.0f,
+                wi::Color(54, 69, 80, 255));
+
+            if (bodyHeight_ > 0.0f)
+            {
+                // A separate stage surface keeps editor-style controls from
+                // appearing as loose rows underneath a highlighted heading.
+                draw(x + 12.0f, y + bodyTop_, width - 24.0f, bodyHeight_,
+                    wi::Color(26, 35, 43, 255));
+                draw(x + 12.0f, y + bodyTop_, 2.0f, bodyHeight_,
+                    wi::Color(161, 98, 60, 255));
+            }
+        }
+
+    private:
+        float bodyTop_ = 0.0f;
+        float bodyHeight_ = 0.0f;
+    };
+
     // The model importer is a presentation workspace, not part of the authored
     // level. Entering it therefore snapshots the scene's visible sky/fog state
     // and replaces only those presentation fields with a neutral backdrop.
@@ -28,9 +86,24 @@ namespace renegade::studio
             previewScene_ = previewScene;
         }
 
+        void InitializeInspectorShell()
+        {
+            // Last child is rendered beneath the actual headings and inputs.
+            AddWidget(&inspectorShell_);
+            inspectorShell_.SetEnabled(false);
+            inspectorShell_.priority_change = false;
+        }
+
+        void LayoutInspectorShell(const float width,
+            const float bodyTop, const float bodyHeight)
+        {
+            inspectorShell_.SetPos(XMFLOAT2(0.0f, 0.0f));
+            inspectorShell_.SetSize(XMFLOAT2(width, 142.0f));
+            inspectorShell_.SetBodyBounds(bodyTop, bodyHeight);
+        }
+
         void OffsetVisibleStageContent(const float offset)
         {
-            stageContentOffset_ = offset;
             for (wi::gui::Widget* widget : widgets)
             {
                 if (widget == nullptr || !widget->IsVisible() ||
@@ -74,12 +147,6 @@ namespace renegade::studio
             }
         }
 
-        void Update(const wi::Canvas& canvas, const float dt) override
-        {
-            ReflowFinalImportPage();
-            wi::gui::Window::Update(canvas, dt);
-        }
-
     private:
         struct WeatherPresentationState
         {
@@ -93,67 +160,6 @@ namespace renegade::studio
             std::string skyMapName;
             wi::Resource skyMap;
         };
-
-        void ReflowFinalImportPage()
-        {
-            // The final IMPORT page also shows Asset Name and Content/Models.
-            // The old fixed thumbnail block began at y=178/214, physically
-            // underneath those fields (190..262). Keep the accepted square
-            // preview size but place the whole final block after the fields.
-            const float actionBarY = 276.0f + stageContentOffset_;
-            const float previewY = 312.0f + stageContentOffset_;
-
-            float previewSide = 244.0f;
-            for (wi::gui::Widget* widget : widgets)
-            {
-                if (widget != nullptr &&
-                    widget->GetName() == "Final Asset Thumbnail Preview")
-                {
-                    previewSide = std::max(1.0f, widget->GetSize().y);
-                    break;
-                }
-            }
-
-            const float panelWidth = GetSize().x;
-            const float previewX =
-                std::max(12.0f, (panelWidth - previewSide) * 0.5f);
-            const float captureY = previewY + previewSide + 10.0f;
-            const float statusY = captureY + 48.0f;
-            const float confirmY = captureY + 96.0f;
-            const float cancelY = captureY + 150.0f;
-
-            for (wi::gui::Widget* widget : widgets)
-            {
-                if (widget == nullptr)
-                    continue;
-
-                const std::string& name = widget->GetName();
-                if (name == "THUMBNAIL & IMPORT")
-                {
-                    widget->SetPos(XMFLOAT2(12.0f, actionBarY));
-                }
-                else if (name == "Final Asset Thumbnail Preview")
-                {
-                    widget->SetPos(XMFLOAT2(previewX, previewY));
-                }
-                else if (name == "Capture Asset Thumbnail")
-                {
-                    widget->SetPos(XMFLOAT2(12.0f, captureY));
-                }
-                else if (name == "THUMBNAIL NOT CAPTURED")
-                {
-                    widget->SetPos(XMFLOAT2(12.0f, statusY));
-                }
-                else if (name == "Import Model Commit")
-                {
-                    widget->SetPos(XMFLOAT2(12.0f, confirmY));
-                }
-                else if (name == "Cancel Model Import")
-                {
-                    widget->SetPos(XMFLOAT2(12.0f, cancelY));
-                }
-            }
-        }
 
         static WeatherPresentationState Capture(
             const wi::scene::WeatherComponent& weather)
@@ -249,9 +255,9 @@ namespace renegade::studio
             entityWeatherBefore_ = {};
         }
 
+        CreatorImportInspectorShell inspectorShell_;
         wi::scene::Scene* previewScene_ = nullptr;
         bool previewWeatherCaptured_ = false;
-        float stageContentOffset_ = 0.0f;
         wi::ecs::Entity weatherEntity_ = wi::ecs::INVALID_ENTITY;
         WeatherPresentationState sceneWeatherBefore_;
         WeatherPresentationState entityWeatherBefore_;
