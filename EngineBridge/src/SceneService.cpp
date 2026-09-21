@@ -837,7 +837,10 @@ namespace renegade::bridge
         {
             auto item = entities[index];
             item.depth = depth;
+            // Keep a branch together for hierarchy presentation, while
+            // explicitly marking only its root as a logical editor asset.
             item.category = category;
+            item.logicalAsset = depth == 0;
             ordered.push_back(std::move(item));
 
             const auto found = children.find(entities[index].entity);

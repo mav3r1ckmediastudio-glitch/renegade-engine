@@ -531,25 +531,11 @@ namespace renegade::studio
             : std::max(1.0f, scale.x - 1.0f - scale.y);
         const float dropX = GetDropX(canvas);
         const float dropOffset = GetDropOffset(canvas);
-        const float filterY = translation.y + scale.y +
-            dropOffset - NativeDropItemHeight;
-        DrawBorderedRect(
-            dropX,
-            filterY,
-            dropWidth,
-            NativeDropItemHeight,
-            Surface0,
-            BorderSoft,
-            cmd);
-        DrawText(
-            filterText.empty() ? "FILTER..." : filterText,
-            dropX + 8.0f,
-            filterY + 5.0f,
-            std::max(9, renderTextSize_ - 1),
-            filterText.empty() ? Muted : TextSecondary,
-            cmd,
-            0.2f,
-            0.12f);
+        // The ComboBox owns a real native TextInputField here. Rendering a
+        // painted substitute hid its caret and typed text even though input
+        // events reached it. Let Wicked render the actual field so focus,
+        // caret, selection and filtering remain aligned with hit testing.
+        filter.Render(canvas, cmd);
 
         int visibleItems = 0;
         for (int index = firstItemVisible;
@@ -2061,7 +2047,13 @@ namespace renegade::studio
                     else
                     {
                         const auto& row = hierarchyRows_[item.rowIndex];
-                        if (HierarchyRowHasChildren(item.rowIndex))
+                        // Disclosure is owned by the chevron hit area only. A
+                        // row click selects; it must never also collapse or
+                        // expand the object being selected.
+                        const float disclosureRight = 14.0f +
+                            std::max(0, row.depth) * 16.0f + 15.0f;
+                        if (HierarchyRowHasChildren(item.rowIndex) &&
+                            x < disclosureRight)
                         {
                             const bool opening =
                                 collapsedHierarchyEntities_.count(row.entity) != 0;
@@ -2925,7 +2917,7 @@ namespace renegade::studio
                     hierarchyRows_.end(),
                     [&item](const HierarchyRow& row)
                     {
-                        return row.category == item.category;
+                        return row.category == item.category && row.logicalAsset;
                     }));
                 DrawRect(
                     8.0f,

@@ -6967,6 +6967,7 @@ namespace renegade::studio
                 entity.depth,
                 entity.entity == selected,
                 static_cast<std::uint64_t>(entity.entity),
+                entity.logicalAsset,
                 ToHierarchyCategory(entity.category),
             });
         }

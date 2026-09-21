@@ -1339,6 +1339,7 @@ namespace renegade::studio
             row.depth = entity.depth;
             row.selected = entity.entity == selected;
             row.entity = static_cast<std::uint64_t>(entity.entity);
+            row.logicalAsset = entity.logicalAsset;
             row.category = MapCategory(entity.category);
             rows.push_back(std::move(row));
         }
