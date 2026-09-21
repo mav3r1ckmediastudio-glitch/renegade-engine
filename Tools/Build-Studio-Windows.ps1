@@ -130,6 +130,30 @@ try {
             -Destination $packageRoot `
             -Force
 
+        $expectedStartupMedia = @(
+            "renegade_logo_reveal_v2.mp4",
+            "renegade_identity_handshake_v1.mp4",
+            "renegade_identity_handshake_final.bmp"
+        )
+        foreach ($startupMedia in $expectedStartupMedia) {
+            $builtStartupMedia = Join-Path `
+                $studioDirectory `
+                "Content\startup\$startupMedia"
+            $packagedStartupMedia = Join-Path `
+                $packageRoot `
+                "Content\startup\$startupMedia"
+            if (-not (Test-Path $builtStartupMedia -PathType Leaf)) {
+                throw "Compiled Studio Content is missing startup media $startupMedia."
+            }
+            if (-not (Test-Path $packagedStartupMedia -PathType Leaf)) {
+                throw "Packaged Studio Content is missing startup media $startupMedia."
+            }
+            if ((Get-Item $packagedStartupMedia).Length -ne
+                (Get-Item $builtStartupMedia).Length) {
+                throw "Packaged startup media size differs from compiled Content: $startupMedia."
+            }
+        }
+
         $expectedMarkerIcons = @(
             "audio_source.png",
             "audio_zone.png",
