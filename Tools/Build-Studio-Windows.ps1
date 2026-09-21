@@ -130,6 +130,40 @@ try {
             -Destination $packageRoot `
             -Force
 
+        $expectedMarkerIcons = @(
+            "audio_source.png",
+            "audio_zone.png",
+            "camera.png",
+            "checkpoint.png",
+            "decal_projector.png",
+            "light_directional.png",
+            "light_point.png",
+            "light_rectangle.png",
+            "light_spot.png",
+            "npc_spawn.png",
+            "particle_emitter.png",
+            "physics_volume.png",
+            "pickup_spawn.png",
+            "player_start.png",
+            "script_entity.png",
+            "trigger_zone.png",
+            "waypoint.png"
+        )
+        $builtMarkerIconRoot = Join-Path $studioDirectory "Content\editor\markericons"
+        $packagedMarkerIconRoot = Join-Path $packageRoot "Content\editor\markericons"
+        foreach ($markerIcon in $expectedMarkerIcons) {
+            if (-not (Test-Path (Join-Path $builtMarkerIconRoot $markerIcon) -PathType Leaf)) {
+                throw "Compiled Studio Content is missing marker icon $markerIcon."
+            }
+            if (-not (Test-Path (Join-Path $packagedMarkerIconRoot $markerIcon) -PathType Leaf)) {
+                throw "Packaged Studio Content is missing marker icon $markerIcon."
+            }
+        }
+        $packagedMarkerIcons = @(Get-ChildItem $packagedMarkerIconRoot -File -Filter "*.png")
+        if ($packagedMarkerIcons.Count -ne $expectedMarkerIcons.Count) {
+            throw "Packaged Studio must contain exactly $($expectedMarkerIcons.Count) stock marker icons."
+        }
+
         $stockActionRoot = Join-Path `
             $packageRoot `
             "Content\ScriptLibrary\RenegadeStockActions"
