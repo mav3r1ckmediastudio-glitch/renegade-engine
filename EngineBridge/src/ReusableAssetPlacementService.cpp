@@ -1,5 +1,7 @@
 #include "renegade/bridge/ReusableAssetService.h"
 
+#include "renegade/bridge/CharacterService.h"
+#include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 
 #include <algorithm>
@@ -13,6 +15,8 @@
 #include <sstream>
 #include <unordered_set>
 #include <vector>
+
+#include "json.hpp"
 
 namespace renegade::bridge
 {
@@ -137,6 +141,53 @@ namespace renegade::bridge
             return true;
         }
 
+        bool ParsePlacementCreatorRecipe(
+            const ReusableModelAssetManifest& manifest,
+            CreatorModelImportRecipe& creatorRecipe,
+            std::string& error)
+        {
+            creatorRecipe = {};
+            if (manifest.settingsSchema != ReusableModelImportSettingsSchema ||
+                manifest.settingsVersion != 1)
+            {
+                error = "Reusable model placement recipe version is unsupported.";
+                return false;
+            }
+
+            try
+            {
+                const nlohmann::json stored =
+                    nlohmann::json::parse(manifest.settingsJson);
+                if (!stored.is_object() || stored.dump() != manifest.settingsJson ||
+                    stored.size() != 2 ||
+                    !stored.contains("source_format") ||
+                    !stored.at("source_format").is_string() ||
+                    !stored.contains("options") ||
+                    !stored.at("options").is_object())
+                {
+                    error =
+                        "Reusable model placement recipe is not the canonical version-1 contract.";
+                    return false;
+                }
+
+                const std::string optionsJson = stored.at("options").dump();
+                if (!ParseCreatorModelImportOptions(
+                        optionsJson, creatorRecipe, error))
+                {
+                    error =
+                        "Reusable model placement creator options are invalid: " + error;
+                    return false;
+                }
+            }
+            catch (const nlohmann::json::exception&)
+            {
+                error = "Reusable model placement recipe is malformed JSON.";
+                return false;
+            }
+
+            error.clear();
+            return true;
+        }
     }
 
     PreparedReusableModelPlacement ReusableAssetService::PrepareModelAssetPlacement(
@@ -249,6 +300,15 @@ namespace renegade::bridge
         }
 
         const auto productDone = std::chrono::steady_clock::now();
+
+        CreatorModelImportRecipe creatorRecipe;
+        if (!ParsePlacementCreatorRecipe(
+                document.manifest, creatorRecipe, result.error))
+        {
+            return prepared;
+        }
+        const bool preparedCharacterAsset =
+            creatorRecipe.assetKind == CreatorAssetImportKind::Character;
         // WISCENE material resources can retain relative paths from the model
         // import. For retained glTF sources, sidecar images/buffers live beside
         // the retained source under SourceAssets. Rehydrate the payload from
@@ -325,6 +385,20 @@ namespace renegade::bridge
         archive = wi::Archive();
         cleanup();
         const auto sceneDone = std::chrono::steady_clock::now();
+
+        // Character classification belongs to the durable import recipe, not
+        // to an arbitrary path or folder guess. Stamp an in-memory template
+        // marker into the prepared reusable payload so both ordinary placement
+        // and the live drag-preview adoption path can create a real Character
+        // instance. This intentionally does not mutate the accepted .rasset.
+        if (preparedCharacterAsset &&
+            !MarkCharacterAssetTemplate(*prepared.scene_))
+        {
+            result.error =
+                "Prepared Character asset payload contains no transform root for Character placement.";
+            prepared.scene_.reset();
+            return prepared;
+        }
 
         // Stable-ID material bindings are authoritative but Wicked Resource
         // handles themselves are not serialized. Resolve them at the exact

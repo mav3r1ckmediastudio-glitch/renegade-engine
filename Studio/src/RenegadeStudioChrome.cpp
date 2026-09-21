@@ -536,6 +536,10 @@ namespace renegade::studio
         // events reached it. Let Wicked render the actual field so focus,
         // caret, selection and filtering remain aligned with hit testing.
         filter.Render(canvas, cmd);
+        // TextInputField restores its own (filter-sized) scissor before it
+        // returns. Restore the full popup region before issuing menu rows,
+        // otherwise every item beneath the Filter row is clipped away.
+        ApplyScissor(canvas, popupScissor, cmd, false);
 
         int visibleItems = 0;
         for (int index = firstItemVisible;

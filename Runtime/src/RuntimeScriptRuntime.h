@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/ScriptDocumentService.h"
 #include "renegade/bridge/GameplayInputService.h"
+#include "renegade/bridge/GameplayEventService.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -69,6 +70,13 @@ namespace renegade::runtime
         void SetGameplayState(
             const bridge::RuntimePlayerState* player,
             const bridge::GameplayInputFrame* input) noexcept;
+
+        // Engine/runtime producers publish through the same bounded FIFO that
+        // governed creator scripts consume in Update(). This is the single
+        // public/cross-system GameplayEventService boundary.
+        [[nodiscard]] bool EnqueueGameplayEvent(
+            bridge::GameplayEvent event,
+            std::string& error);
 
         void Update(float dt) noexcept;
         void Pause() noexcept;

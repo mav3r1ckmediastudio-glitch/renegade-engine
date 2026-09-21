@@ -1,9 +1,13 @@
 #pragma once
 
+#include <algorithm>
+#include <cstddef>
+#include <sstream>
 #include <string>
 
 #include <WickedEngine.h>
 
+#include "renegade/bridge/CreatorExternalAnimationImportService.h"
 #include "renegade/bridge/StudioSession.h"
 #include "RenegadeStudioChrome.h"
 
@@ -119,10 +123,17 @@ namespace renegade::studio
 
         void SetVisible(const bool visible)
         {
+            const bool openingPreview = visible && !previewWeatherCaptured_;
             const bool closingPreview = !visible && previewWeatherCaptured_;
-            if (visible && !previewWeatherCaptured_)
+            if (openingPreview)
             {
                 CaptureAndNeutralizePreviewWeather();
+                if (auto* session = bridge::StudioSession::Current();
+                    session != nullptr && session->Projects().HasProject())
+                {
+                    bridge::BeginCreatorExternalAnimationImportSession(
+                        session->Projects().CurrentProject().rootPath);
+                }
             }
             else if (!visible && previewWeatherCaptured_)
             {
@@ -132,6 +143,11 @@ namespace renegade::studio
             wi::gui::Window::SetVisible(visible);
             if (closingPreview)
             {
+                bridge::ClearCreatorExternalAnimationImportSession();
+                externalAnimationSignature_.clear();
+                externalAnimationSelected_ = 0;
+                externalAnimationMessage_.clear();
+
                 // DismissImportScalePanel refreshes the Inspector and then
                 // makes its parent Window visible again. Wicked propagates that
                 // visibility to the Window children, which can temporarily
@@ -147,6 +163,15 @@ namespace renegade::studio
             }
         }
 
+        void Update(const wi::Canvas& canvas, const float dt) override
+        {
+            EnsureExternalAnimationControls();
+            RefreshExternalAnimationControls();
+            // Review-page geometry is owned by StudioApplication's layout pass.
+            // Do not reflow these widgets here: doing so races that layout and
+            // can place the thumbnail surface over the capture/import controls.
+            wi::gui::Window::Update(canvas, dt);
+        }
     private:
         struct WeatherPresentationState
         {
@@ -160,6 +185,394 @@ namespace renegade::studio
             std::string skyMapName;
             wi::Resource skyMap;
         };
+
+        void EnsureExternalAnimationControls()
+        {
+            if (externalAnimationControlsCreated_)
+                return;
+
+            externalAnimationHeader_.Create("Creator Character External Animation Header");
+            externalAnimationHeader_.SetText("EXTERNAL ANIMATIONS");
+            externalAnimationHeader_.SetColor(wi::Color::Transparent());
+            externalAnimationHeader_.SetFitTextEnabled(false);
+            AddWidget(&externalAnimationHeader_);
+
+            externalAnimationAdd_.Create("Creator Character Add Animations");
+            externalAnimationAdd_.SetText("+ ADD ANIMATIONS...");
+            externalAnimationAdd_.SetTooltip(
+                "Add one or many external animation sources to this Character import. "
+                "WISCENE / FBX / GLTF / GLB / VRM / VRMA are inspected with Wicked's native importers.");
+            externalAnimationAdd_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                BrowseExternalAnimations();
+            });
+            AddWidget(&externalAnimationAdd_);
+
+            externalAnimationClips_.Create("Creator Character External Animation Clips");
+            externalAnimationClips_.SetTooltip(
+                "External source actions queued for this Character. One-action files default to the source filename.");
+            externalAnimationClips_.OnSelect([this](const wi::gui::EventArgs& args)
+            {
+                externalAnimationSelected_ = static_cast<std::size_t>(args.userdata);
+                externalAnimationSignature_.clear();
+            });
+            AddWidget(&externalAnimationClips_);
+
+            externalAnimationName_.Create("Creator Character External Animation Name");
+            externalAnimationName_.SetDescription("CLIP NAME  ");
+            externalAnimationName_.SetPlaceholder("Animation clip name");
+            externalAnimationName_.SetCancelInputEnabled(false);
+            externalAnimationName_.OnInputAccepted([this](const wi::gui::EventArgs& args)
+            {
+                std::string error;
+                if (!bridge::RenameCreatorExternalAnimationClip(
+                        externalAnimationSelected_, args.sValue, error))
+                {
+                    externalAnimationMessage_ = error;
+                }
+                else
+                {
+                    externalAnimationMessage_ = "External animation clip renamed.";
+                }
+                externalAnimationSignature_.clear();
+            });
+            AddWidget(&externalAnimationName_);
+
+            externalAnimationIncluded_.Create("Creator Character External Animation Included");
+            externalAnimationIncluded_.AddItem("INCLUDE", 1);
+            externalAnimationIncluded_.AddItem("EXCLUDE", 0);
+            externalAnimationIncluded_.SetTooltip(
+                "Included clips are retained in the Character recipe. Excluded rows remain as reimport provenance.");
+            externalAnimationIncluded_.OnSelect([this](const wi::gui::EventArgs& args)
+            {
+                std::string error;
+                if (!bridge::SetCreatorExternalAnimationClipEnabled(
+                        externalAnimationSelected_, args.userdata != 0, error))
+                {
+                    externalAnimationMessage_ = error;
+                }
+                externalAnimationSignature_.clear();
+            });
+            AddWidget(&externalAnimationIncluded_);
+
+            externalAnimationRemove_.Create("Creator Character Remove External Animation");
+            externalAnimationRemove_.SetText("REMOVE CLIP");
+            externalAnimationRemove_.SetTooltip(
+                "Remove this external action from the current Character import queue.");
+            externalAnimationRemove_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                std::string error;
+                if (!bridge::RemoveCreatorExternalAnimationClip(
+                        externalAnimationSelected_, error))
+                {
+                    externalAnimationMessage_ = error;
+                }
+                else
+                {
+                    const auto snapshot = bridge::CaptureCreatorExternalAnimationQueue();
+                    if (externalAnimationSelected_ >= snapshot.clips.size() &&
+                        externalAnimationSelected_ > 0)
+                    {
+                        --externalAnimationSelected_;
+                    }
+                    externalAnimationMessage_ = "External animation clip removed.";
+                }
+                externalAnimationSignature_.clear();
+            });
+            AddWidget(&externalAnimationRemove_);
+
+            externalAnimationStatus_.Create("Creator Character External Animation Status");
+            externalAnimationStatus_.SetColor(wi::Color::Transparent());
+            externalAnimationStatus_.SetFitTextEnabled(true);
+            AddWidget(&externalAnimationStatus_);
+
+            externalAnimationControlsCreated_ = true;
+            SetExternalAnimationControlsVisible(false);
+        }
+
+        [[nodiscard]] int ImportSectionIndex() const
+        {
+            for (wi::gui::Widget* widget : widgets)
+            {
+                if (widget != nullptr && widget->GetName() == "Importer Section")
+                {
+                    return static_cast<wi::gui::ComboBox*>(widget)->GetSelected();
+                }
+            }
+            return -1;
+        }
+
+        [[nodiscard]] int ImportAssetKindIndex() const
+        {
+            for (wi::gui::Widget* widget : widgets)
+            {
+                if (widget != nullptr &&
+                    widget->GetName() == "Creator Asset Import Kind")
+                {
+                    return static_cast<wi::gui::ComboBox*>(widget)->GetSelected();
+                }
+            }
+            return -1;
+        }
+
+        void SetExternalAnimationControlsVisible(const bool visible)
+        {
+            if (!externalAnimationControlsCreated_)
+                return;
+            externalAnimationHeader_.SetVisible(visible);
+            externalAnimationAdd_.SetVisible(visible);
+            externalAnimationClips_.SetVisible(visible);
+            externalAnimationName_.SetVisible(visible);
+            externalAnimationIncluded_.SetVisible(visible);
+            externalAnimationRemove_.SetVisible(visible);
+            externalAnimationStatus_.SetVisible(visible);
+        }
+
+        void RefreshExternalAnimationControls()
+        {
+            if (!externalAnimationControlsCreated_)
+                return;
+
+            // Import kind index 1 is the CW-01 CHARACTER choice. If the creator
+            // deliberately switches back to MODEL, discard the Character-only
+            // external queue so it can never leak into a model recipe.
+            const int assetKind = ImportAssetKindIndex();
+            if (assetKind != 1)
+            {
+                const auto snapshot = bridge::CaptureCreatorExternalAnimationQueue();
+                if (!snapshot.clips.empty())
+                {
+                    bridge::ClearCreatorExternalAnimationImportSession();
+                    if (auto* session = bridge::StudioSession::Current();
+                        session != nullptr && session->Projects().HasProject())
+                    {
+                        bridge::BeginCreatorExternalAnimationImportSession(
+                            session->Projects().CurrentProject().rootPath);
+                    }
+                    externalAnimationSignature_.clear();
+                    externalAnimationSelected_ = 0;
+                }
+                SetExternalAnimationControlsVisible(false);
+                return;
+            }
+
+            // Current importer navigation index 4 is ANIMATION.
+            if (ImportSectionIndex() != 4)
+            {
+                SetExternalAnimationControlsVisible(false);
+                return;
+            }
+
+            SetExternalAnimationControlsVisible(true);
+            constexpr float x = 12.0f;
+            const float width = std::max(160.0f, GetSize().x - 24.0f);
+            // Existing embedded animation controls end at y=396. External
+            // ingestion deliberately continues beneath them in the same
+            // scrollable ANIMATION page.
+            float y = 404.0f;
+            externalAnimationHeader_.SetPos(XMFLOAT2(x, y));
+            externalAnimationHeader_.SetSize(XMFLOAT2(width, 22.0f));
+            y += 26.0f;
+            externalAnimationAdd_.SetPos(XMFLOAT2(x, y));
+            externalAnimationAdd_.SetSize(XMFLOAT2(width, 30.0f));
+            y += 36.0f;
+            externalAnimationClips_.SetPos(XMFLOAT2(x, y));
+            externalAnimationClips_.SetSize(XMFLOAT2(width, 30.0f));
+            y += 36.0f;
+            externalAnimationName_.SetPos(XMFLOAT2(x, y));
+            externalAnimationName_.SetSize(XMFLOAT2(width, 30.0f));
+            y += 36.0f;
+            const float half = (width - 8.0f) * 0.5f;
+            externalAnimationIncluded_.SetPos(XMFLOAT2(x, y));
+            externalAnimationIncluded_.SetSize(XMFLOAT2(half, 30.0f));
+            externalAnimationRemove_.SetPos(XMFLOAT2(x + half + 8.0f, y));
+            externalAnimationRemove_.SetSize(XMFLOAT2(half, 30.0f));
+            y += 36.0f;
+            externalAnimationStatus_.SetPos(XMFLOAT2(x, y));
+            externalAnimationStatus_.SetSize(XMFLOAT2(width, 42.0f));
+
+            const auto snapshot = bridge::CaptureCreatorExternalAnimationQueue();
+            std::ostringstream signature;
+            signature << snapshot.clips.size() << '|';
+            for (const auto& clip : snapshot.clips)
+                signature << clip.name << '|' << clip.enabled << '|' << clip.localSourcePath << ';';
+            const std::string signatureText = signature.str();
+
+            if (signatureText != externalAnimationSignature_)
+            {
+                if (!snapshot.clips.empty())
+                    externalAnimationSelected_ = std::min(
+                        externalAnimationSelected_, snapshot.clips.size() - 1);
+                else
+                    externalAnimationSelected_ = 0;
+
+                externalAnimationClips_.ClearItems();
+                for (std::size_t i = 0; i < snapshot.clips.size(); ++i)
+                {
+                    const auto& clip = snapshot.clips[i];
+                    externalAnimationClips_.AddItem(
+                        clip.name + "  //  " + clip.sourceDisplayName,
+                        static_cast<std::uint64_t>(i));
+                }
+                if (!snapshot.clips.empty())
+                {
+                    externalAnimationClips_.SetSelectedByUserdataWithoutCallback(
+                        static_cast<std::uint64_t>(externalAnimationSelected_));
+                    const auto& selected = snapshot.clips[externalAnimationSelected_];
+                    externalAnimationName_.SetText(selected.name);
+                    externalAnimationIncluded_.SetSelectedByUserdataWithoutCallback(
+                        selected.enabled ? 1u : 0u);
+                }
+                else
+                {
+                    externalAnimationName_.SetText("");
+                    externalAnimationIncluded_.SetSelectedByUserdataWithoutCallback(1u);
+                }
+                externalAnimationSignature_ = signatureText;
+            }
+
+            const bool hasSelection = !snapshot.clips.empty() &&
+                externalAnimationSelected_ < snapshot.clips.size();
+            externalAnimationName_.SetEnabled(hasSelection);
+            externalAnimationIncluded_.SetEnabled(hasSelection);
+            externalAnimationRemove_.SetEnabled(hasSelection);
+
+            if (hasSelection)
+            {
+                const auto& selected = snapshot.clips[externalAnimationSelected_];
+                std::ostringstream status;
+                status << bridge::HumanoidAnimationSourceFormatName(selected.sourceFormat)
+                    << " // source action " << (selected.sourceAnimationIndex + 1)
+                    << " // " << selected.start << " - " << selected.end
+                    << " // SOURCE READY";
+                if (!selected.sourceActionName.empty())
+                    status << " // " << selected.sourceActionName;
+                externalAnimationStatus_.SetText(
+                    externalAnimationMessage_.empty()
+                        ? status.str()
+                        : externalAnimationMessage_ + "  //  " + status.str());
+            }
+            else
+            {
+                externalAnimationStatus_.SetText(
+                    externalAnimationMessage_.empty()
+                        ? "No external animation files added. Embedded actions remain available above."
+                        : externalAnimationMessage_);
+            }
+        }
+
+        void BrowseExternalAnimations()
+        {
+            auto* session = bridge::StudioSession::Current();
+            if (session == nullptr || !session->Projects().HasProject())
+            {
+                externalAnimationMessage_ = "Open a project before adding Character animations.";
+                return;
+            }
+            const std::string expectedProjectRoot =
+                session->Projects().CurrentProject().rootPath;
+
+            wi::helper::FileDialogParams params;
+            params.type = wi::helper::FileDialogParams::OPEN;
+            params.description =
+                "Character animation sources (WISCENE, FBX, GLTF, GLB, VRM, VRMA)";
+            params.extensions = {"wiscene", "fbx", "gltf", "glb", "vrm", "vrma"};
+            params.multiselect = true;
+            wi::helper::FileDialog(params,
+                [this, expectedProjectRoot](const std::string& fileName)
+                {
+                    if (fileName.empty())
+                        return;
+                    wi::eventhandler::Subscribe_Once(
+                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                        [this, expectedProjectRoot, fileName](std::uint64_t)
+                        {
+                            auto* current = bridge::StudioSession::Current();
+                            if (!IsVisible() || current == nullptr ||
+                                !current->Projects().HasProject() ||
+                                current->Projects().CurrentProject().rootPath != expectedProjectRoot ||
+                                ImportAssetKindIndex() != 1)
+                            {
+                                return;
+                            }
+
+                            std::string error;
+                            if (!bridge::QueueCreatorExternalAnimationSource(fileName, error))
+                            {
+                                externalAnimationMessage_ = error;
+                            }
+                            else
+                            {
+                                const auto snapshot = bridge::CaptureCreatorExternalAnimationQueue();
+                                externalAnimationMessage_ =
+                                    "Queued " + std::to_string(snapshot.clips.size()) +
+                                    " external animation action(s).";
+                            }
+                            externalAnimationSignature_.clear();
+                        });
+                });
+        }
+
+        void ReflowFinalImportPage()
+        {
+            // The final IMPORT page also shows Asset Name and Content/Models.
+            // The old fixed thumbnail block began at y=178/214, physically
+            // underneath those fields (190..262). Keep the accepted square
+            // preview size but place the whole final block after the fields.
+            constexpr float actionBarY = 276.0f;
+            constexpr float previewY = 312.0f;
+
+            float previewSide = 244.0f;
+            for (wi::gui::Widget* widget : widgets)
+            {
+                if (widget != nullptr &&
+                    widget->GetName() == "Final Asset Thumbnail Preview")
+                {
+                    previewSide = std::max(1.0f, widget->GetSize().y);
+                    break;
+                }
+            }
+
+            const float panelWidth = GetSize().x;
+            const float previewX =
+                std::max(12.0f, (panelWidth - previewSide) * 0.5f);
+            const float captureY = previewY + previewSide + 10.0f;
+            const float statusY = captureY + 48.0f;
+            const float confirmY = captureY + 96.0f;
+            const float cancelY = captureY + 150.0f;
+
+            for (wi::gui::Widget* widget : widgets)
+            {
+                if (widget == nullptr)
+                    continue;
+
+                const std::string& name = widget->GetName();
+                if (name == "THUMBNAIL & IMPORT")
+                {
+                    widget->SetPos(XMFLOAT2(12.0f, actionBarY));
+                }
+                else if (name == "Final Asset Thumbnail Preview")
+                {
+                    widget->SetPos(XMFLOAT2(previewX, previewY));
+                }
+                else if (name == "Capture Asset Thumbnail")
+                {
+                    widget->SetPos(XMFLOAT2(12.0f, captureY));
+                }
+                else if (name == "THUMBNAIL NOT CAPTURED")
+                {
+                    widget->SetPos(XMFLOAT2(12.0f, statusY));
+                }
+                else if (name == "Import Model Commit")
+                {
+                    widget->SetPos(XMFLOAT2(12.0f, confirmY));
+                }
+                else if (name == "Cancel Model Import")
+                {
+                    widget->SetPos(XMFLOAT2(12.0f, cancelY));
+                }
+            }
+        }
 
         static WeatherPresentationState Capture(
             const wi::scene::WeatherComponent& weather)
@@ -261,5 +674,17 @@ namespace renegade::studio
         wi::ecs::Entity weatherEntity_ = wi::ecs::INVALID_ENTITY;
         WeatherPresentationState sceneWeatherBefore_;
         WeatherPresentationState entityWeatherBefore_;
+
+        bool externalAnimationControlsCreated_ = false;
+        std::size_t externalAnimationSelected_ = 0;
+        std::string externalAnimationSignature_;
+        std::string externalAnimationMessage_;
+        wi::gui::Label externalAnimationHeader_;
+        RenegadeButton externalAnimationAdd_;
+        RenegadeComboBox externalAnimationClips_;
+        RenegadeTextInputField externalAnimationName_;
+        RenegadeComboBox externalAnimationIncluded_;
+        RenegadeButton externalAnimationRemove_;
+        wi::gui::Label externalAnimationStatus_;
     };
 }

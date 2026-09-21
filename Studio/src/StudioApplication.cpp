@@ -575,6 +575,8 @@ namespace
         bool scaleLinked = true;
         std::string assetName;
         std::string destinationFolder = "Content/Models";
+        renegade::bridge::CreatorAssetImportKind assetKind =
+            renegade::bridge::CreatorAssetImportKind::Model;
         float lightIntensity = 4.0f;
         float lightAzimuth = -35.0f;
         float lightElevation = 35.0f;
@@ -748,6 +750,7 @@ namespace
     renegade::studio::RenegadeButton creatorImportRigRetarget;
     renegade::studio::RenegadeButton creatorImportRigPreview;
     renegade::studio::RenegadeTextInputField creatorImportAssetName;
+    renegade::studio::RenegadeComboBox creatorImportAssetKind;
     renegade::studio::RenegadeTextInputField creatorImportDestination;
     renegade::studio::RenegadeSlider creatorImportPositionX;
     renegade::studio::RenegadeSlider creatorImportPositionY;
@@ -4630,6 +4633,22 @@ namespace renegade::studio
         {
             creatorModelImporter.assetName = args.sValue;
         });
+        creatorImportAssetKind.Create("Creator Asset Import Kind");
+        creatorImportAssetKind.AddItem("IMPORT AS // MODEL");
+        creatorImportAssetKind.AddItem("IMPORT AS // CHARACTER");
+        creatorImportAssetKind.SetSelectedWithoutCallback(0);
+        creatorImportAssetKind.OnSelect([](const wi::gui::EventArgs& args)
+        {
+            const bool character = args.iValue == 1;
+            creatorModelImporter.assetKind = character
+                ? bridge::CreatorAssetImportKind::Character
+                : bridge::CreatorAssetImportKind::Model;
+            creatorModelImporter.destinationFolder = character
+                ? "Content/Characters"
+                : "Content/Models";
+            creatorImportDestination.SetValue(
+                creatorModelImporter.destinationFolder);
+        });
         creatorImportDestination.Create("Creator Asset Destination");
         creatorImportDestination.SetPlaceholder("Content/Models");
         creatorImportDestination.OnInput([](const wi::gui::EventArgs& args)
@@ -5268,6 +5287,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportModelChoice),
             static_cast<wi::gui::Widget*>(&creatorImportCharacterChoice),
             static_cast<wi::gui::Widget*>(&creatorImportAssetName),
+            static_cast<wi::gui::Widget*>(&creatorImportAssetKind),
             static_cast<wi::gui::Widget*>(&creatorImportDestination),
             static_cast<wi::gui::Widget*>(&creatorImportRigReadout),
             static_cast<wi::gui::Widget*>(&creatorImportRigAutoMap),
@@ -6408,7 +6428,9 @@ namespace renegade::studio
         creatorImportHelpLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 42.0f));
         creatorImportAssetName.SetPos(XMFLOAT2(12.0f, 190.0f));
         creatorImportAssetName.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 32.0f));
-        creatorImportDestination.SetPos(XMFLOAT2(12.0f, 230.0f));
+        creatorImportAssetKind.SetPos(XMFLOAT2(12.0f, 230.0f));
+        creatorImportAssetKind.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
+        creatorImportDestination.SetPos(XMFLOAT2(12.0f, 266.0f));
         creatorImportDestination.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 32.0f));
         creatorImportModelChoice.SetPos(XMFLOAT2(12.0f, 274.0f));
         creatorImportModelChoice.SetSize(XMFLOAT2((importScalePanelWidth - 28.0f) * 0.5f, 44.0f));
@@ -12162,6 +12184,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         creatorModelImporter.importAsCharacter = false;
         importScaleTitleLabel_.SetText("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
         creatorImportAssetName.SetValue(creatorModelImporter.assetName);
+        creatorImportAssetKind.SetSelectedWithoutCallback(0);
         creatorImportDestination.SetValue(creatorModelImporter.destinationFolder);
         creatorImportRigReadout.SetText(creatorModelImporter.rigDiagnostic);
         creatorImportRigReadout.SetTooltip(creatorModelImporter.rigDiagnostic);
@@ -12348,6 +12371,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         creatorImportCharacterChoice.SetText(creatorModelImporter.importAsCharacter
             ? "✓ CHARACTER" : "CHARACTER");
         creatorImportAssetName.SetVisible(section == 0 || section == 5);
+        creatorImportAssetKind.SetVisible(section == 0 || section == 5);
         creatorImportDestination.SetVisible(section == 0 || section == 5);
         for (wi::gui::Widget* rigControl : {
             static_cast<wi::gui::Widget*>(&creatorImportRigReadout),
@@ -12535,13 +12559,17 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         }
 
         const auto& project = session_->Projects().CurrentProject();
+        const std::string importDestination =
+            creatorModelImporter.assetKind == bridge::CreatorAssetImportKind::Character
+            ? "Content/Characters"
+            : creatorModelImporter.destinationFolder;
         bridge::CreatorAssetWorkflowService workflow;
         std::string destinationError;
         if (!workflow.ValidateModelImportDestination(
                 project.rootPath,
                 creatorModelImporter.sourcePath,
                 creatorModelImporter.assetName,
-                creatorModelImporter.destinationFolder,
+                importDestination,
                 destinationError))
         {
             // Keep the actual actionable reason visible after dismissing the dialog.
@@ -12574,6 +12602,8 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             XMFLOAT3 positionOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
             XMFLOAT3 rotationDegrees = XMFLOAT3(0.0f, 0.0f, 0.0f);
             XMFLOAT3 authoredScale = XMFLOAT3(1.0f, 1.0f, 1.0f);
+            bridge::CreatorAssetImportKind assetKind =
+                bridge::CreatorAssetImportKind::Model;
             std::string settingsJson = "{}";
             bridge::PreparedModelImport prepared;
             bridge::CreatorModelImportResult imported;
@@ -12587,7 +12617,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         state->projectId = project.projectId;
         state->sourcePath = creatorModelImporter.sourcePath;
         state->assetName = creatorModelImporter.assetName;
-        state->destinationFolder = creatorModelImporter.destinationFolder;
+        state->destinationFolder = importDestination;
         state->thumbnailCapturePath = creatorModelImporter.thumbnailCapturePath;
         state->materialOverrides = creatorModelImporter.materialOverrides;
         state->animationRecipe = creatorModelImporter.animationRecipe;
@@ -12597,6 +12627,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         state->positionOffset = creatorModelImporter.positionOffset;
         state->rotationDegrees = creatorModelImporter.rotationDegrees;
         state->authoredScale = creatorModelImporter.scale;
+        state->assetKind = creatorModelImporter.assetKind;
         state->prepared = std::move(creatorModelImporter.preparedForCommit);
 
         const auto cameraBefore = creatorModelImporter.cameraBefore;
@@ -12728,6 +12759,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                         if (materials.succeeded)
                         {
                             materials.recipe.animations = state->animationRecipe;
+                            materials.recipe.assetKind = state->assetKind;
                             materials.recipe.transform.authored = true;
                             materials.recipe.transform.positionX = state->positionOffset.x;
                             materials.recipe.transform.positionY = state->positionOffset.y;

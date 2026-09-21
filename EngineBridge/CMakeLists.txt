@@ -18,6 +18,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/DiagnosticService.h
     include/renegade/bridge/CreatorAssetActionPolicy.h
     include/renegade/bridge/CreatorAssetWorkflowService.h
+    include/renegade/bridge/CreatorExternalAnimationImportService.h
     include/renegade/bridge/CreatorModelImportRecipe.h
     include/renegade/bridge/CreatorModelMaterialPreparationService.h
     include/renegade/bridge/CreatorSurfaceBuilderService.h
@@ -50,6 +51,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/ReusableAssetInstanceService.h
     include/renegade/bridge/ReusableAssetDependencyService.h
     include/renegade/bridge/ReusableAssetRuntimeService.h
+    include/renegade/bridge/CharacterPrefabService.h
     include/renegade/bridge/MaterialService.h
     include/renegade/bridge/MaterialTextureAssetService.h
     include/renegade/bridge/CollisionService.h
@@ -85,10 +87,12 @@ add_library(RenegadeEngineBridge STATIC
     src/AudioService.cpp
     src/DecalProbeService.cpp
     src/CommandService.cpp
+    src/CharacterDuplicateCommand.cpp
     src/HumanoidRetargetService.cpp
     src/DiagnosticService.cpp
     src/DiagnosticEndpoint.cpp
     src/CreatorAssetWorkflowService.cpp
+    src/CreatorExternalAnimationImportService.cpp
     src/CreatorModelImportRecipe.cpp
     src/CreatorModelMaterialDetectionService.cpp
     src/CreatorModelMaterialPreparationService.cpp
@@ -123,9 +127,12 @@ add_library(RenegadeEngineBridge STATIC
     src/ReusableAssetService.cpp
     src/ReusableAssetReimportService.cpp
     src/ReusableAssetPlacementService.cpp
+    src/CharacterPrefabPlacementRouter.cpp
     src/ReusableAssetInstanceService.cpp
     src/ReusableAssetDependencyService.cpp
     src/ReusableAssetRuntimeService.cpp
+    src/CharacterPrefabService.cpp
+    src/CharacterPrefabPlacementTemplate.cpp
     src/MaterialService.cpp
     src/MaterialTextureAssetService.cpp
     src/MaterialTextureClearCommand.cpp
@@ -150,6 +157,28 @@ add_library(RenegadeEngineBridge STATIC
     src/SelectionService.cpp
     src/TestLevelSnapshotService.cpp
     src/WindowsGameBuildProjectService.cpp
+)
+
+# CW-05 replaces only DuplicateEntityCommand with a Character-aware definition
+# in CharacterDuplicateCommand.cpp. Keep all other established command
+# implementations in CommandService.cpp by renaming that translation unit's
+# legacy duplicate class token at compile time.
+set_source_files_properties(
+    src/CommandService.cpp
+    PROPERTIES
+        COMPILE_DEFINITIONS "DuplicateEntityCommand=LegacyDuplicateEntityCommand"
+)
+
+# Likewise the existing LP07/CW-04 reusable placement backend is retained
+# byte-for-byte as PrepareModelAssetPlacementLegacy(). The CW-05 router owns the
+# public PrepareModelAssetPlacement() symbol and diverts only registered
+# Character Prefabs to their stable base Character asset. Hide the public router
+# declaration while compiling the legacy translation unit, otherwise the token
+# rename turns both declarations into PrepareModelAssetPlacementLegacy().
+set_source_files_properties(
+    src/ReusableAssetPlacementService.cpp
+    PROPERTIES
+        COMPILE_DEFINITIONS "PrepareModelAssetPlacement=PrepareModelAssetPlacementLegacy;RENEGADE_LEGACY_PLACEMENT_IMPLEMENTATION=1"
 )
 
 # Wicked's format converters are self-contained even though upstream keeps

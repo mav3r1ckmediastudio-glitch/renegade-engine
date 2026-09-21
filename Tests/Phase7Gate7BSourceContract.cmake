@@ -28,18 +28,24 @@ set(inspector_header "${RENEGADE_SOURCE_DIR}/Studio/src/Phase7Gate7BHumanoidReta
 set(inspector_source "${RENEGADE_SOURCE_DIR}/Studio/src/Phase7Gate7BHumanoidRetargetInspector.cpp")
 set(async_guard "${RENEGADE_SOURCE_DIR}/Studio/src/Phase7AsyncSceneGuard.h")
 set(animation_header "${RENEGADE_SOURCE_DIR}/Studio/src/Phase7Gate7AAnimationInspector.h")
+set(creator_recipe_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/CreatorModelImportRecipe.cpp")
+set(reimport_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/ReusableAssetReimportService.cpp")
 
 require_file("${service_header}" "HumanoidRetargetService header")
 require_file("${service_source}" "HumanoidRetargetService source")
 require_file("${inspector_header}" "humanoid retarget inspector header")
 require_file("${inspector_source}" "humanoid retarget inspector source")
 require_file("${async_guard}" "Phase 7 async scene guard")
+require_file("${creator_recipe_source}" "creator import recipe source")
+require_file("${reimport_source}" "reusable asset reimport source")
 
 file(READ "${service_header}" service_h)
 file(READ "${service_source}" service)
 file(READ "${inspector_source}" inspector)
 file(READ "${async_guard}" guard)
 file(READ "${animation_header}" animation)
+file(READ "${creator_recipe_source}" creator_recipe)
+file(READ "${reimport_source}" reimport)
 
 require_text("${service}" "scene_->RetargetAnimation(" "native Wicked retarget call")
 require_text("${service}" "destinationHumanoid_, sourceAnimation, true, &sourceScene" "baked native retarget")
@@ -88,9 +94,23 @@ require_text("${inspector}" "Phase7AnimationSectionId" "7A playback integration"
 require_text("${animation}" "RegisterPhase7Gate7BHumanoidRetargetInspector" "7B inspector registration")
 require_text("${animation}" "PreparePhase7Gate7BHumanoidRetargetInspector" "7B inspector layout preparation")
 
+# CW-03: the normal Character import path must use the same native humanoid and
+# retarget backend before the .rasset is finalised. Reimport must pass through
+# the same recipe application boundary so retained snapshots reproduce the same
+# prepared Character rather than relying on a later scene repair operation.
+require_text("${creator_recipe}" "BuildAutoHumanoidMapping(scene, candidate)" "CW-03 import-time humanoid auto-map")
+require_text("${creator_recipe}" "IsHumanoidMappingValid(captured)" "CW-03 import-time mapping validation")
+require_text("${creator_recipe}" "RetargetHumanoidAnimationsCommand command(" "CW-03 existing retarget backend reuse")
+require_text("${creator_recipe}" "SourceAssets" "CW-03 governed source root")
+require_text("${creator_recipe}" "Animations" "CW-03 governed animation tree")
+require_text("${creator_recipe}" "Snapshots" "CW-03 immutable snapshot tree")
+require_text("${creator_recipe}" "recipe.assetKind != CreatorAssetImportKind::Character" "CW-03 Character-only external provenance")
+require_text("${creator_recipe}" "RetargetExternalAnimations(" "CW-03 final-import retarget boundary")
+require_text("${reimport}" "ApplyCreatorModelImportRecipe(*preparedScene" "CW-03 deterministic reimport boundary")
+
 string(FIND "${inspector}" "HumanoidWindow.h" stock_humanoid_window)
 if(NOT stock_humanoid_window EQUAL -1)
     message(FATAL_ERROR "Phase 7B must not embed Wicked's stock HumanoidWindow")
 endif()
 
-message(STATUS "Phase 7B repaired native humanoid/retarget source contract passed")
+message(STATUS "Phase 7B / CW-03 repaired native humanoid/retarget source contract passed")

@@ -27,6 +27,31 @@ set_tests_properties(
     PROPERTIES TIMEOUT 60
 )
 
+# Character Workflow CW-02 is a headless source-governance contract. It proves
+# that external animation actions share retained immutable sources, glTF local
+# dependencies are retained and included in snapshot identity, unsafe traversal
+# is rejected, and importer queue ownership is isolated by project.
+add_executable(RenegadeCreatorExternalAnimationImportTests
+    ${CMAKE_CURRENT_LIST_DIR}/CreatorExternalAnimationImportTests.cpp
+)
+target_link_libraries(
+    RenegadeCreatorExternalAnimationImportTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+set_target_properties(
+    RenegadeCreatorExternalAnimationImportTests
+    PROPERTIES FOLDER "Renegade/Tests"
+)
+add_test(
+    NAME RenegadeCreatorExternalAnimationImportTests
+    COMMAND RenegadeCreatorExternalAnimationImportTests
+)
+set_tests_properties(
+    RenegadeCreatorExternalAnimationImportTests
+    PROPERTIES TIMEOUT 60
+)
+
 add_executable(RenegadeReusableAssetReimportGraphicsProof
     ${CMAKE_CURRENT_LIST_DIR}/ReusableAssetReimportGraphicsProof.cpp
 )
@@ -50,12 +75,13 @@ set_target_properties(
     PROPERTIES FOLDER "Renegade/Tests"
 )
 
-# Studio CI builds RenegadeBridgeTests explicitly before CTest. Keep both Gate 4
+# Studio CI builds RenegadeBridgeTests explicitly before CTest. Keep all Gate 4
 # targets in that build chain in both configurations even when Debug execution
 # of the graphics proof is excluded on the hosted DX12 runner.
 add_dependencies(
     RenegadeBridgeTests
     RenegadeReusableAssetReimportRecipeTests
+    RenegadeCreatorExternalAnimationImportTests
     RenegadeReusableAssetReimportGraphicsProof
 )
 
