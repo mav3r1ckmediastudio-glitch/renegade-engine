@@ -394,14 +394,36 @@ namespace renegade::studio
         }
         const bool engaged =
             state == wi::gui::ACTIVE || state == wi::gui::FOCUS;
-        DrawBorderedRect(
-            translation.x,
-            translation.y,
-            scale.x,
-            scale.y,
-            engaged ? wi::Color(28, 20, 16, 255) : Surface2,
-            engaged ? Forge : Border,
-            cmd);
+        if (primaryStyle_ && IsEnabled())
+        {
+            const auto rounded = [cmd](float x, float y, float w, float h, wi::Color color)
+            {
+                wi::image::Params p(x, y, w, h, color);
+                p.blendFlag = wi::enums::BLENDMODE_ALPHA;
+                p.enableCornerRounding();
+                for (auto& corner : p.corners_rounding)
+                {
+                    corner.radius = 5.0f;
+                    corner.segments = 6;
+                }
+                wi::image::Draw(nullptr, p, cmd);
+            };
+            rounded(translation.x, translation.y + 2.0f, scale.x, scale.y - 2.0f,
+                wi::Color(110, 57, 31, 255));
+            rounded(translation.x, translation.y, scale.x, scale.y - 2.0f,
+                engaged ? wi::Color(255, 163, 105, 255) : wi::Color(251, 137, 75, 255));
+            DrawRect(translation.x + 5.0f, translation.y + 2.0f,
+                scale.x - 10.0f, 1.0f, wi::Color(255, 198, 155, 255), cmd);
+        }
+        else
+            DrawBorderedRect(
+                translation.x,
+                translation.y,
+                scale.x,
+                scale.y,
+                engaged ? wi::Color(28, 20, 16, 255) : Surface2,
+                engaged ? Forge : Border,
+                cmd);
         const std::string text = GetText();
         const float textWidth = static_cast<float>(text.size()) *
             static_cast<float>(renderTextSize_) * 0.7f;
@@ -411,7 +433,7 @@ namespace renegade::studio
             translation.y + std::max(4.0f,
                 (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
             renderTextSize_,
-            IsEnabled() ? TextStrong : Muted,
+            !IsEnabled() ? Muted : primaryStyle_ ? wi::Color(33, 22, 16, 255) : TextStrong,
             cmd,
             0.25f,
             0.16f);
@@ -790,7 +812,7 @@ namespace renegade::studio
         if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
         {
             selected_ = index;
-            if (selectedCallback_) selectedCallback_(index);
+            if (selectedCallback_) selectedCallback_(rows_[index].recipeIndex);
         }
     }
 
@@ -801,28 +823,39 @@ namespace renegade::studio
         ApplyScissor(canvas, scissorRect, cmd);
         DrawBorderedRect(translation.x, translation.y, scale.x, scale.y,
             Surface0, Border, cmd);
-        DrawText("ACTION / SOURCE", translation.x + 7.0f,
-            translation.y + 8.0f, 12, TextSecondary, cmd);
-        DrawText("START - END", translation.x + scale.x - 120.0f,
+        DrawText("CLIP NAME", translation.x + 12.0f,
             translation.y + 8.0f, 11, TextSecondary, cmd);
+        DrawText("SOURCE", translation.x + scale.x * 0.48f,
+            translation.y + 8.0f, 11, TextSecondary, cmd);
+        DrawText("DURATION", translation.x + scale.x - 74.0f,
+            translation.y + 8.0f, 10, TextSecondary, cmd);
         for (std::size_t i = first_; i < rows_.size() && i < first_ + 6; ++i)
         {
             const float y = translation.y + 27.0f + (i - first_) * 32.0f;
             DrawBorderedRect(translation.x + 3.0f, y, scale.x - 6.0f, 30.0f,
-                i == selected_ ? Surface2 : Surface0,
+                i == selected_ ? wi::Color(50, 34, 26, 255) : Surface0,
                 i == selected_ ? Forge : i == hovered_ ? HoverEdge : BorderSoft, cmd);
+            if (i == selected_)
+                DrawRect(translation.x + 4.0f, y + 2.0f,
+                    2.0f, 26.0f, wi::Color(255, 140, 77, 255), cmd);
             const auto& row = rows_[i];
-            DrawText(Ellipsize((row.external ? "EXT  " : "SRC  ") +
-                (row.name.empty() ? "Untitled action" : row.name), 24),
-                translation.x + 8.0f, y + 8.0f, 12, TextStrong, cmd);
-            char range[64];
-            std::snprintf(range, sizeof(range), "%.1f  -  %.1f", row.start, row.end);
-            DrawText(range, translation.x + scale.x - 112.0f, y + 9.0f, 11,
-                TextSecondary, cmd);
+            const std::size_t nameChars = static_cast<std::size_t>(
+                std::max(8.0f, (scale.x * 0.45f - 22.0f) / 7.0f));
+            DrawText(Ellipsize(row.name.empty() ? "Untitled clip" : row.name, nameChars),
+                translation.x + 12.0f, y + 8.0f, 12, TextStrong, cmd);
+            const std::size_t sourceChars = static_cast<std::size_t>(
+                std::max(6.0f, (scale.x * 0.34f - 18.0f) / 7.0f));
+            DrawText(Ellipsize(row.source, sourceChars),
+                translation.x + scale.x * 0.48f, y + 8.0f, 11, TextSecondary, cmd);
+            char duration[32];
+            std::snprintf(duration, sizeof(duration), "%.2fs",
+                std::max(0.0f, row.end - row.start));
+            DrawText(duration, translation.x + scale.x - 73.0f,
+                y + 8.0f, 11, TextSecondary, cmd);
 
         }
         DrawText(rows_.empty() ? "NO CLIPS // LOAD AN ANIMATION FILE" :
-            rows_.size() > 6 ? "NEXT PAGE / BACK TO FIRST" : "SELECT AN ACTION TO EDIT", translation.x + 8.0f,
+            rows_.size() > 6 ? "NEXT PAGE / BACK TO FIRST" : "SELECT A CLIP TO PREVIEW", translation.x + 8.0f,
             translation.y + scale.y - 19.0f, 9, TextSecondary, cmd);
     }
 

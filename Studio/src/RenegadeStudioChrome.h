@@ -37,11 +37,13 @@ namespace renegade::studio
     {
     public:
         void SetRenderTextSize(int size) noexcept;
+        void SetPrimaryStyle(bool primary) noexcept { primaryStyle_ = primary; }
         void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const override;
         const char* GetWidgetTypeName() const override { return "RenegadeButton"; }
 
     private:
         int renderTextSize_ = 10;
+        bool primaryStyle_ = false;
     };
 
     class RenegadeCheckBox : public wi::gui::CheckBox
@@ -204,7 +206,7 @@ namespace renegade::studio
     class RenegadeAnimationClipTable final : public wi::gui::Widget
     {
     public:
-        struct Row { std::string name; float start = 0; float end = 0; bool external = false; };
+        struct Row { std::string name; float start = 0; float end = 0; bool external = false; std::string source; std::size_t recipeIndex = 0; };
         void SetRows(std::vector<Row> rows, std::size_t selected);
         void OnSelected(std::function<void(std::size_t)> callback);
         void Update(const wi::Canvas& canvas, float dt) override;

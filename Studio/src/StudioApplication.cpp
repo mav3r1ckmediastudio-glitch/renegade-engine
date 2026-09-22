@@ -1,5 +1,7 @@
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
+#include "CreatorImportAnimationDashboard.h"
+#include <cctype>
 #include "StudioUserPreferences.h"
 #include <ModelImporter.h>
 
@@ -712,6 +714,12 @@ namespace
     renegade::studio::RenegadeComboBox creatorImportMaterialCombo;
     renegade::studio::RenegadeComboBox creatorImportAnimationCombo;
     renegade::studio::RenegadeAnimationClipTable creatorImportAnimationTable;
+    renegade::studio::CreatorImportAnimationDashboard creatorImportAnimationDashboard;
+    renegade::studio::RenegadeTextInputField creatorImportAnimationSearch;
+    std::string creatorImportClipFilter;
+    std::array<renegade::studio::RenegadeComboBox, 6> creatorImportActionSlots;
+    renegade::studio::RenegadeComboBox creatorImportAttackVariant;
+    renegade::studio::RenegadeComboBox creatorImportRemoveAttackVariant;
     wi::gui::Label creatorImportMaterialLabel;
     wi::gui::Label creatorImportMaterialReadout;
     wi::gui::Label creatorImportTextureHelp;
@@ -1366,16 +1374,181 @@ namespace
         RefreshCreatorImportAnimationEditor();
     }
 
+    void RefreshCreatorImportActionDashboard()
+    {
+        constexpr std::array<const char*, 6> actions = {
+            "Idle", "Walk", "Run", "Attack", "Hit", "Death"};
+        std::array<std::string, 6> assigned{};
+        std::array<int, 6> counts{};
+        std::vector<std::string> sources;
+        std::vector<std::size_t> sourceCounts;
+        const std::string& base = creatorModelImporter.sourcePath;
+        sources.push_back(std::filesystem::path(base).filename().string());
+        sourceCounts.push_back(creatorModelImporter.animationEntities.size());
+        for (const auto& source : creatorModelImporter.externalAnimations)
+        {
+            sources.push_back(std::filesystem::path(source.sourcePath).filename().string());
+            sourceCounts.push_back(source.clipCount);
+            sourceCounts.front() -= std::min(sourceCounts.front(), source.clipCount);
+        }
+        for (const auto& clip : creatorModelImporter.animationRecipe)
+        {
+            if (!clip.enabled) continue;
+            for (std::size_t a = 0; a < actions.size(); ++a)
+                if (clip.action == actions[a])
+                {
+                    if (counts[a] == 0) assigned[a] = clip.name;
+                    ++counts[a];
+                }
+        }
+        int total = 0;
+        for (int count : counts) total += count;
+        std::string validation = total > 0
+            ? std::to_string(total) + " clip assignment(s) saved with this character."
+            : "No gameplay actions assigned yet.";
+        std::string unassigned;
+        constexpr std::array<const char*, 6> friendlyNames = {
+            "Idle", "Walk", "Run", "Attack", "Hit", "Death"};
+        for (std::size_t i = 0; i < counts.size(); ++i)
+            if (counts[i] == 0)
+                unassigned += (unassigned.empty() ? "" : ", ") + std::string(friendlyNames[i]);
+        std::string validationDetail = unassigned.empty()
+            ? "All six core action types are assigned."
+            : "Optional unassigned: " + unassigned;
+        for (std::size_t i = 0; i < creatorModelImporter.animationRecipe.size(); ++i)
+        {
+            const auto& clip = creatorModelImporter.animationRecipe[i];
+            if (!clip.enabled) continue;
+            if (clip.name.empty())
+            {
+                validation = "A clip has no name. Rename it before importing.";
+                break;
+            }
+            for (std::size_t j = i + 1; j < creatorModelImporter.animationRecipe.size(); ++j)
+            {
+                const auto& other = creatorModelImporter.animationRecipe[j];
+                if (!other.enabled || clip.name.size() != other.name.size()) continue;
+                if (std::equal(clip.name.begin(), clip.name.end(), other.name.begin(),
+                    [](unsigned char a, unsigned char b)
+                    { return std::tolower(a) == std::tolower(b); }))
+                {
+                    validation = "Duplicate clip names. Rename one before importing.";
+                    break;
+                }
+            }
+            if (validation.find("Duplicate") != std::string::npos) break;
+        }
+        creatorImportAnimationDashboard.SetSources(std::move(sources), std::move(sourceCounts));
+        if (!creatorModelImporter.animationRecipe.empty())
+        {
+            const auto& selected = creatorModelImporter.animationRecipe[
+                std::min(creatorModelImporter.selectedAnimation, creatorModelImporter.animationRecipe.size() - 1)];
+            std::string origin = std::filesystem::path(
+                creatorModelImporter.sourcePath).filename().string();
+            for (const auto& source : creatorModelImporter.externalAnimations)
+                if (selected.sourceAnimationIndex >= source.firstSourceIndex &&
+                    selected.sourceAnimationIndex - source.firstSourceIndex < source.clipCount)
+                    origin = std::filesystem::path(source.sourcePath).filename().string();
+            float trimStart = 0.0f, trimEnd = 1.0f;
+            if (selected.sourceAnimationIndex < creatorModelImporter.animationSourceRanges.size())
+            {
+                const auto range = creatorModelImporter.animationSourceRanges[selected.sourceAnimationIndex];
+                if (range.y > range.x)
+                {
+                    trimStart = (selected.start - range.x) / (range.y - range.x);
+                    trimEnd = (selected.end - range.x) / (range.y - range.x);
+                }
+            }
+            creatorImportAnimationDashboard.SetSelectedClip(selected.name, origin,
+                std::max(0.0f, selected.end - selected.start), trimStart, trimEnd);
+        }
+        else creatorImportAnimationDashboard.SetSelectedClip("No clip selected", "-", 0.0f);
+        creatorImportAnimationDashboard.SetAssignments(assigned, counts,
+            std::move(validation), std::move(validationDetail));
+        for (std::size_t a = 0; a < creatorImportActionSlots.size(); ++a)
+        {
+            auto& combo = creatorImportActionSlots[a];
+            combo.ClearItems();
+            combo.AddItem("Not assigned", 0);
+            int selectedRow = 0;
+            for (std::size_t i = 0; i < creatorModelImporter.animationRecipe.size(); ++i)
+            {
+                const auto& clip = creatorModelImporter.animationRecipe[i];
+                if (!clip.enabled) continue;
+                combo.AddItem(clip.name, static_cast<std::uint64_t>(i + 1));
+                if (clip.action == actions[a] && selectedRow == 0)
+                    selectedRow = combo.GetItemCount() - 1;
+            }
+            combo.SetSelectedWithoutCallback(selectedRow);
+        }
+        creatorImportAttackVariant.ClearItems();
+        creatorImportAttackVariant.AddItem("+ ADD VARIANT", 0);
+        for (std::size_t i = 0; i < creatorModelImporter.animationRecipe.size(); ++i)
+        {
+            const auto& clip = creatorModelImporter.animationRecipe[i];
+            if (clip.enabled && (clip.action.empty() || clip.action == "Unassigned"))
+                creatorImportAttackVariant.AddItem(clip.name, static_cast<std::uint64_t>(i + 1));
+        }
+        creatorImportAttackVariant.SetSelectedWithoutCallback(0);
+        creatorImportRemoveAttackVariant.ClearItems();
+        creatorImportRemoveAttackVariant.AddItem("- REMOVE VARIANT", 0);
+        for (std::size_t i = 0; i < creatorModelImporter.animationRecipe.size(); ++i)
+        {
+            const auto& clip = creatorModelImporter.animationRecipe[i];
+            if (clip.enabled && clip.action == "Attack")
+                creatorImportRemoveAttackVariant.AddItem(clip.name,
+                    static_cast<std::uint64_t>(i + 1));
+        }
+        creatorImportRemoveAttackVariant.SetSelectedWithoutCallback(0);
+    }
+
     void RebuildCreatorImportAnimationCombo()
     {
         std::vector<renegade::studio::RenegadeAnimationClipTable::Row> tableRows;
-        for (const auto& clip : creatorModelImporter.animationRecipe)
-            tableRows.push_back({clip.name, clip.start, clip.end,
-                std::any_of(creatorModelImporter.externalAnimations.begin(),
-                    creatorModelImporter.externalAnimations.end(),
-                    [&clip](const auto& source) { return clip.sourceAnimationIndex >= source.firstSourceIndex &&
-                        clip.sourceAnimationIndex - source.firstSourceIndex < source.clipCount; })});
-        creatorImportAnimationTable.SetRows(std::move(tableRows), creatorModelImporter.selectedAnimation);
+        std::size_t selectedVisibleIndex = 0;
+        for (std::size_t i = 0; i < creatorModelImporter.animationRecipe.size(); ++i)
+        {
+            const auto& clip = creatorModelImporter.animationRecipe[i];
+            std::string origin = std::filesystem::path(creatorModelImporter.sourcePath).filename().string();
+            bool external = false;
+            for (const auto& source : creatorModelImporter.externalAnimations)
+                if (clip.sourceAnimationIndex >= source.firstSourceIndex &&
+                    clip.sourceAnimationIndex - source.firstSourceIndex < source.clipCount)
+                {
+                    external = true;
+                    origin = std::filesystem::path(source.sourcePath).filename().string();
+                }
+            std::string haystack = clip.name + " " + origin;
+            std::transform(haystack.begin(), haystack.end(), haystack.begin(),
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            std::string needle = creatorImportClipFilter;
+            std::transform(needle.begin(), needle.end(), needle.begin(),
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (haystack.find(needle) == std::string::npos) continue;
+            if (i == creatorModelImporter.selectedAnimation)
+                selectedVisibleIndex = tableRows.size();
+            tableRows.push_back({clip.name, clip.start, clip.end, external, origin, i});
+        }
+        if (!tableRows.empty() &&
+            std::none_of(tableRows.begin(), tableRows.end(),
+                [](const auto& row)
+                { return row.recipeIndex == creatorModelImporter.selectedAnimation; }))
+        {
+            creatorModelImporter.selectedAnimation = tableRows.front().recipeIndex;
+            selectedVisibleIndex = 0;
+        }
+        const bool hasVisibleClips = !tableRows.empty();
+        for (wi::gui::Widget* edit : {
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationName),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationStart),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnd),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationSpeed),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationPlay),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationPause),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationStop)})
+            edit->SetEnabled(hasVisibleClips);
+        creatorImportAnimationTable.SetRows(std::move(tableRows), selectedVisibleIndex);
         creatorImportAnimationCombo.ClearItems();
         for (std::size_t index = 0; index < creatorModelImporter.animationRecipe.size(); ++index)
         {
@@ -1393,6 +1566,7 @@ namespace
                 static_cast<int>(creatorModelImporter.selectedAnimation));
         }
         RefreshCreatorImportAnimationEditor();
+        RefreshCreatorImportActionDashboard();
     }
 
     void RefreshCreatorExternalAnimationQueue()
@@ -5031,13 +5205,22 @@ namespace renegade::studio
             });
         }
         creatorImportAnimationLabel.Create("ANIMATIONS // EDITABLE CLIPS");
-        creatorImportAnimationTable.SetName("Unified animation actions");
+        creatorImportAnimationTable.SetName("Available Character Clips");
+        creatorImportAnimationSearch.Create("Search Character Clips");
+        creatorImportAnimationSearch.SetRenderTextSize(12);
+        creatorImportAnimationSearch.SetPlaceholder("Search clips or source...");
+        creatorImportAnimationSearch.OnInput([](const wi::gui::EventArgs& args)
+        {
+            creatorImportClipFilter = args.sValue;
+            RebuildCreatorImportAnimationCombo();
+        });
         creatorImportAnimationTable.OnSelected([](std::size_t index)
         {
             StopCreatorImportPreviewAnimations();
             creatorModelImporter.selectedAnimation = index;
             creatorImportAnimationCombo.SetSelectedWithoutCallback(static_cast<int>(index));
             RefreshCreatorImportAnimationEditor();
+            RefreshCreatorImportActionDashboard();
         });
         creatorImportAnimationCombo.Create("Animation Action");
         creatorImportAnimationCombo.OnSelect([](const wi::gui::EventArgs& args)
@@ -5046,8 +5229,10 @@ namespace renegade::studio
             creatorModelImporter.selectedAnimation =
                 static_cast<std::size_t>(args.userdata);
             RefreshCreatorImportAnimationEditor();
+            RefreshCreatorImportActionDashboard();
         });
         creatorImportAnimationName.Create("Animation Clip Name");
+        creatorImportAnimationName.SetRenderTextSize(12);
         creatorImportAnimationName.SetPlaceholder("CLIP NAME");
         creatorImportAnimationName.OnInputAccepted([](const wi::gui::EventArgs& args)
         {
@@ -5056,6 +5241,7 @@ namespace renegade::studio
             RebuildCreatorImportAnimationCombo();
         });
         creatorImportAnimationStart.Create("Animation Start");
+        creatorImportAnimationStart.SetRenderTextSize(12);
         creatorImportAnimationStart.SetDescription("START: ");
         creatorImportAnimationStart.OnInputAccepted([](const wi::gui::EventArgs& args)
         {
@@ -5065,6 +5251,7 @@ namespace renegade::studio
             RebuildCreatorImportAnimationCombo();
         });
         creatorImportAnimationEnd.Create("Animation End");
+        creatorImportAnimationEnd.SetRenderTextSize(12);
         creatorImportAnimationEnd.SetDescription("END: ");
         creatorImportAnimationEnd.OnInputAccepted([](const wi::gui::EventArgs& args)
         {
@@ -5074,6 +5261,7 @@ namespace renegade::studio
             RebuildCreatorImportAnimationCombo();
         });
         creatorImportAnimationSpeed.Create("Animation Playback Speed");
+        creatorImportAnimationSpeed.SetRenderTextSize(12);
         creatorImportAnimationSpeed.SetDescription("SPEED (0.1-4x): ");
         creatorImportAnimationSpeed.OnInputAccepted([](const wi::gui::EventArgs& args)
         {
@@ -5099,7 +5287,60 @@ namespace renegade::studio
                 "Run", "Attack", "Reload", "Hit", "Death"};
             creatorModelImporter.animationRecipe[
                 creatorModelImporter.selectedAnimation].action = actions[args.iValue];
-            RefreshCreatorImportAnimationEditor();
+            RebuildCreatorImportAnimationCombo();
+            RefreshCreatorExternalAnimationQueue();
+        });
+        constexpr std::array<const char*, 6> actionLabels = {
+            "Idle", "Walk", "Run", "Attack", "Hit", "Death"};
+        for (std::size_t a = 0; a < creatorImportActionSlots.size(); ++a)
+        {
+            auto& combo = creatorImportActionSlots[a];
+            combo.Create(std::string("Assign Character ") + actionLabels[a]);
+            combo.SetRenderTextSize(12);
+            combo.SetTooltip(std::string("Choose a clip from this Character's library for ") +
+                actionLabels[a] + ". Leave unassigned when no animation is available.");
+            combo.OnSelect([a](const wi::gui::EventArgs& args)
+            {
+                constexpr std::array<const char*, 6> actions = {
+                    "Idle", "Walk", "Run", "Attack", "Hit", "Death"};
+                if (args.userdata > creatorModelImporter.animationRecipe.size()) return;
+                auto& clips = creatorModelImporter.animationRecipe;
+                if (args.userdata == 0 || a != 3)
+                {
+                    for (auto& clip : clips)
+                        if (clip.action == actions[a]) clip.action = "Unassigned";
+                }
+                if (args.userdata != 0)
+                    clips[static_cast<std::size_t>(args.userdata - 1)].action = actions[a];
+                RebuildCreatorImportAnimationCombo();
+                RefreshCreatorExternalAnimationQueue();
+            });
+        }
+        creatorImportAttackVariant.Create("Add Attack Animation Variant");
+        creatorImportAttackVariant.SetRenderTextSize(11);
+        creatorImportAttackVariant.SetTooltip(
+            "Choose another imported clip. Existing attack variants remain assigned.");
+        creatorImportAttackVariant.OnSelect([](const wi::gui::EventArgs& args)
+        {
+            if (args.userdata == 0 || args.userdata > creatorModelImporter.animationRecipe.size())
+                return;
+            creatorModelImporter.animationRecipe[
+                static_cast<std::size_t>(args.userdata - 1)].action = "Attack";
+            RebuildCreatorImportAnimationCombo();
+            RefreshCreatorExternalAnimationQueue();
+        });
+        creatorImportRemoveAttackVariant.Create("Remove Attack Animation Variant");
+        creatorImportRemoveAttackVariant.SetRenderTextSize(11);
+        creatorImportRemoveAttackVariant.SetTooltip(
+            "Select an assigned attack clip to remove that variant. Its source clip stays imported.");
+        creatorImportRemoveAttackVariant.OnSelect([](const wi::gui::EventArgs& args)
+        {
+            if (args.userdata == 0 || args.userdata > creatorModelImporter.animationRecipe.size())
+                return;
+            auto& clip = creatorModelImporter.animationRecipe[
+                static_cast<std::size_t>(args.userdata - 1)];
+            if (clip.action == "Attack") clip.action = "Unassigned";
+            RebuildCreatorImportAnimationCombo();
             RefreshCreatorExternalAnimationQueue();
         });
         creatorImportAnimationEnabled.Create("Animation Included");
@@ -5109,7 +5350,7 @@ namespace renegade::studio
         {
             if (creatorModelImporter.animationRecipe.empty()) return;
             creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation].enabled = args.iValue == 0;
-            RefreshCreatorImportAnimationEditor();
+            RebuildCreatorImportAnimationCombo();
         });
         creatorImportAnimationAdd.Create("Add Animation Clip");
         creatorImportAnimationAdd.SetText("ADD CLIP");
@@ -5120,6 +5361,14 @@ namespace renegade::studio
             clip.name = clip.name.empty()
                 ? "Clip " + std::to_string(creatorModelImporter.animationRecipe.size() + 1)
                 : clip.name + " Copy";
+            const std::string baseName = clip.name;
+            std::size_t suffix = 2;
+            while (std::any_of(creatorModelImporter.animationRecipe.begin(),
+                creatorModelImporter.animationRecipe.end(),
+                [&clip](const auto& current) { return current.name == clip.name; }))
+                clip.name = baseName + " " + std::to_string(suffix++);
+            // A duplicated source range is a new clip, not a second implicit action.
+            clip.action = "Unassigned";
             creatorModelImporter.animationRecipe.push_back(std::move(clip));
             creatorModelImporter.selectedAnimation = creatorModelImporter.animationRecipe.size() - 1;
             RebuildCreatorImportAnimationCombo();
@@ -5380,6 +5629,9 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportMannequinVisible),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationLabel),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationTable),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationSearch),
+            static_cast<wi::gui::Widget*>(&creatorImportAttackVariant),
+            static_cast<wi::gui::Widget*>(&creatorImportRemoveAttackVariant),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationCombo),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationName),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationStart),
@@ -5404,6 +5656,11 @@ namespace renegade::studio
             widget->SetShadowRadius(0.0f);
             importScalePanel_.AddWidget(widget);
         }
+        for (auto& combo : creatorImportActionSlots)
+        {
+            combo.SetShadowRadius(0.0f);
+            importScalePanel_.AddWidget(&combo);
+        }
         for (auto& heading : creatorImportStageButtons)
         {
             heading.SetShadowRadius(0.0f);
@@ -5424,6 +5681,8 @@ namespace renegade::studio
             group.SetShadowRadius(0.0f);
             importScalePanel_.AddWidget(&group);
         }
+        importScalePanel_.AddWidget(&creatorImportAnimationDashboard);
+        creatorImportAnimationDashboard.SetVisible(false);
         importScalePanel_.InitializeInspectorShell();
         // Hide only after all child controls have inherited an enabled parent.
         importScalePanel_.SetVisible(false);
@@ -6478,8 +6737,8 @@ namespace renegade::studio
         importScaleTitleLabel_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 24.0f));
         importScaleReadoutLabel_.SetPos(XMFLOAT2(12.0f, 36.0f));
         importScaleReadoutLabel_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 64.0f));
-        creatorImportHelpLabel.SetPos(XMFLOAT2(12.0f, 100.0f));
-        creatorImportHelpLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 42.0f));
+        creatorImportHelpLabel.SetPos(XMFLOAT2(12.0f, creatorModelImporter.workspaceSection == 4 ? 45.0f : 100.0f));
+        creatorImportHelpLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, creatorModelImporter.workspaceSection == 4 ? 36.0f : 42.0f));
         creatorImportAssetName.SetPos(XMFLOAT2(12.0f, 190.0f));
         creatorImportAssetName.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 32.0f));
         creatorImportAssetKind.SetPos(XMFLOAT2(12.0f, 230.0f));
@@ -6708,71 +6967,89 @@ namespace renegade::studio
         creatorImportExternalAnimationStatus.SetPos(XMFLOAT2(12.0f, 532.0f));
         creatorImportExternalAnimationStatus.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 112.0f));
 
-        float animationY = 184.0f;
-        for (std::size_t group = 0; group < creatorImportAnimationGroups.size(); ++group)
+        // Approved Animation screen: five independent, deeply layered cards.
+        // Do not fall back to the old accordion's cramped column of controls.
+        const float dashboardTop = 89.0f;
+        const float dashboardWidth = importScalePanelWidth - 18.0f;
+        const float dashboardX = 9.0f;
+        const float sourceHeight = 128.0f + 47.0f * static_cast<float>(
+            std::min<std::size_t>(2, std::max<std::size_t>(1,
+                creatorModelImporter.externalAnimations.size() + 1)) - 1) +
+            (creatorModelImporter.externalAnimations.size() > 1 ? 32.0f : 0.0f);
+        const float clipsTop = sourceHeight + 10.0f;
+        const float tableHeight = 51.0f + 32.0f * static_cast<float>(
+            std::min<std::size_t>(6, std::max<std::size_t>(1,
+                creatorModelImporter.animationRecipe.size())));
+        const float clipsHeight = 58.0f + tableHeight;
+        const float previewTop = clipsTop + clipsHeight + 10.0f;
+        const float assignmentsTop = previewTop + 340.0f;
+        const float validationTop = assignmentsTop + 341.0f;
+        const float dashboardHeight = validationTop + 93.0f;
+        creatorImportAnimationDashboard.SetLayout(sourceHeight, clipsTop,
+            clipsHeight, previewTop, assignmentsTop, validationTop);
+        creatorImportAnimationDashboard.SetPos(XMFLOAT2(dashboardX, dashboardTop));
+        creatorImportAnimationDashboard.SetSize(XMFLOAT2(dashboardWidth, dashboardHeight));
+        creatorImportExternalAnimationAdd.SetText("+ ADD ANIMATION SOURCE");
+        creatorImportExternalAnimationAdd.SetPrimaryStyle(true);
+        creatorImportExternalAnimationAdd.SetRenderTextSize(11);
+        creatorImportAnimationPlay.SetPrimaryStyle(true);
+        creatorImportAnimationPlay.SetRenderTextSize(12);
+        creatorImportExternalAnimationAdd.SetPos(XMFLOAT2(
+            dashboardX + dashboardWidth - 184.0f, dashboardTop + 6.0f));
+        creatorImportExternalAnimationAdd.SetSize(XMFLOAT2(174.0f, 28.0f));
+        creatorImportExternalAnimationRemove.SetPos(XMFLOAT2(
+            dashboardX + dashboardWidth - 174.0f, dashboardTop + sourceHeight - 35.0f));
+        creatorImportExternalAnimationRemove.SetSize(XMFLOAT2(164.0f, 28.0f));
+        creatorImportAnimationSearch.SetPos(XMFLOAT2(
+            dashboardX + dashboardWidth - 194.0f, dashboardTop + clipsTop + 9.0f));
+        creatorImportAnimationSearch.SetSize(XMFLOAT2(184.0f, 30.0f));
+        creatorImportAnimationTable.SetPos(XMFLOAT2(
+            dashboardX + 10.0f, dashboardTop + clipsTop + 46.0f));
+
+        creatorImportAnimationTable.SetSize(XMFLOAT2(dashboardWidth - 20.0f, tableHeight));
+        creatorImportAnimationName.SetPos(XMFLOAT2(dashboardX + 12.0f, dashboardTop + previewTop + 55.0f));
+        creatorImportAnimationName.SetSize(XMFLOAT2(dashboardWidth - 24.0f, 30.0f));
+        const float trimWidth = (dashboardWidth - 30.0f) * 0.5f;
+        creatorImportAnimationStart.SetPos(XMFLOAT2(dashboardX + 12.0f, dashboardTop + previewTop + 148.0f));
+        creatorImportAnimationEnd.SetPos(XMFLOAT2(
+            dashboardX + 18.0f + trimWidth, dashboardTop + previewTop + 148.0f));
+        creatorImportAnimationStart.SetSize(XMFLOAT2(trimWidth, 28.0f));
+        creatorImportAnimationEnd.SetSize(XMFLOAT2(trimWidth, 28.0f));
+        creatorImportAnimationSpeed.SetPos(XMFLOAT2(dashboardX + 12.0f, dashboardTop + previewTop + 186.0f));
+        creatorImportAnimationSpeed.SetSize(XMFLOAT2(dashboardWidth - 24.0f, 28.0f));
+        creatorImportAnimationEnabled.SetPos(XMFLOAT2(dashboardX + 12.0f, dashboardTop + previewTop + 221.0f));
+        creatorImportAnimationEnabled.SetSize(XMFLOAT2(dashboardWidth - 24.0f, 28.0f));
+        creatorImportAnimationAdd.SetPos(XMFLOAT2(dashboardX + 12.0f, dashboardTop + previewTop + 257.0f));
+        creatorImportAnimationDelete.SetPos(XMFLOAT2(
+            dashboardX + 18.0f + trimWidth, dashboardTop + previewTop + 257.0f));
+        creatorImportAnimationAdd.SetSize(XMFLOAT2(trimWidth, 28.0f));
+        creatorImportAnimationDelete.SetSize(XMFLOAT2(trimWidth, 28.0f));
+        const float clipButtonWidth = (dashboardWidth - 32.0f) / 3.0f;
+        for (std::size_t i = 0; i < 3; ++i)
         {
-            auto& heading = creatorImportAnimationGroups[group];
-            heading.SetPos(XMFLOAT2(12.0f, animationY));
-            heading.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
-            animationY += 42.0f;
-            if (!creatorImportAnimationExpanded[group])
-                continue;
-            if (group == 0)
-            {
-                creatorImportAnimationTable.SetPos(XMFLOAT2(12.0f, animationY));
-                const float tableHeight = 51.0f + 32.0f * static_cast<float>(
-                    std::min<std::size_t>(6, std::max<std::size_t>(2, creatorModelImporter.animationRecipe.size())));
-                creatorImportAnimationTable.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, tableHeight));
-                animationY += tableHeight + 8.0f;
-                layoutFullRow(creatorImportAnimationName, animationY);
-                animationY += 36.0f;
-                const float trimWidth = (importScalePanelWidth - 28.0f) * 0.5f;
-                creatorImportAnimationStart.SetPos(XMFLOAT2(12.0f, animationY));
-                creatorImportAnimationEnd.SetPos(XMFLOAT2(16.0f + trimWidth, animationY));
-                creatorImportAnimationStart.SetSize(XMFLOAT2(trimWidth, 28.0f));
-                creatorImportAnimationEnd.SetSize(XMFLOAT2(trimWidth, 28.0f));
-                animationY += 36.0f;
-                layoutFullRow(creatorImportAnimationSpeed, animationY);
-                animationY += 36.0f;
-                layoutFullRow(creatorImportAnimationEnabled, animationY);
-                animationY += 36.0f;
-                layoutFullRow(creatorImportAnimationAction, animationY);
-                animationY += 36.0f;
-                creatorImportAnimationAdd.SetPos(XMFLOAT2(12.0f, animationY));
-                creatorImportAnimationDelete.SetPos(XMFLOAT2(16.0f + trimWidth, animationY));
-                creatorImportAnimationAdd.SetSize(XMFLOAT2(trimWidth, 28.0f));
-                creatorImportAnimationDelete.SetSize(XMFLOAT2(trimWidth, 28.0f));
-                animationY += 36.0f;
-                const float clipButtonWidth = (importScalePanelWidth - 32.0f) / 3.0f;
-                for (std::size_t i = 0; i < 3; ++i)
-                {
-                    wi::gui::Widget* control = i == 0
-                        ? static_cast<wi::gui::Widget*>(&creatorImportAnimationPlay)
-                        : i == 1 ? static_cast<wi::gui::Widget*>(&creatorImportAnimationPause)
-                                 : static_cast<wi::gui::Widget*>(&creatorImportAnimationStop);
-                    control->SetPos(XMFLOAT2(12.0f + i * (clipButtonWidth + 4.0f), animationY));
-                    control->SetSize(XMFLOAT2(clipButtonWidth, 34.0f));
-                }
-                animationY += 42.0f;
-                creatorImportExternalAnimationAdd.SetPos(XMFLOAT2(12.0f, animationY));
-                creatorImportExternalAnimationAdd.SetSize(XMFLOAT2(trimWidth, 34.0f));
-                creatorImportExternalAnimationRemove.SetPos(XMFLOAT2(16.0f + trimWidth, animationY));
-                creatorImportExternalAnimationRemove.SetSize(XMFLOAT2(trimWidth, 34.0f));
-                animationY += 42.0f;
-            }
-            else
-            {
-                layoutFullRow(creatorImportExternalAnimationAdd, animationY);
-                animationY += 40.0f;
-                layoutFullRow(creatorImportExternalAnimationRemove, animationY);
-                animationY += 38.0f;
-                creatorImportExternalAnimationStatus.SetPos(XMFLOAT2(12.0f, animationY));
-                creatorImportExternalAnimationStatus.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 112.0f));
-                animationY += 120.0f;
-            }
-            animationY += 8.0f;
+            wi::gui::Widget* control = i == 0
+                ? static_cast<wi::gui::Widget*>(&creatorImportAnimationPlay)
+                : i == 1 ? static_cast<wi::gui::Widget*>(&creatorImportAnimationPause)
+                         : static_cast<wi::gui::Widget*>(&creatorImportAnimationStop);
+            control->SetPos(XMFLOAT2(dashboardX + 10.0f + i * (clipButtonWidth + 5.0f),
+                dashboardTop + previewTop + 290.0f));
+            control->SetSize(XMFLOAT2(clipButtonWidth, 31.0f));
         }
-        const float animationBodyHeight = animationY - 184.0f + 8.0f;
+        const float assignmentX = dashboardX + dashboardWidth * 0.41f;
+        const float assignmentWidth = dashboardWidth * 0.59f - 11.0f;
+        for (std::size_t i = 0; i < creatorImportActionSlots.size(); ++i)
+        {
+            auto& combo = creatorImportActionSlots[i];
+            combo.SetPos(XMFLOAT2(assignmentX, dashboardTop + assignmentsTop + 64.0f + i * 35.0f));
+            combo.SetSize(XMFLOAT2(assignmentWidth, 29.0f));
+        }
+        const float variantWidth = (assignmentWidth - 5.0f) * 0.5f;
+        creatorImportAttackVariant.SetPos(XMFLOAT2(assignmentX, dashboardTop + assignmentsTop + 286.0f));
+        creatorImportAttackVariant.SetSize(XMFLOAT2(variantWidth, 28.0f));
+        creatorImportRemoveAttackVariant.SetPos(XMFLOAT2(
+            assignmentX + variantWidth + 5.0f, dashboardTop + assignmentsTop + 286.0f));
+        creatorImportRemoveAttackVariant.SetSize(XMFLOAT2(variantWidth, 28.0f));
+        const float animationBodyHeight = dashboardTop + dashboardHeight - 184.0f + 22.0f;
         creatorImportActionBar.SetPos(XMFLOAT2(12.0f, 178.0f));
         creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
         // Review owns explicit layout rather than an Update-time widget-name
@@ -12422,6 +12699,12 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 rowY += bodyHeights[index];
             }
         }
+        if (creatorModelImporter.workspaceSection == 4)
+        {
+            contentOffset = 0.0f;
+            activeBodyTop = 78.0f;
+            activeBodyHeight = animationBodyHeight + 104.0f;
+        }
         importScalePanel_.OffsetVisibleStageContent(contentOffset);
         importScalePanel_.LayoutInspectorShell(
             inspectorWidth, activeBodyTop, activeBodyHeight);
@@ -12434,11 +12717,21 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 creatorModelImporter.workspaceSection == 4))
             creatorModelImporter.workspaceSection = 0;
         const std::size_t section = creatorModelImporter.workspaceSection;
+        creatorImportAnimationDashboard.SetVisible(section == 4 && creatorModelImporter.importAsCharacter);
+        creatorImportNextStage.SetPrimaryStyle(section == 4);
+        importScaleTitleLabel_.SetText(section == 4 ? "5  ANIMATIONS" :
+            (creatorModelImporter.importAsCharacter ?
+                "CHARACTER IMPORTER // RIG REVIEW REQUIRED" :
+                "MODEL IMPORTER // PREVIEW BEFORE COMMIT"));
+        importScaleReadoutLabel_.SetVisible(section != 4);
+        creatorImportHelpLabel.SetText(section == 4 ?
+            "Import, preview, assign and validate character clips. Scroll to reach all five sections." :
+            "The model is temporary. The project is unchanged until CONFIRM IMPORT is pressed.");
         for (std::size_t index = 0; index < creatorImportStageButtons.size(); ++index)
         {
             auto& heading = creatorImportStageButtons[index];
-            heading.SetVisible(creatorModelImporter.importAsCharacter ||
-                (index != 3 && index != 4));
+            heading.SetVisible(section != 4 &&
+                (creatorModelImporter.importAsCharacter || (index != 3 && index != 4)));
             heading.SetText(std::array<const char*, 6>{"ASSET SETUP", "TRANSFORM & SCALE",
                 "MATERIALS & TEXTURES", "RIG & RETARGETING", "ANIMATIONS",
                 "REVIEW & IMPORT"}[index]);
@@ -12530,32 +12823,33 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             static_cast<wi::gui::Widget*>(&creatorImportMannequinVisible)})
             widget->SetVisible(section == 1 && creatorImportTransformExpanded[4]);
 
-        constexpr const char* animationGroupNames[] = {
-            "ANIMATION CLIPS", "EXTERNAL ANIMATION FILES"};
-        for (std::size_t index = 0; index < creatorImportAnimationGroups.size(); ++index)
-        {
-            creatorImportAnimationGroups[index].SetVisible(
-                section == 4 && creatorModelImporter.importAsCharacter && index == 0);
-            creatorImportAnimationGroups[index].SetText(
-                std::string(creatorImportAnimationExpanded[index] ? "-  " : "+  ") +
-                animationGroupNames[index]);
-        }
-        const auto showAnimation = [section](const bool expanded,
-            std::initializer_list<wi::gui::Widget*> widgets)
-        {
-            for (auto* widget : widgets)
-                widget->SetVisible(section == 4 && creatorModelImporter.importAsCharacter && expanded);
-        };
-        showAnimation(creatorImportAnimationExpanded[0],
-            {&creatorImportAnimationTable, &creatorImportAnimationName,
-             &creatorImportAnimationStart, &creatorImportAnimationEnd,
-             &creatorImportAnimationSpeed, &creatorImportAnimationEnabled,
-             &creatorImportAnimationAction,
-             &creatorImportAnimationAdd,
-             &creatorImportAnimationDelete, &creatorImportAnimationPlay,
-             &creatorImportAnimationPause, &creatorImportAnimationStop});
-        showAnimation(creatorImportAnimationExpanded[0],
-            {&creatorImportExternalAnimationAdd, &creatorImportExternalAnimationRemove});
+        for (auto& heading : creatorImportAnimationGroups)
+            heading.SetVisible(false);
+        const bool showDashboard = section == 4 && creatorModelImporter.importAsCharacter;
+        for (wi::gui::Widget* control : {
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationTable),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationSearch),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationName),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationStart),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnd),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationSpeed),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationPlay),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationPause),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationStop),
+            static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationAdd),
+            static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationRemove),
+            static_cast<wi::gui::Widget*>(&creatorImportAttackVariant),
+            static_cast<wi::gui::Widget*>(&creatorImportRemoveAttackVariant)})
+            control->SetVisible(showDashboard);
+        for (auto& action : creatorImportActionSlots)
+            action.SetVisible(showDashboard);
+        creatorImportAnimationAction.SetVisible(false); // replaced by explicit action rows
+        creatorImportAnimationCombo.SetVisible(false);
+        creatorImportExternalAnimationStatus.SetVisible(false);
+        creatorImportAnimationReadout.SetVisible(false);
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportActionBar),
