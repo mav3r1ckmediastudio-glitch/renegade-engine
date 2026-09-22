@@ -152,14 +152,14 @@ namespace renegade::studio
         // destroys the Inspector's section state.
         void SyncAudioInspectorPresentation()
         {
-            if (studioChrome_.IsAudioWorkspaceActive())
+            if (studioChrome_.IsAudioWorkspaceActive() || importScalePanel_.IsVisible())
             {
                 inspectorPanel_.wi::gui::Widget::SetVisible(false);
                 renderWorkspacePanel_.wi::gui::Widget::SetVisible(false);
                 return;
             }
 
-            if (!projectHubVisible_ && !renderWorkspaceActive_)
+            if (!projectHubVisible_ && !renderWorkspaceActive_ && !importScalePanel_.IsVisible())
                 inspectorPanel_.wi::gui::Widget::SetVisible(true);
         }
 
@@ -1113,7 +1113,8 @@ namespace renegade::studio
         RenegadeButton hubNewProjectCancelButton_;
         wi::gui::Button gridToggleButton_;
         CreatorImportPreviewWindow importScalePanel_;
-        float importInspectorWidth_ = 500.0f;
+        float importInspectorWidth_ = 390.0f;
+        bool importInspectorResizePending_ = false;
         bool importInspectorLayoutInProgress_ = false;
         bool importAudioWorkspaceWasVisible_ = false;
         wi::gui::Label importScaleTitleLabel_;

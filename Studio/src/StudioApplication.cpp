@@ -4681,7 +4681,20 @@ namespace renegade::studio
     {
         importScalePanel_.Create(
             "Model Import Workspace",
-            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+            static_cast<wi::gui::Window::WindowControls>(
+                static_cast<int>(wi::gui::Window::WindowControls::DISABLE_TITLE_BAR) |
+                static_cast<int>(wi::gui::Window::WindowControls::RESIZE_LEFT)));
+        // Vertical scrolling only: prevent the parent horizontal scrollbar from covering content.
+        importScalePanel_.RemoveWidget(&importScalePanel_.scrollbar_horizontal);
+        importScalePanel_.scrollbar_horizontal.Detach();
+        importScalePanel_.OnResize([this]()
+        {
+            if (importInspectorLayoutInProgress_ || !creatorModelImporter.active) return;
+            const float nextWidth = std::clamp(importScalePanel_.GetSize().x, 380.0f, 680.0f);
+            if (std::abs(importInspectorWidth_ - nextWidth) < 0.5f) return;
+            importInspectorWidth_ = nextWidth;
+            importInspectorResizePending_ = true;
+        });
         // Registration is deferred until every importer page is attached.
 
         importScaleTitleLabel_.Create("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
@@ -5206,9 +5219,9 @@ namespace renegade::studio
         }
         creatorImportAnimationLabel.Create("ANIMATIONS // EDITABLE CLIPS");
         creatorImportAnimationTable.SetName("Available Character Clips");
-        creatorImportAnimationSearch.Create("Search Character Clips");
+        creatorImportAnimationSearch.Create("Search clips");
         creatorImportAnimationSearch.SetRenderTextSize(12);
-        creatorImportAnimationSearch.SetPlaceholder("Search clips or source...");
+        creatorImportAnimationSearch.SetPlaceholder("Search clips...");
         creatorImportAnimationSearch.OnInput([](const wi::gui::EventArgs& args)
         {
             creatorImportClipFilter = args.sValue;
@@ -5934,6 +5947,11 @@ namespace renegade::studio
         DiagnosticInputFrame diagnosticInput(diagnosticService_,
             wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
         PollTestLevel();
+        if (importInspectorResizePending_ && creatorModelImporter.active)
+        {
+            importInspectorResizePending_ = false;
+            ResizeLayout();
+        }
         if (testLevelRuntime_.IsActive())
         {
             diagnosticInput.StopAt("test_level");
@@ -6717,8 +6735,8 @@ namespace renegade::studio
         // buttons sit well below the combo rather than immediately under
         // it.
         const float importScalePanelWidth = std::clamp(
-            importInspectorWidth_, 310.0f,
-            std::max(310.0f, std::min(680.0f, width * 0.6f)));
+            importInspectorWidth_, 380.0f,
+            std::max(380.0f, std::min(680.0f, width * 0.48f)));
         const float importScalePanelTop = 8.0f;
         const float importScalePanelHeight = std::max(320.0f, height - 16.0f);
         // GGMAX-style task workspace: keep the preview unobstructed and dock
@@ -6734,11 +6752,11 @@ namespace renegade::studio
             importScalePanelHeight));
         importInspectorLayoutInProgress_ = false;
         importScaleTitleLabel_.SetPos(XMFLOAT2(12.0f, 8.0f));
-        importScaleTitleLabel_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 24.0f));
+        importScaleTitleLabel_.SetSize(XMFLOAT2(importScalePanelWidth - 44.0f, 24.0f));
         importScaleReadoutLabel_.SetPos(XMFLOAT2(12.0f, 36.0f));
         importScaleReadoutLabel_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 64.0f));
         creatorImportHelpLabel.SetPos(XMFLOAT2(12.0f, creatorModelImporter.workspaceSection == 4 ? 45.0f : 100.0f));
-        creatorImportHelpLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, creatorModelImporter.workspaceSection == 4 ? 36.0f : 42.0f));
+        creatorImportHelpLabel.SetSize(XMFLOAT2(importScalePanelWidth - 44.0f, creatorModelImporter.workspaceSection == 4 ? 36.0f : 42.0f));
         creatorImportAssetName.SetPos(XMFLOAT2(12.0f, 190.0f));
         creatorImportAssetName.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 32.0f));
         creatorImportAssetKind.SetPos(XMFLOAT2(12.0f, 230.0f));
@@ -6970,7 +6988,8 @@ namespace renegade::studio
         // Approved Animation screen: five independent, deeply layered cards.
         // Do not fall back to the old accordion's cramped column of controls.
         const float dashboardTop = 89.0f;
-        const float dashboardWidth = importScalePanelWidth - 18.0f;
+        // Reserve Wicked's 20px vertical scrollbar plus a safety gutter.
+        const float dashboardWidth = importScalePanelWidth - 42.0f;
         const float dashboardX = 9.0f;
         const float sourceHeight = 128.0f + 47.0f * static_cast<float>(
             std::min<std::size_t>(2, std::max<std::size_t>(1,
@@ -6989,20 +7008,20 @@ namespace renegade::studio
             clipsHeight, previewTop, assignmentsTop, validationTop);
         creatorImportAnimationDashboard.SetPos(XMFLOAT2(dashboardX, dashboardTop));
         creatorImportAnimationDashboard.SetSize(XMFLOAT2(dashboardWidth, dashboardHeight));
-        creatorImportExternalAnimationAdd.SetText("+ ADD ANIMATION SOURCE");
+        creatorImportExternalAnimationAdd.SetText("+ ADD SOURCE");
         creatorImportExternalAnimationAdd.SetPrimaryStyle(true);
         creatorImportExternalAnimationAdd.SetRenderTextSize(11);
         creatorImportAnimationPlay.SetPrimaryStyle(true);
         creatorImportAnimationPlay.SetRenderTextSize(12);
         creatorImportExternalAnimationAdd.SetPos(XMFLOAT2(
-            dashboardX + dashboardWidth - 184.0f, dashboardTop + 6.0f));
-        creatorImportExternalAnimationAdd.SetSize(XMFLOAT2(174.0f, 28.0f));
+            dashboardX + dashboardWidth - 134.0f, dashboardTop + 6.0f));
+        creatorImportExternalAnimationAdd.SetSize(XMFLOAT2(124.0f, 28.0f));
         creatorImportExternalAnimationRemove.SetPos(XMFLOAT2(
             dashboardX + dashboardWidth - 174.0f, dashboardTop + sourceHeight - 35.0f));
         creatorImportExternalAnimationRemove.SetSize(XMFLOAT2(164.0f, 28.0f));
         creatorImportAnimationSearch.SetPos(XMFLOAT2(
-            dashboardX + dashboardWidth - 194.0f, dashboardTop + clipsTop + 9.0f));
-        creatorImportAnimationSearch.SetSize(XMFLOAT2(184.0f, 30.0f));
+            dashboardX + dashboardWidth - 134.0f, dashboardTop + clipsTop + 9.0f));
+        creatorImportAnimationSearch.SetSize(XMFLOAT2(124.0f, 30.0f));
         creatorImportAnimationTable.SetPos(XMFLOAT2(
             dashboardX + 10.0f, dashboardTop + clipsTop + 46.0f));
 
@@ -7043,11 +7062,13 @@ namespace renegade::studio
             combo.SetPos(XMFLOAT2(assignmentX, dashboardTop + assignmentsTop + 64.0f + i * 35.0f));
             combo.SetSize(XMFLOAT2(assignmentWidth, 29.0f));
         }
-        const float variantWidth = (assignmentWidth - 5.0f) * 0.5f;
-        creatorImportAttackVariant.SetPos(XMFLOAT2(assignmentX, dashboardTop + assignmentsTop + 286.0f));
+        const float variantWidth = (dashboardWidth - 30.0f) * 0.5f;
+        creatorImportAttackVariant.SetText("+ ATTACK VARIANT");
+        creatorImportRemoveAttackVariant.SetText("- REMOVE VARIANT");
+        creatorImportAttackVariant.SetPos(XMFLOAT2(dashboardX + 12.0f, dashboardTop + assignmentsTop + 286.0f));
         creatorImportAttackVariant.SetSize(XMFLOAT2(variantWidth, 28.0f));
         creatorImportRemoveAttackVariant.SetPos(XMFLOAT2(
-            assignmentX + variantWidth + 5.0f, dashboardTop + assignmentsTop + 286.0f));
+            dashboardX + 18.0f + variantWidth, dashboardTop + assignmentsTop + 286.0f));
         creatorImportRemoveAttackVariant.SetSize(XMFLOAT2(variantWidth, 28.0f));
         const float animationBodyHeight = dashboardTop + dashboardHeight - 184.0f + 22.0f;
         creatorImportActionBar.SetPos(XMFLOAT2(12.0f, 178.0f));
@@ -12506,7 +12527,8 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                         importScalePanel_.SetPreviewScene(scene);
                         ClearSelectionOutline();
                         studioChrome_.SetVisible(false);
-                        inspectorPanel_.SetVisible(false);
+                        // Preserve Inspector section state without leaving its Window visible.
+                        inspectorPanel_.wi::gui::Widget::SetVisible(false);
                         hierarchySearch_.SetVisible(false);
                         ShowImportScalePanel(
                             creatorModelImporter.previewRoot,
@@ -12608,8 +12630,10 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         importAudioWorkspaceWasVisible_ =
             studioChrome_.AudioWorkspace().IsVisible();
         studioChrome_.AudioWorkspace().SetVisible(false);
-        renderWorkspacePanel_.SetVisible(false);
-        inspectorPanel_.SetVisible(false);
+        renderWorkspacePanel_.wi::gui::Widget::SetVisible(false);
+        // Window::SetVisible rewrites every child; hide only the shell so
+        // imported assets cannot expose stale specialist controls on focus.
+        inspectorPanel_.wi::gui::Widget::SetVisible(false);
         importScalePanel_.SetVisible(true);
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportResetView),
@@ -12725,7 +12749,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 "MODEL IMPORTER // PREVIEW BEFORE COMMIT"));
         importScaleReadoutLabel_.SetVisible(section != 4);
         creatorImportHelpLabel.SetText(section == 4 ?
-            "Import, preview, assign and validate character clips. Scroll to reach all five sections." :
+            "Import / preview / assign / validate. Drag left edge to resize." :
             "The model is temporary. The project is unchanged until CONFIRM IMPORT is pressed.");
         for (std::size_t index = 0; index < creatorImportStageButtons.size(); ++index)
         {
