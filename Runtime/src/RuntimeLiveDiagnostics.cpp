@@ -263,12 +263,29 @@ namespace renegade::runtime
                 characterDecisionState_,
                 simulationDt,
                 false);
+            const auto priorPlayback = characterAnimationState_.playbackRequests;
             UpdateRuntimeCharacterAnimations(
                 scenes_.GetScene(),
                 characterAiState_,
                 characterDecisionState_,
                 combatState_,
                 characterAnimationState_);
+            // Log only native clip transitions, not every frame. This makes a
+            // real TestGame T-pose distinguishable from missing AI activation.
+            if (characterAnimationState_.playbackRequests != priorPlayback)
+            {
+                for (const auto& animation : characterAnimationState_.characters)
+                {
+                    const auto* clip = scenes_.GetScene().animations.GetComponent(
+                        animation.activeClip);
+                    if (clip != nullptr)
+                        wi::backlog::post("[AI06-PLAY] id=" + animation.characterId +
+                            " action=" + CharacterAnimationSemanticName(animation.activeSemantic) +
+                            " clip=" + animation.resolvedClipName +
+                            " channels=" + std::to_string(clip->channels.size()) +
+                            " playing=" + std::to_string(clip->IsPlaying()));
+                }
+            }
         }
 
         if (navigationSceneRevision_ != sceneRevision ||

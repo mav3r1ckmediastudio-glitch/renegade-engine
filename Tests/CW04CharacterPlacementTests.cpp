@@ -37,7 +37,10 @@ namespace
             for (const char* clipName : {"Idle", "Run"})
             {
                 const auto clip = scene->Entity_CreateTransform(clipName);
-                scene->animations.Create(clip);
+                auto& animation = scene->animations.Create(clip);
+                wi::scene::AnimationComponent::AnimationChannel channel;
+                channel.target = child;
+                animation.channels.push_back(channel);
                 scene->Component_Attach(clip, root, true);
             }
         }
@@ -94,8 +97,13 @@ int main()
     int playingClips = 0;
     for (std::size_t index = 0; index < scene.animations.GetCount(); ++index)
         playingClips += scene.animations[index].IsPlaying() ? 1 : 0;
-    if (!Require(scene.animations.GetCount() == 2 && playingClips == 0,
-            "Character placement started all mutually exclusive animations"))
+    const auto idleEntity = scene.animations.GetEntity(0);
+    const auto runEntity = scene.animations.GetEntity(1);
+    if (!Require(scene.animations.GetCount() == 2 && playingClips == 1 &&
+            scene.animations.GetComponent(idleEntity)->IsPlaying() &&
+            scene.animations.GetComponent(idleEntity)->IsLooped() &&
+            !scene.animations.GetComponent(runEntity)->IsPlaying(),
+            "Character placement must preview one Idle, not T-pose or all clips"))
         return 1;
     const StableId firstCharacterId = PersistentEntityId(scene, firstCharacter);
     const StableId firstPayloadId = PersistentEntityId(scene, firstPayload);

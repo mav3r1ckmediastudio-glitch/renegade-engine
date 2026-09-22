@@ -1,9 +1,12 @@
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 
 #include "renegade/bridge/CharacterService.h"
+#include "renegade/bridge/AnimationService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/IdentityService.h"
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <unordered_set>
 #include <utility>
@@ -21,6 +24,29 @@ namespace renegade::bridge
         {
             return entity != wi::ecs::INVALID_ENTITY &&
                 scene.transforms.GetComponent(entity) != nullptr;
+        }
+
+        void StartCharacterIdlePreview(
+            wi::scene::Scene& scene, const wi::ecs::Entity characterRoot)
+        {
+            const auto clips = CollectAnimationClips(scene, characterRoot, true);
+            wi::ecs::Entity idle = wi::ecs::INVALID_ENTITY;
+            for (const auto& clip : clips)
+            {
+                std::string name = clip.name;
+                std::transform(name.begin(), name.end(), name.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (idle == wi::ecs::INVALID_ENTITY && clip.channelCount != 0 &&
+                    (name.find("idle") != std::string::npos ||
+                     name.find("breath") != std::string::npos))
+                    idle = clip.entity;
+                (void)StopAnimation(scene, clip.entity);
+            }
+            if (auto* animation = scene.animations.GetComponent(idle))
+            {
+                animation->SetLooped(true);
+                (void)PlayAnimation(scene, idle, true);
+            }
         }
 
         bool AssignFreshReusableHierarchyIdentities(
@@ -590,6 +616,9 @@ namespace renegade::bridge
                     return false;
                 }
 
+                if (promoteCharacter_)
+                    StartCharacterIdlePreview(*scene_, entity_);
+
                 CaptureMaterialResources(firstMaterialIndex_);
                 snapshot_.SetReadModeAndResetPos(false);
                 wi::ecs::EntitySerializer serializer;
@@ -669,9 +698,11 @@ namespace renegade::bridge
                 return false;
             }
 
-            // Multiple actions are mutually exclusive, not simultaneous.
-            // Leave the library stopped until Character Runtime chooses a clip.
-            if (scene_->animations.GetCount() == animationCountBefore + 1)
+            // Studio displays one real idle pose, never a static FBX bind pose
+            // or all mutually exclusive imported actions simultaneously.
+            if (promoteCharacter_)
+                StartCharacterIdlePreview(*scene_, entity_);
+            else if (scene_->animations.GetCount() == animationCountBefore + 1)
                 scene_->animations[animationCountBefore].Play();
 
             CaptureMaterialResources(materialCountBefore);

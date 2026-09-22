@@ -1,6 +1,7 @@
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
 #include "renegade/bridge/AnimationService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
+#include "renegade/bridge/ReusableAssetService.h"
 #include "../Runtime/src/RuntimeCharacterAnimation.h"
 #include "../Runtime/src/RuntimeCombatDecision.h"
 #include "renegade/bridge/AssetRegistryService.h"
@@ -831,12 +832,16 @@ int main(int argc, char** argv)
             "skinned/animated FBX fixture missing"))
         return 3;
 
+    const bool assetAuditMode = argc == 6 && std::string(argv[4]) == "--audit-asset";
+    const fs::path assetAuditPath = assetAuditMode ? fs::u8path(argv[5]) : fs::path{};
+    if (assetAuditMode && !Require(fs::is_regular_file(assetAuditPath), "owner asset audit file missing"))
+        return 3;
     const bool auditMode = argc == 6 && std::string(argv[4]) == "--audit-scene";
     const fs::path auditPath = auditMode ? fs::u8path(argv[5]) : fs::path{};
     if (auditMode && !Require(fs::is_regular_file(auditPath), "scene audit file missing"))
         return 3;
     std::vector<fs::path> externalSources;
-    for (int index = 4; !auditMode && index < argc; ++index)
+    for (int index = 4; !auditMode && !assetAuditMode && index < argc; ++index)
     {
         const fs::path source = fs::weakly_canonical(fs::u8path(argv[index]));
         if (!Require(fs::is_regular_file(source),
@@ -867,6 +872,111 @@ int main(int argc, char** argv)
                 "Wicked graphics device was not initialized"))
         {
             exitCode = 5;
+        }
+        else if (assetAuditMode)
+        {
+            renegade::bridge::ReusableModelAssetDocument document;
+            std::string error;
+            if (!renegade::bridge::ReadReusableModelAssetDocument(
+                    assetAuditPath.generic_u8string(), document, error))
+            {
+                std::cerr << "OWNER ASSET AUDIT FAILED: " << error << '\n';
+                exitCode = 6;
+            }
+            else
+            {
+                fs::create_directories(outputRoot);
+                const auto payloadPath = outputRoot / "owner-asset-audit.wiscene";
+                std::ofstream payload(payloadPath, std::ios::binary | std::ios::trunc);
+                payload.write(reinterpret_cast<const char*>(document.payload.data()),
+                    static_cast<std::streamsize>(document.payload.size()));
+                payload.close();
+                wi::Archive archive(payloadPath.generic_u8string(), true, false);
+                wi::scene::Scene actual;
+                actual.Serialize(archive);
+                std::cout << "OWNER ASSET CLIPS=" << actual.animations.GetCount() << '\n';
+                std::size_t usableIdles = 0;
+                for (std::size_t i = 0; i < actual.animations.GetCount(); ++i)
+                {
+                    const auto entity = actual.animations.GetEntity(i);
+                    const auto& animation = actual.animations[i];
+                    const auto* name = actual.names.GetComponent(entity);
+                    const std::string clipName = name ? name->name : "<unnamed>";
+                    std::size_t transformTargets = 0;
+                    for (const auto& channel : animation.channels)
+                        transformTargets += actual.transforms.Contains(channel.target) ? 1 : 0;
+                    const bool idle = renegade::runtime::IsExplicitCharacterIdleName(clipName) &&
+                        renegade::runtime::InferCharacterAnimationSemantic(clipName) ==
+                            renegade::runtime::CharacterAnimationSemantic::Idle;
+                    if (idle && transformTargets && animation.end > animation.start + 0.1f)
+                        ++usableIdles;
+                    std::cout << "OWNER CLIP [" << clipName << "] duration="
+                        << animation.end - animation.start << " channels="
+                        << animation.channels.size() << " transform_targets="
+                        << transformTargets << " explicit_idle=" << idle << '\n';
+                }
+                std::cout << "OWNER USABLE IDLES=" << usableIdles << '\n';
+                // Exercise the actual .rasset's native sampled pose, not just
+                // its clip names and channel counts. Nothing writes to the
+                // owner's project; the payload is staged under BUILD/recovery.
+                wi::ecs::Entity breathing = wi::ecs::INVALID_ENTITY;
+                for (std::size_t i = 0; i < actual.animations.GetCount(); ++i)
+                {
+                    const auto entity = actual.animations.GetEntity(i);
+                    const auto* name = actual.names.GetComponent(entity);
+                    auto& animation = actual.animations[i];
+                    animation.Stop();
+                    animation.timer = animation.start;
+                    animation.last_update_time = animation.start;
+                    if (name && name->name == "mutant breathing idle")
+                        breathing = entity;
+                }
+                if (auto* animation = actual.animations.GetComponent(breathing))
+                {
+                    std::vector<XMFLOAT4> rotations;
+                    std::vector<XMFLOAT3> translations;
+                    for (const auto& channel : animation->channels)
+                    {
+                        const auto* target = actual.transforms.GetComponent(channel.target);
+                        rotations.push_back(target ? target->rotation_local : XMFLOAT4{});
+                        translations.push_back(target ? target->translation_local : XMFLOAT3{});
+                    }
+                    animation->SetLooped(true);
+                    animation->Play();
+                    animation->timer = animation->start + 0.75f;
+                    animation->last_update_time = animation->start;
+                    actual.dt = 1.0f / 60.0f;
+                    actual.ScanAnimationDependencies();
+                    wi::jobsystem::context animationContext;
+                    actual.RunAnimationUpdateSystem(animationContext);
+                    wi::jobsystem::Wait(animationContext);
+                    std::size_t movedChannels = 0;
+                    for (std::size_t k = 0; k < animation->channels.size(); ++k)
+                    {
+                        const auto* target = actual.transforms.GetComponent(
+                            animation->channels[k].target);
+                        if (!target) continue;
+                        const auto& r = target->rotation_local;
+                        const auto& r0 = rotations[k];
+                        const auto& t = target->translation_local;
+                        const auto& t0 = translations[k];
+                        const float change =
+                            std::abs(r.x-r0.x) + std::abs(r.y-r0.y) +
+                            std::abs(r.z-r0.z) + std::abs(r.w-r0.w) +
+                            std::abs(t.x-t0.x) + std::abs(t.y-t0.y) +
+                            std::abs(t.z-t0.z);
+                        if (change > 0.0001f) ++movedChannels;
+                    }
+                    std::cout << "OWNER IDLE NATIVE POSE // moved_channels="
+                        << movedChannels << " playing=" << animation->IsPlaying() << '\n';
+                    if (!Require(movedChannels > 0,
+                            "actual Mutant breathing idle did not animate any skeleton transform"))
+                        exitCode = 6;
+                }
+                if (!Require(usableIdles >= 1,
+                        "owner imported asset lacks a targetable, non-bind-pose idle"))
+                    exitCode = 6;
+            }
         }
         else if (auditMode)
         {

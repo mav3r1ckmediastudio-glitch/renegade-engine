@@ -48,6 +48,43 @@ int main()
         return Fail("native clip semantic inference");
     }
 
+    // The owner's 14-clip Mutant has a 0.033s bind-pose clip named "Mutant".
+    // Prior inference sorted it before two real idle clips and looped T-pose.
+    wi::scene::Scene ownerScene;
+    const auto owner = ownerScene.Entity_CreateTransform("mutty123");
+    for (const char* name : {"Mutant", "left turn 45", "mutant breathing idle",
+            "mutant dying", "mutant flexing muscles", "mutant idle",
+            "mutant jumping", "mutant left turn 45", "mutant right turn 45",
+            "mutant swiping", "Standing Melee Punch", "Mutant Punch",
+            "Mutant Run", "Mutant Walking"})
+    {
+        const auto clip = AddClip(ownerScene, owner, name);
+        if (std::string(name) == "Mutant")
+            ownerScene.animations.GetComponent(clip)->end = 0.0333333f;
+    }
+    RuntimeCharacterSystemState ownerCharacters;
+    RuntimeCharacterRecord ownerRecord;
+    ownerRecord.stableEntityId = "00000000-0000-4000-8000-000000000014";
+    ownerRecord.entity = owner;
+    ownerCharacters.characters.push_back(ownerRecord);
+    RuntimeCombatState ownerCombat;
+    CharacterCombatRecord ownerCombatRecord;
+    ownerCombatRecord.characterId = ownerRecord.stableEntityId;
+    ownerCombatRecord.entity = owner;
+    ownerCombat.characters.push_back(ownerCombatRecord);
+    RuntimeCharacterAnimationState ownerState;
+    std::string ownerError;
+    if (!InitializeRuntimeCharacterAnimations(ownerScene, ownerCharacters,
+            ownerCombat, ownerState, ownerError))
+        return Fail("actual 14-clip Mutant semantic setup: " + ownerError);
+    auto* ownerAnimations = FindCharacterAnimation(ownerState, ownerRecord.stableEntityId);
+    if (ownerAnimations == nullptr ||
+        ownerAnimations->clips[CharacterAnimationIndex(CharacterAnimationSemantic::Idle)].size() != 2 ||
+        !RequestCharacterAnimation(ownerScene, ownerState, *ownerAnimations,
+            CharacterAnimationSemantic::Idle) ||
+        ownerAnimations->resolvedClipName != "mutant breathing idle")
+        return Fail("Mutant must choose real breathing/idle, never bind-pose/turn/jump");
+
     const wi::ecs::Entity idle = AddClip(scene, character, "Idle_Breathe");
     const wi::ecs::Entity attack = AddClip(scene, character, "Claw_Attack_01");
     const wi::ecs::Entity attackTwo = AddClip(scene, character, "Claw_Attack_02");

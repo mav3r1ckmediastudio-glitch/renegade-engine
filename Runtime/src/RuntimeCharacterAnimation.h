@@ -107,6 +107,12 @@ namespace renegade::runtime
         }
         return false;
     }
+    [[nodiscard]] inline bool IsExplicitCharacterIdleName(const std::string& nativeName)
+    {
+        const std::string name = NormalizeAnimationClipName(nativeName);
+        return AnimationNameContains(name, {"idle", "breath", "rest", "stand"});
+    }
+
     [[nodiscard]] inline CharacterAnimationSemantic InferCharacterAnimationSemantic(
         const std::string& nativeName) noexcept
     {
@@ -180,15 +186,32 @@ namespace renegade::runtime
             record.observedDamage = combatRecord->damageTaken;
             record.observedHealth = combatRecord->health;
 
+            std::vector<RuntimeAnimationClip> unnamedIdleFallback;
             for (const auto& clip : bridge::CollectAnimationClips(
                      scene, character.entity, true))
             {
                 if (clip.entity == wi::ecs::INVALID_ENTITY)
                     continue;
-                record.clips[CharacterAnimationIndex(
-                    InferCharacterAnimationSemantic(clip.name))]
-                    .push_back({clip.entity, clip.name});
+                const auto semantic = InferCharacterAnimationSemantic(clip.name);
+                if (semantic == CharacterAnimationSemantic::Idle &&
+                    !IsExplicitCharacterIdleName(clip.name))
+                {
+                    unnamedIdleFallback.push_back({clip.entity, clip.name});
+                }
+                else
+                {
+                    record.clips[CharacterAnimationIndex(semantic)]
+                        .push_back({clip.entity, clip.name});
+                }
             }
+            // A short FBX bind-pose clip named after the model is not an idle.
+            // Turn/jump/flex clips are likewise not idle variants when the
+            // asset supplies actual Idle/Breath animations. Retain legacy
+            // fallback only for assets without any explicitly named idle.
+            auto& idles = record.clips[CharacterAnimationIndex(
+                CharacterAnimationSemantic::Idle)];
+            if (idles.empty())
+                idles = std::move(unnamedIdleFallback);
 
             for (auto& variants : record.clips)
             {
