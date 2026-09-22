@@ -321,6 +321,9 @@ namespace
             }
         }
         // Exercise real importer action metadata through governed .rasset save/reopen.
+        std::string segmentedClipName;
+        float segmentedClipStart = 0.0f;
+        float segmentedClipEnd = 0.0f;
         std::string characterOptions = R"({"asset_kind":"character"})";
         if (!externalSources.empty())
         {
@@ -345,6 +348,26 @@ namespace
                 else if (normalized.find("run") != std::string::npos) clip.action = "Run";
                 else if (normalized.find("swiping") != std::string::npos) clip.action = "Attack";
                 authored.animations.push_back(std::move(clip));
+            }
+            // The V4 ADD CLIP pathway duplicates a native source index, then
+            // edits its own range/speed. Prove two independent native clips
+            // survive governed import and reopening from the same source.
+            for (const auto& sourceClip : authored.animations)
+            {
+                if (sourceClip.action != "Walk" ||
+                    sourceClip.end - sourceClip.start <= 0.1f) continue;
+                auto segment = sourceClip;
+                segmentedClipName = sourceClip.name + " Segment";
+                const float duration = sourceClip.end - sourceClip.start;
+                segment.name = segmentedClipName;
+                segment.start += duration * 0.15f;
+                segment.end -= duration * 0.15f;
+                segmentedClipStart = segment.start;
+                segmentedClipEnd = segment.end;
+                segment.speed = 0.75f;
+                segment.action = "Unassigned";
+                authored.animations.push_back(std::move(segment));
+                break;
             }
             std::string actionError;
             if (!Require(SerializeCreatorModelImportOptions(
@@ -415,6 +438,7 @@ namespace
             const auto& scene = *reopenedCharacter.PeekScene();
             std::cout << "PERSISTED CHARACTER ANIMATIONS //";
             std::size_t tagged = 0, walks = 0, runs = 0, attacks = 0, poses = 0;
+            bool segmentVerified = segmentedClipName.empty();
             for (std::size_t index = 0; index < scene.animations.GetCount(); ++index)
             {
                 const auto entity = scene.animations.GetEntity(index);
@@ -431,12 +455,20 @@ namespace
                     attacks += action == "Attack";
                     poses += action == "Unassigned";
                 }
+                if (name != nullptr && name->name == segmentedClipName)
+                    segmentVerified = metadata != nullptr &&
+                        metadata->string_values.has(CreatorCharacterAnimationActionMetadataKey) &&
+                        metadata->string_values.get(CreatorCharacterAnimationActionMetadataKey) == "Unassigned" &&
+                        std::abs(scene.animations[index].start - segmentedClipStart) < 0.0001f &&
+                        std::abs(scene.animations[index].end - segmentedClipEnd) < 0.0001f &&
+                        std::abs(scene.animations[index].speed - 0.75f) < 0.0001f;
                 std::cout << " [" << (name == nullptr ? "<unnamed>" : name->name) << "]";
             }
             std::cout << '\n';
             if (!Require(tagged == scene.animations.GetCount() &&
-                    walks >= 1 && runs >= 1 && attacks >= 1 && poses >= 1,
-                    "authored clip assignments did not survive governed RAsset reopen"))
+                    walks >= 1 && runs >= 1 && attacks >= 1 && poses >= 1 &&
+                    segmentVerified,
+                    "authored/duplicated trim and action metadata did not survive governed RAsset reopen"))
                 return false;
         }
         if (!Require(reopenedCharacter.IsReady() &&

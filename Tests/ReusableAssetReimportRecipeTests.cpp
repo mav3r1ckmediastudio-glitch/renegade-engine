@@ -1,4 +1,5 @@
 #include "renegade/bridge/CreatorModelImportRecipe.h"
+#include "../Studio/src/CreatorAnimationRangeEditing.h"
 #include "renegade/bridge/CreatorModelMaterialPreparationService.h"
 #include "renegade/bridge/CreatorSurfaceBuilderService.h"
 #include "renegade/bridge/ReusableAssetService.h"
@@ -9,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <iostream>
 #include <iterator>
 #include <sstream>
@@ -92,6 +94,50 @@ namespace
     {
         std::ofstream output(path, std::ios::binary | std::ios::trunc);
         return static_cast<bool>(output);
+    }
+
+    bool TestCreatorTrimEditor()
+    {
+        using renegade::bridge::CreatorAnimationImportRecipe;
+        using renegade::studio::TryEditCreatorAnimationTrim;
+        CreatorAnimationImportRecipe clip;
+        clip.name = "Mutant swipe";
+        clip.action = "Attack";
+        clip.start = 0.0f;
+        clip.end = 2.0f;
+        clip.speed = 0.8f;
+        std::string error;
+        const auto reject = [&](const float value, const bool start)
+        {
+            const float oldStart = clip.start, oldEnd = clip.end;
+            return Require(!TryEditCreatorAnimationTrim(clip, 0.0f, 2.0f,
+                        value, start, error) && !error.empty() &&
+                    clip.start == oldStart && clip.end == oldEnd,
+                "invalid trim changed the authored Character clip");
+        };
+        if (!reject(-0.1f, true) || !reject(2.1f, false) ||
+            !reject(2.0f, true) || !reject(0.0f, false) ||
+            !reject(std::numeric_limits<float>::quiet_NaN(), true) ||
+            !reject(std::numeric_limits<float>::infinity(), false))
+            return false;
+        if (!Require(TryEditCreatorAnimationTrim(clip, 0.0f, 2.0f,
+                    0.25f, true, error) && clip.start == 0.25f && error.empty(),
+                "valid start trim was rejected") ||
+            !Require(TryEditCreatorAnimationTrim(clip, 0.0f, 2.0f,
+                    1.5f, false, error) && clip.end == 1.5f && error.empty(),
+                "valid end trim was rejected") ||
+            !Require(clip.name == "Mutant swipe" && clip.action == "Attack" &&
+                    clip.speed == 0.8f,
+                "trim edit discarded action assignment, speed or clip name"))
+            return false;
+        clip.start = 0.0f;
+        clip.end = 2.0f;
+        if (!Require(TryEditCreatorAnimationTrim(clip, 0.0f, 2.0f,
+                    2.000001f, false, error) && clip.end == 2.0f,
+                "rounded source endpoint was rejected instead of clamped"))
+            return false;
+        std::cout << "CREATOR CHARACTER TRIM EDITOR PASS\n";
+        return true;
     }
 
     bool TestCreatorRecipeContract()
@@ -491,7 +537,8 @@ int main()
     if (!Require(!ec, "could not create project fixture"))
         return 1;
 
-    if (!TestCreatorRecipeContract() ||
+    if (!TestCreatorTrimEditor() ||
+        !TestCreatorRecipeContract() ||
         !TestCreatorMaterialDetection(hardeningRoot) ||
         !TestCreatorSurfaceBuilder(hardeningRoot) ||
         !TestCreatorPreviewSurfaceCacheIdentity(hardeningRoot))

@@ -1,6 +1,7 @@
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
 #include "CreatorImportAnimationDashboard.h"
+#include "CreatorAnimationRangeEditing.h"
 #include <cctype>
 #include "StudioUserPreferences.h"
 #include <ModelImporter.h>
@@ -717,6 +718,7 @@ namespace
     renegade::studio::CreatorImportAnimationDashboard creatorImportAnimationDashboard;
     renegade::studio::RenegadeTextInputField creatorImportAnimationSearch;
     std::string creatorImportClipFilter;
+    std::string creatorImportEditWarning;
     std::array<renegade::studio::RenegadeComboBox, 6> creatorImportActionSlots;
     renegade::studio::RenegadeComboBox creatorImportAttackVariant;
     renegade::studio::RenegadeComboBox creatorImportRemoveAttackVariant;
@@ -1404,7 +1406,7 @@ namespace
         int total = 0;
         for (int count : counts) total += count;
         std::string validation = total > 0
-            ? std::to_string(total) + " clip assignment(s) saved with this character."
+            ? std::to_string(total) + " clip assignment(s) ready for import."
             : "No gameplay actions assigned yet.";
         std::string unassigned;
         constexpr std::array<const char*, 6> friendlyNames = {
@@ -1437,6 +1439,11 @@ namespace
                 }
             }
             if (validation.find("Duplicate") != std::string::npos) break;
+        }
+        if (!creatorImportEditWarning.empty())
+        {
+            validation = creatorImportEditWarning;
+            validationDetail = "Edit rejected; the previous clip settings are intact.";
         }
         creatorImportAnimationDashboard.SetSources(std::move(sources), std::move(sourceCounts));
         if (!creatorModelImporter.animationRecipe.empty())
@@ -5224,12 +5231,14 @@ namespace renegade::studio
         creatorImportAnimationSearch.SetPlaceholder("Search clips...");
         creatorImportAnimationSearch.OnInput([](const wi::gui::EventArgs& args)
         {
+            creatorImportEditWarning.clear();
             creatorImportClipFilter = args.sValue;
             RebuildCreatorImportAnimationCombo();
         });
         creatorImportAnimationTable.OnSelected([](std::size_t index)
         {
             StopCreatorImportPreviewAnimations();
+            creatorImportEditWarning.clear();
             creatorModelImporter.selectedAnimation = index;
             creatorImportAnimationCombo.SetSelectedWithoutCallback(static_cast<int>(index));
             RefreshCreatorImportAnimationEditor();
@@ -5260,8 +5269,27 @@ namespace renegade::studio
         {
             if (creatorModelImporter.animationRecipe.empty()) return;
             auto& clip = creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation];
-            clip.start = std::min(args.fValue, clip.end);
-            RebuildCreatorImportAnimationCombo();
+            if (clip.sourceAnimationIndex >= creatorModelImporter.animationSourceRanges.size())
+                creatorImportEditWarning = "Invalid trim: source animation unavailable.";
+            else
+            {
+                const auto range = creatorModelImporter.animationSourceRanges[clip.sourceAnimationIndex];
+                std::string error;
+                if (renegade::studio::TryEditCreatorAnimationTrim(
+                        clip, range.x, range.y, args.fValue, true, error))
+                    creatorImportEditWarning.clear();
+                else creatorImportEditWarning = std::move(error);
+            }
+            if (creatorImportEditWarning.empty())
+            {
+                StopCreatorImportPreviewAnimations();
+                RebuildCreatorImportAnimationCombo();
+            }
+            else
+            {
+                RefreshCreatorImportAnimationEditor();
+                RefreshCreatorImportActionDashboard();
+            }
         });
         creatorImportAnimationEnd.Create("Animation End");
         creatorImportAnimationEnd.SetRenderTextSize(12);
@@ -5270,8 +5298,27 @@ namespace renegade::studio
         {
             if (creatorModelImporter.animationRecipe.empty()) return;
             auto& clip = creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation];
-            clip.end = std::max(args.fValue, clip.start);
-            RebuildCreatorImportAnimationCombo();
+            if (clip.sourceAnimationIndex >= creatorModelImporter.animationSourceRanges.size())
+                creatorImportEditWarning = "Invalid trim: source animation unavailable.";
+            else
+            {
+                const auto range = creatorModelImporter.animationSourceRanges[clip.sourceAnimationIndex];
+                std::string error;
+                if (renegade::studio::TryEditCreatorAnimationTrim(
+                        clip, range.x, range.y, args.fValue, false, error))
+                    creatorImportEditWarning.clear();
+                else creatorImportEditWarning = std::move(error);
+            }
+            if (creatorImportEditWarning.empty())
+            {
+                StopCreatorImportPreviewAnimations();
+                RebuildCreatorImportAnimationCombo();
+            }
+            else
+            {
+                RefreshCreatorImportAnimationEditor();
+                RefreshCreatorImportActionDashboard();
+            }
         });
         creatorImportAnimationSpeed.Create("Animation Playback Speed");
         creatorImportAnimationSpeed.SetRenderTextSize(12);
@@ -5281,12 +5328,16 @@ namespace renegade::studio
             if (creatorModelImporter.animationRecipe.empty()) return;
             if (!std::isfinite(args.fValue) || args.fValue < 0.1f || args.fValue > 4.0f)
             {
-                creatorImportAnimationReadout.SetText("Speed must be between 0.1x and 4x.");
+                creatorImportEditWarning = "Invalid speed: enter 0.1x to 4x.";
+                RefreshCreatorImportAnimationEditor();
+                RefreshCreatorImportActionDashboard();
                 return;
             }
             StopCreatorImportPreviewAnimations();
             creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation].speed = args.fValue;
+            creatorImportEditWarning.clear();
             RefreshCreatorImportAnimationEditor();
+            RefreshCreatorImportActionDashboard();
         });
         creatorImportAnimationAction.Create("Character Action Assignment");
         for (const char* action : {"UNASSIGNED / REFERENCE", "IDLE", "WALK",
@@ -12604,6 +12655,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         RefreshCreatorImportTextureEditor();
 
         creatorModelImporter.selectedAnimation = 0;
+        creatorImportEditWarning.clear();
+        creatorImportClipFilter.clear();
+        creatorImportAnimationSearch.SetValue("");
         RebuildCreatorImportAnimationCombo();
         RefreshCreatorExternalAnimationQueue();
         creatorImportLightIntensity.SetValue(creatorModelImporter.lightIntensity);

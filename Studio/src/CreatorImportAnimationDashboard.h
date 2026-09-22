@@ -158,7 +158,9 @@ namespace renegade::studio
             }
             panel(validationTop_, 93, "5.  VALIDATION");
             const bool needsAttention = validation_.find("No gameplay") != std::string::npos ||
-                validation_.find("Duplicate") != std::string::npos;
+                validation_.find("Duplicate") != std::string::npos ||
+                validation_.find("Invalid trim") != std::string::npos ||
+                validation_.find("Invalid speed") != std::string::npos;
             rect(x + 14, y + validationTop_ + 43, 18, 18, needsAttention
                 ? wi::Color(145, 92, 39, 255) : wi::Color(42, 119, 78, 255));
             text(needsAttention ? "!" : "OK", x + 16, y + validationTop_ + 44, 11, strong);
