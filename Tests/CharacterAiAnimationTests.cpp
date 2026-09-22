@@ -80,6 +80,24 @@ int main()
         return Fail("multiple attack variants were not resolved");
     }
 
+    // Runtime starts with semantic Idle but NO active clip. The first real
+    // frame must start a native clip, not mistake the enum default for playback.
+    RuntimeCharacterDecisionState initialDecisions;
+    CharacterDecisionRecord initialDecision;
+    initialDecision.characterId = authored.stableEntityId;
+    initialDecision.intent = CharacterIntent::Idle;
+    initialDecisions.characters.push_back(initialDecision);
+    UpdateRuntimeCharacterAnimations(
+        scene, characters, initialDecisions, combat, state);
+    if (record->activeClip != idle ||
+        !scene.animations.GetComponent(idle)->IsPlaying())
+        return Fail("initial Idle default never starts a native animation");
+    (void)renegade::bridge::StopAnimation(scene, idle);
+    UpdateRuntimeCharacterAnimations(
+        scene, characters, initialDecisions, combat, state);
+    if (!scene.animations.GetComponent(idle)->IsPlaying())
+        return Fail("stopped active loop never restarts during active AI intent");
+
     if (!RequestCharacterAnimation(
             scene, state, *record, CharacterAnimationSemantic::Idle))
     {

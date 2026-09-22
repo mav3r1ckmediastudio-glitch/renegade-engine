@@ -4544,6 +4544,8 @@ namespace renegade::studio
             }
             StopCreatorImportPreviewAnimations();
             creatorModelImporter.importAsCharacter = false;
+            creatorModelImporter.assetKind = bridge::CreatorAssetImportKind::Model;
+            creatorImportAssetKind.SetSelectedWithoutCallback(0);
             creatorModelImporter.destinationFolder = "Content/Models";
             creatorImportDestination.SetValue(creatorModelImporter.destinationFolder);
             importScaleTitleLabel_.SetText("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
@@ -4556,6 +4558,8 @@ namespace renegade::studio
         creatorImportCharacterChoice.OnClick([this](const wi::gui::EventArgs&)
         {
             creatorModelImporter.importAsCharacter = true;
+            creatorModelImporter.assetKind = bridge::CreatorAssetImportKind::Character;
+            creatorImportAssetKind.SetSelectedWithoutCallback(1);
             creatorModelImporter.destinationFolder = "Content/Characters";
             creatorImportDestination.SetValue(creatorModelImporter.destinationFolder);
             importScaleTitleLabel_.SetText("CHARACTER IMPORTER // RIG REVIEW REQUIRED");
@@ -4645,6 +4649,7 @@ namespace renegade::studio
             creatorModelImporter.assetKind = character
                 ? bridge::CreatorAssetImportKind::Character
                 : bridge::CreatorAssetImportKind::Model;
+            creatorModelImporter.importAsCharacter = character;
             creatorModelImporter.destinationFolder = character
                 ? "Content/Characters"
                 : "Content/Models";

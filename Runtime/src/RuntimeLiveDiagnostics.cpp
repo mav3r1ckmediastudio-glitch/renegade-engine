@@ -176,6 +176,27 @@ namespace renegade::runtime
                 combatState_ = std::move(resolvedCombat);
                 characterAnimationState_ = std::move(resolvedAnimation);
                 characterSceneRevision_ = sceneRevision;
+                for (const auto& actor : characterAiState_.characters)
+                {
+                    const auto* clips = FindCharacterAnimation(
+                        characterAnimationState_, actor.stableEntityId);
+                    const auto* weapon = FindCharacterCombat(
+                        combatState_, actor.stableEntityId);
+                    if (clips == nullptr || weapon == nullptr)
+                        continue;
+                    const auto clipCount = [clips](CharacterAnimationSemantic semantic)
+                    {
+                        return clips->clips[CharacterAnimationIndex(semantic)].size();
+                    };
+                    wi::backlog::post("[AI06-ACTOR-READY] id=" + actor.stableEntityId +
+                        " faction=" + actor.authoring.factionId +
+                        " combatStyle=" + std::to_string(static_cast<int>(actor.authoring.combatStyle)) +
+                        " weaponStyle=" + std::to_string(static_cast<int>(weapon->weapon.style)) +
+                        " idle=" + std::to_string(clipCount(CharacterAnimationSemantic::Idle)) +
+                        " walk=" + std::to_string(clipCount(CharacterAnimationSemantic::Locomotion)) +
+                        " run=" + std::to_string(clipCount(CharacterAnimationSemantic::Run)) +
+                        " attack=" + std::to_string(clipCount(CharacterAnimationSemantic::Attack)));
+                }
                 if (!characterState_.characters.empty())
                 {
                     diagnosticService_.Record(
@@ -429,6 +450,31 @@ namespace renegade::runtime
                 ? std::to_string(first.targetDistance)
                 : std::string("none");
         }
+        // Expose native clip selection beside AI intent/combat so an actor
+        // gliding in TestGame is diagnosable without synthetic test assumptions.
+        std::uint64_t animationPlaybackCount = 0;
+        std::uint64_t animationMissingCount = 0;
+        std::uint64_t animationClipCount = 0;
+        std::string firstAnimationSemantic;
+        std::string firstAnimationClip;
+        std::string firstAnimationRequest;
+        bool firstAnimationPlaying = false;
+        for (const auto& animation : characterAnimationState_.characters)
+        {
+            animationPlaybackCount += animation.playbackRequests;
+            animationMissingCount += animation.missingRequests;
+            for (const auto& variants : animation.clips)
+                animationClipCount += variants.size();
+        }
+        if (!characterAnimationState_.characters.empty())
+        {
+            const auto& first = characterAnimationState_.characters.front();
+            firstAnimationSemantic = CharacterAnimationSemanticName(first.activeSemantic);
+            firstAnimationClip = first.resolvedClipName;
+            firstAnimationRequest = first.lastRequest;
+            const auto* native = scenes_.GetScene().animations.GetComponent(first.activeClip);
+            firstAnimationPlaying = native != nullptr && native->IsPlaying();
+        }
         diagnosticService_.Observe("ai", {
             {"character_count", static_cast<std::uint64_t>(characterState_.characters.size())},
             {"resolved_character_count", static_cast<std::uint64_t>(characterAiState_.characters.size())},
@@ -473,6 +519,14 @@ namespace renegade::runtime
             {"gameplay_event_queue_depth", static_cast<std::uint64_t>(creatorScripts_.PendingEventCount())},
             {"gameplay_event_dropped", static_cast<std::uint64_t>(creatorScripts_.DroppedEventCount())},
             {"combat_events_rejected", combatState_.combatEventsRejected},
+            {"animation_character_count", static_cast<std::uint64_t>(characterAnimationState_.characters.size())},
+            {"animation_clip_count", animationClipCount},
+            {"animation_playback_requests", animationPlaybackCount},
+            {"animation_missing_requests", animationMissingCount},
+            {"first_animation_semantic", firstAnimationSemantic},
+            {"first_animation_clip", firstAnimationClip},
+            {"first_animation_request", firstAnimationRequest},
+            {"first_animation_playing", firstAnimationPlaying},
             {"memory_count", totalMemories},
             {"cognition_ticks", totalCognitionTicks},
             {"decision_ticks", characterDecisionState_.decisionTicks},

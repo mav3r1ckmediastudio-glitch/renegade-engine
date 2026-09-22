@@ -375,6 +375,17 @@ namespace renegade::runtime
                 requestPlayback = record->activeSemantic != requested;
             }
 
+            // The default enum is Idle even when no native clip has ever
+            // started. Likewise a stopped loop must restart without requiring
+            // a new AI intent. Previously both conditions silently glided.
+            if (!requestPlayback &&
+                (requested == CharacterAnimationSemantic::Idle ||
+                 requested == CharacterAnimationSemantic::Locomotion ||
+                 requested == CharacterAnimationSemantic::Run))
+            {
+                const auto* active = scene.animations.GetComponent(record->activeClip);
+                requestPlayback = active == nullptr || !active->IsPlaying();
+            }
             if (requestPlayback)
                 (void)RequestCharacterAnimation(scene, state, *record, requested);
 

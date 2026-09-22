@@ -42,4 +42,18 @@ math(EXPR availableBottom "184 + ${reviewBodyHeight} - 8")
 if(cancelBottom GREATER availableBottom)
     message(FATAL_ERROR "Importer Review final action exceeds scroll-body bounds")
 endif()
+# A Character button must change durable recipe kind, not merely its folder.
+# Both import selectors must keep the preview classification synchronized.
+foreach(required IN ITEMS
+    "creatorModelImporter.assetKind = bridge::CreatorAssetImportKind::Model;"
+    "creatorModelImporter.assetKind = bridge::CreatorAssetImportKind::Character;"
+    "creatorImportAssetKind.SetSelectedWithoutCallback(0);"
+    "creatorImportAssetKind.SetSelectedWithoutCallback(1);"
+    "creatorModelImporter.importAsCharacter = character;")
+    string(FIND "${importer}" "${required}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Importer Model/Character selectors out of sync: ${required}")
+    endif()
+endforeach()
+message(STATUS "Importer recipe-kind synchronization contract passed")
 message(STATUS "Importer Review layout contract passed: destination, thumbnail and final actions")

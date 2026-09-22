@@ -1,5 +1,8 @@
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
 #include "renegade/bridge/AnimationService.h"
+#include "renegade/bridge/ReusableAssetInstanceService.h"
+#include "../Runtime/src/RuntimeCharacterAnimation.h"
+#include "../Runtime/src/RuntimeCombatDecision.h"
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/CreatorAssetActionPolicy.h"
 #include "renegade/bridge/ImportService.h"
@@ -318,7 +321,7 @@ namespace
         }
         const auto workflowStarted = std::chrono::steady_clock::now();
         auto character = workflow.ImportModel(projectRoot.generic_u8string(), ProjectId,
-            animatedFixture.generic_u8string(), "{}", sharedStem,
+            animatedFixture.generic_u8string(), "{\"asset_kind\":\"character\"}", sharedStem,
             "Content/Characters", std::move(preparedCharacter), {});
         if (!externalSources.empty())
             std::cout << "EXTERNAL CHARACTER GOVERNED PACKAGE MS=" <<
@@ -415,6 +418,162 @@ namespace
                 return false;
         }
 
+        // Unlike a raw merged FBX, Studio uses a reusable Character wrapper.
+        // Verify AI-06 can resolve the clips from THAT logical actor.
+        if (!externalSources.empty())
+        {
+            auto actual = workflow.PrepareModelPlacement(
+                projectRoot.generic_u8string(), ProjectId, character.asset.assetId);
+            if (!Require(actual.IsReady(), "Character wrapper preparation failed")) return false;
+            wi::scene::Scene wrappedScene;
+            PlaceReusableModelCommand wrapped(
+                wrappedScene, actual.ReleaseScene(), character.asset.assetId,
+                XMFLOAT3(17.0f, 3.0f, -9.0f), 1.0f, "Mutant");
+            if (!Require(wrapped.Execute(), "real Character wrapper placement failed")) return false;
+            if (!Require(IsRenegadeCharacter(wrappedScene, wrapped.PlacedEntity()),
+                    "Character folder imported a Model without a real AI Character")) return false;
+            const auto clips = CollectAnimationClips(wrappedScene, wrapped.PlacedEntity(), true);
+            std::cout << "REAL MUTANT AI WRAPPER CLIPS=" << clips.size();
+            bool walk = false, run = false, attack = false;
+            for (const auto& clip : clips)
+            {
+                std::cout << " [" << clip.name << "]";
+                walk |= clip.name.find("mutant walking") != std::string::npos;
+                run |= clip.name.find("mutant run") != std::string::npos;
+                attack |= clip.name.find("mutant swiping") != std::string::npos;
+            }
+            std::cout << '\n';
+            if (!Require(walk && run && attack,
+                    "AI actor wrapper cannot resolve walk/run/swipe clips")) return false;
+            using namespace renegade::runtime;
+            RuntimeCharacterSystemState actors;
+            RuntimeCharacterRecord actor;
+            actor.stableEntityId = PersistentEntityId(wrappedScene, wrapped.PlacedEntity());
+            actor.entity = wrapped.PlacedEntity();
+            actors.characters.push_back(actor);
+            RuntimeCombatState combat;
+            CharacterCombatRecord weapon;
+            weapon.characterId = actor.stableEntityId;
+            weapon.entity = actor.entity;
+            weapon.health = 100.0f;
+            combat.characters.push_back(weapon);
+            RuntimeCharacterDecisionState decisions;
+            CharacterDecisionRecord decision;
+            decision.characterId = actor.stableEntityId;
+            decision.intent = CharacterIntent::Idle;
+            decisions.characters.push_back(decision);
+            RuntimeCharacterAnimationState animations;
+            std::string animationError;
+            if (!Require(InitializeRuntimeCharacterAnimations(
+                    wrappedScene, actors, combat, animations, animationError),
+                    "real Mutant AI animation setup failed: " + animationError)) return false;
+            auto* selected = FindCharacterAnimation(animations, actor.stableEntityId);
+            if (!Require(selected != nullptr, "real Mutant AI actor not indexed")) return false;
+            const auto expect = [&](CharacterAnimationSemantic semantic, const char* label)
+            {
+                const auto* clip = wrappedScene.animations.GetComponent(selected->activeClip);
+                return Require(selected->activeSemantic == semantic &&
+                    clip != nullptr && clip->IsPlaying() &&
+                    selected->resolvedClipName.find(label) != std::string::npos,
+                    std::string("real Mutant AI failed native ") + label + " playback");
+            };
+            UpdateRuntimeCharacterAnimations(wrappedScene, actors, decisions, combat, animations);
+            if (!expect(CharacterAnimationSemantic::Idle, "Mutant")) return false;
+            decisions.characters.front().intent = CharacterIntent::Patrol;
+            UpdateRuntimeCharacterAnimations(wrappedScene, actors, decisions, combat, animations);
+            if (!expect(CharacterAnimationSemantic::Locomotion, "mutant walking")) return false;
+            decisions.characters.front().intent = CharacterIntent::Chase;
+            UpdateRuntimeCharacterAnimations(wrappedScene, actors, decisions, combat, animations);
+            if (!expect(CharacterAnimationSemantic::Run, "mutant run")) return false;
+            ++combat.characters.front().shotsFired;
+            UpdateRuntimeCharacterAnimations(wrappedScene, actors, decisions, combat, animations);
+            if (!expect(CharacterAnimationSemantic::Attack, "mutant swiping")) return false;
+            UpdateRuntimeCharacterAnimations(wrappedScene, actors, decisions, combat, animations);
+            if (!expect(CharacterAnimationSemantic::Attack, "mutant swiping")) return false;
+            (void)StopAnimation(wrappedScene, selected->activeClip);
+            UpdateRuntimeCharacterAnimations(wrappedScene, actors, decisions, combat, animations);
+            if (!expect(CharacterAnimationSemantic::Run, "mutant run")) return false;
+            std::cout << "REAL MUTANT AI TRANSITIONS // idle -> walk -> run -> swipe -> run PASS\n";
+            // Exercise the actual AI-01 -> AI-05 -> AI-06 integration using
+            // the real wrapped Mutant and authored intrinsic melee capability.
+            auto settings = CaptureCharacterSettings(wrappedScene, actor.entity);
+            settings.factionId = "Enemy";
+            settings.combatStyle = CombatStyle::Melee;
+            SetCharacterSettingsCommand configure(wrappedScene, actor.entity, settings);
+            if (!Require(configure.Execute(), "Mutant could not author intrinsic melee")) return false;
+            CharacterRuntimeState foundation;
+            std::string runtimeError;
+            if (!Require(InitializeRuntimeCharacters(wrappedScene, foundation, runtimeError),
+                    "real Mutant Runtime foundation failed: " + runtimeError)) return false;
+            RuntimeCharacterSystemState liveActors;
+            if (!Require(InitializeRuntimeCharacterSystem(
+                    wrappedScene, foundation, liveActors, runtimeError),
+                    "real Mutant AI profile failed: " + runtimeError)) return false;
+            RuntimeCharacterPerceptionState livePerception;
+            if (!Require(InitializeRuntimeCharacterPerception(
+                    liveActors, livePerception, runtimeError),
+                    "real Mutant perception failed: " + runtimeError)) return false;
+            RuntimeCharacterDecisionState liveDecisions;
+            if (!Require(InitializeRuntimeCharacterDecision(
+                    wrappedScene, liveActors, livePerception, liveDecisions, runtimeError),
+                    "real Mutant AI decision failed: " + runtimeError)) return false;
+            RuntimeCombatState liveCombat;
+            if (!Require(InitializeRuntimeCombat(
+                    wrappedScene, liveActors, liveCombat, runtimeError),
+                    "real Mutant intrinsic combat failed: " + runtimeError)) return false;
+            RuntimeCharacterAnimationState liveAnimations;
+            if (!Require(InitializeRuntimeCharacterAnimations(
+                    wrappedScene, liveActors, liveCombat, liveAnimations, runtimeError),
+                    "real Mutant AI06 setup failed: " + runtimeError)) return false;
+            auto* liveSelected = FindCharacterAnimation(liveAnimations, actor.stableEntityId);
+            if (!Require(liveSelected != nullptr, "real Mutant gameplay clips missing")) return false;
+            const auto* native = wrappedScene.characters.GetComponent(actor.entity);
+            if (!Require(native != nullptr && native->IsActive(),
+                    "real Mutant native controller not active")) return false;
+            auto& cognition = livePerception.characters.front();
+            cognition.awareness = AwarenessState::Combat;
+            cognition.suspicion = 100.0f;
+            ++cognition.cognitionTicks;
+            CharacterMemoryRecord target;
+            target.subjectId = RuntimePlayerKnowledgeId;
+            target.subjectFactionId = "Player";
+            target.source = KnowledgeSource::Seen;
+            target.lastKnownPosition = native->GetPositionInterpolated();
+            target.lastKnownPosition.x += 1.0f;
+            target.confidence = 1.0f;
+            target.threat = 1.0f;
+            target.hasPosition = true;
+            target.hostile = true;
+            target.directSight = true;
+            cognition.memories.push_back(target);
+            std::uint64_t gameplayEvents = 0;
+            const CombatEventEmitter emit = [&gameplayEvents](
+                GameplayEvent, std::string& eventError)
+            {
+                ++gameplayEvents;
+                eventError.clear();
+                return true;
+            };
+            UpdateRuntimeCombatDecision(
+                wrappedScene, liveActors, livePerception, liveDecisions,
+                liveCombat, emit, 1.0f / 60.0f);
+            UpdateRuntimeCharacterDecision(
+                wrappedScene, liveActors, livePerception, liveDecisions,
+                1.0f / 60.0f, false);
+            UpdateRuntimeCharacterAnimations(
+                wrappedScene, liveActors, liveDecisions, liveCombat,
+                liveAnimations);
+            if (!Require(liveDecisions.characters.front().intent == CharacterIntent::Attack &&
+                    liveCombat.characters.front().shotsFired > 0 &&
+                    gameplayEvents > 0 &&
+                    liveSelected->activeSemantic == CharacterAnimationSemantic::Attack &&
+                    liveSelected->resolvedClipName.find("mutant swiping") != std::string::npos &&
+                    wrappedScene.animations.GetComponent(liveSelected->activeClip)->IsPlaying(),
+                    "real Mutant AI saw a hostile target but did not attack with native swipe"))
+                return false;
+            ResetRuntimeCharacters(wrappedScene, foundation);
+            std::cout << "REAL MUTANT AUTONOMOUS COMBAT // hostile target -> melee event -> swipe PASS\n";
+        }
         if (!Require(importedPlacement.IsReady(),
                 "successful creator import did not return an in-memory placement handoff") ||
             !Require(importedPlacement.Result().assetId == imported.asset.assetId &&
@@ -651,8 +810,12 @@ int main(int argc, char** argv)
             "skinned/animated FBX fixture missing"))
         return 3;
 
+    const bool auditMode = argc == 6 && std::string(argv[4]) == "--audit-scene";
+    const fs::path auditPath = auditMode ? fs::u8path(argv[5]) : fs::path{};
+    if (auditMode && !Require(fs::is_regular_file(auditPath), "scene audit file missing"))
+        return 3;
     std::vector<fs::path> externalSources;
-    for (int index = 4; index < argc; ++index)
+    for (int index = 4; !auditMode && index < argc; ++index)
     {
         const fs::path source = fs::weakly_canonical(fs::u8path(argv[index]));
         if (!Require(fs::is_regular_file(source),
@@ -683,6 +846,39 @@ int main(int argc, char** argv)
                 "Wicked graphics device was not initialized"))
         {
             exitCode = 5;
+        }
+        else if (auditMode)
+        {
+            wi::Archive archive(auditPath.generic_u8string(), true, false);
+            if (!Require(archive.IsOpen(), "scene audit could not open archived scene"))
+                exitCode = 6;
+            else
+            {
+                wi::scene::Scene auditScene;
+                auditScene.Serialize(archive);
+                std::cout << "OWNER SCENE AUDIT // native_characters="
+                    << auditScene.characters.GetCount() << " authored_characters="
+                    << renegade::bridge::CollectCharacters(auditScene).size()
+                    << " animation_clips=" << auditScene.animations.GetCount() << '\n';
+                for (std::size_t i = 0; i < auditScene.characters.GetCount(); ++i)
+                {
+                    const auto entity = auditScene.characters.GetEntity(i);
+                    const auto* name = auditScene.names.GetComponent(entity);
+                    const bool authored = renegade::bridge::IsRenegadeCharacter(auditScene, entity);
+                    const auto clips = renegade::bridge::CollectAnimationClips(auditScene, entity, true);
+                    std::cout << "OWNER CHARACTER // name=" << (name ? name->name : "<unnamed>")
+                        << " authored=" << authored << " clips=" << clips.size();
+                    if (authored)
+                    {
+                        const auto settings = renegade::bridge::CaptureCharacterSettings(auditScene, entity);
+                        std::cout << " faction=" << settings.factionId
+                            << " combat_style=" << static_cast<int>(settings.combatStyle)
+                            << " weapon_id=" << settings.weaponEntityId;
+                    }
+                    for (const auto& clip : clips) std::cout << " [" << clip.name << "]";
+                    std::cout << '\n';
+                }
+            }
         }
         else if (!RunLifecycle(outputRoot / "creator-asset-project",
                 staticFixture, animatedFixture, externalSources))
