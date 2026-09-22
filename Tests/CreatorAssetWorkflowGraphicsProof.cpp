@@ -272,10 +272,25 @@ namespace
             auto* destinationScene = preparedCharacter.PeekMutableScene();
             if (!Require(destinationScene != nullptr, "prepared Character scene missing"))
                 return false;
+            std::cout << "MUTANT PRE-MAPPING HUMANOIDS=" << destinationScene->humanoids.GetCount();
+            for (std::size_t i = 0; i < destinationScene->humanoids.GetCount(); ++i)
+            {
+                const auto& h = destinationScene->humanoids[i];
+                std::cout << " [lookAt=" << h.IsLookAtEnabled()
+                    << " target=" << h.lookAtEntity
+                    << " xyz=" << h.lookAt.x << "," << h.lookAt.y << "," << h.lookAt.z << "]";
+            }
+            std::cout << '\n';
             originalCharacterClipCount = destinationScene->animations.GetCount();
             std::string mappingError;
             if (!Require(EnsureHumanoidAnimationSourceMapping(*destinationScene, mappingError),
                     "external Character destination mapping failed: " + mappingError))
+                return false;
+            if (!Require(destinationScene->humanoids.GetCount() > 0 &&
+                    std::all_of(destinationScene->humanoids.GetComponentArray().begin(),
+                                destinationScene->humanoids.GetComponentArray().end(),
+                                [](const auto& humanoid) { return !humanoid.IsLookAtEnabled(); }),
+                    "external-animation mapping restored unwanted default head look-at"))
                 return false;
             wi::ecs::Entity destination = wi::ecs::INVALID_ENTITY;
             for (std::size_t i = 0; i < destinationScene->armatures.GetCount(); ++i)
@@ -349,6 +364,11 @@ namespace
             return false;
         auto reopenedCharacter = workflow.PrepareModelPlacement(
             projectRoot.generic_u8string(), ProjectId, character.asset.assetId);
+        if (!externalSources.empty() &&
+            !Require(reopenedCharacter.IsReady() &&
+                     reopenedCharacter.PeekScene()->humanoids.GetCount() > 0 &&
+                     !reopenedCharacter.PeekScene()->humanoids[0].IsLookAtEnabled(),
+                     "governed Character reopened with unwanted head look-at")) return false;
         if (!externalSources.empty() &&
             !Require(reopenedCharacter.IsReady() &&
                      reopenedCharacter.PeekScene()->animations.GetCount() >=

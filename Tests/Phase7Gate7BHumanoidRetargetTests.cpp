@@ -121,11 +121,23 @@ int main()
     // An imported FBX has no authored look-at target. Wicked enables look-at
     // by default, which turns the head toward world origin on the first tick.
     auto* importedHumanoid = scene.humanoids.GetComponent(rig);
-    if (!Require(importedHumanoid != nullptr && importedHumanoid->IsLookAtEnabled(),
-            "test rig should exhibit Wicked default look-at")) return 1;
-    if (!Require(renegade::bridge::DisableDefaultHumanoidLookAt(scene) == 1 &&
-            !importedHumanoid->IsLookAtEnabled(),
-            "default look-at must be disabled before import preview and commit")) return 1;
+    if (!Require(importedHumanoid != nullptr && !importedHumanoid->IsLookAtEnabled(),
+            "auto-mapping after preview must not re-enable default head look-at")) return 1;
+    // Real Mutant.fbx already contains a valid native HumanoidComponent,
+    // so EnsureHumanoidAnimationSourceMapping skips creation on that path.
+    importedHumanoid->SetLookAtEnabled(true);
+    if (!Require(renegade::bridge::EnsureHumanoidAnimationSourceMapping(
+            scene, sourceMappingError) && !importedHumanoid->IsLookAtEnabled(),
+            "already-valid imported humanoid retained Wicked default look-at")) return 1;
+    // Legacy imported scenes may already contain the Wicked default; the
+    // original normalization still needs to repair those without authored targets.
+    wi::scene::Scene legacyScene;
+    const auto legacyRig = legacyScene.Entity_CreateTransform("Legacy imported rig");
+    auto& legacyHumanoid = legacyScene.humanoids.Create(legacyRig);
+    if (!Require(legacyHumanoid.IsLookAtEnabled() &&
+            renegade::bridge::DisableDefaultHumanoidLookAt(legacyScene) == 1 &&
+            !legacyHumanoid.IsLookAtEnabled(),
+            "legacy default look-at normalization regressed")) return 1;
     if (!Require(renegade::bridge::DisableDefaultHumanoidLookAt(scene) == 0,
             "default look-at normalization must be idempotent")) return 1;
     importedHumanoid->SetLookAtEnabled(true);

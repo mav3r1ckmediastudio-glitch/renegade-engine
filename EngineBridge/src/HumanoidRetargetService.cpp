@@ -350,6 +350,11 @@ namespace renegade::bridge
             error = "External animation has no complete humanoid armature; verify its bone names and required mappings.";
             return false;
         }
+        // Some FBXs, including the owner's real Mutant, already contain a
+        // valid HumanoidComponent with Wicked's enabled zero-target look-at.
+        // No new map is created for those rigs; normalize them as well.
+        // Explicit nonzero/entity look-at targets remain untouched.
+        (void)DisableDefaultHumanoidLookAt(scene);
         error.clear();
         return true;
     }
@@ -377,7 +382,13 @@ namespace renegade::bridge
         }
         auto* humanoid = scene_->humanoids.GetComponent(rigEntity_);
         if (humanoid == nullptr)
+        {
             humanoid = &scene_->humanoids.Create(rigEntity_);
+            // External animation import can create this component AFTER the
+            // initial preview look-at normalization. Never leave a newly
+            // mapped, unauthored rig tracking world origin by default.
+            humanoid->SetLookAtEnabled(false);
+        }
         for (std::size_t i = 0; i < HumanoidBoneCount; ++i)
             humanoid->bones[i] = mapping.bones[i];
 
