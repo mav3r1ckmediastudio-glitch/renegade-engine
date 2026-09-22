@@ -1,3 +1,8 @@
+## OWNER-APPROVED CHARACTER IMPORTER V4 BASELINE - 22 September 2026
+
+Owner visually accepted `RenegadeStudio_ImporterIsolation_v4.exe` as "perfect" **for UI appearance only**. Exact source commit `5152874fa443ce011981e8f0ac50ab1da1d2cfdf` is preserved on remote Git tag `importer-ui-v4-approved-20260922` and remote branch `checkpoint/approved-importer-ui-v4-20260922`; neither is `main`. The corresponding 28 MB executable and required Studio content were archived locally outside all build/worktree directories with matching SHA-256 `14C05F4BCDF6130C3DD5C218DEB6A65DB2ED4530AECAA72A33B7B4F1FE07E1D4`.
+
+Functional development begins on separate `feature/a6-animation-wiring-v4` branch from that exact tag. Read `docs/APPROVED_IMPORTER_V4_UI_FREEZE.md`; run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests/ApprovedImporterUiContract.ps1` after UI work (source guard only; visual owner comparison still required). V4 focused CTest 4/4 and Release Studio link passed prior to owner visual approval. No live full import-to-TestGame acceptance has occurred; action slots, source removal, frame ranges, existing-character editing and changed-reimport identity remain incomplete. Do not change the frozen UI without explicit owner approval. Original owner's assets/project, `main`, and unrelated untracked files remain untouched. Nothing in the new wiring branch is merged into `main`.
 # Renegade Engine — Current Handoff
 
 ## Character Importer action assignment - 22 September 2026

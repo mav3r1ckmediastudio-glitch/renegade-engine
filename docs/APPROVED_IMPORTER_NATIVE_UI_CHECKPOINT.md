@@ -1,3 +1,9 @@
+# V4 owner approval supersedes the historical V2 status below
+
+V4 presentation was accepted by the project owner on 22 September 2026. Exact preserved source, local executable archive and remaining functional work: [APPROVED_IMPORTER_V4_UI_FREEZE.md](APPROVED_IMPORTER_V4_UI_FREEZE.md). The V2 notes below are historical evidence, not the current acceptance state.
+
+---
+
 ﻿# Approved Character Importer UI — local checkpoint
 
 Branch: `feature/a6-approved-importer-ui`, based on the protected A6 recovery checkpoint `2492fd4`. This is not on `main` and has not been pushed or merged.
