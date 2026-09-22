@@ -32,6 +32,15 @@ namespace
         scene->Component_Attach(child, root, true);
         if (character && !renegade::bridge::MarkCharacterAssetTemplate(*scene))
             return {};
+        if (character)
+        {
+            for (const char* clipName : {"Idle", "Run"})
+            {
+                const auto clip = scene->Entity_CreateTransform(clipName);
+                scene->animations.Create(clip);
+                scene->Component_Attach(clip, root, true);
+            }
+        }
         return scene;
     }
 
@@ -72,7 +81,22 @@ int main()
         return 1;
 
     const wi::ecs::Entity firstCharacter = first.PlacedEntity();
+    const auto* initialPosition = scene.transforms.GetComponent(firstCharacter);
+    if (!Require(initialPosition != nullptr &&
+            initialPosition->GetPosition().x == 1.0f &&
+            initialPosition->GetPosition().y == 2.0f &&
+            initialPosition->GetPosition().z == 3.0f,
+            "native Character wrapper world position was not published on placement"))
+        return 1;
     const wi::ecs::Entity firstPayload = first.PayloadRootEntity();
+    // The imported action library is not a request to play Idle and Run
+    // simultaneously; Runtime AI must select the one active action.
+    int playingClips = 0;
+    for (std::size_t index = 0; index < scene.animations.GetCount(); ++index)
+        playingClips += scene.animations[index].IsPlaying() ? 1 : 0;
+    if (!Require(scene.animations.GetCount() == 2 && playingClips == 0,
+            "Character placement started all mutually exclusive animations"))
+        return 1;
     const StableId firstCharacterId = PersistentEntityId(scene, firstCharacter);
     const StableId firstPayloadId = PersistentEntityId(scene, firstPayload);
     if (!Require(IsRenegadeCharacter(scene, firstCharacter),

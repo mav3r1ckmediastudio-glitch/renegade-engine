@@ -11,6 +11,7 @@
 
 #include <WickedEngine.h>
 #include <chrono>
+#include <cmath>
 #include <Windows.h>
 
 #include <algorithm>
@@ -370,6 +371,30 @@ namespace
                         wi::ecs::INVALID_ENTITY,
                 "same-named Character reopened without native animation keys"))
             return false;
+        // Real FBX Character placement must publish the requested WORLD position
+        // immediately: Runtime startup reads TransformComponent::GetPosition()
+        // before the next Scene::Update and must not reset the NPC to origin.
+        {
+            SceneService characterScene;
+            characterScene.NewScene();
+            const XMFLOAT3 requested(17.0f, 3.0f, -9.0f);
+            const float scale = ImportService::ResolveScaleFactor(
+                ModelScaleMode::Automatic, *reopenedCharacter.PeekScene());
+            PlaceImportedModelCommand placeCharacter(
+                characterScene.GetScene(), reopenedCharacter.ReleaseScene(),
+                requested, scale);
+            if (!Require(placeCharacter.Execute(),
+                    "real imported Character could not be placed")) return false;
+            const auto entity = placeCharacter.PlacedEntity();
+            const auto* transform = characterScene.GetScene().transforms.GetComponent(entity);
+            if (!Require(transform != nullptr &&
+                    std::abs(transform->GetPosition().x - requested.x) < 0.001f &&
+                    std::abs(transform->GetPosition().y - requested.y) < 0.001f &&
+                    std::abs(transform->GetPosition().z - requested.z) < 0.001f,
+                    "real imported Character world transform reset to source origin"))
+                return false;
+        }
+
         if (!Require(importedPlacement.IsReady(),
                 "successful creator import did not return an in-memory placement handoff") ||
             !Require(importedPlacement.Result().assetId == imported.asset.assetId &&

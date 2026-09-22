@@ -634,6 +634,9 @@ namespace renegade::bridge
             instanceTransform->scale_local = XMFLOAT3(
                 scaleFactor_, scaleFactor_, scaleFactor_);
             instanceTransform->SetDirty();
+            // Runtime initializes its native controller from WORLD position.
+            // Publish the placed wrapper before attaching its payload.
+            instanceTransform->UpdateTransform();
 
             auto& instanceMetadata = scene_->metadatas.Create(entity_);
             instanceMetadata.string_values.set(
@@ -663,11 +666,10 @@ namespace renegade::bridge
                 return false;
             }
 
-            for (std::size_t index = animationCountBefore;
-                index < scene_->animations.GetCount(); ++index)
-            {
-                scene_->animations[index].Play();
-            }
+            // Multiple actions are mutually exclusive, not simultaneous.
+            // Leave the library stopped until Character Runtime chooses a clip.
+            if (scene_->animations.GetCount() == animationCountBefore + 1)
+                scene_->animations[animationCountBefore].Play();
 
             CaptureMaterialResources(materialCountBefore);
 

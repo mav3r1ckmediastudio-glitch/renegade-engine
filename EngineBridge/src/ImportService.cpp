@@ -792,6 +792,10 @@ namespace renegade::bridge
                     scaleFactor_,
                     scaleFactor_);
                 transform->SetDirty();
+                // The native Character controller reads GetPosition() from
+                // world on startup, before the next scene update. Publish the
+                // creator-selected placement immediately, not only to local.
+                transform->UpdateTransform();
             }
 
             // A single imported action retains the useful native default of
