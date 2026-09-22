@@ -25,6 +25,7 @@
 #include <iomanip>
 #include <memory>
 #include <sstream>
+#include <set>
 #include <utility>
 
 namespace
@@ -726,6 +727,7 @@ namespace
     renegade::studio::RenegadeTextInputField creatorImportAnimationEnd;
     renegade::studio::RenegadeTextInputField creatorImportAnimationSpeed;
     renegade::studio::RenegadeComboBox creatorImportAnimationEnabled;
+    renegade::studio::RenegadeComboBox creatorImportAnimationAction;
     renegade::studio::RenegadeButton creatorImportAnimationAdd;
     renegade::studio::RenegadeButton creatorImportAnimationDelete;
     renegade::studio::RenegadeButton creatorImportAnimationPlay;
@@ -1275,6 +1277,7 @@ namespace
             creatorImportAnimationEnd.SetValue(0.0f);
             creatorImportAnimationSpeed.SetValue(1.0f);
             creatorImportAnimationEnabled.SetSelectedWithoutCallback(-1);
+            creatorImportAnimationAction.SetSelectedWithoutCallback(0);
             creatorImportAnimationReadout.SetText("No animation actions detected.");
             return;
         }
@@ -1288,10 +1291,17 @@ namespace
         creatorImportAnimationEnd.SetValue(clip.end);
         creatorImportAnimationSpeed.SetValue(clip.speed);
         creatorImportAnimationEnabled.SetSelectedWithoutCallback(clip.enabled ? 0 : 1);
+        constexpr const char* actions[] = {"Unassigned", "Idle", "Walk", "Run",
+            "Attack", "Reload", "Hit", "Death"};
+        int actionIndex = 0;
+        for (int index = 1; index < 8; ++index)
+            if (clip.action == actions[index]) actionIndex = index;
+        creatorImportAnimationAction.SetSelectedWithoutCallback(actionIndex);
         std::ostringstream out;
         out.precision(3);
         out << std::fixed << "Source action " << clip.sourceAnimationIndex + 1
             << " // " << clip.start << " - " << clip.end
+            << " // action " << (clip.action.empty() ? "Unassigned" : clip.action)
             << " // " << clip.speed << "x speed"
             << " // " << (clip.enabled ? "INCLUDED" : "EXCLUDED");
         if (creatorModelImporter.previewScene.IsValid() &&
@@ -1389,7 +1399,20 @@ namespace
     {
         std::ostringstream status;
         status << "EXTERNAL SOURCES: " << creatorModelImporter.externalAnimations.size();
-        status << " // Imported actions appear in the table above."
+        status << " // Imported clips appear above.";
+        std::size_t assigned = 0;
+        bool idleAssigned = false;
+        for (const auto& clip : creatorModelImporter.animationRecipe)
+        {
+            if (!clip.enabled || clip.action.empty() || clip.action == "Unassigned")
+                continue;
+            ++assigned;
+            idleAssigned = idleAssigned || clip.action == "Idle";
+        }
+        status << " // ACTIONS ASSIGNED: " << assigned;
+        if (creatorModelImporter.importAsCharacter && !idleAssigned)
+            status << " // IDLE UNASSIGNED (no bind-pose fallback)";
+        status
                << "\nPREVIEW ONLY // CONFIRM ATTEMPTS GOVERNED COMMIT.";
         creatorImportExternalAnimationStatus.SetText(status.str());
         creatorImportExternalAnimationRemove.SetEnabled(
@@ -1491,6 +1514,7 @@ namespace
             clip.start = animation->start;
             clip.end = animation->end;
             clip.enabled = true;
+            clip.action = "Unassigned";
             creatorModelImporter.animationEntities.push_back(entity);
             creatorModelImporter.animationSourceRanges.push_back(
                 XMFLOAT2(animation->start, animation->end));
@@ -5063,6 +5087,21 @@ namespace renegade::studio
             creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation].speed = args.fValue;
             RefreshCreatorImportAnimationEditor();
         });
+        creatorImportAnimationAction.Create("Character Action Assignment");
+        for (const char* action : {"UNASSIGNED / REFERENCE", "IDLE", "WALK",
+                "RUN", "ATTACK", "RELOAD", "HIT", "DEATH"})
+            creatorImportAnimationAction.AddItem(action);
+        creatorImportAnimationAction.OnSelect([](const wi::gui::EventArgs& args)
+        {
+            if (creatorModelImporter.animationRecipe.empty() ||
+                args.iValue < 0 || args.iValue >= 8) return;
+            constexpr const char* actions[] = {"Unassigned", "Idle", "Walk",
+                "Run", "Attack", "Reload", "Hit", "Death"};
+            creatorModelImporter.animationRecipe[
+                creatorModelImporter.selectedAnimation].action = actions[args.iValue];
+            RefreshCreatorImportAnimationEditor();
+            RefreshCreatorExternalAnimationQueue();
+        });
         creatorImportAnimationEnabled.Create("Animation Included");
         creatorImportAnimationEnabled.AddItem("INCLUDE");
         creatorImportAnimationEnabled.AddItem("EXCLUDE");
@@ -5347,6 +5386,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAnimationEnd),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationSpeed),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationAction),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationPlay),
@@ -6695,6 +6735,8 @@ namespace renegade::studio
                 layoutFullRow(creatorImportAnimationSpeed, animationY);
                 animationY += 36.0f;
                 layoutFullRow(creatorImportAnimationEnabled, animationY);
+                animationY += 36.0f;
+                layoutFullRow(creatorImportAnimationAction, animationY);
                 animationY += 36.0f;
                 creatorImportAnimationAdd.SetPos(XMFLOAT2(12.0f, animationY));
                 creatorImportAnimationDelete.SetPos(XMFLOAT2(16.0f + trimWidth, animationY));
@@ -12081,6 +12123,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                                 clip.start = animation->start;
                                 clip.end = animation->end;
                                 clip.enabled = true;
+                                clip.action = "Unassigned";
                                 creatorModelImporter.animationRecipe.push_back(std::move(clip));
                             }
                         }
@@ -12507,6 +12550,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             {&creatorImportAnimationTable, &creatorImportAnimationName,
              &creatorImportAnimationStart, &creatorImportAnimationEnd,
              &creatorImportAnimationSpeed, &creatorImportAnimationEnabled,
+             &creatorImportAnimationAction,
              &creatorImportAnimationAdd,
              &creatorImportAnimationDelete, &creatorImportAnimationPlay,
              &creatorImportAnimationPause, &creatorImportAnimationStop});
@@ -12593,6 +12637,29 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         {
             DismissImportScalePanel();
             return;
+        }
+
+        // Clip names are a creator-facing contract: reject ambiguity at import,
+        // rather than picking the first identically named animation at Runtime.
+        if (creatorModelImporter.assetKind == bridge::CreatorAssetImportKind::Character)
+        {
+            std::set<std::string> names;
+            for (const auto& clip : creatorModelImporter.animationRecipe)
+            {
+                if (!clip.enabled) continue;
+                std::string key = clip.name;
+                std::transform(key.begin(), key.end(), key.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (key.empty() || !names.insert(key).second)
+                {
+                    creatorImportThumbnailStatus.SetText(
+                        "IMPORT BLOCKED // NAME EACH INCLUDED CLIP DIFFERENTLY");
+                    ShowStudioMessageBox(
+                        "Included Character animation clips need different non-empty names. Rename duplicate clips on the Animations page.",
+                        "Character Animation Names");
+                    return;
+                }
+            }
         }
 
         const auto& project = session_->Projects().CurrentProject();

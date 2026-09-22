@@ -5,6 +5,7 @@
 #include "RuntimeCombatService.h"
 
 #include "renegade/bridge/AnimationService.h"
+#include "renegade/bridge/CreatorModelImportRecipe.h"
 
 #include <algorithm>
 #include <array>
@@ -186,32 +187,47 @@ namespace renegade::runtime
             record.observedDamage = combatRecord->damageTaken;
             record.observedHealth = combatRecord->health;
 
-            std::vector<RuntimeAnimationClip> unnamedIdleFallback;
-            for (const auto& clip : bridge::CollectAnimationClips(
-                     scene, character.entity, true))
+            const auto available = bridge::CollectAnimationClips(
+                scene, character.entity, true);
+            const bool hasAuthoredActions = std::any_of(
+                available.begin(), available.end(), [&scene](const auto& clip)
+                {
+                    const auto* metadata = scene.metadatas.GetComponent(clip.entity);
+                    return metadata != nullptr && metadata->string_values.has(
+                        bridge::CreatorCharacterAnimationActionMetadataKey);
+                });
+            for (const auto& clip : available)
             {
                 if (clip.entity == wi::ecs::INVALID_ENTITY)
                     continue;
-                const auto semantic = InferCharacterAnimationSemantic(clip.name);
-                if (semantic == CharacterAnimationSemantic::Idle &&
-                    !IsExplicitCharacterIdleName(clip.name))
+                CharacterAnimationSemantic semantic = CharacterAnimationSemantic::Idle;
+                if (hasAuthoredActions)
                 {
-                    unnamedIdleFallback.push_back({clip.entity, clip.name});
+                    const auto* metadata = scene.metadatas.GetComponent(clip.entity);
+                    if (metadata == nullptr || !metadata->string_values.has(
+                            bridge::CreatorCharacterAnimationActionMetadataKey))
+                        continue;
+                    const std::string action = metadata->string_values.get(
+                        bridge::CreatorCharacterAnimationActionMetadataKey);
+                    if (action == "Idle") semantic = CharacterAnimationSemantic::Idle;
+                    else if (action == "Walk") semantic = CharacterAnimationSemantic::Locomotion;
+                    else if (action == "Run") semantic = CharacterAnimationSemantic::Run;
+                    else if (action == "Attack") semantic = CharacterAnimationSemantic::Attack;
+                    else if (action == "Reload") semantic = CharacterAnimationSemantic::Reload;
+                    else if (action == "Hit") semantic = CharacterAnimationSemantic::Hit;
+                    else if (action == "Death") semantic = CharacterAnimationSemantic::Death;
+                    else continue; // Unassigned/custom actions cannot become Idle.
                 }
                 else
                 {
-                    record.clips[CharacterAnimationIndex(semantic)]
-                        .push_back({clip.entity, clip.name});
+                    semantic = InferCharacterAnimationSemantic(clip.name);
+                    if (semantic == CharacterAnimationSemantic::Idle &&
+                        !IsExplicitCharacterIdleName(clip.name))
+                        continue; // Never treat an unnamed bind/turn clip as Idle.
                 }
+                record.clips[CharacterAnimationIndex(semantic)]
+                    .push_back({clip.entity, clip.name});
             }
-            // A short FBX bind-pose clip named after the model is not an idle.
-            // Turn/jump/flex clips are likewise not idle variants when the
-            // asset supplies actual Idle/Breath animations. Retain legacy
-            // fallback only for assets without any explicitly named idle.
-            auto& idles = record.clips[CharacterAnimationIndex(
-                CharacterAnimationSemantic::Idle)];
-            if (idles.empty())
-                idles = std::move(unnamedIdleFallback);
 
             for (auto& variants : record.clips)
             {
@@ -264,9 +280,13 @@ namespace renegade::runtime
             return false;
         }
 
+        auto* active = scene.animations.GetComponent(record.activeClip);
+        // A fresh combat event must not cut off an already-playing one-shot.
+        if (record.activeSemantic == semantic && active != nullptr &&
+            active->IsPlaying() && active->IsPlayingOnce())
+            return true;
         const RuntimeAnimationClip& next = (*variants)[
             record.variantSequence++ % variants->size()];
-        auto* active = scene.animations.GetComponent(record.activeClip);
         if (record.activeClip == next.entity &&
             record.activeSemantic == semantic &&
             active != nullptr && active->IsPlaying())
@@ -407,7 +427,23 @@ namespace renegade::runtime
                  requested == CharacterAnimationSemantic::Run))
             {
                 const auto* active = scene.animations.GetComponent(record->activeClip);
-                requestPlayback = active == nullptr || !active->IsPlaying();
+                const auto& variants = record->clips[CharacterAnimationIndex(requested)];
+                const bool fallbackWalk = requested == CharacterAnimationSemantic::Run &&
+                    !record->clips[CharacterAnimationIndex(
+                        CharacterAnimationSemantic::Locomotion)].empty();
+                requestPlayback = (!variants.empty() || fallbackWalk) &&
+                    (active == nullptr || !active->IsPlaying());
+            }
+            // No authored Idle means no Idle. Never substitute the source bind pose,
+            // and do not count a missing optional loop as a failure every frame.
+            if (requestPlayback && requested == CharacterAnimationSemantic::Idle &&
+                record->clips[CharacterAnimationIndex(requested)].empty())
+            {
+                record->activeClip = wi::ecs::INVALID_ENTITY;
+                record->activeSemantic = requested;
+                record->resolvedClipName.clear();
+                record->lastRequest = "Idle (unassigned)";
+                requestPlayback = false;
             }
             if (requestPlayback)
                 (void)RequestCharacterAnimation(scene, state, *record, requested);

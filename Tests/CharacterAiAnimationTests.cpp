@@ -161,11 +161,15 @@ int main()
     }
     const wi::ecs::Entity firstAttack = record->activeClip;
 
+    // A second request while the first one-shot plays must not switch clips.
+    if (!RequestCharacterAnimation(
+            scene, state, *record, CharacterAnimationSemantic::Attack) ||
+        record->activeClip != firstAttack)
+        return Fail("second attack request interrupted the active one-shot");
+    (void)renegade::bridge::StopAnimation(scene, firstAttack);
     if (!RequestCharacterAnimation(
             scene, state, *record, CharacterAnimationSemantic::Attack))
-    {
-        return Fail("second attack variant request");
-    }
+        return Fail("second attack variant request after completion");
     auto* attackTwoAnimation = scene.animations.GetComponent(record->activeClip);
     if (attackTwoAnimation == nullptr || !attackTwoAnimation->IsPlaying() ||
         record->activeClip == firstAttack)
@@ -213,6 +217,40 @@ int main()
     {
         return Fail("missing optional animation must fail safely");
     }
+
+    // Author-defined actions override filename guesses and never play a bind pose.
+    wi::scene::Scene explicitScene;
+    const auto explicitActor = explicitScene.Entity_CreateTransform("AssignedCharacter");
+    const auto pose = AddClip(explicitScene, explicitActor, "Mutant");
+    explicitScene.animations.GetComponent(pose)->end = 0.0333333f;
+    const auto explicitAttack = AddClip(explicitScene, explicitActor, "LooksLikeIdle");
+    const auto explicitRun = AddClip(explicitScene, explicitActor, "LooksLikePunch");
+    for (const auto& pair : {std::pair{pose, "Unassigned"},
+            std::pair{explicitAttack, "Attack"}, std::pair{explicitRun, "Run"}})
+        explicitScene.metadatas.Create(pair.first).string_values.set(
+            renegade::bridge::CreatorCharacterAnimationActionMetadataKey, pair.second);
+    RuntimeCharacterSystemState explicitCharacters;
+    RuntimeCharacterRecord explicitRecord;
+    explicitRecord.stableEntityId = "00000000-0000-4000-8000-000000000016";
+    explicitRecord.entity = explicitActor;
+    explicitCharacters.characters.push_back(explicitRecord);
+    RuntimeCombatState explicitCombat;
+    CharacterCombatRecord explicitCombatRecord;
+    explicitCombatRecord.characterId = explicitRecord.stableEntityId;
+    explicitCombatRecord.entity = explicitActor;
+    explicitCombat.characters.push_back(explicitCombatRecord);
+    RuntimeCharacterAnimationState explicitState;
+    if (!InitializeRuntimeCharacterAnimations(explicitScene, explicitCharacters,
+            explicitCombat, explicitState, error))
+        return Fail("explicit action setup: " + error);
+    auto* assigned = FindCharacterAnimation(explicitState, explicitRecord.stableEntityId);
+    if (assigned == nullptr ||
+        !assigned->clips[CharacterAnimationIndex(CharacterAnimationSemantic::Idle)].empty() ||
+        assigned->clips[CharacterAnimationIndex(CharacterAnimationSemantic::Attack)].size() != 1 ||
+        assigned->clips[CharacterAnimationIndex(CharacterAnimationSemantic::Run)].size() != 1 ||
+        !RequestCharacterAnimation(explicitScene, explicitState, *assigned,
+            CharacterAnimationSemantic::Attack) || assigned->activeClip != explicitAttack)
+        return Fail("authored actions must override names; reference pose is not Idle");
 
     std::cout << "AI06_PASS semantic-native-playback-variants-action-run-fallback\n";
     return 0;

@@ -40,6 +40,8 @@ namespace renegade::bridge
         float start = 0.0f;
         float end = 0.0f;
         float speed = 1.0f; // Native playback multiplier, 0.1x..4x.
+        // Empty means a legacy recipe. New Characters assign an action explicitly.
+        std::string action;
         bool enabled = true;
     };
 
@@ -80,6 +82,11 @@ namespace renegade::bridge
         std::vector<CreatorAnimationImportRecipe> animations;
         std::vector<CreatorExternalAnimationImportRecipe> externalAnimations;
     };
+
+    // Stored on each native animation entity inside the governed Character WISCENE.
+    // Unassigned deliberately excludes a reference-pose clip.
+    inline constexpr const char* CreatorCharacterAnimationActionMetadataKey =
+        "renegade.character.animation.action";
 
     inline constexpr const char* CreatorAuthoredTransformRootName =
         "__renegade_creator_authored_transform";

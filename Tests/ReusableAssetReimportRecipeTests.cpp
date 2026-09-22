@@ -132,6 +132,7 @@ namespace
         walk.start = 2.0f;
         walk.end = 18.0f;
         walk.speed = 1.5f;
+        walk.action = "Walk";
         walk.enabled = true;
         recipe.animations.push_back(walk);
 
@@ -196,6 +197,7 @@ namespace
                 decoded.animations[0].start == 2.0f &&
                 decoded.animations[0].end == 18.0f &&
                 decoded.animations[0].speed == 1.5f &&
+                decoded.animations[0].action == "Walk" &&
                 decoded.animations[0].enabled &&
                 !decoded.animations[1].enabled,
                 "creator animation clip data did not round-trip") ||
@@ -210,7 +212,8 @@ namespace
         if (!Require(ParseCreatorModelImportOptions(
                 "{\"animations\":[{\"enabled\":true,\"end\":1.0,\"name\":\"Legacy\",\"source_animation_index\":0,\"start\":0.0}]}",
                 legacy, error) && legacy.animations.size() == 1 &&
-                legacy.animations[0].speed == 1.0f,
+                legacy.animations[0].speed == 1.0f &&
+                legacy.animations[0].action.empty(),
                 "legacy animation speed default did not parse"))
             return false;
 

@@ -605,8 +605,10 @@ namespace renegade::bridge
                         error = "Each creator animation recipe requires source index, name, start, end and enabled.";
                         return false;
                     }
-                    if (item.size() != 5 + (item.contains("speed") ? 1 : 0) ||
-                        (item.contains("speed") && !item.at("speed").is_number()))
+                    if (item.size() != 5 + (item.contains("speed") ? 1 : 0) +
+                        (item.contains("action") ? 1 : 0) ||
+                        (item.contains("speed") && !item.at("speed").is_number()) ||
+                        (item.contains("action") && !item.at("action").is_string()))
                     {
                         error = "Creator animation recipe contains unsupported fields or speed.";
                         return false;
@@ -618,6 +620,14 @@ namespace renegade::bridge
                     animation.start = item.at("start").get<float>();
                     animation.end = item.at("end").get<float>();
                     animation.speed = item.value("speed", 1.0f);
+                    animation.action = item.value("action", std::string{});
+                    if (animation.action.size() > 64 ||
+                        std::any_of(animation.action.begin(), animation.action.end(),
+                            [](unsigned char c) { return c < 32; }))
+                    {
+                        error = "Creator animation action label is invalid.";
+                        return false;
+                    }
                     animation.enabled = item.at("enabled").get<bool>();
                     if (!std::isfinite(animation.speed) ||
                         animation.speed < 0.1f || animation.speed > 4.0f)
@@ -783,6 +793,8 @@ namespace renegade::bridge
                 };
                 if (animation.speed != 1.0f)
                     entry["speed"] = animation.speed;
+                if (!animation.action.empty())
+                    entry["action"] = animation.action;
                 animations.push_back(std::move(entry));
             }
             root["animations"] = std::move(animations);
@@ -968,6 +980,15 @@ namespace renegade::bridge
                 if (name == nullptr)
                     name = &scene.names.Create(target);
                 name->name = clip.name.empty() ? source.name : clip.name;
+                if (recipe.assetKind == CreatorAssetImportKind::Character &&
+                    !clip.action.empty())
+                {
+                    auto* metadata = scene.metadatas.GetComponent(target);
+                    if (metadata == nullptr)
+                        metadata = &scene.metadatas.Create(target);
+                    metadata->string_values.set(
+                        CreatorCharacterAnimationActionMetadataKey, clip.action);
+                }
             }
         }
 

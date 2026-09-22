@@ -320,9 +320,41 @@ namespace
                         std::chrono::steady_clock::now()-retargetStarted).count() << '\n';
             }
         }
+        // Exercise real importer action metadata through governed .rasset save/reopen.
+        std::string characterOptions = R"({"asset_kind":"character"})";
+        if (!externalSources.empty())
+        {
+            CreatorModelImportRecipe authored;
+            authored.assetKind = CreatorAssetImportKind::Character;
+            const auto* sourceScene = preparedCharacter.PeekScene();
+            for (std::size_t index = 0; index < sourceScene->animations.GetCount(); ++index)
+            {
+                const auto entity = sourceScene->animations.GetEntity(index);
+                const auto& native = sourceScene->animations[index];
+                const auto* name = sourceScene->names.GetComponent(entity);
+                CreatorAnimationImportRecipe clip;
+                clip.sourceAnimationIndex = static_cast<std::uint32_t>(index);
+                clip.name = name ? name->name : "Animation " + std::to_string(index);
+                clip.start = native.start;
+                clip.end = native.end;
+                clip.action = "Unassigned";
+                std::string normalized = clip.name;
+                std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (normalized.find("walking") != std::string::npos) clip.action = "Walk";
+                else if (normalized.find("run") != std::string::npos) clip.action = "Run";
+                else if (normalized.find("swiping") != std::string::npos) clip.action = "Attack";
+                authored.animations.push_back(std::move(clip));
+            }
+            std::string actionError;
+            if (!Require(SerializeCreatorModelImportOptions(
+                    authored, characterOptions, actionError),
+                    "real Mutant action assignments did not serialize: " + actionError))
+                return false;
+        }
         const auto workflowStarted = std::chrono::steady_clock::now();
         auto character = workflow.ImportModel(projectRoot.generic_u8string(), ProjectId,
-            animatedFixture.generic_u8string(), "{\"asset_kind\":\"character\"}", sharedStem,
+            animatedFixture.generic_u8string(), characterOptions, sharedStem,
             "Content/Characters", std::move(preparedCharacter), {});
         if (!externalSources.empty())
             std::cout << "EXTERNAL CHARACTER GOVERNED PACKAGE MS=" <<
@@ -382,13 +414,30 @@ namespace
         {
             const auto& scene = *reopenedCharacter.PeekScene();
             std::cout << "PERSISTED CHARACTER ANIMATIONS //";
+            std::size_t tagged = 0, walks = 0, runs = 0, attacks = 0, poses = 0;
             for (std::size_t index = 0; index < scene.animations.GetCount(); ++index)
             {
                 const auto entity = scene.animations.GetEntity(index);
                 const auto* name = scene.names.GetComponent(entity);
+                const auto* metadata = scene.metadatas.GetComponent(entity);
+                if (metadata != nullptr && metadata->string_values.has(
+                        CreatorCharacterAnimationActionMetadataKey))
+                {
+                    ++tagged;
+                    const auto action = metadata->string_values.get(
+                        CreatorCharacterAnimationActionMetadataKey);
+                    walks += action == "Walk";
+                    runs += action == "Run";
+                    attacks += action == "Attack";
+                    poses += action == "Unassigned";
+                }
                 std::cout << " [" << (name == nullptr ? "<unnamed>" : name->name) << "]";
             }
             std::cout << '\n';
+            if (!Require(tagged == scene.animations.GetCount() &&
+                    walks >= 1 && runs >= 1 && attacks >= 1 && poses >= 1,
+                    "authored clip assignments did not survive governed RAsset reopen"))
+                return false;
         }
         if (!Require(reopenedCharacter.IsReady() &&
                     FindKeyedNativeAnimation(*reopenedCharacter.PeekScene()) !=
@@ -500,7 +549,9 @@ namespace
                     std::string("real Mutant AI failed native ") + label + " playback");
             };
             UpdateRuntimeCharacterAnimations(wrappedScene, actors, decisions, combat, animations);
-            if (!expect(CharacterAnimationSemantic::Idle, "Mutant")) return false;
+            if (!Require(selected->activeClip == wi::ecs::INVALID_ENTITY &&
+                    selected->clips[CharacterAnimationIndex(CharacterAnimationSemantic::Idle)].empty(),
+                    "unassigned base pose became gameplay Idle")) return false;
             decisions.characters.front().intent = CharacterIntent::Patrol;
             UpdateRuntimeCharacterAnimations(wrappedScene, actors, decisions, combat, animations);
             if (!expect(CharacterAnimationSemantic::Locomotion, "mutant walking")) return false;
@@ -515,7 +566,7 @@ namespace
             (void)StopAnimation(wrappedScene, selected->activeClip);
             UpdateRuntimeCharacterAnimations(wrappedScene, actors, decisions, combat, animations);
             if (!expect(CharacterAnimationSemantic::Run, "mutant run")) return false;
-            std::cout << "REAL MUTANT AI TRANSITIONS // idle -> walk -> run -> swipe -> run PASS\n";
+            std::cout << "REAL MUTANT AI TRANSITIONS // unassigned pose -> walk -> run -> swipe -> run PASS\n";
             // Exercise the actual AI-01 -> AI-05 -> AI-06 integration using
             // the real wrapped Mutant and authored intrinsic melee capability.
             auto settings = CaptureCharacterSettings(wrappedScene, actor.entity);
