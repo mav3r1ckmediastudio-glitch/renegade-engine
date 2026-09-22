@@ -28,3 +28,7 @@ Branch: `feature/a6-approved-importer-ui`, based on the protected A6 recovery ch
 - Screen-sized layout and scrolling, dropdown popovers, source removal, controls with six+ clips and multiple sources require an actual native owner inspection. The original mockup is the acceptance reference; structural resemblance alone is not final visual acceptance.
 - Full approved workflow remains incomplete: per-source removal rather than remove-last, arbitrary custom action categories, expandable named variant slots beyond the current Attack add/remove behaviour, frame-number trimming (existing controls use seconds), reopening an existing character in the importer and reimport identity reconciliation.
 - Do not merge or claim final importer completion based on a successful build or these four tests alone.
+
+## Later V4 owner approval and first functionality checkpoint (supersedes v2 notes above)
+
+The owner accepted exact V4 UI at `5152874`; it is frozen in the tag `importer-ui-v4-approved-20260922`. Functional wiring now occurs on `feature/a6-animation-wiring-v4`; first code checkpoint `8540887` validates native-time trim, reports errors in the visible Validation card and verifies real-Mutant duplicate-clip save/reopen, native transitions and melee. See `docs/APPROVED_IMPORTER_V4_UI_FREEZE.md` and `docs/CHARACTER_IMPORTER_V4_WIRING_HANDOFF.md`. The historical v2 unverified notes above do not describe the current V4/V5 status.
