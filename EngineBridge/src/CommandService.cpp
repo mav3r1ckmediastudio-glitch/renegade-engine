@@ -1,5 +1,6 @@
 #include "renegade/bridge/CommandService.h"
 
+#include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/CollisionService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/SunService.h"
@@ -616,6 +617,7 @@ namespace renegade::bridge
         transform->translation_local = translation;
         transform->SetDirty();
         transform->UpdateTransform();
+        renegade::bridge::SyncNativeCharacterPoseFromTransform(*scene_, entity_);
         return true;
     }
 
@@ -674,6 +676,7 @@ namespace renegade::bridge
         transform->scale_local = transformState.scale;
         transform->SetDirty();
         transform->UpdateTransform();
+        renegade::bridge::SyncNativeCharacterPoseFromTransform(*scene_, entity_);
 
         // Primitive dimensions on a reusable asset are authored in root-local
         // space. The renderer's gizmo previews its after-state before this

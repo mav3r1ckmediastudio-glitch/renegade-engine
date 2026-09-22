@@ -3,6 +3,7 @@
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/IdentityService.h"
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -11,6 +12,30 @@
 
 namespace renegade::bridge
 {
+    // Wicked writes CharacterComponent pose to TransformComponent even when
+    // inactive. Mirror authored edits into the controller immediately so an
+    // editor frame cannot teleport or reverse an NPC after promotion/gizmo.
+    inline void SyncNativeCharacterPoseFromTransform(
+        wi::scene::Scene& scene, const wi::ecs::Entity entity) noexcept
+    {
+        auto* transform = scene.transforms.GetComponent(entity);
+        auto* character = scene.characters.GetComponent(entity);
+        if (transform == nullptr || character == nullptr)
+            return;
+        transform->UpdateTransform();
+        character->SetPosition(transform->GetPosition());
+        const XMFLOAT3 forward = transform->GetForward();
+        const float horizontal = std::sqrt(forward.x * forward.x + forward.z * forward.z);
+        if (horizontal > 0.0001f)
+        {
+            // Wicked applies an additional PI yaw in RunCharacterUpdateSystem.
+            character->SetFacing(XMFLOAT3(
+                -forward.x / horizontal, 0.0f, -forward.z / horizontal));
+        }
+        // CharacterComponent supplies a uniform scale when updating Transform.
+        character->scale = transform->scale_local.x;
+    }
+
     inline constexpr const char* CharacterMetadataKey = "renegade.character";
     inline constexpr const char* CharacterSchemaVersionMetadataKey = "renegade.character.version";
     inline constexpr const char* CharacterTypeMetadataKey = "renegade.character.type";

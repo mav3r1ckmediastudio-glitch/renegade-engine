@@ -179,6 +179,25 @@ int main()
         return 1;
     }
 
+    // Studio's actual drag path calls Scene::Instantiate on a cached Character
+    // template, attaches that payload to a cursor wrapper, then adopts it.
+    wi::scene::Scene instantiatedScene;
+    auto cachedCharacter = MakeTemplate("Cached Mutant", true);
+    if (!Require(cachedCharacter.IsValid(), "cached Character template unavailable")) return 1;
+    const auto instantiatedPayload = instantiatedScene.Instantiate(*cachedCharacter, true);
+    if (!Require(instantiatedPayload != wi::ecs::INVALID_ENTITY &&
+            CharacterAssetTemplateInHierarchy(instantiatedScene, instantiatedPayload),
+            "Wicked Instantiate lost the Character template marker")) return 1;
+    const auto instantiatedWrapper = instantiatedScene.Entity_CreateTransform("Live Drag Wrapper");
+    instantiatedScene.Component_Attach(instantiatedPayload, instantiatedWrapper, true);
+    PlaceReusableModelCommand instantiatedDrag(
+        instantiatedScene, CharacterAssetId, instantiatedWrapper,
+        instantiatedPayload, 0, "Cached Mutant.rasset");
+    if (!Require(instantiatedDrag.Execute() &&
+            IsRenegadeCharacter(instantiatedScene, instantiatedWrapper) &&
+            instantiatedScene.characters.Contains(instantiatedWrapper),
+            "actual cached drag/drop did not auto-promote Character")) return 1;
+
     // Studio drag/drop adopts a live cursor hierarchy rather than merging a
     // second copy. The payload marker must therefore drive Character promotion
     // through the adopt-existing constructor too.

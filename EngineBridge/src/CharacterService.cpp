@@ -433,8 +433,7 @@ namespace renegade::bridge
                 ResetRuntimeCharacters(scene, candidate);
                 return false;
             }
-            character->SetPosition(transform->GetPosition());
-            character->SetFacing(transform->GetForward());
+            SyncNativeCharacterPoseFromTransform(scene, record.entity);
             character->SetActive(true);
         }
 
@@ -505,6 +504,8 @@ namespace renegade::bridge
             character->SetFootPlacementEnabled(false);
         }
         character->SetActive(false);
+        // Seed the controller before Wicked's next inactive-character update.
+        SyncNativeCharacterPoseFromTransform(*scene_, entity_);
 
         auto* metadata = scene_->metadatas.GetComponent(entity_);
         if (metadata == nullptr)

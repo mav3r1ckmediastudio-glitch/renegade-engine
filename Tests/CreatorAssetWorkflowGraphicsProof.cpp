@@ -432,6 +432,27 @@ namespace
             if (!Require(wrapped.Execute(), "real Character wrapper placement failed")) return false;
             if (!Require(IsRenegadeCharacter(wrappedScene, wrapped.PlacedEntity()),
                     "Character folder imported a Model without a real AI Character")) return false;
+            // Actual Wicked update overwrites inactive Character transforms too.
+            // Prove the real imported instance keeps its pose across a scene tick.
+            {
+                const auto e = wrapped.PlacedEntity();
+                auto* t = wrappedScene.transforms.GetComponent(e);
+                auto* c = wrappedScene.characters.GetComponent(e);
+                if (!Require(t != nullptr && c != nullptr,
+                        "Mutant pose proof missing transform/controller")) return false;
+                const auto beforeForward = t->GetForward();
+                wrappedScene.dt = 1.0f / 60.0f;
+                wi::jobsystem::context characterTick;
+                wrappedScene.RunCharacterUpdateSystem(characterTick);
+                t = wrappedScene.transforms.GetComponent(e);
+                if (!Require(t != nullptr &&
+                        std::abs(t->GetPosition().x - 17.0f) < 0.01f &&
+                        std::abs(t->GetPosition().y - 3.0f) < 0.01f &&
+                        std::abs(t->GetPosition().z + 9.0f) < 0.01f &&
+                        std::abs(t->GetForward().x - beforeForward.x) < 0.01f &&
+                        std::abs(t->GetForward().z - beforeForward.z) < 0.01f,
+                        "real Mutant reset position or flipped after native Wicked Character update")) return false;
+            }
             const auto clips = CollectAnimationClips(wrappedScene, wrapped.PlacedEntity(), true);
             std::cout << "REAL MUTANT AI WRAPPER CLIPS=" << clips.size();
             bool walk = false, run = false, attack = false;

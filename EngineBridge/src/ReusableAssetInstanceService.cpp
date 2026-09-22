@@ -445,7 +445,8 @@ namespace renegade::bridge
         const wi::ecs::Entity existingInstanceRoot,
         const wi::ecs::Entity existingPayloadRoot,
         const std::size_t firstMaterialIndex,
-        std::string displayName)
+        std::string displayName,
+        const bool preparedCharacterAsset)
         : scene_(&targetScene)
         , assetId_(std::move(assetId))
         , displayName_(NormalizeReusableAssetDisplayName(displayName))
@@ -454,7 +455,9 @@ namespace renegade::bridge
         , firstMaterialIndex_(firstMaterialIndex)
         , adoptExisting_(true)
     {
-        promoteCharacter_ =
+        // Authoritative cached import recipe survives even if an instancing
+        // path drops the optional metadata marker on the new payload.
+        promoteCharacter_ = preparedCharacterAsset ||
             CharacterAssetTemplateInHierarchy(targetScene, existingPayloadRoot);
     }
 

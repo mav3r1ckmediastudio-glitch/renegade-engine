@@ -49,6 +49,49 @@ int main()
     if (nativeCharacter == nullptr || nativeCharacter->IsActive())
         return Fail("MAKE CHARACTER did not create an inactive native CharacterComponent");
 
+    // Regression: native Wicked controllers overwrite the Transform every
+    // editor frame, including while inactive. Promotion must seed its world
+    // position and inverse visual facing BEFORE the first scene update.
+    wi::scene::Scene placed;
+    const auto placedActor = placed.Entity_CreateTransform("Placed mutant");
+    auto* placedTransform = placed.transforms.GetComponent(placedActor);
+    placedTransform->translation_local = XMFLOAT3(17.0f, 3.0f, -9.0f);
+    placedTransform->RotateRollPitchYaw(XMFLOAT3(0.0f, 0.7f, 0.0f));
+    placedTransform->SetDirty();
+    placedTransform->UpdateTransform();
+    const auto initialForward = placedTransform->GetForward();
+    MakeCharacterCommand promotePlaced(placed, placedActor);
+    if (!promotePlaced.Execute()) return Fail("placed Character promotion rejected");
+    const auto* placedController = placed.characters.GetComponent(placedActor);
+    if (placedController == nullptr ||
+        !Near(placedController->GetPosition().x, 17.0f) ||
+        !Near(placedController->GetPosition().y, 3.0f) ||
+        !Near(placedController->GetPosition().z, -9.0f) ||
+        !Near(placedController->GetFacing().x, -initialForward.x) ||
+        !Near(placedController->GetFacing().z, -initialForward.z))
+        return Fail("MAKE CHARACTER reset native position or reversed visual facing");
+
+    // The same native controller must follow gizmo/inspector edits AND undo.
+    auto edited = CaptureTransform(*placedTransform);
+    edited.translation = XMFLOAT3(21.0f, 3.0f, -11.0f);
+    XMStoreFloat4(&edited.rotation,
+        XMQuaternionRotationRollPitchYaw(0.0f, 1.4f, 0.0f));
+    SetTransformCommand editPlaced(placed, placedActor, edited);
+    if (!editPlaced.Execute()) return Fail("placed Character transform edit rejected");
+    if (!Near(placedController->GetPosition().x, 21.0f) ||
+        !Near(placedController->GetPosition().z, -11.0f) ||
+        !Near(placedController->GetFacing().x, -placedTransform->GetForward().x) ||
+        !Near(placedController->GetFacing().z, -placedTransform->GetForward().z))
+        return Fail("edited Character controller did not follow gizmo transform");
+    editPlaced.Undo();
+    if (!Near(placedController->GetPosition().x, 17.0f) ||
+        !Near(placedController->GetPosition().z, -9.0f) ||
+        !Near(placedController->GetFacing().x, -initialForward.x) ||
+        !Near(placedController->GetFacing().z, -initialForward.z))
+        return Fail("Character transform Undo left native controller at wrong pose");
+    if (!editPlaced.Execute() || !Near(placedController->GetPosition().x, 21.0f))
+        return Fail("Character transform Redo did not re-synchronise controller");
+
     auto* metadata = scene.metadatas.GetComponent(actor);
     if (metadata == nullptr ||
         !metadata->bool_values.has(CharacterControllerOwnedMetadataKey) ||

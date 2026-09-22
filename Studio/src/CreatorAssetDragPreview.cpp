@@ -1,5 +1,6 @@
 #include "RenegadeStudioChrome.h"
 
+#include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/ImportService.h"
@@ -57,6 +58,7 @@ namespace
         wi::ecs::Entity payloadRoot = wi::ecs::INVALID_ENTITY;
         renegade::bridge::ModelBounds bounds;
         float scale = 1.0f;
+        bool preparedCharacterAsset = false;
         XMFLOAT3 position = {};
         std::size_t firstMaterialIndex = 0;
         std::vector<wi::ecs::Entity> createdEntities;
@@ -607,6 +609,8 @@ namespace
         preview = {};
         preview.assetId = assetId;
         preview.assetPath = NormalizePath(assetPath);
+        preview.preparedCharacterAsset =
+            renegade::bridge::IsCharacterAssetTemplateScene(*templateScene);
         preview.scene = &scene;
         preview.wrapper = wrapper;
         preview.payloadRoot = payloadRoot;
@@ -620,10 +624,23 @@ namespace
         wi::unordered_set<wi::ecs::Entity> createdSet;
         for (const auto entity : preview.createdEntities)
             createdSet.insert(entity);
+        std::size_t previewClipCount = 0;
+        wi::ecs::Entity previewFirstClip = wi::ecs::INVALID_ENTITY;
         for (std::size_t index = 0; index < scene.animations.GetCount(); ++index)
         {
-            if (createdSet.count(scene.animations.GetEntity(index)) != 0)
-                scene.animations[index].Play();
+            const auto entity = scene.animations.GetEntity(index);
+            if (createdSet.count(entity) == 0) continue;
+            scene.animations[index].Stop();
+            if (previewFirstClip == wi::ecs::INVALID_ENTITY)
+                previewFirstClip = entity;
+            ++previewClipCount;
+        }
+        // Never run all Character actions simultaneously on drag. A single
+        // clip remains previewable; multi-clip Characters wait for Runtime AI.
+        if (previewFirstClip != wi::ecs::INVALID_ENTITY &&
+            (previewClipCount == 1 || !preview.preparedCharacterAsset))
+        {
+            scene.animations.GetComponent(previewFirstClip)->Play();
         }
 
         if (!PositionPreview(surface))
@@ -797,7 +814,8 @@ namespace renegade::studio::detail
                 preview.wrapper,
                 preview.payloadRoot,
                 preview.firstMaterialIndex,
-                preview.assetPath);
+                preview.assetPath,
+                preview.preparedCharacterAsset);
             auto* placed = command.get();
             const auto commitStarted = std::chrono::steady_clock::now();
             if (!session->Commands().Execute(std::move(command)))

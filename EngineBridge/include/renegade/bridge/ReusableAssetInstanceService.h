@@ -74,7 +74,8 @@ namespace renegade::bridge
             wi::ecs::Entity existingInstanceRoot,
             wi::ecs::Entity existingPayloadRoot,
             std::size_t firstMaterialIndex,
-            std::string displayName = {});
+            std::string displayName = {},
+            bool preparedCharacterAsset = false);
 
         bool Execute() override;
         void Undo() override;

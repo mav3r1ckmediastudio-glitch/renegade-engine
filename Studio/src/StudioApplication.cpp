@@ -4,6 +4,7 @@
 #include <ModelImporter.h>
 
 #include "renegade/bridge/TestLevelSnapshotService.h"
+#include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/CreatorModelMaterialPreparationService.h"
@@ -5920,6 +5921,12 @@ namespace renegade::studio
             !flyCameraActive_)
         {
             gizmo_.Update(*camera, pointer, *this);
+            if (gizmo_.IsInteracting())
+            {
+                // The controller overwrites gizmo edits, even if inactive.
+                bridge::SyncNativeCharacterPoseFromTransform(
+                    session_->Scenes().GetScene(), gizmoEntity_);
+            }
         }
 
         if (HandleTerrainSculpt(pointer))
