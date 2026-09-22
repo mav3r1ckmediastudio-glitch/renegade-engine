@@ -12,6 +12,7 @@
 #include <cctype>
 #include <cstdint>
 #include <initializer_list>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -65,6 +66,10 @@ namespace renegade::runtime
         std::string resolvedClipName;
         std::string lastRequest;
         std::uint64_t variantSequence = 0;
+        // Each one-shot action has its own reproducible, per-character sequence.
+        // Loop requests must not influence combat/death/hit variant selection.
+        std::array<std::uint64_t, CharacterAnimationSemanticCount> oneShotVariantSequence{};
+        std::array<std::size_t, CharacterAnimationSemanticCount> lastOneShotVariant{};
         std::uint64_t observedShots = 0;
         std::uint64_t observedReloads = 0;
         std::uint64_t observedDamage = 0;
@@ -254,6 +259,38 @@ namespace renegade::runtime
         return true;
     }
 
+    // Stable-ID-seeded pseudo-random variant choice: reproducible across runs,
+    // independent between actions, and avoids repeating the last variant when
+    // there are at least two options. No global RNG or file-name guessing.
+    [[nodiscard]] inline std::size_t PickCharacterOneShotVariant(
+        const RuntimeCharacterAnimationRecord& record,
+        const CharacterAnimationSemantic semantic,
+        const std::size_t count) noexcept
+    {
+        if (count <= 1) return 0;
+        const std::size_t action = CharacterAnimationIndex(semantic);
+        std::uint64_t value = 1469598103934665603ull;
+        for (const unsigned char byte : record.characterId)
+        {
+            value ^= byte;
+            value *= 1099511628211ull;
+        }
+        value ^= static_cast<std::uint64_t>(action) * 0x9e3779b97f4a7c15ull;
+        value += (record.oneShotVariantSequence[action] + 1ull) *
+            0x9e3779b97f4a7c15ull;
+        value = (value ^ (value >> 30)) * 0xbf58476d1ce4e5b9ull;
+        value = (value ^ (value >> 27)) * 0x94d049bb133111ebull;
+        value ^= value >> 31;
+        std::size_t selected = static_cast<std::size_t>(value % count);
+        if (record.oneShotVariantSequence[action] > 0 &&
+            selected == record.lastOneShotVariant[action])
+        {
+            selected = (selected + 1 +
+                static_cast<std::size_t>((value >> 32) % (count - 1))) % count;
+        }
+        return selected;
+    }
+
     inline void ResetRuntimeCharacterAnimations(
         RuntimeCharacterAnimationState& state) noexcept
     {
@@ -285,8 +322,14 @@ namespace renegade::runtime
         if (record.activeSemantic == semantic && active != nullptr &&
             active->IsPlaying() && active->IsPlayingOnce())
             return true;
-        const RuntimeAnimationClip& next = (*variants)[
-            record.variantSequence++ % variants->size()];
+        const bool oneShot = semantic == CharacterAnimationSemantic::Attack ||
+            semantic == CharacterAnimationSemantic::Reload ||
+            semantic == CharacterAnimationSemantic::Hit ||
+            semantic == CharacterAnimationSemantic::Death;
+        const std::size_t variantIndex = oneShot
+            ? PickCharacterOneShotVariant(record, semantic, variants->size())
+            : static_cast<std::size_t>(record.variantSequence++ % variants->size());
+        const RuntimeAnimationClip& next = (*variants)[variantIndex];
         if (record.activeClip == next.entity &&
             record.activeSemantic == semantic &&
             active != nullptr && active->IsPlaying())
@@ -327,6 +370,12 @@ namespace renegade::runtime
             return false;
         }
 
+        if (oneShot)
+        {
+            const std::size_t action = CharacterAnimationIndex(semantic);
+            record.lastOneShotVariant[action] = variantIndex;
+            ++record.oneShotVariantSequence[action];
+        }
         record.activeClip = next.entity;
         record.activeSemantic = semantic;
         record.resolvedClipName = next.name;

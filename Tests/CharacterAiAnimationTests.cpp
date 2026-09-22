@@ -31,6 +31,38 @@ int main()
 {
     using namespace renegade::runtime;
 
+    // A6 one-shots use independent, stable-ID-seeded pseudo-random choices;
+    // no immediate repeat, including across interruptions by other actions.
+    RuntimeCharacterAnimationRecord seeded;
+    seeded.characterId = "00000000-0000-4000-8000-000000000006";
+    RuntimeCharacterAnimationRecord replay = seeded;
+    bool varied = false;
+    std::size_t first = 0;
+    for (std::size_t i = 0; i < 20; ++i)
+    {
+        const auto pick = PickCharacterOneShotVariant(
+            seeded, CharacterAnimationSemantic::Attack, 5);
+        if (pick >= 5 || (i > 0 && pick == seeded.lastOneShotVariant[
+                CharacterAnimationIndex(CharacterAnimationSemantic::Attack)]))
+            return Fail("one-shot variant selection repeated or out of range");
+        if (i == 0) first = pick;
+        varied = varied || (pick != first);
+        if (pick != PickCharacterOneShotVariant(
+                replay, CharacterAnimationSemantic::Attack, 5))
+            return Fail("stable-ID variant sequence is not reproducible");
+        const auto attackIndex = CharacterAnimationIndex(CharacterAnimationSemantic::Attack);
+        seeded.lastOneShotVariant[attackIndex] = pick;
+        replay.lastOneShotVariant[attackIndex] = pick;
+        ++seeded.oneShotVariantSequence[attackIndex];
+        ++replay.oneShotVariantSequence[attackIndex];
+        // Activity in a different semantic must not move the attack sequence.
+        ++seeded.oneShotVariantSequence[CharacterAnimationIndex(CharacterAnimationSemantic::Hit)];
+        ++seeded.variantSequence;
+    }
+    if (!varied || seeded.oneShotVariantSequence[
+            CharacterAnimationIndex(CharacterAnimationSemantic::Attack)] != 20)
+        return Fail("multiple authored attack variants were not exercised");
+
     wi::scene::Scene scene;
     const wi::ecs::Entity character = scene.Entity_CreateTransform("Mutant");
 
@@ -160,12 +192,16 @@ int main()
         return Fail("attack must use native play-once playback");
     }
     const wi::ecs::Entity firstAttack = record->activeClip;
+    const auto attackSequenceAfterFirst = record->oneShotVariantSequence[
+        CharacterAnimationIndex(CharacterAnimationSemantic::Attack)];
 
     // A second request while the first one-shot plays must not switch clips.
     if (!RequestCharacterAnimation(
             scene, state, *record, CharacterAnimationSemantic::Attack) ||
-        record->activeClip != firstAttack)
-        return Fail("second attack request interrupted the active one-shot");
+        record->activeClip != firstAttack ||
+        record->oneShotVariantSequence[
+            CharacterAnimationIndex(CharacterAnimationSemantic::Attack)] != attackSequenceAfterFirst)
+        return Fail("second attack request interrupted the active one-shot or consumed a variant");
     (void)renegade::bridge::StopAnimation(scene, firstAttack);
     if (!RequestCharacterAnimation(
             scene, state, *record, CharacterAnimationSemantic::Attack))
@@ -174,7 +210,7 @@ int main()
     if (attackTwoAnimation == nullptr || !attackTwoAnimation->IsPlaying() ||
         record->activeClip == firstAttack)
     {
-        return Fail("attack variants must cycle deterministically");
+        return Fail("attack variants must avoid immediate repeats");
     }
 
     RuntimeCharacterDecisionState decisions;
