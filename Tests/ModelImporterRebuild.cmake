@@ -16,8 +16,8 @@ add_custom_command(TARGET RenegadeModelImporterRebuildGraphicsProof POST_BUILD
     VERBATIM)
 add_test(NAME RenegadeModelImporterRebuildGraphicsProof
     COMMAND RenegadeModelImporterRebuildGraphicsProof
-        "${CMAKE_SOURCE_DIR}/Tests/Fixtures/Importer/static_triangle.glb"
-        "${CMAKE_SOURCE_DIR}/Tests/Fixtures/Importer/external_uri_triangle.glb"
+        "${CMAKE_SOURCE_DIR}/Tests/fixtures/Importer/static_triangle.glb"
+        "${CMAKE_SOURCE_DIR}/Tests/fixtures/Importer/external_uri_triangle.glb"
         "${CMAKE_BINARY_DIR}/model-import-rebuild-proof"
     CONFIGURATIONS Release)
 set_tests_properties(RenegadeModelImporterRebuildGraphicsProof PROPERTIES
