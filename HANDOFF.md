@@ -235,7 +235,7 @@ Local Windows command: `cmake --build BUILD/no-import --config Release --target 
 
 ### Static GLB transaction build checkpoint - 30 September 2026
 
-On feature/model-importer-rebuild, ModelImportCommitService stages a
+Implementation commits 46b8432 and aa9da5c on feature/model-importer-rebuild. ModelImportCommitService stages a
 self-contained static GLB source, WISCENE-backed .rasset, managed projection,
 registry and metadata in one project transaction. It refuses external URI
 references, source fingerprint changes, rig/animation payload, existing paths
