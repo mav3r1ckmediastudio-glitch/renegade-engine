@@ -247,8 +247,13 @@ Tests/ModelImporterRebuildGraphicsProof.cpp and two tiny GLB fixtures cover
 actual conversion, external-reference rejection, commit/reopen and duplicate
 refusal. Windows VS18 Release RenegadeEngineBridge target build passed
 (exit 0, 619.46 s). RenegadeModelImporterRebuildGraphicsProof target build
-passed (exit 0, 8.61 s). The graphics proof has NOT run; no transaction
-success, Studio UI or creator acceptance is claimed. Next run the proof in
-BUILD/no-import/model-import-rebuild-proof when the desktop is clear, repair
-any behavioural failure, then wire native Studio controls after backend proof.
+passed (exit 0, 8.61 s). The first graphics run exposed a ReadBytes bug:
+istreambuf_iterator did not set eofbit, causing a false source-change failure.
+The reader now uses a sized binary read. VS18 Release rebuilt the proof
+(exit 0, 650.92 s), and the focused graphics proof passed (exit 0, 0.66 s)
+in BUILD/no-import/model-import-rebuild-proof. It covered static GLB conversion,
+external-URI refusal, governed commit, exact asset reopen, current catalogue,
+stable-ID placement preparation and duplicate refusal. Studio UI, scene
+Save/Reopen, project reopen and creator acceptance remain unproven. Next wire
+native Studio controls, then test the built UI and the full acceptance sequence.
 Main and other worktrees remain untouched.

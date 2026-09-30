@@ -132,7 +132,7 @@ component into `Scene::weather`.
 
 ### Model import boundary
 
-**Rebuild state (30 September 2026):** The legacy guided creator importer and model import transaction were removed on the no-import baseline. The paragraphs below record historical V1/v3 design, not a current Studio capability. The new `ModelImportCandidateService` begins with isolated GLB conversion and truthful scene evidence. It has no Studio entry. The static GLB transaction compiles but awaits graphics proof. It targets the retained `.rasset` reader, catalogue, stable registry and placement loader; see `docs/MODEL_IMPORTER_REBUILD.md` for its acceptance contract.
+**Rebuild state (30 September 2026):** The legacy guided creator importer and model import transaction were removed on the no-import baseline. The paragraphs below record historical V1/v3 design, not a current Studio capability. The new `ModelImportCandidateService` begins with isolated GLB conversion and truthful scene evidence. It has no Studio entry. The static GLB transaction and focused graphics proof pass in Windows VS18 Release on a disposable project. It targets the retained `.rasset` reader, catalogue, stable registry and placement loader; see `docs/MODEL_IMPORTER_REBUILD.md` for its acceptance contract.
 
 `ImportService` is the UI-independent boundary for Model Import V1. Renegade
 compiles Wicked's standalone `ModelImporter_GLTF.cpp` conversion unit into

@@ -42,5 +42,9 @@ authoring and animation controls follow only after this result works locally.
 - Owner inspects the exact build before any release/merge claim.
 
 The branch contains isolated GLB conversion and a governed static-model
-commit/reopen service. The Release bridge and graphics proof executable build.
-The graphics proof has not run; no Studio button is exposed.
+commit/reopen service. The Windows VS18 Release bridge and proof executable
+build. The focused graphics proof passed (exit 0) on a disposable project:
+static GLB conversion, external URI rejection, governed commit, asset reopen,
+current catalogue and stable-ID placement preparation, plus duplicate refusal.
+No Studio button is exposed. Native UI, scene Save/Reopen, project reopen and
+owner acceptance remain to be verified.

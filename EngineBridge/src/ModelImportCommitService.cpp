@@ -54,9 +54,17 @@ namespace renegade::bridge
         {
             std::ifstream stream(path, std::ios::binary);
             if (!stream) return false;
-            bytes.assign(std::istreambuf_iterator<char>(stream),
-                std::istreambuf_iterator<char>());
-            return stream.eof() && !bytes.empty();
+            stream.seekg(0, std::ios::end);
+            const auto length = stream.tellg();
+            if (length <= 0 ||
+                static_cast<std::uintmax_t>(length) >
+                    static_cast<std::uintmax_t>(std::numeric_limits<std::streamsize>::max()))
+                return false;
+            stream.seekg(0, std::ios::beg);
+            bytes.resize(static_cast<std::size_t>(length));
+            stream.read(reinterpret_cast<char*>(bytes.data()),
+                static_cast<std::streamsize>(bytes.size()));
+            return static_cast<bool>(stream);
         }
 
         std::uint64_t Fingerprint(const std::vector<std::uint8_t>& bytes)
