@@ -293,6 +293,7 @@ namespace renegade::studio
             CreateCamera,
             CreateDecal,
             CreateEnvironmentProbe,
+            ImportStaticGlb,
             Focus,
             ToggleGrid,
             EnvironmentWorkspace,

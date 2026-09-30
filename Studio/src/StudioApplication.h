@@ -11,6 +11,7 @@
 #include <Translator.h>
 
 #include "renegade/bridge/StudioSession.h"
+#include "renegade/bridge/ModelImportCommitService.h"
 #include "renegade/bridge/AssetBrowserService.h"
 #include "renegade/bridge/LightService.h"
 #include "renegade/bridge/CameraService.h"
@@ -64,6 +65,8 @@ namespace renegade::studio
         void QueueInspectorRefresh() noexcept;
         void RefreshProjectHub();
         void RefreshAssetBrowser();
+        void OpenStaticModelImporter();
+        void CommitStaticModelImporter();
         void RestoreGovernedMaterialTextures();
 
         void RequestProjectHubFromStoryFlow();
@@ -1080,6 +1083,13 @@ namespace renegade::studio
         RenegadeButton hubNewProjectCancelButton_;
         wi::gui::Button gridToggleButton_;
         RenegadePhysicsLabStudioChrome studioChrome_;
+        wi::gui::Window modelImportPanel_;
+        wi::gui::Label modelImportSummary_;
+        wi::gui::TextInputField modelImportName_;
+        wi::gui::Button modelImportCommit_;
+        wi::gui::Button modelImportCancel_;
+        std::unique_ptr<bridge::ModelImportCandidate> modelImportCandidate_;
+        bridge::StableId modelImportProjectId_;
         TestLevelRuntimeProcess testLevelRuntime_;
         bool projectPreviewActive_ = false;
         Translator gizmo_;

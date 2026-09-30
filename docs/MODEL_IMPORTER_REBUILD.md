@@ -48,3 +48,13 @@ static GLB conversion, external URI rejection, governed commit, asset reopen,
 current catalogue and stable-ID placement preparation, plus duplicate refusal.
 No Studio button is exposed. Native UI, scene Save/Reopen, project reopen and
 owner acceptance remain to be verified.
+
+## Native Studio entry in progress
+
+The isolated branch exposes ADD > IMPORT STATIC GLB with a native file picker,
+structural conversion evidence, editable asset name, and native commit/cancel
+controls. Windows Release Studio builds; its menu and picker were visually
+clicked. The candidate panel and commit controls have not yet been clicked
+through in Studio. This evidence panel is not a rendered 3D model preview.
+A disposable-project UI acceptance run and an isolated rendered preview remain
+required before the importer can be marked ready.

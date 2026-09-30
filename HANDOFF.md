@@ -257,3 +257,28 @@ stable-ID placement preparation and duplicate refusal. Studio UI, scene
 Save/Reopen, project reopen and creator acceptance remain unproven. Next wire
 native Studio controls, then test the built UI and the full acceptance sequence.
 Main and other worktrees remain untouched.
+
+### Native static GLB Studio entry checkpoint - 30 September 2026
+
+The isolated rebuild branch now has a real ADD > IMPORT STATIC GLB action, a
+Windows GLB file picker, isolated conversion evidence, native asset-name input,
+and IMPORT ASSET / CANCEL widgets. Commit calls the governed bridge transaction
+at a Wicked thread-safe point; success refreshes and reveals the exact stable-ID
+asset card. A committed-but-reveal-failed result is reported without suggesting
+a retry. This is a static-model slice only, not the finished importer.
+
+Windows VS18 Release RenegadeStudio built and linked (exit 0, 354.98 s); the
+incremental reveal change rebuilt and linked (exit 0, 15.90 s). The executable
+launched on DX12; ADD menu and its IMPORT STATIC GLB item were visible and a
+click opened the native GLB picker. The previously open 9.WISCENE project was
+automatically restored. No import was committed and no scene was saved. The
+owner resumed desktop activity during the picker check, so interactive work
+stopped and the test Studio process was closed. Candidate panel, cancel,
+commit, asset reveal, placement and save/reopen have NOT been verified in the
+built Studio. The panel currently reports structural counts; an actual model
+render preview remains to build. Do not claim this UI READY or merge it.
+
+Next, on a clear desktop, create a disposable Studio project and click through
+file selection, evidence, name editing, cancel, commit, asset card, placement,
+Undo/Redo and scene/project reopen. Then implement and verify an isolated 3D
+model preview before owner acceptance. Main and other worktrees remain untouched.

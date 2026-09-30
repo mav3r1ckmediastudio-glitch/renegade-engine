@@ -7,6 +7,7 @@
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
+#include "renegade/bridge/ModelImportCommitService.h"
 #include "renegade/bridge/CreatorTextureWorkflowService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
@@ -2603,6 +2604,9 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::CreateEnvironmentProbe:
                 RequestDiagnosticAction(EditorAction::CreateEnvironmentProbe);
                 break;
+            case RenegadeStudioChrome::Action::ImportStaticGlb:
+                OpenStaticModelImporter();
+                break;
             case RenegadeStudioChrome::Action::Focus:
                 RequestDiagnosticAction(EditorAction::FocusSelection);
                 break;
@@ -2721,6 +2725,39 @@ namespace renegade::studio
         GetGUI().RemoveWidget(&inspectorPanel_);
         GetGUI().AddWidget(&studioChrome_.AudioWorkspace());
         GetGUI().AddWidget(&inspectorPanel_);
+        modelImportPanel_.Create("Import Static GLB");
+        modelImportPanel_.SetSize(XMFLOAT2(520.0f, 270.0f));
+        modelImportSummary_.Create("Model Import Summary");
+        modelImportSummary_.SetPos(XMFLOAT2(20.0f, 35.0f));
+        modelImportSummary_.SetSize(XMFLOAT2(480.0f, 85.0f));
+        modelImportSummary_.SetFitTextEnabled(true);
+        modelImportPanel_.AddWidget(&modelImportSummary_);
+        modelImportName_.Create("Model Asset Name");
+        modelImportName_.SetDescription("Asset name: ");
+        modelImportName_.SetPos(XMFLOAT2(20.0f, 135.0f));
+        modelImportName_.SetSize(XMFLOAT2(480.0f, 30.0f));
+        modelImportPanel_.AddWidget(&modelImportName_);
+        modelImportCommit_.Create("Commit Model Asset");
+        modelImportCommit_.SetText("IMPORT ASSET");
+        modelImportCommit_.SetPos(XMFLOAT2(20.0f, 185.0f));
+        modelImportCommit_.SetSize(XMFLOAT2(220.0f, 32.0f));
+        modelImportCommit_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            CommitStaticModelImporter();
+        });
+        modelImportPanel_.AddWidget(&modelImportCommit_);
+        modelImportCancel_.Create("Cancel Model Import");
+        modelImportCancel_.SetText("CANCEL");
+        modelImportCancel_.SetPos(XMFLOAT2(260.0f, 185.0f));
+        modelImportCancel_.SetSize(XMFLOAT2(220.0f, 32.0f));
+        modelImportCancel_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            modelImportPanel_.SetVisible(false);
+            modelImportCandidate_.reset();
+        });
+        modelImportPanel_.AddWidget(&modelImportCancel_);
+        modelImportPanel_.SetVisible(false);
+        GetGUI().AddWidget(&modelImportPanel_);
         GetGUI().AddWidget(&studioChrome_);
     }
 
@@ -3429,6 +3466,9 @@ namespace renegade::studio
 
         const float width = GetLogicalWidth();
         const float height = GetLogicalHeight();
+        modelImportPanel_.SetPos(XMFLOAT2(
+            std::max(0.0f, (width - 520.0f) * 0.5f),
+            std::max(70.0f, (height - 270.0f) * 0.5f)));
         studioChrome_.SetLayout(width, height);
         projectHubChrome_.SetLayout(width, height);
 
@@ -5322,6 +5362,126 @@ namespace renegade::studio
             RefreshInspector();
             RefreshStatus();
         }
+    }
+
+    void StudioRenderPath::OpenStaticModelImporter()
+    {
+        if (session_ == nullptr || !session_->Projects().HasProject())
+            return;
+        modelImportPanel_.SetVisible(false);
+        modelImportCandidate_.reset();
+        const bridge::StableId projectId =
+            session_->Projects().CurrentProject().projectId;
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "Select self-contained static GLB";
+        params.extensions = {"glb"};
+        wi::helper::FileDialog(params,
+            [this, projectId](const std::string& path)
+            {
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, projectId, path](std::uint64_t)
+                    {
+                        if (path.empty() || session_ == nullptr ||
+                            !session_->Projects().HasProject() ||
+                            session_->Projects().CurrentProject().projectId != projectId)
+                            return;
+                        studioChrome_.SetStatusText("MODEL IMPORT // CONVERTING GLB");
+                        auto candidate = std::make_unique<bridge::ModelImportCandidate>(
+                            bridge::ModelImportCandidateService().PrepareGlb(path));
+                        if (!candidate->IsReady())
+                        {
+                            studioChrome_.SetStatusText(
+                                "MODEL IMPORT // " + candidate->Error());
+                            ShowStudioMessageBox(candidate->Error(), "Import Static GLB");
+                            return;
+                        }
+                        if (candidate->Evidence().HasRigOrAnimationPayload() ||
+                            candidate->Summary().animations != 0)
+                        {
+                            studioChrome_.SetStatusText(
+                                "MODEL IMPORT // THIS GATE ACCEPTS STATIC GLB ONLY");
+                            ShowStudioMessageBox(
+                                "This first importer accepts static GLB only. "
+                                "Rig and animation content needs a separate proven path.",
+                                "Import Static GLB");
+                            return;
+                        }
+                        modelImportProjectId_ = projectId;
+                        const std::string name = fs::u8path(path).stem().generic_u8string();
+                        modelImportName_.SetValue(name);
+                        const auto& summary = candidate->Summary();
+                        modelImportSummary_.SetText(
+                            "SOURCE // " + fs::u8path(path).filename().generic_u8string() +
+                            "\nSTATIC GLB // " + std::to_string(summary.meshes) +
+                            " meshes / " + std::to_string(summary.materials) +
+                            " materials / " + std::to_string(summary.objects) + " objects" +
+                            "\nNo authored scene changes before import.");
+                        modelImportCandidate_ = std::move(candidate);
+                        modelImportPanel_.SetVisible(true);
+                        studioChrome_.SetStatusText("MODEL IMPORT // REVIEW AND IMPORT ASSET");
+                    });
+            });
+    }
+
+    void StudioRenderPath::CommitStaticModelImporter()
+    {
+        if (!modelImportCandidate_ || session_ == nullptr ||
+            !session_->Projects().HasProject() ||
+            session_->Projects().CurrentProject().projectId != modelImportProjectId_)
+            return;
+        const std::string name = modelImportName_.GetValue();
+        wi::eventhandler::Subscribe_Once(
+            wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+            [this, name, projectId = modelImportProjectId_](std::uint64_t)
+            {
+                if (!modelImportCandidate_ || session_ == nullptr ||
+                    !session_->Projects().HasProject() ||
+                    session_->Projects().CurrentProject().projectId != projectId)
+                    return;
+                bridge::ModelImportCommitRequest request;
+                request.projectRoot = session_->Projects().CurrentProject().rootPath;
+                request.projectId = projectId;
+                request.assetName = name;
+                const auto result = bridge::ModelImportCommitService().CommitGlb(
+                    request, *modelImportCandidate_);
+                if (!result.succeeded)
+                {
+                    studioChrome_.SetStatusText("MODEL IMPORT // " + result.error);
+                    ShowStudioMessageBox(result.error, "Import Static GLB");
+                    if (result.committed)
+                    {
+                        modelImportPanel_.SetVisible(false);
+                        modelImportCandidate_.reset();
+                        RefreshAssetBrowser();
+                    }
+                    return;
+                }
+                modelImportPanel_.SetVisible(false);
+                modelImportCandidate_.reset();
+                RefreshAssetBrowser();
+                studioChrome_.SetActiveBottomTab(0, true);
+                bridge::AssetCatalogue catalogue;
+                std::string revealError;
+                if (!bridge::CreatorAssetWorkflowService().BuildCatalogueSnapshot(
+                        request.projectRoot, projectId, catalogue, revealError) ||
+                    !studioChrome_.RevealCreatorAsset(result.assetId,
+                        result.assetProjectRelativePath, projectId,
+                        std::move(catalogue), revealError))
+                {
+                    studioChrome_.SetStatusText(
+                        "MODEL IMPORT // COMMITTED; REVEAL FAILED // " + revealError);
+                    ShowStudioMessageBox(
+                        "The model was committed, but its Asset Browser card "
+                        "could not be revealed. Do not import it again.\n\n" +
+                        revealError, "Import Static GLB");
+                    return;
+                }
+                studioChrome_.SetStatusText(
+                    "MODEL IMPORT // ASSET REGISTERED // " +
+                    result.assetProjectRelativePath);
+            });
     }
 
     void StudioRenderPath::ChooseSelectedDecalTexture()
@@ -9814,6 +9974,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         }
 
         projectHubVisible_ = visible;
+        if (visible)
+        {
+            modelImportPanel_.SetVisible(false);
+            modelImportCandidate_.reset();
+        }
         projectHubPanel_.SetVisible(false);
         projectHubChrome_.SetVisible(visible);
         if (!visible)
