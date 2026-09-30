@@ -24,12 +24,10 @@
 #include "renegade/bridge/RenderSettingsService.h"
 #include "renegade/bridge/RenderLutService.h"
 #include "renegade/bridge/LightmapBakeService.h"
-#include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
 #include "renegade/bridge/SunService.h"
 #include "renegade/bridge/TerrainService.h"
-#include "CreatorImportPreviewWindow.h"
 #include "InspectorSectionFramework.h"
 #include "RenegadeStudioChrome.h"
 #include "RenegadePhysicsLabStudioChrome.h"
@@ -39,14 +37,6 @@
 #include "RenegadeScreenEditorRenderPath.h"
 #include "StoryFlowStudioIntegration.h"
 #include "TestLevelRuntimeProcess.h"
-
-// StudioApplication.cpp defines this helper in its global unnamed namespace.
-// Declare it here so earlier creator-import callbacks can call it before the
-// definition appears later in the translation unit.
-namespace
-{
-    void RefreshCreatorImportMaterialReadout();
-}
 
 namespace renegade::studio
 {
@@ -71,7 +61,6 @@ namespace renegade::studio
         void RefreshStatus();
         void RefreshHierarchy();
         void RefreshInspector();
-        [[nodiscard]] bool DiagnosticImportActive() const;
         void QueueInspectorRefresh() noexcept;
         void RefreshProjectHub();
         void RefreshAssetBrowser();
@@ -152,14 +141,14 @@ namespace renegade::studio
         // destroys the Inspector's section state.
         void SyncAudioInspectorPresentation()
         {
-            if (studioChrome_.IsAudioWorkspaceActive() || importScalePanel_.IsVisible())
+            if (studioChrome_.IsAudioWorkspaceActive())
             {
                 inspectorPanel_.wi::gui::Widget::SetVisible(false);
                 renderWorkspacePanel_.wi::gui::Widget::SetVisible(false);
                 return;
             }
 
-            if (!projectHubVisible_ && !renderWorkspaceActive_ && !importScalePanel_.IsVisible())
+            if (!projectHubVisible_ && !renderWorkspaceActive_)
                 inspectorPanel_.wi::gui::Widget::SetVisible(true);
         }
 
@@ -229,10 +218,6 @@ namespace renegade::studio
             ApplyTerrainMaterialPreset,
             ApplyDefaultGrass,
             ReloadTerrainMaterial,
-            ValidateModelImport,
-            ImportModel,
-            ApplyImportScale,
-            DismissImportScale,
         };
 
         struct GridConstants
@@ -531,24 +516,6 @@ namespace renegade::studio
         void CommitTerrainTextureScale(float value);
         void ApplyDefaultGrass();
         void ReloadTerrainMaterial();
-        void ValidateModelImport();
-        void RunModelImportProof(const std::string& sourcePath);
-        void PresentModelImportProof(
-            const bridge::ImportResult& result);
-        void ImportModel();
-        void RunModelImportPlacement(const std::string& sourcePath);
-        void CreateImportScalePanel();
-        void ShowImportScalePanel(
-            wi::ecs::Entity entity,
-            float appliedScaleFactor,
-            const std::string& sourceFileName);
-        void FrameCreatorImportPreviewCamera();
-        void CaptureCreatorImportThumbnail();
-        void ApplyImportScaleMode(bridge::ModelScaleMode mode);
-        void DismissImportScalePanel();
-        void RefreshCreatorImportWorkspaceSection();
-        void LayoutCreatorImportStageHeadings(float inspectorWidth, float transformBodyHeight,
-            float materialBodyHeight, float animationBodyHeight);
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,
@@ -1112,16 +1079,6 @@ namespace renegade::studio
         RenegadeButton hubNewProjectConfirmButton_;
         RenegadeButton hubNewProjectCancelButton_;
         wi::gui::Button gridToggleButton_;
-        CreatorImportPreviewWindow importScalePanel_;
-        float importInspectorWidth_ = 390.0f;
-        bool importInspectorResizePending_ = false;
-        bool importInspectorLayoutInProgress_ = false;
-        bool importAudioWorkspaceWasVisible_ = false;
-        wi::gui::Label importScaleTitleLabel_;
-        wi::gui::Label importScaleReadoutLabel_;
-        RenegadeComboBox importScaleModeCombo_;
-        RenegadeButton importScaleApplyButton_;
-        RenegadeButton importScaleDismissButton_;
         RenegadePhysicsLabStudioChrome studioChrome_;
         TestLevelRuntimeProcess testLevelRuntime_;
         bool projectPreviewActive_ = false;
@@ -1254,15 +1211,10 @@ namespace renegade::studio
         bool windowsGameBuildRequested_ = false;
         wi::jobsystem::context sceneOpenWorkload_;
         wi::jobsystem::context projectLoadWorkload_;
-        wi::jobsystem::context modelImportWorkload_;
         wi::jobsystem::context decalTextureImportWorkload_;
         wi::jobsystem::context materialTextureImportWorkload_;
         std::string openingScenePath_;
         bool sceneOpenInProgress_ = false;
-        wi::ecs::Entity importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
-        float importScaleAppliedFactor_ = 1.0f;
-        bridge::ModelScaleMode pendingImportScaleMode_ =
-            bridge::ModelScaleMode::Original;
     };
 
     // The Physics Lab is a GUI workspace over the authoritative Scene render

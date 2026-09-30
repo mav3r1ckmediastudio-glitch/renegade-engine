@@ -216,3 +216,11 @@ Local Windows VS18 evidence:
 - `git diff --check` passed. Diagnostic/build logs remain in ignored `BUILD/navigation-*` files; no private assets or logs were staged.
 
 Next gate: push the implementation and this evidence to PR #172, then inspect all four exact-head Windows checks. CI is pending at this handoff; do not describe it as passed or merge before required checks pass. The accepted importer UI, existing Studio executables and other worktrees were preserved. This focused test lifecycle workaround does not claim to repair Wicked's general asynchronous-logger implementation.
+
+### Creator model importer removal checkpoint — 30 September 2026
+
+Branch: `feature/remove-importer-completely`, isolated Windows worktree `renegade-no-import`, based on accepted V4 commit `5152874`. This is a temporary no-model-import reset, not the replacement importer. Main and the previous experimental worktrees were not edited.
+
+The old guided model/character importer was physically removed from Studio: its state, preview window/dashboard, callbacks, stage controls, commit path, ADD menu action, Asset Browser model import/reimport controls, reference FBX and package copy rule. The bridge model import transaction, prepared conversion entry points, external animation/material preparation and model reimport methods were deleted. Existing `.rasset` read and placement utilities remain so old projects can still open and place their assets. Independent texture, video, audio and specialist resource workflows are outside this model importer reset.
+
+Windows Release `RenegadeStudio` compilation and link passed before the bridge deletion; the first post-build step failed only because the CMake copy command still referenced the deleted reference FBX. That rule is now removed. The final incremental Windows Release `RenegadeStudio` build after bridge deletion passed with exit code 0 and produced `BUILD/no-import/Studio/Release/RenegadeStudio.exe`. The executable launched to Project Hub on DX12. No new importer or UI has been started. Next acceptance: inspect ADD and Asset Browser in a QA project, and verify an existing project opens; those checks are not yet complete.

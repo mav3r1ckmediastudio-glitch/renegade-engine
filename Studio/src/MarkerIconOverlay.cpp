@@ -312,11 +312,7 @@ namespace renegade::studio
             {
                 return IsVisible() && owner_ != nullptr &&
                     !owner_->IsProjectHubVisible() &&
-                    !owner_->IsTestLevelRuntimeActive() &&
-                    // The importer renders a separate transient scene. Any
-                    // authored-level marker (notably AUDIO) is misleading and
-                    // visually contaminates that isolated presentation.
-                    !owner_->DiagnosticImportActive();
+                    !owner_->IsTestLevelRuntimeActive();
             }
 
             void ForEachMarker(

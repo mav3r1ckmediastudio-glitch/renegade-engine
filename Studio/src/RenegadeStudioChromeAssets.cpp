@@ -2,11 +2,9 @@
 
 #include "renegade/bridge/CreatorAssetActionPolicy.h"
 #include "renegade/bridge/CreatorTextureWorkflowService.h"
-#include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/MaterialService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ResourceAssetService.h"
-#include "renegade/bridge/ResourceImportService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/StudioSession.h"
 
@@ -401,15 +399,6 @@ namespace renegade::studio
             creatorAssetRefreshPending_ = true;
         });
 
-        creatorAssetImportButton_.Create("Creator Import Asset");
-        creatorAssetImportButton_.SetText("IMPORT MODEL...");
-        creatorAssetImportButton_.SetTooltip(
-            "Open the guided preview, material, lighting, animation, thumbnail and final import workflow.");
-        creatorAssetImportButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            ImportCreatorModel();
-        });
-
         creatorAssetPlaceButton_.Create("Creator Asset Action");
         creatorAssetPlaceButton_.SetText("PLACE");
         creatorAssetPlaceButton_.SetTooltip(
@@ -417,15 +406,6 @@ namespace renegade::studio
         creatorAssetPlaceButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             PlaceSelectedCreatorAsset();
-        });
-
-        creatorAssetReimportButton_.Create("Creator Reimport Asset");
-        creatorAssetReimportButton_.SetText("REIMPORT");
-        creatorAssetReimportButton_.SetTooltip(
-            "Refresh LC01 state and replay the selected model or governed resource's accepted import recipe.");
-        creatorAssetReimportButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            ReimportSelectedCreatorAsset();
         });
 
         creatorAssetSaveTagsButton_.Create("Creator Save Asset Tags");
@@ -443,9 +423,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorAssetStateCombo_),
             static_cast<wi::gui::Widget*>(&creatorAssetFormatCombo_),
             static_cast<wi::gui::Widget*>(&creatorAssetRigCombo_),
-            static_cast<wi::gui::Widget*>(&creatorAssetImportButton_),
             static_cast<wi::gui::Widget*>(&creatorAssetPlaceButton_),
-            static_cast<wi::gui::Widget*>(&creatorAssetReimportButton_),
             static_cast<wi::gui::Widget*>(&creatorAssetSaveTagsButton_)})
         {
             widget->SetVisible(false);
@@ -469,9 +447,7 @@ namespace renegade::studio
         constexpr float stateWidth = 70.0f;
         constexpr float formatWidth = 58.0f;
         constexpr float rigWidth = 70.0f;
-        constexpr float importWidth = 110.0f;
         constexpr float placeWidth = 80.0f;
-        constexpr float reimportWidth = 76.0f;
         constexpr float saveWidth = 70.0f;
 
         // Keep the creator actions in the drawer header, away from the legacy
@@ -480,7 +456,7 @@ namespace renegade::studio
         // leaving the backend workflow effectively unreachable to creators.
         const float actionY = drawerTop + 8.0f;
         float actionX = right -
-            (importWidth + placeWidth + reimportWidth + saveWidth + gap * 3.0f);
+            (placeWidth + saveWidth + gap);
         const auto placeAction = [&actionX, actionY, gap](
             wi::gui::Widget& widget, const float width)
         {
@@ -488,9 +464,7 @@ namespace renegade::studio
             widget.SetSize(XMFLOAT2(width, 25.0f));
             actionX += width + gap;
         };
-        placeAction(creatorAssetImportButton_, importWidth);
         placeAction(creatorAssetPlaceButton_, placeWidth);
-        placeAction(creatorAssetReimportButton_, reimportWidth);
         placeAction(creatorAssetSaveTagsButton_, saveWidth);
 
         const float filterY = drawerTop + 45.0f;
@@ -577,9 +551,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorAssetStateCombo_),
             static_cast<wi::gui::Widget*>(&creatorAssetFormatCombo_),
             static_cast<wi::gui::Widget*>(&creatorAssetRigCombo_),
-            static_cast<wi::gui::Widget*>(&creatorAssetImportButton_),
             static_cast<wi::gui::Widget*>(&creatorAssetPlaceButton_),
-            static_cast<wi::gui::Widget*>(&creatorAssetReimportButton_),
             static_cast<wi::gui::Widget*>(&creatorAssetSaveTagsButton_)})
         {
             widget->SetVisible(visible);
@@ -604,10 +576,6 @@ namespace renegade::studio
             selected->registered && bridge::IsValidStableId(selected->assetId);
         const bool modelProduct = registered &&
             bridge::CanPlaceCreatorModelAsset(*selected);
-        const bool modelReimportable = registered &&
-            bridge::CanReimportCreatorModelAsset(*selected);
-        const bool resourceReimportable = registered &&
-            bridge::CanReimportCreatorResourceAsset(*selected);
         const bool textureProduct = registered && selected->importedProduct &&
             selected->productAvailable &&
             selected->dependencyClass == bridge::DependencyClass::Texture;
@@ -636,13 +604,9 @@ namespace renegade::studio
                 "Place the selected registered model .rasset without reconverting its source.");
         }
         creatorAssetPlaceButton_.SetEnabled(modelProduct || textureAssignable);
-        creatorAssetReimportButton_.SetEnabled(
-            modelReimportable || resourceReimportable);
         creatorAssetSaveTagsButton_.SetEnabled(registered);
 
-        creatorAssetImportButton_.Update(canvas, dt);
         creatorAssetPlaceButton_.Update(canvas, dt);
-        creatorAssetReimportButton_.Update(canvas, dt);
         creatorAssetSaveTagsButton_.Update(canvas, dt);
 
         const std::string search = InputValue(creatorAssetSearch_);
@@ -659,11 +623,9 @@ namespace renegade::studio
         creatorAssetControlConsumed_ =
             engaged(creatorAssetSearch_) || engaged(creatorAssetTags_) ||
             engaged(creatorAssetStateCombo_) || engaged(creatorAssetFormatCombo_) ||
-            engaged(creatorAssetRigCombo_) || engaged(creatorAssetImportButton_) ||
-            engaged(creatorAssetPlaceButton_) || engaged(creatorAssetReimportButton_) ||
             engaged(creatorAssetSaveTagsButton_);
 
-        if (creatorAssetRefreshPending_ && !wi::jobsystem::IsBusy(creatorAssetWorkload_))
+        if (creatorAssetRefreshPending_)
             RefreshCreatorAssetBrowser();
     }
 
@@ -692,9 +654,7 @@ namespace renegade::studio
         creatorAssetStateCombo_.Render(canvas, cmd);
         creatorAssetFormatCombo_.Render(canvas, cmd);
         creatorAssetRigCombo_.Render(canvas, cmd);
-        creatorAssetImportButton_.Render(canvas, cmd);
         creatorAssetPlaceButton_.Render(canvas, cmd);
-        creatorAssetReimportButton_.Render(canvas, cmd);
         creatorAssetSaveTagsButton_.Render(canvas, cmd);
     }
 
@@ -895,161 +855,7 @@ namespace renegade::studio
         return true;
     }
 
-    void CreatorAssetStudioChrome::ImportCreatorModel()
-    {
-        // Model imports must never bypass the dedicated preview-first
-        // workspace or its required thumbnail/verification stage. Route the
-        // Asset Browser shortcut through the same Studio action as
-        // ADD > IMPORT MODEL... .
-        if (creatorAction_)
-        {
-            creatorAction_(Action::ImportModel);
-            return;
-        }
 
-        auto* session = bridge::StudioSession::Current();
-        if (session == nullptr || !session->Projects().HasProject())
-        {
-            wi::helper::messageBox(
-                "Open or create a Renegade project before importing an asset.",
-                "Import Project Asset");
-            return;
-        }
-        if (wi::jobsystem::IsBusy(creatorAssetWorkload_))
-            return;
-
-        wi::helper::FileDialogParams params;
-        params.type = wi::helper::FileDialogParams::OPEN;
-        params.description =
-            "Reusable model or governed texture to import into this project";
-        params.extensions = {
-            "fbx", "gltf", "glb",
-            "jpg", "jpeg", "png", "bmp", "dds", "tga", "hdr"};
-        wi::helper::FileDialog(params, [this](const std::string& sourcePath)
-        {
-            wi::eventhandler::Subscribe_Once(
-                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                [this, sourcePath](std::uint64_t)
-                {
-                    auto* current = bridge::StudioSession::Current();
-                    if (sourcePath.empty() || current == nullptr ||
-                        !current->Projects().HasProject() ||
-                        wi::jobsystem::IsBusy(creatorAssetWorkload_))
-                        return;
-
-                    const bridge::ResourceSourceFormat resourceFormat =
-                        bridge::DetectResourceSourceFormat(sourcePath);
-                    const bool isTexture =
-                        resourceFormat != bridge::ResourceSourceFormat::Unknown &&
-                        bridge::ClassifyResourceSourceFormat(resourceFormat) ==
-                            bridge::ResourceClass::Texture;
-                    if (isTexture)
-                    {
-                        struct TextureImportWorkState
-                        {
-                            std::string projectRoot;
-                            bridge::StableId projectId;
-                            std::string sourcePath;
-                            bridge::CreatorTextureImportResult imported;
-                        };
-
-                        auto state = std::make_shared<TextureImportWorkState>();
-                        state->projectRoot = current->Projects().CurrentProject().rootPath;
-                        state->projectId = current->Projects().CurrentProject().projectId;
-                        state->sourcePath = sourcePath;
-                        SetStatusText("IMPORT TEXTURE // RETAIN + REGISTER // " +
-                            fs::u8path(sourcePath).filename().generic_u8string());
-
-                        wi::jobsystem::Execute(creatorAssetWorkload_,
-                            [this, state](wi::jobsystem::JobArgs)
-                            {
-                                bridge::CreatorTextureWorkflowService workflow;
-                                state->imported = workflow.ImportTexture(
-                                    state->projectRoot, state->projectId,
-                                    state->sourcePath);
-                                wi::eventhandler::Subscribe_Once(
-                                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                                    [this, state](std::uint64_t)
-                                    {
-                                        creatorAssetCatalogueDirty_ = true;
-                                        creatorAssetRefreshPending_ = true;
-                                        if (!state->imported.succeeded)
-                                        {
-                                            if (state->imported.committed)
-                                            {
-                                                SetStatusText(
-                                                    "IMPORT TEXTURE // COMMITTED // VERIFY FAILED");
-                                                wi::helper::messageBox(
-                                                    "The governed texture transaction committed, but post-commit verification failed. Refresh the project before retrying.\n\nReason: " +
-                                                        state->imported.error,
-                                                    "Import Project Texture");
-                                            }
-                                            else
-                                            {
-                                                SetStatusText("IMPORT TEXTURE // FAILED");
-                                                wi::helper::messageBox(
-                                                    "Could not create the governed project texture.\n\nReason: " +
-                                                        state->imported.error,
-                                                    "Import Project Texture");
-                                            }
-                                            return;
-                                        }
-                                        creatorSelectedAssetId_ =
-                                            state->imported.assetId;
-                                        creatorSelectedAssetPath_ =
-                                            state->imported.assetProjectRelativePath;
-                                        SetStatusText(
-                                            "IMPORT TEXTURE // CURRENT // SELECT OBJECT + ASSIGN BASE");
-                                    });
-                            });
-                        return;
-                    }
-
-                    struct ImportWorkState
-                    {
-                        std::string projectRoot;
-                        bridge::StableId projectId;
-                        std::string sourcePath;
-                        bridge::CreatorModelImportResult imported;
-                    };
-
-                    auto state = std::make_shared<ImportWorkState>();
-                    state->projectRoot = current->Projects().CurrentProject().rootPath;
-                    state->projectId = current->Projects().CurrentProject().projectId;
-                    state->sourcePath = sourcePath;
-                    SetStatusText("IMPORT ASSET // RETAIN + CONVERT // " +
-                        fs::u8path(sourcePath).filename().generic_u8string());
-
-                    wi::jobsystem::Execute(creatorAssetWorkload_,
-                        [this, state](wi::jobsystem::JobArgs)
-                        {
-                            bridge::CreatorAssetWorkflowService workflow;
-                            state->imported = workflow.ImportModel(
-                                state->projectRoot, state->projectId, state->sourcePath);
-                            wi::eventhandler::Subscribe_Once(
-                                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                                [this, state](std::uint64_t)
-                                {
-                                    creatorAssetCatalogueDirty_ = true;
-                                    creatorAssetRefreshPending_ = true;
-                                    if (!state->imported.succeeded)
-                                    {
-                                        SetStatusText("IMPORT ASSET // FAILED");
-                                        wi::helper::messageBox(
-                                            "Could not create the reusable project asset.\n\nReason: " +
-                                                state->imported.error,
-                                            "Import Project Asset");
-                                        return;
-                                    }
-                                    creatorSelectedAssetId_ = state->imported.asset.assetId;
-                                    creatorSelectedAssetPath_ = state->imported.assetProjectRelativePath;
-                                    SetStatusText(
-                                        "IMPORT ASSET // CURRENT // READY IN ASSET BROWSER");
-                                });
-                        });
-                });
-        });
-    }
 
     void CreatorAssetStudioChrome::PlaceSelectedCreatorAsset()
     {
@@ -1142,168 +948,7 @@ namespace renegade::studio
         }
     }
 
-    void CreatorAssetStudioChrome::ReimportSelectedCreatorAsset()
-    {
-        auto* session = bridge::StudioSession::Current();
-        if (session == nullptr || !session->Projects().HasProject() ||
-            !bridge::IsValidStableId(creatorSelectedAssetId_) ||
-            wi::jobsystem::IsBusy(creatorAssetWorkload_))
-            return;
 
-        const auto selected = std::find_if(
-            creatorAssetCatalogue_.entries.begin(), creatorAssetCatalogue_.entries.end(),
-            [this](const bridge::AssetCatalogueEntry& entry)
-            {
-                return entry.assetId == creatorSelectedAssetId_;
-            });
-        if (selected == creatorAssetCatalogue_.entries.end())
-            return;
-
-        if (bridge::IsCreatorGovernedResourceClass(selected->dependencyClass))
-        {
-            if (!bridge::CanReimportCreatorResourceAsset(*selected))
-            {
-                SetStatusText(
-                    "REIMPORT RESOURCE // RECOVER MISSING SOURCE/PRODUCT OR REPAIR INVALID STATE");
-                return;
-            }
-
-            struct ResourceReimportWorkState
-            {
-                std::string projectRoot;
-                bridge::StableId projectId;
-                bridge::StableId assetId;
-                bridge::DependencyClass dependencyClass = bridge::DependencyClass::Data;
-                bridge::ResourceAssetReimportResult result;
-            };
-
-            auto state = std::make_shared<ResourceReimportWorkState>();
-            state->projectRoot = session->Projects().CurrentProject().rootPath;
-            state->projectId = session->Projects().CurrentProject().projectId;
-            state->assetId = creatorSelectedAssetId_;
-            state->dependencyClass = selected->dependencyClass;
-            SetStatusText("REIMPORT RESOURCE // REFRESH + REPLAY STORED RECIPE");
-
-            wi::jobsystem::Execute(creatorAssetWorkload_,
-                [this, state](wi::jobsystem::JobArgs)
-                {
-                    bridge::CreatorAssetWorkflowService refreshWorkflow;
-                    bridge::AssetCatalogue refreshedCatalogue;
-                    std::string refreshError;
-                    if (!refreshWorkflow.BuildCatalogue(
-                            state->projectRoot, state->projectId,
-                            refreshedCatalogue, refreshError))
-                    {
-                        state->result.error =
-                            "LC01 refresh before resource reimport failed: " +
-                            refreshError;
-                    }
-                    else
-                    {
-                        bridge::ResourceAssetReimportRequest request;
-                        request.projectRoot = state->projectRoot;
-                        request.projectId = state->projectId;
-                        request.assetId = state->assetId;
-                        state->result = bridge::ResourceAssetService()
-                            .ReimportResourceAsset(request);
-                    }
-
-                    wi::eventhandler::Subscribe_Once(
-                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                        [this, state](std::uint64_t)
-                        {
-                            creatorAssetCatalogueDirty_ = true;
-                            creatorAssetRefreshPending_ = true;
-                            if (!state->result.succeeded)
-                            {
-                                if (state->result.transaction.committed)
-                                {
-                                    SetStatusText(
-                                        "REIMPORT RESOURCE // COMMITTED // VERIFY FAILED // " +
-                                        state->result.error);
-                                }
-                                else
-                                {
-                                    SetStatusText(
-                                        "REIMPORT RESOURCE // FAILED // " +
-                                        state->result.error);
-                                }
-                                return;
-                            }
-
-                            if (state->dependencyClass ==
-                                bridge::DependencyClass::Texture)
-                            {
-                                auto* current = bridge::StudioSession::Current();
-                                if (current == nullptr ||
-                                    !current->Projects().HasProject() ||
-                                    current->Projects().CurrentProject().projectId !=
-                                        state->projectId)
-                                {
-                                    SetStatusText(
-                                        "REIMPORT TEXTURE // CURRENT // LIVE SCENE NO LONGER MATCHES PROJECT");
-                                    return;
-                                }
-                                const auto refreshed =
-                                    bridge::RefreshMaterialTextureBindingsForAsset(
-                                        current->Scenes().GetScene(),
-                                        state->projectRoot, state->projectId,
-                                        state->assetId);
-                                if (!refreshed.succeeded)
-                                {
-                                    SetStatusText(
-                                        "REIMPORT TEXTURE // CURRENT // LIVE REFRESH WARNING // " +
-                                        refreshed.error);
-                                    return;
-                                }
-                                SetStatusText(
-                                    "REIMPORT TEXTURE // CURRENT // SAME STABLE ID // LIVE BINDINGS " +
-                                    std::to_string(refreshed.restored));
-                                return;
-                            }
-
-                            SetStatusText(
-                                "REIMPORT RESOURCE // CURRENT // SAME STABLE ID");
-                        });
-                });
-            return;
-        }
-
-        struct ReimportWorkState
-        {
-            std::string projectRoot;
-            bridge::StableId projectId;
-            bridge::StableId assetId;
-            bridge::ReusableModelReimportResult result;
-        };
-
-        auto state = std::make_shared<ReimportWorkState>();
-        state->projectRoot = session->Projects().CurrentProject().rootPath;
-        state->projectId = session->Projects().CurrentProject().projectId;
-        state->assetId = creatorSelectedAssetId_;
-        SetStatusText("REIMPORT ASSET // REFRESH + REPLAY RECIPE");
-
-        wi::jobsystem::Execute(creatorAssetWorkload_,
-            [this, state](wi::jobsystem::JobArgs)
-            {
-                bridge::CreatorAssetWorkflowService workflow;
-                state->result = workflow.ReimportModel(
-                    state->projectRoot, state->projectId, state->assetId);
-                wi::eventhandler::Subscribe_Once(
-                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, state](std::uint64_t)
-                    {
-                        creatorAssetCatalogueDirty_ = true;
-                        creatorAssetRefreshPending_ = true;
-                        if (!state->result.succeeded)
-                        {
-                            SetStatusText("REIMPORT ASSET // FAILED // " + state->result.error);
-                            return;
-                        }
-                        SetStatusText("REIMPORT ASSET // CURRENT // SAME STABLE ID");
-                    });
-            });
-    }
 
     void CreatorAssetStudioChrome::SaveSelectedCreatorTags()
     {

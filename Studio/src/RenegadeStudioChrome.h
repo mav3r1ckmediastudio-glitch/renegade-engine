@@ -293,7 +293,6 @@ namespace renegade::studio
             CreateCamera,
             CreateDecal,
             CreateEnvironmentProbe,
-            ImportModel,
             Focus,
             ToggleGrid,
             EnvironmentWorkspace,
@@ -303,7 +302,6 @@ namespace renegade::studio
             TestLevelPlay,
             TestLevelStop,
             BuildWindowsGame,
-            ValidateModelImport,
         };
 
         struct HierarchyRow
@@ -658,9 +656,7 @@ namespace renegade::studio
             wi::graphics::CommandList cmd) const;
         void RefreshCreatorAssetBrowser();
         bool SelectCreatorAsset(const std::string& relativePath);
-        void ImportCreatorModel();
         void PlaceSelectedCreatorAsset();
-        void ReimportSelectedCreatorAsset();
         void SaveSelectedCreatorTags();
         void RefreshCreatorHierarchyRows();
         [[nodiscard]] bridge::AssetCatalogueQuery CreatorAssetQuery() const;
@@ -687,15 +683,12 @@ namespace renegade::studio
             const std::string&,
             float,
             float)> creatorAssetDropped_;
-        wi::jobsystem::context creatorAssetWorkload_;
         CreatorAssetSearchField creatorAssetSearch_;
         CreatorAssetTextInputField creatorAssetTags_;
         CreatorAssetComboBox creatorAssetStateCombo_;
         CreatorAssetComboBox creatorAssetFormatCombo_;
         CreatorAssetComboBox creatorAssetRigCombo_;
-        CreatorAssetButton creatorAssetImportButton_;
         CreatorAssetButton creatorAssetPlaceButton_;
-        CreatorAssetButton creatorAssetReimportButton_;
         CreatorAssetButton creatorAssetSaveTagsButton_;
         float creatorLayoutWidth_ = 1920.0f;
         float creatorLayoutHeight_ = 1080.0f;

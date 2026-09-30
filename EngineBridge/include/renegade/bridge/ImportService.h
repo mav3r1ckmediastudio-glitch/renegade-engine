@@ -52,13 +52,6 @@ namespace renegade::bridge
         Vrma,
     };
 
-    struct ModelImportRequest
-    {
-        std::string sourcePath;
-        std::string assetPath;
-        ModelSourceFormat expectedFormat = ModelSourceFormat::Unknown;
-    };
-
     struct ImportedModelEvidence
     {
         std::size_t skinnedMeshes = 0;
@@ -125,63 +118,6 @@ namespace renegade::bridge
         }
     };
 
-    struct ImportResult
-    {
-        bool succeeded = false;
-        std::string sourcePath;
-        std::string assetPath;
-        std::string error;
-        ModelSourceFormat sourceFormat = ModelSourceFormat::Unknown;
-        std::string importerBackend;
-        std::uint64_t sourceBytes = 0;
-        std::uint64_t sourceFingerprint = 0;
-        ImportedSceneSummary imported;
-        ImportedSceneSummary reloaded;
-        ImportedModelEvidence importedEvidence;
-        ImportedModelEvidence reloadedEvidence;
-    };
-
-    class PreparedModelImport
-    {
-    public:
-        PreparedModelImport() = default;
-        PreparedModelImport(PreparedModelImport&&) noexcept = default;
-        PreparedModelImport& operator=(PreparedModelImport&&) noexcept = default;
-        PreparedModelImport(const PreparedModelImport&) = delete;
-        PreparedModelImport& operator=(const PreparedModelImport&) = delete;
-
-        [[nodiscard]] bool IsReady() const noexcept
-        {
-            return scene_.IsValid() && result_.error.empty();
-        }
-
-        [[nodiscard]] const ImportResult& Result() const noexcept
-        {
-            return result_;
-        }
-
-        [[nodiscard]] const wi::scene::Scene* PeekScene() const noexcept
-        {
-            return scene_.IsValid() ? scene_.get() : nullptr;
-        }
-
-        [[nodiscard]] wi::scene::Scene* PeekMutableScene() noexcept
-        {
-            return scene_.IsValid() ? scene_.get() : nullptr;
-        }
-
-        [[nodiscard]] wi::allocator::shared_ptr<wi::scene::Scene>
-        ReleaseScene() noexcept
-        {
-            return std::move(scene_);
-        }
-
-    private:
-        friend class ImportService;
-        wi::allocator::shared_ptr<wi::scene::Scene> scene_;
-        ImportResult result_;
-    };
-
     enum class ModelScaleMode
     {
         Original,
@@ -210,31 +146,6 @@ namespace renegade::bridge
     class ImportService
     {
     public:
-        [[nodiscard]] PreparedModelImport PrepareModelAsset(
-            const ModelImportRequest& request) const;
-
-        // Recompute the structural/rig evidence after a creator import recipe
-        // mutates the isolated converted scene, before the normal round-trip
-        // serializer proof is run.
-        [[nodiscard]] bool RefreshPreparedModelEvidence(
-            PreparedModelImport& prepared,
-            std::string& error) const;
-
-        // Repoint an already-converted model at the project-retained source and
-        // final temporary WISCENE destination without invoking the converter a
-        // second time. The retained source must be byte-identical to the source
-        // that produced the prepared scene.
-        [[nodiscard]] bool RetargetPreparedModelAsset(
-            PreparedModelImport& prepared,
-            const ModelImportRequest& request,
-            std::string& error) const;
-
-        [[nodiscard]] ImportResult CompleteModelAsset(
-            PreparedModelImport prepared) const;
-
-        [[nodiscard]] ImportResult SavePreparedModelAsset(
-            PreparedModelImport& prepared) const;
-
         [[nodiscard]] static ModelSourceFormat ClassifyModelSourceFormat(
             const std::string& sourcePath) noexcept;
         [[nodiscard]] static bool IsModelSourceFormatSupported(
@@ -244,13 +155,6 @@ namespace renegade::bridge
         [[nodiscard]] static ImportedModelEvidence SummarizeModelEvidence(
             const wi::scene::Scene& scene) noexcept;
 
-        [[nodiscard]] PreparedModelImport PrepareGltfAsset(
-            const std::string& sourcePath,
-            const std::string& assetPath) const;
-        [[nodiscard]] ImportResult CompleteGltfAsset(
-            PreparedModelImport prepared) const;
-        [[nodiscard]] ImportResult SavePreparedGltfAsset(
-            PreparedModelImport& prepared) const;
         [[nodiscard]] static ImportedSceneSummary Summarize(
             const wi::scene::Scene& scene) noexcept;
         [[nodiscard]] static float ResolveScaleFactor(
@@ -269,26 +173,5 @@ namespace renegade::bridge
             float scaleFactor) noexcept;
     };
 
-    class PlaceImportedModelCommand final : public ICommand
-    {
-    public:
-        PlaceImportedModelCommand(
-            wi::scene::Scene& targetScene,
-            wi::allocator::shared_ptr<wi::scene::Scene> preparedScene,
-            const XMFLOAT3& placementPosition,
-            float scaleFactor = 1.0f);
 
-        bool Execute() override;
-        void Undo() override;
-        [[nodiscard]] wi::ecs::Entity PlacedEntity() const noexcept;
-
-    private:
-        wi::scene::Scene* scene_ = nullptr;
-        wi::allocator::shared_ptr<wi::scene::Scene> preparedScene_;
-        XMFLOAT3 placementPosition_ = {};
-        float scaleFactor_ = 1.0f;
-        wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
-        wi::Archive snapshot_;
-        bool hasSnapshot_ = false;
-    };
 }

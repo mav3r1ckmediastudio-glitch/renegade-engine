@@ -48,10 +48,6 @@ namespace renegade::studio
         case EditorAction::ApplyTerrainMaterialPreset: return "ApplyTerrainMaterialPreset";
         case EditorAction::ApplyDefaultGrass: return "ApplyDefaultGrass";
         case EditorAction::ReloadTerrainMaterial: return "ReloadTerrainMaterial";
-        case EditorAction::ValidateModelImport: return "ValidateModelImport";
-        case EditorAction::ImportModel: return "ImportModel";
-        case EditorAction::ApplyImportScale: return "ApplyImportScale";
-        case EditorAction::DismissImportScale: return "DismissImportScale";
         }
         return "unknown";
     }
@@ -117,7 +113,7 @@ namespace renegade::studio
                 gizmo_.isRotator ? std::string("rotate") : gizmo_.isScalator ? std::string("scale") : std::string("select")},
             {"placement_active", lightPlacementActive_ || creatorAssetPlacementActive_},
             {"gizmo_drag_active", gizmoDragActive_}, {"terrain_stroke_active", terrainStrokeActive_},
-            {"asset_drop_pending", creatorAssetDropPending_}, {"import_active", DiagnosticImportActive()}},
+            {"asset_drop_pending", creatorAssetDropPending_}},
             "Studio/src/StudioLiveDiagnostics.cpp");
         diagnosticService_.SetState("input", {{"applicable", levelEditor}, {"gui_focus", GetGUI().HasFocus()},
             {"pointer_over_viewport", levelEditor && IsPointerOverViewport(wi::input::GetPointer())},

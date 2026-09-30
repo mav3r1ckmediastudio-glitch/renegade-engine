@@ -94,71 +94,6 @@ namespace renegade::bridge
         ReusableModelAssetDocument& document,
         std::string& error);
 
-    struct ReusableModelImportRequest
-    {
-        std::string projectRoot;
-        StableId projectId;
-        std::string sourceProjectRelativePath;
-        std::string assetProjectRelativePath;
-        ModelSourceFormat expectedFormat = ModelSourceFormat::Unknown;
-        std::string settingsJson = "{}";
-        std::vector<std::uint8_t> thumbnailPngBytes;
-    };
-
-    struct ReusableModelImportOptions
-    {
-        std::string transactionId;
-        ProjectDocumentTransactionHook operationHook;
-        AssetIdGenerator generateId = GenerateStableId;
-    };
-
-    struct ReusableModelImportResult
-    {
-        bool succeeded = false;
-        bool committedProductVerified = false;
-        StableId sourceAssetId;
-        StableId assetId;
-        std::string sourceProjectRelativePath;
-        std::string assetProjectRelativePath;
-        std::string managedProjectionProjectRelativePath;
-        std::string thumbnailProjectRelativePath;
-        ImportResult import;
-        ModelDerivedMetadata modelMetadata;
-        ProjectDocumentTransactionResult transaction;
-        std::string error;
-    };
-
-    struct ReusableModelReimportRequest
-    {
-        std::string projectRoot;
-        StableId projectId;
-        StableId assetId;
-    };
-
-    struct ReusableModelReimportOptions
-    {
-        std::string transactionId;
-        ProjectDocumentTransactionHook operationHook;
-    };
-
-    struct ReusableModelReimportResult
-    {
-        bool succeeded = false;
-        StableId sourceAssetId;
-        StableId assetId;
-        std::string sourceProjectRelativePath;
-        std::string assetProjectRelativePath;
-        std::string managedProjectionProjectRelativePath;
-        std::string thumbnailProjectRelativePath;
-        ImportedProductStatus statusBefore;
-        ImportResult import;
-        ModelDerivedMetadata modelMetadata;
-        std::string previousProductHash;
-        std::string productHash;
-        ProjectDocumentTransactionResult transaction;
-        std::string error;
-    };
-
     struct ReusableModelPlacementRequest
     {
         std::string projectRoot;
@@ -222,16 +157,6 @@ namespace renegade::bridge
     class ReusableAssetService
     {
     public:
-        [[nodiscard]] ReusableModelImportResult ImportModelAsset(
-            const ReusableModelImportRequest& request,
-            ReusableModelImportOptions options = {},
-            PreparedModelImport preparedModel = {},
-            PreparedReusableModelPlacement* preparedPlacement = nullptr) const;
-
-        [[nodiscard]] ReusableModelReimportResult ReimportModelAsset(
-            const ReusableModelReimportRequest& request,
-            ReusableModelReimportOptions options = {}) const;
-
 #ifndef RENEGADE_LEGACY_PLACEMENT_IMPLEMENTATION
         // Creator-facing placement accepts both ordinary reusable model/Character
         // products and CW-05 Character Prefabs. Prefabs resolve their stable base

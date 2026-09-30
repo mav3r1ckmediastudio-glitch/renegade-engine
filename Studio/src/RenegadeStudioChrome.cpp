@@ -1873,7 +1873,7 @@ namespace renegade::studio
                 constexpr float itemHeight = 30.0f;
                 const float popupX = menuPositions[activeMenu_] - 8.0f;
                 constexpr std::array<int, 6> popupItemCounts = {
-                    5, 4, 9, 4, 2, 3};
+                    5, 4, 8, 4, 1, 3};
                 const int item = static_cast<int>(
                     (y - TopBarHeight) / itemHeight);
                 const bool inPopup = x >= popupX &&
@@ -1903,9 +1903,9 @@ namespace renegade::studio
                             Action::Duplicate, Action::Delete};
                         invoke(actions[item]);
                     }
-                    else if (activeMenu_ == 2 && item >= 0 && item < 9)
+                    else if (activeMenu_ == 2 && item >= 0 && item < 8)
                     {
-                        constexpr std::array<Action, 9> actions = {
+                        constexpr std::array<Action, 8> actions = {
                             Action::CreatePointLight,
                             Action::CreateSpotLight,
                             Action::CreateDirectionalLight,
@@ -1913,8 +1913,7 @@ namespace renegade::studio
                             Action::CreatePlayerStart,
                             Action::CreateCamera,
                             Action::CreateDecal,
-                            Action::CreateEnvironmentProbe,
-                            Action::ImportModel};
+                            Action::CreateEnvironmentProbe};
                         invoke(actions[item]);
                     }
                     else if (activeMenu_ == 3 && item >= 0 && item < 4)
@@ -1932,16 +1931,9 @@ namespace renegade::studio
                             SetActiveBottomTab(item == 2 ? 0 : 3, true);
                         }
                     }
-                    else if (activeMenu_ == 4 && item >= 0 && item < 2)
+                    else if (activeMenu_ == 4 && item == 0)
                     {
-                        if (item == 0)
-                        {
-                            invoke(Action::BuildWindowsGame);
-                        }
-                        else
-                        {
-                            invoke(Action::ValidateModelImport);
-                        }
+                        invoke(Action::BuildWindowsGame);
                     }
                     else if (activeMenu_ == 5 && item >= 0 && item < 3)
                     {
@@ -3443,7 +3435,7 @@ namespace renegade::studio
                 items = {{"POINT LIGHT", true}, {"SPOT LIGHT", true},
                     {"DIRECTIONAL LIGHT", true}, {"RECTANGLE LIGHT", true},
                     {"PLAYER START", true}, {"CAMERA", true}, {"DECAL", true},
-                    {"ENVIRONMENT PROBE", true}, {"IMPORT MODEL...", true}};
+                    {"ENVIRONMENT PROBE", true}};
             }
             else if (activeMenu_ == 3)
             {
@@ -3453,8 +3445,7 @@ namespace renegade::studio
             }
             else if (activeMenu_ == 4)
             {
-                items = {{"BUILD WINDOWS GAME...", true},
-                    {"VALIDATE GLB/GLTF IMPORT...", true}};
+                items = {{"BUILD WINDOWS GAME...", true}};
             }
             else
             {
