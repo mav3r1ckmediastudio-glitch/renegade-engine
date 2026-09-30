@@ -39,6 +39,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/LightService.h
     include/renegade/bridge/ImportService.h
     include/renegade/bridge/ModelImportCandidateService.h
+    include/renegade/bridge/ModelImportCommitService.h
     include/renegade/bridge/ResourceImportService.h
     include/renegade/bridge/ResourceAssetService.h
     include/renegade/bridge/ResourceAssetCacheIdentityService.h
@@ -113,6 +114,7 @@ add_library(RenegadeEngineBridge STATIC
     src/ImportService.cpp
     src/ImportServiceModel.cpp
     src/ModelImportCandidateService.cpp
+    src/ModelImportCommitService.cpp
     src/ResourceImportService.cpp
     src/ResourceAssetService.cpp
     src/ResourceAssetReimportService.cpp

@@ -41,5 +41,6 @@ authoring and animation controls follow only after this result works locally.
 - Failed/missing/external-dependency source leaves no partial project asset.
 - Owner inspects the exact build before any release/merge claim.
 
-The current first checkpoint implements only isolated GLB conversion and
-evidence. It exposes no Studio button and cannot commit an asset yet.
+The branch contains isolated GLB conversion and a governed static-model
+commit/reopen service. The Release bridge and graphics proof executable build.
+The graphics proof has not run; no Studio button is exposed.

@@ -232,3 +232,23 @@ Implementation commit `9543ace` on branch `feature/model-importer-rebuild` start
 Changed files: `EngineBridge/include/renegade/bridge/ModelImportCandidateService.h`, `EngineBridge/src/ModelImportCandidateService.cpp`, `EngineBridge/CMakeLists.txt`, `docs/MODEL_IMPORTER_REBUILD.md`, `docs/ARCHITECTURE.md`, and this handoff. The acceptance contract demands a governed `.rasset` transaction, current catalogue card, exact reopened placement, scene Save/Reopen, and a real native UI check before any READY or completion claim. The GLB source dependency closure must be checked at commit; a GLB extension alone does not guarantee embedded images. Character/animation controls remain out of this first gate.
 
 Local Windows command: `cmake --build BUILD/no-import --config Release --target RenegadeEngineBridge --parallel 2` (VS18 CMake) passed with exit code 0; the immediate incremental repeat also passed with exit code 0 after final source transfer. `git diff --check` passed. No new GPU conversion proof or Studio interaction has run. Next: implement and test the commit/reopen transaction using the retained asset contract. Do not claim the importer works in Studio yet.
+
+### Static GLB transaction build checkpoint - 30 September 2026
+
+On feature/model-importer-rebuild, ModelImportCommitService stages a
+self-contained static GLB source, WISCENE-backed .rasset, managed projection,
+registry and metadata in one project transaction. It refuses external URI
+references, source fingerprint changes, rig/animation payload, existing paths
+and recovery tombstones. After commit it checks the exact asset document,
+current catalogue entry and stable-ID placement loader. A post-commit failure
+reports committed=true and does not invite a blind retry.
+
+Tests/ModelImporterRebuildGraphicsProof.cpp and two tiny GLB fixtures cover
+actual conversion, external-reference rejection, commit/reopen and duplicate
+refusal. Windows VS18 Release RenegadeEngineBridge target build passed
+(exit 0, 619.46 s). RenegadeModelImporterRebuildGraphicsProof target build
+passed (exit 0, 8.61 s). The graphics proof has NOT run; no transaction
+success, Studio UI or creator acceptance is claimed. Next run the proof in
+BUILD/no-import/model-import-rebuild-proof when the desktop is clear, repair
+any behavioural failure, then wire native Studio controls after backend proof.
+Main and other worktrees remain untouched.
