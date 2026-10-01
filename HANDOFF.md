@@ -282,3 +282,43 @@ Next, on a clear desktop, create a disposable Studio project and click through
 file selection, evidence, name editing, cancel, commit, asset card, placement,
 Undo/Redo and scene/project reopen. Then implement and verify an isolated 3D
 model preview before owner acceptance. Main and other worktrees remain untouched.
+
+### Static GLB drag repair - 1 October 2026
+
+Implementation commit `5e0444c` on `feature/model-importer-rebuild` restores
+Studio's per-frame `UpdateCreatorAssetDragPreview` call after GUI callbacks
+and before chrome's consumed-pointer guard. The no-import reset accidentally
+removed this existing placement block along with vegetation ticking, dirty
+workspace layout handling and viewport bounds refresh; all four are restored.
+The owner imported Bow 05 successfully but could not drag its CURRENT asset
+card into the scene. This missing update explains the queued drag/drop failure.
+
+Changed implementation: `Studio/src/StudioApplication.cpp` and
+`Tests/ModelImporterRebuildGraphicsProof.cpp`. The graphics proof now executes
+actual reusable placement, Undo, Redo, WISCENE save/reopen, stable instance
+identity, mesh/object counts and wrapper position checks.
+
+Windows VS18 command: `MSBuild BUILD/no-import/Studio/RenegadeStudio.vcxproj
+/p:Configuration=Release /p:Platform=x64 /p:TargetName=RenegadeStudio_DragRepair
+/p:BuildProjectReferences=false /m:2 /verbosity:minimal` passed (exit 0,
+15.52 s). The side-by-side executable is in `BUILD/no-import/Studio/Release`.
+The original Studio process remains open and predates this fix; no scene was
+closed, saved or edited. Build warnings MSB8029 and existing C4834 remain.
+
+VS18 CMake command: `cmake --build BUILD/no-import --config Release --target
+RenegadeModelImporterRebuildGraphicsProof --parallel 2` passed (exit 0,
+12.66 s). From `BUILD/no-import/Release`, ran
+`RenegadeModelImporterRebuildGraphicsProof <static_triangle.glb>
+<external_uri_triangle.glb> <BUILD/no-import/model-import-rebuild-proof>`
+and then the same command with the owner's retained `Bow 05.glb` source and
+`BUILD/no-import/model-import-bow-placement-proof`. Both printed placement/
+Undo/Redo/save/reopen PASS; combined process exit 0 (1.47 s). Only disposable
+BUILD projects were written. The owner's project was read for its GLB source.
+`git diff --check` passed.
+
+Remaining: save/close the old Studio safely, launch the DragRepair executable,
+and visually test the exact asset card drag, drop, Undo/Redo and Save/Reopen.
+Do not force-close a process with potentially unsaved work. Warn the owner
+before mouse/keyboard interaction. Thumbnail generation and a real importer
+model preview remain unfinished. Native acceptance and independent exact-head
+verification remain pending; this is not a READY importer claim.
