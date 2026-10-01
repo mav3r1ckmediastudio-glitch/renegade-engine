@@ -87,6 +87,9 @@ namespace
         PlaceReusableModelCommand command(*scene, prepared.ReleaseScene(),
             assetId, XMFLOAT3(4.0f, 5.0f, 6.0f), 1.0f, "Placement Proof");
         if (!Require(command.Execute(), "placement command failed")) return false;
+        for (size_t i = 0; i < scene->materials.GetCount(); ++i)
+            for (const auto& texture : scene->materials[i].textures)
+                if (!texture.name.empty() && !Require(texture.resource.IsValid() && texture.resource.GetTexture().IsValid(), "placed model lost a texture")) return false;
         const auto meshCount = scene->meshes.GetCount();
         const auto objectCount = scene->objects.GetCount();
         const auto wrapperId = PersistentEntityId(*scene, command.PlacedEntity());
@@ -141,14 +144,25 @@ int main(int argc, char** argv)
         std::cerr << "Usage: ModelImporterRebuildGraphicsProof <static.glb> <external-uri.glb> <output-root>\n";
         return 2;
     }
-    const fs::path fixture = fs::weakly_canonical(fs::u8path(argv[1]));
+    const bool reopening = std::string(argv[1]) == "--reopen";
+    fs::path fixture = fs::weakly_canonical(fs::u8path(argv[1]));
     const fs::path externalFixture = fs::weakly_canonical(fs::u8path(argv[2]));
-    const fs::path root = fs::absolute(fs::u8path(argv[3]));
-    if (!Require(fs::is_regular_file(fixture) &&
+    const fs::path root = fs::absolute(fs::u8path(reopening ? argv[2] : argv[3]));
+    const bool isFbx = fixture.extension() == ".fbx";
+    const fs::path sourceRoot = root.parent_path() / (root.filename().generic_u8string() + "-source");
+    if (!reopening && !Require(fs::is_regular_file(fixture) &&
             fs::is_regular_file(externalFixture), "GLB fixtures unavailable")) return 3;
 
     std::error_code ec;
-    fs::remove_all(root, ec);
+    if (!reopening) fs::remove_all(root, ec);
+    if (!reopening && isFbx)
+    {
+        fs::remove_all(sourceRoot, ec);
+        fs::create_directories(sourceRoot, ec);
+        fs::copy(fixture.parent_path(), sourceRoot, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+        if (!Require(!ec, "could not prepare disposable FBX sources")) return 4;
+        fixture = sourceRoot / fixture.filename();
+    }
     ec.clear();
     fs::create_directories(root / "Content" / "Models", ec);
     if (!Require(!ec, "could not prepare isolated project")) return 4;
@@ -184,7 +198,22 @@ int main(int argc, char** argv)
         else
         {
             wi::initializer::InitializeComponentsImmediate();
-            auto candidate = ModelImportCandidateService().PrepareGlb(
+            if (reopening)
+            {
+                ReusableModelAssetDocument document;
+                std::string error;
+                if (!Require(ReadReusableModelAssetDocument((root / "Content/Models/Proof Triangle.rasset").generic_u8string(), document, error), "cold RAsset read failed: " + error)) return 20;
+                if (!VerifyPlacement(root, document.manifest.projectId, document.manifest.assetId)) return 21;
+                auto retained = ModelImportCandidateService().PrepareStaticModel((root / fs::u8path(argv[3])).generic_u8string());
+                if (!Require(retained.IsReady(), "retained FBX cannot reconvert without original source: " + retained.Error())) return 22;
+                renegade::studio::ModelImportPreview preview;
+                std::vector<std::uint8_t> png;
+                if (!Require(preview.Prepare(*retained.PeekMutableScene(), error), error) || !RenderPreview(preview) ||
+                    !Require(preview.CapturePng(png, error), error) || !VerifyThumbnailPixels(png)) return 23;
+                std::cout << "FBX COLD REOPEN PASS: retained source reconversion and textured placement without original source directory\n";
+                return 0;
+            }
+            auto candidate = ModelImportCandidateService().PrepareStaticModel(
                 fixture.generic_u8string());
             if (!Require(candidate.IsReady(),
                     "isolated GLB conversion failed: " + candidate.Error()) ||
@@ -219,15 +248,38 @@ int main(int argc, char** argv)
                         "rotation did not change the rendered thumbnail") ||
                     !Require(before == ImportService::Summarize(*candidate.PeekScene()),
                         "rotation contaminated the import candidate")) return 16;
+                if (isFbx)
+                {
+                    if (!Require(!candidate.Dependencies().empty(), "textured FBX has no dependency snapshots")) return 17;
+                    const auto& dependency = candidate.Dependencies().front();
+                    if (!dependency.sourcePath.empty())
+                    {
+                        const fs::path texturePath = fs::u8path(dependency.sourcePath);
+                        const fs::path hidden = texturePath.generic_u8string() + ".hidden";
+                        fs::rename(texturePath, hidden);
+                        auto missing = ModelImportCandidateService().PrepareStaticModel(fixture.generic_u8string());
+                        request.assetName = "Missing Texture";
+                        auto refusedMissing = ModelImportCommitService().CommitStaticModel(request, candidate);
+                        fs::rename(hidden, texturePath);
+                        if (!Require(!missing.IsReady() && !refusedMissing.committed && !refusedMissing.succeeded &&
+                            !fs::exists(root / "Content/Models/Missing Texture.rasset"), "missing texture created a successful candidate or product")) return 18;
+                        { std::ofstream changed(texturePath, std::ios::binary | std::ios::app); changed.put('x'); }
+                        request.assetName = "Changed Texture";
+                        auto refusedChanged = ModelImportCommitService().CommitStaticModel(request, candidate);
+                        { std::ofstream restored(texturePath, std::ios::binary | std::ios::trunc); restored.write(reinterpret_cast<const char*>(dependency.bytes.data()), dependency.bytes.size()); }
+                        if (!Require(!refusedChanged.committed && !refusedChanged.succeeded && !fs::exists(root / "Content/Models/Changed Texture.rasset"), "changed texture was not rejected before commit")) return 19;
+                        std::cout << "FBX MISSING/CHANGED TEXTURE REJECTION PASS\n";
+                    }
+                }
                 auto invalidThumbnail = request;
                 invalidThumbnail.assetName = "Invalid Thumbnail";
                 invalidThumbnail.thumbnailPng = {0};
-                const auto refusedThumbnail = ModelImportCommitService().CommitGlb(
+                const auto refusedThumbnail = ModelImportCommitService().CommitStaticModel(
                     invalidThumbnail, candidate);
                 if (!Require(!refusedThumbnail.succeeded && !refusedThumbnail.committed &&
                         !fs::exists(root / "Content" / "Models" / "Invalid Thumbnail.rasset"),
                         "invalid thumbnail created a partial model product")) return 14;
-                auto external = ModelImportCandidateService().PrepareGlb(
+                auto external = ModelImportCandidateService().PrepareStaticModel(
                     externalFixture.generic_u8string());
                 request.assetName = "External Source";
                 if (!Require(external.IsReady(),
@@ -238,7 +290,7 @@ int main(int argc, char** argv)
                 }
                 else
                 {
-                    const auto refused = ModelImportCommitService().CommitGlb(
+                    const auto refused = ModelImportCommitService().CommitStaticModel(
                         request, external);
                     if (!Require(!refused.succeeded && !refused.committed &&
                             !fs::exists(root / "Content" / "Models" /
@@ -249,7 +301,7 @@ int main(int argc, char** argv)
                 if (resultCode == 0)
                 {
                     request.assetName = "Proof Triangle";
-                    const auto committed = ModelImportCommitService().CommitGlb(
+                    const auto committed = ModelImportCommitService().CommitStaticModel(
                         request, candidate);
                     if (!Require(committed.succeeded && committed.committed,
                             "governed commit/reopen failed: " + committed.error))
@@ -277,15 +329,32 @@ int main(int argc, char** argv)
                             resultCode = 9;
                         else
                         {
-                            const auto duplicate = ModelImportCommitService().CommitGlb(
+                            const auto duplicate = ModelImportCommitService().CommitStaticModel(
                                 request, candidate);
                             if (!Require(!duplicate.succeeded && !duplicate.committed,
                                     "duplicate destination should fail without replacing product"))
                                 resultCode = 10;
                             else if (!VerifyPlacement(root, request.projectId, committed.assetId))
                                 resultCode = 11;
-                            else std::cout << "MODEL REBUILD PROOF PASS: placement/Undo/Redo/save/reopen; stable asset="
+                            else
+                            {
+                                if (isFbx)
+                                {
+                                    for (const auto& d : candidate.Dependencies())
+                                    {
+                                        const auto retained = root / "SourceAssets/Models/Proof Triangle" / fs::u8path(d.retainedRelativePath);
+                                        if (!Require(fs::is_regular_file(retained), "retained FBX texture missing")) return 24;
+                                        std::ifstream stream(retained, std::ios::binary);
+                                        const std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(stream)), {});
+                                        if (!Require(bytes == d.bytes, "retained FBX texture bytes changed")) return 24;
+                                    }
+                                    if (!Require(before == ImportService::Summarize(*candidate.PeekScene()), "commit mutated the import candidate")) return 25;
+                                    fs::remove_all(sourceRoot, ec);
+                                    if (!Require(!ec && !fs::exists(sourceRoot), "original disposable source directory was not removed")) return 26;
+                                }
+                                std::cout << "MODEL REBUILD PROOF PASS: placement/Undo/Redo/save/reopen; stable asset="
                                 << committed.assetId << "\n";
+                            }
                         }
                     }
                 }

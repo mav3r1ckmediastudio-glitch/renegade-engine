@@ -3436,7 +3436,7 @@ namespace renegade::studio
                 items = {{"POINT LIGHT", true}, {"SPOT LIGHT", true},
                     {"DIRECTIONAL LIGHT", true}, {"RECTANGLE LIGHT", true},
                     {"PLAYER START", true}, {"CAMERA", true}, {"DECAL", true},
-                    {"ENVIRONMENT PROBE", true}, {"IMPORT STATIC GLB...", true}};
+                    {"ENVIRONMENT PROBE", true}, {"IMPORT STATIC MODEL...", true}};
             }
             else if (activeMenu_ == 3)
             {

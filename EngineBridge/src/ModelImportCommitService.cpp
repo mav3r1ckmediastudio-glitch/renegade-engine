@@ -162,6 +162,14 @@ namespace renegade::bridge
                 error = "Could not create isolated WISCENE archive.";
                 return false;
             }
+            // A reusable payload must carry its resource bytes independently
+            // of the source bundle and of the user's current save preference.
+            struct RestoreResourceMode
+            {
+                wi::resourcemanager::Mode previous = wi::resourcemanager::GetMode();
+                ~RestoreResourceMode() { wi::resourcemanager::SetMode(previous); }
+            } resourceMode;
+            wi::resourcemanager::SetMode(wi::resourcemanager::Mode::EMBED_FILE_DATA);
             scene.Serialize(archive);
             const bool saved = archive.SaveFile(temporary.generic_u8string());
             archive = wi::Archive(); // disarm Wicked's second destructor save
@@ -220,6 +228,16 @@ namespace renegade::bridge
         const ModelImportCommitRequest& request,
         ModelImportCandidate& candidate) const
     {
+        if (candidate.SourceFormat() == ModelSourceFormat::Glb)
+            return CommitStaticModel(request, candidate);
+        ModelImportCommitResult result;
+        result.error = "The GLB compatibility entry point accepts GLB files only.";
+        return result;
+    }
+
+    ModelImportCommitResult ModelImportCommitService::CommitStaticModel(
+        const ModelImportCommitRequest& request, ModelImportCandidate& candidate) const
+    {
         ModelImportCommitResult result;
         if (!candidate.IsReady() || candidate.PeekMutableScene() == nullptr ||
             !IsValidStableId(request.projectId))
@@ -237,7 +255,7 @@ namespace renegade::bridge
         if (candidate.Evidence().HasRigOrAnimationPayload() ||
             candidate.Summary().animations != 0)
         {
-            result.error = "This first model gate accepts static GLB content only.";
+            result.error = "This model importer accepts static GLB or FBX content only.";
             return result;
         }
 
@@ -256,10 +274,27 @@ namespace renegade::bridge
             sourceBytes.size() != candidate.SourceBytes() ||
             Fingerprint(sourceBytes) != candidate.SourceFingerprint())
         {
-            result.error = "Selected GLB changed after conversion; choose it again.";
+            result.error = "Selected model changed after conversion; choose it again.";
             return result;
         }
-        if (!SelfContainedGlb(sourceBytes, result.error)) return result;
+        const bool isFbx = candidate.SourceFormat() == ModelSourceFormat::Fbx;
+        if (!isFbx && candidate.SourceFormat() != ModelSourceFormat::Glb)
+        {
+            result.error = "Unsupported model candidate source format.";
+            return result;
+        }
+        if (!isFbx && !SelfContainedGlb(sourceBytes, result.error)) return result;
+        for (const auto& dependency : candidate.Dependencies())
+        {
+            std::vector<std::uint8_t> current;
+            if (!dependency.sourcePath.empty() &&
+                (!ReadBytes(fs::u8path(dependency.sourcePath), current) || current != dependency.bytes))
+            {
+                result.error = "FBX texture changed or disappeared after preview: " +
+                    fs::u8path(dependency.sourcePath).filename().generic_u8string();
+                return result;
+            }
+        }
 
         if (!request.thumbnailPng.empty())
         {
@@ -300,8 +335,54 @@ namespace renegade::bridge
                 return result;
             }
         }
-        const fs::path retainedSource = sourceFolder /
-            fs::u8path(request.assetName + ".glb");
+        const fs::path sourceBundle = isFbx ? sourceFolder / fs::u8path(request.assetName) : sourceFolder;
+        if (isFbx && fs::exists(sourceBundle, ec) && !fs::is_empty(sourceBundle, ec))
+        {
+            result.error = "Model source bundle already exists; choose another asset name.";
+            return result;
+        }
+        const fs::path retainedSource = isFbx
+            ? sourceBundle / sourcePath.filename()
+            : sourceFolder / fs::u8path(request.assetName + ".glb");
+        std::vector<fs::path> dependencyPaths;
+        struct EmptyBundleCleanup
+        {
+            fs::path bundle;
+            std::vector<fs::path>& paths;
+            ~EmptyBundleCleanup()
+            {
+                if (bundle.empty()) return;
+                // Failed transactions may leave empty generated directories.
+                // Never remove files or non-empty recovery directories.
+                std::error_code ignored;
+                for (auto it = paths.rbegin(); it != paths.rend(); ++it)
+                    for (auto parent = it->parent_path(); parent != bundle && Within(parent, bundle); parent = parent.parent_path())
+                        fs::remove(parent, ignored);
+                fs::remove(bundle, ignored);
+            }
+        } cleanup{isFbx ? sourceBundle : fs::path{}, dependencyPaths};
+        for (const auto& dependency : candidate.Dependencies())
+        {
+            const fs::path relative = fs::u8path(dependency.retainedRelativePath);
+            const fs::path destination = (sourceBundle / relative).lexically_normal();
+            if (relative.empty() || relative.is_absolute() ||
+                !Within(destination, sourceBundle) || destination == retainedSource ||
+                fs::exists(destination, ec) || ec)
+            {
+                result.error = "FBX retained texture destination is invalid or already occupied.";
+                return result;
+            }
+            dependencyPaths.push_back(destination);
+        }
+        if (isFbx)
+        {
+            fs::create_directories(sourceBundle, ec);
+            if (ec || !Within(fs::weakly_canonical(sourceBundle, ec), root) || ec)
+            {
+                result.error = "Could not prepare retained FBX source bundle.";
+                return result;
+            }
+        }
         const fs::path assetPath = assetFolder /
             fs::u8path(request.assetName + ".rasset");
         result.sourceProjectRelativePath = retainedSource.lexically_relative(root)
@@ -375,10 +456,36 @@ namespace renegade::bridge
         }
 
         std::vector<std::uint8_t> payload;
+        wi::scene::Scene commitScene;
         try
         {
-            if (!SerializeScene(*candidate.PeekMutableScene(),
-                    workFolder / fs::u8path(result.assetId + ".wiscene"),
+            // Relocation happens on a clone; failed commits leave the candidate
+            // and preview retryable with their original resource identities.
+            wi::Archive clone;
+            candidate.PeekMutableScene()->Serialize(clone);
+            clone.SetReadModeAndResetPos(true);
+            commitScene.Serialize(clone);
+            for (size_t i = 0; i < commitScene.materials.GetCount(); ++i)
+            {
+                for (auto& texture : commitScene.materials[i].textures)
+                {
+                    for (size_t d = 0; d < candidate.Dependencies().size(); ++d)
+                    {
+                        const auto& dependency = candidate.Dependencies()[d];
+                        if (texture.name != dependency.previewResourceName) continue;
+                        texture.name = dependencyPaths[d].generic_u8string();
+                        texture.resource = wi::resourcemanager::Load(texture.name,
+                            wi::resourcemanager::Flags::IMPORT_RETAIN_FILEDATA,
+                            dependency.bytes.data(), dependency.bytes.size());
+                        if (!texture.resource.IsValid() || !texture.resource.GetTexture().IsValid())
+                            throw std::runtime_error("Retained FBX texture could not decode.");
+                    }
+                }
+                commitScene.materials[i].SetDirty();
+            }
+            if (!SerializeScene(commitScene,
+                    (isFbx ? sourceBundle : workFolder) /
+                        fs::u8path(".renegade-" + result.assetId + ".import.wiscene"),
                     payload, result.error)) return result;
         }
         catch (const std::exception& exception)
@@ -412,14 +519,15 @@ namespace renegade::bridge
             morphCount += candidate.PeekScene()->meshes[i].morph_targets.size();
         if (!count(morphCount, metadataValue.morphTargetCount)) return result;
 
-        const std::string recipeJson =
-            R"({"options":{},"source_format":"glb"})";
+        nlohmann::json recipe = {{"options", nlohmann::json::object()},
+            {"source_format", isFbx ? "fbx" : "glb"}};
+        const std::string recipeJson = recipe.dump();
         ReusableModelAssetDocument document;
         document.manifest.projectId = request.projectId;
         document.manifest.assetId = result.assetId;
         document.manifest.sourceAssetId = result.sourceAssetId;
-        document.manifest.sourceFormat = "glb";
-        document.manifest.importer = "wicked.gltf";
+        document.manifest.sourceFormat = isFbx ? "fbx" : "glb";
+        document.manifest.importer = isFbx ? "wicked.fbx" : "wicked.gltf";
         document.manifest.settingsJson = recipeJson;
         document.manifest.payloadHash = Hash(payload);
         document.payload = std::move(payload);
@@ -433,7 +541,7 @@ namespace renegade::bridge
         projection.sourceAssetId = result.sourceAssetId;
         projection.sourceProjectRelativePath = result.sourceProjectRelativePath;
         projection.assetProjectRelativePath = result.assetProjectRelativePath;
-        projection.sourceFormat = "glb";
+        projection.sourceFormat = document.manifest.sourceFormat;
         projection.importer = document.manifest.importer;
         projection.settingsJson = recipeJson;
         projection.payloadHash = document.manifest.payloadHash;
@@ -456,6 +564,23 @@ namespace renegade::bridge
         sourceRecord.provider = "lp07.source_asset";
         sourceRecord.contentHash = sourceHash;
         registry.records.push_back(std::move(sourceRecord));
+        for (size_t d = 0; d < dependencyPaths.size(); ++d)
+        {
+            AssetRecord textureRecord;
+            textureRecord.assetId = GenerateStableId();
+            if (!idUnused(textureRecord.assetId))
+            {
+                result.error = "Could not allocate unique retained texture identity.";
+                return result;
+            }
+            textureRecord.dependencyNodeId = "lp07.source:" + textureRecord.assetId;
+            textureRecord.projectRelativePath = dependencyPaths[d].lexically_relative(root).generic_u8string();
+            textureRecord.dependencyClass = DependencyClass::ImportedContent;
+            textureRecord.requirement = DependencyRequirement::EditorOnly;
+            textureRecord.provider = "lp07.source_asset";
+            textureRecord.contentHash = Hash(candidate.Dependencies()[d].bytes);
+            registry.records.push_back(std::move(textureRecord));
+        }
         AssetRecord product;
         product.assetId = result.assetId;
         product.dependencyNodeId = "lp07.rasset:" + result.assetId;
@@ -490,6 +615,8 @@ namespace renegade::bridge
 
         std::vector<ProjectDocumentWrite> writes;
         writes.push_back(ExactWrite(retainedSource, std::move(sourceBytes)));
+        for (size_t d = 0; d < dependencyPaths.size(); ++d)
+            writes.push_back(ExactWrite(dependencyPaths[d], candidate.Dependencies()[d].bytes));
         writes.push_back(ExactWrite(assetPath, std::move(assetBytes)));
         writes.push_back(TextWrite(projectionPath, projectionJson));
         if (!request.thumbnailPng.empty())

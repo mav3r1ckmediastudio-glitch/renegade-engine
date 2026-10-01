@@ -667,3 +667,23 @@ No upstream changes, project serialization, API key or cloud service is involved
 A local coding agent must run on the machine hosting the executable: this does
 not connect cloud sessions to an owner's localhost. See LIVE_DIAGNOSTIC_ACCESS.md
 for schema, limits, reader and outstanding acceptance proof.
+
+
+## Static model importer rebuild: FBX sources
+
+ModelImportCandidateService owns isolated GLB/FBX conversion and FBX dependency
+snapshots. Studio uses PrepareStaticModel and CommitStaticModel through the
+bridge; strict GLB entry points remain for compatibility. FBX textures receive
+unique preview resource keys so a previous filename cache cannot conceal changed
+bytes. External texture references are limited to the source folder tree;
+embedded textures require usable filenames.
+
+ModelImportCommitService clones the candidate before relocating material paths.
+FBX source bundles retain original filenames and source-relative texture layout
+under SourceAssets/Models/<asset name>. Texture bytes and EditorOnly source
+records join the existing governed product/projection/thumbnail/registry/metadata
+transaction without extending the canonical creator recipe schema. Payload
+serialization embeds resource bytes with a scoped resource-mode restoration and
+uses the retained-source directory as its path base, matching placement staging.
+Empty-directory cleanup never removes files or nonempty recovery directories.
+This is a static Windows x64/DX12 candidate; Character/animation remains separate.

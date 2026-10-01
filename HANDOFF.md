@@ -1,5 +1,112 @@
 # Renegade Engine — Current Handoff
 
+## Current importer recovery: static FBX - 1 October 2026
+
+Branch: feature/model-importer-rebuild. Base: 8749a20, the recorded independent
+native GLB verification. This checkpoint adds static FBX with embedded and
+source-folder-relative textures while preserving the accepted GLB preview and
+rotation workflow. The exact implementation commit is recorded in the subsequent
+checkpoint entry. No push, merge, owner-project mutation or global release claim.
+
+### Implementation and files
+
+- EngineBridge ModelImportCandidateService header/source: PrepareStaticModel,
+  FBX dependency snapshots through ufbx, isolated conversion, exact-byte decoding
+  with unique preview resource keys, and source/dependency change refusal.
+- EngineBridge ModelImportCommitService header/source: CommitStaticModel,
+  retained FBX/texture bundle, source registry records, cloned material relocation,
+  embedded payload serialization with resource-mode restoration and paths based
+  at the retained source bundle. Empty-directory cleanup preserves files and
+  nonempty recovery folders. Existing strict GLB entry points remain.
+- StudioApplication.cpp and RenegadeStudioChrome.cpp: static-model picker and
+  summary accept GLB/FBX using the same working native preview/name/rotation/
+  commit/cancel controls.
+- Tests/ModelImporterRebuildGraphicsProof.cpp and ModelImporterRebuild.cmake:
+  external/embedded FBX proof and fresh-process reopen cases. Generated fixture
+  FBXs, checker PNG, Blender generator and provenance are under
+  Tests/fixtures/Importer. Exporter-written machine paths are removed.
+- docs/MODEL_IMPORTER_REBUILD.md, ARCHITECTURE.md and FEATURE_MATRIX.csv record
+  the contract, evidence and outstanding acceptance.
+
+### Build and automated evidence
+
+VS18 Windows x64 Release, DX12, RTX 4070 Ti. Wicked remains pinned and clean at
+3a800b7134aafe58461093c8abb2e274d4e64033.
+
+Using the installed VS18 MSBuild executable, these sequential final commands
+all returned exit 0 (BuildProjectReferences=false requires explicitly building
+the bridge first so dependent executables link the current library):
+
+    MSBuild BUILD/no-import/EngineBridge/RenegadeEngineBridge.vcxproj /p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false /m:1 /verbosity:quiet /nologo
+    MSBuild BUILD/no-import/RenegadeModelImporterRebuildGraphicsProof.vcxproj /p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false /m:1 /verbosity:quiet /nologo
+    MSBuild BUILD/no-import/Studio/RenegadeStudio.vcxproj /p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false /p:TargetName=RenegadeStudio_FbxImport /m:1 /verbosity:quiet /nologo
+    ctest --test-dir BUILD/no-import -C Release -R RenegadeModelImporterRebuild --output-on-failure
+
+CTest passed 5/5, exit 0, 9.29 seconds: existing GLB; external-texture FBX;
+external FBX cold reopen; embedded-texture FBX; embedded FBX cold reopen.
+The final sequential build-and-test process took 28.14 seconds. Existing
+MSB8029 intermediate-directory warnings remain; earlier full Studio compilation
+also reported existing ignored-nodiscard warnings.
+
+The external proof rejects missing or changed texture bytes before producing a
+product. Both FBX proofs verify preview pixels and rotation, retained texture
+bytes, candidate isolation, thumbnail decode, placement Undo/Redo and WISCENE
+save/reopen. They delete their disposable original source copies; separate
+processes then verify textured placement and reconversion from retained source.
+The embedded fixture's generated thumbnail was visually inspected.
+
+Earlier failing runs are retained as diagnostic evidence, not acceptance:
+an unsupported retained_dependencies recipe key was removed; a dependent build
+initially linked the stale bridge library. Subsequent tests exposed texture loss
+because the payload used the Intermediate directory as its relative path base.
+The final implementation uses the source bundle base and embeds resource bytes;
+all five cases now pass. Logs are ignored BUILD/no-import/texture-fix-*.log and
+the CTest output, not committed machine-path transcripts.
+
+### Native Studio evidence
+
+Executable: BUILD/no-import/Studio/Release/RenegadeStudio_FbxImport.exe.
+SHA-256: 492c645c608624203612ec09707f8bfd93c957526746ef7034d2f3360d79028d.
+Built from the implementation changes over base 8749a20; the diagnostic revision
+in the executable remains that base, so use this hash to identify the tested file.
+
+In the disposable BUILD/no-import/model-preview-native-proof project:
+
+- ADD > IMPORT STATIC MODEL selected static_textured_cube.fbx.
+- Native preview visibly showed its red/blue checker texture; Rotate Right
+  changed the view. Scene model count stayed 2 before import and after commit.
+- Native name field created FBX Native Proof. Its textured thumbnail card was
+  visible in Content/Models and drag/drop created a third logical model.
+- Focus showed the textured cube in the viewport. Undo returned count 2;
+  Redo returned count 3. Ctrl+S cleared the scene's dirty marker.
+- Closed Studio normally and started a fresh process. Opened the same disposable
+  project and Level: count 3 and the checker-textured cube survived. Reopened
+  Content/Models and visually verified the textured card labelled CURRENT / FBX.
+- Closed the test Studio normally after inspection; desktop input is released.
+
+Stable asset ID: fc6efa99-06ff-4e1e-9b65-9e4f7e9eb281.
+Thumbnail SHA-256 before/after reopen:
+23ebc910d9892986dd4f78719accaac4baa23db65c255841089ffca7b68705cd.
+Screenshots are reproducible ignored BUILD/no-import/import-proof-fbx-*.png.
+The owner's V2 project was not opened.
+
+### Remaining scope and next task
+
+Static FBX only. External textures must be within the source folder tree; export
+relative references. Embedded images need filenames. Ambiguous, missing,
+unreadable or changed dependencies fail explicitly. glTF sidecars, arbitrary
+outside-folder texture relocation, rig/animation/Character authoring, destination
+selection and reimport UX are not part of this result. No Runtime/gameplay proof
+or original-Wicked parity claim was made. Existing texture-free GLB tests remain
+green; broader importer release acceptance is separate.
+
+Next: owner inspects this exact FBX build with a static model, then independent
+exact-commit verification before accepting any release gate. Character/animation
+support requires its own bounded authoring and persistence slice. Consult this
+entry and MODEL_IMPORTER_REBUILD.md instead of relying on the stalled chat.
+
+
+
 ## Character Importer action assignment - 22 September 2026
 
 On isolated `feature/complete-a6-recovery-20260921`, the first explicit Character action assignment slice is implemented locally. Animations-page choices persist on governed native clip metadata and A6 reads them instead of guessing filenames; the base reference-pose clip is not a fallback Idle. Repeated attack requests no longer interrupt an active one-shot. Runtime and focused tests built Release; 3/3 selected tests passed, plus an actual owner Mutant four-clip governed import/reopen/AI graphics proof passed. Studio Release ClCompile passed; a separate `RenegadeStudio_ActionAssignments.exe` also linked successfully without replacing the running Studio. NOT a finished importer UI or owner acceptance. Read `docs/CHARACTER_ACTION_IMPORTER_HANDOFF.md` for scope, validation, unimplemented slots/frame-number/custom-action UI and next safe steps. No main edits, owner-project mutation, push or merge.

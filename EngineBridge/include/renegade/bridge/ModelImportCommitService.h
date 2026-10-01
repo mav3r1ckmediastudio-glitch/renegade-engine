@@ -35,6 +35,9 @@ namespace renegade::bridge
         // Run on Wicked's thread-safe point. All project-visible writes cross
         // one journaled transaction; success requires catalogue and placement
         // reopen by the committed stable ID.
+        [[nodiscard]] ModelImportCommitResult CommitStaticModel(
+            const ModelImportCommitRequest& request,
+            ModelImportCandidate& candidate) const;
         [[nodiscard]] ModelImportCommitResult CommitGlb(
             const ModelImportCommitRequest& request,
             ModelImportCandidate& candidate) const;

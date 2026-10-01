@@ -2734,7 +2734,7 @@ namespace renegade::studio
         GetGUI().RemoveWidget(&inspectorPanel_);
         GetGUI().AddWidget(&studioChrome_.AudioWorkspace());
         GetGUI().AddWidget(&inspectorPanel_);
-        modelImportPanel_.Create("Import Static GLB");
+        modelImportPanel_.Create("Import Static Model");
         modelImportPanel_.SetSize(XMFLOAT2(560.0f, 610.0f));
         modelImportPreviewImage_.Create("Rendered Model Preview");
         modelImportPreviewImage_.SetText("");
@@ -5456,8 +5456,8 @@ namespace renegade::studio
             session_->Projects().CurrentProject().projectId;
         wi::helper::FileDialogParams params;
         params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "Select self-contained static GLB";
-        params.extensions = {"glb"};
+        params.description = "Select static GLB or FBX";
+        params.extensions = {"glb", "fbx"};
         wi::helper::FileDialog(params,
             [this, projectId](const std::string& path)
             {
@@ -5469,25 +5469,25 @@ namespace renegade::studio
                             !session_->Projects().HasProject() ||
                             session_->Projects().CurrentProject().projectId != projectId)
                             return;
-                        studioChrome_.SetStatusText("MODEL IMPORT // CONVERTING GLB");
+                        studioChrome_.SetStatusText("MODEL IMPORT // CONVERTING MODEL");
                         auto candidate = std::make_unique<bridge::ModelImportCandidate>(
-                            bridge::ModelImportCandidateService().PrepareGlb(path));
+                            bridge::ModelImportCandidateService().PrepareStaticModel(path));
                         if (!candidate->IsReady())
                         {
                             studioChrome_.SetStatusText(
                                 "MODEL IMPORT // " + candidate->Error());
-                            ShowStudioMessageBox(candidate->Error(), "Import Static GLB");
+                            ShowStudioMessageBox(candidate->Error(), "Import Static Model");
                             return;
                         }
                         if (candidate->Evidence().HasRigOrAnimationPayload() ||
                             candidate->Summary().animations != 0)
                         {
                             studioChrome_.SetStatusText(
-                                "MODEL IMPORT // THIS GATE ACCEPTS STATIC GLB ONLY");
+                                "MODEL IMPORT // THIS GATE ACCEPTS STATIC MODELS ONLY");
                             ShowStudioMessageBox(
-                                "This first importer accepts static GLB only. "
+                                "This importer accepts static GLB or FBX only. "
                                 "Rig and animation content needs a separate proven path.",
-                                "Import Static GLB");
+                                "Import Static Model");
                             return;
                         }
                         auto preview = std::make_unique<ModelImportPreview>();
@@ -5505,7 +5505,7 @@ namespace renegade::studio
                         const auto& summary = candidate->Summary();
                         modelImportSummary_.SetText(
                             "SOURCE // " + fs::u8path(path).filename().generic_u8string() +
-                            "\nSTATIC GLB // " + std::to_string(summary.meshes) +
+                            "\nSTATIC " + std::string(candidate->SourceFormat() == bridge::ModelSourceFormat::Fbx ? "FBX" : "GLB") + " // " + std::to_string(summary.meshes) +
                             " meshes / " + std::to_string(summary.materials) +
                             " materials / " + std::to_string(summary.objects) + " objects" +
                             "\nNo authored scene changes before import.");
@@ -5542,12 +5542,12 @@ namespace renegade::studio
                     ShowStudioMessageBox(thumbnailError, "Model Thumbnail");
                     return;
                 }
-                const auto result = bridge::ModelImportCommitService().CommitGlb(
+                const auto result = bridge::ModelImportCommitService().CommitStaticModel(
                     request, *modelImportCandidate_);
                 if (!result.succeeded)
                 {
                     studioChrome_.SetStatusText("MODEL IMPORT // " + result.error);
-                    ShowStudioMessageBox(result.error, "Import Static GLB");
+                    ShowStudioMessageBox(result.error, "Import Static Model");
                     if (result.committed)
                     {
                         modelImportPanel_.SetVisible(false);
@@ -5577,7 +5577,7 @@ namespace renegade::studio
                     ShowStudioMessageBox(
                         "The model was committed, but its Asset Browser card "
                         "could not be revealed. Do not import it again.\n\n" +
-                        revealError, "Import Static GLB");
+                        revealError, "Import Static Model");
                     return;
                 }
                 studioChrome_.SetStatusText(
