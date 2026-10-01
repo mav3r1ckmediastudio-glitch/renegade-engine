@@ -396,3 +396,12 @@ project, confirms the thumbnail card and project reopen. Warn before desktop
 input and protect unsaved work. Old thumbnails are not auto-regenerated.
 Static self-contained GLB to Content/Models only; no FBX, rigs or animation.
 This is an implemented/tested candidate, not a completed release gate.\n
+### Exact implementation commit checkpoint - 1 October 2026
+
+Implementation: fd8b24718085669a41f8fad1fe01f41eb52dcc7a
+(Add isolated rendered GLB preview and transactional thumbnails).
+The running RenegadeStudio_ModelPreview Release executable was built from
+this implementation's source before its commit. All build/proof/visual
+evidence and pending native checks are listed in the preceding checkpoint.
+git diff --check passed before commit. This follow-up changes documentation
+only. Independent verification must target fd8b247; no release gate accepted.\n
