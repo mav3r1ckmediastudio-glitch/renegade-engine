@@ -405,3 +405,75 @@ this implementation's source before its commit. All build/proof/visual
 evidence and pending native checks are listed in the preceding checkpoint.
 git diff --check passed before commit. This follow-up changes documentation
 only. Independent verification must target fd8b247; no release gate accepted.\n
+### Recovery-session native verification - 1 October 2026
+
+Reviewed implementation: fd8b24718085669a41f8fad1fe01f41eb52dcc7a.
+Repository HEAD before this documentation update:
+462bf3f (Record exact preview implementation and acceptance handoff), on
+feature/model-importer-rebuild. Working tree and Wicked submodule were clean.
+Verifier: a different Codex conversation, recovering the interrupted session;
+no implementation code was changed in this verification.
+
+Owner evidence: the owner explicitly confirmed the corrected preview and BOTH
+rotation buttons worked; that message had been lost by the frozen conversation.
+The recovered desktop history contained the implementation and handoff commits.
+There were no active Desktop Commander sessions or Studio/build processes when
+recovery began; the old chat spinner did not indicate a running local build.
+
+Independent native checks, Windows 11 Pro 10.0.26200, RTX 4070 Ti driver
+32.0.15.9636, DX12, existing VS18 Release preview executable:
+- Opened a disposable BUILD/no-import/model-preview-native-proof project.
+  Its earlier incomplete descriptor was refused because it lacked startup
+  content. Fixed only the disposable fixture by adding Content/Scenes/Preview.wiscene
+  copied from the existing Bow placement proof; no product code change needed.
+- ADD > IMPORT STATIC GLB selected the retained Bow fixture, rendered the model,
+  and left the authored scene untouched. Cancel closed the panel without creating
+  a model asset; the scene SHA256 stayed
+  B009919E1A692EF69C9D8E7D2FBFEC48DC48E85DF572CE00B5BC6D47304E79E4.
+- Reopened the picker, clicked Rotate Right (visible view change), typed Native
+  Bow Thumbnail, and clicked Import Asset. Native success status identified
+  Content/Models/Native Bow Thumbnail.rasset. The transaction created the source,
+  RAsset, managed projection, registry record, and 512x320 PNG.
+- Opened Content/Models in Project Assets and visually inspected the Bow thumbnail
+  on the new card. Dragged that card into the viewport; model count rose 1 -> 2.
+- Clicked native Undo: model count 2 -> 1, Redo available. Clicked native Redo
+  in its updated Inspector position: count 1 -> 2. Ctrl+S cleared the dirty marker.
+- Closed the saved disposable project through Alt+F4, launched a fresh process,
+  opened Preview Proof from Recent Projects, and opened its Main Level. The saved
+  scene reopened with model count 2 and clean Undo/Redo history.
+- Asset ID a9d94fce-548d-4053-9977-ec9084e0ca46 remained in the reopened registry.
+  RAsset, thumbnail and scene files retained these SHA256 hashes after reopen:
+  RAsset: 4F91C22C5638B1CCF3CA3EAD54438E5E4D0E8D2E1DF7DD3121875EFD31F8C606
+  PNG: C15D8D8701D904761B412F3C0CDCF1994DFB4CC9C16EAC85A74BA9F0E45C0561
+  WISCENE: 51E12C4A261CE3363FAD0A21959850F589CBAE2D63800E3DCA2E5B56A98F6450
+
+Evidence under BUILD/no-import (ignored, local only): import-proof-preview.png,
+import-proof-cancel.png, import-proof-named.png, import-proof-committed.png,
+import-proof-card.png, import-proof-placed.png, import-proof-undo.png,
+import-proof-redo-saved.png, import-proof-project-reopened.png,
+import-proof-reopened-scene.png. Screenshots were read and visually inspected.
+The post-reopen PNG was verified byte-identical; the card screenshot documents
+its appearance before reopening, not an additional post-reopen visual assertion.
+
+Automated command (use the CMAKE_CTEST_COMMAND executable from CMakeCache.txt;
+ctest is not on the ordinary PowerShell PATH):
+ctest --test-dir BUILD/no-import -C Release --output-on-failure
+  -R '^RenegadeModelImporterRebuildGraphicsProof$'
+Result: 1/1 passed, 2.12 seconds test / 2.22 seconds total.
+The reviewed preview executable SHA256 was
+20CF05225B30D86FF942B2FFF5FBE5A976F4BDDBA67EE8995CF8B206871A4BAA;
+it is the prior implementation build, not a fresh rebuild in this session.
+Wicked remains 3a800b7134aafe58461093c8abb2e274d4e64033 with no tracked changes.
+
+Result: PASS WITH LIMITATIONS for the bounded static embedded GLB native
+preview/thumbnail/import/placement/save/project-reopen workflow. This completes
+the outstanding native checks described in the preceding checkpoint. No global
+release gate, full regression suite, new clean clone, FBX/sidecar/rig/animation,
+Runtime/package parity, destination selection or old-thumbnail regeneration is
+accepted by this result. Existing DX12 startup warnings in the local log remain;
+no crash or visual failure was observed in the tested workflow.
+
+Desktop input stopped; the saved disposable Studio session was closed normally.
+The owner's authored project was neither opened nor modified. Next bounded work
+is importer source-format expansion (FBX / retained dependency support), before
+character and animation authoring. Keep the accepted static GLB slice intact.

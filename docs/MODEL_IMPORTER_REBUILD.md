@@ -63,9 +63,10 @@ external URI refusal, duplicate refusal, stable-ID placement, Undo/Redo and
 WISCENE save/reopen. Generated triangle and Bow PNGs were visually inspected.
 The corrected native Bow preview was visually inspected in the running Studio.
 
-The owner previously confirmed the repaired native card drag/drop. Native
-rotation-button clicks, a new thumbnail card through the native commit path,
-project reopen and independent exact-commit acceptance remain to verify.
-Desktop input stopped when the owner resumed work with an unsaved scene.
+The owner confirmed the repaired native card drag/drop, corrected preview and
+both rotation buttons. A different recovery conversation independently verified
+native cancel, rotation, naming, thumbnail commit/card, drag placement, Undo/Redo,
+scene save and a fresh-process project reopen on 1 October. Exact implementation
+fd8b247 and executable hash plus evidence are recorded in HANDOFF.md.
 No release gate is marked complete. Scope remains Windows x64/DX12 static GLB;
-FBX, sidecars, rigs, animation and destination selection remain later work.\n
+FBX, sidecars, rigs, animation and destination selection remain later work.
