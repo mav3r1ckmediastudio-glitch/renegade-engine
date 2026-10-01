@@ -680,3 +680,105 @@ previews embedded clips but does not assign gameplay actions; Mutant's reference
 pose in Runtime is expected. Preserve this committed static/rigged import and
 collision checkpoint while adding that next slice. Do not mark a release gate
 complete without independent verification of the exact implementation commit.
+
+## External Character animation continuation checkpoint (2026-10-01)
+
+Implementation commit: 5a53c404af545a9027b2739ac4224cbf30acce26 on
+feature/model-importer-rebuild. Local only; no push, merge or release gate claim.
+
+New Character import exposes ADD ANIMATION FBX and per-clip Unassigned, Idle,
+Walk, Run, Attack, Reload, Hit and Death actions in native Wicked controls.
+Append retargets an isolated clone, requires one usable humanoid and every source
+take, rejects changed sources, and preserves the previous candidate on failure.
+Commit retains external bytes under SourceAssets/Animations/Snapshots and writes
+action metadata and durable take recipes through the governed transaction.
+Legacy external recipes preserve defaults; new recipes opt into source mapping.
+Existing valid destination humanoids are reused. New clips remain paused.
+The asset name field now preserves edits when Import is clicked without Enter.
+
+Changed files (relative to repository root):
+- EngineBridge/include/renegade/bridge/{CreatorModelImportRecipe,HumanoidRetargetService,
+  ModelImportCandidateService,ModelImportCommitService}.h
+- EngineBridge/src/{CreatorModelImportRecipe,HumanoidRetargetService,
+  ModelImportCandidateService,ModelImportCommitService}.cpp
+- Studio/src/StudioApplication.{h,cpp}
+- Tests/ModelImporterRebuildGraphicsProof.cpp
+- docs/{ARCHITECTURE.md,FEATURE_MATRIX.csv,MODEL_IMPORTER_REBUILD.md}
+
+Windows x64/DX12 Release commands follow. MSBuild.exe refers to the installed
+Visual Studio BuildTools MSBuild; ctest is CMAKE_CTEST_COMMAND from CMakeCache.txt.
+
+From repository root, each target was built with MSBuild.exe and:
+  /m:2 /verbosity:quiet /nologo /p:Configuration=Release /p:Platform=x64
+  /p:BuildProjectReferences=false
+Targets (all exit 0):
+  BUILD/no-import/EngineBridge/RenegadeEngineBridge.vcxproj
+  BUILD/no-import/RenegadeModelImporterRebuildGraphicsProof.vcxproj
+  BUILD/no-import/RenegadePhase7Gate7BTests.vcxproj
+  BUILD/no-import/Runtime/RenegadeRuntime.vcxproj
+  BUILD/no-import/Studio/RenegadeStudio.vcxproj
+Studio additionally used /p:TargetName=RenegadeStudio_AnimationImport.
+Final name-field-only Studio rebuild also passed, exit 0.
+  ctest --test-dir BUILD/no-import -C Release
+    -R 'RenegadeModelImporterRebuild|RenegadePhase7Gate7BHumanoidRetargetTests'
+    --output-on-failure
+PASS: 8/8, 14.12 seconds. Final name-field change does not affect bridge tests.
+
+From BUILD/no-import/Release:
+  RenegadeModelImporterRebuildGraphicsProof.exe
+    '../character-mutant-proof/SourceAssets/Models/Proof Triangle/Mutant.fbx'
+    '../../../Tests/fixtures/Importer/external_uri_triangle.glb'
+    '../external-mutant-proof' <walk-fbx> <run-fbx> <swipe-fbx> <idle-fbx>
+PASS, exit 0. Private owner source paths intentionally omitted. The proof copies
+external files into disposable sources before testing. Retained Mutant had
+37 bones, five clips, two textures and four external animation dependencies.
+The log's "6 textures" label counts all six dependencies, not just textures.
+
+Direct proof verified changed rendered scrub pixels, preview isolation,
+Play/Pause/speed, invalid source and unmappable rig refusal, changed-source commit
+refusal with no product, retained byte preservation, placement Undo/Redo and
+WISCENE reopen, and 300-frame grounding at (4,5,6).
+After disposable originals were deleted, retained-source reimport reproduced
+clips/actions. Runtime authored Idle/Locomotion/Run/Attack each resolved one
+playing variant. Full external retarget reimport was in the same proof process;
+do not describe that part as a fresh-process proof.
+
+Native Studio inspection used the side-by-side executable and disposable project.
+Walk played and scrubbed visibly, its action survived adding Idle, and native
+Idle and Walk assignments persisted into the three-clip Mutant.rasset recipe.
+The final executable separately saved Native Name Verified.rasset after typing
+the new name and clicking Import without Enter. Screenshots were read and
+visually inspected. Studio was closed normally; owner projects were not edited.
+
+Standalone Runtime loaded external-mutant-proof/RuntimeProof.renegade via an
+absolute --project argument (relative paths resolve under the executable folder).
+Its migrated Story Flow entered Main Level successfully. Mutant was textured
+and visibly on the floor. Diagnostics: startup SUCCESS, scene_loaded=true,
+character_scene_sync_failed=false, player_spawned=true, one synchronized
+Character; first_animation_clip="mutant idle", semantic Idle, playing=true.
+Runtime was closed normally after inspection.
+
+Inspected binary SHA256:
+- Studio: 34AB99682403DB624C5182FAE2E82F440A8B2095EC2674406B6DA84BBA7F5561
+- Runtime: 0F097DB8EDB26468830100074C9BD00F839778DDAD10355E5E496F27EB889B4C
+Binaries were built before the implementation commit. Embedded diagnostic
+build_commit is historical 9b5c5b4; use these hashes for inspected builds.
+
+Ignored local evidence under BUILD/no-import:
+external-final-*.log, external-animation-studio-build-final.log,
+external-animation-studio-name-build.log, external-animation-ctest-final.log,
+external-mutant-proof.log, import-proof-external-native-*.png,
+import-proof-external-name-*.png, import-proof-external-runtime-final.png,
+external-runtime-final-diagnostics.json, and the disposable proof project.
+git diff --check passed; FEATURE_MATRIX has 16 columns per row; Wicked unchanged.
+
+Limitations: bounded new imports only. No custom slots, clip frame authoring,
+existing-Character editing, universal multi-rig compatibility or packaged export
+claim. Legacy ReusableAssetReimportRecipeTests and CreatorExternalAnimationImportTests
+refer to removed preparation services in this baseline and were not counted;
+new optional-recipe checks run in the active graphics proof. Existing MSB8029
+and unrelated C4834 warnings remain. No full-suite CI or independent acceptance.
+
+Next task: independent exact-commit inspection and owner acceptance of this
+native importer slice, then separately scope existing-Character action editing.
+Preserve the implementation commit and this evidence before further changes.
