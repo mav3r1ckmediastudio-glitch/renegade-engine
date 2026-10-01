@@ -584,3 +584,99 @@ Desktop input stopped; the saved disposable Studio session was closed normally.
 The owner's authored project was neither opened nor modified. Next bounded work
 is importer source-format expansion (FBX / retained dependency support), before
 character and animation authoring. Keep the accepted static GLB slice intact.
+
+
+### Rigged importer and collision recovery checkpoint - 1 October 2026
+
+Implementation commit: `c14884ebdab5c5607891a1bd8f5953f68bc0ead5` on `feature/model-importer-rebuild`.
+Base checkpoint: `9b5c5b4`. Main and other worktrees were not edited or merged;
+no remote push or CI was triggered. Pinned Wicked source and pointer are unchanged.
+The earlier conversation stalled, then the remote device connection stalled;
+this recovery finished after reconnection. All implementation WIP is now committed.
+
+Bounded result: native rigged GLB/FBX Character import with preserved skin/bind
+payload and embedded clips; isolated clip preview; paused placement; corrected
+native Character collision startup in standalone Runtime. The owner-reported
+checker cube failure was reproduced: the floor ray hit y=5 but an unseeded
+previous object matrix imparted platform inertia, sending the Character to
+(1202,1365.47,1803) after 300 frames. Preparing rigid-body surface-query geometry
+and seeding previous matrices from current matrices fixes it without a navigation
+grid or upstream patch. A zero-time startup update is not a second gameplay loop.
+
+Changed files:
+EngineBridge/include/renegade/bridge/ModelAnimationPreviewService.h
+EngineBridge/include/renegade/bridge/ModelImportCandidateService.h
+EngineBridge/include/renegade/bridge/ModelImportCommitService.h
+EngineBridge/src/ModelImportCandidateService.cpp
+EngineBridge/src/ModelImportCommitService.cpp
+EngineBridge/src/ReusableAssetInstanceService.cpp
+Runtime/src/RuntimeCharacterCollision.h
+Runtime/src/RuntimeLiveDiagnostics.cpp
+Studio/src/CreatorAssetDragPreview.cpp
+Studio/src/ModelImportPreview.cpp
+Studio/src/ModelImportPreview.h
+Studio/src/RenegadeStudioChrome.cpp
+Studio/src/StudioApplication.cpp
+Studio/src/StudioApplication.h
+Tests/ModelImporterRebuild.cmake
+Tests/ModelImporterRebuildGraphicsProof.cpp
+Tests/fixtures/Importer/FBX_FIXTURES.md
+Tests/fixtures/Importer/animated_character.fbx
+Tests/fixtures/Importer/generate_character_fixture.py
+Tests/fixtures/Importer/rig_checker.png
+docs/ARCHITECTURE.md
+docs/FEATURE_MATRIX.csv
+docs/MODEL_IMPORTER_REBUILD.md
+
+Windows x64/DX12 Release commands, run from repository root unless noted:
+- MSBuild.exe BUILD/no-import/RenegadeModelImporterRebuildGraphicsProof.vcxproj
+  /m:1 /verbosity:quiet /nologo /p:Configuration=Release /p:Platform=x64
+  /p:BuildProjectReferences=false: PASS, exit 0.
+- MSBuild.exe BUILD/no-import/Runtime/RenegadeRuntime.vcxproj
+  with the same arguments: PASS, exit 0 (11.74 seconds).
+- Use the CMAKE_CTEST_COMMAND executable from BUILD/no-import/CMakeCache.txt:
+  ctest --test-dir BUILD/no-import -C Release
+  -R '^RenegadeModelImporterRebuild' --output-on-failure:
+  PASS, 7/7, 17.26 seconds. CTest is not on the ordinary PowerShell PATH.
+- From BUILD/no-import/Release:
+  RenegadeModelImporterRebuildGraphicsProof.exe --reopen
+  ../character-mutant-proof 'SourceAssets/Models/Proof Triangle/Mutant.fbx':
+  PASS, exit 0. Both fixture and Mutant have ground_intersect=true and position
+  (4,5,6) after 300 updates at 1/60 second. The proof calls the production Runtime
+  preparation helper, with no test-only navigation filter or BVH workaround.
+- git diff --check and git -C WickedEngine status --short: clean before commit.
+
+Standalone player inspection:
+- BUILD/no-import/Runtime/Release/RenegadeRuntime.exe --project
+  BUILD/no-import/model-import-animated_character-proof/RuntimeProof.renegade:
+  checker cube visibly stable on the floor; Runtime startup SUCCESS and one
+  synchronized Character. Saved disposable project and scene loaded in player.
+- Same executable with --project
+  BUILD/no-import/character-mutant-proof/RuntimeProof.renegade:
+  Mutant visible with textures in reference pose on the floor at approximately
+  20.69 seconds; startup SUCCESS, one synchronized Character, Player spawned,
+  character_scene_sync_failed=false. Screenshot was read and visually inspected.
+- Both player windows were closed normally after inspection. No input was sent
+  to an authored project. Mutant remains private in ignored BUILD proof files.
+- Runtime executable SHA256:
+  F378221A069852D03C99F1D1F9B0062B3165C7FCEC51D771849FA5A0136D1807.
+  The executable was built before the implementation commit; its embedded build
+  revision is historical, so use this binary hash for the inspected build.
+
+Local ignored evidence: collision-recovery-build.log, collision-runtime-build.log,
+collision-runtime-screen.png, collision-runtime-diagnostics.json,
+collision-mutant-runtime.png, collision-mutant-runtime-diagnostics.json and
+Testing/Temporary/LastTest.log beneath BUILD/no-import.
+
+Earlier-session Studio controls/build evidence is carried by the existing
+character-studio-final.log and import-proof-character-* images. The recovery did
+not repeat every native Studio control interaction. Existing MSB8029 and C4834
+warnings remain. No full-suite Debug/Release CI, packaged export, universal FBX
+compatibility, or independent exact-commit owner acceptance is claimed.
+
+Next bounded task: external animation import/retarget and explicit per-Character
+semantic action slots, starting with a real Idle/Walk example. The current slice
+previews embedded clips but does not assign gameplay actions; Mutant's reference
+pose in Runtime is expected. Preserve this committed static/rigged import and
+collision checkpoint while adding that next slice. Do not mark a release gate
+complete without independent verification of the exact implementation commit.
