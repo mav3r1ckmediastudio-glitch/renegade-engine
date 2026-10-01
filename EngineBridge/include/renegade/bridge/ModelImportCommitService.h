@@ -13,6 +13,8 @@ namespace renegade::bridge
         std::string projectRoot;
         StableId projectId;
         std::string assetName;
+        // Optional for headless callers; Studio supplies its rendered PNG.
+        std::vector<std::uint8_t> thumbnailPng;
     };
 
     struct ModelImportCommitResult

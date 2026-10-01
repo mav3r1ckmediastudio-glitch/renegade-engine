@@ -655,6 +655,9 @@ namespace renegade::studio
             wi::RenderPath2D::PreRender();
             return;
         }
+        if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_ &&
+            !modelImportPreview_->IsReady())
+            modelImportPreview_->PreRender();
         wi::RenderPath3D::PreRender();
     }
 
@@ -664,6 +667,12 @@ namespace renegade::studio
         {
             wi::RenderPath2D::Render();
             return;
+        }
+        if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_ &&
+            !modelImportPreview_->IsReady())
+        {
+            modelImportPreview_->Render();
+            // Retain the rendered texture once ready, until the view rotates.
         }
         if (pathTracePreviewActive_)
         {
@@ -2726,20 +2735,42 @@ namespace renegade::studio
         GetGUI().AddWidget(&studioChrome_.AudioWorkspace());
         GetGUI().AddWidget(&inspectorPanel_);
         modelImportPanel_.Create("Import Static GLB");
-        modelImportPanel_.SetSize(XMFLOAT2(520.0f, 270.0f));
+        modelImportPanel_.SetSize(XMFLOAT2(560.0f, 610.0f));
+        modelImportPreviewImage_.Create("Rendered Model Preview");
+        modelImportPreviewImage_.SetText("");
+        modelImportPreviewImage_.SetColor(wi::Color::White());
+        modelImportPreviewImage_.SetPos(XMFLOAT2(20.0f, 35.0f));
+        modelImportPreviewImage_.SetSize(XMFLOAT2(512.0f, 320.0f));
+        modelImportPanel_.AddWidget(&modelImportPreviewImage_);
+        modelImportRotateLeft_.Create("Rotate Preview Left");
+        modelImportRotateLeft_.SetText("ROTATE LEFT");
+        modelImportRotateLeft_.SetPos(XMFLOAT2(20.0f, 365.0f));
+        modelImportRotateLeft_.SetSize(XMFLOAT2(245.0f, 28.0f));
+        modelImportRotateLeft_.OnClick([this](const wi::gui::EventArgs&) {
+            if (modelImportPreview_) modelImportPreview_->Rotate(-XM_PIDIV4);
+        });
+        modelImportPanel_.AddWidget(&modelImportRotateLeft_);
+        modelImportRotateRight_.Create("Rotate Preview Right");
+        modelImportRotateRight_.SetText("ROTATE RIGHT");
+        modelImportRotateRight_.SetPos(XMFLOAT2(285.0f, 365.0f));
+        modelImportRotateRight_.SetSize(XMFLOAT2(245.0f, 28.0f));
+        modelImportRotateRight_.OnClick([this](const wi::gui::EventArgs&) {
+            if (modelImportPreview_) modelImportPreview_->Rotate(XM_PIDIV4);
+        });
+        modelImportPanel_.AddWidget(&modelImportRotateRight_);
         modelImportSummary_.Create("Model Import Summary");
-        modelImportSummary_.SetPos(XMFLOAT2(20.0f, 35.0f));
+        modelImportSummary_.SetPos(XMFLOAT2(20.0f, 405.0f));
         modelImportSummary_.SetSize(XMFLOAT2(480.0f, 85.0f));
         modelImportSummary_.SetFitTextEnabled(true);
         modelImportPanel_.AddWidget(&modelImportSummary_);
         modelImportName_.Create("Model Asset Name");
         modelImportName_.SetDescription("Asset name: ");
-        modelImportName_.SetPos(XMFLOAT2(20.0f, 135.0f));
-        modelImportName_.SetSize(XMFLOAT2(480.0f, 30.0f));
+        modelImportName_.SetPos(XMFLOAT2(110.0f, 500.0f));
+        modelImportName_.SetSize(XMFLOAT2(390.0f, 30.0f));
         modelImportPanel_.AddWidget(&modelImportName_);
         modelImportCommit_.Create("Commit Model Asset");
         modelImportCommit_.SetText("IMPORT ASSET");
-        modelImportCommit_.SetPos(XMFLOAT2(20.0f, 185.0f));
+        modelImportCommit_.SetPos(XMFLOAT2(20.0f, 550.0f));
         modelImportCommit_.SetSize(XMFLOAT2(220.0f, 32.0f));
         modelImportCommit_.OnClick([this](const wi::gui::EventArgs&)
         {
@@ -2748,12 +2779,14 @@ namespace renegade::studio
         modelImportPanel_.AddWidget(&modelImportCommit_);
         modelImportCancel_.Create("Cancel Model Import");
         modelImportCancel_.SetText("CANCEL");
-        modelImportCancel_.SetPos(XMFLOAT2(260.0f, 185.0f));
+        modelImportCancel_.SetPos(XMFLOAT2(260.0f, 550.0f));
         modelImportCancel_.SetSize(XMFLOAT2(220.0f, 32.0f));
         modelImportCancel_.OnClick([this](const wi::gui::EventArgs&)
         {
             modelImportPanel_.SetVisible(false);
             modelImportCandidate_.reset();
+            modelImportPreviewImage_.SetImage({});
+            modelImportPreview_.reset();
         });
         modelImportPanel_.AddWidget(&modelImportCancel_);
         modelImportPanel_.SetVisible(false);
@@ -3031,6 +3064,12 @@ namespace renegade::studio
             HologramActive,
             wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
 
+        // Rendered pixels need an untinted image; the global GUI theme uses
+        // dark sprite colours and background blur for ordinary controls.
+        modelImportPreviewImage_.SetColor(wi::Color::White());
+        for (auto& sprite : modelImportPreviewImage_.sprites)
+            sprite.params.disableBackground();
+
         projectHubPanel_.SetColor(
             HubBackground,
             wi::gui::WIDGET_ID_WINDOW_BASE);
@@ -3239,6 +3278,19 @@ namespace renegade::studio
             diagnosticInput.StopAt("project_hub");
             detail::ClearCreatorAssetDragPreview();
             return;
+        }
+
+        if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_)
+        {
+            if (!modelImportPreview_->IsReady())
+            {
+                modelImportPreview_->PreUpdate();
+                modelImportPreview_->Update(dt);
+            }
+            wi::Resource image;
+            image.SetTexture(modelImportPreview_->GetRenderResult3D());
+            modelImportPreviewImage_.SetImage(image);
+            modelImportCommit_.SetEnabled(modelImportPreview_->IsReady());
         }
 
         TickWd01Vegetation();
@@ -3495,8 +3547,8 @@ namespace renegade::studio
         const float width = GetLogicalWidth();
         const float height = GetLogicalHeight();
         modelImportPanel_.SetPos(XMFLOAT2(
-            std::max(0.0f, (width - 520.0f) * 0.5f),
-            std::max(70.0f, (height - 270.0f) * 0.5f)));
+            std::max(0.0f, (width - 560.0f) * 0.5f),
+            std::max(70.0f, (height - 610.0f) * 0.5f)));
         studioChrome_.SetLayout(width, height);
         projectHubChrome_.SetLayout(width, height);
 
@@ -5398,6 +5450,8 @@ namespace renegade::studio
             return;
         modelImportPanel_.SetVisible(false);
         modelImportCandidate_.reset();
+        modelImportPreviewImage_.SetImage({});
+        modelImportPreview_.reset();
         const bridge::StableId projectId =
             session_->Projects().CurrentProject().projectId;
         wi::helper::FileDialogParams params;
@@ -5436,6 +5490,15 @@ namespace renegade::studio
                                 "Import Static GLB");
                             return;
                         }
+                        auto preview = std::make_unique<ModelImportPreview>();
+                        std::string previewError;
+                        if (!preview->Prepare(*candidate->PeekMutableScene(), previewError))
+                        {
+                            ShowStudioMessageBox(previewError, "Model Preview");
+                            return;
+                        }
+                        modelImportPreview_ = std::move(preview);
+                        modelImportCommit_.SetEnabled(false);
                         modelImportProjectId_ = projectId;
                         const std::string name = fs::u8path(path).stem().generic_u8string();
                         modelImportName_.SetValue(name);
@@ -5472,6 +5535,13 @@ namespace renegade::studio
                 request.projectRoot = session_->Projects().CurrentProject().rootPath;
                 request.projectId = projectId;
                 request.assetName = name;
+                std::string thumbnailError;
+                if (!modelImportPreview_ ||
+                    !modelImportPreview_->CapturePng(request.thumbnailPng, thumbnailError))
+                {
+                    ShowStudioMessageBox(thumbnailError, "Model Thumbnail");
+                    return;
+                }
                 const auto result = bridge::ModelImportCommitService().CommitGlb(
                     request, *modelImportCandidate_);
                 if (!result.succeeded)
@@ -5482,12 +5552,16 @@ namespace renegade::studio
                     {
                         modelImportPanel_.SetVisible(false);
                         modelImportCandidate_.reset();
+                        modelImportPreviewImage_.SetImage({});
+                        modelImportPreview_.reset();
                         RefreshAssetBrowser();
                     }
                     return;
                 }
                 modelImportPanel_.SetVisible(false);
                 modelImportCandidate_.reset();
+                modelImportPreviewImage_.SetImage({});
+                modelImportPreview_.reset();
                 RefreshAssetBrowser();
                 studioChrome_.SetActiveBottomTab(0, true);
                 bridge::AssetCatalogue catalogue;
@@ -10006,6 +10080,8 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         {
             modelImportPanel_.SetVisible(false);
             modelImportCandidate_.reset();
+            modelImportPreviewImage_.SetImage({});
+            modelImportPreview_.reset();
         }
         projectHubPanel_.SetVisible(false);
         projectHubChrome_.SetVisible(visible);

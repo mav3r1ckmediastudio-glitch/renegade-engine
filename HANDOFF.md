@@ -322,3 +322,77 @@ Do not force-close a process with potentially unsaved work. Warn the owner
 before mouse/keyboard interaction. Thumbnail generation and a real importer
 model preview remain unfinished. Native acceptance and independent exact-head
 verification remain pending; this is not a READY importer claim.
+
+### Owner drag acceptance and preview implementation WIP - 1 October 2026
+
+The owner saved/closed the old Studio. Launched the side-by-side
+`RenegadeStudio_DragRepair.exe`; PID 62800 restored 9.WISCENE in DX12.
+Warned before desktop control, dragged the CURRENT Bow 05 card into viewport,
+and the owner immediately confirmed: "that now works". No scene save was
+performed by the agent. User was released to resume desktop use.
+
+Next authorized work is real importer model preview and asset thumbnails.
+Uncommitted WIP adds `Studio/src/ModelImportPreview.h/.cpp`: private cloned
+scene, auto-framed camera, fixed neutral lighting, offscreen 512x320 render,
+rotation and PNG capture. Native panel has image plus real rotation buttons.
+The commit service accepts an optional rendered PNG and includes thumbnail
+and managed projection path in the same project transaction. Graphics proof
+now renders/captures the preview and checks transaction thumbnail decode.
+At this checkpoint the extended proof Release build is running; no preview
+render, native preview click or thumbnail transaction success claimed yet.
+Do not replace/close the running drag-repaired Studio without warning and
+protecting the owner's potentially unsaved scene.
+
+### Rendered model preview and thumbnail checkpoint - 1 October 2026
+
+Supersedes the preview WIP checkpoint above. Implementation commit is recorded
+in the following exact-commit checkpoint after the implementation is committed.
+
+Changed: Studio ModelImportPreview.h/.cpp, StudioApplication.h/.cpp and CMake;
+EngineBridge ModelImportCommitService header/source; Tests rebuild CMake and
+graphics proof; MODEL_IMPORTER_REBUILD, ARCHITECTURE, FEATURE_MATRIX and HANDOFF.
+
+The preview renders a private scene clone at 512x320 with auto-framed camera
+and neutral illumination; native rotation changes only its camera. Studio
+waits for usable frames then freezes the texture until rotation. The global
+GUI theme had darkened the image; the image widget now bypasses tint and
+background blur. Asset name positioning also keeps its label inside the panel.
+No Wicked source or submodule pointer change. No forced GPU waits were added
+to Studio. Captured PNG validation and persistence share the governed model
+transaction; the existing Asset Browser reads the sibling thumbnail.
+
+Commands/results (Windows VS18, Release x64):
+- MSBuild BUILD/no-import/Studio/RenegadeStudio.vcxproj
+  /p:Configuration=Release /p:Platform=x64
+  /p:TargetName=RenegadeStudio_ModelPreview /p:BuildProjectReferences=false
+  /m:1 /verbosity:quiet: exit 0, 18.61 seconds. Existing MSB8029/C4834 remain.
+- MSBuild BUILD/no-import/RenegadeModelImporterRebuildGraphicsProof.vcxproj
+  /p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false
+  /m:1 /verbosity:quiet: exit 0.
+- From BUILD/no-import/Release, RenegadeModelImporterRebuildGraphicsProof
+  <static_triangle.glb> <external_uri_triangle.glb>
+  <BUILD/no-import/model-import-rebuild-proof>, then the same command with
+  the owner's retained Bow 05.glb source and model-import-bow-placement-proof:
+  combined exit 0. Triangle contrasting pixel counts 13293/4230 before/after
+  rotation; Bow 2892/2574. Conversion, candidate isolation, changed rotated
+  image, malformed PNG/external URI rejection, transaction thumbnail decode,
+  stable-ID placement, Undo/Redo and WISCENE Save/Reopen all pass.
+- ctest --test-dir BUILD/no-import -C Release --output-on-failure
+  -R '^RenegadeModelImporterRebuildGraphicsProof$': 1/1 passed, 2.11 seconds.
+
+The graphics harness now fires EVENT_THREAD_SAFE_POINT like Application,
+installing asynchronously compiled pipelines before counting rendered frames.
+It initializes components before conversion and drains pending pipeline work
+before Application destruction, fixing the proof's earlier teardown crash.
+Both generated PNGs and the corrected native Bow preview were visually
+inspected. Only disposable BUILD projects were written by the proof.
+A disposable native proof descriptor was prepared but native commit/card
+verification was not completed: the owner resumed desktop use and 9.WISCENE
+had unsaved edits. Desktop input stopped; no authored scene was saved/closed.
+
+Next: owner or different reviewer verifies this exact implementation commit
+using VERIFICATION_CHECKLIST, clicks rotation/cancel, imports into a disposable
+project, confirms the thumbnail card and project reopen. Warn before desktop
+input and protect unsaved work. Old thumbnails are not auto-regenerated.
+Static self-contained GLB to Content/Models only; no FBX, rigs or animation.
+This is an implemented/tested candidate, not a completed release gate.\n

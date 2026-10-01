@@ -261,6 +261,33 @@ namespace renegade::bridge
         }
         if (!SelfContainedGlb(sourceBytes, result.error)) return result;
 
+        if (!request.thumbnailPng.empty())
+        {
+            constexpr std::array<std::uint8_t, 8> signature =
+                {137, 80, 78, 71, 13, 10, 26, 10};
+            const auto& png = request.thumbnailPng;
+            if (png.size() < 33 || png.size() > 4 * 1024 * 1024 ||
+                !std::equal(signature.begin(), signature.end(), png.begin()) ||
+                png[12] != 'I' || png[13] != 'H' || png[14] != 'D' || png[15] != 'R' ||
+                png[16] != 0 || png[17] != 0 || png[18] != 2 || png[19] != 0 ||
+                png[20] != 0 || png[21] != 0 || png[22] != 1 || png[23] != 64)
+            {
+                result.error = "Rendered thumbnail must be a bounded 512 by 320 PNG.";
+                return result;
+            }
+            const auto thumbnail = wi::resourcemanager::Load(
+                "model-import-thumbnail-" + GenerateStableId() + ".png",
+                wi::resourcemanager::Flags::NONE, request.thumbnailPng.data(),
+                request.thumbnailPng.size());
+            if (!thumbnail.IsValid() || !thumbnail.GetTexture().IsValid() ||
+                thumbnail.GetTexture().GetDesc().width != 512 ||
+                thumbnail.GetTexture().GetDesc().height != 320)
+            {
+                result.error = "Rendered thumbnail must be a valid 512 by 320 PNG.";
+                return result;
+            }
+        }
+
         const fs::path sourceFolder = root / "SourceAssets" / "Models";
         const fs::path assetFolder = root / "Content" / "Models";
         const fs::path workFolder = root / "Intermediate" / "Imports";
@@ -284,7 +311,9 @@ namespace renegade::bridge
         const fs::path projectionPath = root / fs::u8path(
             ResolveReusableModelManagedProjectionPath(
                 result.assetProjectRelativePath));
-        for (const auto& path : {retainedSource, assetPath, projectionPath})
+        const fs::path thumbnailPath = assetFolder /
+            fs::u8path(request.assetName + ".thumbnail.png");
+        for (const auto& path : {retainedSource, assetPath, projectionPath, thumbnailPath})
         {
             ec.clear();
             if (fs::exists(path, ec) || ec)
@@ -409,6 +438,9 @@ namespace renegade::bridge
         projection.settingsJson = recipeJson;
         projection.payloadHash = document.manifest.payloadHash;
         projection.modelMetadata = metadataValue;
+        if (!request.thumbnailPng.empty())
+            projection.thumbnailProjectRelativePath =
+                thumbnailPath.lexically_relative(root).generic_u8string();
         std::string projectionJson;
         if (!SerializeReusableModelManagedProjection(projection,
                 projectionJson, result.error)) return result;
@@ -460,6 +492,8 @@ namespace renegade::bridge
         writes.push_back(ExactWrite(retainedSource, std::move(sourceBytes)));
         writes.push_back(ExactWrite(assetPath, std::move(assetBytes)));
         writes.push_back(TextWrite(projectionPath, projectionJson));
+        if (!request.thumbnailPng.empty())
+            writes.push_back(ExactWrite(thumbnailPath, request.thumbnailPng));
         writes.push_back(TextWrite(registryPath, registryJson));
         writes.push_back(TextWrite(root / AssetCatalogueMetadataDocumentName,
             metadataJson));

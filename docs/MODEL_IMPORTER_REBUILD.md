@@ -41,20 +41,31 @@ authoring and animation controls follow only after this result works locally.
 - Failed/missing/external-dependency source leaves no partial project asset.
 - Owner inspects the exact build before any release/merge claim.
 
-The branch contains isolated GLB conversion and a governed static-model
-commit/reopen service. The Windows VS18 Release bridge and proof executable
-build. The focused graphics proof passed (exit 0) on a disposable project:
-static GLB conversion, external URI rejection, governed commit, asset reopen,
-current catalogue and stable-ID placement preparation, plus duplicate refusal.
-No Studio button is exposed. Native UI, scene Save/Reopen, project reopen and
-owner acceptance remain to be verified.
+The branch implements static self-contained GLB import to Content/Models.
+ADD > IMPORT STATIC GLB opens the native picker and a 512 by 320 rendered
+preview, editable name, Rotate Left/Right, Import Asset and Cancel controls.
+The preview owns a cloned scene, auto-framed camera and neutral lighting;
+rotation does not alter the candidate or authored scene. The image remains
+untinted by the global GUI theme and freezes once ready until rotation.
+Import stays disabled while the preview warms up.
 
-## Native Studio entry in progress
+Studio captures the selected view as a PNG. The bridge validates its format,
+size and decode, and writes the thumbnail with retained source, .rasset,
+managed projection, registry and metadata in the governed transaction.
+The existing Asset Browser consumes the sibling .thumbnail.png. Headless
+callers may omit a thumbnail; old assets are not automatically regenerated.
 
-The isolated branch exposes ADD > IMPORT STATIC GLB with a native file picker,
-structural conversion evidence, editable asset name, and native commit/cancel
-controls. Windows Release Studio builds; its menu and picker were visually
-clicked. The candidate panel and commit controls have not yet been clicked
-through in Studio. This evidence panel is not a rendered 3D model preview.
-A disposable-project UI acceptance run and an isolated rendered preview remain
-required before the importer can be marked ready.
+Windows VS18 Release Studio and graphics proof builds pass. CTest's focused
+RenegadeModelImporterRebuildGraphicsProof passes (1/1). Direct triangle and
+Bow 05 runs pass nonblank rendered pixels, changed pixels after rotation,
+candidate isolation, malformed thumbnail refusal, persisted PNG decode,
+external URI refusal, duplicate refusal, stable-ID placement, Undo/Redo and
+WISCENE save/reopen. Generated triangle and Bow PNGs were visually inspected.
+The corrected native Bow preview was visually inspected in the running Studio.
+
+The owner previously confirmed the repaired native card drag/drop. Native
+rotation-button clicks, a new thumbnail card through the native commit path,
+project reopen and independent exact-commit acceptance remain to verify.
+Desktop input stopped when the owner resumed work with an unsaved scene.
+No release gate is marked complete. Scope remains Windows x64/DX12 static GLB;
+FBX, sidecars, rigs, animation and destination selection remain later work.\n

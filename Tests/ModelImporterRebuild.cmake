@@ -1,5 +1,6 @@
 add_executable(RenegadeModelImporterRebuildGraphicsProof
     ${CMAKE_CURRENT_LIST_DIR}/ModelImporterRebuildGraphicsProof.cpp
+    ${CMAKE_SOURCE_DIR}/Studio/src/ModelImportPreview.cpp
 )
 target_link_libraries(RenegadeModelImporterRebuildGraphicsProof
     PRIVATE Renegade::EngineBridge)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include "ModelImportPreview.h"
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -1085,6 +1086,10 @@ namespace renegade::studio
         RenegadePhysicsLabStudioChrome studioChrome_;
         wi::gui::Window modelImportPanel_;
         wi::gui::Label modelImportSummary_;
+        wi::gui::Label modelImportPreviewImage_;
+        wi::gui::Button modelImportRotateLeft_;
+        wi::gui::Button modelImportRotateRight_;
+        std::unique_ptr<ModelImportPreview> modelImportPreview_;
         wi::gui::TextInputField modelImportName_;
         wi::gui::Button modelImportCommit_;
         wi::gui::Button modelImportCancel_;
