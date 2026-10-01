@@ -687,3 +687,35 @@ serialization embeds resource bytes with a scoped resource-mode restoration and
 uses the retained-source directory as its path base, matching placement staging.
 Empty-directory cleanup never removes files or nonempty recovery directories.
 This is a static Windows x64/DX12 candidate; Character/animation remains separate.
+
+
+## Rigged importer preview and paused placement
+
+The rebuild now classifies native skinned-mesh/armature candidates through the
+canonical Character recipe. ModelAnimationPreviewService is a transient bridge
+controller over a cloned native scene; Studio owns its native widgets and camera.
+It restores source transforms for Reference Pose, evaluates only the selected
+AnimationComponent and forces paused scrub evaluation through last_update_time.
+ComputeVisibleModelBounds uses native CPU SkinVertex after Scene::Update to fit
+deformed geometry without relying on joint helper bounds. No second animation
+runtime or authored action inference is introduced.
+
+CommitModel serializes source pose with native clips paused and a scoped
+renegade.model_import.starts_paused metadata marker. Reusable placement and
+Studio drag preview respect that marker, preserving legacy auto-idle behavior
+for earlier assets. Rig/animation evidence populates existing managed metadata;
+canonical options.asset_kind=character drives the existing Character promotion.
+Preview time, speed and selection are deliberately transient. External retarget
+and semantic action assignment remain a later bounded slice.
+
+
+## Runtime Character collision startup
+
+RuntimeCharacterCollision.h prepares the native collision scene once per Level
+synchronization before activating authored Character controllers. Rigid-body
+render geometry is admitted to native Character surface queries even when no
+Navigation Grid exists. A zero-time Scene update creates the query bounds and
+object matrices; previous object matrices are then seeded from current matrices.
+This prevents initial world translation being interpreted as moving-platform
+inertia. Normal per-frame advancement remains owned by the existing RenderPath.
+The preparation does not advance gameplay time or alter the pinned Wicked source.

@@ -5,6 +5,8 @@
 #include "renegade/bridge/IdentityService.h"
 
 #include <WickedEngine.h>
+#include "renegade/bridge/ModelAnimationPreviewService.h"
+#include "renegade/bridge/CreatorModelImportRecipe.h"
 #include <json.hpp>
 
 #include <algorithm>
@@ -238,6 +240,15 @@ namespace renegade::bridge
     ModelImportCommitResult ModelImportCommitService::CommitStaticModel(
         const ModelImportCommitRequest& request, ModelImportCandidate& candidate) const
     {
+        if (!request.characterAsset) return CommitModel(request, candidate);
+        ModelImportCommitResult result;
+        result.error = "The static compatibility entry point cannot create Character assets.";
+        return result;
+    }
+
+    ModelImportCommitResult ModelImportCommitService::CommitModel(
+        const ModelImportCommitRequest& request, ModelImportCandidate& candidate) const
+    {
         ModelImportCommitResult result;
         if (!candidate.IsReady() || candidate.PeekMutableScene() == nullptr ||
             !IsValidStableId(request.projectId))
@@ -250,12 +261,19 @@ namespace renegade::bridge
             result.error = "Asset name must use letters, numbers, spaces, _ or - and be 1-80 characters.";
             return result;
         }
-        // Character/animation handling needs its own authoring and rig round-trip
-        // proof. This first commit path accepts static models only.
-        if (candidate.Evidence().HasRigOrAnimationPayload() ||
-            candidate.Summary().animations != 0)
+        // Static compatibility requests must not silently accept a rig or clips.
+        // Character requests use the separately validated native rig round-trip.
+        if (!request.characterAsset && (candidate.Evidence().HasRigOrAnimationPayload() ||
+            candidate.Summary().animations != 0))
         {
             result.error = "This model importer accepts static GLB or FBX content only.";
+            return result;
+        }
+
+        if (request.characterAsset && (candidate.Evidence().skinnedMeshes == 0 ||
+            candidate.Evidence().armatureBones == 0))
+        {
+            result.error = "Character import requires a skinned mesh and skeleton.";
             return result;
         }
 
@@ -465,6 +483,14 @@ namespace renegade::bridge
             candidate.PeekMutableScene()->Serialize(clone);
             clone.SetReadModeAndResetPos(true);
             commitScene.Serialize(clone);
+            PauseImportedModelAnimations(commitScene);
+            if (request.characterAsset && commitScene.transforms.GetCount() != 0)
+            {
+                const auto rootEntity = commitScene.transforms.GetEntity(0);
+                auto* metadata = commitScene.metadatas.GetComponent(rootEntity);
+                if (!metadata) metadata = &commitScene.metadatas.Create(rootEntity);
+                metadata->bool_values.set(ModelImportStartsPausedMetadataKey, true);
+            }
             for (size_t i = 0; i < commitScene.materials.GetCount(); ++i)
             {
                 for (auto& texture : commitScene.materials[i].textures)
@@ -501,6 +527,8 @@ namespace renegade::bridge
 
         ModelDerivedMetadata metadataValue;
         metadataValue.known = true;
+        metadataValue.skinned = candidate.Evidence().skinnedMeshes != 0;
+        metadataValue.animated = candidate.Summary().animations != 0;
         const auto count = [&result](std::size_t value, std::uint32_t& output)
         {
             if (value > (std::numeric_limits<std::uint32_t>::max)())
@@ -514,6 +542,10 @@ namespace renegade::bridge
         if (!count(candidate.Summary().meshes, metadataValue.meshCount) ||
             !count(candidate.Summary().materials, metadataValue.materialCount))
             return result;
+        if (!count(candidate.Summary().animations, metadataValue.animationClipCount) ||
+            !count(candidate.Evidence().animationChannels, metadataValue.animationChannelCount) ||
+            !count(candidate.PeekScene()->armatures.GetCount(), metadataValue.armatureCount) ||
+            !count(candidate.Evidence().armatureBones, metadataValue.boneCount)) return result;
         std::size_t morphCount = 0;
         for (std::size_t i = 0; i < candidate.PeekScene()->meshes.GetCount(); ++i)
             morphCount += candidate.PeekScene()->meshes[i].morph_targets.size();
@@ -521,6 +553,7 @@ namespace renegade::bridge
 
         nlohmann::json recipe = {{"options", nlohmann::json::object()},
             {"source_format", isFbx ? "fbx" : "glb"}};
+        if (request.characterAsset) recipe["options"]["asset_kind"] = "character";
         const std::string recipeJson = recipe.dump();
         ReusableModelAssetDocument document;
         document.manifest.projectId = request.projectId;

@@ -13,9 +13,16 @@ namespace renegade::studio
         previewScene_->Serialize(archive);
         scene = previewScene_.get();
         camera = &previewCamera_;
+        animationPreview_.Prepare(*scene);
         scene->Update(0);
-        center_ = scene->bounds.getCenter();
-        const auto extent = scene->bounds.getHalfWidth();
+        wi::primitive::AABB visibleBounds;
+        if (!bridge::ComputeVisibleModelBounds(*scene, visibleBounds))
+        {
+            error = "Model has no finite visible preview bounds.";
+            return false;
+        }
+        center_ = visibleBounds.getCenter();
+        const auto extent = visibleBounds.getHalfWidth();
         radius_ = std::sqrt(extent.x * extent.x + extent.y * extent.y + extent.z * extent.z);
         if (!std::isfinite(radius_) || radius_ < 0.000001f)
         {
@@ -72,6 +79,36 @@ namespace renegade::studio
         angle_ += radians;
         FitCamera();
         renderedFrames_ = 0;
+    }
+
+    bool ModelImportPreview::SelectClip(int index)
+    {
+        if (!animationPreview_.Select(index)) return false;
+        renderedFrames_ = 0;
+        return true;
+    }
+    bool ModelImportPreview::PlayPause()
+    {
+        if (!animationPreview_.PlayPause()) return false;
+        renderedFrames_ = 0;
+        return true;
+    }
+    bool ModelImportPreview::Scrub(float time)
+    {
+        if (!animationPreview_.Scrub(time)) return false;
+        renderedFrames_ = 0;
+        return true;
+    }
+    bool ModelImportPreview::SetSpeed(float speed)
+    {
+        return animationPreview_.Speed(speed);
+    }
+
+    void ModelImportPreview::Update(float dt)
+    {
+        const bool wasPlaying = IsPlaying();
+        wi::RenderPath3D::Update(dt);
+        if (wasPlaying && !IsPlaying()) renderedFrames_ = 0;
     }
 
     void ModelImportPreview::Render() const

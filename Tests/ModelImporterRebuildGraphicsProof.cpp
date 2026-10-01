@@ -1,3 +1,5 @@
+#include "renegade/bridge/CharacterService.h"
+#include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/ModelImportCandidateService.h"
 #include "renegade/bridge/ModelImportCommitService.h"
 #include "renegade/bridge/ReusableAssetService.h"
@@ -7,6 +9,7 @@
 #include <cmath>
 
 #include "../Studio/src/ModelImportPreview.h"
+#include "../Runtime/src/RuntimeCharacterCollision.h"
 #include <WickedEngine.h>
 #include <Windows.h>
 
@@ -65,7 +68,7 @@ namespace
                 pixels.size() >= 512 * 320 * 4,
                 "thumbnail pixels could not be read")) return false;
         size_t visiblePixels = 0;
-        for (size_t p = 0; p + 4 <= pixels.size(); p += 4)
+        for (size_t p = 0; p + 4 <= 512 * 320 * 4; p += 4)
         {
             const int difference = std::abs(int(pixels[p]) - int(pixels[0])) +
                 std::abs(int(pixels[p + 1]) - int(pixels[1])) +
@@ -73,7 +76,8 @@ namespace
             if (difference > 20) ++visiblePixels;
         }
         std::cout << "MODEL PREVIEW: " << visiblePixels << " contrasting pixels\n";
-        return Require(visiblePixels > 100, "thumbnail contains no visible model");
+        return Require(visiblePixels > 100, "thumbnail contains no visible model") &&
+            Require(visiblePixels < 512 * 320 * 0.8, "model fills the thumbnail instead of being framed");
     }
 
     bool VerifyPlacement(const fs::path& root, const StableId& projectId,
@@ -83,6 +87,8 @@ namespace
             root.generic_u8string(), projectId, assetId);
         if (!Require(prepared.IsReady(), "stable-ID placement preparation failed"))
             return false;
+        const bool character = IsCharacterAssetTemplateScene(*prepared.PeekScene());
+        const auto preparedEvidence = ImportService::SummarizeModelEvidence(*prepared.PeekScene());
         auto scene = wi::allocator::make_shared<wi::scene::Scene>();
         PlaceReusableModelCommand command(*scene, prepared.ReleaseScene(),
             assetId, XMFLOAT3(4.0f, 5.0f, 6.0f), 1.0f, "Placement Proof");
@@ -90,6 +96,19 @@ namespace
         for (size_t i = 0; i < scene->materials.GetCount(); ++i)
             for (const auto& texture : scene->materials[i].textures)
                 if (!texture.name.empty() && !Require(texture.resource.IsValid() && texture.resource.GetTexture().IsValid(), "placed model lost a texture")) return false;
+        if (character)
+        {
+            if (!Require(IsRenegadeCharacter(*scene, command.PlacedEntity()),
+                "placement did not promote a real Character wrapper")) return false;
+            const auto placedEvidence = ImportService::SummarizeModelEvidence(*scene);
+            if (!Require(placedEvidence.skinnedMeshes == preparedEvidence.skinnedMeshes &&
+                placedEvidence.armatureBones == preparedEvidence.armatureBones &&
+                placedEvidence.skinWeightFingerprint == preparedEvidence.skinWeightFingerprint &&
+                placedEvidence.inverseBindFingerprint == preparedEvidence.inverseBindFingerprint,
+                "placement altered skin weights or inverse bind matrices")) return false;
+            for (size_t i = 0; i < scene->animations.GetCount(); ++i)
+                if (!Require(!scene->animations[i].IsPlaying(), "Character placement auto-started a clip")) return false;
+        }
         const auto meshCount = scene->meshes.GetCount();
         const auto objectCount = scene->objects.GetCount();
         const auto wrapperId = PersistentEntityId(*scene, command.PlacedEntity());
@@ -127,6 +146,69 @@ namespace
                 reopened->meshes.GetCount() == meshCount &&
                 reopened->objects.GetCount() == objectCount,
                 "save/reopen lost stable instance identity or payload")) return false;
+        if (character)
+        {
+            if (!Require(IsRenegadeCharacter(*reopened, instances.front().instanceRoot),
+                "save/reopen lost Character authoring")) return false;
+            for (size_t i = 0; i < reopened->animations.GetCount(); ++i)
+                if (!Require(!reopened->animations[i].IsPlaying(), "save/reopen auto-started a clip")) return false;
+        }
+        if (character)
+        {
+            reopened->Update(0);
+            wi::primitive::AABB runtimeBounds;
+            if (!Require(ComputeVisibleModelBounds(*reopened, runtimeBounds), "reopened skin has no visible bounds")) return false;
+            const auto runtimeCenter = runtimeBounds.getCenter();
+            std::cout << "CHARACTER WORLD CENTER: " << runtimeCenter.x << "," << runtimeCenter.y << "," << runtimeCenter.z << "\n";
+            // Separate disposable Level for the standalone-player acceptance run.
+            TransformState start;
+            start.translation = XMFLOAT3(4, 5, 0);
+            CreatePlayerStartCommand player(*reopened, start);
+            if (!Require(player.Execute(), "Runtime proof Player Start failed")) return false;
+            const auto floor = reopened->Entity_CreateCube("Runtime proof floor");
+            auto* floorTransform = reopened->transforms.GetComponent(floor);
+            floorTransform->Scale(XMFLOAT3(20, 0.5f, 20));
+            floorTransform->Translate(XMFLOAT3(4, 4.5f, 6));
+            auto& body = reopened->rigidbodies.Create(floor);
+            body.mass = 0;
+            body.shape = wi::scene::RigidBodyPhysicsComponent::CollisionShape::BOX;
+            auto& weather = reopened->weathers.Create(wi::ecs::CreateEntity());
+            weather.ambient = XMFLOAT3(0.3f, 0.3f, 0.3f);
+            const auto light = reopened->Entity_CreateLight("Runtime proof sun");
+            reopened->lights.GetComponent(light)->SetType(wi::scene::LightComponent::DIRECTIONAL);
+            reopened->transforms.GetComponent(light)->RotateRollPitchYaw(XMFLOAT3(-0.7f, 0.6f, 0));
+            const auto runtimePath = (root / "runtime-proof.wiscene").generic_u8string();
+            wi::Archive runtimeArchive(runtimePath, false, false);
+            reopened->Serialize(runtimeArchive);
+            if (!Require(runtimeArchive.SaveFile(runtimePath), "Runtime proof Level save failed")) return false;
+            wi::scene::Scene groundedScene;
+            wi::Archive groundingCopy;
+            reopened->Serialize(groundingCopy);
+            groundingCopy.SetReadModeAndResetPos(true);
+            groundedScene.Serialize(groundingCopy);
+            renegade::runtime::PrepareRuntimeCharacterCollisionScene(groundedScene);
+            CharacterRuntimeState runtimeCharacters;
+            if (!Require(InitializeRuntimeCharacters(groundedScene, runtimeCharacters, error), error)) return false;
+            const auto* initialCharacter = groundedScene.characters.GetComponent(runtimeCharacters.characters.front().entity);
+            std::cout << "GROUND START: " << initialCharacter->position.x << "," << initialCharacter->position.y << "," << initialCharacter->position.z << " width=" << initialCharacter->width << " height=" << initialCharacter->height << "\n";
+            const auto probe = groundedScene.Intersects(wi::primitive::Ray(XMFLOAT3(4, 10, 6), XMFLOAT3(0, -1, 0)), wi::enums::FILTER_NAVIGATION_MESH);
+            std::cout << "FLOOR PROBE: entity=" << probe.entity << " y=" << probe.position.y << "\n";
+            for (int frame = 0; frame < 300; ++frame) groundedScene.Update(1.0f / 60.0f);
+            const auto* finalCharacter = groundedScene.characters.GetComponent(runtimeCharacters.characters.front().entity);
+            std::cout << "GROUND END: " << finalCharacter->position.x << "," << finalCharacter->position.y << "," << finalCharacter->position.z << " grounded=" << finalCharacter->ground_intersect << "\n";
+            const auto* grounded = groundedScene.characters.GetComponent(runtimeCharacters.characters.front().entity);
+            if (!Require(grounded && grounded->ground_intersect &&
+                std::abs(grounded->position.x - 4.0f) < 0.01f &&
+                std::abs(grounded->position.y - 5.0f) < 0.01f &&
+                std::abs(grounded->position.z - 6.0f) < 0.01f,
+                "Runtime Character fell through or was launched off the proof floor")) return false;
+            std::cout << "CHARACTER GROUNDED AFTER 5 SECONDS: y=" << grounded->position.y << "\n";
+            std::ofstream descriptor(root / "RuntimeProof.renegade");
+            descriptor << "format = renegade-project\nversion = 1\n[project]\nproject_id = " << projectId
+                << "\nname = Character Runtime Proof\nstartup_scene = runtime-proof.wiscene\n"
+                   "startup_flow_id = \nstartup_flow = \nstartup_screen_id = \nstartup_screen = \n"
+                   "[dependencies]\nalways_include_format = 1\nalways_include_count = 0\n";
+        }
         const auto* transform = reopened->transforms.GetComponent(
             instances.front().instanceRoot);
         return Require(transform != nullptr &&
@@ -204,7 +286,7 @@ int main(int argc, char** argv)
                 std::string error;
                 if (!Require(ReadReusableModelAssetDocument((root / "Content/Models/Proof Triangle.rasset").generic_u8string(), document, error), "cold RAsset read failed: " + error)) return 20;
                 if (!VerifyPlacement(root, document.manifest.projectId, document.manifest.assetId)) return 21;
-                auto retained = ModelImportCandidateService().PrepareStaticModel((root / fs::u8path(argv[3])).generic_u8string());
+                auto retained = ModelImportCandidateService().PrepareModel((root / fs::u8path(argv[3])).generic_u8string());
                 if (!Require(retained.IsReady(), "retained FBX cannot reconvert without original source: " + retained.Error())) return 22;
                 renegade::studio::ModelImportPreview preview;
                 std::vector<std::uint8_t> png;
@@ -213,7 +295,7 @@ int main(int argc, char** argv)
                 std::cout << "FBX COLD REOPEN PASS: retained source reconversion and textured placement without original source directory\n";
                 return 0;
             }
-            auto candidate = ModelImportCandidateService().PrepareStaticModel(
+            auto candidate = ModelImportCandidateService().PrepareModel(
                 fixture.generic_u8string());
             if (!Require(candidate.IsReady(),
                     "isolated GLB conversion failed: " + candidate.Error()) ||
@@ -226,9 +308,12 @@ int main(int argc, char** argv)
                 ModelImportCommitRequest request;
                 request.projectRoot = root.generic_u8string();
                 request.projectId = "88888888-8888-4888-8888-888888888888";
+                request.characterAsset = candidate.Evidence().skinnedMeshes != 0 &&
+                    candidate.Evidence().armatureBones != 0;
                 renegade::studio::ModelImportPreview preview;
                 std::string previewError;
                 const auto before = ImportService::Summarize(*candidate.PeekScene());
+                const auto evidenceBefore = candidate.Evidence();
                 if (!Require(preview.Prepare(*candidate.PeekMutableScene(), previewError),
                         "preview preparation failed: " + previewError)) return 12;
                 if (!RenderPreview(preview)) return 12;
@@ -248,6 +333,40 @@ int main(int argc, char** argv)
                         "rotation did not change the rendered thumbnail") ||
                     !Require(before == ImportService::Summarize(*candidate.PeekScene()),
                         "rotation contaminated the import candidate")) return 16;
+                if (request.characterAsset)
+                {
+                    const auto clips = preview.Clips();
+                    if (!Require(!clips.empty(), "Character fixture has no clip")) return 27;
+                    std::cout << "CHARACTER EVIDENCE: " << candidate.Evidence().armatureBones
+                        << " bones; " << clips.size() << " clips; " << candidate.Dependencies().size() << " textures\n";
+                    if (!Require(preview.SelectClip(0) && preview.Scrub((clips[0].start + clips[0].end) * 0.5f),
+                        "clip selection/scrub failed") || !RenderPreview(preview)) return 27;
+                    std::vector<std::uint8_t> animatedPng;
+                    if (!Require(preview.CapturePng(animatedPng, previewError), previewError)) return 27;
+                    // The generated moving fixture must visibly evaluate its skinned pose.
+                    // An owner reference-pose take need not contain actual movement.
+                    if (fixture.filename() == "animated_character.fbx" &&
+                        !Require(animatedPng != request.thumbnailPng, "paused scrub did not change the rendered skin pose")) return 27;
+                    const float scrubbed = preview.ClipTime();
+                    if (!Require(preview.SetSpeed(2.0f) && preview.PlayPause() && preview.IsPlaying(),
+                        "preview play or speed failed") || !RenderPreview(preview)) return 27;
+                    if (!Require(preview.ClipTime() != scrubbed, "playback time did not advance") ||
+                        !Require(preview.PlayPause() && !preview.IsPlaying(), "Pause failed")) return 27;
+                    const float pausedTime = preview.ClipTime();
+                    if (!RenderPreview(preview) || !Require(preview.ClipTime() == pausedTime,
+                        "paused playback time advanced")) return 27;
+                    if (clips.size() > 1 && (!Require(preview.SelectClip(1), "second clip selection failed") ||
+                        !RenderPreview(preview))) return 27;
+                    if (!Require(preview.SelectClip(-1), "reference pose selection failed") || !RenderPreview(preview)) return 27;
+                    if (!Require(evidenceBefore == ImportService::SummarizeModelEvidence(*candidate.PeekScene()),
+                        "animation preview modified the candidate rig or clips")) return 27;
+                    request.assetName = "Static Refusal";
+                    const auto staticRefusal = ModelImportCommitService().CommitStaticModel(request, candidate);
+                    if (!Require(!staticRefusal.succeeded && !staticRefusal.committed,
+                        "static compatibility entry point accepted Character")) return 27;
+                    if (!Require(preview.CapturePng(request.thumbnailPng, previewError), previewError)) return 27;
+                    std::cout << "CHARACTER PREVIEW SELECT/SCRUB/PLAY/PAUSE/SPEED/ISOLATION PASS\n";
+                }
                 if (isFbx)
                 {
                     if (!Require(!candidate.Dependencies().empty(), "textured FBX has no dependency snapshots")) return 17;
@@ -257,15 +376,15 @@ int main(int argc, char** argv)
                         const fs::path texturePath = fs::u8path(dependency.sourcePath);
                         const fs::path hidden = texturePath.generic_u8string() + ".hidden";
                         fs::rename(texturePath, hidden);
-                        auto missing = ModelImportCandidateService().PrepareStaticModel(fixture.generic_u8string());
+                        auto missing = ModelImportCandidateService().PrepareModel(fixture.generic_u8string());
                         request.assetName = "Missing Texture";
-                        auto refusedMissing = ModelImportCommitService().CommitStaticModel(request, candidate);
+                        auto refusedMissing = ModelImportCommitService().CommitModel(request, candidate);
                         fs::rename(hidden, texturePath);
                         if (!Require(!missing.IsReady() && !refusedMissing.committed && !refusedMissing.succeeded &&
                             !fs::exists(root / "Content/Models/Missing Texture.rasset"), "missing texture created a successful candidate or product")) return 18;
                         { std::ofstream changed(texturePath, std::ios::binary | std::ios::app); changed.put('x'); }
                         request.assetName = "Changed Texture";
-                        auto refusedChanged = ModelImportCommitService().CommitStaticModel(request, candidate);
+                        auto refusedChanged = ModelImportCommitService().CommitModel(request, candidate);
                         { std::ofstream restored(texturePath, std::ios::binary | std::ios::trunc); restored.write(reinterpret_cast<const char*>(dependency.bytes.data()), dependency.bytes.size()); }
                         if (!Require(!refusedChanged.committed && !refusedChanged.succeeded && !fs::exists(root / "Content/Models/Changed Texture.rasset"), "changed texture was not rejected before commit")) return 19;
                         std::cout << "FBX MISSING/CHANGED TEXTURE REJECTION PASS\n";
@@ -274,12 +393,12 @@ int main(int argc, char** argv)
                 auto invalidThumbnail = request;
                 invalidThumbnail.assetName = "Invalid Thumbnail";
                 invalidThumbnail.thumbnailPng = {0};
-                const auto refusedThumbnail = ModelImportCommitService().CommitStaticModel(
+                const auto refusedThumbnail = ModelImportCommitService().CommitModel(
                     invalidThumbnail, candidate);
                 if (!Require(!refusedThumbnail.succeeded && !refusedThumbnail.committed &&
                         !fs::exists(root / "Content" / "Models" / "Invalid Thumbnail.rasset"),
                         "invalid thumbnail created a partial model product")) return 14;
-                auto external = ModelImportCandidateService().PrepareStaticModel(
+                auto external = ModelImportCandidateService().PrepareModel(
                     externalFixture.generic_u8string());
                 request.assetName = "External Source";
                 if (!Require(external.IsReady(),
@@ -290,8 +409,10 @@ int main(int argc, char** argv)
                 }
                 else
                 {
-                    const auto refused = ModelImportCommitService().CommitStaticModel(
-                        request, external);
+                    auto externalRequest = request;
+                    externalRequest.characterAsset = false;
+                    const auto refused = ModelImportCommitService().CommitModel(
+                        externalRequest, external);
                     if (!Require(!refused.succeeded && !refused.committed &&
                             !fs::exists(root / "Content" / "Models" /
                                 "External Source.rasset"),
@@ -301,7 +422,7 @@ int main(int argc, char** argv)
                 if (resultCode == 0)
                 {
                     request.assetName = "Proof Triangle";
-                    const auto committed = ModelImportCommitService().CommitStaticModel(
+                    const auto committed = ModelImportCommitService().CommitModel(
                         request, candidate);
                     if (!Require(committed.succeeded && committed.committed,
                             "governed commit/reopen failed: " + committed.error))
@@ -329,7 +450,7 @@ int main(int argc, char** argv)
                             resultCode = 9;
                         else
                         {
-                            const auto duplicate = ModelImportCommitService().CommitStaticModel(
+                            const auto duplicate = ModelImportCommitService().CommitModel(
                                 request, candidate);
                             if (!Require(!duplicate.succeeded && !duplicate.committed,
                                     "duplicate destination should fail without replacing product"))

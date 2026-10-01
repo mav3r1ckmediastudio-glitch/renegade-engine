@@ -656,7 +656,7 @@ namespace renegade::studio
             return;
         }
         if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_ &&
-            !modelImportPreview_->IsReady())
+            modelImportPreview_->NeedsRender())
             modelImportPreview_->PreRender();
         wi::RenderPath3D::PreRender();
     }
@@ -669,7 +669,7 @@ namespace renegade::studio
             return;
         }
         if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_ &&
-            !modelImportPreview_->IsReady())
+            modelImportPreview_->NeedsRender())
         {
             modelImportPreview_->Render();
             // Retain the rendered texture once ready, until the view rotates.
@@ -2734,7 +2734,7 @@ namespace renegade::studio
         GetGUI().RemoveWidget(&inspectorPanel_);
         GetGUI().AddWidget(&studioChrome_.AudioWorkspace());
         GetGUI().AddWidget(&inspectorPanel_);
-        modelImportPanel_.Create("Import Static Model");
+        modelImportPanel_.Create("Import Model");
         modelImportPanel_.SetSize(XMFLOAT2(560.0f, 610.0f));
         modelImportPreviewImage_.Create("Rendered Model Preview");
         modelImportPreviewImage_.SetText("");
@@ -2763,6 +2763,59 @@ namespace renegade::studio
         modelImportSummary_.SetSize(XMFLOAT2(480.0f, 85.0f));
         modelImportSummary_.SetFitTextEnabled(true);
         modelImportPanel_.AddWidget(&modelImportSummary_);
+        modelImportClip_.Create("Animation clip");
+        modelImportClip_.SetPos(XMFLOAT2(110.0f, 470.0f));
+        modelImportClip_.SetSize(XMFLOAT2(390.0f, 30.0f));
+        modelImportClip_.OnSelect([this](const wi::gui::EventArgs& args) {
+            if (!modelImportPreview_ || !modelImportPreview_->SelectClip(args.iValue - 1)) return;
+            const auto clips = modelImportPreview_->Clips();
+            const bool selected = args.iValue > 0 && size_t(args.iValue) <= clips.size();
+            modelImportPlay_.SetEnabled(selected);
+            modelImportRestart_.SetEnabled(selected);
+            modelImportTime_.SetEnabled(selected);
+            modelImportSpeed_.SetEnabled(selected);
+            if (selected) {
+                const auto& clip = clips[args.iValue - 1];
+                modelImportTime_.SetRange(clip.start, std::max(clip.end, clip.start + 0.001f));
+                modelImportTime_.SetValue(clip.start);
+                modelImportSpeed_.SetValue(clip.speed);
+            }
+        });
+        modelImportPanel_.AddWidget(&modelImportClip_);
+        modelImportPlay_.Create("Preview Play Pause");
+        modelImportPlay_.SetText("PLAY");
+        modelImportPlay_.SetPos(XMFLOAT2(20.0f, 515.0f));
+        modelImportPlay_.SetSize(XMFLOAT2(245.0f, 30.0f));
+        modelImportPlay_.OnClick([this](const wi::gui::EventArgs&) {
+            if (modelImportPreview_) modelImportPreview_->PlayPause();
+        });
+        modelImportPanel_.AddWidget(&modelImportPlay_);
+        modelImportRestart_.Create("Restart Selected Preview Clip");
+        modelImportRestart_.SetText("RESTART");
+        modelImportRestart_.SetPos(XMFLOAT2(285.0f, 515.0f));
+        modelImportRestart_.SetSize(XMFLOAT2(245.0f, 30.0f));
+        modelImportRestart_.OnClick([this](const wi::gui::EventArgs&) {
+            if (!modelImportPreview_) return;
+            const auto clips = modelImportPreview_->Clips();
+            const int index = modelImportClip_.GetSelected() - 1;
+            if (index >= 0 && size_t(index) < clips.size())
+                modelImportPreview_->Scrub(clips[index].start);
+        });
+        modelImportPanel_.AddWidget(&modelImportRestart_);
+        modelImportTime_.Create(0.0f, 1.0f, 0.0f, 10000, "Preview time (seconds)");
+        modelImportTime_.SetPos(XMFLOAT2(160.0f, 560.0f));
+        modelImportTime_.SetSize(XMFLOAT2(350.0f, 25.0f));
+        modelImportTime_.OnSlide([this](const wi::gui::EventArgs& args) {
+            if (modelImportPreview_) modelImportPreview_->Scrub(args.fValue);
+        });
+        modelImportPanel_.AddWidget(&modelImportTime_);
+        modelImportSpeed_.Create(0.1f, 4.0f, 1.0f, 390, "Preview speed");
+        modelImportSpeed_.SetPos(XMFLOAT2(160.0f, 605.0f));
+        modelImportSpeed_.SetSize(XMFLOAT2(350.0f, 25.0f));
+        modelImportSpeed_.OnSlide([this](const wi::gui::EventArgs& args) {
+            if (modelImportPreview_) modelImportPreview_->SetSpeed(args.fValue);
+        });
+        modelImportPanel_.AddWidget(&modelImportSpeed_);
         modelImportName_.Create("Model Asset Name");
         modelImportName_.SetDescription("Asset name: ");
         modelImportName_.SetPos(XMFLOAT2(110.0f, 500.0f));
@@ -3282,7 +3335,7 @@ namespace renegade::studio
 
         if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_)
         {
-            if (!modelImportPreview_->IsReady())
+            if (modelImportPreview_->NeedsRender())
             {
                 modelImportPreview_->PreUpdate();
                 modelImportPreview_->Update(dt);
@@ -3291,6 +3344,9 @@ namespace renegade::studio
             image.SetTexture(modelImportPreview_->GetRenderResult3D());
             modelImportPreviewImage_.SetImage(image);
             modelImportCommit_.SetEnabled(modelImportPreview_->IsReady());
+            modelImportPlay_.SetText(modelImportPreview_->IsPlaying() ? "PAUSE" : "PLAY");
+            if (modelImportPreview_->HasClip())
+                modelImportTime_.SetValue(modelImportPreview_->ClipTime());
         }
 
         TickWd01Vegetation();
@@ -3548,7 +3604,7 @@ namespace renegade::studio
         const float height = GetLogicalHeight();
         modelImportPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
-            std::max(70.0f, (height - 610.0f) * 0.5f)));
+            std::max(70.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));
         studioChrome_.SetLayout(width, height);
         projectHubChrome_.SetLayout(width, height);
 
@@ -5456,7 +5512,7 @@ namespace renegade::studio
             session_->Projects().CurrentProject().projectId;
         wi::helper::FileDialogParams params;
         params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "Select static GLB or FBX";
+        params.description = "Select GLB or FBX model or rigged character";
         params.extensions = {"glb", "fbx"};
         wi::helper::FileDialog(params,
             [this, projectId](const std::string& path)
@@ -5471,23 +5527,20 @@ namespace renegade::studio
                             return;
                         studioChrome_.SetStatusText("MODEL IMPORT // CONVERTING MODEL");
                         auto candidate = std::make_unique<bridge::ModelImportCandidate>(
-                            bridge::ModelImportCandidateService().PrepareStaticModel(path));
+                            bridge::ModelImportCandidateService().PrepareModel(path));
                         if (!candidate->IsReady())
                         {
                             studioChrome_.SetStatusText(
                                 "MODEL IMPORT // " + candidate->Error());
-                            ShowStudioMessageBox(candidate->Error(), "Import Static Model");
+                            ShowStudioMessageBox(candidate->Error(), "Import Model");
                             return;
                         }
-                        if (candidate->Evidence().HasRigOrAnimationPayload() ||
-                            candidate->Summary().animations != 0)
+                        const bool character = candidate->Evidence().skinnedMeshes != 0 &&
+                            candidate->Evidence().armatureBones != 0;
+                        if (!character && candidate->Evidence().HasRigOrAnimationPayload())
                         {
-                            studioChrome_.SetStatusText(
-                                "MODEL IMPORT // THIS GATE ACCEPTS STATIC MODELS ONLY");
                             ShowStudioMessageBox(
-                                "This importer accepts static GLB or FBX only. "
-                                "Rig and animation content needs a separate proven path.",
-                                "Import Static Model");
+                                "Animated import currently requires a skinned mesh and skeleton.", "Import Model");
                             return;
                         }
                         auto preview = std::make_unique<ModelImportPreview>();
@@ -5498,6 +5551,22 @@ namespace renegade::studio
                             return;
                         }
                         modelImportPreview_ = std::move(preview);
+                        modelImportPanel_.SetSize(XMFLOAT2(560.0f, character ? 770.0f : 610.0f));
+                        modelImportSummary_.SetSize(XMFLOAT2(480.0f, character ? 55.0f : 85.0f));
+                        modelImportName_.SetPos(XMFLOAT2(110.0f, character ? 660.0f : 500.0f));
+                        modelImportCommit_.SetPos(XMFLOAT2(20.0f, character ? 710.0f : 550.0f));
+                        modelImportCancel_.SetPos(XMFLOAT2(260.0f, character ? 710.0f : 550.0f));
+                        modelImportClip_.SetVisible(character);
+                        modelImportPlay_.SetVisible(character);
+                        modelImportRestart_.SetVisible(character);
+                        modelImportTime_.SetVisible(character);
+                        modelImportSpeed_.SetVisible(character);
+                        modelImportClip_.ClearItems();
+                        modelImportClip_.AddItem("REFERENCE POSE");
+                        for (const auto& clip : modelImportPreview_->Clips())
+                            modelImportClip_.AddItem(clip.name + " (" + std::to_string(clip.end - clip.start) + " s)");
+                        modelImportClip_.SetSelected(0);
+                        ResizeLayout();
                         modelImportCommit_.SetEnabled(false);
                         modelImportProjectId_ = projectId;
                         const std::string name = fs::u8path(path).stem().generic_u8string();
@@ -5505,10 +5574,12 @@ namespace renegade::studio
                         const auto& summary = candidate->Summary();
                         modelImportSummary_.SetText(
                             "SOURCE // " + fs::u8path(path).filename().generic_u8string() +
-                            "\nSTATIC " + std::string(candidate->SourceFormat() == bridge::ModelSourceFormat::Fbx ? "FBX" : "GLB") + " // " + std::to_string(summary.meshes) +
+                            "\n" + std::string(character ? "CHARACTER " : "STATIC ") + std::string(candidate->SourceFormat() == bridge::ModelSourceFormat::Fbx ? "FBX" : "GLB") + " // " + std::to_string(summary.meshes) +
                             " meshes / " + std::to_string(summary.materials) +
                             " materials / " + std::to_string(summary.objects) + " objects" +
-                            "\nNo authored scene changes before import.");
+                            (character ? " / " + std::to_string(candidate->Evidence().armatureBones) + " bones / " +
+                                std::to_string(summary.animations) + " clips" : "") +
+                            "\nPreview controls do not change the imported asset.");
                         modelImportCandidate_ = std::move(candidate);
                         modelImportPanel_.SetVisible(true);
                         studioChrome_.SetStatusText("MODEL IMPORT // REVIEW AND IMPORT ASSET");
@@ -5535,6 +5606,9 @@ namespace renegade::studio
                 request.projectRoot = session_->Projects().CurrentProject().rootPath;
                 request.projectId = projectId;
                 request.assetName = name;
+                request.characterAsset = modelImportCandidate_ &&
+                    modelImportCandidate_->Evidence().skinnedMeshes != 0 &&
+                    modelImportCandidate_->Evidence().armatureBones != 0;
                 std::string thumbnailError;
                 if (!modelImportPreview_ ||
                     !modelImportPreview_->CapturePng(request.thumbnailPng, thumbnailError))
@@ -5542,12 +5616,12 @@ namespace renegade::studio
                     ShowStudioMessageBox(thumbnailError, "Model Thumbnail");
                     return;
                 }
-                const auto result = bridge::ModelImportCommitService().CommitStaticModel(
+                const auto result = bridge::ModelImportCommitService().CommitModel(
                     request, *modelImportCandidate_);
                 if (!result.succeeded)
                 {
                     studioChrome_.SetStatusText("MODEL IMPORT // " + result.error);
-                    ShowStudioMessageBox(result.error, "Import Static Model");
+                    ShowStudioMessageBox(result.error, "Import Model");
                     if (result.committed)
                     {
                         modelImportPanel_.SetVisible(false);
@@ -5577,7 +5651,7 @@ namespace renegade::studio
                     ShowStudioMessageBox(
                         "The model was committed, but its Asset Browser card "
                         "could not be revealed. Do not import it again.\n\n" +
-                        revealError, "Import Static Model");
+                        revealError, "Import Model");
                     return;
                 }
                 studioChrome_.SetStatusText(

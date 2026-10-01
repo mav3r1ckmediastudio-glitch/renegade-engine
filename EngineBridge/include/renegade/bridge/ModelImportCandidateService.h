@@ -69,6 +69,7 @@ namespace renegade::bridge
     class ModelImportCandidateService
     {
     public:
+        [[nodiscard]] ModelImportCandidate PrepareModel(const std::string& sourcePath) const;
         // Static GLB or FBX. FBX file textures are snapshotted before conversion;
         // dependencies must be embedded or within the model source folder.
         [[nodiscard]] ModelImportCandidate PrepareStaticModel(

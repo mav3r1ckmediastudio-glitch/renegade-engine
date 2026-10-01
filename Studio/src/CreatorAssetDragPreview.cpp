@@ -1,3 +1,4 @@
+#include "renegade/bridge/ModelAnimationPreviewService.h"
 #include "RenegadeStudioChrome.h"
 
 #include "renegade/bridge/CharacterService.h"
@@ -637,7 +638,8 @@ namespace
         }
         // Never run all Character actions simultaneously on drag. A single
         // clip remains previewable; multi-clip Characters wait for Runtime AI.
-        if (previewFirstClip != wi::ecs::INVALID_ENTITY &&
+        if (!renegade::bridge::ModelImportStartsPaused(scene, wrapper) &&
+            previewFirstClip != wi::ecs::INVALID_ENTITY &&
             (previewClipCount == 1 || !preview.preparedCharacterAsset))
         {
             scene.animations.GetComponent(previewFirstClip)->Play();

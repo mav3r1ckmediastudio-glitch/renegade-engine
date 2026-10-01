@@ -1,4 +1,5 @@
 #include "RuntimeApplication.h"
+#include "RuntimeCharacterCollision.h"
 
 #include <utility>
 
@@ -43,6 +44,8 @@ namespace renegade::runtime
             characterSceneAttemptRevision_ = sceneRevision;
             characterSceneAttempted_ = true;
             characterSceneSyncFailed_ = false;
+
+            PrepareRuntimeCharacterCollisionScene(scenes_.GetScene());
 
             bridge::CharacterRuntimeState discoveredCharacters;
             RuntimeCharacterSystemState resolvedCharacters;

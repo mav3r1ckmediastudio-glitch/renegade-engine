@@ -19,3 +19,15 @@ and changed external-texture rejection, imports and persists textures, checks
 preview rotation and placement Undo/Redo/save/reopen, then deletes that input
 copy. A separate process verifies textured placement and retained-source
 reconversion without the original disposable source directory.
+
+
+## Animated Character fixture
+
+Run Blender in background with --python generate_character_fixture.py. The
+script creates a two-metre textured cube weighted to MovingBone under a two-bone
+skeleton, with Wave (X rotation) and Turn (Z rotation) actions. It writes the
+embedded-texture animated_character.fbx and rig_checker.png, removes exporter
+machine paths without changing binary offsets, and uses FBX_SCALE_ALL for the
+pinned converter's skin/unit compatibility. Default FBX_SCALE_NONE produced a
+100-times rendered skin mismatch and is not accepted as this fixture. Everything
+is generated here; no owner model, third-party character or animation is committed.

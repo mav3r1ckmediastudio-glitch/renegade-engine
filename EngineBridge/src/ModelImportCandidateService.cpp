@@ -102,6 +102,10 @@ namespace
 
 namespace renegade::bridge
 {
+    ModelImportCandidate ModelImportCandidateService::PrepareModel(const std::string& sourcePath) const
+    {
+        return PrepareStaticModel(sourcePath);
+    }
     ModelImportCandidate ModelImportCandidateService::PrepareGlb(const std::string& sourcePath) const
     {
         if (ImportService::ClassifyModelSourceFormat(sourcePath) == ModelSourceFormat::Glb)

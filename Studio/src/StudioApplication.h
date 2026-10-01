@@ -1089,6 +1089,11 @@ namespace renegade::studio
         wi::gui::Label modelImportPreviewImage_;
         wi::gui::Button modelImportRotateLeft_;
         wi::gui::Button modelImportRotateRight_;
+        wi::gui::ComboBox modelImportClip_;
+        wi::gui::Button modelImportPlay_;
+        wi::gui::Button modelImportRestart_;
+        wi::gui::Slider modelImportTime_;
+        wi::gui::Slider modelImportSpeed_;
         std::unique_ptr<ModelImportPreview> modelImportPreview_;
         wi::gui::TextInputField modelImportName_;
         wi::gui::Button modelImportCommit_;

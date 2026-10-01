@@ -13,6 +13,7 @@ namespace renegade::bridge
         std::string projectRoot;
         StableId projectId;
         std::string assetName;
+        bool characterAsset = false;
         // Optional for headless callers; Studio supplies its rendered PNG.
         std::vector<std::uint8_t> thumbnailPng;
     };
@@ -35,6 +36,8 @@ namespace renegade::bridge
         // Run on Wicked's thread-safe point. All project-visible writes cross
         // one journaled transaction; success requires catalogue and placement
         // reopen by the committed stable ID.
+        [[nodiscard]] ModelImportCommitResult CommitModel(
+            const ModelImportCommitRequest& request, ModelImportCandidate& candidate) const;
         [[nodiscard]] ModelImportCommitResult CommitStaticModel(
             const ModelImportCommitRequest& request,
             ModelImportCandidate& candidate) const;

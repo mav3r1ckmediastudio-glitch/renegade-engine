@@ -25,7 +25,7 @@ set_tests_properties(RenegadeModelImporterRebuildGraphicsProof PROPERTIES
     TIMEOUT 180
     WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeModelImporterRebuildGraphicsProof>")
 
-foreach(fbx_fixture IN ITEMS static_textured_cube static_embedded_cube)
+foreach(fbx_fixture IN ITEMS static_textured_cube static_embedded_cube animated_character)
     add_test(NAME RenegadeModelImporterRebuild_${fbx_fixture}
         COMMAND RenegadeModelImporterRebuildGraphicsProof
             "${CMAKE_SOURCE_DIR}/Tests/fixtures/Importer/${fbx_fixture}.fbx"

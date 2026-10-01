@@ -11,8 +11,9 @@ A creator can select a self-contained GLB or static FBX, inspect an isolated con
 model, choose a name and destination, commit it, find its `.rasset` card in
 Project Assets, place it in a scene, save, close and reopen. A failed operation
 must leave no registered product or misleading READY state. A success message
-must identify the actual card and stable asset ID. glTF sidecars, Character
-authoring and animation controls follow only after the static result works locally.
+must identify the actual card and stable asset ID. The first static slice is retained below as historical evidence. The current
+Character slice adds embedded native clip preview and paused reusable placement.
+External clip retargeting and action assignment remain separate work.
 
 ## Boundaries
 
@@ -42,7 +43,7 @@ authoring and animation controls follow only after the static result works local
 - Owner inspects the exact build before any release/merge claim.
 
 The branch implements static self-contained GLB and FBX import to Content/Models.
-ADD > IMPORT STATIC MODEL opens the native picker and a 512 by 320 rendered
+ADD > IMPORT MODEL opens the native picker and a 512 by 320 rendered
 preview, editable name, Rotate Left/Right, Import Asset and Cancel controls.
 The preview owns a cloned scene, auto-framed camera and neutral lighting;
 rotation does not alter the candidate or authored scene. The image remains
@@ -104,3 +105,65 @@ and Undo/Redo were visually checked in the dedicated Studio build. Saved-scene
 and project reopening evidence is recorded in HANDOFF.md. These are local
 candidate checks; owner acceptance of FBX and independent exact-commit review
 remain outstanding. No Character, animation or standalone gameplay claim.
+
+
+## Rigged Character and embedded clip preview - 1 October 2026
+
+PrepareModel retains isolated pinned-native GLB/FBX conversion. A candidate with
+skinned meshes and armature bones is committed as a Character using the existing
+canonical options.asset_kind recipe. Bones, inverse bind matrices, weights,
+texture bytes and native embedded animation/data components stay in the WISCENE
+payload. Static compatibility entry points continue to refuse Character requests.
+
+ModelAnimationPreviewService owns transient playback on a private scene clone.
+Reference Pose restores saved transforms; selecting a clip evaluates only that
+clip. Native Play/Pause, Restart, time in seconds and speed 0.1-4 operate on the
+real AnimationComponent. Paused scrubbing explicitly invalidates native
+last_update_time so the new pose evaluates. Root motion is disabled in preview.
+Preview controls and camera changes do not become creator recipe or AI actions.
+The camera fits deformed vertex positions rather than armature joint helper AABBs.
+
+CommitModel resets the cloned payload to paused source pose and marks new
+Character imports with renegade.model_import.starts_paused. The existing
+placement and drag-preview paths respect that marker, including single-clip
+characters. Existing assets without it retain their previous behavior. The marker
+is native serialized metadata, not a second runtime animation system.
+
+The generated animated_character.fbx fixture has two bones, two one-second
+clips and an embedded checker texture. It is generated with Blender 5.1.1 using
+FBX_SCALE_ALL (FBX Units Scale). Default per-node unit scaling exposed a pinned
+native conversion mismatch: rendered skin was 100 times the static mesh extent.
+That exporter combination is not claimed supported; no skin weights, inverse
+bind matrices or Wicked sources were patched to conceal it. Inspect source scale
+and poses in preview before importing unfamiliar FBXs. This fixture and the
+owner Mutant asset are the bounded compatibility evidence, not universal FBX parity.
+
+Seven focused graphics cases cover static GLB, external/embedded FBX plus their
+cold reopen, and animated Character plus cold reopen. Character checks include
+visible changed scrub pose, time advance/freeze, speed, clip switch, candidate
+isolation, strict static refusal, real Character placement, skin/bind fingerprints,
+Undo/Redo and paused save/reopen after deleting original sources. Thumbnail
+coverage rejects an image filled by oversized geometry. The proof also writes a
+separate disposable Runtime Level with a Player Start and floor.
+
+This slice does not add external animation files, retarget mapping, Idle/Walk/Run/
+Attack action slots, custom actions, destination selection or reimport editing.
+Previewing an embedded reference-pose take does not prove locomotion or AI.
+Native Studio and standalone-player acceptance evidence belongs in HANDOFF.md;
+independent exact-commit verification and owner acceptance remain required.
+
+
+### Grounding recovery validation - 1 October 2026
+
+The generated rigged checker cube and retained owner Mutant both remain grounded
+at (4,5,6) for 300 native updates after reopening. The proof invokes the same
+RuntimeCharacterCollision startup helper as the standalone player and requires
+native ground contact plus all three position coordinates within 0.01 metres.
+The unseeded startup reproduced a launch to (1202,1365.47,1803), despite a valid
+floor ray hit. Runtime now prepares rigid-body query geometry and initializes
+previous object matrices before activating Character controllers.
+
+Release Runtime/proof builds and all seven importer CTest cases passed. Native
+standalone inspection showed the checker cube on the floor and Mutant visible
+in reference pose after approximately 20 seconds. No gameplay animation action
+assignment or locomotion is claimed. Exact commands and evidence are in HANDOFF.

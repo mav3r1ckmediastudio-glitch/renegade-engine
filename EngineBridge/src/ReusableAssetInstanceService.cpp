@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/AnimationService.h"
+#include "renegade/bridge/ModelAnimationPreviewService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/IdentityService.h"
 
@@ -30,6 +31,17 @@ namespace renegade::bridge
             wi::scene::Scene& scene, const wi::ecs::Entity characterRoot)
         {
             const auto clips = CollectAnimationClips(scene, characterRoot, true);
+            if (ModelImportStartsPaused(scene, characterRoot))
+            {
+                for (const auto& clip : clips)
+                {
+                    auto* animation = scene.animations.GetComponent(clip.entity);
+                    animation->Pause();
+                    animation->timer = animation->start;
+                    animation->last_update_time = animation->timer;
+                }
+                return;
+            }
             wi::ecs::Entity idle = wi::ecs::INVALID_ENTITY;
             for (const auto& clip : clips)
             {
