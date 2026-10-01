@@ -1,4 +1,6 @@
 #include "renegade/bridge/CharacterService.h"
+#include "renegade/bridge/CreatorModelImportRecipe.h"
+#include "../WickedEngine/Editor/json.hpp"
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/ModelImportCandidateService.h"
 #include "renegade/bridge/ModelImportCommitService.h"
@@ -10,6 +12,7 @@
 
 #include "../Studio/src/ModelImportPreview.h"
 #include "../Runtime/src/RuntimeCharacterCollision.h"
+#include "../Runtime/src/RuntimeCharacterAnimation.h"
 #include <WickedEngine.h>
 #include <Windows.h>
 
@@ -203,6 +206,30 @@ namespace
                 std::abs(grounded->position.z - 6.0f) < 0.01f,
                 "Runtime Character fell through or was launched off the proof floor")) return false;
             std::cout << "CHARACTER GROUNDED AFTER 5 SECONDS: y=" << grounded->position.y << "\n";
+            using namespace renegade::runtime;
+            RuntimeCharacterSystemState actors;
+            RuntimeCharacterRecord actor;
+            actor.entity = instances.front().instanceRoot;
+            actor.stableEntityId = PersistentEntityId(*reopened, actor.entity);
+            actors.characters.push_back(actor);
+            RuntimeCombatState combat;
+            CharacterCombatRecord combatRecord;
+            combatRecord.characterId = actor.stableEntityId;
+            combatRecord.entity = actor.entity;
+            combatRecord.health = 100.0f;
+            combat.characters.push_back(combatRecord);
+            RuntimeCharacterAnimationState animations;
+            if (!Require(InitializeRuntimeCharacterAnimations(*reopened, actors, combat, animations, error), error)) return false;
+            auto& authored = animations.characters.front();
+            for (const auto semantic : {CharacterAnimationSemantic::Idle, CharacterAnimationSemantic::Locomotion,
+                CharacterAnimationSemantic::Run, CharacterAnimationSemantic::Attack})
+            {
+                const auto& variants = authored.clips[CharacterAnimationIndex(semantic)];
+                if (variants.empty()) continue;
+                if (!Require(RequestCharacterAnimation(*reopened, animations, authored, semantic), "runtime action playback failed") ||
+                    !Require(reopened->animations.GetComponent(authored.activeClip)->IsPlaying(), "runtime selected action is paused")) return false;
+                std::cout << "RUNTIME AUTHORED ACTION: " << CharacterAnimationSemanticName(semantic) << " / " << variants.size() << " variants\n";
+            }
             std::ofstream descriptor(root / "RuntimeProof.renegade");
             descriptor << "format = renegade-project\nversion = 1\n[project]\nproject_id = " << projectId
                 << "\nname = Character Runtime Proof\nstartup_scene = runtime-proof.wiscene\n"
@@ -221,11 +248,37 @@ namespace
 
 int main(int argc, char** argv)
 {
-    if (argc != 4)
+    if (argc < 4)
     {
         std::cerr << "Usage: ModelImporterRebuildGraphicsProof <static.glb> <external-uri.glb> <output-root>\n";
         return 2;
     }
+    CreatorModelImportRecipe recipeCheck;
+    recipeCheck.assetKind = CreatorAssetImportKind::Character;
+    CreatorExternalAnimationImportRecipe externalCheck;
+    externalCheck.sourceProjectRelativePath = "SourceAssets/Animations/Walk.fbx";
+    externalCheck.name = "Walk"; externalCheck.end = 1.0f;
+    externalCheck.action = "Walk"; externalCheck.speed = 1.5f; externalCheck.autoMapSource = true;
+    recipeCheck.externalAnimations.push_back(externalCheck);
+    std::string encoded, recipeError;
+    if (!Require(SerializeCreatorModelImportOptions(recipeCheck, encoded, recipeError) &&
+        ParseCreatorModelImportOptions(encoded, recipeCheck, recipeError) &&
+        recipeCheck.externalAnimations.front().action == "Walk" &&
+        recipeCheck.externalAnimations.front().speed == 1.5f &&
+        recipeCheck.externalAnimations.front().autoMapSource, "external recipe roundtrip failed")) return 28;
+    recipeCheck.externalAnimations.front().action.clear();
+    recipeCheck.externalAnimations.front().speed = 1.0f;
+    recipeCheck.externalAnimations.front().autoMapSource = false;
+    if (!Require(SerializeCreatorModelImportOptions(recipeCheck, encoded, recipeError) &&
+        encoded.find("auto_map_source") == std::string::npos &&
+        encoded.find("action") == std::string::npos &&
+        encoded.find("speed") == std::string::npos &&
+        ParseCreatorModelImportOptions(encoded, recipeCheck, recipeError), "legacy external schema changed")) return 28;
+    recipeCheck.externalAnimations.front().speed = 0.0f;
+    if (!Require(!SerializeCreatorModelImportOptions(recipeCheck, encoded, recipeError), "invalid external speed accepted")) return 28;
+    recipeCheck.externalAnimations.front().speed = 1.0f;
+    recipeCheck.externalAnimations.front().action = std::string(1, char(10));
+    if (!Require(!SerializeCreatorModelImportOptions(recipeCheck, encoded, recipeError), "control-character action accepted")) return 28;
     const bool reopening = std::string(argv[1]) == "--reopen";
     fs::path fixture = fs::weakly_canonical(fs::u8path(argv[1]));
     const fs::path externalFixture = fs::weakly_canonical(fs::u8path(argv[2]));
@@ -310,6 +363,31 @@ int main(int argc, char** argv)
                 request.projectId = "88888888-8888-4888-8888-888888888888";
                 request.characterAsset = candidate.Evidence().skinnedMeshes != 0 &&
                     candidate.Evidence().armatureBones != 0;
+                if (fixture.filename() == "animated_character.fbx") {
+                    const auto originalEvidence = candidate.Evidence();
+                    const auto originalDependencies = candidate.Dependencies().size();
+                    std::string rejectedError;
+                    const bool appended = ModelImportCandidateService().AppendExternalAnimations(candidate, fixture.generic_u8string(), rejectedError);
+                    if (!Require(!appended && !rejectedError.empty() && candidate.Evidence() == originalEvidence &&
+                        candidate.Dependencies().size() == originalDependencies, "incomplete humanoid mapping changed candidate")) return 28;
+                }
+                const auto embeddedCount = candidate.Summary().animations;
+                if (request.characterAsset) request.animationActions.assign(embeddedCount, "Unassigned");
+                for (int arg = 4; arg < argc; ++arg)
+                {
+                    const fs::path externalSource = fs::u8path(argv[arg]);
+                    const fs::path disposable = sourceRoot / ("external-" + std::to_string(arg)) / externalSource.filename();
+                    fs::create_directories(disposable.parent_path());
+                    fs::copy_file(externalSource, disposable, fs::copy_options::overwrite_existing);
+                    std::string error;
+                    const bool appended = ModelImportCandidateService().AppendExternalAnimations(candidate, disposable.generic_u8string(), error);
+                    if (!Require(appended, "external animation append failed: " + error)) return 28;
+                    request.animationActions.resize(candidate.Summary().animations, arg == 4 ? "Walk" : arg == 5 ? "Run" : arg == 6 ? "Attack" : "Idle");
+                }
+                const auto unchanged = candidate.Evidence();
+                std::string refusalError;
+                if (!Require(!ModelImportCandidateService().AppendExternalAnimations(candidate, externalFixture.generic_u8string(), refusalError) &&
+                    unchanged == candidate.Evidence(), "invalid external source changed candidate")) return 28;
                 renegade::studio::ModelImportPreview preview;
                 std::string previewError;
                 const auto before = ImportService::Summarize(*candidate.PeekScene());
@@ -336,6 +414,14 @@ int main(int argc, char** argv)
                 if (request.characterAsset)
                 {
                     const auto clips = preview.Clips();
+                    if (argc > 4 && (!Require(preview.SelectClip(int(embeddedCount)), "external clip selection failed") ||
+                        !Require(preview.Scrub((clips[embeddedCount].start + clips[embeddedCount].end) * 0.5f), "external scrub failed") ||
+                        !RenderPreview(preview))) return 28;
+                    if (argc > 4) {
+                        std::vector<std::uint8_t> externalPng;
+                        if (!Require(preview.CapturePng(externalPng, previewError), previewError) ||
+                            !Require(externalPng != request.thumbnailPng, "external animation did not change rendered pose")) return 28;
+                    }
                     if (!Require(!clips.empty(), "Character fixture has no clip")) return 27;
                     std::cout << "CHARACTER EVIDENCE: " << candidate.Evidence().armatureBones
                         << " bones; " << clips.size() << " clips; " << candidate.Dependencies().size() << " textures\n";
@@ -389,6 +475,16 @@ int main(int argc, char** argv)
                         if (!Require(!refusedChanged.committed && !refusedChanged.succeeded && !fs::exists(root / "Content/Models/Changed Texture.rasset"), "changed texture was not rejected before commit")) return 19;
                         std::cout << "FBX MISSING/CHANGED TEXTURE REJECTION PASS\n";
                     }
+                }
+                if (argc > 4) {
+                    const auto& dependency = candidate.Dependencies().back();
+                    const fs::path path = fs::u8path(dependency.sourcePath);
+                    { std::ofstream changed(path, std::ios::binary | std::ios::app); changed.put('x'); }
+                    auto changedRequest = request;
+                    changedRequest.assetName = "Changed Animation";
+                    const auto refused = ModelImportCommitService().CommitModel(changedRequest, candidate);
+                    { std::ofstream restored(path, std::ios::binary | std::ios::trunc); restored.write(reinterpret_cast<const char*>(dependency.bytes.data()), dependency.bytes.size()); }
+                    if (!Require(!refused.succeeded && !refused.committed && !fs::exists(root / "Content/Models/Changed Animation.rasset"), "changed animation source committed")) return 28;
                 }
                 auto invalidThumbnail = request;
                 invalidThumbnail.assetName = "Invalid Thumbnail";
@@ -450,6 +546,18 @@ int main(int argc, char** argv)
                             resultCode = 9;
                         else
                         {
+                            if (request.characterAsset)
+                            {
+                                auto placed = CreatorAssetWorkflowService().PrepareModelPlacement(root.generic_u8string(), request.projectId, committed.assetId);
+                                if (!Require(placed.IsReady(), "authored Character reopen failed")) return 28;
+                                for (size_t i = 0; i < placed.PeekScene()->animations.GetCount(); ++i)
+                                {
+                                    const auto entity = placed.PeekScene()->animations.GetEntity(i);
+                                    const auto* metadata = placed.PeekScene()->metadatas.GetComponent(entity);
+                                    if (!Require(metadata && metadata->string_values.get(CreatorCharacterAnimationActionMetadataKey) == request.animationActions[i],
+                                        "reopen lost explicit clip action")) return 28;
+                                }
+                            }
                             const auto duplicate = ModelImportCommitService().CommitModel(
                                 request, candidate);
                             if (!Require(!duplicate.succeeded && !duplicate.committed,
@@ -463,7 +571,7 @@ int main(int argc, char** argv)
                                 {
                                     for (const auto& d : candidate.Dependencies())
                                     {
-                                        const auto retained = root / "SourceAssets/Models/Proof Triangle" / fs::u8path(d.retainedRelativePath);
+                                        const auto retained = root / (d.referenceName.empty() ? "SourceAssets/Animations/Snapshots" : "SourceAssets/Models/Proof Triangle") / fs::u8path(d.retainedRelativePath);
                                         if (!Require(fs::is_regular_file(retained), "retained FBX texture missing")) return 24;
                                         std::ifstream stream(retained, std::ios::binary);
                                         const std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(stream)), {});
@@ -472,6 +580,18 @@ int main(int argc, char** argv)
                                     if (!Require(before == ImportService::Summarize(*candidate.PeekScene()), "commit mutated the import candidate")) return 25;
                                     fs::remove_all(sourceRoot, ec);
                                     if (!Require(!ec && !fs::exists(sourceRoot), "original disposable source directory was not removed")) return 26;
+                                    CreatorModelImportRecipe recipe;
+                                    const auto settings = nlohmann::json::parse(reopened.manifest.settingsJson);
+                                    if (!Require(ParseCreatorModelImportOptions(settings.at("options").dump(), recipe, error), error)) return 28;
+                                    auto reimported = ModelImportCandidateService().PrepareModel((root / fs::u8path(committed.sourceProjectRelativePath)).generic_u8string());
+                                    if (!Require(reimported.IsReady(), reimported.Error()) ||
+                                        !Require(ApplyCreatorModelImportRecipe(*reimported.PeekMutableScene(), root.generic_u8string(), request.projectId, recipe, error), error) ||
+                                        !Require(reimported.PeekScene()->animations.GetCount() == candidate.Summary().animations, "retained reimport lost external clips")) return 28;
+                                    if (request.characterAsset) for (size_t i = 0; i < reimported.PeekScene()->animations.GetCount(); ++i) {
+                                        const auto* metadata = reimported.PeekScene()->metadatas.GetComponent(reimported.PeekScene()->animations.GetEntity(i));
+                                        if (!Require(metadata && metadata->string_values.get(CreatorCharacterAnimationActionMetadataKey) == request.animationActions[i], "retained reimport lost action")) return 28;
+                                    }
+                                    std::cout << "RETAINED REIMPORT CLIPS/ACTIONS PASS\n";
                                 }
                                 std::cout << "MODEL REBUILD PROOF PASS: placement/Undo/Redo/save/reopen; stable asset="
                                 << committed.assetId << "\n";

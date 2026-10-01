@@ -1,6 +1,8 @@
 #include "renegade/bridge/ModelImportCandidateService.h"
-#include "renegade/bridge/ModelImporterFailureAdapter.h"
+#include "renegade/bridge/HumanoidRetargetService.h"
+#include "renegade/bridge/ModelAnimationPreviewService.h"
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/ModelImporterFailureAdapter.h"
 #include <ModelImporter.h>
 #define UFBX_REAL_TYPE float
 #include <ufbx.h>
@@ -102,6 +104,75 @@ namespace
 
 namespace renegade::bridge
 {
+    bool ModelImportCandidateService::AppendExternalAnimations(
+        ModelImportCandidate& candidate, const std::string& sourcePath,
+        std::string& error) const
+    {
+        error.clear();
+        if (!candidate.IsReady() || candidate.evidence_.skinnedMeshes == 0 ||
+            candidate.evidence_.armatureBones == 0)
+        { error = "External animations require a ready rigged Character."; return false; }
+        const auto sourceKind = ClassifyHumanoidAnimationSource(sourcePath);
+        if (sourceKind != HumanoidAnimationSourceFormat::Fbx)
+        { error = "External animation import currently accepts FBX only."; return false; }
+        std::vector<std::uint8_t> before, after;
+        if (!ReadBytes(fs::u8path(sourcePath), before) || before.empty())
+        { error = "External animation source could not be read."; return false; }
+        auto prepared = wi::allocator::make_shared_single<wi::scene::Scene>();
+        try
+        {
+            wi::Archive clone;
+            candidate.scene_->Serialize(clone);
+            clone.SetReadModeAndResetPos(true);
+            prepared->Serialize(clone);
+            bool alreadyMapped = false;
+            for (std::size_t i = 0; i < prepared->humanoids.GetCount(); ++i)
+                alreadyMapped = alreadyMapped || prepared->humanoids[i].IsValid();
+            if (!alreadyMapped && !EnsureHumanoidAnimationSourceMapping(*prepared, error)) return false;
+            (void)DisableDefaultHumanoidLookAt(*prepared);
+            wi::ecs::Entity destination = wi::ecs::INVALID_ENTITY;
+            for (std::size_t i = 0; i < prepared->humanoids.GetCount(); ++i)
+                if (prepared->humanoids[i].IsValid())
+                {
+                    if (destination != wi::ecs::INVALID_ENTITY)
+                    { error = "External animation import requires exactly one humanoid rig."; return false; }
+                    destination = prepared->humanoids.GetEntity(i);
+                }
+            if (destination == wi::ecs::INVALID_ENTITY)
+            { error = "Character humanoid mapping is incomplete."; return false; }
+            const auto first = prepared->animations.GetCount();
+            ClearWickedModelImporterFailureDiagnostic();
+            RetargetHumanoidAnimationsCommand retarget(*prepared, destination, sourcePath, true);
+            const bool succeeded = retarget.Execute();
+            const auto importerFailure = ConsumeWickedModelImporterFailureDiagnostic();
+            if (!succeeded || !importerFailure.empty())
+            { error = importerFailure.empty() ? retarget.Result().error : importerFailure; return false; }
+            const auto& result = retarget.Result();
+            if (result.createdAnimations.size() != result.sourceAnimationCount)
+            { error = "Not every source clip could be retargeted; nothing was added."; return false; }
+            if (!ReadBytes(fs::u8path(sourcePath), after) || after != before)
+            { error = "External animation source changed during conversion."; return false; }
+            PauseImportedModelAnimations(*prepared);
+            ModelImportDependency source;
+            source.sourcePath = fs::absolute(fs::u8path(sourcePath)).generic_u8string();
+            source.retainedRelativePath = GenerateStableId() + "/" +
+                fs::u8path(sourcePath).filename().generic_u8string();
+            source.bytes = std::move(before);
+            candidate.externalAnimations_.reserve(candidate.externalAnimations_.size() + 1);
+            candidate.dependencies_.reserve(candidate.dependencies_.size() + 1);
+            candidate.externalAnimations_.push_back({candidate.dependencies_.size(), first,
+                result.createdAnimations.size()});
+            candidate.dependencies_.push_back(std::move(source));
+            candidate.scene_ = std::move(prepared);
+            candidate.summary_ = ImportService::Summarize(*candidate.scene_);
+            candidate.evidence_ = ImportService::SummarizeModelEvidence(*candidate.scene_);
+            return true;
+        }
+        catch (const std::exception& exception) { error = exception.what(); }
+        catch (...) { error = "External animation conversion failed."; }
+        return false;
+    }
+
     ModelImportCandidate ModelImportCandidateService::PrepareModel(const std::string& sourcePath) const
     {
         return PrepareStaticModel(sourcePath);

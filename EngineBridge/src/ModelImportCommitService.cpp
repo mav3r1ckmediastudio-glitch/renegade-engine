@@ -308,7 +308,7 @@ namespace renegade::bridge
             if (!dependency.sourcePath.empty() &&
                 (!ReadBytes(fs::u8path(dependency.sourcePath), current) || current != dependency.bytes))
             {
-                result.error = "FBX texture changed or disappeared after preview: " +
+                result.error = "Import dependency changed or disappeared after preview: " +
                     fs::u8path(dependency.sourcePath).filename().generic_u8string();
                 return result;
             }
@@ -379,15 +379,19 @@ namespace renegade::bridge
                 fs::remove(bundle, ignored);
             }
         } cleanup{isFbx ? sourceBundle : fs::path{}, dependencyPaths};
-        for (const auto& dependency : candidate.Dependencies())
+        for (size_t index = 0; index < candidate.Dependencies().size(); ++index)
         {
+            const auto& dependency = candidate.Dependencies()[index];
+            const bool externalAnimation = std::any_of(candidate.ExternalAnimations().begin(), candidate.ExternalAnimations().end(),
+                [index](const auto& source) { return source.dependencyIndex == index; });
+            const fs::path allowedFolder = externalAnimation ? root / "SourceAssets/Animations/Snapshots" : sourceBundle;
             const fs::path relative = fs::u8path(dependency.retainedRelativePath);
-            const fs::path destination = (sourceBundle / relative).lexically_normal();
+            const fs::path destination = (allowedFolder / relative).lexically_normal();
             if (relative.empty() || relative.is_absolute() ||
-                !Within(destination, sourceBundle) || destination == retainedSource ||
+                !Within(destination, allowedFolder) || destination == retainedSource ||
                 fs::exists(destination, ec) || ec)
             {
-                result.error = "FBX retained texture destination is invalid or already occupied.";
+                result.error = "Retained import dependency destination is invalid or already occupied.";
                 return result;
             }
             dependencyPaths.push_back(destination);
@@ -473,6 +477,41 @@ namespace renegade::bridge
             return result;
         }
 
+        CreatorModelImportRecipe authoredRecipe;
+        authoredRecipe.assetKind = request.characterAsset ? CreatorAssetImportKind::Character : CreatorAssetImportKind::Model;
+        if (!request.animationActions.empty() &&
+            (!request.characterAsset || request.animationActions.size() != candidate.Summary().animations))
+        { result.error = "Animation action assignments do not match the Character clips."; return result; }
+        const std::vector<std::string> actionsAllowed = {"Unassigned", "Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death"};
+        for (size_t i = 0; request.characterAsset && i < candidate.Summary().animations; ++i)
+        {
+            const std::string action = request.animationActions.empty() ? "Unassigned" : request.animationActions[i];
+            if (std::find(actionsAllowed.begin(), actionsAllowed.end(), action) == actionsAllowed.end())
+            { result.error = "Unknown Character animation action."; return result; }
+            const auto& native = candidate.PeekScene()->animations[i];
+            const auto* name = candidate.PeekScene()->names.GetComponent(candidate.PeekScene()->animations.GetEntity(i));
+            const auto external = std::find_if(candidate.ExternalAnimations().begin(), candidate.ExternalAnimations().end(),
+                [i](const auto& source) { return i >= source.firstAnimationIndex && i < source.firstAnimationIndex + source.animationCount; });
+            if (external == candidate.ExternalAnimations().end())
+            {
+                CreatorAnimationImportRecipe clip;
+                clip.sourceAnimationIndex = static_cast<std::uint32_t>(i);
+                clip.name = name ? name->name : "Clip " + std::to_string(i + 1);
+                clip.start = native.start; clip.end = native.end; clip.action = action;
+                authoredRecipe.animations.push_back(std::move(clip));
+            }
+            else
+            {
+                CreatorExternalAnimationImportRecipe clip;
+                clip.sourceProjectRelativePath = dependencyPaths[external->dependencyIndex].lexically_relative(root).generic_u8string();
+                clip.sourceAnimationIndex = static_cast<std::uint32_t>(i - external->firstAnimationIndex);
+                clip.name = name ? name->name : "External Clip " + std::to_string(i + 1);
+                clip.start = native.start; clip.end = native.end; clip.action = action; clip.autoMapSource = true;
+                authoredRecipe.externalAnimations.push_back(std::move(clip));
+            }
+        }
+        std::string authoredOptions;
+        if (!SerializeCreatorModelImportOptions(authoredRecipe, authoredOptions, result.error)) return result;
         std::vector<std::uint8_t> payload;
         wi::scene::Scene commitScene;
         try
@@ -484,6 +523,11 @@ namespace renegade::bridge
             clone.SetReadModeAndResetPos(true);
             commitScene.Serialize(clone);
             PauseImportedModelAnimations(commitScene);
+            if (request.characterAsset)
+                for (size_t i = 0; i < commitScene.animations.GetCount(); ++i)
+                    commitScene.metadatas.Create(commitScene.animations.GetEntity(i)).string_values.set(
+                        CreatorCharacterAnimationActionMetadataKey,
+                        request.animationActions.empty() ? "Unassigned" : request.animationActions[i]);
             if (request.characterAsset && commitScene.transforms.GetCount() != 0)
             {
                 const auto rootEntity = commitScene.transforms.GetEntity(0);
@@ -498,7 +542,8 @@ namespace renegade::bridge
                     for (size_t d = 0; d < candidate.Dependencies().size(); ++d)
                     {
                         const auto& dependency = candidate.Dependencies()[d];
-                        if (texture.name != dependency.previewResourceName) continue;
+                        if (dependency.referenceName.empty() ||
+                            texture.name != dependency.previewResourceName) continue;
                         texture.name = dependencyPaths[d].generic_u8string();
                         texture.resource = wi::resourcemanager::Load(texture.name,
                             wi::resourcemanager::Flags::IMPORT_RETAIN_FILEDATA,
@@ -553,7 +598,7 @@ namespace renegade::bridge
 
         nlohmann::json recipe = {{"options", nlohmann::json::object()},
             {"source_format", isFbx ? "fbx" : "glb"}};
-        if (request.characterAsset) recipe["options"]["asset_kind"] = "character";
+        recipe["options"] = nlohmann::json::parse(authoredOptions);
         const std::string recipeJson = recipe.dump();
         ReusableModelAssetDocument document;
         document.manifest.projectId = request.projectId;
@@ -603,7 +648,7 @@ namespace renegade::bridge
             textureRecord.assetId = GenerateStableId();
             if (!idUnused(textureRecord.assetId))
             {
-                result.error = "Could not allocate unique retained texture identity.";
+                result.error = "Could not allocate unique retained dependency identity.";
                 return result;
             }
             textureRecord.dependencyNodeId = "lp07.source:" + textureRecord.assetId;

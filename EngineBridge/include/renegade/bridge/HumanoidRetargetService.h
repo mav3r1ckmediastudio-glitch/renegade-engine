@@ -54,6 +54,7 @@ namespace renegade::bridge
         std::string sourcePath;
         std::string error;
         std::vector<wi::ecs::Entity> createdAnimations;
+        std::size_t sourceAnimationCount = 0;
     };
 
     // Baked retarget results must be command-owned after the first import.

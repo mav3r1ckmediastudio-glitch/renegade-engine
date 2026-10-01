@@ -17,6 +17,13 @@ namespace renegade::bridge
         std::vector<std::uint8_t> bytes;
     };
 
+    struct ModelImportExternalAnimationSource
+    {
+        std::size_t dependencyIndex = 0;
+        std::size_t firstAnimationIndex = 0;
+        std::size_t animationCount = 0;
+    };
+
     // A conversion candidate is kept separate from the active editor Scene.
     // It is not a project asset until the later transaction commits and reopens it.
     class ModelImportCandidate
@@ -38,6 +45,7 @@ namespace renegade::bridge
         [[nodiscard]] std::uint64_t SourceFingerprint() const noexcept { return sourceFingerprint_; }
         [[nodiscard]] ModelSourceFormat SourceFormat() const noexcept { return sourceFormat_; }
         [[nodiscard]] const std::vector<ModelImportDependency>& Dependencies() const noexcept { return dependencies_; }
+        [[nodiscard]] const std::vector<ModelImportExternalAnimationSource>& ExternalAnimations() const noexcept { return externalAnimations_; }
         [[nodiscard]] const ImportedSceneSummary& Summary() const noexcept { return summary_; }
         [[nodiscard]] const ImportedModelEvidence& Evidence() const noexcept { return evidence_; }
         [[nodiscard]] const wi::scene::Scene* PeekScene() const noexcept
@@ -62,6 +70,7 @@ namespace renegade::bridge
         std::uint64_t sourceFingerprint_ = 0;
         ModelSourceFormat sourceFormat_ = ModelSourceFormat::Unknown;
         std::vector<ModelImportDependency> dependencies_;
+        std::vector<ModelImportExternalAnimationSource> externalAnimations_;
         ImportedSceneSummary summary_;
         ImportedModelEvidence evidence_;
     };
@@ -69,6 +78,9 @@ namespace renegade::bridge
     class ModelImportCandidateService
     {
     public:
+        // Failure leaves the candidate unchanged. Only baked native clips join it.
+        [[nodiscard]] bool AppendExternalAnimations(ModelImportCandidate& candidate,
+            const std::string& sourcePath, std::string& error) const;
         [[nodiscard]] ModelImportCandidate PrepareModel(const std::string& sourcePath) const;
         // Static GLB or FBX. FBX file textures are snapshotted before conversion;
         // dependencies must be embedded or within the model source folder.

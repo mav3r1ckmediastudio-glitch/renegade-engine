@@ -379,7 +379,9 @@ namespace renegade::bridge
                     return false;
 
                 RetargetHumanoidAnimationsCommand command(
-                    scene, destinationHumanoid, sourcePath);
+                    scene, destinationHumanoid, sourcePath,
+                    std::any_of(group.clips.begin(), group.clips.end(),
+                        [](const auto* clip) { return clip && clip->autoMapSource; }));
                 if (!command.Execute())
                 {
                     error =
@@ -390,7 +392,8 @@ namespace renegade::bridge
                 }
 
                 const auto& result = command.Result();
-                if (result.createdAnimations.size() <= maximumSourceIndex)
+                if (result.createdAnimations.size() != result.sourceAnimationCount ||
+                    result.createdAnimations.size() <= maximumSourceIndex)
                 {
                     error =
                         "Character external animation retarget did not produce every source action referenced by the durable import recipe for '" +
@@ -424,6 +427,10 @@ namespace renegade::bridge
 
                     animation->start = clip->start;
                     animation->end = clip->end;
+                    animation->speed = clip->speed;
+                    if (!clip->action.empty())
+                        scene.metadatas.Create(entity).string_values.set(
+                            CreatorCharacterAnimationActionMetadataKey, clip->action);
                     if (!clip->name.empty())
                     {
                         auto* name = scene.names.GetComponent(entity);
@@ -655,7 +662,12 @@ namespace renegade::bridge
                 }
                 for (const auto& item : root.at("external_animations"))
                 {
-                    if (!item.is_object() || item.size() != 6 ||
+                    if (!item.is_object() || item.size() != 6 +
+                        (item.contains("auto_map_source") ? 1 : 0) +
+                        (item.contains("action") ? 1 : 0) + (item.contains("speed") ? 1 : 0) ||
+                        (item.contains("auto_map_source") && !item.at("auto_map_source").is_boolean()) ||
+                        (item.contains("action") && !item.at("action").is_string()) ||
+                        (item.contains("speed") && !item.at("speed").is_number()) ||
                         !item.contains("source_project_relative_path") ||
                         !item.at("source_project_relative_path").is_string() ||
                         !item.contains("source_animation_index") ||
@@ -671,6 +683,14 @@ namespace renegade::bridge
                     CreatorExternalAnimationImportRecipe animation;
                     animation.sourceProjectRelativePath =
                         item.at("source_project_relative_path").get<std::string>();
+                    animation.autoMapSource = item.value("auto_map_source", false);
+                    animation.action = item.value("action", std::string{});
+                    animation.speed = item.value("speed", 1.0f);
+                    if (animation.action.size() > 64 ||
+                        std::any_of(animation.action.begin(), animation.action.end(),
+                            [](unsigned char c) { return c < 32; }) ||
+                        !std::isfinite(animation.speed) || animation.speed < 0.1f || animation.speed > 4.0f)
+                    { error = "External animation action or speed is invalid."; return false; }
                     animation.sourceAnimationIndex =
                         item.at("source_animation_index").get<std::uint32_t>();
                     animation.name = item.at("name").get<std::string>();
@@ -821,6 +841,9 @@ namespace renegade::bridge
                     {"source_project_relative_path", animation.sourceProjectRelativePath},
                     {"start", animation.start},
                 });
+                if (animation.autoMapSource) animations.back()["auto_map_source"] = true;
+                if (!animation.action.empty()) animations.back()["action"] = animation.action;
+                if (animation.speed != 1.0f) animations.back()["speed"] = animation.speed;
             }
             root["external_animations"] = std::move(animations);
         }

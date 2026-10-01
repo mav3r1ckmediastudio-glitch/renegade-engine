@@ -719,3 +719,26 @@ object matrices; previous object matrices are then seeded from current matrices.
 This prevents initial world translation being interpreted as moving-platform
 inertia. Normal per-frame advancement remains owned by the existing RenderPath.
 The preparation does not advance gameplay time or alter the pinned Wicked source.
+
+## External Character clips and action labels
+
+ModelImportCandidateService appends animation FBXs through the existing native
+Humanoid retarget command on a private candidate clone. Existing valid destination
+mappings are reused; named armatures are auto-mapped only when required. Multiple
+valid destination rigs and incomplete source conversion fail before replacing the
+candidate. The source animation count guards durable numeric take indices against
+partial retarget results. Preview remains a separate clone.
+
+External source bytes are snapshotted as non-texture dependencies and retained
+beneath the existing SourceAssets/Animations/Snapshots tree. The existing governed transaction registers
+those files as editor-only source assets alongside the model and textures.
+No external source mesh or materials are merged into the Character payload.
+
+The canonical external_animations recipe accepts optional auto_map_source, action
+and speed fields. Omitted fields retain legacy defaults and serialization shape.
+New Character commits assign every native clip an explicit action, defaulting to
+Unassigned. Embedded and external recipe entries reproduce those labels during
+retained-source reimport. Native animation-entity metadata remains the runtime
+contract; existing action variants and missing-slot semantics remain unchanged.
+Studio owns one native per-clip action selector and an external FBX picker.
+Preview playback speed and scrub position remain transient.

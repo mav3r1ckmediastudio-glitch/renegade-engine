@@ -167,3 +167,27 @@ Release Runtime/proof builds and all seven importer CTest cases passed. Native
 standalone inspection showed the checker cube on the floor and Mutant visible
 in reference pose after approximately 20 seconds. No gameplay animation action
 assignment or locomotion is claimed. Exact commands and evidence are in HANDOFF.
+
+## External-animation continuation slice
+
+The native Character importer now offers ADD ANIMATION FBX and a Gameplay action
+selector for the selected clip. Choose Unassigned, Idle, Walk, Run, Attack, Reload,
+Hit or Death. Several clips may share an action; missing actions remain valid.
+Reference pose is a preview mode and cannot acquire an action. Imported source
+takes default to Unassigned until the creator assigns one.
+
+External conversion reuses the pinned native humanoid retargeter on an isolated
+clone. It requires one usable destination humanoid and a complete source result.
+Failure preserves the prior candidate. Successful addition refreshes the preview
+and clip list; Import remains disabled until the new preview is ready.
+
+Commit retains exact external FBX bytes in SourceAssets/Animations/Snapshots, registers them
+as editor-only source dependencies, and persists explicit native action metadata
+plus durable source/take recipe entries in the existing transaction.
+Reimport uses the retained files with optional source auto-mapping.
+Preview time and speed remain presentation controls.
+
+This is bounded new-import authoring. Custom slots, frame-range authoring,
+editing an existing Character, arbitrary multi-rig retargeting and universal
+FBX compatibility remain outside this slice. Exact validation is recorded in
+HANDOFF.md; independent verification and owner acceptance remain pending.

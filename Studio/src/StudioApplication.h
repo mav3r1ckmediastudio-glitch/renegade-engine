@@ -67,6 +67,7 @@ namespace renegade::studio
         void RefreshProjectHub();
         void RefreshAssetBrowser();
         void OpenStaticModelImporter();
+        void AppendModelImportAnimations();
         void CommitStaticModelImporter();
         void RestoreGovernedMaterialTextures();
 
@@ -1090,6 +1091,9 @@ namespace renegade::studio
         wi::gui::Button modelImportRotateLeft_;
         wi::gui::Button modelImportRotateRight_;
         wi::gui::ComboBox modelImportClip_;
+        wi::gui::ComboBox modelImportAction_;
+        wi::gui::Button modelImportAddAnimation_;
+        std::vector<std::string> modelImportActions_;
         wi::gui::Button modelImportPlay_;
         wi::gui::Button modelImportRestart_;
         wi::gui::Slider modelImportTime_;

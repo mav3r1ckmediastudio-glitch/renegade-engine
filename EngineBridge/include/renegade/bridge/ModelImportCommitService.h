@@ -14,6 +14,8 @@ namespace renegade::bridge
         StableId projectId;
         std::string assetName;
         bool characterAsset = false;
+        // Native clip order; empty defaults new clips to Unassigned.
+        std::vector<std::string> animationActions;
         // Optional for headless callers; Studio supplies its rendered PNG.
         std::vector<std::uint8_t> thumbnailPng;
     };

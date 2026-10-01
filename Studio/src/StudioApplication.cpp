@@ -2774,6 +2774,12 @@ namespace renegade::studio
             modelImportRestart_.SetEnabled(selected);
             modelImportTime_.SetEnabled(selected);
             modelImportSpeed_.SetEnabled(selected);
+            modelImportAction_.SetEnabled(selected);
+            if (selected && size_t(args.iValue - 1) < modelImportActions_.size()) {
+                const std::vector<std::string> actions = {"Unassigned", "Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death"};
+                const auto found = std::find(actions.begin(), actions.end(), modelImportActions_[args.iValue - 1]);
+                modelImportAction_.SetSelected(int(found - actions.begin()));
+            }
             if (selected) {
                 const auto& clip = clips[args.iValue - 1];
                 modelImportTime_.SetRange(clip.start, std::max(clip.end, clip.start + 0.001f));
@@ -2816,7 +2822,27 @@ namespace renegade::studio
             if (modelImportPreview_) modelImportPreview_->SetSpeed(args.fValue);
         });
         modelImportPanel_.AddWidget(&modelImportSpeed_);
+        modelImportAction_.Create("Gameplay action");
+        modelImportAction_.SetPos(XMFLOAT2(160.0f, 645.0f));
+        modelImportAction_.SetSize(XMFLOAT2(350.0f, 30.0f));
+        for (const auto* action : {"Unassigned", "Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death"})
+            modelImportAction_.AddItem(action);
+        modelImportAction_.OnSelect([this](const wi::gui::EventArgs& args) {
+            const int clip = modelImportClip_.GetSelected() - 1;
+            const std::vector<std::string> actions = {"Unassigned", "Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death"};
+            if (clip >= 0 && size_t(clip) < modelImportActions_.size() && args.iValue >= 0 && size_t(args.iValue) < actions.size())
+                modelImportActions_[clip] = actions[args.iValue];
+        });
+        modelImportPanel_.AddWidget(&modelImportAction_);
+        modelImportAddAnimation_.Create("Add External Animation FBX");
+        modelImportAddAnimation_.SetText("ADD ANIMATION FBX");
+        modelImportAddAnimation_.SetPos(XMFLOAT2(20.0f, 685.0f));
+        modelImportAddAnimation_.SetSize(XMFLOAT2(510.0f, 30.0f));
+        modelImportAddAnimation_.OnClick([this](const wi::gui::EventArgs&) { AppendModelImportAnimations(); });
+        modelImportPanel_.AddWidget(&modelImportAddAnimation_);
         modelImportName_.Create("Model Asset Name");
+        // Preserve typed names when clicking Import without first pressing Enter.
+        modelImportName_.SetCancelInputEnabled(false);
         modelImportName_.SetDescription("Asset name: ");
         modelImportName_.SetPos(XMFLOAT2(110.0f, 500.0f));
         modelImportName_.SetSize(XMFLOAT2(390.0f, 30.0f));
@@ -5551,11 +5577,15 @@ namespace renegade::studio
                             return;
                         }
                         modelImportPreview_ = std::move(preview);
-                        modelImportPanel_.SetSize(XMFLOAT2(560.0f, character ? 770.0f : 610.0f));
+                        modelImportPanel_.SetSize(XMFLOAT2(560.0f, character ? 850.0f : 610.0f));
                         modelImportSummary_.SetSize(XMFLOAT2(480.0f, character ? 55.0f : 85.0f));
-                        modelImportName_.SetPos(XMFLOAT2(110.0f, character ? 660.0f : 500.0f));
-                        modelImportCommit_.SetPos(XMFLOAT2(20.0f, character ? 710.0f : 550.0f));
-                        modelImportCancel_.SetPos(XMFLOAT2(260.0f, character ? 710.0f : 550.0f));
+                        modelImportName_.SetPos(XMFLOAT2(110.0f, character ? 740.0f : 500.0f));
+                        modelImportCommit_.SetPos(XMFLOAT2(20.0f, character ? 790.0f : 550.0f));
+                        modelImportCancel_.SetPos(XMFLOAT2(260.0f, character ? 790.0f : 550.0f));
+                        modelImportActions_.assign(candidate->Summary().animations, "Unassigned");
+                        modelImportAction_.SetVisible(character);
+                        modelImportAction_.SetEnabled(false);
+                        modelImportAddAnimation_.SetVisible(character);
                         modelImportClip_.SetVisible(character);
                         modelImportPlay_.SetVisible(character);
                         modelImportRestart_.SetVisible(character);
@@ -5579,12 +5609,59 @@ namespace renegade::studio
                             " materials / " + std::to_string(summary.objects) + " objects" +
                             (character ? " / " + std::to_string(candidate->Evidence().armatureBones) + " bones / " +
                                 std::to_string(summary.animations) + " clips" : "") +
-                            "\nPreview controls do not change the imported asset.");
+                            (character ? "\nSelect a clip to assign its gameplay action." : "\nPreview controls do not change the imported asset."));
                         modelImportCandidate_ = std::move(candidate);
                         modelImportPanel_.SetVisible(true);
                         studioChrome_.SetStatusText("MODEL IMPORT // REVIEW AND IMPORT ASSET");
                     });
             });
+    }
+
+    void StudioRenderPath::AppendModelImportAnimations()
+    {
+        if (!modelImportCandidate_ || !modelImportPanel_.IsVisible()) return;
+        const auto projectId = modelImportProjectId_;
+        const auto modelSource = modelImportCandidate_->SourcePath();
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "Select humanoid animation FBX";
+        params.extensions = {"fbx"};
+        wi::helper::FileDialog(params, [this, projectId, modelSource](const std::string& path) {
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this, projectId, modelSource, path](std::uint64_t) {
+                    if (path.empty() || !modelImportCandidate_ || !modelImportPanel_.IsVisible() ||
+                        session_ == nullptr || !session_->Projects().HasProject() ||
+                        session_->Projects().CurrentProject().projectId != projectId ||
+                        modelImportCandidate_->SourcePath() != modelSource) return;
+                    std::string error;
+                    if (!bridge::ModelImportCandidateService().AppendExternalAnimations(*modelImportCandidate_, path, error)) {
+                        ShowStudioMessageBox(error, "Add Animation");
+                        return;
+                    }
+                    auto preview = std::make_unique<ModelImportPreview>();
+                    if (!preview->Prepare(*modelImportCandidate_->PeekMutableScene(), error)) {
+                        modelImportCandidate_.reset();
+                        modelImportPreview_.reset();
+                        modelImportPreviewImage_.SetImage({});
+                        modelImportPanel_.SetVisible(false);
+                        ShowStudioMessageBox(error, "Animation Preview");
+                        return;
+                    }
+                    modelImportPreview_ = std::move(preview);
+                    modelImportPreviewImage_.SetImage({});
+                    modelImportCommit_.SetEnabled(false);
+                    modelImportActions_.resize(modelImportCandidate_->Summary().animations, "Unassigned");
+                    modelImportClip_.ClearItems();
+                    modelImportClip_.AddItem("REFERENCE POSE");
+                    for (const auto& clip : modelImportPreview_->Clips())
+                        modelImportClip_.AddItem(clip.name + " (" + std::to_string(clip.end - clip.start) + " s)");
+                    modelImportClip_.SetSelected(0);
+                    modelImportSummary_.SetText("CHARACTER // " +
+                        std::to_string(modelImportCandidate_->Summary().animations) +
+                        " clips\nSelect a clip and assign its gameplay action.");
+                    studioChrome_.SetStatusText("MODEL IMPORT // ANIMATION ADDED");
+                });
+        });
     }
 
     void StudioRenderPath::CommitStaticModelImporter()
@@ -5606,6 +5683,8 @@ namespace renegade::studio
                 request.projectRoot = session_->Projects().CurrentProject().rootPath;
                 request.projectId = projectId;
                 request.assetName = name;
+                if (modelImportCandidate_->Evidence().skinnedMeshes != 0)
+                    request.animationActions = modelImportActions_;
                 request.characterAsset = modelImportCandidate_ &&
                     modelImportCandidate_->Evidence().skinnedMeshes != 0 &&
                     modelImportCandidate_->Evidence().armatureBones != 0;

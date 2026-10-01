@@ -58,6 +58,9 @@ namespace renegade::bridge
         float start = 0.0f;
         float end = 0.0f;
         bool enabled = true;
+        bool autoMapSource = false;
+        std::string action;
+        float speed = 1.0f;
     };
 
     struct CreatorModelTransformRecipe

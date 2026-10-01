@@ -536,6 +536,7 @@ namespace renegade::bridge
             result_.error = "Animation source import failed with an unknown error.";
             return false;
         }
+        result_.sourceAnimationCount = sourceScene.animations.GetCount();
         if (sourceScene.animations.GetCount() == 0)
         {
             result_.error = std::string(HumanoidAnimationSourceFormatName(result_.sourceFormat)) +
@@ -630,7 +631,9 @@ namespace renegade::bridge
             }
         }
 
+        const auto sourceAnimationCount = result_.sourceAnimationCount;
         result_ = {};
+        result_.sourceAnimationCount = sourceAnimationCount;
         result_.sourcePath = sourcePath_;
         result_.sourceFormat = ClassifyHumanoidAnimationSource(sourcePath_);
         for (const auto& snapshot : animationSnapshots_)
