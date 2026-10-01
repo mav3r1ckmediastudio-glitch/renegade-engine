@@ -5,8 +5,8 @@
 Branch: feature/model-importer-rebuild. Base: 8749a20, the recorded independent
 native GLB verification. This checkpoint adds static FBX with embedded and
 source-folder-relative textures while preserving the accepted GLB preview and
-rotation workflow. The exact implementation commit is recorded in the subsequent
-checkpoint entry. No push, merge, owner-project mutation or global release claim.
+rotation workflow. Implementation commit: 07c21c9da696d8181626c92fda67b0e8fdbf98ef.
+The following documentation-only commit records that exact checkpoint. No push, merge, owner-project mutation or global release claim.
 
 ### Implementation and files
 
