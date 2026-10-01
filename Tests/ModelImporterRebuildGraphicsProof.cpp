@@ -1,6 +1,10 @@
 #include "renegade/bridge/ModelImportCandidateService.h"
 #include "renegade/bridge/ModelImportCommitService.h"
 #include "renegade/bridge/ReusableAssetService.h"
+#include "renegade/bridge/CreatorAssetWorkflowService.h"
+#include "renegade/bridge/ReusableAssetInstanceService.h"
+
+#include <cmath>
 
 #include <WickedEngine.h>
 #include <Windows.h>
@@ -24,6 +28,62 @@ namespace
     {
         if (!condition) std::cerr << "MODEL REBUILD PROOF FAIL: " << detail << '\n';
         return condition;
+    }
+    bool VerifyPlacement(const fs::path& root, const StableId& projectId,
+        const StableId& assetId)
+    {
+        auto prepared = CreatorAssetWorkflowService().PrepareModelPlacement(
+            root.generic_u8string(), projectId, assetId);
+        if (!Require(prepared.IsReady(), "stable-ID placement preparation failed"))
+            return false;
+        auto scene = wi::allocator::make_shared<wi::scene::Scene>();
+        PlaceReusableModelCommand command(*scene, prepared.ReleaseScene(),
+            assetId, XMFLOAT3(4.0f, 5.0f, 6.0f), 1.0f, "Placement Proof");
+        if (!Require(command.Execute(), "placement command failed")) return false;
+        const auto meshCount = scene->meshes.GetCount();
+        const auto objectCount = scene->objects.GetCount();
+        const auto wrapperId = PersistentEntityId(*scene, command.PlacedEntity());
+        if (!Require(meshCount > 0 && objectCount > 0,
+                "placement contains no mesh/object payload")) return false;
+        command.Undo();
+        std::vector<ReusableAssetInstanceRecord> instances;
+        std::string error;
+        if (!Require(InspectReusableAssetInstances(*scene, instances, error) &&
+                instances.empty() && scene->objects.GetCount() == 0,
+                "Undo retained placement payload")) return false;
+        if (!Require(command.Execute() &&
+                PersistentEntityId(*scene, command.PlacedEntity()) == wrapperId &&
+                scene->meshes.GetCount() == meshCount &&
+                scene->objects.GetCount() == objectCount,
+                "Redo lost placement identity or payload")) return false;
+        const auto path = (root / "placement-proof.wiscene").generic_u8string();
+        {
+            wi::Archive archive(path, false, false);
+            if (!Require(archive.IsOpen(), "save archive unavailable")) return false;
+            archive.SetCompressionEnabled(true);
+            scene->Serialize(archive);
+            if (!Require(archive.SaveFile(path), "placement save failed")) return false;
+        }
+        auto reopened = wi::allocator::make_shared<wi::scene::Scene>();
+        {
+            wi::Archive archive(path, true);
+            if (!Require(archive.IsOpen(), "reopen archive unavailable")) return false;
+            reopened->Serialize(archive);
+        }
+        instances.clear();
+        if (!Require(InspectReusableAssetInstances(*reopened, instances, error) &&
+                instances.size() == 1 && instances.front().assetId == assetId &&
+                PersistentEntityId(*reopened, instances.front().instanceRoot) == wrapperId &&
+                reopened->meshes.GetCount() == meshCount &&
+                reopened->objects.GetCount() == objectCount,
+                "save/reopen lost stable instance identity or payload")) return false;
+        const auto* transform = reopened->transforms.GetComponent(
+            instances.front().instanceRoot);
+        return Require(transform != nullptr &&
+            std::abs(transform->translation_local.x - 4.0f) < 0.001f &&
+            std::abs(transform->translation_local.y - 5.0f) < 0.001f &&
+            std::abs(transform->translation_local.z - 6.0f) < 0.001f,
+            "save/reopen lost placement position");
     }
 }
 
@@ -130,7 +190,9 @@ int main(int argc, char** argv)
                             if (!Require(!duplicate.succeeded && !duplicate.committed,
                                     "duplicate destination should fail without replacing product"))
                                 resultCode = 10;
-                            else std::cout << "MODEL REBUILD PROOF PASS: stable asset="
+                            else if (!VerifyPlacement(root, request.projectId, committed.assetId))
+                                resultCode = 11;
+                            else std::cout << "MODEL REBUILD PROOF PASS: placement/Undo/Redo/save/reopen; stable asset="
                                 << committed.assetId << "\n";
                         }
                     }

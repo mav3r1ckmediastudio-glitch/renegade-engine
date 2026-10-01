@@ -3241,6 +3241,34 @@ namespace renegade::studio
             return;
         }
 
+        TickWd01Vegetation();
+
+        // Process the asset browser's drag release after GUI callbacks and
+        // before chrome input ownership can short-circuit this frame.
+        wi::ecs::Entity dragPlaced = wi::ecs::INVALID_ENTITY;
+        if (camera != nullptr)
+            dragPlaced = detail::UpdateCreatorAssetDragPreview(*this, *camera);
+        else
+            detail::ClearCreatorAssetDragPreview();
+        if (dragPlaced != wi::ecs::INVALID_ENTITY)
+        {
+            session_->Selection().Select(dragPlaced);
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+            SyncGizmoSelection();
+            SyncSelectionOutline();
+            studioChrome_.SetStatusText(
+                "PLACE ASSET // LIVE CURSOR INSTANCE COMMITTED // READY");
+        }
+
+        if (workspaceLayoutDirty_)
+        {
+            workspaceLayoutDirty_ = false;
+            ResizeLayout();
+        }
+
+        viewportBounds_ = studioChrome_.ViewportBounds();
         const XMFLOAT4 pointer = wi::input::GetPointer();
         const bool playerStartIconConsumed = HandlePlayerStartSceneIcon(pointer);
         const bool cameraIconConsumed = HandleCameraSceneIcons(pointer);
