@@ -7,13 +7,13 @@ Renegade owns its Studio editor, project and asset workflows, Runtime/player,
 build lifecycle, creator UX, diagnostics and higher-level gameplay framework.
 
 > **Status: active development — Phase 6 / Playable Core.** Renegade has moved
-> beyond scene-authoring foundations into a working gameplay stack with player
-> control, governed input, physics, audio, Lua scripting, creator-facing script
-> authoring, gameplay APIs, live diagnostics and reusable script-library package
-> adoption. S6 — Library Adoption & Package Closure — is merged on `main`
-> through PR #143 after its final integrated Windows CI passed. PR #144 is the
-> active S7 candidate for six creator-ready stock Lua Actions. Renegade is not
-> yet a distribution-ready v1 engine.
+> beyond scene-authoring foundations into an integrated gameplay stack with
+> player control, physics, audio, governed Lua scripting, a rebuilt native asset
+> and character importer, Character Prefabs, animation assignment/crossfading,
+> voxel/path-query navigation and profile-driven NPC behaviour. The current
+> programme is focused on making those systems robust enough for repeatable
+> creator workflows and a small independently packaged playable game. Renegade is
+> not yet a distribution-ready v1 engine.
 
 ## What Renegade already does
 
@@ -24,10 +24,12 @@ build lifecycle, creator UX, diagnostics and higher-level gameplay framework.
 - Project Hub, Story Flow/Journey authoring, Scene hierarchy, selection,
   transform gizmos, Inspector workflows and command-backed Undo/Redo.
 - Asset Browser placement and creator-owned project/scene lifecycle.
-- Environment, Terrain, Render, Physics, Audio and Diagnostics authoring
-  surfaces.
+- Environment, Terrain, Render, Physics, Audio, Character and Diagnostics
+  authoring surfaces.
 - Stable Inspector section/provider architecture used by both existing and new
   creator-facing systems.
+- Test Level launches the real Renegade Runtime while Studio yields 3D ownership,
+  avoiding a second competing simulation/render world.
 
 ### World and rendering
 
@@ -39,19 +41,56 @@ build lifecycle, creator UX, diagnostics and higher-level gameplay framework.
   ocean foundations.
 - Lights, materials, decals, probes, post-processing, AO/GI/reflections,
   ray/path-tracing exposure, lightmap/baking workflows and render diagnostics.
-- Packaged Studio/Runtime parity checks for the accepted world and rendering
-  paths.
+- Packaged Studio/Runtime parity checks for accepted world and rendering paths.
 
-### Assets and standalone builds
+### Assets, importer and standalone builds
 
-- GLB/GLTF creator-facing import with placement, automatic scale correction,
-  Undo/Redo and save/reopen behaviour.
+- Rebuilt native importer workflow rather than the former painted/non-interactive
+  importer prototype.
+- Static GLB/GLTF and FBX import with native preview, rotation controls, retained
+  source provenance, texture handling and save/reopen verification.
+- Character import workflow with native preview, Character creation and reusable
+  Character Prefabs.
+- External animation clip import and per-character animation assignment for
+  semantic categories such as Locomotion, Idle, Attack, Hit and Death.
 - Stable asset identity, source provenance and deterministic moved/missing
   source recovery.
 - Deterministic dependency extraction and standalone Windows build staging,
   validation, rollback/promotion and isolated Runtime launch.
-- Test Level runs through the real Runtime process; Studio yields 3D ownership
-  while Test Level is active instead of rendering a competing second world.
+
+See [MODEL_IMPORTER_REBUILD](docs/MODEL_IMPORTER_REBUILD.md) and
+[CHARACTER_WORKFLOW_PROGRESS](docs/CHARACTER_WORKFLOW_PROGRESS.md).
+
+### Character animation and AI
+
+Renegade now has a functioning Character gameplay pipeline rather than treating
+animated models as generic scene assets.
+
+- Native animation playback with crossfades between assigned character clips,
+  including differing bone-track coverage.
+- Continuous outgoing action tails during attack transitions to avoid the
+  stop/start appearance of hard clip switching.
+- Idle base-loop selection plus occasional idle variation playback.
+- Character profiles and creator-facing AI settings.
+- Normal roles including Idle, Guard, Patrol and Wander.
+- Wander uses the existing Wicked CharacterComponent/PathQuery movement pipeline,
+  with a configurable terrain-chunk extent around the spawn position.
+- Hostile perception, Chase/Attack behaviour, search memory, death handling and
+  return to the configured normal role.
+- Authored pursuit radius/leash behaviour so an NPC can disengage and return to
+  Guard, Patrol, Idle or Wander rather than pursuing indefinitely.
+- Runtime diagnostics expose decision intent, navigation goals, pursuit state and
+  Wander state for debugging.
+
+Current character movement is built on Wicked navigation/path-query facilities.
+The system is intentionally still evolving: gait phase synchronisation, animation
+layers, additive animation, blend spaces, authored contact markers and
+production-scale crowd behaviour remain future work.
+
+See
+[RENEGADE_CHARACTER_WORKFLOW_IMPLEMENTATION_SPEC](docs/RENEGADE_CHARACTER_WORKFLOW_IMPLEMENTATION_SPEC.md),
+[RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY](docs/RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY.md)
+and [AI_IMPLEMENTATION_HANDOFF](docs/AI_IMPLEMENTATION_HANDOFF.md).
 
 ### Physics, player, input and audio
 
@@ -63,18 +102,18 @@ build lifecycle, creator UX, diagnostics and higher-level gameplay framework.
   and deterministic Reset lifecycle behaviour.
 - Native Wicked audio authoring for global/2D and movable positional 3D sources,
   preview playback, buses/mixing/reverb and Runtime Pause/Reset integration.
-- Audio-specific trigger zones are intentionally deferred; a future shared
-  ZoneService must serve audio, objectives, weather and other gameplay systems
+- Audio-specific trigger zones remain intentionally deferred; a future shared
+  ZoneService should serve audio, objectives, weather and other gameplay systems
   rather than creating separate incompatible zone implementations.
 
 ## Governed Lua scripting
 
-Renegade now has a creator-facing scripting stack rather than relying on ad-hoc
-raw Lua execution:
+Renegade has a creator-facing scripting stack rather than relying on ad-hoc raw
+Lua execution:
 
 - **S1A/S1B — Inspector foundation:** extensible Inspector sections/providers and
   migration of existing Inspector ownership.
-- **S2 — Script document/source model:** durable project `.rscripts` companions,
+- **S2 — Script document/source model:** durable project .rscripts companions,
   transactional edits, source identity and validation.
 - **S3 — Governed Lua Runtime:** Runtime-owned Lua lifecycle, live EntityRef
   validation and a deliberately restricted standard-library surface.
@@ -87,112 +126,114 @@ raw Lua execution:
   structured diagnostics across the creator/runtime boundary.
 - **S6 — Creator Library packages:** immutable installed package manifests,
   deterministic transitive dependency closure, transactional first-use adoption
-  into project-owned `Content/Scripts/Library/...`, clean update handling,
+  into project-owned Content/Scripts/Library/..., clean update handling,
   creator-edit conflict protection and structured package diagnostics.
-- **S7 — Stock Actions candidate:** six installed Lua Actions for doors,
-  switches, trigger zones, pickups, relays and sound playback; generic Runtime
-  Interact prompts; imported-entity identity repair; and a usable Action picker.
+- **S7 — Stock Actions:** installed Lua Actions for doors, switches, trigger
+  zones, pickups, relays and sound playback, with generic Runtime Interact
+  prompts and creator-facing Action selection.
 
-After S6 adoption the **project copy is authoritative**. Runtime never searches
-or executes scripts directly from the installed Library. Test Level and Build
-Game consume the same project-owned script closure through the existing project
+After Library adoption the **project copy is authoritative**. Runtime does not
+search or execute scripts directly from the installed Library. Test Level and
+Build Game consume the same project-owned script closure through the project
 snapshot and dependency-graph paths.
 
 See
-[`docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md`](docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md).
-The S7 setup and owner test is
-[`docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md`](docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md).
+[SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE](docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md).
 
 ## Diagnostics
 
 Renegade has a built-in Diagnostics surface for inspecting the running editor and
 Test Level/Runtime rather than relying only on build logs. The current diagnostic
 stack includes structured editor/runtime state, script and audio diagnostics,
-Runtime heartbeat/liveness semantics, local live diagnostic transport and the
-Studio/Test Level IPC handshake.
+Runtime heartbeat/liveness semantics, local live diagnostic transport, the
+Studio/Test Level IPC handshake and Character AI/navigation state.
 
-See [`docs/LIVE_DIAGNOSTIC_ACCESS.md`](docs/LIVE_DIAGNOSTIC_ACCESS.md).
+See [LIVE_DIAGNOSTIC_ACCESS](docs/LIVE_DIAGNOSTIC_ACCESS.md).
 
 ## Current programme
 
-Phase 6 exits when Renegade can author and package a small interactive game with
-a controllable character, collisions, audio and a scripted objective.
+Phase 6 exits when Renegade can author, reopen, run and independently package a
+small interactive game using the same creator-facing workflows that built it.
 
-With the scripting foundation through S6 merged and S7 stock Actions in active
-acceptance, the remaining bounded playable-core work is centred on:
+The current bounded work is centred on:
 
-1. a reusable scripted **objective and interaction vertical slice** using the
-   governed scripting/gameplay APIs;
-2. **navigation and actor path queries** over Wicked's voxel/pathfinding
-   facilities; and
-3. **integrated playable-core acceptance** across reopen, Test Level and an
-   independently packaged Windows game.
+1. **Character workflow hardening** — continue turning the rebuilt importer,
+   Character Prefabs, animation assignment and AI authoring into a coherent,
+   repeatable creator workflow.
+2. **Navigation and behaviour scaling** — harden Wicked voxel/path-query
+   navigation for multiple actors, role behaviour and more demanding scenes.
+3. **Animation quality** — improve transition quality beyond the current native
+   crossfade implementation where it materially benefits gameplay.
+4. **Playable vertical-slice acceptance** — verify interaction, objectives,
+   characters, audio, reopen behaviour, Test Level and an independently packaged
+   Windows build as one integrated flow.
+5. **CI and regression protection** — keep the rebuilt importer/character stack
+   and established editor/runtime workflows protected while Phase 6 advances.
 
-Shared trigger/volume authoring may be introduced as part of that work only as a
-single cross-system ZoneService. Player arms, combat, production enemy AI and
-advanced animation remain later work unless a narrow playable-core dependency
-requires them.
-
-The detailed programme state lives in [`docs/ROADMAP.md`](docs/ROADMAP.md), not
-in a fast-aging branch/status paragraph here.
+The detailed programme state lives in [ROADMAP](docs/ROADMAP.md).
+Implementation checkpoints and owner-test evidence live in [HANDOFF](HANDOFF.md)
+and the focused subsystem documents rather than in fast-aging branch notes here.
 
 ## Build baseline
 
-- Wicked upstream: `https://github.com/turanszkij/WickedEngine.git`
-- Pinned branch: `master`
-- Pinned Wicked commit: `3a800b7134aafe58461093c8abb2e274d4e64033`
+- Wicked upstream: https://github.com/turanszkij/WickedEngine.git
+- Pinned branch: master
+- Pinned Wicked commit: 3a800b7134aafe58461093c8abb2e274d4e64033
 - Primary target: Windows x64 / DirectX 12
 - Development cross-check: Vulkan on Windows
 
-Wicked Engine is included as a pinned Git submodule at `/WickedEngine`.
+Wicked Engine is included as a pinned Git submodule at /WickedEngine.
 
 Clone with:
 
-```bash
+~~~bash
 git clone --recurse-submodules \
   https://github.com/mav3r1ckmediastudio-glitch/renegade-engine.git
-```
+~~~
 
 For an existing clone:
 
-```bash
+~~~bash
 git submodule update --init --recursive
-```
+~~~
 
 The Windows reference build and evidence workflow is documented in
-[`docs/BUILD_WINDOWS.md`](docs/BUILD_WINDOWS.md).
+[BUILD_WINDOWS](docs/BUILD_WINDOWS.md).
 
 ## Product layers
 
 | Path | Responsibility |
 |---|---|
-| `/WickedEngine` | Pinned upstream engine foundation |
-| `/Studio` | Renegade editor application and owned creator UX |
-| `/EngineBridge` | Stable Renegade services/adapters around Wicked APIs |
-| `/Runtime` | Standalone game/player executable |
-| `/Tools` | Import, shader, packaging and validation tools |
-| `/Templates` | Starter projects and examples |
-| `/Tests` | Automated, integration, packaged and acceptance tests |
-| `/docs` | Canonical architecture, roadmap, gate contracts and verification records |
-| `/assets` | Renegade-owned editor assets |
+| /WickedEngine | Pinned upstream engine foundation |
+| /Studio | Renegade editor application and owned creator UX |
+| /EngineBridge | Stable Renegade services/adapters around Wicked APIs |
+| /Runtime | Standalone game/player executable |
+| /Tools | Import, shader, packaging and validation tools |
+| /Templates | Starter projects and examples |
+| /Tests | Automated, integration, packaged and acceptance tests |
+| /docs | Canonical architecture, roadmap, gate contracts and verification records |
+| /assets | Renegade-owned editor assets |
 
 The original Wicked Editor remains available inside the submodule as a parity
 reference. It is not the Renegade editor and is not embedded as Renegade UI.
 
 ## Start here
 
-1. Read [`docs/PROJECT_CHARTER.md`](docs/PROJECT_CHARTER.md).
-2. Read [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md).
-3. Check [`docs/ROADMAP.md`](docs/ROADMAP.md) for the current programme state.
-4. Check [`HANDOFF.md`](HANDOFF.md) for the current implementation handoff only.
-5. For the scripting stack, start with
-   [`docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md`](docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md)
-   and follow its references back through S1-S5.
-6. For live diagnostics, read
-   [`docs/LIVE_DIAGNOSTIC_ACCESS.md`](docs/LIVE_DIAGNOSTIC_ACCESS.md).
-7. Follow [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) for Codex, ChatGPT,
+1. Read [PROJECT_CHARTER](docs/PROJECT_CHARTER.md).
+2. Read [MASTER_PLAN](docs/MASTER_PLAN.md).
+3. Check [ROADMAP](docs/ROADMAP.md) for the current programme state.
+4. Check [HANDOFF](HANDOFF.md) for the latest implementation checkpoint.
+5. For the rebuilt importer, read
+   [MODEL_IMPORTER_REBUILD](docs/MODEL_IMPORTER_REBUILD.md).
+6. For Character workflows and AI, read
+   [RENEGADE_CHARACTER_WORKFLOW_IMPLEMENTATION_SPEC](docs/RENEGADE_CHARACTER_WORKFLOW_IMPLEMENTATION_SPEC.md)
+   and
+   [RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY](docs/RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY.md).
+7. For live diagnostics, read
+   [LIVE_DIAGNOSTIC_ACCESS](docs/LIVE_DIAGNOSTIC_ACCESS.md).
+8. Follow [AI_WORKFLOW](docs/AI_WORKFLOW.md) for Codex, ChatGPT,
    Claude or human handovers.
-8. Treat [`docs/FEATURE_MATRIX.csv`](docs/FEATURE_MATRIX.csv) as the capability
+9. Treat [FEATURE_MATRIX.csv](docs/FEATURE_MATRIX.csv) as the capability
    evidence ledger; compilation alone is never proof of creator-facing parity.
 
 ## Verification policy
@@ -208,5 +249,4 @@ failure overrides nominal automated success.
 Wicked Engine is MIT licensed and retains its original copyright and licence.
 Renegade's own project-wide licence has not yet been selected. Current standalone
 outputs are engineering/acceptance builds rather than commercial redistribution
-clearance. See [`docs/LICENSING.md`](docs/LICENSING.md) before redistributing any
-build.
+clearance. See [LICENSING](docs/LICENSING.md) before redistributing any build.
