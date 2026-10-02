@@ -1,3 +1,67 @@
+## Latest checkpoint: continuous action tails and post-combat roles - 2 October 2026
+
+Branch: feature/character-animation-crossfades.
+Implementation: e98deef50b7368c6593d191a4949df1ac45cb3ff (following 59420a5).
+The following documentation commit records this exact implementation. No push
+or merge. Independent exact-commit verification remains pending.
+
+Owner reported: "that is significantly better" during native gameplay of the
+continuous-tail build. Final self-sound exclusion was then tested locally;
+that incremental behaviour fix has not received separate owner acceptance.
+
+Changed files: Runtime/src/RuntimeCharacterAnimation.h, RuntimeCharacterDecision.h,
+RuntimeCharacterPerception.h, RuntimeCombatDecision.h, RuntimeCombatService.h,
+RuntimeLiveDiagnostics.cpp; Tests/CharacterAiAnimationTests.cpp,
+CharacterAiCombatTests.cpp, CharacterAiDecisionTests.cpp,
+CharacterAiPerceptionTests.cpp, CharacterAnimationBlendProof.h,
+ModelImporterRebuildGraphicsProof.cpp; docs/ARCHITECTURE.md and FEATURE_MATRIX.csv.
+
+Melee playback now overlaps the outgoing action's moving tail, including a sole
+attack replay with two independent native timers. Attack transition: 0.18s.
+Quietest rotational motion among assigned Idle clips becomes the base loop;
+other Idle clips are occasional 12-second variations, play once, then fade back.
+Dead player knowledge is excluded, perception stops observing dead players, and
+self-generated attack sounds cannot create search memories. Patrol requires an
+assigned route; Guard remembers and returns to its initial post. No route was
+invented or added to the owner Level.
+
+Windows x64 Release commands (installed VS18 MSBuild and CTest):
+- MSBuild BUILD/no-import/Runtime/RenegadeRuntime.vcxproj /m:2 /verbosity:quiet /nologo /p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false /p:TargetName=RenegadeRuntime_NaturalPlayback
+- MSBuild BUILD/no-import/RenegadeCharacterAiPerceptionTests.vcxproj with the same Release flags (no TargetName); likewise root DecisionTests and CombatTests targets.
+- MSBuild BUILD/no-import/Tests/RenegadeCharacterAiAnimationTests.vcxproj with the same Release flags (no TargetName).
+- MSBuild BUILD/no-import/RenegadeModelImporterRebuildGraphicsProof.vcxproj with the same Release flags (no TargetName).
+- ctest --test-dir BUILD/no-import -C Release -R "CharacterAi(Animation|Decision|Combat|Perception)(Tests|SourceContract)|ModelImporterRebuild|HumanoidRetarget" --output-on-failure
+- BUILD/no-import/Release/RenegadeModelImporterRebuildGraphicsProof.exe --inspect-scene BUILD/no-import/blending-owner-captured/Content/Scenes/TestLevel.wiscene BUILD/no-import/natural-playback-owner-proof
+
+Final Runtime, perception, decision and combat builds exit 0. Animation and
+native graphics proof builds pass. CTest 15/15, exit 0, 15.70s; includes existing
+cold-reopen importer checks. Synthetic native TRS blending, action-tail overlap,
+sole-attack replay, idle variation, dead-target role return and self-sound checks
+pass. Captured owner scene native render proof passes, with nonblank textured
+poses inspected. Actual idle scores: breathing 1.09575, flex 19.485, stretch 9.59737.
+No serialized authoring changes; owner Level was not saved or overwritten.
+
+Native Test Level final run: two characters, 13 assigned clips; five hits;
+Attack -> Idle at about 7.95s when player health reaches zero; breathing at 10.42s;
+flex once at 22.34s; breathing again at 26.94s. No Search after death. Existing
+older character has only the stretch idle assigned and therefore retains it.
+Screens from continuous gameplay were inspected; owner confirms substantially
+better motion. Owner confirmation does not replace independent exact-head review.
+Logs and private captures remain ignored under BUILD/no-import/natural-*.
+
+Staged bundle: BUILD/no-import/BlendingTest/Runtime/RenegadeRuntime.exe.
+SHA256 CDD417C6862A724ED049DDDCF0FF47076DAF5CE7A6BB6EB39169F49296A6729A.
+Paired Studio remains the accepted importer bytes. Original Studio and Runtime
+SHA256 remain unchanged (34AB9968...F5561 and 0F097DB8...B4C). Earlier bundle
+runtime is preserved as RenegadeRuntime_PreNaturalPlayback.exe. Editor remains
+open with owner setup; no original importer executable was replaced.
+
+Limits: idle selection is a motion heuristic, no authored base-idle UI yet;
+fixed fade durations; no gait phase synchronization, layers, additive blending
+or blend spaces. Melee damage still uses the existing fire event, not authored
+contact markers. Events/non-transform coverage keep guarded immediate fallback.
+Next: owner verify this final bundle, especially route Patrol/Guard return, and
+independent exact-commit review before merge or broader acceptance claims.
 # Renegade Engine — Current Handoff
 
 ## Current importer recovery: static FBX - 1 October 2026
