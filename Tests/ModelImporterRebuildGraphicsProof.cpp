@@ -271,6 +271,13 @@ bool VerifyRenderedCharacterCrossfades(const wi::scene::Scene& source,
         record.clips[CharacterAnimationIndex(semantic)].push_back({entity, actions[i]});
     }
     CompleteCharacterAnimationCoverage(scene, record);
+    const auto& idles = record.clips[CharacterAnimationIndex(CharacterAnimationSemantic::Idle)];
+    for (const auto& clip : idles)
+        std::cout << "IDLE MOTION " << scene.names.GetComponent(clip.entity)->name << "="
+            << CharacterIdleMotionScore(scene, clip.entity) << '\n';
+    if (!idles.empty())
+        record.baseIdle = std::min_element(idles.begin(), idles.end(), [&scene](const auto& a, const auto& b)
+            { return CharacterIdleMotionScore(scene, a.entity) < CharacterIdleMotionScore(scene, b.entity); })->entity;
     std::string error;
     auto capture = [&](const char* label)
     {

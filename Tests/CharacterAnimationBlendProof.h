@@ -113,7 +113,7 @@ inline bool VerifyNativeCharacterCrossfades()
     AdvanceCharacterAnimationBlend(scene, record, 0.20f);
     if (!expectPose(20)) return false;
     if (!request(CharacterAnimationSemantic::Attack)) return false;
-    AdvanceCharacterAnimationBlend(scene, record, 0.04f);
+    AdvanceCharacterAnimationBlend(scene, record, 0.09f);
     if (!expectPose(25) || !scene.animations.GetComponent(attack)->IsPlayingOnce()) return false;
     if (!request(CharacterAnimationSemantic::Attack) || !expectPose(25)) return false;
     if (!request(CharacterAnimationSemantic::Hit) || !expectPose(25)) return false;

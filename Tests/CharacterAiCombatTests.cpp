@@ -282,6 +282,20 @@ int main()
     if (!(escapeGoal.x < position.x))
         return Fail("flee goal must move away from remembered hostile position");
 
+    character.authoring.role = CharacterRole::Guard;
+    character.authoring.autonomous = true;
+    characterSystem.characters.front() = character;
+    combatState.playerDead = true;
+    RuntimeCharacterDecisionState resumed;
+    decision.intent = CharacterIntent::Attack;
+    decision.commitmentRemainingSeconds = 1.0f;
+    resumed.characters.push_back(decision);
+    UpdateRuntimeCombatDecision(scene, characterSystem, perception, resumed, combatState, emitter, 0.016f);
+    const auto* defeated = FindCharacterMemory(perception.characters.front(), RuntimePlayerKnowledgeId);
+    if (!defeated || !defeated->subjectDead || defeated->directSight ||
+        resumed.characters.front().intent != CharacterIntent::Guard || combat->hasDirectHostileTarget)
+        return Fail("dead player must be excluded from combat and resume the guard role");
+
     std::cout << "AI05_PASS weapon-health-ammo-reload-range-accuracy-damage-attribution-retreat-flee-surrender-events\n";
     return 0;
 }

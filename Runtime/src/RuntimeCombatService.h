@@ -318,8 +318,8 @@ namespace renegade::runtime
             if (cognition == nullptr)
                 continue;
             const auto* memory = FindCharacterMemory(*cognition, RuntimePlayerKnowledgeId);
-            if (memory == nullptr || !memory->hostile || !memory->directSight ||
-                !memory->hasPosition)
+            if (state.playerDead || memory == nullptr || memory->subjectDead ||
+                !memory->hostile || !memory->directSight || !memory->hasPosition)
             {
                 continue;
             }

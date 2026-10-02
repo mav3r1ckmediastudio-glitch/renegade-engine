@@ -12,6 +12,7 @@
 #include <cctype>
 #include <cstdint>
 #include <initializer_list>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -83,6 +84,11 @@ namespace renegade::runtime
         float blendDuration = 0.0f;
         std::uint64_t crossfadeTransitions = 0;
         std::uint64_t incompatibleTransitions = 0;
+        wi::ecs::Entity baseIdle = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity replayOutgoing = wi::ecs::INVALID_ENTITY;
+        float idleElapsed = 0.0f;
+        bool idleVariation = false;
+        std::uint64_t idleVariationSequence = 0;
     };
 
     struct RuntimeCharacterAnimationState
@@ -169,6 +175,45 @@ namespace renegade::runtime
             iterator->characterId == characterId
             ? &*iterator
             : nullptr;
+    }
+
+    [[nodiscard]] inline float CharacterAnimationSecondsRemaining(
+        const wi::scene::AnimationComponent& animation) noexcept
+    {
+        const float speed = std::abs(animation.speed);
+        return speed > 0.0001f ? std::max(0.0f, animation.end - animation.timer) / speed :
+            std::numeric_limits<float>::infinity();
+    }
+
+    [[nodiscard]] inline double CharacterIdleMotionScore(
+        const wi::scene::Scene& scene, const wi::ecs::Entity entity) noexcept
+    {
+        const auto* animation = scene.animations.GetComponent(entity);
+        if (!animation) return std::numeric_limits<double>::infinity();
+        double distance = 0.0;
+        for (const auto& channel : animation->channels)
+        {
+            if (channel.path != wi::scene::AnimationComponent::AnimationChannel::Path::ROTATION ||
+                channel.samplerIndex < 0 || size_t(channel.samplerIndex) >= animation->samplers.size()) continue;
+            const auto& sampler = animation->samplers[channel.samplerIndex];
+            const auto* dataScene = sampler.scene ? static_cast<const wi::scene::Scene*>(sampler.scene) : &scene;
+            const auto* data = dataScene->animation_datas.GetComponent(sampler.data);
+            if (!data || data->keyframe_times.size() < 2) continue;
+            const size_t stride = sampler.mode == wi::scene::AnimationComponent::AnimationSampler::CUBICSPLINE ? 12 : 4;
+            const size_t offset = stride == 12 ? 4 : 0;
+            if (data->keyframe_data.size() < data->keyframe_times.size() * stride) continue;
+            for (size_t i = 1; i < data->keyframe_times.size(); ++i)
+            {
+                const auto* a = data->keyframe_data.data() + (i - 1) * stride + offset;
+                const auto* c = data->keyframe_data.data() + i * stride + offset;
+                const double norm = std::sqrt((a[0]*a[0]+a[1]*a[1]+a[2]*a[2]+a[3]*a[3]) *
+                    (c[0]*c[0]+c[1]*c[1]+c[2]*c[2]+c[3]*c[3]));
+                if (norm > 0.000001)
+                    distance += 2.0 * std::acos(std::clamp(std::abs(
+                        a[0]*c[0]+a[1]*c[1]+a[2]*c[2]+a[3]*c[3]) / norm, 0.0, 1.0));
+            }
+        }
+        return distance / std::max(0.001f, animation->GetLength());
     }
 
     // Complete transform coverage in the transient Runtime scene before playback.
@@ -311,6 +356,11 @@ namespace renegade::runtime
                     });
             }
             CompleteCharacterAnimationCoverage(scene, record);
+            const auto& idles = record.clips[CharacterAnimationIndex(CharacterAnimationSemantic::Idle)];
+            if (!idles.empty())
+                record.baseIdle = std::min_element(idles.begin(), idles.end(),
+                    [&scene](const auto& a, const auto& b)
+                    { return CharacterIdleMotionScore(scene, a.entity) < CharacterIdleMotionScore(scene, b.entity); })->entity;
             candidate.characters.push_back(std::move(record));
         }
 
@@ -416,7 +466,8 @@ namespace renegade::runtime
                 semantic == CharacterAnimationSemantic::Locomotion ||
                 semantic == CharacterAnimationSemantic::Run;
             record.blendDuration = loop ? 0.20f :
-                semantic == CharacterAnimationSemantic::Death ? 0.05f : 0.08f;
+                semantic == CharacterAnimationSemantic::Death ? 0.05f :
+                semantic == CharacterAnimationSemantic::Attack ? 0.18f : 0.08f;
         }
         record.blendElapsed = 0.0f;
         ApplyCharacterAnimationBlend(scene, record);
@@ -458,7 +509,9 @@ namespace renegade::runtime
         wi::scene::Scene& scene,
         RuntimeCharacterAnimationState& state,
         RuntimeCharacterAnimationRecord& record,
-        const CharacterAnimationSemantic semantic) noexcept
+        const CharacterAnimationSemantic semantic,
+        const bool forceTransition = false,
+        const wi::ecs::Entity preferredClip = wi::ecs::INVALID_ENTITY) noexcept
     {
         record.lastRequest = CharacterAnimationSemanticName(semantic);
         auto* active = scene.animations.GetComponent(record.activeClip);
@@ -485,12 +538,16 @@ namespace renegade::runtime
         }
 
         // Repeated requests must not restart an active loop or one-shot.
-        if (record.activeSemantic == semantic && active != nullptr &&
+        if (!forceTransition && record.activeSemantic == semantic && active != nullptr &&
             active->IsPlaying())
             return true;
-        const RuntimeAnimationClip& next = (*variants)[
-            record.variantSequence++ % variants->size()];
-        if (record.activeClip == next.entity && active != nullptr && active->IsPlaying())
+        const wi::ecs::Entity preferred = preferredClip != wi::ecs::INVALID_ENTITY ? preferredClip :
+            semantic == CharacterAnimationSemantic::Idle ? record.baseIdle : wi::ecs::INVALID_ENTITY;
+        const auto selected = std::find_if(variants->begin(), variants->end(),
+            [preferred](const auto& clip) { return clip.entity == preferred; });
+        const RuntimeAnimationClip next = selected != variants->end() ? *selected :
+            (*variants)[record.variantSequence++ % variants->size()];
+        if (!forceTransition && record.activeClip == next.entity && active != nullptr && active->IsPlaying())
         {
             // Optional Run falls back to the same Walk without restarting it.
             record.activeSemantic = semantic;
@@ -498,6 +555,17 @@ namespace renegade::runtime
             return true;
         }
 
+        if (record.activeClip == next.entity && active != nullptr && forceTransition)
+        {
+            const auto outgoing = *active;
+            if (record.replayOutgoing == wi::ecs::INVALID_ENTITY)
+                record.replayOutgoing = wi::ecs::CreateEntity();
+            auto* copy = scene.animations.GetComponent(record.replayOutgoing);
+            if (!copy) copy = &scene.animations.Create(record.replayOutgoing);
+            *copy = outgoing;
+            for (auto& clip : record.blendClips)
+                if (clip.entity == next.entity) clip.entity = record.replayOutgoing;
+        }
         auto* animation = scene.animations.GetComponent(next.entity);
         if (animation == nullptr)
         {
@@ -507,7 +575,9 @@ namespace renegade::runtime
             return false;
         }
 
-        if (semantic == CharacterAnimationSemantic::Idle ||
+        record.idleVariation = semantic == CharacterAnimationSemantic::Idle &&
+            record.baseIdle != wi::ecs::INVALID_ENTITY && next.entity != record.baseIdle;
+        if ((semantic == CharacterAnimationSemantic::Idle && !record.idleVariation) ||
             semantic == CharacterAnimationSemantic::Locomotion ||
             semantic == CharacterAnimationSemantic::Run)
         {
@@ -570,6 +640,10 @@ namespace renegade::runtime
             CharacterAnimationSemantic requested =
                 CharacterAnimationSemantic::Idle;
             bool requestPlayback = false;
+            bool forceTransition = false;
+            wi::ecs::Entity preferredClip = wi::ecs::INVALID_ENTITY;
+            const auto* activeAnimation = scene.animations.GetComponent(record->activeClip);
+            const float remaining = activeAnimation ? CharacterAnimationSecondsRemaining(*activeAnimation) : 0.0f;
             if (combatRecord->dead || decision->intent == CharacterIntent::Dead)
             {
                 requested = CharacterAnimationSemantic::Death;
@@ -581,7 +655,7 @@ namespace renegade::runtime
                 requested = CharacterAnimationSemantic::Hit;
                 requestPlayback = true;
             }
-            else if (record->activeSemantic == CharacterAnimationSemantic::Hit &&
+            else if (record->activeSemantic == CharacterAnimationSemantic::Hit && remaining > 0.08f &&
                 scene.animations.GetComponent(record->activeClip) != nullptr &&
                 scene.animations.GetComponent(record->activeClip)->IsPlaying() &&
                 scene.animations.GetComponent(record->activeClip)->IsPlayingOnce())
@@ -593,6 +667,7 @@ namespace renegade::runtime
             {
                 requested = CharacterAnimationSemantic::Attack;
                 requestPlayback = true;
+                forceTransition = combatRecord->weapon.style == bridge::WeaponAiStyle::Melee;
             }
             else if (combatRecord->reloads != record->observedReloads)
             {
@@ -601,14 +676,22 @@ namespace renegade::runtime
             }
             else if ((record->activeSemantic == CharacterAnimationSemantic::Attack ||
                 record->activeSemantic == CharacterAnimationSemantic::Reload ||
-                record->activeSemantic == CharacterAnimationSemantic::Hit) &&
-                scene.animations.GetComponent(record->activeClip) != nullptr &&
+                record->activeSemantic == CharacterAnimationSemantic::Hit ||
+                (record->idleVariation && (decision->intent == CharacterIntent::Idle ||
+                    (decision->intent == CharacterIntent::Guard && !decision->hasGoal)))) &&
+                remaining > (record->activeSemantic == CharacterAnimationSemantic::Attack &&
+                    decision->intent == CharacterIntent::Attack && !combat.playerDead ? 0.18f : 0.20f) && scene.animations.GetComponent(record->activeClip) != nullptr &&
                 scene.animations.GetComponent(record->activeClip)->IsPlaying() &&
                 scene.animations.GetComponent(record->activeClip)->IsPlayingOnce())
             {
                 // Finish authored one-shot actions before choosing Idle/Run.
                 requested = record->activeSemantic;
                 requestPlayback = false;
+            }
+            else if (decision->intent == CharacterIntent::Guard && decision->hasGoal && !decision->arrived)
+            {
+                requested = CharacterAnimationSemantic::Locomotion;
+                requestPlayback = record->activeSemantic != requested;
             }
             else if (decision->intent == CharacterIntent::Chase ||
                 decision->intent == CharacterIntent::Retreat ||
@@ -629,6 +712,34 @@ namespace renegade::runtime
                 requested = CharacterAnimationSemantic::Idle;
                 requestPlayback = record->activeSemantic != requested;
             }
+
+            const bool quiet = requested == CharacterAnimationSemantic::Idle &&
+                (decision->intent == CharacterIntent::Idle ||
+                 (decision->intent == CharacterIntent::Guard && !decision->hasGoal));
+            if (quiet && record->baseIdle != wi::ecs::INVALID_ENTITY)
+            {
+                if (record->idleVariation)
+                {
+                    if (remaining <= 0.20f || !activeAnimation || !activeAnimation->IsPlaying())
+                    {
+                        requestPlayback = forceTransition = true;
+                        preferredClip = record->baseIdle;
+                    }
+                }
+                else if (record->activeClip == record->baseIdle)
+                {
+                    if (dt > 0 && std::isfinite(dt)) record->idleElapsed += dt;
+                    const auto& idles = record->clips[CharacterAnimationIndex(CharacterAnimationSemantic::Idle)];
+                    if (record->idleElapsed >= 12.0f && idles.size() > 1)
+                    {
+                        do { preferredClip = idles[record->idleVariationSequence++ % idles.size()].entity; }
+                        while (preferredClip == record->baseIdle);
+                        requestPlayback = forceTransition = true;
+                        record->idleElapsed = 0.0f;
+                    }
+                }
+            }
+            else record->idleElapsed = 0.0f;
 
             // The default enum is Idle even when no native clip has ever
             // started. Likewise a stopped loop must restart without requiring
@@ -659,7 +770,7 @@ namespace renegade::runtime
                 requestPlayback = false;
             }
             if (requestPlayback)
-                (void)RequestCharacterAnimation(scene, state, *record, requested);
+                (void)RequestCharacterAnimation(scene, state, *record, requested, forceTransition, preferredClip);
 
             AdvanceCharacterAnimationBlend(scene, *record, dt);
             record->observedShots = combatRecord->shotsFired;

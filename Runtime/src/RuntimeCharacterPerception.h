@@ -323,7 +323,7 @@ namespace renegade::runtime
         {
             for (const auto& memory : cognition.memories)
             {
-                if (memory.hostile && memory.confidence >= MinimumMemoryConfidence)
+                if (!memory.subjectDead && memory.hostile && memory.confidence >= MinimumMemoryConfidence)
                     return true;
             }
             return false;
@@ -333,7 +333,7 @@ namespace renegade::runtime
         {
             for (const auto& memory : cognition.memories)
             {
-                if (memory.hostile && memory.directSight &&
+                if (!memory.subjectDead && memory.hostile && memory.directSight &&
                     memory.confidence >= MinimumMemoryConfidence)
                 {
                     return true;
@@ -907,7 +907,8 @@ namespace renegade::runtime
     {
         const auto audibleStrength = [&](const SoundStimulus& sound, float& strength)
         {
-            if (sound.sequence <= cognition.lastHeardSoundSequence ||
+            if (sound.sourceSubjectId == cognition.characterId ||
+                sound.sequence <= cognition.lastHeardSoundSequence ||
                 sound.expiresTime < state.elapsedSeconds)
             {
                 return false;
@@ -994,7 +995,8 @@ namespace renegade::runtime
         RuntimeCharacterPerceptionState& state,
         const bridge::RuntimePlayerState& player,
         const bridge::PlayerControllerSettings& playerSettings,
-        const float dt)
+        const float dt,
+        const bool playerAlive = true)
     {
         const float safeDt = std::clamp(
             std::isfinite(dt) ? dt : 0.0f,
@@ -1002,7 +1004,7 @@ namespace renegade::runtime
             0.25f);
         state.elapsedSeconds += safeDt;
         ExpireSoundStimuli(state);
-        EmitPlayerFootstepStimulus(scene, player, playerSettings, state);
+        if (playerAlive) EmitPlayerFootstepStimulus(scene, player, playerSettings, state);
 
         for (auto& cognition : state.characters)
         {
@@ -1025,7 +1027,7 @@ namespace renegade::runtime
             ProcessAudibleSound(*character, cognition, listenerPosition, state);
 
             VisualObservation observation;
-            const bool sampledVisible = SamplePlayerVisualObservation(
+            const bool sampledVisible = playerAlive && SamplePlayerVisualObservation(
                 scene,
                 *character,
                 player,

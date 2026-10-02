@@ -199,6 +199,23 @@ int main()
         decision.intent != CharacterIntent::Investigate)
         return Fail("fresh legitimate memory must be actionable again");
 
+    cognition.memories.front().subjectDead = true;
+    cognition.memories.front().directSight = true;
+    decision.intent = CharacterIntent::Attack;
+    decision.commitmentRemainingSeconds = 1.0f;
+    SelectIntent(character, cognition, decision);
+    if (BestActionableMemory(cognition) != nullptr || decision.intent != CharacterIntent::Patrol)
+        return Fail("dead hostile must not retain Attack or block normal patrol");
+    character.authoring.role = CharacterRole::Guard;
+    decision.intent = CharacterIntent::Attack;
+    SelectIntent(character, cognition, decision);
+    decision.hasGuardPost = true;
+    decision.guardPost = XMFLOAT3(17, 0, 23);
+    if (decision.intent != CharacterIntent::Guard ||
+        !ResolveIntentGoal(character, cognition, decision, goal) ||
+        !Near(goal.x, 17) || !Near(goal.z, 23))
+        return Fail("guard must return to its saved post after target death");
+
     std::cout << "AI04_PASS patrol-authoring utility-memory hysteresis traversal search-timeout\n";
     return 0;
 }

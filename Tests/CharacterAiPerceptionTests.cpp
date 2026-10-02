@@ -259,6 +259,17 @@ int main()
         return Fail("AI-03 transient reset/reinitialization was not deterministic");
     }
 
+    RuntimeCharacterPerceptionState selfSound;
+    CharacterCognitionRecord listener;
+    listener.characterId = guard.stableEntityId;
+    (void)EmitSoundStimulus(selfSound, guard.stableEntityId, guard.authoring.factionId,
+        XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 0), 40.0f, 1.0f, 2.0f);
+    ProcessAudibleSound(guard, listener, XMFLOAT3(0, 0, 0), selfSound);
+    selfSound.elapsedSeconds = 1.0f;
+    ProcessAudibleSound(guard, listener, XMFLOAT3(0, 0, 0), selfSound);
+    if (!listener.memories.empty() || listener.pendingSoundSequence != 0 || selfSound.heardStimuli != 0)
+        return Fail("own attack sound must not create a search memory");
+
     std::cout << "AI-03 perception/memory tests passed\n";
     return 0;
 }

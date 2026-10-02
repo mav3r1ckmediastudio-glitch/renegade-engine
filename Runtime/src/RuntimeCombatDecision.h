@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -372,11 +373,21 @@ namespace renegade::runtime
         RuntimeCharacterDecisionState& decisions,
         RuntimeCombatState& combatState,
         const CombatEventEmitter& emitter,
-        const float dt) noexcept
+        const float dt,
+        const std::function<bool(const bridge::StableId&)>& meleePresentationReady = {}) noexcept
     {
         if (!(dt >= 0.0f) || !std::isfinite(dt))
             return;
 
+        if (combatState.playerDead)
+            for (auto& cognition : perception.characters)
+                for (auto& memory : cognition.memories)
+                    if (memory.subjectId == RuntimePlayerKnowledgeId)
+                    {
+                        memory.subjectDead = true;
+                        memory.directSight = false;
+                        memory.threat = 0.0f;
+                    }
         RefreshRuntimeCombat(scene, characters, perception, combatState, dt);
         for (const auto& character : characters.characters)
         {
@@ -421,6 +432,8 @@ namespace renegade::runtime
             case CharacterIntent::Attack:
             {
                 StopNativeCharacter(*nativeCharacter);
+                if (combat->weapon.style == bridge::WeaponAiStyle::Melee &&
+                    meleePresentationReady && !meleePresentationReady(character.stableEntityId)) break;
                 CombatFireResult result;
                 (void)TryFireAtRuntimePlayer(
                     scene,

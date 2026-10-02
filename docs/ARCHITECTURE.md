@@ -760,12 +760,12 @@ already contributing loop. Completed outgoing one-shots contribute their final
 pose until their weight reaches zero, then stop.
 
 Crossfades require matching target/path channel coverage and no event channels.
-Different coverage retains immediate-switch behaviour; layered and additive
+Transform coverage is completed below; events retain guarded fallback. Layered and additive
 animation require a separate design. Locomotion fades take 0.20 seconds; other
-actions take 0.08 seconds and Death 0.05 seconds. Runtime simulation time drives
+actions take 0.08 seconds, Attack 0.18 seconds and Death 0.05 seconds. Runtime simulation time drives
 the fade, and paused gameplay does not advance it. Native root motion is disabled
 for AI-owned clips because the existing Character controller owns movement.
-An active Hit finishes before a new shot/reload; Death is terminal. Unassigned
+Hit retains priority until its final 0.08 seconds; Death is terminal. Unassigned
 Idle or Death stops owned playback without substituting a bind pose.
 
 ### Runtime Character crossfades with differing transform coverage
@@ -780,3 +780,24 @@ Event or non-transform tracks retain the guarded immediate-switch fallback.
 Native cumulative animation amounts still own pose blending; the native
 Character controller owns movement. Diagnostics expose crossfade and fallback
 counts so owner gameplay reports can distinguish a short fade from no fade.
+
+### Continuous action tails and quiet idle
+
+Melee attacks wait for the current attack to reach its final 0.18 seconds before
+issuing the next attack. The outgoing clip continues through the transition.
+Repeating a single attack preserves its outgoing timer in a transient native
+animation component while the incoming instance restarts. Damage still occurs
+at the existing combat event; animation-authored contact markers are deferred.
+Hit and action-to-locomotion transitions also begin before the one-shot stops.
+
+Among explicitly assigned Idle clips, Runtime selects the lowest rotational
+travel per second as the base loop. Other assigned Idle clips play once after
+12 seconds of quiet time, then crossfade back to the base. This is a heuristic,
+not an authored base-idle setting. With only a stretch assigned, that stretch
+remains the base. Motionless or unusual retargeted clips may need authoring UI
+in a later change. Existing importer assignments and saved Levels are unchanged.
+
+Dead subjects cannot be actionable memories or retain stale search continuation.
+Dead players emit no new visual or footstep observations. Self-generated attack sounds cannot create search memories. Normal role decisions
+resume: Patrol requires an assigned route; Guard returns to its initial post;
+a character with no patrol route uses its configured fallback role.

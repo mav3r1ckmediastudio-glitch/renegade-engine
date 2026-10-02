@@ -275,6 +275,48 @@ int main()
     UpdateRuntimeCharacterAnimations(scene, characters, decisions, combat, state, 0.05f);
     if (state.missingRequests != missingAtDeath)
         return Fail("unassigned terminal Death must not retry every frame");
+    // A finished action must blend before native playback pauses.
+    combat.characters.front().dead = false;
+    record->activeSemantic = CharacterAnimationSemantic::Idle;
+    record->baseIdle = idle;
+    record->activeClip = wi::ecs::INVALID_ENTITY;
+    if (!RequestCharacterAnimation(scene, state, *record, CharacterAnimationSemantic::Attack))
+        return Fail("tail overlap setup");
+    const auto outgoingAttack = record->activeClip;
+    auto* tail = scene.animations.GetComponent(outgoingAttack);
+    tail->timer = tail->end - 0.10f;
+    decisions.characters.front().intent = CharacterIntent::Idle;
+    UpdateRuntimeCharacterAnimations(scene, characters, decisions, combat, state, 0.016f);
+    if (record->activeClip != idle || record->blendDuration <= 0 ||
+        !scene.animations.GetComponent(outgoingAttack)->IsPlaying())
+        return Fail("action exit must overlap a still-playing outgoing clip");
+
+    // Idle gestures are occasional one-shots, then return to the base loop.
+    const auto gesture = AddClip(scene, character, "Gesture");
+    record->clips[CharacterAnimationIndex(CharacterAnimationSemantic::Idle)].push_back({gesture, "Gesture"});
+    record->idleElapsed = 12.0f;
+    UpdateRuntimeCharacterAnimations(scene, characters, decisions, combat, state, 0.016f);
+    if (record->activeClip != gesture || !record->idleVariation ||
+        !scene.animations.GetComponent(gesture)->IsPlayingOnce())
+        return Fail("idle variation must be occasional and play once");
+    scene.animations.GetComponent(gesture)->timer = 3.90f;
+    UpdateRuntimeCharacterAnimations(scene, characters, decisions, combat, state, 0.016f);
+    if (record->activeClip != idle || record->idleVariation ||
+        !scene.animations.GetComponent(idle)->IsLooped() ||
+        !scene.animations.GetComponent(gesture)->IsPlaying())
+        return Fail("idle variation must fade back before it stops");
+
+    // Replaying a sole attack still needs two independent native timers.
+    record->clips[CharacterAnimationIndex(CharacterAnimationSemantic::Attack)] = {{attack, "Attack"}};
+    if (!RequestCharacterAnimation(scene, state, *record, CharacterAnimationSemantic::Attack)) return Fail("replay setup");
+    AdvanceCharacterAnimationBlend(scene, *record, 0.20f);
+    scene.animations.GetComponent(attack)->timer = 3.90f;
+    if (!RequestCharacterAnimation(scene, state, *record, CharacterAnimationSemantic::Attack, true) ||
+        record->blendClips.size() != 2 || record->replayOutgoing == wi::ecs::INVALID_ENTITY ||
+        scene.animations.GetComponent(record->replayOutgoing)->timer != 3.90f ||
+        scene.animations.GetComponent(attack)->timer != 2.0f)
+        return Fail("single attack repeat needs an independent outgoing timer");
+
     ResetRuntimeCharacterAnimations(state);
     if (!state.characters.empty()) return Fail("reset retained transient blend state");
     std::cout << "AI06_PASS semantic-native-playback-variants-action-run-fallback-hit-death\n";

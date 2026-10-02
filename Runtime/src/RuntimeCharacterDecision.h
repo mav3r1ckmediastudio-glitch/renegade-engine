@@ -104,6 +104,8 @@ namespace renegade::runtime
         bool hasGoal = false;
         bool arrived = false;
         bool hasLastPosition = false;
+        bool hasGuardPost = false;
+        XMFLOAT3 guardPost = XMFLOAT3(0, 0, 0);
         XMFLOAT3 goal = XMFLOAT3(0.0f, 0.0f, 0.0f);
         XMFLOAT3 lastPosition = XMFLOAT3(0.0f, 0.0f, 0.0f);
         std::array<CharacterIntentScore, 3> topScores{};
@@ -166,7 +168,7 @@ namespace renegade::runtime
         float bestScore = -1.0f;
         for (const auto& memory : cognition.memories)
         {
-            if (!memory.hasPosition || memory.confidence <= 0.0f)
+            if (memory.subjectDead || !memory.hasPosition || memory.confidence <= 0.0f)
                 continue;
             const float score =
                 memory.threat * 2.0f + memory.confidence +
@@ -311,7 +313,9 @@ namespace renegade::runtime
         }
         else if (memory == nullptr &&
                  cognition.awareness == AwarenessState::Searching &&
-                 decision.searchRemainingSeconds > 0.0f)
+                 decision.searchRemainingSeconds > 0.0f &&
+                 std::none_of(cognition.memories.begin(), cognition.memories.end(),
+                     [](const CharacterMemoryRecord& known) { return known.hostile && known.subjectDead; }))
         {
             scores.push_back({CharacterIntent::Search, 52.0f});
         }
@@ -470,6 +474,10 @@ namespace renegade::runtime
         const CharacterMemoryRecord* memory = BestActionableMemory(cognition);
         switch (decision.intent)
         {
+        case CharacterIntent::Guard:
+            if (!decision.hasGuardPost) return false;
+            goal = decision.guardPost;
+            return true;
         case CharacterIntent::Patrol:
             if (decision.patrol.route.points.size() < 2)
                 return false;
@@ -529,6 +537,11 @@ namespace renegade::runtime
             }
             CharacterDecisionRecord decision;
             decision.characterId = character.stableEntityId;
+            if (const auto* transform = scene.transforms.GetComponent(character.entity))
+            {
+                decision.guardPost = transform->GetPosition();
+                decision.hasGuardPost = true;
+            }
             if (character.references.patrolRouteEntity != wi::ecs::INVALID_ENTITY)
             {
                 bridge::PatrolRoute route;

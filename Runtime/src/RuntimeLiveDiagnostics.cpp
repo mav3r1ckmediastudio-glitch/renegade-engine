@@ -232,7 +232,8 @@ namespace renegade::runtime
                 characterPerceptionState_,
                 player_,
                 playerSettings_,
-                simulationDt);
+                simulationDt,
+                !combatState_.playerDead);
             const CombatEventEmitter combatEmitter = [this](
                 bridge::GameplayEvent event,
                 std::string& error)
@@ -258,7 +259,17 @@ namespace renegade::runtime
                 characterDecisionState_,
                 combatState_,
                 combatEmitter,
-                simulationDt);
+                simulationDt,
+                [this](const bridge::StableId& id)
+                {
+                    const auto* record = FindCharacterAnimation(characterAnimationState_, id);
+                    if (!record) return true;
+                    const auto* clip = scenes_.GetScene().animations.GetComponent(record->activeClip);
+                    if (!clip || !clip->IsPlayingOnce() || !clip->IsPlaying()) return true;
+                    if (record->activeSemantic == CharacterAnimationSemantic::Hit) return false;
+                    return record->activeSemantic != CharacterAnimationSemantic::Attack ||
+                        CharacterAnimationSecondsRemaining(*clip) <= 0.18f;
+                });
             UpdateRuntimeCharacterDecision(
                 scenes_.GetScene(),
                 characterAiState_,
@@ -491,7 +502,9 @@ namespace renegade::runtime
                 animationBlendState += animation.characterId + ":" + animation.resolvedClipName +
                     ":duration=" + std::to_string(animation.blendDuration) +
                     ":contributors=" + std::to_string(animation.blendClips.size()) +
-                    ":fades=" + std::to_string(animation.crossfadeTransitions) + ";";
+                    ":fades=" + std::to_string(animation.crossfadeTransitions) +
+                    ":base_idle=" + std::to_string(animation.baseIdle) +
+                    ":variation=" + std::to_string(animation.idleVariation) + ";";
             animationPlaybackCount += animation.playbackRequests;
             animationMissingCount += animation.missingRequests;
             for (const auto& variants : animation.clips)
