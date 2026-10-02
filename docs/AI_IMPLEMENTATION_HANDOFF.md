@@ -1,6 +1,26 @@
 # Renegade Character & AI implementation handoff
 
-## Authority and baseline
+## Current integrated status — 2026-10-03
+
+This document retains the detailed AI-01 through AI-04 gate evidence below as
+historical implementation provenance. The old `feature/character-ai-programme`
+branch is no longer the active programme authority.
+
+Current `main` has advanced beyond that checkpoint. The integrated Character
+Runtime now includes the accepted perception/memory and utility-decision
+foundations plus owner-tested hostile Chase/Attack behaviour, pursuit-radius
+disengagement/return-to-role, Guard/Patrol/Idle/Wander normal roles, native
+navigation ownership, semantic Character animation playback and runtime
+crossfading. Owner gameplay has verified a Character wandering, detecting and
+attacking the Player, disengaging when the Player escapes the pursuit radius and
+resuming Wander.
+
+The active product programme is now **Alpha Playability — Player Arms & Combat**.
+Further squad/cover/smart-object/crowd AI work remains backlog unless it blocks
+the playable combat loop. See `ROADMAP.md` and
+`PLAYER_ARMS_COMBAT_FRAMEWORK.md`.
+
+## Authority and historical baseline
 
 - Programme branch: `feature/character-ai-programme`.
 - Accepted Phase 7 baseline: `d36918878776d0d91e0c39f88f6764a1926a6534`.
@@ -14,7 +34,9 @@
 - Pinned Wicked revision: `3a800b7134aafe58461093c8abb2e274d4e64033`.
 - Repository-native Character/AI authority: `docs/RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY.md`.
 
-Only code and documentation present on the programme branch are implementation truth.
+For the historical gate evidence below, the named checkpoint commits remain the
+source of truth. For current product state, use `main`, `ROADMAP.md`,
+`HANDOFF.md` and the current subsystem documents.
 
 ## Gate status
 
@@ -188,14 +210,18 @@ Therefore AI-04 is accepted as **COMPLETE** for its defined gate scope.
 - No Lua ordinary-NPC brain was introduced.
 - Public/cross-system AI events remain on the existing `GameplayEventService` boundary for later gates.
 
-## CI/recovery policy
+## Current continuation policy
 
-- Keep `feature/character-ai-programme` remotely recoverable.
-- Ordinary checkpoint pushes do not intentionally trigger the full Windows matrix.
-- Do not intentionally open the integrated PR/full four-job matrix before AI-05.
-- Focused branch-only validation is allowed when required to prove a gate without wasting the full matrix.
-- A gate is not COMPLETE merely because source exists or compiles.
+The historical programme branch has been retired after integration/cleanup.
+Current Character/AI work must branch from `main` and preserve the accepted
+ownership rules above.
 
-## Exact next implementation step
+Do not restart a parallel AI combat, animation, navigation or event system for
+the Player programme. Player-facing combat extends the shared damage/event seams
+and uses the accepted Character Runtime as its opponent/receiver.
 
-Begin **AI-05 — Combat Intelligence** from accepted AI-04 checkpoint `42159af5d3125a2e7fec80619dd2e325ca27d86e` and the green AI-01→AI-04 acceptance evidence in run `34852462926`. Preserve the existing AI-01→04 boundaries while adding a reusable combat foundation and combat reasoning: weapon descriptors/range bands, bounded ammo/reload state, health/damage seams, Attack/Chase/Hold/Retreat/Flee/Surrender scoring, safer reload decisions, deterministic bounded-accuracy hit resolution where the architecture requires it, and public AI combat events through the existing `GameplayEventService`. Keep combat mechanics outside cognition, do not hide weapon/health rules inside the decision layer, and do not start AI-06 animation integration until AI-05 reaches its integrated checkpoint and required Windows validation.
+Further AI expansion is deliberately secondary to Alpha Playability. The next
+implementation gate is **P1 — First-person Arms Rig** from the active
+`PLAYER_ARMS_COMBAT_FRAMEWORK.md` roadmap. Squad communication, cover, smart
+objects and large-population cognition/performance work resume when the playable
+combat loop requires them or after the reference combat families are accepted.

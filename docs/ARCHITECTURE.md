@@ -801,3 +801,56 @@ Dead subjects cannot be actionable memories or retain stale search continuation.
 Dead players emit no new visual or footstep observations. Self-generated attack sounds cannot create search memories. Normal role decisions
 resume: Patrol requires an assigned route; Guard returns to its initial post;
 a character with no patrol route uses its configured fallback role.
+
+## Player Arms & Combat architecture — Alpha Playability authority
+
+The next programme extends the accepted Player rather than replacing it.
+World-space Player movement, collision, camera ownership and lifecycle remain
+authoritative. A first-person View Rig is presentation-only and may not become a
+second Player controller or physics body.
+
+The Player combat boundary is divided into four responsibilities:
+
+- world Player/controller: movement, position, health/damage receiver and interaction;
+- first-person View Rig: primary/off-hand/two-hand presentation and procedural layers;
+- combat/action controller: aim solution, hand reservation and action state;
+- item/ability definitions: rules, projectiles, animation, audio and VFX bindings.
+
+Both hands are first-class. Items declare hand usage instead of assuming that the
+right hand owns gameplay. Two-handed/support actions reserve or assist the other
+hand through the same action model.
+Combat families share one semantic action framework. Firearms, melee, bows,
+crossbows and spells may use Prepare/Wind-up/Hold/Charge/Active/Release/Recovery
+phases without embedding family-specific state in the Player controller.
+
+Projectiles and damage remain world simulation. First-person recoil, muzzle
+flash, hand motion, particles, camera impulse and sound are presentation/effect
+layers driven from deterministic gameplay trigger points.
+
+Directional melee is explicitly not a centre-camera raycast. During active
+strike windows, relevant weapon sockets/regions are swept between frames through
+the accepted Wicked physics/query authority. Attack direction, guard direction,
+weapon region, reach, relative motion, surface and defensive state can therefore
+participate in contact resolution.
+
+Directional guards, shields, parries, feints, counters/chambers and stamina are
+extensions of that same action/contact model. Sword + shield is the required
+reference proof for independent hand ownership.
+
+Bows use a real draw value and the shared projectile framework. Crossbows use
+generic staged actions for cock/load/fire. Magic uses the same hand/action/effect
+boundary without being represented as a fake weapon.
+Animation remains semantic and native-Wicked-backed. The Arms Rig requests
+actions such as Equip, Aim, Fire, Reload, Charge, Release, Block, Parry and Cast;
+it does not request asset-specific filenames from gameplay code. Authored clips
+may be layered with procedural sway, breathing, aim offsets, recoil and impact
+deflection without introducing a second skeleton evaluator.
+
+The detailed product contract, reference combat families and acceptance gates are
+defined in PLAYER_ARMS_COMBAT_FRAMEWORK.md. That document is the canonical
+authority for the Alpha Playability combat programme.
+
+Combat acceptance includes direct owner play. Automated tests can prove action
+state, collision, damage and persistence, but cannot prove recoil, melee timing,
+audio/particle response or overall combat feel. A dedicated owner feel session
+is therefore an explicit programme gate.

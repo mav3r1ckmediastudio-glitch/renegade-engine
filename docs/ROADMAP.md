@@ -1,172 +1,197 @@
 # Renegade Engine Roadmap
 
-**Current programme:** Character & AI System  
-**Accepted Phase 7 baseline / current main at programme start:** `d36918878776d0d91e0c39f88f6764a1926a6534`  
-**Programme branch:** `feature/character-ai-programme`  
-**Accepted AI-01 checkpoint:** `674b1efc3e1b81e6f55bf080f539f29a0c466db4`  
-**Accepted AI-02 checkpoint/evidence head:** `09ee66e6b925b305a75b81cf0cf00170ca42edfc`  
-**Clean AI-03 implementation checkpoint:** `307161dee97f0b9aa39eaab4e8d655240c072171`  
-**AI-03 focused validation run:** `34843305044`  
-**Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
+**Current programme:** Alpha Playability — Player Arms & Combat Framework
+**Current integrated main:** PR #176 merged as 3bb768b148da590ea9dd7aa47fbb28006c0508d6
+**Wicked pin:** 3a800b7134aafe58461093c8abb2e274d4e64033
+**Canonical combat design:** [PLAYER_ARMS_COMBAT_FRAMEWORK](PLAYER_ARMS_COMBAT_FRAMEWORK.md)
 
 ## Current state
 
-Phase 6 Playable Core and Phase 7 Character/Animation foundations are accepted programme prerequisites. Character & AI builds on those accepted systems rather than introducing parallel Runtime stacks.
+Renegade has moved beyond editor/world foundations into a playable-core engine.
+Current main includes the custom Studio, project/scene lifecycle, Terrain and
+rendering authoring, Wicked/Jolt player movement, governed input and Lua, audio,
+Story Flow/Screens, standalone Build Game, the rebuilt native model/Character
+importer, Character Prefabs, semantic animation assignment/crossfading,
+navigation, perception, role behaviour and owner-tested hostile NPC combat.
 
-Repository-native Character/AI authority:
+The next programme is intentionally not another deep AI expansion. The priority
+is to make the existing Player a complete gameplay actor so Renegade can build a
+small representative game rather than only demonstrate engine subsystems.
 
-- [`RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY.md`](RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY.md)
-- [`AI_IMPLEMENTATION_HANDOFF.md`](AI_IMPLEMENTATION_HANDOFF.md)
+The Alpha Playability target is:
 
-The product goal is **AAA-style-ish AI architecture with GameGuru-style setup simplicity**: creators configure understandable Character/Role/Personality/Faction/Skill/Awareness choices while Runtime composes deterministic native-backed behaviour without requiring ordinary users to write Lua or author behaviour trees.
+> spawn -> equip -> explore -> encounter -> fight -> somebody dies -> HUD reflects
+> state -> restart/respawn -> the same loop works in an independently packaged game.
+## Accepted foundations reused by Alpha Playability
 
-## Accepted foundations reused by Character & AI
-
-| Foundation | Accepted ownership used by AI |
+| Foundation | Reused ownership |
 |---|---|
-| Phase 6 Player/Core | Player Start, possession, gameplay lifecycle and Runtime process boundaries. |
-| Phase 6 scripting/events | Governed `.rscripts`, typed stable references and existing `GameplayEventService`; AI must not create a second generic event bus. |
-| Phase 6 navigation | Existing `NavigationService` over Wicked `VoxelGrid`, `PathQuery` and native `CharacterComponent`; AI must not introduce Recast or transform-driven normal movement. |
-| Phase 7 animation | Native `AnimationComponent`, humanoid mapping/retarget, IK, look-at, expressions and timeline authoring; AI-06 will drive these accepted systems semantically. |
-| Stable identity | `IdentityService` stable IDs are persisted; raw Wicked ECS IDs are Runtime caches only. |
-| Diagnostics | Existing bounded Runtime/Studio diagnostics are extended rather than replaced. |
+| Player/Core | Existing Player Start, Wicked/Jolt capsule, camera, movement, sprint, jump and Runtime lifecycle remain authoritative. |
+| Character combat | Existing Character health/damage/combat seams are extended to Player-facing combat rather than replaced. |
+| Animation | Wicked AnimationComponent and Renegade semantic action/crossfade work remain the animation authority. |
+| Physics | Wicked/Jolt remains world collision and projectile/melee query authority. |
+| Input | Existing governed action maps are extended; no separate weapon input stack. |
+| Audio/VFX | Existing audio and particle/light/render systems provide presentation hooks. |
+| Stable identity/events | Existing identity and governed gameplay-event boundaries are reused. |
+| Test Level / Build Game | Combat must prove parity through the existing Runtime and packaging lifecycle. |
 
-## Character & AI gates
+## Alpha Playability gates
 
-### AI-01 — Character Foundation
+### P1 — First-person Arms Rig
 
-**Status: COMPLETE / focused Windows validation green.**
+**Status: NEXT.**
 
-Delivered:
+Extend the existing Player camera with a presentation-only first-person View Rig.
+Deliver primary hand, off hand and two-hand/support sockets, movement presentation
+and semantic animation ownership. Do not create a second Player controller.
 
-- MAKE CHARACTER / REMOVE CHARACTER;
-- stable Character identity and versioned metadata;
-- non-destructive native Wicked `CharacterComponent` adoption/ownership;
-- command-backed creator authoring and Undo/Redo;
-- Character Inspector integration;
-- deterministic Runtime discovery/activation/reset;
-- baseline Character diagnostics;
-- fail-closed duplicate-ID/invalid-controller handling.
+Acceptance includes Test Level and packaged Runtime parity, correct camera
+pitch/yaw behaviour and a foundation that does not assume the right hand is the
+only gameplay hand.
+### P2 — Equipment & Action Framework
 
-### AI-02 — Profiles, Factions & Runtime State
+Implement generic item/ability ownership, equip/unequip, primary/alternate use,
+charge/release, reload, staged actions and hand reservation.
 
-**Status: COMPLETE / focused Windows validation green.**
+Items declare PrimaryOnly, OffHandOnly, EitherHand, TwoHanded or
+PrimaryWithSupport semantics. Gameplay requests semantic actions rather than
+asset-specific animation filenames.
 
-Delivered:
+### P3 — Projectile & Impact Framework
 
-- deterministic tuning composition: Type -> Role -> Personality -> Skill -> Awareness -> explicit overrides;
-- versioned Advanced AI overrides and repairable malformed-payload handling;
-- built-in and creator-defined faction registry plus semantic relationships;
-- stable-ID-keyed transient Runtime Character records;
-- Patrol Route and Weapon stable reference resolution;
-- deterministic reset/failure cleanup;
-- Character Inspector Skill/Awareness/Faction/effective profile/grouped Advanced AI controls;
-- bounded AI-02 diagnostics and corruption/recovery regression coverage.
+Implement the reusable projectile/hit boundary used by bullets, arrows, bolts,
+throwables and spell projectiles. Include collision, damage routing, owner/source
+identity, gravity/lifetime policy and surface-aware impact presentation.
 
-Focused Windows validation run `34837594589` completed green.
+Provide the common SFX/VFX/decal/light hooks needed for weapon feel.
 
-### AI-03 — Perception & Memory
+### P4 — Firearm Reference
 
-**Status: COMPLETE / focused Windows validation green.**
+Use one intentionally simple pistol to prove the framework:
+equip, hip/ADS aim, fire, ammo, reload, dry fire, hitscan/physical-projectile
+seam, recoil, weapon impulse, muzzle flash/smoke/light, shot/mechanical audio,
+surface impact and Character damage.
 
-Clean implementation checkpoint: `307161dee97f0b9aa39eaab4e8d655240c072171`.
+Camera recoil and weapon recoil remain independently tunable.
+### P5 — Directional Melee
 
-Delivered:
+Directional melee is core scope, not a generic Melee button.
 
-- bounded 5 Hz stable-ID-staggered Runtime cognition;
-- physics-authoritative Runtime-player position/velocity;
-- central/peripheral sight with horizontal/vertical FOV;
-- native Wicked `Scene::Intersects()` line of sight;
-- observer-self hierarchy rejection in LOS;
-- visual and audio reaction latency;
-- explicit bounded sound stimuli plus Runtime-player footsteps;
-- governed damage-attribution stimulus seam;
-- Seen / Heard / DamagedBy memory;
-- last-known position/velocity, confidence, threat and age decay;
-- suspicion and `Unaware -> Interested -> Suspicious -> Alerted -> Combat -> Searching` progression;
-- deterministic reset and stale-player scene-revision guard;
-- diagnostics for awareness, suspicion, knowledge, memory, LOS and stimulus pressure;
-- explicit anti-cheat tests proving hidden coordinates cannot refresh memory;
-- regression for repeated-sound reaction starvation.
+Prove left/right slash, overhead and thrust; directional guards; sword trajectory
+and swept collision; wind-up/hold/active/recovery phases; block/parry/feint
+seams; shield interaction; hit deflection/rebound; weapon reach; stamina hooks;
+and surface-specific SFX/VFX.
 
-Focused Windows run `34843305044` built AI-01/02/03 test targets plus `RenegadeRuntime` and `RenegadeStudio` Debug and passed all **7/7** Character-AI focused tests.
+The reference proof is sword + shield because it exercises independent hands,
+directional attack and defence, collision, animation and impact feedback.
 
-AI-03 deliberately contains no utility decision/patrol execution or combat action selection; those remain AI-04/05.
+### P6 — Bow Reference
 
-### AI-04 — Decision & Patrol
+Prove a two-handed nock/draw/hold/release loop with draw amount as a real 0..1
+gameplay value affecting velocity/trajectory/damage/presentation as appropriate.
+Use the shared projectile framework for arrows and preserve extension seams for
+embedding, bounce, break, recovery and elemental/utility arrows.
 
-**Status: NOT STARTED.**
+### P7 — Crossbow Reference
 
-Implement utility-scored intents with hysteresis, Guard/Patrol/Investigate/Search/Return-to-role behaviour and movement through the accepted native `NavigationService` / Wicked `CharacterComponent` authority. All target pursuit/search information must consume legitimate AI-03 memory rather than hidden transforms.
+Prove staged Fired/Unloaded -> Cock -> Load Bolt -> Ready -> Aim -> Fire
+behaviour. Multi-stage reload/actions must be generic rather than hard-coded to
+crossbows so firearms and other equipment can reuse them.
+### P8 — Magic Reference
 
-### AI-05 — Combat Intelligence
+Prove that spells are first-class abilities rather than fake weapons. Implement
+at least one charged projectile spell and one continuous/channel spell through
+the same hand/action/effect architecture.
 
-**Status: NOT STARTED.**
+The design must remain capable of projectile, beam, area, targeted and self-cast
+abilities plus sword + spell, shield + spell, dual spells and staff/off-hand use.
 
-Implement the smallest reusable health/damage/weapon boundary required, weapon-range/ammo/reload reasoning, combat intent selection, retreat/flee/surrender and integrated diagnostics/events.
+### P9 — Dual-hand Composition Proof
 
-**First intended full integrated Debug+Release/full CTest Windows CI boundary: AI-05.** Earlier gates may use focused branch-only validation when necessary.
+Deliberately combine independently useful hand systems without Player special
+cases. Required reference combinations include sword + shield and at least one
+weapon/spell or item/off-hand combination.
 
-### AI-06 — Animation Integration
+This gate proves that hand reservation, animation and action ownership were
+designed generically rather than around the pistol reference.
 
-**Status: NOT STARTED.**
+### P10 — Combat Feel & First Playable Loop
 
-Map semantic AI intents such as locomotion/fire/reload to Animation Sets and drive the accepted Phase 7 native animation/humanoid/IK/look-at stack. No second animation runtime.
+This is an owner-led acceptance gate, not merely an automated-test gate.
 
-### AI-07 — Squads & Communication
+Tune responsiveness, animation timing, camera motion, procedural recoil, sway,
+muzzle flash, particles, SFX, mechanical audio, impacts, melee weight, guard and
+parry timing, bow draw/release, crossbow staging and magic presentation until
+combat feels good in direct play.
+Complete the loop with Player health/death, NPC damage/death, HUD state,
+restart/respawn and independently packaged Runtime parity.
 
-**Status: NOT STARTED.**
+A weapon or combat mode is not accepted merely because a test proves the expected
+damage number. Direct owner play is mandatory for feel.
 
-Implement imperfect legitimate information sharing, alert propagation and squad state without magic exact hidden target knowledge.
+## Immediately following Alpha Playability
 
-### AI-08 — Cover
+### Gameplay HUD / UI authoring
 
-**Status: NOT STARTED.**
+The playable loop requires health, ammo/resource, crosshair/aim state,
+interaction prompts and equipment state. This should build on the existing
+Screen/Journey infrastructure and the planned creator UI designer rather than
+introducing a disconnected HUD runtime.
 
-Implement explicit creator Cover Points first, scoring/reservation and native-navigation use. Generated cover may come later behind the same interface.
+The UI path should remain capable of static images, sprites/animated imagery and
+video/overlay content where the renderer/runtime supports them.
 
-### AI-09 — Smart Objects
+### Performance and scale
 
-**Status: NOT STARTED.**
+Open issue #169 remains the explicit rigged-character performance investigation.
+Before city-scale populations, profile first-rigged-character cost, multi-NPC
+animation/cognition/navigation load, projectile pressure and practical actor
+budgets. Preserve native Wicked streaming/scene ownership rather than solving
+scale with a parallel world.
+## Character & AI continuation backlog
 
-Implement reusable context points/reservations for Door, Cover, Chair, Ladder, Turret, Bed, Workbench, Guard Point and Generic Use Point semantics.
+The earlier Character & AI programme established Character identity, profiles,
+factions, perception/memory, patrol/decision foundations and the later integrated
+Runtime now demonstrates Wander, hostile perception, Chase/Attack, pursuit
+leashing/disengagement, semantic animation playback and crossfading in owner
+gameplay.
 
-### AI-10 — Lua / Diagnostics / Performance / Packaged Hardening
+The following remain later expansion work unless Alpha Playability exposes a
+blocking need:
 
-**Status: NOT STARTED.**
+- squad communication and imperfect information sharing;
+- authored/generated cover;
+- smart objects and reservations;
+- cognition/animation LOD and large-population scheduling;
+- richer animation layers/blend spaces/contact markers;
+- broader behaviour/prefab authoring;
+- advanced navigation scaling.
 
-Finish safe high-level Lua integration, complete diagnostics/overlays, cognition LOD and scheduling/budget hardening, representative 1/10/25/50/100 Character performance evidence and packaged standalone parity.
+Do not let those features displace the Player/combat work required for a small
+complete game.
 
-This is the second intended full integrated validation/acceptance boundary if practical.
+## Architecture rules
 
-## Non-negotiable architecture
-
-- Studio owns authoring, not production cognition.
-- EngineBridge owns stable Renegade semantics and command-backed creator APIs.
-- Runtime owns transient execution/cognition.
-- Wicked remains Scene/ECS/native physics/navigation/animation authority.
-- No Recast or second navigation world.
-- No second physics/Scene/gameplay loop.
-- No transform-driven normal NPC movement.
-- No second generic gameplay event bus.
-- No raw ECS IDs in persisted authoring.
-- No Lua ordinary-NPC brain and no unrestricted Wicked-global Lua surface.
-- No hidden-target transform cheating.
-- No LLM Runtime dependency.
-- No naive all-pairs perception every frame.
-- No compile-only definition of done.
-
-## Integrated acceptance target
-
-The completed programme must prove a representative Level containing Player Start, native navigation, a cautious enemy Guard on patrol, a second soldier, a timid civilian, patrol route, cover and later Smart Objects.
-
-The final behaviour proof includes patrol, nonvisual noise investigation, legitimate visual confirmation, imperfect squad alert, cover/reload decisions, loss-of-LOS last-known search, search timeout/return-to-role, civilian flee/cower, Save/Open authoring persistence, deterministic Test Level/reset and packaged standalone parity.
-
+- Extend accepted systems; do not create parallel Player, physics, animation,
+  navigation, event or damage stacks.
+- World simulation is authoritative; first-person arms are presentation.
+- Both hands are first-class.
+- Combat families share action/projectile/effect foundations.
+- Directional melee uses swept weapon motion, not a centre-camera raycast.
+- Bows/crossbows/magic are reference requirements, not post-alpha add-ons.
+- Creator-facing definitions should be data-driven and semantically named.
+- Visual/behavioural owner failure overrides nominal automated success.
+- Save/reopen, Test Level and packaged Runtime parity are acceptance requirements.
 ## Verification policy
 
-- A gate is not complete merely because source exists.
-- Focused build/test evidence is required before moving to the next gate when the gate changes executable code.
-- Visual or behavioural owner failure overrides nominal automated success.
-- Save/Open is required for persisted authoring.
-- Gameplay-facing state must be exercised in the real Runtime process at the appropriate integrated gate.
-- Full integrated Debug+Release/full-test CI remains intentionally concentrated at AI-05 and AI-10 to avoid wasting long builds while known implementation work is still changing.
+CI must build and test from a clean checkout. The repaired Studio CI explicitly
+builds the registered test dependencies and treats hosted graphics visibility
+separately from owner-hardware rendered-pixel acceptance.
+
+The importer and Character stack remains protected by automated tests, while
+real rendered visibility and subjective gameplay feel remain owner-hardware
+acceptance responsibilities.
+
+Historical programme evidence remains in subsystem handoffs/specifications.
+This roadmap describes current priority and should not be used as a release
+claim for unfinished gates.

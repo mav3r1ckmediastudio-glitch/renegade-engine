@@ -1105,3 +1105,42 @@ Owner subjective gameplay acceptance is still required. Fixed durations remain
 0.20s loops, 0.08s actions, 0.05s Death. Idle variant scheduling/loop policy remains
 basic; this repair does not change which assigned Idle variant is selected.
 No Debug/full CI/package-export/layered blending claims or release gate completion.
+## 2026-10-03 main CI repair integration and Alpha Playability handoff
+
+PR #176 (`fix/main-ci-green`) was verified with four green pull-request checks
+and merged into `main` as merge commit
+`3bb768b148da590ea9dd7aa47fbb28006c0508d6`.
+
+The repair addressed three clean-run CI assumptions exposed after the large
+Character/importer integration:
+- EngineBridge Debug required MSVC `/bigobj` for large translation units;
+- the Studio CI aggregate build had to include every registered test executable
+  it later asks CTest to run;
+- the rebuilt importer graphics proof had to distinguish hosted-headless PNG
+  readback from owner-hardware visible-model pixel acceptance.
+
+The final PR head `f0b4f815f345dd1765bd4fde3c8ce623bea912e5`
+passed Windows baseline Debug/Release and Renegade Studio Debug/Release on a
+clean GitHub checkout. Local owner-hardware validation separately retained the
+full rendered-model visibility assertion, and the hosted-headless importer group
+passed 7/7 while preserving import/commit/reopen coverage.
+The post-merge `main` Windows baseline and Renegade Studio workflows were
+triggered automatically for `3bb768b`; they were still in progress when this
+documentation handoff section was written and must be checked before calling the
+merged main globally green.
+
+The active programme is now **Alpha Playability — Player Arms & Combat**.
+Canonical design authority:
+`docs/PLAYER_ARMS_COMBAT_FRAMEWORK.md`.
+
+The programme extends the existing Player rather than replacing it. Both hands
+are first-class; combat families share equipment/action/projectile/effect
+foundations. Required reference families are firearm, directional sword + shield,
+bow, crossbow and magic. Directional melee uses attack/guard directions and swept
+weapon collision rather than a generic centre-camera melee ray.
+
+The first implementation gate is **P1 — First-person Arms Rig**. A dedicated
+owner combat-feel gate is mandatory later for recoil, camera response, animation
+timing, SFX, particles, muzzle flash, projectile/impact feel, directional melee,
+parries/guards, bow/crossbow timing and spellcasting presentation. Automated
+damage/state correctness is not sufficient acceptance.

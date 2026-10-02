@@ -1,6 +1,14 @@
 # Renegade Character & AI System — Implementation Authority
 
-**Programme branch:** `feature/character-ai-programme`  
+> **Current integration note — 2026-10-03:** this remains the architectural
+> authority for Character/AI ownership and design principles, but its programme
+> branch/gate sequencing is historical. The implementation is integrated into
+> `main`; the retired `feature/character-ai-programme` branch must not be
+> recreated as the active product programme. Current priority is Alpha
+> Playability / Player Arms & Combat. See `ROADMAP.md`,
+> `AI_IMPLEMENTATION_HANDOFF.md` and `PLAYER_ARMS_COMBAT_FRAMEWORK.md`.
+
+**Historical programme branch:** `feature/character-ai-programme`
 **Accepted Phase 7 baseline:** `d36918878776d0d91e0c39f88f6764a1926a6534`  
 **Pinned Wicked revision:** `3a800b7134aafe58461093c8abb2e274d4e64033`  
 **Original full design artifact provenance:** `RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_SPEC.md`, 62,613 bytes, SHA-256 `aa396b6aa6fbf94650abeb6e0916657e29b90c3775075360438af6e58085a74e`.
