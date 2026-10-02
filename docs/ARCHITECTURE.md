@@ -742,3 +742,28 @@ retained-source reimport. Native animation-entity metadata remains the runtime
 contract; existing action variants and missing-slot semantics remain unchanged.
 Studio owns one native per-clip action selector and an external FBX picker.
 Preview playback speed and scrub position remain transient.
+
+## Runtime Character crossfades
+
+RuntimeCharacterAnimation owns transient logical weights and transition time
+alongside the existing semantic action record. AI decisions and explicit native
+clip metadata remain the action authority. Wicked's native AnimationComponent
+evaluates translation, rotation and scale; no second skeleton evaluator or
+movement controller is introduced.
+
+The pinned Scene applies animations sequentially in component order. Runtime
+sorts only its contributing clips by native component index and converts their
+logical weights into cumulative amounts. The first contribution establishes a
+full base pose; later contributions overlay their share of cumulative weight.
+Rapid interruptions capture existing weights and preserve the phase of an
+already contributing loop. Completed outgoing one-shots contribute their final
+pose until their weight reaches zero, then stop.
+
+Crossfades require matching target/path channel coverage and no event channels.
+Different coverage retains immediate-switch behaviour; layered and additive
+animation require a separate design. Locomotion fades take 0.20 seconds; other
+actions take 0.08 seconds and Death 0.05 seconds. Runtime simulation time drives
+the fade, and paused gameplay does not advance it. Native root motion is disabled
+for AI-owned clips because the existing Character controller owns movement.
+An active Hit finishes before a new shot/reload; Death is terminal. Unassigned
+Idle or Death stops owned playback without substituting a bind pose.

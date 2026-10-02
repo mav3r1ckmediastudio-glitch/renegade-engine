@@ -272,7 +272,8 @@ namespace renegade::runtime
                 characterAiState_,
                 characterDecisionState_,
                 combatState_,
-                characterAnimationState_);
+                characterAnimationState_,
+                simulationDt);
             // Log only native clip transitions, not every frame. This makes a
             // real TestGame T-pose distinguishable from missing AI activation.
             if (characterAnimationState_.playbackRequests != priorPlayback)

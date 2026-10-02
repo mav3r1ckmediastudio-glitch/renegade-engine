@@ -55,6 +55,13 @@ namespace renegade::runtime
         std::string name;
     };
 
+    struct RuntimeAnimationBlendClip
+    {
+        wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
+        float weight = 0.0f;
+        float startWeight = 0.0f;
+    };
+
     struct RuntimeCharacterAnimationRecord
     {
         bridge::StableId characterId;
@@ -71,6 +78,9 @@ namespace renegade::runtime
         float observedHealth = 0.0f;
         std::uint64_t playbackRequests = 0;
         std::uint64_t missingRequests = 0;
+        std::vector<RuntimeAnimationBlendClip> blendClips;
+        float blendElapsed = 0.0f;
+        float blendDuration = 0.0f;
     };
 
     struct RuntimeCharacterAnimationState
@@ -254,6 +264,129 @@ namespace renegade::runtime
         return true;
     }
 
+    // Native animation amounts blend sequentially in component order. Logical
+    // weights are converted to cumulative amounts so the result is independent
+    // of whether the incoming clip precedes or follows the outgoing clip.
+    inline void ApplyCharacterAnimationBlend(
+        wi::scene::Scene& scene, RuntimeCharacterAnimationRecord& record) noexcept
+    {
+        std::sort(record.blendClips.begin(), record.blendClips.end(),
+            [&scene](const auto& a, const auto& b)
+            { return scene.animations.GetIndex(a.entity) < scene.animations.GetIndex(b.entity); });
+        float cumulative = 0.0f;
+        for (const auto& clip : record.blendClips)
+        {
+            auto* animation = scene.animations.GetComponent(clip.entity);
+            if (animation == nullptr) continue;
+            cumulative += clip.weight;
+            animation->amount = clip.weight > 0.0f ? clip.weight / cumulative : 0.0f;
+            // A completed outgoing one-shot still contributes its final pose.
+            if (clip.weight > 0.0f && !animation->IsPlaying())
+                animation->last_update_time = animation->timer - 1.0f;
+        }
+    }
+
+    inline void StopCharacterAnimationBlend(
+        wi::scene::Scene& scene, RuntimeCharacterAnimationRecord& record) noexcept
+    {
+        for (const auto& clip : record.blendClips)
+        {
+            (void)bridge::StopAnimation(scene, clip.entity);
+            if (auto* animation = scene.animations.GetComponent(clip.entity))
+                animation->amount = 0.0f;
+        }
+        record.blendClips.clear();
+        record.blendElapsed = record.blendDuration = 0.0f;
+    }
+
+    [[nodiscard]] inline bool MatchingCharacterAnimationChannels(
+        const wi::scene::AnimationComponent& first,
+        const wi::scene::AnimationComponent& second) noexcept
+    {
+        if (first.channels.size() != second.channels.size()) return false;
+        for (const auto& channel : first.channels)
+        {
+            if (channel.GetPathDataType() == wi::scene::AnimationComponent::AnimationChannel::PathDataType::Event)
+                return false; // Gameplay events must not fire from fading clips.
+            if (std::none_of(second.channels.begin(), second.channels.end(),
+                [&channel](const auto& other)
+                { return other.target == channel.target && other.path == channel.path; }))
+                return false;
+        }
+        return true;
+    }
+
+    inline void BeginCharacterAnimationBlend(
+        wi::scene::Scene& scene, RuntimeCharacterAnimationRecord& record,
+        const wi::ecs::Entity incoming, const CharacterAnimationSemantic semantic)
+    {
+        auto* animation = scene.animations.GetComponent(incoming);
+        if (animation == nullptr) return;
+        bool compatible = !record.blendClips.empty();
+        for (const auto& clip : record.blendClips)
+        {
+            const auto* prior = scene.animations.GetComponent(clip.entity);
+            compatible = compatible && prior != nullptr &&
+                MatchingCharacterAnimationChannels(*prior, *animation);
+        }
+        if (!compatible)
+        {
+            // Partial skeleton tracks need a separate layered-animation design.
+            // Preserve the established immediate-switch behaviour for those.
+            for (const auto& clip : record.blendClips)
+                if (clip.entity != incoming)
+                {
+                    (void)bridge::StopAnimation(scene, clip.entity);
+                    if (auto* prior = scene.animations.GetComponent(clip.entity))
+                        prior->amount = 0.0f;
+                }
+            record.blendClips = {{incoming, 1.0f, 1.0f}};
+            record.blendDuration = 0.0f;
+        }
+        else
+        {
+            auto found = std::find_if(record.blendClips.begin(), record.blendClips.end(),
+                [incoming](const auto& clip) { return clip.entity == incoming; });
+            if (found == record.blendClips.end())
+                record.blendClips.push_back({incoming, 0.0f, 0.0f});
+            for (auto& clip : record.blendClips) clip.startWeight = clip.weight;
+            const bool loop = semantic == CharacterAnimationSemantic::Idle ||
+                semantic == CharacterAnimationSemantic::Locomotion ||
+                semantic == CharacterAnimationSemantic::Run;
+            record.blendDuration = loop ? 0.20f :
+                semantic == CharacterAnimationSemantic::Death ? 0.05f : 0.08f;
+        }
+        record.blendElapsed = 0.0f;
+        ApplyCharacterAnimationBlend(scene, record);
+    }
+
+    inline void AdvanceCharacterAnimationBlend(
+        wi::scene::Scene& scene, RuntimeCharacterAnimationRecord& record,
+        const float dt) noexcept
+    {
+        if (record.blendDuration > 0.0f)
+        {
+            if (std::isfinite(dt) && dt > 0.0f) record.blendElapsed += dt;
+            const float t = std::clamp(record.blendElapsed / record.blendDuration, 0.0f, 1.0f);
+            for (auto& clip : record.blendClips)
+                clip.weight = clip.startWeight * (1.0f - t) +
+                    (clip.entity == record.activeClip ? t : 0.0f);
+            if (t >= 1.0f)
+            {
+                for (const auto& clip : record.blendClips)
+                    if (clip.entity != record.activeClip)
+                    {
+                        (void)bridge::StopAnimation(scene, clip.entity);
+                        if (auto* animation = scene.animations.GetComponent(clip.entity))
+                            animation->amount = 0.0f;
+                    }
+                record.blendClips = {{record.activeClip, 1.0f, 1.0f}};
+                record.blendDuration = 0.0f;
+            }
+        }
+        ApplyCharacterAnimationBlend(scene, record);
+    }
+
     inline void ResetRuntimeCharacterAnimations(
         RuntimeCharacterAnimationState& state) noexcept
     {
@@ -266,6 +399,9 @@ namespace renegade::runtime
         const CharacterAnimationSemantic semantic) noexcept
     {
         record.lastRequest = CharacterAnimationSemanticName(semantic);
+        auto* active = scene.animations.GetComponent(record.activeClip);
+        if (record.activeSemantic == CharacterAnimationSemantic::Death && active != nullptr)
+            return semantic == CharacterAnimationSemantic::Death;
         const auto* variants =
             &record.clips[CharacterAnimationIndex(semantic)];
         // Run is optional in an authored asset: fall back to walk without
@@ -274,30 +410,30 @@ namespace renegade::runtime
             variants = &record.clips[CharacterAnimationIndex(CharacterAnimationSemantic::Locomotion)];
         if (variants->empty())
         {
+            if (semantic == CharacterAnimationSemantic::Death)
+            {
+                StopCharacterAnimationBlend(scene, record);
+                record.activeClip = wi::ecs::INVALID_ENTITY;
+                record.activeSemantic = semantic;
+            }
             record.resolvedClipName.clear();
             ++record.missingRequests;
             ++state.missingRequests;
             return false;
         }
 
-        auto* active = scene.animations.GetComponent(record.activeClip);
-        // A fresh combat event must not cut off an already-playing one-shot.
+        // Repeated requests must not restart an active loop or one-shot.
         if (record.activeSemantic == semantic && active != nullptr &&
-            active->IsPlaying() && active->IsPlayingOnce())
+            active->IsPlaying())
             return true;
         const RuntimeAnimationClip& next = (*variants)[
             record.variantSequence++ % variants->size()];
-        if (record.activeClip == next.entity &&
-            record.activeSemantic == semantic &&
-            active != nullptr && active->IsPlaying())
+        if (record.activeClip == next.entity && active != nullptr && active->IsPlaying())
         {
+            // Optional Run falls back to the same Walk without restarting it.
+            record.activeSemantic = semantic;
+            record.resolvedClipName = next.name;
             return true;
-        }
-
-        if (record.activeClip != wi::ecs::INVALID_ENTITY &&
-            record.activeClip != next.entity)
-        {
-            (void)bridge::StopAnimation(scene, record.activeClip);
         }
 
         auto* animation = scene.animations.GetComponent(next.entity);
@@ -319,7 +455,11 @@ namespace renegade::runtime
         {
             animation->SetPlayOnce();
         }
-        if (!bridge::PlayAnimation(scene, next.entity, true))
+        const bool alreadyContributing = std::any_of(record.blendClips.begin(), record.blendClips.end(),
+            [&next](const auto& clip) { return clip.entity == next.entity && clip.weight > 0.0f; });
+        // The Character controller owns world movement, including during a fade.
+        animation->RootMotionOff();
+        if (!bridge::PlayAnimation(scene, next.entity, !alreadyContributing || animation->IsPlayingOnce()))
         {
             record.resolvedClipName.clear();
             ++record.missingRequests;
@@ -327,6 +467,7 @@ namespace renegade::runtime
             return false;
         }
 
+        BeginCharacterAnimationBlend(scene, record, next.entity, semantic);
         record.activeClip = next.entity;
         record.activeSemantic = semantic;
         record.resolvedClipName = next.name;
@@ -340,7 +481,8 @@ namespace renegade::runtime
         const RuntimeCharacterSystemState& characters,
         const RuntimeCharacterDecisionState& decisions,
         const RuntimeCombatState& combat,
-        RuntimeCharacterAnimationState& state) noexcept
+        RuntimeCharacterAnimationState& state,
+        const float dt = 0.0f) noexcept
     {
         if (state.characters.size() != characters.characters.size() ||
             decisions.characters.size() != characters.characters.size() ||
@@ -376,6 +518,14 @@ namespace renegade::runtime
             {
                 requested = CharacterAnimationSemantic::Hit;
                 requestPlayback = true;
+            }
+            else if (record->activeSemantic == CharacterAnimationSemantic::Hit &&
+                scene.animations.GetComponent(record->activeClip) != nullptr &&
+                scene.animations.GetComponent(record->activeClip)->IsPlaying() &&
+                scene.animations.GetComponent(record->activeClip)->IsPlayingOnce())
+            {
+                requested = CharacterAnimationSemantic::Hit;
+                requestPlayback = false;
             }
             else if (combatRecord->shotsFired != record->observedShots)
             {
@@ -439,6 +589,7 @@ namespace renegade::runtime
             if (requestPlayback && requested == CharacterAnimationSemantic::Idle &&
                 record->clips[CharacterAnimationIndex(requested)].empty())
             {
+                StopCharacterAnimationBlend(scene, *record);
                 record->activeClip = wi::ecs::INVALID_ENTITY;
                 record->activeSemantic = requested;
                 record->resolvedClipName.clear();
@@ -448,6 +599,7 @@ namespace renegade::runtime
             if (requestPlayback)
                 (void)RequestCharacterAnimation(scene, state, *record, requested);
 
+            AdvanceCharacterAnimationBlend(scene, *record, dt);
             record->observedShots = combatRecord->shotsFired;
             record->observedReloads = combatRecord->reloads;
             record->observedDamage = combatRecord->damageTaken;

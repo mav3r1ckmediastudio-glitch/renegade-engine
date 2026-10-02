@@ -191,3 +191,21 @@ This is bounded new-import authoring. Custom slots, frame-range authoring,
 editing an existing Character, arbitrary multi-rig retargeting and universal
 FBX compatibility remain outside this slice. Exact validation is recorded in
 HANDOFF.md; independent verification and owner acceptance remain pending.
+
+## Separate runtime blending candidate
+
+The external-import checkpoint remains on feature/model-importer-rebuild.
+feature/character-animation-crossfades adds automatic runtime transitions using
+the existing per-character action assignments. It does not change importer UI.
+
+Idle/Walk/Run transitions crossfade over 0.20 seconds. Attack, Reload and Hit use
+short 0.08-second transitions; Death uses 0.05 seconds and stays terminal.
+Repeated requests preserve active playback. Interrupted fades retain current
+weights, and a returning loop retains its phase. AI movement remains owned by
+the existing Character controller.
+
+Matching whole-clip track coverage is required for blending. Partial tracks and
+event-bearing clips retain immediate switches. This is crossfade support, not a
+speed blend space, directional locomotion, upper-body layer or additive recoil.
+Durations are fixed runtime defaults in this slice. Owner acceptance, packaged
+export, large-crowd performance and independent verification remain pending.

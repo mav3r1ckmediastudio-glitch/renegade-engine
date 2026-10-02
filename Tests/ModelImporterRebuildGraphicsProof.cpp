@@ -13,6 +13,7 @@
 #include "../Studio/src/ModelImportPreview.h"
 #include "../Runtime/src/RuntimeCharacterCollision.h"
 #include "../Runtime/src/RuntimeCharacterAnimation.h"
+#include "CharacterAnimationBlendProof.h"
 #include <WickedEngine.h>
 #include <Windows.h>
 
@@ -246,6 +247,66 @@ namespace
     }
 }
 
+bool VerifyRenderedCharacterCrossfades(const wi::scene::Scene& source,
+    const std::vector<std::string>& actions, const fs::path& root)
+{
+    using namespace renegade::runtime;
+    wi::scene::Scene scene;
+    wi::Archive clone;
+    const_cast<wi::scene::Scene&>(source).Serialize(clone);
+    clone.SetReadModeAndResetPos(true);
+    scene.Serialize(clone);
+    RuntimeCharacterAnimationState state;
+    state.characters.emplace_back();
+    auto& record = state.characters.front();
+    for (std::size_t i = 0; i < actions.size(); ++i)
+    {
+        CharacterAnimationSemantic semantic;
+        if (actions[i] == "Idle") semantic = CharacterAnimationSemantic::Idle;
+        else if (actions[i] == "Walk") semantic = CharacterAnimationSemantic::Locomotion;
+        else if (actions[i] == "Run") semantic = CharacterAnimationSemantic::Run;
+        else continue;
+        const auto entity = scene.animations.GetEntity(i);
+        record.clips[CharacterAnimationIndex(semantic)].push_back({entity, actions[i]});
+    }
+    std::string error;
+    auto capture = [&](const char* label)
+    {
+        for (const auto& clip : record.blendClips)
+        {
+            auto* animation = scene.animations.GetComponent(clip.entity);
+            animation->timer = animation->start + animation->GetLength() * 0.25f;
+            animation->Pause();
+        }
+        ApplyCharacterAnimationBlend(scene, record);
+        scene.Update(0.0f);
+        renegade::studio::ModelImportPreview preview;
+        std::vector<std::uint8_t> png;
+        if (!Require(preview.Prepare(scene, error), error) || !RenderPreview(preview) ||
+            !Require(preview.CapturePng(png, error), error)) return false;
+        std::ofstream image(root / (std::string("blend-") + label + ".png"), std::ios::binary);
+        image.write(reinterpret_cast<const char*>(png.data()), png.size());
+        return image.good();
+    };
+    if (!RequestCharacterAnimation(scene, state, record, CharacterAnimationSemantic::Idle) ||
+        !capture("idle")) return false;
+    for (const auto& step : {
+        std::pair{CharacterAnimationSemantic::Locomotion, "idle-walk"},
+        std::pair{CharacterAnimationSemantic::Run, "walk-run"},
+        std::pair{CharacterAnimationSemantic::Idle, "run-idle"}})
+    {
+        if (!RequestCharacterAnimation(scene, state, record, step.first) ||
+            !Require(record.blendDuration > 0.0f, "real clips have incompatible blend tracks"))
+            return false;
+        AdvanceCharacterAnimationBlend(scene, record, 0.10f);
+        if (!capture((std::string(step.second) + "-half").c_str())) return false;
+        AdvanceCharacterAnimationBlend(scene, record, 0.10f);
+        if (!capture(step.second)) return false;
+    }
+    std::cout << "REAL CHARACTER CROSSFADE RENDER SNAPSHOTS PASS\n";
+    return true;
+}
+
 int main(int argc, char** argv)
 {
     if (argc < 4)
@@ -333,6 +394,7 @@ int main(int argc, char** argv)
         else
         {
             wi::initializer::InitializeComponentsImmediate();
+            if (!VerifyNativeCharacterCrossfades()) return 30;
             if (reopening)
             {
                 ReusableModelAssetDocument document;
@@ -453,6 +515,7 @@ int main(int argc, char** argv)
                     if (!Require(preview.CapturePng(request.thumbnailPng, previewError), previewError)) return 27;
                     std::cout << "CHARACTER PREVIEW SELECT/SCRUB/PLAY/PAUSE/SPEED/ISOLATION PASS\n";
                 }
+                if (argc >= 8 && !VerifyRenderedCharacterCrossfades(*candidate.PeekScene(), request.animationActions, root)) return 31;
                 if (isFbx)
                 {
                     if (!Require(!candidate.Dependencies().empty(), "textured FBX has no dependency snapshots")) return 17;

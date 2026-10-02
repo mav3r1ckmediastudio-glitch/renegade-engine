@@ -22,6 +22,7 @@ namespace
         animation.end = 4.0f;
         wi::scene::AnimationComponent::AnimationChannel channel;
         channel.target = target;
+        channel.path = wi::scene::AnimationComponent::AnimationChannel::Path::TRANSLATION;
         animation.channels.push_back(channel);
         return entity;
     }
@@ -252,6 +253,30 @@ int main()
             CharacterAnimationSemantic::Attack) || assigned->activeClip != explicitAttack)
         return Fail("authored actions must override names; reference pose is not Idle");
 
-    std::cout << "AI06_PASS semantic-native-playback-variants-action-run-fallback\n";
+    const auto hit = AddClip(scene, character, "Hit");
+    record->clips[CharacterAnimationIndex(CharacterAnimationSemantic::Hit)].push_back({hit, "Hit"});
+    combat.characters.front().health = 100.0f;
+    record->observedHealth = 100.0f;
+    ++combat.characters.front().damageTaken;
+    UpdateRuntimeCharacterAnimations(scene, characters, decisions, combat, state, 0.04f);
+    if (record->activeClip != hit || record->blendDuration <= 0.0f)
+        return Fail("damage must interrupt locomotion with a short native fade");
+    ++combat.characters.front().shotsFired;
+    UpdateRuntimeCharacterAnimations(scene, characters, decisions, combat, state, 0.04f);
+    if (record->activeClip != hit)
+        return Fail("attack event must not interrupt an active hit reaction");
+    combat.characters.front().dead = true;
+    UpdateRuntimeCharacterAnimations(scene, characters, decisions, combat, state, 0.05f);
+    if (record->activeClip != wi::ecs::INVALID_ENTITY ||
+        record->activeSemantic != CharacterAnimationSemantic::Death ||
+        !record->blendClips.empty() || scene.animations.GetComponent(hit)->IsPlaying())
+        return Fail("unassigned Death must stop owned playback without a looping attack");
+    const auto missingAtDeath = state.missingRequests;
+    UpdateRuntimeCharacterAnimations(scene, characters, decisions, combat, state, 0.05f);
+    if (state.missingRequests != missingAtDeath)
+        return Fail("unassigned terminal Death must not retry every frame");
+    ResetRuntimeCharacterAnimations(state);
+    if (!state.characters.empty()) return Fail("reset retained transient blend state");
+    std::cout << "AI06_PASS semantic-native-playback-variants-action-run-fallback-hit-death\n";
     return 0;
 }
