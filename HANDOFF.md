@@ -912,3 +912,61 @@ Older copied runtime-proof has four clips and no nav grid, so this verifies laun
 startup and return, not owner pursuit blending acceptance. Owner must repeat the
 configured pursuit scenario with this paired build; Asset/Character selector next.
 No new code/build required: reused tested binary hashes. No push, merge or release gate.
+## 2026-10-02 owner-scene partial-track crossfade repair
+Implementation: 5fdd4c677bbffbad6472484690c51ad2d70b6cf1 on
+feature/character-animation-crossfades (no push/merge).
+Changed RuntimeCharacterAnimation.h, RuntimeLiveDiagnostics.cpp,
+CharacterAnimationBlendProof.h, ModelImporterRebuildGraphicsProof.cpp,
+docs/ARCHITECTURE.md and docs/FEATURE_MATRIX.csv REN-AI-007.
+Owner reported Run -> three attacks without blending -> stretch Idle loop.
+Live original test PID 44348 was the correct paired Runtime. Player had taken
+five hits and was dead (0 health), explaining return to Idle after combat.
+Captured its disposable Test Level under BUILD/no-import/blending-owner-captured.
+Two AI Characters; 13 assigned clips. Native inspection found 93-track source
+clips and 90-track retargeted clips: matching-coverage guard caused immediate
+switches between those groups. Native controllers had no competing animation list.
+Runtime startup now completes assigned transform coverage using constant tracks
+from the target's initial local pose; native blending remains authoritative.
+Only transient Runtime scene changes; saved Levels/importer products untouched.
+Event/non-transform tracks still use guarded fallback. Counters expose fades,
+incompatible switches and per-Character blend status through live diagnostics.
+
+Release MSBuild.exe (VS18 BuildTools) commands, from repository root:
+BUILD/no-import/Runtime/RenegadeRuntime.vcxproj /m:2 /verbosity:quiet /nologo
+/p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false
+/p:TargetName=RenegadeRuntime_BlendingFix -> PASS, build log owner-fix-runtime.
+Same switches without TargetName on RenegadeModelImporterRebuildGraphicsProof.vcxproj
+and Tests/RenegadeCharacterAiAnimationTests.vcxproj -> PASS.
+Logs under BUILD/no-import/blending-owner-*-build.log; existing MSB8029 warnings.
+ctest.exe --test-dir BUILD/no-import -C Release -R
+'ModelImporterRebuild|CharacterAiAnimation|HumanoidRetarget' --output-on-failure
+-> final PASS 9/9, 13.71s; log blending-owner-ctest-final.log.Native proof executable command (repository root):
+BUILD/no-import/Release/RenegadeModelImporterRebuildGraphicsProof.exe
+--inspect-scene BUILD/no-import/blending-owner-captured/Content/Scenes/TestLevel.wiscene
+BUILD/no-import/blending-owner-fixed-proof-final
+-> PASS exit 0; log blending-owner-fixed-proof-final.log.
+Synthetic native partial translation/rotation/scale midpoint, repeated sampling,
+completion and idempotent coverage tests pass. Existing lifecycle checks pass.
+Both owner Characters pass Idle/Walk/Run/Attack/Attack/Idle render checks.
+Initial inspection fixture produced blank images; corrected isolation retains
+referenced meshes and disables physics only in preview clones. Added pixel-content
+assertion so blank frames fail. Final character-1 run-attack-half, run-attack and
+attack-attack-half PNGs read and visually inspected: visible distinct poses.
+The source captured WISCENE is never saved or edited by inspection.
+
+Replaced only paired BUILD/no-import/BlendingTest/Runtime/RenegadeRuntime.exe
+with new Runtime_BlendingFix; preserved former bundle runtime as
+Runtime/RenegadeRuntime_PreCoverageFix.exe. New SHA256:
+E9EAA5EC91DCFE51BD5102969B7C7FD28376CC1EA004CFA81101D9B838172AE7.
+Original accepted Studio and original Runtime binaries remain untouched.
+Native Studio PLAY launched new Runtime PID 35704, parent 51056. Startup SUCCESS;
+13 clips; five crossfade transitions; zero incompatible transitions or missing
+requests; five hits and Player dead. Evidence: blending-owner-runtime-fixed-
+diagnostics.json, import-proof-blending-coverage-runtime.png and coverage-return.
+Runtime closed normally, Studio returned to the same owner Level ready to Play.
+Standalone visual screenshot did not frame the Character; visual transition proof
+comes from the inspected isolated owner-character renders, not this screenshot.
+Owner subjective gameplay acceptance is still required. Fixed durations remain
+0.20s loops, 0.08s actions, 0.05s Death. Idle variant scheduling/loop policy remains
+basic; this repair does not change which assigned Idle variant is selected.
+No Debug/full CI/package-export/layered blending claims or release gate completion.
