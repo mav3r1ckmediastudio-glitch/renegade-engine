@@ -720,6 +720,9 @@ target_include_directories(
 set_target_properties(RenegadeCharacterAiAnimationTests PROPERTIES
     FOLDER "Renegade/Tests"
 )
+# The Studio CI builds RenegadeBridgeTests before running the full CTest
+# registry, so this executable must be part of that aggregate dependency graph.
+add_dependencies(RenegadeBridgeTests RenegadeCharacterAiAnimationTests)
 add_test(
     NAME RenegadeCharacterAiAnimationTests
     COMMAND RenegadeCharacterAiAnimationTests

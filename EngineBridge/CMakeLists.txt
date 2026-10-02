@@ -219,6 +219,13 @@ target_link_libraries(RenegadeEngineBridge
         WickedEngine
 )
 
+# EngineBridge includes several large translation units. MSVC Debug CI can exceed
+# the default COFF section limit (C1128), so match Studio's /bigobj policy.
+target_compile_options(RenegadeEngineBridge
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>"
+)
+
 if(WIN32)
     target_link_libraries(RenegadeEngineBridge PRIVATE ws2_32)
     # LP06 packaging is Windows-first. Keep its Win32/BCrypt implementation out
