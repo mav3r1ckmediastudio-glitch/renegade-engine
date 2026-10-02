@@ -265,10 +265,12 @@ bool VerifyRenderedCharacterCrossfades(const wi::scene::Scene& source,
         if (actions[i] == "Idle") semantic = CharacterAnimationSemantic::Idle;
         else if (actions[i] == "Walk") semantic = CharacterAnimationSemantic::Locomotion;
         else if (actions[i] == "Run") semantic = CharacterAnimationSemantic::Run;
+        else if (actions[i] == "Attack") semantic = CharacterAnimationSemantic::Attack;
         else continue;
         const auto entity = scene.animations.GetEntity(i);
         record.clips[CharacterAnimationIndex(semantic)].push_back({entity, actions[i]});
     }
+    CompleteCharacterAnimationCoverage(scene, record);
     std::string error;
     auto capture = [&](const char* label)
     {
@@ -283,7 +285,7 @@ bool VerifyRenderedCharacterCrossfades(const wi::scene::Scene& source,
         renegade::studio::ModelImportPreview preview;
         std::vector<std::uint8_t> png;
         if (!Require(preview.Prepare(scene, error), error) || !RenderPreview(preview) ||
-            !Require(preview.CapturePng(png, error), error)) return false;
+            !Require(preview.CapturePng(png, error), error) || !VerifyThumbnailPixels(png)) return false;
         std::ofstream image(root / (std::string("blend-") + label + ".png"), std::ios::binary);
         image.write(reinterpret_cast<const char*>(png.data()), png.size());
         return image.good();
@@ -293,14 +295,17 @@ bool VerifyRenderedCharacterCrossfades(const wi::scene::Scene& source,
     for (const auto& step : {
         std::pair{CharacterAnimationSemantic::Locomotion, "idle-walk"},
         std::pair{CharacterAnimationSemantic::Run, "walk-run"},
-        std::pair{CharacterAnimationSemantic::Idle, "run-idle"}})
+        std::pair{CharacterAnimationSemantic::Attack, "run-attack"},
+        std::pair{CharacterAnimationSemantic::Attack, "attack-attack"},
+        std::pair{CharacterAnimationSemantic::Idle, "attack-idle"}})
     {
         if (!RequestCharacterAnimation(scene, state, record, step.first) ||
             !Require(record.blendDuration > 0.0f, "real clips have incompatible blend tracks"))
             return false;
-        AdvanceCharacterAnimationBlend(scene, record, 0.10f);
+        const float halfDuration = record.blendDuration * 0.5f;
+        AdvanceCharacterAnimationBlend(scene, record, halfDuration);
         if (!capture((std::string(step.second) + "-half").c_str())) return false;
-        AdvanceCharacterAnimationBlend(scene, record, 0.10f);
+        AdvanceCharacterAnimationBlend(scene, record, halfDuration);
         if (!capture(step.second)) return false;
     }
     std::cout << "REAL CHARACTER CROSSFADE RENDER SNAPSHOTS PASS\n";
@@ -340,10 +345,11 @@ int main(int argc, char** argv)
     recipeCheck.externalAnimations.front().speed = 1.0f;
     recipeCheck.externalAnimations.front().action = std::string(1, char(10));
     if (!Require(!SerializeCreatorModelImportOptions(recipeCheck, encoded, recipeError), "control-character action accepted")) return 28;
-    const bool reopening = std::string(argv[1]) == "--reopen";
+    const bool inspecting = std::string(argv[1]) == "--inspect-scene";
+    const bool reopening = inspecting || std::string(argv[1]) == "--reopen";
     fs::path fixture = fs::weakly_canonical(fs::u8path(argv[1]));
     const fs::path externalFixture = fs::weakly_canonical(fs::u8path(argv[2]));
-    const fs::path root = fs::absolute(fs::u8path(reopening ? argv[2] : argv[3]));
+    const fs::path root = fs::absolute(fs::u8path(reopening && !inspecting ? argv[2] : argv[3]));
     const bool isFbx = fixture.extension() == ".fbx";
     const fs::path sourceRoot = root.parent_path() / (root.filename().generic_u8string() + "-source");
     if (!reopening && !Require(fs::is_regular_file(fixture) &&
@@ -394,6 +400,67 @@ int main(int argc, char** argv)
         else
         {
             wi::initializer::InitializeComponentsImmediate();
+            if (inspecting)
+            {
+                wi::scene::Scene scene;
+                wi::Archive archive(argv[2], true);
+                if (!Require(archive.IsOpen(), "inspection scene unavailable")) return 32;
+                scene.Serialize(archive);
+                for (size_t i = 0; i < scene.animations.GetCount(); ++i)
+                {
+                    const auto entity = scene.animations.GetEntity(i);
+                    const auto* name = scene.names.GetComponent(entity);
+                    const auto* meta = scene.metadatas.GetComponent(entity);
+                    std::cout << "CLIP " << i << " name=" << (name ? name->name : "")
+                        << " action=" << (meta ? meta->string_values.get(CreatorCharacterAnimationActionMetadataKey) : "")
+                        << " channels=" << scene.animations[i].channels.size() << '\n';
+                    for (size_t j = 0; j < i; ++j)
+                        std::cout << "PAIR " << j << "," << i << " compatible="
+                            << renegade::runtime::MatchingCharacterAnimationChannels(scene.animations[j], scene.animations[i]) << '\n';
+                }
+                if (!VerifyNativeCharacterCrossfades()) return 30;
+                for (size_t i = 0; i < scene.characters.GetCount(); ++i)
+                {
+                    wi::Archive snapshot;
+                    scene.Serialize(snapshot);
+                    snapshot.SetReadModeAndResetPos(true);
+                    wi::scene::Scene isolated;
+                    isolated.Serialize(snapshot);
+                    const auto actor = isolated.characters.GetEntity(i);
+                    auto belongs = [&](wi::ecs::Entity entity)
+                    {
+                        for (size_t depth = 0; depth <= isolated.hierarchy.GetCount(); ++depth)
+                        {
+                            if (entity == actor) return true;
+                            const auto* hierarchy = isolated.hierarchy.GetComponent(entity);
+                            if (!hierarchy) break;
+                            entity = hierarchy->parentID;
+                        }
+                        return false;
+                    };
+                    for (size_t o = isolated.objects.GetCount(); o-- > 0;)
+                        if (!belongs(isolated.objects.GetEntity(o)))
+                            isolated.objects.Remove(isolated.objects.GetEntity(o));
+                    const auto owned = CollectAnimationClips(isolated, actor, true);
+                    isolated.characters.Clear();
+                    isolated.rigidbodies.Clear();
+                    std::vector<std::string> actions;
+                    for (size_t a = 0; a < isolated.animations.GetCount(); ++a)
+                    {
+                        isolated.animations[a].Stop();
+                        const auto* meta = isolated.metadatas.GetComponent(isolated.animations.GetEntity(a));
+                        const auto entity = isolated.animations.GetEntity(a);
+                        const bool selected = std::any_of(owned.begin(), owned.end(),
+                            [entity](const auto& clip) { return clip.entity == entity; });
+                        actions.push_back(selected && meta ? meta->string_values.get(CreatorCharacterAnimationActionMetadataKey) : "");
+                    }
+                    const auto evidence = root / ("character-" + std::to_string(i));
+                    fs::create_directories(evidence);
+                    std::cout << "ISOLATED CHARACTER " << i << " clips=" << actions.size() << '\n';
+                    if (!VerifyRenderedCharacterCrossfades(isolated, actions, evidence)) return 33;
+                }
+                return 0;
+            }
             if (!VerifyNativeCharacterCrossfades()) return 30;
             if (reopening)
             {

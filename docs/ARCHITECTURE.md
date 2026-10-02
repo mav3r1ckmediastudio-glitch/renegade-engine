@@ -767,3 +767,16 @@ the fade, and paused gameplay does not advance it. Native root motion is disable
 for AI-owned clips because the existing Character controller owns movement.
 An active Hit finishes before a new shot/reload; Death is terminal. Unassigned
 Idle or Death stops owned playback without substituting a bind pose.
+
+### Runtime Character crossfades with differing transform coverage
+
+Assigned Character clips use the union of their target/path transform tracks.
+At Runtime animation initialization, missing translation, rotation or scale
+tracks receive a constant native AnimationDataComponent using that target's
+initial authored local transform. These additions occur only in the transient
+Runtime scene; importer products and saved editor Levels are unchanged.
+Coverage completion is idempotent and scoped to the Character's assigned clips.
+Event or non-transform tracks retain the guarded immediate-switch fallback.
+Native cumulative animation amounts still own pose blending; the native
+Character controller owns movement. Diagnostics expose crossfade and fallback
+counts so owner gameplay reports can distinguish a short fade from no fade.

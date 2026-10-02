@@ -81,6 +81,8 @@ namespace renegade::runtime
         std::vector<RuntimeAnimationBlendClip> blendClips;
         float blendElapsed = 0.0f;
         float blendDuration = 0.0f;
+        std::uint64_t crossfadeTransitions = 0;
+        std::uint64_t incompatibleTransitions = 0;
     };
 
     struct RuntimeCharacterAnimationState
@@ -169,8 +171,66 @@ namespace renegade::runtime
             : nullptr;
     }
 
+    // Complete transform coverage in the transient Runtime scene before playback.
+    // Native sequential amounts need every contributing clip to write each path.
+    inline void CompleteCharacterAnimationCoverage(
+        wi::scene::Scene& scene, const RuntimeCharacterAnimationRecord& record)
+    {
+        using Channel = wi::scene::AnimationComponent::AnimationChannel;
+        std::vector<Channel> coverage;
+        for (const auto& variants : record.clips)
+            for (const auto& clip : variants)
+            {
+                const auto* animation = scene.animations.GetComponent(clip.entity);
+                if (!animation) return;
+                for (const auto& channel : animation->channels)
+                {
+                    if ((channel.path != Channel::Path::TRANSLATION &&
+                         channel.path != Channel::Path::ROTATION &&
+                         channel.path != Channel::Path::SCALE) ||
+                        !scene.transforms.GetComponent(channel.target))
+                        return; // Events and non-transform tracks retain the guarded fallback.
+                    if (std::none_of(coverage.begin(), coverage.end(), [&channel](const auto& other)
+                        { return other.target == channel.target && other.path == channel.path; }))
+                        coverage.push_back(channel);
+                }
+            }
+        for (const auto& variants : record.clips)
+            for (const auto& clip : variants)
+            {
+                auto* animation = scene.animations.GetComponent(clip.entity);
+                for (auto channel : coverage)
+                {
+                    if (std::any_of(animation->channels.begin(), animation->channels.end(),
+                        [&channel](const auto& other)
+                        { return other.target == channel.target && other.path == channel.path; }))
+                        continue;
+                    const auto* transform = scene.transforms.GetComponent(channel.target);
+                    const auto dataEntity = wi::ecs::CreateEntity();
+                    auto& data = scene.animation_datas.Create(dataEntity);
+                    data.keyframe_times = {animation->start};
+                    if (channel.path == Channel::Path::ROTATION)
+                        data.keyframe_data = {transform->rotation_local.x, transform->rotation_local.y,
+                            transform->rotation_local.z, transform->rotation_local.w};
+                    else
+                    {
+                        const auto value = channel.path == Channel::Path::TRANSLATION ?
+                            transform->translation_local : transform->scale_local;
+                        data.keyframe_data = {value.x, value.y, value.z};
+                    }
+                    wi::scene::AnimationComponent::AnimationSampler sampler;
+                    sampler.data = dataEntity;
+                    sampler.mode = wi::scene::AnimationComponent::AnimationSampler::STEP;
+                    channel.samplerIndex = static_cast<int>(animation->samplers.size());
+                    channel.retargetIndex = -1; // Values already belong to the destination skeleton.
+                    animation->samplers.push_back(sampler);
+                    animation->channels.push_back(channel);
+                }
+            }
+    }
+
     [[nodiscard]] inline bool InitializeRuntimeCharacterAnimations(
-        const wi::scene::Scene& scene,
+        wi::scene::Scene& scene,
         const RuntimeCharacterSystemState& characters,
         const RuntimeCombatState& combat,
         RuntimeCharacterAnimationState& state,
@@ -250,6 +310,7 @@ namespace renegade::runtime
                         return lhs.entity < rhs.entity;
                     });
             }
+            CompleteCharacterAnimationCoverage(scene, record);
             candidate.characters.push_back(std::move(record));
         }
 
@@ -331,8 +392,8 @@ namespace renegade::runtime
         }
         if (!compatible)
         {
-            // Partial skeleton tracks need a separate layered-animation design.
-            // Preserve the established immediate-switch behaviour for those.
+            if (!record.blendClips.empty()) ++record.incompatibleTransitions;
+            // Events and non-transform coverage retain an immediate switch.
             for (const auto& clip : record.blendClips)
                 if (clip.entity != incoming)
                 {
@@ -345,6 +406,7 @@ namespace renegade::runtime
         }
         else
         {
+            ++record.crossfadeTransitions;
             auto found = std::find_if(record.blendClips.begin(), record.blendClips.end(),
                 [incoming](const auto& clip) { return clip.entity == incoming; });
             if (found == record.blendClips.end())

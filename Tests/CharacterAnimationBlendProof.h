@@ -137,6 +137,33 @@ inline bool VerifyNativeCharacterCrossfades()
         record.blendDuration != 0.0f || scene.animations.GetComponent(idle)->IsPlaying())
         return false;
     StopCharacterAnimationBlend(scene, record);
-    std::cout << "NATIVE CROSSFADE POSE/ORDER/INTERRUPTION/PHASE/DEATH PASS\n";
+    record.activeClip = wi::ecs::INVALID_ENTITY;
+    record.activeSemantic = CharacterAnimationSemantic::Idle;
+    auto* reference = scene.transforms.GetComponent(actor);
+    reference->translation_local = XMFLOAT3(12, 0, 0);
+    reference->rotation_local = XMFLOAT4(0, 0, 0, 1);
+    reference->scale_local = XMFLOAT3(1, 1, 1);
+    CompleteCharacterAnimationCoverage(scene, record);
+    const auto dataCount = scene.animation_datas.GetCount();
+    CompleteCharacterAnimationCoverage(scene, record);
+    if (scene.animation_datas.GetCount() != dataCount ||
+        !MatchingCharacterAnimationChannels(*scene.animations.GetComponent(idle),
+            *scene.animations.GetComponent(walk))) return false;
+    if (!request(CharacterAnimationSemantic::Idle)) return false;
+    scene.Update(0.0f);
+    if (!request(CharacterAnimationSemantic::Locomotion) || record.blendDuration <= 0) return false;
+    AdvanceCharacterAnimationBlend(scene, record, 0.10f);
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        scene.Update(0.0f);
+        const auto* pose = scene.transforms.GetComponent(actor);
+        if (std::abs(pose->translation_local.x - 6) > 0.001f ||
+            std::abs(pose->rotation_local.w - 1) > 0.001f ||
+            std::abs(pose->scale_local.x - 1) > 0.001f) return false;
+    }
+    AdvanceCharacterAnimationBlend(scene, record, 0.10f);
+    scene.Update(0.0f);
+    if (std::abs(scene.transforms.GetComponent(actor)->translation_local.x - 12) > 0.001f) return false;
+    std::cout << "NATIVE CROSSFADE POSE/ORDER/INTERRUPTION/PHASE/DEATH/PARTIAL-COVERAGE PASS\n";
     return true;
 }

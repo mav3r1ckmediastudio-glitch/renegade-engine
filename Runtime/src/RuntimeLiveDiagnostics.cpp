@@ -476,12 +476,22 @@ namespace renegade::runtime
         std::uint64_t animationPlaybackCount = 0;
         std::uint64_t animationMissingCount = 0;
         std::uint64_t animationClipCount = 0;
+        std::uint64_t animationCrossfadeCount = 0;
+        std::uint64_t animationIncompatibleCount = 0;
+        std::string animationBlendState;
         std::string firstAnimationSemantic;
         std::string firstAnimationClip;
         std::string firstAnimationRequest;
         bool firstAnimationPlaying = false;
         for (const auto& animation : characterAnimationState_.characters)
         {
+            animationCrossfadeCount += animation.crossfadeTransitions;
+            animationIncompatibleCount += animation.incompatibleTransitions;
+            if (animationBlendState.size() < 2048)
+                animationBlendState += animation.characterId + ":" + animation.resolvedClipName +
+                    ":duration=" + std::to_string(animation.blendDuration) +
+                    ":contributors=" + std::to_string(animation.blendClips.size()) +
+                    ":fades=" + std::to_string(animation.crossfadeTransitions) + ";";
             animationPlaybackCount += animation.playbackRequests;
             animationMissingCount += animation.missingRequests;
             for (const auto& variants : animation.clips)
@@ -544,6 +554,9 @@ namespace renegade::runtime
             {"animation_clip_count", animationClipCount},
             {"animation_playback_requests", animationPlaybackCount},
             {"animation_missing_requests", animationMissingCount},
+            {"animation_crossfade_transitions", animationCrossfadeCount},
+            {"animation_incompatible_transitions", animationIncompatibleCount},
+            {"animation_blend_state", animationBlendState},
             {"first_animation_semantic", firstAnimationSemantic},
             {"first_animation_clip", firstAnimationClip},
             {"first_animation_request", firstAnimationRequest},
