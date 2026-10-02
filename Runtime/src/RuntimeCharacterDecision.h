@@ -93,6 +93,10 @@ namespace renegade::runtime
         float repathRemainingSeconds = 0.0f;
         float stuckSeconds = 0.0f;
         float exhaustedSearchMemoryAgeSeconds = -1.0f;
+        bool hasPursuitOrigin = false;
+        XMFLOAT3 pursuitOrigin = XMFLOAT3(0.0f, 0.0f, 0.0f);
+        std::string pursuitSubjectId;
+        std::string exhaustedPursuitSubjectId;
         std::uint64_t lastCognitionTick = 0;
         std::uint64_t transitionCount = 0;
         std::uint64_t pathRequests = 0;
@@ -183,6 +187,65 @@ namespace renegade::runtime
         return best;
     }
 
+    [[nodiscard]] inline float HorizontalDistance(
+        const XMFLOAT3& lhs,
+        const XMFLOAT3& rhs) noexcept
+    {
+        const float dx = lhs.x - rhs.x;
+        const float dz = lhs.z - rhs.z;
+        return std::sqrt(dx * dx + dz * dz);
+    }
+
+    [[nodiscard]] inline bool IsPursuitMemoryExhausted(
+        const CharacterDecisionRecord& decision,
+        const CharacterMemoryRecord& memory) noexcept
+    {
+        return !decision.exhaustedPursuitSubjectId.empty() &&
+            memory.subjectId == decision.exhaustedPursuitSubjectId;
+    }
+
+    inline void RefreshPursuitLeash(
+        const RuntimeCharacterRecord& character,
+        const CharacterCognitionRecord& cognition,
+        CharacterDecisionRecord& decision) noexcept
+    {
+        const CharacterMemoryRecord* memory = BestActionableMemory(cognition);
+        if (memory == nullptr)
+        {
+            decision.hasPursuitOrigin = false;
+            decision.pursuitSubjectId.clear();
+            decision.exhaustedPursuitSubjectId.clear();
+            return;
+        }
+
+        if (decision.pursuitSubjectId != memory->subjectId)
+        {
+            decision.hasPursuitOrigin = false;
+            decision.pursuitSubjectId = memory->subjectId;
+            decision.exhaustedPursuitSubjectId.clear();
+        }
+
+        if (!memory->directSight || !memory->hostile || !memory->hasPosition)
+            return;
+
+        if (!decision.hasPursuitOrigin)
+        {
+            decision.pursuitOrigin = memory->lastKnownPosition;
+            decision.hasPursuitOrigin = true;
+        }
+
+        const float distance = HorizontalDistance(
+            memory->lastKnownPosition, decision.pursuitOrigin);
+        if (distance > character.tuning.pursuitDistance)
+        {
+            decision.exhaustedPursuitSubjectId = memory->subjectId;
+        }
+        else if (decision.exhaustedPursuitSubjectId == memory->subjectId)
+        {
+            decision.exhaustedPursuitSubjectId.clear();
+        }
+    }
+
     [[nodiscard]] inline bool IsSearchMemoryExhausted(
         const CharacterDecisionRecord& decision,
         const CharacterMemoryRecord& memory) noexcept
@@ -267,7 +330,10 @@ namespace renegade::runtime
         }
 
         const CharacterMemoryRecord* memory = BestActionableMemory(cognition);
-        if (memory != nullptr && !IsSearchMemoryExhausted(decision, *memory))
+        const bool pursuitExhausted =
+            memory != nullptr && IsPursuitMemoryExhausted(decision, *memory);
+        if (memory != nullptr && !pursuitExhausted &&
+            !IsSearchMemoryExhausted(decision, *memory))
         {
             const float knowledge = std::clamp(memory->confidence, 0.0f, 1.0f);
             const float curiosity = character.tuning.curiosity * 12.0f;
@@ -311,7 +377,7 @@ namespace renegade::runtime
                     30.0f + curiosity + knowledge * 6.0f});
             }
         }
-        else if (memory == nullptr &&
+        else if (!pursuitExhausted && memory == nullptr &&
                  cognition.awareness == AwarenessState::Searching &&
                  decision.searchRemainingSeconds > 0.0f &&
                  std::none_of(cognition.memories.begin(), cognition.memories.end(),
@@ -349,6 +415,7 @@ namespace renegade::runtime
         CharacterDecisionRecord& decision)
     {
         RefreshSearchExhaustion(cognition, decision);
+        RefreshPursuitLeash(character, cognition, decision);
         auto scores = ScoreCharacterIntents(character, cognition, decision);
         CaptureTopScores(decision, scores);
         if (scores.empty())

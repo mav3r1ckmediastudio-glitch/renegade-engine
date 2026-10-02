@@ -294,7 +294,7 @@ namespace renegade::studio
 
             [[nodiscard]] float MeasureAdvanced() const noexcept
             {
-                return 956.0f;
+                return 990.0f;
             }
 
             void Refresh()
@@ -499,6 +499,7 @@ namespace renegade::studio
                 place(preferredRange_);
                 place(cover_);
                 place(retreat_);
+                place(pursuitDistance_);
                 place(pursuit_);
                 place(suppression_);
                 group(communicationGroup_);
@@ -605,6 +606,9 @@ namespace renegade::studio
                 CreateOverrideSlider(retreat_, 0.0f, 1.0f, 0.25f, 1000.0f,
                     "AI Retreat Health", "RETREAT HEALTH",
                     &bridge::CharacterAdvancedOverrides::retreatHealthThreshold);
+                CreateOverrideSlider(pursuitDistance_, 0.0f, 250.0f, 45.0f, 2500.0f,
+                    "AI Pursuit Radius", "PURSUIT RADIUS",
+                    &bridge::CharacterAdvancedOverrides::pursuitDistance);
                 CreateOverrideSlider(pursuit_, 0.0f, 60.0f, 10.0f, 1200.0f,
                     "AI Pursuit Seconds", "PURSUIT DURATION",
                     &bridge::CharacterAdvancedOverrides::pursuitSeconds);
@@ -677,7 +681,7 @@ namespace renegade::studio
                     &memoryGroup_, &memory_, &suspicionDecay_, &search_,
                     &personalityGroup_, &aggression_, &courage_, &curiosity_, &alertness_,
                     &loyalty_, &combatGroup_, &accuracy_, &preferredRange_, &cover_,
-                    &retreat_, &pursuit_, &suppression_, &communicationGroup_,
+                    &retreat_, &pursuitDistance_, &pursuit_, &suppression_, &communicationGroup_,
                     &canCommunicate_, &communication_};
             }
 
@@ -687,7 +691,7 @@ namespace renegade::studio
                     &vision_, &horizontalFov_, &hearing_, &reaction_, &memory_,
                     &suspicionDecay_, &search_, &aggression_, &courage_, &curiosity_,
                     &alertness_, &loyalty_, &accuracy_, &preferredRange_, &cover_,
-                    &retreat_, &pursuit_, &suppression_, &communication_};
+                    &retreat_, &pursuitDistance_, &pursuit_, &suppression_, &communication_};
             }
 
             void ResolveSelection()
@@ -761,6 +765,7 @@ namespace renegade::studio
                 preferredRange_.SetValue(tuning.preferredCombatRange);
                 cover_.SetValue(tuning.coverPreference);
                 retreat_.SetValue(tuning.retreatHealthThreshold);
+                pursuitDistance_.SetValue(tuning.pursuitDistance);
                 pursuit_.SetValue(tuning.pursuitSeconds);
                 suppression_.SetValue(tuning.suppressionTolerance);
                 communication_.SetValue(tuning.communicationRange);
@@ -978,6 +983,7 @@ namespace renegade::studio
             SceneInspectorSlider preferredRange_;
             SceneInspectorSlider cover_;
             SceneInspectorSlider retreat_;
+            SceneInspectorSlider pursuitDistance_;
             SceneInspectorSlider pursuit_;
             SceneInspectorSlider suppression_;
             wi::gui::Label communicationGroup_;

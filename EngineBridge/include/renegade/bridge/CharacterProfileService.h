@@ -50,6 +50,7 @@ namespace renegade::bridge
 
         float coverPreference = 0.50f;
         float retreatHealthThreshold = 0.25f;
+        float pursuitDistance = 45.0f;
         float pursuitSeconds = 10.0f;
         float searchSeconds = 12.0f;
         float communicationRange = 25.0f;
@@ -81,6 +82,7 @@ namespace renegade::bridge
         std::optional<float> maxCombatRange;
         std::optional<float> coverPreference;
         std::optional<float> retreatHealthThreshold;
+        std::optional<float> pursuitDistance;
         std::optional<float> pursuitSeconds;
         std::optional<float> searchSeconds;
         std::optional<float> communicationRange;
@@ -111,6 +113,7 @@ namespace renegade::bridge
             lhs.maxCombatRange == rhs.maxCombatRange &&
             lhs.coverPreference == rhs.coverPreference &&
             lhs.retreatHealthThreshold == rhs.retreatHealthThreshold &&
+            lhs.pursuitDistance == rhs.pursuitDistance &&
             lhs.pursuitSeconds == rhs.pursuitSeconds &&
             lhs.searchSeconds == rhs.searchSeconds &&
             lhs.communicationRange == rhs.communicationRange &&
@@ -183,6 +186,7 @@ namespace renegade::bridge
                 tuning.preferredCombatRange, tuning.minCombatRange, tuning.maxCombatRange);
             tuning.coverPreference = Clamp01(tuning.coverPreference);
             tuning.retreatHealthThreshold = Clamp01(tuning.retreatHealthThreshold);
+            tuning.pursuitDistance = std::clamp(tuning.pursuitDistance, 0.0f, 1000.0f);
             tuning.pursuitSeconds = std::clamp(tuning.pursuitSeconds, 0.0f, 600.0f);
             tuning.searchSeconds = std::clamp(tuning.searchSeconds, 0.0f, 600.0f);
             tuning.communicationRange = std::clamp(tuning.communicationRange, 0.0f, 1000.0f);
@@ -419,6 +423,7 @@ namespace renegade::bridge
             RENEGADE_AI_APPLY_OVERRIDE(maxCombatRange);
             RENEGADE_AI_APPLY_OVERRIDE(coverPreference);
             RENEGADE_AI_APPLY_OVERRIDE(retreatHealthThreshold);
+            RENEGADE_AI_APPLY_OVERRIDE(pursuitDistance);
             RENEGADE_AI_APPLY_OVERRIDE(pursuitSeconds);
             RENEGADE_AI_APPLY_OVERRIDE(searchSeconds);
             RENEGADE_AI_APPLY_OVERRIDE(communicationRange);
@@ -474,6 +479,7 @@ namespace renegade::bridge
             RENEGADE_AI_PARSE_OVERRIDE(maxCombatRange, "max_range")
             RENEGADE_AI_PARSE_OVERRIDE(coverPreference, "cover")
             RENEGADE_AI_PARSE_OVERRIDE(retreatHealthThreshold, "retreat_health")
+            RENEGADE_AI_PARSE_OVERRIDE(pursuitDistance, "pursuit_distance")
             RENEGADE_AI_PARSE_OVERRIDE(pursuitSeconds, "pursuit")
             RENEGADE_AI_PARSE_OVERRIDE(searchSeconds, "search")
             RENEGADE_AI_PARSE_OVERRIDE(communicationRange, "communication")
@@ -514,8 +520,8 @@ namespace renegade::bridge
             o.suspicionDecay || o.alertThreshold || o.combatThreshold || o.aggression ||
             o.courage || o.curiosity || o.alertness || o.loyalty || o.accuracy ||
             o.preferredCombatRange || o.minCombatRange || o.maxCombatRange ||
-            o.coverPreference || o.retreatHealthThreshold || o.pursuitSeconds ||
-            o.searchSeconds || o.communicationRange || o.suppressionTolerance;
+            o.coverPreference || o.retreatHealthThreshold || o.pursuitDistance ||
+            o.pursuitSeconds || o.searchSeconds || o.communicationRange || o.suppressionTolerance;
     }
 
     [[nodiscard]] inline bool ValidateCharacterAdvancedOverrides(
@@ -549,6 +555,7 @@ namespace renegade::bridge
         if (!detail::FiniteInRange(o.preferredCombatRange, 0.0f, 500.0f)) return invalid("preferred combat range");
         if (!detail::FiniteInRange(o.minCombatRange, 0.0f, 500.0f)) return invalid("minimum combat range");
         if (!detail::FiniteInRange(o.maxCombatRange, 0.0f, 500.0f)) return invalid("maximum combat range");
+        if (!detail::FiniteInRange(o.pursuitDistance, 0.0f, 1000.0f)) return invalid("pursuit distance");
         if (!detail::FiniteInRange(o.pursuitSeconds, 0.0f, 600.0f)) return invalid("pursuit duration");
         if (!detail::FiniteInRange(o.searchSeconds, 0.0f, 600.0f)) return invalid("search duration");
         if (!detail::FiniteInRange(o.communicationRange, 0.0f, 1000.0f)) return invalid("communication range");
@@ -680,6 +687,7 @@ namespace renegade::bridge
         detail::AppendOverride(stream, "max_range", o.maxCombatRange);
         detail::AppendOverride(stream, "cover", o.coverPreference);
         detail::AppendOverride(stream, "retreat_health", o.retreatHealthThreshold);
+        detail::AppendOverride(stream, "pursuit_distance", o.pursuitDistance);
         detail::AppendOverride(stream, "pursuit", o.pursuitSeconds);
         detail::AppendOverride(stream, "search", o.searchSeconds);
         detail::AppendOverride(stream, "communication", o.communicationRange);

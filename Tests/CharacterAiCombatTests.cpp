@@ -137,6 +137,14 @@ int main()
     if (!ContainsIntent(attackScores, CharacterIntent::Attack))
         return Fail("direct in-range hostile target should score Attack");
 
+    decision.exhaustedPursuitSubjectId = RuntimePlayerKnowledgeId;
+    const auto disengagedScores = ScoreCharacterCombatIntents(
+        character, perception.characters.front(), decision, *combat);
+    if (ContainsIntent(disengagedScores, CharacterIntent::Attack) ||
+        ContainsIntent(disengagedScores, CharacterIntent::Chase))
+        return Fail("pursuit-exhausted target must not retain combat Attack/Chase");
+    decision.exhaustedPursuitSubjectId.clear();
+
     const float chance = ComputeCombatHitChance(
         character.tuning, combat->weapon, combat->targetDistance);
     if (!(chance >= 0.02f && chance <= 0.98f))

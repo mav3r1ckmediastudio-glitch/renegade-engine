@@ -153,6 +153,31 @@ int main()
     if (decision.intent != CharacterIntent::Chase)
         return Fail("direct hostile sight should select Chase");
 
+    // Pursuit is spatially bounded from the point where this hostile engagement
+    // began. Moving the visible target beyond the authored radius must break
+    // Chase and return to the configured normal role; re-entering that same
+    // engagement area permits a fresh Chase without requiring a new Character.
+    character.tuning.pursuitDistance = 30.0f;
+    const XMFLOAT3 pursuitOrigin = cognition.memories.front().lastKnownPosition;
+    cognition.memories.front().lastKnownPosition.x = pursuitOrigin.x + 31.0f;
+    decision.commitmentRemainingSeconds = 0.0f;
+    SelectIntent(character, cognition, decision);
+    if (decision.intent != CharacterIntent::Patrol ||
+        decision.exhaustedPursuitSubjectId != cognition.memories.front().subjectId)
+        return Fail("target outside pursuit radius must disengage to Patrol");
+
+    cognition.memories.front().lastKnownPosition.x = pursuitOrigin.x + 10.0f;
+    decision.commitmentRemainingSeconds = 0.0f;
+    SelectIntent(character, cognition, decision);
+    if (decision.intent != CharacterIntent::Chase ||
+        !decision.exhaustedPursuitSubjectId.empty())
+        return Fail("target re-entering pursuit radius must be chaseable again");
+
+    cognition.memories.front().lastKnownPosition = pursuitOrigin;
+    decision.hasPursuitOrigin = false;
+    decision.pursuitSubjectId.clear();
+    decision.exhaustedPursuitSubjectId.clear();
+
     character.authoring.autonomous = false;
     decision.intent = CharacterIntent::Patrol;
     decision.commitmentRemainingSeconds = 0.0f;

@@ -28,7 +28,10 @@ namespace renegade::runtime
             return scores;
 
         const CharacterMemoryRecord* memory = BestActionableMemory(cognition);
-        const bool hostileKnowledge = memory != nullptr && memory->hostile;
+        const bool pursuitExhausted =
+            memory != nullptr && IsPursuitMemoryExhausted(decision, *memory);
+        const bool hostileKnowledge =
+            memory != nullptr && memory->hostile && !pursuitExhausted;
         const bool directHostile = hostileKnowledge && memory->directSight &&
             combat.hasDirectHostileTarget;
         const float health = HealthFraction(combat);
@@ -170,6 +173,7 @@ namespace renegade::runtime
         const CombatEventEmitter& emitter)
     {
         RefreshSearchExhaustion(cognition, decision);
+        RefreshPursuitLeash(character, cognition, decision);
         auto scores = ScoreCharacterIntents(character, cognition, decision);
         const auto combatScores = ScoreCharacterCombatIntents(
             character, cognition, decision, combat);

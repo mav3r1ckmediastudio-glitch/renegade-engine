@@ -1,4 +1,21 @@
-## Latest checkpoint: continuous action tails and post-combat roles - 2 October 2026
+## Latest checkpoint: authored pursuit leash and disengagement - 2 October 2026
+
+Branch: feature/character-animation-crossfades.
+
+Added a profile-driven Pursuit Radius (default 45 m) to Advanced AI. Runtime
+latches the hostile engagement origin, suppresses Chase/Attack once the target
+moves beyond the authored radius, and allows re-engagement if the target comes
+back inside. The existing normal-role utility then resumes Guard/Patrol/Idle
+behaviour; existing search/death handling remains intact. AI-05 combat scoring
+respects the same exhausted pursuit subject so Attack cannot override disengage.
+
+Changed: CharacterProfileService.h, RuntimeCharacterDecision.h,
+RuntimeCombatDecision.h, AICharacterInspector.cpp, CharacterAiDecisionTests.cpp,
+CharacterAiCombatTests.cpp. Studio and Runtime v145 Release builds pass. Focused
+CTest: CharacterAi Profiles/Decision/Combat Tests + SourceContract = 6/6 pass.
+git diff --check passes. No push or merge.
+
+## Previous checkpoint: continuous action tails and post-combat roles - 2 October 2026
 
 Branch: feature/character-animation-crossfades.
 Implementation: e98deef50b7368c6593d191a4949df1ac45cb3ff (following 59420a5).
