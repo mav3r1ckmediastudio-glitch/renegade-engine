@@ -1,59 +1,85 @@
-# Source-geometry regression: the Review stage must leave thumbnail capture
-# and Confirm Import reachable below the asset destination, without overlap.
+# Rebuilt importer geometry and interaction regression.
+# The retired multi-stage Review UI was removed with the legacy importer.
 if(NOT DEFINED RENEGADE_SOURCE_DIR)
     message(FATAL_ERROR "RENEGADE_SOURCE_DIR is required")
 endif()
-file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp" importer)
-foreach(field IN ITEMS reviewTitleY reviewPreviewY)
-    string(REGEX MATCH "const float ${field} = ([0-9]+)\\.0f;" match "${importer}")
-    if(NOT match)
-        message(FATAL_ERROR "Importer Review ${field} has no literal layout anchor")
+
+set(STUDIO_SOURCE "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp")
+set(STUDIO_HEADER "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.h")
+foreach(path IN ITEMS "${STUDIO_SOURCE}" "${STUDIO_HEADER}")
+    if(NOT EXISTS "${path}")
+        message(FATAL_ERROR "Rebuilt importer contract input missing: ${path}")
     endif()
-    set(${field} "${CMAKE_MATCH_1}")
 endforeach()
-string(REGEX MATCH "creatorImportDestination.SetPos\\(XMFLOAT2\\(12\\.0f, ([0-9]+)\\.0f\\)\\);" dest_position "${importer}")
-if(NOT dest_position)
-    message(FATAL_ERROR "Importer destination position missing")
-endif()
-set(destinationTop "${CMAKE_MATCH_1}")
-string(REGEX MATCH "creatorImportDestination.SetSize\\(XMFLOAT2\\(importScalePanelWidth - 24\\.0f, ([0-9]+)\\.0f\\)\\);" dest_size "${importer}")
-if(NOT dest_size)
-    message(FATAL_ERROR "Importer destination height missing")
-endif()
-set(destinationHeight "${CMAKE_MATCH_1}")
-math(EXPR destinationBottom "${destinationTop} + ${destinationHeight}")
-math(EXPR minimumTitle "${destinationBottom} + 8")
-if(reviewTitleY LESS minimumTitle)
-    message(FATAL_ERROR "Importer Review title overlaps asset destination")
-endif()
-math(EXPR minimumPreview "${reviewTitleY} + 28 + 8")
-if(reviewPreviewY LESS minimumPreview)
-    message(FATAL_ERROR "Importer thumbnail preview overlaps Review title")
-endif()
-string(REGEX MATCH "340\\.0f, animationBodyHeight, ([0-9]+)\\.0f" review_body "${importer}")
-if(NOT review_body)
-    message(FATAL_ERROR "Importer Review scroll-body height missing")
-endif()
-set(reviewBodyHeight "${CMAKE_MATCH_1}")
-# 244 is the thumbnail's maximum side; remaining spacings and button heights
-# correspond to the actual Review stage layout in StudioApplication.cpp.
-math(EXPR cancelBottom "${reviewPreviewY} + 244 + 14 + 48 + 46 + 52 + 34")
-math(EXPR availableBottom "184 + ${reviewBodyHeight} - 8")
-if(cancelBottom GREATER availableBottom)
-    message(FATAL_ERROR "Importer Review final action exceeds scroll-body bounds")
-endif()
-# A Character button must change durable recipe kind, not merely its folder.
-# Both import selectors must keep the preview classification synchronized.
-foreach(required IN ITEMS
-    "creatorModelImporter.assetKind = bridge::CreatorAssetImportKind::Model;"
-    "creatorModelImporter.assetKind = bridge::CreatorAssetImportKind::Character;"
-    "creatorImportAssetKind.SetSelectedWithoutCallback(0);"
-    "creatorImportAssetKind.SetSelectedWithoutCallback(1);"
-    "creatorModelImporter.importAsCharacter = character;")
-    string(FIND "${importer}" "${required}" found)
+file(READ "${STUDIO_SOURCE}" importer)
+file(READ "${STUDIO_HEADER}" importer_header)
+
+function(require_text haystack_var needle description)
+    string(FIND "${${haystack_var}}" "${needle}" found)
     if(found EQUAL -1)
-        message(FATAL_ERROR "Importer Model/Character selectors out of sync: ${required}")
+        message(FATAL_ERROR
+            "Rebuilt importer contract missing ${description}: ${needle}")
     endif()
-endforeach()
-message(STATUS "Importer recipe-kind synchronization contract passed")
-message(STATUS "Importer Review layout contract passed: destination, thumbnail and final actions")
+endfunction()
+
+# The preview is a genuine native render target with explicit rotation controls.
+require_text(importer
+    "modelImportPreviewImage_.SetSize(XMFLOAT2(512.0f, 320.0f));"
+    "512x320 rendered preview")
+require_text(importer
+    "modelImportRotateLeft_.SetPos(XMFLOAT2(20.0f, 365.0f));"
+    "left rotation control below preview")
+require_text(importer
+    "modelImportRotateRight_.SetPos(XMFLOAT2(285.0f, 365.0f));"
+    "right rotation control below preview")
+require_text(importer_header
+    "std::unique_ptr<ModelImportPreview> modelImportPreview_;"
+    "real ModelImportPreview ownership")
+require_text(importer_header
+    "std::unique_ptr<bridge::ModelImportCandidate> modelImportCandidate_;"
+    "governed candidate ownership")
+
+# Static assets keep the compact layout; Characters expand the same native
+# importer and expose real clip/action controls rather than a painted panel.
+require_text(importer
+    "modelImportPanel_.SetSize(XMFLOAT2(560.0f, character ? 850.0f : 610.0f));"
+    "static/Character adaptive panel height")
+require_text(importer
+    "modelImportName_.SetPos(XMFLOAT2(110.0f, character ? 740.0f : 500.0f));"
+    "asset-name position below active controls")
+require_text(importer
+    "modelImportCommit_.SetPos(XMFLOAT2(20.0f, character ? 790.0f : 550.0f));"
+    "commit action remains reachable")
+require_text(importer
+    "modelImportCancel_.SetPos(XMFLOAT2(260.0f, character ? 790.0f : 550.0f));"
+    "cancel action remains reachable")
+require_text(importer
+    "modelImportAddAnimation_.SetPos(XMFLOAT2(20.0f, 685.0f));"
+    "external animation action above Character name")
+require_text(importer
+    "modelImportAction_.SetVisible(character);"
+    "Character-only semantic action control")
+require_text(importer
+    "modelImportClip_.SetVisible(character);"
+    "Character-only clip selector")
+require_text(importer
+    "modelImportTime_.SetVisible(character);"
+    "Character-only scrub control")
+require_text(importer
+    "modelImportSpeed_.SetVisible(character);"
+    "Character-only preview speed control")
+
+# Import is only committed after a rendered preview is ready and a thumbnail
+# can be captured from that same preview.
+require_text(importer
+    "modelImportCommit_.SetEnabled(modelImportPreview_->IsReady());"
+    "preview readiness gates import")
+require_text(importer
+    "!modelImportPreview_->CapturePng(request.thumbnailPng, thumbnailError)"
+    "commit captures real preview thumbnail")
+require_text(importer
+    "ModelImportCommitService().CommitModel("
+    "governed rebuilt importer commit")
+
+message(STATUS
+    "Rebuilt importer native review/layout contract passed")

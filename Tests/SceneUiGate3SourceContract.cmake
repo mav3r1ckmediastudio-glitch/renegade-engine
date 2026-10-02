@@ -117,11 +117,11 @@ require_text(studio_header_source
     "RenegadeTextInputField hubNewProjectNameInput_;"
     "Project Hub retains independent typography")
 require_text(studio_header_source
-    "RenegadeComboBox importScaleModeCombo_;"
-    "creator import scale UI retains independent typography")
+    "wi::gui::ComboBox modelImportAction_;"
+    "rebuilt creator importer retains independent native combo typography")
 require_text(studio_header_source
-    "RenegadeButton importScaleApplyButton_;"
-    "creator import action retains independent typography")
+    "wi::gui::Button modelImportCommit_;"
+    "rebuilt creator importer retains independent native action typography")
 
 # Existing headings were already readable and must stay that way while the
 # functional Inspector remains the scrollable opaque window host.

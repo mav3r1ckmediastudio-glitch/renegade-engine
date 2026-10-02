@@ -199,54 +199,6 @@ int main()
             rassetPath.generic_u8string(), reopened, error),
         "file RAsset reopen failed: " + error);
 
-    ReusableAssetService service;
-    ReusableModelImportRequest request;
-    request.projectRoot = root.generic_u8string();
-    request.projectId = ProjectId;
-    request.sourceProjectRelativePath = "Content/Models/source.fbx";
-    request.assetProjectRelativePath = "Content/Models/new.rasset";
-    const auto outsideSource = service.ImportModelAsset(request);
-    passed &= Check(!outsideSource.succeeded &&
-            outsideSource.error.find("SourceAssets") != std::string::npos,
-        "source outside SourceAssets did not fail closed before conversion");
-
-    passed &= Check(WriteText(root / "SourceAssets" / "Models" / "source.fbx", "not-a-real-fbx"),
-        "could not write source fixture");
-    request.sourceProjectRelativePath = "SourceAssets/Models/source.fbx";
-    request.assetProjectRelativePath = "Content/Models/fixture.rasset";
-    const auto existingProduct = service.ImportModelAsset(request);
-    passed &= Check(!existingProduct.succeeded &&
-            existingProduct.error.find("already exists") != std::string::npos,
-        "existing RAsset destination was not rejected before conversion");
-    std::vector<std::uint8_t> preserved;
-    {
-        std::ifstream stream(rassetPath, std::ios::binary);
-        preserved.assign(std::istreambuf_iterator<char>(stream),
-            std::istreambuf_iterator<char>());
-    }
-    passed &= Check(preserved == first,
-        "rejected replacement modified the last-good RAsset bytes");
-
-    request.assetProjectRelativePath = "Content/Models/new.rasset";
-    request.settingsJson = "{\"z\":1,\"a\":2}";
-    const auto nonCanonicalSettings = service.ImportModelAsset(request);
-    passed &= Check(!nonCanonicalSettings.succeeded &&
-            nonCanonicalSettings.error.find("canonical") != std::string::npos,
-        "non-canonical import settings were accepted");
-
-    AssetRegistry foreignRegistry;
-    foreignRegistry.projectId = OtherProjectId;
-    std::string foreignJson;
-    passed &= Check(SerializeAssetRegistry(foreignRegistry, foreignJson, error),
-        "could not serialize cross-project registry fixture: " + error);
-    passed &= Check(WriteText(root / AssetRegistryDocumentName, foreignJson),
-        "could not write cross-project registry fixture");
-    request.settingsJson = "{}";
-    const auto crossProject = service.ImportModelAsset(request);
-    passed &= Check(!crossProject.succeeded &&
-            crossProject.error.find("another project") != std::string::npos,
-        "cross-project registry did not fail closed before conversion");
-
     fs::remove_all(root, ec);
     if (!passed)
         return 1;

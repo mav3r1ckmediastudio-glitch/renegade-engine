@@ -62,8 +62,8 @@ require_text(chrome_header
     "CreatorAssetComboBox creatorAssetStateCombo_;"
     "readable creator state filter")
 require_text(chrome_header
-    "CreatorAssetButton creatorAssetImportButton_;"
-    "readable import action")
+    "CreatorAssetButton creatorAssetPlaceButton_;"
+    "readable placement action")
 require_text(chrome_header
     "AssetBrowserFolderScrollRow() const noexcept"
     "read-only folder scroll presentation seam")
@@ -179,8 +179,14 @@ require_text(asset_source
     "creatorAssetPlaceButton_.SetEnabled(modelProduct || textureAssignable);"
     "honest PLACE/ASSIGN enable state")
 require_text(asset_source
-    "creatorAction_(Action::ImportModel);"
-    "guided preview-first model import route")
+    "ADD > IMPORT MODEL belongs to StudioApplication's guided"
+    "Asset Browser no longer intercepts the rebuilt model importer route")
+require_text(studio_application
+    "case RenegadeStudioChrome::Action::ImportStaticGlb:"
+    "top-level ADD import action reaches StudioApplication")
+require_text(studio_application
+    "OpenStaticModelImporter();"
+    "rebuilt preview-first model importer route")
 require_text(asset_source
     "detail::WarmCreatorAssetDragPreparation("
     "visible-card placement warm-up")
