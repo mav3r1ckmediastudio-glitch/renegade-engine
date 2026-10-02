@@ -32,6 +32,12 @@ jobs:
     name: Renegade Studio Windows x64 ${{ matrix.configuration }}
     runs-on: windows-2025
     timeout-minutes: 60
+    env:
+      # GitHub-hosted Windows runners expose a DX12 device but do not provide
+      # the reliable visible-model presentation path used by the owner-hardware
+      # importer preview proof. Keep import/commit/reopen and PNG readback in CI;
+      # retain pixel-visibility/pose-difference assertions on real owner hardware.
+      RENEGADE_HOSTED_HEADLESS_GRAPHICS: "1"
     strategy:
       fail-fast: false
       matrix:

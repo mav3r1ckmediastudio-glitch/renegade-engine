@@ -7,9 +7,15 @@ target_link_libraries(RenegadeModelImporterRebuildGraphicsProof
 target_compile_definitions(RenegadeModelImporterRebuildGraphicsProof
     PRIVATE UNICODE _UNICODE)
 target_compile_options(RenegadeModelImporterRebuildGraphicsProof
-    PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+        "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>"
+)
 set_target_properties(RenegadeModelImporterRebuildGraphicsProof
     PROPERTIES FOLDER "Renegade/Tests")
+# RenegadeBridgeTests is the aggregate target built before the full CTest run.
+# Keep every registered test executable reachable from that aggregate.
+add_dependencies(RenegadeBridgeTests RenegadeModelImporterRebuildGraphicsProof)
 add_custom_command(TARGET RenegadeModelImporterRebuildGraphicsProof POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
