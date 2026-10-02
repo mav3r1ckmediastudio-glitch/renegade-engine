@@ -230,7 +230,12 @@ namespace renegade::runtime
 
         if (!decision.hasPursuitOrigin)
         {
-            decision.pursuitOrigin = memory->lastKnownPosition;
+            if (decision.hasLastPosition)
+                decision.pursuitOrigin = decision.lastPosition;
+            else if (decision.hasGuardPost)
+                decision.pursuitOrigin = decision.guardPost;
+            else
+                decision.pursuitOrigin = memory->lastKnownPosition;
             decision.hasPursuitOrigin = true;
         }
 
@@ -460,9 +465,16 @@ namespace renegade::runtime
         decision.hasGoal = false;
         decision.arrived = false;
         ++decision.transitionCount;
-        decision.lastTransitionReason =
-            std::string(ToString(decision.previousIntent)) + " -> " +
-            ToString(decision.intent) + " by utility";
+        const CharacterIntent normalRole = NormalRoleIntent(
+            character, decision.patrol.route.points.size() >= 2);
+        const CharacterMemoryRecord* transitionMemory = BestActionableMemory(cognition);
+        const bool returningFromPursuitLeash =
+            decision.intent == normalRole && transitionMemory != nullptr &&
+            IsPursuitMemoryExhausted(decision, *transitionMemory);
+        decision.lastTransitionReason = returningFromPursuitLeash
+            ? std::string("Pursuit radius exceeded -> return to ") + ToString(decision.intent)
+            : std::string(ToString(decision.previousIntent)) + " -> " +
+                ToString(decision.intent) + " by utility";
         if (decision.intent == CharacterIntent::Search)
             decision.searchRemainingSeconds = character.tuning.searchSeconds;
     }

@@ -400,8 +400,11 @@ namespace renegade::runtime
         std::string firstReserveAmmo;
         std::string firstReloadRemaining;
         std::string firstTargetDistance;
+        std::string firstPursuitOrigin;
+        std::string firstPursuitSubject;
         bool firstDirectSight = false;
         bool firstHasDecisionGoal = false;
+        bool firstPursuitExhausted = false;
         std::uint64_t totalMemories = 0;
         std::uint64_t totalCognitionTicks = 0;
         std::uint64_t totalIntentTransitions = 0;
@@ -450,6 +453,15 @@ namespace renegade::runtime
             firstIntentReason = first.lastTransitionReason;
             firstHasDecisionGoal = first.hasGoal;
             firstPatrolRouteId = first.patrol.routeId;
+            firstPursuitSubject = first.pursuitSubjectId;
+            firstPursuitExhausted = !first.exhaustedPursuitSubjectId.empty();
+            if (first.hasPursuitOrigin)
+            {
+                firstPursuitOrigin =
+                    std::to_string(first.pursuitOrigin.x) + "," +
+                    std::to_string(first.pursuitOrigin.y) + "," +
+                    std::to_string(first.pursuitOrigin.z);
+            }
             if (first.hasGoal)
             {
                 firstDecisionGoal =
@@ -545,6 +557,9 @@ namespace renegade::runtime
             {"first_has_decision_goal", firstHasDecisionGoal},
             {"first_decision_goal", firstDecisionGoal},
             {"first_patrol_route_id", firstPatrolRouteId},
+            {"first_pursuit_origin", firstPursuitOrigin},
+            {"first_pursuit_subject", firstPursuitSubject},
+            {"first_pursuit_exhausted", firstPursuitExhausted},
             {"first_top_utility_scores", firstTopScores},
             {"first_health", firstHealth},
             {"first_health_fraction", firstHealthFraction},

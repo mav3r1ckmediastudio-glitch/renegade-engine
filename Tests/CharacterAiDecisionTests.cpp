@@ -147,6 +147,9 @@ int main()
     cognition.memories.front().directSight = true;
     cognition.memories.front().secondsSinceSeen = 0.0f;
     cognition.awareness = AwarenessState::Combat;
+    const XMFLOAT3 pursuitOrigin(4.0f, 0.0f, 2.0f);
+    decision.lastPosition = pursuitOrigin;
+    decision.hasLastPosition = true;
     decision.intent = CharacterIntent::Patrol;
     decision.commitmentRemainingSeconds = 0.0f;
     SelectIntent(character, cognition, decision);
@@ -158,13 +161,18 @@ int main()
     // Chase and return to the configured normal role; re-entering that same
     // engagement area permits a fresh Chase without requiring a new Character.
     character.tuning.pursuitDistance = 30.0f;
-    const XMFLOAT3 pursuitOrigin = cognition.memories.front().lastKnownPosition;
-    cognition.memories.front().lastKnownPosition.x = pursuitOrigin.x + 31.0f;
+    cognition.memories.front().lastKnownPosition = XMFLOAT3(
+        pursuitOrigin.x + 31.0f, 0.0f, pursuitOrigin.z);
     decision.commitmentRemainingSeconds = 0.0f;
     SelectIntent(character, cognition, decision);
     if (decision.intent != CharacterIntent::Patrol ||
-        decision.exhaustedPursuitSubjectId != cognition.memories.front().subjectId)
-        return Fail("target outside pursuit radius must disengage to Patrol");
+        decision.exhaustedPursuitSubjectId != cognition.memories.front().subjectId ||
+        decision.lastTransitionReason != "Pursuit radius exceeded -> return to Patrol" ||
+        !Near3(decision.pursuitOrigin, pursuitOrigin))
+        return Fail("target outside pursuit radius must disengage to Patrol from NPC engagement origin");
+    if (!ResolveIntentGoal(character, cognition, decision, goal) ||
+        !Near3(goal, route.points[decision.patrolPointIndex].position))
+        return Fail("disengaged Patrol must return to its authored patrol route");
 
     cognition.memories.front().lastKnownPosition.x = pursuitOrigin.x + 10.0f;
     decision.commitmentRemainingSeconds = 0.0f;
@@ -173,7 +181,7 @@ int main()
         !decision.exhaustedPursuitSubjectId.empty())
         return Fail("target re-entering pursuit radius must be chaseable again");
 
-    cognition.memories.front().lastKnownPosition = pursuitOrigin;
+    cognition.memories.front().lastKnownPosition = memory.lastKnownPosition;
     decision.hasPursuitOrigin = false;
     decision.pursuitSubjectId.clear();
     decision.exhaustedPursuitSubjectId.clear();

@@ -1,4 +1,20 @@
-## Latest checkpoint: authored pursuit leash and disengagement - 2 October 2026
+## Latest checkpoint: patrol/guard return diagnostics and NPC-centred pursuit - 2 October 2026
+
+Branch: feature/character-animation-crossfades.
+
+Pursuit origin is now the Character's own position when hostile engagement begins
+(last Runtime position, then authored guard/start post as fallback), not the
+player's first-seen position. Crossing Pursuit Radius suppresses Chase/Attack and
+returns utility to the configured normal role. Patrol resolves its existing
+authored route target; Guard resolves its saved start post. Transition diagnostics
+now report pursuit origin, subject, exhausted flag, decision goal and the explicit
+reason "Pursuit radius exceeded -> return to <role>".
+
+Focused Character AI Profiles/Decision/Combat Tests + SourceContract: 6/6 pass.
+Decision and Studio Release targets compile; Runtime ReturnRole build exists.
+git diff --check passes. No push or merge.
+
+## Previous checkpoint: authored pursuit leash and disengagement - 2 October 2026
 
 Branch: feature/character-animation-crossfades.
 
