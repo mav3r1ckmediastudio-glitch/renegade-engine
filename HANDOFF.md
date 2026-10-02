@@ -882,3 +882,33 @@ Final real Mutant proof rerun after the last source/test changes: PASS, exit 0,
 reimport/actions and 300-frame grounding pass. The final log is
 BUILD/no-import/blending-mutant-proof-final.log; disposable asset identity
 68c9f808-17ab-423c-b532-ee1595d9a095. No source files changed after that run.
+
+## 2026-10-02 owner importer acceptance and paired blending Test Level
+Owner reports ALL animation files imported, assigned actions and played correctly;
+with a nav grid, Character idles, walks, runs toward Player and attacks.
+Owner also confirms a fresh Level includes sky, sunlight and default nav grid.
+The older runtime-proof fixture intentionally lacks normal fresh-Level defaults.
+
+Prepared ignored BUILD/no-import/BlendingTest (no production source changes):
+RenegadeStudio_BlendingTest.exe is byte-identical to accepted AnimationImport
+Studio (SHA256 34AB99682403DB624C5182FAE2E82F440A8B2095EC2674406B6DA84BBA7F5561).
+Runtime/RenegadeRuntime.exe is byte-identical to crossfade Runtime_Blending
+(SHA256 BAC9ED6BC29CC44CE1E6F891BFC1E65218B881D6620675B8D386F1480C664C4E),
+implementation bea6313e2ebfa270fc955b4016f9e28215d5140e; prior handoff 0d4bcc5.
+Copied support Content/shaders/BuildInputs/DX compiler; original binaries untouched.
+Copied external-mutant-proof project to BUILD/no-import/blending-owner-project.
+Original editor PID 63288 had unsaved fresh-Level edits: cancelled its close
+prompt, preserved it open and minimized. New paired editor PID 51056 is open.
+
+Native Studio PLAY launched PID 7280, parent 51056, using the bundle Runtime
+and copied-project Intermediate/TestLevelSnapshots/1790939239452207-0000000000.
+GET http://127.0.0.1:38742/snapshot: startup SUCCESS, scene loaded, Player spawned,
+Character synced, mutant idle playing; no missing animation request.
+Normal CloseMainWindow on child Runtime returned paired Studio to READY /
+TEST LEVEL COMPLETED; child exited. Screenshots visually inspected:
+BUILD/no-import/import-proof-blending-pair-editor.png (fresh Level defaults),
+import-proof-blending-pair-runtime.png and import-proof-blending-pair-return.png.
+Older copied runtime-proof has four clips and no nav grid, so this verifies launch,
+startup and return, not owner pursuit blending acceptance. Owner must repeat the
+configured pursuit scenario with this paired build; Asset/Character selector next.
+No new code/build required: reused tested binary hashes. No push, merge or release gate.
