@@ -1,4 +1,42 @@
-## Latest checkpoint: patrol/guard return diagnostics and NPC-centred pursuit - 2 October 2026
+## Latest checkpoint: Wander normal role with 2x2 terrain-chunk extent - 2 October 2026
+
+Branch: feature/character-animation-crossfades.
+
+Added Wander as a first-class Character Role/Behaviour dropdown option without
+changing existing persisted role values. CharacterAuthoringSettings now owns a
+wanderExtentChunks value with default 2; the value persists through native
+Character metadata, WISCENE entity serialization, duplication and Character
+Prefab serialization. Existing prefabs without the field default to 2.
+
+Runtime Wander uses the existing Wicked CharacterComponent/PathQuery movement
+pipeline. At Runtime start it captures a fixed Wander origin from the Character
+spawn position and derives world chunk span from the active Terrain chunkScale.
+It chooses deterministic meandering destinations inside the fixed configured
+extent, rejects/retries unreachable goals through the existing navigation query,
+idles for a deterministic 1-4 seconds on arrival, then chooses another point.
+Stuck recovery also abandons the current random destination rather than retrying
+it forever. Wander uses Locomotion while travelling and Idle while paused.
+
+Combat/threat states still interrupt the normal role. When the threat is dead or
+pursuit disengages, NormalRoleIntent resolves back to Wander and requests a fresh
+Wander destination. The existing pursuit/vision separation and animation
+crossfade implementation were not replaced.
+
+Diagnostics expose first_wander_origin, first_wander_extent_chunks and
+first_wander_visit_count alongside existing intent/goal diagnostics.
+
+Validation:
+- EngineBridge Release rebuild: exit 0.
+- AI Profiles, AI Decision, AI Combat and CW05 Character Prefab executables: pass.
+- Focused CTest Profiles/Decision/Combat + source contracts + CW05 Prefab: 8/8 pass.
+- Runtime RenegadeRuntime_Wander Release build: exit 0.
+- Studio RenegadeStudio_Wander Release build: exit 0.
+- git diff --check passes.
+Known build warnings are the pre-existing MSB8029 build-directory warnings plus
+existing C4834 nodiscard warnings in unrelated RenderSettings/Studio code.
+No push or merge.
+
+## Previous checkpoint: patrol/guard return diagnostics and NPC-centred pursuit - 2 October 2026
 
 Branch: feature/character-animation-crossfades.
 

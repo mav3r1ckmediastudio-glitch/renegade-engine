@@ -700,7 +700,9 @@ namespace renegade::runtime
                 requested = CharacterAnimationSemantic::Run;
                 requestPlayback = record->activeSemantic != requested;
             }
-            else if (decision->intent == CharacterIntent::Patrol ||
+            else if ((decision->intent == CharacterIntent::Wander &&
+                      decision->hasGoal && !decision->arrived) ||
+                decision->intent == CharacterIntent::Patrol ||
                 decision->intent == CharacterIntent::Investigate ||
                 decision->intent == CharacterIntent::Search)
             {

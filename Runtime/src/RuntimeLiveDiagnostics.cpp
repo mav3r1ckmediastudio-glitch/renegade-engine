@@ -402,6 +402,9 @@ namespace renegade::runtime
         std::string firstTargetDistance;
         std::string firstPursuitOrigin;
         std::string firstPursuitSubject;
+        std::string firstWanderOrigin;
+        std::uint64_t firstWanderExtentChunks = 0;
+        std::uint64_t firstWanderVisitCount = 0;
         bool firstDirectSight = false;
         bool firstHasDecisionGoal = false;
         bool firstPursuitExhausted = false;
@@ -415,6 +418,8 @@ namespace renegade::runtime
             firstFaction = first.authoring.factionId;
             firstVisionDistance = std::to_string(first.tuning.visionDistance);
             firstAggression = std::to_string(first.tuning.aggression);
+            firstWanderExtentChunks = static_cast<std::uint64_t>(
+                std::max(0, first.authoring.wanderExtentChunks));
         }
         for (const auto& cognition : characterPerceptionState_.characters)
         {
@@ -455,6 +460,14 @@ namespace renegade::runtime
             firstPatrolRouteId = first.patrol.routeId;
             firstPursuitSubject = first.pursuitSubjectId;
             firstPursuitExhausted = !first.exhaustedPursuitSubjectId.empty();
+            firstWanderVisitCount = first.wanderVisitCount;
+            if (first.hasWanderOrigin)
+            {
+                firstWanderOrigin =
+                    std::to_string(first.wanderOrigin.x) + "," +
+                    std::to_string(first.wanderOrigin.y) + "," +
+                    std::to_string(first.wanderOrigin.z);
+            }
             if (first.hasPursuitOrigin)
             {
                 firstPursuitOrigin =
@@ -560,6 +573,9 @@ namespace renegade::runtime
             {"first_pursuit_origin", firstPursuitOrigin},
             {"first_pursuit_subject", firstPursuitSubject},
             {"first_pursuit_exhausted", firstPursuitExhausted},
+            {"first_wander_origin", firstWanderOrigin},
+            {"first_wander_extent_chunks", firstWanderExtentChunks},
+            {"first_wander_visit_count", firstWanderVisitCount},
             {"first_top_utility_scores", firstTopScores},
             {"first_health", firstHealth},
             {"first_health_fraction", firstHealthFraction},

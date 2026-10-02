@@ -97,6 +97,7 @@ namespace
         document.settings.skill = SkillPreset::Elite;
         document.settings.awareness = AwarenessPreset::Vigilant;
         document.settings.canSurrender = true;
+        document.settings.wanderExtentChunks = 5;
         document.settings.patrolRouteEntityId.clear();
         document.settings.weaponEntityId.clear();
 
@@ -134,6 +135,7 @@ int main()
     configured.combatStyle = CombatStyle::Ranged;
     configured.skill = SkillPreset::Veteran;
     configured.awareness = AwarenessPreset::Alert;
+    configured.wanderExtentChunks = 4;
     configured.canSurrender = true;
     const wi::ecs::Entity source = MakeCharacter(scene, configured);
     if (!Require(source != wi::ecs::INVALID_ENTITY,

@@ -144,6 +144,7 @@ namespace renegade::studio
                 AddEnum(role_, "COMPANION", bridge::CharacterRole::Companion);
                 AddEnum(role_, "PREDATOR", bridge::CharacterRole::Predator);
                 AddEnum(role_, "PASSIVE", bridge::CharacterRole::Passive);
+                AddEnum(role_, "WANDER", bridge::CharacterRole::Wander);
                 AddEnum(role_, "CUSTOM", bridge::CharacterRole::Custom);
                 role_.OnSelect([this](const wi::gui::EventArgs& args)
                 {

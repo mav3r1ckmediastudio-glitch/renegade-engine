@@ -44,6 +44,7 @@ namespace renegade::bridge
     inline constexpr const char* CharacterFactionMetadataKey = "renegade.character.faction";
     inline constexpr const char* CharacterAnimationSetMetadataKey = "renegade.character.animation_set";
     inline constexpr const char* CharacterPatrolRouteMetadataKey = "renegade.character.patrol_route_id";
+    inline constexpr const char* CharacterWanderExtentChunksMetadataKey = "renegade.character.wander_extent_chunks";
     inline constexpr const char* CharacterSquadMetadataKey = "renegade.character.squad";
     inline constexpr const char* CharacterWeaponMetadataKey = "renegade.character.weapon_id";
     inline constexpr const char* CharacterCombatStyleMetadataKey = "renegade.character.combat_style";
@@ -172,6 +173,7 @@ namespace renegade::bridge
         Predator,
         Passive,
         Custom,
+        Wander,
     };
 
     enum class PersonalityPreset : std::int32_t
@@ -219,6 +221,7 @@ namespace renegade::bridge
         std::string factionId = "Neutral";
         StableId animationSetId;
         StableId patrolRouteEntityId;
+        int wanderExtentChunks = 2;
         std::string squadId;
         StableId weaponEntityId;
         CombatStyle combatStyle = CombatStyle::None;

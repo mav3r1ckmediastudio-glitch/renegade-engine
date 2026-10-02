@@ -4,6 +4,7 @@
 #include "RuntimeCharacterSystem.h"
 #include "renegade/bridge/NavigationService.h"
 #include "renegade/bridge/PatrolRouteService.h"
+#include "renegade/bridge/TerrainService.h"
 
 #include <DirectXMath.h>
 
@@ -23,6 +24,7 @@ namespace renegade::runtime
     {
         Idle = 0,
         Patrol,
+        Wander,
         Guard,
         Investigate,
         Search,
@@ -47,6 +49,7 @@ namespace renegade::runtime
         switch (intent)
         {
         case CharacterIntent::Patrol: return "Patrol";
+        case CharacterIntent::Wander: return "Wander";
         case CharacterIntent::Guard: return "Guard";
         case CharacterIntent::Investigate: return "Investigate";
         case CharacterIntent::Search: return "Search";
@@ -104,12 +107,18 @@ namespace renegade::runtime
         std::size_t patrolPointIndex = 0;
         int patrolDirection = 1;
         std::uint64_t patrolVisitCount = 0;
+        std::uint64_t wanderVisitCount = 0;
         std::size_t searchPointIndex = 0;
         bool hasGoal = false;
         bool arrived = false;
         bool hasLastPosition = false;
         bool hasGuardPost = false;
+        bool hasWanderOrigin = false;
+        bool hasWanderGoal = false;
         XMFLOAT3 guardPost = XMFLOAT3(0, 0, 0);
+        XMFLOAT3 wanderOrigin = XMFLOAT3(0, 0, 0);
+        XMFLOAT3 wanderGoal = XMFLOAT3(0, 0, 0);
+        float wanderChunkSpan = bridge::TerrainChunkSpanInVertices;
         XMFLOAT3 goal = XMFLOAT3(0.0f, 0.0f, 0.0f);
         XMFLOAT3 lastPosition = XMFLOAT3(0.0f, 0.0f, 0.0f);
         std::array<CharacterIntentScore, 3> topScores{};
@@ -305,6 +314,8 @@ namespace renegade::runtime
             return CharacterIntent::Patrol;
         switch (character.authoring.role)
         {
+        case bridge::CharacterRole::Wander:
+            return CharacterIntent::Wander;
         case bridge::CharacterRole::Guard:
         case bridge::CharacterRole::Soldier:
         case bridge::CharacterRole::Companion:
@@ -477,6 +488,12 @@ namespace renegade::runtime
                 ToString(decision.intent) + " by utility";
         if (decision.intent == CharacterIntent::Search)
             decision.searchRemainingSeconds = character.tuning.searchSeconds;
+        if (decision.intent == CharacterIntent::Wander &&
+            decision.previousIntent != CharacterIntent::Wander)
+        {
+            decision.hasWanderGoal = false;
+            decision.waitRemainingSeconds = 0.0f;
+        }
     }
 
     [[nodiscard]] inline std::size_t StableRandomPatrolIndex(
@@ -528,6 +545,52 @@ namespace renegade::runtime
         }
     }
 
+    [[nodiscard]] inline float StableWanderUnit(
+        const CharacterDecisionRecord& decision,
+        const std::uint64_t salt) noexcept
+    {
+        std::uint64_t hash = 1469598103934665603ull;
+        for (const unsigned char value : decision.characterId)
+        {
+            hash ^= value;
+            hash *= 1099511628211ull;
+        }
+        hash ^= decision.wanderVisitCount + salt * 0x9e3779b97f4a7c15ull;
+        hash *= 1099511628211ull;
+        return static_cast<float>(hash & 0x00FFFFFFull) /
+            static_cast<float>(0x01000000ull);
+    }
+
+    inline void ChooseWanderGoal(
+        const RuntimeCharacterRecord& character,
+        CharacterDecisionRecord& decision) noexcept
+    {
+        if (!decision.hasWanderOrigin)
+            return;
+        const float extentChunks = static_cast<float>(
+            std::clamp(character.authoring.wanderExtentChunks, 1, 16));
+        const float halfExtent = std::max(
+            1.0f, decision.wanderChunkSpan * extentChunks * 0.5f);
+        const float margin = std::min(decision.wanderChunkSpan * 0.10f, halfExtent * 0.20f);
+        const float usable = std::max(1.0f, halfExtent - margin);
+
+        XMFLOAT3 candidate = decision.wanderOrigin;
+        for (std::uint64_t attempt = 0; attempt < 8; ++attempt)
+        {
+            const float unitX = StableWanderUnit(decision, attempt * 2 + 1);
+            const float unitZ = StableWanderUnit(decision, attempt * 2 + 2);
+            candidate.x = decision.wanderOrigin.x + (unitX * 2.0f - 1.0f) * usable;
+            candidate.z = decision.wanderOrigin.z + (unitZ * 2.0f - 1.0f) * usable;
+            candidate.y = decision.wanderOrigin.y;
+            const float minimumStep = std::min(5.0f, usable * 0.25f);
+            if (!decision.hasLastPosition ||
+                HorizontalDistance(candidate, decision.lastPosition) >= minimumStep)
+                break;
+        }
+        decision.wanderGoal = candidate;
+        decision.hasWanderGoal = true;
+    }
+
     [[nodiscard]] inline XMFLOAT3 SearchOffset(
         const std::size_t index) noexcept
     {
@@ -556,6 +619,15 @@ namespace renegade::runtime
         case CharacterIntent::Guard:
             if (!decision.hasGuardPost) return false;
             goal = decision.guardPost;
+            return true;
+        case CharacterIntent::Wander:
+            if (!decision.hasWanderOrigin)
+                return false;
+            if (!decision.hasWanderGoal)
+                ChooseWanderGoal(character, decision);
+            if (!decision.hasWanderGoal)
+                return false;
+            goal = decision.wanderGoal;
             return true;
         case CharacterIntent::Patrol:
             if (decision.patrol.route.points.size() < 2)
@@ -618,8 +690,19 @@ namespace renegade::runtime
             decision.characterId = character.stableEntityId;
             if (const auto* transform = scene.transforms.GetComponent(character.entity))
             {
-                decision.guardPost = transform->GetPosition();
+                const XMFLOAT3 start = transform->GetPosition();
+                decision.guardPost = start;
                 decision.hasGuardPost = true;
+                decision.wanderOrigin = start;
+                decision.hasWanderOrigin = true;
+                decision.lastPosition = start;
+                decision.hasLastPosition = true;
+            }
+            if (scene.terrains.GetCount() > 0)
+            {
+                const auto terrainState = bridge::CaptureTerrain(scene.terrains[0]);
+                decision.wanderChunkSpan = bridge::TerrainChunkSpanInVertices *
+                    std::max(0.01f, terrainState.chunkScale);
             }
             if (character.references.patrolRouteEntity != wi::ecs::INVALID_ENTITY)
             {
@@ -791,6 +874,14 @@ namespace renegade::runtime
                         decision->patrol.route.settings.waitSeconds;
                     AdvancePatrolPoint(*decision);
                 }
+                else if (decision->intent == CharacterIntent::Wander)
+                {
+                    ++decision->wanderVisitCount;
+                    decision->hasWanderGoal = false;
+                    decision->waitRemainingSeconds =
+                        1.0f + StableWanderUnit(*decision, 97) * 3.0f;
+                    decision->lastTransitionReason = "Wander destination reached -> idle pause";
+                }
                 else if (decision->intent == CharacterIntent::Investigate)
                 {
                     decision->previousIntent = decision->intent;
@@ -837,6 +928,11 @@ namespace renegade::runtime
                 else
                 {
                     ++state.rejectedGoals;
+                    if (decision->intent == CharacterIntent::Wander)
+                    {
+                        ++decision->wanderVisitCount;
+                        decision->hasWanderGoal = false;
+                    }
                 }
             }
 
@@ -894,6 +990,11 @@ namespace renegade::runtime
                 decision->stuckSeconds = 0.0f;
                 decision->hasGoal = false;
                 decision->repathRemainingSeconds = 0.0f;
+                if (decision->intent == CharacterIntent::Wander)
+                {
+                    ++decision->wanderVisitCount;
+                    decision->hasWanderGoal = false;
+                }
                 ++decision->stuckRecoveries;
                 ++state.stuckRecoveries;
                 decision->lastTransitionReason =

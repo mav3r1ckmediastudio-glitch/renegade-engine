@@ -123,6 +123,41 @@ int main()
     memory.ageSeconds = 3.0f;
     cognition.memories.push_back(memory);
 
+    // Wander is a first-class normal role. Its default two-chunk extent is a
+    // fixed square centred on spawn; generated goals remain inside that square
+    // and advance deterministically rather than bouncing off a boundary.
+    RuntimeCharacterRecord wanderCharacter;
+    wanderCharacter.stableEntityId = "00000000-0000-4000-8000-000000000044";
+    wanderCharacter.authoring.role = CharacterRole::Wander;
+    wanderCharacter.authoring.wanderExtentChunks = 2;
+    wanderCharacter.authoring.autonomous = true;
+    wanderCharacter.tuning = ResolveCharacterTuning(wanderCharacter.authoring);
+    CharacterDecisionRecord wanderDecision;
+    wanderDecision.characterId = wanderCharacter.stableEntityId;
+    wanderDecision.intent = CharacterIntent::Wander;
+    wanderDecision.previousIntent = CharacterIntent::Wander;
+    wanderDecision.wanderOrigin = XMFLOAT3(100.0f, 0.0f, 200.0f);
+    wanderDecision.hasWanderOrigin = true;
+    wanderDecision.lastPosition = wanderDecision.wanderOrigin;
+    wanderDecision.hasLastPosition = true;
+    wanderDecision.wanderChunkSpan = TerrainChunkSpanInVertices;
+    CharacterCognitionRecord wanderCognition;
+    wanderCognition.characterId = wanderCharacter.stableEntityId;
+    XMFLOAT3 wanderGoal;
+    if (NormalRoleIntent(wanderCharacter, false) != CharacterIntent::Wander ||
+        !ResolveIntentGoal(wanderCharacter, wanderCognition, wanderDecision, wanderGoal))
+        return Fail("Wander must resolve as a normal role with a navigation goal");
+    const float wanderHalfExtent = TerrainChunkSpanInVertices;
+    if (std::abs(wanderGoal.x - wanderDecision.wanderOrigin.x) > wanderHalfExtent ||
+        std::abs(wanderGoal.z - wanderDecision.wanderOrigin.z) > wanderHalfExtent)
+        return Fail("default Wander goal escaped fixed 2x2 chunk extent");
+    const XMFLOAT3 firstWanderGoal = wanderGoal;
+    ++wanderDecision.wanderVisitCount;
+    wanderDecision.hasWanderGoal = false;
+    if (!ResolveIntentGoal(wanderCharacter, wanderCognition, wanderDecision, wanderGoal) ||
+        Near3(firstWanderGoal, wanderGoal))
+        return Fail("Wander must meander to a new deterministic destination");
+
     CharacterDecisionRecord decision;
     decision.characterId = character.stableEntityId;
     decision.patrol.route = route;
@@ -249,6 +284,20 @@ int main()
         !Near(goal.x, 17) || !Near(goal.z, 23))
         return Fail("guard must return to its saved post after target death");
 
-    std::cout << "AI04_PASS patrol-authoring utility-memory hysteresis traversal search-timeout\n";
+    character.authoring.role = CharacterRole::Wander;
+    character.authoring.wanderExtentChunks = 2;
+    decision.intent = CharacterIntent::Attack;
+    decision.previousIntent = CharacterIntent::Attack;
+    decision.commitmentRemainingSeconds = 0.0f;
+    decision.wanderOrigin = XMFLOAT3(20.0f, 0.0f, 30.0f);
+    decision.hasWanderOrigin = true;
+    decision.hasWanderGoal = false;
+    decision.wanderChunkSpan = TerrainChunkSpanInVertices;
+    SelectIntent(character, cognition, decision);
+    if (decision.intent != CharacterIntent::Wander ||
+        !ResolveIntentGoal(character, cognition, decision, goal))
+        return Fail("Wander role must resume after target death");
+
+    std::cout << "AI04_PASS patrol-wander-authoring utility-memory hysteresis traversal search-timeout\n";
     return 0;
 }

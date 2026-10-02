@@ -134,10 +134,10 @@ namespace renegade::bridge
         CharacterRole role = CharacterRole::Guard;
     };
 
-    [[nodiscard]] inline const std::array<BehaviourProfileInfo, 8>&
+    [[nodiscard]] inline const std::array<BehaviourProfileInfo, 9>&
         BuiltInBehaviourProfiles() noexcept
     {
-        static constexpr std::array<BehaviourProfileInfo, 8> profiles = {{
+        static constexpr std::array<BehaviourProfileInfo, 9> profiles = {{
             {"guard", "Guard", CharacterRole::Guard},
             {"patrol_guard", "Patrol Guard", CharacterRole::PatrolGuard},
             {"soldier", "Soldier", CharacterRole::Soldier},
@@ -145,6 +145,7 @@ namespace renegade::bridge
             {"companion", "Companion", CharacterRole::Companion},
             {"predator", "Predator", CharacterRole::Predator},
             {"passive", "Passive Creature", CharacterRole::Passive},
+            {"wander", "Wander", CharacterRole::Wander},
             {"custom", "Custom", CharacterRole::Custom},
         }};
         return profiles;
@@ -271,6 +272,9 @@ namespace renegade::bridge
                 t.retreatHealthThreshold = 0.12f;
                 t.pursuitSeconds = 18.0f;
                 t.communicationRange = 0.0f;
+                break;
+            case CharacterRole::Wander:
+                t.curiosity += 0.10f;
                 break;
             case CharacterRole::Passive:
                 t.aggression = 0.05f;
@@ -615,7 +619,7 @@ namespace renegade::bridge
                 static_cast<int>(CharacterType::Human), static_cast<int>(CharacterType::Custom),
                 "character type", error) ||
             !detail::ValidateEnumMetadata(*metadata, CharacterRoleMetadataKey,
-                static_cast<int>(CharacterRole::Guard), static_cast<int>(CharacterRole::Custom),
+                static_cast<int>(CharacterRole::Guard), static_cast<int>(CharacterRole::Wander),
                 "role", error) ||
             !detail::ValidateEnumMetadata(*metadata, CharacterPersonalityMetadataKey,
                 static_cast<int>(PersonalityPreset::Cautious), static_cast<int>(PersonalityPreset::Custom),

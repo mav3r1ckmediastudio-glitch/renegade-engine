@@ -401,6 +401,7 @@ namespace renegade::bridge
             value["faction"] = settings.factionId;
             value["animation_set_id"] = settings.animationSetId;
             value["patrol_route_id"] = settings.patrolRouteEntityId;
+            value["wander_extent_chunks"] = settings.wanderExtentChunks;
             value["squad"] = settings.squadId;
             value["weapon_id"] = settings.weaponEntityId;
             value["combat_style"] = static_cast<int>(settings.combatStyle);
@@ -432,6 +433,7 @@ namespace renegade::bridge
             settings.factionId = value.value("faction", std::string("Neutral"));
             settings.animationSetId = value.value("animation_set_id", std::string{});
             settings.patrolRouteEntityId = value.value("patrol_route_id", std::string{});
+            settings.wanderExtentChunks = value.value("wander_extent_chunks", 2);
             settings.squadId = value.value("squad", std::string{});
             settings.weaponEntityId = value.value("weapon_id", std::string{});
             settings.combatStyle = static_cast<CombatStyle>(value.value("combat_style", 0));

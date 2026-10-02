@@ -58,6 +58,16 @@ namespace
         return metadata->string_values.get(key);
     }
 
+    int ReadInt(
+        const wi::scene::MetadataComponent* metadata,
+        const char* key,
+        const int fallback) noexcept
+    {
+        if (metadata == nullptr || !metadata->int_values.has(key))
+            return fallback;
+        return metadata->int_values.get(key);
+    }
+
     bool ReadBool(
         const wi::scene::MetadataComponent* metadata,
         const char* key,
@@ -124,6 +134,7 @@ namespace
         metadata.string_values.set(CharacterFactionMetadataKey, settings.factionId);
         SetOrErase(metadata, CharacterAnimationSetMetadataKey, settings.animationSetId);
         SetOrErase(metadata, CharacterPatrolRouteMetadataKey, settings.patrolRouteEntityId);
+        metadata.int_values.set(CharacterWanderExtentChunksMetadataKey, settings.wanderExtentChunks);
         SetOrErase(metadata, CharacterSquadMetadataKey, settings.squadId);
         SetOrErase(metadata, CharacterWeaponMetadataKey, settings.weaponEntityId);
         metadata.int_values.set(CharacterCombatStyleMetadataKey, static_cast<int>(settings.combatStyle));
@@ -146,6 +157,7 @@ namespace
         metadata.string_values.erase(CharacterFactionMetadataKey);
         metadata.string_values.erase(CharacterAnimationSetMetadataKey);
         metadata.string_values.erase(CharacterPatrolRouteMetadataKey);
+        metadata.int_values.erase(CharacterWanderExtentChunksMetadataKey);
         metadata.string_values.erase(CharacterSquadMetadataKey);
         metadata.string_values.erase(CharacterWeaponMetadataKey);
         metadata.int_values.erase(CharacterCombatStyleMetadataKey);
@@ -226,6 +238,7 @@ namespace renegade::bridge
             lhs.personality == rhs.personality && lhs.factionId == rhs.factionId &&
             lhs.animationSetId == rhs.animationSetId &&
             lhs.patrolRouteEntityId == rhs.patrolRouteEntityId &&
+            lhs.wanderExtentChunks == rhs.wanderExtentChunks &&
             lhs.squadId == rhs.squadId && lhs.weaponEntityId == rhs.weaponEntityId &&
             lhs.combatStyle == rhs.combatStyle && lhs.skill == rhs.skill &&
             lhs.awareness == rhs.awareness && lhs.autonomous == rhs.autonomous &&
@@ -299,13 +312,15 @@ namespace renegade::bridge
             CharacterType::Human, CharacterType::Custom);
         settings.role = ReadEnum(
             metadata, CharacterRoleMetadataKey, CharacterRole::Guard,
-            CharacterRole::Guard, CharacterRole::Custom);
+            CharacterRole::Guard, CharacterRole::Wander);
         settings.personality = ReadEnum(
             metadata, CharacterPersonalityMetadataKey, PersonalityPreset::Balanced,
             PersonalityPreset::Cautious, PersonalityPreset::Custom);
         settings.factionId = ReadString(metadata, CharacterFactionMetadataKey, "Neutral");
         settings.animationSetId = ReadString(metadata, CharacterAnimationSetMetadataKey);
         settings.patrolRouteEntityId = ReadString(metadata, CharacterPatrolRouteMetadataKey);
+        settings.wanderExtentChunks = std::clamp(
+            ReadInt(metadata, CharacterWanderExtentChunksMetadataKey, 2), 1, 16);
         settings.squadId = ReadString(metadata, CharacterSquadMetadataKey);
         settings.weaponEntityId = ReadString(metadata, CharacterWeaponMetadataKey);
         settings.combatStyle = ReadEnum(
@@ -337,6 +352,11 @@ namespace renegade::bridge
         if (settings.squadId.size() > 64)
         {
             error = "Character squad must be at most 64 characters.";
+            return false;
+        }
+        if (settings.wanderExtentChunks < 1 || settings.wanderExtentChunks > 16)
+        {
+            error = "Character Wander extent must be between 1 and 16 terrain chunks.";
             return false;
         }
         for (const auto* id : {
