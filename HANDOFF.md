@@ -782,3 +782,103 @@ and unrelated C4834 warnings remain. No full-suite CI or independent acceptance.
 Next task: independent exact-commit inspection and owner acceptance of this
 native importer slice, then separately scope existing-Character action editing.
 Preserve the implementation commit and this evidence before further changes.
+
+## Native Character crossfade checkpoint (2026-10-02)
+
+Implementation commit: bea6313e2ebfa270fc955b4016f9e28215d5140e.
+Branch: feature/character-animation-crossfades, based on importer evidence
+checkpoint 6a08fb0. The importer branch and its owner test executables remain
+unchanged. No push, merge, or release gate completion.
+
+Crossfade slice:
+- AI still chooses actions; native action metadata still selects clips.
+- Runtime owns transient logical weights and elapsed simulation time; native
+  Wicked evaluates the poses. Sequential amounts use cumulative normalization.
+- Matching channel coverage and event-free clips blend; other clips immediately
+  switch. Only contributing clips are scanned/sorted per character.
+- Loops fade for 0.20s; Attack/Reload/Hit for 0.08s; Death for 0.05s.
+- Repeated requests do not restart loops/one-shots. A returning contributing
+  loop preserves its timer. Interrupted transitions preserve current weights.
+- Hit finishes before a new Attack/Reload; Death interrupts and stays terminal.
+  Missing Death stops owned playback once. Missing Idle also stops owned clips.
+- Native root motion is disabled for AI-owned clips: Character movement remains
+  controller-owned. No speed blend space, gait synchronization, upper-body layer
+  or additive animation is claimed. Durations are fixed in this slice.
+
+Changed files: Runtime/src/RuntimeCharacterAnimation.h, RuntimeLiveDiagnostics.cpp;
+Tests/CharacterAiAnimationTests.cpp, CharacterAnimationBlendProof.h,
+ModelImporterRebuildGraphicsProof.cpp; docs/ARCHITECTURE.md, FEATURE_MATRIX.csv,
+MODEL_IMPORTER_REBUILD.md. This handoff is a separate documentation commit.
+
+Exact Windows Release commands, from repository root unless noted:
+- Use CMAKE_COMMAND from BUILD/no-import/CMakeCache.txt:
+  cmake -S . -B BUILD/no-import: PASS.
+- MSBuild.exe BUILD/no-import/Tests/RenegadeCharacterAiAnimationTests.vcxproj
+  /m:2 /verbosity:quiet /nologo /p:Configuration=Release /p:Platform=x64
+  /p:BuildProjectReferences=false: PASS, exit 0.
+- Same MSBuild arguments with
+  BUILD/no-import/RenegadeModelImporterRebuildGraphicsProof.vcxproj:
+  PASS, exit 0.
+- Same arguments with BUILD/no-import/Runtime/RenegadeRuntime.vcxproj
+  plus /p:TargetName=RenegadeRuntime_Blending: PASS, exit 0.
+- Use CMAKE_CTEST_COMMAND from the cache:
+  ctest --test-dir BUILD/no-import -C Release
+    -R 'RenegadeModelImporterRebuild|RenegadeCharacterAiAnimationTests|RenegadePhase7Gate7BHumanoidRetargetTests'
+    --output-on-failure: PASS, 9/9, 16.14 seconds.
+- From BUILD/no-import/Release:
+  RenegadeModelImporterRebuildGraphicsProof.exe
+    '../character-mutant-proof/SourceAssets/Models/Proof Triangle/Mutant.fbx'
+    '../../../Tests/fixtures/Importer/external_uri_triangle.glb'
+    '../blending-mutant-proof' <walk-fbx> <run-fbx> <swipe-fbx> <idle-fbx>
+  Private source paths deliberately omitted; sources copied to disposable files.
+  Native translation, rotation and scale tests verify midpoint/order, no repeated
+  frame accumulation, interruption continuity, loop phase, completed Death pose
+  and partial-track immediate fallback. Semantic tests cover Hit priority,
+  missing Death termination, optional Run fallback and state reset.
+
+Real Mutant rendering proof writes blend-*.png under blending-mutant-proof:
+Idle, Idle/Walk halfway, Walk, Walk/Run halfway, Run, Run/Idle halfway and Idle.
+These snapshots were opened and visually inspected. Native channels matched,
+and intermediate poses showed the expected mixtures. The governed import,
+retained-source reimport, placement Undo/Redo/reopen and 300-frame grounding
+proofs also run in the same executable.
+
+Standalone inspection:
+  BUILD/no-import/Runtime/Release/RenegadeRuntime_Blending.exe --project
+  <absolute repository path>/BUILD/no-import/blending-mutant-proof/RuntimeProof.renegade
+PASS: startup SUCCESS; scene_loaded=true; character_scene_sync_failed=false;
+one synchronized Character; Player spawned; mutant idle playing as Idle.
+Mutant was visibly textured and on the floor; screenshot read and inspected.
+This standalone inspection exercises saved-scene loading and Idle playback;
+transition midpoints are validated by the native graphics proof, not manually
+triggered through gameplay in that standalone run. Runtime closed normally.
+
+Blending executable SHA256:
+BAC9ED6BC29CC44CE1E6F891BFC1E65218B881D6620675B8D386F1480C664C4E.
+Executable built before commit; embedded revision is historical.
+Original Runtime hash remains
+0F097DB8EDB26468830100074C9BD00F839778DDAD10355E5E496F27EB889B4C;
+original Studio_AnimationImport hash remains
+34AB99682403DB624C5182FAE2E82F440A8B2095EC2674406B6DA84BBA7F5561.
+
+Ignored evidence under BUILD/no-import: blending-configure.log,
+blending-animation-tests-build.log, blending-graphics-build.log,
+blending-runtime-build.log, blending-ctest-final.log, blending-mutant-proof*.log,
+blending-mutant-proof/blend-*.png, import-proof-blending-runtime-final.png,
+blending-runtime-final-diagnostics.json. Private assets remain ignored.
+git diff --check passes; all FEATURE_MATRIX nonempty rows have 16 columns;
+Wicked submodule source and pointer unchanged. Existing MSB8029 warnings remain.
+
+Limitations and next task:
+Fixed durations and matching coverage only. No UI duration authoring, Debug/full
+CI, packaged export, crowd-performance claim or independent acceptance.
+Owner tests the preserved importer executable first. Independently inspect this
+exact blending implementation before integration. Then test AI movement/action
+interruptions in an owner-approved disposable Level; separately scope editing
+existing Character assignments. No release gate is marked complete.
+
+Final real Mutant proof rerun after the last source/test changes: PASS, exit 0,
+6.81 seconds; native crossfade and real-render snapshot checks pass; retained
+reimport/actions and 300-frame grounding pass. The final log is
+BUILD/no-import/blending-mutant-proof-final.log; disposable asset identity
+68c9f808-17ab-423c-b532-ee1595d9a095. No source files changed after that run.
