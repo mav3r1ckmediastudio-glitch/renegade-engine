@@ -1,12 +1,30 @@
+#include "RuntimePlayerViewAsset.h"
 #include "RuntimePlayerViewRig.h"
 
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
+#include <vector>
 
 namespace
 {
+    namespace fs = std::filesystem;
+
+    constexpr const char* P1ProjectId =
+        "12121212-1212-4212-8212-121212121212";
+    constexpr const char* P1ArmsAssetId =
+        "34343434-3434-4434-8434-343434343434";
+    constexpr const char* P1SourceAssetId =
+        "56565656-5656-4656-8656-565656565656";
+    constexpr std::uint64_t FnvOffset = 1469598103934665603ull;
+    constexpr std::uint64_t FnvPrime = 1099511628211ull;
+
     bool Near(
         const float left,
         const float right,
@@ -29,6 +47,132 @@ namespace
     {
         std::cerr << "PLAYER VIEW RIG FAIL // " << message << '\n';
         std::exit(EXIT_FAILURE);
+    }
+
+    std::string HashBytes(const std::vector<std::uint8_t>& bytes)
+    {
+        std::uint64_t hash = FnvOffset;
+        for (const std::uint8_t value : bytes)
+        {
+            hash ^= value;
+            hash *= FnvPrime;
+        }
+        std::ostringstream stream;
+        stream << "fnv1a64:" << std::hex << std::setfill('0')
+               << std::setw(16) << hash;
+        return stream.str();
+    }
+
+    bool WriteBytes(
+        const fs::path& path,
+        const std::vector<std::uint8_t>& bytes)
+    {
+        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        if (!output)
+            return false;
+        if (!bytes.empty())
+        {
+            output.write(
+                reinterpret_cast<const char*>(bytes.data()),
+                static_cast<std::streamsize>(bytes.size()));
+        }
+        return static_cast<bool>(output);
+    }
+
+    bool WriteText(const fs::path& path, const std::string& text)
+    {
+        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        if (!output)
+            return false;
+        output.write(text.data(), static_cast<std::streamsize>(text.size()));
+        return static_cast<bool>(output);
+    }
+
+    std::vector<std::uint8_t> SerializeGovernedViewAssetPayload()
+    {
+        using namespace renegade::bridge;
+
+        wi::scene::Scene assetScene;
+        const auto root =
+            assetScene.Entity_CreateTransform("P1 Governed Arms Root");
+        const auto mesh =
+            assetScene.Entity_CreateTransform("P1 Governed Arms Mesh");
+        assetScene.objects.Create(mesh);
+        assetScene.Component_Attach(mesh, root, true);
+
+        // Deliberately contaminate the reusable product with gameplay-facing
+        // components. The P1 Runtime loader must remove all of them rather
+        // than allowing a view model to become a second Player/Character.
+        assetScene.characters.Create(root);
+        assetScene.rigidbodies.Create(root);
+        assetScene.colliders.Create(root);
+        auto& metadata = assetScene.metadatas.Create(root);
+        metadata.bool_values.set(CharacterAssetTemplateMetadataKey, true);
+        metadata.int_values.set(CharacterAssetTemplateVersionMetadataKey, 1);
+        metadata.string_values.set(
+            PersistentEntityIdMetadataKey,
+            "78787878-7878-4878-8878-787878787878");
+
+        wi::Archive archive;
+        assetScene.Serialize(archive);
+        std::vector<std::uint8_t> bytes;
+        archive.WriteData(bytes);
+        return bytes;
+    }
+
+    fs::path WritePackagedViewAssetFixture()
+    {
+        using namespace renegade::bridge;
+
+        const fs::path packageRoot =
+            fs::temp_directory_path() / "renegade-p1-player-view-asset";
+        const fs::path productPath =
+            packageRoot / "GameData" / "Content" / "Models" / "p1-arms.rasset";
+        const fs::path manifestPath =
+            packageRoot / "GameData" / "content-manifest.json";
+
+        std::error_code ec;
+        fs::remove_all(packageRoot, ec);
+        ec.clear();
+        fs::create_directories(productPath.parent_path(), ec);
+        if (ec)
+            Fail("could not create governed view-asset package fixture");
+
+        ReusableModelAssetDocument asset;
+        asset.manifest.projectId = P1ProjectId;
+        asset.manifest.assetId = P1ArmsAssetId;
+        asset.manifest.sourceAssetId = P1SourceAssetId;
+        asset.manifest.sourceFormat = "fbx";
+        asset.manifest.importer = "wicked.ufbx";
+        asset.manifest.importerVersion = 1;
+        asset.manifest.settingsSchema = ReusableModelImportSettingsSchema;
+        asset.manifest.settingsVersion = 1;
+        asset.manifest.settingsJson =
+            "{\"options\":{},\"source_format\":\"fbx\"}";
+        asset.payload = SerializeGovernedViewAssetPayload();
+        asset.manifest.payloadHash = HashBytes(asset.payload);
+
+        std::string error;
+        std::vector<std::uint8_t> productBytes;
+        if (asset.payload.empty() ||
+            !SerializeReusableModelAssetDocument(asset, productBytes, error) ||
+            !WriteBytes(productPath, productBytes))
+        {
+            Fail("could not write governed view-asset product: " + error);
+        }
+
+        const std::string manifestJson =
+            std::string("{\"files\":[{\"asset_id\":\"") +
+            P1ArmsAssetId +
+            "\",\"path\":\"GameData/Content/Models/p1-arms.rasset\","
+            "\"source_hash\":\"" + HashBytes(productBytes) +
+            "\"}],\"format\":\"renegade-content-manifest\","
+            "\"project_id\":\"" + P1ProjectId +
+            "\",\"schema_version\":1}";
+        if (!WriteText(manifestPath, manifestJson))
+            Fail("could not write governed view-asset content manifest");
+
+        return packageRoot;
     }
 }
 
@@ -162,6 +306,132 @@ int main()
         !importedObject->IsNotVisibleInReflections())
     {
         Fail("attached view-model hierarchy did not inherit P1 foreground policy");
+    }
+
+    // Prove the actual packaged governed-asset path, not just an in-memory
+    // hierarchy attachment. The fixture intentionally carries Character and
+    // physics components that must never survive as first-person presentation.
+    {
+        wi::scene::Scene packagedScene;
+        const auto packagedPlayer =
+            packagedScene.Entity_CreateTransform("__p1_packaged_player");
+
+        RuntimePlayerViewRigState packagedRig;
+        RuntimePlayerViewRigSettings packagedSettings;
+        packagedSettings.createProofGeometry = false;
+        if (!SpawnRuntimePlayerViewRig(
+                packagedScene,
+                packagedRig,
+                packagedPlayer,
+                eyeHeight,
+                error,
+                packagedSettings))
+        {
+            Fail("packaged View Rig spawn failed: " + error);
+        }
+
+        const auto proofPrimary =
+            packagedScene.Entity_CreateTransform("__p1_proxy_primary");
+        const auto proofOff =
+            packagedScene.Entity_CreateTransform("__p1_proxy_off");
+        packagedScene.Component_Attach(
+            proofPrimary, packagedRig.presentationRoot, true);
+        packagedScene.Component_Attach(
+            proofOff, packagedRig.presentationRoot, true);
+        packagedRig.primaryArmProof = proofPrimary;
+        packagedRig.offHandArmProof = proofOff;
+
+        const fs::path packageRoot = WritePackagedViewAssetFixture();
+        if (!LoadPackagedRuntimePlayerViewAsset(
+                packagedScene,
+                packagedRig,
+                packageRoot.generic_u8string(),
+                P1ProjectId,
+                P1ArmsAssetId,
+                error))
+        {
+            Fail("packaged governed first-person arms load failed: " + error);
+        }
+
+        if (packagedRig.viewModelRoot == wi::ecs::INVALID_ENTITY ||
+            packagedRig.viewModelAssetId != P1ArmsAssetId)
+        {
+            Fail("governed first-person arms identity was not retained");
+        }
+        if (packagedRig.primaryArmProof != wi::ecs::INVALID_ENTITY ||
+            packagedRig.offHandArmProof != wi::ecs::INVALID_ENTITY ||
+            packagedScene.transforms.Contains(proofPrimary) ||
+            packagedScene.transforms.Contains(proofOff))
+        {
+            Fail("real governed arms did not replace the P1 proxy geometry");
+        }
+
+        const auto* viewHierarchy =
+            packagedScene.hierarchy.GetComponent(packagedRig.viewModelRoot);
+        if (viewHierarchy == nullptr ||
+            viewHierarchy->parentID != packagedRig.presentationRoot)
+        {
+            Fail("governed arms root was not attached to the presentation root");
+        }
+
+        const auto governedRoot = packagedScene.Entity_FindByName(
+            "P1 Governed Arms Root", packagedRig.viewModelRoot);
+        const auto governedMesh = packagedScene.Entity_FindByName(
+            "P1 Governed Arms Mesh", packagedRig.viewModelRoot);
+        const auto* governedObject =
+            packagedScene.objects.GetComponent(governedMesh);
+        if (governedRoot == wi::ecs::INVALID_ENTITY ||
+            governedMesh == wi::ecs::INVALID_ENTITY ||
+            governedObject == nullptr ||
+            !governedObject->IsForeground() ||
+            governedObject->IsCastingShadow() ||
+            !governedObject->IsNotVisibleInReflections())
+        {
+            Fail("governed arms did not inherit the P1 foreground render policy");
+        }
+
+        for (std::size_t index = 0;
+             index < packagedScene.transforms.GetCount();
+             ++index)
+        {
+            const auto entity = packagedScene.transforms.GetEntity(index);
+            if (entity != packagedRig.viewModelRoot &&
+                !packagedScene.Entity_IsDescendant(
+                    entity, packagedRig.viewModelRoot))
+            {
+                continue;
+            }
+            if (packagedScene.characters.Contains(entity) ||
+                packagedScene.rigidbodies.Contains(entity) ||
+                packagedScene.colliders.Contains(entity))
+            {
+                Fail("governed view model retained gameplay/physics components");
+            }
+        }
+
+        const auto* governedMetadata =
+            packagedScene.metadatas.GetComponent(governedRoot);
+        if (governedMetadata != nullptr &&
+            (governedMetadata->bool_values.has(
+                 renegade::bridge::CharacterAssetTemplateMetadataKey) ||
+             governedMetadata->int_values.has(
+                 renegade::bridge::CharacterAssetTemplateVersionMetadataKey) ||
+             governedMetadata->string_values.has(
+                 renegade::bridge::PersistentEntityIdMetadataKey)))
+        {
+            Fail("governed view model retained Character/identity metadata");
+        }
+
+        const auto loadedViewRoot = packagedRig.viewModelRoot;
+        DespawnRuntimePlayerViewRig(packagedScene, packagedRig);
+        if (packagedScene.transforms.Contains(loadedViewRoot) ||
+            !packagedScene.transforms.Contains(packagedPlayer))
+        {
+            Fail("governed view-model cleanup escaped View Rig ownership");
+        }
+
+        std::error_code cleanupError;
+        fs::remove_all(packageRoot, cleanupError);
     }
 
     renegade::bridge::PlayerInputFrame presentationInput;
