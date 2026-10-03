@@ -209,6 +209,8 @@ namespace renegade::runtime
     {
         diagnosticService_.StopLocalEndpoint();
         StopCreatorScripts();
+        ResetRuntimePlayerViewAnimations(
+            scenes_.GetScene(), playerViewAnimation_);
         DespawnRuntimePlayerViewRig(scenes_.GetScene(), playerViewRig_);
         creatorScripts_.Shutdown();
         scriptSceneRevision_ = 0;
@@ -418,6 +420,11 @@ namespace renegade::runtime
                         playerViewRig_,
                         gameplayInput.player,
                         paused_ ? 0.0f : dt);
+                    UpdateRuntimePlayerViewAnimations(
+                        scenes_.GetScene(),
+                        playerViewAnimation_,
+                        playerViewRig_.action,
+                        paused_ ? 0.0f : dt);
                 }
             }
         }
@@ -476,6 +483,7 @@ namespace renegade::runtime
 
         player_ = {};
         playerViewRig_ = {};
+        playerViewAnimation_ = {};
         playerSceneRevision_ = scenes_.Revision();
         const auto resolved = bridge::ResolvePlayerStart(scenes_.GetScene());
         if (resolved.resolution == bridge::PlayerStartResolution::Missing)
@@ -578,6 +586,33 @@ namespace renegade::runtime
                         "player.view_rig.asset_loaded",
                         "Governed first-person arms asset loaded: " +
                             playerSettings_.firstPersonArmsAssetId);
+
+                    std::string animationError;
+                    if (!InitializeRuntimePlayerViewAnimations(
+                            scenes_.GetScene(),
+                            playerViewRig_,
+                            playerViewAnimation_,
+                            animationError))
+                    {
+                        diagnosticService_.Record(
+                            bridge::DiagnosticSeverity::Error,
+                            "runtime.player.view_rig",
+                            "player.view_rig.animation_failed",
+                            animationError);
+                    }
+                    else
+                    {
+                        (void)RequestRuntimePlayerViewAnimation(
+                            scenes_.GetScene(),
+                            playerViewAnimation_,
+                            PlayerViewAction::Idle);
+                        diagnosticService_.Record(
+                            bridge::DiagnosticSeverity::Info,
+                            "runtime.player.view_rig",
+                            "player.view_rig.animation_ready",
+                            "First-person arms native animation binding is ready.");
+                    }
+
                     wi::backlog::post(
                         "Renegade Runtime: loaded governed first-person arms asset.",
                         wi::backlog::LogLevel::Default);

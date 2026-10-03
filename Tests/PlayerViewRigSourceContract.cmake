@@ -20,6 +20,7 @@ endfunction()
 
 set(view_rig "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimePlayerViewRig.h")
 set(view_asset "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimePlayerViewAsset.h")
+set(view_animation "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimePlayerViewAnimation.h")
 set(runtime "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.cpp")
 set(player_service "${RENEGADE_SOURCE_DIR}/EngineBridge/src/PlayerService.cpp")
 set(reusable_dependency "${RENEGADE_SOURCE_DIR}/EngineBridge/src/ReusableAssetDependencyService.cpp")
@@ -38,6 +39,10 @@ require_text("${view_rig}" "ConfigureRuntimeViewModelHierarchy" "foreground hier
 require_text("${view_rig}" "AttachRuntimeViewModelHierarchy" "real asset attachment seam")
 require_text("${view_rig}" "ResolvePlayerViewAction" "semantic Idle/Walk/Sprint resolver")
 require_text("${view_rig}" "UpdateRuntimePlayerViewRigPresentation" "semantic movement presentation")
+require_text("${view_animation}" "InitializeRuntimePlayerViewAnimations" "native view-model animation binding")
+require_text("${view_animation}" "RequestRuntimePlayerViewAnimation" "semantic native animation request")
+require_text("${view_animation}" "MatchingPlayerViewAnimationChannels" "native animation crossfade guard")
+require_text("${view_animation}" "RootMotionOff" "view-model root-motion suppression")
 require_text(
     "${view_rig}"
     "Component_Attach(created.root, created.playerEntity, true)"
@@ -45,6 +50,8 @@ require_text(
 require_text("${runtime}" "SpawnRuntimePlayerViewRig" "Runtime View Rig spawn")
 require_text("${runtime}" "PoseRuntimePlayerViewRig" "Runtime View Rig pose")
 require_text("${runtime}" "UpdateRuntimePlayerViewRigPresentation" "Runtime movement presentation")
+require_text("${runtime}" "UpdateRuntimePlayerViewAnimations" "Runtime native view-model animation update")
+require_text("${runtime}" "InitializeRuntimePlayerViewAnimations" "Runtime native view-model animation setup")
 require_text("${runtime}" "DespawnRuntimePlayerViewRig" "Runtime View Rig cleanup")
 require_text("${runtime}" "LoadRuntimePlayerViewAsset" "editor/Test Level governed arms load")
 require_text("${runtime}" "LoadPackagedRuntimePlayerViewAsset" "packaged governed arms load")
@@ -64,6 +71,7 @@ require_text("${studio}" "CommitSelectedPlayerArmsAsset" "Undo/Redo-backed Playe
 file(READ "${runtime}" runtime_text)
 string(FIND "${runtime_text}" "PoseRuntimePlayerViewRig" rig_pose_pos)
 string(FIND "${runtime_text}" "UpdateRuntimePlayerViewRigPresentation" rig_presentation_pos)
+string(FIND "${runtime_text}" "UpdateRuntimePlayerViewAnimations" rig_animation_pos)
 string(FIND "${runtime_text}" "wi::Application::Update(paused_ ? 0.0f : dt);" scene_update_pos)
 string(FIND "${runtime_text}" "bridge::ApplyRuntimePlayerCamera" camera_pos)
 
@@ -77,6 +85,12 @@ if(rig_presentation_pos EQUAL -1 OR
    NOT rig_presentation_pos LESS scene_update_pos)
     message(FATAL_ERROR
         "P1 Player View Rig presentation must update before Wicked Scene update")
+endif()
+
+if(rig_animation_pos EQUAL -1 OR
+   NOT rig_animation_pos LESS scene_update_pos)
+    message(FATAL_ERROR
+        "P1 Player View native animation must update before Wicked Scene update")
 endif()
 
 if(camera_pos EQUAL -1 OR NOT scene_update_pos LESS camera_pos)

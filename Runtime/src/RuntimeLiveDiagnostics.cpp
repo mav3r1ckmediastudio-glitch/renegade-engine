@@ -644,6 +644,11 @@ namespace renegade::runtime
             {"player_view_rig_proof_geometry",
                 playerViewRig_.primaryArmProof != wi::ecs::INVALID_ENTITY &&
                 playerViewRig_.offHandArmProof != wi::ecs::INVALID_ENTITY},
+            {"player_view_asset_loaded",
+                playerViewRig_.viewModelRoot != wi::ecs::INVALID_ENTITY},
+            {"player_view_action", PlayerViewActionName(playerViewRig_.action)},
+            {"player_view_animation_initialized", playerViewAnimation_.initialized},
+            {"player_view_animation_clip", playerViewAnimation_.resolvedClipName},
             {"character_count", static_cast<std::uint64_t>(characterState_.characters.size())},
             {"character_profile_count", static_cast<std::uint64_t>(characterAiState_.characters.size())},
             {"character_perception_count", static_cast<std::uint64_t>(characterPerceptionState_.characters.size())},

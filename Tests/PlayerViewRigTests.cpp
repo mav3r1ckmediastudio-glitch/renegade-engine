@@ -1,4 +1,5 @@
 #include "RuntimePlayerViewAsset.h"
+#include "RuntimePlayerViewAnimation.h"
 #include "RuntimePlayerViewRig.h"
 
 #include <cmath>
@@ -86,6 +87,29 @@ namespace
             return false;
         output.write(text.data(), static_cast<std::streamsize>(text.size()));
         return static_cast<bool>(output);
+    }
+
+    wi::ecs::Entity AddPlayerViewAnimationClip(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity target,
+        const std::string& name,
+        const std::string& action)
+    {
+        const wi::ecs::Entity entity =
+            scene.Entity_CreateTransform(name);
+        auto& animation = scene.animations.Create(entity);
+        animation.start = 0.0f;
+        animation.end = 1.0f;
+        wi::scene::AnimationComponent::AnimationChannel channel;
+        channel.target = target;
+        channel.path =
+            wi::scene::AnimationComponent::AnimationChannel::Path::TRANSLATION;
+        animation.channels.push_back(channel);
+        auto& metadata = scene.metadatas.Create(entity);
+        metadata.string_values.set(
+            renegade::bridge::CreatorCharacterAnimationActionMetadataKey,
+            action);
+        return entity;
     }
 
     std::vector<std::uint8_t> SerializeGovernedViewAssetPayload()
@@ -307,6 +331,72 @@ int main()
     {
         Fail("attached view-model hierarchy did not inherit P1 foreground policy");
     }
+
+    // P1 movement presentation owns semantic native animation requests. It
+    // must use Wicked's AnimationComponent on the loaded view model rather
+    // than inventing a second skeleton/animation runtime.
+    rig.viewModelRoot = importedViewModel;
+    const auto viewIdle = AddPlayerViewAnimationClip(
+        scene, importedMesh, "Arms_Idle_Breathe", "Idle");
+    const auto viewWalk = AddPlayerViewAnimationClip(
+        scene, importedMesh, "Arms_Walk", "Walk");
+    const auto viewSprint = AddPlayerViewAnimationClip(
+        scene, importedMesh, "Arms_Sprint", "Run");
+
+    PlayerViewAction inferredAction = PlayerViewAction::Idle;
+    if (!ResolvePlayerViewAnimationAction(
+            "weapon sprint forward", inferredAction) ||
+        inferredAction != PlayerViewAction::Sprint)
+    {
+        Fail("Player View native animation semantic inference is wrong");
+    }
+
+    RuntimePlayerViewAnimationState viewAnimation;
+    if (!InitializeRuntimePlayerViewAnimations(
+            scene, rig, viewAnimation, error))
+    {
+        Fail("Player View native animation setup failed: " + error);
+    }
+    if (viewAnimation.clips[PlayerViewActionIndex(PlayerViewAction::Idle)].size() != 1 ||
+        viewAnimation.clips[PlayerViewActionIndex(PlayerViewAction::Walk)].size() != 1 ||
+        viewAnimation.clips[PlayerViewActionIndex(PlayerViewAction::Sprint)].size() != 1 ||
+        !RequestRuntimePlayerViewAnimation(
+            scene, viewAnimation, PlayerViewAction::Idle) ||
+        viewAnimation.activeClip != viewIdle ||
+        !scene.animations.GetComponent(viewIdle)->IsPlaying() ||
+        scene.animations.GetComponent(viewIdle)->IsRootMotion())
+    {
+        Fail("Player View Idle did not bind to native Wicked animation");
+    }
+
+    UpdateRuntimePlayerViewAnimations(
+        scene, viewAnimation, PlayerViewAction::Walk, 0.10f);
+    if (viewAnimation.activeClip != viewWalk ||
+        viewAnimation.outgoingClip != viewIdle ||
+        !scene.animations.GetComponent(viewWalk)->IsPlaying() ||
+        scene.animations.GetComponent(viewWalk)->amount <= 0.0f ||
+        scene.animations.GetComponent(viewIdle)->amount <= 0.0f)
+    {
+        Fail("Player View Walk did not crossfade native Wicked animation");
+    }
+    UpdateRuntimePlayerViewAnimations(
+        scene, viewAnimation, PlayerViewAction::Walk, 0.11f);
+    if (viewAnimation.outgoingClip != wi::ecs::INVALID_ENTITY ||
+        scene.animations.GetComponent(viewIdle)->IsPlaying() ||
+        !Near(scene.animations.GetComponent(viewWalk)->amount, 1.0f))
+    {
+        Fail("Player View Walk crossfade did not settle cleanly");
+    }
+
+    UpdateRuntimePlayerViewAnimations(
+        scene, viewAnimation, PlayerViewAction::Sprint, 0.01f);
+    if (viewAnimation.activeClip != viewSprint ||
+        viewAnimation.activeAction != PlayerViewAction::Sprint ||
+        !scene.animations.GetComponent(viewSprint)->IsPlaying())
+    {
+        Fail("Player View Sprint did not request its semantic native clip");
+    }
+    ResetRuntimePlayerViewAnimations(scene, viewAnimation);
 
     // Prove the actual packaged governed-asset path, not just an in-memory
     // hierarchy attachment. The fixture intentionally carries Character and

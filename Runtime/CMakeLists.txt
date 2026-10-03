@@ -37,6 +37,7 @@ add_executable(RenegadeRuntime WIN32
     src/RuntimeLiveDiagnostics.cpp
     src/RuntimeApplication.h
     src/RuntimePlayerViewAsset.h
+    src/RuntimePlayerViewAnimation.h
     src/RuntimePlayerViewRig.h
     src/main_Windows.cpp
 )

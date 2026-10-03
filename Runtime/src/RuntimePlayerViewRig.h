@@ -28,6 +28,19 @@ namespace renegade::runtime
         Sprint,
     };
 
+    [[nodiscard]] inline const char* PlayerViewActionName(
+        const PlayerViewAction action) noexcept
+    {
+        switch (action)
+        {
+        case PlayerViewAction::Walk: return "Walk";
+        case PlayerViewAction::Sprint: return "Sprint";
+        case PlayerViewAction::Idle:
+        default:
+            return "Idle";
+        }
+    }
+
     enum class PlayerViewRigSocket
     {
         PrimaryHand,
