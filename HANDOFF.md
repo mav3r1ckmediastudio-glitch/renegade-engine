@@ -1262,3 +1262,16 @@ P1ProxyParity.exe package. Then validate the actual Studio Test Level/Build Game
 UI workflow. Real skinned arms, hand-bone sockets and asset/package closure remain
 unaccepted. This fixed three-input manual plan is not a new general packager.
 No push, merge or P1 gate acceptance.
+
+## 2026-10-03 23:05 Europe/London: packaged proxy controls accepted
+
+After being asked to check movement, Escape pause/resume and R reset in the
+open detached package, the owner reported "everything works". These requested
+checks are accepted for this exact proxy package. Proof tooling source: ee79134;
+camera repair source: 4dd9953. Package executable SHA-256:
+a5532514ed33f33cdb8c554808cb1e72de13fb54ac3d863c094dc64e60e47ace
+No gameplay code or binary changed after this acceptance. Preserve the package
+and fixed control fixture. Next bounded task is the actual Studio Test Level
+and Build Game UI workflow. Real skinned arms, skeletal animation, animated
+hand-bone sockets and real-asset dependency closure remain unaccepted; P1 remains
+open. Do not resume the withdrawn owner/GGMAX arms experiment.

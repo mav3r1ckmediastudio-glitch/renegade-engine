@@ -193,3 +193,13 @@ Release regression after adding the manual target: PackageIntegrity plus
 PlayerViewRig and TestLevelSnapshot checks pass 5/5, 0.36 seconds; log
 parity-regression.log. git diff --check passes. The owner-verified Runtime
 executable was not rebuilt or altered by this test-only continuation.
+
+## Owner packaged-controls acceptance
+
+At 23:05 Europe/London on 2026-10-03, following the request to check movement,
+Escape pause/resume and R reset in the detached package, the owner reported
+"everything works". Those requested checks now pass on the exact package hash
+recorded above (proof tooling ee79134; gameplay camera repair 4dd9953).
+This supersedes the packaged-controls retest status above. Keep the accepted
+package unchanged. Actual Studio UI Test Level/Build Game and real skinned-asset
+acceptance remain separate open requirements. P1 is not marked complete.
