@@ -140,3 +140,56 @@ Debug logs use the matching sync-after-Debug, sync-tests-Debug and sync-Debug
 names in the same evidence directory. These binaries were built before the
 repair commit; diagnostic revision records 9efc1a9, so hashes identify the
 owner-verified binaries. The repair commit records the source plus acceptance.
+
+
+## Snapshot and detached package proof
+
+Tests/PlayerViewRigParityFixture.cpp is an optional manual Windows GPU target.
+It inspects this fixed project, loads its scene through SceneService, requires
+one Player Start with no arms assignment, creates a Runtime-ready snapshot with
+TestLevelSnapshotService, reloads that snapshot and checks the assignment and
+unchanged authoritative scene path. The snapshot was launched in standalone
+Runtime; diagnostics and inspected screenshot reproduce the same proxies/floor.
+
+It stages exactly the descriptor, scene and GameplayInput through
+StageWindowsGameBuild, then applies ApplyWindowsGameExecutableIdentity and
+validates the resulting package. The initial stage-only trial was rejected by
+Runtime's Gate 3 manifest check; that incomplete trial is not acceptance evidence.
+The corrected package was copied to BUILD/renegade/p1-proxy-detached-identity
+and launched without project arguments from an unrelated working directory.
+Bootstrap reports package_relative_launch=true, package_integrity=PASS and
+DX12 startup success. Diagnostics resolve project and scene exclusively beneath
+the detached GameData folder, with Player spawned, proxies enabled, no imported
+arms and no Characters. Its screenshot was visually inspected.
+
+Descriptor, scene and GameplayInput SHA-256 each match the control project.
+Source Runtime remains unchanged. Package executable SHA-256 (Gate 3 identity
+changes resources only):
+a5532514ed33f33cdb8c554808cb1e72de13fb54ac3d863c094dc64e60e47ace
+
+Evidence: parity-configure.log, parity-build.log, parity-fixture.log,
+parity-snapshot-diagnostics.json, parity-package-diagnostics.json and
+parity-package-bootstrap.log under BUILD/renegade/p1-placeholder-proof;
+BUILD/renegade/p1-parity-snapshot.png and p1-parity-package.png.
+The detached package remains open for owner controls/lifecycle retest.
+This proves snapshot and package service paths for proxies, not the Studio
+buttons, full BuildWindowsGame promotion workflow, governed real-arms dependency
+closure, skeletal animation or final P1 acceptance. The fixed proof plan lists
+three known fixture inputs; it is not a general project packager.
+
+From repository root, with the installed VS18 tools:
+```text
+cmake -S . -B BUILD/renegade
+MSBuild BUILD/renegade/Tests/RenegadePlayerViewRigParityFixture.vcxproj /p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false /m:2 /verbosity:quiet
+BUILD/renegade/Tests/Release/RenegadePlayerViewRigParityFixture.exe BUILD/renegade/p1-placeholder-proof/RuntimeProof.renegade BUILD/renegade/Runtime/Release/RenegadeRuntime.exe BUILD/renegade/Runtime/Release/dxcompiler.dll BUILD/renegade/Studio/Release/BuildInputs BUILD/renegade/p1-proxy-parity 4dd9953
+```
+Configure, target build, snapshot reload, staging, executable identity and stage
+validation all pass, exit 0. Existing MSB8029 warnings remain. Input paths refer
+to the existing disposable fixture and installed Runtime support. Subsequent
+runs create unique staging and snapshot directories; do not overwrite the
+owner-verified detached package during its acceptance session.
+
+Release regression after adding the manual target: PackageIntegrity plus
+PlayerViewRig and TestLevelSnapshot checks pass 5/5, 0.36 seconds; log
+parity-regression.log. git diff --check passes. The owner-verified Runtime
+executable was not rebuilt or altered by this test-only continuation.

@@ -1237,3 +1237,28 @@ At 22:50 Europe/London the owner tested the repaired Release Runtime and reporte
 Release and Debug native movement proofs pass with maximum camera/rig error
 2.38419e-07 and real interpolation divergence 0.0498593. Both configurations'
 Player/arms/snapshot checks pass 5/5. P1 skinned-asset/package acceptance remains open.
+
+
+## 2026-10-03 proxy snapshot and detached package proof
+
+Camera repair source remains 4dd9953 and owner-verified Runtime is preserved.
+Added Tests/PlayerViewRigParityFixture.cpp and its optional Windows manual target
+in Tests/CMakeLists.txt. No gameplay production code changed.
+Production TestLevelSnapshotService snapshot saved/reloaded and launched in
+standalone Runtime; assignment remains empty and control scene path unchanged.
+StageWindowsGameBuild plus ApplyWindowsGameExecutableIdentity and stage validation
+pass. Copied package launches from unrelated working directory with no arguments;
+bootstrap verifies package integrity and DX12 success, live diagnostics resolve
+only detached GameData paths. Descriptor/scene/input hashes match the control.
+Snapshot and package screenshots visually inspected with identical proxy framing.
+Commands, hashes and evidence are in docs/P1_PLACEHOLDER_PROOF.md. An initial
+stage-only trial failed the expected Gate 3 schema check; corrected tool now
+finishes executable identity before producing the launchable package.
+
+Updated docs/P1_STATUS_AND_RECOVERY.md so the supplied owner/GGMAX arms are
+explicitly excluded and live camera agreement is no longer described as untested.
+Next: owner checks directional movement, pause/resume and R reset in the open
+P1ProxyParity.exe package. Then validate the actual Studio Test Level/Build Game
+UI workflow. Real skinned arms, hand-bone sockets and asset/package closure remain
+unaccepted. This fixed three-input manual plan is not a new general packager.
+No push, merge or P1 gate acceptance.

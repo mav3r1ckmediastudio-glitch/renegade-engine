@@ -41,6 +41,9 @@ The Alpha Playability target is:
 
 **Status: IN PROGRESS — foundation implemented; real-arms visual acceptance failed/pending.**
 Implementation baseline: `51513b9` on `feature/p1-first-person-arms-rig`.
+Camera synchronization repair `4dd9953` removes owner-reported proxy movement
+stutter. Proxy snapshot and detached-package launches are visually verified;
+owner packaged-controls retest and real skinned-asset/UI parity remain open.
 See [P1_STATUS_AND_RECOVERY](P1_STATUS_AND_RECOVERY.md) for the commit inventory,
 local build/test evidence, missing acceptance and controlled recovery sequence.
 

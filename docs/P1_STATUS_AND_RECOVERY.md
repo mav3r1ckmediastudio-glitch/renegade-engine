@@ -5,7 +5,8 @@ Implementation baseline: `51513b95e98e6f962c0052da3f92f1b8c279b280`.
 Local recovery reference: `recovery/p1-baseline-20261003`.
 Wicked remains pinned at `3a800b7134aafe58461093c8abb2e274d4e64033`.
 
-**P1 is implemented in part and visually unaccepted. It is not complete.**
+**P1 is implemented in part. Placeholder framing, idle and directional movement
+are owner-verified after camera synchronization repair 4dd9953. P1 is not complete.**
 The source exists in four commits; crashed chats have not erased it.
 This document separates source capabilities from demonstrated behaviour.
 
@@ -22,7 +23,7 @@ This document separates source capabilities from demonstrated behaviour.
 
 | Area | Source implementation | Evidence / acceptance limit |
 | --- | --- | --- |
-| One authoritative Player | Existing controller owns movement and collision; View Rig is its child. | Synthetic transform and ownership assertions. Live physics/camera agreement is still unverified. |
+| One authoritative Player | Existing controller owns movement and collision; View Rig is its child. | Synthetic transform and ownership assertions. Native movement regression passes in Release and Debug after 4dd9953; owner confirms directional proxy stutter is gone. |
 | Camera-relative rig | Pose derives yaw/pitch and eye height; Player hierarchy propagates movement. | Synthetic translation and orientation checks. These are not live rendered skin checks. |
 | Both hands | Primary, off-hand and support transform sockets exist independently. | Socket existence and distinct offset checks. They are fixed transform sockets, not bindings to animated hand bones or proven equipment grips. |
 | Foreground rendering | Native Wicked foreground flag; no shadows or reflection visibility. | Component flag assertions. No rendered-pixel acceptance in the P1 tests. |
@@ -143,10 +144,10 @@ and a proven view-model coordinate contract. Do not continue cycling FBX variant
    Stop if this fails; asset orientation cannot explain a no-asset failure.
 3. Verify simple asymmetric View Rig geometry against that same camera. This
    isolates coordinate basis and camera/rig agreement from skinning/import.
-4. Import one immutable copy of the owner's original arms. Inspect its rest pose,
-   skinning, axis/unit conversion, material dependencies and animation basis.
-   Define the expected camera-local forward/up and elbow-to-hand direction before
-   changing it. The original source remains unchanged.
+4. The owner has withdrawn the supplied-arms experiment. Do not use or re-export
+   the original owner arms or GGMAX proof arms. Complete snapshot and independent
+   package checks with the accepted proxies. A future skinned view model must have
+   a documented rest/animation basis and agreed scope before replacing this control.
 5. Bind that one derived asset to the unchanged fixture. Change one variable per
    recorded comparison; do not replace fixture and asset together.
 6. Inspect rendered Idle/Walk/Sprint, transitions, pitch/yaw, wall proximity,

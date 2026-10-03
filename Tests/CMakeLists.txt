@@ -774,3 +774,12 @@ if(WIN32)
     set_target_properties(RenegadePlayerViewRigFixture PROPERTIES
         FOLDER "Renegade/Tests")
 endif()
+
+# Manual GPU snapshot/staging proof for the owner-verified proxy scene.
+if(WIN32)
+    add_executable(RenegadePlayerViewRigParityFixture PlayerViewRigParityFixture.cpp)
+    target_link_libraries(RenegadePlayerViewRigParityFixture PRIVATE Renegade::EngineBridge)
+    target_compile_options(RenegadePlayerViewRigParityFixture PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    set_target_properties(RenegadePlayerViewRigParityFixture PROPERTIES FOLDER "Renegade/Tests")
+endif()
