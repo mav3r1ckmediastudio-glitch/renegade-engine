@@ -1183,3 +1183,21 @@ asset. Stop at the first failed isolation check. Do not rotate/re-export more
 variants while replacing the fixture. Verify the coordinate/rest/animation basis
 before correction. Subsequent owner exact-build visual and packaged parity
 verification are required; do not move to P2 on test passes alone.
+
+## 2026-10-03 P1 no-imported-arms placeholder proof
+
+Owner requested that supplied arms stop being used. Generated a separate
+BUILD/renegade/p1-placeholder-proof project with no arms assignment or imported
+assets and no Story Flow override. Baseline Release Runtime now visibly shows
+solid floor, three landmarks and orange/blue proxies extending from the lower
+view. Two inspected captures 62.07 seconds apart retain world framing.
+Diagnostics: Player spawned; proxy geometry true; imported asset loaded false;
+Character count zero. Runtime left open for owner movement/look verification.
+
+Added Tests/PlayerViewRigFixture.cpp and optional Windows
+RenegadePlayerViewRigFixture CMake target to preserve the no-asset scene generator.
+See docs/P1_PLACEHOLDER_PROOF.md for commands, hash, evidence and limits.
+Configure and generator Release build pass; generator save/reload passes on
+separate output; P1 Release tests 2/2 pass. Existing MSB8029 warnings remain.
+No production Runtime/Player/View Rig code changed; original arms untouched.
+No skinned-arms or live movement/pitch/yaw or full P1 acceptance claim.

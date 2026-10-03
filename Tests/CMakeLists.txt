@@ -761,3 +761,14 @@ add_test(
         -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/PlayerViewRigSourceContract.cmake
 )
+
+# Manual Windows GPU fixture generator; not an automatic gameplay acceptance test.
+# Writes a no-imported-arms scene for the standalone Runtime placeholder check.
+if(WIN32)
+    add_executable(RenegadePlayerViewRigFixture PlayerViewRigFixture.cpp)
+    target_link_libraries(RenegadePlayerViewRigFixture PRIVATE Renegade::EngineBridge)
+    target_compile_options(RenegadePlayerViewRigFixture PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    set_target_properties(RenegadePlayerViewRigFixture PROPERTIES
+        FOLDER "Renegade/Tests")
+endif()

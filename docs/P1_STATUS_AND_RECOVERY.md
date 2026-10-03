@@ -122,6 +122,15 @@ Logs: `BUILD/renegade/p1-recovery-20261003-2217/`.
 Executable identity must include configuration and SHA-256, not only the
 historical embedded Git revision. Baseline binary hashes are recorded there.
 
+## Placeholder progress after recovery
+
+The owner requested that supplied arms stop being used. A separate scene with
+no imported arms now renders stable floor/landmarks and the built-in coloured
+proxies extending from the lower view. Two inspected captures span 62 seconds.
+See [P1_PLACEHOLDER_PROOF](P1_PLACEHOLDER_PROOF.md) for the reusable fixture
+generator, evidence and remaining manual movement/look checks. This does not
+establish a skinned-arms fix or complete P1.
+
 ## Controlled next task
 
 The next implementation session must first establish one stable fixed fixture
