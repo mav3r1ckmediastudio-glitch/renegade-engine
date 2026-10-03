@@ -203,3 +203,38 @@ recorded above (proof tooling ee79134; gameplay camera repair 4dd9953).
 This supersedes the packaged-controls retest status above. Keep the accepted
 package unchanged. Actual Studio UI Test Level/Build Game and real skinned-asset
 acceptance remain separate open requirements. P1 is not marked complete.
+
+## Studio Build Game export fixture
+
+Tools/StoryFlow/Create-P1ExportFixture.ps1 creates a separate project with fresh
+stable project/scene/flow IDs, one byte-identical copy of the accepted scene and
+GameplayInput, and Game Start -> Proxy Proof -> Complete Game. Completion is
+routed by level.complete for Build Game's smoke verification; normal play does
+not auto-complete the level. The source descriptor and scene are never written.
+The script refuses an existing destination, writes complete newline-terminated
+native documents, and checks copied scene/input SHA-256 agreement.
+
+Owner export project: BUILD/renegade/p1-studio-export-proof/P1ExportProof.renegade.
+Tests/PlayerViewRigParityFixture now supports --inspect-export-project and calls
+ProjectService::InspectProject plus PrepareWindowsGameBuildProjectState, the
+production Build Game readiness/dependency/registry/route boundary. Its hidden
+GPU application waits for pipeline creation and GPU completion before teardown.
+This is a preflight check, not a completed export or Studio UI acceptance.
+
+From repository root:
+```text
+powershell -ExecutionPolicy Bypass -File Tools/StoryFlow/Create-P1ExportFixture.ps1 -SourceProject BUILD/renegade/p1-placeholder-proof/RuntimeProof.renegade -DestinationRoot BUILD/renegade/p1-studio-export-proof
+MSBuild BUILD/renegade/Tests/RenegadePlayerViewRigParityFixture.vcxproj /p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false /m:2 /verbosity:quiet
+BUILD/renegade/Tests/Release/RenegadePlayerViewRigParityFixture.exe --inspect-export-project BUILD/renegade/p1-studio-export-proof/P1ExportProof.renegade
+```
+Use a fresh destination for reruns. Preflight passes with one Level completion
+and the expected two-route trace. A second fresh generated project separately
+checks generator repeatability. Logs are under the existing proof directory:
+export-fixture.log, export-generator-validation.log, export-preflight-build.log,
+p1-studio-export-proof-preflight.log and p1-export-generator-validation-preflight.log.
+Next owner action: close Test Level, open P1ExportProof in Studio and use Build
+Game. Runtime may briefly open during export's automatic validation. Then run
+its produced game and verify the same controls/proxies. Do not mark P1 accepted
+on preflight alone. The earlier incomplete helper trials are not acceptance;
+final generator fixes document termination and final helper synchronizes GPU
+teardown. Production Studio and Runtime code/binaries are unchanged.

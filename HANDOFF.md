@@ -1305,3 +1305,24 @@ Studio's captured ready flag remains false while its update is suspended;
 this does not establish readiness-indicator acceptance. Gameplay owner result
 is accepted; actual Studio Build Game export remains next. Source checkpoint
 5d4d985 records bundle repair; verified Runtime hash unchanged. Full P1 open.
+
+## 2026-10-03 Studio export-test project prepared
+
+Added Tools/StoryFlow/Create-P1ExportFixture.ps1. It refuses existing destinations,
+creates fresh stable IDs, copies only the accepted scene/input unchanged, creates
+scene identity metadata and a three-node/two-route Story Flow, and declares the
+input map Always Include. Owner project is the ignored
+BUILD/renegade/p1-studio-export-proof/P1ExportProof.renegade. Control project and
+accepted Runtime/Studio binaries were not changed.
+Extended Tests/PlayerViewRigParityFixture.cpp with --inspect-export-project,
+calling the real PrepareWindowsGameBuildProjectState readiness boundary with a
+hidden GPU context and synchronized teardown. Release helper build passes;
+owner export project and a second fresh generator-validation project both pass
+InspectProject/dependency/registry/route preflight, exit 0, one Level completion.
+The generated scene/input SHA-256 match the control. git diff --check passes.
+Commands and logs are in docs/P1_PLACEHOLDER_PROOF.md. Early helper trials failed
+before document newline/GPU teardown corrections and are not acceptance evidence.
+Next: owner closes Test Level, opens P1ExportProof in Studio, uses Build Game and
+checks the resulting exported game's movement/look/idle/pause/reset. Export may
+briefly open Runtime for automatic smoke validation. This preflight is not an
+actual export or full P1 acceptance. No supplied arms resumed; no push or merge.

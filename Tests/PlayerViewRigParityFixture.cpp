@@ -2,6 +2,7 @@
 // Uses production snapshot/staging services; does not claim Studio UI acceptance.
 #include "renegade/bridge/BuildStageService.h"
 #include "renegade/bridge/BuildIdentityService.h"
+#include "renegade/bridge/WindowsGameBuildProjectService.h"
 #include <stdexcept>
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/PackageIntegrityService.h"
@@ -33,6 +34,29 @@ std::string ContentHash(const fs::path& path)
 }
 int main(int argc, char** argv)
 {
+    if (argc==3 && std::string(argv[1])=="--inspect-export-project") {
+        WNDCLASSEXW c={}; c.cbSize=sizeof(c); c.lpfnWndProc=ParityWindow;
+        c.hInstance=GetModuleHandleW(nullptr); c.lpszClassName=L"P1ExportPreflight";
+        RegisterClassExW(&c);
+        HWND h=CreateWindowExW(0,c.lpszClassName,L"P1 Export Preflight",WS_OVERLAPPEDWINDOW,
+            0,0,64,64,nullptr,nullptr,c.hInstance,nullptr);
+        if(!h) return 2;
+        wi::Application app; app.allow_hdr=false; app.SetWindow(h);
+        wi::initializer::InitializeComponentsImmediate();
+        ProjectService projects; ProjectMetadata project; std::string error;
+        WindowsGameBuildProjectState state;
+        const bool inspected=projects.InspectProject(fs::absolute(argv[2]).generic_u8string(),project,error);
+        std::cout<<"PROJECT_INSPECTED="<<inspected<<"\n";
+        const bool prepared=inspected && PrepareWindowsGameBuildProjectState(project,state,error);
+        std::cout<<"EXPORT_PREPARED="<<prepared<<"\n";
+        while(wi::renderer::IsPipelineCreationActive()>0) Sleep(10);
+        wi::graphics::GetDevice()->WaitForGPU();
+        if(!prepared) {std::cerr<<error<<"\n"; return 1;}
+        std::cout<<"EXPORT_PREFLIGHT=PASS\nLEVEL_COMPLETIONS="<<state.levelCompletionCount<<"\n";
+        for(const auto& step:state.expectedFlowTrace) std::cout<<step<<"\n";
+        std::cout<<std::flush;
+        return 0;
+    }
     if (argc!=7) { std::cerr<<"Expected project, Runtime, dxcompiler, BuildInputs, output, source revision\n"; return 2; }
     try {
         std::string error;
