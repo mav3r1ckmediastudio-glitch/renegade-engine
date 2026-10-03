@@ -727,3 +727,37 @@ add_test(
     NAME RenegadeCharacterAiAnimationTests
     COMMAND RenegadeCharacterAiAnimationTests
 )
+
+# Alpha Playability P1 - first-person Player View Rig.
+add_executable(RenegadePlayerViewRigTests
+    PlayerViewRigTests.cpp
+)
+target_link_libraries(
+    RenegadePlayerViewRigTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+target_include_directories(
+    RenegadePlayerViewRigTests
+    PRIVATE
+        "${CMAKE_SOURCE_DIR}/Runtime/src"
+)
+target_compile_options(RenegadePlayerViewRigTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+set_target_properties(RenegadePlayerViewRigTests PROPERTIES
+    FOLDER "Renegade/Tests"
+)
+# Studio CI builds RenegadeBridgeTests before the complete CTest registry.
+add_dependencies(RenegadeBridgeTests RenegadePlayerViewRigTests)
+add_test(
+    NAME RenegadePlayerViewRigTests
+    COMMAND RenegadePlayerViewRigTests
+)
+add_test(
+    NAME RenegadePlayerViewRigSourceContract
+    COMMAND ${CMAKE_COMMAND}
+        -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/PlayerViewRigSourceContract.cmake
+)

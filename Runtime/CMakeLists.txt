@@ -36,6 +36,7 @@ add_executable(RenegadeRuntime WIN32
     src/RuntimeApplication.cpp
     src/RuntimeLiveDiagnostics.cpp
     src/RuntimeApplication.h
+    src/RuntimePlayerViewRig.h
     src/main_Windows.cpp
 )
 add_dependencies(RenegadeRuntime RenegadeTerrainSurfacePacker)
