@@ -280,6 +280,66 @@ namespace renegade::bridge
         }
     }
 
+    bool PreparePackagedReusableAsset(
+        const std::string& packageRootText,
+        const StableId& projectId,
+        const StableId& assetId,
+        PreparedPackagedReusableAsset& prepared,
+        std::string& error)
+    {
+        prepared = {};
+        error.clear();
+
+        if (packageRootText.empty() ||
+            !IsValidStableId(projectId) ||
+            !IsValidStableId(assetId))
+        {
+            error =
+                "Packaged reusable asset preparation requires a package root and valid project/asset IDs.";
+            return false;
+        }
+
+        std::error_code ec;
+        const fs::path packageRoot = fs::weakly_canonical(
+            fs::u8path(packageRootText), ec);
+        if (ec || !fs::is_directory(packageRoot, ec) || ec)
+        {
+            error =
+                "Packaged reusable asset preparation package root is unavailable.";
+            return false;
+        }
+
+        std::map<StableId, PackagedAssetEntry> packageEntries;
+        if (!ReadPackageAssetMap(
+                packageRoot, projectId, packageEntries, error))
+        {
+            return false;
+        }
+
+        const auto entry = packageEntries.find(assetId);
+        if (entry == packageEntries.end())
+        {
+            error =
+                "Reusable asset stable ID is absent from the packaged content manifest: " +
+                assetId;
+            return false;
+        }
+
+        PreparedAssetPayload internal;
+        if (!PreparePayload(
+                packageRoot, projectId, entry->second, internal, error))
+        {
+            return false;
+        }
+
+        prepared.assetId = internal.assetId;
+        prepared.packagedAssetPath = internal.packagedPath;
+        prepared.payloadHash = internal.payloadHash;
+        prepared.scene = std::move(internal.scene);
+        error.clear();
+        return true;
+    }
+
     bool RefreshPackagedReusableAssetInstances(
         wi::scene::Scene& scene,
         const std::string& packageRootText,

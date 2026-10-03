@@ -3,11 +3,13 @@
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/ReusableAssetService.h"
+#include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <set>
 #include <utility>
 
 namespace renegade::bridge
@@ -176,15 +178,28 @@ namespace renegade::bridge
                 return false;
             }
 
+            const wi::scene::Scene& inspectedScene =
+                *prepared.ReadOnlyScene();
+
             std::vector<ReusableAssetInstanceRecord> instances;
             if (!InspectReusableAssetInstances(
-                    *prepared.ReadOnlyScene(), instances, error))
+                    inspectedScene, instances, error))
             {
                 error =
                     "Reusable asset dependency scene metadata is invalid: " + error;
                 return false;
             }
-            if (instances.empty())
+
+            StableId firstPersonArmsAssetId;
+            const PlayerStartResult playerStart =
+                ResolvePlayerStart(inspectedScene);
+            if (playerStart.resolution == PlayerStartResolution::Success)
+            {
+                firstPersonArmsAssetId =
+                    playerStart.start.settings.firstPersonArmsAssetId;
+            }
+
+            if (instances.empty() && firstPersonArmsAssetId.empty())
             {
                 error.clear();
                 return true;
@@ -195,31 +210,62 @@ namespace renegade::bridge
                     context, projectId_, registry, error))
                 return false;
 
+            std::set<StableId> emittedAssetIds;
+            const auto emitGovernedProduct =
+                [&](const StableId& assetId,
+                    const std::string& provenancePrefix,
+                    const std::string& failureContext) -> bool
+                {
+                    if (!emittedAssetIds.insert(assetId).second)
+                        return true;
+
+                    const AssetRecord* product =
+                        FindAssetById(registry, assetId);
+                    const ImportedProductRecord* provenance =
+                        FindImportedProduct(registry, assetId);
+                    if (product == nullptr || provenance == nullptr ||
+                        product->dependencyClass !=
+                            DependencyClass::ImportedContent ||
+                        !product->sourceAvailable ||
+                        LowerExtension(product->projectRelativePath) !=
+                            ReusableAssetExtension)
+                    {
+                        error = failureContext +
+                            " does not resolve to an available governed .rasset product in LC01: " +
+                            assetId;
+                        return false;
+                    }
+
+                    DependencyCandidate candidate;
+                    candidate.declaredPath = product->projectRelativePath;
+                    candidate.dependencyClass =
+                        DependencyClass::ImportedContent;
+                    candidate.requirement =
+                        DependencyRequirement::Required;
+                    candidate.provenance =
+                        provenancePrefix + assetId;
+                    emit(candidate);
+                    return true;
+                };
+
             for (const auto& instance : instances)
             {
-                const AssetRecord* product =
-                    FindAssetById(registry, instance.assetId);
-                const ImportedProductRecord* provenance =
-                    FindImportedProduct(registry, instance.assetId);
-                if (product == nullptr || provenance == nullptr ||
-                    product->dependencyClass != DependencyClass::ImportedContent ||
-                    !product->sourceAvailable ||
-                    LowerExtension(product->projectRelativePath) !=
-                        ReusableAssetExtension)
+                if (!emitGovernedProduct(
+                        instance.assetId,
+                        "lp07.reusable_asset_instance:",
+                        "Reusable asset scene instance"))
                 {
-                    error =
-                        "Reusable asset scene instance does not resolve to an available governed .rasset product in LC01: " +
-                        instance.assetId;
                     return false;
                 }
+            }
 
-                DependencyCandidate candidate;
-                candidate.declaredPath = product->projectRelativePath;
-                candidate.dependencyClass = DependencyClass::ImportedContent;
-                candidate.requirement = DependencyRequirement::Required;
-                candidate.provenance =
-                    "lp07.reusable_asset_instance:" + instance.assetId;
-                emit(candidate);
+            if (!firstPersonArmsAssetId.empty() &&
+                !emitGovernedProduct(
+                    firstPersonArmsAssetId,
+                    "p1.player_first_person_arms:",
+                    "Player first-person arms assignment"))
+            {
+                return false;
             }
 
             error.clear();

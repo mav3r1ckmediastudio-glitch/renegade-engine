@@ -459,6 +459,7 @@ namespace renegade::studio
             bridge::ObjectParticipationProperty property,
             bool value);
         void CommitSelectedPlayerField(PlayerField field, float value);
+        void CommitSelectedPlayerArmsAsset(std::size_t choiceIndex);
         void ApplySelectedTransformValue(
             TransformTool tool,
             int axis,
@@ -784,6 +785,8 @@ namespace renegade::studio
         SceneInspectorCheckBox sceneObjectWetmap_;
         wi::gui::Label playerLabel_;
         wi::gui::Label playerCameraMode_;
+        SceneInspectorComboBox playerFirstPersonArms_;
+        std::vector<bridge::StableId> playerFirstPersonArmsChoices_;
         SceneInspectorSlider playerCapsuleRadius_;
         SceneInspectorSlider playerCapsuleHeight_;
         SceneInspectorSlider playerEyeHeight_;

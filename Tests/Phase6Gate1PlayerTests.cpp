@@ -76,12 +76,17 @@ int main()
     authoredSettings.capsuleHeight = 0.55f;
     authoredSettings.maximumSlopeDegrees = 42.0f;
     authoredSettings.gravityFactor = 1.2f;
+    authoredSettings.firstPersonArmsAssetId =
+        "12345678-1234-4234-8234-123456789abc";
     if (!commands.Execute(
             std::make_unique<SetPlayerControllerSettingsCommand>(
                 scene, startEntity, authoredSettings)) ||
         !Near(CapturePlayerControllerSettings(scene, startEntity).walkSpeed, 3.25f) ||
+        CapturePlayerControllerSettings(scene, startEntity).firstPersonArmsAssetId !=
+            authoredSettings.firstPersonArmsAssetId ||
         !commands.Undo() ||
         !Near(CapturePlayerControllerSettings(scene, startEntity).walkSpeed, 4.5f) ||
+        !CapturePlayerControllerSettings(scene, startEntity).firstPersonArmsAssetId.empty() ||
         !commands.Redo())
     {
         Fail("Player Start settings were not command-backed with Undo/Redo");
@@ -119,7 +124,9 @@ int main()
         reopenedStart.resolution != PlayerStartResolution::Success ||
         !Near(reopenedStart.start.transform.translation.x, 4.0f) ||
         !Near(reopenedStart.start.settings.walkSpeed, 3.25f) ||
-        !Near(reopenedStart.start.settings.eyeHeight, 1.72f))
+        !Near(reopenedStart.start.settings.eyeHeight, 1.72f) ||
+        reopenedStart.start.settings.firstPersonArmsAssetId !=
+            authoredSettings.firstPersonArmsAssetId)
     {
         Fail("Player Start did not survive native Wicked serialization");
     }

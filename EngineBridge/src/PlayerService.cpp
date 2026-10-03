@@ -22,6 +22,8 @@ namespace renegade::bridge
         constexpr const char* KeyEyeHeight = "renegade.player.eye_height";
         constexpr const char* KeyMaximumSlope = "renegade.player.maximum_slope";
         constexpr const char* KeyGravityFactor = "renegade.player.gravity_factor";
+        constexpr const char* KeyFirstPersonArmsAssetId =
+            "renegade.player.first_person_arms_asset_id";
 
         float FiniteOr(const float value, const float fallback) noexcept
         {
@@ -69,6 +71,16 @@ namespace renegade::bridge
             metadata.float_values.set(KeyEyeHeight, settings.eyeHeight);
             metadata.float_values.set(KeyMaximumSlope, settings.maximumSlopeDegrees);
             metadata.float_values.set(KeyGravityFactor, settings.gravityFactor);
+            if (settings.firstPersonArmsAssetId.empty())
+            {
+                metadata.string_values.erase(KeyFirstPersonArmsAssetId);
+            }
+            else
+            {
+                metadata.string_values.set(
+                    KeyFirstPersonArmsAssetId,
+                    settings.firstPersonArmsAssetId);
+            }
         }
 
         bool SettingsDiffer(
@@ -89,7 +101,8 @@ namespace renegade::bridge
                 different(left.capsuleHeight, right.capsuleHeight) ||
                 different(left.eyeHeight, right.eyeHeight) ||
                 different(left.maximumSlopeDegrees, right.maximumSlopeDegrees) ||
-                different(left.gravityFactor, right.gravityFactor);
+                different(left.gravityFactor, right.gravityFactor) ||
+                left.firstPersonArmsAssetId != right.firstPersonArmsAssetId;
         }
     }
 
@@ -166,6 +179,11 @@ namespace renegade::bridge
         settings.eyeHeight = ReadFloat(*metadata, KeyEyeHeight, settings.eyeHeight);
         settings.maximumSlopeDegrees = ReadFloat(*metadata, KeyMaximumSlope, settings.maximumSlopeDegrees);
         settings.gravityFactor = ReadFloat(*metadata, KeyGravityFactor, settings.gravityFactor);
+        if (metadata->string_values.has(KeyFirstPersonArmsAssetId))
+        {
+            settings.firstPersonArmsAssetId =
+                metadata->string_values.get(KeyFirstPersonArmsAssetId);
+        }
         return SanitizePlayerControllerSettings(settings);
     }
 
@@ -317,6 +335,11 @@ namespace renegade::bridge
             FiniteOr(result.gravityFactor, 1.0f),
             0.0f,
             10.0f);
+        if (!result.firstPersonArmsAssetId.empty() &&
+            !IsValidStableId(result.firstPersonArmsAssetId))
+        {
+            result.firstPersonArmsAssetId.clear();
+        }
         return result;
     }
 

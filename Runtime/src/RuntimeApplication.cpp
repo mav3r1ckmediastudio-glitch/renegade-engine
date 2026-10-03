@@ -538,6 +538,51 @@ namespace renegade::runtime
                 "runtime.player.view_rig",
                 "player.view_rig.spawned",
                 "First-person primary/off-hand View Rig spawned on Wicked foreground rendering.");
+
+            if (!playerSettings_.firstPersonArmsAssetId.empty())
+            {
+                std::string armsError;
+                const bool loaded = startupResult_.packageRelativeLaunch
+                    ? LoadPackagedRuntimePlayerViewAsset(
+                        scenes_.GetScene(),
+                        playerViewRig_,
+                        startupResult_.packageRootPath,
+                        startupResult_.project.projectId,
+                        playerSettings_.firstPersonArmsAssetId,
+                        armsError)
+                    : LoadRuntimePlayerViewAsset(
+                        scenes_.GetScene(),
+                        playerViewRig_,
+                        startupResult_.project.rootPath,
+                        startupResult_.project.projectId,
+                        playerSettings_.firstPersonArmsAssetId,
+                        armsError);
+
+                if (!loaded)
+                {
+                    diagnosticService_.Record(
+                        bridge::DiagnosticSeverity::Error,
+                        "runtime.player.view_rig",
+                        "player.view_rig.asset_failed",
+                        armsError);
+                    wi::backlog::post(
+                        "Renegade Runtime: first-person arms asset could not be loaded; retaining P1 proxy geometry: " +
+                            armsError,
+                        wi::backlog::LogLevel::Error);
+                }
+                else
+                {
+                    diagnosticService_.Record(
+                        bridge::DiagnosticSeverity::Info,
+                        "runtime.player.view_rig",
+                        "player.view_rig.asset_loaded",
+                        "Governed first-person arms asset loaded: " +
+                            playerSettings_.firstPersonArmsAssetId);
+                    wi::backlog::post(
+                        "Renegade Runtime: loaded governed first-person arms asset.",
+                        wi::backlog::LogLevel::Default);
+                }
+            }
         }
 
         wi::backlog::post(

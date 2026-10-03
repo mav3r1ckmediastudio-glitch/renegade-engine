@@ -54,6 +54,8 @@ namespace renegade::runtime
         wi::ecs::Entity twoHandSupportSocket = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity primaryArmProof = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity offHandArmProof = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity viewModelRoot = wi::ecs::INVALID_ENTITY;
+        bridge::StableId viewModelAssetId;
         PlayerViewAction action = PlayerViewAction::Idle;
         float presentationPhase = 0.0f;
         float eyeHeight = 1.65f;

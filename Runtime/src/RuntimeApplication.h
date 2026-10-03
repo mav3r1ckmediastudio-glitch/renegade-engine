@@ -10,6 +10,7 @@
 #include "RuntimeCharacterSystem.h"
 #include "RuntimeCombatDecision.h"
 #include "RuntimeCombatService.h"
+#include "RuntimePlayerViewAsset.h"
 #include "RuntimePlayerViewRig.h"
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"

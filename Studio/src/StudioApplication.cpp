@@ -6,6 +6,7 @@
 #include "renegade/bridge/TestLevelSnapshotService.h"
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
+#include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/ModelImportCommitService.h"
 #include "renegade/bridge/CreatorTextureWorkflowService.h"
@@ -1110,6 +1111,17 @@ namespace renegade::studio
         playerCameraMode_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         playerCameraMode_.SetColor(wi::Color::Transparent());
         inspectorPanel_.AddWidget(&playerCameraMode_);
+
+        playerFirstPersonArms_.Create("Player First Person Arms");
+        playerFirstPersonArms_.SetTooltip(
+            "Choose a governed imported .rasset for the first-person arms View Rig. "
+            "NONE keeps the temporary P1 proxy proof geometry.");
+        playerFirstPersonArms_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            CommitSelectedPlayerArmsAsset(
+                static_cast<std::size_t>(args.userdata));
+        });
+        inspectorPanel_.AddWidget(&playerFirstPersonArms_);
 
         const auto createPlayerSlider = [this](
             SceneInspectorSlider& slider,
@@ -3788,17 +3800,18 @@ namespace renegade::studio
         layoutObjectToggle(sceneObjectWetmap_, 1, 590.0f);
         positionEnvironmentWidget(playerLabel_, 224.0f, 20.0f);
         positionEnvironmentWidget(playerCameraMode_, 244.0f, 32.0f);
-        positionEnvironmentWidget(playerCapsuleRadius_, 280.0f);
-        positionEnvironmentWidget(playerCapsuleHeight_, 314.0f);
-        positionEnvironmentWidget(playerEyeHeight_, 348.0f);
-        positionEnvironmentWidget(playerWalkSpeed_, 382.0f);
-        positionEnvironmentWidget(playerSprintSpeed_, 416.0f);
-        positionEnvironmentWidget(playerJumpSpeed_, 450.0f);
-        positionEnvironmentWidget(playerLookSensitivity_, 484.0f);
-        positionEnvironmentWidget(playerMaximumSlope_, 518.0f);
-        positionEnvironmentWidget(playerGravityFactor_, 552.0f);
-        positionEnvironmentWidget(playerMinimumPitch_, 586.0f);
-        positionEnvironmentWidget(playerMaximumPitch_, 620.0f);
+        positionEnvironmentWidget(playerFirstPersonArms_, 280.0f);
+        positionEnvironmentWidget(playerCapsuleRadius_, 314.0f);
+        positionEnvironmentWidget(playerCapsuleHeight_, 348.0f);
+        positionEnvironmentWidget(playerEyeHeight_, 382.0f);
+        positionEnvironmentWidget(playerWalkSpeed_, 416.0f);
+        positionEnvironmentWidget(playerSprintSpeed_, 450.0f);
+        positionEnvironmentWidget(playerJumpSpeed_, 484.0f);
+        positionEnvironmentWidget(playerLookSensitivity_, 518.0f);
+        positionEnvironmentWidget(playerMaximumSlope_, 552.0f);
+        positionEnvironmentWidget(playerGravityFactor_, 586.0f);
+        positionEnvironmentWidget(playerMinimumPitch_, 620.0f);
+        positionEnvironmentWidget(playerMaximumPitch_, 654.0f);
         LayoutMaterialInspector(environmentFieldWidth);
 
         positionEnvironmentWidget(cameraLabel_, 506.0f, 20.0f);
@@ -4422,6 +4435,7 @@ namespace renegade::studio
         };
         setPlayerVisible(playerLabel_);
         setPlayerVisible(playerCameraMode_);
+        setPlayerVisible(playerFirstPersonArms_);
         setPlayerVisible(playerCapsuleRadius_);
         setPlayerVisible(playerCapsuleHeight_);
         setPlayerVisible(playerEyeHeight_);
@@ -4437,6 +4451,83 @@ namespace renegade::studio
         {
             const auto settings = bridge::CapturePlayerControllerSettings(
                 session_->Scenes().GetScene(), selectedEntity);
+
+            playerFirstPersonArms_.ClearItems();
+            playerFirstPersonArmsChoices_.clear();
+            playerFirstPersonArmsChoices_.push_back({});
+            playerFirstPersonArms_.AddItem("NONE // PROXY PROOF", 0);
+
+            std::size_t selectedArmsChoice = 0;
+            bool currentArmsFound = settings.firstPersonArmsAssetId.empty();
+            if (session_->Projects().HasProject())
+            {
+                bridge::AssetRegistry registry;
+                std::string registryError;
+                const auto& project = session_->Projects().CurrentProject();
+                if (bridge::ReadAssetRegistry(
+                        project.rootPath,
+                        project.projectId,
+                        registry,
+                        registryError))
+                {
+                    for (const auto& record : registry.records)
+                    {
+                        std::string extension =
+                            fs::u8path(record.projectRelativePath)
+                                .extension().generic_string();
+                        std::transform(
+                            extension.begin(), extension.end(), extension.begin(),
+                            [](const unsigned char value)
+                            {
+                                return static_cast<char>(std::tolower(value));
+                            });
+                        if (!record.sourceAvailable || extension != ".rasset")
+                            continue;
+
+                        const bool importedProduct = std::any_of(
+                            registry.importedProducts.begin(),
+                            registry.importedProducts.end(),
+                            [&record](const bridge::ImportedProductRecord& product)
+                            {
+                                return product.productAssetId == record.assetId;
+                            });
+                        if (!importedProduct ||
+                            !bridge::IsValidStableId(record.assetId))
+                        {
+                            continue;
+                        }
+
+                        const std::size_t choice =
+                            playerFirstPersonArmsChoices_.size();
+                        playerFirstPersonArmsChoices_.push_back(record.assetId);
+                        std::string label =
+                            fs::u8path(record.projectRelativePath)
+                                .filename().generic_string();
+                        label += " // " + record.assetId.substr(0, 8);
+                        playerFirstPersonArms_.AddItem(label, choice);
+                        if (record.assetId == settings.firstPersonArmsAssetId)
+                        {
+                            selectedArmsChoice = choice;
+                            currentArmsFound = true;
+                        }
+                    }
+                }
+            }
+
+            if (!currentArmsFound &&
+                bridge::IsValidStableId(settings.firstPersonArmsAssetId))
+            {
+                selectedArmsChoice = playerFirstPersonArmsChoices_.size();
+                playerFirstPersonArmsChoices_.push_back(
+                    settings.firstPersonArmsAssetId);
+                playerFirstPersonArms_.AddItem(
+                    "MISSING // " +
+                        settings.firstPersonArmsAssetId.substr(0, 12),
+                    selectedArmsChoice);
+            }
+            playerFirstPersonArms_.SetSelected(
+                static_cast<int>(selectedArmsChoice));
+
             playerCapsuleRadius_.SetValue(settings.capsuleRadius);
             playerCapsuleHeight_.SetValue(
                 bridge::PlayerCapsuleTotalHeight(settings));
@@ -8336,6 +8427,36 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 scene, entity, settings));
         RefreshInspector();
         RefreshStatus();
+    }
+
+
+    void StudioRenderPath::CommitSelectedPlayerArmsAsset(
+        const std::size_t choiceIndex)
+    {
+        if (session_ == nullptr ||
+            !session_->Selection().HasSelection() ||
+            choiceIndex >= playerFirstPersonArmsChoices_.size())
+        {
+            return;
+        }
+
+        auto& scene = session_->Scenes().GetScene();
+        const auto entity = session_->Selection().SelectedEntity();
+        if (!bridge::IsPlayerStart(scene, entity))
+            return;
+
+        auto settings =
+            bridge::CapturePlayerControllerSettings(scene, entity);
+        settings.firstPersonArmsAssetId =
+            playerFirstPersonArmsChoices_[choiceIndex];
+
+        if (session_->Commands().Execute(
+                std::make_unique<bridge::SetPlayerControllerSettingsCommand>(
+                    scene, entity, settings)))
+        {
+            RefreshInspector();
+            RefreshStatus();
+        }
     }
 
 

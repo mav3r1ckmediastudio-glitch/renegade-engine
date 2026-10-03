@@ -4,6 +4,8 @@
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/PlayerService.h"
+#include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
@@ -363,6 +365,200 @@ namespace
         return true;
     }
 
+    bool SnapshotGovernedPlayerViewInputs(
+        const renegade::bridge::ProjectMetadata& project,
+        const renegade::bridge::TestLevelSnapshot& snapshot,
+        const wi::scene::Scene& scene,
+        std::string& error)
+    {
+        using namespace renegade::bridge;
+
+        const PlayerStartResult playerStart = ResolvePlayerStart(scene);
+        if (playerStart.resolution != PlayerStartResolution::Success ||
+            playerStart.start.settings.firstPersonArmsAssetId.empty())
+        {
+            error.clear();
+            return true;
+        }
+
+        const StableId armsAssetId =
+            playerStart.start.settings.firstPersonArmsAssetId;
+
+        AssetRegistry registry;
+        if (!ReadAssetRegistry(
+                project.rootPath, project.projectId, registry, error))
+        {
+            error =
+                "Could not read the governed asset registry for first-person arms Test Level snapshot: " +
+                error;
+            return false;
+        }
+
+        const auto armsRecord = std::find_if(
+            registry.records.begin(),
+            registry.records.end(),
+            [&](const AssetRecord& candidate)
+            {
+                return candidate.assetId == armsAssetId;
+            });
+        const auto armsProvenance = std::find_if(
+            registry.importedProducts.begin(),
+            registry.importedProducts.end(),
+            [&](const ImportedProductRecord& candidate)
+            {
+                return candidate.productAssetId == armsAssetId;
+            });
+        if (armsRecord == registry.records.end() ||
+            armsProvenance == registry.importedProducts.end() ||
+            armsRecord->dependencyClass != DependencyClass::ImportedContent ||
+            !armsRecord->sourceAvailable ||
+            fs::u8path(armsRecord->projectRelativePath).extension() !=
+                ReusableAssetExtension)
+        {
+            error =
+                "Player first-person arms assignment does not resolve to an available governed .rasset product: " +
+                armsAssetId;
+            return false;
+        }
+
+        std::string registrySourceText;
+        if (!ResolveAssetRegistryDocumentPath(
+                project.rootPath, registrySourceText, error))
+        {
+            error =
+                "Could not resolve the governed asset registry for first-person arms Test Level snapshot: " +
+                error;
+            return false;
+        }
+
+        const fs::path sourceRoot = fs::u8path(project.rootPath);
+        const fs::path snapshotRoot = fs::u8path(snapshot.sessionDirectory);
+        std::error_code ec;
+        fs::copy_file(
+            fs::u8path(registrySourceText),
+            snapshotRoot / AssetRegistryDocumentName,
+            fs::copy_options::overwrite_existing,
+            ec);
+        if (ec)
+        {
+            error =
+                "Could not snapshot the governed asset registry for first-person arms: " +
+                ec.message();
+            return false;
+        }
+
+        const auto copyRecord =
+            [&](const AssetRecord& record,
+                const char* label) -> bool
+            {
+                const fs::path relative =
+                    fs::u8path(record.projectRelativePath).lexically_normal();
+                if (!IsSafeSnapshotContentPath(relative))
+                {
+                    error = std::string(label) +
+                        " escaped governed Content: " +
+                        record.projectRelativePath;
+                    return false;
+                }
+
+                ec.clear();
+                const fs::path source = sourceRoot / relative;
+                const fs::file_status status =
+                    fs::symlink_status(source, ec);
+                if (ec || fs::is_symlink(status) ||
+                    !fs::is_regular_file(status))
+                {
+                    error = std::string(label) +
+                        " is unavailable: " + source.generic_u8string();
+                    if (ec)
+                        error += ": " + ec.message();
+                    return false;
+                }
+
+                const fs::path destination = snapshotRoot / relative;
+                fs::create_directories(destination.parent_path(), ec);
+                if (!ec)
+                {
+                    fs::copy_file(
+                        source,
+                        destination,
+                        fs::copy_options::overwrite_existing,
+                        ec);
+                }
+                if (ec)
+                {
+                    error = "Could not snapshot " + std::string(label) +
+                        ": " + source.generic_u8string() +
+                        ": " + ec.message();
+                    return false;
+                }
+                return true;
+            };
+
+        if (!copyRecord(*armsRecord, "first-person arms product"))
+            return false;
+
+        ReusableModelPlacementRequest request;
+        request.projectRoot = project.rootPath;
+        request.projectId = project.projectId;
+        request.assetId = armsAssetId;
+        ReusableAssetService reusableAssets;
+        auto prepared = reusableAssets.PrepareModelAssetPlacement(request);
+        if (!prepared.IsReady() || prepared.PeekScene() == nullptr)
+        {
+            error =
+                "Could not inspect first-person arms dependencies for Test Level: " +
+                (prepared.Result().error.empty()
+                    ? std::string("reusable product was not ready")
+                    : prepared.Result().error);
+            return false;
+        }
+
+        std::vector<MaterialTextureBindingRecord> bindings;
+        if (!InspectMaterialTextureBindings(
+                *prepared.PeekScene(), bindings, error))
+        {
+            error =
+                "Could not inspect first-person arms texture bindings for Test Level: " +
+                error;
+            return false;
+        }
+
+        std::unordered_set<StableId> copiedTextures;
+        for (const auto& binding : bindings)
+        {
+            if (!copiedTextures.insert(binding.textureAssetId).second)
+                continue;
+
+            const auto textureRecord = std::find_if(
+                registry.records.begin(),
+                registry.records.end(),
+                [&](const AssetRecord& candidate)
+                {
+                    return candidate.assetId == binding.textureAssetId;
+                });
+            if (textureRecord == registry.records.end() ||
+                textureRecord->dependencyClass != DependencyClass::Texture ||
+                !textureRecord->sourceAvailable)
+            {
+                error =
+                    "First-person arms references an unavailable governed texture: " +
+                    binding.textureAssetId;
+                return false;
+            }
+
+            if (!copyRecord(
+                    *textureRecord,
+                    "first-person arms texture product"))
+            {
+                return false;
+            }
+        }
+
+        error.clear();
+        return true;
+    }
+
     bool SnapshotCreatorScripts(
         const renegade::bridge::ProjectMetadata& project,
         const renegade::bridge::TestLevelSnapshot& snapshot,
@@ -683,6 +879,16 @@ namespace renegade::bridge
             {
                 return failAndCleanup(
                     "Could not snapshot governed material state: " + error);
+            }
+
+            if (!SnapshotGovernedPlayerViewInputs(
+                    project,
+                    created,
+                    scenes_.GetScene(),
+                    error))
+            {
+                return failAndCleanup(
+                    "Could not snapshot first-person arms state: " + error);
             }
 
             const fs::path descriptorPath =
