@@ -238,3 +238,8 @@ its produced game and verify the same controls/proxies. Do not mark P1 accepted
 on preflight alone. The earlier incomplete helper trials are not acceptance;
 final generator fixes document termination and final helper synchronizes GPU
 teardown. Production Studio and Runtime code/binaries are unchanged.
+
+
+### Actual Studio Build Game result — 2026-10-03
+
+Owner screenshot shows Build Windows Game / P1 Export Proof at 100%, BUILD COMPLETE, elapsed 28s. The final package is `BUILD/renegade/p1-studio-export-proof/Builds/Windows/P1 Export Proof Windows Build/P1 Export Proof.exe`. Its native build-report.json reports `gate5_validated_for_final_path`, `stage_only: false`, DX12 smoke test, Test All parity and package isolation `passed_gate4`, and safe rebuild `passed_gate5`. This is actual Studio export evidence, following the previously accepted Studio Test Level. Owner controls verification of this final exported executable remains pending. Do not treat this proxy proof as acceptance of skinned arms or hand-bone sockets.
