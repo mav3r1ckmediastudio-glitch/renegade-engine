@@ -1292,3 +1292,16 @@ this synchronization; direct-target builds had bypassed its packaging step.
 Build Game also prefers this bundle. Live Runtime diagnostics initially belonged
 to detached PID 26420 rather than Test Level PID 59816: match diagnostic PID to
 child PID before drawing conclusions. Owner button retry remains pending.
+
+## 2026-10-03 23:23 Europe/London: Studio Test Level gameplay accepted
+
+After synchronizing Studio's bundled Runtime, owner retried the Test Level
+button and reported "yes everything works". Requested movement/look/sprint/jump,
+pause/resume and reset checks accepted for the proxy fixture through Studio.
+Live Runtime PID 48644 matches Studio's child PID, loads the new TestLevel
+snapshot, reports startup success, proxies enabled and no imported arms.
+Evidence: BUILD/renegade/p1-placeholder-proof/studio-test-accepted.json.
+Studio's captured ready flag remains false while its update is suspended;
+this does not establish readiness-indicator acceptance. Gameplay owner result
+is accepted; actual Studio Build Game export remains next. Source checkpoint
+5d4d985 records bundle repair; verified Runtime hash unchanged. Full P1 open.
