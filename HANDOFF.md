@@ -1201,3 +1201,14 @@ Configure and generator Release build pass; generator save/reload passes on
 separate output; P1 Release tests 2/2 pass. Existing MSB8029 warnings remain.
 No production Runtime/Player/View Rig code changed; original arms untouched.
 No skinned-arms or live movement/pitch/yaw or full P1 acceptance claim.
+
+## 2026-10-03 owner placeholder movement and idle acceptance
+
+At 22:32 Europe/London owner reports movement is fluid and idle works well on
+the placeholder arms. This verifies movement feel and procedural idle on the
+baseline Release Runtime (51513b9 source; hash in P1_PLACEHOLDER_PROOF.md).
+No imported skeletal asset is involved. Existing running fixture unchanged.
+Explicit look extremes, sprint, jump/landing, pause/resume and R reset are the
+remaining immediate owner checks. Input bindings confirmed from the fixture's
+governed GameplayInput file; checklist added to docs/P1_PLACEHOLDER_PROOF.md.
+No implementation change or full P1 acceptance.
