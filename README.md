@@ -129,6 +129,10 @@ required gate because passing damage/state tests cannot prove that combat feels
 good.
 
 See [PLAYER_ARMS_COMBAT_FRAMEWORK](docs/PLAYER_ARMS_COMBAT_FRAMEWORK.md).
+P1's rig, asset binding and movement-animation foundation is implemented on the
+active P1 branch, but real-arms visual acceptance remains outstanding. The
+[P1 status and recovery checkpoint](docs/P1_STATUS_AND_RECOVERY.md) distinguishes
+implemented code, passing automated checks and the unresolved gameplay result.
 
 ## Governed Lua scripting
 

@@ -1144,3 +1144,42 @@ owner combat-feel gate is mandatory later for recoil, camera response, animation
 timing, SFX, particles, muzzle flash, projectile/impact feel, directional melee,
 parries/guards, bow/crossbow timing and spellcasting presentation. Automated
 damage/state correctness is not sufficient acceptance.
+
+## 2026-10-03 P1 recovery and honest acceptance checkpoint
+
+Implementation baseline: 51513b95e98e6f962c0052da3f92f1b8c279b280
+on feature/p1-first-person-arms-rig. Local recovery reference:
+recovery/p1-baseline-20261003. The recorded origin branch points at the same
+baseline; no fetch/push/merge was performed by this recovery.
+
+Read docs/P1_STATUS_AND_RECOVERY.md before resuming P1. It inventories the four
+implementation commits, source capabilities, actual test coverage, failed
+experimental Runtime evidence, missing acceptance and the next bounded task.
+
+Preserved temporary RuntimeApplication diagnostic source and patch under ignored
+BUILD/renegade/p1-recovery-20261003-2217, then restored RuntimeApplication.cpp.
+Foreground policy already matches baseline. Runtime, EngineBridge, Studio and
+Tests now have no source diff against 51513b9. Experimental BUILD projects and
+asset variants remain preserved and unaccepted; original owner arms are untouched.
+Generated Tools/__pycache__ was not committed.
+
+Changed documentation: README.md, docs/ROADMAP.md, docs/FEATURE_MATRIX.csv,
+docs/P1_STATUS_AND_RECOVERY.md and this handoff. No new gameplay implementation.
+
+Exact commands, hashes and evidence limits are in the status document.
+VS18 BuildTools local incremental Release and Debug Runtime builds passed;
+Release and Debug P1 executable builds passed. P1 tests passed 2/2 per
+configuration (0.17s each). Related Release regression passed 9/9 (0.39s),
+including the P1 pair. Existing MSB8029 warnings remain. Wicked source/pin clean.
+Logs and preserved patch: BUILD/renegade/p1-recovery-20261003-2217/.
+
+No Runtime window launched during this recovery. No direct UI/save/reopen,
+real-arms visual fix, independently exported game or clean-CI claim. Synthetic
+product round-trip tests do not prove live rendered arms. P1 is NOT accepted.
+
+Next task: stabilize one fixed no-imported-arms fixture and prove grounded Player,
+visible landmarks and camera/rig agreement before examining one immutable arms
+asset. Stop at the first failed isolation check. Do not rotate/re-export more
+variants while replacing the fixture. Verify the coordinate/rest/animation basis
+before correction. Subsequent owner exact-build visual and packaged parity
+verification are required; do not move to P2 on test passes alone.

@@ -39,7 +39,10 @@ The Alpha Playability target is:
 
 ### P1 — First-person Arms Rig
 
-**Status: NEXT.**
+**Status: IN PROGRESS — foundation implemented; real-arms visual acceptance failed/pending.**
+Implementation baseline: `51513b9` on `feature/p1-first-person-arms-rig`.
+See [P1_STATUS_AND_RECOVERY](P1_STATUS_AND_RECOVERY.md) for the commit inventory,
+local build/test evidence, missing acceptance and controlled recovery sequence.
 
 Extend the existing Player camera with a presentation-only first-person View Rig.
 Deliver primary hand, off hand and two-hand/support sockets, movement presentation
