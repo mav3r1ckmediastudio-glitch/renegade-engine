@@ -1212,3 +1212,28 @@ Explicit look extremes, sprint, jump/landing, pause/resume and R reset are the
 remaining immediate owner checks. Input bindings confirmed from the fixture's
 governed GameplayInput file; checklist added to docs/P1_PLACEHOLDER_PROOF.md.
 No implementation change or full P1 acceptance.
+
+
+## 2026-10-03 directional proxy stutter repair (owner verified)
+
+Owner clarified that the other placeholder checks work, but moving in a
+direction makes the proxies stutter. This supersedes broad movement acceptance.
+A native 300-frame Scene/Jolt test reproduces a 0.0498593-unit camera/rig-root
+position mismatch at 75 Hz rendering and 120 Hz physics, with forward/backward
+and sideways walking/sprinting. The mismatch equals raw versus interpolated
+Player position; this is not evidence of a defective imported arms asset.
+
+ApplyRuntimePlayerCamera now prefers the post-Scene::Update Player transform,
+matching the attached rig's interpolated presentation position. Physics remains
+movement authority, with raw position retained only as a missing-transform
+camera fallback. The placeholder scene, geometry and idle behaviour are unchanged.
+Tests/PlayerViewRigFixture.cpp retains the native movement regression and rejects
+both camera/rig drift and an inconclusive run without interpolation divergence.
+Build/test results and executable identity are recorded in P1_PLACEHOLDER_PROOF.md.
+No upstream Wicked changes, push, merge or full P1 acceptance.
+
+At 22:50 Europe/London the owner tested the repaired Release Runtime and reported
+"stutter is gone". Directional placeholder movement is accepted on this fixture.
+Release and Debug native movement proofs pass with maximum camera/rig error
+2.38419e-07 and real interpolation divergence 0.0498593. Both configurations'
+Player/arms/snapshot checks pass 5/5. P1 skinned-asset/package acceptance remains open.

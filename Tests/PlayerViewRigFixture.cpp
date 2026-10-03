@@ -1,4 +1,6 @@
 #include "renegade/bridge/PlayerService.h"
+#include "RuntimePlayerViewRig.h"
+#include <cmath>
 #include <WickedEngine.h>
 #include <windows.h>
 #include <iostream>
@@ -33,6 +35,41 @@ int main(int argc,char** argv) {
  {wi::scene::Scene reopened; wi::Archive a(argv[1],true,false); reopened.Serialize(a);
  auto start=renegade::bridge::ResolvePlayerStart(reopened);
  if(start.resolution!=renegade::bridge::PlayerStartResolution::Success || !start.start.settings.firstPersonArmsAssetId.empty()) result=6;}
+ // Keep authored output unchanged; exercise physics/render agreement only in memory.
+ wi::physics::SetEnabled(true); wi::physics::SetSimulationEnabled(true);
+ wi::physics::SetInterpolationEnabled(true); wi::physics::SetFrameRate(120);
+ auto start=renegade::bridge::ResolvePlayerStart(s);
+ renegade::bridge::RuntimePlayerState player;
+ renegade::runtime::RuntimePlayerViewRigState rig;
+ renegade::runtime::RuntimePlayerViewRigSettings rigSettings; rigSettings.createProofGeometry=false;
+ std::string error;
+ if(!renegade::bridge::SpawnRuntimePlayer(s,start.start,player,error) ||
+    !renegade::runtime::SpawnRuntimePlayerViewRig(s,rig,player.entity,start.start.settings.eyeHeight,error,rigSettings))
+ {std::cerr<<error<<"\n"; return 7;}
+ wi::scene::CameraComponent camera;
+ float maxError=0; float maxPhysicsDifference=0;
+ for(int frame=0;frame<300;++frame) {
+    renegade::bridge::PlayerInputFrame input;
+    if(frame>=60) {
+        const int direction=((frame-60)/60)%4;
+        input.moveForward=direction==0?1.0f:direction==1?-1.0f:0.0f;
+        input.moveRight=direction==2?1.0f:direction==3?-1.0f:0.0f;
+        input.sprintDown=frame>=180;
+    }
+    (void)renegade::bridge::UpdateRuntimePlayer(s,player,input,start.start.settings);
+    (void)renegade::runtime::PoseRuntimePlayerViewRig(s,rig,player.yaw,player.pitch);
+    s.Update(1.0f/75.0f);
+    renegade::bridge::ApplyRuntimePlayerCamera(s,player,camera,start.start.settings);
+    auto p=s.transforms.GetComponent(rig.root)->GetPosition();
+    const float e=std::sqrt((p.x-camera.Eye.x)*(p.x-camera.Eye.x)+(p.y-camera.Eye.y)*(p.y-camera.Eye.y)+(p.z-camera.Eye.z)*(p.z-camera.Eye.z));
+    maxError=std::max(maxError,e);
+    auto rendered=s.transforms.GetComponent(player.entity)->GetPosition();
+    auto physics=wi::physics::GetPosition(*s.rigidbodies.GetComponent(player.entity));
+    const float d=std::sqrt((rendered.x-physics.x)*(rendered.x-physics.x)+(rendered.y-physics.y)*(rendered.y-physics.y)+(rendered.z-physics.z)*(rendered.z-physics.z));
+    maxPhysicsDifference=std::max(maxPhysicsDifference,d);
+ }
+ std::cout<<"MAX_CAMERA_RIG_ERROR="<<maxError<<" RAW_RENDER_DIFFERENCE="<<maxPhysicsDifference<<"\n";
+ if(maxError>0.0001f || maxPhysicsDifference<0.001f) result=8;
  while(wi::renderer::IsPipelineCreationActive()>0) Sleep(10); wi::graphics::GetDevice()->WaitForGPU();
  }
  DestroyWindow(h); std::cout<<"CLEAN_PROOF_RESULT="<<result<<"\n"; return result;

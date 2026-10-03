@@ -809,6 +809,12 @@ World-space Player movement, collision, camera ownership and lifecycle remain
 authoritative. A first-person View Rig is presentation-only and may not become a
 second Player controller or physics body.
 
+After Scene::Update, Runtime samples the Player's rendered scene transform for
+both camera position and the attached View Rig. Wicked may interpolate that
+transform between fixed physics steps. Raw Jolt position remains the simulation
+sample and is only a camera fallback when the scene transform is unavailable;
+mixing raw physics camera position with an interpolated rig causes movement jitter.
+
 The Player combat boundary is divided into four responsibilities:
 
 - world Player/controller: movement, position, health/damage receiver and interaction;

@@ -1,8 +1,9 @@
 # P1 placeholder Runtime proof
 
 Date: 2026-10-03. Gameplay implementation baseline: 51513b9.
-P1 remains incomplete. Static placeholder framing plus owner-reported movement
-and procedural idle are verified; other live acceptance checks remain open.
+P1 remains incomplete. Static placeholder framing and procedural idle are verified.
+The owner subsequently reported directional movement stutter, then confirmed
+that the camera/rig interpolation repair below removes it.
 
 ## Result
 
@@ -21,8 +22,10 @@ Initial and stable captures were read and visually inspected. Their unchanged
 world framing establishes a stable stationary rendered view; it is not a
 numerical physics grounding assertion. At 22:32 Europe/London the owner reported:
 "movement is fluid and the idle works well on the arms" (placeholder proxies).
-This accepts movement feel and procedural idle on the recorded baseline Runtime;
-it does not verify authored skeletal animation. Explicit pitch/yaw extremes,
+The owner later refined this result: everything works except that the proxies
+stutter during directional movement. Procedural idle remains accepted; directional
+movement presentation is rejected pending the repair/retest below. This does not
+verify authored skeletal animation. Explicit pitch/yaw extremes,
 sprint, jump, pause/resume, reset and wall-clipping checks remain outstanding. Synthetic P1
 transform tests provide separate orientation/attachment checks, not a substitute
 for those direct gameplay checks. No real skinned-arms acceptance is claimed.
@@ -90,3 +93,50 @@ The project input map explicitly binds:
 
 Record each actual owner result before marking it passed. The running project
 and baseline executable are unchanged by the acceptance documentation update.
+
+
+## Directional movement stutter: camera interpolation repair
+
+The owner refined acceptance: other placeholder checks work, but directional
+movement makes the proxies stutter. The camera sampled raw Jolt position while
+the parented rig inherited Wicked's interpolated scene transform. The camera
+now prefers the Player scene transform after Scene::Update; raw physics position
+is retained only when that transform is missing.
+
+The manual native fixture now runs 300 frames at 75 Hz scene updates and 120 Hz
+physics, first settling and then walking forward/backward and sprinting sideways.
+It compares camera Eye with rig root every frame and requires actual divergence
+between raw physics and rendered Player positions, so a non-interpolating run
+cannot silently pass. Authored fixture serialization occurs before this test.
+
+Before repair: exit 8, maximum camera/rig difference 0.0498593 scene units.
+Release after repair: exit 0, maximum difference 0.000000238419 scene units,
+with raw/render divergence still 0.0498593. This numerically verifies matching
+presentation positions. At 22:50 Europe/London the owner tested this repaired
+Release Runtime and confirmed: "stutter is gone". Directional proxy movement
+is now owner-verified on this fixture.
+Release Player/arms/snapshot CTest checks passed 5/5 after rebuilt Player tests.
+
+Repaired Release Runtime SHA-256:
+69536DA66FD6F40EBC392387DDEB0CE4E218F4373F0A74465F45B2E9524D1B92
+
+Evidence under BUILD/renegade/p1-placeholder-proof:
+- sync-before.log, sync-after-Release.log and sync-tests-Release.log;
+- sync-Release-*.log build logs;
+- sync-diagnostics.json from reopened standalone Runtime.
+BUILD/renegade/p1-camera-sync.png was visually inspected: same floor, landmarks
+and forward-projecting orange/blue proxies. Diagnostics confirm the same project
+and scene, no imported arms, no Characters and successful startup. The pre-repair
+Release executable is preserved as RenegadeRuntime_PreCameraSync.exe.
+
+Debug validation also passed: native movement proof exit 0 with maximum
+camera/rig difference 0.000000238419 and raw/render divergence 0.0498593;
+rebuilt Player/arms/snapshot CTest checks 5/5. Release and Debug EngineBridge,
+Runtime and proof targets build successfully. Existing MSB8029 and unrelated
+RenderSettingsService C4834 warnings remain.
+Debug Runtime SHA-256:
+6DB35A18300701A02BEC6D909DA7E4AADA1410E6C74F1858DBBE7C041E5C2A76
+Debug logs use the matching sync-after-Debug, sync-tests-Debug and sync-Debug
+names in the same evidence directory. These binaries were built before the
+repair commit; diagnostic revision records 9efc1a9, so hashes identify the
+owner-verified binaries. The repair commit records the source plus acceptance.

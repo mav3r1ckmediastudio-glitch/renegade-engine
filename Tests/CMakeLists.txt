@@ -767,6 +767,8 @@ add_test(
 if(WIN32)
     add_executable(RenegadePlayerViewRigFixture PlayerViewRigFixture.cpp)
     target_link_libraries(RenegadePlayerViewRigFixture PRIVATE Renegade::EngineBridge)
+    target_include_directories(RenegadePlayerViewRigFixture PRIVATE
+        "${CMAKE_SOURCE_DIR}/Runtime/src")
     target_compile_options(RenegadePlayerViewRigFixture PRIVATE
         "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
     set_target_properties(RenegadePlayerViewRigFixture PROPERTIES

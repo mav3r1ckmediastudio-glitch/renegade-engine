@@ -484,11 +484,13 @@ namespace renegade::bridge
             return;
         const auto safe = SanitizePlayerControllerSettings(settings);
         XMFLOAT3 position = state.spawnPosition;
-        if (!GetPhysicsPosition(scene, state.entity, position))
-        {
-            if (const auto* transform = scene.transforms.GetComponent(state.entity))
-                position = transform->GetPosition();
-        }
+        // Sample the post-Scene::Update presentation transform, just like the
+        // view rig. Raw physics positions bypass interpolation and make the
+        // camera move relative to its arms between fixed physics steps.
+        if (const auto* transform = scene.transforms.GetComponent(state.entity))
+            position = transform->GetPosition();
+        else
+            (void)GetPhysicsPosition(scene, state.entity, position);
         position.y += safe.eyeHeight;
 
         wi::scene::TransformComponent cameraTransform;
