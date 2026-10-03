@@ -3,6 +3,7 @@
 #include <WickedEngine.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <string>
 
@@ -69,6 +70,8 @@ namespace renegade::runtime
         wi::ecs::Entity offHandArmProof = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity viewModelRoot = wi::ecs::INVALID_ENTITY;
         bridge::StableId viewModelAssetId;
+        RuntimePlayerViewRigSettings settings;
+        std::array<wi::ecs::Entity, 3> socketTargets = {};
         PlayerViewAction action = PlayerViewAction::Idle;
         float presentationPhase = 0.0f;
         float eyeHeight = 1.65f;
@@ -201,6 +204,117 @@ namespace renegade::runtime
         return true;
     }
 
+    // Authored semantic anchors survive native entity-ID remapping and WISCENE
+    // persistence. They refer to bones (or authored grip transforms below bones),
+    // never inferred bone names. One anchor may serve more than one hand role.
+    inline constexpr std::array<const char*, 3> PlayerViewSocketMetadataKeys = {
+        "renegade.player.view_socket.primary",
+        "renegade.player.view_socket.off_hand",
+        "renegade.player.view_socket.two_hand_support",
+    };
+
+    [[nodiscard]] inline bool BindRuntimePlayerViewRigSockets(
+        wi::scene::Scene& scene,
+        RuntimePlayerViewRigState& state,
+        const wi::ecs::Entity viewModelRoot,
+        std::string& error)
+    {
+        error.clear();
+        if (!state.IsSpawned() ||
+            !player_view_rig_detail::HasTransform(scene, viewModelRoot) ||
+            !scene.Entity_IsDescendant(viewModelRoot, state.presentationRoot))
+        {
+            error = "Hand bindings require an attached first-person view model.";
+            return false;
+        }
+
+        const std::array<wi::ecs::Entity, 3> sockets = {
+            state.primaryHandSocket, state.offHandSocket,
+            state.twoHandSupportSocket,
+        };
+        for (const auto socket : sockets)
+        {
+            if (!player_view_rig_detail::HasTransform(scene, socket) ||
+                viewModelRoot == socket ||
+                scene.Entity_IsDescendant(viewModelRoot, socket))
+            {
+                error = "Hand binding would create a cyclic or missing socket hierarchy.";
+                return false;
+            }
+        }
+
+        std::array<wi::ecs::Entity, 3> targets = {};
+        // Resolve and validate every role before changing any socket. A broken
+        // imported binding must leave the existing proxy/fallback rig intact.
+        for (std::size_t i = 0; i < scene.transforms.GetCount(); ++i)
+        {
+            const auto entity = scene.transforms.GetEntity(i);
+            if (entity != viewModelRoot &&
+                !scene.Entity_IsDescendant(entity, viewModelRoot))
+                continue;
+            const auto* metadata = scene.metadatas.GetComponent(entity);
+            if (metadata == nullptr)
+                continue;
+
+            for (std::size_t role = 0; role < targets.size(); ++role)
+            {
+                const char* key = PlayerViewSocketMetadataKeys[role];
+                if (!metadata->bool_values.has(key) ||
+                    !metadata->bool_values.get(key))
+                    continue;
+
+                bool belongsToBone = false;
+                for (std::size_t a = 0; a < scene.armatures.GetCount(); ++a)
+                {
+                    const auto armatureEntity = scene.armatures.GetEntity(a);
+                    if (armatureEntity != viewModelRoot &&
+                        !scene.Entity_IsDescendant(armatureEntity, viewModelRoot))
+                        continue;
+                    for (const auto bone : scene.armatures[a].boneCollection)
+                    {
+                        if (player_view_rig_detail::HasTransform(scene, bone) &&
+                            scene.Entity_IsDescendant(bone, viewModelRoot) &&
+                            (entity == bone || scene.Entity_IsDescendant(entity, bone)))
+                        {
+                            belongsToBone = true;
+                            break;
+                        }
+                    }
+                    if (belongsToBone)
+                        break;
+                }
+                if (!belongsToBone)
+                {
+                    error = std::string("Hand anchor is not part of the view-model skeleton: ") + key;
+                    return false;
+                }
+                if (targets[role] != wi::ecs::INVALID_ENTITY)
+                {
+                    error = std::string("Multiple first-person anchors declare the same hand role: ") + key;
+                    return false;
+                }
+                targets[role] = entity;
+            }
+        }
+
+        const std::array<XMFLOAT3, 3> fallbackOffsets = {
+            state.settings.primaryHandOffset, state.settings.offHandOffset,
+            state.settings.twoHandSupportOffset,
+        };
+        for (std::size_t role = 0; role < sockets.size(); ++role)
+        {
+            const bool bound = targets[role] != wi::ecs::INVALID_ENTITY;
+            scene.Component_Attach(
+                sockets[role], bound ? targets[role] : state.presentationRoot, true);
+            player_view_rig_detail::SetLocalTransform(
+                scene, sockets[role],
+                bound ? XMFLOAT3(0.0f, 0.0f, 0.0f) : fallbackOffsets[role],
+                XMFLOAT3(1.0f, 1.0f, 1.0f));
+        }
+        state.socketTargets = targets;
+        return true;
+    }
+
     inline void UpdateRuntimePlayerViewRigPresentation(
         wi::scene::Scene& scene,
         RuntimePlayerViewRigState& state,
@@ -321,6 +435,7 @@ namespace renegade::runtime
         RuntimePlayerViewRigState created;
         created.playerEntity = playerEntity;
         created.eyeHeight = eyeHeight;
+        created.settings = settings;
         created.root = scene.Entity_CreateTransform(RuntimePlayerViewRigRootName);
         created.presentationRoot =
             scene.Entity_CreateTransform(RuntimePlayerViewRigPresentationName);

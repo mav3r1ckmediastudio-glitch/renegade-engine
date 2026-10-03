@@ -1,15 +1,17 @@
 #include "renegade/bridge/PlayerService.h"
 #include "RuntimePlayerViewRig.h"
+#include "PlayerViewSocketGraphicsProof.h"
 #include <cmath>
 #include <WickedEngine.h>
 #include <windows.h>
 #include <iostream>
 LRESULT CALLBACK ProofWindow(HWND h,UINT m,WPARAM w,LPARAM l) {return DefWindowProcW(h,m,w,l);}
 int main(int argc,char** argv) {
- if(argc!=2) return 2;
+ const bool socketProof = argc == 3 && std::string(argv[1]) == "--socket-proof";
+ if(argc!=2 && !socketProof) return 2;
  WNDCLASSEXW c={}; c.cbSize=sizeof(c); c.lpfnWndProc=ProofWindow;
  c.hInstance=GetModuleHandleW(nullptr); c.lpszClassName=L"P1CleanProof"; RegisterClassExW(&c);
- HWND h=CreateWindowExW(0,c.lpszClassName,L"P1 Clean",WS_OVERLAPPEDWINDOW,0,0,64,64,nullptr,nullptr,c.hInstance,nullptr);
+ HWND h=CreateWindowExW(0,c.lpszClassName,L"P1 Clean",WS_OVERLAPPEDWINDOW,0,0,socketProof ? 1040 : 64,socketProof ? 807 : 64,nullptr,nullptr,c.hInstance,nullptr);
  int result=0;
  {
  wi::Application app; app.allow_hdr=false; app.SetWindow(h); wi::initializer::InitializeComponentsImmediate();
@@ -30,7 +32,16 @@ int main(int argc,char** argv) {
  renegade::bridge::TransformState pose; pose.translation=XMFLOAT3(0,2,0);
  renegade::bridge::CreatePlayerStartCommand cmd(s,pose); if(!cmd.Execute()) return 3;
 
-
+ if (socketProof)
+ {
+    wi::physics::SetEnabled(true); wi::physics::SetSimulationEnabled(true);
+    wi::physics::SetInterpolationEnabled(true); wi::physics::SetFrameRate(120);
+    result = RunPlayerViewSocketGraphicsProof(app, s, argv[2]);
+    while(wi::renderer::IsPipelineCreationActive()>0) Sleep(10);
+    wi::graphics::GetDevice()->WaitForGPU();
+ }
+ else
+ {
  {wi::Archive output(argv[1],false,false); if(!output.IsOpen()) return 5; s.Serialize(output);}
  {wi::scene::Scene reopened; wi::Archive a(argv[1],true,false); reopened.Serialize(a);
  auto start=renegade::bridge::ResolvePlayerStart(reopened);
@@ -71,6 +82,7 @@ int main(int argc,char** argv) {
  std::cout<<"MAX_CAMERA_RIG_ERROR="<<maxError<<" RAW_RENDER_DIFFERENCE="<<maxPhysicsDifference<<"\n";
  if(maxError>0.0001f || maxPhysicsDifference<0.001f) result=8;
  while(wi::renderer::IsPipelineCreationActive()>0) Sleep(10); wi::graphics::GetDevice()->WaitForGPU();
+ }
  }
  DestroyWindow(h); std::cout<<"CLEAN_PROOF_RESULT="<<result<<"\n"; return result;
 }

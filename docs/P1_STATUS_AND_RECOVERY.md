@@ -25,7 +25,7 @@ This document separates source capabilities from demonstrated behaviour.
 | --- | --- | --- |
 | One authoritative Player | Existing controller owns movement and collision; View Rig is its child. | Synthetic transform and ownership assertions. Native movement regression passes in Release and Debug after 4dd9953; owner confirms directional proxy stutter is gone. |
 | Camera-relative rig | Pose derives yaw/pitch and eye height; Player hierarchy propagates movement. | Synthetic translation and orientation checks. These are not live rendered skin checks. |
-| Both hands | Primary, off-hand and support transform sockets exist independently. | Socket existence and distinct offset checks. They are fixed transform sockets, not bindings to animated hand bones or proven equipment grips. |
+| Both hands | Independent primary, off-hand and support sockets retain fixed-offset fallback; explicitly tagged native bones/grip transforms can bind each role. | Serialized and packaged-load regressions plus 300-frame DX12 animation proof check same-frame world matrices, camera agreement and pause. Creator binding UI, production skinning/grip/IK and owner acceptance of the new binding build remain open; see P1_HAND_SOCKET_BINDINGS.md. |
 | Foreground rendering | Native Wicked foreground flag; no shadows or reflection visibility. | Component flag assertions. No rendered-pixel acceptance in the P1 tests. |
 | Arms assignment | Player settings store a stable governed asset ID; selector offers imported products plus NONE and MISSING. | Source integration and settings tests. Exact-build owner UI save/reopen and Undo/Redo still need direct verification. |
 | Imported view model | Instantiates reusable product, attaches its root, removes Character/physics components and replaces proxy geometry. | Synthetic packaged-product round trip, sanitization and cleanup. A correctly posed real skinned asset is not yet accepted. |
@@ -39,7 +39,9 @@ This document separates source capabilities from demonstrated behaviour.
 
 - Accepted first-person pose, orientation, scale, materials and camera framing.
 - A dedicated creator workflow for view-model alignment/offset/FOV tuning.
-- Verified animated-hand socket binding, equipment placement or grip/IK.
+- Creator-facing hand-bone/grip assignment UI or accepted production grip/IK.
+  Native semantic socket binding has an automated DX12 proof; this is not a
+  production arms or combat acceptance claim.
 - Production arm animations or accepted subjective animation quality.
 - Fire, reload, equip, directional melee, bow, crossbow or spell actions.
   These belong to the later P2-P10 combat programme; a proof Attack clip does

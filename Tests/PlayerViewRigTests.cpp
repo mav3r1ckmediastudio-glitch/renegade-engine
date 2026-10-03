@@ -1,6 +1,7 @@
 #include "RuntimePlayerViewAsset.h"
 #include "RuntimePlayerViewAnimation.h"
 #include "RuntimePlayerViewRig.h"
+#include "PlayerViewSocketFixture.h"
 
 #include <cmath>
 #include <cstdint>
@@ -117,6 +118,7 @@ namespace
         using namespace renegade::bridge;
 
         wi::scene::Scene assetScene;
+        renegade::tests::CreatePlayerViewSocketAsset(assetScene);
         const auto root =
             assetScene.Entity_CreateTransform("P1 Governed Arms Root");
         const auto mesh =
@@ -512,6 +514,11 @@ int main()
             Fail("governed view model retained Character/identity metadata");
         }
 
+        for (const auto target : packagedRig.socketTargets)
+            if (target == wi::ecs::INVALID_ENTITY ||
+                !packagedScene.Entity_IsDescendant(target, packagedRig.viewModelRoot))
+                Fail("packaged governed asset did not bind its remapped skeletal hand anchors");
+
         const auto loadedViewRoot = packagedRig.viewModelRoot;
         DespawnRuntimePlayerViewRig(packagedScene, packagedRig);
         if (packagedScene.transforms.Contains(loadedViewRoot) ||
@@ -631,7 +638,93 @@ int main()
         Fail("View Rig despawn damaged Player ownership or left transient entities");
     }
 
+    // Native serialized bone/grip identity, atomic failure and fallback proof.
+    {
+        wi::scene::Scene prepared;
+        renegade::tests::CreatePlayerViewSocketAsset(prepared);
+        wi::Archive write;
+        prepared.Serialize(write);
+        std::vector<std::uint8_t> bytes;
+        write.WriteData(bytes);
+        wi::scene::Scene reopened;
+        wi::Archive read(bytes.data(), bytes.size());
+        reopened.Serialize(read);
+
+        wi::scene::Scene boundScene;
+        const auto boundPlayer = boundScene.Entity_CreateTransform("Socket test Player");
+        RuntimePlayerViewRigState boundRig;
+        RuntimePlayerViewRigSettings boundSettings;
+        boundSettings.createProofGeometry = false;
+        if (!SpawnRuntimePlayerViewRig(boundScene, boundRig, boundPlayer, 1.65f, error, boundSettings) ||
+            !CommitRuntimePlayerViewAsset(boundScene, boundRig, reopened, P1ArmsAssetId, error))
+            Fail("serialized native skeleton socket binding failed: " + error);
+
+        const std::array<wi::ecs::Entity, 3> sockets = {
+            boundRig.primaryHandSocket, boundRig.offHandSocket, boundRig.twoHandSupportSocket,
+        };
+        for (std::size_t role = 0; role < sockets.size(); ++role)
+        {
+            const auto target = boundRig.socketTargets[role];
+            if (target == wi::ecs::INVALID_ENTITY ||
+                boundScene.hierarchy.GetComponent(sockets[role])->parentID != target ||
+                !Near3(boundScene.transforms.GetComponent(sockets[role])->translation_local, XMFLOAT3(0,0,0)))
+                Fail("native hand/grip target was not remapped and bound at its authored origin");
+        }
+
+        const auto originalTargets = boundRig.socketTargets;
+        const auto duplicate = boundScene.Entity_CreateTransform("Ambiguous primary grip");
+        boundScene.Component_Attach(duplicate, originalTargets[0], true);
+        boundScene.metadatas.Create(duplicate).bool_values.set(PlayerViewSocketMetadataKeys[0], true);
+        if (BindRuntimePlayerViewRigSockets(boundScene, boundRig, boundRig.viewModelRoot, error) ||
+            error.find("Multiple") == std::string::npos ||
+            boundRig.socketTargets != originalTargets)
+            Fail("ambiguous anchor was not rejected atomically");
+        for (std::size_t role = 0; role < sockets.size(); ++role)
+            if (boundScene.hierarchy.GetComponent(sockets[role])->parentID != originalTargets[role])
+                Fail("failed anchor validation changed an existing socket");
+        boundScene.Entity_Remove(duplicate);
+
+        // An unrelated world skeleton's tags must never become first-person anchors.
+        const auto foreign = boundScene.Entity_CreateTransform("Unrelated world rig");
+        boundScene.metadatas.Create(foreign).bool_values.set(PlayerViewSocketMetadataKeys[0], true);
+        if (!BindRuntimePlayerViewRigSockets(boundScene, boundRig, boundRig.viewModelRoot, error))
+            Fail("world metadata contaminated view-model socket resolution");
+
+        const auto invalid = boundScene.Entity_CreateTransform("Non-skeletal primary anchor");
+        boundScene.Component_Attach(invalid, boundRig.viewModelRoot, true);
+        boundScene.metadatas.Create(invalid).bool_values.set(PlayerViewSocketMetadataKeys[0], true);
+        if (BindRuntimePlayerViewRigSockets(boundScene, boundRig, boundRig.viewModelRoot, error) ||
+            error.find("skeleton") == std::string::npos)
+            Fail("a non-skeletal anchor was accepted");
+        boundScene.Entity_Remove(invalid);
+
+        // Missing roles restore their original fallback offsets without affecting others.
+        boundScene.metadatas.GetComponent(originalTargets[1])->bool_values.erase(PlayerViewSocketMetadataKeys[1]);
+        if (!BindRuntimePlayerViewRigSockets(boundScene, boundRig, boundRig.viewModelRoot, error) ||
+            boundRig.socketTargets[0] != originalTargets[0] ||
+            boundRig.socketTargets[1] != wi::ecs::INVALID_ENTITY ||
+            boundRig.socketTargets[2] != originalTargets[2] ||
+            boundScene.hierarchy.GetComponent(sockets[1])->parentID != boundRig.presentationRoot ||
+            !Near3(boundScene.transforms.GetComponent(sockets[1])->translation_local, boundSettings.offHandOffset))
+            Fail("partial hand-binding fallback changed the authored roles or original offsets");
+
+        const auto cyclic = boundScene.Entity_CreateTransform("Cyclic view model");
+        boundScene.Component_Attach(cyclic, sockets[0], true);
+        if (BindRuntimePlayerViewRigSockets(boundScene, boundRig, cyclic, error) ||
+            error.find("cyclic") == std::string::npos)
+            Fail("binding accepted a view model below its own hand socket");
+        boundScene.Entity_Remove(cyclic);
+
+        const auto modelRoot = boundRig.viewModelRoot;
+        DespawnRuntimePlayerViewRig(boundScene, boundRig);
+        for (const auto socket : sockets)
+            if (boundScene.transforms.Contains(socket))
+                Fail("bone-bound socket leaked during despawn");
+        if (boundScene.transforms.Contains(modelRoot) || !boundScene.transforms.Contains(boundPlayer))
+            Fail("bone-bound hierarchy cleanup damaged Player ownership");
+    }
+
     std::cout
-        << "PASS: parented dual-hand Player View Rig and Wicked foreground policy\n";
+        << "PASS: parented dual-hand Player View Rig, serialized skeletal sockets and Wicked foreground policy\n";
     return EXIT_SUCCESS;
 }

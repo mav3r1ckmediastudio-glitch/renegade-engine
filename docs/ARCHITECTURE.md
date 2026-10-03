@@ -860,3 +860,16 @@ Combat acceptance includes direct owner play. Automated tests can prove action
 state, collision, damage and persistence, but cannot prove recoil, melee timing,
 audio/particle response or overall combat feel. A dedicated owner feel session
 is therefore an explicit programme gate.
+
+
+### P1 native semantic hand anchors
+
+Runtime Player View Rig sockets can attach to explicitly tagged native bones or
+child grip transforms inside the governed view-model hierarchy. Optional boolean
+roles are documented in P1_HAND_SOCKET_BINDINGS.md; they survive WISCENE entity-ID
+remapping. Duplicate/non-skeletal/cyclic anchors fail validation before mutation;
+missing roles use the original independent fixed offsets. Socket bindings are
+transient native Component_Attach relationships, evaluated by Wicked after native
+animation. This preserves one Player controller and the accepted interpolated
+camera/rig contract. Creator binding commands/UI are a subsequent bounded task;
+there is no name-inferred hand mapping or separate skeleton evaluator.

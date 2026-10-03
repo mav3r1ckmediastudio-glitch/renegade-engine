@@ -91,6 +91,12 @@ namespace renegade::runtime
             return false;
         }
 
+        if (!BindRuntimePlayerViewRigSockets(scene, state, viewModelRoot, error))
+        {
+            scene.Entity_Remove(viewModelRoot);
+            return false;
+        }
+
         RemoveRuntimePlayerViewRigProofGeometry(scene, state);
         state.viewModelRoot = viewModelRoot;
         state.viewModelAssetId = assetId;
