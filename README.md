@@ -6,14 +6,16 @@ renderer, ECS, Jolt physics integration and other low-level engine systems;
 Renegade owns its Studio editor, project and asset workflows, Runtime/player,
 build lifecycle, creator UX, diagnostics and higher-level gameplay framework.
 
-> **Status: active development — Phase 6 / Playable Core.** Renegade has moved
-> beyond scene-authoring foundations into an integrated gameplay stack with
-> player control, physics, audio, governed Lua scripting, a rebuilt native asset
-> and character importer, Character Prefabs, animation assignment/crossfading,
-> voxel/path-query navigation and profile-driven NPC behaviour. The current
-> programme is focused on making those systems robust enough for repeatable
-> creator workflows and a small independently packaged playable game. Renegade is
-> not yet a distribution-ready v1 engine.
+> **Status: active development — Phase 6 / Playable Core, entering Alpha
+> Playability.** Renegade has moved beyond scene-authoring foundations into an
+> integrated gameplay stack with player control, physics, audio, governed Lua
+> scripting, a rebuilt native asset and Character importer, Character Prefabs,
+> animation assignment/crossfading, voxel/path-query navigation and profile-driven
+> NPC behaviour. The current programme is the Player Arms & Combat Framework:
+> turning the accepted Player and Character systems into a complete small-game
+> combat loop with first-person arms, equipment, firearms, directional melee,
+> bows, crossbows, magic, HUD state and packaged Runtime parity. Renegade is not
+> yet a distribution-ready v1 engine.
 
 ## What Renegade already does
 
@@ -106,6 +108,28 @@ and [AI_IMPLEMENTATION_HANDOFF](docs/AI_IMPLEMENTATION_HANDOFF.md).
   ZoneService should serve audio, objectives, weather and other gameplay systems
   rather than creating separate incompatible zone implementations.
 
+### Player Arms & Combat — active programme
+
+The next Alpha Playability programme extends the existing Player rather than
+replacing it. A camera-mounted first-person View Rig will provide first-class
+primary/off-hand/two-hand presentation while world movement/collision remains
+owned by the accepted Player controller.
+
+The shared combat framework is required to support firearms, physical
+projectiles, **directional melee and directional defence**, shields, bows,
+crossbows and spellcasting through common equipment/action/projectile/effect
+boundaries. Directional melee includes swept weapon collision, attack/guard
+directions, block/parry/feint seams and surface-specific impact feedback rather
+than a generic centre-camera melee ray.
+
+Combat acceptance explicitly includes animation quality, recoil/weapon impulse,
+camera response, muzzle flash, particles, SFX/mechanical audio, projectiles,
+surface impacts and target reactions. A dedicated owner gameplay session is a
+required gate because passing damage/state tests cannot prove that combat feels
+good.
+
+See [PLAYER_ARMS_COMBAT_FRAMEWORK](docs/PLAYER_ARMS_COMBAT_FRAMEWORK.md).
+
 ## Governed Lua scripting
 
 Renegade has a creator-facing scripting stack rather than relying on ad-hoc raw
@@ -157,18 +181,17 @@ small interactive game using the same creator-facing workflows that built it.
 
 The current bounded work is centred on:
 
-1. **Character workflow hardening** — continue turning the rebuilt importer,
-   Character Prefabs, animation assignment and AI authoring into a coherent,
-   repeatable creator workflow.
-2. **Navigation and behaviour scaling** — harden Wicked voxel/path-query
-   navigation for multiple actors, role behaviour and more demanding scenes.
-3. **Animation quality** — improve transition quality beyond the current native
-   crossfade implementation where it materially benefits gameplay.
-4. **Playable vertical-slice acceptance** — verify interaction, objectives,
-   characters, audio, reopen behaviour, Test Level and an independently packaged
-   Windows build as one integrated flow.
-5. **CI and regression protection** — keep the rebuilt importer/character stack
-   and established editor/runtime workflows protected while Phase 6 advances.
+1. **First-person Arms Rig** — primary/off-hand/two-hand presentation on top of
+   the existing authoritative Player controller.
+2. **Generic equipment/actions and projectiles** — shared foundations for
+   firearms, melee, bows, crossbows, throwables and magic.
+3. **Reference combat families** — pistol, directional sword + shield, bow,
+   crossbow and spellcasting must all work without Player special cases.
+4. **Combat feel and HUD loop** — health/ammo/resource state, death/restart,
+   recoil, animation, SFX, particles, impacts and owner-led feel tuning.
+5. **Packaged parity and performance** — preserve clean CI, Test Level/Build Game
+   equivalence and investigate the open rigged-character FPS issue before
+   scaling to large populations.
 
 The detailed programme state lives in [ROADMAP](docs/ROADMAP.md).
 Implementation checkpoints and owner-test evidence live in [HANDOFF](HANDOFF.md)
@@ -229,11 +252,13 @@ reference. It is not the Renegade editor and is not embedded as Renegade UI.
    [RENEGADE_CHARACTER_WORKFLOW_IMPLEMENTATION_SPEC](docs/RENEGADE_CHARACTER_WORKFLOW_IMPLEMENTATION_SPEC.md)
    and
    [RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY](docs/RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY.md).
-7. For live diagnostics, read
+7. For the active Player/combat programme, read
+   [PLAYER_ARMS_COMBAT_FRAMEWORK](docs/PLAYER_ARMS_COMBAT_FRAMEWORK.md).
+8. For live diagnostics, read
    [LIVE_DIAGNOSTIC_ACCESS](docs/LIVE_DIAGNOSTIC_ACCESS.md).
-8. Follow [AI_WORKFLOW](docs/AI_WORKFLOW.md) for Codex, ChatGPT,
+9. Follow [AI_WORKFLOW](docs/AI_WORKFLOW.md) for Codex, ChatGPT,
    Claude or human handovers.
-9. Treat [FEATURE_MATRIX.csv](docs/FEATURE_MATRIX.csv) as the capability
+10. Treat [FEATURE_MATRIX.csv](docs/FEATURE_MATRIX.csv) as the capability
    evidence ledger; compilation alone is never proof of creator-facing parity.
 
 ## Verification policy

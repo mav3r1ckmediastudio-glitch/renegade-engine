@@ -1,6 +1,25 @@
 # Model importer rebuild — first vertical slice
 
-This branch starts from the verified no-creator-model-import baseline. The old
+## Current integrated status — 2026-10-03
+
+The clean native importer rebuild is now integrated into `main`. Static model
+import, Character detection, retained-source provenance, native preview/rotation,
+external animation FBX addition, semantic action assignment, Character placement,
+cold reopen and Runtime semantic playback are no longer separate feature-branch
+candidates.
+
+The later Character crossfade work is also integrated and owner-tested in real
+gameplay. The historical sections below retain the sequence of implementation
+evidence and therefore contain branch-era language that should not be read as the
+current repository state.
+
+Current CI builds the importer proof dependencies from a clean checkout. GitHub's
+hosted Windows graphics adapter can create/read the preview PNG but does not
+reliably render visible model pixels, so CI validates import/commit/reopen and PNG
+decode/readback while owner hardware retains the mandatory visible-pixel/pose
+proof. The exact CI repair was merged through PR #176.
+
+This historical implementation started from the verified no-creator-model-import baseline. The old
 guided import UI and its transaction are not the implementation template. The
 existing `.rasset` reader, identity registry, Project Assets catalogue and
 placement path remain the destination contract for a newly committed model.
@@ -192,20 +211,24 @@ editing an existing Character, arbitrary multi-rig retargeting and universal
 FBX compatibility remain outside this slice. Exact validation is recorded in
 HANDOFF.md; independent verification and owner acceptance remain pending.
 
-## Separate runtime blending candidate
+## Runtime blending integration
 
-The external-import checkpoint remains on feature/model-importer-rebuild.
-feature/character-animation-crossfades adds automatic runtime transitions using
-the existing per-character action assignments. It does not change importer UI.
+Runtime transitions now use the existing per-character semantic action
+assignments and native Wicked AnimationComponent evaluation. This is integrated
+product behaviour rather than a separate candidate branch.
 
-Idle/Walk/Run transitions crossfade over 0.20 seconds. Attack, Reload and Hit use
-short 0.08-second transitions; Death uses 0.05 seconds and stays terminal.
-Repeated requests preserve active playback. Interrupted fades retain current
-weights, and a returning loop retains its phase. AI movement remains owned by
-the existing Character controller.
+Locomotion transitions use the established short crossfade path; Attack uses a
+longer action transition, Death remains terminal, repeated requests do not
+restart stable loops and interrupted transitions preserve contributing weights.
+Later repair work also completes missing transform-track coverage transiently in
+Runtime so retargeted clips with different transform coverage can still blend
+without modifying saved importer products.
 
-Matching whole-clip track coverage is required for blending. Partial tracks and
-event-bearing clips retain immediate switches. This is crossfade support, not a
-speed blend space, directional locomotion, upper-body layer or additive recoil.
-Durations are fixed runtime defaults in this slice. Owner acceptance, packaged
-export, large-crowd performance and independent verification remain pending.
+AI movement remains owned by the Character controller. This remains crossfade
+support rather than a full speed blend space, directional locomotion, upper-body
+layer or additive animation system. Those richer animation features are later
+work and must extend, not replace, the accepted native animation ownership.
+
+Owner gameplay has verified visibly improved transitions in the live hostile
+Character loop. Large-crowd performance and broader layered-animation work remain
+future scope.

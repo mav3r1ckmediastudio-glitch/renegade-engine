@@ -1,6 +1,22 @@
 # Character workflow implementation progress
 
-## Recovery authority
+## Current integrated status — 2026-10-03
+
+This file preserves the CW gate history below. The old
+`feature/character-workflow-programme` branch is no longer the active product
+branch. The current Character/importer/prefab stack is integrated into `main`
+and participates in the normal Windows test graph.
+
+The rebuilt native importer, Character classification/placement, Character
+Prefabs, external animation assignment, Runtime semantic playback and later
+crossfade work are now part of the integrated engine. Owner gameplay has also
+verified imported/assigned animations and a working hostile Character loop.
+
+Prefab-specific creator acceptance can still be expanded, but the next product
+programme is not CW-06 by default: it is Alpha Playability / Player Arms &
+Combat. See `ROADMAP.md` and `PLAYER_ARMS_COMBAT_FRAMEWORK.md`.
+
+## Historical recovery authority
 
 - **Authoritative specification:** `docs/RENEGADE_CHARACTER_WORKFLOW_IMPLEMENTATION_SPEC.md`
   (SHA-256: `dff426869be84ddeecbb98511d96126bbf9a4fa6d83bb6a588767a5c536d43d5`).
@@ -23,8 +39,8 @@
 | CW-02 | Complete / source-validated | Character import accepts queued external WISCENE/FBX/GLTF/GLB/VRM/VRMA animation sources, retains governed provenance and has a registered regression target. |
 | CW-03 | Complete / source-validated | Character import validates/prepares Wicked humanoid mapping and retargets included external animation sources before final Character Asset commit; governed reimport uses the same recipe path. |
 | CW-04 | Complete / source-validated | Prepared Character Assets automatically become governed Character scene instances on placement with fresh identity/default gameplay settings and route directly into the Character Inspector. |
-| CW-05 | Implementation complete / Windows validation pending | Character-aware duplication, portable Character Prefabs, Asset Browser placement, script companion Undo/Redo and the explicit Character Inspector save action are implemented and remotely checkpointed. Dedicated functional/source-contract targets are registered. No Windows compile/CTest result is claimed yet. |
-| CW-06 to CW-08 | Not started | Begin only after CW-05 compile/test repair and owner acceptance as appropriate. |
+| CW-05 | Integrated / automated validation covered | Character-aware duplication, portable Character Prefabs, Asset Browser placement, script companion Undo/Redo and the explicit Character Inspector save action are integrated and registered in the normal test graph. Broader owner acceptance of every prefab-specific workflow can continue as needed. |
+| CW-06 to CW-08 | Deferred | Later Character workflow expansion is secondary to the active Alpha Playability programme unless it blocks the playable loop. |
 
 ## CW-05 implementation details
 
@@ -131,17 +147,13 @@
 
 ## Validation and known state
 
-- The programme branch remains based on the accepted Phase 7 / AI-05 lineage and
-  has not been merged.
-- Programme-branch pushes do not trigger the expensive Windows matrices; PRs
-  targeting `main` do. No full Windows CI run is claimed for CW-01 through CW-05
-  at this checkpoint.
-- This connector execution environment cannot perform the Windows native Studio
-  build locally. Source/API integration has been audited against the current
-  branch, but **compilation is not claimed until Windows CI actually compiles it**.
-- Current workflow configuration still runs both Windows baseline and Renegade
-  Studio Debug/Release matrices on pull requests targeting `main`.
-- CW-05 owner acceptance after a green artifact should verify:
+The branch-era validation caveats below have been superseded by integration into
+the normal Windows build/test graph. The current CI policy runs Windows baseline
+and Renegade Studio Debug/Release checks from clean checkouts. Creator-facing
+behaviour still requires owner testing; automated success does not replace
+visual or workflow acceptance.
+
+Additional CW-05 owner acceptance may still verify:
   1. configure a placed Character's faction/role/personality/combat/Actions;
   2. Ctrl+D it and confirm authored setup is retained but the actor behaves as an
      independent instance;
@@ -153,9 +165,9 @@
   7. confirm cleared patrol/weapon/scene-reference warnings are truthful;
   8. Save/Reopen and repeat one prefab placement/duplication check.
 
-## Exact next task
+## Current next task
 
-Trigger the intentional CW-05 Windows confidence/acceptance build, inspect the
-exact-head Debug/Release compile + CTest results, repair any failures on this same
-programme branch, then owner-test the resulting Studio artifact. Do not begin
-CW-06 or claim CW-05 green until that validation is complete.
+Preserve the integrated Character workflow while beginning **P1 — First-person
+Arms Rig** from the active Player Arms & Combat programme. Return to CW-06+
+only when a concrete Player/combat requirement exposes a missing Character
+authoring capability or after the reference combat loop is accepted.

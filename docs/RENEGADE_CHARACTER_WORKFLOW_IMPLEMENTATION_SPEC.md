@@ -4,7 +4,11 @@
 **Implementation authority:** This document becomes authoritative once the owner signs it off and it is committed to the repository.  
 **Primary implementation agent:** Codex  
 **Continuation/recovery agent:** ChatGPT must be able to continue directly from GitHub at any point without access to Codex's private workspace.  
-**Status:** Design specification for owner review. Do **not** begin implementation until the owner explicitly approves this document.
+**Status:** Historical implementation specification — implemented/integrated. The
+branch creation, PR-number and "do not begin" instructions below describe the
+original programme execution and must not be reused as current workflow. Current
+product state is on `main`; see `CHARACTER_WORKFLOW_PROGRESS.md`,
+`ROADMAP.md` and `PLAYER_ARMS_COMBAT_FRAMEWORK.md`.
 
 ---
 
