@@ -1326,3 +1326,48 @@ Next: owner closes Test Level, opens P1ExportProof in Studio, uses Build Game an
 checks the resulting exported game's movement/look/idle/pause/reset. Export may
 briefly open Runtime for automatic smoke validation. This preflight is not an
 actual export or full P1 acceptance. No supplied arms resumed; no push or merge.
+
+
+## 2026-10-03 P1 native hand socket binding checkpoint
+
+Implementation commit: bab0de7 on feature/p1-first-person-arms-rig. Prior owner
+Studio export-launch confirmation is recorded by 757ee6d: actual P1 Export Proof
+Windows build launches/rendered DX12 at 75 FPS with both proxies and landmarks.
+
+Changed Runtime/src/RuntimePlayerViewRig.h and RuntimePlayerViewAsset.h: explicit
+primary/off-hand/support native boolean anchor metadata binds sockets to bones or
+child grips in the view-model skeleton. Missing roles retain original offsets;
+duplicate/non-skeletal/cyclic anchors fail before mutation and failed asset commit
+retains proxies. Native Wicked animation/hierarchy remains the sole pose authority.
+No movement/camera contract change or supplied owner/GGMAX arms use.
+
+Extended PlayerViewRigTests and manual PlayerViewRigFixture; added shared generated
+native skeleton and GPU proof headers. Updated P1_STATUS_AND_RECOVERY, ROADMAP,
+ARCHITECTURE and FEATURE_MATRIX; full contract, commands, hashes and limits are in
+docs/P1_HAND_SOCKET_BINDINGS.md. Runtime/tests/fixture build Release and Debug exit
+0. Final related CTest checks pass 5/5 per configuration. Packaged governed rasset
+loader binds remapped anchors; save/reload, atomic rejection, fallback and cleanup
+checks pass. Generated rigid geometry is not a production skinned arms asset.
+
+Manual --socket-proof DX12 runs 300 frames of translation/rotation Idle Walk Sprint,
+forward/backward/sideways movement and pitch/yaw in both configurations. Socket
+matrix error 0; camera/rig error 2.38419e-07; actual animated local Z range 0.0592m;
+pause matrix/timer errors 0; three captures per configuration; exit 0. Rendered
+captures inspected with yellow primary, green off-hand and purple support markers.
+Evidence in ignored BUILD/renegade/p1-socket-proof; build logs under p1-socket prefixes.
+New Release standalone Runtime starts the accepted unchanged proxy project in DX12,
+then closes only its new test window cleanly, exit 0. This is startup regression,
+not owner controls acceptance of the new binding build. Existing MSB8029 remains.
+
+Runtime candidate hashes: Release
+3b3e0bbddcdd7cab9251bca92b7e64ee2c63b7406aac5107d10d24513f0968ae;
+Debug de0d86e3f5ad45d6507bbc3934743df7aa63789f059126ce06b20aea53925f3d.
+Studio's bundle and owner-approved export deliberately remain at the previously
+accepted camera-sync binary; they do not contain this new socket candidate yet.
+Wicked source/pin unchanged; no push/merge. Untracked Tools/__pycache__ and log.txt
+left alone. P1 remains open; this is C++/native metadata exposure only.
+
+Next bounded outcome: command-backed Studio primary/off-hand/support bone/grip
+selection and grip offsets with Undo/Redo and governed asset save/reopen. Then use
+one agreed separately generated/authored skinned view model for owner verification;
+preserve the accepted proxy control. Do not resume the withdrawn supplied arms.
