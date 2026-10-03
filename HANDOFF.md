@@ -1275,3 +1275,20 @@ and fixed control fixture. Next bounded task is the actual Studio Test Level
 and Build Game UI workflow. Real skinned arms, skeletal animation, animated
 hand-bone sockets and real-asset dependency closure remain unaccepted; P1 remains
 open. Do not resume the withdrawn owner/GGMAX arms experiment.
+
+## 2026-10-03 Studio Test Level stale bundled Runtime repaired
+
+Owner reported no arms through Studio Test Level. Process inspection confirmed
+the correct proxy snapshot, but Studio selected its bundled Runtime from
+16 September, before P1. Stale bundle hash:
+56f7ac45a73ba17e03bcfbcda33f0274b53eee167e08fe8b2e2ff0b7615d171b
+Closed obsolete child PID 59816 and detached package PID 26420, preserved the
+old executable in the ignored proof folder, then synchronized the verified
+Runtime executable, dxcompiler and Content into Studio/Release/Runtime.
+Source and bundle now both hash:
+69536da66fd6f40ebc392387ddeb0ce4e218f4373f0a74465f45b2e9524d1b92
+No production source change. Tools/Build-Studio-Windows.ps1 already performs
+this synchronization; direct-target builds had bypassed its packaging step.
+Build Game also prefers this bundle. Live Runtime diagnostics initially belonged
+to detached PID 26420 rather than Test Level PID 59816: match diagnostic PID to
+child PID before drawing conclusions. Owner button retry remains pending.
