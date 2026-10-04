@@ -2090,3 +2090,61 @@ existing gameplay movement. Input-driven equipment/actions, damage/ammo/recoil
 and paired crossfades remain later roadmap work. New native UI owner acceptance,
 actual full-library Build Game export and independent exact-head verification
 remain pending. P1 gate remains open.
+
+
+## Runtime fire/reload animation input - 4 October 2026
+
+Implementation: 090e589d96cee00408e5c238dc3ca732705b116f on
+feature/p1-first-person-arms-rig. Local only; no push or merge.
+Owner requested left mouse fire and R reload; confirms "yep, that works"
+after the rebuilt Runtime was opened on the full-library Test Level snapshot.
+
+Changed GameplayInputService.h/.cpp, RuntimeApplication.cpp,
+RuntimePlayerViewAnimation.h, RuntimePlayerViewRig.h; PlayerViewRigTests.cpp,
+Phase6Gate2InputTests.cpp and Tests/CMakeLists.txt; README, architecture, roadmap,
+feature matrix and assembly authoring docs. Input tests were previously not
+registered; now registered and included in the CI bridge test aggregate.
+
+Fire is a discrete left mouse press; Reload is R; Reset is F8. Old version-1
+input maps gain Fire/Reload defaults in memory and move the old default R reset
+to F8. Custom bindings remain authored. Paired Attack/Reload plays once on the
+existing shared native clock, shorter tracks hold, Reload wins simultaneous
+presses, busy actions reject retriggers, pause freezes time, and completion
+returns to current movement. Missing assigned pairs do not imitate firing with
+Idle. Damage, ammunition, audio, effects and recoil remain later combat work.
+
+Owner screenshot caught stale standalone Runtime: old binary rejected new
+assembly actions with "Unknown assembly action" and displayed proxy blocks.
+Rebuilt Runtime now loads the governed full-library asset successfully.
+The earlier bootstrap proof linked updated headers but did not establish that
+the actual Studio-launched executable was current; native launch supersedes
+that earlier evidence.
+
+Build commands: CL=/MP4; MSBuild /m:2 /nologo /verbosity:quiet
+/p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false.
+Targets BUILD/renegade/EngineBridge/RenegadeEngineBridge.vcxproj,
+BUILD/renegade/Tests/RenegadePlayerViewRigTests.vcxproj,
+BUILD/renegade/Runtime/RenegadeRuntime.vcxproj and
+BUILD/renegade/Tests/RenegadeGameplayInputTests.vcxproj. All exit 0.
+CMake -S . -B BUILD/renegade configured the new input test.
+CTest --test-dir BUILD/renegade -C Release -R
+"GameplayInputTests|RenegadePlayerViewRig" --output-on-failure: 3/3 PASS, 0.75s.
+Regressions cover legacy binding migration and input persistence, paired action
+priority, one-shot completion, short-track hold, pause, retrigger rejection,
+second-shot restart and return to movement. git diff --check passes.
+
+Copied new Runtime executable to Studio's existing Release/Runtime launch path.
+Both binaries SHA256:
+A02504741931FF039730A6BB77F50D2A0195E3B6D4401B46537CBDB8F2F9994C.
+Native standalone DX12 launched the same TestLevel.renegade snapshot from
+BUILD/arms-full-library-ready/Intermediate/TestLevelSnapshots.
+Runtime log shows loaded governed first-person arms asset and no load error.
+Native R key check rendered reload with aligned hands, gun and shells instead
+of resetting. Owner independently accepts the controls on this build.
+The existing Ready Studio was left open; updated Runtime was opened for testing.
+No authored scene/assembly change was needed.
+
+Next: broader action routing (aim/equipment/jump) and later actual combat systems.
+Current accepted slice is input-driven animation, not a complete firearm.
+Full-library actual Build Game export and independent exact-commit overall P1
+verification remain pending; no release gate is closed.
