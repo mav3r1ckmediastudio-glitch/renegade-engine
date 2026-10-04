@@ -25,7 +25,7 @@ namespace renegade::runtime
 
     struct RuntimePlayerViewAnimationState
     {
-        std::array<std::vector<RuntimePlayerViewAnimationClip>, 9> clips;
+        std::array<std::vector<RuntimePlayerViewAnimationClip>, 14> clips;
         wi::ecs::Entity activeClip = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity outgoingClip = wi::ecs::INVALID_ENTITY;
         PlayerViewAction activeAction = PlayerViewAction::Idle;
@@ -36,6 +36,12 @@ namespace renegade::runtime
         bool pairedAssembly = false;
         bool oneShotPlaying = false;
         bool aiming = false;
+        bool equipped = true;
+        bool groundKnown = false;
+        bool wasGrounded = true;
+        bool jumpCycleActive = false;
+        bool takeoffPending = false;
+        bool landingPending = false;
         // Bounded two-barrel shotgun prototype; reserve ammo is not modelled yet.
         int loadedShells = 2;
         wi::ecs::Entity activeWeaponClip = wi::ecs::INVALID_ENTITY;
@@ -48,6 +54,11 @@ namespace renegade::runtime
     {
         switch (action)
         {
+        case PlayerViewAction::Equip: return 9;
+        case PlayerViewAction::Unequip: return 10;
+        case PlayerViewAction::JumpStart: return 11;
+        case PlayerViewAction::JumpLoop: return 12;
+        case PlayerViewAction::JumpLand: return 13;
         case PlayerViewAction::AimIn: return 6;
         case PlayerViewAction::AimOut: return 7;
         case PlayerViewAction::AimAttack: return 8;
@@ -117,6 +128,15 @@ namespace renegade::runtime
         const std::string& authoredAction,
         PlayerViewAction& action) noexcept
     {
+        if (authoredAction == "Equip" || authoredAction == "Unequip" ||
+            authoredAction == "JumpStart" || authoredAction == "JumpLoop" || authoredAction == "JumpLand")
+        {
+            action = authoredAction == "Equip" ? PlayerViewAction::Equip :
+                authoredAction == "Unequip" ? PlayerViewAction::Unequip :
+                authoredAction == "JumpStart" ? PlayerViewAction::JumpStart :
+                authoredAction == "JumpLoop" ? PlayerViewAction::JumpLoop : PlayerViewAction::JumpLand;
+            return true;
+        }
         if (authoredAction == "AimIn" || authoredAction == "AimOut" || authoredAction == "AimAttack")
         {
             action = authoredAction == "AimIn" ? PlayerViewAction::AimIn :
@@ -542,7 +562,9 @@ namespace renegade::runtime
         const float dt,
         const bool firePressed = false,
         const bool reloadPressed = false,
-        const bool aimDown = false) noexcept
+        const bool aimDown = false,
+        const bool toggleEquipmentPressed = false,
+        const bool grounded = true) noexcept
     {
         if (!state.initialized)
             return;
@@ -551,10 +573,52 @@ namespace renegade::runtime
         {
             // A discrete action owns both tracks until its shared duration finishes.
             // Ignore new presses while busy; missing action pairs never play Idle as a shot.
-            PlayerViewAction next = state.aiming ? PlayerViewAction::AimIn : requested;
+            const bool advancing = std::isfinite(dt) && dt > 0;
+            if (advancing)
+            {
+                if (state.groundKnown)
+                {
+                    if (state.wasGrounded && !grounded)
+                    { state.takeoffPending = true; state.jumpCycleActive = true; }
+                    if (!state.wasGrounded && grounded && state.jumpCycleActive) state.landingPending = true;
+                }
+                state.wasGrounded = grounded;
+                state.groundKnown = true;
+            }
+            PlayerViewAction next = !state.equipped ? PlayerViewAction::Unequip :
+                state.aiming ? PlayerViewAction::AimIn : requested;
+            const auto startAction = [&](const PlayerViewAction action) {
+                if (state.clips[PlayerViewActionIndex(action)].empty()) return false;
+                next = action;
+                state.activeClip = wi::ecs::INVALID_ENTITY;
+                state.oneShotPlaying = true;
+                return true;
+            };
             if (state.oneShotPlaying)
                 next = state.activeAction;
-            else if (std::isfinite(dt) && dt > 0 && (reloadPressed || firePressed))
+            else if (advancing && toggleEquipmentPressed)
+            {
+                if (startAction(state.equipped ? PlayerViewAction::Unequip : PlayerViewAction::Equip))
+                    state.aiming = false;
+            }
+            else if (advancing && state.equipped && state.landingPending)
+            {
+                state.landingPending = false;
+                state.takeoffPending = false;
+                if (startAction(PlayerViewAction::JumpLand)) state.aiming = false;
+                else state.jumpCycleActive = false;
+            }
+            else if (advancing && state.equipped && state.takeoffPending)
+            {
+                state.takeoffPending = false;
+                if (startAction(PlayerViewAction::JumpStart)) state.aiming = false;
+            }
+            else if (state.equipped && state.jumpCycleActive && !grounded && !state.clips[PlayerViewActionIndex(PlayerViewAction::JumpLoop)].empty())
+            {
+                next = PlayerViewAction::JumpLoop;
+                state.aiming = false;
+            }
+            else if (advancing && state.equipped && (reloadPressed || firePressed))
             {
                 const auto action = reloadPressed
                     ? (state.loadedShells == 1 ? PlayerViewAction::ReloadPartial : PlayerViewAction::Reload)
@@ -578,7 +642,7 @@ namespace renegade::runtime
                 }
             }
             // Reconcile hold/release after a busy action. Never interrupt paired tracks.
-            if (!state.oneShotPlaying && std::isfinite(dt) && dt > 0 && aimDown != state.aiming)
+            if (!state.oneShotPlaying && advancing && state.equipped && !state.jumpCycleActive && aimDown != state.aiming)
             {
                 const auto transition = aimDown ? PlayerViewAction::AimIn : PlayerViewAction::AimOut;
                 if (!state.clips[PlayerViewActionIndex(transition)].empty())
@@ -617,6 +681,20 @@ namespace renegade::runtime
                         if (state.activeAction == PlayerViewAction::Reload ||
                             state.activeAction == PlayerViewAction::ReloadPartial)
                             state.loadedShells = 2;
+                        if (state.activeAction == PlayerViewAction::JumpLand)
+                            state.jumpCycleActive = false;
+                        if (state.activeAction == PlayerViewAction::Equip)
+                        {
+                            state.equipped = true;
+                            state.takeoffPending = false;
+                            state.landingPending = false;
+                        }
+                        else if (state.activeAction == PlayerViewAction::Unequip)
+                        {
+                            state.equipped = false;
+                            state.takeoffPending = false;
+                            state.landingPending = false;
+                        }
                         if (state.activeAction == PlayerViewAction::AimIn)
                             state.aiming = true;
                         else if (state.activeAction == PlayerViewAction::AimOut)
@@ -624,7 +702,8 @@ namespace renegade::runtime
                         state.oneShotPlaying = false;
                     }
                 }
-                else if (state.aiming && next == PlayerViewAction::AimIn)
+                else if ((!state.equipped && next == PlayerViewAction::Unequip) ||
+                    (state.aiming && next == PlayerViewAction::AimIn))
                     state.pairedTime = duration; // Hold the authored sight pose, do not loop aim-in.
                 else
                     state.pairedTime = std::fmod(state.pairedTime + dt, duration);

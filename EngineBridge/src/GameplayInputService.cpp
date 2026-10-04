@@ -244,6 +244,7 @@ namespace renegade::bridge
         case GameplayAction::Fire: return "fire";
         case GameplayAction::Reload: return "reload";
         case GameplayAction::Aim: return "aim";
+        case GameplayAction::ToggleEquipment: return "toggle_equipment";
         case GameplayAction::Count: break;
         }
         return "unknown";
@@ -285,6 +286,7 @@ namespace renegade::bridge
             {GameplayAction::Fire, "", "MOUSE_LEFT", ""},
             {GameplayAction::Reload, "R", "", ""},
             {GameplayAction::Aim, "", "MOUSE_RIGHT", ""},
+            {GameplayAction::ToggleEquipment, "Q", "", ""},
         }};
         return map;
     }
@@ -499,6 +501,7 @@ namespace renegade::bridge
         seen[fireIndex] = true;
         seen[reloadIndex] = true;
         seen[static_cast<std::size_t>(GameplayAction::Aim)] = true;
+        seen[static_cast<std::size_t>(GameplayAction::ToggleEquipment)] = true;
 
         if (!formatSeen || !versionSeen ||
             std::any_of(seen.begin(), seen.end(), [](const bool value) { return !value; }))
@@ -662,6 +665,7 @@ namespace renegade::bridge
         frame.firePressed = Pressed(Binding(map, GameplayAction::Fire));
         frame.reloadPressed = Pressed(Binding(map, GameplayAction::Reload));
         frame.aimDown = Down(Binding(map, GameplayAction::Aim));
+        frame.toggleEquipmentPressed = Pressed(Binding(map, GameplayAction::ToggleEquipment));
         return frame;
     }
 }

@@ -34,6 +34,11 @@ namespace renegade::runtime
         AimIn,
         AimOut,
         AimAttack,
+        Equip,
+        Unequip,
+        JumpStart,
+        JumpLoop,
+        JumpLand,
     };
 
     [[nodiscard]] inline const char* PlayerViewActionName(
@@ -41,6 +46,11 @@ namespace renegade::runtime
     {
         switch (action)
         {
+        case PlayerViewAction::Equip: return "Equip";
+        case PlayerViewAction::Unequip: return "Unequip";
+        case PlayerViewAction::JumpStart: return "JumpStart";
+        case PlayerViewAction::JumpLoop: return "JumpLoop";
+        case PlayerViewAction::JumpLand: return "JumpLand";
         case PlayerViewAction::AimIn: return "AimIn";
         case PlayerViewAction::AimOut: return "AimOut";
         case PlayerViewAction::AimAttack: return "AimAttack";

@@ -718,6 +718,73 @@ static bool FullLibraryReopenProof(const fs::path& descriptor,const fs::path& ou
  return true;
 }
 
+static bool JumpPlaygroundProof(const fs::path& input,const fs::path& output)
+{
+ ProjectMetadata project;std::string error;
+ if(!ProjectService().InspectProject(fs::absolute(input).generic_u8string(),project,error))return false;
+ SceneService scenes;
+ if(!scenes.LoadScene((fs::u8path(project.rootPath)/fs::u8path(project.startupScene)).generic_u8string()))return false;
+ auto& scene=scenes.GetScene();
+ auto start=ResolvePlayerStart(scene);if(start.resolution!=PlayerStartResolution::Success)return false;
+ auto* spawn=scene.transforms.GetComponent(start.start.entity);if(!spawn)return false;
+ spawn->ClearTransform();spawn->Translate(XMFLOAT3(0,2,0));spawn->UpdateTransform();
+ const auto floor=scene.Entity_CreateCube("Arms playground floor");
+ auto* transform=scene.transforms.GetComponent(floor);
+ transform->Translate(XMFLOAT3(0,-0.5f,0));transform->UpdateTransform();
+ auto* mesh=scene.meshes.GetComponent(scene.objects.GetComponent(floor)->meshID);
+ for(auto& v:mesh->vertex_positions){v.x*=30;v.y*=0.5f;v.z*=30;}mesh->CreateRenderData();
+ auto& body=scene.rigidbodies.Create(floor);body.mass=0;
+ body.shape=wi::scene::RigidBodyPhysicsComponent::CollisionShape::BOX;
+ body.box.halfextents=XMFLOAT3(30,0.5f,30);
+ auto& weather=scene.weathers.Create(wi::ecs::CreateEntity());
+ weather.ambient=XMFLOAT3(0.4f,0.4f,0.4f);
+ weather.horizon=XMFLOAT3(0.25f,0.4f,0.55f);weather.zenith=XMFLOAT3(0.08f,0.18f,0.35f);
+ wi::Archive archive;scene.Serialize(archive);
+ const auto file=output/"ArmsPlayground.wiscene";
+ if(!archive.SaveFile(file.generic_u8string()))return false;
+ SceneService reopened;if(!reopened.LoadScene(file.generic_u8string()))return false;
+ if(reopened.GetScene().rigidbodies.GetCount()!=scene.rigidbodies.GetCount() ||
+    ResolvePlayerStart(reopened.GetScene()).start.settings.firstPersonArmsAssetId!=start.start.settings.firstPersonArmsAssetId)return false;
+ wi::physics::SetEnabled(true);wi::physics::SetSimulationEnabled(true);
+ wi::physics::SetFrameRate(120);
+ auto& test=reopened.GetScene();auto retainedStart=ResolvePlayerStart(test);
+ RuntimePlayerState player;renegade::runtime::RuntimePlayerViewRigState rig;
+ renegade::runtime::RuntimePlayerViewRigSettings rigSettings;rigSettings.createProofGeometry=false;
+ if(!SpawnRuntimePlayer(test,retainedStart.start,player,error) ||
+    !renegade::runtime::SpawnRuntimePlayerViewRig(test,rig,player.entity,retainedStart.start.settings.eyeHeight,error,rigSettings) ||
+    !renegade::runtime::LoadRuntimePlayerViewAsset(test,rig,project.rootPath,project.projectId,
+        retainedStart.start.settings.firstPersonArmsAssetId,error))return false;
+ renegade::runtime::RuntimePlayerViewAnimationState animation;
+ if(!renegade::runtime::InitializeRuntimePlayerViewAnimations(test,rig,animation,error))return false;
+ bool sawStart=false,sawLoop=false,sawLand=false,sawGround=false;
+ for(int frame=0;frame<360;++frame) {
+  PlayerInputFrame inputFrame;inputFrame.jumpPressed=frame==120;
+  const bool grounded=wi::physics::IsCharacterGroundSupported(*test.rigidbodies.GetComponent(player.entity));
+  sawGround=sawGround||grounded;
+  (void)UpdateRuntimePlayer(test,player,inputFrame,retainedStart.start.settings);
+  renegade::runtime::UpdateRuntimePlayerViewAnimations(test,animation,
+    renegade::runtime::PlayerViewAction::Idle,1.0f/75,false,false,false,false,grounded);
+  sawStart=sawStart||animation.activeAction==renegade::runtime::PlayerViewAction::JumpStart;
+  sawLoop=sawLoop||animation.activeAction==renegade::runtime::PlayerViewAction::JumpLoop;
+  sawLand=sawLand||animation.activeAction==renegade::runtime::PlayerViewAction::JumpLand;
+  test.Update(1.0f/75);
+
+ }
+ auto& capsule=*test.rigidbodies.GetComponent(player.entity);
+ const auto settled=wi::physics::GetPosition(capsule);
+ const auto velocity=wi::physics::GetVelocity(capsule);
+ if(!sawGround||!sawStart||!sawLoop||!sawLand||animation.jumpCycleActive ||
+    !wi::physics::IsCharacterGroundSupported(capsule) ||
+    std::abs(settled.x)>0.05f || std::abs(settled.z)>0.05f ||
+    std::abs(settled.y)>0.05f || std::abs(velocity.y)>0.05f) {
+  std::cerr<<"JOLT JUMP ground="<<sawGround<<" start="<<sawStart<<" loop="<<sawLoop<<" land="<<sawLand<<"\n";
+  return false;
+ }
+ std::cout<<"JOLT TAKEOFF AIRBORNE LANDING NATIVE PAIRED ACTIONS PASS\n";
+ std::cout<<"PLAYGROUND FLOOR AND PLAYER ASSIGNMENT SAVE REOPEN PASS\n";
+ return true;
+}
+
 int main(int argc,char** argv)
 {
     if(argc<3 || argc>4) { std::cerr<<"Usage: proof pack-folder output-folder\n"; return 2; }
@@ -733,6 +800,7 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--jump-playground") return JumpPlaygroundProof(input,output)?0:17;
     if(argc==4 && std::string(argv[3])=="--full-library") return FullLibraryProof(input,output)?0:15;
     if(argc==4 && std::string(argv[3])=="--full-library-reopen") return FullLibraryReopenProof(input,output)?0:16;
     if(argc==4 && std::string(argv[3])=="--update-assembly") return UpdateAssemblyProof(input,output)?0:14;

@@ -427,7 +427,11 @@ namespace renegade::runtime
                         paused_ ? 0.0f : dt,
                         !paused_ && gameplayInput.firePressed,
                         !paused_ && gameplayInput.reloadPressed,
-                        gameplayInput.aimDown);
+                        gameplayInput.aimDown,
+                        !paused_ && gameplayInput.toggleEquipmentPressed,
+                        scenes_.GetScene().rigidbodies.GetComponent(player_.entity) == nullptr ||
+                            wi::physics::IsCharacterGroundSupported(
+                                *scenes_.GetScene().rigidbodies.GetComponent(player_.entity)));
                 }
             }
         }

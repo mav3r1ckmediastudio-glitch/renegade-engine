@@ -152,6 +152,16 @@ namespace
         add(weaponTarget, "AimIn", "weapon", 0, 0.3f);
         const auto aimOut = add(armsTarget, "AimOut", "arms", 0, 0.6f);
         add(weaponTarget, "AimOut", "weapon", 0, 0.3f);
+        const auto equip = add(armsTarget, "Equip", "arms", 0, 0.6f);
+        add(weaponTarget, "Equip", "weapon", 0, 0.3f);
+        const auto holster = add(armsTarget, "Unequip", "arms", 0, 0.6f);
+        add(weaponTarget, "Unequip", "weapon", 0, 0.3f);
+        const auto jumpStart = add(armsTarget, "JumpStart", "arms", 0, 0.6f);
+        add(weaponTarget, "JumpStart", "weapon", 0, 0.3f);
+        const auto jumpLoop = add(armsTarget, "JumpLoop", "arms", 0, 1.5f);
+        add(weaponTarget, "JumpLoop", "weapon", 0, 0.3f);
+        const auto jumpLand = add(armsTarget, "JumpLand", "arms", 0, 0.6f);
+        add(weaponTarget, "JumpLand", "weapon", 0, 0.3f);
         const auto aimFire = add(armsTarget, "AimAttack", "arms", 0, 0.5f);
         add(weaponTarget, "AimAttack", "weapon", 0, 0.3f);
 
@@ -291,6 +301,34 @@ namespace
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1, false, false, true);
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1);
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f);
+        const int shellsBeforeHolster = state.loadedShells;
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, false, false, false, true);
+        if (state.activeClip != holster || !state.oneShotPlaying) Fail("Q did not start holster");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, true, true, true);
+        if (state.equipped || state.activeClip != holster || state.oneShotPlaying ||
+            state.loadedShells != shellsBeforeHolster || !Near(state.pairedTime, 0.6f))
+            Fail("holstered weapon did not hold hidden pose or blocked actions consumed ammo");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, false, false, false, true);
+        if (state.activeClip != equip || state.equipped) Fail("Q did not start equip");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f);
+        if (!state.equipped || state.activeClip != armsWalk || state.loadedShells != shellsBeforeHolster)
+            Fail("equip did not resume movement with retained ammunition");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, false, false, false, false, false);
+        if (state.activeClip != jumpStart || !state.oneShotPlaying) Fail("takeoff did not start JumpStart");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0, false, false, false, false, false);
+        if (!Near(state.pairedTime, 0.1f)) Fail("pause advanced jump");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1, false, false, false, false, false);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, true, true, true, false, false);
+        if (state.activeClip != jumpLoop || state.oneShotPlaying || state.loadedShells != shellsBeforeHolster)
+            Fail("airborne loop was interrupted or consumed ammo");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f);
+        if (state.activeClip != jumpLand || !state.oneShotPlaying) Fail("ground contact did not start JumpLand");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f);
+        if (state.activeClip != armsWalk || state.jumpCycleActive)
+            Fail("landing did not return to movement");
         ResetRuntimePlayerViewAnimations(scene, state);
         if (state.initialized || state.activeWeaponClip != wi::ecs::INVALID_ENTITY ||
             !Near(scene.animations.GetComponent(weaponWalk)->amount, 0))
@@ -329,6 +367,8 @@ namespace
         assetScene.characters.Create(root);
         assetScene.rigidbodies.Create(root);
         assetScene.colliders.Create(root);
+        assetScene.softbodies.Create(root);
+        assetScene.humanoids.Create(root).SetRagdollPhysicsEnabled(true);
         auto& metadata = assetScene.metadatas.Create(root);
         metadata.bool_values.set(CharacterAssetTemplateMetadataKey, true);
         metadata.int_values.set(CharacterAssetTemplateVersionMetadataKey, 1);
@@ -696,9 +736,15 @@ int main()
             }
             if (packagedScene.characters.Contains(entity) ||
                 packagedScene.rigidbodies.Contains(entity) ||
-                packagedScene.colliders.Contains(entity))
+                packagedScene.colliders.Contains(entity) ||
+                packagedScene.softbodies.Contains(entity))
             {
                 Fail("governed view model retained gameplay/physics components");
+            }
+            if (const auto* humanoid = packagedScene.humanoids.GetComponent(entity))
+            {
+                if (!humanoid->IsRagdollDisabled() || humanoid->IsRagdollPhysicsEnabled() || humanoid->ragdoll)
+                    Fail("view model retained humanoid ragdoll collision");
             }
         }
 

@@ -49,6 +49,14 @@ namespace renegade::runtime
             scene.characters.Remove(entity);
             scene.rigidbodies.Remove(entity);
             scene.colliders.Remove(entity);
+            scene.softbodies.Remove(entity);
+            if (auto* humanoid = scene.humanoids.GetComponent(entity))
+            {
+                humanoid->SetRagdollPhysicsEnabled(false);
+                humanoid->SetRagdollDisabled(true);
+                humanoid->ragdoll = {};
+            }
+
 
             if (auto* metadata = scene.metadatas.GetComponent(entity))
             {

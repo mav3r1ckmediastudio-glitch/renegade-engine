@@ -323,3 +323,16 @@ uses partial/full reload as appropriate, and resumes aim-in if right mouse is
 still held. Transitions finish before queued hold/release changes are reconciled;
 pause freezes them. This uses authored native animation only, with no zoom/FOV
 change or new camera/controller.
+
+
+### Equipment and jump animation routing
+
+Q toggles holster/equip using the assigned Unequip/Equip pairs. Holstered arms
+hold the final out-of-view pose; fire, aim and reload are blocked, with shells
+preserved. Existing Space jump physics drives grounded-to-airborne JumpStart,
+airborne JumpLoop and grounded-contact JumpLand. Busy actions finish before
+pending jump transitions. Jump animation ownership blocks fire/aim/reload until
+landing; movement physics remains authoritative. Pause freezes action clocks.
+Initial airborne spawn does not pretend a jump occurred. A collidable floor is
+required to exercise takeoff and landing; the empty preview fixture is not a
+complete gameplay level. No new controller or root-motion locomotion is added.
