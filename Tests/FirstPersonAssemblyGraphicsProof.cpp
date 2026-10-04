@@ -63,7 +63,7 @@ static wi::ecs::Entity Find(wi::scene::Scene& scene,const std::string& name)
 static bool Assembly(wi::scene::Scene& arms,wi::scene::Scene& weapon,
     const fs::path& output,const std::string& action)
 {
-    const auto anchor=Find(arms,"weapon_r");
+    const auto anchor=Find(arms,"ik_hand_gun");
     if(anchor==wi::ecs::INVALID_ENTITY) return false;
     std::vector<wi::ecs::Entity> roots;
     for(size_t i=0;i<weapon.transforms.GetCount();++i)
@@ -73,17 +73,16 @@ static bool Assembly(wi::scene::Scene& arms,wi::scene::Scene& weapon,
     }
     if(roots.size()!=1) {std::cerr<<"Unexpected weapon roots\n";return false;}
     arms.Merge(weapon);
-    // Provisional fixture placement: align weapon Handle reference pivot to right hand.
-    // Native local attachment is retained; production socket offset remains to be authored.
-    const auto hand=arms.transforms.GetComponent(Find(arms,"hand_r"))->GetPosition();
+    // Original demo SKM_Weapon attaches to ik_hand_gun. Preserve its authored
+    // relative transform, not a hand-joint/Handle-pivot alignment.
+    // UE centimetres -> this FBX/Wicked basis: (x,-y,-z), metres.
+    // UE Rotator (6.552304,-182.929938,-10.254553) converted in that basis.
     auto* weaponRoot=arms.transforms.GetComponent(roots.front());
+    arms.Component_Attach(roots.front(),anchor,true);
     weaponRoot->ClearTransform();
-    // Calibrated lateral correction for this pack: camera right is imported -X.
-    // Move the whole assembly toward the palm, including its authored shell bones.
-    constexpr float gripLateralCorrection=0.025f;
-    weaponRoot->Translate(XMFLOAT3(hand.x+gripLateralCorrection,hand.y-0.184208f,hand.z-0.00225067f));
+    weaponRoot->rotation_local=XMFLOAT4(-0.059182247f,0.087738050f,0.994176416f,-0.020316230f);
+    weaponRoot->Translate(XMFLOAT3(-0.03466970f,0.27336276f,-0.04505738f));
     weaponRoot->UpdateTransform();
-    arms.Component_Attach(roots.front(),anchor,false);
     for(float time : {0.0f,0.6f,1.2f,2.0f,2.9f})
     {
         Pose(arms,time);

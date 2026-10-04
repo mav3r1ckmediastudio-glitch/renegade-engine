@@ -41,11 +41,21 @@ with a fixed roughness. This is not complete Unreal material reproduction.
 
 ## Assembly and camera limits
 
-Arms and weapon remain separate skeletons. Native attachment follows weapon_r.
-Identity attachment was visibly misaligned. The proof derives a provisional local
-offset by aligning the weapon Handle reference pivot to the right hand at time 0,
-then retaining native parentage. This is fixture calibration, not verified
-authored socket metadata or a generic automatic grip solver.
+Arms and weapon remain separate skeletons. The earlier weapon_r/Handle-to-hand
+placement and 25 mm lateral nudge were rejected by the owner: stock on the back
+of the hand and reload shells below the palm. Those calibrations are superseded.
+
+Read-only inspection of the original Unreal BP_DemoCharacter package identified
+SKM_Weapon_GEN_VARIABLE (export serial range 369438..370399), whose relative
+location is (-3.466970,-27.336276,4.505738) cm and rotation is
+(Pitch 6.552304,Yaw -182.929938,Roll -10.254553) degrees. Its construction node
+sets AttachToName=ik_hand_gun. The diagnostic now uses this parent and exact
+converted local transform: translation (-0.03466970,0.27336276,-0.04505738) m,
+quaternion (-0.059182247,0.087738050,0.994176416,-0.020316230).
+The exported FBX retains Z-up; UE to this imported basis is (x,-y,-z).
+No individual mesh, shell track or hand animation was nudged.
+The skeleton's GripPoint socket is on middle_01_r; it is not the demo weapon
+attachment. Finding a socket name alone does not justify selecting it.
 
 First-person inspection uses a fixed camera in the imported coordinate system:
 eye (0, 0.08, -1.65), target (0, -1, -1.65), up (0, 0, -1), FOV 80 degrees.
@@ -122,3 +132,13 @@ Release rebuild and full textured capture/save/reopen proof exit0.
 Idle and Reload at1.2s/2.0s visually inspected: lateral offset is reduced.
 Reopened preview retains R/Space/Escape. Owner confirmation of corrected
 alignment remains pending; animation playback feedback does not close P1.
+
+## Authored demo attachment correction
+
+Release build and authored-proof.log capture/save/reopen exit 0. Idle, reload
+1.2s/2.0s and reopened native live window visually inspected. Contact appears
+improved; exact owner grip/reload acceptance remains pending. Original Unreal
+projects were read only. No full original-editor parity or production acceptance
+is claimed. Earlier executable hashes describe superseded previews.
+Current Release proof SHA-256:
+A81A3421BEBD20CD4F52E74B8F46736153B7ECA85A84098E252868A431641E20.
