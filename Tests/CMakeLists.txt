@@ -784,3 +784,14 @@ if(WIN32)
         "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
     set_target_properties(RenegadePlayerViewRigParityFixture PROPERTIES FOLDER "Renegade/Tests")
 endif()
+
+# Manual DX12 GPU regression, intentionally excluded from headless CTest.
+if(WIN32)
+    add_executable(RenegadeStudioShaderDx12Proof StudioShaderDx12Proof.cpp)
+    target_link_libraries(RenegadeStudioShaderDx12Proof PRIVATE Renegade::EngineBridge)
+    set_target_properties(RenegadeStudioShaderDx12Proof PROPERTIES FOLDER "Renegade/Tests")
+    add_custom_command(TARGET RenegadeStudioShaderDx12Proof POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+            "$<TARGET_FILE_DIR:RenegadeStudioShaderDx12Proof>")
+endif()

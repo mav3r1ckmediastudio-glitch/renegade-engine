@@ -102,12 +102,13 @@ float AxisCoverage(float coordinate, float derivative)
 	return 1.0 - saturate(abs(coordinate) / max(derivative, 1e-8));
 }
 
-// ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT matches Wicked's Example_ImGui. Without
-// it, Wicked's DX12 backend fails to build the indirect draw command
-// signatures it derives from an embedded root signature, logging
-// CreateCommandSignature E_INVALIDARG errors at startup. Those indirect paths
-// are never used by this shader, but the error spam would hide real problems.
-[RootSignature("RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT), CBV(b0)")]
+// Allow the input assembler, as required by the pinned backend's DRAW command
+// signatures even though this full-screen pass supplies no vertex buffer.
+// Counted indirect signatures additionally require root constants in slot 0.
+// Pinned Wicked DX12 creates counted indirect signatures using root slot 0.
+// Reserve one DWORD there, as in its native b999 push-constant convention.
+// Both shader stages must embed the same signature; b0 remains the draw CBV.
+[RootSignature("RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT), RootConstants(num32BitConstants=1, b999), CBV(b0)")]
 PixelOutput main(VertexOutput input)
 {
 	PixelOutput output;

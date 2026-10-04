@@ -91,11 +91,13 @@ absence of the scene gizmo over the panel were visually inspected. UI evidence i
 BUILD/renegade/p1-hand-grips-proof/studio-reopened.png. This is agent-operated
 native evidence, not owner acceptance.
 
-Debug Studio's standalone launch from the isolated fixture working directory
-hit a Wicked DX12 graphics-pipeline assertion (wiGraphicsDevice_DX12.cpp line
-3939) before reaching the editor. Debug compilation, headless tests and the native
-GPU fixture pass; Debug Studio startup is not accepted by this checkpoint.
-The cause of that assertion has not been established.
+At this original checkpoint Debug Studio's standalone launch hit a DX12
+CreateCommandSignature assertion (wiGraphicsDevice_DX12.cpp line 3939) before
+reaching the editor. Subsequent diagnosis identified incompatible root signatures
+in the Studio grid and ImGui shaders. See [STUDIO_DX12_SHADER_ASSERT](STUDIO_DX12_SHADER_ASSERT.md)
+and the later HANDOFF entry for the correction and native startup evidence.
+The original checkpoint's compilation/headless/GPU proofs remain historical;
+they did not establish Debug Studio startup acceptance.
 
 Release Studio candidate SHA-256:
 7EA283E885D82A0FE6A1188660E57F138624E6BA987F5461C02BFB7CB2A078DF
