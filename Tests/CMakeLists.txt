@@ -795,3 +795,19 @@ if(WIN32)
             "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
             "$<TARGET_FILE_DIR:RenegadeStudioShaderDx12Proof>")
 endif()
+
+# Manual first-person assembly inspection. No third-party asset in source/CTest.
+if(WIN32)
+    add_executable(RenegadeFirstPersonAssemblyGraphicsProof
+        FirstPersonAssemblyGraphicsProof.cpp
+        ${CMAKE_SOURCE_DIR}/Studio/src/ModelImportPreview.cpp)
+    target_link_libraries(RenegadeFirstPersonAssemblyGraphicsProof PRIVATE Renegade::EngineBridge)
+    target_compile_definitions(RenegadeFirstPersonAssemblyGraphicsProof PRIVATE UNICODE _UNICODE)
+    target_compile_options(RenegadeFirstPersonAssemblyGraphicsProof PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>" "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>")
+    set_target_properties(RenegadeFirstPersonAssemblyGraphicsProof PROPERTIES FOLDER "Renegade/Tests")
+    add_custom_command(TARGET RenegadeFirstPersonAssemblyGraphicsProof POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+            "$<TARGET_FILE_DIR:RenegadeFirstPersonAssemblyGraphicsProof>")
+endif()
