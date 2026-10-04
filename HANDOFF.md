@@ -1960,3 +1960,60 @@ exact-commit verification remains outstanding. distribution_ready=false remains.
 No code changes, app launch/closure, push or merge in this acceptance step.
 Status docs updated; git diff --check. P1 authoring lifecycle and gameplay work
 remain as previously documented. Existing untracked files preserved.
+
+## Assembly save/update and draft history - 4 October 2026
+
+Implementation: 419fa655484945cf8543eeb8d2b8c9840368b0fc on
+feature/p1-first-person-arms-rig. Local commit only; no push/merge.
+The following documentation checkpoint records this implementation.
+
+Changed: FirstPersonAssemblyService.h/.cpp, FirstPersonAssemblyEditor.cpp,
+StudioApplication.h/.cpp, FirstPersonAssemblyGraphicsProof.cpp,
+FirstPersonAssemblySettingsTests.cpp; README, architecture, roadmap, feature ledger
+and P1_ASSEMBLY_AUTHORING documentation.
+
+SAVE CHANGES rebuilds the assigned assembly with the same product/recipe IDs and
+paths. Player Start assignment is preserved. SAVE AS NEW creates and assigns a
+variant through the existing scene command. Native draft UNDO/REDO snapshots
+parts, parent, weapon/view transforms and clip pairs, including incomplete
+selections; save marks the history boundary. Updating requires the original
+registered and disk product hash. All replacements use ProjectDocumentTransaction.
+Opening the panel refreshes retained assets after dependency-only build scans.
+Unrelated stale/missing import provenance is preserved rather than requiring
+every historic import to be current.
+
+Windows x64 Release validation (installed MSBuild; CL=/MP4):
+- MSBuild BUILD/renegade/EngineBridge/RenegadeEngineBridge.vcxproj
+- MSBuild BUILD/renegade/Tests/RenegadeFirstPersonAssemblySettingsTests.vcxproj
+- MSBuild BUILD/renegade/Tests/RenegadeFirstPersonAssemblyWorkflowProof.vcxproj
+- MSBuild BUILD/renegade/Studio/RenegadeStudio.vcxproj with
+  /p:TargetName=RenegadeStudioAssemblyLifecycle
+All use /m:2 /nologo /verbosity:quiet /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false. All exit 0; known MSB8029 warnings remain.
+- ctest --test-dir BUILD/renegade -C Release -R
+  "FirstPersonAssemblySettings|MatchingRigAnimation|RenegadePlayerViewRig"
+  --output-on-failure: 4/4 pass, final run 0.33s.
+- BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+  BUILD/assembly-lifecycle-project-final/AssemblyProof.renegade
+  BUILD/assembly-lifecycle-proof-final --update-assembly: exit 0.
+  Disposable owner-project copy only. Same product/recipe IDs, exact reopen,
+  injected AfterReplace failure and byte rollback, stale original hash rejection,
+  separate Save-as-new ID and unchanged level bytes pass. Updated product passes
+  production Test Level snapshot and paired Runtime pose/pause/cleanup checks.
+- Same proof executable with BUILD/assembly-lifecycle-proof-final/isolated-package
+  BUILD/assembly-lifecycle-proof-final/cold --runtime-package: exit 0, 2.31s.
+  Fresh-process packaged native loading and paired Runtime checks pass.
+- Updated-assembly render inspected: textured arms/shotgun present.
+- git diff --check passes.
+
+New Studio SHA256:
+778E3DE0E32E09E4C2756B2A5DE5BB078D683AAC3A1D02028311F42057E3FABA
+Executable: BUILD/renegade/Studio/Release/RenegadeStudioAssemblyLifecycle.exe.
+Opened this alternate build for owner checking; older LongPathComplete editor
+was not closed or overwritten. Owner original project was not changed by proofs.
+
+Next: owner checks offset Undo/Redo, UPDATE PREVIEW, SAVE CHANGES and panel reopen,
+then unique Copy name + SAVE AS NEW and level save. New UI acceptance and
+independent exact-commit verification remain pending. P1 gate remains open.
+Runtime paired crossfades, reload/fire gameplay and general texture-relink UI
+remain outside this slice.
