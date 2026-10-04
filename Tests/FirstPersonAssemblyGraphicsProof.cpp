@@ -78,7 +78,10 @@ static bool Assembly(wi::scene::Scene& arms,wi::scene::Scene& weapon,
     const auto hand=arms.transforms.GetComponent(Find(arms,"hand_r"))->GetPosition();
     auto* weaponRoot=arms.transforms.GetComponent(roots.front());
     weaponRoot->ClearTransform();
-    weaponRoot->Translate(XMFLOAT3(hand.x,hand.y-0.184208f,hand.z-0.00225067f));
+    // Calibrated lateral correction for this pack: camera right is imported -X.
+    // Move the whole assembly toward the palm, including its authored shell bones.
+    constexpr float gripLateralCorrection=0.025f;
+    weaponRoot->Translate(XMFLOAT3(hand.x+gripLateralCorrection,hand.y-0.184208f,hand.z-0.00225067f));
     weaponRoot->UpdateTransform();
     arms.Component_Attach(roots.front(),anchor,false);
     for(float time : {0.0f,0.6f,1.2f,2.0f,2.9f})

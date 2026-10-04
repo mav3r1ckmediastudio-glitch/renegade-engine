@@ -107,3 +107,18 @@ Final Release executable SHA-256:
 8C92B649D9279B5853DBD76B2D3A01C6B1B0AC1AB6A639FC3BC488827DCF8282.
 Built before committing these source changes; no exact-commit owner acceptance
 or completed P1 gate is inferred.
+
+## Owner animation feedback and lateral grip adjustment
+
+Owner reports animations work very well, but weapon/shells sit to the right.
+The screenshot confirms the provisional attachment does not fit the palms.
+Adjusted the entire weapon root by +0.025 metres in imported X before deriving
+its local attachment; supplied camera right is -X, so this moves it left.
+Weapon mesh and existing animated shell bones move together; no animation,
+hand, camera, or individual shell-track edit. This is still provisional fixture
+calibration; matching action durations alone does not establish authored fit.
+
+Release rebuild and full textured capture/save/reopen proof exit0.
+Idle and Reload at1.2s/2.0s visually inspected: lateral offset is reduced.
+Reopened preview retains R/Space/Escape. Owner confirmation of corrected
+alignment remains pending; animation playback feedback does not close P1.
