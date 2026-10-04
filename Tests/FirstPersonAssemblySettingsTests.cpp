@@ -19,6 +19,27 @@ int main()
         !ParseFirstPersonAssemblySettings(json, parsed, error) ||
         !SerializeFirstPersonAssemblySettings(parsed, reopened, error) || reopened != json)
     { std::cerr << "Assembly attachment or paired indices lost on reopen: " << error; return 1; }
+    CommandService history;
+    auto draft=settings;
+    auto next=draft;next.weaponPosition.x+=0.01f;next.cameraPosition.z+=0.02f;
+    next.cameraRotation={0,0,0,1};next.pairs.pop_back();
+    if(!history.Execute(std::make_unique<SetFirstPersonAssemblySettingsCommand>(draft,next))||
+        !history.IsDirty()||draft.pairs.size()!=1||!history.Undo()||
+        !SerializeFirstPersonAssemblySettings(draft,reopened,error)||reopened!=json||
+        history.IsDirty()||!history.Redo()||draft.cameraPosition.z!=next.cameraPosition.z)
+        return 4;
+    history.MarkSaved();
+    if(history.Execute(std::make_unique<SetFirstPersonAssemblySettingsCommand>(draft,draft))||
+        history.IsDirty()||!history.Undo()||!history.IsDirty()||!history.Redo()||history.IsDirty())
+        return 5;
+    auto incomplete=draft;incomplete.pairs[0].weaponClip=~0u;
+    if(!history.Execute(std::make_unique<SetFirstPersonAssemblySettingsCommand>(draft,incomplete))||
+        !history.Undo()||draft.pairs[0].weaponClip!=next.pairs[0].weaponClip)
+        return 6;
+    auto branch=draft;branch.weaponPosition.y+=0.01f;
+    if(!history.Execute(std::make_unique<SetFirstPersonAssemblySettingsCommand>(draft,branch))||
+        history.CanRedo())
+        return 7;
     for (int failure = 0; failure < 7; ++failure)
     {
         auto bad = settings;

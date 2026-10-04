@@ -18,16 +18,22 @@ in progress; this is not acceptance of firing, reload gameplay, inventory or P2.
    or both NONE. The preview evaluates both native tracks on one clock; a shorter
    track holds its last pose. UPDATE PREVIEW applies the draft settings.
 6. Choose a preview action, play/pause or scrub. Save is enabled after rendering.
-7. Give the assembly a new name and SAVE + ASSIGN. This creates a governed product
-   and assigns its stable ID through the existing Player settings command.
-   Save the level to persist that assignment.
-8. Reopen the panel on an assigned assembly to recover its recipe. Saving makes
-   a new product rather than overwriting a shared asset. Closing discards the draft.
+7. SAVE CHANGES rebuilds an assigned assembly while retaining its product and recipe
+   IDs, paths and Player Start assignment. Existing users of the shared asset see
+   the rebuilt product on their next load.
+8. To create a variant, enter a unique Copy name and SAVE AS NEW. This creates a
+   separate product and assigns it through the existing Player settings command.
+   Save the level to persist that assignment. Reopen the panel to recover its recipe.
+9. UNDO and REDO restore draft part selection, parent, attachment/view transforms
+   and clip pairs. UPDATE PREVIEW after restoring a draft. Closing discards the draft.
 
 Selecting different parts requires LOAD PARTS. Changing parent, transforms or
 pairs invalidates the previous preview. A part registry hash change after preview
 requires a fresh load/preview before saving. Player assignment remains undoable;
-draft assembly controls do not yet have command history.
+the assembly draft uses its own CommandService history and saved-state boundary.
+Save changes rejects a stale product hash. Failed document replacement rolls back
+product, recipe, projection, registry, catalogue and optional thumbnail together.
+Opening the editor refreshes retained authoring assets from disk after build scans.
 
 ## Durable contract and ownership
 
@@ -111,7 +117,7 @@ camera/look check on 4 October. The supplied DX12 screenshot shows textured arms
 and shotgun together in the foreground at 75 FPS. This is bounded visual acceptance.
 
 Outstanding: general texture relink UI, a dedicated rigged-part import
-classification, draft Undo/Redo and assembly rebuild/update lifecycle.
+classification and owner verification of the save/update and draft history UI.
 Windows long-path staging and package integrity repair is implemented locally;
 a 312-character stage/integrity regression and actual 35-file owner candidate
 validation plus DX12 automatic Runtime smoke pass. Original deep-root Studio

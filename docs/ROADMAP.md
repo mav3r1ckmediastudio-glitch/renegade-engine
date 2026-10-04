@@ -46,7 +46,9 @@ and fresh-process rendering. Native Studio assembly authoring now has retained p
 and transforms, paired preview, governed save/reopen and undoable Player Start
 assignment. Owner accepts the preview controls; Runtime movement pairs now evaluate
 on one clock and pass native roundtrip and real-product packaged-loader proofs.
-Owner Test Level and actual Build Game acceptance remain outstanding; see
+Owner Test Level and actual Build Game visuals are accepted. Stable-ID updates,
+Save as new and draft Undo/Redo are implemented with local lifecycle and Runtime
+proofs; owner verification of the new controls remains pending. See
 [P1_ASSEMBLY_AUTHORING](P1_ASSEMBLY_AUTHORING.md).
 Implementation baseline: `51513b9` on `feature/p1-first-person-arms-rig`.
 Camera synchronization repair `4dd9953` removes owner-reported proxy movement

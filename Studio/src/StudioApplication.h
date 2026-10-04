@@ -71,7 +71,9 @@ namespace renegade::studio
         void OpenAssemblyEditor();
         void LoadAssemblyParts();
         void RebuildAssemblyPreview();
-        void SaveAssemblyEditor();
+        void SaveAssemblyEditor(bool asNew);
+        void RecordAssemblyDraft(const bridge::FirstPersonAssemblySettings& before);
+        void RefreshAssemblyDraft();
         void OpenStaticModelImporter();
         void AppendModelImportAnimations();
         void CommitStaticModelImporter();
@@ -1117,7 +1119,10 @@ namespace renegade::studio
         std::array<SceneInspectorSlider, 12> assemblyValues_;
         wi::gui::Slider assemblyTime_;
         wi::gui::TextInputField assemblyName_;
-        wi::gui::Button assemblyLoad_, assemblyPreviewButton_, assemblyPlay_, assemblySave_, assemblyClose_;
+        wi::gui::Button assemblyLoad_, assemblyPreviewButton_, assemblyPlay_, assemblySave_, assemblySaveNew_, assemblyUndo_, assemblyRedo_, assemblyClose_;
+        bridge::CommandService assemblyCommands_;
+        bridge::StableId assemblyAssetId_;
+        std::string assemblyOriginalHash_;
         std::unique_ptr<ModelImportPreview> assemblyPreview_;
         bridge::FirstPersonAssemblySettings assemblySettings_;
         std::vector<bridge::StableId> assemblyPartIds_;

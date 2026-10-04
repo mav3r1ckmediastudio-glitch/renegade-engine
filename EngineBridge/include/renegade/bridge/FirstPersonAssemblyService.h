@@ -2,6 +2,8 @@
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/PlayerViewGripService.h"
 #include <memory>
+#include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/ProjectDocumentTransaction.h"
 namespace renegade::bridge {
 struct FirstPersonAssemblyPair {
     std::string action = "Idle";
@@ -18,6 +20,16 @@ struct FirstPersonAssemblySettings {
 };
 bool SerializeFirstPersonAssemblySettings(const FirstPersonAssemblySettings&, std::string&, std::string&);
 bool ParseFirstPersonAssemblySettings(const std::string&, FirstPersonAssemblySettings&, std::string&);
+class SetFirstPersonAssemblySettingsCommand final : public ICommand {
+public:
+    SetFirstPersonAssemblySettingsCommand(FirstPersonAssemblySettings& target,
+        FirstPersonAssemblySettings next);
+    bool Execute() override;
+    void Undo() override;
+private:
+    FirstPersonAssemblySettings& target_;
+    FirstPersonAssemblySettings before_, after_;
+};
 class FirstPersonAssemblyService {
 public:
     // Private native scenes only. No part product or editor world is mutated.
@@ -30,5 +42,14 @@ public:
     bool Save(const std::string& root, const StableId& project, const std::string& name,
         const FirstPersonAssemblySettings&, const std::vector<std::uint8_t>& thumbnail,
         StableId& asset, std::string& error) const;
+    bool Update(const std::string& root, const StableId& project,
+        const StableId& asset, const std::string& expectedProductHash,
+        const FirstPersonAssemblySettings&, const std::vector<std::uint8_t>& thumbnail,
+        std::string& error, ProjectDocumentTransactionHook hook = {}) const;
+private:
+    bool SaveImpl(const std::string& root, const StableId& project, const std::string& name,
+        const FirstPersonAssemblySettings&, const std::vector<std::uint8_t>& thumbnail,
+        StableId& asset, std::string& error, const StableId& existing,
+        const std::string& expectedHash, ProjectDocumentTransactionHook hook) const;
 };
 }

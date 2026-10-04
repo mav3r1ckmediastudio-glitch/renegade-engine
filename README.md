@@ -134,7 +134,9 @@ active P1 branch. The owner accepts the authored shotgun diagnostic grip/reload;
 native Studio assembly authoring now supports retained parts, explicit attachment,
 paired preview and governed save/reopen with Player Start assignment. Owner accepts
 the preview controls. Runtime movement playback now evaluates both native tracks
-on one clock; real owner Test Level and Build Game checks remain outstanding. See
+on one clock; owner Test Level and actual Build Game visuals are accepted. Save
+changes, Save as new and draft Undo/Redo are implemented; their owner UI check
+remains pending. See
 [P1 assembly authoring](docs/P1_ASSEMBLY_AUTHORING.md). The
 [P1 status and recovery checkpoint](docs/P1_STATUS_AND_RECOVERY.md) distinguishes
 implemented code, passing automated checks and the unresolved gameplay result.

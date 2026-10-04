@@ -895,8 +895,13 @@ arms bone; paired native action tracks preserve both skeletons. Studio controls
 call the bridge service and evaluate the preview on one clock. The assembled
 WISCENE embeds resources; its versioned recipe, product, projection, registry and
 catalogue cross the existing project document transaction. Player Start assignment
-uses the existing settings command. Runtime paired-track action evaluation remains
-outstanding. See P1_ASSEMBLY_AUTHORING.md for the contract and limitations.
+uses the existing settings command. Save changes retains product/recipe IDs and
+paths, rejects stale product hashes and updates documents through the same
+transaction. Save as new creates a separate product. Draft snapshots use an
+independent CommandService, including incomplete clip selections. Opening the
+panel refreshes authoring assets after dependency-only build scans. Unrelated
+stale import provenance is preserved during an assembly rebuild.
+See P1_ASSEMBLY_AUTHORING.md for the contract and limitations.
 
 ### Runtime assembly movement pairs
 

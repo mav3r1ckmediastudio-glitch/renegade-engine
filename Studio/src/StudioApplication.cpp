@@ -3401,8 +3401,12 @@ namespace renegade::studio
                     assemblyImage_.SetImage(image);
                     assemblyTime_.SetValue(assemblyPreview_->ClipTime());
                     assemblyPlay_.SetText(assemblyPreview_->IsPlaying() ? "PAUSE" : "PLAY");
-                    assemblySave_.SetEnabled(assemblyPreview_->IsReady());
+                    assemblySave_.SetEnabled(assemblyPreview_->IsReady()&&!assemblyAssetId_.empty());
+                    assemblySaveNew_.SetEnabled(assemblyPreview_->IsReady());
                 }
+                assemblyUndo_.SetEnabled(assemblyCommands_.CanUndo());
+                assemblyRedo_.SetEnabled(assemblyCommands_.CanRedo());
+                if(!assemblyPreview_){assemblySave_.SetEnabled(false);assemblySaveNew_.SetEnabled(false);}
                 diagnosticInput.StopAt("first_person_assembly"); detail::ClearCreatorAssetDragPreview();
                 pendingAction_ = EditorAction::None; return;
             }

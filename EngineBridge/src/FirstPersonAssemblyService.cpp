@@ -171,6 +171,23 @@ bool FirstPersonAssemblyService::Pose(wi::scene::Scene& s,const std::string& act
  if(selected!=2){e="Action must resolve to one arms track and one weapon track.";return false;}
  s.Update(1.0f/60);e.clear();return true;
 }
+SetFirstPersonAssemblySettingsCommand::SetFirstPersonAssemblySettingsCommand(
+ FirstPersonAssemblySettings& target,FirstPersonAssemblySettings next)
+ :target_(target),before_(target),after_(std::move(next)) {}
+bool SetFirstPersonAssemblySettingsCommand::Execute() {
+ auto equal3=[](const XMFLOAT3& a,const XMFLOAT3& b){return a.x==b.x&&a.y==b.y&&a.z==b.z;};
+ auto equal4=[](const XMFLOAT4& a,const XMFLOAT4& b){return a.x==b.x&&a.y==b.y&&a.z==b.z&&a.w==b.w;};
+ bool same=before_.armsAssetId==after_.armsAssetId&&before_.weaponAssetId==after_.weaponAssetId&&
+ before_.parentBonePath==after_.parentBonePath&&equal3(before_.weaponPosition,after_.weaponPosition)&&
+ equal3(before_.cameraPosition,after_.cameraPosition)&&equal4(before_.weaponRotation,after_.weaponRotation)&&
+ equal4(before_.cameraRotation,after_.cameraRotation)&&before_.pairs.size()==after_.pairs.size();
+ for(size_t i=0;same&&i<before_.pairs.size();++i)
+ same=before_.pairs[i].action==after_.pairs[i].action&&before_.pairs[i].armsClip==after_.pairs[i].armsClip&&
+ before_.pairs[i].weaponClip==after_.pairs[i].weaponClip;
+ if(same)return false;
+ target_=after_;return true;
+}
+void SetFirstPersonAssemblySettingsCommand::Undo(){target_=before_;}
 bool FirstPersonAssemblyService::ReadSettings(const std::string& root,const StableId& project,const StableId& id,
  FirstPersonAssemblySettings& settings,std::string& e) const {
  auto placement=ReusableAssetService().PrepareModelAssetPlacement({root,project,id});
@@ -183,26 +200,58 @@ bool FirstPersonAssemblyService::ReadSettings(const std::string& root,const Stab
 }
 bool FirstPersonAssemblyService::Save(const std::string& rootPath,const StableId& project,const std::string& name,
  const FirstPersonAssemblySettings& s,const std::vector<std::uint8_t>& thumbnail,StableId& asset,std::string& e) const {
+ return SaveImpl(rootPath,project,name,s,thumbnail,asset,e,{}, {}, {});
+}
+bool FirstPersonAssemblyService::Update(const std::string& rootPath,const StableId& project,
+ const StableId& existing,const std::string& expectedHash,const FirstPersonAssemblySettings& s,
+ const std::vector<std::uint8_t>& thumbnail,std::string& e,ProjectDocumentTransactionHook hook) const {
+ if(!IsValidStableId(existing)||expectedHash.empty()){e="Existing assembly identity and original hash are required.";return false;}
+ StableId saved;
+ return SaveImpl(rootPath,project,{},s,thumbnail,saved,e,existing,expectedHash,std::move(hook));
+}
+bool FirstPersonAssemblyService::SaveImpl(const std::string& rootPath,const StableId& project,const std::string& name,
+ const FirstPersonAssemblySettings& s,const std::vector<std::uint8_t>& thumbnail,StableId& asset,std::string& e,
+ const StableId& existing,const std::string& expectedHash,ProjectDocumentTransactionHook hook) const {
+ const bool updating=!existing.empty();
  asset.clear();std::string settings;if(!SerializeFirstPersonAssemblySettings(s,settings,e))return false;
- if(name.empty()||name.size()>80||name=="."||name==".."||name.back()=='.'||name.back()==' '||
+ if(!updating&&(name.empty()||name.size()>80||name=="."||name==".."||name.back()=='.'||name.back()==' '||
  name.find_first_of("<>:\"/\\|?*")!=std::string::npos||
- std::any_of(name.begin(),name.end(),[](unsigned char c){return c<32;})){e="Choose a valid new assembly name.";return false;}
+ std::any_of(name.begin(),name.end(),[](unsigned char c){return c<32;}))){e="Choose a valid new assembly name.";return false;}
  std::error_code ec;auto root=fs::weakly_canonical(fs::u8path(rootPath),ec);
  if(ec||!fs::is_directory(root)||!IsValidStableId(project)){e="Assembly project is unavailable.";return false;}
  wi::scene::Scene scene;if(!Prepare(rootPath,project,s,scene,e))return false;
  AssetRegistry registry;if(!ReadAssetRegistry(rootPath,project,registry,e))return false;
- const std::string relative="Content/Assemblies/"+name+".rasset";
- const std::string sourceRelative="SourceAssets/Assemblies/"+name+".json";
+ StableId sourceId=GenerateStableId(),id=updating?existing:GenerateStableId();
+ std::string relative="Content/Assemblies/"+name+".rasset";
+ std::string sourceRelative="SourceAssets/Assemblies/"+name+".json";
+ if(updating) {
+ auto record=std::find_if(registry.records.begin(),registry.records.end(),[&](const auto& r){return r.assetId==existing;});
+ auto product=std::find_if(registry.importedProducts.begin(),registry.importedProducts.end(),[&](const auto& p){return p.productAssetId==existing;});
+ if(record==registry.records.end()||product==registry.importedProducts.end()||
+ product->importer!="renegade.first_person.assembly"||record->contentHash!=expectedHash) {
+ e="Assembly changed or is no longer available. Reopen it before saving changes.";return false;}
+ relative=record->projectRelativePath;sourceId=product->sourceAssetId;
+ auto sourceRecord=std::find_if(registry.records.begin(),registry.records.end(),[&](const auto& r){return r.assetId==sourceId;});
+ if(sourceRecord==registry.records.end()){e="Assembly recipe identity is unavailable.";return false;}
+ sourceRelative=sourceRecord->projectRelativePath;
+ std::vector<std::uint8_t> original;
+ if(!Read(root/fs::u8path(relative),original)||Hash(original)!=expectedHash) {
+ e="Assembly product bytes changed. Reopen it before saving changes.";return false;}
+ ReusableModelAssetDocument originalDocument;
+ if(!ReadReusableModelAssetDocument((root/fs::u8path(relative)).generic_u8string(),originalDocument,e)||
+ originalDocument.manifest.projectId!=project||originalDocument.manifest.assetId!=id||
+ originalDocument.manifest.sourceAssetId!=sourceId||originalDocument.manifest.sourceFormat!="assembly") {
+ e="Existing assembly identity is inconsistent.";return false;}
+ }
  auto path=root/fs::u8path(relative),source=root/fs::u8path(sourceRelative);
  auto projection=root/fs::u8path(ResolveReusableModelManagedProjectionPath(relative));
  for(auto p:{path,source,projection}){
- if(fs::exists(p)||std::any_of(registry.records.begin(),registry.records.end(),[&](const auto& r){return r.projectRelativePath==p.lexically_relative(root).generic_u8string();})||
- std::any_of(registry.missingAssets.begin(),registry.missingAssets.end(),[&](const auto& r){return r.lastKnownPath==p.lexically_relative(root).generic_u8string();})){
+ if(!updating&&(fs::exists(p)||std::any_of(registry.records.begin(),registry.records.end(),[&](const auto& r){return r.projectRelativePath==p.lexically_relative(root).generic_u8string();})||
+ std::any_of(registry.missingAssets.begin(),registry.missingAssets.end(),[&](const auto& r){return r.lastKnownPath==p.lexically_relative(root).generic_u8string();}))){
  e="Assembly destination exists or has a recovery identity; choose a new name.";return false;}
  fs::create_directories(p.parent_path(),ec);
  if(ec||!Within(fs::weakly_canonical(p.parent_path(),ec),root)){e="Assembly destination escapes the project.";return false;}
  }
- const auto sourceId=GenerateStableId(),id=GenerateStableId();
  std::string recipe=nlohmann::json({{"source_format","assembly"},{"options",nlohmann::json::parse(settings)}}).dump();
  ReusableModelAssetDocument d;d.manifest.projectId=project;d.manifest.assetId=id;d.manifest.sourceAssetId=sourceId;
  d.manifest.sourceFormat="assembly";d.manifest.importer="renegade.first_person.assembly";d.manifest.settingsJson=recipe;
@@ -223,8 +272,10 @@ bool FirstPersonAssemblyService::Save(const std::string& rootPath,const StableId
  ReusableModelManagedProjection p;p.projectId=project;p.assetId=id;p.sourceAssetId=sourceId;
  p.sourceProjectRelativePath=sourceRelative;p.assetProjectRelativePath=relative;p.sourceFormat="assembly";
  p.importer=d.manifest.importer;p.settingsJson=recipe;p.payloadHash=d.manifest.payloadHash;p.modelMetadata=Describe(scene);
+ if(updating&&thumbnail.empty()&&fs::is_regular_file(root/fs::u8path(ResolveReusableModelThumbnailPath(relative))))
+ p.thumbnailProjectRelativePath=ResolveReusableModelThumbnailPath(relative);
  if(!thumbnail.empty()) {
- const auto image=wi::resourcemanager::Load("assembly-thumbnail-"+id+".png",wi::resourcemanager::Flags::NONE,thumbnail.data(),thumbnail.size());
+ const auto image=wi::resourcemanager::Load("assembly-thumbnail-"+id+"-"+Hash(thumbnail)+".png",wi::resourcemanager::Flags::NONE,thumbnail.data(),thumbnail.size());
  if(thumbnail.size()>4*1024*1024||!image.IsValid()||!image.GetTexture().IsValid()||
  image.GetTexture().GetDesc().width!=512||image.GetTexture().GetDesc().height!=320){e="Assembly thumbnail must be a bounded 512x320 PNG.";return false;}
  p.thumbnailProjectRelativePath=ResolveReusableModelThumbnailPath(relative);
@@ -234,25 +285,37 @@ bool FirstPersonAssemblyService::Save(const std::string& rootPath,const StableId
  AssetRecord r;r.assetId=id;r.dependencyNodeId=std::string(source?"lp07.source:":"lp07.rasset:")+id;
  r.projectRelativePath=path;r.dependencyClass=DependencyClass::ImportedContent;
  r.requirement=source?DependencyRequirement::EditorOnly:DependencyRequirement::Required;
- r.provider=source?"lp07.source_asset":"lp07.rasset";r.contentHash=hash;registry.records.push_back(r);};
+ r.provider=source?"lp07.source_asset":"lp07.rasset";r.contentHash=hash;
+ if(updating) {
+ auto current=std::find_if(registry.records.begin(),registry.records.end(),[&](const auto& item){return item.assetId==id;});
+ current->contentHash=hash;
+ } else registry.records.push_back(r);};
  add(sourceId,sourceRelative,Hash(Bytes(recipe)),true);add(id,relative,Hash(productBytes),false);
  ImportedProductRecord provenance;provenance.sourceAssetId=sourceId;provenance.productAssetId=id;
  provenance.importer=d.manifest.importer;provenance.settingsSchema=d.manifest.settingsSchema;provenance.settingsJson=recipe;
  provenance.sourceContentHashAtImport=Hash(Bytes(recipe));provenance.productContentHashAtImport=Hash(productBytes);
- auto products=registry.importedProducts;products.push_back(provenance);
- if(!SetImportedProductRecords(registry,std::move(products),e))return false;
+ auto products=registry.importedProducts;
+ if(updating) {
+ auto current=std::find_if(products.begin(),products.end(),[&](const auto& p){return p.productAssetId==id;});
+ *current=provenance;
+ } else products.push_back(provenance);
+ // Preserve unrelated stale/missing provenance; only this assembly is rebuilt.
+ registry.importedProducts=std::move(products);
+ registry.schemaVersion=AssetRegistry::CurrentSchemaVersion;
+ if(!ValidateAssetRegistry(registry,e))return false;
  AssetCatalogueMetadataDocument catalogue;
  if(!ReadAssetCatalogueMetadata(rootPath,project,catalogue,e)||!SetAssetModelDerivedMetadata(catalogue,id,p.modelMetadata,e))return false;
  std::string registryJson,catalogueJson;
  if(!SerializeAssetRegistry(registry,registryJson,e)||!SerializeAssetCatalogueMetadata(catalogue,catalogueJson,e))return false;
  ProjectDocumentTransactionOptions options;options.allowedRoot=root.generic_u8string();
  options.journalDirectory=(root/"Intermediate/Transactions").generic_u8string();
+ options.operationHook=std::move(hook);
  std::vector<ProjectDocumentWrite> writes={Write(source,Bytes(recipe)),Write(path,productBytes),
  Write(projection,Bytes(projectionJson)),Write(root/AssetRegistryDocumentName,Bytes(registryJson)),
  Write(root/AssetCatalogueMetadataDocumentName,Bytes(catalogueJson))};
  if(!thumbnail.empty()) {
  auto thumb=root/fs::u8path(p.thumbnailProjectRelativePath);
- if(fs::exists(thumb)){e="Assembly thumbnail destination already exists.";return false;}
+ if(!updating&&fs::exists(thumb)){e="Assembly thumbnail destination already exists.";return false;}
  writes.push_back(Write(thumb,thumbnail));
  }
  auto transaction=ProjectDocumentTransaction().Execute(std::move(writes),options);

@@ -534,6 +534,64 @@ static bool RuntimeAssemblyProof(const fs::path& input, const fs::path& output, 
  return true;
 }
 
+
+// Run only against a disposable project copy, never the owner's live assets.
+static bool UpdateAssemblyProof(const fs::path& descriptor,const fs::path& output)
+{
+ std::string error;ProjectMetadata project;
+ if(!ProjectService().InspectProject(fs::absolute(descriptor).generic_u8string(),project,error))return false;
+ const fs::path root=fs::u8path(project.rootPath);
+ SceneService scenes;if(!scenes.LoadScene((root/fs::u8path(project.startupScene)).generic_u8string()))return false;
+ auto start=ResolvePlayerStart(scenes.GetScene());
+ if(start.resolution!=PlayerStartResolution::Success)return false;
+ const auto asset=start.start.settings.firstPersonArmsAssetId;
+ AssetRegistry before;if(!CreatorAssetWorkflowService().RefreshRegistryFromDisk(project.rootPath,project.projectId,before,error))return false;
+ const auto record=std::find_if(before.records.begin(),before.records.end(),[&](const auto& r){return r.assetId==asset;});
+ if(record==before.records.end())return false;
+ const auto expectedHash=record->contentHash;
+ FirstPersonAssemblyService service;FirstPersonAssemblySettings original,changed,reopened;
+ if(!service.ReadSettings(project.rootPath,project.projectId,asset,original,error))return false;
+ changed=original;changed.weaponPosition.x+=0.005f;changed.cameraPosition.z+=0.01f;
+ auto bytes=[](const fs::path& path){std::ifstream f(path,std::ios::binary);
+ return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(f),{});};
+ std::vector<std::pair<fs::path,std::vector<std::uint8_t>>> untouched;
+ for(const auto& r:before.records)if(r.assetId==asset||
+ std::any_of(before.importedProducts.begin(),before.importedProducts.end(),[&](const auto& p){
+ return p.productAssetId==asset&&p.sourceAssetId==r.assetId;}))
+ untouched.push_back({root/fs::u8path(r.projectRelativePath),bytes(root/fs::u8path(r.projectRelativePath))});
+ for(const auto& path:{root/AssetRegistryDocumentName,root/AssetCatalogueMetadataDocumentName,
+ root/fs::u8path(ResolveReusableModelManagedProjectionPath(record->projectRelativePath))})
+ untouched.push_back({path,bytes(path)});
+ const auto levelPath=root/fs::u8path(project.startupScene);
+ const auto levelBytes=bytes(levelPath);
+ auto fail=[](ProjectDocumentTransactionStage stage,size_t,const std::string&,std::string& e){
+ if(stage==ProjectDocumentTransactionStage::AfterReplace){e="Injected assembly replacement failure";return ProjectDocumentTransactionHookAction::Fail;}
+ return ProjectDocumentTransactionHookAction::Continue;};
+ if(service.Update(project.rootPath,project.projectId,asset,expectedHash,changed,{},error,fail)||
+ error.find("Injected assembly replacement failure")==std::string::npos)return false;
+ for(const auto& entry:untouched)if(bytes(entry.first)!=entry.second){std::cerr<<"Assembly rollback changed "<<entry.first<<"\n";return false;}
+ if(!service.Update(project.rootPath,project.projectId,asset,expectedHash,changed,{},error)){std::cerr<<error<<"\n";return false;}
+ if(!service.ReadSettings(project.rootPath,project.projectId,asset,reopened,error))return false;
+ std::string wanted,actual;
+ if(!SerializeFirstPersonAssemblySettings(changed,wanted,error)||
+ !SerializeFirstPersonAssemblySettings(reopened,actual,error)||wanted!=actual)return false;
+ AssetRegistry after;if(!ReadAssetRegistry(project.rootPath,project.projectId,after,error))return false;
+ if(after.records.size()!=before.records.size()||after.importedProducts.size()!=before.importedProducts.size())return false;
+ const auto oldProduct=std::find_if(before.importedProducts.begin(),before.importedProducts.end(),[&](const auto& p){return p.productAssetId==asset;});
+ const auto newProduct=std::find_if(after.importedProducts.begin(),after.importedProducts.end(),[&](const auto& p){return p.productAssetId==asset;});
+ if(oldProduct==before.importedProducts.end()||newProduct==after.importedProducts.end()||
+ oldProduct->sourceAssetId!=newProduct->sourceAssetId)return false;
+ if(service.Update(project.rootPath,project.projectId,asset,expectedHash,original,{},error))return false;
+ if(bytes(levelPath)!=levelBytes||CapturePlayerControllerSettings(scenes.GetScene(),start.start.entity).firstPersonArmsAssetId!=asset)return false;
+ StableId copy;
+ if(!service.Save(project.rootPath,project.projectId,"Assembly lifecycle variant",changed,{},copy,error)||
+ copy==asset||bytes(levelPath)!=levelBytes)return false;
+ wi::scene::Scene rendered;if(!service.Prepare(project.rootPath,project.projectId,reopened,rendered,error)||
+ !Capture(rendered,output/"updated-assembly.png",true,true))return false;
+ std::cout<<"UPDATE SAME ID, RECIPE ID, EXACT REOPEN, STALE REJECTION, ROLLBACK AND SAVE AS NEW PASS\n";
+ return RuntimeAssemblyProof(descriptor,output,false);
+}
+
 int main(int argc,char** argv)
 {
     if(argc<3 || argc>4) { std::cerr<<"Usage: proof pack-folder output-folder\n"; return 2; }
@@ -549,6 +607,7 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--update-assembly") return UpdateAssemblyProof(input,output)?0:14;
     if(argc==4 && std::string(argv[3])=="--runtime-assembly") return RuntimeAssemblyProof(input,output,false)?0:12;
     if(argc==4 && std::string(argv[3])=="--runtime-package") return RuntimeAssemblyProof(input,output,true)?0:13;
     if(argc==4 && std::string(argv[3])=="--assembly") return ProductAssemblyProof(input,output,false)?0:10;
