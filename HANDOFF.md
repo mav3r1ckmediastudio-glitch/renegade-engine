@@ -2017,3 +2017,76 @@ then unique Copy name + SAVE AS NEW and level save. New UI acceptance and
 independent exact-commit verification remain pending. P1 gate remains open.
 Runtime paired crossfades, reload/fire gameplay and general texture-relink UI
 remain outside this slice.
+
+## Complete shotgun preview library and automatic refresh - 4 October 2026
+
+Implementation: 34297443c03c986935690e4fc1dd53886d94d0d6 on
+feature/p1-first-person-arms-rig. Local commit; no push or merge.
+Owner accepts prior 419fa65 lifecycle UI: "yup, all that works as expected".
+Owner requested live offset feedback because the cleared image looked broken,
+then chose "Complete animation library" as tonight's goal.
+
+Changed: FirstPersonAssemblyService.h/.cpp (shared 14-action whitelist);
+FirstPersonAssemblyEditor.cpp, StudioApplication.h/.cpp (three six-row action
+pages, 150ms debounced safe-point rebuild, retain last valid image until ready,
+block stale draft saves and preserve preview action/time/play state);
+FirstPersonAssemblyGraphicsProof.cpp and SettingsTests.cpp; README, architecture,
+roadmap, feature matrix and P1 assembly authoring instructions.
+
+Exact Windows x64 Release build flags:
+CL=/MP4; MSBuild /m:2 /nologo /verbosity:quiet /p:Configuration=Release
+/p:Platform=x64 /p:BuildProjectReferences=false.
+Targets: BUILD/renegade/EngineBridge/RenegadeEngineBridge.vcxproj;
+BUILD/renegade/Tests/RenegadeFirstPersonAssemblySettingsTests.vcxproj;
+BUILD/renegade/Tests/RenegadeFirstPersonAssemblyWorkflowProof.vcxproj;
+BUILD/renegade/Studio/RenegadeStudio.vcxproj with
+/p:TargetName=RenegadeStudioFullArmsLibraryReady. All exit 0.
+Known MSB8029 and unrelated Studio nodiscard warnings remain.
+CTest --test-dir BUILD/renegade -C Release -R
+"FirstPersonAssemblySettings|MatchingRigAnimation|RenegadePlayerViewRig"
+--output-on-failure: 4/4 pass, 0.45s. Includes all 14 action recipe roundtrip.
+
+Manual proof executable:
+BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+- BUILD/renegade/p1-shotgun-proof/input BUILD/arms-full-library-ready
+  --full-library: PASS. 14 arms clips and 4 weapon clips, native matching-rig
+  ingestion, unchanged skin-index/inverse-bind evidence, retained-source recipe
+  reconstruction and governed commit/reopen. Descriptive native clip names
+  survive retention instead of displaying 18 generic "Unreal Take" labels.
+- BUILD/arms-full-library-ready/ArmsLibrary.renegade
+  BUILD/full-arms-ready-cold-preview --full-library-reopen: PASS.
+  14 semantic pairs, 28 tracks, two armatures and ten valid retained textures.
+  Every action rendered at start/midpoint/near end; draw/holster legitimately
+  permit out-of-view frames. Final build/import/cold proof chain exit 0, 36.73s.
+- Same descriptor BUILD/full-arms-ready-runtime --runtime-assembly: PASS.
+  Production Test Level snapshot, paired movement pose/pause/cleanup.
+- BUILD/full-arms-ready-runtime/isolated-package
+  BUILD/full-arms-ready-runtime/cold --runtime-package: PASS in a fresh process.
+  Final launch and Runtime proof chain exit 0, 19.43s.
+- Rendered aim, fire, sprint, jump, draw/holster, reload and partial reload poses
+  visually inspected. Native UI inspection caught overlapping labels caused by
+  Window child visibility propagation; selected page visibility is now enforced
+  each frame. Final native first-page layout has six distinct labelled rows.
+- Native offset changed temporarily: prior image remained during "Updating
+  preview...", then the new offset rendered without pressing UPDATE PREVIEW.
+  Undo was used to restore the original draft. No assembly save was performed.
+- git diff --check passes.
+
+Ready Studio: BUILD/renegade/Studio/Release/RenegadeStudioFullArmsLibraryReady.exe
+SHA256 D807AFEDB336EBD763FF157C708C19A7922901CA39978AA7D4C7AC6CD95292E3.
+Ready fixture: BUILD/arms-full-library-ready/ArmsLibrary.renegade
+Project ID 3720e96a-6cf6-48f9-8988-c5744445a95a.
+Assembly ID 07858b1d-4b5a-4be9-90ab-c9dd5629761c.
+Existing level was copied as template into the new fixture; owner original
+project and prior accepted executable were not overwritten.
+Our preliminary full-library editor was closed after inspection; the owner's
+AssemblyLifecycle editor was left open. Corrected Ready editor has the new
+project loaded, Player Start selected, assembly preview open.
+
+Next owner check: use Preview action + PLAY for the 14 supplied actions; check
+small offsets refresh automatically and page selection is clean. Aim/jump,
+equip/fire/reload remain authoring previews; only Idle/Walk/Run are wired to
+existing gameplay movement. Input-driven equipment/actions, damage/ammo/recoil
+and paired crossfades remain later roadmap work. New native UI owner acceptance,
+actual full-library Build Game export and independent exact-head verification
+remain pending. P1 gate remains open.
