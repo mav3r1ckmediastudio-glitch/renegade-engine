@@ -1559,3 +1559,26 @@ demo Blueprint setup. Next: owner inspect R/Space/Escape preview, resolve exact
 authored attachment/timeline, then bounded governed assembly import/relink/save
 workflow, followed by existing Player View Rig integration. Do not broaden into
 inventory/pickups or replace working Player controls at this checkpoint.
+
+## P1 proof lateral grip correction - 4 October 2026
+
+Source checkpoint 9af049296ad681f11a18bbfa5df06e58b5a229ff; parent ce2a2af.
+Owner confirms animations work very well; reports gun/shells right of hands.
+Uploaded screenshot read locally successfully despite displayed missing-file error.
+Changed Tests/FirstPersonAssemblyGraphicsProof.cpp and
+docs/P1_SHOTGUN_ASSEMBLY_PROOF.md: +0.025m imported-X correction to entire weapon
+root before local attachment derivation (camera-right is -X). Shells follow
+existing native weapon skeleton; clips/hands/camera/gameplay unchanged.
+
+Same Release MSBuild command from prior checkpoint exits0; full textured capture,
+WISCENE save/reopen/render proof exits0. Logs alignment-proof.log and existing
+p1-shotgun-build.log. Idle and reload1.2s/2.0s FP renders visually inspected:
+lateral mismatch reduced; exact final fit remains owner-pending. Agent-owned
+previous preview closed through CloseMainWindow, corrected --view reopened.
+No mouse/keyboard automation, push, merge, upstream or production Player changes.
+
+Corrected Release proof SHA-256:
+B539693C7A1A25E7CB42D735FF715875D332550BE56F070858FFA19DEB96F953.
+Pre-commit compiled source content; owner exact-commit verification not inferred.
+Animations accepted by owner, corrected alignment not yet accepted; P1 still
+IN PROGRESS. Next assess grip/shell contacts through full reload with owner.
