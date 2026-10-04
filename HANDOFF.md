@@ -2225,3 +2225,53 @@ Current Runtime and existing Ready Studio left open for owner review.
 No project, scene or assembly edits/saves needed. New aim owner acceptance pending.
 No gate closure, push or merge. Next: owner aim/reload feel check, then further
 equipment/jump routing or weapon definition work within the canonical roadmap.
+
+## 2026-10-05 Equipment, jump and view-model collision correction
+
+Implementation commit: f87795a13ebb2fc16dfc2a38c8b00cef65f1809c.
+Owner accepted prior aim behavior and requested Equip, Unequip and all jump stages.
+Q toggles authored paired equip/holster clips, terminal holster holds hidden,
+and holstered firing/reload/aim are blocked without losing shell count.
+Space uses the existing capsule jump input; Jolt ground support drives paired
+JumpStart, JumpLoop and JumpLand. Pause freezes action progression.
+
+Changed GameplayInputService.h/.cpp, RuntimeApplication.cpp,
+RuntimePlayerViewAnimation.h, RuntimePlayerViewRig.h, RuntimePlayerViewAsset.h,
+FirstPersonAssemblyGraphicsProof.cpp, Phase6Gate2InputTests.cpp,
+PlayerViewRigTests.cpp, README, architecture, roadmap, assembly authoring docs
+and feature matrix. The private playground is a separate descriptor/scene under
+BUILD/arms-full-library-ready, retaining the real arms assignment. Original
+ArmsLibrary scene remains untouched. Native save/reopen checks retain the floor
+rigid body and Player Start assignment.
+
+Owner reported bouncing followed by endless falling. Real physics trace
+reproduced spontaneous sideways/upward impulses before jump input. Imported
+humanoid ragdoll colliders were pushing the authoritative capsule. View-model
+sanitization now disables ragdolls and removes soft-body physics alongside
+character/rigid-body/collider components. Regression checks cover the retained
+humanoid being disabled. No Wicked source or submodule change.
+
+Exact Release build flags: CL=/MP4; MSBuild /m:2 /nologo /verbosity:quiet
+/p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false.
+Final corrected Runtime and PlayerViewRigTests target build chain exit 0, 24.76s.
+CTest --test-dir BUILD/renegade -C Release -R
+"GameplayInputTests|RenegadePlayerViewRig" --output-on-failure:
+3/3 PASS, 0.61s.
+Final FirstPersonAssemblyWorkflowProof target build and executable:
+BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+BUILD/arms-full-library-ready/ArmsLibrary.renegade
+BUILD/arms-full-library-ready/Content/Scenes --jump-playground
+exit 0, 14.80s. Real Jolt takeoff/airborne/landing stages pass and the final
+capsule remains supported, stationary, at the floor, with no horizontal drift.
+Earlier failing diagnostic builds were corrected before this result.
+git diff --check passes.
+
+Deployed Runtime at Studio Release/Runtime launch location, SHA256:
+DE42ACB21368353D291230B2A198E0E5D60254470C3F6583A9D1D7EE907CB04A.
+Warned before replacing the previous Runtime; existing Ready Studio stays open.
+Corrected Shotgun Arms Playground DX12 Runtime left open. Native Q holster/equip
+and Space start/loop/land captures taken; final grounded floor and arms visually
+inspected. Owner review of this corrected build pending.
+Lighting in this diagnostic playground is bright; polish remains separate.
+No overall release gate closure, push or merge. Next: owner confirm corrected
+jump stability and equipment behavior, then weapon definition work per roadmap.
