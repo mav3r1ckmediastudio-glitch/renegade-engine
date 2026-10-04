@@ -1495,3 +1495,67 @@ errors and is not a production project acceptance. Nonfatal #680 warnings remain
 This bounded startup fix does not close P1 or prove real skinned arms. Next is
 independent exact-commit verification and owner acceptance of native grip editing
 on an appropriate governed asset; withdrawn original/GGMAX arms remain withdrawn.
+
+## P1 isolated textured shotgun assembly proof - 4 October 2026
+
+Source/proof checkpoint: a858e87b73ff3d632b7391834f60e99d6781fd0b.
+Branch feature/p1-first-person-arms-rig; parent e8df1b5. No push or merge.
+User authorized inspection/preview using supplied SawedOffShotgun pack, rather
+than the earlier full-body Shotgun Animset. Original withdrawn arms remain unused.
+
+Changed Tests/FirstPersonAssemblyGraphicsProof.cpp, Tests/CMakeLists.txt and
+docs/P1_SHOTGUN_ASSEMBLY_PROOF.md. Added a manual Windows DX12 native diagnostic
+and optional interactive view; no Studio/Runtime/Player/production importer or
+upstream source/pin changes. No feature-exposure change; FEATURE_MATRIX and
+production P1 status remain unchanged.
+
+Owner-supplied FBXs found locally; four idle/reload inputs match uploaded bytes.
+Copied pack and separate Manny D/N textures into ignored input tree. Weapon and
+shell textures were already supplied. FBXs contain stale original-author paths;
+governed PrepareModel correctly refuses unresolved dependencies. Fixture reports
+that refusal, uses raw native converter and explicitly relinks supplied D/N
+textures plus weapon/shell ORM maps. It does NOT prove governed asset import,
+material relink UI, retained-source reimport or packaged game integration.
+
+Native conversion: arms161 bones/483 channels; weapon7 bones/21 channels.
+Arms Idle7s, weapon Idle0.666667s; both Reload3s. Separate skeletons preserved.
+Direct identity weapon_r attachment was visibly wrong. Fixture derives a
+provisional offset from right-hand and weapon Handle reference pivots at time0,
+then retains native hierarchy attachment. Not an authored socket/IK solution.
+Fixed first-person camera inspects original import coordinates; production
+axis normalization/camera-relative placement remains unresolved.
+
+Evidence:
+- cmake -S . -B BUILD/renegade: exit0.
+- CL=/MP4; MSBuild BUILD/renegade/Tests/RenegadeFirstPersonAssemblyGraphicsProof.vcxproj /m:2 /nologo /verbosity:quiet /p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false: exit0, existing MSB8029 warnings.
+- From BUILD/renegade/Tests/Release:
+  RenegadeFirstPersonAssemblyGraphicsProof.exe ../../p1-shotgun-proof/input ../../p1-shotgun-proof/captures: exit0 with explicit texture relink including ORM.
+- Overview and FP captures at0,.6,1.2,2,2.9s; Idle/Reload WISCENE saves reopened and rendered at1.2s.
+- Textured idle FP, reload FP and reopened overview inspected: arms beneath
+  camera, gun forward, red shells and wood/arm details present, reload opens gun.
+- --view starts paused; R restarts both reload tracks, Space pauses/resumes,
+  Escape closes. Initial blurry64px canvas corrected by refreshing app window
+  canvas and render-path size after resize. Corrected live window inspected
+  sharply at larger size. NO keyboard/mouse automation; owner controls pending.
+
+Power cut interrupted first viewer-check attempt. User restarted Desktop Commander
+with established npx.cmd remote launcher; connection restored and resumed above.
+Only earlier agent-owned preview closed for size fix. Final proof viewer remains
+open for owner (PID18824 at checkpoint; do not assume PID after a restart).
+No running owner Studio was detected at initial inspection; accepted proxy
+project/export/Runtime were not modified.
+
+Ignored evidence BUILD/renegade/p1-shotgun-proof: input copies, captures,
+textured-proof.log, viewer.log and viewer-window.png. Build log
+BUILD/renegade/p1-shotgun-build.log.
+Final Release proof exe SHA-256:
+8C92B649D9279B5853DBD76B2D3A01C6B1B0AC1AB6A639FC3BC488827DCF8282.
+Built from pre-commit working changes; no independent exact-commit gate claimed.
+No third-party assets committed.
+
+P1 remains IN PROGRESS. Final grip fit, loose-shell attachment/visibility events
+and ammo/action timing need inspection; Unreal montage text is not a complete
+demo Blueprint setup. Next: owner inspect R/Space/Escape preview, resolve exact
+authored attachment/timeline, then bounded governed assembly import/relink/save
+workflow, followed by existing Player View Rig integration. Do not broaden into
+inventory/pickups or replace working Player controls at this checkpoint.
