@@ -1898,3 +1898,47 @@ for actual BUILD WINDOWS GAME retry. Short-root successful export remains valid;
 new original-path UI/export acceptance is still pending. This is a scoped staging
 file-copy/hash repair, not universal long-path support across every engine API.
 Existing Tools/__pycache__/ and log.txt preserved untracked.
+
+
+## Correct long-path package integrity beyond staging - 4 October 2026
+
+Base 0014527. Owner retest of original deep-root project overrides earlier staging
+success: copy passed but package validation rejected the same texture as missing.
+Prior fix/test scope was incomplete. Shared private WindowsFileIoPath.h now owns
+local extended path conversion for staging and integrity. Integrity probes and
+canonical containment use the same extended representation; digest retains the
+absolute-input requirement. Public result root remains ordinary path. Existing
+symlink, traversal, duplicate, extra, missing and tamper checks remain authoritative.
+
+Changed BuildStageService.cpp, new WindowsFileIoPath.h, PackageIntegrityService.cpp,
+BuildStageTests.cpp, PackageIntegrityTests.cpp and status docs. Long fixture now
+runs actual Gate 4 integrity after stage validation; fake-executable fixture
+upgrades only package manifest schema to 2, without claiming real Gate 3 identity.
+PackageIntegrityTests --validate-package <absolute-candidate> provides read-only
+real artifact verification. Initial tests exposed canonical prefix normalization
+and Gate 2 versus Gate 3 schema mismatch; fixed both. Final two tests pass.
+
+VS18 MSBuild with CL=/MP4, /m:2 /nologo /verbosity:quiet /p:Configuration=Release
+/p:Platform=x64 /p:BuildProjectReferences=false: EngineBridge/RenegadeEngineBridge,
+RenegadeBuildStageTests, RenegadePackageIntegrityTests, Studio/RenegadeStudio all
+exit 0. Studio /p:TargetName=RenegadeStudioLongPathComplete preserves running app.
+Logs BUILD/renegade/longpath-integrity-final-<target>.log; validator rebuild log
+longpath-actual-validator-build.log. Explicit VS18 CTest --test-dir BUILD/renegade
+-C Release -R 'RenegadeBuildStageTests|RenegadePackageIntegrity'
+--output-on-failure: 2/2 pass, 0.35s. Includes 312-character staged file integrity
+and existing package rejection tests. git diff --check passes. MSB8029 remains.
+
+Read-only validator of owner's actual failed candidate
+Assembly Proof Windows Build.studio-1102be708a10-67ac: PASS, 35 files, exit 0.
+Launched actual staged Assembly Proof.exe from detached temp working directory
+with dx12 --flow-outcome=next --renegade-smoke-autoplay --renegade-smoke-exit:
+exit 0, RuntimeBootstrap evidence status PASS, package_integrity PASS, DX12 STARTED,
+smoke_status PASS, terminal Complete Game. Initial manual smoke omitted required
+next outcome and exited 27 flow_not_complete; corrected invocation above passed.
+Owner warned before automatic test window. No owner level changes, promotion,
+upstream changes, push or merge. Full suite/Debug/independent verification not claimed.
+
+New Studio SHA256 FEBE6A58506F8B8B9E3144AE590FAC545C6D6190CC3D6031CE62E642664EFFBE.
+Next owner saves/closes current Studio, launch RenegadeStudioLongPathComplete,
+then original deep-root project actual Build Windows Game UI retry. Original-path
+promotion and owner UI acceptance still pending; short-root acceptance preserved.

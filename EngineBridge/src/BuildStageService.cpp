@@ -1,4 +1,5 @@
 #include "renegade/bridge/BuildStageService.h"
+#include "WindowsFileIoPath.h"
 
 #include <algorithm>
 #include <array>
@@ -30,26 +31,7 @@ namespace renegade::bridge
     {
         namespace fs = std::filesystem;
 
-        // Keep extended paths at the local I/O boundary, never in package manifests.
-        fs::path FileIoPath(const fs::path& path)
-        {
-#if defined(_WIN32)
-            std::error_code ec;
-            fs::path absolute = fs::absolute(path, ec);
-            if (ec)
-                return path;
-            absolute = absolute.lexically_normal();
-            absolute.make_preferred();
-            const std::wstring native = absolute.native();
-            if (native.rfind(L"\\\\?\\", 0) == 0)
-                return absolute;
-            if (native.rfind(L"\\\\", 0) == 0)
-                return fs::path(L"\\\\?\\UNC\\" + native.substr(2));
-            return fs::path(L"\\\\?\\" + native);
-#else
-            return path;
-#endif
-        }
+        using detail::FileIoPath;
 
         constexpr const char* RequiredPackageDocuments[] = {
             "ReadMe.txt",

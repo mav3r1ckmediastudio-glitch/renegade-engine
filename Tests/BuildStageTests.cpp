@@ -1,4 +1,5 @@
 #include "renegade/bridge/BuildStageService.h"
+#include "renegade/bridge/PackageIntegrityService.h"
 
 #include <algorithm>
 #include <chrono>
@@ -346,6 +347,26 @@ int main(int argc, char** argv)
         const int failure = Fail("long staging path: " + error);
         std::error_code cleanupError;
         fs::remove_all(cleanupRoot, cleanupError);
+        return failure;
+    }
+    // Gate 3 normally upgrades the package schema after executable identity.
+    // This fixture uses a fake executable, so promote only the manifest schema
+    // before testing the real Gate 4 file and hash validation.
+    std::string integrityManifest = longResult.packageManifestJson;
+    const auto schema = integrityManifest.find("\"schema_version\":1");
+    if (schema == std::string::npos)
+        return Fail("long fixture package schema missing");
+    integrityManifest.replace(schema, std::string("\"schema_version\":1").size(),
+        "\"schema_version\":2");
+    if (!WriteFile(fs::u8path(longResult.stagingPath) / "package-manifest.json",
+            integrityManifest, error))
+        return Fail(error);
+    WindowsGamePackageIntegrityResult integrity;
+    if (!ValidateWindowsGamePackage(longResult.stagingPath, integrity, error) ||
+        integrity.packageRootPath.find("\\\\?\\") != std::string::npos)
+    {
+        const int failure = Fail("long package integrity: " + error);
+        fs::remove_all(cleanupRoot);
         return failure;
     }
     const fs::path longOutput = fs::u8path(longResult.stagingPath) /
