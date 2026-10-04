@@ -1861,3 +1861,40 @@ HANDOFF, assembly authoring status and feature ledger only; git diff --check.
 No code rebuild, user app launch/closure, upstream edits, push or merge. Next:
 independent exact-commit verification and remaining P1 authoring lifecycle work.
 Existing Tools/__pycache__/ and log.txt remain untracked.
+
+
+## Windows long-leaf staging copy repair - 4 October 2026
+
+Base 93dfd33; implementation is the commit containing this checkpoint. Changed
+EngineBridge/src/BuildStageService.cpp, Tests/BuildStageTests.cpp and status docs.
+Windows staging copy and digest use explicit extended absolute native paths at
+local I/O boundaries (drive and UNC forms); returned paths/manifests retain their
+portable existing representation. Approved-plan checks, source symlink rejection,
+no-overwrite copy and post-copy digest comparison remain in place. Copy failures
+now include OS error value/message. No upstream, controller or serialized change.
+
+Regression stages a 312-character leaf path with legal <=96-character components,
+checks identical SHA256 and absence of extended prefix in portable manifest,
+validates the complete stage and cleans through an extended-path fixture root.
+Original copy call reproduced failure (OS error 3), exit 1; corrected call passes.
+Initial fixture used an overlong component rejected by Gate 1; corrected to legal
+components. Initial long-fixture cleanup threw; corrected cleanup preserves test
+failure reporting. First manual test invocation used relative document paths;
+corrected to absolute fixture path. Final results below supersede these attempts.
+
+VS18 MSBuild with CL=/MP4, /m:2 /nologo /verbosity:quiet /p:Configuration=Release
+/p:Platform=x64 /p:BuildProjectReferences=false: EngineBridge/RenegadeEngineBridge,
+RenegadeBuildStageTests, Studio/RenegadeStudio all exit 0. Studio uses
+/p:TargetName=RenegadeStudioLongPath to preserve running owner editor. Logs:
+BUILD/renegade/longpath-final-<target>.log. Explicit VS18 CTest --test-dir
+BUILD/renegade -C Release -R '^RenegadeBuildStageTests$' --output-on-failure:
+1/1 passes, 0.23 seconds; covers existing collision/tamper/stale-source checks.
+git diff --check passes. Existing MSB8029 warnings. No new Debug/full-suite/CI
+or independent verification claim. No app launched or closed and no push/merge.
+
+Next owner saves/closes existing Studio, then launches Release
+RenegadeStudioLongPath.exe and opens original deep-root AssemblyProof.renegade
+for actual BUILD WINDOWS GAME retry. Short-root successful export remains valid;
+new original-path UI/export acceptance is still pending. This is a scoped staging
+file-copy/hash repair, not universal long-path support across every engine API.
+Existing Tools/__pycache__/ and log.txt preserved untracked.

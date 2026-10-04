@@ -238,6 +238,11 @@ int main(int argc, char** argv)
         .time_since_epoch().count();
     const fs::path root = fs::temp_directory_path() /
         fs::u8path(u8"Renegade LP06 Gate2 Ω " + std::to_string(nonce));
+#if defined(_WIN32)
+    const fs::path cleanupRoot = fs::path(L"\\\\?\\" + fs::absolute(root).native());
+#else
+    const fs::path cleanupRoot = root;
+#endif
     const fs::path projectRoot = root / "Project With Spaces";
     const fs::path outputRoot = root / "Build Output";
     const fs::path supportRoot = root / "Runtime Support";
@@ -267,7 +272,7 @@ int main(int argc, char** argv)
         !WriteFile(supportRoot / "dxcompiler.dll",
             "dxc-binary-gate2\n", error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail(error);
     }
 
@@ -279,13 +284,13 @@ int main(int argc, char** argv)
     WindowsGameBuildStageResult first;
     if (!StageWindowsGameBuild(plan, request, first, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail(error);
     }
     if (first.stagingPath.find(".renegade-staging") == std::string::npos ||
         fs::exists(fs::u8path(first.finalOutputPath)))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 did not isolate staging from the final build path");
     }
     if (first.files.size() != 19 ||
@@ -298,13 +303,13 @@ int main(int argc, char** argv)
         Find(first, "build-report.json") == nullptr ||
         Find(first, "package-manifest.json") == nullptr)
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 staged tree did not contain the exact governed shell");
     }
     if (fs::exists(fs::u8path(first.stagingPath) /
             "GameData/Content/Unused/unused.txt"))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 cooked an unused project file outside the Gate 1 plan");
     }
     if (first.projectManifestJson.find(root.generic_u8string()) !=
@@ -316,14 +321,47 @@ int main(int argc, char** argv)
         first.packageManifestJson.find(root.generic_u8string()) !=
             std::string::npos)
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 leaked machine-specific absolute paths into manifests");
     }
     if (!ValidateWindowsGameBuildStage(first, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail(error);
     }
+
+#if defined(_WIN32)
+    // The owner export failed on a long leaf path while its parent was still short.
+    WindowsGameBuildPlan longPathPlan = plan;
+    const std::string longDestination =
+        "GameData/Content/Imported/" + std::string(80, 'x') + ".wiscene";
+    longPathPlan.files[4].destinationPath = longDestination;
+    auto longRequest = Request(
+        projectRoot, outputRoot / std::string(60, 'p'),
+        supportRoot, fixtureRoot, "long-leaf");
+    WindowsGameBuildStageResult longResult;
+    if (!StageWindowsGameBuild(longPathPlan, longRequest, longResult, error) ||
+        !ValidateWindowsGameBuildStage(longResult, error))
+    {
+        const int failure = Fail("long staging path: " + error);
+        std::error_code cleanupError;
+        fs::remove_all(cleanupRoot, cleanupError);
+        return failure;
+    }
+    const fs::path longOutput = fs::u8path(longResult.stagingPath) /
+        fs::u8path(longDestination);
+    const auto* longFile = Find(longResult, longDestination);
+    const auto* shortFile = Find(first, "GameData/Content/Imported/model.wiscene");
+    if (longOutput.native().size() <= 260 || longFile == nullptr ||
+        shortFile == nullptr || longFile->sha256 != shortFile->sha256 ||
+        longResult.packageManifestJson.find("\\\\?\\") != std::string::npos)
+    {
+        fs::remove_all(cleanupRoot);
+        return Fail("long staging path did not retain bytes and portable manifests");
+    }
+    std::cout << "PASS: staged and hashed " << longOutput.native().size()
+              << "-character Windows file path\n";
+#endif
 
     WindowsGameBuildStagingRequest reordered = Request(
         projectRoot, outputRoot, supportRoot, fixtureRoot, "stage-b");
@@ -334,7 +372,7 @@ int main(int argc, char** argv)
     WindowsGameBuildStageResult second;
     if (!StageWindowsGameBuild(plan, reordered, second, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail(error);
     }
     if (first.projectManifestJson != second.projectManifestJson ||
@@ -346,14 +384,14 @@ int main(int argc, char** argv)
         first.runtimeSupportManifestSha256 != second.runtimeSupportManifestSha256 ||
         first.packageManifestSha256 != second.packageManifestSha256)
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("unchanged Gate 2 inputs changed normalized manifest bytes");
     }
 
     WindowsGameBuildStageResult rejected;
     if (StageWindowsGameBuild(plan, reordered, rejected, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 reused a single-use staging ID");
     }
 
@@ -362,7 +400,7 @@ int main(int argc, char** argv)
     missingSupport.runtimeSupportSources.pop_back();
     if (StageWindowsGameBuild(plan, missingSupport, rejected, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 accepted an incomplete Runtime support source set");
     }
 
@@ -371,7 +409,7 @@ int main(int argc, char** argv)
     missingNotice.packageDocuments.pop_back();
     if (StageWindowsGameBuild(plan, missingNotice, rejected, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 accepted a missing required notice input");
     }
 
@@ -383,59 +421,59 @@ int main(int argc, char** argv)
             "collision", "repo:test-fixture:lp06-gate2-v1"});
     if (StageWindowsGameBuild(plan, collidingNotice, rejected, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 accepted a Windows case-equivalent notice collision");
     }
 
     if (!WriteFile(projectRoot / "Content/Scenes/LevelTwo.wiscene",
             "scene=changed-after-plan\n", error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail(error);
     }
     auto staleProject = Request(
         projectRoot, outputRoot, supportRoot, fixtureRoot, "stale-project");
     if (StageWindowsGameBuild(plan, staleProject, rejected, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 copied project bytes that changed after Gate 1 planning");
     }
     if (!WriteFile(projectRoot / "Content/Scenes/LevelTwo.wiscene",
             levelTwoText, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail(error);
     }
 
     if (!WriteFile(supportRoot / "dxcompiler.dll",
             "changed-dxc-after-plan\n", error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail(error);
     }
     auto staleRuntime = Request(
         projectRoot, outputRoot, supportRoot, fixtureRoot, "stale-runtime");
     if (StageWindowsGameBuild(plan, staleRuntime, rejected, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 copied Runtime support that changed after Gate 1 planning");
     }
     if (!WriteFile(supportRoot / "dxcompiler.dll",
             "dxc-binary-gate2\n", error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail(error);
     }
 
     const fs::path firstRoot = fs::u8path(first.stagingPath);
     if (!WriteFile(firstRoot / "injected-extra.txt", "extra\n", error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail(error);
     }
     if (ValidateWindowsGameBuildStage(first, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 validation accepted an unmanifested extra file");
     }
     fs::remove(firstRoot / "injected-extra.txt");
@@ -444,35 +482,35 @@ int main(int argc, char** argv)
         firstRoot / "GameData/Content/Scenes/LevelOne.wiscene";
     if (!WriteFile(stagedLevel, "tampered\n", error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail(error);
     }
     if (ValidateWindowsGameBuildStage(first, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 validation accepted tampered staged content");
     }
     if (!WriteFile(stagedLevel, levelOneText, error) ||
         !ValidateWindowsGameBuildStage(first, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 validation did not recover after restoring staged bytes");
     }
 
     fs::remove(firstRoot / "ReadMe.txt");
     if (ValidateWindowsGameBuildStage(first, error))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 validation accepted a missing governed staged file");
     }
 
     if (fs::exists(fs::u8path(first.finalOutputPath)))
     {
-        fs::remove_all(root);
+        fs::remove_all(cleanupRoot);
         return Fail("Gate 2 created or promoted an owner-visible final build");
     }
 
-    fs::remove_all(root);
+    fs::remove_all(cleanupRoot);
     std::cout << "PASS: LP06 Gate 2 clean loose cooker and governed staging\n";
     return 0;
 }

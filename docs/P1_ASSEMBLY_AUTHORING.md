@@ -111,8 +111,9 @@ camera/look check on 4 October. The supplied DX12 screenshot shows textured arms
 and shotgun together in the foreground at 75 FPS. This is bounded visual acceptance.
 
 Outstanding: general texture relink UI, a dedicated rigged-part import
-classification, draft Undo/Redo, assembly rebuild/update lifecycle and durable
-Windows long-path export handling. Owner reports "the build works" for actual
+classification, draft Undo/Redo and assembly rebuild/update lifecycle.
+Windows long-leaf staging copy/hash repair is implemented locally; a 312-character
+staging regression passes. Original deep-root Studio export retest remains pending. Owner reports "the build works" for actual
 Studio Build Windows Game export from a short-root project copy on 4 October;
 screenshot shows textured arms/shotgun in exported Runtime at 74 FPS. Original
 265-character staging texture destination failed; short-root export succeeds.

@@ -30,6 +30,27 @@ namespace renegade::bridge
     {
         namespace fs = std::filesystem;
 
+        // Keep extended paths at the local I/O boundary, never in package manifests.
+        fs::path FileIoPath(const fs::path& path)
+        {
+#if defined(_WIN32)
+            std::error_code ec;
+            fs::path absolute = fs::absolute(path, ec);
+            if (ec)
+                return path;
+            absolute = absolute.lexically_normal();
+            absolute.make_preferred();
+            const std::wstring native = absolute.native();
+            if (native.rfind(L"\\\\?\\", 0) == 0)
+                return absolute;
+            if (native.rfind(L"\\\\", 0) == 0)
+                return fs::path(L"\\\\?\\UNC\\" + native.substr(2));
+            return fs::path(L"\\\\?\\" + native);
+#else
+            return path;
+#endif
+        }
+
         constexpr const char* RequiredPackageDocuments[] = {
             "ReadMe.txt",
             "Licences/Renegade-Licence-or-Notice.txt",
@@ -379,7 +400,7 @@ namespace renegade::bridge
             std::string& error)
         {
             digest = {};
-            std::ifstream input(path, std::ios::binary);
+            std::ifstream input(FileIoPath(path), std::ios::binary);
             if (!input)
             {
                 error = "Gate 2 could not open file for hashing: " +
@@ -525,9 +546,11 @@ namespace renegade::bridge
                     destination;
                 return false;
             }
-            if (!fs::copy_file(source, output, fs::copy_options::none, ec) || ec)
+            if (!fs::copy_file(FileIoPath(source), FileIoPath(output),
+                    fs::copy_options::none, ec) || ec)
             {
-                error = "Gate 2 failed copying approved file: " + destination;
+                error = "Gate 2 failed copying approved file: " + destination +
+                    " (" + std::to_string(ec.value()) + ": " + ec.message() + ")";
                 return false;
             }
             FileDigest copiedDigest;
