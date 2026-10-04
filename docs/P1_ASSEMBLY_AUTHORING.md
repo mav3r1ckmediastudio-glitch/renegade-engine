@@ -86,10 +86,27 @@ The manual proof requires the owner's licensed retained products; no third-party
 assets enter source or CTest. Final local evidence and exact source checkpoint
 are recorded in HANDOFF.md.
 
+Owner accepts the native assembly preview controls, paired reload playback,
+replay and scrubbing on 4 October. Named product save was confirmed on disk; the
+name-field reopen regression is repaired separately.
+
+Runtime now recognizes the explicit assembly marker and arms/weapon track roles.
+Idle/Walk/Run pairs are evaluated together on one clock before the normal Wicked
+scene update, with root motion disabled and shorter tracks holding their last
+pose until the whole pair loops. Missing Run falls back to Walk then Idle;
+missing Walk falls back to Idle without restarting the same pair. Native track
+timers are paused so Wicked evaluates channels without advancing the clock twice.
+Legacy single-rig variant playback and compatible crossfades remain unchanged.
+Assembly movement pair changes currently switch immediately; paired crossfades
+and animation layers are not implemented. Reload/Attack/Equip remain preview-only
+and are suppressed in movement playback. Runtime requires an explicit Idle pair.
+
+Real-product project loading, Test Level snapshot identity and fresh-process
+isolated packaged asset loading pass through production services, including two
+armatures, textured rendering, paired pose, pause and cleanup. The isolated
+package fixture tests the packaged loader; it is not a completed Build Game export.
+
 Outstanding: general texture relink UI, a dedicated rigged-part import
-classification, draft Undo/Redo, assembly rebuild/update lifecycle, Runtime paired
-action ownership, direct Studio panel owner acceptance, Test Level and Build Game
-parity for this real assembly. Existing Runtime chooses action variants and must
-not be claimed to evaluate both assembly tracks as a gameplay action. Reload
-preview is not a reload gameplay implementation. No release gate is closed by
-this slice.
+classification, draft Undo/Redo, assembly rebuild/update lifecycle, direct owner
+Test Level and actual Build Game parity for this real assembly. Reload preview is
+not a reload gameplay implementation. No release gate is closed by this slice.

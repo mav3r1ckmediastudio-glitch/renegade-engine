@@ -897,3 +897,15 @@ WISCENE embeds resources; its versioned recipe, product, projection, registry an
 catalogue cross the existing project document transaction. Player Start assignment
 uses the existing settings command. Runtime paired-track action evaluation remains
 outstanding. See P1_ASSEMBLY_AUTHORING.md for the contract and limitations.
+
+### Runtime assembly movement pairs
+
+The existing RuntimePlayerViewAnimation controller recognizes the authored assembly
+marker and explicit arms/weapon track metadata after native instantiation/remapping.
+Each movement action has exactly one native track per role; Runtime requires Idle.
+A shared elapsed clock sets both paused native timers before Wicked's normal Scene
+update. Shorter tracks hold their final pose until the whole pair wraps. Movement
+fallbacks retain the same pair clock; unused Reload/Attack/Equip tracks stay inactive.
+Legacy single-rig variants/crossfades retain their existing path. Pair-to-pair
+movement transitions currently switch immediately; paired crossfades are deferred.
+No new input, camera, physics actor, skeleton evaluator or gameplay reload is added.

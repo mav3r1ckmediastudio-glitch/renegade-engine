@@ -16,6 +16,13 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <iomanip>
+#include <sstream>
+#include "../Runtime/src/RuntimePlayerViewAnimation.h"
+#include "../Runtime/src/RuntimePlayerViewAsset.h"
+#include "renegade/bridge/ProjectService.h"
+#include "renegade/bridge/SceneService.h"
+#include "renegade/bridge/TestLevelSnapshotService.h"
 namespace fs = std::filesystem;
 using namespace renegade::bridge;
 static LRESULT CALLBACK WindowProc(HWND w, UINT m, WPARAM a, LPARAM b)
@@ -456,6 +463,77 @@ static bool ProductAssemblyProof(const fs::path& project,const fs::path& output,
  return true;
 }
 
+static bool RuntimeAssemblyProof(const fs::path& input, const fs::path& output, bool packaged)
+{
+ using namespace renegade::runtime;
+ std::string error; StableId projectId, assetId;
+ fs::path root=input;
+ if(packaged) {
+  std::ifstream manifest(input/"GameData/content-manifest.json");
+  nlohmann::json j; manifest>>j;
+  projectId=j.at("project_id").get<std::string>();
+  assetId=j.at("files")[0].at("asset_id").get<std::string>();
+ } else {
+  ProjectMetadata project;
+  if(!ProjectService().InspectProject(fs::absolute(input).generic_u8string(),project,error)) {
+   std::cerr<<error<<"\n";return false;
+  }
+  root=fs::u8path(project.rootPath);projectId=project.projectId;
+  SceneService scenes;
+  if(!scenes.LoadScene((root/fs::u8path(project.startupScene)).generic_u8string()))return false;
+  auto start=ResolvePlayerStart(scenes.GetScene());
+  if(start.resolution!=PlayerStartResolution::Success)return false;
+  assetId=start.start.settings.firstPersonArmsAssetId;
+  CommandService commands;TestLevelSnapshotService snapshots(scenes,commands);TestLevelSnapshot snapshot;
+  if(!snapshots.Create(project,snapshot,error)){std::cerr<<error<<"\n";return false;}
+  SceneService reopened;
+  if(!reopened.LoadScene(snapshot.scenePath))return false;
+  auto copied=ResolvePlayerStart(reopened.GetScene());
+  if(copied.resolution!=PlayerStartResolution::Success||copied.start.settings.firstPersonArmsAssetId!=assetId)return false;
+  std::ofstream(output/"snapshot-descriptor.txt")<<snapshot.descriptorPath;
+  std::cout<<"SNAPSHOT_DESCRIPTOR="<<snapshot.descriptorPath<<"\n";
+  auto product=ReusableAssetService().PrepareModelAssetPlacement({project.rootPath,projectId,assetId});
+  if(!product.IsReady()){std::cerr<<product.Result().error<<"\n";return false;}
+  const auto relative=product.Result().assetProjectRelativePath;
+  auto package=output/"isolated-package";
+  fs::create_directories(package/"GameData"/fs::u8path(relative).parent_path());
+  fs::copy_file(root/fs::u8path(relative),package/"GameData"/fs::u8path(relative),fs::copy_options::overwrite_existing);
+  std::ifstream data(root/fs::u8path(relative),std::ios::binary);
+  std::uint64_t hash=1469598103934665603ull;for(char c;data.get(c);){hash^=static_cast<unsigned char>(c);hash*=1099511628211ull;}
+  std::ostringstream digest;digest<<"fnv1a64:"<<std::hex<<std::setw(16)<<std::setfill('0')<<hash;
+  nlohmann::json manifest={{"format","renegade-content-manifest"},{"schema_version",1},{"project_id",projectId},
+   {"files",nlohmann::json::array({{{"asset_id",assetId},{"path","GameData/"+relative},{"source_hash",digest.str()}}})}};
+  std::ofstream(package/"GameData/content-manifest.json")<<manifest.dump();
+ }
+ wi::scene::Scene scene;const auto player=scene.Entity_CreateTransform("Runtime proof player");
+ scene.transforms.GetComponent(player)->Translate(XMFLOAT3(0,-1.65f,0));scene.transforms.GetComponent(player)->UpdateTransform();
+ RuntimePlayerViewRigState rig;RuntimePlayerViewRigSettings rigSettings;rigSettings.createProofGeometry=false;
+ if(!SpawnRuntimePlayerViewRig(scene,rig,player,1.65f,error,rigSettings))return false;
+ bool loaded=packaged?LoadPackagedRuntimePlayerViewAsset(scene,rig,root.generic_u8string(),projectId,assetId,error):
+  LoadRuntimePlayerViewAsset(scene,rig,root.generic_u8string(),projectId,assetId,error);
+ if(!loaded){std::cerr<<error<<"\n";return false;}
+ RuntimePlayerViewAnimationState animation;
+ if(!InitializeRuntimePlayerViewAnimations(scene,rig,animation,error)||!animation.pairedAssembly) {
+  std::cerr<<"Paired initialization: "<<error<<"\n";return false;
+ }
+ if(scene.armatures.GetCount()!=2||scene.characters.GetCount()!=0||scene.rigidbodies.GetCount()!=0)return false;
+ for(float dt:{0.0f,0.35f,0.75f,6.5f}) {
+  UpdateRuntimePlayerViewAnimations(scene,animation,PlayerViewAction::Walk,dt);
+  scene.Update(1.0f/60);
+  if(animation.activeWeaponClip==wi::ecs::INVALID_ENTITY||
+   scene.animations.GetComponent(animation.activeClip)->amount!=1||
+   scene.animations.GetComponent(animation.activeWeaponClip)->amount!=1)return false;
+  if(!Capture(scene,output/("paired-"+std::to_string(animation.pairedTime)+".png"),true,true))return false;
+ }
+ auto t=animation.pairedTime;UpdateRuntimePlayerViewAnimations(scene,animation,PlayerViewAction::Sprint,0);
+ if(t!=animation.pairedTime)return false;
+ ResetRuntimePlayerViewAnimations(scene,animation);DespawnRuntimePlayerViewRig(scene,rig);
+ if(scene.transforms.GetCount()!=1)return false;
+ std::cout<<"REAL ASSEMBLY "<<(packaged?"ISOLATED PACKAGED":"PROJECT AND TEST SNAPSHOT")
+ <<" PAIRED RUNTIME LOAD, POSE, PAUSE AND CLEANUP PASS "<<assetId<<"\n";
+ return true;
+}
+
 int main(int argc,char** argv)
 {
     if(argc<3 || argc>4) { std::cerr<<"Usage: proof pack-folder output-folder\n"; return 2; }
@@ -471,6 +549,8 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--runtime-assembly") return RuntimeAssemblyProof(input,output,false)?0:12;
+    if(argc==4 && std::string(argv[3])=="--runtime-package") return RuntimeAssemblyProof(input,output,true)?0:13;
     if(argc==4 && std::string(argv[3])=="--assembly") return ProductAssemblyProof(input,output,false)?0:10;
     if(argc==4 && std::string(argv[3])=="--assembly-reopen") return ProductAssemblyProof(input,output,true)?0:11;
     if(argc==4 && std::string(argv[3])=="--workflow-reopen") return ColdWorkflowProof(input,output)?0:9;

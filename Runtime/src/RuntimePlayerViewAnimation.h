@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cmath>
 #include <initializer_list>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -19,6 +20,7 @@ namespace renegade::runtime
     {
         wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
         std::string name;
+        std::string assemblyTrack;
     };
 
     struct RuntimePlayerViewAnimationState
@@ -31,6 +33,10 @@ namespace renegade::runtime
         float blendElapsed = 0.0f;
         float blendDuration = 0.20f;
         bool initialized = false;
+        bool pairedAssembly = false;
+        wi::ecs::Entity activeWeaponClip = wi::ecs::INVALID_ENTITY;
+        float pairedTime = 0.0f;
+        std::vector<wi::ecs::Entity> ownedAssemblyClips;
     };
 
     [[nodiscard]] inline std::size_t PlayerViewActionIndex(
@@ -207,6 +213,13 @@ namespace renegade::runtime
                 }
             }
         }
+        for (const auto entity : state.ownedAssemblyClips)
+        {
+            if (auto* clip = scene.animations.GetComponent(entity))
+            {
+                clip->Pause(); clip->amount = 0.0f;
+            }
+        }
         state = {};
     }
 
@@ -227,6 +240,15 @@ namespace renegade::runtime
             return false;
         }
 
+        for (std::size_t i = 0; i < scene.metadatas.GetCount(); ++i)
+        {
+            const auto entity = scene.metadatas.GetEntity(i);
+            const auto& metadata = scene.metadatas[i];
+            if ((entity == rig.viewModelRoot || scene.Entity_IsDescendant(entity, rig.viewModelRoot)) &&
+                metadata.bool_values.has("renegade.first_person.assembly") &&
+                metadata.bool_values.get("renegade.first_person.assembly"))
+                state.pairedAssembly = true;
+        }
         const auto available =
             bridge::CollectAnimationClips(scene, rig.viewModelRoot, true);
         const bool hasAuthoredActions = std::any_of(
@@ -245,6 +267,29 @@ namespace renegade::runtime
             if (clip.entity == wi::ecs::INVALID_ENTITY)
                 continue;
 
+            std::string assemblyTrack;
+            if (state.pairedAssembly)
+            {
+                auto* animation = scene.animations.GetComponent(clip.entity);
+                if (animation == nullptr) continue;
+                state.ownedAssemblyClips.push_back(clip.entity);
+                animation->Pause(); animation->RootMotionOff(); animation->amount = 0.0f;
+                const auto* metadata = scene.metadatas.GetComponent(clip.entity);
+                if (metadata == nullptr || !metadata->string_values.has("renegade.first_person.assembly.track"))
+                {
+                    error = "Assembly animation is missing its explicit track role.";
+                    ResetRuntimePlayerViewAnimations(scene, state); return false;
+                }
+                assemblyTrack = metadata->string_values.get("renegade.first_person.assembly.track");
+                if ((assemblyTrack != "arms" && assemblyTrack != "weapon") ||
+                    !std::isfinite(animation->start) || !std::isfinite(animation->end) ||
+                    animation->end < animation->start ||
+                    !std::isfinite(animation->end - animation->start))
+                {
+                    error = "Assembly animation has an invalid track role or timeline.";
+                    ResetRuntimePlayerViewAnimations(scene, state); return false;
+                }
+            }
             PlayerViewAction action = PlayerViewAction::Idle;
             bool accepted = false;
             if (hasAuthoredActions)
@@ -281,7 +326,7 @@ namespace renegade::runtime
             animation->amount = 0.0f;
 
             state.clips[PlayerViewActionIndex(action)].push_back(
-                {clip.entity, clip.name});
+                {clip.entity, clip.name, assemblyTrack});
         }
 
         for (auto& variants : state.clips)
@@ -297,6 +342,27 @@ namespace renegade::runtime
                 });
         }
 
+        if (state.pairedAssembly)
+        {
+            for (const auto& variants : state.clips)
+            {
+                if (variants.empty()) continue;
+                const auto arms = std::count_if(variants.begin(), variants.end(),
+                    [](const auto& clip) { return clip.assemblyTrack == "arms"; });
+                const auto weapon = std::count_if(variants.begin(), variants.end(),
+                    [](const auto& clip) { return clip.assemblyTrack == "weapon"; });
+                if (variants.size() != 2 || arms != 1 || weapon != 1)
+                {
+                    error = "Each assembly movement action requires one arms and one weapon track.";
+                    ResetRuntimePlayerViewAnimations(scene, state); return false;
+                }
+            }
+            if (state.clips[0].empty())
+            {
+                error = "Runtime assembly requires an explicit Idle pair.";
+                ResetRuntimePlayerViewAnimations(scene, state); return false;
+            }
+        }
         state.initialized = true;
         return true;
     }
@@ -340,6 +406,38 @@ namespace renegade::runtime
             return false;
         }
 
+        if (state.pairedAssembly)
+        {
+            if (variants->size() != 2) return false;
+            const auto arms = std::find_if(variants->begin(), variants->end(),
+                [](const auto& clip) { return clip.assemblyTrack == "arms"; });
+            const auto weapon = std::find_if(variants->begin(), variants->end(),
+                [](const auto& clip) { return clip.assemblyTrack == "weapon"; });
+            if (arms == variants->end() || weapon == variants->end() ||
+                !scene.animations.Contains(arms->entity) || !scene.animations.Contains(weapon->entity))
+                return false;
+            const bool changed = state.activeClip != arms->entity || state.activeWeaponClip != weapon->entity;
+            if (changed)
+            {
+                for (const auto entity : state.ownedAssemblyClips)
+                    if (auto* clip = scene.animations.GetComponent(entity))
+                    { clip->Pause(); clip->amount = 0.0f; }
+                state.pairedTime = 0;
+            }
+            state.activeClip = arms->entity;
+            state.activeWeaponClip = weapon->entity;
+            state.activeAction = requested;
+            state.resolvedClipName = arms->name + " + " + weapon->name;
+            state.outgoingClip = wi::ecs::INVALID_ENTITY;
+            state.blendDuration = 0;
+            for (const auto entity : {state.activeClip, state.activeWeaponClip})
+            {
+                auto& clip = *scene.animations.GetComponent(entity);
+                clip.Pause(); clip.RootMotionOff(); clip.SetLooped(false); clip.amount = 1.0f;
+                if (changed) { clip.timer = clip.start; clip.last_update_time = -std::numeric_limits<float>::max(); }
+            }
+            return true;
+        }
         const RuntimePlayerViewAnimationClip& next = variants->front();
         auto* nextAnimation =
             scene.animations.GetComponent(next.entity);
@@ -420,6 +518,24 @@ namespace renegade::runtime
         if (!state.initialized)
             return;
 
+        if (state.pairedAssembly)
+        {
+            if (!RequestRuntimePlayerViewAnimation(scene, state, requested)) return;
+            auto* arms = scene.animations.GetComponent(state.activeClip);
+            auto* weapon = scene.animations.GetComponent(state.activeWeaponClip);
+            if (arms == nullptr || weapon == nullptr) return;
+            const float duration = std::max(arms->end - arms->start, weapon->end - weapon->start);
+            if (std::isfinite(dt) && dt > 0 && duration > 0)
+                state.pairedTime = std::fmod(state.pairedTime + dt, duration);
+            // Wicked evaluates native channels during the normal Scene update.
+            // Paused tracks prevent a second timer advance. Short tracks hold.
+            for (auto* clip : {arms, weapon})
+            {
+                clip->timer = std::clamp(clip->start + state.pairedTime, clip->start, clip->end);
+                clip->last_update_time = -std::numeric_limits<float>::max();
+            }
+            return;
+        }
         auto* active =
             scene.animations.GetComponent(state.activeClip);
         if (state.activeClip == wi::ecs::INVALID_ENTITY ||

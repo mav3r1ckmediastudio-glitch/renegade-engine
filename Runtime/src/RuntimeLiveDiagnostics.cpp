@@ -649,6 +649,10 @@ namespace renegade::runtime
             {"player_view_action", PlayerViewActionName(playerViewRig_.action)},
             {"player_view_animation_initialized", playerViewAnimation_.initialized},
             {"player_view_animation_clip", playerViewAnimation_.resolvedClipName},
+            {"player_view_paired_assembly", playerViewAnimation_.pairedAssembly},
+            {"player_view_active_tracks", static_cast<std::uint64_t>(
+                (playerViewAnimation_.activeClip != wi::ecs::INVALID_ENTITY ? 1 : 0) +
+                (playerViewAnimation_.activeWeaponClip != wi::ecs::INVALID_ENTITY ? 1 : 0))},
             {"character_count", static_cast<std::uint64_t>(characterState_.characters.size())},
             {"character_profile_count", static_cast<std::uint64_t>(characterAiState_.characters.size())},
             {"character_perception_count", static_cast<std::uint64_t>(characterPerceptionState_.characters.size())},

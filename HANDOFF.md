@@ -1747,3 +1747,66 @@ exe avoids changing the owner's running recovery build. No automatic restart.
 
 Name-field repair Release build exits 0; git diff --check passes. Existing MSB8029
 warnings remain. Commit containing this section is the bounded repair checkpoint.
+
+## Runtime paired assembly movement - 4 October 2026
+
+Base e7be162; implementation is the commit containing this section. Owner confirms
+native assembly controls work as expected, then confirms selecting the named asset
+and saving the level. Read-only real-product proof resolves the saved named assembly
+assignment. P1 remains IN PROGRESS; no gameplay reload or release gate closure.
+
+Changed RuntimePlayerViewAnimation.h: recognize explicit assembly root marker and
+track roles, require one arms/weapon pair per movement action and an Idle pair,
+set both paused native timers from one clock before the existing Wicked scene
+update, suppress root motion and unused action tracks, hold shorter clips until
+whole-pair wrap, preserve clocks across movement fallbacks, reset both tracks.
+Legacy single-rig variant/crossfade path is retained. Pair-to-pair transitions
+currently switch immediately; paired crossfades remain deferred. Diagnostics adds
+paired-assembly and active-track count without per-frame clock event spam.
+Tests/PlayerViewRigTests.cpp covers native pose evaluation of both tracks with
+unequal starts/durations, no double timer advance, pause, wrap, fallback, action
+switch/reset, missing/duplicate partners and native serialized entity remapping.
+Tests/FirstPersonAssemblyGraphicsProof.cpp adds --runtime-assembly and
+--runtime-package proof modes. README, roadmap, architecture, feature matrix and
+P1_ASSEMBLY_AUTHORING.md updated. Full changed-file inventory: git show --stat.
+
+VS18 Release MSBuild (same executable and CL=/MP4 as prior checkpoint): targets
+Tests/RenegadePlayerViewRigTests, Tests/RenegadeFirstPersonAssemblyWorkflowProof,
+Runtime/RenegadeRuntime with /m:2 /nologo /verbosity:quiet /p:Configuration=Release
+/p:Platform=x64 /p:BuildProjectReferences=false: all exit 0. Final logs:
+BUILD/renegade/p1paired-final-<target>.log. Explicit VS18 CTest --test-dir
+BUILD/renegade -C Release -R
+'FirstPersonAssemblySettings|MatchingRigAnimation|RenegadePlayerViewRig'
+--output-on-failure: 4/4 pass, 0.41 seconds, p1paired-ctest.log.
+
+Manual real-product proof commands, from repo:
+BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+BUILD/p1wf/project-ad198d5b/AssemblyProof.renegade BUILD/p1paired --runtime-assembly
+exits 0 (p1paired-project-proof.log). Saves disposable Test Level snapshot and
+verifies assigned stable ID survives snapshot loading; no owner level rewrite.
+Same exe with BUILD/p1paired/isolated-package BUILD/p1paired/cold-final
+--runtime-package exits 0 (p1paired-cold-final.log) in a separate process.
+Isolated asset fixture has only product and manifest: no retained-source rigs,
+recipes or textures. Both modes verify two armatures, no second physics/Character,
+paired rendering through the native Runtime loader/controller, pause and cleanup.
+Cold paired-1.100000.png visually inspected: textured arms and shotgun visible.
+This tests packaged loading, not the actual Build Game UI/export acceptance.
+
+Initial headless native-pose test used full Scene::Update without a graphics device
+and crashed; corrected to the pinned native animation dependency scan/update and
+job wait. Initial proof compile hit ambiguous Translate initializer; corrected to
+explicit XMFLOAT3. Initial diagnostic build rejected float DiagnosticValue;
+removed the continuous clock observation. Final builds/tests above pass. Existing
+MSB8029 warnings remain. Debug, full suite, CI and independent exact-commit review
+not claimed. git diff --check passes.
+
+Studio had stale Release/Runtime/RenegadeRuntime.exe, preferred over sibling Runtime.
+After confirming no Runtime process running, copied final executable to that
+existing Studio launch path; both SHA256:
+352B73620B68A6B9D4B7D383E46825D9556F0B8BAD1501CB15AF99BB0274026F.
+Studio remains open; no live Runtime launched or user app closed by this work.
+No upstream change, push, merge or licensed asset commit. Existing untracked
+Tools/__pycache__/ and log.txt preserved. Next owner closes assembly panel and
+uses Studio PLAY to verify real camera-relative arms/weapon rendering and look;
+then actual Build Game parity. Read diagnostics for paired=true and active_tracks=2.
+Reload/Attack/Equip remain preview-only. No inventory/ammo/fire scope expansion.

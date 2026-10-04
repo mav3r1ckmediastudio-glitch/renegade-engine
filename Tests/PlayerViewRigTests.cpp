@@ -113,6 +113,107 @@ namespace
         return entity;
     }
 
+    void TestPairedAssemblyPlayback()
+    {
+        using namespace renegade::runtime;
+        wi::scene::Scene scene;
+        const auto root = scene.Entity_CreateTransform("Assembly");
+        scene.metadatas.Create(root).bool_values.set("renegade.first_person.assembly", true);
+        const auto armsTarget = scene.Entity_CreateTransform("Arms bone");
+        const auto weaponTarget = scene.Entity_CreateTransform("Weapon bone");
+        scene.Component_Attach(armsTarget, root, true);
+        scene.Component_Attach(weaponTarget, root, true);
+        const auto add = [&](wi::ecs::Entity target, const char* action, const char* track, float start, float duration) {
+            auto entity = AddPlayerViewAnimationClip(scene, target, track, action);
+            scene.metadatas.GetComponent(entity)->string_values.set("renegade.first_person.assembly.track", track);
+            auto* clip = scene.animations.GetComponent(entity);
+            clip->start = start; clip->end = start + duration;
+            const auto dataEntity = scene.Entity_CreateTransform("Paired keyframes");
+            auto& data = scene.animation_datas.Create(dataEntity);
+            data.keyframe_times = {start, start + duration};
+            data.keyframe_data = {0,0,0, 1,0,0};
+            wi::scene::AnimationComponent::AnimationSampler sampler;
+            sampler.data = dataEntity;
+            scene.animations.GetComponent(entity)->samplers.push_back(sampler);
+            scene.animations.GetComponent(entity)->channels.front().samplerIndex = 0;
+            return entity;
+        };
+        const auto armsIdle = add(armsTarget, "Idle", "arms", 2, 2);
+        const auto weaponIdle = add(weaponTarget, "Idle", "weapon", 3, 0.5f);
+        const auto armsWalk = add(armsTarget, "Walk", "arms", 0, 1);
+        const auto weaponWalk = add(weaponTarget, "Walk", "weapon", 1, 1);
+        const auto reload = add(armsTarget, "Reload", "arms", 0, 3);
+        RuntimePlayerViewRigState rig; rig.viewModelRoot = root;
+        RuntimePlayerViewAnimationState state; std::string error;
+        if (!InitializeRuntimePlayerViewAnimations(scene, rig, state, error) || !state.pairedAssembly)
+            Fail("paired assembly initialization: " + error);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 0.75f);
+        if (state.activeClip != armsIdle || state.activeWeaponClip != weaponIdle ||
+            !Near(scene.animations.GetComponent(armsIdle)->timer, 2.75f) ||
+            !Near(scene.animations.GetComponent(weaponIdle)->timer, 3.5f) ||
+            !Near(scene.animations.GetComponent(armsIdle)->amount, 1) ||
+            !Near(scene.animations.GetComponent(weaponIdle)->amount, 1) ||
+            scene.animations.GetComponent(armsIdle)->IsPlaying() ||
+            scene.animations.GetComponent(weaponIdle)->IsPlaying() ||
+            !Near(scene.animations.GetComponent(reload)->amount, 0))
+            Fail("paired clocks, final-pose hold, or nonmovement suppression");
+        wi::jobsystem::Initialize();
+        const auto evaluate = [](wi::scene::Scene& native) {
+            native.dt = 1.0f / 60;
+            native.ScanAnimationDependencies();
+            wi::jobsystem::context context;
+            native.RunAnimationUpdateSystem(context);
+            wi::jobsystem::Wait(context);
+        };
+        evaluate(scene);
+        if (!Near(scene.transforms.GetComponent(armsTarget)->translation_local.x, 0.375f) ||
+            !Near(scene.transforms.GetComponent(weaponTarget)->translation_local.x, 1.0f) ||
+            !Near(scene.animations.GetComponent(armsIdle)->timer, 2.75f))
+            Fail("Wicked did not evaluate both native tracks without advancing their clock twice");
+        wi::Archive archive; scene.Serialize(archive); archive.SetReadModeAndResetPos(true);
+        wi::scene::Scene reopened; reopened.Serialize(archive);
+        RuntimePlayerViewRigState reopenedRig;
+        for (size_t i = 0; i < reopened.names.GetCount(); ++i)
+            if (reopened.names[i].name == "Assembly") reopenedRig.viewModelRoot = reopened.names.GetEntity(i);
+        RuntimePlayerViewAnimationState reopenedState;
+        if (!InitializeRuntimePlayerViewAnimations(reopened, reopenedRig, reopenedState, error)) Fail(error);
+        UpdateRuntimePlayerViewAnimations(reopened, reopenedState, PlayerViewAction::Idle, 0.75f);
+        evaluate(reopened);
+        if (!reopenedState.pairedAssembly || reopenedState.activeWeaponClip == wi::ecs::INVALID_ENTITY ||
+            !Near(reopened.animations.GetComponent(reopenedState.activeWeaponClip)->timer, 3.5f))
+            Fail("native roundtrip lost paired roles or channel bindings");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 0);
+        if (!Near(state.pairedTime, 0.75f)) Fail("pause advanced paired clock");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 1.5f);
+        if (!Near(state.pairedTime, 0.25f) || !Near(scene.animations.GetComponent(weaponIdle)->timer, 3.25f))
+            Fail("paired clocks did not wrap together");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f);
+        if (state.activeClip != armsWalk || state.activeWeaponClip != weaponWalk ||
+            !Near(scene.animations.GetComponent(armsIdle)->amount, 0) ||
+            !Near(scene.animations.GetComponent(weaponIdle)->amount, 0))
+            Fail("action switch left one old track active");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Sprint, 0.1f);
+        if (state.activeClip != armsWalk || !Near(state.pairedTime, 0.2f))
+            Fail("Sprint fallback restarted its Walk pair");
+        ResetRuntimePlayerViewAnimations(scene, state);
+        if (state.initialized || state.activeWeaponClip != wi::ecs::INVALID_ENTITY ||
+            !Near(scene.animations.GetComponent(weaponWalk)->amount, 0))
+            Fail("paired reset did not release both tracks");
+        scene.animations.Remove(armsWalk); scene.animations.Remove(weaponWalk);
+        if (!InitializeRuntimePlayerViewAnimations(scene, rig, state, error)) Fail(error);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Sprint, 0.1f);
+        if (state.activeClip != armsIdle || state.activeWeaponClip != weaponIdle || !Near(state.pairedTime, 0.2f))
+            Fail("missing movement pair did not retain synchronized Idle");
+        scene.metadatas.GetComponent(weaponIdle)->string_values.set("renegade.first_person.assembly.track", "arms");
+        if (InitializeRuntimePlayerViewAnimations(scene, rig, state, error) || state.initialized || error.empty())
+            Fail("duplicate assembly track role accepted");
+        scene.metadatas.GetComponent(weaponIdle)->string_values.set("renegade.first_person.assembly.track", "weapon");
+        scene.animations.Remove(weaponIdle);
+        if (InitializeRuntimePlayerViewAnimations(scene, rig, state, error) || state.initialized)
+            Fail("missing assembly partner accepted");
+    }
+
     std::vector<std::uint8_t> SerializeGovernedViewAssetPayload()
     {
         using namespace renegade::bridge;
@@ -206,6 +307,7 @@ namespace
 
 int main()
 {
+    TestPairedAssemblyPlayback();
     TestPlayerViewGripAuthoring();
     using namespace renegade::runtime;
 
