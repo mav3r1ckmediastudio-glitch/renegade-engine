@@ -1122,6 +1122,10 @@ namespace renegade::studio
                 static_cast<std::size_t>(args.userdata));
         });
         inspectorPanel_.AddWidget(&playerFirstPersonArms_);
+        playerHandGrips_.Create("Player Hand Grips");
+        playerHandGrips_.SetText("EDIT HAND GRIPS");
+        playerHandGrips_.OnClick([this](const wi::gui::EventArgs&) { OpenHandGripEditor(); });
+        inspectorPanel_.AddWidget(&playerHandGrips_);
 
         const auto createPlayerSlider = [this](
             SceneInspectorSlider& slider,
@@ -2881,6 +2885,7 @@ namespace renegade::studio
         });
         modelImportPanel_.AddWidget(&modelImportCancel_);
         modelImportPanel_.SetVisible(false);
+        CreateHandGripEditor();
         GetGUI().AddWidget(&modelImportPanel_);
         GetGUI().AddWidget(&studioChrome_);
     }
@@ -3371,6 +3376,20 @@ namespace renegade::studio
             return;
         }
 
+        if (handGripPanel_.IsVisible())
+        {
+            if (!session_->Projects().HasProject() ||
+                session_->Projects().CurrentProject().projectId != handGripProjectId_)
+            { handGripPanel_.SetVisible(false); handGripSession_.reset(); }
+            else
+            {
+                diagnosticInput.StopAt("player_hand_grips");
+                detail::ClearCreatorAssetDragPreview();
+                pendingAction_ = EditorAction::None;
+                return;
+            }
+        }
+
         if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_)
         {
             if (modelImportPreview_->NeedsRender())
@@ -3603,7 +3622,7 @@ namespace renegade::studio
         };
         device->BindScissorRects(1, &viewportScissor, cmd);
 
-        if (!projectHubVisible_ &&
+        if (!projectHubVisible_ && !handGripPanel_.IsVisible() &&
             outlinedSelection_ != wi::ecs::INVALID_ENTITY &&
             selectionOutlineMask_.IsValid())
         {
@@ -3618,7 +3637,7 @@ namespace renegade::studio
                 XMFLOAT4(0.30f, 0.86f, 1.0f, 0.90f));
         }
 
-        if (!projectHubVisible_ &&
+        if (!projectHubVisible_ && !handGripPanel_.IsVisible() &&
             !gizmoSuppressedForCameraView_ &&
             gizmoEntity_ != wi::ecs::INVALID_ENTITY)
         {
@@ -3643,6 +3662,9 @@ namespace renegade::studio
         modelImportPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
             std::max(70.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));
+        handGripPanel_.SetPos(XMFLOAT2(
+            std::max(0.0f, (width - 560.0f) * 0.5f),
+            std::max(60.0f, (height - 550.0f) * 0.5f)));
         studioChrome_.SetLayout(width, height);
         projectHubChrome_.SetLayout(width, height);
 
@@ -3801,17 +3823,18 @@ namespace renegade::studio
         positionEnvironmentWidget(playerLabel_, 224.0f, 20.0f);
         positionEnvironmentWidget(playerCameraMode_, 244.0f, 32.0f);
         positionEnvironmentWidget(playerFirstPersonArms_, 280.0f);
-        positionEnvironmentWidget(playerCapsuleRadius_, 314.0f);
-        positionEnvironmentWidget(playerCapsuleHeight_, 348.0f);
-        positionEnvironmentWidget(playerEyeHeight_, 382.0f);
-        positionEnvironmentWidget(playerWalkSpeed_, 416.0f);
-        positionEnvironmentWidget(playerSprintSpeed_, 450.0f);
-        positionEnvironmentWidget(playerJumpSpeed_, 484.0f);
-        positionEnvironmentWidget(playerLookSensitivity_, 518.0f);
-        positionEnvironmentWidget(playerMaximumSlope_, 552.0f);
-        positionEnvironmentWidget(playerGravityFactor_, 586.0f);
-        positionEnvironmentWidget(playerMinimumPitch_, 620.0f);
-        positionEnvironmentWidget(playerMaximumPitch_, 654.0f);
+        positionEnvironmentWidget(playerHandGrips_, 314.0f);
+        positionEnvironmentWidget(playerCapsuleRadius_, 348.0f);
+        positionEnvironmentWidget(playerCapsuleHeight_, 382.0f);
+        positionEnvironmentWidget(playerEyeHeight_, 416.0f);
+        positionEnvironmentWidget(playerWalkSpeed_, 450.0f);
+        positionEnvironmentWidget(playerSprintSpeed_, 484.0f);
+        positionEnvironmentWidget(playerJumpSpeed_, 518.0f);
+        positionEnvironmentWidget(playerLookSensitivity_, 552.0f);
+        positionEnvironmentWidget(playerMaximumSlope_, 586.0f);
+        positionEnvironmentWidget(playerGravityFactor_, 620.0f);
+        positionEnvironmentWidget(playerMinimumPitch_, 654.0f);
+        positionEnvironmentWidget(playerMaximumPitch_, 688.0f);
         LayoutMaterialInspector(environmentFieldWidth);
 
         positionEnvironmentWidget(cameraLabel_, 506.0f, 20.0f);
@@ -4436,6 +4459,7 @@ namespace renegade::studio
         setPlayerVisible(playerLabel_);
         setPlayerVisible(playerCameraMode_);
         setPlayerVisible(playerFirstPersonArms_);
+        setPlayerVisible(playerHandGrips_);
         setPlayerVisible(playerCapsuleRadius_);
         setPlayerVisible(playerCapsuleHeight_);
         setPlayerVisible(playerEyeHeight_);
@@ -4527,6 +4551,7 @@ namespace renegade::studio
             }
             playerFirstPersonArms_.SetSelected(
                 static_cast<int>(selectedArmsChoice));
+            playerHandGrips_.SetEnabled(currentArmsFound && !settings.firstPersonArmsAssetId.empty());
 
             playerCapsuleRadius_.SetValue(settings.capsuleRadius);
             playerCapsuleHeight_.SetValue(
@@ -8459,6 +8484,193 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         }
     }
 
+
+
+    void StudioRenderPath::CreateHandGripEditor()
+    {
+        handGripPanel_.Create("Hand Grips", wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        handGripPanel_.SetShadowRadius(0);
+        handGripPanel_.SetColor(HologramPanel, wi::gui::WIDGET_ID_WINDOW_BASE);
+        handGripPanel_.SetSize(XMFLOAT2(560, 550));
+        const auto label = [this](wi::gui::Label& widget, const char* name,
+            const char* text, float y, float height)
+        {
+            widget.Create(name); widget.SetText(text);
+            widget.font.params.size = 12;
+            widget.font.params.color = HologramMuted;
+            widget.font.params.h_align = wi::font::WIFALIGN_LEFT;
+            widget.SetColor(wi::Color::Transparent());
+            widget.SetPos(XMFLOAT2(20, y)); widget.SetSize(XMFLOAT2(520, height));
+            handGripPanel_.AddWidget(&widget);
+        };
+        label(handGripTitle_, "Hand Grips Title", "HAND GRIPS // FIRST PERSON ARMS", 16, 24);
+        label(handGripAsset_, "Hand Grips Asset", "", 43, 32);
+        label(handGripPositionLabel_, "Grip Position Label", "POSITION // METRES RELATIVE TO BONE", 168, 20);
+        label(handGripRotationLabel_, "Grip Rotation Label", "ROTATION // DEGREES RELATIVE TO BONE", 294, 20);
+        label(handGripStatus_, "Hand Grips Status", "Shared arms asset. Save applies to all players using it.", 510, 30);
+        handGripRole_.Create("Grip Role");
+        handGripRole_.AddItem("PRIMARY HAND", 0);
+        handGripRole_.AddItem("OFF HAND", 1);
+        handGripRole_.AddItem("TWO HAND SUPPORT", 2);
+        handGripRole_.SetPos(XMFLOAT2(20, 85)); handGripRole_.SetSize(XMFLOAT2(520, 28));
+        handGripRole_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            if (handGripRefreshing_) return;
+            handGripRoleIndex_ = static_cast<std::size_t>(args.userdata);
+            RefreshHandGripEditor();
+        });
+        handGripPanel_.AddWidget(&handGripRole_);
+        handGripBone_.Create("Grip Bone");
+        handGripBone_.SetTooltip("Choose a native skeleton bone. NONE uses the Runtime socket's default camera offset.");
+        handGripBone_.SetPos(XMFLOAT2(20, 125)); handGripBone_.SetSize(XMFLOAT2(520, 28));
+        handGripBone_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            if (handGripRefreshing_ || !handGripSession_) return;
+            auto binding = handGripSession_->Settings()[handGripRoleIndex_];
+            const auto index = static_cast<std::size_t>(args.userdata);
+            if (index > handGripSession_->Bones().size()) return;
+            binding.bonePath = index == 0 ? "" : handGripSession_->Bones()[index - 1].path;
+            std::string error;
+            if (!handGripSession_->SetBinding(handGripRoleIndex_, binding, error))
+                handGripStatus_.SetText(error);
+            RefreshHandGripEditor();
+        });
+        handGripPanel_.AddWidget(&handGripBone_);
+        const char* axes[] = {"X", "Y", "Z"};
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            auto& position = handGripPosition_[axis];
+            const std::string positionName = std::string("Grip Position ") + axes[axis];
+            position.Create(-2, 2, 0, 4000, positionName, axes[axis]);
+            position.SetPos(XMFLOAT2(65, 192.0f + axis * 34.0f));
+            position.SetSize(XMFLOAT2(420, 28));
+            position.OnValueCommitted([this, axis](float value) { CommitHandGripValue(false, axis, value); });
+            handGripPanel_.AddWidget(&position);
+            auto& rotation = handGripRotation_[axis];
+            const std::string rotationName = std::string("Grip Rotation ") + axes[axis];
+            rotation.Create(-180, 180, 0, 3600, rotationName, axes[axis]);
+            rotation.SetPos(XMFLOAT2(65, 318.0f + axis * 34.0f));
+            rotation.SetSize(XMFLOAT2(420, 28));
+            rotation.OnValueCommitted([this, axis](float value) { CommitHandGripValue(true, axis, value); });
+            handGripPanel_.AddWidget(&rotation);
+        }
+        const auto button = [this](SceneInspectorButton& widget, const char* name,
+            const char* text, float x, float y)
+        {
+            widget.Create(name); widget.SetText(text);
+            widget.SetPos(XMFLOAT2(x, y)); widget.SetSize(XMFLOAT2(252, 28));
+            handGripPanel_.AddWidget(&widget);
+        };
+        button(handGripUndo_, "Grip Undo", "UNDO", 20, 428);
+        button(handGripRedo_, "Grip Redo", "REDO", 288, 428);
+        button(handGripSave_, "Grip Save", "SAVE SHARED ASSET", 20, 472);
+        button(handGripClose_, "Grip Close", "CLOSE / DISCARD UNSAVED", 288, 472);
+        handGripUndo_.OnClick([this](const wi::gui::EventArgs&)
+        { if (handGripSession_) { handGripSession_->Undo(); RefreshHandGripEditor(); } });
+        handGripRedo_.OnClick([this](const wi::gui::EventArgs&)
+        { if (handGripSession_) { handGripSession_->Redo(); RefreshHandGripEditor(); } });
+        handGripSave_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this](std::uint64_t) { SaveHandGripEditor(); });
+        });
+        handGripClose_.OnClick([this](const wi::gui::EventArgs&)
+        { handGripPanel_.SetVisible(false); handGripSession_.reset(); });
+        handGripPanel_.SetVisible(false);
+        GetGUI().AddWidget(&handGripPanel_);
+    }
+
+    void StudioRenderPath::OpenHandGripEditor()
+    {
+        if (!session_ || !session_->Projects().HasProject() ||
+            !session_->Selection().HasSelection()) return;
+        const auto& scene = session_->Scenes().GetScene();
+        const auto entity = session_->Selection().SelectedEntity();
+        if (!bridge::IsPlayerStart(scene, entity)) return;
+        const auto assetId = bridge::CapturePlayerControllerSettings(scene, entity).firstPersonArmsAssetId;
+        if (assetId.empty()) return;
+        const auto project = session_->Projects().CurrentProject();
+        wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+            [this, assetId, project](std::uint64_t)
+        {
+            if (!session_->Projects().HasProject() ||
+                session_->Projects().CurrentProject().projectId != project.projectId) return;
+            auto working = std::make_unique<bridge::PlayerViewGripSession>();
+            std::string error;
+            if (!working->Open(project.rootPath, project.projectId, assetId, error))
+            { studioChrome_.SetStatusText("HAND GRIPS // " + error); return; }
+            handGripSession_ = std::move(working);
+            handGripProjectId_ = project.projectId;
+            handGripRoleIndex_ = 0;
+            handGripRole_.SetSelected(0);
+            handGripBone_.ClearItems();
+            handGripBone_.AddItem("NONE // DEFAULT CAMERA OFFSET", 0);
+            std::size_t index = 1;
+            for (const auto& bone : handGripSession_->Bones())
+                handGripBone_.AddItem(bone.label, index++);
+            handGripAsset_.SetText(handGripSession_->AssetPath());
+            handGripStatus_.SetText("Shared arms asset. Save applies to all players using it.");
+            handGripPanel_.SetVisible(true);
+            RefreshHandGripEditor();
+            ResizeLayout();
+        });
+    }
+
+    void StudioRenderPath::RefreshHandGripEditor()
+    {
+        if (!handGripSession_ || handGripRoleIndex_ >= 3) return;
+        handGripRefreshing_ = true;
+        const auto& binding = handGripSession_->Settings()[handGripRoleIndex_];
+        int choice = 0;
+        for (std::size_t i = 0; i < handGripSession_->Bones().size(); ++i)
+            if (handGripSession_->Bones()[i].path == binding.bonePath)
+                choice = static_cast<int>(i + 1);
+        handGripBone_.SetSelected(choice);
+        handGripBone_.SetTooltip(choice == 0 ? "Default Runtime camera socket offset." :
+            handGripSession_->Bones()[choice - 1].label);
+        const float positions[] = {binding.position.x, binding.position.y, binding.position.z};
+        const float rotations[] = {binding.rotationDegrees.x, binding.rotationDegrees.y, binding.rotationDegrees.z};
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            handGripPosition_[axis].SetValue(positions[axis]);
+            handGripRotation_[axis].SetValue(rotations[axis]);
+            handGripPosition_[axis].SetEnabled(choice != 0);
+            handGripRotation_[axis].SetEnabled(choice != 0);
+        }
+        handGripUndo_.SetEnabled(handGripSession_->CanUndo());
+        handGripRedo_.SetEnabled(handGripSession_->CanRedo());
+        handGripSave_.SetEnabled(handGripSession_->IsDirty());
+        handGripTitle_.SetText(handGripSession_->IsDirty() ?
+            "HAND GRIPS // UNSAVED CHANGES" : "HAND GRIPS // FIRST PERSON ARMS");
+        handGripRefreshing_ = false;
+    }
+
+    void StudioRenderPath::CommitHandGripValue(bool rotation, int axis, float value)
+    {
+        if (handGripRefreshing_ || !handGripSession_ || axis < 0 || axis > 2) return;
+        auto binding = handGripSession_->Settings()[handGripRoleIndex_];
+        auto& vector = rotation ? binding.rotationDegrees : binding.position;
+        if (axis == 0) vector.x = value;
+        else if (axis == 1) vector.y = value;
+        else vector.z = value;
+        std::string error;
+        if (!handGripSession_->SetBinding(handGripRoleIndex_, binding, error))
+            handGripStatus_.SetText(error);
+        RefreshHandGripEditor();
+    }
+
+    void StudioRenderPath::SaveHandGripEditor()
+    {
+        if (!handGripSession_ || !session_->Projects().HasProject() ||
+            session_->Projects().CurrentProject().projectId != handGripProjectId_) return;
+        std::string error;
+        if (!handGripSession_->Save(error))
+        { handGripStatus_.SetText("SAVE FAILED // " + error); return; }
+        handGripStatus_.SetText("SAVED // Reopen Test Level to load the updated hand grips.");
+        RefreshHandGripEditor();
+        RefreshAssetBrowser();
+        RefreshInspector();
+    }
 
     bridge::TransformState StudioRenderPath::CaptureEditorCameraTransform() const
     {

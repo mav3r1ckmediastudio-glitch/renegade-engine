@@ -138,6 +138,7 @@ add_library(RenegadeEngineBridge STATIC
     src/CollisionService.cpp
     src/PhysicsService.cpp
     src/PlayerService.cpp
+    src/PlayerViewGripService.cpp
     src/NavigationService.cpp
     src/GameplayInputService.cpp
     include/renegade/bridge/GameplayEventService.h

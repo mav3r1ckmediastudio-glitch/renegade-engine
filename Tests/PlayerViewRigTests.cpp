@@ -202,8 +202,11 @@ namespace
     }
 }
 
+#include "PlayerViewGripAuthoringTests.h"
+
 int main()
 {
+    TestPlayerViewGripAuthoring();
     using namespace renegade::runtime;
 
     wi::scene::Scene scene;

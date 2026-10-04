@@ -45,8 +45,10 @@ Camera synchronization repair `4dd9953` removes owner-reported proxy movement
 stutter. Owner accepts proxy gameplay through standalone Runtime and Studio Test
 Level, and confirms the actual Studio Build Game export launches and renders.
 Authored skeletal socket binding now has serialized/packaged-load regression and
-native DX12 animation proof; creator binding UI and real skinned-asset acceptance
-remain open. See [P1_HAND_SOCKET_BINDINGS](P1_HAND_SOCKET_BINDINGS.md).
+native DX12 animation proof. A native Studio Hand Grips editor now exposes bone
+selection, grip offsets, Undo/Redo and governed save/reopen; real skinned-asset
+acceptance remains open. See [P1_HAND_SOCKET_BINDINGS](P1_HAND_SOCKET_BINDINGS.md)
+and [P1_HAND_GRIP_EDITOR](P1_HAND_GRIP_EDITOR.md).
 See [P1_STATUS_AND_RECOVERY](P1_STATUS_AND_RECOVERY.md) for the commit inventory,
 local build/test evidence, missing acceptance and controlled recovery sequence.
 

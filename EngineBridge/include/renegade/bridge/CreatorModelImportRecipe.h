@@ -1,6 +1,7 @@
 #pragma once
 
 #include "renegade/bridge/MaterialTextureAssetService.h"
+#include "renegade/bridge/PlayerViewGripService.h"
 
 #include <cstdint>
 #include <string>
@@ -81,6 +82,8 @@ namespace renegade::bridge
     {
         CreatorAssetImportKind assetKind = CreatorAssetImportKind::Model;
         CreatorModelTransformRecipe transform;
+        bool hasHandGrips = false;
+        PlayerViewGripSettings handGrips = {};
         std::vector<CreatorMaterialImportRecipe> materials;
         std::vector<CreatorAnimationImportRecipe> animations;
         std::vector<CreatorExternalAnimationImportRecipe> externalAnimations;

@@ -12,6 +12,13 @@ inline int RunPlayerViewSocketGraphicsProof(
     using namespace renegade::runtime;
     wi::scene::Scene generated;
     renegade::tests::CreatePlayerViewSocketAsset(generated, true);
+    renegade::bridge::PlayerViewGripSettings grips;
+    std::string gripError;
+    if (!renegade::bridge::CapturePlayerViewGrips(generated, grips, gripError)) return 24;
+    grips[0].position = XMFLOAT3(0.03f,-0.02f,0.09f);
+    grips[0].rotationDegrees = XMFLOAT3(18,32,-14);
+    grips[1].position = XMFLOAT3(-0.04f,0.01f,0.08f);
+    if (!renegade::bridge::ApplyPlayerViewGrips(generated, grips, gripError)) return 25;
     {
         wi::Archive output(outputPath, false, false);
         if (!output.IsOpen()) return 20;
@@ -103,7 +110,8 @@ inline int RunPlayerViewSocketGraphicsProof(
         const auto eye = world.transforms.GetComponent(rig.root)->GetPosition();
         maximumCameraError = std::max(maximumCameraError,
             std::max({std::abs(eye.x-camera.Eye.x), std::abs(eye.y-camera.Eye.y), std::abs(eye.z-camera.Eye.z)}));
-        const float animatedZ = world.transforms.GetComponent(rig.socketTargets[0])->translation_local.z;
+        const auto animatedBone = world.hierarchy.GetComponent(rig.socketTargets[0])->parentID;
+        const float animatedZ = world.transforms.GetComponent(animatedBone)->translation_local.z;
         minimumAnimatedZ = std::min(minimumAnimatedZ, animatedZ);
         maximumAnimatedZ = std::max(maximumAnimatedZ, animatedZ);
         app.Run();

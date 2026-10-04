@@ -871,5 +871,8 @@ remapping. Duplicate/non-skeletal/cyclic anchors fail validation before mutation
 missing roles use the original independent fixed offsets. Socket bindings are
 transient native Component_Attach relationships, evaluated by Wicked after native
 animation. This preserves one Player controller and the accepted interpolated
-camera/rig contract. Creator binding commands/UI are a subsequent bounded task;
-there is no name-inferred hand mapping or separate skeleton evaluator.
+camera/rig contract. The Studio Hand Grips panel uses a private EngineBridge
+asset working copy and command history. Save journals the native product, managed
+projection and registry together, retaining hierarchy-path bindings in the import
+recipe. See P1_HAND_GRIP_EDITOR.md. There is no name-inferred hand mapping or
+separate skeleton evaluator.

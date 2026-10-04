@@ -19,6 +19,7 @@
 #include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/DiagnosticService.h"
 #include "renegade/bridge/PlayerService.h"
+#include "renegade/bridge/PlayerViewGripService.h"
 #include "renegade/bridge/DecalProbeService.h"
 #include "renegade/bridge/MaterialService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
@@ -460,6 +461,11 @@ namespace renegade::studio
             bool value);
         void CommitSelectedPlayerField(PlayerField field, float value);
         void CommitSelectedPlayerArmsAsset(std::size_t choiceIndex);
+        void CreateHandGripEditor();
+        void OpenHandGripEditor();
+        void RefreshHandGripEditor();
+        void CommitHandGripValue(bool rotation, int axis, float value);
+        void SaveHandGripEditor();
         void ApplySelectedTransformValue(
             TransformTool tool,
             int axis,
@@ -787,6 +793,16 @@ namespace renegade::studio
         wi::gui::Label playerCameraMode_;
         SceneInspectorComboBox playerFirstPersonArms_;
         std::vector<bridge::StableId> playerFirstPersonArmsChoices_;
+        SceneInspectorButton playerHandGrips_;
+        wi::gui::Window handGripPanel_;
+        wi::gui::Label handGripTitle_, handGripAsset_, handGripPositionLabel_, handGripRotationLabel_, handGripStatus_;
+        SceneInspectorComboBox handGripRole_, handGripBone_;
+        std::array<SceneInspectorSlider, 3> handGripPosition_, handGripRotation_;
+        SceneInspectorButton handGripUndo_, handGripRedo_, handGripSave_, handGripClose_;
+        std::unique_ptr<bridge::PlayerViewGripSession> handGripSession_;
+        bridge::StableId handGripProjectId_;
+        std::size_t handGripRoleIndex_ = 0;
+        bool handGripRefreshing_ = false;
         SceneInspectorSlider playerCapsuleRadius_;
         SceneInspectorSlider playerCapsuleHeight_;
         SceneInspectorSlider playerEyeHeight_;

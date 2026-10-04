@@ -745,6 +745,7 @@ target_include_directories(
 target_compile_options(RenegadePlayerViewRigTests
     PRIVATE
         "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+        "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>"
 )
 set_target_properties(RenegadePlayerViewRigTests PROPERTIES
     FOLDER "Renegade/Tests"

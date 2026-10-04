@@ -97,7 +97,8 @@ folder; CloseMainWindow on the returned process only; wait for exit 0.
 
 ## Limits and next outcome
 
-This is a native C++/metadata boundary, not an exposed Studio authoring feature.
+This socket checkpoint is a native C++/metadata boundary. The subsequent Studio
+Hand Grips authoring implementation is documented in P1_HAND_GRIP_EDITOR.md.
 Generated rigid geometry and native animated bones prove attachment mechanics;
 they do not prove skinned deformation, production hand anatomy/materials, grip IK,
 weapon actions or subjective real-arm animation quality. Wicked owns animation
@@ -108,8 +109,7 @@ claimed and no new stock Editor acceptance session was performed.
 The owner-approved proxy export and Studio Runtime bundle remain preserved.
 Original owner/GGMAX arms are still withdrawn. Do not resume FBX experiments.
 
-Next bounded task: expose explicit primary/off-hand/support anchor choice and
-grip transforms through a command-backed Studio workflow, including Undo/Redo
-and governed asset save/reopen. Then agree on one separately generated/authored
-skinned view model for rendered owner acceptance. Do not replace the accepted
+The next bounded authoring task is implemented in P1_HAND_GRIP_EDITOR.md.
+Agree on one separately generated/authored skinned view model for rendered
+owner acceptance after exact-build verification of the grip editor. Do not replace the accepted
 control scene, skip creator exposure, mark P1 complete or push/merge this work.

@@ -473,12 +473,18 @@ namespace renegade::bridge
                 if (iterator.key() != "asset_kind" &&
                     iterator.key() != "transform" &&
                     iterator.key() != "materials" && iterator.key() != "animations" &&
-                    iterator.key() != "external_animations")
+                    iterator.key() != "external_animations" && iterator.key() != "hand_grips")
                 {
                     error = "Creator model import options contain an unsupported key: " +
                         iterator.key();
                     return false;
                 }
+            }
+
+            if (root.contains("hand_grips"))
+            {
+                recipe.hasHandGrips = true;
+                if (!ParsePlayerViewGripOptions(root.at("hand_grips").dump(), recipe.handGrips, error)) return false;
             }
 
             if (root.contains("asset_kind"))
@@ -725,6 +731,12 @@ namespace renegade::bridge
         std::string& error)
     {
         nlohmann::json root = nlohmann::json::object();
+        if (recipe.hasHandGrips)
+        {
+            std::string grips;
+            if (!SerializePlayerViewGripOptions(recipe.handGrips, grips, error)) return false;
+            root["hand_grips"] = nlohmann::json::parse(grips);
+        }
         if (recipe.assetKind == CreatorAssetImportKind::Character)
             root["asset_kind"] = "character";
         if (recipe.transform.authored)
@@ -1057,6 +1069,7 @@ namespace renegade::bridge
             }
         }
 
+        if (recipe.hasHandGrips && !ApplyPlayerViewGrips(scene, recipe.handGrips, error)) return false;
         error.clear();
         return true;
     }

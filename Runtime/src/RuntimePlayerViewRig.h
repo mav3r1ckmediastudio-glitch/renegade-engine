@@ -8,6 +8,7 @@
 #include <string>
 
 #include "renegade/bridge/PlayerService.h"
+#include "renegade/bridge/PlayerViewGripService.h"
 
 namespace renegade::runtime
 {
@@ -207,11 +208,7 @@ namespace renegade::runtime
     // Authored semantic anchors survive native entity-ID remapping and WISCENE
     // persistence. They refer to bones (or authored grip transforms below bones),
     // never inferred bone names. One anchor may serve more than one hand role.
-    inline constexpr std::array<const char*, 3> PlayerViewSocketMetadataKeys = {
-        "renegade.player.view_socket.primary",
-        "renegade.player.view_socket.off_hand",
-        "renegade.player.view_socket.two_hand_support",
-    };
+    inline constexpr auto PlayerViewSocketMetadataKeys = bridge::PlayerViewSocketMetadataKeys;
 
     [[nodiscard]] inline bool BindRuntimePlayerViewRigSockets(
         wi::scene::Scene& scene,
