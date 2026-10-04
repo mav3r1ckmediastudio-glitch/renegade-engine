@@ -1722,3 +1722,8 @@ Corrected recovery CTest invocation exits 0: four of four pass, 0.34 seconds
 git diff --check passes; Git warns only about LF-to-CRLF normalization in appended
 documentation. Recovery build is pre-commit source-identical code; independent
 exact-commit verification and owner panel inspection remain open.
+
+Exact recovered assembly implementation commit: 2be899e. The following checkpoint
+commit changes documentation only. Release recovery executable and four passing
+checks correspond to the implementation code; final Studio visual inspection and
+Runtime paired-action integration remain pending.
