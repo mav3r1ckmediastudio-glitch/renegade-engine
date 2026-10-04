@@ -5,7 +5,7 @@
 #include <filesystem>
 namespace renegade::studio {
 namespace {
-const std::array<const char*,6> Actions={"Idle","Reload","Walk","Run","Attack","Equip"};
+const auto& Actions=bridge::FirstPersonAssemblyActions;
 XMFLOAT3 Euler(const XMFLOAT4& q) {
  XMFLOAT4X4 m;XMStoreFloat4x4(&m,XMMatrixRotationQuaternion(XMLoadFloat4(&q)));
  const bool gimbal = std::abs(m._32) > 0.999999f;
@@ -31,7 +31,7 @@ void StudioRenderPath::CreateAssemblyEditor() {
  if(arms>0&&size_t(arms)<assemblyPartIds_.size())assemblySettings_.armsAssetId=assemblyPartIds_[arms];
  if(weapon>0&&size_t(weapon)<assemblyPartIds_.size())assemblySettings_.weaponAssetId=assemblyPartIds_[weapon];
  RecordAssemblyDraft(before);
- assemblyPreview_.reset();assemblyImage_.SetImage({});assemblySave_.SetEnabled(false);
+ assemblyPreviewRefreshPending_=false;assemblySave_.SetEnabled(false);
  assemblyStatus_.SetText("Parts changed. LOAD PARTS before preview or save.");
  };
  assemblyArms_.OnSelect(partChanged);assemblyWeapon_.OnSelect(partChanged);
@@ -39,13 +39,13 @@ void StudioRenderPath::CreateAssemblyEditor() {
  assemblyLoad_.OnClick([this](const wi::gui::EventArgs&){
  wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this](std::uint64_t){LoadAssemblyParts();});});
  assemblyImage_.Create("Assembly first-person preview");assemblyImage_.SetText("");
- assemblyImage_.SetColor(wi::Color::White());assemblyImage_.SetPos(XMFLOAT2(20,145));
+ assemblyImage_.SetColor(wi::Color(25,29,33,255));assemblyImage_.SetPos(XMFLOAT2(20,145));
  assemblyImage_.SetSize(XMFLOAT2(512,320));assemblyPanel_.AddWidget(&assemblyImage_);
  combo(assemblyBone_,"Parent bone",700,35,350);
  assemblyBone_.OnSelect([this](const wi::gui::EventArgs& a){
  if(assemblyRefreshing_)return;const auto before=assemblySettings_;size_t i=static_cast<size_t>(a.userdata);
  assemblySettings_.parentBonePath=i>0&&i<=assemblyBones_.size()?assemblyBones_[i-1].path:"";
- RecordAssemblyDraft(before);assemblyPreview_.reset();assemblySave_.SetEnabled(false);});
+ RecordAssemblyDraft(before);});
  const char* names[]={"Weapon X (m)","Weapon Y (m)","Weapon Z (m)","Weapon pitch","Weapon yaw","Weapon roll",
  "View X (m)","View Y (m)","View Z (m)","View pitch","View yaw","View roll"};
  for(int i=0;i<12;++i){
@@ -62,13 +62,23 @@ void StudioRenderPath::CreateAssemblyEditor() {
  auto e=Euler(q);if(a==3)e.x=value;else if(a==4)e.y=value;else e.z=value;
  XMStoreFloat4(&q,XMQuaternionRotationRollPitchYaw(XMConvertToRadians(e.x),XMConvertToRadians(e.y),XMConvertToRadians(e.z)));
  }
- RecordAssemblyDraft(before);assemblyPreview_.reset();assemblySave_.SetEnabled(false);
+ RecordAssemblyDraft(before);
  });assemblyPanel_.AddWidget(&v);
  }
+ combo(assemblyActionPage_,"Action slots",550,105,130);assemblyActionPage_.SetText("");
+ assemblyActionPage_.AddItem("Movement / use");
+ assemblyActionPage_.AddItem("Aim / jump");
+ assemblyActionPage_.AddItem("Land / partial");
+ assemblyActionPage_.OnSelect([this](const wi::gui::EventArgs& a){
+ for(size_t i=0;i<Actions.size();++i) {
+ assemblyArmsClips_[i].SetVisible(i/6==size_t(std::max(a.iValue,0)));
+ assemblyWeaponClips_[i].SetVisible(i/6==size_t(std::max(a.iValue,0)));
+ }
+ });
  // Explicit paired tracks. NONE leaves an action out of the assembled product.
  for(size_t i=0;i<Actions.size();++i){
- combo(assemblyArmsClips_[i],std::string(Actions[i])+" arms",140,490+i*31.0f,385);
- combo(assemblyWeaponClips_[i],std::string(Actions[i])+" weapon",665,490+i*31.0f,385);
+ combo(assemblyArmsClips_[i],std::string(Actions[i])+" arms",140,490+(i%6)*31.0f,385);
+ combo(assemblyWeaponClips_[i],std::string(Actions[i])+" weapon",665,490+(i%6)*31.0f,385);
  auto changed=[this](const wi::gui::EventArgs&){
  if(assemblyRefreshing_)return;
  const auto before=assemblySettings_;assemblySettings_.pairs.clear();
@@ -76,9 +86,10 @@ void StudioRenderPath::CreateAssemblyEditor() {
  int a=assemblyArmsClips_[i].GetSelected(),w=assemblyWeaponClips_[i].GetSelected();
  if(a>0||w>0)assemblySettings_.pairs.push_back({Actions[i],a>0?unsigned(a-1):~0u,w>0?unsigned(w-1):~0u});
  }
- RecordAssemblyDraft(before);assemblyPreview_.reset();assemblySave_.SetEnabled(false);
+ RecordAssemblyDraft(before);
  };
  assemblyArmsClips_[i].OnSelect(changed);assemblyWeaponClips_[i].OnSelect(changed);
+ assemblyArmsClips_[i].SetVisible(i<6);assemblyWeaponClips_[i].SetVisible(i<6);
  }
  combo(assemblyAction_,"Preview action",680,460,190);
  assemblyAction_.OnSelect([this](const wi::gui::EventArgs& a){
@@ -142,7 +153,7 @@ void StudioRenderPath::OpenAssemblyEditor() {
  for(size_t i=0;i<Actions.size();++i){assemblyArmsClips_[i].ClearItems();assemblyWeaponClips_[i].ClearItems();}
  assemblySave_.SetEnabled(false);assemblyName_.SetValue("First Person Assembly");assemblyPanel_.SetVisible(true);
  assemblyStatus_.SetText("Select parts and LOAD PARTS. Save as new creates and assigns a product.");
- assemblyRefreshing_=false;
+ assemblyRefreshing_=false;assemblyPreviewRefreshPending_=false;assemblyDraftPreviewDirty_=true;
  if(!assigned.empty()&&bridge::FirstPersonAssemblyService().ReadSettings(project.rootPath,project.projectId,assigned,assemblySettings_,error)){
  const auto record=std::find_if(registry.records.begin(),registry.records.end(),
  [&assigned](const auto& r){return r.assetId==assigned;});
@@ -192,10 +203,11 @@ void StudioRenderPath::LoadAssemblyParts() {
  float values[]={s.weaponPosition.x,s.weaponPosition.y,s.weaponPosition.z,we.x,we.y,we.z,
  s.cameraPosition.x,s.cameraPosition.y,s.cameraPosition.z,ce.x,ce.y,ce.z};
  for(int i=0;i<12;++i)assemblyValues_[i].SetValue(values[i]);
- assemblyRefreshing_=false;assemblyPreview_.reset();assemblyImage_.SetImage({});assemblySave_.SetEnabled(false);
- assemblyStatus_.SetText("Choose the authored parent and matching clip pairs, then UPDATE PREVIEW.");
+ assemblyRefreshing_=false;assemblyPreviewRefreshPending_=false;assemblySave_.SetEnabled(false);
+ QueueAssemblyPreviewRefresh();
 }
 void StudioRenderPath::RebuildAssemblyPreview() {
+ assemblyPreviewRefreshPending_=false;assemblyDraftPreviewDirty_=true;
  if(!session_||!session_->Projects().HasProject()||session_->Projects().CurrentProject().projectId!=assemblyProjectId_)return;
  int armsIndex=assemblyArms_.GetSelected(),weaponIndex=assemblyWeapon_.GetSelected();
  if(armsIndex<=0||weaponIndex<=0||size_t(armsIndex)>=assemblyPartIds_.size()||size_t(weaponIndex)>=assemblyPartIds_.size()||
@@ -214,10 +226,14 @@ void StudioRenderPath::RebuildAssemblyPreview() {
  assemblyStatus_.SetText(error);return;}
  auto preview=std::make_unique<ModelImportPreview>();
  if(!preview->Prepare(composed,error)){assemblyStatus_.SetText(error);return;}
- preview->UseFirstPersonCamera();preview->SetPairedAction(assemblySettings_.pairs.front().action);
+ const int selected=std::clamp(assemblyAction_.GetSelected(),0,int(assemblySettings_.pairs.size()-1));
+ const float time=assemblyPreview_?assemblyPreview_->ClipTime():0;
+ const bool playing=assemblyPreview_&&assemblyPreview_->IsPlaying();
+ preview->UseFirstPersonCamera();preview->SetPairedAction(assemblySettings_.pairs[selected].action);
+ preview->Scrub(time);if(playing)preview->PlayPause();
  assemblyRefreshing_=true;assemblyAction_.ClearItems();
  for(const auto& p:assemblySettings_.pairs)assemblyAction_.AddItem(p.action);
- assemblyAction_.SetSelected(0);assemblyRefreshing_=false;
+ assemblyAction_.SetSelected(selected);assemblyRefreshing_=false;
  float duration=0;for(const auto& clip:preview->Clips())duration=std::max(duration,clip.end-clip.start);
  bridge::AssetRegistry registry;
  if(!bridge::ReadAssetRegistry(project.rootPath,project.projectId,registry,error)){assemblyStatus_.SetText(error);return;}
@@ -228,13 +244,20 @@ void StudioRenderPath::RebuildAssemblyPreview() {
  assemblyPartHashes_[i]=record->contentHash;
  }
  assemblyTime_.SetRange(0,std::max(duration,0.001f));assemblyPreview_=std::move(preview);
+ assemblyDraftPreviewDirty_=false;
  assemblyStatus_.SetText("Preview uses both native tracks on one clock. Shorter tracks hold their final pose.");
 }
 void StudioRenderPath::RecordAssemblyDraft(const bridge::FirstPersonAssemblySettings& before) {
  auto after=assemblySettings_;assemblySettings_=before;
  assemblyCommands_.Execute(std::make_unique<bridge::SetFirstPersonAssemblySettingsCommand>(assemblySettings_,std::move(after)));
  assemblySaveNew_.SetEnabled(false);
- assemblyStatus_.SetText("Draft changed. UPDATE PREVIEW before saving.");
+ QueueAssemblyPreviewRefresh();
+}
+void StudioRenderPath::QueueAssemblyPreviewRefresh() {
+ assemblyDraftPreviewDirty_=true;assemblyPreviewRefreshPending_=true;
+ assemblyPreviewRefreshDelay_=0.15f;
+ assemblySave_.SetEnabled(false);assemblySaveNew_.SetEnabled(false);
+ assemblyStatus_.SetText("Updating preview...");
 }
 void StudioRenderPath::RefreshAssemblyDraft() {
  assemblyRefreshing_=true;
@@ -244,10 +267,10 @@ void StudioRenderPath::RefreshAssemblyDraft() {
  select(assemblyArms_,assemblySettings_.armsAssetId);select(assemblyWeapon_,assemblySettings_.weaponAssetId);
  assemblyRefreshing_=false;LoadAssemblyParts();
  assemblySaveNew_.SetEnabled(false);
- assemblyStatus_.SetText("Draft restored. UPDATE PREVIEW before saving.");
+ QueueAssemblyPreviewRefresh();
 }
 void StudioRenderPath::SaveAssemblyEditor(bool asNew) {
- if(!assemblyPreview_||!assemblyPreview_->IsReady()||!session_->Projects().HasProject()||
+ if(assemblyDraftPreviewDirty_||assemblyPreviewRefreshPending_||!assemblyPreview_||!assemblyPreview_->IsReady()||!session_->Projects().HasProject()||
  session_->Projects().CurrentProject().projectId!=assemblyProjectId_)return;
  const auto project=session_->Projects().CurrentProject();std::string error;bridge::StableId id;std::vector<std::uint8_t> thumbnail;
  bridge::AssetRegistry registry;

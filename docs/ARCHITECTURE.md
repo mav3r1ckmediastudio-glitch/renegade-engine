@@ -914,3 +914,15 @@ fallbacks retain the same pair clock; unused Reload/Attack/Equip tracks stay ina
 Legacy single-rig variants/crossfades retain their existing path. Pair-to-pair
 movement transitions currently switch immediately; paired crossfades are deferred.
 No new input, camera, physics actor, skeleton evaluator or gameplay reload is added.
+
+
+### Full-library assembly preview and refresh
+
+FirstPersonAssemblyActions is the shared bridge/Studio whitelist for 14 action
+pairs; the version-1 recipe remains backward compatible. Studio pages the paired
+selectors in six-row groups and reapplies page visibility after the native
+Window propagates child visibility. Draft changes debounce for 150 ms, rebuild
+at the existing thread-safe point, and retain the previous rendered texture
+until the new preview has completed rendering. Stale/invalid drafts cannot save.
+Preview reconstruction preserves selected action, scrub time and play state.
+This does not add an equipment controller or Runtime action-input routing.

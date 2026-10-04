@@ -16,7 +16,8 @@ in progress; this is not acceptance of firing, reload gameplay, inventory or P2.
    player camera, whose forward direction is +Z and up is +Y.
 5. Choose an arms clip and weapon clip for each action. Both must be selected,
    or both NONE. The preview evaluates both native tracks on one clock; a shorter
-   track holds its last pose. UPDATE PREVIEW applies the draft settings.
+   track holds its last pose. Valid draft edits refresh automatically after a short
+   delay; UPDATE PREVIEW remains available for an explicit retry.
 6. Choose a preview action, play/pause or scrub. Save is enabled after rendering.
 7. SAVE CHANGES rebuilds an assigned assembly while retaining its product and recipe
    IDs, paths and Player Start assignment. Existing users of the shared asset see
@@ -25,10 +26,14 @@ in progress; this is not acceptance of firing, reload gameplay, inventory or P2.
    separate product and assigns it through the existing Player settings command.
    Save the level to persist that assignment. Reopen the panel to recover its recipe.
 9. UNDO and REDO restore draft part selection, parent, attachment/view transforms
-   and clip pairs. UPDATE PREVIEW after restoring a draft. Closing discards the draft.
+   and clip pairs. Restoring a valid draft also refreshes the preview automatically.
+   Closing discards the draft.
 
 Selecting different parts requires LOAD PARTS. Changing parent, transforms or
-pairs invalidates the previous preview. A part registry hash change after preview
+pairs marks the preview stale, disables saving and schedules a refresh after
+150 ms. The image retains its last valid render until the replacement is ready;
+incomplete/invalid edits show an explanation and keep saving disabled. A part
+registry hash change after preview
 requires a fresh load/preview before saving. Player assignment remains undoable;
 the assembly draft uses its own CommandService history and saved-state boundary.
 Save changes rejects a stale product hash. Failed document replacement rolls back
@@ -117,7 +122,9 @@ camera/look check on 4 October. The supplied DX12 screenshot shows textured arms
 and shotgun together in the foreground at 75 FPS. This is bounded visual acceptance.
 
 Outstanding: general texture relink UI, a dedicated rigged-part import
-classification and owner verification of the save/update and draft history UI.
+classification and owner verification of the full-library and auto-refresh UI.
+The owner confirms Save changes, Save as new and draft Undo/Redo work as expected
+on 4 October. This bounded acceptance does not close the overall P1 gate.
 Windows long-path staging and package integrity repair is implemented locally;
 a 312-character stage/integrity regression and actual 35-file owner candidate
 validation plus DX12 automatic Runtime smoke pass. Original deep-root Studio
@@ -129,3 +136,28 @@ screenshot shows textured arms/shotgun in exported Runtime at 74 FPS. Original
 Actual export launch/visual acceptance is recorded. Reload preview is not a reload
 gameplay implementation. Independent exact-commit verification remains pending;
 no release gate is closed by this slice.
+
+
+## Complete supplied shotgun animation library
+
+The retained creator fixture now contains 14 arms clips and four weapon clips.
+All are ingested through the matching-rig path and retained import recipes.
+The assembled product contains 14 semantic pairs (28 native tracks):
+Idle, Reload, Walk, Run, Attack, Equip, Unequip, AimIn, AimOut, AimAttack,
+JumpStart, JumpLoop, JumpLand and ReloadPartial. Native FBX sources with a generic
+"Unreal Take" label receive descriptive authored names before governed commit;
+those names survive retained recipe reconstruction.
+
+Studio exposes the paired selectors on three pages: Movement / use, Aim / jump,
+and Land / partial. The preview action selector contains every assigned action.
+The supplied pack has dedicated weapon clips for Idle, Fire, full Reload and
+Partial. Walk, Run, Equip, Unequip, aim transitions and jump stages explicitly
+pair their arms clip with weapon Idle; AimAttack uses weapon Fire. No weapon
+track or socket is inferred from a guessed name at Runtime.
+
+Fresh-process preview checks render each action at start, midpoint and near end.
+Equip/Unequip may intentionally leave the camera view. Movement remains the
+existing Idle/Walk/Run Runtime controller. Aim, jump, equip, firing and reload
+are retained authoring/preview actions; their gameplay input and staged action
+ownership are not implemented by this library slice. No damage, ammo or recoil
+gameplay claim is made.

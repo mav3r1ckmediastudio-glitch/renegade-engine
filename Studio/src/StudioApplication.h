@@ -73,6 +73,7 @@ namespace renegade::studio
         void RebuildAssemblyPreview();
         void SaveAssemblyEditor(bool asNew);
         void RecordAssemblyDraft(const bridge::FirstPersonAssemblySettings& before);
+        void QueueAssemblyPreviewRefresh();
         void RefreshAssemblyDraft();
         void OpenStaticModelImporter();
         void AppendModelImportAnimations();
@@ -1114,8 +1115,8 @@ namespace renegade::studio
         wi::gui::Button playerAssembly_;
         wi::gui::Window assemblyPanel_;
         wi::gui::Label assemblyImage_, assemblyStatus_;
-        wi::gui::ComboBox assemblyArms_, assemblyWeapon_, assemblyBone_, assemblyAction_;
-        std::array<wi::gui::ComboBox, 6> assemblyArmsClips_, assemblyWeaponClips_;
+        wi::gui::ComboBox assemblyArms_, assemblyWeapon_, assemblyBone_, assemblyAction_, assemblyActionPage_;
+        std::array<wi::gui::ComboBox, bridge::FirstPersonAssemblyActions.size()> assemblyArmsClips_, assemblyWeaponClips_;
         std::array<SceneInspectorSlider, 12> assemblyValues_;
         wi::gui::Slider assemblyTime_;
         wi::gui::TextInputField assemblyName_;
@@ -1131,6 +1132,8 @@ namespace renegade::studio
         std::array<std::string,2> assemblyPartHashes_;
         wi::ecs::Entity assemblyPlayer_ = wi::ecs::INVALID_ENTITY;
         bool assemblyRefreshing_ = false;
+        bool assemblyPreviewRefreshPending_ = false, assemblyDraftPreviewDirty_ = true;
+        float assemblyPreviewRefreshDelay_ = 0;
         wi::gui::Window modelImportPanel_;
         wi::gui::Label modelImportSummary_;
         wi::gui::Label modelImportPreviewImage_;

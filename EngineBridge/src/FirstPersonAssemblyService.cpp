@@ -49,7 +49,8 @@ bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
  }
  std::set<std::string> actions;
  for(const auto& p:s.pairs) {
- if(p.action!="Idle"&&p.action!="Walk"&&p.action!="Run"&&p.action!="Reload"&&p.action!="Attack"&&p.action!="Equip") {
+ if(std::none_of(FirstPersonAssemblyActions.begin(),FirstPersonAssemblyActions.end(),
+ [&](const char* action){return p.action==action;})) {
  e="Unknown assembly action.";return false;}
  if(!actions.insert(p.action).second){e="Each assembly action needs one explicit pair.";return false;}
  }

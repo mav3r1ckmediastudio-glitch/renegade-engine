@@ -48,7 +48,9 @@ assignment. Owner accepts the preview controls; Runtime movement pairs now evalu
 on one clock and pass native roundtrip and real-product packaged-loader proofs.
 Owner Test Level and actual Build Game visuals are accepted. Stable-ID updates,
 Save as new and draft Undo/Redo are implemented with local lifecycle and Runtime
-proofs; owner verification of the new controls remains pending. See
+proofs and owner acceptance. The supplied shotgun library now has all 14 paired
+preview actions and automatic draft refresh, with owner verification pending.
+Input-driven fire/reload, equip, aim and jump action ownership remain later work. See
 [P1_ASSEMBLY_AUTHORING](P1_ASSEMBLY_AUTHORING.md).
 Implementation baseline: `51513b9` on `feature/p1-first-person-arms-rig`.
 Camera synchronization repair `4dd9953` removes owner-reported proxy movement

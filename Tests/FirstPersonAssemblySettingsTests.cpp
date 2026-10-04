@@ -40,6 +40,10 @@ int main()
     if(!history.Execute(std::make_unique<SetFirstPersonAssemblySettingsCommand>(draft,branch))||
         history.CanRedo())
         return 7;
+    auto full=settings;full.pairs.clear();
+    for(unsigned i=0;i<FirstPersonAssemblyActions.size();++i)full.pairs.push_back({FirstPersonAssemblyActions[i],i,0});
+    if(!SerializeFirstPersonAssemblySettings(full,reopened,error)||
+        !ParseFirstPersonAssemblySettings(reopened,parsed,error)||parsed.pairs.size()!=14)return 8;
     for (int failure = 0; failure < 7; ++failure)
     {
         auto bad = settings;

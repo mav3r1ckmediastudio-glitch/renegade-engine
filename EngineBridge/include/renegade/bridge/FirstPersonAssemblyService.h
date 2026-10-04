@@ -2,9 +2,13 @@
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/PlayerViewGripService.h"
 #include <memory>
+#include <array>
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
 namespace renegade::bridge {
+inline constexpr std::array<const char*,14> FirstPersonAssemblyActions = {
+ "Idle","Reload","Walk","Run","Attack","Equip","Unequip","AimIn","AimOut",
+ "AimAttack","JumpStart","JumpLoop","JumpLand","ReloadPartial"};
 struct FirstPersonAssemblyPair {
     std::string action = "Idle";
     unsigned armsClip = 0, weaponClip = 0;

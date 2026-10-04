@@ -3394,15 +3394,30 @@ namespace renegade::studio
                 session_->Projects().CurrentProject().projectId != assemblyProjectId_) {
                 assemblyPanel_.SetVisible(false); assemblyPreview_.reset();
             } else {
+                // Window visibility propagates to children; enforce the selected page afterwards.
+                for(size_t i=0;i<bridge::FirstPersonAssemblyActions.size();++i) {
+                    const bool visible=i/6==size_t(std::max(assemblyActionPage_.GetSelected(),0));
+                    assemblyArmsClips_[i].SetVisible(visible);assemblyWeaponClips_[i].SetVisible(visible);
+                }
+                if(assemblyPreviewRefreshPending_) {
+                    assemblyPreviewRefreshDelay_-=dt;
+                    if(assemblyPreviewRefreshDelay_<=0) {
+                        assemblyPreviewRefreshPending_=false;
+                        wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                            [this](std::uint64_t){if(assemblyPanel_.IsVisible())RebuildAssemblyPreview();});
+                    }
+                }
                 if (assemblyPreview_) {
                     if (assemblyPreview_->NeedsRender()) { assemblyPreview_->PreUpdate(); assemblyPreview_->Update(dt); }
-                    wi::Resource image; image.SetTexture(assemblyPreview_->GetRenderResult3D());
-                    assemblyImage_.SetColor(wi::Color::White());
-                    assemblyImage_.SetImage(image);
+                    if(!assemblyDraftPreviewDirty_&&assemblyPreview_->IsReady()) {
+                        wi::Resource image; image.SetTexture(assemblyPreview_->GetRenderResult3D());
+                        assemblyImage_.SetColor(wi::Color::White());
+                        assemblyImage_.SetImage(image);
+                    }
                     assemblyTime_.SetValue(assemblyPreview_->ClipTime());
                     assemblyPlay_.SetText(assemblyPreview_->IsPlaying() ? "PAUSE" : "PLAY");
-                    assemblySave_.SetEnabled(assemblyPreview_->IsReady()&&!assemblyAssetId_.empty());
-                    assemblySaveNew_.SetEnabled(assemblyPreview_->IsReady());
+                    assemblySave_.SetEnabled(!assemblyDraftPreviewDirty_&&assemblyPreview_->IsReady()&&!assemblyAssetId_.empty());
+                    assemblySaveNew_.SetEnabled(!assemblyDraftPreviewDirty_&&assemblyPreview_->IsReady());
                 }
                 assemblyUndo_.SetEnabled(assemblyCommands_.CanUndo());
                 assemblyRedo_.SetEnabled(assemblyCommands_.CanRedo());

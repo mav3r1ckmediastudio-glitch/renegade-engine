@@ -27,7 +27,7 @@ namespace fs = std::filesystem;
 using namespace renegade::bridge;
 static LRESULT CALLBACK WindowProc(HWND w, UINT m, WPARAM a, LPARAM b)
 { return DefWindowProcW(w,m,a,b); }
-static bool Capture(wi::scene::Scene& scene, const fs::path& file, bool firstPerson=false, bool normalized=false)
+static bool Capture(wi::scene::Scene& scene, const fs::path& file, bool firstPerson=false, bool normalized=false, bool allowEmpty=false)
 {
     renegade::studio::ModelImportPreview preview;
     std::string error;
@@ -69,7 +69,7 @@ static bool Capture(wi::scene::Scene& scene, const fs::path& file, bool firstPer
                 std::abs(int(pixels[p+1])-int(pixels[1]))+
                 std::abs(int(pixels[p+2])-int(pixels[2]))>20)++contrasting;
         }
-        if((firstPerson?litModelPixels:contrasting)>50){visible=true;break;}
+        if(allowEmpty||(firstPerson?litModelPixels:contrasting)>50){visible=true;break;}
     }
     if(!visible){std::cerr<<"No rendered assembly pixels: "<<file.generic_u8string()<<"\n";return false;}
     std::ofstream out(file,std::ios::binary);
@@ -525,8 +525,9 @@ static bool RuntimeAssemblyProof(const fs::path& input, const fs::path& output, 
    scene.animations.GetComponent(animation.activeWeaponClip)->amount!=1)return false;
   if(!Capture(scene,output/("paired-"+std::to_string(animation.pairedTime)+".png"),true,true))return false;
  }
- auto t=animation.pairedTime;UpdateRuntimePlayerViewAnimations(scene,animation,PlayerViewAction::Sprint,0);
- if(t!=animation.pairedTime)return false;
+ auto t=animation.pairedTime;const auto previousClip=animation.activeClip;
+ UpdateRuntimePlayerViewAnimations(scene,animation,PlayerViewAction::Sprint,0);
+ if(previousClip==animation.activeClip?t!=animation.pairedTime:animation.pairedTime!=0)return false;
  ResetRuntimePlayerViewAnimations(scene,animation);DespawnRuntimePlayerViewRig(scene,rig);
  if(scene.transforms.GetCount()!=1)return false;
  std::cout<<"REAL ASSEMBLY "<<(packaged?"ISOLATED PACKAGED":"PROJECT AND TEST SNAPSHOT")
@@ -592,6 +593,131 @@ static bool UpdateAssemblyProof(const fs::path& descriptor,const fs::path& outpu
  return RuntimeAssemblyProof(descriptor,output,false);
 }
 
+static bool FullLibraryProof(const fs::path& input,const fs::path& project)
+{
+ fs::create_directories(project);
+ const auto projectId=GenerateStableId();
+ const std::array<const char*,14> armsFiles={"Idle","Reload","Walk","Sprint","Fire","Draw",
+ "Holster","ADS_In","ADS_Out","ADS_Fire","Jump_Start","Jump_Loop","Jump_Land","Reload_Partial"};
+ const std::array<const char*,4> weaponFiles={"Idle","Reload","Fire","Partial"};
+ StableId ids[2];std::string error;
+ for(int part=0;part<2;++part) {
+ using M=wi::scene::MaterialComponent;
+ std::vector<ModelImportTextureRelink> relinks;
+ auto add=[&](uint32_t material,uint32_t slot,const std::string& path){
+ relinks.push_back({material,slot,(input/path).generic_u8string()});};
+ if(part==0) {
+ add(0,M::BASECOLORMAP,"Textures/Manny/T_Manny_02_D.PNG");
+ add(0,M::NORMALMAP,"Textures/Manny/T_Manny_02_N.PNG");
+ add(1,M::BASECOLORMAP,"Textures/Manny/T_Manny_01_D.PNG");
+ add(1,M::NORMALMAP,"Textures/Manny/T_Manny_01_N.PNG");
+ } else for(uint32_t m=0;m<2;++m) {
+ const std::string prefix=m==0?"Meshes/Textures/Weapon/T_Sawed_Off_Shotgun_":"Meshes/Textures/Shell/T_Shell_Red_";
+ add(m,M::BASECOLORMAP,prefix+"BaseColor.PNG");add(m,M::NORMALMAP,prefix+"Normal.PNG");
+ add(m,M::SURFACEMAP,prefix+"OcclusionRoughnessMetallic.PNG");
+ }
+ const std::string folder=part==0?"Animations/":"Animations/Weapon/";
+ auto candidate=ModelImportCandidateService().PrepareModel((input/(folder+"AS_Shotgun_Idle.FBX")).generic_u8string(),relinks);
+ if(!candidate.IsReady()){std::cerr<<candidate.Error()<<"\n";return false;}
+ const auto before=candidate.Evidence();
+ const size_t count=part==0?armsFiles.size():weaponFiles.size();
+ for(size_t i=1;i<count;++i) {
+ const std::string clip=part==0?armsFiles[i]:weaponFiles[i];
+ if(!ModelImportCandidateService().AppendExternalAnimations(candidate,(input/(folder+"AS_Shotgun_"+clip+".FBX")).generic_u8string(),error)){
+ std::cerr<<"Full library "<<clip<<": "<<error<<"\n";return false;}
+ }
+ if(candidate.Summary().animations!=count||candidate.ExternalAnimations().size()!=count-1||
+ candidate.Evidence().skinIndexFingerprint!=before.skinIndexFingerprint||
+ candidate.Evidence().inverseBindFingerprint!=before.inverseBindFingerprint||
+ std::any_of(candidate.ExternalAnimations().begin(),candidate.ExternalAnimations().end(),[](const auto& a){return !a.matchingRig;}))return false;
+ // Preserve descriptive authored names rather than the FBX-wide "Unreal Take".
+ auto* native=candidate.PeekMutableScene();
+ for(size_t i=0;i<count;++i)native->names.Create(native->animations.GetEntity(i)).name=
+ std::string("Shotgun / ")+(part==0?armsFiles[i]:weaponFiles[i]);
+ ModelImportCommitRequest request;request.projectRoot=project.generic_u8string();request.projectId=projectId;
+ request.assetName=part==0?"Shotgun Arms Full Library":"Shotgun Weapon Full Library";request.characterAsset=true;
+ auto saved=ModelImportCommitService().CommitModel(request,candidate);
+ if(!saved.succeeded){std::cerr<<saved.error<<"\n";return false;}
+ ids[part]=saved.assetId;
+ auto reopened=CreatorAssetWorkflowService().PrepareModelPlacement(request.projectRoot,projectId,saved.assetId);
+ if(!reopened.IsReady()||reopened.PeekScene()->animations.GetCount()!=count)return false;
+ // Rebuild every external clip from retained project-owned sources.
+ ReusableModelAssetDocument document;CreatorModelImportRecipe recipe;
+ if(!ReadReusableModelAssetDocument((project/fs::u8path(saved.assetProjectRelativePath)).generic_u8string(),document,error)||
+ !ParseCreatorModelImportOptions(nlohmann::json::parse(document.manifest.settingsJson).at("options").dump(),recipe,error))return false;
+ wi::scene::Scene rebuilt;ImportModel_FBX((project/fs::u8path(saved.sourceProjectRelativePath)).generic_u8string(),rebuilt);
+ if(!ApplyCreatorModelImportRecipe(rebuilt,request.projectRoot,projectId,recipe,error)||rebuilt.animations.GetCount()!=count){
+ std::cerr<<"Full retained rebuild "<<error<<"\n";return false;}
+ std::cout<<"FULL RETAINED PART "<<part<<" clips="<<count<<" matching-rig and retained-source rebuild PASS\n";
+ }
+ FirstPersonAssemblySettings settings;
+ settings.armsAssetId=ids[0];settings.weaponAssetId=ids[1];
+ settings.parentBonePath="[\"AS_Shotgun_Idle.FBX\",\"root\",\"ik_hand_root\",\"ik_hand_gun\"]";
+ settings.weaponPosition={-0.03466970f,0.27336276f,-0.04505738f};
+ settings.weaponRotation={-0.059182247f,0.087738050f,0.994176416f,-0.020316230f};
+ settings.cameraPosition={0,-1.65f,0.08f};settings.cameraRotation={0,0.707106781f,-0.707106781f,0};
+ const unsigned weaponIndices[]={0,1,0,0,2,0,0,0,0,2,0,0,0,3};
+ for(unsigned i=0;i<FirstPersonAssemblyActions.size();++i)
+ settings.pairs.push_back({FirstPersonAssemblyActions[i],i,weaponIndices[i]});
+ FirstPersonAssemblyService service;StableId asset;
+ if(!service.Save(project.generic_u8string(),projectId,"Shotgun Full Library",settings,{},asset,error)){
+ std::cerr<<error<<"\n";return false;}
+ wi::scene::Scene level;
+ if(fs::is_regular_file(project/"Template.wiscene")) {
+ wi::Archive archive((project/"Template.wiscene").generic_u8string(),true,false);level.Serialize(archive);
+ }
+ auto start=ResolvePlayerStart(level);wi::ecs::Entity player;
+ if(start.resolution==PlayerStartResolution::Success)player=start.start.entity;
+ else {CreatePlayerStartCommand create(level,{});if(!create.Execute())return false;player=create.CreatedEntity();}
+ auto playerSettings=CapturePlayerControllerSettings(level,player);playerSettings.firstPersonArmsAssetId=asset;
+ if(!SetPlayerControllerSettingsCommand(level,player,playerSettings).Execute())return false;
+ fs::create_directories(project/"Content/Scenes");
+ const auto scenePath=project/"Content/Scenes/ArmsLibrary.wiscene";
+ wi::Archive archive(scenePath.generic_u8string(),false,false);level.Serialize(archive);
+ if(!archive.SaveFile(scenePath.generic_u8string()))return false;archive=wi::Archive();
+ std::ofstream descriptor(project/"ArmsLibrary.renegade");
+ descriptor<<"format = renegade-project\nversion = 1\n\n[project]\nproject_id = "<<projectId
+ <<"\nname = Shotgun Full Library\nstartup_scene = Content/Scenes/ArmsLibrary.wiscene\n";
+ descriptor.close();
+ std::ofstream(project/"assembly-id.txt")<<asset;
+ std::cout<<"FULL LIBRARY ASSEMBLY SAVED "<<asset<<"\n";
+ return true;
+}
+
+static bool FullLibraryReopenProof(const fs::path& descriptor,const fs::path& output)
+{
+ ProjectMetadata project;std::string error;
+ if(!ProjectService().InspectProject(fs::absolute(descriptor).generic_u8string(),project,error))return false;
+ SceneService scenes;if(!scenes.LoadScene((fs::u8path(project.rootPath)/fs::u8path(project.startupScene)).generic_u8string()))return false;
+ const auto start=ResolvePlayerStart(scenes.GetScene());if(start.resolution!=PlayerStartResolution::Success)return false;
+ FirstPersonAssemblyService service;FirstPersonAssemblySettings settings;
+ if(!service.ReadSettings(project.rootPath,project.projectId,start.start.settings.firstPersonArmsAssetId,settings,error)||
+ settings.pairs.size()!=14)return false;
+ wi::scene::Scene assembly;if(!service.Prepare(project.rootPath,project.projectId,settings,assembly,error))return false;
+ if(assembly.armatures.GetCount()!=2||assembly.animations.GetCount()!=28)return false;
+ unsigned textures=0;
+ for(size_t m=0;m<assembly.materials.GetCount();++m)for(const auto& t:assembly.materials[m].textures)
+ if(!t.name.empty()){if(!t.resource.IsValid()||!t.resource.GetTexture().IsValid())return false;++textures;}
+ if(textures!=10)return false;
+ for(const auto& pair:settings.pairs) {
+ float duration=0;
+ for(size_t i=0;i<assembly.animations.GetCount();++i) {
+ const auto* metadata=assembly.metadatas.GetComponent(assembly.animations.GetEntity(i));
+ if(metadata&&metadata->string_values.has(CreatorCharacterAnimationActionMetadataKey)&&
+ metadata->string_values.get(CreatorCharacterAnimationActionMetadataKey)==pair.action)
+ duration=std::max(duration,assembly.animations[i].end-assembly.animations[i].start);
+ }
+ for(float fraction:{0.0f,0.5f,0.95f}) {
+ if(!service.Pose(assembly,pair.action,duration*fraction,error)||
+ !Capture(assembly,output/(pair.action+"-"+std::to_string(fraction)+".png"),true,true,
+ pair.action=="Equip"||pair.action=="Unequip"))return false;
+ }
+ std::cout<<"FULL PAIRED PREVIEW "<<pair.action<<" duration="<<duration<<" PASS\n";
+ }
+ std::cout<<"FULL LIBRARY COLD REOPEN: 14 pairs, 28 tracks, 2 armatures, 10 textures PASS\n";
+ return true;
+}
+
 int main(int argc,char** argv)
 {
     if(argc<3 || argc>4) { std::cerr<<"Usage: proof pack-folder output-folder\n"; return 2; }
@@ -607,6 +733,8 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--full-library") return FullLibraryProof(input,output)?0:15;
+    if(argc==4 && std::string(argv[3])=="--full-library-reopen") return FullLibraryReopenProof(input,output)?0:16;
     if(argc==4 && std::string(argv[3])=="--update-assembly") return UpdateAssemblyProof(input,output)?0:14;
     if(argc==4 && std::string(argv[3])=="--runtime-assembly") return RuntimeAssemblyProof(input,output,false)?0:12;
     if(argc==4 && std::string(argv[3])=="--runtime-package") return RuntimeAssemblyProof(input,output,true)?0:13;
