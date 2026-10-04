@@ -48,12 +48,12 @@ namespace
             const unsigned char c = static_cast<unsigned char>(token.front());
             return std::isalnum(c) != 0;
         }
-        return token == "SPACE" || token == "LSHIFT" || token == "ESCAPE";
+        return token == "SPACE" || token == "LSHIFT" || token == "ESCAPE" || token == "F8";
     }
 
     bool SupportedMouseToken(const std::string& token) noexcept
     {
-        return token.empty() || token == "MOUSE_X" || token == "MOUSE_Y";
+        return token.empty() || token == "MOUSE_X" || token == "MOUSE_Y" || token == "MOUSE_LEFT";
     }
 
     bool SupportedGamepadToken(const std::string& token) noexcept
@@ -81,6 +81,8 @@ namespace
             return wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT);
         if (token == "ESCAPE")
             return wi::input::Down(wi::input::KEYBOARD_BUTTON_ESCAPE);
+        if (token == "F8")
+            return wi::input::Down(wi::input::KEYBOARD_BUTTON_F8);
         return false;
     }
 
@@ -100,6 +102,8 @@ namespace
             return wi::input::Press(wi::input::KEYBOARD_BUTTON_LSHIFT);
         if (token == "ESCAPE")
             return wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE);
+        if (token == "F8")
+            return wi::input::Press(wi::input::KEYBOARD_BUTTON_F8);
         return false;
     }
 
@@ -165,7 +169,8 @@ namespace
 
     bool Pressed(const GameplayActionBinding& binding) noexcept
     {
-        return KeyboardPress(binding.keyboard) ||
+        return (binding.mouse == "MOUSE_LEFT" && wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) ||
+            KeyboardPress(binding.keyboard) ||
             GamepadPress(binding.gamepad);
     }
 
@@ -234,6 +239,8 @@ namespace renegade::bridge
         case GameplayAction::Interact: return "interact";
         case GameplayAction::Pause: return "pause";
         case GameplayAction::Reset: return "reset";
+        case GameplayAction::Fire: return "fire";
+        case GameplayAction::Reload: return "reload";
         case GameplayAction::Count: break;
         }
         return "unknown";
@@ -271,7 +278,9 @@ namespace renegade::bridge
             {GameplayAction::Sprint, "LSHIFT", "", "BUTTON_7"},
             {GameplayAction::Interact, "E", "", ""},
             {GameplayAction::Pause, "ESCAPE", "", ""},
-            {GameplayAction::Reset, "R", "", ""},
+            {GameplayAction::Reset, "F8", "", ""},
+            {GameplayAction::Fire, "", "MOUSE_LEFT", ""},
+            {GameplayAction::Reload, "R", "", ""},
         }};
         return map;
     }
@@ -474,6 +483,18 @@ namespace renegade::bridge
         if (!seen[interactIndex])
             seen[interactIndex] = true;
 
+        // Version-1 projects gain the new actions without losing custom bindings.
+        const auto fireIndex = static_cast<std::size_t>(GameplayAction::Fire);
+        const auto reloadIndex = static_cast<std::size_t>(GameplayAction::Reload);
+        if (!seen[reloadIndex])
+        {
+            auto& reset = parsed.bindings[static_cast<std::size_t>(GameplayAction::Reset)];
+            if (reset.keyboard == "R" && reset.mouse.empty() && reset.gamepad.empty())
+                reset.keyboard = "F8";
+        }
+        seen[fireIndex] = true;
+        seen[reloadIndex] = true;
+
         if (!formatSeen || !versionSeen ||
             std::any_of(seen.begin(), seen.end(), [](const bool value) { return !value; }))
         {
@@ -633,6 +654,8 @@ namespace renegade::bridge
         frame.interactPressed = Pressed(Binding(map, GameplayAction::Interact));
         frame.pausePressed = Pressed(Binding(map, GameplayAction::Pause));
         frame.resetPressed = Pressed(Binding(map, GameplayAction::Reset));
+        frame.firePressed = Pressed(Binding(map, GameplayAction::Fire));
+        frame.reloadPressed = Pressed(Binding(map, GameplayAction::Reload));
         return frame;
     }
 }

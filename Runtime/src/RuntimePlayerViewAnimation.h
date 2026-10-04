@@ -25,7 +25,7 @@ namespace renegade::runtime
 
     struct RuntimePlayerViewAnimationState
     {
-        std::array<std::vector<RuntimePlayerViewAnimationClip>, 3> clips;
+        std::array<std::vector<RuntimePlayerViewAnimationClip>, 5> clips;
         wi::ecs::Entity activeClip = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity outgoingClip = wi::ecs::INVALID_ENTITY;
         PlayerViewAction activeAction = PlayerViewAction::Idle;
@@ -34,6 +34,7 @@ namespace renegade::runtime
         float blendDuration = 0.20f;
         bool initialized = false;
         bool pairedAssembly = false;
+        bool oneShotPlaying = false;
         wi::ecs::Entity activeWeaponClip = wi::ecs::INVALID_ENTITY;
         float pairedTime = 0.0f;
         std::vector<wi::ecs::Entity> ownedAssemblyClips;
@@ -44,6 +45,8 @@ namespace renegade::runtime
     {
         switch (action)
         {
+        case PlayerViewAction::Attack: return 3;
+        case PlayerViewAction::Reload: return 4;
         case PlayerViewAction::Walk: return 1;
         case PlayerViewAction::Sprint: return 2;
         case PlayerViewAction::Idle:
@@ -107,6 +110,11 @@ namespace renegade::runtime
         const std::string& authoredAction,
         PlayerViewAction& action) noexcept
     {
+        if (authoredAction == "Attack" || authoredAction == "Reload")
+        {
+            action = authoredAction == "Attack" ? PlayerViewAction::Attack : PlayerViewAction::Reload;
+            return true;
+        }
         if (authoredAction == "Idle")
         {
             action = PlayerViewAction::Idle;
@@ -353,7 +361,7 @@ namespace renegade::runtime
                     [](const auto& clip) { return clip.assemblyTrack == "weapon"; });
                 if (variants.size() != 2 || arms != 1 || weapon != 1)
                 {
-                    error = "Each assembly movement action requires one arms and one weapon track.";
+                    error = "Each assembly action requires one arms and one weapon track.";
                     ResetRuntimePlayerViewAnimations(scene, state); return false;
                 }
             }
@@ -513,20 +521,52 @@ namespace renegade::runtime
         wi::scene::Scene& scene,
         RuntimePlayerViewAnimationState& state,
         const PlayerViewAction requested,
-        const float dt) noexcept
+        const float dt,
+        const bool firePressed = false,
+        const bool reloadPressed = false) noexcept
     {
         if (!state.initialized)
             return;
 
         if (state.pairedAssembly)
         {
-            if (!RequestRuntimePlayerViewAnimation(scene, state, requested)) return;
+            // A discrete action owns both tracks until its shared duration finishes.
+            // Ignore new presses while busy; missing action pairs never play Idle as a shot.
+            PlayerViewAction next = requested;
+            if (state.oneShotPlaying)
+                next = state.activeAction;
+            else if (std::isfinite(dt) && dt > 0 && (reloadPressed || firePressed))
+            {
+                const auto action = reloadPressed ? PlayerViewAction::Reload : PlayerViewAction::Attack;
+                if (!state.clips[PlayerViewActionIndex(action)].empty())
+                {
+                    next = action;
+                    state.activeClip = wi::ecs::INVALID_ENTITY;
+                    state.oneShotPlaying = true;
+                }
+            }
+            if (!RequestRuntimePlayerViewAnimation(scene, state, next))
+            {
+                state.oneShotPlaying = false;
+                return;
+            }
             auto* arms = scene.animations.GetComponent(state.activeClip);
             auto* weapon = scene.animations.GetComponent(state.activeWeaponClip);
             if (arms == nullptr || weapon == nullptr) return;
             const float duration = std::max(arms->end - arms->start, weapon->end - weapon->start);
             if (std::isfinite(dt) && dt > 0 && duration > 0)
-                state.pairedTime = std::fmod(state.pairedTime + dt, duration);
+            {
+                if (state.oneShotPlaying)
+                {
+                    state.pairedTime = std::min(state.pairedTime + dt, duration);
+                    if (state.pairedTime >= duration)
+                        state.oneShotPlaying = false;
+                }
+                else
+                    state.pairedTime = std::fmod(state.pairedTime + dt, duration);
+            }
+            else if (duration <= 0)
+                state.oneShotPlaying = false;
             // Wicked evaluates native channels during the normal Scene update.
             // Paused tracks prevent a second timer advance. Short tracks hold.
             for (auto* clip : {arms, weapon})

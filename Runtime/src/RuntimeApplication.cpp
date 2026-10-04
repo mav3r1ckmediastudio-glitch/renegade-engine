@@ -424,7 +424,9 @@ namespace renegade::runtime
                         scenes_.GetScene(),
                         playerViewAnimation_,
                         playerViewRig_.action,
-                        paused_ ? 0.0f : dt);
+                        paused_ ? 0.0f : dt,
+                        !paused_ && gameplayInput.firePressed,
+                        !paused_ && gameplayInput.reloadPressed);
                 }
             }
         }

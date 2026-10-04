@@ -161,3 +161,15 @@ existing Idle/Walk/Run Runtime controller. Aim, jump, equip, firing and reload
 are retained authoring/preview actions; their gameplay input and staged action
 ownership are not implemented by this library slice. No damage, ammo or recoil
 gameplay claim is made.
+
+
+### Runtime fire and reload animation controls
+
+Left mouse triggers the assigned Attack pair once; R triggers the assigned Reload
+pair once. F8 resets the play session. Reload wins simultaneous presses; an active
+action completes before another action can start, then idle/walk/run resumes.
+Pause freezes the paired clock. Missing action assignments remain harmless.
+These controls currently drive animation only; ammunition, damage, sound and
+recoil gameplay remain later combat work. Legacy version-1 input maps gain fire
+and reload defaults; the old default R reset moves to F8 while custom bindings
+remain authored. Full-library Runtime must be rebuilt alongside the bridge.

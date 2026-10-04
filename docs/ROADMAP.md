@@ -218,3 +218,15 @@ acceptance responsibilities.
 Historical programme evidence remains in subsystem handoffs/specifications.
 This roadmap describes current priority and should not be used as a release
 claim for unfinished gates.
+
+
+### Runtime fire and reload animation controls
+
+Left mouse triggers the assigned Attack pair once; R triggers the assigned Reload
+pair once. F8 resets the play session. Reload wins simultaneous presses; an active
+action completes before another action can start, then idle/walk/run resumes.
+Pause freezes the paired clock. Missing action assignments remain harmless.
+These controls currently drive animation only; ammunition, damage, sound and
+recoil gameplay remain later combat work. Legacy version-1 input maps gain fire
+and reload defaults; the old default R reset moves to F8 while custom bindings
+remain authored. Full-library Runtime must be rebuilt alongside the bridge.

@@ -28,6 +28,8 @@ namespace renegade::runtime
         Idle,
         Walk,
         Sprint,
+        Attack,
+        Reload,
     };
 
     [[nodiscard]] inline const char* PlayerViewActionName(
@@ -35,6 +37,8 @@ namespace renegade::runtime
     {
         switch (action)
         {
+        case PlayerViewAction::Attack: return "Attack";
+        case PlayerViewAction::Reload: return "Reload";
         case PlayerViewAction::Walk: return "Walk";
         case PlayerViewAction::Sprint: return "Sprint";
         case PlayerViewAction::Idle:

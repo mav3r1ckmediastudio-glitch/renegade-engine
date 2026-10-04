@@ -926,3 +926,14 @@ at the existing thread-safe point, and retain the previous rendered texture
 until the new preview has completed rendering. Stale/invalid drafts cannot save.
 Preview reconstruction preserves selected action, scrub time and play state.
 This does not add an equipment controller or Runtime action-input routing.
+
+
+### Paired Runtime action input
+
+GameplayInputService appends Fire and Reload to the version-1 action map and
+polls discrete presses through the existing input seam. The existing Player View
+animation state owns explicit Attack/Reload pairs for one shared non-looping
+duration; shorter tracks hold their final pose. Busy actions reject repeated
+presses and completion returns to current movement. Reload has simultaneous-input
+priority. Runtime pause passes zero time and no action presses. This is bounded
+animation routing, with no parallel controller or combat simulation.

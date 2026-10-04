@@ -840,3 +840,12 @@ target_link_libraries(RenegadeFirstPersonAssemblySettingsTests PRIVATE Renegade:
 add_test(NAME FirstPersonAssemblySettings COMMAND RenegadeFirstPersonAssemblySettingsTests)
 set_target_properties(RenegadeFirstPersonAssemblySettingsTests PROPERTIES FOLDER "Renegade/Tests")
 add_dependencies(RenegadeBridgeTests RenegadeFirstPersonAssemblySettingsTests)
+
+
+add_executable(RenegadeGameplayInputTests Phase6Gate2InputTests.cpp)
+target_link_libraries(RenegadeGameplayInputTests PRIVATE Renegade::EngineBridge)
+target_compile_options(RenegadeGameplayInputTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+set_target_properties(RenegadeGameplayInputTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeGameplayInputTests COMMAND RenegadeGameplayInputTests)
+
+add_dependencies(RenegadeBridgeTests RenegadeGameplayInputTests)

@@ -143,6 +143,10 @@ namespace
         const auto armsWalk = add(armsTarget, "Walk", "arms", 0, 1);
         const auto weaponWalk = add(weaponTarget, "Walk", "weapon", 1, 1);
         const auto reload = add(armsTarget, "Reload", "arms", 0, 3);
+        const auto reloadWeapon = add(weaponTarget, "Reload", "weapon", 1, 1);
+        const auto fire = add(armsTarget, "Attack", "arms", 0, 0.5f);
+        const auto fireWeapon = add(weaponTarget, "Attack", "weapon", 2, 0.25f);
+
         RuntimePlayerViewRigState rig; rig.viewModelRoot = root;
         RuntimePlayerViewAnimationState state; std::string error;
         if (!InitializeRuntimePlayerViewAnimations(scene, rig, state, error) || !state.pairedAssembly)
@@ -195,6 +199,32 @@ namespace
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Sprint, 0.1f);
         if (state.activeClip != armsWalk || !Near(state.pairedTime, 0.2f))
             Fail("Sprint fallback restarted its Walk pair");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, true, true);
+        if (state.activeClip != reload || state.activeWeaponClip != reloadWeapon || !state.oneShotPlaying)
+            Fail("reload did not own both tracks with priority over fire");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Sprint, 0, true, false);
+        if (!Near(state.pairedTime, 0.1f)) Fail("paused action advanced or retriggered");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Sprint, 1.5f, true, true);
+        if (state.activeClip != reload || !Near(state.pairedTime, 1.6f) ||
+            !Near(scene.animations.GetComponent(reloadWeapon)->timer, 2))
+            Fail("busy action restarted or short weapon track did not hold");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 2);
+        if (state.oneShotPlaying || !Near(state.pairedTime, 3))
+            Fail("reload looped instead of completing once");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f);
+        if (state.activeClip != armsWalk || !Near(state.pairedTime, 0.1f))
+            Fail("completed action did not return to movement");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 0.1f, true);
+        if (state.activeClip != fire || state.activeWeaponClip != fireWeapon)
+            Fail("fire press did not select its explicit pair");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 1);
+        if (state.oneShotPlaying || !Near(state.pairedTime, 0.5f))
+            Fail("fire did not complete once");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 0.1f, true);
+        if (!state.oneShotPlaying || !Near(state.pairedTime, 0.1f))
+            Fail("second fire press did not restart at the beginning");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f);
         ResetRuntimePlayerViewAnimations(scene, state);
         if (state.initialized || state.activeWeaponClip != wi::ecs::INVALID_ENTITY ||
             !Near(scene.animations.GetComponent(weaponWalk)->amount, 0))

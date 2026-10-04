@@ -71,9 +71,12 @@ int main()
         "S7 Interact default is not E");
     Check(Binding(map, GameplayAction::Pause).keyboard == "ESCAPE",
         "pause default is not Escape");
-    Check(Binding(map, GameplayAction::Reset).keyboard == "R",
-        "reset default is not R");
+    Check(Binding(map, GameplayAction::Reset).keyboard == "F8",
+        "reset default is not F8");
 
+    Check(Binding(map, GameplayAction::Fire).mouse == "MOUSE_LEFT" &&
+            Binding(map, GameplayAction::Reload).keyboard == "R",
+        "fire/reload defaults were not assigned");
     auto rebound = map;
     rebound.bindings[static_cast<std::size_t>(GameplayAction::MoveForward)].keyboard = "I";
     rebound.bindings[static_cast<std::size_t>(GameplayAction::MoveBackward)].keyboard = "K";
@@ -132,6 +135,13 @@ int main()
         if (first != std::string::npos && next != std::string::npos)
             legacyText.erase(first, next - first);
 
+        const auto fireStart = legacyText.find("[action.fire]\n");
+        const auto settingsStart = legacyText.find("[settings]", fireStart);
+        if (fireStart != std::string::npos && settingsStart != std::string::npos)
+            legacyText.erase(fireStart, settingsStart - fireStart);
+        const auto resetKey = legacyText.find("keyboard = F8", legacyText.find("[action.reset]"));
+        if (resetKey != std::string::npos)
+            legacyText.replace(resetKey, std::string("keyboard = F8").size(), "keyboard = R");
         const fs::path legacyPath = root / "legacy-v1.renegade-input";
         std::ofstream legacy(legacyPath, std::ios::binary | std::ios::trunc);
         legacy << legacyText;
@@ -144,6 +154,10 @@ int main()
             "pre-S7 version-1 input map did not migrate in memory: " + error);
         Check(Binding(legacyMap, GameplayAction::Interact).keyboard == "E",
             "legacy input map did not receive the S7 E Interact default");
+        Check(Binding(legacyMap, GameplayAction::Reset).keyboard == "F8" &&
+                Binding(legacyMap, GameplayAction::Reload).keyboard == "R" &&
+                Binding(legacyMap, GameplayAction::Fire).mouse == "MOUSE_LEFT",
+            "old R reset map did not adopt fire/reload safely");
         Check(Binding(legacyMap, GameplayAction::MoveForward).keyboard == "I",
             "legacy migration disturbed an authored binding");
     }
