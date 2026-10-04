@@ -1834,3 +1834,30 @@ Tools/__pycache__/ and log.txt preserved. P1 remains IN PROGRESS. Next: actual
 Studio BUILD > BUILD WINDOWS GAME export and owner launch parity for this real
 assembly; independent exact-commit verification remains pending. Gameplay reload,
 firing and paired crossfades are not claimed.
+
+## Owner actual Assembly Proof export acceptance - 4 October 2026
+
+Following a277ec8, original deep-root Studio export failed at Gate 2 copying the
+retained shotgun ORM texture. Source exists and about 44 GB free; failed staging
+path measured 265 characters. Prepared separate short-root project via robocopy
+/E /XD Builds Intermediate Saved /R:1 /W:1; all 49 copied files hash-identical.
+First retry still opened original project, confirmed by live Studio diagnostics.
+Owner then opened short-root copy and reports "the build works". Recovered image
+shows exported Assembly Proof Runtime DX12 with textured arms and shotgun, 74 FPS,
+and export folder Explorer behind it. Read-only inspection confirms promoted
+Assembly Proof.exe plus build-report and package-manifest. Export executable SHA256:
+E9DA5D6F437D55F9B8A72E232A4B24F90A98E38F172AE9067DC4C72905E17E8A.
+Build report status gate5_validated_for_final_path; package isolation and smoke
+passed_gate4, safe rebuild passed_gate5, distribution_ready=false. Its configured
+revision remains 6562c812 (running Studio configuration metadata); do not treat
+that as an independent exact-31263ba verification.
+
+This records bounded actual Studio export launch/visual acceptance for this real
+assembly, alongside prior Test Level acceptance. No gameplay reload/fire claim or
+whole P1 gate closure. Path-length workaround succeeded; durable long-path handling
+and OS-error diagnostics remain outstanding. Earlier HANDOFF append attempts were
+blocked by a file-sharing lock; this entry records those outcomes now. Changed
+HANDOFF, assembly authoring status and feature ledger only; git diff --check.
+No code rebuild, user app launch/closure, upstream edits, push or merge. Next:
+independent exact-commit verification and remaining P1 authoring lifecycle work.
+Existing Tools/__pycache__/ and log.txt remain untracked.
