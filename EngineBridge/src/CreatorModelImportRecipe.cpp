@@ -1,5 +1,6 @@
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/HumanoidRetargetService.h"
+#include "renegade/bridge/MatchingRigAnimationService.h"
 
 #include <algorithm>
 #include <cmath>
@@ -164,7 +165,7 @@ namespace renegade::bridge
             const std::string& projectRoot,
             const std::string& projectRelativePath,
             std::string& sourcePath,
-            std::string& error)
+            std::string& error, bool textureSource = false)
         {
             sourcePath.clear();
             if (projectRoot.empty())
@@ -191,9 +192,11 @@ namespace renegade::bridge
             for (const auto& part : relative)
                 parts.push_back(part.generic_u8string());
             if (parts.size() < 4 || parts[0] != "SourceAssets" ||
-                parts[1] != "Animations" || parts[2] != "Snapshots")
+                (textureSource ? parts[1] != "Models" :
+                    (parts[1] != "Animations" || parts[2] != "Snapshots")))
             {
                 error =
+                    textureSource ? "Relink texture is outside the governed SourceAssets/Models tree." :
                     "Character external animation source is outside the governed SourceAssets/Animations/Snapshots tree.";
                 return false;
             }
@@ -378,20 +381,22 @@ namespace renegade::bridge
                         projectRoot, group.projectRelativePath, sourcePath, error))
                     return false;
 
-                RetargetHumanoidAnimationsCommand command(
-                    scene, destinationHumanoid, sourcePath,
-                    std::any_of(group.clips.begin(), group.clips.end(),
-                        [](const auto* clip) { return clip && clip->autoMapSource; }));
-                if (!command.Execute())
-                {
-                    error =
-                        "Character external animation retarget failed for '" +
-                        group.projectRelativePath + "': " + command.Result().error +
-                        " Repair the Character/source humanoid mapping and reimport; Mixamo/VRM-compatible rigs are auto-mapped when possible.";
-                    return false;
+                struct ClipResult { std::vector<wi::ecs::Entity> createdAnimations; size_t sourceAnimationCount=0; } result;
+                const bool matching=group.clips.front()->matchingRig;
+                if(std::any_of(group.clips.begin(),group.clips.end(),
+                    [matching](const auto* clip){return clip->matchingRig!=matching;}))
+                {error="External source mixes matching-rig and retarget modes.";return false;}
+                if(matching) {
+                    if(!ImportMatchingRigAnimations(scene,sourcePath,result.createdAnimations,error))return false;
+                    result.sourceAnimationCount=result.createdAnimations.size();
+                } else {
+                    RetargetHumanoidAnimationsCommand command(scene,destinationHumanoid,sourcePath,
+                        std::any_of(group.clips.begin(),group.clips.end(),
+                            [](const auto* clip){return clip && clip->autoMapSource;}));
+                    if(!command.Execute()){error=command.Result().error;return false;}
+                    result.createdAnimations.assign(command.Result().createdAnimations.begin(),command.Result().createdAnimations.end());
+                    result.sourceAnimationCount=command.Result().sourceAnimationCount;
                 }
-
-                const auto& result = command.Result();
                 if (result.createdAnimations.size() != result.sourceAnimationCount ||
                     result.createdAnimations.size() <= maximumSourceIndex)
                 {
@@ -446,7 +451,7 @@ namespace renegade::bridge
                     if (keptAnimations.count(entity) == 0)
                         scene.Entity_Remove(entity, true);
                 }
-                scene.ResetPose(destinationHumanoid);
+                if(destinationHumanoid!=wi::ecs::INVALID_ENTITY)scene.ResetPose(destinationHumanoid);
             }
 
             error.clear();
@@ -473,7 +478,7 @@ namespace renegade::bridge
                 if (iterator.key() != "asset_kind" &&
                     iterator.key() != "transform" &&
                     iterator.key() != "materials" && iterator.key() != "animations" &&
-                    iterator.key() != "external_animations" && iterator.key() != "hand_grips")
+                    iterator.key() != "external_animations" && iterator.key() != "texture_relinks" && iterator.key() != "hand_grips")
                 {
                     error = "Creator model import options contain an unsupported key: " +
                         iterator.key();
@@ -536,6 +541,27 @@ namespace renegade::bridge
                     return false;
             }
 
+            if(root.contains("texture_relinks")) {
+                if(!root.at("texture_relinks").is_array()){error="Texture relinks must be an array.";return false;}
+                std::set<std::pair<std::uint32_t,std::uint32_t>> slots;
+                for(const auto& item:root.at("texture_relinks")) {
+                    if(!item.is_object() || item.size()!=3 || !item.contains("material_index") ||
+                        !item.at("material_index").is_number_unsigned() || !item.contains("texture_slot") ||
+                        !item.at("texture_slot").is_number_unsigned() || !item.contains("source_project_relative_path") ||
+                        !item.at("source_project_relative_path").is_string())
+                    {error="Texture relink requires material index, slot and retained source path.";return false;}
+                    CreatorTextureRelinkRecipe relink;
+                    relink.materialIndex=item.at("material_index").get<std::uint32_t>();
+                    relink.textureSlot=item.at("texture_slot").get<std::uint32_t>();
+                    relink.sourceProjectRelativePath=item.at("source_project_relative_path").get<std::string>();
+                    const auto path=fs::u8path(relink.sourceProjectRelativePath);
+                    if(relink.textureSlot>=wi::scene::MaterialComponent::TEXTURESLOT_COUNT || path.empty() ||
+                        path.is_absolute() || relink.sourceProjectRelativePath.find("..")!=std::string::npos ||
+                        !slots.emplace(relink.materialIndex,relink.textureSlot).second)
+                    {error="Texture relink path or material slot is invalid.";return false;}
+                    recipe.textureRelinks.push_back(std::move(relink));
+                }
+            }
             if (root.contains("materials"))
             {
                 if (!root.at("materials").is_array())
@@ -670,8 +696,10 @@ namespace renegade::bridge
                 {
                     if (!item.is_object() || item.size() != 6 +
                         (item.contains("auto_map_source") ? 1 : 0) +
+                        (item.contains("matching_rig") ? 1 : 0) +
                         (item.contains("action") ? 1 : 0) + (item.contains("speed") ? 1 : 0) ||
                         (item.contains("auto_map_source") && !item.at("auto_map_source").is_boolean()) ||
+                        (item.contains("matching_rig") && !item.at("matching_rig").is_boolean()) ||
                         (item.contains("action") && !item.at("action").is_string()) ||
                         (item.contains("speed") && !item.at("speed").is_number()) ||
                         !item.contains("source_project_relative_path") ||
@@ -690,6 +718,7 @@ namespace renegade::bridge
                     animation.sourceProjectRelativePath =
                         item.at("source_project_relative_path").get<std::string>();
                     animation.autoMapSource = item.value("auto_map_source", false);
+                    animation.matchingRig = item.value("matching_rig", false);
                     animation.action = item.value("action", std::string{});
                     animation.speed = item.value("speed", 1.0f);
                     if (animation.action.size() > 64 ||
@@ -771,6 +800,12 @@ namespace renegade::bridge
                 {"scale", {transform.scaleX, transform.scaleY,
                     transform.scaleZ}},
             };
+        }
+        if(!recipe.textureRelinks.empty()) {
+            root["texture_relinks"]=nlohmann::json::array();
+            for(const auto& relink:recipe.textureRelinks)
+                root["texture_relinks"].push_back({{"material_index",relink.materialIndex},
+                    {"texture_slot",relink.textureSlot},{"source_project_relative_path",relink.sourceProjectRelativePath}});
         }
         if (!recipe.materials.empty())
         {
@@ -854,6 +889,7 @@ namespace renegade::bridge
                     {"start", animation.start},
                 });
                 if (animation.autoMapSource) animations.back()["auto_map_source"] = true;
+                if (animation.matchingRig) animations.back()["matching_rig"] = true;
                 if (!animation.action.empty()) animations.back()["action"] = animation.action;
                 if (animation.speed != 1.0f) animations.back()["speed"] = animation.speed;
             }
@@ -925,6 +961,18 @@ namespace renegade::bridge
             // will propagate world transforms when a graphics context exists.
         }
 
+        for(const auto& relink:recipe.textureRelinks) {
+            if(relink.materialIndex>=scene.materials.GetCount() ||
+                relink.textureSlot>=wi::scene::MaterialComponent::TEXTURESLOT_COUNT)
+            {error="Relink material slot disappeared after conversion.";return false;}
+            std::string path;
+            if(!ResolveExternalAnimationSource(projectRoot,relink.sourceProjectRelativePath,path,error,true))return false;
+            auto& texture=scene.materials[relink.materialIndex].textures[relink.textureSlot];
+            texture.resource=wi::resourcemanager::Load(path,wi::resourcemanager::Flags::IMPORT_RETAIN_FILEDATA);
+            if(!texture.resource.IsValid() || !texture.resource.GetTexture().IsValid())
+            {error="Retained relink texture could not decode.";return false;}
+            texture.name=path;scene.materials[relink.materialIndex].SetDirty();
+        }
         for (const auto& materialRecipe : recipe.materials)
         {
             if (materialRecipe.materialIndex >= scene.materials.GetCount())
@@ -1046,7 +1094,8 @@ namespace renegade::bridge
 
             wi::ecs::Entity destinationHumanoid = wi::ecs::INVALID_ENTITY;
             if (!PrepareCharacterHumanoid(
-                    scene, hasEnabledExternalAnimation,
+                    scene, std::any_of(recipe.externalAnimations.begin(),recipe.externalAnimations.end(),
+                        [](const auto& clip){return clip.enabled && !clip.matchingRig;}),
                     destinationHumanoid, error))
             {
                 return false;
@@ -1054,7 +1103,9 @@ namespace renegade::bridge
 
             if (hasEnabledExternalAnimation)
             {
-                if (destinationHumanoid == wi::ecs::INVALID_ENTITY)
+                if (destinationHumanoid == wi::ecs::INVALID_ENTITY &&
+                    std::any_of(recipe.externalAnimations.begin(),recipe.externalAnimations.end(),
+                        [](const auto& clip){return clip.enabled && !clip.matchingRig;}))
                 {
                     error =
                         "Character external animations require a prepared humanoid destination.";

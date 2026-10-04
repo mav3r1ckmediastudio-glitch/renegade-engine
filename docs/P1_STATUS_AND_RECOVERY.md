@@ -162,3 +162,14 @@ Acceptance: arms extend forward from below the camera; hands are ahead of
 elbows, the view stays clear, both arms retain correct skinning/materials, and
 camera-relative framing stays stable during movement and look changes.
 The bounded next outcome is a stable visible rig, not more combat features.
+
+## 4 October source-assembly acceptance and import foundation
+
+The owner now accepts the authored shotgun diagnostic grip, shell contacts and
+reload quality. Earlier unaccepted hand-joint/Handle and lateral nudges are
+superseded by source checkpoint 7c4a976 using the original demo attachment.
+Matching-rig clip import and explicit texture relinks now have governed
+commit/reopen, retained-recipe and fresh-process render evidence.
+See P1_ASSEMBLY_IMPORT_FOUNDATION.md. Historical failure statements above refer
+to the earlier experiments; production Studio assembly authoring, existing Player
+integration and real-arms Test Level/Build Game parity are still pending.

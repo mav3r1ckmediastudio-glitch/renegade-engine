@@ -876,3 +876,13 @@ asset working copy and command history. Save journals the native product, manage
 projection and registry together, retaining hierarchy-path bindings in the import
 recipe. See P1_HAND_GRIP_EDITOR.md. There is no name-inferred hand mapping or
 separate skeleton evaluator.
+
+### Matching-rig animation and explicit FBX relinks
+
+MatchingRigAnimationService validates one named skeleton, parent topology and
+inverse binds before copying native channels/keyframe data without retargeting.
+ModelImportCandidateService tries this route before the existing humanoid route.
+Explicit material-slot relinks snapshot selected texture bytes and retain their
+project-relative paths in the import recipe and journaled model transaction.
+These are shared bridge boundaries; Studio does not implement another converter.
+See P1_ASSEMBLY_IMPORT_FOUNDATION.md for real-pack evidence and creator UI limits.

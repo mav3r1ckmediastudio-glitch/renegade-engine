@@ -506,9 +506,15 @@ namespace renegade::bridge
                 clip.sourceProjectRelativePath = dependencyPaths[external->dependencyIndex].lexically_relative(root).generic_u8string();
                 clip.sourceAnimationIndex = static_cast<std::uint32_t>(i - external->firstAnimationIndex);
                 clip.name = name ? name->name : "External Clip " + std::to_string(i + 1);
-                clip.start = native.start; clip.end = native.end; clip.action = action; clip.autoMapSource = true;
+                clip.start = native.start; clip.end = native.end; clip.action = action; clip.autoMapSource = !external->matchingRig; clip.matchingRig = external->matchingRig;
                 authoredRecipe.externalAnimations.push_back(std::move(clip));
             }
+        }
+        for(size_t d=0;d<candidate.Dependencies().size();++d) {
+            const auto& dependency=candidate.Dependencies()[d];
+            if(dependency.explicitRelink)
+                authoredRecipe.textureRelinks.push_back({dependency.materialIndex,dependency.textureSlot,
+                    dependencyPaths[d].lexically_relative(root).generic_u8string()});
         }
         std::string authoredOptions;
         if (!SerializeCreatorModelImportOptions(authoredRecipe, authoredOptions, result.error)) return result;

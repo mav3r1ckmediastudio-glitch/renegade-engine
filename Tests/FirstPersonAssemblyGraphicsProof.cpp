@@ -3,6 +3,11 @@
 #include "renegade/bridge/ModelAnimationPreviewService.h"
 #include "../Studio/src/ModelImportPreview.h"
 #include <WickedEngine.h>
+#include "renegade/bridge/ModelImportCommitService.h"
+#include "renegade/bridge/MatchingRigAnimationService.h"
+#include "renegade/bridge/CreatorAssetWorkflowService.h"
+#include "renegade/bridge/CreatorModelImportRecipe.h"
+#include "../WickedEngine/Editor/json.hpp"
 #include "../WickedEngine/Editor/ModelImporter.h"
 #include <Windows.h>
 #include <filesystem>
@@ -31,25 +36,48 @@ static bool Capture(wi::scene::Scene& scene, const fs::path& file, bool firstPer
         preview.scene->animations[i].timer=scene.animations[i].timer;
         preview.scene->animations[i].last_update_time=-std::numeric_limits<float>::max();
     }
-    for (int frame=0; frame<3000 && !preview.IsReady(); ++frame)
+    std::vector<uint8_t> png;
+    bool visible=false;
+    for (int frame=0; frame<3000; ++frame)
     {
         wi::eventhandler::FireEvent(wi::eventhandler::EVENT_THREAD_SAFE_POINT,0);
         preview.PreUpdate(); preview.Update(1.0f/60); preview.PreRender(); preview.Render();
         wi::graphics::GetDevice()->SubmitCommandLists();
         wi::renderer::UpdateGPUSuballocator(); Sleep(10);
+        if(!preview.IsReady())continue;
+        if(!preview.CapturePng(png,error)){std::cerr<<error<<"\n";return false;}
+        const auto decoded=wi::resourcemanager::Load("assembly-pixels-"+GenerateStableId()+".png",
+            wi::resourcemanager::Flags::NONE,png.data(),png.size());
+        wi::vector<uint8_t> pixels;
+        if(!decoded.IsValid() || !decoded.GetTexture().IsValid() ||
+            !wi::helper::saveTextureToMemory(decoded.GetTexture(),pixels) ||
+            pixels.size()<512*320*4)return false;
+        size_t contrasting=0, litModelPixels=0;
+        for(size_t p=0;p+4<=512*320*4;p+=4) {
+            if(pixels[p]>100 || pixels[p+1]>100 || pixels[p+2]>100)++litModelPixels;
+            if(std::abs(int(pixels[p])-int(pixels[0]))+
+                std::abs(int(pixels[p+1])-int(pixels[1]))+
+                std::abs(int(pixels[p+2])-int(pixels[2]))>20)++contrasting;
+        }
+        if((firstPerson?litModelPixels:contrasting)>50){visible=true;break;}
     }
-    std::vector<uint8_t> png;
-    if (!preview.CapturePng(png,error)) { std::cerr << error << '\n'; return false; }
+    if(!visible){std::cerr<<"No rendered assembly pixels: "<<file.generic_u8string()<<"\n";return false;}
     std::ofstream out(file,std::ios::binary);
     out.write(reinterpret_cast<const char*>(png.data()),png.size());
     return out.good();
 }
-static void Pose(wi::scene::Scene& scene,float time)
+static void Pose(wi::scene::Scene& scene,float time,const std::string& action={})
 {
     for (size_t i=0;i<scene.animations.GetCount();++i)
     {
         auto& clip=scene.animations[i]; clip.Pause(); clip.RootMotionOff();
-        clip.amount=1; clip.timer=std::min(time,clip.end);
+        clip.amount=1;
+        if(!action.empty()) {
+            const auto* metadata=scene.metadatas.GetComponent(scene.animations.GetEntity(i));
+            if(metadata && metadata->string_values.has(CreatorCharacterAnimationActionMetadataKey))
+                clip.amount=metadata->string_values.get(CreatorCharacterAnimationActionMetadataKey)==action?1.0f:0.0f;
+        }
+        clip.timer=std::min(time,clip.end);
         clip.last_update_time=-std::numeric_limits<float>::max();
     }
     scene.Update(1.0f/60);
@@ -85,7 +113,7 @@ static bool Assembly(wi::scene::Scene& arms,wi::scene::Scene& weapon,
     weaponRoot->UpdateTransform();
     for(float time : {0.0f,0.6f,1.2f,2.0f,2.9f})
     {
-        Pose(arms,time);
+        Pose(arms,time,action=="idle"?"Idle":"Reload");
         const auto p=arms.transforms.GetComponent(anchor)->GetPosition();
         std::cout<<action<<" t="<<time<<" attachment="<<p.x<<","<<p.y<<","<<p.z<<"\n";
         if(!Capture(arms,output/(action+"-"+std::to_string(time)+".png"))) return false;
@@ -97,7 +125,7 @@ static bool Assembly(wi::scene::Scene& arms,wi::scene::Scene& weapon,
     wi::scene::Scene reopened;
     wi::Archive saved((output/(action+".wiscene")).generic_u8string(),true,false);
     if(!saved.IsOpen()) return false;
-    reopened.Serialize(saved); Pose(reopened,1.2f);
+    reopened.Serialize(saved); Pose(reopened,1.2f,action=="idle"?"Idle":"Reload");
     if(!Capture(reopened,output/(action+"-reopened.png"))) return false;
     return true;
 }
@@ -200,6 +228,155 @@ static bool RelinkDiagnosticMaterials(wi::scene::Scene& scene,const fs::path& in
     return true;
 }
 
+static bool WorkflowProof(const fs::path& input,const fs::path& output)
+{
+    const auto project=output/("project-"+GenerateStableId().substr(0,8));
+    fs::create_directories(project);
+    const auto projectId=GenerateStableId();
+    wi::allocator::shared_ptr<wi::scene::Scene> retained[2];
+    for(int part=0;part<2;++part) {
+        using M=wi::scene::MaterialComponent;
+        std::vector<ModelImportTextureRelink> relinks;
+        auto add=[&](uint32_t material,uint32_t slot,const std::string& path){
+            relinks.push_back({material,slot,(input/path).generic_u8string()});};
+        if(part==0) {
+            add(0,M::BASECOLORMAP,"Textures/Manny/T_Manny_02_D.PNG");
+            add(0,M::NORMALMAP,"Textures/Manny/T_Manny_02_N.PNG");
+            add(1,M::BASECOLORMAP,"Textures/Manny/T_Manny_01_D.PNG");
+            add(1,M::NORMALMAP,"Textures/Manny/T_Manny_01_N.PNG");
+        } else {
+            for(uint32_t material=0;material<2;++material) {
+                const std::string prefix=material==0?"Meshes/Textures/Weapon/T_Sawed_Off_Shotgun_":
+                    "Meshes/Textures/Shell/T_Shell_Red_";
+                add(material,M::BASECOLORMAP,prefix+"BaseColor.PNG");
+                add(material,M::NORMALMAP,prefix+"Normal.PNG");
+                add(material,M::SURFACEMAP,prefix+"OcclusionRoughnessMetallic.PNG");
+            }
+        }
+        const auto idle=input/(part==0?"Animations/AS_Shotgun_Idle.FBX":"Animations/Weapon/AS_Shotgun_Idle.FBX");
+        const auto reload=input/(part==0?"Animations/AS_Shotgun_Reload.FBX":"Animations/Weapon/AS_Shotgun_Reload.FBX");
+        auto candidate=ModelImportCandidateService().PrepareModel(idle.generic_u8string(),relinks);
+        if(!candidate.IsReady()){std::cerr<<"WORKFLOW PREPARE "<<candidate.Error()<<"\n";return false;}
+        if(part==0) {
+            auto duplicate=relinks;duplicate.push_back(relinks.front());
+            if(ModelImportCandidateService().PrepareModel(idle.generic_u8string(),duplicate).IsReady())return false;
+            const auto copy=output/"dependency-change.png";
+            fs::copy_file(fs::u8path(relinks.front().sourcePath),copy,fs::copy_options::overwrite_existing);
+            auto changedRelinks=relinks;changedRelinks.front().sourcePath=copy.generic_u8string();
+            auto changed=ModelImportCandidateService().PrepareModel(idle.generic_u8string(),changedRelinks);
+            if(!changed.IsReady())return false;
+            std::ofstream(copy,std::ios::binary|std::ios::app).put('x');
+            ModelImportCommitRequest rejected;rejected.projectRoot=project.generic_u8string();
+            rejected.projectId=projectId;rejected.assetName="Changed Dependency";rejected.characterAsset=true;
+            const auto failure=ModelImportCommitService().CommitModel(rejected,changed);
+            if(failure.succeeded || failure.committed || failure.error.find("changed")==std::string::npos ||
+                fs::exists(project/"Content/Models/Changed Dependency.rasset"))return false;
+            fs::remove(copy);
+            std::cout<<"DUPLICATE RELINK AND CHANGED-DEPENDENCY COMMIT REJECTION PASS\n";
+        }
+        const auto before=candidate.Evidence();
+        std::vector<wi::vector<XMFLOAT4>> originalWeights;
+        for(size_t m=0;m<candidate.PeekScene()->meshes.GetCount();++m)
+            originalWeights.push_back(candidate.PeekScene()->meshes[m].vertex_boneweights);
+        std::string error;
+        if(!ModelImportCandidateService().AppendExternalAnimations(candidate,reload.generic_u8string(),error))
+        {std::cerr<<"MATCHING CLIP "<<error<<"\n";return false;}
+        if(candidate.Summary().animations!=2 || candidate.ExternalAnimations().size()!=1 ||
+            !candidate.ExternalAnimations()[0].matchingRig ||
+            candidate.Evidence().skinIndexFingerprint!=before.skinIndexFingerprint ||
+            candidate.Evidence().inverseBindFingerprint!=before.inverseBindFingerprint)
+        {std::cerr<<"Native matching rig altered geometry or used retargeting: clips="<<candidate.Summary().animations<<" exact="<<candidate.ExternalAnimations()[0].matchingRig<<" weights="<<before.skinWeightFingerprint<<"/"<<candidate.Evidence().skinWeightFingerprint<<" binds="<<before.inverseBindFingerprint<<"/"<<candidate.Evidence().inverseBindFingerprint<<"\n";return false;}
+        float maxWeightChange=0;
+        for(size_t m=0;m<originalWeights.size();++m) {
+            const auto& weights=candidate.PeekScene()->meshes[m].vertex_boneweights;
+            if(weights.size()!=originalWeights[m].size())return false;
+            for(size_t v=0;v<weights.size();++v)
+                for(int axis=0;axis<4;++axis)
+                    maxWeightChange=std::max(maxWeightChange,std::abs((&weights[v].x)[axis]-(&originalWeights[m][v].x)[axis]));
+        }
+        std::cout<<"MATCHING RIG "<<part<<" max clone weight normalization="<<maxWeightChange<<"\n";
+        if(maxWeightChange>0.000001f)return false;
+        ModelImportCommitRequest request;
+        request.projectRoot=project.generic_u8string();request.projectId=projectId;
+        request.assetName=part==0?"Shotgun Arms":"Shotgun Weapon";
+        request.characterAsset=true;request.animationActions={"Idle","Reload"};
+        auto result=ModelImportCommitService().CommitModel(request,candidate);
+        if(!result.succeeded){std::cerr<<"WORKFLOW COMMIT "<<result.error<<"\n";return false;}
+        auto reopened=CreatorAssetWorkflowService().PrepareModelPlacement(request.projectRoot,projectId,result.assetId);
+        if(!reopened.IsReady()){std::cerr<<"WORKFLOW REOPEN "<<reopened.Result().error<<"\n";return false;}
+        retained[part]=reopened.ReleaseScene();
+        if(retained[part]->animations.GetCount()!=2){std::cerr<<"Retained clip count changed\n";return false;}
+        ReusableModelAssetDocument document;
+        if(!ReadReusableModelAssetDocument((project/result.assetProjectRelativePath).generic_u8string(),document,error))return false;
+        CreatorModelImportRecipe recipe;
+        if(!ParseCreatorModelImportOptions(nlohmann::json::parse(document.manifest.settingsJson).at("options").dump(),recipe,error) ||
+            recipe.textureRelinks.size()!=relinks.size() || recipe.externalAnimations.size()!=1 ||
+            !recipe.externalAnimations[0].matchingRig)return false;
+        wi::scene::Scene rebuilt;
+        ImportModel_FBX((project/result.sourceProjectRelativePath).generic_u8string(),rebuilt);
+        if(!ApplyCreatorModelImportRecipe(rebuilt,request.projectRoot,projectId,recipe,error))
+        {std::cerr<<"RETAINED RECIPE "<<error<<"\n";return false;}
+        if(rebuilt.animations.GetCount()!=2)return false;
+        for(size_t i=0;i<rebuilt.materials.GetCount();++i) {
+            auto& material=rebuilt.materials[i];
+            for(const auto& texture:material.textures)
+                if(!texture.name.empty() && (!texture.resource.IsValid() ||
+                    !texture.resource.GetTexture().IsValid()))return false;
+        }
+        if(!Capture(rebuilt,output/("retained-recipe-"+std::to_string(part)+".png")))return false;
+        for(size_t i=0;i<retained[part]->materials.GetCount();++i) {
+            auto& material=retained[part]->materials[i];
+            material.baseColor=XMFLOAT4(1,1,1,1);material.normalMapStrength=1;
+            material.roughness=part==0?0.6f:1.0f;
+            if(part!=0){material.metalness=1;material.SetOcclusionEnabled_Primary(true);}
+            material.SetDirty();
+        }
+        std::cout<<"GOVERNED PART "<<part<<" matching rig clips retained/rebuilt; asset "<<result.assetId<<"\n";
+    }
+    wi::scene::Scene idleArms,idleWeapon;
+    for(int part=0;part<2;++part) {
+        Pose(*retained[part],0,"Idle");
+        wi::Archive clone;retained[part]->Serialize(clone);clone.SetReadModeAndResetPos(true);
+        (part==0?idleArms:idleWeapon).Serialize(clone);
+    }
+    if(!Assembly(idleArms,idleWeapon,output,"idle") ||
+        !Assembly(*retained[0],*retained[1],output,"reload"))return false;
+    std::ofstream(output/"latest-project.txt")<<fs::absolute(project).generic_u8string();
+    std::cout<<"GOVERNED TEXTURES, NATIVE MATCHING CLIPS, COMMIT, REOPEN, RETAINED RECIPE AND ASSEMBLY PASS\n";
+    return true;
+}
+
+static bool ColdWorkflowProof(const fs::path& project,const fs::path& output)
+{
+    wi::allocator::shared_ptr<wi::scene::Scene> scenes[2];
+    for(int part=0;part<2;++part) {
+        const auto path=project/"Content/Models"/(part==0?"Shotgun Arms.rasset":"Shotgun Weapon.rasset");
+        ReusableModelAssetDocument document;std::string error;
+        if(!ReadReusableModelAssetDocument(path.generic_u8string(),document,error))return false;
+        auto loaded=CreatorAssetWorkflowService().PrepareModelPlacement(project.generic_u8string(),
+            document.manifest.projectId,document.manifest.assetId);
+        if(!loaded.IsReady()){std::cerr<<loaded.Result().error<<"\n";return false;}
+        scenes[part]=loaded.ReleaseScene();
+        if(scenes[part]->animations.GetCount()!=2)return false;
+        for(size_t i=0;i<scenes[part]->materials.GetCount();++i) {
+            auto& material=scenes[part]->materials[i];
+            for(const auto& texture:material.textures) {
+                if(texture.name.empty())continue;
+                if(!texture.resource.IsValid() || !texture.resource.GetTexture().IsValid() ||
+                    texture.name.find(".__renegade_preview")!=std::string::npos)return false;
+            }
+            material.baseColor=XMFLOAT4(1,1,1,1);material.normalMapStrength=1;
+            material.roughness=part==0?0.6f:1.0f;
+            if(part!=0){material.metalness=1;material.SetOcclusionEnabled_Primary(true);}
+            material.SetDirty();
+        }
+        Pose(*scenes[part],0,"Idle");
+    }
+    if(!Assembly(*scenes[0],*scenes[1],output,"reload"))return false;
+    std::cout<<"FRESH PROCESS STABLE-ID LOAD, TEXTURES, BOTH CLIP PAIRS AND RELOAD ASSEMBLY PASS\n";
+    return true;
+}
+
 int main(int argc,char** argv)
 {
     if(argc<3 || argc>4) { std::cerr<<"Usage: proof pack-folder output-folder\n"; return 2; }
@@ -215,6 +392,8 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--workflow-reopen") return ColdWorkflowProof(input,output)?0:9;
+    if(argc==4 && std::string(argv[3])=="--workflow") return WorkflowProof(input,output)?0:8;
     const char* paths[]={"Animations/AS_Shotgun_Idle.FBX",
         "Animations/Weapon/AS_Shotgun_Idle.FBX","Animations/AS_Shotgun_Reload.FBX",
         "Animations/Weapon/AS_Shotgun_Reload.FBX"};

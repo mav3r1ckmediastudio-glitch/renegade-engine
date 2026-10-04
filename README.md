@@ -130,7 +130,9 @@ good.
 
 See [PLAYER_ARMS_COMBAT_FRAMEWORK](docs/PLAYER_ARMS_COMBAT_FRAMEWORK.md).
 P1's rig, asset binding and movement-animation foundation is implemented on the
-active P1 branch, but real-arms visual acceptance remains outstanding. The
+active P1 branch. The owner accepts the authored shotgun diagnostic grip/reload;
+production assembly authoring and Player integration remain outstanding. See
+[P1 assembly import foundation](docs/P1_ASSEMBLY_IMPORT_FOUNDATION.md). The
 [P1 status and recovery checkpoint](docs/P1_STATUS_AND_RECOVERY.md) distinguishes
 implemented code, passing automated checks and the unresolved gameplay result.
 

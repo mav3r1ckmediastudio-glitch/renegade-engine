@@ -17,6 +17,13 @@ namespace renegade::bridge
         Character,
     };
 
+    struct CreatorTextureRelinkRecipe
+    {
+        std::uint32_t materialIndex = 0;
+        std::uint32_t textureSlot = 0;
+        std::string sourceProjectRelativePath;
+    };
+
     struct CreatorMaterialImportRecipe
     {
         std::uint32_t materialIndex = 0;
@@ -60,6 +67,7 @@ namespace renegade::bridge
         float end = 0.0f;
         bool enabled = true;
         bool autoMapSource = false;
+        bool matchingRig = false;
         std::string action;
         float speed = 1.0f;
     };
@@ -85,6 +93,7 @@ namespace renegade::bridge
         bool hasHandGrips = false;
         PlayerViewGripSettings handGrips = {};
         std::vector<CreatorMaterialImportRecipe> materials;
+        std::vector<CreatorTextureRelinkRecipe> textureRelinks;
         std::vector<CreatorAnimationImportRecipe> animations;
         std::vector<CreatorExternalAnimationImportRecipe> externalAnimations;
     };

@@ -142,3 +142,11 @@ projects were read only. No full original-editor parity or production acceptance
 is claimed. Earlier executable hashes describe superseded previews.
 Current Release proof SHA-256:
 A81A3421BEBD20CD4F52E74B8F46736153B7ECA85A84098E252868A431641E20.
+
+## Owner acceptance
+
+Owner accepts the authored attachment diagnostic grip/reload after 7c4a976
+("almost perfect", then confirms no remaining mismatch). Earlier owner-pending
+phrases are historical. This accepts the diagnostic result only. Production
+assembly workflow and Player parity remain open; next source/retention checkpoint
+is documented in P1_ASSEMBLY_IMPORT_FOUNDATION.md.

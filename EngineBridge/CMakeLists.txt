@@ -38,6 +38,8 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/IdentityService.h
     include/renegade/bridge/LightService.h
     include/renegade/bridge/ImportService.h
+    include/renegade/bridge/MatchingRigAnimationService.h
+    src/MatchingRigAnimationService.cpp
     include/renegade/bridge/ModelImportCandidateService.h
     include/renegade/bridge/ModelImportCommitService.h
     include/renegade/bridge/ResourceImportService.h

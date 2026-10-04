@@ -5740,7 +5740,7 @@ namespace renegade::studio
         const auto modelSource = modelImportCandidate_->SourcePath();
         wi::helper::FileDialogParams params;
         params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "Select humanoid animation FBX";
+        params.description = "Select matching-rig or humanoid animation FBX";
         params.extensions = {"fbx"};
         wi::helper::FileDialog(params, [this, projectId, modelSource](const std::string& path) {
             wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,

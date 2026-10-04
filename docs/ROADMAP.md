@@ -39,7 +39,11 @@ The Alpha Playability target is:
 
 ### P1 — First-person Arms Rig
 
-**Status: IN PROGRESS — foundation implemented; real-arms visual acceptance failed/pending.**
+**Status: IN PROGRESS — foundation implemented; shotgun diagnostic accepted; production assembly integration pending.**
+Owner accepts the authored shotgun diagnostic grip/reload on 4 October. Matching-rig
+clip ingestion and explicit retained-texture relinks now pass real-pack commit/reopen
+and fresh-process rendering. Studio assembly authoring remains to implement; see
+[P1_ASSEMBLY_IMPORT_FOUNDATION](P1_ASSEMBLY_IMPORT_FOUNDATION.md).
 Implementation baseline: `51513b9` on `feature/p1-first-person-arms-rig`.
 Camera synchronization repair `4dd9953` removes owner-reported proxy movement
 stutter. Owner accepts proxy gameplay through standalone Runtime and Studio Test

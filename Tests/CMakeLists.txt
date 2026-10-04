@@ -811,3 +811,26 @@ if(WIN32)
             "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
             "$<TARGET_FILE_DIR:RenegadeFirstPersonAssemblyGraphicsProof>")
 endif()
+
+add_executable(RenegadeMatchingRigAnimationTests MatchingRigAnimationTests.cpp)
+target_link_libraries(RenegadeMatchingRigAnimationTests PRIVATE Renegade::EngineBridge)
+add_test(NAME MatchingRigAnimation COMMAND RenegadeMatchingRigAnimationTests)
+set_target_properties(RenegadeMatchingRigAnimationTests PROPERTIES FOLDER "Renegade/Tests")
+
+# Separate executable keeps the owner's accepted diagnostic preview running.
+if(WIN32)
+    add_executable(RenegadeFirstPersonAssemblyWorkflowProof
+        FirstPersonAssemblyGraphicsProof.cpp
+        ${CMAKE_SOURCE_DIR}/Studio/src/ModelImportPreview.cpp)
+    target_link_libraries(RenegadeFirstPersonAssemblyWorkflowProof PRIVATE Renegade::EngineBridge)
+    target_compile_definitions(RenegadeFirstPersonAssemblyWorkflowProof PRIVATE UNICODE _UNICODE)
+    target_compile_options(RenegadeFirstPersonAssemblyWorkflowProof PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>" "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>")
+    set_target_properties(RenegadeFirstPersonAssemblyWorkflowProof PROPERTIES FOLDER "Renegade/Tests")
+    add_custom_command(TARGET RenegadeFirstPersonAssemblyWorkflowProof POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+            "$<TARGET_FILE_DIR:RenegadeFirstPersonAssemblyWorkflowProof>")
+endif()
+
+add_dependencies(RenegadeBridgeTests RenegadeMatchingRigAnimationTests)
