@@ -2185,3 +2185,43 @@ checks, existing Studio left open. No scene/assembly save was needed.
 Owner acceptance of this new capacity/partial reload build is pending.
 No gate closure, push or merge. Next check: two shots then blocked third, R full
 reload; one shot then R partial; both restore two usable shots.
+
+
+## Right-mouse aiming - 4 October 2026
+
+Implementation ec86f172a413b965916b6f2de52058d51492589e, local only.
+Owner confirms prior two-shot limit and partial/full reload were already checked.
+This slice adds Aim input on right mouse hold, with backward-compatible default
+for existing version-1 input documents. Existing Player View controller recognizes
+explicit AimIn/AimOut/AimAttack track pairs. Hold plays AimIn once then retains
+its final pose; release plays AimOut then movement resumes. Aimed fire consumes
+the same two-shell count. Reload lowers sights and resumes AimIn if still held.
+Busy actions finish before the next hold/release transition; pause freezes them.
+No FOV/camera change, ammo reserve, damage or crossfade scope is claimed.
+
+Changed GameplayInputService.h/.cpp, RuntimeApplication.cpp,
+RuntimePlayerViewAnimation.h, RuntimePlayerViewRig.h, input and paired animation
+tests, README, architecture, roadmap, authoring docs and feature matrix.
+Exact Release build flags: CL=/MP4; MSBuild /m:2 /nologo /verbosity:quiet
+/p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false.
+Targets EngineBridge/RenegadeEngineBridge, Tests/RenegadePlayerViewRigTests,
+Tests/RenegadeGameplayInputTests, Runtime/RenegadeRuntime under BUILD/renegade.
+CTest --test-dir BUILD/renegade -C Release -R
+"GameplayInputTests|RenegadePlayerViewRig" --output-on-failure.
+Regressions cover aim-in timing and terminal hold, pause, aimed fire ammo,
+release queued during firing, return to movement and reload resuming held aim.
+
+
+All four Release targets exit 0; build/test chain 196.73s.
+CTest 3/3 PASS, 0.78s; git diff --check passes.
+Deployed Runtime to Studio Release/Runtime launch location, SHA256:
+0430928D63B4CBDE6AE572EB7ACBF43AAF0E8CDF9B0D94A9E7FCEAAFDEA4858E.
+The prior temporary snapshot had been cleaned up; direct old-path launch failed.
+Closed that failed launch and used the real Studio PLAY control to create a new
+snapshot and launch the updated Runtime. Correct full-library project stayed open.
+Native right mouse hold visibly centers the shotgun in the authored sight pose;
+left fire then release returns to the hip stance. Both captures visually checked.
+Current Runtime and existing Ready Studio left open for owner review.
+No project, scene or assembly edits/saves needed. New aim owner acceptance pending.
+No gate closure, push or merge. Next: owner aim/reload feel check, then further
+equipment/jump routing or weapon definition work within the canonical roadmap.
