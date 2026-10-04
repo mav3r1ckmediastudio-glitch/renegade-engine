@@ -937,3 +937,16 @@ duration; shorter tracks hold their final pose. Busy actions reject repeated
 presses and completion returns to current movement. Reload has simultaneous-input
 priority. Runtime pause passes zero time and no action presses. This is bounded
 animation routing, with no parallel controller or combat simulation.
+
+
+### Two-shell shotgun Runtime prototype
+
+The current paired shotgun starts with two loaded shells. Each accepted fire
+press consumes one shell; empty fire presses do not play Attack. R after one
+shot selects ReloadPartial, and R after two selects Reload. Reload at capacity
+is ignored. The shell count returns to two only when the paired reload finishes,
+including its weapon track. Busy actions and pause do not consume/refill shells.
+An absent partial pair uses an explicitly assigned full reload if available.
+Reset/reinitialization restores two shells. This is a bounded two-barrel prototype;
+creator-configurable weapon definitions, reserve ammunition, HUD, damage and
+reload interruption remain later work.

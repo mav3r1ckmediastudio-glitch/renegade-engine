@@ -25,7 +25,7 @@ namespace renegade::runtime
 
     struct RuntimePlayerViewAnimationState
     {
-        std::array<std::vector<RuntimePlayerViewAnimationClip>, 5> clips;
+        std::array<std::vector<RuntimePlayerViewAnimationClip>, 6> clips;
         wi::ecs::Entity activeClip = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity outgoingClip = wi::ecs::INVALID_ENTITY;
         PlayerViewAction activeAction = PlayerViewAction::Idle;
@@ -35,6 +35,8 @@ namespace renegade::runtime
         bool initialized = false;
         bool pairedAssembly = false;
         bool oneShotPlaying = false;
+        // Bounded two-barrel shotgun prototype; reserve ammo is not modelled yet.
+        int loadedShells = 2;
         wi::ecs::Entity activeWeaponClip = wi::ecs::INVALID_ENTITY;
         float pairedTime = 0.0f;
         std::vector<wi::ecs::Entity> ownedAssemblyClips;
@@ -47,6 +49,7 @@ namespace renegade::runtime
         {
         case PlayerViewAction::Attack: return 3;
         case PlayerViewAction::Reload: return 4;
+        case PlayerViewAction::ReloadPartial: return 5;
         case PlayerViewAction::Walk: return 1;
         case PlayerViewAction::Sprint: return 2;
         case PlayerViewAction::Idle:
@@ -110,6 +113,11 @@ namespace renegade::runtime
         const std::string& authoredAction,
         PlayerViewAction& action) noexcept
     {
+        if (authoredAction == "ReloadPartial")
+        {
+            action = PlayerViewAction::ReloadPartial;
+            return true;
+        }
         if (authoredAction == "Attack" || authoredAction == "Reload")
         {
             action = authoredAction == "Attack" ? PlayerViewAction::Attack : PlayerViewAction::Reload;
@@ -537,19 +545,32 @@ namespace renegade::runtime
                 next = state.activeAction;
             else if (std::isfinite(dt) && dt > 0 && (reloadPressed || firePressed))
             {
-                const auto action = reloadPressed ? PlayerViewAction::Reload : PlayerViewAction::Attack;
-                if (!state.clips[PlayerViewActionIndex(action)].empty())
+                const auto action = reloadPressed
+                    ? (state.loadedShells == 1 ? PlayerViewAction::ReloadPartial : PlayerViewAction::Reload)
+                    : PlayerViewAction::Attack;
+                const bool allowed = reloadPressed ? state.loadedShells < 2 : state.loadedShells > 0;
+                // A missing partial pair may use the authored full reload, but
+                // a missing fire pair must never consume ammunition.
+                auto selected = action;
+                if (selected == PlayerViewAction::ReloadPartial &&
+                    state.clips[PlayerViewActionIndex(selected)].empty())
+                    selected = PlayerViewAction::Reload;
+                if (allowed && !state.clips[PlayerViewActionIndex(selected)].empty())
                 {
-                    next = action;
+                    next = selected;
                     state.activeClip = wi::ecs::INVALID_ENTITY;
                     state.oneShotPlaying = true;
                 }
             }
+            const bool startingShot = state.oneShotPlaying &&
+                state.activeClip == wi::ecs::INVALID_ENTITY && next == PlayerViewAction::Attack;
             if (!RequestRuntimePlayerViewAnimation(scene, state, next))
             {
                 state.oneShotPlaying = false;
                 return;
             }
+            if (startingShot)
+                --state.loadedShells;
             auto* arms = scene.animations.GetComponent(state.activeClip);
             auto* weapon = scene.animations.GetComponent(state.activeWeaponClip);
             if (arms == nullptr || weapon == nullptr) return;
@@ -560,7 +581,12 @@ namespace renegade::runtime
                 {
                     state.pairedTime = std::min(state.pairedTime + dt, duration);
                     if (state.pairedTime >= duration)
+                    {
+                        if (state.activeAction == PlayerViewAction::Reload ||
+                            state.activeAction == PlayerViewAction::ReloadPartial)
+                            state.loadedShells = 2;
                         state.oneShotPlaying = false;
+                    }
                 }
                 else
                     state.pairedTime = std::fmod(state.pairedTime + dt, duration);

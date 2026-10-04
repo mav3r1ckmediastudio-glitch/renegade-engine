@@ -146,6 +146,9 @@ namespace
         const auto reloadWeapon = add(weaponTarget, "Reload", "weapon", 1, 1);
         const auto fire = add(armsTarget, "Attack", "arms", 0, 0.5f);
         const auto fireWeapon = add(weaponTarget, "Attack", "weapon", 2, 0.25f);
+        const auto partial = add(armsTarget, "ReloadPartial", "arms", 0, 2);
+        const auto partialWeapon = add(weaponTarget, "ReloadPartial", "weapon", 0, 1);
+
 
         RuntimePlayerViewRigState rig; rig.viewModelRoot = root;
         RuntimePlayerViewAnimationState state; std::string error;
@@ -199,6 +202,7 @@ namespace
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Sprint, 0.1f);
         if (state.activeClip != armsWalk || !Near(state.pairedTime, 0.2f))
             Fail("Sprint fallback restarted its Walk pair");
+        state.loadedShells = 0; // Existing full-reload timing proof starts empty.
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, true, true);
         if (state.activeClip != reload || state.activeWeaponClip != reloadWeapon || !state.oneShotPlaying)
             Fail("reload did not own both tracks with priority over fire");
@@ -225,6 +229,30 @@ namespace
             Fail("second fire press did not restart at the beginning");
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1);
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f);
+        if (state.loadedShells != 0) Fail("two shots did not consume both shells");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, true);
+        if (state.oneShotPlaying || state.activeClip != armsWalk || state.loadedShells != 0)
+            Fail("empty shotgun accepted a third shot");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 0.1f, false, true);
+        if (state.activeClip != reload || state.loadedShells != 0)
+            Fail("empty reload selected wrong pair or refilled before completion");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 3);
+        if (state.loadedShells != 2) Fail("full reload did not restore two shells");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 0.1f, true);
+        if (state.loadedShells != 1) Fail("single shot did not consume one shell");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 1);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 0.1f, false, true);
+        if (state.activeClip != partial || state.activeWeaponClip != partialWeapon || state.loadedShells != 1)
+            Fail("one-shell reload did not select partial native pair");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 0, true, true);
+        if (state.loadedShells != 1 || !Near(state.pairedTime, 0.1f))
+            Fail("paused partial reload refilled ammo or advanced time");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 2, true);
+        if (state.loadedShells != 2 || state.oneShotPlaying)
+            Fail("partial reload did not complete with two shells");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, false, true);
+        if (state.oneShotPlaying || state.activeClip != armsWalk)
+            Fail("full shotgun accepted an unnecessary reload");
         ResetRuntimePlayerViewAnimations(scene, state);
         if (state.initialized || state.activeWeaponClip != wi::ecs::INVALID_ENTITY ||
             !Near(scene.animations.GetComponent(weaponWalk)->amount, 0))

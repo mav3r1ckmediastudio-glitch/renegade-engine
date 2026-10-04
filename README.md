@@ -299,3 +299,16 @@ These controls currently drive animation only; ammunition, damage, sound and
 recoil gameplay remain later combat work. Legacy version-1 input maps gain fire
 and reload defaults; the old default R reset moves to F8 while custom bindings
 remain authored. Full-library Runtime must be rebuilt alongside the bridge.
+
+
+### Two-shell shotgun Runtime prototype
+
+The current paired shotgun starts with two loaded shells. Each accepted fire
+press consumes one shell; empty fire presses do not play Attack. R after one
+shot selects ReloadPartial, and R after two selects Reload. Reload at capacity
+is ignored. The shell count returns to two only when the paired reload finishes,
+including its weapon track. Busy actions and pause do not consume/refill shells.
+An absent partial pair uses an explicitly assigned full reload if available.
+Reset/reinitialization restores two shells. This is a bounded two-barrel prototype;
+creator-configurable weapon definitions, reserve ammunition, HUD, damage and
+reload interruption remain later work.
