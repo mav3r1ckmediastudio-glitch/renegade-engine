@@ -1813,4 +1813,24 @@ Reload/Attack/Equip remain preview-only. No inventory/ammo/fire scope expansion.
 
 Exact Runtime paired movement implementation checkpoint: 31263ba. This following
 checkpoint is documentation-only; compiled code matches that implementation.
-Independent exact-commit and owner Test Level/actual export acceptance remain open.
+Independent exact-commit and owner Test Level/actual export acceptance remained open at that checkpoint.
+
+## Owner real assembly Test Level acceptance - 4 October 2026
+
+Implementation 31263ba; preceding documentation checkpoint 363c37e. Owner reports
+"everything looks great" after the requested Studio PLAY camera/look check.
+Recovered screenshot shows Renegade Runtime - Assembly Proof [DX12], textured
+arms/gloves and shotgun held together in the foreground, and 75 FPS. This records
+bounded owner Test Level visual acceptance; movement timing is covered by the
+previous native proofs, not inferred from a still image. Runtime was no longer
+running at this read-only follow-up, so live paired/active-track diagnostics were
+not captured. Studio's Runtime executable still hashes to
+352B73620B68A6B9D4B7D383E46825D9556F0B8BAD1501CB15AF99BB0274026F.
+
+Changed HANDOFF.md, docs/P1_ASSEMBLY_AUTHORING.md and docs/FEATURE_MATRIX.csv only.
+Validation: git diff --check; no new implementation or rebuild required. No app
+launched or closed, owner level edited, upstream change, push or merge. Existing
+Tools/__pycache__/ and log.txt preserved. P1 remains IN PROGRESS. Next: actual
+Studio BUILD > BUILD WINDOWS GAME export and owner launch parity for this real
+assembly; independent exact-commit verification remains pending. Gameplay reload,
+firing and paired crossfades are not claimed.

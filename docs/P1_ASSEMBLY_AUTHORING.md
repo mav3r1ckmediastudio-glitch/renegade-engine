@@ -106,7 +106,12 @@ isolated packaged asset loading pass through production services, including two
 armatures, textured rendering, paired pose, pause and cleanup. The isolated
 package fixture tests the packaged loader; it is not a completed Build Game export.
 
+Owner reports "everything looks great" after the real Assembly Proof Test Level
+camera/look check on 4 October. The supplied DX12 screenshot shows textured arms
+and shotgun together in the foreground at 75 FPS. This is bounded visual acceptance.
+
 Outstanding: general texture relink UI, a dedicated rigged-part import
-classification, draft Undo/Redo, assembly rebuild/update lifecycle, direct owner
-Test Level and actual Build Game parity for this real assembly. Reload preview is
-not a reload gameplay implementation. No release gate is closed by this slice.
+classification, draft Undo/Redo, assembly rebuild/update lifecycle and actual
+Build Game parity for this real assembly. Reload preview is not a reload gameplay
+implementation. Independent exact-commit verification remains pending; no release
+gate is closed by this slice.
