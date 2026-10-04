@@ -1611,3 +1611,61 @@ Space pause/resume, Escape close. No keyboard/mouse automation, push or merge.
 P1 remains IN PROGRESS. Next owner inspect actual grip and shell contacts through
 reload; resolve any remaining authored event/visibility behavior before governed
 assembly import/relink/save workflow and existing Player View Rig integration.
+
+## Owner acceptance and assembly import foundation - 4 October 2026
+
+Source checkpoint e329ac830be1c7d79cd0a76656b1b4cc88894f94; parent 1ffe86e.
+Owner accepts authored shotgun diagnostic grip and reload ("almost perfect",
+then confirms no remaining mismatch). Baseline source 7c4a976; diagnostic exe
+A81A3421BEBD20CD4F52E74B8F46736153B7ECA85A84098E252868A431641E20.
+This is visual diagnostic acceptance, not production P1 completion.
+
+Changed shared import/recipe/commit boundaries for explicit material-slot texture
+relinks and native matching-rig clip ingestion; added MatchingRigAnimationService,
+headless rejection/recipe tests, workflow/cold proof modes and a separate manual
+workflow target. Studio's existing ADD ANIMATION now automatically preserves
+matching native rigs, with prior humanoid retarget fallback retained. Texture
+relink bridge API has no creator UI yet. Full changed-file list: git show --stat
+e329ac8. README, architecture, roadmap, feature matrix and P1 docs updated.
+Canonical detailed limits/commands: docs/P1_ASSEMBLY_IMPORT_FOUNDATION.md.
+
+Release configure and builds of Bridge, Studio, matching-rig tests, workflow
+proof, importer graphics proof and PlayerViewRig tests: exit0. Same MSBuild
+/m:2 /nologo /verbosity:quiet /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false with CL=/MP4.
+CTest selection recorded in p1-workflow-ctest.log: six of six pass (matching-rig,
+PlayerViewRig tests/contract, GLB importer, animated Character and cold reopen).
+Real-pack --workflow exits0: both rigs/Idle+Reload clips retained, committed,
+stable-ID reopened, reconstructed from retained recipes and reassembled using
+accepted authored parent/transform. Duplicate relinks and disposable changed-
+texture commit reject without product. Maximum clone normalization 1.78814e-7
+for arms, zero for weapon; strict indices/binds preserved, no retargeting.
+--workflow-reopen exits0 in a separate process; all FP frames require lit model
+pixels, all captures require visible pixels. Fresh-process reload1.2s inspected
+via unique cold-verified-reload-1743.png after stale same-path image display.
+Final --workflow rerun with final proof executable exits0.
+
+Studio exe SHA256 7390E00685B8DE7DB509AA6ECF2B3989F8036C7486F11257C78F0DEE1E27D5FA.
+Workflow exe SHA256 9CE51204BC79A3729E06C7875284A1ACB8FAC78830CF864A0C785E3C84F7E168.
+Compiled before commit (final newline-only normalization); exact-commit
+independent acceptance/CI and Debug not claimed. Existing warnings remain.
+Existing ReusableAssetReimportRecipeTests build blocked by removed
+CreatorModelMaterialPreparationService.h from prior importer rebuild; recorded,
+not silently counted passing or repaired by this scoped change.
+Deep initial proof project hit Windows staging-path limit; final ignored project
+uses BUILD/p1wf short destination. No production path-length fix claimed.
+
+Evidence: BUILD/p1wf plus BUILD/renegade/p1-shotgun-proof/workflow-proof.log,
+workflow-cold-proof.log and p1-workflow-*.log. Original assets/Unreal projects
+untouched; licensed files not committed. No mouse/keyboard automation, new
+Runtime launch, upstream change, push or merge. Accepted diagnostic viewer stays
+open (6632 at prior checkpoint; resolve by process/title). Studio built but not
+restarted. Untracked Tools/__pycache__/ and log.txt preserved.
+
+Next bounded outcome: native Studio first-person assembly controls over these
+bridge APIs; choose retained arms/weapon parts, explicit parent bone and authored
+transform, paired semantic clip preview, persist/reopen one assembly product.
+Then connect that assembly to the existing Player Start and prove camera-relative
+skin, Test Level and Build Game parity. Do not treat the current two Character-kind
+rigged-part test products as a final Weapon Asset/NPC workflow, and do not broaden
+into inventory/ammo/fire gameplay. P1 remains IN PROGRESS.
