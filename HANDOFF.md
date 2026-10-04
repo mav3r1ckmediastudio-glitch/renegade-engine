@@ -1942,3 +1942,21 @@ New Studio SHA256 FEBE6A58506F8B8B9E3144AE590FAC545C6D6190CC3D6031CE62E642664EFF
 Next owner saves/closes current Studio, launch RenegadeStudioLongPathComplete,
 then original deep-root project actual Build Windows Game UI retry. Original-path
 promotion and owner UI acceptance still pending; short-root acceptance preserved.
+
+
+## Original deep-root Studio export success - 4 October 2026
+
+Implementation cf6bd66. Owner supplied screenshot after using verified
+RenegadeStudioLongPathComplete: BUILD COMPLETE, 23 seconds, original project
+Builds/Windows output. Read actual promoted build-report: status
+ gate5_validated_for_final_path, stage_only=false, package_isolation and smoke
+passed_gate4, safe_rebuild passed_gate5, directory-rename promotion. Read-only
+RenegadePackageIntegrityTests --validate-package <original-final-output> passes
+35 files, exit 0. Deep-root export blocker is now verified resolved through the
+actual Studio workflow. Prior short-root standalone visual acceptance retained;
+no new manual foreground visual test inferred from Build Complete screenshot.
+Configured report revision still 6562c812 (stale configure metadata), so independent
+exact-commit verification remains outstanding. distribution_ready=false remains.
+No code changes, app launch/closure, push or merge in this acceptance step.
+Status docs updated; git diff --check. P1 authoring lifecycle and gameplay work
+remain as previously documented. Existing untracked files preserved.

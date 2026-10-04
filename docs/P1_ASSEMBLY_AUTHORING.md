@@ -115,7 +115,8 @@ classification, draft Undo/Redo and assembly rebuild/update lifecycle.
 Windows long-path staging and package integrity repair is implemented locally;
 a 312-character stage/integrity regression and actual 35-file owner candidate
 validation plus DX12 automatic Runtime smoke pass. Original deep-root Studio
-promotion retest remains pending. Owner reports "the build works" for actual
+export now reports BUILD COMPLETE in 23 seconds; promoted final package
+passes all 35 file checks and automatic DX12 smoke/promotion. Owner reports "the build works" for actual
 Studio Build Windows Game export from a short-root project copy on 4 October;
 screenshot shows textured arms/shotgun in exported Runtime at 74 FPS. Original
 265-character staging texture destination failed; short-root export succeeds.
