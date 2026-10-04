@@ -2148,3 +2148,40 @@ Next: broader action routing (aim/equipment/jump) and later actual combat system
 Current accepted slice is input-driven animation, not a complete firearm.
 Full-library actual Build Game export and independent exact-commit overall P1
 verification remain pending; no release gate is closed.
+
+
+## Two-shell shotgun and partial reload - 4 October 2026
+
+Implementation b52e4804d5b8263fb034b7783f03535274113f73, local only.
+Owner requested firing to stop after two shots and partial reload after one.
+Changed RuntimePlayerViewAnimation.h, RuntimePlayerViewRig.h,
+PlayerViewRigTests.cpp, README, architecture, roadmap, assembly authoring docs
+and feature matrix. Existing player, native pair clocks and input service remain.
+
+The bounded shotgun prototype initializes two shells. An accepted Attack
+consumes one only after its explicit native pair is successfully requested.
+Empty fire is ignored. R with one shell uses ReloadPartial; empty uses Reload;
+full-capacity reload is ignored. A missing partial pair may use an assigned full
+reload. Reload completion restores two, with no early refill, pause refill or
+busy action consumption. Reset/reinitialization restores the count.
+Reserve ammo, creator weapon definitions, HUD and damage remain later work.
+
+CL=/MP4; MSBuild /m:2 /nologo /verbosity:quiet /p:Configuration=Release
+/p:Platform=x64 /p:BuildProjectReferences=false:
+BUILD/renegade/Tests/RenegadePlayerViewRigTests.vcxproj and
+BUILD/renegade/Runtime/RenegadeRuntime.vcxproj exit 0.
+CTest --test-dir BUILD/renegade -C Release -R
+"GameplayInputTests|RenegadePlayerViewRig" --output-on-failure: 3/3 PASS, 0.71s.
+Tests prove two-shot exhaustion, blocked third shot, full refill at completion,
+one-shot partial pair selection, frozen paused reload, full-capacity rejection
+and existing movement/busy action regressions. git diff --check passes.
+
+Copied Runtime to the actual Studio Release/Runtime launch location.
+SHA256 4D8FD0FBBBB466512D29C5366C3655A23ED23D4D6331E076D03156DAFA3448F9.
+Fresh native DX12 launched the same full-library Test Level snapshot.
+Left mouse once, then R visibly renders the partial reload with one shell
+being handled; native screenshot inspected. Updated Runtime is open for owner
+checks, existing Studio left open. No scene/assembly save was needed.
+Owner acceptance of this new capacity/partial reload build is pending.
+No gate closure, push or merge. Next check: two shots then blocked third, R full
+reload; one shot then R partial; both restore two usable shots.
