@@ -1582,3 +1582,32 @@ B539693C7A1A25E7CB42D735FF715875D332550BE56F070858FFA19DEB96F953.
 Pre-commit compiled source content; owner exact-commit verification not inferred.
 Animations accepted by owner, corrected alignment not yet accepted; P1 still
 IN PROGRESS. Next assess grip/shell contacts through full reload with owner.
+
+## Authored shotgun attachment restored - 4 October 2026
+
+Source checkpoint 7c4a9762c864029f09b9449452e8aeda562edb99; parent 56d5b93.
+Owner explicitly rejects previous 25mm calibration: stock rests on back of hand,
+reload shells hover below palm. Animation quality accepted; grip NOT accepted.
+Changed Tests/FirstPersonAssemblyGraphicsProof.cpp and
+docs/P1_SHOTGUN_ASSEMBLY_PROOF.md only. Read-only original Unreal package
+inspection located BP_DemoCharacter SKM_Weapon_GEN_VARIABLE serial export
+369438..370399: AttachToName ik_hand_gun; location
+(-3.466970,-27.336276,4.505738)cm, Rotator(6.552304,-182.929938,-10.254553).
+Proof replaces guessed weapon_r placement with this exact converted local
+transform. Skeleton GripPoint is middle_01_r, not demo attachment.
+No original asset, upstream, production Studio/Runtime/Player change.
+
+Same bounded Release MSBuild command recorded above: exit0. Full paired
+captures and WISCENE save/reopen/render: exit0, authored-proof.log.
+Idle, reload1.2s/2s and new live viewer visually inspected: fit improved,
+owner acceptance pending. No original Unreal/Wicked Editor parity claimed.
+Current exe SHA256 A81A3421BEBD20CD4F52E74B8F46736153B7ECA85A84098E252868A431641E20.
+Built pre-commit source content; no independent exact-commit gate verification.
+git diff --check clean. Existing untracked Tools/__pycache__/ and log.txt left.
+Only earlier agent diagnostic closed via CloseMainWindow. New preview left open,
+PID6632 at checkpoint; use process name/title, not a stale PID. R reload,
+Space pause/resume, Escape close. No keyboard/mouse automation, push or merge.
+
+P1 remains IN PROGRESS. Next owner inspect actual grip and shell contacts through
+reload; resolve any remaining authored event/visibility behavior before governed
+assembly import/relink/save workflow and existing Player View Rig integration.
