@@ -834,3 +834,9 @@ if(WIN32)
 endif()
 
 add_dependencies(RenegadeBridgeTests RenegadeMatchingRigAnimationTests)
+
+add_executable(RenegadeFirstPersonAssemblySettingsTests FirstPersonAssemblySettingsTests.cpp)
+target_link_libraries(RenegadeFirstPersonAssemblySettingsTests PRIVATE Renegade::EngineBridge)
+add_test(NAME FirstPersonAssemblySettings COMMAND RenegadeFirstPersonAssemblySettingsTests)
+set_target_properties(RenegadeFirstPersonAssemblySettingsTests PROPERTIES FOLDER "Renegade/Tests")
+add_dependencies(RenegadeBridgeTests RenegadeFirstPersonAssemblySettingsTests)

@@ -42,8 +42,10 @@ The Alpha Playability target is:
 **Status: IN PROGRESS — foundation implemented; shotgun diagnostic accepted; production assembly integration pending.**
 Owner accepts the authored shotgun diagnostic grip/reload on 4 October. Matching-rig
 clip ingestion and explicit retained-texture relinks now pass real-pack commit/reopen
-and fresh-process rendering. Studio assembly authoring remains to implement; see
-[P1_ASSEMBLY_IMPORT_FOUNDATION](P1_ASSEMBLY_IMPORT_FOUNDATION.md).
+and fresh-process rendering. Native Studio assembly authoring now has retained part selection, explicit parent
+and transforms, paired preview, governed save/reopen and undoable Player Start
+assignment. Direct owner UI acceptance and production Runtime paired-action playback
+remain outstanding; see [P1_ASSEMBLY_AUTHORING](P1_ASSEMBLY_AUTHORING.md).
 Implementation baseline: `51513b9` on `feature/p1-first-person-arms-rig`.
 Camera synchronization repair `4dd9953` removes owner-reported proxy movement
 stutter. Owner accepts proxy gameplay through standalone Runtime and Studio Test

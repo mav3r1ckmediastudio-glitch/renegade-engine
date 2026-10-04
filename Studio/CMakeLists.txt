@@ -116,6 +116,7 @@ add_executable(RenegadeStudio WIN32
     src/Phase7Gate7AAnimationInspector.h
     src/WD01Vegetation.cpp
     src/StudioApplication.cpp
+    src/FirstPersonAssemblyEditor.cpp
     src/StudioLiveDiagnostics.cpp
     src/StudioApplication.h
     src/StudioUserPreferences.cpp

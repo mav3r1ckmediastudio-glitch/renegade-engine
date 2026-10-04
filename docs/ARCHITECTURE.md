@@ -886,3 +886,14 @@ Explicit material-slot relinks snapshot selected texture bytes and retain their
 project-relative paths in the import recipe and journaled model transaction.
 These are shared bridge boundaries; Studio does not implement another converter.
 See P1_ASSEMBLY_IMPORT_FOUNDATION.md for real-pack evidence and creator UI limits.
+
+### First-person assembly authoring
+
+FirstPersonAssemblyService composes private retained native arms and weapon scenes.
+An explicit hierarchy path and local transform attach the weapon to the authored
+arms bone; paired native action tracks preserve both skeletons. Studio controls
+call the bridge service and evaluate the preview on one clock. The assembled
+WISCENE embeds resources; its versioned recipe, product, projection, registry and
+catalogue cross the existing project document transaction. Player Start assignment
+uses the existing settings command. Runtime paired-track action evaluation remains
+outstanding. See P1_ASSEMBLY_AUTHORING.md for the contract and limitations.

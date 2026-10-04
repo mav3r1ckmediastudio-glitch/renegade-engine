@@ -1,4 +1,6 @@
 add_library(RenegadeEngineBridge STATIC
+    include/renegade/bridge/FirstPersonAssemblyService.h
+    src/FirstPersonAssemblyService.cpp
     include/renegade/bridge/AssetBrowserService.h
     include/renegade/bridge/AssetCatalogueService.h
     include/renegade/bridge/AssetRegistryService.h

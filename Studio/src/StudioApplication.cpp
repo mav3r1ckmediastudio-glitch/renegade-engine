@@ -659,6 +659,8 @@ namespace renegade::studio
         if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_ &&
             modelImportPreview_->NeedsRender())
             modelImportPreview_->PreRender();
+        if (assemblyPanel_.IsVisible() && assemblyPreview_ && assemblyPreview_->NeedsRender())
+            assemblyPreview_->PreRender();
         wi::RenderPath3D::PreRender();
     }
 
@@ -675,6 +677,8 @@ namespace renegade::studio
             modelImportPreview_->Render();
             // Retain the rendered texture once ready, until the view rotates.
         }
+        if (assemblyPanel_.IsVisible() && assemblyPreview_ && assemblyPreview_->NeedsRender())
+            assemblyPreview_->Render();
         if (pathTracePreviewActive_)
         {
             RenderPath3D_PathTracing::Render();
@@ -1126,6 +1130,10 @@ namespace renegade::studio
         playerHandGrips_.SetText("EDIT HAND GRIPS");
         playerHandGrips_.OnClick([this](const wi::gui::EventArgs&) { OpenHandGripEditor(); });
         inspectorPanel_.AddWidget(&playerHandGrips_);
+        playerAssembly_.Create("Player First Person Assembly");
+        playerAssembly_.SetText("ASSEMBLY");
+        playerAssembly_.OnClick([this](const wi::gui::EventArgs&) { OpenAssemblyEditor(); });
+        inspectorPanel_.AddWidget(&playerAssembly_);
 
         const auto createPlayerSlider = [this](
             SceneInspectorSlider& slider,
@@ -2886,6 +2894,7 @@ namespace renegade::studio
         modelImportPanel_.AddWidget(&modelImportCancel_);
         modelImportPanel_.SetVisible(false);
         CreateHandGripEditor();
+        CreateAssemblyEditor();
         GetGUI().AddWidget(&modelImportPanel_);
         GetGUI().AddWidget(&studioChrome_);
     }
@@ -3165,6 +3174,9 @@ namespace renegade::studio
         modelImportPreviewImage_.SetColor(wi::Color::White());
         for (auto& sprite : modelImportPreviewImage_.sprites)
             sprite.params.disableBackground();
+        assemblyImage_.SetColor(wi::Color::White());
+        for (auto& sprite : assemblyImage_.sprites)
+            sprite.params.disableBackground();
 
         projectHubPanel_.SetColor(
             HubBackground,
@@ -3376,6 +3388,25 @@ namespace renegade::studio
             return;
         }
 
+        if (assemblyPanel_.IsVisible())
+        {
+            if (!session_->Projects().HasProject() ||
+                session_->Projects().CurrentProject().projectId != assemblyProjectId_) {
+                assemblyPanel_.SetVisible(false); assemblyPreview_.reset();
+            } else {
+                if (assemblyPreview_) {
+                    if (assemblyPreview_->NeedsRender()) { assemblyPreview_->PreUpdate(); assemblyPreview_->Update(dt); }
+                    wi::Resource image; image.SetTexture(assemblyPreview_->GetRenderResult3D());
+                    assemblyImage_.SetColor(wi::Color::White());
+                    assemblyImage_.SetImage(image);
+                    assemblyTime_.SetValue(assemblyPreview_->ClipTime());
+                    assemblyPlay_.SetText(assemblyPreview_->IsPlaying() ? "PAUSE" : "PLAY");
+                    assemblySave_.SetEnabled(assemblyPreview_->IsReady());
+                }
+                diagnosticInput.StopAt("first_person_assembly"); detail::ClearCreatorAssetDragPreview();
+                pendingAction_ = EditorAction::None; return;
+            }
+        }
         if (handGripPanel_.IsVisible())
         {
             if (!session_->Projects().HasProject() ||
@@ -3622,7 +3653,7 @@ namespace renegade::studio
         };
         device->BindScissorRects(1, &viewportScissor, cmd);
 
-        if (!projectHubVisible_ && !handGripPanel_.IsVisible() &&
+        if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
             outlinedSelection_ != wi::ecs::INVALID_ENTITY &&
             selectionOutlineMask_.IsValid())
         {
@@ -3637,7 +3668,7 @@ namespace renegade::studio
                 XMFLOAT4(0.30f, 0.86f, 1.0f, 0.90f));
         }
 
-        if (!projectHubVisible_ && !handGripPanel_.IsVisible() &&
+        if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
             !gizmoSuppressedForCameraView_ &&
             gizmoEntity_ != wi::ecs::INVALID_ENTITY)
         {
@@ -3659,6 +3690,7 @@ namespace renegade::studio
 
         const float width = GetLogicalWidth();
         const float height = GetLogicalHeight();
+        assemblyPanel_.SetPos(XMFLOAT2(std::max(0.0f, (width-1080)*0.5f), std::max(0.0f, (height-810)*0.5f)));
         modelImportPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
             std::max(70.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));
@@ -3824,6 +3856,9 @@ namespace renegade::studio
         positionEnvironmentWidget(playerCameraMode_, 244.0f, 32.0f);
         positionEnvironmentWidget(playerFirstPersonArms_, 280.0f);
         positionEnvironmentWidget(playerHandGrips_, 314.0f);
+        playerHandGrips_.SetSize(XMFLOAT2(environmentFieldWidth * 0.49f, 28));
+        playerAssembly_.SetPos(XMFLOAT2(12 + environmentFieldWidth * 0.51f, 314));
+        playerAssembly_.SetSize(XMFLOAT2(environmentFieldWidth * 0.49f, 28));
         positionEnvironmentWidget(playerCapsuleRadius_, 348.0f);
         positionEnvironmentWidget(playerCapsuleHeight_, 382.0f);
         positionEnvironmentWidget(playerEyeHeight_, 416.0f);
@@ -4460,6 +4495,7 @@ namespace renegade::studio
         setPlayerVisible(playerCameraMode_);
         setPlayerVisible(playerFirstPersonArms_);
         setPlayerVisible(playerHandGrips_);
+        setPlayerVisible(playerAssembly_);
         setPlayerVisible(playerCapsuleRadius_);
         setPlayerVisible(playerCapsuleHeight_);
         setPlayerVisible(playerEyeHeight_);
@@ -5646,6 +5682,7 @@ namespace renegade::studio
     {
         if (session_ == nullptr || !session_->Projects().HasProject())
             return;
+        assemblyPanel_.SetVisible(false); assemblyImage_.SetImage({}); assemblyPreview_.reset();
         modelImportPanel_.SetVisible(false);
         modelImportCandidate_.reset();
         modelImportPreviewImage_.SetImage({});

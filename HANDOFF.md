@@ -1669,3 +1669,56 @@ Then connect that assembly to the existing Player Start and prove camera-relativ
 skin, Test Level and Build Game parity. Do not treat the current two Character-kind
 rigged-part test products as a final Weapon Asset/NPC workflow, and do not broaden
 into inventory/ammo/fire gameplay. P1 remains IN PROGRESS.
+
+## Studio assembly authoring recovered - 4 October 2026
+
+Base source checkpoint 6562c81; implementation checkpoint is the commit containing
+this section (resolve with git log). Branch feature/p1-first-person-arms-rig.
+Recovered uncommitted assembly candidate rather than rebuilding accepted imports.
+Changed-file inventory: git show --stat at that implementation commit. New bridge
+FirstPersonAssemblyService, Studio FirstPersonAssemblyEditor, recipe tests and
+workflow proof additions expose retained part selection, explicit attachment,
+paired native preview, transactional assembly save/reopen and command-backed
+Player Start assignment. README, architecture, roadmap and feature ledger updated.
+
+Recovered evidence: p1assembly-ctest.log has seven passing Release checks;
+p1assembly-final-save.log and p1assembly-final-cold.log report exact recipe reopen,
+both rigs and paired camera rendering. Source-unavailable proof is separately
+recorded in p1assembly-source-unavailable.log. These are prior-session results,
+not newly rerun or independent acceptance. Cold Reload-1.200000.png visually
+inspected during recovery: textured hands, weapon and shells are visible.
+Studio panel screenshot studio-assembly-12.png exposed dark image styling,
+parent-label overlap and clipped status. Applied the existing importer theme
+exception to assemblyImage_ (white sprites and disableBackground), shortened the
+parent label and expanded panel height. Also restart completed paired previews
+on Play and report assignment failure accurately after successful product save.
+Final UI appearance still requires direct inspection; no visual success inferred.
+
+Recovery build command from repo: set CL=/MP4; MSBuild executable from VS18
+BuildTools Current/Bin on BUILD/renegade/Studio/RenegadeStudio.vcxproj with /m:2
+/nologo /verbosity:quiet /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false /p:TargetName=RenegadeStudioAssemblyRecovery.
+Exit 0, p1assembly-recovery-studio-final.log. Alternate exe name leaves the
+already-running Studio untouched. SHA256:
+FC38B3B890EAEA0488391C086139EE510172C59C49C314BB34A4CA5C0EBE7815.
+Existing MSB8029 temporary-directory warnings remain. No application launched,
+closed or controlled during recovery. No upstream change, push or merge.
+Initial ctest invocation failed because PATH lacks CTest; do not count stale
+LASTEXITCODE from that invocation. Correct explicit VS18 CTest binary used for
+--test-dir BUILD/renegade -C Release -R
+'FirstPersonAssemblySettings|MatchingRigAnimation|RenegadePlayerViewRig'
+--output-on-failure; result in p1assembly-recovery-ctest.log.
+
+P1 remains IN PROGRESS. Next: inspect the rebuilt Studio panel with the owner,
+then extend existing RuntimePlayerViewAnimation to evaluate the assembly arms
+and weapon tracks together (currently treated as action variants), preserving
+camera/controller ownership. Prove real assembly Test Level and Build Game parity.
+Do not broaden into ammo, firing, inventory or pickups. General texture relink UI,
+draft Undo/Redo and assembly update/rebuild remain outstanding. Existing
+Tools/__pycache__/ and log.txt stay untracked.
+
+Corrected recovery CTest invocation exits 0: four of four pass, 0.34 seconds
+(PlayerViewRig tests and source contract, MatchingRigAnimation, assembly settings).
+git diff --check passes; Git warns only about LF-to-CRLF normalization in appended
+documentation. Recovery build is pre-commit source-identical code; independent
+exact-commit verification and owner panel inspection remain open.

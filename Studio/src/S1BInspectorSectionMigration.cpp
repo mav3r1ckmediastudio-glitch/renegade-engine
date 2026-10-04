@@ -621,6 +621,7 @@ namespace renegade::studio
             fullAt(playerCameraMode_, y, 32.0f); y += 36.0f;
             fullAt(playerFirstPersonArms_, y); y += 34.0f;
             fullAt(playerHandGrips_, y); y += 34.0f;
+            fullAt(playerAssembly_, y); y += 34.0f;
             for (wi::gui::Widget* widget : {
                 static_cast<wi::gui::Widget*>(&playerCapsuleRadius_),
                 static_cast<wi::gui::Widget*>(&playerCapsuleHeight_),

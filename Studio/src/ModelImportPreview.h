@@ -2,6 +2,7 @@
 #include <WickedEngine.h>
 #include "renegade/bridge/ModelAnimationPreviewService.h"
 #include <string>
+#include "renegade/bridge/FirstPersonAssemblyService.h"
 #include <vector>
 
 namespace renegade::studio
@@ -18,15 +19,20 @@ namespace renegade::studio
         bool PlayPause();
         bool Scrub(float time);
         bool SetSpeed(float speed);
-        bool IsPlaying() const { return animationPreview_.IsPlaying(); }
-        bool HasClip() const { return animationPreview_.HasSelection(); }
-        float ClipTime() const { return animationPreview_.Time(); }
+        bool SetPairedAction(const std::string& action);
+        void UseFirstPersonCamera();
+        bool IsPlaying() const { return paired_ ? pairedPlaying_ : animationPreview_.IsPlaying(); }
+        bool HasClip() const { return paired_ || animationPreview_.HasSelection(); }
+        float ClipTime() const { return paired_ ? pairedTime_ : animationPreview_.Time(); }
         bool NeedsRender() const { return !IsReady() || IsPlaying(); }
         void Update(float dt) override;
         void Render() const override;
         bool CapturePng(std::vector<std::uint8_t>& png, std::string& error) const;
         bool IsReady() const { return renderedFrames_ >= 8; }
     private:
+        bool paired_ = false, pairedPlaying_ = false;
+        float pairedTime_ = 0, pairedEnd_ = 0;
+        std::string pairedAction_;
         void FitCamera();
         bridge::ModelAnimationPreviewService animationPreview_;
         wi::allocator::shared_ptr<wi::scene::Scene> previewScene_;

@@ -10,6 +10,8 @@
 #include "../WickedEngine/Editor/json.hpp"
 #include "../WickedEngine/Editor/ModelImporter.h"
 #include <Windows.h>
+#include "renegade/bridge/FirstPersonAssemblyService.h"
+#include "renegade/bridge/PlayerService.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -18,7 +20,7 @@ namespace fs = std::filesystem;
 using namespace renegade::bridge;
 static LRESULT CALLBACK WindowProc(HWND w, UINT m, WPARAM a, LPARAM b)
 { return DefWindowProcW(w,m,a,b); }
-static bool Capture(wi::scene::Scene& scene, const fs::path& file, bool firstPerson=false)
+static bool Capture(wi::scene::Scene& scene, const fs::path& file, bool firstPerson=false, bool normalized=false)
 {
     renegade::studio::ModelImportPreview preview;
     std::string error;
@@ -27,6 +29,7 @@ static bool Capture(wi::scene::Scene& scene, const fs::path& file, bool firstPer
         preview.camera->CreatePerspective(512,320,0.005f,10.0f,XMConvertToRadians(80.0f));
         preview.camera->TransformCamera(XMMatrixInverse(nullptr,XMMatrixLookAtLH(
             XMVectorSet(0,0.08f,-1.65f,1),XMVectorSet(0,-1,-1.65f,1),XMVectorSet(0,0,-1,0))));
+        if(normalized)preview.camera->TransformCamera(XMMatrixIdentity());
         preview.camera->UpdateCamera();
     }
     // Preserve all simultaneously selected tracks on the private preview copy.
@@ -377,6 +380,82 @@ static bool ColdWorkflowProof(const fs::path& project,const fs::path& output)
     return true;
 }
 
+
+static bool ProductAssemblyProof(const fs::path& project,const fs::path& output,bool cold) {
+ ReusableModelAssetDocument ad,wd;std::string error;
+ if(!ReadReusableModelAssetDocument((project/"Content/Models/Shotgun Arms.rasset").generic_u8string(),ad,error)||
+ !ReadReusableModelAssetDocument((project/"Content/Models/Shotgun Weapon.rasset").generic_u8string(),wd,error)){
+ std::cerr<<error<<"\n";return false;}
+ FirstPersonAssemblyService service;FirstPersonAssemblySettings settings;
+ StableId asset;
+ if(cold){
+  std::ifstream f(output.parent_path()/"assembly-id.txt");f>>asset;
+  if(!service.ReadSettings(project.generic_u8string(),ad.manifest.projectId,asset,settings,error)){std::cerr<<error<<"\n";return false;}
+ }else{
+ settings.armsAssetId=ad.manifest.assetId;settings.weaponAssetId=wd.manifest.assetId;
+ auto part=ReusableAssetService().PrepareModelAssetPlacement({project.generic_u8string(),ad.manifest.projectId,settings.armsAssetId});
+ std::vector<PlayerViewBoneChoice> bones;
+ if(!part.IsReady()||!CollectPlayerViewBones(*part.PeekScene(),bones,error))return false;
+ for(const auto& b:bones){const auto* n=part.PeekScene()->names.GetComponent(b.entity);if(n&&n->name=="ik_hand_gun")settings.parentBonePath=b.path;}
+ settings.weaponPosition={-0.03466970f,0.27336276f,-0.04505738f};
+ settings.weaponRotation={-0.059182247f,0.087738050f,0.994176416f,-0.020316230f};
+ settings.cameraPosition={0,-1.65f,0.08f};
+ settings.cameraRotation={0,0.707106781f,-0.707106781f,0};
+ settings.pairs={{"Idle",0,0},{"Reload",1,1}};
+ wi::scene::Scene invalid;
+ auto bad=settings;bad.parentBonePath="[\"missing\"]";
+ if(service.Prepare(project.generic_u8string(),ad.manifest.projectId,bad,invalid,error))return false;
+ bad=settings;bad.pairs[0].weaponClip=9999;
+ if(service.Prepare(project.generic_u8string(),ad.manifest.projectId,bad,invalid,error))return false;
+ bad=settings;bad.weaponRotation.w=5;
+ if(service.Prepare(project.generic_u8string(),ad.manifest.projectId,bad,invalid,error))return false;
+ if(!service.Save(project.generic_u8string(),ad.manifest.projectId,"Shotgun Assembly "+GenerateStableId().substr(0,8),settings,{},asset,error)){
+ std::cerr<<error<<"\n";return false;}
+ std::ofstream(output/"assembly-id.txt")<<asset;
+ }
+ auto product=ReusableAssetService().PrepareModelAssetPlacement({project.generic_u8string(),ad.manifest.projectId,asset});
+ if(!product.IsReady()){std::cerr<<product.Result().error<<"\n";return false;}
+ auto& scene=*product.PeekMutableScene();
+ if(scene.armatures.GetCount()!=2||scene.animations.GetCount()!=4)return false;
+ size_t retainedTextures=0;
+ for(size_t m=0;m<scene.materials.GetCount();++m)for(const auto& t:scene.materials[m].textures){
+  if(t.name.empty())continue;
+  std::cout<<"ASSEMBLY TEXTURE "<<t.name<<" valid="<<t.resource.IsValid()<<"\n";
+  if(!t.resource.IsValid()||!t.resource.GetTexture().IsValid())return false;
+ ++retainedTextures;
+ }
+ if(retainedTextures!=10)return false;
+ FirstPersonAssemblySettings reopened;
+ if(!service.ReadSettings(project.generic_u8string(),ad.manifest.projectId,asset,reopened,error))return false;
+ std::string a,b;
+ if(!SerializeFirstPersonAssemblySettings(settings,a,error)||!SerializeFirstPersonAssemblySettings(reopened,b,error)||a!=b)return false;
+ for(const auto* action:{"Idle","Reload"})for(float t:{0.0f,0.6f,1.2f,2.0f,2.9f}){
+ if(!service.Pose(scene,action,t,error))return false;
+ if(!Capture(scene,output/(std::string(action)+"-"+std::to_string(t)+".png"),true,true))return false;
+ }
+ if(!cold) {
+ wi::scene::Scene level;
+ CreatePlayerStartCommand create(level,{});
+ if(!create.Execute())return false;
+ auto playerSettings=CapturePlayerControllerSettings(level,create.CreatedEntity());
+ playerSettings.firstPersonArmsAssetId=asset;
+ SetPlayerControllerSettingsCommand assign(level,create.CreatedEntity(),playerSettings);
+ if(!assign.Execute())return false;
+ fs::create_directories(project/"Content/Scenes");
+ auto scenePath=project/"Content/Scenes/AssemblyProof.wiscene";
+ wi::Archive archive(scenePath.generic_u8string(),false,false);level.Serialize(archive);
+ if(!archive.SaveFile(scenePath.generic_u8string()))return false;archive=wi::Archive();
+ wi::scene::Scene reopened;wi::Archive read(scenePath.generic_u8string(),true,false);reopened.Serialize(read);
+ auto start=ResolvePlayerStart(reopened);
+ if(start.resolution!=PlayerStartResolution::Success||start.start.settings.firstPersonArmsAssetId!=asset)return false;
+ std::ofstream descriptor(project/"AssemblyProof.renegade");
+ descriptor<<"format = renegade-project\nversion = 1\n\n[project]\nproject_id = "<<ad.manifest.projectId
+ <<"\nname = Assembly Proof\nstartup_scene = Content/Scenes/AssemblyProof.wiscene\n";
+ }
+ std::cout<<"GOVERNED ASSEMBLY SAVE, EXACT RECIPE REOPEN, BOTH RIGS AND PAIRED CAMERA PREVIEW PASS "<<asset<<"\n";
+ return true;
+}
+
 int main(int argc,char** argv)
 {
     if(argc<3 || argc>4) { std::cerr<<"Usage: proof pack-folder output-folder\n"; return 2; }
@@ -392,6 +471,8 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--assembly") return ProductAssemblyProof(input,output,false)?0:10;
+    if(argc==4 && std::string(argv[3])=="--assembly-reopen") return ProductAssemblyProof(input,output,true)?0:11;
     if(argc==4 && std::string(argv[3])=="--workflow-reopen") return ColdWorkflowProof(input,output)?0:9;
     if(argc==4 && std::string(argv[3])=="--workflow") return WorkflowProof(input,output)?0:8;
     const char* paths[]={"Animations/AS_Shotgun_Idle.FBX",
