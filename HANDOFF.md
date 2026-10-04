@@ -1810,3 +1810,7 @@ Tools/__pycache__/ and log.txt preserved. Next owner closes assembly panel and
 uses Studio PLAY to verify real camera-relative arms/weapon rendering and look;
 then actual Build Game parity. Read diagnostics for paired=true and active_tracks=2.
 Reload/Attack/Equip remain preview-only. No inventory/ammo/fire scope expansion.
+
+Exact Runtime paired movement implementation checkpoint: 31263ba. This following
+checkpoint is documentation-only; compiled code matches that implementation.
+Independent exact-commit and owner Test Level/actual export acceptance remain open.
