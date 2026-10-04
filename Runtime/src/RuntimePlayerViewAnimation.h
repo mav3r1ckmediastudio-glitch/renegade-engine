@@ -25,7 +25,7 @@ namespace renegade::runtime
 
     struct RuntimePlayerViewAnimationState
     {
-        std::array<std::vector<RuntimePlayerViewAnimationClip>, 6> clips;
+        std::array<std::vector<RuntimePlayerViewAnimationClip>, 9> clips;
         wi::ecs::Entity activeClip = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity outgoingClip = wi::ecs::INVALID_ENTITY;
         PlayerViewAction activeAction = PlayerViewAction::Idle;
@@ -35,6 +35,7 @@ namespace renegade::runtime
         bool initialized = false;
         bool pairedAssembly = false;
         bool oneShotPlaying = false;
+        bool aiming = false;
         // Bounded two-barrel shotgun prototype; reserve ammo is not modelled yet.
         int loadedShells = 2;
         wi::ecs::Entity activeWeaponClip = wi::ecs::INVALID_ENTITY;
@@ -47,6 +48,9 @@ namespace renegade::runtime
     {
         switch (action)
         {
+        case PlayerViewAction::AimIn: return 6;
+        case PlayerViewAction::AimOut: return 7;
+        case PlayerViewAction::AimAttack: return 8;
         case PlayerViewAction::Attack: return 3;
         case PlayerViewAction::Reload: return 4;
         case PlayerViewAction::ReloadPartial: return 5;
@@ -113,6 +117,12 @@ namespace renegade::runtime
         const std::string& authoredAction,
         PlayerViewAction& action) noexcept
     {
+        if (authoredAction == "AimIn" || authoredAction == "AimOut" || authoredAction == "AimAttack")
+        {
+            action = authoredAction == "AimIn" ? PlayerViewAction::AimIn :
+                authoredAction == "AimOut" ? PlayerViewAction::AimOut : PlayerViewAction::AimAttack;
+            return true;
+        }
         if (authoredAction == "ReloadPartial")
         {
             action = PlayerViewAction::ReloadPartial;
@@ -531,7 +541,8 @@ namespace renegade::runtime
         const PlayerViewAction requested,
         const float dt,
         const bool firePressed = false,
-        const bool reloadPressed = false) noexcept
+        const bool reloadPressed = false,
+        const bool aimDown = false) noexcept
     {
         if (!state.initialized)
             return;
@@ -540,30 +551,51 @@ namespace renegade::runtime
         {
             // A discrete action owns both tracks until its shared duration finishes.
             // Ignore new presses while busy; missing action pairs never play Idle as a shot.
-            PlayerViewAction next = requested;
+            PlayerViewAction next = state.aiming ? PlayerViewAction::AimIn : requested;
             if (state.oneShotPlaying)
                 next = state.activeAction;
             else if (std::isfinite(dt) && dt > 0 && (reloadPressed || firePressed))
             {
                 const auto action = reloadPressed
                     ? (state.loadedShells == 1 ? PlayerViewAction::ReloadPartial : PlayerViewAction::Reload)
-                    : PlayerViewAction::Attack;
+                    : (state.aiming ? PlayerViewAction::AimAttack : PlayerViewAction::Attack);
                 const bool allowed = reloadPressed ? state.loadedShells < 2 : state.loadedShells > 0;
                 // A missing partial pair may use the authored full reload, but
                 // a missing fire pair must never consume ammunition.
                 auto selected = action;
+                if (selected == PlayerViewAction::AimAttack &&
+                    state.clips[PlayerViewActionIndex(selected)].empty())
+                    selected = PlayerViewAction::Attack;
                 if (selected == PlayerViewAction::ReloadPartial &&
                     state.clips[PlayerViewActionIndex(selected)].empty())
                     selected = PlayerViewAction::Reload;
                 if (allowed && !state.clips[PlayerViewActionIndex(selected)].empty())
                 {
                     next = selected;
+                    if (reloadPressed) state.aiming = false;
                     state.activeClip = wi::ecs::INVALID_ENTITY;
                     state.oneShotPlaying = true;
                 }
             }
+            // Reconcile hold/release after a busy action. Never interrupt paired tracks.
+            if (!state.oneShotPlaying && std::isfinite(dt) && dt > 0 && aimDown != state.aiming)
+            {
+                const auto transition = aimDown ? PlayerViewAction::AimIn : PlayerViewAction::AimOut;
+                if (!state.clips[PlayerViewActionIndex(transition)].empty())
+                {
+                    next = transition;
+                    state.activeClip = wi::ecs::INVALID_ENTITY;
+                    state.oneShotPlaying = true;
+                }
+                else if (!aimDown)
+                {
+                    state.aiming = false;
+                    next = requested;
+                }
+            }
             const bool startingShot = state.oneShotPlaying &&
-                state.activeClip == wi::ecs::INVALID_ENTITY && next == PlayerViewAction::Attack;
+                state.activeClip == wi::ecs::INVALID_ENTITY &&
+                (next == PlayerViewAction::Attack || next == PlayerViewAction::AimAttack);
             if (!RequestRuntimePlayerViewAnimation(scene, state, next))
             {
                 state.oneShotPlaying = false;
@@ -585,9 +617,15 @@ namespace renegade::runtime
                         if (state.activeAction == PlayerViewAction::Reload ||
                             state.activeAction == PlayerViewAction::ReloadPartial)
                             state.loadedShells = 2;
+                        if (state.activeAction == PlayerViewAction::AimIn)
+                            state.aiming = true;
+                        else if (state.activeAction == PlayerViewAction::AimOut)
+                            state.aiming = false;
                         state.oneShotPlaying = false;
                     }
                 }
+                else if (state.aiming && next == PlayerViewAction::AimIn)
+                    state.pairedTime = duration; // Hold the authored sight pose, do not loop aim-in.
                 else
                     state.pairedTime = std::fmod(state.pairedTime + dt, duration);
             }

@@ -31,6 +31,9 @@ namespace renegade::runtime
         Attack,
         Reload,
         ReloadPartial,
+        AimIn,
+        AimOut,
+        AimAttack,
     };
 
     [[nodiscard]] inline const char* PlayerViewActionName(
@@ -38,6 +41,9 @@ namespace renegade::runtime
     {
         switch (action)
         {
+        case PlayerViewAction::AimIn: return "AimIn";
+        case PlayerViewAction::AimOut: return "AimOut";
+        case PlayerViewAction::AimAttack: return "AimAttack";
         case PlayerViewAction::Attack: return "Attack";
         case PlayerViewAction::Reload: return "Reload";
         case PlayerViewAction::ReloadPartial: return "ReloadPartial";

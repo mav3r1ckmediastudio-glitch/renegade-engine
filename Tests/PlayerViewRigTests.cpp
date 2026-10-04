@@ -148,6 +148,13 @@ namespace
         const auto fireWeapon = add(weaponTarget, "Attack", "weapon", 2, 0.25f);
         const auto partial = add(armsTarget, "ReloadPartial", "arms", 0, 2);
         const auto partialWeapon = add(weaponTarget, "ReloadPartial", "weapon", 0, 1);
+        const auto aimIn = add(armsTarget, "AimIn", "arms", 0, 0.6f);
+        add(weaponTarget, "AimIn", "weapon", 0, 0.3f);
+        const auto aimOut = add(armsTarget, "AimOut", "arms", 0, 0.6f);
+        add(weaponTarget, "AimOut", "weapon", 0, 0.3f);
+        const auto aimFire = add(armsTarget, "AimAttack", "arms", 0, 0.5f);
+        add(weaponTarget, "AimAttack", "weapon", 0, 0.3f);
+
 
 
         RuntimePlayerViewRigState rig; rig.viewModelRoot = root;
@@ -253,6 +260,37 @@ namespace
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, false, true);
         if (state.oneShotPlaying || state.activeClip != armsWalk)
             Fail("full shotgun accepted an unnecessary reload");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, false, false, true);
+        if (state.activeClip != aimIn || !state.oneShotPlaying || state.aiming)
+            Fail("right mouse did not start aim-in");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0, false, false, false);
+        if (!Near(state.pairedTime, 0.1f)) Fail("paused aim transition changed time");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1, false, false, true);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, false, false, true);
+        if (!state.aiming || state.oneShotPlaying || state.activeClip != aimIn || !Near(state.pairedTime, 0.6f))
+            Fail("held aim did not retain the terminal sight pose");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, true, false, true);
+        if (state.activeClip != aimFire || state.loadedShells != 1)
+            Fail("aimed fire did not use AimAttack and consume one shell");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1, false, false, false);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, false, false, false);
+        if (state.activeClip != aimOut || !state.oneShotPlaying)
+            Fail("release during fire did not queue aim-out after completion");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f);
+        if (state.aiming || state.activeClip != armsWalk)
+            Fail("aim-out did not return to movement");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1, false, false, true);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, false, true, true);
+        if (state.activeClip != partial || state.aiming)
+            Fail("reload while aiming did not select partial and lower sights");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 3, false, false, true);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, false, false, true);
+        if (state.activeClip != aimIn || !state.oneShotPlaying || state.loadedShells != 2)
+            Fail("held aim did not resume after reload");
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1, false, false, true);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 1);
+        UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f);
         ResetRuntimePlayerViewAnimations(scene, state);
         if (state.initialized || state.activeWeaponClip != wi::ecs::INVALID_ENTITY ||
             !Near(scene.animations.GetComponent(weaponWalk)->amount, 0))

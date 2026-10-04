@@ -950,3 +950,14 @@ An absent partial pair uses an explicitly assigned full reload if available.
 Reset/reinitialization restores two shells. This is a bounded two-barrel prototype;
 creator-configurable weapon definitions, reserve ammunition, HUD, damage and
 reload interruption remain later work.
+
+
+### Right-mouse aiming
+
+Hold right mouse to play the assigned AimIn pair once and hold its final sight
+pose; release plays AimOut then returns to movement. Left mouse while aimed uses
+AimAttack and consumes the same two-shell ammunition. Reload lowers the sights,
+uses partial/full reload as appropriate, and resumes aim-in if right mouse is
+still held. Transitions finish before queued hold/release changes are reconciled;
+pause freezes them. This uses authored native animation only, with no zoom/FOV
+change or new camera/controller.

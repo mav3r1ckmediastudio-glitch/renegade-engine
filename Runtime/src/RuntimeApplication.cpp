@@ -426,7 +426,8 @@ namespace renegade::runtime
                         playerViewRig_.action,
                         paused_ ? 0.0f : dt,
                         !paused_ && gameplayInput.firePressed,
-                        !paused_ && gameplayInput.reloadPressed);
+                        !paused_ && gameplayInput.reloadPressed,
+                        gameplayInput.aimDown);
                 }
             }
         }

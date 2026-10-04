@@ -77,6 +77,7 @@ int main()
     Check(Binding(map, GameplayAction::Fire).mouse == "MOUSE_LEFT" &&
             Binding(map, GameplayAction::Reload).keyboard == "R",
         "fire/reload defaults were not assigned");
+    Check(Binding(map, GameplayAction::Aim).mouse == "MOUSE_RIGHT", "aim default is not right mouse");
     auto rebound = map;
     rebound.bindings[static_cast<std::size_t>(GameplayAction::MoveForward)].keyboard = "I";
     rebound.bindings[static_cast<std::size_t>(GameplayAction::MoveBackward)].keyboard = "K";

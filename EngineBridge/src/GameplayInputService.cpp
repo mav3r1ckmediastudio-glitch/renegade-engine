@@ -53,7 +53,7 @@ namespace
 
     bool SupportedMouseToken(const std::string& token) noexcept
     {
-        return token.empty() || token == "MOUSE_X" || token == "MOUSE_Y" || token == "MOUSE_LEFT";
+        return token.empty() || token == "MOUSE_X" || token == "MOUSE_Y" || token == "MOUSE_LEFT" || token == "MOUSE_RIGHT";
     }
 
     bool SupportedGamepadToken(const std::string& token) noexcept
@@ -176,7 +176,9 @@ namespace
 
     bool Down(const GameplayActionBinding& binding) noexcept
     {
-        return KeyboardDown(binding.keyboard) ||
+        return (binding.mouse == "MOUSE_RIGHT" && wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT)) ||
+            (binding.mouse == "MOUSE_LEFT" && wi::input::Down(wi::input::MOUSE_BUTTON_LEFT)) ||
+            KeyboardDown(binding.keyboard) ||
             GamepadDown(binding.gamepad);
     }
 
@@ -241,6 +243,7 @@ namespace renegade::bridge
         case GameplayAction::Reset: return "reset";
         case GameplayAction::Fire: return "fire";
         case GameplayAction::Reload: return "reload";
+        case GameplayAction::Aim: return "aim";
         case GameplayAction::Count: break;
         }
         return "unknown";
@@ -281,6 +284,7 @@ namespace renegade::bridge
             {GameplayAction::Reset, "F8", "", ""},
             {GameplayAction::Fire, "", "MOUSE_LEFT", ""},
             {GameplayAction::Reload, "R", "", ""},
+            {GameplayAction::Aim, "", "MOUSE_RIGHT", ""},
         }};
         return map;
     }
@@ -494,6 +498,7 @@ namespace renegade::bridge
         }
         seen[fireIndex] = true;
         seen[reloadIndex] = true;
+        seen[static_cast<std::size_t>(GameplayAction::Aim)] = true;
 
         if (!formatSeen || !versionSeen ||
             std::any_of(seen.begin(), seen.end(), [](const bool value) { return !value; }))
@@ -656,6 +661,7 @@ namespace renegade::bridge
         frame.resetPressed = Pressed(Binding(map, GameplayAction::Reset));
         frame.firePressed = Pressed(Binding(map, GameplayAction::Fire));
         frame.reloadPressed = Pressed(Binding(map, GameplayAction::Reload));
+        frame.aimDown = Down(Binding(map, GameplayAction::Aim));
         return frame;
     }
 }
