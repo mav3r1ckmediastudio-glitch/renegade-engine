@@ -1442,3 +1442,56 @@ outcome: owner verify the native grip editor, resolve Debug Studio startup
 assertion if reproducible from its normal resource directory, then agree on a
 separately generated/authored skinned view model for rendered acceptance.
 No production grip IK, weapon behaviour or P1 completion is claimed.
+
+## Studio DX12 startup assertion repaired - 4 October 2026
+
+Branch: feature/p1-first-person-arms-rig.
+Source/diagnostic commit: 1446cef7be51f8edf1c3c2675d4f37d45a27f7e9.
+Parent: f737777. No push or merge.
+
+Confirmed the former Debug failure at wiGraphicsDevice_DX12.cpp:3939 is
+CreateCommandSignature, not pipeline creation. Native DX12 debug layer reports
+#743: root parameter slot 0 was not declared to hold constants. CDB stack reaches
+StudioRenderPath::LoadGridResources. RenegadeGrid and RenegadeImGui signatures
+placed CBV(b0) first, conflicting with the pinned backend's counted draw setup.
+
+Changed all four Studio/shaders/RenegadeGrid*/RenegadeImGui* HLSL files to reserve
+one root-constant DWORD at slot 0 using native b999; retained matching VS/PS
+signatures and b0 binding. Upstream source, submodule, arms/gameplay, accepted
+owner project and exported game are unchanged. Corrected the earlier misleading
+grid-shader comment and P1_HAND_GRIP_EDITOR assertion description.
+
+Added Tests/StudioShaderDx12Proof.cpp and its manual Windows GPU target in
+Tests/CMakeLists.txt. Updated docs/FEATURE_MATRIX.csv, docs/P1_HAND_GRIP_EDITOR.md
+and docs/STUDIO_DX12_SHADER_ASSERT.md. The latter records exact diagnosis,
+commands, logs and acceptance boundaries.
+
+Validation (from repository root; CL=/MP4 for proof and Release Studio):
+- cmake -S . -B BUILD/renegade: exit 0.
+- MSBuild BUILD/renegade/Tests/RenegadeStudioShaderDx12Proof.vcxproj /m:2 /nologo /verbosity:quiet /p:Configuration=Debug /p:Platform=x64 /p:BuildProjectReferences=false: exit 0. Repeat Configuration=Release: exit 0.
+- BUILD/renegade/Tests/Debug/RenegadeStudioShaderDx12Proof.exe Studio/shaders: exit 0. Repeat Tests/Release: exit 0. All four shaders compile and pass real Wicked CreateShader/command-signature creation; both pipeline descriptions accepted.
+- Original shaders under CDB reproduce #743. Corrected grid plus original ImGui: grid passes; ImGui fails identically; direct negative process exit 2170.
+- MSBuild BUILD/renegade/Studio/RenegadeStudio.vcxproj /m:2 /nologo /verbosity:quiet /p:Configuration=Debug /p:Platform=x64 /p:BuildProjectReferences=false: exit 0. Repeat Release with /p:TargetName=RenegadeStudioDx12Fix: exit 0.
+- ctest --test-dir BUILD/renegade -C Debug -R "Phase6Gate1Player|PlayerViewRig|TestLevelSnapshot|ReusableAssetTests" --output-on-failure: 6/6. Repeat -C Release: 6/6.
+- CDB -c g with debugdevice: Debug reaches Project Hub, loads isolated HandGripsProof, renders floor/landmarks/grid and opens native Hand Grips with saved primary Z=0.583. Zero DX12 errors/breaks; two nonfatal #680 depth-view pipeline warnings remain. Release reaches rendered welcome screen; no DX12 validation messages in captured startup.
+- All four source/deployed shader SHA-256 pairs match per configuration; git diff --check passes.
+
+Native captures: BUILD/renegade/p1-hand-grips-proof/dx12-debug-grid.png and
+dx12-debug-hand-grips.png. Application CDB logs: dx12-studio-Debug.txt and
+dx12-studio-Release.txt there. Build/proof/negative/CTest logs use dx12-* under
+BUILD/renegade. Agent-owned debugger sessions stopped after capture; owner's
+original Studio and earlier Release grip candidate remain open.
+
+Debug Studio SHA-256:
+928016EFCF63041419D0BCDB4B01850C67522CDD8C89222EC5D266B677556A92
+Release RenegadeStudioDx12Fix SHA-256:
+A225220EFEBDD487372E86B940E89D1CE5FC20BB52B296AF1823A5796CBCC7EE
+Shader deployment is part of the repair; exe hash alone is insufficient. Binaries
+were built on parent f737777 with this patch; displayed revision remains parent.
+No exact-source-commit owner acceptance is inferred.
+
+Risks/next: synthetic copied fixture emits unrelated Story Flow stable-identity
+errors and is not a production project acceptance. Nonfatal #680 warnings remain.
+This bounded startup fix does not close P1 or prove real skinned arms. Next is
+independent exact-commit verification and owner acceptance of native grip editing
+on an appropriate governed asset; withdrawn original/GGMAX arms remain withdrawn.
