@@ -1371,3 +1371,74 @@ Next bounded outcome: command-backed Studio primary/off-hand/support bone/grip
 selection and grip offsets with Undo/Redo and governed asset save/reopen. Then use
 one agreed separately generated/authored skinned view model for owner verification;
 preserve the accepted proxy control. Do not resume the withdrawn supplied arms.
+
+## P1 native Hand Grips editor checkpoint — 2026-10-04
+
+Code and documentation commit: 7a105d8dcb1b6db188fc006e0432127b0d972cab
+on feature/p1-first-person-arms-rig. No push or merge performed.
+
+Outcome: Player's governed arms selector now offers EDIT HAND GRIPS. Native
+Studio widgets expose primary/off-hand/support roles, native bone hierarchy
+choices and local position/rotation offsets. The private bridge working copy
+has its own CommandService Undo/Redo history. Save journals the .rasset product,
+managed projection and registry together and retains hand_grips in the import
+recipe. Close discards unsaved changes. Bones are identified by canonical
+hierarchy-name arrays, excluding the creator transform wrapper; ECS IDs are not
+persisted. Invalid/missing/ambiguous bones and malformed ownership markers fail
+before mutation. DirectX-compatible rotation decomposition fixed the nonzero
+three-axis roundtrip mismatch found during this session.
+
+Validation:
+- EngineBridge, Runtime, PlayerViewRigTests, PlayerViewRigFixture and Studio
+  build Release and Debug, exit 0. MSB8029 and existing C4834 warnings remain.
+- Tests target now uses /bigobj for Debug JSON-generated sections. After CMake
+  regeneration rerun MSBuild so it reads the new project, rather than executing
+  an already-loaded stale project definition.
+- Related CTest selector Phase6Gate1Player|PlayerViewRig|TestLevelSnapshot|
+  ReusableAssetTests: 6/6 per configuration.
+- New headless checks: offsets and rotation, validation without partial mutation,
+  Undo/Redo and saved-state boundary, injected AfterReplace(index 1) failure and
+  byte-for-byte three-file rollback, successful retry, native reopen, creator
+  recipe reapplication and stale external-product rejection.
+- Release/Debug authored-grip DX12 proof: 300 native animated motion frames;
+  socket matrix error 0, camera error 2.38419e-07 metres, animated bone Z range
+  0.0592 metres, pause matrix/timer errors 0, three captures each, exit 0.
+  The animated-range probe now reads the bone parent of the authored anchor;
+  the grip transform's local offset is correctly static.
+- Native Release Studio on an isolated synthetic fixture: selected product,
+  opened real Hand Grips controls, slider changed primary Z 0.24 -> 0.583,
+  SAVE persisted 0.5829999446868896, Close/reopen restored 0.583 with clean history.
+  Player scroll layout now contains the arms selector and grip button; scene
+  gizmo/outline are suppressed while this editor is open. Native UI capture:
+  BUILD/renegade/p1-hand-grips-proof/studio-reopened.png.
+- Debug Studio launch from the isolated proof working directory hit a Wicked
+  DX12 graphics-pipeline assertion at wiGraphicsDevice_DX12.cpp:3939 before
+  editor entry. Root cause not established. Debug build/headless/GPU evidence
+  must not be described as Debug Studio startup acceptance.
+
+Exact build commands and limits are in docs/P1_HAND_GRIP_EDITOR.md. Ignored logs
+use BUILD/renegade/p1-grips prefixes; tests/GPU/UI fixture artifacts are under
+BUILD/renegade/p1-hand-grips-proof. Release Studio was built with
+/p:TargetName=RenegadeStudioHandGrips because owner's original Studio was running
+and its executable was locked. Existing owner Studio, proxy control project,
+Runtime bundle and accepted exported game were not replaced. Discarded only
+agent-owned test windows during UI verification.
+
+SHA-256:
+Studio Release candidate:
+7EA283E885D82A0FE6A1188660E57F138624E6BA987F5461C02BFB7CB2A078DF
+Runtime Release:
+47EFF1BDA3795FB70CFB1FDF4803AFDA11932C8AD7FEB34F6831D19326286539
+Runtime Debug:
+0E1FC32C4A81C911CC74E34F01FC83583BEA0F8770870FAECFC2CA7EC182650F
+
+Binaries were compiled from checkpoint changes on parent 2f8662d before the
+source commit, so their displayed source revision remains that parent. No owner
+exact-commit verification is inferred. The two-bone native test product is
+synthetic; it is not a real FBX import or proof of skinned deformation.
+
+P1 remains IN PROGRESS. Original owner/GGMAX arms remain withdrawn. Next bounded
+outcome: owner verify the native grip editor, resolve Debug Studio startup
+assertion if reproducible from its normal resource directory, then agree on a
+separately generated/authored skinned view model for rendered acceptance.
+No production grip IK, weapon behaviour or P1 completion is claimed.
