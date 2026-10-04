@@ -1727,3 +1727,23 @@ Exact recovered assembly implementation commit: 2be899e. The following checkpoin
 commit changes documentation only. Release recovery executable and four passing
 checks correspond to the implementation code; final Studio visual inspection and
 Runtime paired-action integration remain pending.
+
+## Owner assembly preview acceptance and name-field repair - 4 October 2026
+
+Owner reports everything works as expected in recovery build after testing native
+assembly preview. Then reports renamed asset name did not save. Read-only project
+inspection confirms Shotgun Assembly Verified.rasset and its recipe/projection/
+thumbnail exist; a later First Person Assembly product also exists. Root cause:
+OpenAssemblyEditor always resets the name input to the default despite reopening
+the assigned assembly recipe. Studio/src/FirstPersonAssemblyEditor.cpp now derives
+the reopened name from the assigned product's registered path stem. Stable asset
+identity, product files and owner level remain unchanged. Save still creates a new
+product; in-place asset renaming is not introduced. Name-field visual acceptance
+and level persistence after owner actions remain unverified.
+
+Build: same VS18 Release MSBuild command recorded above, with
+/p:TargetName=RenegadeStudioAssemblyNameFix; log p1assembly-name-fix.log. Alternate
+exe avoids changing the owner's running recovery build. No automatic restart.
+
+Name-field repair Release build exits 0; git diff --check passes. Existing MSB8029
+warnings remain. Commit containing this section is the bounded repair checkpoint.

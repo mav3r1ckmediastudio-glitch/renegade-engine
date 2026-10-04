@@ -117,6 +117,10 @@ void StudioRenderPath::OpenAssemblyEditor() {
  assemblySave_.SetEnabled(false);assemblyName_.SetValue("First Person Assembly");assemblyPanel_.SetVisible(true);
  assemblyStatus_.SetText("Select parts and LOAD PARTS. Reopening an assigned assembly retains its recipe; Save creates a new product.");
  if(!assigned.empty()&&bridge::FirstPersonAssemblyService().ReadSettings(project.rootPath,project.projectId,assigned,assemblySettings_,error)){
+ const auto record=std::find_if(registry.records.begin(),registry.records.end(),
+ [&assigned](const auto& r){return r.assetId==assigned;});
+ if(record!=registry.records.end())
+ assemblyName_.SetValue(std::filesystem::u8path(record->projectRelativePath).stem().generic_u8string());
  auto select=[&](wi::gui::ComboBox& box,const std::string& id){
  auto it=std::find(assemblyPartIds_.begin(),assemblyPartIds_.end(),id);
  if(it!=assemblyPartIds_.end())box.SetSelected(static_cast<int>(it-assemblyPartIds_.begin()));};
