@@ -68,6 +68,28 @@ int main()
         if(i==3)bad.firearm.minimumShotInterval=std::numeric_limits<float>::quiet_NaN();
         if(SerializeFirstPersonAssemblySettings(bad,reopened,error))return 12;
     }
+    auto hands=settings;
+    hands.offHandWeaponAssetId=GenerateStableId();
+    hands.offHandParentBonePath="[\"root\",\"left\"]";
+    hands.primaryLayerRootPath="[\"root\",\"right\"]";
+    hands.offHandLayerRootPath="[\"root\",\"left\"]";
+    hands.blockStartClip=17;hands.blockLoopClip=22;hands.blockEndClip=24;
+    std::string handsJson;
+    if(!SerializeFirstPersonAssemblySettings(hands,handsJson,error)||
+       !ParseFirstPersonAssemblySettings(handsJson,parsed,error)||
+       !SerializeFirstPersonAssemblySettings(parsed,reopened,error)||reopened!=handsJson||
+       !parsed.IndependentHands())return 21;
+    for(int i=0;i<3;++i) {
+        auto bad=hands;
+        if(i==0)bad.offHandWeaponAssetId=bad.weaponAssetId;
+        if(i==1)bad.offHandLayerRootPath="[1]";
+        if(i==2)bad.offHandWeaponRotation.w=5;
+        if(SerializeFirstPersonAssemblySettings(bad,reopened,error))return 22;
+    }
+    CommandService handHistory;auto handDraft=settings;
+    if(!handHistory.Execute(std::make_unique<SetFirstPersonAssemblySettingsCommand>(handDraft,hands))||
+       !handDraft.IndependentHands()||!handHistory.Undo()||handDraft.IndependentHands()||
+       !handHistory.Redo()||handDraft.blockLoopClip!=22)return 23;
     CommandService history;
     auto draft=settings;
     auto next=draft;next.firearm=tuned.firearm;next.weaponPosition.x+=0.01f;next.cameraPosition.z+=0.02f;

@@ -120,8 +120,7 @@ namespace renegade::runtime
                 actions.Cancel(primary.equipment.assetId, bridge::EquipmentHand::Primary);
                 actions.Cancel(offHand.equipment.assetId, bridge::EquipmentHand::OffHand);
             }
-            // Capability stays false in the live Runtime until native shield
-            // presentation is verified. Gameplay tests can exercise routing now.
+            // Enable held block only for a loaded, compatible independent-hand presentation.
             if(offHandBlockAvailable && !input.cancelEquipmentPressed && input.offHandUsePressed &&
                 !(actions.ReservedHands()&2) && !offHand.equipment.assetId.empty()) {
                 for(const auto& definition:offHand.equipment.actions)

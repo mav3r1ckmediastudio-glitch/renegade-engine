@@ -3,6 +3,7 @@
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
 #include "json.hpp"
 #include "renegade/bridge/CharacterService.h"
+#include "renegade/bridge/PlayerViewAnimationMask.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -12,6 +13,7 @@
 #include <cmath>
 #include <limits>
 namespace renegade::bridge {
+static bool PrepareIndependentHandAssembly(const std::string&,const StableId&,const FirstPersonAssemblySettings&,wi::scene::Scene&,wi::scene::Scene&,wi::scene::Scene&,std::string&);
 std::vector<FirstPersonPartChoice> CollectFirstPersonPartChoices(const AssetRegistry& registry) {
  std::set<StableId> armsIds,weaponIds;
  for(const auto& product:registry.importedProducts) {
@@ -23,6 +25,10 @@ std::vector<FirstPersonPartChoice> CollectFirstPersonPartChoices(const AssetRegi
    const auto weapon=options.value("weapon_asset_id",std::string{});
    if(IsValidStableId(arms))armsIds.insert(arms);
    if(IsValidStableId(weapon))weaponIds.insert(weapon);
+   if(options.contains("hand_layers")) {
+    const auto off=options.at("hand_layers").value("off_hand_asset_id",std::string{});
+    if(IsValidStableId(off))weaponIds.insert(off);
+   }
   } catch(const nlohmann::json::exception&) { /* Invalid provenance cannot classify parts. */ }
  }
  std::vector<FirstPersonPartChoice> result;
@@ -67,10 +73,10 @@ bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
  if(!IsValidStableId(s.armsAssetId)||!IsValidStableId(s.weaponAssetId)||s.parentBonePath.empty()||
  s.armsAssetId==s.weaponAssetId||s.pairs.empty()||s.pairs.size()>32) {
  e="Select distinct arms and weapon products, an explicit parent bone and at least one clip pair.";return false;}
- for(auto p:{s.weaponPosition,s.cameraPosition})
+ for(auto p:{s.weaponPosition,s.cameraPosition,s.offHandWeaponPosition})
  if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z)||
  std::abs(p.x)>10||std::abs(p.y)>10||std::abs(p.z)>10){e="Assembly positions must be finite and within +/-10 metres.";return false;}
- for(auto q:{s.weaponRotation,s.cameraRotation}) {
+ for(auto q:{s.weaponRotation,s.cameraRotation,s.offHandWeaponRotation}) {
  float n=q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w;
  if(!std::isfinite(n)||std::abs(n-1)>0.002f){e="Assembly rotations must be unit quaternions.";return false;}
  }
@@ -78,6 +84,17 @@ bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
  if(!path.is_array()||path.empty()||path.dump()!=s.parentBonePath||
  std::any_of(path.begin(),path.end(),[](const auto& n){return !n.is_string()||n.template get<std::string>().empty();})) {
  e="Assembly parent bone path is malformed.";return false;
+ }
+ if(s.IndependentHands()) {
+  if(!IsValidStableId(s.offHandWeaponAssetId) || s.offHandWeaponAssetId==s.armsAssetId ||
+     s.offHandWeaponAssetId==s.weaponAssetId) {e="Independent hands require three distinct governed products.";return false;}
+  for(const auto& value:{s.offHandParentBonePath,s.primaryLayerRootPath,s.offHandLayerRootPath}) {
+   const auto p=nlohmann::json::parse(value,nullptr,false);
+   if(!p.is_array()||p.empty()||p.dump()!=value||
+      std::any_of(p.begin(),p.end(),[](const auto& n){return !n.is_string()||n.template get<std::string>().empty();})) {
+    e="Independent hand bone paths must be canonical explicit hierarchy paths.";return false;
+   }
+  }
  }
  std::set<std::string> actions;
  for(const auto& p:s.pairs) {
@@ -98,6 +115,7 @@ std::vector<wi::ecs::Entity> Roots(const wi::scene::Scene& s) {
  return r;
 }
 }
+#include "FirstPersonHandAssemblyPreparation.h"
 bool SerializeFirstPersonAssemblySettings(const FirstPersonAssemblySettings& s,std::string& out,std::string& e) {
  if(!Valid(s,e))return false;
  nlohmann::json j={{"schema_version",1},{"arms_asset_id",s.armsAssetId},{"weapon_asset_id",s.weaponAssetId},
@@ -109,11 +127,22 @@ bool SerializeFirstPersonAssemblySettings(const FirstPersonAssemblySettings& s,s
  for(const auto& p:s.pairs)j["pairs"].push_back({{"action",p.action},{"arms_clip",p.armsClip},{"weapon_clip",p.weaponClip}});
  j["firearm"]={{"schema_version",1},{"capacity",s.firearm.capacity},
  {"minimum_shot_interval",s.firearm.minimumShotInterval},{"allow_partial_reload",s.firearm.allowPartialReload}};
+ if(s.IndependentHands()) {
+  j["schema_version"]=2;
+  j["hand_layers"]={{"off_hand_asset_id",s.offHandWeaponAssetId},{"off_hand_parent",s.offHandParentBonePath},
+   {"primary_root",s.primaryLayerRootPath},{"off_hand_root",s.offHandLayerRootPath},
+   {"off_hand_position",{s.offHandWeaponPosition.x,s.offHandWeaponPosition.y,s.offHandWeaponPosition.z}},
+   {"off_hand_rotation",{s.offHandWeaponRotation.x,s.offHandWeaponRotation.y,s.offHandWeaponRotation.z,s.offHandWeaponRotation.w}},
+   {"block_start",s.blockStartClip},{"block_loop",s.blockLoopClip},{"block_end",s.blockEndClip}};
+ }
  out=j.dump();return true;
 }
 bool ParseFirstPersonAssemblySettings(const std::string& text,FirstPersonAssemblySettings& s,std::string& e) {
  s={};try {
- auto j=nlohmann::json::parse(text);if(!j.is_object()||(j.size()!=9 && !(j.size()==10 && j.contains("firearm")))||j.at("schema_version")!=1)throw std::runtime_error("schema");
+ auto j=nlohmann::json::parse(text);
+ const bool independent=j.is_object() && j.value("schema_version",0)==2;
+ if(!j.is_object() || (independent ? (j.size()!=11 || !j.contains("hand_layers") || !j.contains("firearm")) :
+   ((j.size()!=9 && !(j.size()==10 && j.contains("firearm"))) || j.at("schema_version")!=1)))throw std::runtime_error("schema");
  if(j.contains("firearm")) {
  const auto& f=j.at("firearm");
  if(!f.is_object()||f.size()!=4||f.at("schema_version")!=1||
@@ -133,6 +162,17 @@ bool ParseFirstPersonAssemblySettings(const std::string& text,FirstPersonAssembl
  return XMFLOAT4(a[0].get<float>(),a[1].get<float>(),a[2].get<float>(),a[3].get<float>());};
  s.weaponPosition=position("weapon_position");s.cameraPosition=position("camera_position");
  s.weaponRotation=rotation("weapon_rotation");s.cameraRotation=rotation("camera_rotation");
+ if(independent) {
+  const auto& h=j.at("hand_layers");if(!h.is_object()||h.size()!=9)throw std::runtime_error("hand layers");
+  s.offHandWeaponAssetId=h.at("off_hand_asset_id").get<std::string>();
+  s.offHandParentBonePath=h.at("off_hand_parent").get<std::string>();
+  s.primaryLayerRootPath=h.at("primary_root").get<std::string>();s.offHandLayerRootPath=h.at("off_hand_root").get<std::string>();
+  const auto& p=h.at("off_hand_position");const auto& q=h.at("off_hand_rotation");
+  if(!p.is_array()||p.size()!=3||!q.is_array()||q.size()!=4)throw std::runtime_error("hand transform");
+  s.offHandWeaponPosition={p[0].get<float>(),p[1].get<float>(),p[2].get<float>()};
+  s.offHandWeaponRotation={q[0].get<float>(),q[1].get<float>(),q[2].get<float>(),q[3].get<float>()};
+  s.blockStartClip=h.at("block_start").get<unsigned>();s.blockLoopClip=h.at("block_loop").get<unsigned>();s.blockEndClip=h.at("block_end").get<unsigned>();
+ }
  for(const auto& p:j.at("pairs"))s.pairs.push_back({p.at("action").get<std::string>(),p.at("arms_clip").get<unsigned>(),p.at("weapon_clip").get<unsigned>()});
  }catch(const std::exception&){e="Malformed first-person assembly recipe.";return false;}return Valid(s,e);
 }
@@ -147,6 +187,7 @@ bool FirstPersonAssemblyService::Prepare(const std::string& root,const StableId&
  auto b=std::find_if(bones.begin(),bones.end(),[&](const auto& b){return b.path==s.parentBonePath;});
  if(b==bones.end()){e="Selected parent bone does not exist in the retained arms.";return false;}
  auto roots=Roots(w);if(roots.size()!=1){e="Weapon product must have one native transform root.";return false;}
+ if(s.IndependentHands())return PrepareIndependentHandAssembly(root,project,s,a,w,result,e);
  // Copy selected pairs before merging; each track retains its own skeleton targets.
  auto tracks=[&](wi::scene::Scene& native,bool isArms,wi::scene::Scene& selected)->bool {
  wi::Archive copy;native.Serialize(copy);copy.SetReadModeAndResetPos(true);selected.Serialize(copy);
@@ -215,7 +256,11 @@ bool FirstPersonAssemblyService::Pose(wi::scene::Scene& s,const std::string& act
  c.Pause();c.RootMotionOff();c.amount=use?1.0f:0.0f;c.timer=std::clamp(c.start+time,c.start,c.end);
  c.last_update_time=-std::numeric_limits<float>::max();selected+=use;
  }
- if(selected!=2){e="Action must resolve to one arms track and one weapon track.";return false;}
+ bool independent=false;
+ for(size_t i=0;i<s.metadatas.GetCount();++i)
+  independent=independent || (s.metadatas[i].bool_values.has("renegade.first_person.independent_hands") &&
+    s.metadatas[i].bool_values.get("renegade.first_person.independent_hands"));
+ if(selected!=(independent?1u:2u)){e="Action has invalid native track coverage.";return false;}
  s.Update(1.0f/60);e.clear();return true;
 }
 SetFirstPersonAssemblySettingsCommand::SetFirstPersonAssemblySettingsCommand(
@@ -224,7 +269,9 @@ SetFirstPersonAssemblySettingsCommand::SetFirstPersonAssemblySettingsCommand(
 bool SetFirstPersonAssemblySettingsCommand::Execute() {
  auto equal3=[](const XMFLOAT3& a,const XMFLOAT3& b){return a.x==b.x&&a.y==b.y&&a.z==b.z;};
  auto equal4=[](const XMFLOAT4& a,const XMFLOAT4& b){return a.x==b.x&&a.y==b.y&&a.z==b.z&&a.w==b.w;};
- bool same=before_.firearm==after_.firearm&&before_.armsAssetId==after_.armsAssetId&&before_.weaponAssetId==after_.weaponAssetId&&
+ std::string beforeJson,afterJson,error;
+ const bool semanticSame=SerializeFirstPersonAssemblySettings(before_,beforeJson,error)&&SerializeFirstPersonAssemblySettings(after_,afterJson,error)&&beforeJson==afterJson;
+ bool same=semanticSame&&before_.firearm==after_.firearm&&before_.armsAssetId==after_.armsAssetId&&before_.weaponAssetId==after_.weaponAssetId&&
  before_.parentBonePath==after_.parentBonePath&&equal3(before_.weaponPosition,after_.weaponPosition)&&
  equal3(before_.cameraPosition,after_.cameraPosition)&&equal4(before_.weaponRotation,after_.weaponRotation)&&
  equal4(before_.cameraRotation,after_.cameraRotation)&&before_.pairs.size()==after_.pairs.size();

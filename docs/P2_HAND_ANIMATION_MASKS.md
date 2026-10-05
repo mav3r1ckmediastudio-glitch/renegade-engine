@@ -69,3 +69,39 @@ movement policy. Verify actual sword and shield alignment, then Test Level and
 independently packaged Runtime with authored input. Keep the live off-hand
 capability disabled until that route passes. Existing two-hand shotgun actions
 must retain full-arm ownership.
+
+
+# Sword/shield playable checkpoint - 2026-10-05
+Implemented schema-v2 shared arms with static primary/off-hand attachments,
+explicit clavicle partitions, transient native per-hand clips and independent clocks.
+Runtime routes LMB Attack and RMB held Block only for a matching shared presentation.
+Fixed missing MOUSE_RIGHT press support in GameplayInputService.
+Owner requested camera-local 90-degree right yaw and sword 2cm lower in grip.
+Saved project: C:/Users/paulw/OneDrive/Desktop/renegade tests/SwordShieldTest.
+Launcher: Play Sword Shield Test.cmd. All 35 source clips retained; only Idle,
+Walk, Sprint, AttackLeft and BlockStart/Loop/End wired for tonight.
+Release bridge and Runtime builds pass. Alternate Studio build passes at
+BUILD/sword-studio (owner Studio untouched). Five focused CTests pass:
+PlayerViewRig, source contract, FirstPersonAssemblySettings (v1/v2/undo),
+EquipmentActionState, EquipmentAsset.
+Native input evidence: BUILD/sword-native-events.json: equipment ready,
+independent hands enabled; held block phase2 concurrent primary attack;
+release phase3 then phase0. Fixture save/reopen and TestLevel closure checked
+by --sword-playable in Tests/SwordShieldPlayableProof.h (final output proof6).
+No gate closure. Remaining: sword/shield clipping is visible and unsolved;
+no collision, hit damage, directional selection, parry, charge or equip wiring.
+Hard animation transitions currently; blends and compatible combined poses need work.
+Generic v2 assembly editor controls not yet exposed; fixture authored through service.
+Native TestLevel snapshot smoke is required before claiming editor-button parity.
+Files: FirstPersonAssemblyService.h/.cpp, FirstPersonHandAssemblyPreparation.h,
+PlayerViewHandAnimation.h, PlayerViewAnimation.h, GameplayInputService.cpp,
+RuntimeApplication.cpp, RuntimeLiveDiagnostics.cpp, RuntimeEquipmentLoadout.h,
+FirstPersonAssemblyGraphicsProof.cpp, FirstPersonAssemblySettingsTests.cpp,
+SwordShieldPlayableProof.h.
+Reproduce: BUILD/sword_bridge_runtime_build.ps1, sword_playable_build.ps1,
+sword_tests.ps1; manual native input BUILD/sword_native.py.
+Next: correct clipping with compatible block/attack poses, meaningful per-hand
+controller edge-case tests and v2 authoring controls; do not declare P2 complete.
+
+
+Final TestLevel native smoke: snapshot load ready and simultaneous attack/block plus lowering observed in events; strict automated script assertion interrupted by foreground input changes, so no clean editor-button parity claim. Sword grip lowered 2cm; owner visual clipping acknowledged.

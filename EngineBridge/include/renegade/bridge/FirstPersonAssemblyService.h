@@ -24,6 +24,13 @@ struct FirstPersonAssemblySettings {
     XMFLOAT4 cameraRotation = {0,0,0,1};
     std::vector<FirstPersonAssemblyPair> pairs;
     FirearmSettings firearm;
+    // Schema-v2 static dual-hand presentation; v1 paired shotgun stays unchanged.
+    StableId offHandWeaponAssetId;
+    std::string offHandParentBonePath, primaryLayerRootPath, offHandLayerRootPath;
+    XMFLOAT3 offHandWeaponPosition = {};
+    XMFLOAT4 offHandWeaponRotation = {0,0,0,1};
+    unsigned blockStartClip = 0, blockLoopClip = 0, blockEndClip = 0;
+    bool IndependentHands() const noexcept { return !offHandWeaponAssetId.empty(); }
 };
 bool SerializeFirstPersonAssemblySettings(const FirstPersonAssemblySettings&, std::string&, std::string&);
 bool ParseFirstPersonAssemblySettings(const std::string&, FirstPersonAssemblySettings&, std::string&);

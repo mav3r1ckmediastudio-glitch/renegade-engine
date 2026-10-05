@@ -431,7 +431,10 @@ namespace renegade::runtime
                         playerEquipment_.RouteStaged(gameplayInput, playerViewAnimation_.equipped,
                             presentationBusy, paused_ ? 0.0f : dt, playerViewAnimation_.aiming,
                             !playerViewAnimation_.clips[PlayerViewActionIndex(PlayerViewAction::Charge)].empty() &&
-                            !playerViewAnimation_.clips[PlayerViewActionIndex(PlayerViewAction::Release)].empty());
+                            !playerViewAnimation_.clips[PlayerViewActionIndex(PlayerViewAction::Release)].empty(),
+                            playerViewAnimation_.handLayers.enabled &&
+                            !playerEquipment_.offHand.equipment.assetId.empty() &&
+                            playerEquipment_.offHand.equipment.presentationAssetId == playerViewRig_.viewModelAssetId);
                     UpdateRuntimePlayerViewAnimations(
                         scenes_.GetScene(),
                         playerViewAnimation_,
@@ -441,7 +444,8 @@ namespace renegade::runtime
                         !paused_ && equipmentInput.reloadPressed,
                         equipmentInput.aimDown,
                         !paused_ && equipmentInput.toggleEquipmentPressed,
-                        grounded, playerEquipment_.chargePresentation, playerEquipment_.releasePresentation);
+                        grounded, playerEquipment_.chargePresentation, playerEquipment_.releasePresentation,
+                        playerEquipment_.offHandBlockPresentation);
                 }
             }
         }

@@ -1211,6 +1211,7 @@ static bool SwordShieldInspect(const fs::path& input,const fs::path& output)
 }
 
 #include "SwordShieldLayerGraphicsProof.h"
+#include "SwordShieldPlayableProof.h"
 
 int main(int argc,char** argv)
 {
@@ -1227,6 +1228,7 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--sword-playable") return SwordShieldPlayableProof(input,output)?0:24;
     if(argc==4 && std::string(argv[3])=="--sword-layers") return SwordShieldLayerProof(input,output)?0:23;
     if(argc==4 && std::string(argv[3])=="--sword-inspect") return SwordShieldInspect(input,output)?0:22;
     if(argc==4 && std::string(argv[3])=="--camera-preview") return PlayerCameraPreviewProof(input,output)?0:21;

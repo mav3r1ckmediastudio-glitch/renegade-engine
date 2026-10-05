@@ -170,6 +170,7 @@ namespace
     bool Pressed(const GameplayActionBinding& binding) noexcept
     {
         return (binding.mouse == "MOUSE_LEFT" && wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) ||
+            (binding.mouse == "MOUSE_RIGHT" && wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT)) ||
             KeyboardPress(binding.keyboard) ||
             GamepadPress(binding.gamepad);
     }

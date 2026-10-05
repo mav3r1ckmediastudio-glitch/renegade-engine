@@ -1,6 +1,7 @@
 #pragma once
 
 #include "renegade/bridge/PlayerViewRig.h"
+#include "renegade/bridge/PlayerViewHandAnimation.h"
 #include "renegade/bridge/FirearmSettings.h"
 
 #include "renegade/bridge/AnimationService.h"
@@ -50,6 +51,7 @@ namespace renegade::runtime
         wi::ecs::Entity activeWeaponClip = wi::ecs::INVALID_ENTITY;
         float pairedTime = 0.0f;
         std::vector<wi::ecs::Entity> ownedAssemblyClips;
+        RuntimePlayerHandAnimationState handLayers;
     };
 
     [[nodiscard]] inline std::size_t PlayerViewActionIndex(
@@ -276,6 +278,7 @@ namespace renegade::runtime
                 clip->Pause(); clip->amount = 0.0f;
             }
         }
+        ResetRuntimePlayerHandAnimations(scene,state.handLayers);
         state = {};
     }
 
@@ -294,6 +297,19 @@ namespace renegade::runtime
             error =
                 "Player View animation setup requires a loaded view-model root.";
             return false;
+        }
+
+        if(!InitializeRuntimePlayerHandAnimations(scene,rig.viewModelRoot,state.handLayers,error))return false;
+        if(state.handLayers.enabled) {
+            for(size_t action=0;action<state.handLayers.primary.size();++action)
+                for(const auto entity:state.handLayers.primary[action]) {
+                    const auto* name=scene.names.GetComponent(entity);
+                    state.clips[action].push_back({entity,name?name->name:"Hand layer",""});
+                }
+            state.initialized=true;
+            UpdateRuntimePlayerHandAnimations(scene,state.handLayers,PlayerViewAction::Idle,0,false,false);
+            state.activeClip=state.handLayers.right;
+            return true;
         }
 
         for (std::size_t i = 0; i < scene.metadatas.GetCount(); ++i)
@@ -458,6 +474,11 @@ namespace renegade::runtime
         if (!state.initialized)
             return false;
 
+        if(state.handLayers.enabled) {
+            UpdateRuntimePlayerHandAnimations(scene,state.handLayers,requested,0,false,false);
+            state.activeClip=state.handLayers.right;state.activeAction=state.handLayers.action;
+            return true;
+        }
         const auto* variants =
             ResolvePlayerViewAnimationVariants(state, requested);
         if (variants == nullptr || variants->empty())
@@ -581,11 +602,19 @@ namespace renegade::runtime
         const bool toggleEquipmentPressed = false,
         const bool grounded = true,
         const bool chargeHeld = false,
-        const bool releasePressed = false) noexcept
+        const bool releasePressed = false,
+        const bool offHandBlockHeld = false) noexcept
     {
         if (!state.initialized)
             return;
 
+        if(state.handLayers.enabled) {
+            UpdateRuntimePlayerHandAnimations(scene,state.handLayers,requested,dt,firePressed,offHandBlockHeld);
+            state.activeClip=state.handLayers.right;state.activeAction=state.handLayers.action;
+            state.oneShotPlaying=state.handLayers.attacking;state.aiming=false;
+            state.resolvedClipName=state.handLayers.action==PlayerViewAction::Attack?"Sword Attack":"Hand movement";
+            return;
+        }
         if (state.pairedAssembly)
         {
             // A discrete action owns both tracks until its shared duration finishes.

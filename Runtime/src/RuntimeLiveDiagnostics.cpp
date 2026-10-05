@@ -657,6 +657,11 @@ namespace renegade::runtime
             {"player_view_animation_initialized", playerViewAnimation_.initialized},
             {"player_view_animation_clip", playerViewAnimation_.resolvedClipName},
             {"player_view_paired_assembly", playerViewAnimation_.pairedAssembly},
+            {"player_view_independent_hands", playerViewAnimation_.handLayers.enabled},
+            {"player_view_shield_phase", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.blockPhase)},
+            {"player_view_primary_attacking", playerViewAnimation_.handLayers.attacking},
+            {"player_view_shield_time_ms", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.leftTime * 1000.0f)},
+            {"player_view_primary_time_ms", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.rightTime * 1000.0f)},
             {"player_view_active_tracks", static_cast<std::uint64_t>(
                 (playerViewAnimation_.activeClip != wi::ecs::INVALID_ENTITY ? 1 : 0) +
                 (playerViewAnimation_.activeWeaponClip != wi::ecs::INVALID_ENTITY ? 1 : 0))},
