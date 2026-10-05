@@ -1,3 +1,57 @@
+
+## Independent hand transition blending - 2026-10-06
+Implementation commit: 8810af7a675f7a8a86d5f3d6b9dd085cdaca0020.
+PlayerViewHandBlend.h captures the last evaluated local pose per hand and
+restores it as a fixed transition origin before Wicked evaluates the destination
+masked clip. Native AnimationComponent.amount supplies translation/scale lerp
+and quaternion slerp; no custom clip sampler or Wicked source change.
+Smoothstep fades: strike entry 60ms; charge/direction/hold 100ms;
+shield start/loop/end 120ms; primary locomotion/recovery/cancel 140ms.
+Interrupted fades snapshot the displayed pose. Loop wraps do not restart fades.
+Zero or nonfinite dt leaves initialized hand state and blend clocks unchanged.
+Shared base and gameplay charge/release/completion ownership remain unchanged.
+The paired shotgun already uses its existing native crossfade path.
+Scope is the currently bound sword/shield locomotion, attacks, directional
+Charge/Hold/Release and BlockStart/Loop/End; unbound pack actions are retained
+but not newly routed by this task. No new animation authoring UI or schema.
+
+Changed files: EngineBridge/include/renegade/bridge/PlayerViewHandBlend.h,
+PlayerViewHandAnimation.h; Tests/PlayerViewHandBlendTests.h,
+PlayerViewRigTests.cpp and SwordShieldPlayableProof.h.
+Validation:
+- BUILD/blend_build.ps1: MSBuild Release x64 bridge, Runtime, PlayerViewRig
+  and assembly proof using /m:2 /p:BuildProjectReferences=false, CL=/MP4 PASS.
+- ctest --test-dir BUILD/renegade -C Release
+  -R 'FirstPersonAssemblySettings|PlayerViewRig|Equipment'
+  --output-on-failure: 5/5 PASS, 0.78s.
+- Native T/R/S midpoint, fixed-origin drift, interrupted restart, paused elapsed
+  and disjoint hand tests PASS in PlayerViewRig.
+- BUILD/blend_proof_build.ps1 builds the expanded manual fixture proof.
+  Run BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+  BUILD/sword-ue-proof4 BUILD/sword-playable-blend-proof2 --sword-playable:
+  PASS, 7.46s. Four charge and hold fades, release midpoint, direction
+  interruption, cancel, save/reopen and TestLevel dependency closure checked.
+  Second output directory used because repeat save correctly rejects an existing
+  assembly destination; original proof output preserved.
+- Captures stab-blend-charge.png, stab-blend-release.png and
+  blend-cancel-idle.png in BUILD/sword-playable-blend-proof2 inspected.
+- BUILD/directional_focus.ps1 native mouse test PASS, 27.07s:
+  four selected charged releases, independent held shield, low-charge quick tap.
+  Evidence BUILD/directional-native-events.json.
+- BUILD/sword_studio_build.ps1 clean alternate Studio Release PASS, 108.43s.
+- Owner playing updated standalone reports: 'they do look better'.
+- git diff --check PASS. Existing desktop SwordShieldTest uses rebuilt Runtime;
+  no asset migration needed. Owner editor stays open.
+A separate screenshot automation attempt lacked PIL; no dependency installed;
+native input and offscreen evaluated-pose captures supply the evidence instead.
+No Wicked Editor parity or packaged acceptance claim for this new slice.
+No release gate closure.
+
+Next priority explicitly requested by owner: blade/shield collision-aware arm
+pose correction (shoulder/elbow/wrist while preserving grip), separate from NPC
+damage. Blending does not prevent interpenetration. Collision correction, generic
+authoring, unused action routing, damage, stamina and parries remain open.
+
 ## Directional charge playback - 2026-10-06
 Replaces automatic basic-attack cycling in the owner fixture with explicit
 four-direction Charge/Hold/Release bindings. Hold LMB, move left/right/down/up

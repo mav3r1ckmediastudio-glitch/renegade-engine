@@ -1190,3 +1190,12 @@ controller edge-case tests and v2 authoring controls; do not declare P2 complete
 Independent assembly v2 permits ordered distinct Attack bindings. Native attack_order metadata preserves authored order when transient hand masks are rebuilt. Legacy paired schema-v1 actions remain unique.
 
 Directional melee presentation uses explicit Melee{Left,Right,Down,Stab}{Charge,Hold,Release} semantic bindings. The staged primary equipment Charge/Release events remain gameplay authority; directional right-arm playback selects the corresponding native clips independently of shield state. Charge seconds and release strength are transient; damage remains unimplemented.
+
+## Independent first-person hand fades
+For explicitly partitioned shared-arm assemblies, Runtime restores a frozen
+outgoing local pose per hand before the native destination mask is evaluated.
+Wicked AnimationComponent.amount owns T/R/S interpolation. Fades restart from
+the last displayed pose when interrupted; bones remain disjoint and shared-base
+ownership does not move into either hand. Blend state is transient, not serialized.
+Presentation fades never delay gameplay phases or implement weapon collision.
+Paired assemblies retain their existing native action crossfade path.
