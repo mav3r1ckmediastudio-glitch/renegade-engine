@@ -51,3 +51,8 @@ refills only when both tracks finish; nonempty reload uses the partial pair or
 falls back to the explicit full pair. No reserve ammunition is modelled yet.
 Capacity describes gameplay ammunition; changing it does not change the physical
 number of shells in an authored animation.
+
+Selected Player Start displays an editor-only orange wireframe collision capsule.
+It reads the runtime controller radius and total height each frame, follows the
+spawn feet position, and updates after inspector edits and Undo/Redo. It stays
+upright and unscaled like the runtime character, and is absent during Test Level.

@@ -989,3 +989,8 @@ shot cooldown advances only during gameplay. These are discrete shots, with no
 reserve ammunition or automatic firing yet. Gameplay capacity does not change the
 number of shells visible in authored clips. Independent equipment definitions and
 Player prefabs remain next stages; see PLAYER_AUTHORING_CONTINUATION.md.
+
+Selected Player Start displays an editor-only orange wireframe collision capsule.
+It reads the runtime controller radius and total height each frame, follows the
+spawn feet position, and updates after inspector edits and Undo/Redo. It stays
+upright and unscaled like the runtime character, and is absent during Test Level.

@@ -684,6 +684,29 @@ namespace renegade::studio
             RenderPath3D_PathTracing::Render();
             return;
         }
+        // Editor-only selection aid; dimensions come from the same sanitized
+        // settings used by the runtime character body. Player Start is the feet
+        // position, and Wicked's debug capsule takes the outer base/tip.
+        if (!projectHubVisible_ && session_ != nullptr &&
+            session_->Selection().HasSelection())
+        {
+            const auto& scene = session_->Scenes().GetScene();
+            const auto selected = session_->Selection().SelectedEntity();
+            if (bridge::IsPlayerStart(scene, selected))
+            {
+                if (const auto* transform = scene.transforms.GetComponent(selected))
+                {
+                    const auto settings = bridge::SanitizePlayerControllerSettings(
+                        bridge::CapturePlayerControllerSettings(scene, selected));
+                    const auto feet = transform->GetPosition();
+                    const XMFLOAT3 top(feet.x,
+                        feet.y + bridge::PlayerCapsuleTotalHeight(settings), feet.z);
+                    wi::renderer::DrawCapsule(
+                        wi::primitive::Capsule(feet, top, settings.capsuleRadius),
+                        XMFLOAT4(1.0f, 0.48f, 0.12f, 1.0f), false);
+                }
+            }
+        }
         RenderPath3D::Render();
 
         const auto* depthStencil = GetDepthStencil();
