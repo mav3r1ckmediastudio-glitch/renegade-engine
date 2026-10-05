@@ -2344,3 +2344,30 @@ settings every frame. No new serialized state or gameplay behavior in this chang
 Existing editor/runtime processes were retained. New capsule build left open.
 No overall release gate closure, push or merge.
 Next: owner review capsule, then reusable player inspector/prefab work.
+
+## 2026-10-05 Capsule camera-motion display repair
+
+Owner reports capsule visually splitting while navigating and suggests 3D asset.
+Implementation ff4b3b875551d9f5ee58c431d229e0e4c7549e49 replaces queued
+DrawCapsule debug-world rendering with connected capsule geometry projected
+during Studio Compose beside gizmo, after temporal scene postprocessing.
+Wicked wiRenderPath3D.cpp draws debug world before Postprocess_TemporalAA;
+thin debug lines accumulating through temporal history are the likely cause.
+New display uses 48-segment rings, eight meridians, smooth hemispherical caps,
+1.5 logical-pixel orange lines. Reads live controller dimensions and spawn
+translation. Clips camera planes and viewport; hides during hub/Test Level and
+assembly/grip workspaces. No serialized object or imported mesh asset added.
+Changed StudioApplication.cpp and existing capsule docs/feature matrix.
+
+Same Studio Release x64 MSBuild command/flags as prior capsule handoff:
+exit 0, 19.04s. Existing warnings only. git diff --check passes.
+Native BUILD/renegade/Studio/Release/RenegadeStudioStableCapsule.exe opened.
+ArmsLibrary.renegade original fixture opened directly via native project dialog.
+Static selected rounded capsule visually inspected, approximately 75 FPS.
+Automated motion captures repeatedly lost Player Start selection and cannot
+verify the owner's reported moving-capsule defect. Owner movement review pending;
+do not claim this motion behavior passed based on unrelated captures.
+Build left open on ArmsLibrary. Existing editors and Runtime retained.
+No persistence or gameplay changes; no overall gate closure, push or merge.
+Next: owner select Player Start and navigate to verify connected capsule,
+then continue reusable player inspector/prefab setup.
