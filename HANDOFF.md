@@ -1,3 +1,49 @@
+## Latest checkpoint: PR #178 merged; owner acceptance and UX follow-up - 5 October 2026
+
+Implementation merge: `7105a95ddcc103d6a024a17fddefd62f705a86b3` on main.
+PR #178 head before merge: `207ba864e79211992b6eb11465c5a23850c36d3c`.
+Documentation branch: `docs/player-pr178-acceptance-ux-followup`.
+The documentation commit immediately following this checkpoint records these edits.
+
+PR #178 merged into main on 2026-10-05 at `7105a95ddcc103d6a024a17fddefd62f705a86b3`.
+All four pre-merge Windows checks passed: Studio Debug/Release and baseline
+Debug/Release. The owner confirmed the expected player/shotgun behaviour in the
+existing v2 game project and explicitly accepted the PR's functionality.
+This records functional acceptance of the merged scope, not completion of every
+P1 requirement or of the full Alpha Playability combat programme.
+
+Changed documentation: README.md, CHANGELOG.md, HANDOFF.md, docs/ROADMAP.md,
+ARCHITECTURE.md, FEATURE_MATRIX.csv, PLAYER_AUTHORING_CONTINUATION.md,
+P1_ASSEMBLY_AUTHORING.md, P1_STATUS_AND_RECOVERY.md,
+PLAYER_ARMS_COMBAT_FRAMEWORK.md and new PLAYER_AUTHORING_UX_FOLLOWUP.md.
+No engine code, assets, schema or Wicked pin changes.
+
+Evidence:
+- `gh pr view 178 --json state,mergeCommit,mergedAt`: MERGED at
+  2026-10-05T15:30:48Z, merge commit above.
+- Exact pre-merge head had four successful checks: Studio Windows x64
+  Debug/Release and Windows baseline Debug/Release.
+- `RenegadeFirstPersonAssemblyWorkflowProof.exe <isolated-transfer-project>
+  <evidence> --full-library-reopen`: exit 0; 14 paired actions, 28 native tracks,
+  two armatures and ten retained textures.
+- `RenegadeFirstPersonAssemblyWorkflowProof.exe <isolated-package>
+  <evidence> --runtime-package`: exit 0; paired load/pose/pause/cleanup,
+  capacity 2, partial reload enabled.
+- Native v2 Runtime visual inspection showed textured arms/shotgun reloading.
+  Owner then confirmed everything works as expected and accepted PR scope.
+- Transfer required manual project identity, dependency/provenance registration
+  and exact canonical serialization. It is not a shipped one-click importer.
+- Documentation validation: git diff --check, CSV width/identity and Markdown
+  local-link checks; exact results recorded in the documentation PR.
+
+Risks/next task: functionality accepted; authoring UX explicitly needs a revisit.
+Scope dedicated arms/weapon picker collections or folders, combined-folder pack
+roles, readable prefab/assembly names and dependency-aware project adoption.
+Preserve existing automatic preview refresh and check loading/error feedback.
+Independent equipment, reserve ammo, hits/damage, recoil and wider combat gates
+remain open. Do not mark the whole Alpha programme or every P1 requirement closed.
+Keep earlier checkpoints below as historical evidence.
+
 ## Latest checkpoint: Wander normal role with 2x2 terrain-chunk extent - 2 October 2026
 
 Branch: feature/character-animation-crossfades.

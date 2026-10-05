@@ -362,16 +362,17 @@ legacy LP01/LP02 immediate startup route.
 Phase 6 uses one authored Player Start and one Runtime-only player. The Player
 Start is an ordinary WISCENE Transform/Name/Metadata entity identified by a
 Renegade-owned metadata key in addition to Wicked's broader `Player` preset.
-`CreatePlayerStartCommand` owns creation and Undo/Redo; Studio exposes it through
-the Renegade Add menu and existing transform workflow. The same native Metadata
+`PlacePlayerPrefabCommand` creates and assigns a start from the Content/Player
+Asset Browser through command-backed creation and Undo/Redo. New levels do not
+contain an automatic start, and Add no longer exposes Player Start. The same
+native Metadata
 stores the curated `PlayerControllerSettings`; `SetPlayerControllerSettingsCommand`
 is the sole persistent editing path and Runtime consumes those authored values.
 
-The Player Start's flat forward arrow and selected capsule are Studio-only
-visualizers projected from the authored transform and settings. They are not
-mesh/object entities, do not serialize, and cannot enter Runtime or packages.
-The arrow deliberately uses only yaw so it remains on the ground while matching
-the exact first-person spawn heading.
+The Player Start uses an always-visible Studio-only capsule, cyan normally and
+orange when selected. Picking uses its upright bounds, including the interior.
+The former billboard and ground arrow are removed. The overlay is composed after
+temporal postprocessing, does not serialize and cannot enter Runtime or packages.
 
 `PlayerService` resolves the marker deterministically and creates a native
 Wicked `RigidBodyPhysicsComponent` in character mode only inside Runtime. The
@@ -987,10 +988,11 @@ Test Level snapshots and package loading. Old recipes retain the accepted two-sh
 defaults. Runtime reload fills configured capacity only at animation completion;
 shot cooldown advances only during gameplay. These are discrete shots, with no
 reserve ammunition or automatic firing yet. Gameplay capacity does not change the
-number of shells visible in authored clips. Independent equipment definitions and
-Player prefabs remain next stages; see PLAYER_AUTHORING_CONTINUATION.md.
+number of shells visible in authored clips. Independent equipment definitions
+remain a next stage; player prefabs are implemented. See PLAYER_AUTHORING_CONTINUATION.md.
 
-Selected Player Start displays an editor-only orange wireframe collision capsule.
+Player Start displays an always-visible editor-only wireframe collision capsule,
+cyan normally and orange when selected.
 It reads the runtime controller radius and total height each frame, follows the
 spawn feet position, and updates after inspector edits and Undo/Redo. It stays
 upright and unscaled like the runtime character, and is absent during Test Level.
@@ -1021,4 +1023,23 @@ local arms assignments; Test Level snapshots retain prefab data and identity.
 
 
 ### Player placement from Content/Player
-New levels have no automatic Player Start. Project browsing ensures a registered Basic Player Start preset under Content/Player without creating a scene entity. Saved player prefabs appear by authored name in the Asset Browser and support drag-and-drop surface placement (ground-plane fallback) and the existing Place control. One command creates the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve identity, transform and baseline. The always-visible selectable capsule represents the placed player. Add no longer exposes Player Start. A second placement is refused: use the existing Inspector to change prefab, or delete the old start before placing another. Immutable saves refresh the browser. Owner/exact-commit verification remains required.
+New levels have no automatic Player Start. Project browsing ensures a registered Basic
+Player Start preset under Content/Player without creating a scene entity. Saved player
+prefabs appear by authored name in the Asset Browser and support drag-and-drop surface
+placement (ground-plane fallback) and the existing Place control. One command creates
+the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve
+identity, transform and baseline. The always-visible selectable capsule represents the
+placed player. Add no longer exposes Player Start. A second placement is refused: use
+the existing Inspector to change prefab, or delete the old start before placing another.
+Immutable saves refresh the browser. PR #178 functionality is owner-accepted; the UI/UX
+follow-up remains open.
+
+### Player authoring UX and project adoption follow-up
+
+PR #178 is merged and owner-accepted. The current Assembly pickers enumerate
+imported model products without arms/weapon role filtering. Dedicated folders or
+collections and explicit role eligibility are a future UX contract, not an
+existing asset schema. Project identity, canonical registry/provenance and complete
+asset closure must be handled by a bridge adoption workflow; copying a prefab alone
+does not create a valid cross-project player. Keep this logic out of UI panels.
+See PLAYER_AUTHORING_UX_FOLLOWUP.md for requirements and acceptance criteria.

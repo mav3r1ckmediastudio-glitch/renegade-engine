@@ -1,7 +1,7 @@
 # Renegade Engine Roadmap
 
 **Current programme:** Alpha Playability — Player Arms & Combat Framework
-**Current integrated main:** PR #176 merged as 3bb768b148da590ea9dd7aa47fbb28006c0508d6
+**Current integrated main:** PR #178 merged as 7105a95ddcc103d6a024a17fddefd62f705a86b3
 **Wicked pin:** 3a800b7134aafe58461093c8abb2e274d4e64033
 **Canonical combat design:** [PLAYER_ARMS_COMBAT_FRAMEWORK](PLAYER_ARMS_COMBAT_FRAMEWORK.md)
 
@@ -39,30 +39,32 @@ The Alpha Playability target is:
 
 ### P1 — First-person Arms Rig
 
-**Status: IN PROGRESS — foundation implemented; shotgun diagnostic accepted; production assembly integration pending.**
-Owner accepts the authored shotgun diagnostic grip/reload on 4 October. Matching-rig
-clip ingestion and explicit retained-texture relinks now pass real-pack commit/reopen
-and fresh-process rendering. Native Studio assembly authoring now has retained part selection, explicit parent
-and transforms, paired preview, governed save/reopen and undoable Player Start
-assignment. Owner accepts the preview controls; Runtime movement pairs now evaluate
-on one clock and pass native roundtrip and real-product packaged-loader proofs.
-Owner Test Level and actual Build Game visuals are accepted. Stable-ID updates,
-Save as new and draft Undo/Redo are implemented with local lifecycle and Runtime
-proofs and owner acceptance. The supplied shotgun library now has all 14 paired
-preview actions and automatic draft refresh, with owner verification pending.
-Input-driven fire/reload, equip, aim and jump action ownership remain later work. See
-[P1_ASSEMBLY_AUTHORING](P1_ASSEMBLY_AUTHORING.md).
-Implementation baseline: `51513b9` on `feature/p1-first-person-arms-rig`.
-Camera synchronization repair `4dd9953` removes owner-reported proxy movement
-stutter. Owner accepts proxy gameplay through standalone Runtime and Studio Test
-Level, and confirms the actual Studio Build Game export launches and renders.
-Authored skeletal socket binding now has serialized/packaged-load regression and
-native DX12 animation proof. A native Studio Hand Grips editor now exposes bone
-selection, grip offsets, Undo/Redo and governed save/reopen; real skinned-asset
-acceptance remains open. See [P1_HAND_SOCKET_BINDINGS](P1_HAND_SOCKET_BINDINGS.md)
-and [P1_HAND_GRIP_EDITOR](P1_HAND_GRIP_EDITOR.md).
-See [P1_STATUS_AND_RECOVERY](P1_STATUS_AND_RECOVERY.md) for the commit inventory,
-local build/test evidence, missing acceptance and controlled recovery sequence.
+**Status: MERGED FUNCTIONAL CHECKPOINT; OWNER ACCEPTED; broader P1/Alpha scope remains open.**
+
+PR #178 merged into main on 2026-10-05 at `7105a95ddcc103d6a024a17fddefd62f705a86b3`.
+All four pre-merge Windows checks passed: Studio Debug/Release and baseline
+Debug/Release. The owner confirmed the expected player/shotgun behaviour in the
+existing v2 game project and explicitly accepted the PR's functionality.
+This records functional acceptance of the merged scope, not completion of every
+P1 requirement or of the full Alpha Playability combat programme.
+
+The merged slice includes the complete supplied shotgun's 14 paired actions,
+fire/reload/dry-fire ammunition state, partial reload, aim/equip/jump routing,
+editable firearm policy, native assembly lifecycle and reusable player prefabs.
+Player starts are placed from `Content/Player`, remain selectable as always-visible
+capsules, and retain Inspector defaults/overrides with Undo/Redo and save/reopen.
+The v2 transfer passed native full-library cold load and isolated packaged-runtime
+checks; owner gameplay acceptance followed. Cross-project adoption was manual.
+
+**Required follow-up:** revisit player authoring UI/UX, particularly dedicated
+arms/weapon picker folders or role-filtered collections, combined-folder packs,
+readable names and complete dependency-aware transfer. See
+[PLAYER_AUTHORING_UX_FOLLOWUP](PLAYER_AUTHORING_UX_FOLLOWUP.md).
+This is a recorded product requirement, not an implemented filtering feature.
+
+See [PLAYER_AUTHORING_CONTINUATION](PLAYER_AUTHORING_CONTINUATION.md),
+[P1_ASSEMBLY_AUTHORING](P1_ASSEMBLY_AUTHORING.md) and
+[P1_STATUS_AND_RECOVERY](P1_STATUS_AND_RECOVERY.md) for current and historical evidence.
 
 Extend the existing Player camera with a presentation-only first-person View Rig.
 Deliver primary hand, off hand and two-hand/support sockets, movement presentation

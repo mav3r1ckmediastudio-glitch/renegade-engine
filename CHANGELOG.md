@@ -2,6 +2,21 @@
 
 All notable user-facing changes are recorded here. Newest first.
 
+## 2026-10-05 - PR #178 player arms and reusable player authoring
+
+- Merged at `7105a95ddcc103d6a024a17fddefd62f705a86b3`; all four Windows checks passed.
+- Added the supplied shotgun's 14 paired actions, discrete two-shot firing,
+  dry fire, partial/full reload, aim, equip/holster and grounded jump presentation.
+- Added editable firearm policy, native assembly save/update/variant workflow,
+  reusable player prefab defaults/overrides/reset and Content/Player placement.
+- Player capsules remain visible and selectable; new levels contain no automatic
+  player start. Fixed capsule motion trails and editor picking/layout regressions.
+- Owner confirmed expected behaviour in the existing v2 project.
+- Known follow-up: revisit player/assembly UI/UX, especially project-wide part
+  dropdowns, dedicated arms/weapon collections and complete cross-project transfer.
+  See docs/PLAYER_AUTHORING_UX_FOLLOWUP.md. This does not complete the full combat
+  framework or introduce automatic asset migration.
+
 ## Unreleased — Phase 4 project and asset pipeline
 
 ### LP06 — standalone Windows game build lifecycle

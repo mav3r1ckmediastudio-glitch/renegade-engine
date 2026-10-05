@@ -111,7 +111,7 @@ and [AI_IMPLEMENTATION_HANDOFF](docs/AI_IMPLEMENTATION_HANDOFF.md).
 ### Player Arms & Combat — active programme
 
 The next Alpha Playability programme extends the existing Player rather than
-replacing it. A camera-mounted first-person View Rig will provide first-class
+replacing it. A camera-mounted first-person View Rig provides first-class
 primary/off-hand/two-hand presentation while world movement/collision remains
 owned by the accepted Player controller.
 
@@ -129,18 +129,20 @@ required gate because passing damage/state tests cannot prove that combat feels
 good.
 
 See [PLAYER_ARMS_COMBAT_FRAMEWORK](docs/PLAYER_ARMS_COMBAT_FRAMEWORK.md).
-P1's rig, asset binding and movement-animation foundation is implemented on the
-active P1 branch. The owner accepts the authored shotgun diagnostic grip/reload;
-native Studio assembly authoring now supports retained parts, explicit attachment,
-paired preview and governed save/reopen with Player Start assignment. Owner accepts
-the preview controls. Runtime movement playback now evaluates both native tracks
-on one clock; owner Test Level and actual Build Game visuals are accepted. Save
-changes, Save as new and draft Undo/Redo are owner accepted. The complete supplied
-shotgun library now has 14 paired preview actions and automatic draft refresh;
-owner verification of that new UI remains pending. See
-[P1 assembly authoring](docs/P1_ASSEMBLY_AUTHORING.md). The
-[P1 status and recovery checkpoint](docs/P1_STATUS_AND_RECOVERY.md) distinguishes
-implemented code, passing automated checks and the unresolved gameplay result.
+PR #178 is merged into main and owner-accepted on 5 October 2026. The supplied
+shotgun setup provides 14 paired actions, movement/aim/equip/jump presentation,
+discrete two-shot firing, dry fire and partial/full reload. Native assembly editing,
+player prefab save/assignment/reset, local overrides and selectable always-visible
+player capsules are integrated. Named prefabs can be dragged from `Content/Player`;
+new levels remain player-free until the creator places a start.
+
+The owner verified the shotgun in the existing v2 project. Authoring UX remains a
+required follow-up: arms/weapon pickers currently include unrelated project models,
+and cross-project transfer still needs manual registration/dependency handling.
+See [player authoring UI/UX follow-up](docs/PLAYER_AUTHORING_UX_FOLLOWUP.md),
+[player authoring continuation](docs/PLAYER_AUTHORING_CONTINUATION.md) and
+[P1 assembly authoring](docs/P1_ASSEMBLY_AUTHORING.md). Independent equipment,
+reserve ammunition, hits/damage, recoil and the wider combat programme remain open.
 
 ## Governed Lua scripting
 
@@ -347,8 +349,9 @@ Test Level snapshots and package loading. Old recipes retain the accepted two-sh
 defaults. Runtime reload fills configured capacity only at animation completion;
 shot cooldown advances only during gameplay. These are discrete shots, with no
 reserve ammunition or automatic firing yet. Gameplay capacity does not change the
-number of shells visible in authored clips. Independent equipment definitions and
-Player prefabs remain next stages; see PLAYER_AUTHORING_CONTINUATION.md.
+number of shells visible in authored clips. Independent equipment definitions
+remain a next stage; player prefabs are implemented.
+See [player authoring continuation](docs/PLAYER_AUTHORING_CONTINUATION.md).
 
 ### Reusable player prefabs
 
@@ -361,4 +364,13 @@ starting inventories remain later work. See PLAYER_AUTHORING_CONTINUATION.md.
 
 
 ### Player placement from Content/Player
-New levels have no automatic Player Start. Project browsing ensures a registered Basic Player Start preset under Content/Player without creating a scene entity. Saved player prefabs appear by authored name in the Asset Browser and support drag-and-drop surface placement (ground-plane fallback) and the existing Place control. One command creates the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve identity, transform and baseline. The always-visible selectable capsule represents the placed player. Add no longer exposes Player Start. A second placement is refused: use the existing Inspector to change prefab, or delete the old start before placing another. Immutable saves refresh the browser. Owner/exact-commit verification remains required.
+New levels have no automatic Player Start. Project browsing ensures a registered Basic
+Player Start preset under Content/Player without creating a scene entity. Saved player
+prefabs appear by authored name in the Asset Browser and support drag-and-drop surface
+placement (ground-plane fallback) and the existing Place control. One command creates
+the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve
+identity, transform and baseline. The always-visible selectable capsule represents the
+placed player. Add no longer exposes Player Start. A second placement is refused: use
+the existing Inspector to change prefab, or delete the old start before placing another.
+Immutable saves refresh the browser. PR #178 functionality is owner-accepted; the UI/UX
+follow-up remains open.

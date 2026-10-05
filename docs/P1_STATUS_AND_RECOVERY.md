@@ -1,5 +1,21 @@
 # P1 status and recovery checkpoint
 
+## Current checkpoint - 2026-10-05
+
+PR #178 merged into main on 2026-10-05 at `7105a95ddcc103d6a024a17fddefd62f705a86b3`.
+All four pre-merge Windows checks passed: Studio Debug/Release and baseline
+Debug/Release. The owner confirmed the expected player/shotgun behaviour in the
+existing v2 game project and explicitly accepted the PR's functionality.
+This records functional acceptance of the merged scope, not completion of every
+P1 requirement or of the full Alpha Playability combat programme.
+
+The earlier recovery sections below are historical and are not the current
+acceptance status. See [PLAYER_AUTHORING_CONTINUATION](PLAYER_AUTHORING_CONTINUATION.md)
+and [PLAYER_AUTHORING_UX_FOLLOWUP](PLAYER_AUTHORING_UX_FOLLOWUP.md) for merged scope,
+remaining gameplay work and the owner-requested UI/UX revisit.
+
+## Historical recovery record - 2026-10-03
+
 Date: 2026-10-03. Branch: `feature/p1-first-person-arms-rig`.
 Implementation baseline: `51513b95e98e6f962c0052da3f92f1b8c279b280`.
 Local recovery reference: `recovery/p1-baseline-20261003`.

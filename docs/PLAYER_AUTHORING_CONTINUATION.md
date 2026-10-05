@@ -3,6 +3,18 @@
 This document records the owner-requested player authoring programme, alongside
 PLAYER_ARMS_COMBAT_FRAMEWORK.md. It does not close a release gate.
 
+## Merged acceptance checkpoint - 2026-10-05
+
+PR #178 merged into main on 2026-10-05 at `7105a95ddcc103d6a024a17fddefd62f705a86b3`.
+All four pre-merge Windows checks passed: Studio Debug/Release and baseline
+Debug/Release. The owner confirmed the expected player/shotgun behaviour in the
+existing v2 game project and explicitly accepted the PR's functionality.
+This records functional acceptance of the merged scope, not completion of every
+P1 requirement or of the full Alpha Playability combat programme.
+
+See [PLAYER_AUTHORING_UX_FOLLOWUP](PLAYER_AUTHORING_UX_FOLLOWUP.md) for the required
+UI/UX revisit. Functionality is accepted; the setup experience is not final.
+
 ## Accepted baseline
 
 The owner confirmed the supplied shotgun assembly works: movement, aim in/out,
@@ -22,9 +34,9 @@ and the corrected runtime was owner accepted on 2026-10-05.
 
 ## Implementation sequence
 
-1. Editable firearm settings through the existing assembly save path.
-2. Complete Player Start and native Player Inspector workflow.
-3. Reusable Player definitions, placement, duplication and explicit overrides.
+1. Implemented: editable firearm settings through the existing assembly save path.
+2. Implemented functional baseline: Player Start and native Player Inspector; UX revisit pending.
+3. Implemented: reusable Player defaults, placement and explicit overrides. Multiple starts/duplication remain outside the single-player contract.
 4. Complete arms authoring validation, automatic preview and replacement workflow.
 5. Extract reusable equipment definitions and starting loadout; add ammunition
    reserve, fire modes, switching and staged action rules.
@@ -78,7 +90,8 @@ rotating the level's Player Start. The scene retains the prefab StableId and
 serialized assignment baseline. Editing controller values or the arms reference
 is a level-local override, visibly reported in the Inspector. RESET TO PREFAB
 restores the assigned baseline through Undo/Redo. Reusing it in another level:
-add that level's Player Start, then select the prefab in its Inspector.
+drag the named prefab from Content/Player into the level, or select it in an
+existing Player Start's Inspector.
 
 Runtime consumes the resolved scene settings, preserving the existing controller,
 physics and animation boundaries. Test Level snapshots copy the registered prefab;
@@ -88,8 +101,18 @@ as locally assigned arms. Save/reopen retains the baseline and overrides.
 This first reusable stage does not update all placed players when another prefab
 is saved, duplicate the single governed Player Start in one level, or expose a
 starting inventory. Global prefab updates, per-field inheritance indicators,
-Asset Browser drag placement and equipment definitions remain subsequent work.
+Asset Browser drag placement is implemented. Equipment definitions remain
+subsequent work.
 
 
 ### Player placement from Content/Player
-New levels have no automatic Player Start. Project browsing ensures a registered Basic Player Start preset under Content/Player without creating a scene entity. Saved player prefabs appear by authored name in the Asset Browser and support drag-and-drop surface placement (ground-plane fallback) and the existing Place control. One command creates the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve identity, transform and baseline. The always-visible selectable capsule represents the placed player. Add no longer exposes Player Start. A second placement is refused: use the existing Inspector to change prefab, or delete the old start before placing another. Immutable saves refresh the browser. Owner/exact-commit verification remains required.
+New levels have no automatic Player Start. Project browsing ensures a registered Basic
+Player Start preset under Content/Player without creating a scene entity. Saved player
+prefabs appear by authored name in the Asset Browser and support drag-and-drop surface
+placement (ground-plane fallback) and the existing Place control. One command creates
+the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve
+identity, transform and baseline. The always-visible selectable capsule represents the
+placed player. Add no longer exposes Player Start. A second placement is refused: use
+the existing Inspector to change prefab, or delete the old start before placing another.
+Immutable saves refresh the browser. PR #178 functionality is owner-accepted; the UI/UX
+follow-up remains open.
