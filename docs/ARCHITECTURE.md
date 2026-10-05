@@ -1000,3 +1000,8 @@ Studio Compose after scene temporal postprocessing, beside the transform gizmo.
 This avoids the motion trails from temporal accumulation of debug-world lines.
 The overlay is clipped to the scene viewport and camera planes; it is not a
 serialized asset, does not enter Runtime, and is hidden behind assembly/grip workspaces.
+
+Studio window canvas and swapchain must refresh on background WM_SIZE / DPI
+changes and on focus recovery. Minimized windows are excluded. Skipping these
+updates stretches the displayed scene/UI while input retains current client
+coordinates, causing offset hierarchy hitboxes and viewport marker selection.

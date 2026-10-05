@@ -173,8 +173,7 @@ namespace
                 startupPlayer->Resize();
             }
             else if (application != nullptr &&
-                     windowReadyForWicked &&
-                     application->is_window_active)
+                     windowReadyForWicked && !IsIconic(window))
             {
                 application->SetWindow(window);
             }
@@ -208,8 +207,7 @@ namespace
                 startupPlayer->Resize();
             }
             else if (application != nullptr &&
-                     windowReadyForWicked &&
-                     application->is_window_active)
+                     windowReadyForWicked && !IsIconic(window))
             {
                 application->SetWindow(window);
             }
@@ -262,7 +260,13 @@ namespace
 
         case WM_SETFOCUS:
             if (application != nullptr)
+            {
                 application->is_window_active = true;
+                // A background resize or monitor DPI transition must not leave
+                // the swapchain stretched relative to mouse hit coordinates.
+                if (windowReadyForWicked && !IsIconic(window))
+                    application->SetWindow(window);
+            }
             if (startupIdentityActive && startupIdentityPrompt != nullptr)
                 startupIdentityPrompt->Focus();
             return 0;
