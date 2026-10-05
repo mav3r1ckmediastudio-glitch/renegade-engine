@@ -1096,6 +1096,120 @@ static bool PlayerCameraPreviewProof(const fs::path& input,const fs::path& outpu
     return true;
 }
 
+
+static bool SwordShieldInspect(const fs::path& input,const fs::path& output)
+{
+    wi::scene::Scene arms; ImportModel_FBX((input/"Idle.FBX").generic_u8string(),arms);
+    std::cout<<"ARMS objects="<<arms.objects.GetCount()<<" armatures="<<arms.armatures.GetCount()
+        <<" animations="<<arms.animations.GetCount()<<"\n";
+    if(arms.armatures.GetCount()!=1 || !arms.objects.GetCount()) return false;
+    std::cout<<"ARMS bones="<<arms.armatures[0].boneCollection.size()<<"\n";
+    for(const char* name:{"Idle","BlockStart","BlockLoop","BlockEnd","AttackLeft","ShieldBash"}) {
+        wi::scene::Scene source; ImportModel_FBX((input/"X-Forward"/(std::string(name)+".fbx")).generic_u8string(),source);
+        std::cout<<name<<" objects="<<source.objects.GetCount()<<" armatures="<<source.armatures.GetCount()
+            <<" animations="<<source.animations.GetCount();
+        if(source.armatures.GetCount())std::cout<<" bones="<<source.armatures[0].boneCollection.size();
+        std::vector<wi::ecs::Entity> clips;std::string error;
+        const bool matched=AppendMatchingRigAnimationScene(arms,source,clips,error);
+        std::cout<<" exact="<<matched<<" error="<<error<<"\n";
+    }
+    for(const char* name:{"Idle","BlockLoop","AttackLeft"}) {
+        wi::scene::Scene source; ImportModel_FBX((input/"Y-Forward"/("Y_"+std::string(name)+".fbx")).generic_u8string(),source);
+        std::vector<wi::ecs::Entity> clips;std::string error;
+        const bool matched=AppendMatchingRigAnimationScene(arms,source,clips,error);
+        float largest=0;std::string worst;
+        if(source.armatures.GetCount()==1)
+        for(size_t i=0;i<source.armatures[0].boneCollection.size();++i) {
+            const auto* n=source.names.GetComponent(source.armatures[0].boneCollection[i]);
+            if(!n)continue;
+            for(size_t j=0;j<arms.armatures[0].boneCollection.size();++j) {
+                const auto* d=arms.names.GetComponent(arms.armatures[0].boneCollection[j]);
+                if(!d || d->name!=n->name)continue;
+                const float* a=&source.armatures[0].inverseBindMatrices[i]._11;
+                const float* b=&arms.armatures[0].inverseBindMatrices[j]._11;
+                for(int k=0;k<16;++k)if(std::abs(a[k]-b[k])>largest){largest=std::abs(a[k]-b[k]);worst=n->name;}
+            }
+        }
+        std::cout<<"Y "<<name<<" exact="<<matched<<" error="<<error<<" bind-delta="<<largest<<" bone="<<worst<<"\n";
+    }
+    auto candidate=ModelImportCandidateService().PrepareModel((input/"Idle.FBX").generic_u8string());
+    std::cout<<"GOVERNED BASE ready="<<candidate.IsReady()<<" error="<<candidate.Error()<<"\n";
+
+    if(!candidate.IsReady())return false;
+    const auto before=candidate.Evidence();
+    auto* native=candidate.PeekMutableScene();
+    native->names.Create(native->animations.GetEntity(0)).name="SwordShield / Idle";
+    native->metadatas.Create(native->animations.GetEntity(0)).string_values.set(CreatorCharacterAnimationActionMetadataKey,"Idle");
+    std::vector<fs::path> files;
+    for(const auto& file:fs::directory_iterator(input/"X-Forward"))
+        if(file.path().extension()==".fbx" && file.path().stem()!="Idle")files.push_back(file.path());
+    std::sort(files.begin(),files.end());
+    for(const auto& file:files) {
+        std::string error;
+        const size_t first=candidate.PeekScene()->animations.GetCount();
+        if(!ModelImportCandidateService().AppendExternalAnimations(candidate,file.generic_u8string(),error)) {
+            std::cerr<<"APPEND "<<file.filename()<<" "<<error<<"\n";return false;
+        }
+        native=candidate.PeekMutableScene();
+        for(size_t i=first;i<native->animations.GetCount();++i) {
+            const auto entity=native->animations.GetEntity(i);
+            native->names.Create(entity).name="SwordShield / "+file.stem().generic_u8string();
+            native->metadatas.Create(entity).string_values.set(CreatorCharacterAnimationActionMetadataKey,file.stem().generic_u8string());
+        }
+    }
+    if(candidate.Evidence().skinIndexFingerprint!=before.skinIndexFingerprint ||
+        candidate.Evidence().inverseBindFingerprint!=before.inverseBindFingerprint ||
+        native->animations.GetCount()!=35 || candidate.ExternalAnimations().size()!=34 ||
+        std::any_of(candidate.ExternalAnimations().begin(),candidate.ExternalAnimations().end(),
+            [](const auto& clip){return !clip.matchingRig;}))return false;
+    std::cout<<"LIBRARY clips="<<native->animations.GetCount()<<" retained="<<candidate.ExternalAnimations().size()<<"\n";
+    for(const char* action:{"Idle","BlockLoop","AttackLeft"}) {
+        Pose(*native,0.35f,action);
+        if(!Capture(*native,output/(std::string(action)+".png")))return false;
+    }
+    const auto projectId=GenerateStableId();std::string error;
+    ModelImportCommitRequest request;request.projectRoot=output.generic_u8string();request.projectId=projectId;
+    request.assetName="Sword Shield Arms Library";request.characterAsset=true;
+    auto saved=ModelImportCommitService().CommitModel(request,candidate);
+    if(!saved.succeeded){std::cerr<<saved.error<<"\n";return false;}
+    auto reopened=CreatorAssetWorkflowService().PrepareModelPlacement(request.projectRoot,projectId,saved.assetId);
+    if(!reopened.IsReady() || reopened.PeekScene()->animations.GetCount()!=35)return false;
+    ReusableModelAssetDocument document;CreatorModelImportRecipe recipe;
+    if(!ReadReusableModelAssetDocument((output/fs::u8path(saved.assetProjectRelativePath)).generic_u8string(),document,error) ||
+        !ParseCreatorModelImportOptions(nlohmann::json::parse(document.manifest.settingsJson).at("options").dump(),recipe,error))return false;
+    wi::scene::Scene rebuilt;ImportModel_FBX((output/fs::u8path(saved.sourceProjectRelativePath)).generic_u8string(),rebuilt);
+    if(!ApplyCreatorModelImportRecipe(rebuilt,request.projectRoot,projectId,recipe,error) || rebuilt.animations.GetCount()!=35) {
+        std::cerr<<"REBUILD "<<error<<"\n";return false;
+    }
+    // Raw source recipes restore tracks, not the diagnostic semantic labels above.
+    // Reapply labels by the verified append order before selecting a rebuilt pose.
+    for(size_t i=0;i<rebuilt.animations.GetCount();++i) {
+        const std::string action=i==0?"Idle":files[i-1].stem().generic_u8string();
+        rebuilt.metadatas.Create(rebuilt.animations.GetEntity(i)).string_values.set(
+            CreatorCharacterAnimationActionMetadataKey,action);
+    }
+    for(const char* action:{"Idle","BlockLoop","AttackLeft"}) {
+        Pose(rebuilt,0.35f,action);
+        if(!Capture(rebuilt,output/(std::string(action)+"-rebuilt.png")))return false;
+    }
+    std::ofstream(output/"arms-id.txt")<<saved.assetId;
+    std::ofstream(output/"project-id.txt")<<projectId;
+    for(const char* mesh:{"Sword","Shield"}) {
+        auto weapon=ModelImportCandidateService().PrepareModel((input/(std::string(mesh)+"Mesh.glb")).generic_u8string());
+        if(!weapon.IsReady()){std::cerr<<mesh<<" "<<weapon.Error()<<"\n";return false;}
+        request.assetName=std::string(mesh)+" Source Mesh";request.characterAsset=false;
+        auto item=ModelImportCommitService().CommitModel(request,weapon);
+        if(!item.succeeded){std::cerr<<item.error<<"\n";return false;}
+        auto placed=CreatorAssetWorkflowService().PrepareModelPlacement(request.projectRoot,projectId,item.assetId);
+        if(!placed.IsReady())return false;
+        if(!Capture(*placed.PeekMutableScene(),output/(std::string(mesh)+"-mesh.png")))return false;
+        std::ofstream(output/(std::string(mesh)+"-id.txt"))<<item.assetId;
+    }
+    std::cout<<"SWORD SHIELD retained library cold rebuild and meshes PASS\n";
+
+    return true;
+}
+
 int main(int argc,char** argv)
 {
     if(argc<3 || argc>4) { std::cerr<<"Usage: proof pack-folder output-folder\n"; return 2; }
@@ -1111,6 +1225,7 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--sword-inspect") return SwordShieldInspect(input,output)?0:22;
     if(argc==4 && std::string(argv[3])=="--camera-preview") return PlayerCameraPreviewProof(input,output)?0:21;
     if(argc==4 && std::string(argv[3])=="--charge-snapshot") return EquipmentSnapshotProof(input,output,true)?0:20;
     if(argc==4 && std::string(argv[3])=="--equipment-snapshot") return EquipmentSnapshotProof(input,output)?0:19;

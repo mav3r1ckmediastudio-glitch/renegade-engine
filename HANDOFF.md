@@ -1,3 +1,15 @@
+## 2026-10-05 - Sword/shield source verification (parent da550c8)
+
+Changed: Tests/FirstPersonAssemblyGraphicsProof.cpp adds manual --sword-inspect owner-asset proof. No gameplay capability enabled, no gate closure.
+
+Inputs: user Idle.FBX with arms mesh (SHA256 6025ad752595c3a0210e496d8c538208737d2cfaf2565d29bb8711dafb528633) and sword/shield pack (SHA256 64d46273d6fff7ca321200eff551cfd1a2f5a8b82606c71e977284b73404d451). Original animation-only source FBXs fail strict inverse-bind matching; humanoid fallback produces unacceptable grip poses. Strict matching was not weakened.
+
+Preparation: isolated BUILD/sword-unreal-project copies supplied Unreal Content; UE 5.7 commandlet exports animation-only FBXs with export_preview_mesh=false. Maps BlockIdle to BlockLoop. Both X/Y sample exports match the supplied 68-bone arms directly. Preview-mesh export with null RHI failed; animation-only export succeeded. BUILD/sword-normalized-source holds the supplied Idle plus normalized clips and original weapon FBXs. Blender headless converts original static weapon meshes to GLB with export_animations=false because their FBXs contain empty animation takes. Original sources unchanged. Export helper scripts remain ignored BUILD diagnostics; owner assets are not committed.
+
+Validation: Release RenegadeFirstPersonAssemblyWorkflowProof build, then executable BUILD/sword-normalized-source BUILD/sword-ue-proof4 --sword-inspect. Asserts 35 native clips, 34 retained matching-rig external sources, unchanged skin indices/inverse binds, saved asset reopen and retained-source recipe rebuild. Sword and shield static mesh assets save/reopen/render. Diagnostic action labels are reapplied for rebuilt pose selection; source recipe reconstruction does not preserve these temporary labels. Earlier rebuilt screenshots blended all tracks due absent labels; corrected diagnostic selection before final inspection.
+
+Limits: neutral/static weapon previews and dark arms material; no final texture proof, socket alignment, simultaneous left-block/right-attack masking or standalone gameplay proof. Live off-hand capability remains disabled. Next task: one native arms rig with independent left/right channel masks and correct weapon attachments; verify idle, attack and held block before enabling gameplay. No editor foreground takeover in this source check.
+
 ## Off-hand action/input foundation - 2026-10-05
 
 Prepared independent hand ownership while waiting for real sword/shield clips.
