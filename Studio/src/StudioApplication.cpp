@@ -684,29 +684,6 @@ namespace renegade::studio
             RenderPath3D_PathTracing::Render();
             return;
         }
-        // Editor-only selection aid; dimensions come from the same sanitized
-        // settings used by the runtime character body. Player Start is the feet
-        // position, and Wicked's debug capsule takes the outer base/tip.
-        if (!projectHubVisible_ && session_ != nullptr &&
-            session_->Selection().HasSelection())
-        {
-            const auto& scene = session_->Scenes().GetScene();
-            const auto selected = session_->Selection().SelectedEntity();
-            if (bridge::IsPlayerStart(scene, selected))
-            {
-                if (const auto* transform = scene.transforms.GetComponent(selected))
-                {
-                    const auto settings = bridge::SanitizePlayerControllerSettings(
-                        bridge::CapturePlayerControllerSettings(scene, selected));
-                    const auto feet = transform->GetPosition();
-                    const XMFLOAT3 top(feet.x,
-                        feet.y + bridge::PlayerCapsuleTotalHeight(settings), feet.z);
-                    wi::renderer::DrawCapsule(
-                        wi::primitive::Capsule(feet, top, settings.capsuleRadius),
-                        XMFLOAT4(1.0f, 0.48f, 0.12f, 1.0f), false);
-                }
-            }
-        }
         RenderPath3D::Render();
 
         const auto* depthStencil = GetDepthStencil();
@@ -3694,6 +3671,102 @@ namespace renegade::studio
                 LogicalToPhysical(viewportBounds_.w)),
         };
         device->BindScissorRects(1, &viewportScissor, cmd);
+
+        // Draw the capsule after temporal postprocessing, alongside the gizmo.
+        // Project its connected 3D edges using one camera matrix for this frame.
+        if (!projectHubVisible_ && !assemblyPanel_.IsVisible() &&
+            !handGripPanel_.IsVisible() && session_ && camera &&
+            session_->Selection().HasSelection())
+        {
+            const auto& scene = session_->Scenes().GetScene();
+            const auto selected = session_->Selection().SelectedEntity();
+            const auto* transform = scene.transforms.GetComponent(selected);
+            if (transform && bridge::IsPlayerStart(scene, selected))
+            {
+                const auto settings = bridge::SanitizePlayerControllerSettings(
+                    bridge::CapturePlayerControllerSettings(scene, selected));
+                const auto feet = transform->GetPosition();
+                const float radius = settings.capsuleRadius;
+                const float height = bridge::PlayerCapsuleTotalHeight(settings);
+                const auto vp = camera->GetViewProjection();
+                const auto edge = [&](const XMFLOAT3& a, const XMFLOAT3& b)
+                {
+                    XMFLOAT4 ca, cb;
+                    XMStoreFloat4(&ca, XMVector4Transform(
+                        XMVectorSet(a.x,a.y,a.z,1), vp));
+                    XMStoreFloat4(&cb, XMVector4Transform(
+                        XMVectorSet(b.x,b.y,b.z,1), vp));
+                    // Clip homogeneous line endpoints at the camera planes.
+                    const auto clip = [&](float da, float db)
+                    {
+                        if (da < 0 && db < 0) return false;
+                        if (da < 0 || db < 0)
+                        {
+                            const float t = da / (da-db);
+                            const XMFLOAT4 c(ca.x+(cb.x-ca.x)*t,
+                                ca.y+(cb.y-ca.y)*t, ca.z+(cb.z-ca.z)*t,
+                                ca.w+(cb.w-ca.w)*t);
+                            if (da < 0) ca=c; else cb=c;
+                        }
+                        return true;
+                    };
+                    if (!clip(ca.w-0.001f,cb.w-0.001f) ||
+                        !clip(ca.z,cb.z) || !clip(ca.w-ca.z,cb.w-cb.z))
+                        return;
+                    const float ax=(ca.x/ca.w*0.5f+0.5f)*GetLogicalWidth();
+                    const float ay=(-ca.y/ca.w*0.5f+0.5f)*GetLogicalHeight();
+                    const float bx=(cb.x/cb.w*0.5f+0.5f)*GetLogicalWidth();
+                    const float by=(-cb.y/cb.w*0.5f+0.5f)*GetLogicalHeight();
+                    const float dx=bx-ax, dy=by-ay;
+                    wi::image::Params params;
+                    params.pos=XMFLOAT3((ax+bx)*0.5f,(ay+by)*0.5f,0);
+                    params.siz=XMFLOAT2(std::sqrt(dx*dx+dy*dy),1.5f);
+                    params.pivot=XMFLOAT2(0.5f,0.5f);
+                    params.rotation=std::atan2(dy,dx);
+                    params.color=wi::Color(255,122,31,255);
+                    params.blendFlag=wi::enums::BLENDMODE_ALPHA;
+                    wi::image::Draw(nullptr,params,cmd);
+                };
+                const auto point = [&](float angle, float ringRadius, float y)
+                {
+                    return XMFLOAT3(feet.x+std::cos(angle)*ringRadius,
+                        feet.y+y,feet.z+std::sin(angle)*ringRadius);
+                };
+                constexpr int segments=48;
+                // Cylinder seams and cap latitude rings share exact endpoints.
+                for (int cap=0; cap<2; ++cap)
+                {
+                    const float center=cap ? height-radius : radius;
+                    for (int ring=0; ring<3; ++ring)
+                    {
+                        const float latitude=ring*XM_PIDIV2/3;
+                        const float rr=radius*std::cos(latitude);
+                        const float y=center+(cap?1:-1)*radius*std::sin(latitude);
+                        for (int i=0;i<segments;++i)
+                            edge(point(i*XM_2PI/segments,rr,y),
+                                point((i+1)*XM_2PI/segments,rr,y));
+                    }
+                }
+                for (int meridian=0;meridian<8;++meridian)
+                {
+                    const float angle=meridian*XM_2PI/8;
+                    edge(point(angle,radius,radius),
+                        point(angle,radius,height-radius));
+                    for (int cap=0;cap<2;++cap)
+                    {
+                        const float center=cap?height-radius:radius;
+                        for (int i=0;i<12;++i)
+                        {
+                            const float a=i*XM_PIDIV2/12,b=(i+1)*XM_PIDIV2/12;
+                            edge(point(angle,radius*std::cos(a),
+                                center+(cap?1:-1)*radius*std::sin(a)),
+                                point(angle,radius*std::cos(b),
+                                center+(cap?1:-1)*radius*std::sin(b)));
+                        }
+                    }
+                }
+            }
+        }
 
         if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
             outlinedSelection_ != wi::ecs::INVALID_ENTITY &&

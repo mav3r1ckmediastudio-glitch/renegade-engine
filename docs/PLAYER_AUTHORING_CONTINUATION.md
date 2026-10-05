@@ -56,3 +56,9 @@ Selected Player Start displays an editor-only orange wireframe collision capsule
 It reads the runtime controller radius and total height each frame, follows the
 spawn feet position, and updates after inspector edits and Undo/Redo. It stays
 upright and unscaled like the runtime character, and is absent during Test Level.
+
+Capsule display repair: connected 3D capsule edges are projected and drawn in
+Studio Compose after scene temporal postprocessing, beside the transform gizmo.
+This avoids the motion trails from temporal accumulation of debug-world lines.
+The overlay is clipped to the scene viewport and camera planes; it is not a
+serialized asset, does not enter Runtime, and is hidden behind assembly/grip workspaces.
