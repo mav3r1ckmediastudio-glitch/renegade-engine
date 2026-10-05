@@ -6,6 +6,7 @@
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/PlayerPrefabService.h"
+#include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/ProjectService.h"
@@ -34,6 +35,38 @@ namespace
     std::atomic<std::uint64_t> snapshotSequence{0};
     constexpr const char* TestLevelStartupScene =
         "Content/Scenes/TestLevel.wiscene";
+
+    bool SnapshotGameplayInput(const renegade::bridge::ProjectMetadata& project,
+        const renegade::bridge::TestLevelSnapshot& snapshot, std::string& error)
+    {
+        using namespace renegade::bridge;
+        const auto resolved = ResolveDependencyPath(project.rootPath, GameplayInputDocumentRelativePath);
+        if (!resolved.accepted) { error = "Gameplay input map escaped the project."; return false; }
+        GameplayInputMap map;
+        fs::path staging;
+        fs::path source = fs::u8path(resolved.absolutePath);
+        if (resolved.exists)
+        {
+            if (!ReadGameplayInputMapFile(source.generic_u8string(), map, error)) return false;
+        }
+        else
+        {
+            // Generate defaults under a short temporary root; snapshots must not
+            // ask Runtime to journal a new document inside a deeply nested path.
+            staging = fs::temp_directory_path() / ("renegade-input-" + GenerateStableId());
+            map = MakeDefaultGameplayInputMap();
+            if (!WriteGameplayInputMap(staging.generic_u8string(), map, error))
+            { std::error_code ignored; fs::remove_all(staging, ignored); return false; }
+            source = fs::u8path(GameplayInputDocumentPath(staging.generic_u8string()));
+        }
+        const auto destination = fs::u8path(snapshot.sessionDirectory) / GameplayInputDocumentRelativePath;
+        std::error_code ec;
+        fs::create_directories(destination.parent_path(), ec);
+        if (!ec) fs::copy_file(source, destination, fs::copy_options::overwrite_existing, ec);
+        if (!staging.empty()) { std::error_code ignored; fs::remove_all(staging, ignored); }
+        if (ec) { error = "Could not snapshot gameplay input map: " + ec.message(); return false; }
+        return ReadGameplayInputMapFile(destination.generic_u8string(), map, error);
+    }
 
     bool WriteSnapshotDescriptor(
         const renegade::bridge::ProjectMetadata& sourceProject,
@@ -935,6 +968,9 @@ namespace renegade::bridge
                 return failAndCleanup(
                     "Could not snapshot governed material state: " + error);
             }
+
+            if (!SnapshotGameplayInput(project, created, error))
+                return failAndCleanup("Could not snapshot gameplay input: " + error);
 
             if (!SnapshotPlayerPrefab(project, created, scenes_.GetScene(), error))
                 return failAndCleanup("Could not snapshot player prefab: " + error);

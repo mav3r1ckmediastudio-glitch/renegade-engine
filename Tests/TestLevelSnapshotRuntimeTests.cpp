@@ -11,6 +11,7 @@
 #include "RuntimeBootstrap.h"
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/CreatorTextureWorkflowService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ProjectService.h"
@@ -285,6 +286,28 @@ int main()
     {
         return Fail("LP04 Test Level snapshot omitted governed material Runtime inputs");
     }
+
+    renegade::bridge::GameplayInputMap snapshotInput;
+    bool inputCreated = true;
+    if (!renegade::bridge::EnsureGameplayInputMap(
+            snapshot.sessionDirectory, snapshotInput, inputCreated, snapshotError) || inputCreated)
+        return Fail("Test Level Runtime had to create a missing default gameplay input map");
+    if (fs::exists(fs::u8path(renegade::bridge::GameplayInputDocumentPath(project.rootPath))))
+        return Fail("Test Level default input generation modified the source project");
+    auto customInput = renegade::bridge::MakeDefaultGameplayInputMap();
+    customInput.mouseLookScale = 0.003f;
+    if (!renegade::bridge::WriteGameplayInputMap(project.rootPath, customInput, snapshotError))
+        return Fail("custom input fixture could not be saved");
+    const auto inputBefore = ReadBytes(fs::u8path(renegade::bridge::GameplayInputDocumentPath(project.rootPath)));
+    renegade::bridge::TestLevelSnapshot customSnapshot;
+    if (!snapshots.Create(project, customSnapshot, snapshotError) ||
+        !renegade::bridge::ReadGameplayInputMap(customSnapshot.sessionDirectory, snapshotInput, snapshotError) ||
+        !NearlyEqual(snapshotInput.mouseLookScale, customInput.mouseLookScale) ||
+        ReadBytes(fs::u8path(renegade::bridge::GameplayInputDocumentPath(customSnapshot.sessionDirectory))) != inputBefore ||
+        ReadBytes(fs::u8path(renegade::bridge::GameplayInputDocumentPath(project.rootPath))) != inputBefore)
+        return Fail("Test Level did not preserve custom input bytes without modifying source");
+    if (!snapshots.Cleanup(customSnapshot, snapshotError))
+        return Fail("custom input snapshot cleanup failed");
 
     renegade::bridge::ProjectService inspector;
     renegade::bridge::ProjectMetadata inspected;

@@ -2509,3 +2509,38 @@ Inspected GitHub Studio run 37308122911: Debug and Release fail during CTest, af
 Preserved and completed existing local fixes in Tests/CMakeLists.txt (prefab test dependency of bridge test aggregate), Tests/Phase5Gate3SourceContract.cmake (eight Add entries), Tests/Phase6Gate1SourceContract.cmake (browser drop, capsule and prefab card requirements). Tools/Build-Studio-Windows.ps1 now explicitly builds RenegadePlayerPrefabTests and records that target in build evidence. No runtime/editor feature change in this repair.
 Validation: BUILD/validate_prefab_ci.ps1 configures CMake -S . -B BUILD/renegade -A x64 -DRENEGADE_EMBED_SHADERS=ON, builds RenegadePlayerPrefabTests --parallel 4 in Debug and Release, then CTest -R 'RenegadePlayerPrefabTests|RenegadePhase5Gate3SourceContract|RenegadePhase6Gate1SourceContract' --output-on-failure in each configuration. Exit 0, 682.34s including Release bridge recompilation. Debug 3/3 pass (0.41s); Release 3/3 pass (0.38s). Existing MSB8029 and C4834 warnings only. Generated bridge-test project includes prefab-test reference. git diff --check passes. Full fresh hosted Studio workflow remains required; focused local passes do not claim full CI acceptance or release gate closure.
 Next: push repair on existing feature branch and inspect new PR 178 Debug/Release jobs. Do not merge until required checks pass. Preexisting Tools/__pycache__ and log.txt remain untouched.
+
+## 2026-10-05 Test Level gameplay input snapshot recovery
+
+Resumed feature/p2-equipment-actions at c07877a with the existing uncommitted
+P2 equipment persistence/UI candidate retained. Bounded outcome: restore native
+Test Level startup on the previously rejected deeply nested validation project.
+RuntimeBootstrap.log identified ProjectRejected (22): GameplayInput defaults were
+absent from the snapshot; Runtime's journal .writing path exceeded Windows path
+limits. Completed existing SnapshotGameplayInput candidate in
+EngineBridge/src/TestLevelSnapshotService.cpp; snapshots copy validated authored
+input bytes or generate defaults under a short temporary root and copy them.
+Source project input is not changed. No Runtime/player architecture replacement.
+Tests/TestLevelSnapshotRuntimeTests.cpp fixes a non-static Cleanup call and verifies
+Runtime EnsureGameplayInputMap reads defaults without creating them, source has
+no new default document, and custom bytes/mouse sensitivity remain unchanged.
+
+Validation: Release bridge MSBuild then powershell -NoProfile -ExecutionPolicy
+Bypass -File BUILD/p2_snapshot_build.ps1. Final chain exit 0 / 14.10s;
+RenegadeTestLevelSnapshotRuntimeTests 1/1 PASS, 0.25s; Studio Release rebuilt.
+Existing MSB8029 warnings only. git diff --check passes.
+Native DX12: rebuilt Studio PID 40740, validation project opened via Hub and Story
+Flow, PLAY launched Runtime child PID 23200. Bootstrap PASS/SUCCESS/exit_code=0.
+Live diagnostics confirm same build identity, real Studio child, player spawned,
+scene loaded, paired rig/animation initialized, two active Idle tracks and no
+error events. BUILD/p2-snapshot-recovery-diagnostics.json records evidence.
+BUILD/p2-snapshot-runtime-success.png visually inspected: shotgun/arms present,
+75 FPS; existing washed-out fixture lighting remains. This is startup/rig evidence,
+not new combat, gameplay feel, or equipment action acceptance.
+
+Only snapshot source, snapshot regression and this handoff form the bounded
+recovery commit. Other existing P2 changes remain uncommitted and preserved;
+P2 implementation/feature matrix working copies updated with recovery status.
+No push/merge or independent release-gate closure. Next: equipment dependency
+closure in Test Level (snapshot inventory had no .requipment documents), then
+semantic equipment Runtime routing and packaged gameplay acceptance per P2.
