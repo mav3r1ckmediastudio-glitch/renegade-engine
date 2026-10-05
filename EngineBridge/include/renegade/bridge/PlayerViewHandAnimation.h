@@ -3,6 +3,7 @@
 #include "renegade/bridge/PlayerViewRig.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include <array>
+#include "renegade/bridge/PlayerViewHandBlend.h"
 
 namespace renegade::runtime {
 struct RuntimePlayerHandAnimationState {
@@ -15,6 +16,7 @@ struct RuntimePlayerHandAnimationState {
  std::array<wi::ecs::Entity,3> block={wi::ecs::INVALID_ENTITY,wi::ecs::INVALID_ENTITY,wi::ecs::INVALID_ENTITY};
  std::vector<wi::ecs::Entity> generated,sourceClips;
  wi::ecs::Entity base=wi::ecs::INVALID_ENTITY,right=wi::ecs::INVALID_ENTITY,left=wi::ecs::INVALID_ENTITY;
+ RuntimePlayerHandBlend rightBlend,leftBlend;
  float baseTime=0,rightTime=0,leftTime=0;
  unsigned blockPhase=0,attackVariant=0;
  PlayerViewAction action=PlayerViewAction::Idle;
@@ -57,6 +59,7 @@ inline bool InitializeRuntimePlayerHandAnimations(wi::scene::Scene& scene,wi::ec
  }
  bridge::PlayerViewBonePartition partition;
  if(!bridge::CollectPlayerViewBonePartition(scene,armature,primaryRoot,offRoot,partition,error))return false;
+ prepared.rightBlend.bones=partition.primary;prepared.leftBlend.bones=partition.offHand;
  const auto cleanup=[&](){for(const auto e:prepared.generated)scene.Entity_Remove(e);};
  const auto create=[&](wi::ecs::Entity source,const std::vector<wi::ecs::Entity>& targets) {
   wi::ecs::Entity e=wi::ecs::INVALID_ENTITY;
@@ -133,6 +136,7 @@ inline void UpdateRuntimePlayerHandAnimations(wi::scene::Scene& scene,RuntimePla
  PlayerViewAction movement,float dt,bool attackPressed,bool blockHeld,bool chargeHeld=false,bool releasePressed=false,float lookYaw=0,float lookPitch=0,bool cancel=false) {
  if(!state.enabled)return;
  const bool advancing=std::isfinite(dt)&&dt>0;
+ if(!advancing && state.right!=wi::ecs::INVALID_ENTITY)return;
  const unsigned move=movement==PlayerViewAction::Sprint?2:movement==PlayerViewAction::Walk?1:0;
  const unsigned available=state.primary[move].empty()?0:move;
  if(advancing && state.directional) {
@@ -187,11 +191,20 @@ inline void UpdateRuntimePlayerHandAnimations(wi::scene::Scene& scene,RuntimePla
  const bool attackEnded=advance(state.right,state.rightTime,!state.attacking && state.chargePhase!=1);
  const bool leftEnded=advance(state.left,state.leftTime,state.blockPhase==0||state.blockPhase==2);
  for(const auto e:state.generated){auto& c=*scene.animations.GetComponent(e);c.Pause();c.RootMotionOff();c.amount=0;}
- const auto pose=[&](wi::ecs::Entity entity,float time) {
-  auto& c=*scene.animations.GetComponent(entity);c.amount=1;c.timer=std::clamp(c.start+time,c.start,c.end);
+ const auto pose=[&](wi::ecs::Entity entity,float time,float amount) {
+  auto& c=*scene.animations.GetComponent(entity);c.amount=amount;c.timer=std::clamp(c.start+time,c.start,c.end);
   c.last_update_time=-std::numeric_limits<float>::max();
  };
- pose(state.base,state.baseTime);pose(state.right,state.rightTime);pose(state.left,state.leftTime);
+ // Short strike entry preserves responsiveness; recovery and locomotion get
+ // more time. These are presentation-only defaults, not gameplay phase delays.
+ const float rightFade=state.attacking?0.06f:state.chargePhase?0.10f:0.14f;
+ if(state.right==state.rightBlend.clip && !state.attacking && state.chargePhase!=1)
+  state.rightBlend.time=std::min(state.rightBlend.time,state.rightTime);
+ if(state.left==state.leftBlend.clip && (state.blockPhase==0||state.blockPhase==2))
+  state.leftBlend.time=std::min(state.leftBlend.time,state.leftTime);
+ const float rightWeight=PrepareRuntimePlayerHandBlend(scene,state.rightBlend,state.right,state.rightTime,dt,rightFade);
+ const float leftWeight=PrepareRuntimePlayerHandBlend(scene,state.leftBlend,state.left,state.leftTime,dt,0.12f);
+ pose(state.base,state.baseTime,1);pose(state.right,state.rightTime,rightWeight);pose(state.left,state.leftTime,leftWeight);
  if(advancing&&state.chargePhase==1&&attackEnded){state.chargePhase=2;state.rightTime=0;}
  if(advancing&&state.attacking&&attackEnded)state.attacking=false;
  if(advancing&&leftEnded&&state.blockPhase==1){state.blockPhase=2;state.leftTime=0;}

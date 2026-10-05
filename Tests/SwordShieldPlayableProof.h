@@ -91,6 +91,18 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
   assembly.Update(dt);
  };
  for(int frame=0;frame<80;++frame)step(1.0f/60,false,false);
+
+ // Capture already evaluated poses without letting preview redraws repeatedly
+ // apply a fractional amount and converge to the destination.
+ const auto capturePose=[&](const std::string& name) {
+  std::vector<float> amounts;
+  for(size_t i=0;i<assembly.animations.GetCount();++i) {
+   amounts.push_back(assembly.animations[i].amount);assembly.animations[i].amount=0;
+  }
+  const bool ok=Capture(assembly,output/name);
+  for(size_t i=0;i<amounts.size();++i)assembly.animations[i].amount=amounts[i];
+  return ok;
+ };
  std::set<wi::ecs::Entity> played;
  for(unsigned direction=0;direction<4;++direction) {
   const float yaw=direction==0?-0.1f:direction==1?0.1f:0;
@@ -100,7 +112,17 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
   const auto before=animation.handLayers.chargeSeconds;
   step(0,true,false,-yaw,-pitch);
   if(animation.handLayers.chargeSeconds!=before || animation.handLayers.direction!=direction)return false;
-  for(int frame=0;frame<90;++frame)step(1.0f/60,true,false);
+  bool chargeFade=false,holdFade=false;
+  for(int frame=0;frame<90;++frame) {
+   step(1.0f/60,true,false);
+   const float weight=assembly.animations.GetComponent(animation.handLayers.right)->amount;
+   if(weight>0 && weight<1) {
+    if(animation.handLayers.chargePhase==1)chargeFade=true;
+    if(animation.handLayers.chargePhase==2)holdFade=true;
+    if(direction==3 && frame==2 && !capturePose("stab-blend-charge.png"))return false;
+   }
+  }
+  if(!chargeFade||!holdFade)return false;
   if(animation.handLayers.chargePhase!=2 || animation.handLayers.chargeSeconds<0.99f)return false;
   if(!Capture(assembly,output/("sword-charge-"+std::to_string(direction)+".png")))return false;
   step(1.0f/60,false,true);
@@ -108,6 +130,10 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
   played.insert(animation.handLayers.right);
   for(int frame=0;frame<180;++frame) {
    step(1.0f/60,false,false);
+   if(direction==3 && frame==1) {
+    const auto weight=assembly.animations.GetComponent(animation.handLayers.right)->amount;
+    if(!(weight>0 && weight<1)||!capturePose("stab-blend-release.png"))return false;
+   }
    if(frame==12 && !Capture(assembly,output/("sword-release-"+std::to_string(direction)+".png")))return false;
   }
   if(animation.handLayers.blockPhase!=2 || animation.handLayers.attacking)return false;
@@ -119,6 +145,14 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
  for(int frame=0;frame<180;++frame)step(1.0f/60,false,false);
  step(1.0f/60,true,false);step(1.0f/60,false,false,0,0,true);
  if(animation.handLayers.attacking || animation.handLayers.chargePhase!=0)return false;
+
+ step(1.0f/60,true,false,-0.1f,0);
+ for(int frame=0;frame<2;++frame)step(1.0f/60,true,false);
+ step(1.0f/60,true,false,0.1f,0);
+ if(animation.handLayers.direction!=1 || animation.handLayers.leftBlend.clip!=animation.handLayers.left)return false;
+ step(1.0f/60,false,false,0,0,true);
+ for(int frame=0;frame<20;++frame)step(1.0f/60,false,false);
+ if(!capturePose("blend-cancel-idle.png"))return false;
  renegade::runtime::ResetRuntimePlayerViewAnimations(assembly,animation);
  EquipmentDefinition sword;sword.assetId=GenerateStableId();sword.name="Sword Test";
  sword.handUse=EquipmentHandUse::PrimaryOnly;sword.presentationAssetId=asset;
