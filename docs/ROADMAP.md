@@ -302,3 +302,28 @@ equipment/loadout definitions and combat/HUD remain subsequent milestones.
 
 ### Player placement from Content/Player
 New levels have no automatic Player Start. Project browsing ensures a registered Basic Player Start preset under Content/Player without creating a scene entity. Saved player prefabs appear by authored name in the Asset Browser and support drag-and-drop surface placement (ground-plane fallback) and the existing Place control. One command creates the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve identity, transform and baseline. The always-visible selectable capsule represents the placed player. Add no longer exposes Player Start. A second placement is refused: use the existing Inspector to change prefab, or delete the old start before placing another. Immutable saves refresh the browser. Owner/exact-commit verification remains required.
+
+
+## Runtime equipment ownership and immediate action checkpoint — 2026-10-05
+
+Runtime resolves primary/off-hand equipment atomically on player scene synchronization.
+Authored primary equipment owns the effective presentation; empty or invalid authored
+loadouts do not inherit a legacy gun. Original WISCENE authoring settings remain intact.
+Legacy players with no equipment assignment retain their accepted animation path.
+
+The adapter admits matching immediate PrimaryUse/Attack, Reload/Reload,
+AlternateUse/AimIn and Equip/Unequip definitions. Missing, mismatched, staged or held
+definitions block their input. Active duration and ammo remain native paired-animation
+authority. This does not integrate the staged EquipmentActionState clock, charge/release,
+independent off-hand presentation, inventory, or packaged gameplay acceptance.
+
+Windows Release Runtime build passed. Release CTest snapshot, prefab, EquipmentActionState
+and EquipmentAsset passed 4/4. The DX12 equipment snapshot proof cold-loads the real
+paired shotgun, routes PrimaryUse to Attack and verifies one shell consumed.
+Standalone Runtime PID 40508 loaded the generated snapshot: equipment authored/ready,
+no equipment error, presentation loaded, paired animation initialized, two active tracks.
+Screenshot BUILD/p2-route-runtime.png retains the fixture's existing washed-out lighting.
+Diagnostics: BUILD/p2-route-runtime-diagnostics.json. No owner or independent acceptance.
+
+
+Next: staged action routing, independent off-hand presentation and package verification.

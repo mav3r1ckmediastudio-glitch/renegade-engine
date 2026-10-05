@@ -209,6 +209,7 @@ namespace renegade::runtime
     {
         diagnosticService_.StopLocalEndpoint();
         StopCreatorScripts();
+        playerEquipment_ = {};
         ResetRuntimePlayerViewAnimations(
             scenes_.GetScene(), playerViewAnimation_);
         DespawnRuntimePlayerViewRig(scenes_.GetScene(), playerViewRig_);
@@ -420,15 +421,17 @@ namespace renegade::runtime
                         playerViewRig_,
                         gameplayInput.player,
                         paused_ ? 0.0f : dt);
+                    const auto equipmentInput =
+                        playerEquipment_.Route(gameplayInput, playerViewAnimation_.equipped);
                     UpdateRuntimePlayerViewAnimations(
                         scenes_.GetScene(),
                         playerViewAnimation_,
                         playerViewRig_.action,
                         paused_ ? 0.0f : dt,
-                        !paused_ && gameplayInput.firePressed,
-                        !paused_ && gameplayInput.reloadPressed,
-                        gameplayInput.aimDown,
-                        !paused_ && gameplayInput.toggleEquipmentPressed,
+                        !paused_ && equipmentInput.firePressed,
+                        !paused_ && equipmentInput.reloadPressed,
+                        equipmentInput.aimDown,
+                        !paused_ && equipmentInput.toggleEquipmentPressed,
                         scenes_.GetScene().rigidbodies.GetComponent(player_.entity) == nullptr ||
                             wi::physics::IsCharacterGroundSupported(
                                 *scenes_.GetScene().rigidbodies.GetComponent(player_.entity)));
@@ -491,6 +494,7 @@ namespace renegade::runtime
         player_ = {};
         playerViewRig_ = {};
         playerViewAnimation_ = {};
+        playerEquipment_ = {};
         playerSceneRevision_ = scenes_.Revision();
         const auto resolved = bridge::ResolvePlayerStart(scenes_.GetScene());
         if (resolved.resolution == bridge::PlayerStartResolution::Missing)
@@ -513,6 +517,17 @@ namespace renegade::runtime
         }
 
         playerSettings_ = resolved.start.settings;
+        if (!playerEquipment_.Load(startupResult_.project.rootPath,
+                startupResult_.project.projectId, playerSettings_))
+        {
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
+                "runtime.player.equipment", "player.equipment.load_failed", playerEquipment_.error);
+        }
+        // Authored equipment owns its presentation. Keep the original WISCENE
+        // settings intact; this resolved copy belongs only to Runtime.
+        playerSettings_.firstPersonArmsAssetId =
+            playerEquipment_.Presentation(playerSettings_.firstPersonArmsAssetId);
+
 
         std::string error;
         if (!bridge::SpawnRuntimePlayer(

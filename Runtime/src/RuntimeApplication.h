@@ -13,6 +13,7 @@
 #include "RuntimePlayerViewAsset.h"
 #include "RuntimePlayerViewAnimation.h"
 #include "RuntimePlayerViewRig.h"
+#include "RuntimeEquipmentLoadout.h"
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"
 #include "RuntimeScriptRuntime.h"
@@ -104,6 +105,7 @@ namespace renegade::runtime
         bridge::RuntimePlayerState player_;
         RuntimePlayerViewRigState playerViewRig_;
         RuntimePlayerViewAnimationState playerViewAnimation_;
+        RuntimeEquipmentLoadout playerEquipment_;
         bridge::PlayerControllerSettings playerSettings_;
         bridge::NavigationRuntimeState navigationState_;
         bridge::CharacterRuntimeState characterState_;

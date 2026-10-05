@@ -27,6 +27,7 @@
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/TestLevelSnapshotService.h"
 #include "renegade/bridge/EquipmentAssetService.h"
+#include "../Runtime/src/RuntimeEquipmentLoadout.h"
 namespace fs = std::filesystem;
 using namespace renegade::bridge;
 static LRESULT CALLBACK WindowProc(HWND w, UINT m, WPARAM a, LPARAM b)
@@ -899,6 +900,7 @@ static bool PlayerPrefabProof(const fs::path& input,const fs::path& output)
 
 static bool EquipmentSnapshotProof(const fs::path& input, const fs::path& output)
 {
+ using namespace renegade::runtime;
  std::string error;
  ProjectMetadata original;
  if(!ProjectService().InspectProject(fs::absolute(input).generic_u8string(),original,error))
@@ -942,6 +944,25 @@ static bool EquipmentSnapshotProof(const fs::path& input, const fs::path& output
  const auto copied=ResolvePlayerStart(reopened.GetScene());
  if(copied.resolution!=PlayerStartResolution::Success ||
     !PlayerSettingsEqual(copied.start.settings,settings))return false;
+ renegade::runtime::RuntimeEquipmentLoadout equipment;
+ if(!equipment.Load(snapshot.sessionDirectory,project.projectId,settings) ||
+    equipment.Presentation("")!=item.presentationAssetId ||
+    !equipment.Allows(EquipmentAction::PrimaryUse,"Attack"))return false;
+ RuntimePlayerViewRigState rig;RuntimePlayerViewRigSettings rigSettings;
+ rigSettings.createProofGeometry=false;
+ const auto player=reopened.GetScene().Entity_CreateTransform("Equipment runtime proof");
+ if(!SpawnRuntimePlayerViewRig(reopened.GetScene(),rig,player,settings.eyeHeight,error,rigSettings) ||
+    !LoadRuntimePlayerViewAsset(reopened.GetScene(),rig,snapshot.sessionDirectory,project.projectId,
+       equipment.Presentation(""),error))return false;
+ RuntimePlayerViewAnimationState animation;
+ if(!InitializeRuntimePlayerViewAnimations(reopened.GetScene(),rig,animation,error))return false;
+ GameplayInputFrame use;use.firePressed=true;
+ const auto routed=equipment.Route(use,true);
+ UpdateRuntimePlayerViewAnimations(reopened.GetScene(),animation,PlayerViewAction::Idle,
+     0.01f,routed.firePressed,routed.reloadPressed,routed.aimDown,routed.toggleEquipmentPressed,true);
+ if(animation.loadedShells!=animation.firearm.capacity-1 ||
+    animation.activeAction!=PlayerViewAction::Attack || !animation.oneShotPlaying)return false;
+ std::cout<<"RUNTIME EQUIPMENT PRIMARY ACTION PASS // real paired Attack and one shell consumed\n";
  std::ofstream(output/"equipment-snapshot-descriptor.txt")<<snapshot.descriptorPath;
  std::cout<<"EQUIPMENT SNAPSHOT PASS // saved loadout, definition, paired presentation cold load\n";
  return true;

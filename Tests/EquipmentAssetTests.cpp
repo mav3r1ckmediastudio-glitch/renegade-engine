@@ -3,6 +3,7 @@
 #include "renegade/bridge/PlayerPrefabService.h"
 #include "renegade/bridge/ReusableAssetDependencyService.h"
 #include "json.hpp"
+#include "../Runtime/src/RuntimeEquipmentLoadout.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -83,6 +84,42 @@ int main() {
     Check(hasEdges,"prefab loadout registry edges");
     settings.primaryEquipmentAssetId="invalid";
     Check(!SerializePlayerPrefab({project,GenerateStableId(),"Bad",settings},text,error),"invalid loadout ID");
+    renegade::runtime::RuntimeEquipmentLoadout runtime;
+    GameplayInputFrame input;
+    input.firePressed=input.reloadPressed=input.aimDown=input.toggleEquipmentPressed=true;
+    input.player.moveForward=1;
+    Check(runtime.Load(root.generic_u8string(),project,{}) &&
+        !runtime.authored && runtime.Route(input,true).firePressed &&
+        runtime.Presentation("legacy")=="legacy","legacy equipment compatibility");
+    PlayerControllerSettings loadout;
+    loadout.primaryEquipmentAssetId=p;loadout.offHandEquipmentAssetId=o;
+    Check(runtime.Load(root.generic_u8string(),project,loadout)&&runtime.ready&&
+        runtime.primary.equipment.assetId==p&&runtime.offHand.equipment.assetId==o&&
+        runtime.Presentation("legacy").empty(),"loadout ownership and no inherited weapon");
+    auto routed=runtime.Route(input,true);
+    Check(!routed.firePressed&&!routed.reloadPressed&&!routed.aimDown&&
+        !routed.toggleEquipmentPressed&&routed.player.moveForward==1,
+        "staged or missing actions bypassed admission");
+    auto immediate=sword;
+    immediate.actions={{EquipmentAction::PrimaryUse,"Attack",0,0,1,0,false,true},
+        {EquipmentAction::Unequip,"Unequip",0,0,1,0,false,true}};
+    const auto savedImmediate=SaveEquipmentAsset(root.generic_u8string(),project,immediate);
+    loadout.primaryEquipmentAssetId=savedImmediate.document.equipment.assetId;
+    loadout.offHandEquipmentAssetId.clear();
+    Check(savedImmediate.succeeded&&runtime.Load(root.generic_u8string(),project,loadout),
+        "immediate Runtime loadout");
+    routed=runtime.Route(input,true);
+    Check(routed.firePressed&&routed.toggleEquipmentPressed&&!routed.reloadPressed&&
+        !routed.aimDown&&!runtime.Route(input,false).toggleEquipmentPressed,
+        "semantic primary and holster admission");
+    runtime.primary.equipment.actions[0].animationAction="Reload";
+    Check(!runtime.Route(input,true).firePressed,"semantic mismatch admitted as attack");
+    loadout.primaryEquipmentAssetId=GenerateStableId();
+    Check(!runtime.Load(root.generic_u8string(),project,loadout)&&runtime.authored&&
+        !runtime.ready&&runtime.primary.equipment.assetId.empty()&&
+        !runtime.error.empty()&&!runtime.Route(input,true).firePressed&&
+        runtime.Presentation("legacy").empty(),"failed load retained stale or legacy equipment");
+
     fs::remove_all(root);
     std::cout<<"EQUIPMENT ASSET PASS // schema, identity, journal rollback, hand admission, prefab migration, undo/reopen, dependency edges\n";
 }

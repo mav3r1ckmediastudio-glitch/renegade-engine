@@ -1,3 +1,38 @@
+## Runtime equipment ownership and immediate action checkpoint — 2026-10-05
+
+Runtime resolves primary/off-hand equipment atomically on player scene synchronization.
+Authored primary equipment owns the effective presentation; empty or invalid authored
+loadouts do not inherit a legacy gun. Original WISCENE authoring settings remain intact.
+Legacy players with no equipment assignment retain their accepted animation path.
+
+The adapter admits matching immediate PrimaryUse/Attack, Reload/Reload,
+AlternateUse/AimIn and Equip/Unequip definitions. Missing, mismatched, staged or held
+definitions block their input. Active duration and ammo remain native paired-animation
+authority. This does not integrate the staged EquipmentActionState clock, charge/release,
+independent off-hand presentation, inventory, or packaged gameplay acceptance.
+
+Windows Release Runtime build passed. Release CTest snapshot, prefab, EquipmentActionState
+and EquipmentAsset passed 4/4. The DX12 equipment snapshot proof cold-loads the real
+paired shotgun, routes PrimaryUse to Attack and verifies one shell consumed.
+Standalone Runtime PID 40508 loaded the generated snapshot: equipment authored/ready,
+no equipment error, presentation loaded, paired animation initialized, two active tracks.
+Screenshot BUILD/p2-route-runtime.png retains the fixture's existing washed-out lighting.
+Diagnostics: BUILD/p2-route-runtime-diagnostics.json. No owner or independent acceptance.
+
+Verification commands from repository root:
+- powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/build_p2_assets_runtime.ps1
+- powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/p2_runtime_route_verify.ps1
+  (four tests passed; proof compilation initially failed on a missing namespace import)
+- powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/p2_equipment_proof.ps1
+  (passed after fixing the proof namespace)
+- powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/p2_route_launch.ps1
+- python BUILD/p2_route_diagnostics.py
+- powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/p2_route_capture.ps1
+
+Next: staged action clock and native presentation transition integration, then independent
+off-hand support and package verification. The approved small Player Camera Preview inset
+inside the editor remains pending. P2 and release gates remain open.
+
 ## Latest checkpoint: PR #178 merged; owner acceptance and UX follow-up - 5 October 2026
 
 ## 2026-10-05: first P2 checkpoint (in progress)

@@ -644,6 +644,11 @@ namespace renegade::runtime
             {"player_view_rig_proof_geometry",
                 playerViewRig_.primaryArmProof != wi::ecs::INVALID_ENTITY &&
                 playerViewRig_.offHandArmProof != wi::ecs::INVALID_ENTITY},
+            {"player_equipment_authored", playerEquipment_.authored},
+            {"player_equipment_ready", playerEquipment_.ready},
+            {"player_primary_equipment", playerEquipment_.primary.equipment.assetId},
+            {"player_off_hand_equipment", playerEquipment_.offHand.equipment.assetId},
+            {"player_equipment_error", playerEquipment_.error},
             {"player_view_asset_loaded",
                 playerViewRig_.viewModelRoot != wi::ecs::INVALID_ENTITY},
             {"player_view_action", PlayerViewActionName(playerViewRig_.action)},
