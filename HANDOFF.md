@@ -2316,3 +2316,31 @@ Initial deployment-location launch exited early; direct Runtime build works.
 Do not count initial stale screenshots as evidence.
 git diff --check passes. No release gate closure, push, or merge.
 Next: owner review native settings, then reusable player inspector/prefab work.
+
+## 2026-10-05 Selected Player Start wireframe capsule
+
+Implementation commit df95fe31d9c1923895208144a61331d8570ba0e4.
+Owner explicitly requested the concept-art wireframe capsule. Studio Render()
+now queues an orange wireframe only for a selected Player Start, before the
+normal 3D render and after assembly preview rendering. Uses sanitized bridge
+controller settings and PlayerCapsuleTotalHeight; feet are world translation.
+Wicked DrawCapsule expects outer base/tip, so top is feet + total height.
+Upright/unscaled matches runtime player policy. Overlay is transient and absent
+during Test Level and project hub; no scene objects or persistence change.
+Changed StudioApplication.cpp, architecture, assembly authoring, continuation
+documentation and Player Start feature-matrix row.
+
+Release Studio build:
+MSBuild BUILD/renegade/Studio/RenegadeStudio.vcxproj /m:2 /nologo
+/verbosity:quiet /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false with CL=/MP4.
+Exit 0, 18.67s; existing MSB8029 and unrelated nodiscard warning only.
+git diff --check passes. Native DX12 build copied to
+BUILD/renegade/Studio/Release/RenegadeStudioPlayerCapsule.exe and opened.
+Loaded ArmsLibrary through hub and Story Flow, selected Player Start.
+Orange rounded capsule visually inspected at spawn alongside native gizmo.
+Owner review of size editing and Undo/Redo remains pending; drawing reads live
+settings every frame. No new serialized state or gameplay behavior in this change.
+Existing editor/runtime processes were retained. New capsule build left open.
+No overall release gate closure, push or merge.
+Next: owner review capsule, then reusable player inspector/prefab work.
