@@ -1210,6 +1210,8 @@ static bool SwordShieldInspect(const fs::path& input,const fs::path& output)
     return true;
 }
 
+#include "SwordShieldLayerGraphicsProof.h"
+
 int main(int argc,char** argv)
 {
     if(argc<3 || argc>4) { std::cerr<<"Usage: proof pack-folder output-folder\n"; return 2; }
@@ -1225,6 +1227,7 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--sword-layers") return SwordShieldLayerProof(input,output)?0:23;
     if(argc==4 && std::string(argv[3])=="--sword-inspect") return SwordShieldInspect(input,output)?0:22;
     if(argc==4 && std::string(argv[3])=="--camera-preview") return PlayerCameraPreviewProof(input,output)?0:21;
     if(argc==4 && std::string(argv[3])=="--charge-snapshot") return EquipmentSnapshotProof(input,output,true)?0:20;

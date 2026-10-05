@@ -2,6 +2,7 @@
 #include "RuntimePlayerViewAnimation.h"
 #include "RuntimePlayerViewRig.h"
 #include "PlayerViewSocketFixture.h"
+#include "PlayerViewAnimationMaskTests.h"
 
 #include <cmath>
 #include <cstdint>
@@ -475,6 +476,8 @@ namespace
 
 int main()
 {
+    std::string maskError;
+    if(!TestPlayerViewAnimationMasks(maskError))Fail("Native hand mask validation: "+maskError);
     TestPairedAssemblyPlayback();
     TestPlayerViewGripAuthoring();
     using namespace renegade::runtime;
