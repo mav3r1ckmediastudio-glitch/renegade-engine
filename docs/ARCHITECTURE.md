@@ -1143,3 +1143,13 @@ before rebuilding. Re-selecting the player refreshes the copy after asset edits.
 Assembly/import/grip workspaces and Test Level suppress the inset. Pointer
 selection/navigation ignores its rectangle. Large-world clone cost and complete
 render-settings parity still require profiling and acceptance.
+
+## P2 native hand mask candidate
+
+PlayerViewAnimationMask.h is a bridge-owned transient native-clip preparation seam.
+Explicit subtree-root entities partition one armature into disjoint primary,
+off-hand and base bones. Generated transform-only AnimationComponents share
+retained native keyframe data; Wicked evaluates them. The caller owns generated
+clip cleanup and source-data lifetime. This checkpoint is exercised by a private
+sword/shield graphics proof; authored layer identity, procedural sanitation and
+live equipment integration remain pending. See P2_HAND_ANIMATION_MASKS.md.

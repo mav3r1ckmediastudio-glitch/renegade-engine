@@ -270,3 +270,13 @@ verification is claimed. P2 and Alpha release gates remain open.
 Next: independent off-hand presentation, generic action editing, native authoring
 review and packaged gameplay verification. The small editor Player Camera Preview
 inset remains pending.
+
+## Native hand mask checkpoint - 2026-10-05
+
+The bridge now has a transient transform-channel mask helper and a real supplied
+sword/shield native graphics proof. Four sword attack directions preserve the
+held left arm; shield windup/release preserves the attacking right arm. Native
+clock pause/restart and five focused regressions pass. This proves isolated
+native arm-channel ownership, not live off-hand equipment. Authored mesh/layer
+bindings, procedural sanitation, blending and Runtime integration remain open.
+See P2_HAND_ANIMATION_MASKS.md and HANDOFF.md for commands and exact limits.

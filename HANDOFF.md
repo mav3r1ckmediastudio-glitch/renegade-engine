@@ -1,3 +1,52 @@
+## 2026-10-05 - Native independent hand animation masks
+
+Implementation commit: 7c7f7b3692a3f0c647a922ac9e3b310c1afe6052.
+Changed: EngineBridge/include/renegade/bridge/PlayerViewAnimationMask.h;
+Tests/PlayerViewAnimationMaskTests.h; Tests/SwordShieldLayerGraphicsProof.h;
+Tests/PlayerViewRigTests.cpp; Tests/FirstPersonAssemblyGraphicsProof.cpp.
+Documentation follow-up: docs/P2_HAND_ANIMATION_MASKS.md, architecture,
+equipment implementation notes and feature matrix.
+
+Bridge candidate partitions explicit roots on one armature into disjoint hand
+and base bones; transient transform-only native clips share retained keyframes.
+No source clip mutation, custom evaluator or Wicked source/pin change.
+Synthetic native regression checks distinct hand times, fingers, lifetime and
+atomic overlap/foreign/cyclic/retarget/external-data rejection.
+
+Commands/results:
+- powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/sword_layer_verify.ps1
+  builds Release RenegadePlayerViewRigTests and assembly graphics proof with
+  MSBuild /m:2 /verbosity:quiet /nologo /p:Configuration=Release
+  /p:Platform=x64 /p:BuildProjectReferences=false, CL=/MP4.
+  Final build/test/graphics run passed (29.54 seconds).
+- BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+  BUILD/sword-normalized-source BUILD/sword-layer-proof --sword-layers
+  PASS: 21 primary + 21 off-hand + 26 base bones on one 68-bone armature;
+  four attacks preserve held left world matrices within 4.17233e-07;
+  block start/end preserve attacking right matrices within 8.9407e-07;
+  0.0001 tolerance, right motion 1.43963. Native loop progression, pause
+  and right-clip restart without resetting left clock pass.
+- ctest --test-dir BUILD/renegade -C Release --output-on-failure
+  -R 'PlayerViewRig|EquipmentActionState|EquipmentAsset|GameplayInput'
+  passed 5/5, 1.38 seconds.
+- Visual inspection: held-block.png, AttackLeft-0.350000.png,
+  BlockEnd-0.950000.png and released-idle.png in BUILD/sword-layer-proof
+  show distinct masked poses with neutral matte diagnostic material.
+  Twenty captures produced. git diff --check passed.
+
+Initial mask proof failed a base-bone invariant on procedural head movement
+(delta 0.0798943); the arms stayed independent. Clearing the imported humanoid
+modifier on the private proof scene isolates native clip evaluation and fixes
+that diagnostic. No production sanitation change is made by this checkpoint.
+
+Limits/next: no final textures, weapon attachments, first-person framing,
+authored layer schema or live input/controller integration. Generated mask
+clips are ephemeral and require caller-owned cleanup before view-model unload.
+Live off-hand capability remains false. Next is governed two-hand mesh/layer
+authoring and socket alignment, then Runtime start/held/end, recovery/blending,
+Test Level and independent package verification. No gate closure claimed.
+No editor foreground takeover; owner projects untouched.
+
 ## 2026-10-05 - Sword/shield source verification (parent da550c8)
 
 Changed: Tests/FirstPersonAssemblyGraphicsProof.cpp adds manual --sword-inspect owner-asset proof. No gameplay capability enabled, no gate closure.
