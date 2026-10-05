@@ -2275,3 +2275,44 @@ inspected. Owner review of this corrected build pending.
 Lighting in this diagnostic playground is bright; polish remains separate.
 No overall release gate closure, push or merge. Next: owner confirm corrected
 jump stability and equipment behavior, then weapon definition work per roadmap.
+
+## 2026-10-05 Editable assembly firearm settings
+
+Implementation commit: 4a28bcdd3fe5245bb9e7f1e21e07a0834ebcd70c.
+Owner confirmed previous equipment/jump fix works. Continued with one bounded
+outcome: persisted capacity, minimum shot interval, and partial reload policy.
+Changed bridge FirearmSettings/assembly service, native Studio assembly panel,
+Runtime paired animation controller, settings/rig/native workflow tests, README
+and canonical architecture/roadmap/feature matrix/assembly documentation.
+New docs/PLAYER_AUTHORING_CONTINUATION.md records remaining player authoring work.
+Legacy assemblies retain capacity 2, interval 0, partial reload enabled.
+Settings remain shared by assembly; independent equipment assets and ammo reserve
+are future work. Reload still requires an assigned action.
+
+Release x64 build chain: bridge, assembly settings tests, player view rig tests,
+Runtime, Studio, assembly workflow proof: exit 0, 160.69s.
+MSBuild flags: CL=/MP4 /m:2 /nologo /verbosity:quiet
+/p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false.
+CTest --test-dir BUILD/renegade -C Release -R
+"FirstPersonAssemblySettings|GameplayInputTests|RenegadePlayerViewRig"
+--output-on-failure: 4/4 PASS, 0.82s.
+BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+BUILD/arms-weapon-settings-proof/ArmsPlayground.renegade
+BUILD/weapon-settings-evidence --update-assembly
+then same executable BUILD/weapon-settings-evidence/isolated-package
+BUILD/weapon-settings-package-evidence --runtime-package:
+combined exit 0, 36.78s. Same ID update, exact reopen, stale rejection, rollback,
+save-as-new, native snapshot and isolated package paired runtime load pass.
+Proof profile capacity=4, interval=1.25, partial=false; original fixture untouched.
+Native Studio Weapon Settings visually inspected; numeric edit commits with
+physical Enter and Undo restores capacity 2. Automated instantaneous SendKeys
+Enter was missed by frame polling. Preview refreshes on edits.
+Standalone Runtime launched from BUILD/renegade/Runtime/Release with --project
+BUILD/arms-weapon-settings-proof/ArmsPlayground.renegade dx12.
+Grounded arms/playground visually inspected. Private native input scripts exercise
+fire/reload; exact capacity/cooldown/partial behavior verified by rig tests.
+Diagnostic playground lighting remains washed out as previously documented.
+Initial deployment-location launch exited early; direct Runtime build works.
+Do not count initial stale screenshots as evidence.
+git diff --check passes. No release gate closure, push, or merge.
+Next: owner review native settings, then reusable player inspector/prefab work.
