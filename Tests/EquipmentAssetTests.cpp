@@ -131,8 +131,35 @@ int main() {
     Check(runtime.RouteStaged(press,true,false,.4f).firePressed,"next action not admitted");
     runtime.actions.Reset();runtime.dispatched=false;
     staged.holdUntilRelease=true;
+    press.fireDown=true;
     Check(!runtime.RouteStaged(press,true,false,1).firePressed &&
-        runtime.actions.ReservedHands()==0,"held action admitted without release input");
+        runtime.actions.Channels()[0].phase==EquipmentActionPhase::Hold,"held action did not wait");
+    auto held=quiet;held.fireDown=true;
+    Check(!runtime.RouteStaged(held,true,false,2).firePressed &&
+        runtime.actions.ReservedHands()==1,"held action dispatched without release");
+    Check(!runtime.RouteStaged(quiet,true,false,0).firePressed,"pause released held action");
+    Check(runtime.RouteStaged(quiet,true,false,.01f).firePressed,"release did not dispatch");
+    Check(!runtime.RouteStaged(quiet,true,false,.01f).firePressed,"release dispatched twice");
+    runtime.actions.Reset();runtime.dispatched=false;
+    GameplayInputFrame cancel;cancel.cancelEquipmentPressed=true;
+    runtime.RouteStaged(press,true,false,.05f);
+    Check(!runtime.RouteStaged(cancel,true,false,.01f).firePressed &&
+        runtime.actions.ReservedHands()==0,"prepare cancellation failed");
+    runtime.RouteStaged(press,true,false,1);
+    Check(!runtime.RouteStaged(cancel,true,false,.01f).firePressed &&
+        runtime.actions.ReservedHands()==0,"hold cancellation failed");
+    staged.cancellableBeforeActive=false;
+    runtime.RouteStaged(press,true,false,1);
+    cancel.fireDown=true;
+    runtime.RouteStaged(cancel,true,false,.01f);
+    Check(runtime.actions.ReservedHands()==1,"uncancellable hold was cancelled");
+    runtime.actions.Reset();runtime.dispatched=false;
+    staged.cancellableBeforeActive=true;
+    press.fireDown=false;
+    Check(runtime.RouteStaged(press,true,false,1).firePressed,"short tap lost release during windup");
+    runtime.RouteStaged(cancel,true,true,.01f);
+    Check(runtime.actions.ReservedHands()==1,"cancel interrupted active playback");
+    runtime.actions.Reset();runtime.dispatched=false;
     staged.holdUntilRelease=false;
     runtime.primary.equipment.actions[0].animationAction="Reload";
     Check(!runtime.Route(input,true).firePressed,"semantic mismatch admitted as attack");

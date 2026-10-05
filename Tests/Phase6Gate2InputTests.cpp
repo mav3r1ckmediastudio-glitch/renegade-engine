@@ -79,7 +79,9 @@ int main()
         "fire/reload defaults were not assigned");
     Check(Binding(map, GameplayAction::Aim).mouse == "MOUSE_RIGHT", "aim default is not right mouse");
     Check(Binding(map, GameplayAction::ToggleEquipment).keyboard == "Q", "equipment default is not Q");
+    Check(Binding(map, GameplayAction::CancelEquipment).keyboard == "C", "cancel default is not C");
     auto rebound = map;
+    rebound.bindings[static_cast<std::size_t>(GameplayAction::CancelEquipment)].keyboard = "X";
     rebound.bindings[static_cast<std::size_t>(GameplayAction::MoveForward)].keyboard = "I";
     rebound.bindings[static_cast<std::size_t>(GameplayAction::MoveBackward)].keyboard = "K";
     Check(WriteGameplayInputMap(root.generic_u8string(), rebound, error),
@@ -91,6 +93,8 @@ int main()
     Check(Binding(reopened, GameplayAction::MoveForward).keyboard == "I" &&
             Binding(reopened, GameplayAction::MoveBackward).keyboard == "K",
         "keyboard rebinds did not round-trip");
+
+    Check(Binding(reopened, GameplayAction::CancelEquipment).keyboard == "X", "cancel binding did not round-trip");
 
     created = true;
     GameplayInputMap ensured;
@@ -162,6 +166,25 @@ int main()
             "old R reset map did not adopt fire/reload safely");
         Check(Binding(legacyMap, GameplayAction::MoveForward).keyboard == "I",
             "legacy migration disturbed an authored binding");
+    }
+
+    // A recent v1 document lacking only Cancel must retain all authored bindings.
+    {
+        std::ifstream source(inputMapPath, std::ios::binary);
+        std::string text{std::istreambuf_iterator<char>(source),std::istreambuf_iterator<char>()};
+        const auto begin=text.find("[action.cancel_equipment]");
+        const auto end=text.find("[settings]",begin);
+        Check(begin!=std::string::npos && end!=std::string::npos,"cancel section missing");
+        if(begin!=std::string::npos && end!=std::string::npos)text.erase(begin,end-begin);
+        const auto path=root/"pre-cancel.renegade-input";
+        {std::ofstream out(path,std::ios::binary);out<<text;}
+        GameplayInputMap migrated;
+        Check(ReadGameplayInputMapFile(path.generic_u8string(),migrated,error),"pre-cancel migration failed");
+        Check(Binding(migrated,GameplayAction::CancelEquipment).keyboard=="C" &&
+            Binding(migrated,GameplayAction::MoveForward).keyboard=="I","cancel migration replaced authored controls");
+        std::ifstream check(path,std::ios::binary);
+        Check(std::string(std::istreambuf_iterator<char>(check),std::istreambuf_iterator<char>())==text,
+            "in-memory migration rewrote authored document");
     }
 
     // Production Studio project creation/opening must govern the document and

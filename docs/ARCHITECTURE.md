@@ -1096,3 +1096,14 @@ Release Runtime build, focused CTest 4/4, staged DX12 paired Attack/ammo/complet
 proof and standalone immediate-definition routing passed. Held actions/cancellation
 input, off-hand presentation and packaged acceptance remain pending.
 See P2_EQUIPMENT_ACTION_IMPLEMENTATION.md and HANDOFF.md for exact evidence.
+
+
+### Held primary input and cancellation (2026-10-05)
+
+Authored PrimaryUse/Attack can wait in Hold until release of its Fire binding.
+Cancel (default C; remappable) respects pre-active cancellation and leaves native
+Active/recovery untouched. Old version-1 input documents adopt Cancel in memory
+without rewriting custom controls. Release bridge/Runtime builds, focused CTest
+5/5, DX12 held-shotgun proof and standalone hold/release/cancel check passed.
+Separate Charge/Release clips, charge-power mechanics and off-hand presentation
+remain pending. See P2_EQUIPMENT_ACTION_IMPLEMENTATION.md for limits and evidence.

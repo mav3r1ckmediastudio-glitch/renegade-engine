@@ -923,6 +923,11 @@ static bool EquipmentSnapshotProof(const fs::path& input, const fs::path& output
  if(!PrepareEquipmentFromAssembly(project.rootPath,project.projectId,
       start.start.settings.firstPersonArmsAssetId,"Snapshot shotgun",EquipmentHandUse::TwoHanded,item,error))
  {std::cerr<<error<<"\n";return false;}
+ for(auto& action:item.actions)
+  if(action.action==EquipmentAction::PrimaryUse){
+   action.prepareSeconds=.1f;action.windupSeconds=.1f;action.recoverySeconds=.1f;
+   action.holdUntilRelease=true;
+  }
  const auto saved=SaveEquipmentAsset(project.rootPath,project.projectId,item);
  if(!saved.succeeded){std::cerr<<saved.error<<"\n";return false;}
  auto settings=start.start.settings;
@@ -946,8 +951,7 @@ static bool EquipmentSnapshotProof(const fs::path& input, const fs::path& output
     !PlayerSettingsEqual(copied.start.settings,settings))return false;
  renegade::runtime::RuntimeEquipmentLoadout equipment;
  if(!equipment.Load(snapshot.sessionDirectory,project.projectId,settings) ||
-    equipment.Presentation("")!=item.presentationAssetId ||
-    !equipment.Allows(EquipmentAction::PrimaryUse,"Attack"))return false;
+    equipment.Presentation("")!=item.presentationAssetId)return false;
  RuntimePlayerViewRigState rig;RuntimePlayerViewRigSettings rigSettings;
  rigSettings.createProofGeometry=false;
  const auto player=reopened.GetScene().Entity_CreateTransform("Equipment runtime proof");
@@ -956,12 +960,16 @@ static bool EquipmentSnapshotProof(const fs::path& input, const fs::path& output
        equipment.Presentation(""),error))return false;
  RuntimePlayerViewAnimationState animation;
  if(!InitializeRuntimePlayerViewAnimations(reopened.GetScene(),rig,animation,error))return false;
- GameplayInputFrame use;use.firePressed=true;
+ GameplayInputFrame use;use.firePressed=true;use.fireDown=true;
  for(auto& action:equipment.primary.equipment.actions)
   if(action.action==EquipmentAction::PrimaryUse){action.prepareSeconds=.1f;action.windupSeconds=.1f;action.recoverySeconds=.1f;}
  if(equipment.RouteStaged(use,true,false,.05f).firePressed)return false;
  GameplayInputFrame noPress;
- const auto routed=equipment.RouteStaged(noPress,true,false,.2f);
+ GameplayInputFrame held;held.fireDown=true;
+ if(equipment.RouteStaged(held,true,false,1).firePressed ||
+    equipment.actions.Channels()[0].phase!=EquipmentActionPhase::Hold ||
+    animation.loadedShells!=animation.firearm.capacity)return false;
+ const auto routed=equipment.RouteStaged(noPress,true,false,.01f);
  if(!routed.firePressed)return false;
  UpdateRuntimePlayerViewAnimations(reopened.GetScene(),animation,PlayerViewAction::Idle,
      0.01f,routed.firePressed,routed.reloadPressed,routed.aimDown,routed.toggleEquipmentPressed,true);
@@ -974,7 +982,7 @@ static bool EquipmentSnapshotProof(const fs::path& input, const fs::path& output
     equipment.actions.ReservedHands()==0)return false;
  equipment.RouteStaged(noPress,true,false,.1f);
  if(equipment.actions.ReservedHands()!=0)return false;
- std::cout<<"RUNTIME EQUIPMENT STAGED PRIMARY ACTION PASS // delayed paired Attack, one shell, native completion and recovery\n";
+ std::cout<<"RUNTIME EQUIPMENT HELD PRIMARY ACTION PASS // no shot while held, release Attack, one shell and recovery\n";
  std::ofstream(output/"equipment-snapshot-descriptor.txt")<<snapshot.descriptorPath;
  std::cout<<"EQUIPMENT SNAPSHOT PASS // saved loadout, definition, paired presentation cold load\n";
  return true;

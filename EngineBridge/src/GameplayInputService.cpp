@@ -245,6 +245,7 @@ namespace renegade::bridge
         case GameplayAction::Reload: return "reload";
         case GameplayAction::Aim: return "aim";
         case GameplayAction::ToggleEquipment: return "toggle_equipment";
+        case GameplayAction::CancelEquipment: return "cancel_equipment";
         case GameplayAction::Count: break;
         }
         return "unknown";
@@ -287,6 +288,7 @@ namespace renegade::bridge
             {GameplayAction::Reload, "R", "", ""},
             {GameplayAction::Aim, "", "MOUSE_RIGHT", ""},
             {GameplayAction::ToggleEquipment, "Q", "", ""},
+            {GameplayAction::CancelEquipment, "C", "", ""},
         }};
         return map;
     }
@@ -502,6 +504,7 @@ namespace renegade::bridge
         seen[reloadIndex] = true;
         seen[static_cast<std::size_t>(GameplayAction::Aim)] = true;
         seen[static_cast<std::size_t>(GameplayAction::ToggleEquipment)] = true;
+        seen[static_cast<std::size_t>(GameplayAction::CancelEquipment)] = true;
 
         if (!formatSeen || !versionSeen ||
             std::any_of(seen.begin(), seen.end(), [](const bool value) { return !value; }))
@@ -663,6 +666,8 @@ namespace renegade::bridge
         frame.pausePressed = Pressed(Binding(map, GameplayAction::Pause));
         frame.resetPressed = Pressed(Binding(map, GameplayAction::Reset));
         frame.firePressed = Pressed(Binding(map, GameplayAction::Fire));
+        frame.fireDown = Down(Binding(map, GameplayAction::Fire));
+        frame.cancelEquipmentPressed = Pressed(Binding(map, GameplayAction::CancelEquipment));
         frame.reloadPressed = Pressed(Binding(map, GameplayAction::Reload));
         frame.aimDown = Down(Binding(map, GameplayAction::Aim));
         frame.toggleEquipmentPressed = Pressed(Binding(map, GameplayAction::ToggleEquipment));

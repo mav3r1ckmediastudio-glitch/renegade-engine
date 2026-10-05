@@ -74,12 +74,13 @@ namespace renegade::runtime
             }
             // Consume a press only when both gameplay and native presentation are free.
             // Existing native animation retains ammo, jump and paired completion rules.
-            if (!nativeBusy && actions.ReservedHands() == 0) {
+            if (input.cancelEquipmentPressed) actions.Cancel(primary.equipment.assetId);
+            if (!input.cancelEquipmentPressed && !nativeBusy && actions.ReservedHands() == 0) {
                 const auto begin = [&](bridge::EquipmentAction action, const char* semantic) {
                     auto item = primary.equipment;
                     for (const auto& definition : item.actions)
                         if (definition.action == action && definition.animationAction == semantic &&
-                            !definition.holdUntilRelease)
+                            (!definition.holdUntilRelease || action == bridge::EquipmentAction::PrimaryUse))
                             return actions.Begin(item, action, bridge::EquipmentHand::Primary);
                     return false;
                 };
@@ -91,6 +92,7 @@ namespace renegade::runtime
                 else if (equipped && input.firePressed)
                     begin(bridge::EquipmentAction::PrimaryUse, "Attack");
             }
+            if (!input.fireDown) actions.Release(primary.equipment.assetId);
             if (actions.ReservedHands() != 0) output.aimDown = currentAim;
             // A jump/aim pair that began during preparation must finish before dispatch.
             if (nativeBusy && !dispatched) return output;

@@ -1,3 +1,42 @@
+## Held primary action input and cancellation — 2026-10-05
+
+GameplayInputFrame now carries Fire's held state from the existing authored binding.
+Version-1 maps append cancel_equipment (default C); old maps receive it in memory
+without rewriting their bytes or replacing custom controls. Cancel can be rebound.
+
+Authored PrimaryUse/Attack with holdUntilRelease reserves the hands through
+prepare/windup and Hold, then dispatches exactly once when Fire is released.
+A short tap latches release during windup. Pause advances neither release nor
+cancellation; held state is reconciled on the next gameplay frame.
+Cancel uses the authored cancellableBeforeActive policy in prepare/windup/hold.
+It never interrupts active native playback or recovery. Holding after a cancel
+cannot restart without a fresh press; releasing the cancelled hold does not fire.
+Existing immediate shotgun behavior retains discrete press semantics.
+
+This is held PrimaryUse with canonical Attack presentation, not a complete bow,
+charge-power mechanic or separate Charge/Release animation adapter. Hold currently
+retains ordinary movement/aim presentation. Generic action editing and independent
+off-hand presentation remain pending; full package acceptance remains pending.
+
+Verification: updated Release bridge, input/action/equipment/prefab/snapshot targets;
+focused CTest 5/5 and real DX12 held-shotgun snapshot proof passed.
+Runtime Release build passed. Standalone saved held-definition check passed:
+no Attack while held, Attack after release, hand reservation returned to Ready,
+C cancelled another hold, and its subsequent release did not play Attack.
+Evidence: BUILD/p2-held-native-events.json and BUILD/p2-route-runtime-diagnostics.json.
+Commands: powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/p2_held_verify.ps1;
+same invocation for BUILD/p2_held_runtime_build.ps1, BUILD/p2_route_launch.ps1 and
+BUILD/p2_route_capture.ps1; python BUILD/p2_held_native.py.
+The native harness was corrected for the diagnostics PID location and for a fresh
+F8 reset with a focus click before testing. Binary metadata still embeds ef399ac;
+compiled implementation includes this working slice, with no exact-head independent
+verification claimed. Owner Studio was left open; only the launched test Runtime was closed.
+git diff --check passed. No owner/independent verification or release gate closure.
+
+Next: separate semantic Charge/Release presentation and independent off-hand support,
+generic action editing and packaged gameplay verification. The approved small editor
+Player Camera Preview inset remains pending.
+
 ## Staged discrete Runtime equipment actions — 2026-10-05
 
 Runtime now routes authored primary fire, reload and equip/unequip through

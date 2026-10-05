@@ -374,3 +374,12 @@ placed player. Add no longer exposes Player Start. A second placement is refused
 the existing Inspector to change prefab, or delete the old start before placing another.
 Immutable saves refresh the browser. PR #178 functionality is owner-accepted; the UI/UX
 follow-up remains open.
+
+
+### Authored held equipment actions
+
+Equipment definitions can make PrimaryUse wait until left mouse (or the authored
+Fire binding) is released. C cancels eligible actions before activation; the
+cancel_equipment input binding is remappable. Immediate shotgun definitions still
+fire on a press. Held primary/cancellation are implemented; separate Charge/Release
+presentation, charge strength and independent off-hand presentation remain pending.
