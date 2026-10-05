@@ -1,5 +1,37 @@
 ## Latest checkpoint: PR #178 merged; owner acceptance and UX follow-up - 5 October 2026
 
+## 2026-10-05: first P2 checkpoint (in progress)
+
+Implementation commit: `f685c5144668859d7e8ad9f4315666f16cfb3819`.
+Branch: `feature/p2-equipment-actions`. Authored P2 remains the governing scope;
+this checkpoint does not close P2, P1 or the Alpha release gate.
+
+- Assembly Arms/Weapon pickers now use dedicated folder eligibility and saved
+  assembly recipe roles. Existing/shared-pack parts remain usable without moving
+  files. Completed assemblies and unrelated imported models are excluded.
+  Stable-ID user-data preserves selection across different filtered row orders.
+- Pure bridge equipment action foundation covers all five hand-use policies,
+  phased events, hold/release, cancellation before active, pause and reset.
+  It is not yet persisted or wired into Runtime; existing shotgun behavior is
+  unchanged by this gameplay foundation.
+- Windows Release Studio build passed before the checkpoint commit. Native
+  filtered Arms/Weapon dropdowns, saved assembly opening and close/reopen retained
+  the paired textured preview and action mappings in an isolated validation copy.
+  The visual build embeds the earlier documentation revision `59e705e9`;
+  its picker implementation matches this checkpoint. No exact-head independent
+  verifier or owner acceptance of this new slice is claimed.
+- Release CTest `FirstPersonAssemblySettings` and `EquipmentActionState`:
+  2/2 passed after the final hand-policy test additions. Regression covers 100
+  unrelated models, dedicated/shared folders, malformed provenance, all five
+  hand policies, phase/event behavior, hold/release, pause, cancellation and reset.
+- `git diff --check` passed. Existing untracked local files were left untouched.
+
+Next authored P2 work: durable equipment assets/identity, starting-loadout
+Inspector and prefab persistence, Runtime ownership and semantic action routing,
+then snapshot/transitive packaging and owner gameplay acceptance.
+See [P2 implementation](docs/P2_EQUIPMENT_ACTION_IMPLEMENTATION.md) and
+[remaining UI/UX work](docs/PLAYER_AUTHORING_UX_FOLLOWUP.md).
+
 Implementation merge: `7105a95ddcc103d6a024a17fddefd62f705a86b3` on main.
 PR #178 head before merge: `207ba864e79211992b6eb11465c5a23850c36d3c`.
 Documentation branch: `docs/player-pr178-acceptance-ux-followup`.
