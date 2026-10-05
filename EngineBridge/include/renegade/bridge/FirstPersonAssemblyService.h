@@ -2,6 +2,7 @@
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/PlayerViewGripService.h"
 #include <memory>
+#include "renegade/bridge/FirearmSettings.h"
 #include <array>
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
@@ -21,6 +22,7 @@ struct FirstPersonAssemblySettings {
     XMFLOAT3 cameraPosition = {};
     XMFLOAT4 cameraRotation = {0,0,0,1};
     std::vector<FirstPersonAssemblyPair> pairs;
+    FirearmSettings firearm;
 };
 bool SerializeFirstPersonAssemblySettings(const FirstPersonAssemblySettings&, std::string&, std::string&);
 bool ParseFirstPersonAssemblySettings(const std::string&, FirstPersonAssemblySettings&, std::string&);

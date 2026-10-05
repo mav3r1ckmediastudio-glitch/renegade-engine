@@ -35,6 +35,45 @@ void StudioRenderPath::CreateAssemblyEditor() {
  assemblyStatus_.SetText("Parts changed. LOAD PARTS before preview or save.");
  };
  assemblyArms_.OnSelect(partChanged);assemblyWeapon_.OnSelect(partChanged);
+ assemblyFirearmPanel_.Create("Weapon settings");
+ assemblyFirearmPanel_.SetSize(XMFLOAT2(500,270));
+ assemblyFirearmPanel_.SetPos(XMFLOAT2(1120,80));
+ assemblyCapacity_.Create(1,1000,2,999,"Loaded capacity","Capacity");
+ assemblyCapacity_.SetPos(XMFLOAT2(170,45));assemblyCapacity_.SetSize(XMFLOAT2(300,28));
+ assemblyCapacity_.SetTooltip("Maximum loaded rounds. Starts full. Reload fills this capacity when its animation finishes.");
+ assemblyCapacity_.OnValueCommitted([this](float value){
+ if(assemblyRefreshing_)return;const auto before=assemblySettings_;
+ assemblySettings_.firearm.capacity=int(std::round(value));
+ RecordAssemblyDraft(before);assemblyCapacity_.SetValue(float(assemblySettings_.firearm.capacity));
+ });
+ assemblyFirearmPanel_.AddWidget(&assemblyCapacity_);
+ assemblyShotInterval_.Create(0,60,0,6000,"Minimum shot interval","Shot interval (s)");
+ assemblyShotInterval_.SetPos(XMFLOAT2(170,90));assemblyShotInterval_.SetSize(XMFLOAT2(300,28));
+ assemblyShotInterval_.SetTooltip("Minimum seconds between accepted shots. A firing animation must also finish before another shot.");
+ assemblyShotInterval_.OnValueCommitted([this](float value){
+ if(assemblyRefreshing_)return;const auto before=assemblySettings_;
+ assemblySettings_.firearm.minimumShotInterval=value;RecordAssemblyDraft(before);
+ });
+ assemblyFirearmPanel_.AddWidget(&assemblyShotInterval_);
+ assemblyPartialReload_.Create("Allow partial reload");
+ assemblyPartialReload_.SetPos(XMFLOAT2(235,137));assemblyPartialReload_.SetSize(XMFLOAT2(22,22));
+ assemblyPartialReload_.OnClick([this](const wi::gui::EventArgs& a){
+ if(assemblyRefreshing_)return;const auto before=assemblySettings_;
+ assemblySettings_.firearm.allowPartialReload=a.bValue;RecordAssemblyDraft(before);
+ });
+ assemblyFirearmPanel_.AddWidget(&assemblyPartialReload_);
+ assemblyFirearmHelp_.Create("Weapon settings help");
+ assemblyFirearmHelp_.SetText("Shared with this assembly. Use SAVE CHANGES in the assembly window.\nReload requires an assigned action; reserve ammunition comes later.");
+ assemblyFirearmHelp_.SetPos(XMFLOAT2(20,180));assemblyFirearmHelp_.SetSize(XMFLOAT2(460,65));
+ assemblyFirearmHelp_.font.params.size=14;assemblyFirearmPanel_.AddWidget(&assemblyFirearmHelp_);
+ assemblyFirearmPanel_.SetVisible(false);GetGUI().AddWidget(&assemblyFirearmPanel_);
+ button(assemblyFirearmButton_,"WEAPON SETTINGS",300,752,220);
+ assemblyFirearmButton_.OnClick([this](const wi::gui::EventArgs&){
+ assemblyRefreshing_=true;assemblyCapacity_.SetValue(float(assemblySettings_.firearm.capacity));
+ assemblyShotInterval_.SetValue(assemblySettings_.firearm.minimumShotInterval);
+ assemblyPartialReload_.SetCheck(assemblySettings_.firearm.allowPartialReload);
+ assemblyRefreshing_=false;assemblyFirearmPanel_.SetVisible(true);
+ });
  button(assemblyLoad_,"LOAD PARTS",20,105,510);
  assemblyLoad_.OnClick([this](const wi::gui::EventArgs&){
  wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this](std::uint64_t){LoadAssemblyParts();});});
@@ -122,7 +161,7 @@ void StudioRenderPath::CreateAssemblyEditor() {
  wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this](std::uint64_t){
  if(assemblyCommands_.Redo())RefreshAssemblyDraft();});});
  button(assemblyClose_,"CLOSE",900,682,150);
- assemblyClose_.OnClick([this](const wi::gui::EventArgs&){assemblyPanel_.SetVisible(false);assemblyPreview_.reset();assemblyImage_.SetImage({});});
+ assemblyClose_.OnClick([this](const wi::gui::EventArgs&){assemblyPanel_.SetVisible(false);assemblyFirearmPanel_.SetVisible(false);assemblyPreview_.reset();assemblyImage_.SetImage({});});
  assemblyStatus_.Create("Assembly status");assemblyStatus_.SetPos(XMFLOAT2(20,720));
  assemblyStatus_.SetSize(XMFLOAT2(1030,25));assemblyStatus_.SetText("Select parts, explicit parent and clip pairs. Positions in metres; rotations in degrees.");
  assemblyPanel_.AddWidget(&assemblyStatus_);assemblyPanel_.SetVisible(false);GetGUI().AddWidget(&assemblyPanel_);
@@ -135,6 +174,7 @@ void StudioRenderPath::OpenAssemblyEditor() {
  const auto assigned=bridge::CapturePlayerControllerSettings(scene,entity).firstPersonArmsAssetId;
  wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,project,entity,assigned](std::uint64_t){
  if(!session_->Projects().HasProject()||session_->Projects().CurrentProject().projectId!=project.projectId)return;
+ assemblyFirearmPanel_.SetVisible(false);
  assemblyProjectId_=project.projectId;assemblyPlayer_=entity;assemblySettings_={};
  assemblyCommands_.Clear();assemblyAssetId_.clear();assemblyOriginalHash_.clear();assemblyRefreshing_=true;
  assemblyPreview_.reset();assemblyImage_.SetImage({});assemblyPartIds_.clear();
@@ -203,6 +243,9 @@ void StudioRenderPath::LoadAssemblyParts() {
  float values[]={s.weaponPosition.x,s.weaponPosition.y,s.weaponPosition.z,we.x,we.y,we.z,
  s.cameraPosition.x,s.cameraPosition.y,s.cameraPosition.z,ce.x,ce.y,ce.z};
  for(int i=0;i<12;++i)assemblyValues_[i].SetValue(values[i]);
+ assemblyCapacity_.SetValue(float(s.firearm.capacity));
+ assemblyShotInterval_.SetValue(s.firearm.minimumShotInterval);
+ assemblyPartialReload_.SetCheck(s.firearm.allowPartialReload);
  assemblyRefreshing_=false;assemblyPreviewRefreshPending_=false;assemblySave_.SetEnabled(false);
  QueueAssemblyPreviewRefresh();
 }

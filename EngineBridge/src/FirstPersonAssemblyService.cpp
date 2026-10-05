@@ -32,6 +32,7 @@ ProjectDocumentWrite Write(const fs::path& p,const std::vector<std::uint8_t>& b)
  if(!Read(fs::u8path(p),a)||a!=b){e="Assembly staged bytes changed.";return false;}return true;};return w;
 }
 bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
+ if(!ValidateFirearmSettings(s.firearm,e))return false;
  if(!IsValidStableId(s.armsAssetId)||!IsValidStableId(s.weaponAssetId)||s.parentBonePath.empty()||
  s.armsAssetId==s.weaponAssetId||s.pairs.empty()||s.pairs.size()>32) {
  e="Select distinct arms and weapon products, an explicit parent bone and at least one clip pair.";return false;}
@@ -75,11 +76,24 @@ bool SerializeFirstPersonAssemblySettings(const FirstPersonAssemblySettings& s,s
  {"camera_rotation",{s.cameraRotation.x,s.cameraRotation.y,s.cameraRotation.z,s.cameraRotation.w}},
  {"pairs",nlohmann::json::array()}};
  for(const auto& p:s.pairs)j["pairs"].push_back({{"action",p.action},{"arms_clip",p.armsClip},{"weapon_clip",p.weaponClip}});
+ j["firearm"]={{"schema_version",1},{"capacity",s.firearm.capacity},
+ {"minimum_shot_interval",s.firearm.minimumShotInterval},{"allow_partial_reload",s.firearm.allowPartialReload}};
  out=j.dump();return true;
 }
 bool ParseFirstPersonAssemblySettings(const std::string& text,FirstPersonAssemblySettings& s,std::string& e) {
  s={};try {
- auto j=nlohmann::json::parse(text);if(!j.is_object()||j.size()!=9||j.at("schema_version")!=1)throw std::runtime_error("schema");
+ auto j=nlohmann::json::parse(text);if(!j.is_object()||(j.size()!=9 && !(j.size()==10 && j.contains("firearm")))||j.at("schema_version")!=1)throw std::runtime_error("schema");
+ if(j.contains("firearm")) {
+ const auto& f=j.at("firearm");
+ if(!f.is_object()||f.size()!=4||f.at("schema_version")!=1||
+ !f.at("capacity").is_number_integer()||!f.at("minimum_shot_interval").is_number()||
+ !f.at("allow_partial_reload").is_boolean())throw std::runtime_error("firearm");
+ const auto capacity=f.at("capacity").get<long long>();
+ if(capacity<1||capacity>1000)throw std::runtime_error("capacity");
+ s.firearm.capacity=int(capacity);
+ s.firearm.minimumShotInterval=f.at("minimum_shot_interval").get<float>();
+ s.firearm.allowPartialReload=f.at("allow_partial_reload").get<bool>();
+ }
  s.armsAssetId=j.at("arms_asset_id").get<std::string>();s.weaponAssetId=j.at("weapon_asset_id").get<std::string>();
  s.parentBonePath=j.at("parent_bone_path").get<std::string>();
  auto position=[&](const char* k){const auto& a=j.at(k);if(!a.is_array()||a.size()!=3)throw std::runtime_error("position");
@@ -149,6 +163,7 @@ bool FirstPersonAssemblyService::Prepare(const std::string& root,const StableId&
  Set(*ac.transforms.GetComponent(viewRoot),s.cameraPosition,s.cameraRotation);
  for(auto r:armRoots)ac.Component_Attach(r,viewRoot,true);
  ac.metadatas.Create(viewRoot).bool_values.set("renegade.first_person.assembly",true);
+ ApplyFirearmSettings(*ac.metadatas.GetComponent(viewRoot),s.firearm);
  ac.Update(0);
  if(!Pose(ac,s.pairs.front().action,0,e))return false;
  result.Clear();result.Merge(ac);e.clear();return true;
@@ -178,7 +193,7 @@ SetFirstPersonAssemblySettingsCommand::SetFirstPersonAssemblySettingsCommand(
 bool SetFirstPersonAssemblySettingsCommand::Execute() {
  auto equal3=[](const XMFLOAT3& a,const XMFLOAT3& b){return a.x==b.x&&a.y==b.y&&a.z==b.z;};
  auto equal4=[](const XMFLOAT4& a,const XMFLOAT4& b){return a.x==b.x&&a.y==b.y&&a.z==b.z&&a.w==b.w;};
- bool same=before_.armsAssetId==after_.armsAssetId&&before_.weaponAssetId==after_.weaponAssetId&&
+ bool same=before_.firearm==after_.firearm&&before_.armsAssetId==after_.armsAssetId&&before_.weaponAssetId==after_.weaponAssetId&&
  before_.parentBonePath==after_.parentBonePath&&equal3(before_.weaponPosition,after_.weaponPosition)&&
  equal3(before_.cameraPosition,after_.cameraPosition)&&equal4(before_.weaponRotation,after_.weaponRotation)&&
  equal4(before_.cameraRotation,after_.cameraRotation)&&before_.pairs.size()==after_.pairs.size();

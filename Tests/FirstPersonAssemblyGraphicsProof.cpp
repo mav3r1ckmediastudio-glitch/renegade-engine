@@ -488,6 +488,18 @@ static bool RuntimeAssemblyProof(const fs::path& input, const fs::path& output, 
   if(!snapshots.Create(project,snapshot,error)){std::cerr<<error<<"\n";return false;}
   SceneService reopened;
   if(!reopened.LoadScene(snapshot.scenePath))return false;
+  ProjectMetadata snapshotProject;
+  if(!ProjectService().InspectProject(snapshot.descriptorPath,snapshotProject,error))return false;
+  FirstPersonAssemblySettings expectedSettings;
+  if(!FirstPersonAssemblyService().ReadSettings(project.rootPath,projectId,assetId,expectedSettings,error))return false;
+  RuntimePlayerViewRigState snapshotRig;RuntimePlayerViewRigSettings snapshotRigSettings;snapshotRigSettings.createProofGeometry=false;
+  const auto snapshotPlayer=reopened.GetScene().Entity_CreateTransform("Snapshot player");
+  if(!SpawnRuntimePlayerViewRig(reopened.GetScene(),snapshotRig,snapshotPlayer,1.65f,error,snapshotRigSettings) ||
+     !LoadRuntimePlayerViewAsset(reopened.GetScene(),snapshotRig,snapshotProject.rootPath,projectId,assetId,error))return false;
+  RuntimePlayerViewAnimationState snapshotAnimation;
+  if(!InitializeRuntimePlayerViewAnimations(reopened.GetScene(),snapshotRig,snapshotAnimation,error) ||
+     !(snapshotAnimation.firearm==expectedSettings.firearm))return false;
+  std::cout<<"TEST SNAPSHOT WEAPON SETTINGS PASS capacity="<<snapshotAnimation.loadedShells<<"\n";
   auto copied=ResolvePlayerStart(reopened.GetScene());
   if(copied.resolution!=PlayerStartResolution::Success||copied.start.settings.firstPersonArmsAssetId!=assetId)return false;
   std::ofstream(output/"snapshot-descriptor.txt")<<snapshot.descriptorPath;
@@ -517,6 +529,7 @@ static bool RuntimeAssemblyProof(const fs::path& input, const fs::path& output, 
   std::cerr<<"Paired initialization: "<<error<<"\n";return false;
  }
  if(scene.armatures.GetCount()!=2||scene.characters.GetCount()!=0||scene.rigidbodies.GetCount()!=0)return false;
+ std::cout<<"RUNTIME WEAPON capacity="<<animation.firearm.capacity<<" interval="<<animation.firearm.minimumShotInterval<<" partial="<<animation.firearm.allowPartialReload<<"\n";
  for(float dt:{0.0f,0.35f,0.75f,6.5f}) {
   UpdateRuntimePlayerViewAnimations(scene,animation,PlayerViewAction::Walk,dt);
   scene.Update(1.0f/60);
@@ -553,6 +566,7 @@ static bool UpdateAssemblyProof(const fs::path& descriptor,const fs::path& outpu
  FirstPersonAssemblyService service;FirstPersonAssemblySettings original,changed,reopened;
  if(!service.ReadSettings(project.rootPath,project.projectId,asset,original,error))return false;
  changed=original;changed.weaponPosition.x+=0.005f;changed.cameraPosition.z+=0.01f;
+ changed.firearm={4,1.25f,false};
  auto bytes=[](const fs::path& path){std::ifstream f(path,std::ios::binary);
  return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(f),{});};
  std::vector<std::pair<fs::path,std::vector<std::uint8_t>>> untouched;

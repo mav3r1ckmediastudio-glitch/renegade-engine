@@ -1113,7 +1113,11 @@ namespace renegade::studio
         wi::gui::Button gridToggleButton_;
         RenegadePhysicsLabStudioChrome studioChrome_;
         wi::gui::Button playerAssembly_;
-        wi::gui::Window assemblyPanel_;
+        wi::gui::Window assemblyPanel_, assemblyFirearmPanel_;
+        wi::gui::Button assemblyFirearmButton_;
+        wi::gui::Label assemblyFirearmHelp_;
+        SceneInspectorSlider assemblyCapacity_, assemblyShotInterval_;
+        wi::gui::CheckBox assemblyPartialReload_;
         wi::gui::Label assemblyImage_, assemblyStatus_;
         wi::gui::ComboBox assemblyArms_, assemblyWeapon_, assemblyBone_, assemblyAction_, assemblyActionPage_;
         std::array<wi::gui::ComboBox, bridge::FirstPersonAssemblyActions.size()> assemblyArmsClips_, assemblyWeaponClips_;

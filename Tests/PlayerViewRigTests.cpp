@@ -329,6 +329,38 @@ namespace
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f);
         if (state.activeClip != armsWalk || state.jumpCycleActive)
             Fail("landing did not return to movement");
+        renegade::bridge::FirearmSettings configured{4,2.0f,true};
+        renegade::bridge::ApplyFirearmSettings(*scene.metadatas.GetComponent(root),configured);
+        if(!InitializeRuntimePlayerViewAnimations(scene,rig,state,error) ||
+            state.loadedShells!=4 || !(state.firearm==configured)) Fail("configured weapon initialization");
+        UpdateRuntimePlayerViewAnimations(scene,state,PlayerViewAction::Idle,0.1f,true);
+        if(state.loadedShells!=3)Fail("configured weapon shot");
+        UpdateRuntimePlayerViewAnimations(scene,state,PlayerViewAction::Idle,0.6f);
+        UpdateRuntimePlayerViewAnimations(scene,state,PlayerViewAction::Idle,0.1f,true);
+        if(state.loadedShells!=3 || state.oneShotPlaying)Fail("shot interval not enforced after clip completion");
+        const float cooldown=state.shotCooldown;
+        UpdateRuntimePlayerViewAnimations(scene,state,PlayerViewAction::Idle,0,true);
+        if(!Near(cooldown,state.shotCooldown) || state.loadedShells!=3)Fail("pause changed shot cooldown");
+        UpdateRuntimePlayerViewAnimations(scene,state,PlayerViewAction::Idle,2,true);
+        if(state.loadedShells!=2)Fail("cooldown completion did not permit shot");
+        UpdateRuntimePlayerViewAnimations(scene,state,PlayerViewAction::Idle,1);
+        UpdateRuntimePlayerViewAnimations(scene,state,PlayerViewAction::Idle,0.1f,false,true);
+        if(state.activeClip!=partial || state.loadedShells!=2)Fail("capacity-four partial reload selection");
+        UpdateRuntimePlayerViewAnimations(scene,state,PlayerViewAction::Idle,3);
+        if(state.loadedShells!=4)Fail("reload did not fill configured capacity");
+        configured.allowPartialReload=false;
+        renegade::bridge::ApplyFirearmSettings(*scene.metadatas.GetComponent(root),configured);
+        if(!InitializeRuntimePlayerViewAnimations(scene,rig,state,error))Fail(error);
+        UpdateRuntimePlayerViewAnimations(scene,state,PlayerViewAction::Idle,0.1f,true);
+        UpdateRuntimePlayerViewAnimations(scene,state,PlayerViewAction::Idle,1);
+        UpdateRuntimePlayerViewAnimations(scene,state,PlayerViewAction::Idle,0.1f,false,true);
+        if(state.oneShotPlaying || state.loadedShells!=3)Fail("disabled partial reload accepted");
+        state.loadedShells=0;
+        UpdateRuntimePlayerViewAnimations(scene,state,PlayerViewAction::Idle,0.1f,false,true);
+        if(state.activeClip!=reload)Fail("disabled partial reload blocked empty reload");
+        UpdateRuntimePlayerViewAnimations(scene,state,PlayerViewAction::Idle,4);
+        if(state.loadedShells!=4)Fail("empty reload did not restore configured capacity");
+        renegade::bridge::ApplyFirearmSettings(*scene.metadatas.GetComponent(root),renegade::bridge::FirearmSettings{});
         ResetRuntimePlayerViewAnimations(scene, state);
         if (state.initialized || state.activeWeaponClip != wi::ecs::INVALID_ENTITY ||
             !Near(scene.animations.GetComponent(weaponWalk)->amount, 0))

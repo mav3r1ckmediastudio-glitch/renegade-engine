@@ -976,3 +976,16 @@ required to exercise takeoff and landing; the empty preview fixture is not a
 complete gameplay level. No new controller or root-motion locomotion is added.
 
 First-person view-model sanitization disables imported humanoid ragdolls and removes soft-body physics as well as character, rigid-body and collider components. Presentation bones must never push the authoritative player capsule.
+
+### Editable firearm settings
+
+ASSEMBLY > WEAPON SETTINGS exposes loaded capacity, minimum seconds between shots
+and permission for partial reload. Assembly draft Undo/Redo and governed SAVE
+CHANGES / SAVE AS NEW persist these fields in the version-1 recipe and native
+payload. Player Start's existing assembly reference carries settings through
+Test Level snapshots and package loading. Old recipes retain the accepted two-shot
+defaults. Runtime reload fills configured capacity only at animation completion;
+shot cooldown advances only during gameplay. These are discrete shots, with no
+reserve ammunition or automatic firing yet. Gameplay capacity does not change the
+number of shells visible in authored clips. Independent equipment definitions and
+Player prefabs remain next stages; see PLAYER_AUTHORING_CONTINUATION.md.

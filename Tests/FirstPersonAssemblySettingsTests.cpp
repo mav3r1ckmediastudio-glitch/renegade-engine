@@ -19,9 +19,27 @@ int main()
         !ParseFirstPersonAssemblySettings(json, parsed, error) ||
         !SerializeFirstPersonAssemblySettings(parsed, reopened, error) || reopened != json)
     { std::cerr << "Assembly attachment or paired indices lost on reopen: " << error; return 1; }
+    auto tuned=settings;tuned.firearm={6,1.25f,false};
+    if(!SerializeFirstPersonAssemblySettings(tuned,reopened,error) ||
+        !ParseFirstPersonAssemblySettings(reopened,parsed,error) || !(parsed.firearm==tuned.firearm))
+        return 9;
+    // Old recipes lack the firearm member and retain the accepted shotgun default.
+    auto legacy=json;const auto field=legacy.find("\"firearm\":");
+    if(field==std::string::npos)return 10;
+    const auto end=legacy.find('}',field);
+    legacy.erase(field,end-field+2);
+    if(!ParseFirstPersonAssemblySettings(legacy,parsed,error) || !(parsed.firearm==FirearmSettings{}))return 11;
+    for(int i=0;i<4;++i) {
+        auto bad=settings;
+        if(i==0)bad.firearm.capacity=0;
+        if(i==1)bad.firearm.capacity=1001;
+        if(i==2)bad.firearm.minimumShotInterval=-1;
+        if(i==3)bad.firearm.minimumShotInterval=std::numeric_limits<float>::quiet_NaN();
+        if(SerializeFirstPersonAssemblySettings(bad,reopened,error))return 12;
+    }
     CommandService history;
     auto draft=settings;
-    auto next=draft;next.weaponPosition.x+=0.01f;next.cameraPosition.z+=0.02f;
+    auto next=draft;next.firearm=tuned.firearm;next.weaponPosition.x+=0.01f;next.cameraPosition.z+=0.02f;
     next.cameraRotation={0,0,0,1};next.pairs.pop_back();
     if(!history.Execute(std::make_unique<SetFirstPersonAssemblySettingsCommand>(draft,next))||
         !history.IsDirty()||draft.pairs.size()!=1||!history.Undo()||

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "RuntimePlayerViewRig.h"
+#include "renegade/bridge/FirearmSettings.h"
 
 #include "renegade/bridge/AnimationService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
@@ -42,7 +43,9 @@ namespace renegade::runtime
         bool jumpCycleActive = false;
         bool takeoffPending = false;
         bool landingPending = false;
-        // Bounded two-barrel shotgun prototype; reserve ammo is not modelled yet.
+        bridge::FirearmSettings firearm;
+        float shotCooldown = 0;
+        // Loaded ammunition; reserve ammunition is not modelled yet.
         int loadedShells = 2;
         wi::ecs::Entity activeWeaponClip = wi::ecs::INVALID_ENTITY;
         float pairedTime = 0.0f;
@@ -293,7 +296,12 @@ namespace renegade::runtime
             if ((entity == rig.viewModelRoot || scene.Entity_IsDescendant(entity, rig.viewModelRoot)) &&
                 metadata.bool_values.has("renegade.first_person.assembly") &&
                 metadata.bool_values.get("renegade.first_person.assembly"))
+            {
+                if (state.pairedAssembly) { error = "Multiple first-person assembly roots."; return false; }
+                if (!bridge::CaptureFirearmSettings(metadata, state.firearm, error)) return false;
+                state.loadedShells = state.firearm.capacity;
                 state.pairedAssembly = true;
+            }
         }
         const auto available =
             bridge::CollectAnimationClips(scene, rig.viewModelRoot, true);
@@ -576,6 +584,7 @@ namespace renegade::runtime
             const bool advancing = std::isfinite(dt) && dt > 0;
             if (advancing)
             {
+                state.shotCooldown = std::max(0.0f, state.shotCooldown - dt);
                 if (state.groundKnown)
                 {
                     if (state.wasGrounded && !grounded)
@@ -621,9 +630,11 @@ namespace renegade::runtime
             else if (advancing && state.equipped && (reloadPressed || firePressed))
             {
                 const auto action = reloadPressed
-                    ? (state.loadedShells == 1 ? PlayerViewAction::ReloadPartial : PlayerViewAction::Reload)
+                    ? (state.loadedShells > 0 && state.firearm.allowPartialReload ? PlayerViewAction::ReloadPartial : PlayerViewAction::Reload)
                     : (state.aiming ? PlayerViewAction::AimAttack : PlayerViewAction::Attack);
-                const bool allowed = reloadPressed ? state.loadedShells < 2 : state.loadedShells > 0;
+                const bool allowed = reloadPressed ? (state.loadedShells < state.firearm.capacity &&
+                    (state.loadedShells == 0 || state.firearm.allowPartialReload)) :
+                    (state.loadedShells > 0 && state.shotCooldown <= 0);
                 // A missing partial pair may use the authored full reload, but
                 // a missing fire pair must never consume ammunition.
                 auto selected = action;
@@ -665,8 +676,10 @@ namespace renegade::runtime
                 state.oneShotPlaying = false;
                 return;
             }
-            if (startingShot)
+            if (startingShot) {
                 --state.loadedShells;
+                state.shotCooldown = state.firearm.minimumShotInterval;
+            }
             auto* arms = scene.animations.GetComponent(state.activeClip);
             auto* weapon = scene.animations.GetComponent(state.activeWeaponClip);
             if (arms == nullptr || weapon == nullptr) return;
@@ -680,7 +693,7 @@ namespace renegade::runtime
                     {
                         if (state.activeAction == PlayerViewAction::Reload ||
                             state.activeAction == PlayerViewAction::ReloadPartial)
-                            state.loadedShells = 2;
+                            state.loadedShells = state.firearm.capacity;
                         if (state.activeAction == PlayerViewAction::JumpLand)
                             state.jumpCycleActive = false;
                         if (state.activeAction == PlayerViewAction::Equip)
