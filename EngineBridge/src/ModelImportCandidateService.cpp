@@ -4,6 +4,7 @@
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ModelImporterFailureAdapter.h"
 #include <ModelImporter.h>
+#include "renegade/bridge/MatchingRigAnimationService.h"
 #define UFBX_REAL_TYPE float
 #include <ufbx.h>
 #include <algorithm>
@@ -37,7 +38,7 @@ namespace
     std::string String(ufbx_string value) { return std::string(value.data, value.length); }
     bool SnapshotFbxTextures(const fs::path& source,
         std::vector<renegade::bridge::ModelImportDependency>& dependencies,
-        std::string& error)
+        std::string& error, const std::set<std::string>* required = nullptr)
     {
         ufbx_load_opts options = {};
         options.ignore_geometry = true;
@@ -56,6 +57,7 @@ namespace
         {
             renegade::bridge::ModelImportDependency dependency;
             dependency.referenceName = String(file.filename);
+            if(required && !required->count(dependency.referenceName))continue;
             fs::path texturePath = fs::u8path(dependency.referenceName);
             if (texturePath.filename().empty())
             {
@@ -125,6 +127,10 @@ namespace renegade::bridge
             candidate.scene_->Serialize(clone);
             clone.SetReadModeAndResetPos(true);
             prepared->Serialize(clone);
+            const auto first = prepared->animations.GetCount();
+            std::vector<wi::ecs::Entity> created;
+            const bool matchingRig=ImportMatchingRigAnimations(*prepared,sourcePath,created,error);
+            if(!matchingRig) {
             bool alreadyMapped = false;
             for (std::size_t i = 0; i < prepared->humanoids.GetCount(); ++i)
                 alreadyMapped = alreadyMapped || prepared->humanoids[i].IsValid();
@@ -140,18 +146,21 @@ namespace renegade::bridge
                 }
             if (destination == wi::ecs::INVALID_ENTITY)
             { error = "Character humanoid mapping is incomplete."; return false; }
-            const auto first = prepared->animations.GetCount();
             ClearWickedModelImporterFailureDiagnostic();
             RetargetHumanoidAnimationsCommand retarget(*prepared, destination, sourcePath, true);
             const bool succeeded = retarget.Execute();
             const auto importerFailure = ConsumeWickedModelImporterFailureDiagnostic();
             if (!succeeded || !importerFailure.empty())
             { error = importerFailure.empty() ? retarget.Result().error : importerFailure; return false; }
+            created.assign(retarget.Result().createdAnimations.begin(),retarget.Result().createdAnimations.end());
             const auto& result = retarget.Result();
             if (result.createdAnimations.size() != result.sourceAnimationCount)
             { error = "Not every source clip could be retargeted; nothing was added."; return false; }
+
+            }
             if (!ReadBytes(fs::u8path(sourcePath), after) || after != before)
             { error = "External animation source changed during conversion."; return false; }
+            (void)DisableDefaultHumanoidLookAt(*prepared);
             PauseImportedModelAnimations(*prepared);
             ModelImportDependency source;
             source.sourcePath = fs::absolute(fs::u8path(sourcePath)).generic_u8string();
@@ -161,11 +170,12 @@ namespace renegade::bridge
             candidate.externalAnimations_.reserve(candidate.externalAnimations_.size() + 1);
             candidate.dependencies_.reserve(candidate.dependencies_.size() + 1);
             candidate.externalAnimations_.push_back({candidate.dependencies_.size(), first,
-                result.createdAnimations.size()});
+                created.size(), matchingRig});
             candidate.dependencies_.push_back(std::move(source));
             candidate.scene_ = std::move(prepared);
             candidate.summary_ = ImportService::Summarize(*candidate.scene_);
             candidate.evidence_ = ImportService::SummarizeModelEvidence(*candidate.scene_);
+            error.clear();
             return true;
         }
         catch (const std::exception& exception) { error = exception.what(); }
@@ -177,6 +187,9 @@ namespace renegade::bridge
     {
         return PrepareStaticModel(sourcePath);
     }
+    ModelImportCandidate ModelImportCandidateService::PrepareModel(const std::string& sourcePath,
+        const std::vector<ModelImportTextureRelink>& relinks) const
+    { return PrepareWithRelinks(sourcePath,relinks); }
     ModelImportCandidate ModelImportCandidateService::PrepareGlb(const std::string& sourcePath) const
     {
         if (ImportService::ClassifyModelSourceFormat(sourcePath) == ModelSourceFormat::Glb)
@@ -186,6 +199,9 @@ namespace renegade::bridge
         return candidate;
     }
     ModelImportCandidate ModelImportCandidateService::PrepareStaticModel(const std::string& sourcePath) const
+    { return PrepareWithRelinks(sourcePath,{}); }
+    ModelImportCandidate ModelImportCandidateService::PrepareWithRelinks(const std::string& sourcePath,
+        const std::vector<ModelImportTextureRelink>& relinks) const
     {
         ModelImportCandidate candidate;
         std::error_code ec;
@@ -215,9 +231,29 @@ namespace renegade::bridge
         }
         candidate.sourceBytes_ = sourceBytes.size();
         candidate.sourceFingerprint_ = Fingerprint(sourceBytes);
-        if (candidate.sourceFormat_ == ModelSourceFormat::Fbx &&
+        if (candidate.sourceFormat_ == ModelSourceFormat::Fbx && relinks.empty() &&
             !SnapshotFbxTextures(source, candidate.dependencies_, candidate.error_)) return candidate;
 
+        if(!relinks.empty() && candidate.sourceFormat_!=ModelSourceFormat::Fbx)
+        {candidate.error_="Explicit texture relinking currently accepts FBX only.";return candidate;}
+        std::set<std::pair<std::uint32_t,std::uint32_t>> slots;
+        for(const auto& relink:relinks) {
+            if(relink.textureSlot>=wi::scene::MaterialComponent::TEXTURESLOT_COUNT ||
+                !slots.emplace(relink.materialIndex,relink.textureSlot).second)
+            {candidate.error_="Texture relinks contain an invalid or duplicate material slot.";return candidate;}
+            ModelImportDependency dependency;
+            dependency.explicitRelink=true;dependency.materialIndex=relink.materialIndex;
+            dependency.textureSlot=relink.textureSlot;
+            const auto path=fs::weakly_canonical(fs::absolute(fs::u8path(relink.sourcePath),ec),ec);
+            if(ec || !fs::is_regular_file(path,ec) || ec || !ReadBytes(path,dependency.bytes))
+            {candidate.error_="Selected relink texture is missing or unreadable.";return candidate;}
+            dependency.sourcePath=path.generic_u8string();
+            dependency.referenceName="relink:"+std::to_string(relink.materialIndex)+":"+std::to_string(relink.textureSlot);
+            dependency.retainedRelativePath="relinked/"+std::to_string(relink.materialIndex)+"/"+
+                std::to_string(relink.textureSlot)+"/"+path.filename().generic_u8string();
+            dependency.previewResourceName=(source.parent_path()/".__renegade_preview"/GenerateStableId()/path.filename()).generic_u8string();
+            candidate.dependencies_.push_back(std::move(dependency));
+        }
         candidate.scene_ = wi::allocator::make_shared_single<wi::scene::Scene>();
         ClearWickedModelImporterFailureDiagnostic();
         try
@@ -225,22 +261,42 @@ namespace renegade::bridge
             if (candidate.sourceFormat_ == ModelSourceFormat::Fbx)
                 ImportModel_FBX(candidate.sourcePath_, *candidate.scene_);
             else ImportModel_GLTF(candidate.sourcePath_, *candidate.scene_);
+            if(!relinks.empty()) {
+                std::set<std::string> required;
+                for(size_t i=0;i<candidate.scene_->materials.GetCount();++i)
+                    for(size_t slot=0;slot<wi::scene::MaterialComponent::TEXTURESLOT_COUNT;++slot) {
+                        const auto& texture=candidate.scene_->materials[i].textures[slot];
+                        if(!slots.count({std::uint32_t(i),std::uint32_t(slot)}) && !texture.name.empty())
+                            required.insert(texture.name);
+                    }
+                for(const auto& relink:relinks)
+                    if(relink.materialIndex>=candidate.scene_->materials.GetCount())
+                        throw std::runtime_error("Relink refers to a material index absent after conversion.");
+                if(!SnapshotFbxTextures(source,candidate.dependencies_,candidate.error_,&required))
+                    throw std::runtime_error(candidate.error_);
+            }
             // Unique cache keys force the preview to use the exact snapshotted
             // bytes, even when a previous import cached the original filename.
             for (size_t i = 0; i < candidate.scene_->materials.GetCount(); ++i)
             {
-                for (auto& texture : candidate.scene_->materials[i].textures)
+                for(size_t slot=0;slot<wi::scene::MaterialComponent::TEXTURESLOT_COUNT;++slot)
                 {
-                    if (candidate.sourceFormat_ != ModelSourceFormat::Fbx || texture.name.empty()) continue;
-                    const auto found = std::find_if(candidate.dependencies_.begin(), candidate.dependencies_.end(),
-                        [&texture](const ModelImportDependency& d) { return d.referenceName == texture.name; });
-                    if (found == candidate.dependencies_.end())
+                    auto& texture=candidate.scene_->materials[i].textures[slot];
+                    if(candidate.sourceFormat_!=ModelSourceFormat::Fbx)continue;
+                    auto found=std::find_if(candidate.dependencies_.begin(),candidate.dependencies_.end(),
+                        [i,slot](const auto& d){return d.explicitRelink && d.materialIndex==i && d.textureSlot==slot;});
+                    if(found==candidate.dependencies_.end()) {
+                        if(texture.name.empty())continue;
+                        found=std::find_if(candidate.dependencies_.begin(),candidate.dependencies_.end(),
+                            [&texture](const auto& d){return !d.explicitRelink && d.referenceName==texture.name;});
+                    }
+                    if(found==candidate.dependencies_.end())
                         throw std::runtime_error("FBX converter texture was not declared by dependency inspection.");
-                    texture.resource = wi::resourcemanager::Load(found->previewResourceName,
-                        wi::resourcemanager::Flags::IMPORT_RETAIN_FILEDATA, found->bytes.data(), found->bytes.size());
-                    if (!texture.resource.IsValid() || !texture.resource.GetTexture().IsValid())
-                        throw std::runtime_error("FBX texture could not decode: " + fs::u8path(found->referenceName).filename().generic_u8string());
-                    texture.name = found->previewResourceName;
+                    texture.resource=wi::resourcemanager::Load(found->previewResourceName,
+                        wi::resourcemanager::Flags::IMPORT_RETAIN_FILEDATA,found->bytes.data(),found->bytes.size());
+                    if(!texture.resource.IsValid() || !texture.resource.GetTexture().IsValid())
+                        throw std::runtime_error("Selected FBX texture could not decode.");
+                    texture.name=found->previewResourceName;
                 }
                 candidate.scene_->materials[i].SetDirty();
             }

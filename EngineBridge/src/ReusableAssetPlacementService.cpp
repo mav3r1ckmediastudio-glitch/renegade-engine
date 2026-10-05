@@ -1,6 +1,7 @@
 #include "renegade/bridge/ReusableAssetService.h"
 
 #include "renegade/bridge/CharacterService.h"
+#include "renegade/bridge/FirstPersonAssemblyService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 
@@ -171,6 +172,13 @@ namespace renegade::bridge
                 }
 
                 const std::string optionsJson = stored.at("options").dump();
+                if (manifest.sourceFormat == "assembly") {
+                    FirstPersonAssemblySettings assembly;
+                    if (manifest.importer != "renegade.first_person.assembly" ||
+                        !ParseFirstPersonAssemblySettings(optionsJson, assembly, error))
+                        return false;
+                    return true;
+                }
                 if (!ParseCreatorModelImportOptions(
                         optionsJson, creatorRecipe, error))
                 {
@@ -373,6 +381,11 @@ namespace renegade::bridge
             cleanup();
             return prepared;
         }
+        // The staged payload is deleted below and cannot remain a streaming
+        // container. Archive data is already decoded in memory; this policy
+        // forces native resource deserialization to retain embedded file bytes.
+        // No source product bytes or on-disk header are modified.
+        archive.SetCompressionEnabled(true);
         prepared.scene_->Serialize(archive);
         if (archive.GetPos() != archive.GetSize())
         {

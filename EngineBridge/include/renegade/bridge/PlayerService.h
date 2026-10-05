@@ -4,6 +4,8 @@
 
 #include <string>
 
+#include "renegade/bridge/IdentityService.h"
+
 #include "renegade/bridge/CommandService.h"
 
 namespace renegade::bridge
@@ -29,6 +31,7 @@ namespace renegade::bridge
         float eyeHeight = 1.65f;
         float maximumSlopeDegrees = 50.0f;
         float gravityFactor = 1.0f;
+        StableId firstPersonArmsAssetId;
     };
 
     struct PlayerStart

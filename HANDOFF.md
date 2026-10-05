@@ -1144,3 +1144,1290 @@ owner combat-feel gate is mandatory later for recoil, camera response, animation
 timing, SFX, particles, muzzle flash, projectile/impact feel, directional melee,
 parries/guards, bow/crossbow timing and spellcasting presentation. Automated
 damage/state correctness is not sufficient acceptance.
+
+## 2026-10-03 P1 recovery and honest acceptance checkpoint
+
+Implementation baseline: 51513b95e98e6f962c0052da3f92f1b8c279b280
+on feature/p1-first-person-arms-rig. Local recovery reference:
+recovery/p1-baseline-20261003. The recorded origin branch points at the same
+baseline; no fetch/push/merge was performed by this recovery.
+
+Read docs/P1_STATUS_AND_RECOVERY.md before resuming P1. It inventories the four
+implementation commits, source capabilities, actual test coverage, failed
+experimental Runtime evidence, missing acceptance and the next bounded task.
+
+Preserved temporary RuntimeApplication diagnostic source and patch under ignored
+BUILD/renegade/p1-recovery-20261003-2217, then restored RuntimeApplication.cpp.
+Foreground policy already matches baseline. Runtime, EngineBridge, Studio and
+Tests now have no source diff against 51513b9. Experimental BUILD projects and
+asset variants remain preserved and unaccepted; original owner arms are untouched.
+Generated Tools/__pycache__ was not committed.
+
+Changed documentation: README.md, docs/ROADMAP.md, docs/FEATURE_MATRIX.csv,
+docs/P1_STATUS_AND_RECOVERY.md and this handoff. No new gameplay implementation.
+
+Exact commands, hashes and evidence limits are in the status document.
+VS18 BuildTools local incremental Release and Debug Runtime builds passed;
+Release and Debug P1 executable builds passed. P1 tests passed 2/2 per
+configuration (0.17s each). Related Release regression passed 9/9 (0.39s),
+including the P1 pair. Existing MSB8029 warnings remain. Wicked source/pin clean.
+Logs and preserved patch: BUILD/renegade/p1-recovery-20261003-2217/.
+
+No Runtime window launched during this recovery. No direct UI/save/reopen,
+real-arms visual fix, independently exported game or clean-CI claim. Synthetic
+product round-trip tests do not prove live rendered arms. P1 is NOT accepted.
+
+Next task: stabilize one fixed no-imported-arms fixture and prove grounded Player,
+visible landmarks and camera/rig agreement before examining one immutable arms
+asset. Stop at the first failed isolation check. Do not rotate/re-export more
+variants while replacing the fixture. Verify the coordinate/rest/animation basis
+before correction. Subsequent owner exact-build visual and packaged parity
+verification are required; do not move to P2 on test passes alone.
+
+## 2026-10-03 P1 no-imported-arms placeholder proof
+
+Owner requested that supplied arms stop being used. Generated a separate
+BUILD/renegade/p1-placeholder-proof project with no arms assignment or imported
+assets and no Story Flow override. Baseline Release Runtime now visibly shows
+solid floor, three landmarks and orange/blue proxies extending from the lower
+view. Two inspected captures 62.07 seconds apart retain world framing.
+Diagnostics: Player spawned; proxy geometry true; imported asset loaded false;
+Character count zero. Runtime left open for owner movement/look verification.
+
+Added Tests/PlayerViewRigFixture.cpp and optional Windows
+RenegadePlayerViewRigFixture CMake target to preserve the no-asset scene generator.
+See docs/P1_PLACEHOLDER_PROOF.md for commands, hash, evidence and limits.
+Configure and generator Release build pass; generator save/reload passes on
+separate output; P1 Release tests 2/2 pass. Existing MSB8029 warnings remain.
+No production Runtime/Player/View Rig code changed; original arms untouched.
+No skinned-arms or live movement/pitch/yaw or full P1 acceptance claim.
+
+## 2026-10-03 owner placeholder movement and idle acceptance
+
+At 22:32 Europe/London owner reports movement is fluid and idle works well on
+the placeholder arms. This verifies movement feel and procedural idle on the
+baseline Release Runtime (51513b9 source; hash in P1_PLACEHOLDER_PROOF.md).
+No imported skeletal asset is involved. Existing running fixture unchanged.
+Explicit look extremes, sprint, jump/landing, pause/resume and R reset are the
+remaining immediate owner checks. Input bindings confirmed from the fixture's
+governed GameplayInput file; checklist added to docs/P1_PLACEHOLDER_PROOF.md.
+No implementation change or full P1 acceptance.
+
+
+## 2026-10-03 directional proxy stutter repair (owner verified)
+
+Owner clarified that the other placeholder checks work, but moving in a
+direction makes the proxies stutter. This supersedes broad movement acceptance.
+A native 300-frame Scene/Jolt test reproduces a 0.0498593-unit camera/rig-root
+position mismatch at 75 Hz rendering and 120 Hz physics, with forward/backward
+and sideways walking/sprinting. The mismatch equals raw versus interpolated
+Player position; this is not evidence of a defective imported arms asset.
+
+ApplyRuntimePlayerCamera now prefers the post-Scene::Update Player transform,
+matching the attached rig's interpolated presentation position. Physics remains
+movement authority, with raw position retained only as a missing-transform
+camera fallback. The placeholder scene, geometry and idle behaviour are unchanged.
+Tests/PlayerViewRigFixture.cpp retains the native movement regression and rejects
+both camera/rig drift and an inconclusive run without interpolation divergence.
+Build/test results and executable identity are recorded in P1_PLACEHOLDER_PROOF.md.
+No upstream Wicked changes, push, merge or full P1 acceptance.
+
+At 22:50 Europe/London the owner tested the repaired Release Runtime and reported
+"stutter is gone". Directional placeholder movement is accepted on this fixture.
+Release and Debug native movement proofs pass with maximum camera/rig error
+2.38419e-07 and real interpolation divergence 0.0498593. Both configurations'
+Player/arms/snapshot checks pass 5/5. P1 skinned-asset/package acceptance remains open.
+
+
+## 2026-10-03 proxy snapshot and detached package proof
+
+Camera repair source remains 4dd9953 and owner-verified Runtime is preserved.
+Added Tests/PlayerViewRigParityFixture.cpp and its optional Windows manual target
+in Tests/CMakeLists.txt. No gameplay production code changed.
+Production TestLevelSnapshotService snapshot saved/reloaded and launched in
+standalone Runtime; assignment remains empty and control scene path unchanged.
+StageWindowsGameBuild plus ApplyWindowsGameExecutableIdentity and stage validation
+pass. Copied package launches from unrelated working directory with no arguments;
+bootstrap verifies package integrity and DX12 success, live diagnostics resolve
+only detached GameData paths. Descriptor/scene/input hashes match the control.
+Snapshot and package screenshots visually inspected with identical proxy framing.
+Commands, hashes and evidence are in docs/P1_PLACEHOLDER_PROOF.md. An initial
+stage-only trial failed the expected Gate 3 schema check; corrected tool now
+finishes executable identity before producing the launchable package.
+
+Updated docs/P1_STATUS_AND_RECOVERY.md so the supplied owner/GGMAX arms are
+explicitly excluded and live camera agreement is no longer described as untested.
+Next: owner checks directional movement, pause/resume and R reset in the open
+P1ProxyParity.exe package. Then validate the actual Studio Test Level/Build Game
+UI workflow. Real skinned arms, hand-bone sockets and asset/package closure remain
+unaccepted. This fixed three-input manual plan is not a new general packager.
+No push, merge or P1 gate acceptance.
+
+## 2026-10-03 23:05 Europe/London: packaged proxy controls accepted
+
+After being asked to check movement, Escape pause/resume and R reset in the
+open detached package, the owner reported "everything works". These requested
+checks are accepted for this exact proxy package. Proof tooling source: ee79134;
+camera repair source: 4dd9953. Package executable SHA-256:
+a5532514ed33f33cdb8c554808cb1e72de13fb54ac3d863c094dc64e60e47ace
+No gameplay code or binary changed after this acceptance. Preserve the package
+and fixed control fixture. Next bounded task is the actual Studio Test Level
+and Build Game UI workflow. Real skinned arms, skeletal animation, animated
+hand-bone sockets and real-asset dependency closure remain unaccepted; P1 remains
+open. Do not resume the withdrawn owner/GGMAX arms experiment.
+
+## 2026-10-03 Studio Test Level stale bundled Runtime repaired
+
+Owner reported no arms through Studio Test Level. Process inspection confirmed
+the correct proxy snapshot, but Studio selected its bundled Runtime from
+16 September, before P1. Stale bundle hash:
+56f7ac45a73ba17e03bcfbcda33f0274b53eee167e08fe8b2e2ff0b7615d171b
+Closed obsolete child PID 59816 and detached package PID 26420, preserved the
+old executable in the ignored proof folder, then synchronized the verified
+Runtime executable, dxcompiler and Content into Studio/Release/Runtime.
+Source and bundle now both hash:
+69536da66fd6f40ebc392387ddeb0ce4e218f4373f0a74465f45b2e9524d1b92
+No production source change. Tools/Build-Studio-Windows.ps1 already performs
+this synchronization; direct-target builds had bypassed its packaging step.
+Build Game also prefers this bundle. Live Runtime diagnostics initially belonged
+to detached PID 26420 rather than Test Level PID 59816: match diagnostic PID to
+child PID before drawing conclusions. Owner button retry remains pending.
+
+## 2026-10-03 23:23 Europe/London: Studio Test Level gameplay accepted
+
+After synchronizing Studio's bundled Runtime, owner retried the Test Level
+button and reported "yes everything works". Requested movement/look/sprint/jump,
+pause/resume and reset checks accepted for the proxy fixture through Studio.
+Live Runtime PID 48644 matches Studio's child PID, loads the new TestLevel
+snapshot, reports startup success, proxies enabled and no imported arms.
+Evidence: BUILD/renegade/p1-placeholder-proof/studio-test-accepted.json.
+Studio's captured ready flag remains false while its update is suspended;
+this does not establish readiness-indicator acceptance. Gameplay owner result
+is accepted; actual Studio Build Game export remains next. Source checkpoint
+5d4d985 records bundle repair; verified Runtime hash unchanged. Full P1 open.
+
+## 2026-10-03 Studio export-test project prepared
+
+Added Tools/StoryFlow/Create-P1ExportFixture.ps1. It refuses existing destinations,
+creates fresh stable IDs, copies only the accepted scene/input unchanged, creates
+scene identity metadata and a three-node/two-route Story Flow, and declares the
+input map Always Include. Owner project is the ignored
+BUILD/renegade/p1-studio-export-proof/P1ExportProof.renegade. Control project and
+accepted Runtime/Studio binaries were not changed.
+Extended Tests/PlayerViewRigParityFixture.cpp with --inspect-export-project,
+calling the real PrepareWindowsGameBuildProjectState readiness boundary with a
+hidden GPU context and synchronized teardown. Release helper build passes;
+owner export project and a second fresh generator-validation project both pass
+InspectProject/dependency/registry/route preflight, exit 0, one Level completion.
+The generated scene/input SHA-256 match the control. git diff --check passes.
+Commands and logs are in docs/P1_PLACEHOLDER_PROOF.md. Early helper trials failed
+before document newline/GPU teardown corrections and are not acceptance evidence.
+Next: owner closes Test Level, opens P1ExportProof in Studio, uses Build Game and
+checks the resulting exported game's movement/look/idle/pause/reset. Export may
+briefly open Runtime for automatic smoke validation. This preflight is not an
+actual export or full P1 acceptance. No supplied arms resumed; no push or merge.
+
+
+## 2026-10-03 P1 native hand socket binding checkpoint
+
+Implementation commit: bab0de7 on feature/p1-first-person-arms-rig. Prior owner
+Studio export-launch confirmation is recorded by 757ee6d: actual P1 Export Proof
+Windows build launches/rendered DX12 at 75 FPS with both proxies and landmarks.
+
+Changed Runtime/src/RuntimePlayerViewRig.h and RuntimePlayerViewAsset.h: explicit
+primary/off-hand/support native boolean anchor metadata binds sockets to bones or
+child grips in the view-model skeleton. Missing roles retain original offsets;
+duplicate/non-skeletal/cyclic anchors fail before mutation and failed asset commit
+retains proxies. Native Wicked animation/hierarchy remains the sole pose authority.
+No movement/camera contract change or supplied owner/GGMAX arms use.
+
+Extended PlayerViewRigTests and manual PlayerViewRigFixture; added shared generated
+native skeleton and GPU proof headers. Updated P1_STATUS_AND_RECOVERY, ROADMAP,
+ARCHITECTURE and FEATURE_MATRIX; full contract, commands, hashes and limits are in
+docs/P1_HAND_SOCKET_BINDINGS.md. Runtime/tests/fixture build Release and Debug exit
+0. Final related CTest checks pass 5/5 per configuration. Packaged governed rasset
+loader binds remapped anchors; save/reload, atomic rejection, fallback and cleanup
+checks pass. Generated rigid geometry is not a production skinned arms asset.
+
+Manual --socket-proof DX12 runs 300 frames of translation/rotation Idle Walk Sprint,
+forward/backward/sideways movement and pitch/yaw in both configurations. Socket
+matrix error 0; camera/rig error 2.38419e-07; actual animated local Z range 0.0592m;
+pause matrix/timer errors 0; three captures per configuration; exit 0. Rendered
+captures inspected with yellow primary, green off-hand and purple support markers.
+Evidence in ignored BUILD/renegade/p1-socket-proof; build logs under p1-socket prefixes.
+New Release standalone Runtime starts the accepted unchanged proxy project in DX12,
+then closes only its new test window cleanly, exit 0. This is startup regression,
+not owner controls acceptance of the new binding build. Existing MSB8029 remains.
+
+Runtime candidate hashes: Release
+3b3e0bbddcdd7cab9251bca92b7e64ee2c63b7406aac5107d10d24513f0968ae;
+Debug de0d86e3f5ad45d6507bbc3934743df7aa63789f059126ce06b20aea53925f3d.
+Studio's bundle and owner-approved export deliberately remain at the previously
+accepted camera-sync binary; they do not contain this new socket candidate yet.
+Wicked source/pin unchanged; no push/merge. Untracked Tools/__pycache__ and log.txt
+left alone. P1 remains open; this is C++/native metadata exposure only.
+
+Next bounded outcome: command-backed Studio primary/off-hand/support bone/grip
+selection and grip offsets with Undo/Redo and governed asset save/reopen. Then use
+one agreed separately generated/authored skinned view model for owner verification;
+preserve the accepted proxy control. Do not resume the withdrawn supplied arms.
+
+## P1 native Hand Grips editor checkpoint — 2026-10-04
+
+Code and documentation commit: 7a105d8dcb1b6db188fc006e0432127b0d972cab
+on feature/p1-first-person-arms-rig. No push or merge performed.
+
+Outcome: Player's governed arms selector now offers EDIT HAND GRIPS. Native
+Studio widgets expose primary/off-hand/support roles, native bone hierarchy
+choices and local position/rotation offsets. The private bridge working copy
+has its own CommandService Undo/Redo history. Save journals the .rasset product,
+managed projection and registry together and retains hand_grips in the import
+recipe. Close discards unsaved changes. Bones are identified by canonical
+hierarchy-name arrays, excluding the creator transform wrapper; ECS IDs are not
+persisted. Invalid/missing/ambiguous bones and malformed ownership markers fail
+before mutation. DirectX-compatible rotation decomposition fixed the nonzero
+three-axis roundtrip mismatch found during this session.
+
+Validation:
+- EngineBridge, Runtime, PlayerViewRigTests, PlayerViewRigFixture and Studio
+  build Release and Debug, exit 0. MSB8029 and existing C4834 warnings remain.
+- Tests target now uses /bigobj for Debug JSON-generated sections. After CMake
+  regeneration rerun MSBuild so it reads the new project, rather than executing
+  an already-loaded stale project definition.
+- Related CTest selector Phase6Gate1Player|PlayerViewRig|TestLevelSnapshot|
+  ReusableAssetTests: 6/6 per configuration.
+- New headless checks: offsets and rotation, validation without partial mutation,
+  Undo/Redo and saved-state boundary, injected AfterReplace(index 1) failure and
+  byte-for-byte three-file rollback, successful retry, native reopen, creator
+  recipe reapplication and stale external-product rejection.
+- Release/Debug authored-grip DX12 proof: 300 native animated motion frames;
+  socket matrix error 0, camera error 2.38419e-07 metres, animated bone Z range
+  0.0592 metres, pause matrix/timer errors 0, three captures each, exit 0.
+  The animated-range probe now reads the bone parent of the authored anchor;
+  the grip transform's local offset is correctly static.
+- Native Release Studio on an isolated synthetic fixture: selected product,
+  opened real Hand Grips controls, slider changed primary Z 0.24 -> 0.583,
+  SAVE persisted 0.5829999446868896, Close/reopen restored 0.583 with clean history.
+  Player scroll layout now contains the arms selector and grip button; scene
+  gizmo/outline are suppressed while this editor is open. Native UI capture:
+  BUILD/renegade/p1-hand-grips-proof/studio-reopened.png.
+- Debug Studio launch from the isolated proof working directory hit a Wicked
+  DX12 graphics-pipeline assertion at wiGraphicsDevice_DX12.cpp:3939 before
+  editor entry. Root cause not established. Debug build/headless/GPU evidence
+  must not be described as Debug Studio startup acceptance.
+
+Exact build commands and limits are in docs/P1_HAND_GRIP_EDITOR.md. Ignored logs
+use BUILD/renegade/p1-grips prefixes; tests/GPU/UI fixture artifacts are under
+BUILD/renegade/p1-hand-grips-proof. Release Studio was built with
+/p:TargetName=RenegadeStudioHandGrips because owner's original Studio was running
+and its executable was locked. Existing owner Studio, proxy control project,
+Runtime bundle and accepted exported game were not replaced. Discarded only
+agent-owned test windows during UI verification.
+
+SHA-256:
+Studio Release candidate:
+7EA283E885D82A0FE6A1188660E57F138624E6BA987F5461C02BFB7CB2A078DF
+Runtime Release:
+47EFF1BDA3795FB70CFB1FDF4803AFDA11932C8AD7FEB34F6831D19326286539
+Runtime Debug:
+0E1FC32C4A81C911CC74E34F01FC83583BEA0F8770870FAECFC2CA7EC182650F
+
+Binaries were compiled from checkpoint changes on parent 2f8662d before the
+source commit, so their displayed source revision remains that parent. No owner
+exact-commit verification is inferred. The two-bone native test product is
+synthetic; it is not a real FBX import or proof of skinned deformation.
+
+P1 remains IN PROGRESS. Original owner/GGMAX arms remain withdrawn. Next bounded
+outcome: owner verify the native grip editor, resolve Debug Studio startup
+assertion if reproducible from its normal resource directory, then agree on a
+separately generated/authored skinned view model for rendered acceptance.
+No production grip IK, weapon behaviour or P1 completion is claimed.
+
+## Studio DX12 startup assertion repaired - 4 October 2026
+
+Branch: feature/p1-first-person-arms-rig.
+Source/diagnostic commit: 1446cef7be51f8edf1c3c2675d4f37d45a27f7e9.
+Parent: f737777. No push or merge.
+
+Confirmed the former Debug failure at wiGraphicsDevice_DX12.cpp:3939 is
+CreateCommandSignature, not pipeline creation. Native DX12 debug layer reports
+#743: root parameter slot 0 was not declared to hold constants. CDB stack reaches
+StudioRenderPath::LoadGridResources. RenegadeGrid and RenegadeImGui signatures
+placed CBV(b0) first, conflicting with the pinned backend's counted draw setup.
+
+Changed all four Studio/shaders/RenegadeGrid*/RenegadeImGui* HLSL files to reserve
+one root-constant DWORD at slot 0 using native b999; retained matching VS/PS
+signatures and b0 binding. Upstream source, submodule, arms/gameplay, accepted
+owner project and exported game are unchanged. Corrected the earlier misleading
+grid-shader comment and P1_HAND_GRIP_EDITOR assertion description.
+
+Added Tests/StudioShaderDx12Proof.cpp and its manual Windows GPU target in
+Tests/CMakeLists.txt. Updated docs/FEATURE_MATRIX.csv, docs/P1_HAND_GRIP_EDITOR.md
+and docs/STUDIO_DX12_SHADER_ASSERT.md. The latter records exact diagnosis,
+commands, logs and acceptance boundaries.
+
+Validation (from repository root; CL=/MP4 for proof and Release Studio):
+- cmake -S . -B BUILD/renegade: exit 0.
+- MSBuild BUILD/renegade/Tests/RenegadeStudioShaderDx12Proof.vcxproj /m:2 /nologo /verbosity:quiet /p:Configuration=Debug /p:Platform=x64 /p:BuildProjectReferences=false: exit 0. Repeat Configuration=Release: exit 0.
+- BUILD/renegade/Tests/Debug/RenegadeStudioShaderDx12Proof.exe Studio/shaders: exit 0. Repeat Tests/Release: exit 0. All four shaders compile and pass real Wicked CreateShader/command-signature creation; both pipeline descriptions accepted.
+- Original shaders under CDB reproduce #743. Corrected grid plus original ImGui: grid passes; ImGui fails identically; direct negative process exit 2170.
+- MSBuild BUILD/renegade/Studio/RenegadeStudio.vcxproj /m:2 /nologo /verbosity:quiet /p:Configuration=Debug /p:Platform=x64 /p:BuildProjectReferences=false: exit 0. Repeat Release with /p:TargetName=RenegadeStudioDx12Fix: exit 0.
+- ctest --test-dir BUILD/renegade -C Debug -R "Phase6Gate1Player|PlayerViewRig|TestLevelSnapshot|ReusableAssetTests" --output-on-failure: 6/6. Repeat -C Release: 6/6.
+- CDB -c g with debugdevice: Debug reaches Project Hub, loads isolated HandGripsProof, renders floor/landmarks/grid and opens native Hand Grips with saved primary Z=0.583. Zero DX12 errors/breaks; two nonfatal #680 depth-view pipeline warnings remain. Release reaches rendered welcome screen; no DX12 validation messages in captured startup.
+- All four source/deployed shader SHA-256 pairs match per configuration; git diff --check passes.
+
+Native captures: BUILD/renegade/p1-hand-grips-proof/dx12-debug-grid.png and
+dx12-debug-hand-grips.png. Application CDB logs: dx12-studio-Debug.txt and
+dx12-studio-Release.txt there. Build/proof/negative/CTest logs use dx12-* under
+BUILD/renegade. Agent-owned debugger sessions stopped after capture; owner's
+original Studio and earlier Release grip candidate remain open.
+
+Debug Studio SHA-256:
+928016EFCF63041419D0BCDB4B01850C67522CDD8C89222EC5D266B677556A92
+Release RenegadeStudioDx12Fix SHA-256:
+A225220EFEBDD487372E86B940E89D1CE5FC20BB52B296AF1823A5796CBCC7EE
+Shader deployment is part of the repair; exe hash alone is insufficient. Binaries
+were built on parent f737777 with this patch; displayed revision remains parent.
+No exact-source-commit owner acceptance is inferred.
+
+Risks/next: synthetic copied fixture emits unrelated Story Flow stable-identity
+errors and is not a production project acceptance. Nonfatal #680 warnings remain.
+This bounded startup fix does not close P1 or prove real skinned arms. Next is
+independent exact-commit verification and owner acceptance of native grip editing
+on an appropriate governed asset; withdrawn original/GGMAX arms remain withdrawn.
+
+## P1 isolated textured shotgun assembly proof - 4 October 2026
+
+Source/proof checkpoint: a858e87b73ff3d632b7391834f60e99d6781fd0b.
+Branch feature/p1-first-person-arms-rig; parent e8df1b5. No push or merge.
+User authorized inspection/preview using supplied SawedOffShotgun pack, rather
+than the earlier full-body Shotgun Animset. Original withdrawn arms remain unused.
+
+Changed Tests/FirstPersonAssemblyGraphicsProof.cpp, Tests/CMakeLists.txt and
+docs/P1_SHOTGUN_ASSEMBLY_PROOF.md. Added a manual Windows DX12 native diagnostic
+and optional interactive view; no Studio/Runtime/Player/production importer or
+upstream source/pin changes. No feature-exposure change; FEATURE_MATRIX and
+production P1 status remain unchanged.
+
+Owner-supplied FBXs found locally; four idle/reload inputs match uploaded bytes.
+Copied pack and separate Manny D/N textures into ignored input tree. Weapon and
+shell textures were already supplied. FBXs contain stale original-author paths;
+governed PrepareModel correctly refuses unresolved dependencies. Fixture reports
+that refusal, uses raw native converter and explicitly relinks supplied D/N
+textures plus weapon/shell ORM maps. It does NOT prove governed asset import,
+material relink UI, retained-source reimport or packaged game integration.
+
+Native conversion: arms161 bones/483 channels; weapon7 bones/21 channels.
+Arms Idle7s, weapon Idle0.666667s; both Reload3s. Separate skeletons preserved.
+Direct identity weapon_r attachment was visibly wrong. Fixture derives a
+provisional offset from right-hand and weapon Handle reference pivots at time0,
+then retains native hierarchy attachment. Not an authored socket/IK solution.
+Fixed first-person camera inspects original import coordinates; production
+axis normalization/camera-relative placement remains unresolved.
+
+Evidence:
+- cmake -S . -B BUILD/renegade: exit0.
+- CL=/MP4; MSBuild BUILD/renegade/Tests/RenegadeFirstPersonAssemblyGraphicsProof.vcxproj /m:2 /nologo /verbosity:quiet /p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false: exit0, existing MSB8029 warnings.
+- From BUILD/renegade/Tests/Release:
+  RenegadeFirstPersonAssemblyGraphicsProof.exe ../../p1-shotgun-proof/input ../../p1-shotgun-proof/captures: exit0 with explicit texture relink including ORM.
+- Overview and FP captures at0,.6,1.2,2,2.9s; Idle/Reload WISCENE saves reopened and rendered at1.2s.
+- Textured idle FP, reload FP and reopened overview inspected: arms beneath
+  camera, gun forward, red shells and wood/arm details present, reload opens gun.
+- --view starts paused; R restarts both reload tracks, Space pauses/resumes,
+  Escape closes. Initial blurry64px canvas corrected by refreshing app window
+  canvas and render-path size after resize. Corrected live window inspected
+  sharply at larger size. NO keyboard/mouse automation; owner controls pending.
+
+Power cut interrupted first viewer-check attempt. User restarted Desktop Commander
+with established npx.cmd remote launcher; connection restored and resumed above.
+Only earlier agent-owned preview closed for size fix. Final proof viewer remains
+open for owner (PID18824 at checkpoint; do not assume PID after a restart).
+No running owner Studio was detected at initial inspection; accepted proxy
+project/export/Runtime were not modified.
+
+Ignored evidence BUILD/renegade/p1-shotgun-proof: input copies, captures,
+textured-proof.log, viewer.log and viewer-window.png. Build log
+BUILD/renegade/p1-shotgun-build.log.
+Final Release proof exe SHA-256:
+8C92B649D9279B5853DBD76B2D3A01C6B1B0AC1AB6A639FC3BC488827DCF8282.
+Built from pre-commit working changes; no independent exact-commit gate claimed.
+No third-party assets committed.
+
+P1 remains IN PROGRESS. Final grip fit, loose-shell attachment/visibility events
+and ammo/action timing need inspection; Unreal montage text is not a complete
+demo Blueprint setup. Next: owner inspect R/Space/Escape preview, resolve exact
+authored attachment/timeline, then bounded governed assembly import/relink/save
+workflow, followed by existing Player View Rig integration. Do not broaden into
+inventory/pickups or replace working Player controls at this checkpoint.
+
+## P1 proof lateral grip correction - 4 October 2026
+
+Source checkpoint 9af049296ad681f11a18bbfa5df06e58b5a229ff; parent ce2a2af.
+Owner confirms animations work very well; reports gun/shells right of hands.
+Uploaded screenshot read locally successfully despite displayed missing-file error.
+Changed Tests/FirstPersonAssemblyGraphicsProof.cpp and
+docs/P1_SHOTGUN_ASSEMBLY_PROOF.md: +0.025m imported-X correction to entire weapon
+root before local attachment derivation (camera-right is -X). Shells follow
+existing native weapon skeleton; clips/hands/camera/gameplay unchanged.
+
+Same Release MSBuild command from prior checkpoint exits0; full textured capture,
+WISCENE save/reopen/render proof exits0. Logs alignment-proof.log and existing
+p1-shotgun-build.log. Idle and reload1.2s/2.0s FP renders visually inspected:
+lateral mismatch reduced; exact final fit remains owner-pending. Agent-owned
+previous preview closed through CloseMainWindow, corrected --view reopened.
+No mouse/keyboard automation, push, merge, upstream or production Player changes.
+
+Corrected Release proof SHA-256:
+B539693C7A1A25E7CB42D735FF715875D332550BE56F070858FFA19DEB96F953.
+Pre-commit compiled source content; owner exact-commit verification not inferred.
+Animations accepted by owner, corrected alignment not yet accepted; P1 still
+IN PROGRESS. Next assess grip/shell contacts through full reload with owner.
+
+## Authored shotgun attachment restored - 4 October 2026
+
+Source checkpoint 7c4a9762c864029f09b9449452e8aeda562edb99; parent 56d5b93.
+Owner explicitly rejects previous 25mm calibration: stock rests on back of hand,
+reload shells hover below palm. Animation quality accepted; grip NOT accepted.
+Changed Tests/FirstPersonAssemblyGraphicsProof.cpp and
+docs/P1_SHOTGUN_ASSEMBLY_PROOF.md only. Read-only original Unreal package
+inspection located BP_DemoCharacter SKM_Weapon_GEN_VARIABLE serial export
+369438..370399: AttachToName ik_hand_gun; location
+(-3.466970,-27.336276,4.505738)cm, Rotator(6.552304,-182.929938,-10.254553).
+Proof replaces guessed weapon_r placement with this exact converted local
+transform. Skeleton GripPoint is middle_01_r, not demo attachment.
+No original asset, upstream, production Studio/Runtime/Player change.
+
+Same bounded Release MSBuild command recorded above: exit0. Full paired
+captures and WISCENE save/reopen/render: exit0, authored-proof.log.
+Idle, reload1.2s/2s and new live viewer visually inspected: fit improved,
+owner acceptance pending. No original Unreal/Wicked Editor parity claimed.
+Current exe SHA256 A81A3421BEBD20CD4F52E74B8F46736153B7ECA85A84098E252868A431641E20.
+Built pre-commit source content; no independent exact-commit gate verification.
+git diff --check clean. Existing untracked Tools/__pycache__/ and log.txt left.
+Only earlier agent diagnostic closed via CloseMainWindow. New preview left open,
+PID6632 at checkpoint; use process name/title, not a stale PID. R reload,
+Space pause/resume, Escape close. No keyboard/mouse automation, push or merge.
+
+P1 remains IN PROGRESS. Next owner inspect actual grip and shell contacts through
+reload; resolve any remaining authored event/visibility behavior before governed
+assembly import/relink/save workflow and existing Player View Rig integration.
+
+## Owner acceptance and assembly import foundation - 4 October 2026
+
+Source checkpoint e329ac830be1c7d79cd0a76656b1b4cc88894f94; parent 1ffe86e.
+Owner accepts authored shotgun diagnostic grip and reload ("almost perfect",
+then confirms no remaining mismatch). Baseline source 7c4a976; diagnostic exe
+A81A3421BEBD20CD4F52E74B8F46736153B7ECA85A84098E252868A431641E20.
+This is visual diagnostic acceptance, not production P1 completion.
+
+Changed shared import/recipe/commit boundaries for explicit material-slot texture
+relinks and native matching-rig clip ingestion; added MatchingRigAnimationService,
+headless rejection/recipe tests, workflow/cold proof modes and a separate manual
+workflow target. Studio's existing ADD ANIMATION now automatically preserves
+matching native rigs, with prior humanoid retarget fallback retained. Texture
+relink bridge API has no creator UI yet. Full changed-file list: git show --stat
+e329ac8. README, architecture, roadmap, feature matrix and P1 docs updated.
+Canonical detailed limits/commands: docs/P1_ASSEMBLY_IMPORT_FOUNDATION.md.
+
+Release configure and builds of Bridge, Studio, matching-rig tests, workflow
+proof, importer graphics proof and PlayerViewRig tests: exit0. Same MSBuild
+/m:2 /nologo /verbosity:quiet /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false with CL=/MP4.
+CTest selection recorded in p1-workflow-ctest.log: six of six pass (matching-rig,
+PlayerViewRig tests/contract, GLB importer, animated Character and cold reopen).
+Real-pack --workflow exits0: both rigs/Idle+Reload clips retained, committed,
+stable-ID reopened, reconstructed from retained recipes and reassembled using
+accepted authored parent/transform. Duplicate relinks and disposable changed-
+texture commit reject without product. Maximum clone normalization 1.78814e-7
+for arms, zero for weapon; strict indices/binds preserved, no retargeting.
+--workflow-reopen exits0 in a separate process; all FP frames require lit model
+pixels, all captures require visible pixels. Fresh-process reload1.2s inspected
+via unique cold-verified-reload-1743.png after stale same-path image display.
+Final --workflow rerun with final proof executable exits0.
+
+Studio exe SHA256 7390E00685B8DE7DB509AA6ECF2B3989F8036C7486F11257C78F0DEE1E27D5FA.
+Workflow exe SHA256 9CE51204BC79A3729E06C7875284A1ACB8FAC78830CF864A0C785E3C84F7E168.
+Compiled before commit (final newline-only normalization); exact-commit
+independent acceptance/CI and Debug not claimed. Existing warnings remain.
+Existing ReusableAssetReimportRecipeTests build blocked by removed
+CreatorModelMaterialPreparationService.h from prior importer rebuild; recorded,
+not silently counted passing or repaired by this scoped change.
+Deep initial proof project hit Windows staging-path limit; final ignored project
+uses BUILD/p1wf short destination. No production path-length fix claimed.
+
+Evidence: BUILD/p1wf plus BUILD/renegade/p1-shotgun-proof/workflow-proof.log,
+workflow-cold-proof.log and p1-workflow-*.log. Original assets/Unreal projects
+untouched; licensed files not committed. No mouse/keyboard automation, new
+Runtime launch, upstream change, push or merge. Accepted diagnostic viewer stays
+open (6632 at prior checkpoint; resolve by process/title). Studio built but not
+restarted. Untracked Tools/__pycache__/ and log.txt preserved.
+
+Next bounded outcome: native Studio first-person assembly controls over these
+bridge APIs; choose retained arms/weapon parts, explicit parent bone and authored
+transform, paired semantic clip preview, persist/reopen one assembly product.
+Then connect that assembly to the existing Player Start and prove camera-relative
+skin, Test Level and Build Game parity. Do not treat the current two Character-kind
+rigged-part test products as a final Weapon Asset/NPC workflow, and do not broaden
+into inventory/ammo/fire gameplay. P1 remains IN PROGRESS.
+
+## Studio assembly authoring recovered - 4 October 2026
+
+Base source checkpoint 6562c81; implementation checkpoint is the commit containing
+this section (resolve with git log). Branch feature/p1-first-person-arms-rig.
+Recovered uncommitted assembly candidate rather than rebuilding accepted imports.
+Changed-file inventory: git show --stat at that implementation commit. New bridge
+FirstPersonAssemblyService, Studio FirstPersonAssemblyEditor, recipe tests and
+workflow proof additions expose retained part selection, explicit attachment,
+paired native preview, transactional assembly save/reopen and command-backed
+Player Start assignment. README, architecture, roadmap and feature ledger updated.
+
+Recovered evidence: p1assembly-ctest.log has seven passing Release checks;
+p1assembly-final-save.log and p1assembly-final-cold.log report exact recipe reopen,
+both rigs and paired camera rendering. Source-unavailable proof is separately
+recorded in p1assembly-source-unavailable.log. These are prior-session results,
+not newly rerun or independent acceptance. Cold Reload-1.200000.png visually
+inspected during recovery: textured hands, weapon and shells are visible.
+Studio panel screenshot studio-assembly-12.png exposed dark image styling,
+parent-label overlap and clipped status. Applied the existing importer theme
+exception to assemblyImage_ (white sprites and disableBackground), shortened the
+parent label and expanded panel height. Also restart completed paired previews
+on Play and report assignment failure accurately after successful product save.
+Final UI appearance still requires direct inspection; no visual success inferred.
+
+Recovery build command from repo: set CL=/MP4; MSBuild executable from VS18
+BuildTools Current/Bin on BUILD/renegade/Studio/RenegadeStudio.vcxproj with /m:2
+/nologo /verbosity:quiet /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false /p:TargetName=RenegadeStudioAssemblyRecovery.
+Exit 0, p1assembly-recovery-studio-final.log. Alternate exe name leaves the
+already-running Studio untouched. SHA256:
+FC38B3B890EAEA0488391C086139EE510172C59C49C314BB34A4CA5C0EBE7815.
+Existing MSB8029 temporary-directory warnings remain. No application launched,
+closed or controlled during recovery. No upstream change, push or merge.
+Initial ctest invocation failed because PATH lacks CTest; do not count stale
+LASTEXITCODE from that invocation. Correct explicit VS18 CTest binary used for
+--test-dir BUILD/renegade -C Release -R
+'FirstPersonAssemblySettings|MatchingRigAnimation|RenegadePlayerViewRig'
+--output-on-failure; result in p1assembly-recovery-ctest.log.
+
+P1 remains IN PROGRESS. Next: inspect the rebuilt Studio panel with the owner,
+then extend existing RuntimePlayerViewAnimation to evaluate the assembly arms
+and weapon tracks together (currently treated as action variants), preserving
+camera/controller ownership. Prove real assembly Test Level and Build Game parity.
+Do not broaden into ammo, firing, inventory or pickups. General texture relink UI,
+draft Undo/Redo and assembly update/rebuild remain outstanding. Existing
+Tools/__pycache__/ and log.txt stay untracked.
+
+Corrected recovery CTest invocation exits 0: four of four pass, 0.34 seconds
+(PlayerViewRig tests and source contract, MatchingRigAnimation, assembly settings).
+git diff --check passes; Git warns only about LF-to-CRLF normalization in appended
+documentation. Recovery build is pre-commit source-identical code; independent
+exact-commit verification and owner panel inspection remain open.
+
+Exact recovered assembly implementation commit: 2be899e. The following checkpoint
+commit changes documentation only. Release recovery executable and four passing
+checks correspond to the implementation code; final Studio visual inspection and
+Runtime paired-action integration remain pending.
+
+## Owner assembly preview acceptance and name-field repair - 4 October 2026
+
+Owner reports everything works as expected in recovery build after testing native
+assembly preview. Then reports renamed asset name did not save. Read-only project
+inspection confirms Shotgun Assembly Verified.rasset and its recipe/projection/
+thumbnail exist; a later First Person Assembly product also exists. Root cause:
+OpenAssemblyEditor always resets the name input to the default despite reopening
+the assigned assembly recipe. Studio/src/FirstPersonAssemblyEditor.cpp now derives
+the reopened name from the assigned product's registered path stem. Stable asset
+identity, product files and owner level remain unchanged. Save still creates a new
+product; in-place asset renaming is not introduced. Name-field visual acceptance
+and level persistence after owner actions remain unverified.
+
+Build: same VS18 Release MSBuild command recorded above, with
+/p:TargetName=RenegadeStudioAssemblyNameFix; log p1assembly-name-fix.log. Alternate
+exe avoids changing the owner's running recovery build. No automatic restart.
+
+Name-field repair Release build exits 0; git diff --check passes. Existing MSB8029
+warnings remain. Commit containing this section is the bounded repair checkpoint.
+
+## Runtime paired assembly movement - 4 October 2026
+
+Base e7be162; implementation is the commit containing this section. Owner confirms
+native assembly controls work as expected, then confirms selecting the named asset
+and saving the level. Read-only real-product proof resolves the saved named assembly
+assignment. P1 remains IN PROGRESS; no gameplay reload or release gate closure.
+
+Changed RuntimePlayerViewAnimation.h: recognize explicit assembly root marker and
+track roles, require one arms/weapon pair per movement action and an Idle pair,
+set both paused native timers from one clock before the existing Wicked scene
+update, suppress root motion and unused action tracks, hold shorter clips until
+whole-pair wrap, preserve clocks across movement fallbacks, reset both tracks.
+Legacy single-rig variant/crossfade path is retained. Pair-to-pair transitions
+currently switch immediately; paired crossfades remain deferred. Diagnostics adds
+paired-assembly and active-track count without per-frame clock event spam.
+Tests/PlayerViewRigTests.cpp covers native pose evaluation of both tracks with
+unequal starts/durations, no double timer advance, pause, wrap, fallback, action
+switch/reset, missing/duplicate partners and native serialized entity remapping.
+Tests/FirstPersonAssemblyGraphicsProof.cpp adds --runtime-assembly and
+--runtime-package proof modes. README, roadmap, architecture, feature matrix and
+P1_ASSEMBLY_AUTHORING.md updated. Full changed-file inventory: git show --stat.
+
+VS18 Release MSBuild (same executable and CL=/MP4 as prior checkpoint): targets
+Tests/RenegadePlayerViewRigTests, Tests/RenegadeFirstPersonAssemblyWorkflowProof,
+Runtime/RenegadeRuntime with /m:2 /nologo /verbosity:quiet /p:Configuration=Release
+/p:Platform=x64 /p:BuildProjectReferences=false: all exit 0. Final logs:
+BUILD/renegade/p1paired-final-<target>.log. Explicit VS18 CTest --test-dir
+BUILD/renegade -C Release -R
+'FirstPersonAssemblySettings|MatchingRigAnimation|RenegadePlayerViewRig'
+--output-on-failure: 4/4 pass, 0.41 seconds, p1paired-ctest.log.
+
+Manual real-product proof commands, from repo:
+BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+BUILD/p1wf/project-ad198d5b/AssemblyProof.renegade BUILD/p1paired --runtime-assembly
+exits 0 (p1paired-project-proof.log). Saves disposable Test Level snapshot and
+verifies assigned stable ID survives snapshot loading; no owner level rewrite.
+Same exe with BUILD/p1paired/isolated-package BUILD/p1paired/cold-final
+--runtime-package exits 0 (p1paired-cold-final.log) in a separate process.
+Isolated asset fixture has only product and manifest: no retained-source rigs,
+recipes or textures. Both modes verify two armatures, no second physics/Character,
+paired rendering through the native Runtime loader/controller, pause and cleanup.
+Cold paired-1.100000.png visually inspected: textured arms and shotgun visible.
+This tests packaged loading, not the actual Build Game UI/export acceptance.
+
+Initial headless native-pose test used full Scene::Update without a graphics device
+and crashed; corrected to the pinned native animation dependency scan/update and
+job wait. Initial proof compile hit ambiguous Translate initializer; corrected to
+explicit XMFLOAT3. Initial diagnostic build rejected float DiagnosticValue;
+removed the continuous clock observation. Final builds/tests above pass. Existing
+MSB8029 warnings remain. Debug, full suite, CI and independent exact-commit review
+not claimed. git diff --check passes.
+
+Studio had stale Release/Runtime/RenegadeRuntime.exe, preferred over sibling Runtime.
+After confirming no Runtime process running, copied final executable to that
+existing Studio launch path; both SHA256:
+352B73620B68A6B9D4B7D383E46825D9556F0B8BAD1501CB15AF99BB0274026F.
+Studio remains open; no live Runtime launched or user app closed by this work.
+No upstream change, push, merge or licensed asset commit. Existing untracked
+Tools/__pycache__/ and log.txt preserved. Next owner closes assembly panel and
+uses Studio PLAY to verify real camera-relative arms/weapon rendering and look;
+then actual Build Game parity. Read diagnostics for paired=true and active_tracks=2.
+Reload/Attack/Equip remain preview-only. No inventory/ammo/fire scope expansion.
+
+Exact Runtime paired movement implementation checkpoint: 31263ba. This following
+checkpoint is documentation-only; compiled code matches that implementation.
+Independent exact-commit and owner Test Level/actual export acceptance remained open at that checkpoint.
+
+## Owner real assembly Test Level acceptance - 4 October 2026
+
+Implementation 31263ba; preceding documentation checkpoint 363c37e. Owner reports
+"everything looks great" after the requested Studio PLAY camera/look check.
+Recovered screenshot shows Renegade Runtime - Assembly Proof [DX12], textured
+arms/gloves and shotgun held together in the foreground, and 75 FPS. This records
+bounded owner Test Level visual acceptance; movement timing is covered by the
+previous native proofs, not inferred from a still image. Runtime was no longer
+running at this read-only follow-up, so live paired/active-track diagnostics were
+not captured. Studio's Runtime executable still hashes to
+352B73620B68A6B9D4B7D383E46825D9556F0B8BAD1501CB15AF99BB0274026F.
+
+Changed HANDOFF.md, docs/P1_ASSEMBLY_AUTHORING.md and docs/FEATURE_MATRIX.csv only.
+Validation: git diff --check; no new implementation or rebuild required. No app
+launched or closed, owner level edited, upstream change, push or merge. Existing
+Tools/__pycache__/ and log.txt preserved. P1 remains IN PROGRESS. Next: actual
+Studio BUILD > BUILD WINDOWS GAME export and owner launch parity for this real
+assembly; independent exact-commit verification remains pending. Gameplay reload,
+firing and paired crossfades are not claimed.
+
+## Owner actual Assembly Proof export acceptance - 4 October 2026
+
+Following a277ec8, original deep-root Studio export failed at Gate 2 copying the
+retained shotgun ORM texture. Source exists and about 44 GB free; failed staging
+path measured 265 characters. Prepared separate short-root project via robocopy
+/E /XD Builds Intermediate Saved /R:1 /W:1; all 49 copied files hash-identical.
+First retry still opened original project, confirmed by live Studio diagnostics.
+Owner then opened short-root copy and reports "the build works". Recovered image
+shows exported Assembly Proof Runtime DX12 with textured arms and shotgun, 74 FPS,
+and export folder Explorer behind it. Read-only inspection confirms promoted
+Assembly Proof.exe plus build-report and package-manifest. Export executable SHA256:
+E9DA5D6F437D55F9B8A72E232A4B24F90A98E38F172AE9067DC4C72905E17E8A.
+Build report status gate5_validated_for_final_path; package isolation and smoke
+passed_gate4, safe rebuild passed_gate5, distribution_ready=false. Its configured
+revision remains 6562c812 (running Studio configuration metadata); do not treat
+that as an independent exact-31263ba verification.
+
+This records bounded actual Studio export launch/visual acceptance for this real
+assembly, alongside prior Test Level acceptance. No gameplay reload/fire claim or
+whole P1 gate closure. Path-length workaround succeeded; durable long-path handling
+and OS-error diagnostics remain outstanding. Earlier HANDOFF append attempts were
+blocked by a file-sharing lock; this entry records those outcomes now. Changed
+HANDOFF, assembly authoring status and feature ledger only; git diff --check.
+No code rebuild, user app launch/closure, upstream edits, push or merge. Next:
+independent exact-commit verification and remaining P1 authoring lifecycle work.
+Existing Tools/__pycache__/ and log.txt remain untracked.
+
+
+## Windows long-leaf staging copy repair - 4 October 2026
+
+Base 93dfd33; implementation is the commit containing this checkpoint. Changed
+EngineBridge/src/BuildStageService.cpp, Tests/BuildStageTests.cpp and status docs.
+Windows staging copy and digest use explicit extended absolute native paths at
+local I/O boundaries (drive and UNC forms); returned paths/manifests retain their
+portable existing representation. Approved-plan checks, source symlink rejection,
+no-overwrite copy and post-copy digest comparison remain in place. Copy failures
+now include OS error value/message. No upstream, controller or serialized change.
+
+Regression stages a 312-character leaf path with legal <=96-character components,
+checks identical SHA256 and absence of extended prefix in portable manifest,
+validates the complete stage and cleans through an extended-path fixture root.
+Original copy call reproduced failure (OS error 3), exit 1; corrected call passes.
+Initial fixture used an overlong component rejected by Gate 1; corrected to legal
+components. Initial long-fixture cleanup threw; corrected cleanup preserves test
+failure reporting. First manual test invocation used relative document paths;
+corrected to absolute fixture path. Final results below supersede these attempts.
+
+VS18 MSBuild with CL=/MP4, /m:2 /nologo /verbosity:quiet /p:Configuration=Release
+/p:Platform=x64 /p:BuildProjectReferences=false: EngineBridge/RenegadeEngineBridge,
+RenegadeBuildStageTests, Studio/RenegadeStudio all exit 0. Studio uses
+/p:TargetName=RenegadeStudioLongPath to preserve running owner editor. Logs:
+BUILD/renegade/longpath-final-<target>.log. Explicit VS18 CTest --test-dir
+BUILD/renegade -C Release -R '^RenegadeBuildStageTests$' --output-on-failure:
+1/1 passes, 0.23 seconds; covers existing collision/tamper/stale-source checks.
+git diff --check passes. Existing MSB8029 warnings. No new Debug/full-suite/CI
+or independent verification claim. No app launched or closed and no push/merge.
+
+Next owner saves/closes existing Studio, then launches Release
+RenegadeStudioLongPath.exe and opens original deep-root AssemblyProof.renegade
+for actual BUILD WINDOWS GAME retry. Short-root successful export remains valid;
+new original-path UI/export acceptance is still pending. This is a scoped staging
+file-copy/hash repair, not universal long-path support across every engine API.
+Existing Tools/__pycache__/ and log.txt preserved untracked.
+
+
+## Correct long-path package integrity beyond staging - 4 October 2026
+
+Base 0014527. Owner retest of original deep-root project overrides earlier staging
+success: copy passed but package validation rejected the same texture as missing.
+Prior fix/test scope was incomplete. Shared private WindowsFileIoPath.h now owns
+local extended path conversion for staging and integrity. Integrity probes and
+canonical containment use the same extended representation; digest retains the
+absolute-input requirement. Public result root remains ordinary path. Existing
+symlink, traversal, duplicate, extra, missing and tamper checks remain authoritative.
+
+Changed BuildStageService.cpp, new WindowsFileIoPath.h, PackageIntegrityService.cpp,
+BuildStageTests.cpp, PackageIntegrityTests.cpp and status docs. Long fixture now
+runs actual Gate 4 integrity after stage validation; fake-executable fixture
+upgrades only package manifest schema to 2, without claiming real Gate 3 identity.
+PackageIntegrityTests --validate-package <absolute-candidate> provides read-only
+real artifact verification. Initial tests exposed canonical prefix normalization
+and Gate 2 versus Gate 3 schema mismatch; fixed both. Final two tests pass.
+
+VS18 MSBuild with CL=/MP4, /m:2 /nologo /verbosity:quiet /p:Configuration=Release
+/p:Platform=x64 /p:BuildProjectReferences=false: EngineBridge/RenegadeEngineBridge,
+RenegadeBuildStageTests, RenegadePackageIntegrityTests, Studio/RenegadeStudio all
+exit 0. Studio /p:TargetName=RenegadeStudioLongPathComplete preserves running app.
+Logs BUILD/renegade/longpath-integrity-final-<target>.log; validator rebuild log
+longpath-actual-validator-build.log. Explicit VS18 CTest --test-dir BUILD/renegade
+-C Release -R 'RenegadeBuildStageTests|RenegadePackageIntegrity'
+--output-on-failure: 2/2 pass, 0.35s. Includes 312-character staged file integrity
+and existing package rejection tests. git diff --check passes. MSB8029 remains.
+
+Read-only validator of owner's actual failed candidate
+Assembly Proof Windows Build.studio-1102be708a10-67ac: PASS, 35 files, exit 0.
+Launched actual staged Assembly Proof.exe from detached temp working directory
+with dx12 --flow-outcome=next --renegade-smoke-autoplay --renegade-smoke-exit:
+exit 0, RuntimeBootstrap evidence status PASS, package_integrity PASS, DX12 STARTED,
+smoke_status PASS, terminal Complete Game. Initial manual smoke omitted required
+next outcome and exited 27 flow_not_complete; corrected invocation above passed.
+Owner warned before automatic test window. No owner level changes, promotion,
+upstream changes, push or merge. Full suite/Debug/independent verification not claimed.
+
+New Studio SHA256 FEBE6A58506F8B8B9E3144AE590FAC545C6D6190CC3D6031CE62E642664EFFBE.
+Next owner saves/closes current Studio, launch RenegadeStudioLongPathComplete,
+then original deep-root project actual Build Windows Game UI retry. Original-path
+promotion and owner UI acceptance still pending; short-root acceptance preserved.
+
+
+## Original deep-root Studio export success - 4 October 2026
+
+Implementation cf6bd66. Owner supplied screenshot after using verified
+RenegadeStudioLongPathComplete: BUILD COMPLETE, 23 seconds, original project
+Builds/Windows output. Read actual promoted build-report: status
+ gate5_validated_for_final_path, stage_only=false, package_isolation and smoke
+passed_gate4, safe_rebuild passed_gate5, directory-rename promotion. Read-only
+RenegadePackageIntegrityTests --validate-package <original-final-output> passes
+35 files, exit 0. Deep-root export blocker is now verified resolved through the
+actual Studio workflow. Prior short-root standalone visual acceptance retained;
+no new manual foreground visual test inferred from Build Complete screenshot.
+Configured report revision still 6562c812 (stale configure metadata), so independent
+exact-commit verification remains outstanding. distribution_ready=false remains.
+No code changes, app launch/closure, push or merge in this acceptance step.
+Status docs updated; git diff --check. P1 authoring lifecycle and gameplay work
+remain as previously documented. Existing untracked files preserved.
+
+## Assembly save/update and draft history - 4 October 2026
+
+Implementation: 419fa655484945cf8543eeb8d2b8c9840368b0fc on
+feature/p1-first-person-arms-rig. Local commit only; no push/merge.
+The following documentation checkpoint records this implementation.
+
+Changed: FirstPersonAssemblyService.h/.cpp, FirstPersonAssemblyEditor.cpp,
+StudioApplication.h/.cpp, FirstPersonAssemblyGraphicsProof.cpp,
+FirstPersonAssemblySettingsTests.cpp; README, architecture, roadmap, feature ledger
+and P1_ASSEMBLY_AUTHORING documentation.
+
+SAVE CHANGES rebuilds the assigned assembly with the same product/recipe IDs and
+paths. Player Start assignment is preserved. SAVE AS NEW creates and assigns a
+variant through the existing scene command. Native draft UNDO/REDO snapshots
+parts, parent, weapon/view transforms and clip pairs, including incomplete
+selections; save marks the history boundary. Updating requires the original
+registered and disk product hash. All replacements use ProjectDocumentTransaction.
+Opening the panel refreshes retained assets after dependency-only build scans.
+Unrelated stale/missing import provenance is preserved rather than requiring
+every historic import to be current.
+
+Windows x64 Release validation (installed MSBuild; CL=/MP4):
+- MSBuild BUILD/renegade/EngineBridge/RenegadeEngineBridge.vcxproj
+- MSBuild BUILD/renegade/Tests/RenegadeFirstPersonAssemblySettingsTests.vcxproj
+- MSBuild BUILD/renegade/Tests/RenegadeFirstPersonAssemblyWorkflowProof.vcxproj
+- MSBuild BUILD/renegade/Studio/RenegadeStudio.vcxproj with
+  /p:TargetName=RenegadeStudioAssemblyLifecycle
+All use /m:2 /nologo /verbosity:quiet /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false. All exit 0; known MSB8029 warnings remain.
+- ctest --test-dir BUILD/renegade -C Release -R
+  "FirstPersonAssemblySettings|MatchingRigAnimation|RenegadePlayerViewRig"
+  --output-on-failure: 4/4 pass, final run 0.33s.
+- BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+  BUILD/assembly-lifecycle-project-final/AssemblyProof.renegade
+  BUILD/assembly-lifecycle-proof-final --update-assembly: exit 0.
+  Disposable owner-project copy only. Same product/recipe IDs, exact reopen,
+  injected AfterReplace failure and byte rollback, stale original hash rejection,
+  separate Save-as-new ID and unchanged level bytes pass. Updated product passes
+  production Test Level snapshot and paired Runtime pose/pause/cleanup checks.
+- Same proof executable with BUILD/assembly-lifecycle-proof-final/isolated-package
+  BUILD/assembly-lifecycle-proof-final/cold --runtime-package: exit 0, 2.31s.
+  Fresh-process packaged native loading and paired Runtime checks pass.
+- Updated-assembly render inspected: textured arms/shotgun present.
+- git diff --check passes.
+
+New Studio SHA256:
+778E3DE0E32E09E4C2756B2A5DE5BB078D683AAC3A1D02028311F42057E3FABA
+Executable: BUILD/renegade/Studio/Release/RenegadeStudioAssemblyLifecycle.exe.
+Opened this alternate build for owner checking; older LongPathComplete editor
+was not closed or overwritten. Owner original project was not changed by proofs.
+
+Next: owner checks offset Undo/Redo, UPDATE PREVIEW, SAVE CHANGES and panel reopen,
+then unique Copy name + SAVE AS NEW and level save. New UI acceptance and
+independent exact-commit verification remain pending. P1 gate remains open.
+Runtime paired crossfades, reload/fire gameplay and general texture-relink UI
+remain outside this slice.
+
+## Complete shotgun preview library and automatic refresh - 4 October 2026
+
+Implementation: 34297443c03c986935690e4fc1dd53886d94d0d6 on
+feature/p1-first-person-arms-rig. Local commit; no push or merge.
+Owner accepts prior 419fa65 lifecycle UI: "yup, all that works as expected".
+Owner requested live offset feedback because the cleared image looked broken,
+then chose "Complete animation library" as tonight's goal.
+
+Changed: FirstPersonAssemblyService.h/.cpp (shared 14-action whitelist);
+FirstPersonAssemblyEditor.cpp, StudioApplication.h/.cpp (three six-row action
+pages, 150ms debounced safe-point rebuild, retain last valid image until ready,
+block stale draft saves and preserve preview action/time/play state);
+FirstPersonAssemblyGraphicsProof.cpp and SettingsTests.cpp; README, architecture,
+roadmap, feature matrix and P1 assembly authoring instructions.
+
+Exact Windows x64 Release build flags:
+CL=/MP4; MSBuild /m:2 /nologo /verbosity:quiet /p:Configuration=Release
+/p:Platform=x64 /p:BuildProjectReferences=false.
+Targets: BUILD/renegade/EngineBridge/RenegadeEngineBridge.vcxproj;
+BUILD/renegade/Tests/RenegadeFirstPersonAssemblySettingsTests.vcxproj;
+BUILD/renegade/Tests/RenegadeFirstPersonAssemblyWorkflowProof.vcxproj;
+BUILD/renegade/Studio/RenegadeStudio.vcxproj with
+/p:TargetName=RenegadeStudioFullArmsLibraryReady. All exit 0.
+Known MSB8029 and unrelated Studio nodiscard warnings remain.
+CTest --test-dir BUILD/renegade -C Release -R
+"FirstPersonAssemblySettings|MatchingRigAnimation|RenegadePlayerViewRig"
+--output-on-failure: 4/4 pass, 0.45s. Includes all 14 action recipe roundtrip.
+
+Manual proof executable:
+BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+- BUILD/renegade/p1-shotgun-proof/input BUILD/arms-full-library-ready
+  --full-library: PASS. 14 arms clips and 4 weapon clips, native matching-rig
+  ingestion, unchanged skin-index/inverse-bind evidence, retained-source recipe
+  reconstruction and governed commit/reopen. Descriptive native clip names
+  survive retention instead of displaying 18 generic "Unreal Take" labels.
+- BUILD/arms-full-library-ready/ArmsLibrary.renegade
+  BUILD/full-arms-ready-cold-preview --full-library-reopen: PASS.
+  14 semantic pairs, 28 tracks, two armatures and ten valid retained textures.
+  Every action rendered at start/midpoint/near end; draw/holster legitimately
+  permit out-of-view frames. Final build/import/cold proof chain exit 0, 36.73s.
+- Same descriptor BUILD/full-arms-ready-runtime --runtime-assembly: PASS.
+  Production Test Level snapshot, paired movement pose/pause/cleanup.
+- BUILD/full-arms-ready-runtime/isolated-package
+  BUILD/full-arms-ready-runtime/cold --runtime-package: PASS in a fresh process.
+  Final launch and Runtime proof chain exit 0, 19.43s.
+- Rendered aim, fire, sprint, jump, draw/holster, reload and partial reload poses
+  visually inspected. Native UI inspection caught overlapping labels caused by
+  Window child visibility propagation; selected page visibility is now enforced
+  each frame. Final native first-page layout has six distinct labelled rows.
+- Native offset changed temporarily: prior image remained during "Updating
+  preview...", then the new offset rendered without pressing UPDATE PREVIEW.
+  Undo was used to restore the original draft. No assembly save was performed.
+- git diff --check passes.
+
+Ready Studio: BUILD/renegade/Studio/Release/RenegadeStudioFullArmsLibraryReady.exe
+SHA256 D807AFEDB336EBD763FF157C708C19A7922901CA39978AA7D4C7AC6CD95292E3.
+Ready fixture: BUILD/arms-full-library-ready/ArmsLibrary.renegade
+Project ID 3720e96a-6cf6-48f9-8988-c5744445a95a.
+Assembly ID 07858b1d-4b5a-4be9-90ab-c9dd5629761c.
+Existing level was copied as template into the new fixture; owner original
+project and prior accepted executable were not overwritten.
+Our preliminary full-library editor was closed after inspection; the owner's
+AssemblyLifecycle editor was left open. Corrected Ready editor has the new
+project loaded, Player Start selected, assembly preview open.
+
+Next owner check: use Preview action + PLAY for the 14 supplied actions; check
+small offsets refresh automatically and page selection is clean. Aim/jump,
+equip/fire/reload remain authoring previews; only Idle/Walk/Run are wired to
+existing gameplay movement. Input-driven equipment/actions, damage/ammo/recoil
+and paired crossfades remain later roadmap work. New native UI owner acceptance,
+actual full-library Build Game export and independent exact-head verification
+remain pending. P1 gate remains open.
+
+
+## Runtime fire/reload animation input - 4 October 2026
+
+Implementation: 090e589d96cee00408e5c238dc3ca732705b116f on
+feature/p1-first-person-arms-rig. Local only; no push or merge.
+Owner requested left mouse fire and R reload; confirms "yep, that works"
+after the rebuilt Runtime was opened on the full-library Test Level snapshot.
+
+Changed GameplayInputService.h/.cpp, RuntimeApplication.cpp,
+RuntimePlayerViewAnimation.h, RuntimePlayerViewRig.h; PlayerViewRigTests.cpp,
+Phase6Gate2InputTests.cpp and Tests/CMakeLists.txt; README, architecture, roadmap,
+feature matrix and assembly authoring docs. Input tests were previously not
+registered; now registered and included in the CI bridge test aggregate.
+
+Fire is a discrete left mouse press; Reload is R; Reset is F8. Old version-1
+input maps gain Fire/Reload defaults in memory and move the old default R reset
+to F8. Custom bindings remain authored. Paired Attack/Reload plays once on the
+existing shared native clock, shorter tracks hold, Reload wins simultaneous
+presses, busy actions reject retriggers, pause freezes time, and completion
+returns to current movement. Missing assigned pairs do not imitate firing with
+Idle. Damage, ammunition, audio, effects and recoil remain later combat work.
+
+Owner screenshot caught stale standalone Runtime: old binary rejected new
+assembly actions with "Unknown assembly action" and displayed proxy blocks.
+Rebuilt Runtime now loads the governed full-library asset successfully.
+The earlier bootstrap proof linked updated headers but did not establish that
+the actual Studio-launched executable was current; native launch supersedes
+that earlier evidence.
+
+Build commands: CL=/MP4; MSBuild /m:2 /nologo /verbosity:quiet
+/p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false.
+Targets BUILD/renegade/EngineBridge/RenegadeEngineBridge.vcxproj,
+BUILD/renegade/Tests/RenegadePlayerViewRigTests.vcxproj,
+BUILD/renegade/Runtime/RenegadeRuntime.vcxproj and
+BUILD/renegade/Tests/RenegadeGameplayInputTests.vcxproj. All exit 0.
+CMake -S . -B BUILD/renegade configured the new input test.
+CTest --test-dir BUILD/renegade -C Release -R
+"GameplayInputTests|RenegadePlayerViewRig" --output-on-failure: 3/3 PASS, 0.75s.
+Regressions cover legacy binding migration and input persistence, paired action
+priority, one-shot completion, short-track hold, pause, retrigger rejection,
+second-shot restart and return to movement. git diff --check passes.
+
+Copied new Runtime executable to Studio's existing Release/Runtime launch path.
+Both binaries SHA256:
+A02504741931FF039730A6BB77F50D2A0195E3B6D4401B46537CBDB8F2F9994C.
+Native standalone DX12 launched the same TestLevel.renegade snapshot from
+BUILD/arms-full-library-ready/Intermediate/TestLevelSnapshots.
+Runtime log shows loaded governed first-person arms asset and no load error.
+Native R key check rendered reload with aligned hands, gun and shells instead
+of resetting. Owner independently accepts the controls on this build.
+The existing Ready Studio was left open; updated Runtime was opened for testing.
+No authored scene/assembly change was needed.
+
+Next: broader action routing (aim/equipment/jump) and later actual combat systems.
+Current accepted slice is input-driven animation, not a complete firearm.
+Full-library actual Build Game export and independent exact-commit overall P1
+verification remain pending; no release gate is closed.
+
+
+## Two-shell shotgun and partial reload - 4 October 2026
+
+Implementation b52e4804d5b8263fb034b7783f03535274113f73, local only.
+Owner requested firing to stop after two shots and partial reload after one.
+Changed RuntimePlayerViewAnimation.h, RuntimePlayerViewRig.h,
+PlayerViewRigTests.cpp, README, architecture, roadmap, assembly authoring docs
+and feature matrix. Existing player, native pair clocks and input service remain.
+
+The bounded shotgun prototype initializes two shells. An accepted Attack
+consumes one only after its explicit native pair is successfully requested.
+Empty fire is ignored. R with one shell uses ReloadPartial; empty uses Reload;
+full-capacity reload is ignored. A missing partial pair may use an assigned full
+reload. Reload completion restores two, with no early refill, pause refill or
+busy action consumption. Reset/reinitialization restores the count.
+Reserve ammo, creator weapon definitions, HUD and damage remain later work.
+
+CL=/MP4; MSBuild /m:2 /nologo /verbosity:quiet /p:Configuration=Release
+/p:Platform=x64 /p:BuildProjectReferences=false:
+BUILD/renegade/Tests/RenegadePlayerViewRigTests.vcxproj and
+BUILD/renegade/Runtime/RenegadeRuntime.vcxproj exit 0.
+CTest --test-dir BUILD/renegade -C Release -R
+"GameplayInputTests|RenegadePlayerViewRig" --output-on-failure: 3/3 PASS, 0.71s.
+Tests prove two-shot exhaustion, blocked third shot, full refill at completion,
+one-shot partial pair selection, frozen paused reload, full-capacity rejection
+and existing movement/busy action regressions. git diff --check passes.
+
+Copied Runtime to the actual Studio Release/Runtime launch location.
+SHA256 4D8FD0FBBBB466512D29C5366C3655A23ED23D4D6331E076D03156DAFA3448F9.
+Fresh native DX12 launched the same full-library Test Level snapshot.
+Left mouse once, then R visibly renders the partial reload with one shell
+being handled; native screenshot inspected. Updated Runtime is open for owner
+checks, existing Studio left open. No scene/assembly save was needed.
+Owner acceptance of this new capacity/partial reload build is pending.
+No gate closure, push or merge. Next check: two shots then blocked third, R full
+reload; one shot then R partial; both restore two usable shots.
+
+
+## Right-mouse aiming - 4 October 2026
+
+Implementation ec86f172a413b965916b6f2de52058d51492589e, local only.
+Owner confirms prior two-shot limit and partial/full reload were already checked.
+This slice adds Aim input on right mouse hold, with backward-compatible default
+for existing version-1 input documents. Existing Player View controller recognizes
+explicit AimIn/AimOut/AimAttack track pairs. Hold plays AimIn once then retains
+its final pose; release plays AimOut then movement resumes. Aimed fire consumes
+the same two-shell count. Reload lowers sights and resumes AimIn if still held.
+Busy actions finish before the next hold/release transition; pause freezes them.
+No FOV/camera change, ammo reserve, damage or crossfade scope is claimed.
+
+Changed GameplayInputService.h/.cpp, RuntimeApplication.cpp,
+RuntimePlayerViewAnimation.h, RuntimePlayerViewRig.h, input and paired animation
+tests, README, architecture, roadmap, authoring docs and feature matrix.
+Exact Release build flags: CL=/MP4; MSBuild /m:2 /nologo /verbosity:quiet
+/p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false.
+Targets EngineBridge/RenegadeEngineBridge, Tests/RenegadePlayerViewRigTests,
+Tests/RenegadeGameplayInputTests, Runtime/RenegadeRuntime under BUILD/renegade.
+CTest --test-dir BUILD/renegade -C Release -R
+"GameplayInputTests|RenegadePlayerViewRig" --output-on-failure.
+Regressions cover aim-in timing and terminal hold, pause, aimed fire ammo,
+release queued during firing, return to movement and reload resuming held aim.
+
+
+All four Release targets exit 0; build/test chain 196.73s.
+CTest 3/3 PASS, 0.78s; git diff --check passes.
+Deployed Runtime to Studio Release/Runtime launch location, SHA256:
+0430928D63B4CBDE6AE572EB7ACBF43AAF0E8CDF9B0D94A9E7FCEAAFDEA4858E.
+The prior temporary snapshot had been cleaned up; direct old-path launch failed.
+Closed that failed launch and used the real Studio PLAY control to create a new
+snapshot and launch the updated Runtime. Correct full-library project stayed open.
+Native right mouse hold visibly centers the shotgun in the authored sight pose;
+left fire then release returns to the hip stance. Both captures visually checked.
+Current Runtime and existing Ready Studio left open for owner review.
+No project, scene or assembly edits/saves needed. New aim owner acceptance pending.
+No gate closure, push or merge. Next: owner aim/reload feel check, then further
+equipment/jump routing or weapon definition work within the canonical roadmap.
+
+## 2026-10-05 Equipment, jump and view-model collision correction
+
+Implementation commit: f87795a13ebb2fc16dfc2a38c8b00cef65f1809c.
+Owner accepted prior aim behavior and requested Equip, Unequip and all jump stages.
+Q toggles authored paired equip/holster clips, terminal holster holds hidden,
+and holstered firing/reload/aim are blocked without losing shell count.
+Space uses the existing capsule jump input; Jolt ground support drives paired
+JumpStart, JumpLoop and JumpLand. Pause freezes action progression.
+
+Changed GameplayInputService.h/.cpp, RuntimeApplication.cpp,
+RuntimePlayerViewAnimation.h, RuntimePlayerViewRig.h, RuntimePlayerViewAsset.h,
+FirstPersonAssemblyGraphicsProof.cpp, Phase6Gate2InputTests.cpp,
+PlayerViewRigTests.cpp, README, architecture, roadmap, assembly authoring docs
+and feature matrix. The private playground is a separate descriptor/scene under
+BUILD/arms-full-library-ready, retaining the real arms assignment. Original
+ArmsLibrary scene remains untouched. Native save/reopen checks retain the floor
+rigid body and Player Start assignment.
+
+Owner reported bouncing followed by endless falling. Real physics trace
+reproduced spontaneous sideways/upward impulses before jump input. Imported
+humanoid ragdoll colliders were pushing the authoritative capsule. View-model
+sanitization now disables ragdolls and removes soft-body physics alongside
+character/rigid-body/collider components. Regression checks cover the retained
+humanoid being disabled. No Wicked source or submodule change.
+
+Exact Release build flags: CL=/MP4; MSBuild /m:2 /nologo /verbosity:quiet
+/p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false.
+Final corrected Runtime and PlayerViewRigTests target build chain exit 0, 24.76s.
+CTest --test-dir BUILD/renegade -C Release -R
+"GameplayInputTests|RenegadePlayerViewRig" --output-on-failure:
+3/3 PASS, 0.61s.
+Final FirstPersonAssemblyWorkflowProof target build and executable:
+BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+BUILD/arms-full-library-ready/ArmsLibrary.renegade
+BUILD/arms-full-library-ready/Content/Scenes --jump-playground
+exit 0, 14.80s. Real Jolt takeoff/airborne/landing stages pass and the final
+capsule remains supported, stationary, at the floor, with no horizontal drift.
+Earlier failing diagnostic builds were corrected before this result.
+git diff --check passes.
+
+Deployed Runtime at Studio Release/Runtime launch location, SHA256:
+DE42ACB21368353D291230B2A198E0E5D60254470C3F6583A9D1D7EE907CB04A.
+Warned before replacing the previous Runtime; existing Ready Studio stays open.
+Corrected Shotgun Arms Playground DX12 Runtime left open. Native Q holster/equip
+and Space start/loop/land captures taken; final grounded floor and arms visually
+inspected. Owner review of this corrected build pending.
+Lighting in this diagnostic playground is bright; polish remains separate.
+No overall release gate closure, push or merge. Next: owner confirm corrected
+jump stability and equipment behavior, then weapon definition work per roadmap.
+
+## 2026-10-05 Editable assembly firearm settings
+
+Implementation commit: 4a28bcdd3fe5245bb9e7f1e21e07a0834ebcd70c.
+Owner confirmed previous equipment/jump fix works. Continued with one bounded
+outcome: persisted capacity, minimum shot interval, and partial reload policy.
+Changed bridge FirearmSettings/assembly service, native Studio assembly panel,
+Runtime paired animation controller, settings/rig/native workflow tests, README
+and canonical architecture/roadmap/feature matrix/assembly documentation.
+New docs/PLAYER_AUTHORING_CONTINUATION.md records remaining player authoring work.
+Legacy assemblies retain capacity 2, interval 0, partial reload enabled.
+Settings remain shared by assembly; independent equipment assets and ammo reserve
+are future work. Reload still requires an assigned action.
+
+Release x64 build chain: bridge, assembly settings tests, player view rig tests,
+Runtime, Studio, assembly workflow proof: exit 0, 160.69s.
+MSBuild flags: CL=/MP4 /m:2 /nologo /verbosity:quiet
+/p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false.
+CTest --test-dir BUILD/renegade -C Release -R
+"FirstPersonAssemblySettings|GameplayInputTests|RenegadePlayerViewRig"
+--output-on-failure: 4/4 PASS, 0.82s.
+BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+BUILD/arms-weapon-settings-proof/ArmsPlayground.renegade
+BUILD/weapon-settings-evidence --update-assembly
+then same executable BUILD/weapon-settings-evidence/isolated-package
+BUILD/weapon-settings-package-evidence --runtime-package:
+combined exit 0, 36.78s. Same ID update, exact reopen, stale rejection, rollback,
+save-as-new, native snapshot and isolated package paired runtime load pass.
+Proof profile capacity=4, interval=1.25, partial=false; original fixture untouched.
+Native Studio Weapon Settings visually inspected; numeric edit commits with
+physical Enter and Undo restores capacity 2. Automated instantaneous SendKeys
+Enter was missed by frame polling. Preview refreshes on edits.
+Standalone Runtime launched from BUILD/renegade/Runtime/Release with --project
+BUILD/arms-weapon-settings-proof/ArmsPlayground.renegade dx12.
+Grounded arms/playground visually inspected. Private native input scripts exercise
+fire/reload; exact capacity/cooldown/partial behavior verified by rig tests.
+Diagnostic playground lighting remains washed out as previously documented.
+Initial deployment-location launch exited early; direct Runtime build works.
+Do not count initial stale screenshots as evidence.
+git diff --check passes. No release gate closure, push, or merge.
+Next: owner review native settings, then reusable player inspector/prefab work.
+
+## 2026-10-05 Selected Player Start wireframe capsule
+
+Implementation commit df95fe31d9c1923895208144a61331d8570ba0e4.
+Owner explicitly requested the concept-art wireframe capsule. Studio Render()
+now queues an orange wireframe only for a selected Player Start, before the
+normal 3D render and after assembly preview rendering. Uses sanitized bridge
+controller settings and PlayerCapsuleTotalHeight; feet are world translation.
+Wicked DrawCapsule expects outer base/tip, so top is feet + total height.
+Upright/unscaled matches runtime player policy. Overlay is transient and absent
+during Test Level and project hub; no scene objects or persistence change.
+Changed StudioApplication.cpp, architecture, assembly authoring, continuation
+documentation and Player Start feature-matrix row.
+
+Release Studio build:
+MSBuild BUILD/renegade/Studio/RenegadeStudio.vcxproj /m:2 /nologo
+/verbosity:quiet /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false with CL=/MP4.
+Exit 0, 18.67s; existing MSB8029 and unrelated nodiscard warning only.
+git diff --check passes. Native DX12 build copied to
+BUILD/renegade/Studio/Release/RenegadeStudioPlayerCapsule.exe and opened.
+Loaded ArmsLibrary through hub and Story Flow, selected Player Start.
+Orange rounded capsule visually inspected at spawn alongside native gizmo.
+Owner review of size editing and Undo/Redo remains pending; drawing reads live
+settings every frame. No new serialized state or gameplay behavior in this change.
+Existing editor/runtime processes were retained. New capsule build left open.
+No overall release gate closure, push or merge.
+Next: owner review capsule, then reusable player inspector/prefab work.
+
+## 2026-10-05 Capsule camera-motion display repair
+
+Owner reports capsule visually splitting while navigating and suggests 3D asset.
+Implementation ff4b3b875551d9f5ee58c431d229e0e4c7549e49 replaces queued
+DrawCapsule debug-world rendering with connected capsule geometry projected
+during Studio Compose beside gizmo, after temporal scene postprocessing.
+Wicked wiRenderPath3D.cpp draws debug world before Postprocess_TemporalAA;
+thin debug lines accumulating through temporal history are the likely cause.
+New display uses 48-segment rings, eight meridians, smooth hemispherical caps,
+1.5 logical-pixel orange lines. Reads live controller dimensions and spawn
+translation. Clips camera planes and viewport; hides during hub/Test Level and
+assembly/grip workspaces. No serialized object or imported mesh asset added.
+Changed StudioApplication.cpp and existing capsule docs/feature matrix.
+
+Same Studio Release x64 MSBuild command/flags as prior capsule handoff:
+exit 0, 19.04s. Existing warnings only. git diff --check passes.
+Native BUILD/renegade/Studio/Release/RenegadeStudioStableCapsule.exe opened.
+ArmsLibrary.renegade original fixture opened directly via native project dialog.
+Static selected rounded capsule visually inspected, approximately 75 FPS.
+Automated motion captures repeatedly lost Player Start selection and cannot
+verify the owner's reported moving-capsule defect. Owner movement review pending;
+do not claim this motion behavior passed based on unrelated captures.
+Build left open on ArmsLibrary. Existing editors and Runtime retained.
+No persistence or gameplay changes; no overall gate closure, push or merge.
+Next: owner select Player Start and navigate to verify connected capsule,
+then continue reusable player inspector/prefab setup.
+
+## 2026-10-05 Window resize input alignment repair, owner accepted
+
+Implementation 4a38305584e779131a4b21fed287b98673c78314.
+Owner reported hierarchy header only toggles at top and viewport icons have
+large left offset. Window procedure skipped SetWindow on background resize/DPI
+change. Stale swapchain/canvas could stretch the displayed editor while pointer
+coordinates follow current client size. Refresh now runs even while inactive
+(except minimized), and on focus recovery. Changed main_Windows.cpp and
+architecture. Temporary click-coordinate probe was removed before final build.
+
+Studio Release x64 MSBuild BUILD/renegade/Studio/RenegadeStudio.vcxproj
+/m:2 /nologo /verbosity:quiet /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false with CL=/MP4: exit 0, 18.17s.
+git diff --check passes.
+Opened BUILD/renegade/Studio/Release/RenegadeStudioCoordinateFix.exe DX12.
+Reopened ArmsLibrary original fixture. Hub centre Open Project button works.
+Native hierarchy lower/header-centre clicks toggle Characters; Player Start
+row selects with Inspector/capsule. Native capture inspection confirms layout
+no longer stretched. Initial viewport-icon script used stale position after
+camera movement; do not count that capture as successful icon evidence.
+Owner explicitly reports "that works fine now, thanks" at 10:25 UK time,
+confirming reported selection alignment repair. Corrected build left open.
+No serialized or gameplay state changes. No overall release gate closure,
+push or merge. Next: continue player inspector/prefab authoring per continuation doc.
+
+## 2026-10-05 — Always-visible player capsule
+Implementation commit: `0fa05df1cb59d9f06116922b66459611b471556e`.
+Owner requests the capsule remain visible without selection, including future full player prefabs.
+Changed Studio/src/StudioApplication.cpp, docs/ARCHITECTURE.md and docs/FEATURE_MATRIX.csv.
+Compose resolves the governed Player Start independently of selection, respects hierarchy visibility, draws cyan normally/orange selected, and uses the same live controller dimensions. Removed the duplicate older selected-only ring guide from scene-icon handling.
+Validation: `powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/build_capsule.ps1` builds Windows x64 Release Studio with MSBuild /m:2 /p:BuildProjectReferences=false, exit 0, 18.71 seconds; existing MSB8029 and C4834 warnings. `git diff --check` passes.
+Native DX12 visual inspection: reopened ArmsLibrary, unselected cyan capsule visible with empty Inspector (BUILD/capsule-unselected.png); selected orange capsule visible with Player Start Inspector (BUILD/full-arms-window.png). Correct build RenegadeStudioAlwaysCapsule.exe remains open. Previous editor retained.
+No serialized or Runtime changes, so save/reload and standalone gameplay checks are not applicable. Prefab-backed governed starts inherit this display; reusable player prefab authoring remains future work. Owner acceptance and overall release gate remain pending. Next: reusable player prefab setup.
+
+## 2026-10-05 — Capsule selection replaces Player Start icon
+Implementation commit: `567b9ecdcfda276619a1c504da4f6700350af973`.
+Owner accepted always-visible capsule and requested selecting it directly plus removal of the redundant Player Start icon.
+Changed Studio/src/StudioApplication.cpp/.h, Studio/src/MarkerIconOverlay.cpp, docs/ARCHITECTURE.md and docs/FEATURE_MATRIX.csv. Camera pick ray intersects native upright capsule using the same feet/total-height/radius as Compose. Interior and wire edges select the governed entity and refresh Inspector/hierarchy/gizmo. Removed Player Start billboard emission and ground arrow. Other marker kinds retain their existing workflow.
+Validation: `powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/build_capsule.ps1`, Windows x64 Release Studio MSBuild /m:2 /p:BuildProjectReferences=false, exit 0 in 63.54 seconds; existing MSB8029/C4834 warnings. `git diff --check` passes.
+Native DX12 opened ArmsLibrary through Hub/Story Flow: cyan unselected capsule with no Player Start icon/arrow (BUILD/capsule-only-unselected.png). Clicked capsule interior at screen 950,540: orange selection, Player Start hierarchy row and Inspector, transform gizmo visible (BUILD/full-arms-window.png), visually inspected PASS. Adjacent light icon remains. RenegadeStudioPickCapsule.exe remains open, earlier editors retained.
+No serialized or gameplay changes: save/reload and standalone tests not applicable. Capsule picking intentionally follows editor guide semantics without world-depth occlusion. Owner acceptance and independent release gate remain pending. Next: reusable player prefab authoring.
+
+
+## 2026-10-05 — Reusable player prefab authoring and Save freeze repair
+Implementation commit: `774e8e4d912944e06e5c6372a865cac472bd49c5`.
+PlayerPrefabService adds strict versioned .rplayerprefab assets, transactional registry save/rollback, controller and arms defaults, undoable assignment, serialized origin/baseline, local override comparison and Reset. Spawn transform remains local. Studio adds selector, Save As Player Prefab, Reset and status in dynamic Inspector layout. Dependency provider discovers Scene -> prefab -> default arms; Test Level snapshots retain default arms even when local arms are NONE. Changed EngineBridge, Studio, Tests CMake/source and README/architecture/feature matrix/player continuation/roadmap; see commit for exact files.
+Owner reported Save froze the editor at 11:05 UK. Windows Application events 1001 AppHangB1 / 1002 confirm RenegadeStudioPlayerPrefabFinal.exe hang and closure. Refresh used ComboBox::SetSelected, which invokes OnSelect and subscribed another apply during safe-point callback dispatch. Fixed using SetSelectedWithoutCallback; user selection still applies normally. Initial automated service checks missed this native UI defect. Initial prefab layout overlap also caught visually and repaired in S1BInspectorSectionMigration.
+Build: BUILD/build_player_prefab.ps1 configures CMake and builds Bridge, PlayerPrefabTests, Studio, Runtime and FirstPersonAssemblyWorkflowProof Windows x64 Release; final full-target pass exit 0 / 27.82s. Later proof extension build exit 0 / 12.04s. Final Studio callback fix BUILD/build_capsule.ps1 exit 0 / 10.41s; existing MSB8029/C4834 warnings only. git diff --check passes.
+Verification: BUILD/verify_player_prefab.ps1 exit 0 / 14.88s. Five CTests pass (0.49s): Phase6Gate1Player, PlayerViewRig, PlayerViewRigSourceContract, FirstPersonAssemblySettings, PlayerPrefabTests. Native GPU proof clone BUILD/arms-player-prefab-proof passes cold save/reopen, dependency closure, local NONE override retaining default arms in snapshot, real paired Runtime project/snapshot loading and cleanup, capacity-two weapon settings, isolated packaged scene/prefab defaults and paired arms. Evidence BUILD/player-prefab-evidence. Isolated package proof is not full Build Game staged/promotion acceptance.
+Native corrected DX12 RenegadeStudioPlayerPrefabFinal.exe: opened original BUILD/arms-full-library-ready/ArmsLibrary.renegade, selected Player Start; Inspector controls no longer overlap. Save As Player Prefab completed, assigned Player Start // 3d4e8140 and remained responsive at 75 FPS. Changed capsule radius via slider -> LOCAL OVERRIDES and larger guide; Reset -> DEFAULTS/original dimensions. Clicked native SAVE then REOPEN; selected hierarchy Player Start and inspected persisted prefab/defaults/arms. Original project also retains asset a57a0cbf from owner's pre-fix save; no deletion performed. Corrected build remains open on saved Player Start. Earlier test direct Runtime grounded/fire/reload check passed, fixture lighting remains washed out; closed only that test Runtime to unblock relink.
+Each save creates a new immutable reusable defaults asset. Live propagation, asset-browser drag placement, multi-weapon loadout and full Build Game promotion remain future work. No overall release gate closure, push or merge. Next: owner review corrected Save flow, then continue player prefab placement/inspector workflow.
+
+
+## 2026-10-05 — PR 178 Studio CI repair
+Implementation commit: `5a9caf1` (Align Studio CI with player browser workflow and build prefab tests), following player-browser implementation `ce10105`.
+Inspected GitHub Studio run 37308122911: Debug and Release fail during CTest, after compilation; Windows baseline run 37308122891 passes both configurations. Failure set: Phase5Gate3SourceContract expects nine Add items including retired Player Start, Phase6Gate1SourceContract expects retired Player Start arrow/Add workflow, and RenegadePlayerPrefabTests executable is absent from the explicit CI build target set.
+Preserved and completed existing local fixes in Tests/CMakeLists.txt (prefab test dependency of bridge test aggregate), Tests/Phase5Gate3SourceContract.cmake (eight Add entries), Tests/Phase6Gate1SourceContract.cmake (browser drop, capsule and prefab card requirements). Tools/Build-Studio-Windows.ps1 now explicitly builds RenegadePlayerPrefabTests and records that target in build evidence. No runtime/editor feature change in this repair.
+Validation: BUILD/validate_prefab_ci.ps1 configures CMake -S . -B BUILD/renegade -A x64 -DRENEGADE_EMBED_SHADERS=ON, builds RenegadePlayerPrefabTests --parallel 4 in Debug and Release, then CTest -R 'RenegadePlayerPrefabTests|RenegadePhase5Gate3SourceContract|RenegadePhase6Gate1SourceContract' --output-on-failure in each configuration. Exit 0, 682.34s including Release bridge recompilation. Debug 3/3 pass (0.41s); Release 3/3 pass (0.38s). Existing MSB8029 and C4834 warnings only. Generated bridge-test project includes prefab-test reference. git diff --check passes. Full fresh hosted Studio workflow remains required; focused local passes do not claim full CI acceptance or release gate closure.
+Next: push repair on existing feature branch and inspect new PR 178 Debug/Release jobs. Do not merge until required checks pass. Preexisting Tools/__pycache__ and log.txt remain untouched.

@@ -141,8 +141,24 @@ namespace
     }
 }
 
-int main()
+int main(int argc, char** argv)
 {
+    if (argc == 3 && std::string(argv[1]) == "--validate-package")
+    {
+        WindowsGamePackageIntegrityResult result;
+        std::string error;
+        if (!ValidateWindowsGamePackage(argv[2], result, error))
+        {
+            std::cerr << "FAIL: " << error << '\n';
+            return 1;
+        }
+        std::cout << "PASS: actual package integrity; files="
+                  << result.actualFileCount << '\n';
+        return 0;
+    }
+    if (argc != 1)
+        return 1;
+
     const auto nonce = std::chrono::high_resolution_clock::now()
         .time_since_epoch().count();
     const fs::path root = fs::temp_directory_path() /

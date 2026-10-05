@@ -1,11 +1,13 @@
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
+#include "renegade/bridge/PlayerPrefabService.h"
 #include <cctype>
 #include "StudioUserPreferences.h"
 
 #include "renegade/bridge/TestLevelSnapshotService.h"
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
+#include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/ModelImportCommitService.h"
 #include "renegade/bridge/CreatorTextureWorkflowService.h"
@@ -658,6 +660,8 @@ namespace renegade::studio
         if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_ &&
             modelImportPreview_->NeedsRender())
             modelImportPreview_->PreRender();
+        if (assemblyPanel_.IsVisible() && assemblyPreview_ && assemblyPreview_->NeedsRender())
+            assemblyPreview_->PreRender();
         wi::RenderPath3D::PreRender();
     }
 
@@ -674,6 +678,8 @@ namespace renegade::studio
             modelImportPreview_->Render();
             // Retain the rendered texture once ready, until the view rotates.
         }
+        if (assemblyPanel_.IsVisible() && assemblyPreview_ && assemblyPreview_->NeedsRender())
+            assemblyPreview_->Render();
         if (pathTracePreviewActive_)
         {
             RenderPath3D_PathTracing::Render();
@@ -1110,6 +1116,48 @@ namespace renegade::studio
         playerCameraMode_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         playerCameraMode_.SetColor(wi::Color::Transparent());
         inspectorPanel_.AddWidget(&playerCameraMode_);
+
+        playerFirstPersonArms_.Create("Player First Person Arms");
+        playerFirstPersonArms_.SetTooltip(
+            "Choose a governed imported .rasset for the first-person arms View Rig. "
+            "NONE keeps the temporary P1 proxy proof geometry.");
+        playerFirstPersonArms_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            CommitSelectedPlayerArmsAsset(
+                static_cast<std::size_t>(args.userdata));
+        });
+        inspectorPanel_.AddWidget(&playerFirstPersonArms_);
+        playerHandGrips_.Create("Player Hand Grips");
+        playerHandGrips_.SetText("EDIT HAND GRIPS");
+        playerHandGrips_.OnClick([this](const wi::gui::EventArgs&) { OpenHandGripEditor(); });
+        inspectorPanel_.AddWidget(&playerHandGrips_);
+        playerAssembly_.Create("Player First Person Assembly");
+        playerAssembly_.SetText("ASSEMBLY");
+        playerAssembly_.OnClick([this](const wi::gui::EventArgs&) { OpenAssemblyEditor(); });
+        inspectorPanel_.AddWidget(&playerAssembly_);
+        playerPrefab_.Create("Player Prefab");
+        playerPrefab_.SetText("");
+        playerPrefab_.SetTooltip("Choose reusable player defaults. Spawn position and facing remain level-specific.");
+        playerPrefab_.OnSelect([this](const wi::gui::EventArgs& args) {
+            if (args.iValue <= 0) return;
+            if (static_cast<std::size_t>(args.iValue) < playerPrefabChoices_.size())
+                ApplySelectedPlayerPrefab(playerPrefabChoices_[args.iValue]);
+        });
+        inspectorPanel_.AddWidget(&playerPrefab_);
+        playerPrefabSave_.Create("Save Player Prefab");
+        playerPrefabSave_.SetText("SAVE AS PLAYER PREFAB");
+        playerPrefabSave_.OnClick([this](const wi::gui::EventArgs&) { SaveSelectedPlayerPrefab(); });
+        inspectorPanel_.AddWidget(&playerPrefabSave_);
+        playerPrefabReset_.Create("Reset Player Prefab");
+        playerPrefabReset_.SetText("RESET TO PREFAB");
+        playerPrefabReset_.OnClick([this](const wi::gui::EventArgs&) { ResetSelectedPlayerPrefab(); });
+        inspectorPanel_.AddWidget(&playerPrefabReset_);
+        playerPrefabStatus_.Create("Player Prefab Status");
+        playerPrefabStatus_.font.params.size = 11;
+        playerPrefabStatus_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        playerPrefabStatus_.SetColor(wi::Color::Transparent());
+        inspectorPanel_.AddWidget(&playerPrefabStatus_);
+
 
         const auto createPlayerSlider = [this](
             SceneInspectorSlider& slider,
@@ -2869,6 +2917,8 @@ namespace renegade::studio
         });
         modelImportPanel_.AddWidget(&modelImportCancel_);
         modelImportPanel_.SetVisible(false);
+        CreateHandGripEditor();
+        CreateAssemblyEditor();
         GetGUI().AddWidget(&modelImportPanel_);
         GetGUI().AddWidget(&studioChrome_);
     }
@@ -3148,6 +3198,9 @@ namespace renegade::studio
         modelImportPreviewImage_.SetColor(wi::Color::White());
         for (auto& sprite : modelImportPreviewImage_.sprites)
             sprite.params.disableBackground();
+        assemblyImage_.SetColor(wi::Color::White());
+        for (auto& sprite : assemblyImage_.sprites)
+            sprite.params.disableBackground();
 
         projectHubPanel_.SetColor(
             HubBackground,
@@ -3359,6 +3412,58 @@ namespace renegade::studio
             return;
         }
 
+        if (assemblyPanel_.IsVisible())
+        {
+            if (!session_->Projects().HasProject() ||
+                session_->Projects().CurrentProject().projectId != assemblyProjectId_) {
+                assemblyPanel_.SetVisible(false); assemblyPreview_.reset();
+            } else {
+                // Window visibility propagates to children; enforce the selected page afterwards.
+                for(size_t i=0;i<bridge::FirstPersonAssemblyActions.size();++i) {
+                    const bool visible=i/6==size_t(std::max(assemblyActionPage_.GetSelected(),0));
+                    assemblyArmsClips_[i].SetVisible(visible);assemblyWeaponClips_[i].SetVisible(visible);
+                }
+                if(assemblyPreviewRefreshPending_) {
+                    assemblyPreviewRefreshDelay_-=dt;
+                    if(assemblyPreviewRefreshDelay_<=0) {
+                        assemblyPreviewRefreshPending_=false;
+                        wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                            [this](std::uint64_t){if(assemblyPanel_.IsVisible())RebuildAssemblyPreview();});
+                    }
+                }
+                if (assemblyPreview_) {
+                    if (assemblyPreview_->NeedsRender()) { assemblyPreview_->PreUpdate(); assemblyPreview_->Update(dt); }
+                    if(!assemblyDraftPreviewDirty_&&assemblyPreview_->IsReady()) {
+                        wi::Resource image; image.SetTexture(assemblyPreview_->GetRenderResult3D());
+                        assemblyImage_.SetColor(wi::Color::White());
+                        assemblyImage_.SetImage(image);
+                    }
+                    assemblyTime_.SetValue(assemblyPreview_->ClipTime());
+                    assemblyPlay_.SetText(assemblyPreview_->IsPlaying() ? "PAUSE" : "PLAY");
+                    assemblySave_.SetEnabled(!assemblyDraftPreviewDirty_&&assemblyPreview_->IsReady()&&!assemblyAssetId_.empty());
+                    assemblySaveNew_.SetEnabled(!assemblyDraftPreviewDirty_&&assemblyPreview_->IsReady());
+                }
+                assemblyUndo_.SetEnabled(assemblyCommands_.CanUndo());
+                assemblyRedo_.SetEnabled(assemblyCommands_.CanRedo());
+                if(!assemblyPreview_){assemblySave_.SetEnabled(false);assemblySaveNew_.SetEnabled(false);}
+                diagnosticInput.StopAt("first_person_assembly"); detail::ClearCreatorAssetDragPreview();
+                pendingAction_ = EditorAction::None; return;
+            }
+        }
+        if (handGripPanel_.IsVisible())
+        {
+            if (!session_->Projects().HasProject() ||
+                session_->Projects().CurrentProject().projectId != handGripProjectId_)
+            { handGripPanel_.SetVisible(false); handGripSession_.reset(); }
+            else
+            {
+                diagnosticInput.StopAt("player_hand_grips");
+                detail::ClearCreatorAssetDragPreview();
+                pendingAction_ = EditorAction::None;
+                return;
+            }
+        }
+
         if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_)
         {
             if (modelImportPreview_->NeedsRender())
@@ -3379,6 +3484,7 @@ namespace renegade::studio
 
         // Process the asset browser's drag release after GUI callbacks and
         // before chrome input ownership can short-circuit this frame.
+        ProcessPlayerPrefabDrop();
         wi::ecs::Entity dragPlaced = wi::ecs::INVALID_ENTITY;
         if (camera != nullptr)
             dragPlaced = detail::UpdateCreatorAssetDragPreview(*this, *camera);
@@ -3404,7 +3510,7 @@ namespace renegade::studio
 
         viewportBounds_ = studioChrome_.ViewportBounds();
         const XMFLOAT4 pointer = wi::input::GetPointer();
-        const bool playerStartIconConsumed = HandlePlayerStartSceneIcon(pointer);
+        const bool playerStartCapsuleConsumed = HandlePlayerStartCapsule(pointer);
         const bool cameraIconConsumed = HandleCameraSceneIcons(pointer);
         const bool audioIconConsumed = HandleAudioSceneIcons(pointer);
         const bool decalProbeIconConsumed = HandleDecalProbeSceneIcons(pointer);
@@ -3458,7 +3564,7 @@ namespace renegade::studio
             return;
         }
 
-        if (playerStartIconConsumed || cameraIconConsumed || audioIconConsumed ||
+        if (playerStartCapsuleConsumed || cameraIconConsumed || audioIconConsumed ||
             decalProbeIconConsumed || lightIconConsumed)
         {
             diagnosticInput.StopAt("scene_icon");
@@ -3591,7 +3697,107 @@ namespace renegade::studio
         };
         device->BindScissorRects(1, &viewportScissor, cmd);
 
-        if (!projectHubVisible_ &&
+        // Draw the capsule after temporal postprocessing, alongside the gizmo.
+        // Project its connected 3D edges using one camera matrix for this frame.
+        if (!projectHubVisible_ && !assemblyPanel_.IsVisible() &&
+            !handGripPanel_.IsVisible() && session_ && camera)
+        {
+            const auto& scene = session_->Scenes().GetScene();
+            const auto resolved = bridge::ResolvePlayerStart(scene);
+            const auto entity = resolved.start.entity;
+            const auto* transform = scene.transforms.GetComponent(entity);
+            if (resolved.resolution == bridge::PlayerStartResolution::Success &&
+                transform && session_->Scenes().IsHierarchyVisible(entity))
+            {
+                const bool selected =
+                    session_->Selection().SelectedEntity() == entity;
+                const auto settings = bridge::SanitizePlayerControllerSettings(
+                    resolved.start.settings);
+                const auto feet = transform->GetPosition();
+                const float radius = settings.capsuleRadius;
+                const float height = bridge::PlayerCapsuleTotalHeight(settings);
+                const auto vp = camera->GetViewProjection();
+                const auto edge = [&](const XMFLOAT3& a, const XMFLOAT3& b)
+                {
+                    XMFLOAT4 ca, cb;
+                    XMStoreFloat4(&ca, XMVector4Transform(
+                        XMVectorSet(a.x,a.y,a.z,1), vp));
+                    XMStoreFloat4(&cb, XMVector4Transform(
+                        XMVectorSet(b.x,b.y,b.z,1), vp));
+                    // Clip homogeneous line endpoints at the camera planes.
+                    const auto clip = [&](float da, float db)
+                    {
+                        if (da < 0 && db < 0) return false;
+                        if (da < 0 || db < 0)
+                        {
+                            const float t = da / (da-db);
+                            const XMFLOAT4 c(ca.x+(cb.x-ca.x)*t,
+                                ca.y+(cb.y-ca.y)*t, ca.z+(cb.z-ca.z)*t,
+                                ca.w+(cb.w-ca.w)*t);
+                            if (da < 0) ca=c; else cb=c;
+                        }
+                        return true;
+                    };
+                    if (!clip(ca.w-0.001f,cb.w-0.001f) ||
+                        !clip(ca.z,cb.z) || !clip(ca.w-ca.z,cb.w-cb.z))
+                        return;
+                    const float ax=(ca.x/ca.w*0.5f+0.5f)*GetLogicalWidth();
+                    const float ay=(-ca.y/ca.w*0.5f+0.5f)*GetLogicalHeight();
+                    const float bx=(cb.x/cb.w*0.5f+0.5f)*GetLogicalWidth();
+                    const float by=(-cb.y/cb.w*0.5f+0.5f)*GetLogicalHeight();
+                    const float dx=bx-ax, dy=by-ay;
+                    wi::image::Params params;
+                    params.pos=XMFLOAT3((ax+bx)*0.5f,(ay+by)*0.5f,0);
+                    params.siz=XMFLOAT2(std::sqrt(dx*dx+dy*dy),1.5f);
+                    params.pivot=XMFLOAT2(0.5f,0.5f);
+                    params.rotation=std::atan2(dy,dx);
+                    params.color=selected ? wi::Color(255,122,31,255)
+                        : wi::Color(51,214,255,230);
+                    params.blendFlag=wi::enums::BLENDMODE_ALPHA;
+                    wi::image::Draw(nullptr,params,cmd);
+                };
+                const auto point = [&](float angle, float ringRadius, float y)
+                {
+                    return XMFLOAT3(feet.x+std::cos(angle)*ringRadius,
+                        feet.y+y,feet.z+std::sin(angle)*ringRadius);
+                };
+                constexpr int segments=48;
+                // Cylinder seams and cap latitude rings share exact endpoints.
+                for (int cap=0; cap<2; ++cap)
+                {
+                    const float center=cap ? height-radius : radius;
+                    for (int ring=0; ring<3; ++ring)
+                    {
+                        const float latitude=ring*XM_PIDIV2/3;
+                        const float rr=radius*std::cos(latitude);
+                        const float y=center+(cap?1:-1)*radius*std::sin(latitude);
+                        for (int i=0;i<segments;++i)
+                            edge(point(i*XM_2PI/segments,rr,y),
+                                point((i+1)*XM_2PI/segments,rr,y));
+                    }
+                }
+                for (int meridian=0;meridian<8;++meridian)
+                {
+                    const float angle=meridian*XM_2PI/8;
+                    edge(point(angle,radius,radius),
+                        point(angle,radius,height-radius));
+                    for (int cap=0;cap<2;++cap)
+                    {
+                        const float center=cap?height-radius:radius;
+                        for (int i=0;i<12;++i)
+                        {
+                            const float a=i*XM_PIDIV2/12,b=(i+1)*XM_PIDIV2/12;
+                            edge(point(angle,radius*std::cos(a),
+                                center+(cap?1:-1)*radius*std::sin(a)),
+                                point(angle,radius*std::cos(b),
+                                center+(cap?1:-1)*radius*std::sin(b)));
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
             outlinedSelection_ != wi::ecs::INVALID_ENTITY &&
             selectionOutlineMask_.IsValid())
         {
@@ -3606,7 +3812,7 @@ namespace renegade::studio
                 XMFLOAT4(0.30f, 0.86f, 1.0f, 0.90f));
         }
 
-        if (!projectHubVisible_ &&
+        if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
             !gizmoSuppressedForCameraView_ &&
             gizmoEntity_ != wi::ecs::INVALID_ENTITY)
         {
@@ -3628,9 +3834,13 @@ namespace renegade::studio
 
         const float width = GetLogicalWidth();
         const float height = GetLogicalHeight();
+        assemblyPanel_.SetPos(XMFLOAT2(std::max(0.0f, (width-1080)*0.5f), std::max(0.0f, (height-810)*0.5f)));
         modelImportPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
             std::max(70.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));
+        handGripPanel_.SetPos(XMFLOAT2(
+            std::max(0.0f, (width - 560.0f) * 0.5f),
+            std::max(60.0f, (height - 550.0f) * 0.5f)));
         studioChrome_.SetLayout(width, height);
         projectHubChrome_.SetLayout(width, height);
 
@@ -3786,19 +3996,28 @@ namespace renegade::studio
         layoutObjectToggle(sceneObjectMainCamera_, 1, 558.0f);
         layoutObjectToggle(sceneObjectReflections_, 0, 590.0f);
         layoutObjectToggle(sceneObjectWetmap_, 1, 590.0f);
-        positionEnvironmentWidget(playerLabel_, 224.0f, 20.0f);
-        positionEnvironmentWidget(playerCameraMode_, 244.0f, 32.0f);
-        positionEnvironmentWidget(playerCapsuleRadius_, 280.0f);
-        positionEnvironmentWidget(playerCapsuleHeight_, 314.0f);
-        positionEnvironmentWidget(playerEyeHeight_, 348.0f);
-        positionEnvironmentWidget(playerWalkSpeed_, 382.0f);
-        positionEnvironmentWidget(playerSprintSpeed_, 416.0f);
-        positionEnvironmentWidget(playerJumpSpeed_, 450.0f);
-        positionEnvironmentWidget(playerLookSensitivity_, 484.0f);
-        positionEnvironmentWidget(playerMaximumSlope_, 518.0f);
-        positionEnvironmentWidget(playerGravityFactor_, 552.0f);
-        positionEnvironmentWidget(playerMinimumPitch_, 586.0f);
-        positionEnvironmentWidget(playerMaximumPitch_, 620.0f);
+        positionEnvironmentWidget(playerPrefab_, 224.0f);
+        positionEnvironmentWidget(playerPrefabSave_, 258.0f);
+        positionEnvironmentWidget(playerPrefabReset_, 292.0f);
+        positionEnvironmentWidget(playerPrefabStatus_, 326.0f, 28.0f);
+        positionEnvironmentWidget(playerLabel_, 366.0f, 20.0f);
+        positionEnvironmentWidget(playerCameraMode_, 386.0f, 32.0f);
+        positionEnvironmentWidget(playerFirstPersonArms_, 422.0f);
+        positionEnvironmentWidget(playerHandGrips_, 456.0f);
+        playerHandGrips_.SetSize(XMFLOAT2(environmentFieldWidth * 0.49f, 28));
+        playerAssembly_.SetPos(XMFLOAT2(12 + environmentFieldWidth * 0.51f, 314));
+        playerAssembly_.SetSize(XMFLOAT2(environmentFieldWidth * 0.49f, 28));
+        positionEnvironmentWidget(playerCapsuleRadius_, 490.0f);
+        positionEnvironmentWidget(playerCapsuleHeight_, 524.0f);
+        positionEnvironmentWidget(playerEyeHeight_, 558.0f);
+        positionEnvironmentWidget(playerWalkSpeed_, 592.0f);
+        positionEnvironmentWidget(playerSprintSpeed_, 626.0f);
+        positionEnvironmentWidget(playerJumpSpeed_, 660.0f);
+        positionEnvironmentWidget(playerLookSensitivity_, 694.0f);
+        positionEnvironmentWidget(playerMaximumSlope_, 728.0f);
+        positionEnvironmentWidget(playerGravityFactor_, 762.0f);
+        positionEnvironmentWidget(playerMinimumPitch_, 796.0f);
+        positionEnvironmentWidget(playerMaximumPitch_, 830.0f);
         LayoutMaterialInspector(environmentFieldWidth);
 
         positionEnvironmentWidget(cameraLabel_, 506.0f, 20.0f);
@@ -4420,8 +4639,15 @@ namespace renegade::studio
         {
             widget.SetVisible(hasPlayerStart);
         };
+        setPlayerVisible(playerPrefab_);
+        setPlayerVisible(playerPrefabSave_);
+        setPlayerVisible(playerPrefabReset_);
+        setPlayerVisible(playerPrefabStatus_);
         setPlayerVisible(playerLabel_);
         setPlayerVisible(playerCameraMode_);
+        setPlayerVisible(playerFirstPersonArms_);
+        setPlayerVisible(playerHandGrips_);
+        setPlayerVisible(playerAssembly_);
         setPlayerVisible(playerCapsuleRadius_);
         setPlayerVisible(playerCapsuleHeight_);
         setPlayerVisible(playerEyeHeight_);
@@ -4435,8 +4661,87 @@ namespace renegade::studio
         setPlayerVisible(playerMaximumPitch_);
         if (hasPlayerStart)
         {
+            RefreshPlayerPrefabInspector();
             const auto settings = bridge::CapturePlayerControllerSettings(
                 session_->Scenes().GetScene(), selectedEntity);
+
+            playerFirstPersonArms_.ClearItems();
+            playerFirstPersonArmsChoices_.clear();
+            playerFirstPersonArmsChoices_.push_back({});
+            playerFirstPersonArms_.AddItem("NONE // PROXY PROOF", 0);
+
+            std::size_t selectedArmsChoice = 0;
+            bool currentArmsFound = settings.firstPersonArmsAssetId.empty();
+            if (session_->Projects().HasProject())
+            {
+                bridge::AssetRegistry registry;
+                std::string registryError;
+                const auto& project = session_->Projects().CurrentProject();
+                if (bridge::ReadAssetRegistry(
+                        project.rootPath,
+                        project.projectId,
+                        registry,
+                        registryError))
+                {
+                    for (const auto& record : registry.records)
+                    {
+                        std::string extension =
+                            fs::u8path(record.projectRelativePath)
+                                .extension().generic_string();
+                        std::transform(
+                            extension.begin(), extension.end(), extension.begin(),
+                            [](const unsigned char value)
+                            {
+                                return static_cast<char>(std::tolower(value));
+                            });
+                        if (!record.sourceAvailable || extension != ".rasset")
+                            continue;
+
+                        const bool importedProduct = std::any_of(
+                            registry.importedProducts.begin(),
+                            registry.importedProducts.end(),
+                            [&record](const bridge::ImportedProductRecord& product)
+                            {
+                                return product.productAssetId == record.assetId;
+                            });
+                        if (!importedProduct ||
+                            !bridge::IsValidStableId(record.assetId))
+                        {
+                            continue;
+                        }
+
+                        const std::size_t choice =
+                            playerFirstPersonArmsChoices_.size();
+                        playerFirstPersonArmsChoices_.push_back(record.assetId);
+                        std::string label =
+                            fs::u8path(record.projectRelativePath)
+                                .filename().generic_string();
+                        label += " // " + record.assetId.substr(0, 8);
+                        playerFirstPersonArms_.AddItem(label, choice);
+                        if (record.assetId == settings.firstPersonArmsAssetId)
+                        {
+                            selectedArmsChoice = choice;
+                            currentArmsFound = true;
+                        }
+                    }
+                }
+            }
+
+            if (!currentArmsFound &&
+                bridge::IsValidStableId(settings.firstPersonArmsAssetId))
+            {
+                selectedArmsChoice = playerFirstPersonArmsChoices_.size();
+                playerFirstPersonArmsChoices_.push_back(
+                    settings.firstPersonArmsAssetId);
+                playerFirstPersonArms_.AddItem(
+                    "MISSING // " +
+                        settings.firstPersonArmsAssetId.substr(0, 12),
+                    selectedArmsChoice);
+            }
+            playerFirstPersonArms_.SetSelected(
+                static_cast<int>(selectedArmsChoice));
+            playerHandGrips_.SetEnabled(currentArmsFound && !settings.firstPersonArmsAssetId.empty());
+
             playerCapsuleRadius_.SetValue(settings.capsuleRadius);
             playerCapsuleHeight_.SetValue(
                 bridge::PlayerCapsuleTotalHeight(settings));
@@ -5530,6 +5835,7 @@ namespace renegade::studio
     {
         if (session_ == nullptr || !session_->Projects().HasProject())
             return;
+        assemblyPanel_.SetVisible(false); assemblyImage_.SetImage({}); assemblyPreview_.reset();
         modelImportPanel_.SetVisible(false);
         modelImportCandidate_.reset();
         modelImportPreviewImage_.SetImage({});
@@ -5624,7 +5930,7 @@ namespace renegade::studio
         const auto modelSource = modelImportCandidate_->SourcePath();
         wi::helper::FileDialogParams params;
         params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "Select humanoid animation FBX";
+        params.description = "Select matching-rig or humanoid animation FBX";
         params.extensions = {"fbx"};
         wi::helper::FileDialog(params, [this, projectId, modelSource](const std::string& path) {
             wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
@@ -6078,6 +6384,11 @@ namespace renegade::studio
         const float screenX,
         const float screenY)
     {
+        if (fs::u8path(label).extension() == bridge::PlayerPrefabExtension)
+        {
+            playerPrefabDropId_ = assetId; playerPrefabDropPoint_ = {screenX, screenY};
+            return;
+        }
         if (detail::CreatorAssetDragPreviewOwnsDrop(assetId))
         {
             // The live cursor instance is committed by the Studio update in
@@ -6166,6 +6477,13 @@ namespace renegade::studio
             return true;
 
         const auto& project = session_->Projects().CurrentProject();
+        bridge::PlayerPrefabDocument playerPrefab; std::string playerError;
+        if (bridge::LoadPlayerPrefab(project.rootPath, project.projectId, creatorAssetPlacementId_, playerPrefab, playerError))
+        {
+            if (PlacePlayerPrefabAt(creatorAssetPlacementId_, surfacePosition))
+            { creatorAssetPlacementActive_ = false; creatorAssetPlacementId_.clear(); }
+            return true;
+        }
         bridge::CreatorAssetWorkflowService workflow;
         auto prepared = workflow.PrepareModelPlacement(
             project.rootPath,
@@ -6606,7 +6924,7 @@ bool StudioRenderPath::HandleDecalProbeSceneIcons(
     return false;
 }
 
-bool StudioRenderPath::HandlePlayerStartSceneIcon(
+bool StudioRenderPath::HandlePlayerStartCapsule(
     const XMFLOAT4& pointer)
 {
     if (session_ == nullptr || camera == nullptr || projectHubVisible_)
@@ -6625,98 +6943,18 @@ bool StudioRenderPath::HandlePlayerStartSceneIcon(
     if (transform == nullptr)
         return false;
 
+    const auto settings = bridge::SanitizePlayerControllerSettings(
+        resolved.start.settings);
     const XMFLOAT3 feet = transform->GetPosition();
-    const XMFLOAT3 euler = wi::math::QuaternionToRollPitchYaw(
-        resolved.start.transform.rotation);
-    const XMVECTOR forwardVector = XMVectorSet(
-        std::sin(euler.y), 0.0f, std::cos(euler.y), 0.0f);
-    const XMVECTOR rightVector = XMVectorSet(
-        std::cos(euler.y), 0.0f, -std::sin(euler.y), 0.0f);
-    const XMVECTOR origin = XMLoadFloat3(&feet) + XMVectorSet(0, 0.035f, 0, 0);
-    const auto worldPoint = [&](const float forward, const float right,
-        const float up = 0.0f)
-    {
-        XMFLOAT3 point;
-        XMStoreFloat3(&point,
-            origin + forwardVector * forward + rightVector * right +
-                XMVectorSet(0, up, 0, 0));
-        return point;
-    };
-
-    // Ground-plane silhouette follows the supplied arrow asset proportions:
-    // 2.4 m long, 0.72 m wide, with its tip aligned to Runtime +Z forward.
-    constexpr XMFLOAT2 Arrow[7] = {
-        XMFLOAT2(1.20f, 0.0f),
-        XMFLOAT2(0.28f, 0.36f),
-        XMFLOAT2(0.28f, 0.15f),
-        XMFLOAT2(-1.20f, 0.15f),
-        XMFLOAT2(-1.20f, -0.15f),
-        XMFLOAT2(0.28f, -0.15f),
-        XMFLOAT2(0.28f, -0.36f),
-    };
-    XMFLOAT2 projected[7] = {};
-    bool visible[7] = {};
-    for (int index = 0; index < 7; ++index)
-        visible[index] = ProjectEditorPoint(
-            worldPoint(Arrow[index].x, Arrow[index].y), projected[index]);
-
-    XMFLOAT2 center = {};
-    if (!ProjectEditorPoint(feet, center))
-        return false;
-    const float dx = pointer.x - center.x;
-    const float dy = pointer.y - center.y;
-    const bool hovered = dx * dx + dy * dy <= 28.0f * 28.0f;
-    const bool selected = session_->Selection().SelectedEntity() ==
-        resolved.start.entity;
-    const XMFLOAT4 color = selected
-        ? XMFLOAT4(1.0f, 0.55f, 0.15f, 1.0f)
-        : hovered
-            ? XMFLOAT4(0.58f, 0.95f, 1.0f, 1.0f)
-            : XMFLOAT4(0.20f, 0.84f, 1.0f, 0.95f);
-    for (int index = 0; index < 7; ++index)
-    {
-        const int next = (index + 1) % 7;
-        if (visible[index] && visible[next])
-            DrawEditorLine(projected[index], projected[next], color);
-    }
-
-    // The arrow is always present. Selecting it adds the real configured
-    // capsule as a wire guide without creating a renderable Runtime mesh.
-    if (selected)
-    {
-        const auto settings = resolved.start.settings;
-        const float radius = settings.capsuleRadius;
-        const float totalHeight = bridge::PlayerCapsuleTotalHeight(settings);
-        constexpr int Segments = 20;
-        for (int ring = 0; ring < 2; ++ring)
-        {
-            const float height = ring == 0 ? radius : totalHeight - radius;
-            for (int segment = 0; segment < Segments; ++segment)
-            {
-                const float a0 = XM_2PI * static_cast<float>(segment) / Segments;
-                const float a1 = XM_2PI * static_cast<float>(segment + 1) / Segments;
-                XMFLOAT2 p0 = {}, p1 = {};
-                if (ProjectEditorPoint(
-                        worldPoint(std::cos(a0) * radius,
-                            std::sin(a0) * radius, height), p0) &&
-                    ProjectEditorPoint(
-                        worldPoint(std::cos(a1) * radius,
-                            std::sin(a1) * radius, height), p1))
-                {
-                    DrawEditorLine(p0, p1, XMFLOAT4(color.x, color.y, color.z, 0.72f));
-                }
-            }
-        }
-        for (const float side : {-radius, radius})
-        {
-            XMFLOAT2 bottom = {}, top = {};
-            if (ProjectEditorPoint(worldPoint(0, side, radius), bottom) &&
-                ProjectEditorPoint(worldPoint(0, side, totalHeight - radius), top))
-            {
-                DrawEditorLine(bottom, top, XMFLOAT4(color.x, color.y, color.z, 0.72f));
-            }
-        }
-    }
+    const XMFLOAT3 top(feet.x,
+        feet.y + bridge::PlayerCapsuleTotalHeight(settings), feet.z);
+    // Pick the complete capsule volume, so its open wireframe interior is
+    // clickable as well as its edges. Use the same upright bounds as Compose.
+    const wi::primitive::Capsule capsule(feet, top, settings.capsuleRadius);
+    const auto ray = wi::renderer::GetPickRay(
+        static_cast<long>(pointer.x), static_cast<long>(pointer.y),
+        *this, *camera);
+    const bool hovered = capsule.intersects(ray);
 
     const bool selectRequested = hovered && !flyCameraActive_ &&
         !GetGUI().HasFocus() && !gizmo_.IsInteracting() &&
@@ -8339,6 +8577,223 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     }
 
 
+    void StudioRenderPath::CommitSelectedPlayerArmsAsset(
+        const std::size_t choiceIndex)
+    {
+        if (session_ == nullptr ||
+            !session_->Selection().HasSelection() ||
+            choiceIndex >= playerFirstPersonArmsChoices_.size())
+        {
+            return;
+        }
+
+        auto& scene = session_->Scenes().GetScene();
+        const auto entity = session_->Selection().SelectedEntity();
+        if (!bridge::IsPlayerStart(scene, entity))
+            return;
+
+        auto settings =
+            bridge::CapturePlayerControllerSettings(scene, entity);
+        settings.firstPersonArmsAssetId =
+            playerFirstPersonArmsChoices_[choiceIndex];
+
+        if (session_->Commands().Execute(
+                std::make_unique<bridge::SetPlayerControllerSettingsCommand>(
+                    scene, entity, settings)))
+        {
+            RefreshInspector();
+            RefreshStatus();
+        }
+    }
+
+
+
+    void StudioRenderPath::CreateHandGripEditor()
+    {
+        handGripPanel_.Create("Hand Grips", wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        handGripPanel_.SetShadowRadius(0);
+        handGripPanel_.SetColor(HologramPanel, wi::gui::WIDGET_ID_WINDOW_BASE);
+        handGripPanel_.SetSize(XMFLOAT2(560, 550));
+        const auto label = [this](wi::gui::Label& widget, const char* name,
+            const char* text, float y, float height)
+        {
+            widget.Create(name); widget.SetText(text);
+            widget.font.params.size = 12;
+            widget.font.params.color = HologramMuted;
+            widget.font.params.h_align = wi::font::WIFALIGN_LEFT;
+            widget.SetColor(wi::Color::Transparent());
+            widget.SetPos(XMFLOAT2(20, y)); widget.SetSize(XMFLOAT2(520, height));
+            handGripPanel_.AddWidget(&widget);
+        };
+        label(handGripTitle_, "Hand Grips Title", "HAND GRIPS // FIRST PERSON ARMS", 16, 24);
+        label(handGripAsset_, "Hand Grips Asset", "", 43, 32);
+        label(handGripPositionLabel_, "Grip Position Label", "POSITION // METRES RELATIVE TO BONE", 168, 20);
+        label(handGripRotationLabel_, "Grip Rotation Label", "ROTATION // DEGREES RELATIVE TO BONE", 294, 20);
+        label(handGripStatus_, "Hand Grips Status", "Shared arms asset. Save applies to all players using it.", 510, 30);
+        handGripRole_.Create("Grip Role");
+        handGripRole_.AddItem("PRIMARY HAND", 0);
+        handGripRole_.AddItem("OFF HAND", 1);
+        handGripRole_.AddItem("TWO HAND SUPPORT", 2);
+        handGripRole_.SetPos(XMFLOAT2(20, 85)); handGripRole_.SetSize(XMFLOAT2(520, 28));
+        handGripRole_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            if (handGripRefreshing_) return;
+            handGripRoleIndex_ = static_cast<std::size_t>(args.userdata);
+            RefreshHandGripEditor();
+        });
+        handGripPanel_.AddWidget(&handGripRole_);
+        handGripBone_.Create("Grip Bone");
+        handGripBone_.SetTooltip("Choose a native skeleton bone. NONE uses the Runtime socket's default camera offset.");
+        handGripBone_.SetPos(XMFLOAT2(20, 125)); handGripBone_.SetSize(XMFLOAT2(520, 28));
+        handGripBone_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            if (handGripRefreshing_ || !handGripSession_) return;
+            auto binding = handGripSession_->Settings()[handGripRoleIndex_];
+            const auto index = static_cast<std::size_t>(args.userdata);
+            if (index > handGripSession_->Bones().size()) return;
+            binding.bonePath = index == 0 ? "" : handGripSession_->Bones()[index - 1].path;
+            std::string error;
+            if (!handGripSession_->SetBinding(handGripRoleIndex_, binding, error))
+                handGripStatus_.SetText(error);
+            RefreshHandGripEditor();
+        });
+        handGripPanel_.AddWidget(&handGripBone_);
+        const char* axes[] = {"X", "Y", "Z"};
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            auto& position = handGripPosition_[axis];
+            const std::string positionName = std::string("Grip Position ") + axes[axis];
+            position.Create(-2, 2, 0, 4000, positionName, axes[axis]);
+            position.SetPos(XMFLOAT2(65, 192.0f + axis * 34.0f));
+            position.SetSize(XMFLOAT2(420, 28));
+            position.OnValueCommitted([this, axis](float value) { CommitHandGripValue(false, axis, value); });
+            handGripPanel_.AddWidget(&position);
+            auto& rotation = handGripRotation_[axis];
+            const std::string rotationName = std::string("Grip Rotation ") + axes[axis];
+            rotation.Create(-180, 180, 0, 3600, rotationName, axes[axis]);
+            rotation.SetPos(XMFLOAT2(65, 318.0f + axis * 34.0f));
+            rotation.SetSize(XMFLOAT2(420, 28));
+            rotation.OnValueCommitted([this, axis](float value) { CommitHandGripValue(true, axis, value); });
+            handGripPanel_.AddWidget(&rotation);
+        }
+        const auto button = [this](SceneInspectorButton& widget, const char* name,
+            const char* text, float x, float y)
+        {
+            widget.Create(name); widget.SetText(text);
+            widget.SetPos(XMFLOAT2(x, y)); widget.SetSize(XMFLOAT2(252, 28));
+            handGripPanel_.AddWidget(&widget);
+        };
+        button(handGripUndo_, "Grip Undo", "UNDO", 20, 428);
+        button(handGripRedo_, "Grip Redo", "REDO", 288, 428);
+        button(handGripSave_, "Grip Save", "SAVE SHARED ASSET", 20, 472);
+        button(handGripClose_, "Grip Close", "CLOSE / DISCARD UNSAVED", 288, 472);
+        handGripUndo_.OnClick([this](const wi::gui::EventArgs&)
+        { if (handGripSession_) { handGripSession_->Undo(); RefreshHandGripEditor(); } });
+        handGripRedo_.OnClick([this](const wi::gui::EventArgs&)
+        { if (handGripSession_) { handGripSession_->Redo(); RefreshHandGripEditor(); } });
+        handGripSave_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this](std::uint64_t) { SaveHandGripEditor(); });
+        });
+        handGripClose_.OnClick([this](const wi::gui::EventArgs&)
+        { handGripPanel_.SetVisible(false); handGripSession_.reset(); });
+        handGripPanel_.SetVisible(false);
+        GetGUI().AddWidget(&handGripPanel_);
+    }
+
+    void StudioRenderPath::OpenHandGripEditor()
+    {
+        if (!session_ || !session_->Projects().HasProject() ||
+            !session_->Selection().HasSelection()) return;
+        const auto& scene = session_->Scenes().GetScene();
+        const auto entity = session_->Selection().SelectedEntity();
+        if (!bridge::IsPlayerStart(scene, entity)) return;
+        const auto assetId = bridge::CapturePlayerControllerSettings(scene, entity).firstPersonArmsAssetId;
+        if (assetId.empty()) return;
+        const auto project = session_->Projects().CurrentProject();
+        wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+            [this, assetId, project](std::uint64_t)
+        {
+            if (!session_->Projects().HasProject() ||
+                session_->Projects().CurrentProject().projectId != project.projectId) return;
+            auto working = std::make_unique<bridge::PlayerViewGripSession>();
+            std::string error;
+            if (!working->Open(project.rootPath, project.projectId, assetId, error))
+            { studioChrome_.SetStatusText("HAND GRIPS // " + error); return; }
+            handGripSession_ = std::move(working);
+            handGripProjectId_ = project.projectId;
+            handGripRoleIndex_ = 0;
+            handGripRole_.SetSelected(0);
+            handGripBone_.ClearItems();
+            handGripBone_.AddItem("NONE // DEFAULT CAMERA OFFSET", 0);
+            std::size_t index = 1;
+            for (const auto& bone : handGripSession_->Bones())
+                handGripBone_.AddItem(bone.label, index++);
+            handGripAsset_.SetText(handGripSession_->AssetPath());
+            handGripStatus_.SetText("Shared arms asset. Save applies to all players using it.");
+            handGripPanel_.SetVisible(true);
+            RefreshHandGripEditor();
+            ResizeLayout();
+        });
+    }
+
+    void StudioRenderPath::RefreshHandGripEditor()
+    {
+        if (!handGripSession_ || handGripRoleIndex_ >= 3) return;
+        handGripRefreshing_ = true;
+        const auto& binding = handGripSession_->Settings()[handGripRoleIndex_];
+        int choice = 0;
+        for (std::size_t i = 0; i < handGripSession_->Bones().size(); ++i)
+            if (handGripSession_->Bones()[i].path == binding.bonePath)
+                choice = static_cast<int>(i + 1);
+        handGripBone_.SetSelected(choice);
+        handGripBone_.SetTooltip(choice == 0 ? "Default Runtime camera socket offset." :
+            handGripSession_->Bones()[choice - 1].label);
+        const float positions[] = {binding.position.x, binding.position.y, binding.position.z};
+        const float rotations[] = {binding.rotationDegrees.x, binding.rotationDegrees.y, binding.rotationDegrees.z};
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            handGripPosition_[axis].SetValue(positions[axis]);
+            handGripRotation_[axis].SetValue(rotations[axis]);
+            handGripPosition_[axis].SetEnabled(choice != 0);
+            handGripRotation_[axis].SetEnabled(choice != 0);
+        }
+        handGripUndo_.SetEnabled(handGripSession_->CanUndo());
+        handGripRedo_.SetEnabled(handGripSession_->CanRedo());
+        handGripSave_.SetEnabled(handGripSession_->IsDirty());
+        handGripTitle_.SetText(handGripSession_->IsDirty() ?
+            "HAND GRIPS // UNSAVED CHANGES" : "HAND GRIPS // FIRST PERSON ARMS");
+        handGripRefreshing_ = false;
+    }
+
+    void StudioRenderPath::CommitHandGripValue(bool rotation, int axis, float value)
+    {
+        if (handGripRefreshing_ || !handGripSession_ || axis < 0 || axis > 2) return;
+        auto binding = handGripSession_->Settings()[handGripRoleIndex_];
+        auto& vector = rotation ? binding.rotationDegrees : binding.position;
+        if (axis == 0) vector.x = value;
+        else if (axis == 1) vector.y = value;
+        else vector.z = value;
+        std::string error;
+        if (!handGripSession_->SetBinding(handGripRoleIndex_, binding, error))
+            handGripStatus_.SetText(error);
+        RefreshHandGripEditor();
+    }
+
+    void StudioRenderPath::SaveHandGripEditor()
+    {
+        if (!handGripSession_ || !session_->Projects().HasProject() ||
+            session_->Projects().CurrentProject().projectId != handGripProjectId_) return;
+        std::string error;
+        if (!handGripSession_->Save(error))
+        { handGripStatus_.SetText("SAVE FAILED // " + error); return; }
+        handGripStatus_.SetText("SAVED // Reopen Test Level to load the updated hand grips.");
+        RefreshHandGripEditor();
+        RefreshAssetBrowser();
+        RefreshInspector();
+    }
+
     bridge::TransformState StudioRenderPath::CaptureEditorCameraTransform() const
     {
         bridge::TransformState state;
@@ -9546,6 +10001,10 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             return;
         }
 
+        const auto& playerProject = session_->Projects().CurrentProject();
+        std::string playerError;
+        if (!bridge::EnsureBasicPlayerPrefab(playerProject.rootPath, playerProject.projectId, playerError))
+            studioChrome_.SetStatusText("PLAYERS // " + playerError);
         const auto snapshot = assetBrowserService_.Scan(
             session_->Projects().CurrentProject().rootPath,
             assetBrowserCurrentFolder_);

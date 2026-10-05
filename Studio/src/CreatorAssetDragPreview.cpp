@@ -969,6 +969,14 @@ namespace renegade::studio::detail
         }
 
         auto& scene = session->Scenes().GetScene();
+        if (fs::u8path(assetPath).extension() == ".rplayerprefab")
+        {
+            XMFLOAT3 surface;
+            const bool valid = PointerInsideViewport(*chrome, pointer) && ResolveSurface(canvas, camera, pointer, scene, surface);
+            wi::input::SetCursor(valid ? wi::input::CURSOR_CROSS : wi::input::CURSOR_NOTALLOWED);
+            if (valid) wi::renderer::DrawSphere(wi::primitive::Sphere(surface, 0.16f), XMFLOAT4(0, 0.8f, 1, 1), false);
+            return wi::ecs::INVALID_ENTITY;
+        }
         if (!PointerInsideViewport(*chrome, pointer))
         {
             if (preview.wrapper != wi::ecs::INVALID_ENTITY)

@@ -809,6 +809,12 @@ World-space Player movement, collision, camera ownership and lifecycle remain
 authoritative. A first-person View Rig is presentation-only and may not become a
 second Player controller or physics body.
 
+After Scene::Update, Runtime samples the Player's rendered scene transform for
+both camera position and the attached View Rig. Wicked may interpolate that
+transform between fixed physics steps. Raw Jolt position remains the simulation
+sample and is only a camera fallback when the scene transform is unavailable;
+mixing raw physics camera position with an interpolated rig causes movement jitter.
+
 The Player combat boundary is divided into four responsibilities:
 
 - world Player/controller: movement, position, health/damage receiver and interaction;
@@ -854,3 +860,165 @@ Combat acceptance includes direct owner play. Automated tests can prove action
 state, collision, damage and persistence, but cannot prove recoil, melee timing,
 audio/particle response or overall combat feel. A dedicated owner feel session
 is therefore an explicit programme gate.
+
+
+### P1 native semantic hand anchors
+
+Runtime Player View Rig sockets can attach to explicitly tagged native bones or
+child grip transforms inside the governed view-model hierarchy. Optional boolean
+roles are documented in P1_HAND_SOCKET_BINDINGS.md; they survive WISCENE entity-ID
+remapping. Duplicate/non-skeletal/cyclic anchors fail validation before mutation;
+missing roles use the original independent fixed offsets. Socket bindings are
+transient native Component_Attach relationships, evaluated by Wicked after native
+animation. This preserves one Player controller and the accepted interpolated
+camera/rig contract. The Studio Hand Grips panel uses a private EngineBridge
+asset working copy and command history. Save journals the native product, managed
+projection and registry together, retaining hierarchy-path bindings in the import
+recipe. See P1_HAND_GRIP_EDITOR.md. There is no name-inferred hand mapping or
+separate skeleton evaluator.
+
+### Matching-rig animation and explicit FBX relinks
+
+MatchingRigAnimationService validates one named skeleton, parent topology and
+inverse binds before copying native channels/keyframe data without retargeting.
+ModelImportCandidateService tries this route before the existing humanoid route.
+Explicit material-slot relinks snapshot selected texture bytes and retain their
+project-relative paths in the import recipe and journaled model transaction.
+These are shared bridge boundaries; Studio does not implement another converter.
+See P1_ASSEMBLY_IMPORT_FOUNDATION.md for real-pack evidence and creator UI limits.
+
+### First-person assembly authoring
+
+FirstPersonAssemblyService composes private retained native arms and weapon scenes.
+An explicit hierarchy path and local transform attach the weapon to the authored
+arms bone; paired native action tracks preserve both skeletons. Studio controls
+call the bridge service and evaluate the preview on one clock. The assembled
+WISCENE embeds resources; its versioned recipe, product, projection, registry and
+catalogue cross the existing project document transaction. Player Start assignment
+uses the existing settings command. Save changes retains product/recipe IDs and
+paths, rejects stale product hashes and updates documents through the same
+transaction. Save as new creates a separate product. Draft snapshots use an
+independent CommandService, including incomplete clip selections. Opening the
+panel refreshes authoring assets after dependency-only build scans. Unrelated
+stale import provenance is preserved during an assembly rebuild.
+See P1_ASSEMBLY_AUTHORING.md for the contract and limitations.
+
+### Runtime assembly movement pairs
+
+The existing RuntimePlayerViewAnimation controller recognizes the authored assembly
+marker and explicit arms/weapon track metadata after native instantiation/remapping.
+Each movement action has exactly one native track per role; Runtime requires Idle.
+A shared elapsed clock sets both paused native timers before Wicked's normal Scene
+update. Shorter tracks hold their final pose until the whole pair wraps. Movement
+fallbacks retain the same pair clock; unused Reload/Attack/Equip tracks stay inactive.
+Legacy single-rig variants/crossfades retain their existing path. Pair-to-pair
+movement transitions currently switch immediately; paired crossfades are deferred.
+No new input, camera, physics actor, skeleton evaluator or gameplay reload is added.
+
+
+### Full-library assembly preview and refresh
+
+FirstPersonAssemblyActions is the shared bridge/Studio whitelist for 14 action
+pairs; the version-1 recipe remains backward compatible. Studio pages the paired
+selectors in six-row groups and reapplies page visibility after the native
+Window propagates child visibility. Draft changes debounce for 150 ms, rebuild
+at the existing thread-safe point, and retain the previous rendered texture
+until the new preview has completed rendering. Stale/invalid drafts cannot save.
+Preview reconstruction preserves selected action, scrub time and play state.
+This does not add an equipment controller or Runtime action-input routing.
+
+
+### Paired Runtime action input
+
+GameplayInputService appends Fire and Reload to the version-1 action map and
+polls discrete presses through the existing input seam. The existing Player View
+animation state owns explicit Attack/Reload pairs for one shared non-looping
+duration; shorter tracks hold their final pose. Busy actions reject repeated
+presses and completion returns to current movement. Reload has simultaneous-input
+priority. Runtime pause passes zero time and no action presses. This is bounded
+animation routing, with no parallel controller or combat simulation.
+
+
+### Two-shell shotgun Runtime prototype
+
+The current paired shotgun starts with two loaded shells. Each accepted fire
+press consumes one shell; empty fire presses do not play Attack. R after one
+shot selects ReloadPartial, and R after two selects Reload. Reload at capacity
+is ignored. The shell count returns to two only when the paired reload finishes,
+including its weapon track. Busy actions and pause do not consume/refill shells.
+An absent partial pair uses an explicitly assigned full reload if available.
+Reset/reinitialization restores two shells. This is a bounded two-barrel prototype;
+creator-configurable weapon definitions, reserve ammunition, HUD, damage and
+reload interruption remain later work.
+
+
+### Right-mouse aiming
+
+Hold right mouse to play the assigned AimIn pair once and hold its final sight
+pose; release plays AimOut then returns to movement. Left mouse while aimed uses
+AimAttack and consumes the same two-shell ammunition. Reload lowers the sights,
+uses partial/full reload as appropriate, and resumes aim-in if right mouse is
+still held. Transitions finish before queued hold/release changes are reconciled;
+pause freezes them. This uses authored native animation only, with no zoom/FOV
+change or new camera/controller.
+
+
+### Equipment and jump animation routing
+
+Q toggles holster/equip using the assigned Unequip/Equip pairs. Holstered arms
+hold the final out-of-view pose; fire, aim and reload are blocked, with shells
+preserved. Existing Space jump physics drives grounded-to-airborne JumpStart,
+airborne JumpLoop and grounded-contact JumpLand. Busy actions finish before
+pending jump transitions. Jump animation ownership blocks fire/aim/reload until
+landing; movement physics remains authoritative. Pause freezes action clocks.
+Initial airborne spawn does not pretend a jump occurred. A collidable floor is
+required to exercise takeoff and landing; the empty preview fixture is not a
+complete gameplay level. No new controller or root-motion locomotion is added.
+
+First-person view-model sanitization disables imported humanoid ragdolls and removes soft-body physics as well as character, rigid-body and collider components. Presentation bones must never push the authoritative player capsule.
+
+### Editable firearm settings
+
+ASSEMBLY > WEAPON SETTINGS exposes loaded capacity, minimum seconds between shots
+and permission for partial reload. Assembly draft Undo/Redo and governed SAVE
+CHANGES / SAVE AS NEW persist these fields in the version-1 recipe and native
+payload. Player Start's existing assembly reference carries settings through
+Test Level snapshots and package loading. Old recipes retain the accepted two-shot
+defaults. Runtime reload fills configured capacity only at animation completion;
+shot cooldown advances only during gameplay. These are discrete shots, with no
+reserve ammunition or automatic firing yet. Gameplay capacity does not change the
+number of shells visible in authored clips. Independent equipment definitions and
+Player prefabs remain next stages; see PLAYER_AUTHORING_CONTINUATION.md.
+
+Selected Player Start displays an editor-only orange wireframe collision capsule.
+It reads the runtime controller radius and total height each frame, follows the
+spawn feet position, and updates after inspector edits and Undo/Redo. It stays
+upright and unscaled like the runtime character, and is absent during Test Level.
+
+Capsule display repair: connected 3D capsule edges are projected and drawn in
+Studio Compose after scene temporal postprocessing, beside the transform gizmo.
+This avoids the motion trails from temporal accumulation of debug-world lines.
+The overlay is clipped to the scene viewport and camera planes; it is not a
+serialized asset, does not enter Runtime, and is hidden behind assembly/grip workspaces.
+
+Studio window canvas and swapchain must refresh on background WM_SIZE / DPI
+changes and on focus recovery. Minimized windows are excluded. Skipping these
+updates stretches the displayed scene/UI while input retains current client
+coordinates, causing offset hierarchy hitboxes and viewport marker selection.
+
+Player Start capsule guides remain visible in the level editor regardless of selection (cyan normally, orange when selected), using resolved controller dimensions and hierarchy visibility. Prefab-backed starts retain this editor representation. Compose owns the single connected capsule after temporal postprocessing; it is not serialized as a Runtime mesh.
+
+Player Start selection uses a camera pick ray against the same upright capsule bounds as its wireframe, including the open interior. The capsule replaces both the Player Start billboard icon and ground arrow. Other scene marker icons retain their existing workflow.
+
+Player prefab assets are immutable version-1 project Data documents with stable
+identity and a controller/camera settings snapshot plus arms StableId. Disk save
+and registry registration share ProjectDocumentTransaction. Player Start retains
+level spawn transform, applied prefab identity and baseline; resolved controller
+settings remain the Runtime authority. Local overrides are explicit, with
+command-backed reset/assignment. Prefab selection never creates a second player
+controller or multiple starts. Dependency closure includes prefab defaults and
+local arms assignments; Test Level snapshots retain prefab data and identity.
+
+
+### Player placement from Content/Player
+New levels have no automatic Player Start. Project browsing ensures a registered Basic Player Start preset under Content/Player without creating a scene entity. Saved player prefabs appear by authored name in the Asset Browser and support drag-and-drop surface placement (ground-plane fallback) and the existing Place control. One command creates the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve identity, transform and baseline. The always-visible selectable capsule represents the placed player. Add no longer exposes Player Start. A second placement is refused: use the existing Inspector to change prefab, or delete the old start before placing another. Immutable saves refresh the browser. Owner/exact-commit verification remains required.

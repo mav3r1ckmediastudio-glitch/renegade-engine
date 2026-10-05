@@ -209,6 +209,9 @@ namespace renegade::runtime
     {
         diagnosticService_.StopLocalEndpoint();
         StopCreatorScripts();
+        ResetRuntimePlayerViewAnimations(
+            scenes_.GetScene(), playerViewAnimation_);
+        DespawnRuntimePlayerViewRig(scenes_.GetScene(), playerViewRig_);
         creatorScripts_.Shutdown();
         scriptSceneRevision_ = 0;
         reportedScriptDiagnostics_ = 0;
@@ -367,15 +370,16 @@ namespace renegade::runtime
     void RuntimeApplication::Update(const float dt)
     {
         UpdateLiveDiagnostics();
-        // Keep Wicked's device refresh alive while paused, but give the active
-        // 3D path zero simulation time. Physics simulation is also explicitly
-        // disabled by SetPaused(), so Runtime has one deterministic pause owner.
         SyncAudioForScene();
         bridge::RefreshPrecipitationVisual(scenes_.GetScene());
-        wi::Application::Update(paused_ ? 0.0f : dt);
 
-        if (!screenPresenter_.IsLoaded())
+        const bool gameplayFrame = !screenPresenter_.IsLoaded();
+        if (gameplayFrame)
         {
+            // Feed current input into the one authoritative Player before
+            // Wicked advances physics. The View Rig is parented to that Player,
+            // so the normal physics -> hierarchy -> object update carries the
+            // first-person presentation to the same post-physics position.
             gameplayInput_ = bridge::CaptureGameplayInput(inputMap_, dt);
             const auto& gameplayInput = gameplayInput_;
             creatorScripts_.SetGameplayState(&player_, &gameplayInput_);
@@ -393,20 +397,59 @@ namespace renegade::runtime
                 }
             }
 
-            SyncPlayerForScene();
+            if (!screenPresenter_.IsLoaded())
+            {
+                SyncPlayerForScene();
+                if (player_.IsSpawned())
+                {
+                    if (!paused_)
+                    {
+                        (void)bridge::UpdateRuntimePlayer(
+                            scenes_.GetScene(),
+                            player_,
+                            gameplayInput.player,
+                            playerSettings_);
+                    }
+                    (void)PoseRuntimePlayerViewRig(
+                        scenes_.GetScene(),
+                        playerViewRig_,
+                        player_.yaw,
+                        player_.pitch);
+                    UpdateRuntimePlayerViewRigPresentation(
+                        scenes_.GetScene(),
+                        playerViewRig_,
+                        gameplayInput.player,
+                        paused_ ? 0.0f : dt);
+                    UpdateRuntimePlayerViewAnimations(
+                        scenes_.GetScene(),
+                        playerViewAnimation_,
+                        playerViewRig_.action,
+                        paused_ ? 0.0f : dt,
+                        !paused_ && gameplayInput.firePressed,
+                        !paused_ && gameplayInput.reloadPressed,
+                        gameplayInput.aimDown,
+                        !paused_ && gameplayInput.toggleEquipmentPressed,
+                        scenes_.GetScene().rigidbodies.GetComponent(player_.entity) == nullptr ||
+                            wi::physics::IsCharacterGroundSupported(
+                                *scenes_.GetScene().rigidbodies.GetComponent(player_.entity)));
+                }
+            }
+        }
+
+        // Wicked owns the actual Jolt step, hierarchy propagation and GPU
+        // instance update. A paused session still refreshes the device while
+        // advancing the active 3D path with zero simulation time.
+        wi::Application::Update(paused_ ? 0.0f : dt);
+
+        if (!screenPresenter_.IsLoaded())
+        {
             SyncCreatorScriptsForScene();
             if (player_.IsSpawned())
             {
-                if (!paused_)
-                {
-                    (void)bridge::UpdateRuntimePlayer(
-                        scenes_.GetScene(),
-                        player_,
-                        gameplayInput.player,
-                        playerSettings_);
-                }
                 if (renderer_.camera != nullptr)
                 {
+                    // Camera samples the same post-physics Player position that
+                    // the parented View Rig inherited during Scene::Update.
                     bridge::ApplyRuntimePlayerCamera(
                         scenes_.GetScene(),
                         player_,
@@ -446,6 +489,8 @@ namespace renegade::runtime
             return;
 
         player_ = {};
+        playerViewRig_ = {};
+        playerViewAnimation_ = {};
         playerSceneRevision_ = scenes_.Revision();
         const auto resolved = bridge::ResolvePlayerStart(scenes_.GetScene());
         if (resolved.resolution == bridge::PlayerStartResolution::Missing)
@@ -484,6 +529,104 @@ namespace renegade::runtime
                 wi::backlog::LogLevel::Error);
             return;
         }
+        if (!SpawnRuntimePlayerViewRig(
+                scenes_.GetScene(),
+                playerViewRig_,
+                player_.entity,
+                playerSettings_.eyeHeight,
+                error))
+        {
+            diagnosticService_.Record(
+                bridge::DiagnosticSeverity::Error,
+                "runtime.player.view_rig",
+                "player.view_rig.spawn.failed",
+                error);
+            wi::backlog::post(
+                "Renegade Runtime: Player spawned but the first-person View Rig could not be created: " +
+                    error,
+                wi::backlog::LogLevel::Error);
+        }
+        else
+        {
+            diagnosticService_.Record(
+                bridge::DiagnosticSeverity::Info,
+                "runtime.player.view_rig",
+                "player.view_rig.spawned",
+                "First-person primary/off-hand View Rig spawned on Wicked foreground rendering.");
+
+            if (!playerSettings_.firstPersonArmsAssetId.empty())
+            {
+                std::string armsError;
+                const bool loaded = startupResult_.packageRelativeLaunch
+                    ? LoadPackagedRuntimePlayerViewAsset(
+                        scenes_.GetScene(),
+                        playerViewRig_,
+                        startupResult_.packageRootPath,
+                        startupResult_.project.projectId,
+                        playerSettings_.firstPersonArmsAssetId,
+                        armsError)
+                    : LoadRuntimePlayerViewAsset(
+                        scenes_.GetScene(),
+                        playerViewRig_,
+                        startupResult_.project.rootPath,
+                        startupResult_.project.projectId,
+                        playerSettings_.firstPersonArmsAssetId,
+                        armsError);
+
+                if (!loaded)
+                {
+                    diagnosticService_.Record(
+                        bridge::DiagnosticSeverity::Error,
+                        "runtime.player.view_rig",
+                        "player.view_rig.asset_failed",
+                        armsError);
+                    wi::backlog::post(
+                        "Renegade Runtime: first-person arms asset could not be loaded; retaining P1 proxy geometry: " +
+                            armsError,
+                        wi::backlog::LogLevel::Error);
+                }
+                else
+                {
+                    diagnosticService_.Record(
+                        bridge::DiagnosticSeverity::Info,
+                        "runtime.player.view_rig",
+                        "player.view_rig.asset_loaded",
+                        "Governed first-person arms asset loaded: " +
+                            playerSettings_.firstPersonArmsAssetId);
+
+                    std::string animationError;
+                    if (!InitializeRuntimePlayerViewAnimations(
+                            scenes_.GetScene(),
+                            playerViewRig_,
+                            playerViewAnimation_,
+                            animationError))
+                    {
+                        diagnosticService_.Record(
+                            bridge::DiagnosticSeverity::Error,
+                            "runtime.player.view_rig",
+                            "player.view_rig.animation_failed",
+                            animationError);
+                    }
+                    else
+                    {
+                        (void)RequestRuntimePlayerViewAnimation(
+                            scenes_.GetScene(),
+                            playerViewAnimation_,
+                            PlayerViewAction::Idle);
+                        diagnosticService_.Record(
+                            bridge::DiagnosticSeverity::Info,
+                            "runtime.player.view_rig",
+                            "player.view_rig.animation_ready",
+                            "First-person arms native animation binding is ready.");
+                    }
+
+                    wi::backlog::post(
+                        "Renegade Runtime: loaded governed first-person arms asset.",
+                        wi::backlog::LogLevel::Default);
+                }
+            }
+        }
+
         wi::backlog::post(
             "Renegade Runtime: possessed Player Start with the Wicked character controller.",
             wi::backlog::LogLevel::Default);
@@ -691,6 +834,7 @@ namespace renegade::runtime
         ReportCreatorScriptDiagnostics();
         scriptSceneRevision_ = 0;
         SetPaused(false);
+        DespawnRuntimePlayerViewRig(scenes_.GetScene(), playerViewRig_);
         bridge::DespawnRuntimePlayer(scenes_.GetScene(), player_);
         player_ = {};
         playerSettings_ = {};

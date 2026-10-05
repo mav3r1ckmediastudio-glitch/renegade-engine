@@ -28,6 +28,10 @@ namespace renegade::bridge
         Interact,
         Pause,
         Reset,
+        Fire,
+        Reload,
+        Aim,
+        ToggleEquipment,
         Count,
     };
 
@@ -54,6 +58,10 @@ namespace renegade::bridge
         bool interactPressed = false;
         bool pausePressed = false;
         bool resetPressed = false;
+        bool firePressed = false;
+        bool reloadPressed = false;
+        bool aimDown = false;
+        bool toggleEquipmentPressed = false;
     };
 
     [[nodiscard]] const char* GameplayActionId(GameplayAction action) noexcept;

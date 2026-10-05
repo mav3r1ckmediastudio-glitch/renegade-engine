@@ -335,6 +335,7 @@ namespace renegade::bridge
             return AssetType::Script;
         }
 
+        if (extension == ".rplayerprefab") return AssetType::Player;
         const std::string category = ContentCategory(projectRelativePath);
         if (IsResourceCategory(category))
         {

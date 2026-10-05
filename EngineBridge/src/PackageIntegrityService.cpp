@@ -1,4 +1,5 @@
 #include "renegade/bridge/PackageIntegrityService.h"
+#include "WindowsFileIoPath.h"
 
 #include <algorithm>
 #include <array>
@@ -247,8 +248,9 @@ namespace renegade::bridge
         std::string& error)
     {
         digest = {};
-        const fs::path path = fs::u8path(absolutePath);
-        if (absolutePath.empty() || !path.is_absolute())
+        const fs::path declaredPath = fs::u8path(absolutePath);
+        const fs::path path = detail::FileIoPath(declaredPath);
+        if (absolutePath.empty() || !declaredPath.is_absolute())
         {
             error = "Package digest path must be absolute.";
             return false;
@@ -373,7 +375,8 @@ namespace renegade::bridge
         {
             std::error_code ec;
             const fs::path declaredRoot = fs::u8path(packageRootPath);
-            const fs::path root = fs::weakly_canonical(declaredRoot, ec);
+            const fs::path logicalRoot = fs::weakly_canonical(declaredRoot, ec);
+            const fs::path root = detail::FileIoPath(logicalRoot);
             if (packageRootPath.empty() || ec || root.empty() ||
                 !fs::is_directory(root, ec) || ec)
             {
@@ -384,7 +387,7 @@ namespace renegade::bridge
                     error);
                 return false;
             }
-            result.packageRootPath = root.generic_u8string();
+            result.packageRootPath = logicalRoot.generic_u8string();
 
             const fs::path manifestRelative = "package-manifest.json";
             std::string offending;
@@ -571,7 +574,8 @@ namespace renegade::bridge
                     return false;
                 }
 
-                const fs::path resolved = fs::weakly_canonical(root / relative, ec);
+                const fs::path resolved = detail::FileIoPath(
+                    fs::weakly_canonical(root / relative, ec));
                 if (ec || !ContainsPath(root, resolved) ||
                     !fs::is_regular_file(resolved, ec) || ec)
                 {

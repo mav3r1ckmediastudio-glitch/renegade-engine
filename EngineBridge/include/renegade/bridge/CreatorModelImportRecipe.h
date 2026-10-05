@@ -1,6 +1,7 @@
 #pragma once
 
 #include "renegade/bridge/MaterialTextureAssetService.h"
+#include "renegade/bridge/PlayerViewGripService.h"
 
 #include <cstdint>
 #include <string>
@@ -14,6 +15,13 @@ namespace renegade::bridge
     {
         Model,
         Character,
+    };
+
+    struct CreatorTextureRelinkRecipe
+    {
+        std::uint32_t materialIndex = 0;
+        std::uint32_t textureSlot = 0;
+        std::string sourceProjectRelativePath;
     };
 
     struct CreatorMaterialImportRecipe
@@ -59,6 +67,7 @@ namespace renegade::bridge
         float end = 0.0f;
         bool enabled = true;
         bool autoMapSource = false;
+        bool matchingRig = false;
         std::string action;
         float speed = 1.0f;
     };
@@ -81,7 +90,10 @@ namespace renegade::bridge
     {
         CreatorAssetImportKind assetKind = CreatorAssetImportKind::Model;
         CreatorModelTransformRecipe transform;
+        bool hasHandGrips = false;
+        PlayerViewGripSettings handGrips = {};
         std::vector<CreatorMaterialImportRecipe> materials;
+        std::vector<CreatorTextureRelinkRecipe> textureRelinks;
         std::vector<CreatorAnimationImportRecipe> animations;
         std::vector<CreatorExternalAnimationImportRecipe> externalAnimations;
     };

@@ -17,7 +17,10 @@ cbuffer vertexBuffer : register(b0)
     float4x4 ProjectionMatrix;
 };
 
-[RootSignature("RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT), CBV(b0), DescriptorTable(SRV(t0)), DescriptorTable(Sampler(s0))")]
+// Pinned Wicked DX12 creates counted indirect signatures using root slot 0.
+// Reserve one DWORD there, as in its native b999 push-constant convention.
+// Both shader stages must embed the same signature; b0 remains the draw CBV.
+[RootSignature("RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT), RootConstants(num32BitConstants=1, b999), CBV(b0), DescriptorTable(SRV(t0)), DescriptorTable(Sampler(s0))")]
 VertexOutput main(VertexInput input)
 {
     VertexOutput output;

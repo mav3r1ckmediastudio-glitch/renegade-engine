@@ -6,12 +6,18 @@ namespace renegade::studio
 {
     bool ModelImportPreview::Prepare(wi::scene::Scene& source, std::string& error)
     {
+        paired_ = pairedPlaying_ = false;
         previewScene_ = wi::allocator::make_shared<wi::scene::Scene>();
         wi::Archive archive;
         source.Serialize(archive);
         archive.SetReadModeAndResetPos(true);
         previewScene_->Serialize(archive);
         scene = previewScene_.get();
+        for (size_t i = 0; i < source.materials.GetCount(); ++i) {
+            for (size_t slot = 0; slot < wi::scene::MaterialComponent::TEXTURESLOT_COUNT; ++slot)
+                scene->materials[i].textures[slot] = source.materials[i].textures[slot];
+            scene->materials[i].SetDirty();
+        }
         camera = &previewCamera_;
         animationPreview_.Prepare(*scene);
         scene->Update(0);
@@ -63,6 +69,23 @@ namespace renegade::studio
         return true;
     }
 
+    void ModelImportPreview::UseFirstPersonCamera()
+    {
+        camera->CreatePerspective(512, 320, 0.005f, 10.0f, XMConvertToRadians(80));
+        camera->TransformCamera(XMMatrixIdentity()); camera->UpdateCamera();
+        renderedFrames_ = 0;
+    }
+    bool ModelImportPreview::SetPairedAction(const std::string& action)
+    {
+        std::string error;
+        if (!bridge::FirstPersonAssemblyService().Pose(*scene, action, 0, error)) return false;
+        paired_ = true; pairedPlaying_ = false; pairedTime_ = pairedEnd_ = 0; pairedAction_ = action;
+        for (size_t i = 0; i < scene->animations.GetCount(); ++i)
+            if (scene->animations[i].amount > 0)
+                pairedEnd_ = std::max(pairedEnd_, scene->animations[i].end - scene->animations[i].start);
+        renderedFrames_ = 0; return true;
+    }
+
     void ModelImportPreview::FitCamera()
     {
         const float distance = radius_ / std::sin(XM_PI / 8.0f) * 1.12f;
@@ -89,12 +112,26 @@ namespace renegade::studio
     }
     bool ModelImportPreview::PlayPause()
     {
+        if (paired_) {
+            if (!pairedPlaying_ && pairedTime_ >= pairedEnd_) {
+                std::string error;
+                if (!bridge::FirstPersonAssemblyService().Pose(*scene, pairedAction_, 0, error)) return false;
+                pairedTime_ = 0;
+            }
+            pairedPlaying_ = !pairedPlaying_; renderedFrames_ = 0; return true;
+        }
         if (!animationPreview_.PlayPause()) return false;
         renderedFrames_ = 0;
         return true;
     }
     bool ModelImportPreview::Scrub(float time)
     {
+        if (paired_) {
+            std::string error;
+            pairedTime_ = std::clamp(time, 0.0f, pairedEnd_); pairedPlaying_ = false;
+            if (!bridge::FirstPersonAssemblyService().Pose(*scene, pairedAction_, pairedTime_, error)) return false;
+            renderedFrames_ = 0; return true;
+        }
         if (!animationPreview_.Scrub(time)) return false;
         renderedFrames_ = 0;
         return true;
@@ -107,6 +144,12 @@ namespace renegade::studio
     void ModelImportPreview::Update(float dt)
     {
         const bool wasPlaying = IsPlaying();
+        if (paired_ && pairedPlaying_) {
+            pairedTime_ = std::min(pairedEnd_, pairedTime_ + dt);
+            std::string error;
+            (void)bridge::FirstPersonAssemblyService().Pose(*scene, pairedAction_, pairedTime_, error);
+            if (pairedTime_ >= pairedEnd_) pairedPlaying_ = false;
+        }
         wi::RenderPath3D::Update(dt);
         if (wasPlaying && !IsPlaying()) renderedFrames_ = 0;
     }

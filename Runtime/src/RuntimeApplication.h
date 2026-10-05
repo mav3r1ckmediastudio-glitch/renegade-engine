@@ -10,6 +10,9 @@
 #include "RuntimeCharacterSystem.h"
 #include "RuntimeCombatDecision.h"
 #include "RuntimeCombatService.h"
+#include "RuntimePlayerViewAsset.h"
+#include "RuntimePlayerViewAnimation.h"
+#include "RuntimePlayerViewRig.h"
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"
 #include "RuntimeScriptRuntime.h"
@@ -99,6 +102,8 @@ namespace renegade::runtime
         RuntimeActionDispatcher actions_;
         RuntimeScriptRuntime creatorScripts_;
         bridge::RuntimePlayerState player_;
+        RuntimePlayerViewRigState playerViewRig_;
+        RuntimePlayerViewAnimationState playerViewAnimation_;
         bridge::PlayerControllerSettings playerSettings_;
         bridge::NavigationRuntimeState navigationState_;
         bridge::CharacterRuntimeState characterState_;

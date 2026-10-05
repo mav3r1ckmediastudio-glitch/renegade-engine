@@ -19,6 +19,7 @@
 #include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/DiagnosticService.h"
 #include "renegade/bridge/PlayerService.h"
+#include "renegade/bridge/PlayerViewGripService.h"
 #include "renegade/bridge/DecalProbeService.h"
 #include "renegade/bridge/MaterialService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
@@ -66,6 +67,14 @@ namespace renegade::studio
         void QueueInspectorRefresh() noexcept;
         void RefreshProjectHub();
         void RefreshAssetBrowser();
+        void CreateAssemblyEditor();
+        void OpenAssemblyEditor();
+        void LoadAssemblyParts();
+        void RebuildAssemblyPreview();
+        void SaveAssemblyEditor(bool asNew);
+        void RecordAssemblyDraft(const bridge::FirstPersonAssemblySettings& before);
+        void QueueAssemblyPreviewRefresh();
+        void RefreshAssemblyDraft();
         void OpenStaticModelImporter();
         void AppendModelImportAnimations();
         void CommitStaticModelImporter();
@@ -459,6 +468,12 @@ namespace renegade::studio
             bridge::ObjectParticipationProperty property,
             bool value);
         void CommitSelectedPlayerField(PlayerField field, float value);
+        void CommitSelectedPlayerArmsAsset(std::size_t choiceIndex);
+        void CreateHandGripEditor();
+        void OpenHandGripEditor();
+        void RefreshHandGripEditor();
+        void CommitHandGripValue(bool rotation, int axis, float value);
+        void SaveHandGripEditor();
         void ApplySelectedTransformValue(
             TransformTool tool,
             int axis,
@@ -549,6 +564,10 @@ namespace renegade::studio
         [[nodiscard]] bridge::TransformState CaptureEditorCameraTransform() const;
         void CreateCameraFromView();
         void CreatePlayerStartFromView();
+        bool PlacePlayerPrefabAt(const bridge::StableId&, const XMFLOAT3&);
+        void ProcessPlayerPrefabDrop();
+        bridge::StableId playerPrefabDropId_;
+        XMFLOAT2 playerPrefabDropPoint_ = {};
         void AlignSelectedCameraToView();
         void ViewFromSelectedCamera();
         void CreateDecalFromView();
@@ -602,7 +621,7 @@ namespace renegade::studio
         bool HandleCreatorAssetPlacement(const XMFLOAT4& pointer);
         void CancelCreatorAssetPlacement();
         bool HandleCameraSceneIcons(const XMFLOAT4& pointer);
-        bool HandlePlayerStartSceneIcon(const XMFLOAT4& pointer);
+        bool HandlePlayerStartCapsule(const XMFLOAT4& pointer);
         bool HandleAudioSceneIcons(const XMFLOAT4& pointer);
         bool HandleDecalProbeSceneIcons(const XMFLOAT4& pointer);
         bool HandleLightSceneIcons(const XMFLOAT4& pointer);
@@ -784,6 +803,18 @@ namespace renegade::studio
         SceneInspectorCheckBox sceneObjectWetmap_;
         wi::gui::Label playerLabel_;
         wi::gui::Label playerCameraMode_;
+        SceneInspectorComboBox playerFirstPersonArms_;
+        std::vector<bridge::StableId> playerFirstPersonArmsChoices_;
+        SceneInspectorButton playerHandGrips_;
+        wi::gui::Window handGripPanel_;
+        wi::gui::Label handGripTitle_, handGripAsset_, handGripPositionLabel_, handGripRotationLabel_, handGripStatus_;
+        SceneInspectorComboBox handGripRole_, handGripBone_;
+        std::array<SceneInspectorSlider, 3> handGripPosition_, handGripRotation_;
+        SceneInspectorButton handGripUndo_, handGripRedo_, handGripSave_, handGripClose_;
+        std::unique_ptr<bridge::PlayerViewGripSession> handGripSession_;
+        bridge::StableId handGripProjectId_;
+        std::size_t handGripRoleIndex_ = 0;
+        bool handGripRefreshing_ = false;
         SceneInspectorSlider playerCapsuleRadius_;
         SceneInspectorSlider playerCapsuleHeight_;
         SceneInspectorSlider playerEyeHeight_;
@@ -1085,6 +1116,40 @@ namespace renegade::studio
         RenegadeButton hubNewProjectCancelButton_;
         wi::gui::Button gridToggleButton_;
         RenegadePhysicsLabStudioChrome studioChrome_;
+        std::vector<std::string> playerPrefabChoices_;
+        wi::gui::ComboBox playerPrefab_;
+        wi::gui::Button playerPrefabSave_, playerPrefabReset_;
+        wi::gui::Label playerPrefabStatus_;
+        void SaveSelectedPlayerPrefab();
+        void ApplySelectedPlayerPrefab(std::string assetId);
+        void ResetSelectedPlayerPrefab();
+        void RefreshPlayerPrefabInspector();
+        wi::gui::Button playerAssembly_;
+        wi::gui::Window assemblyPanel_, assemblyFirearmPanel_;
+        wi::gui::Button assemblyFirearmButton_;
+        wi::gui::Label assemblyFirearmHelp_;
+        SceneInspectorSlider assemblyCapacity_, assemblyShotInterval_;
+        wi::gui::CheckBox assemblyPartialReload_;
+        wi::gui::Label assemblyImage_, assemblyStatus_;
+        wi::gui::ComboBox assemblyArms_, assemblyWeapon_, assemblyBone_, assemblyAction_, assemblyActionPage_;
+        std::array<wi::gui::ComboBox, bridge::FirstPersonAssemblyActions.size()> assemblyArmsClips_, assemblyWeaponClips_;
+        std::array<SceneInspectorSlider, 12> assemblyValues_;
+        wi::gui::Slider assemblyTime_;
+        wi::gui::TextInputField assemblyName_;
+        wi::gui::Button assemblyLoad_, assemblyPreviewButton_, assemblyPlay_, assemblySave_, assemblySaveNew_, assemblyUndo_, assemblyRedo_, assemblyClose_;
+        bridge::CommandService assemblyCommands_;
+        bridge::StableId assemblyAssetId_;
+        std::string assemblyOriginalHash_;
+        std::unique_ptr<ModelImportPreview> assemblyPreview_;
+        bridge::FirstPersonAssemblySettings assemblySettings_;
+        std::vector<bridge::StableId> assemblyPartIds_;
+        std::vector<bridge::PlayerViewBoneChoice> assemblyBones_;
+        bridge::StableId assemblyProjectId_;
+        std::array<std::string,2> assemblyPartHashes_;
+        wi::ecs::Entity assemblyPlayer_ = wi::ecs::INVALID_ENTITY;
+        bool assemblyRefreshing_ = false;
+        bool assemblyPreviewRefreshPending_ = false, assemblyDraftPreviewDirty_ = true;
+        float assemblyPreviewRefreshDelay_ = 0;
         wi::gui::Window modelImportPanel_;
         wi::gui::Label modelImportSummary_;
         wi::gui::Label modelImportPreviewImage_;

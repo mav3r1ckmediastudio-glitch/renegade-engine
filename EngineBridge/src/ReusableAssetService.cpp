@@ -1,5 +1,6 @@
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
+#include "renegade/bridge/FirstPersonAssemblyService.h"
 
 #include <chrono>
 #include <WickedEngine.h>
@@ -200,7 +201,7 @@ namespace renegade::bridge
 
         bool IsSupportedSourceFormatToken(const std::string& value)
         {
-            return value == "fbx" || value == "gltf" || value == "glb";
+            return value == "fbx" || value == "gltf" || value == "glb" || value == "assembly";
         }
 
         std::string BuildRecipeJson(
@@ -652,6 +653,13 @@ namespace renegade::bridge
         {
             error = "RAsset model recipe is malformed.";
             return false;
+        }
+        if (manifest.sourceFormat == "assembly") {
+            FirstPersonAssemblySettings assembly;
+            const auto recipe = nlohmann::json::parse(manifest.settingsJson);
+            if (manifest.importer != "renegade.first_person.assembly" ||
+                !ParseFirstPersonAssemblySettings(recipe.at("options").dump(), assembly, error))
+                return false;
         }
         if (manifest.payloadHash != HashBytes(document.payload))
         {

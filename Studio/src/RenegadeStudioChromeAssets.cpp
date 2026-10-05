@@ -129,7 +129,8 @@ namespace renegade::studio
         creatorCurrentPath_ = currentPath;
         RenegadeStudioChrome::SetAssetBrowserData(
             std::move(folders), std::move(assets), std::move(currentPath));
-        if (folderChanged || creatorAssetCatalogue_.entries.empty())
+        creatorAssetCatalogueDirty_ = true;
+        if (folderChanged || creatorAssetCatalogue_.entries.empty() || creatorAssetCatalogueDirty_)
             creatorAssetRefreshPending_ = true;
     }
 
@@ -200,10 +201,12 @@ namespace renegade::studio
                         return entry.assetId == creatorSelectedAssetId_;
                     });
                 if (selected == creatorAssetCatalogue_.entries.end() ||
-                    !bridge::CanPlaceCreatorModelAsset(*selected))
+                    !(bridge::CanPlaceCreatorModelAsset(*selected) ||
+                      (selected->type == bridge::AssetType::Player && selected->registered &&
+                       selected->state == bridge::AssetCatalogueState::Current && selected->productAvailable)))
                 {
                     SetStatusText(
-                        "PLACE ASSET // DRAG A CURRENT MODEL ASSET");
+                        "PLACE ASSET // DRAG A CURRENT MODEL OR PLAYER PREFAB");
                     return;
                 }
                 creatorAssetDropped_(
@@ -575,7 +578,8 @@ namespace renegade::studio
         const bool registered = selected != creatorAssetCatalogue_.entries.end() &&
             selected->registered && bridge::IsValidStableId(selected->assetId);
         const bool modelProduct = registered &&
-            bridge::CanPlaceCreatorModelAsset(*selected);
+            (bridge::CanPlaceCreatorModelAsset(*selected) ||
+             (selected->type == bridge::AssetType::Player && selected->state == bridge::AssetCatalogueState::Current && selected->productAvailable));
         const bool textureProduct = registered && selected->importedProduct &&
             selected->productAvailable &&
             selected->dependencyClass == bridge::DependencyClass::Texture;
@@ -723,7 +727,7 @@ namespace renegade::studio
             AssetCard card;
             card.name = entry.name;
             card.relativePath = entry.projectRelativePath;
-            card.typeLabel = UpperAscii(bridge::AssetCatalogueStateLabel(entry.state));
+            card.typeLabel = entry.type == bridge::AssetType::Player ? "PLAYER PREFAB" : UpperAscii(bridge::AssetCatalogueStateLabel(entry.state));
             fs::path thumbnailPath =
                 fs::u8path(project.rootPath) /
                 fs::u8path(entry.projectRelativePath);

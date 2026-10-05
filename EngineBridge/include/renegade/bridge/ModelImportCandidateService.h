@@ -8,6 +8,13 @@
 
 namespace renegade::bridge
 {
+    struct ModelImportTextureRelink
+    {
+        std::uint32_t materialIndex = 0;
+        std::uint32_t textureSlot = 0;
+        std::string sourcePath;
+    };
+
     struct ModelImportDependency
     {
         std::string sourcePath; // Empty for embedded data.
@@ -15,6 +22,9 @@ namespace renegade::bridge
         std::string previewResourceName;
         std::string retainedRelativePath;
         std::vector<std::uint8_t> bytes;
+        bool explicitRelink = false;
+        std::uint32_t materialIndex = 0;
+        std::uint32_t textureSlot = 0;
     };
 
     struct ModelImportExternalAnimationSource
@@ -22,6 +32,7 @@ namespace renegade::bridge
         std::size_t dependencyIndex = 0;
         std::size_t firstAnimationIndex = 0;
         std::size_t animationCount = 0;
+        bool matchingRig = false;
     };
 
     // A conversion candidate is kept separate from the active editor Scene.
@@ -82,10 +93,16 @@ namespace renegade::bridge
         [[nodiscard]] bool AppendExternalAnimations(ModelImportCandidate& candidate,
             const std::string& sourcePath, std::string& error) const;
         [[nodiscard]] ModelImportCandidate PrepareModel(const std::string& sourcePath) const;
+        [[nodiscard]] ModelImportCandidate PrepareModel(const std::string& sourcePath,
+            const std::vector<ModelImportTextureRelink>& relinks) const;
         // Static GLB or FBX. FBX file textures are snapshotted before conversion;
         // dependencies must be embedded or within the model source folder.
         [[nodiscard]] ModelImportCandidate PrepareStaticModel(
             const std::string& sourcePath) const;
+    private:
+        [[nodiscard]] ModelImportCandidate PrepareWithRelinks(const std::string& sourcePath,
+            const std::vector<ModelImportTextureRelink>& relinks) const;
+    public:
         // Compatibility entry point preserves the original GLB-only contract.
         [[nodiscard]] ModelImportCandidate PrepareGlb(
             const std::string& sourcePath) const;

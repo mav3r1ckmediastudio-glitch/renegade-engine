@@ -3,11 +3,14 @@
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/ReusableAssetService.h"
+#include "renegade/bridge/PlayerService.h"
+#include "renegade/bridge/PlayerPrefabService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <set>
 #include <utility>
 
 namespace renegade::bridge
@@ -139,7 +142,8 @@ namespace renegade::bridge
         const DependencyClass dependencyClass) const noexcept
     {
         return dependencyClass == DependencyClass::Scene ||
-            dependencyClass == DependencyClass::ImportedContent;
+            dependencyClass == DependencyClass::ImportedContent ||
+            dependencyClass == DependencyClass::Data;
     }
 
     bool ReusableAssetDependencyProvider::Discover(
@@ -176,15 +180,30 @@ namespace renegade::bridge
                 return false;
             }
 
+            const wi::scene::Scene& inspectedScene =
+                *prepared.ReadOnlyScene();
+
             std::vector<ReusableAssetInstanceRecord> instances;
             if (!InspectReusableAssetInstances(
-                    *prepared.ReadOnlyScene(), instances, error))
+                    inspectedScene, instances, error))
             {
                 error =
                     "Reusable asset dependency scene metadata is invalid: " + error;
                 return false;
             }
-            if (instances.empty())
+
+            StableId firstPersonArmsAssetId;
+            const PlayerStartResult playerStart =
+                ResolvePlayerStart(inspectedScene);
+            if (playerStart.resolution == PlayerStartResolution::Success)
+            {
+                firstPersonArmsAssetId =
+                    playerStart.start.settings.firstPersonArmsAssetId;
+            }
+
+            const StableId prefabId = playerStart.resolution == PlayerStartResolution::Success
+                ? CapturePlayerPrefabOrigin(inspectedScene, playerStart.start.entity) : StableId{};
+            if (instances.empty() && firstPersonArmsAssetId.empty() && prefabId.empty())
             {
                 error.clear();
                 return true;
@@ -195,33 +214,107 @@ namespace renegade::bridge
                     context, projectId_, registry, error))
                 return false;
 
+            std::set<StableId> emittedAssetIds;
+            const auto emitGovernedProduct =
+                [&](const StableId& assetId,
+                    const std::string& provenancePrefix,
+                    const std::string& failureContext) -> bool
+                {
+                    if (!emittedAssetIds.insert(assetId).second)
+                        return true;
+
+                    const AssetRecord* product =
+                        FindAssetById(registry, assetId);
+                    const ImportedProductRecord* provenance =
+                        FindImportedProduct(registry, assetId);
+                    if (product == nullptr || provenance == nullptr ||
+                        product->dependencyClass !=
+                            DependencyClass::ImportedContent ||
+                        !product->sourceAvailable ||
+                        LowerExtension(product->projectRelativePath) !=
+                            ReusableAssetExtension)
+                    {
+                        error = failureContext +
+                            " does not resolve to an available governed .rasset product in LC01: " +
+                            assetId;
+                        return false;
+                    }
+
+                    DependencyCandidate candidate;
+                    candidate.declaredPath = product->projectRelativePath;
+                    candidate.dependencyClass =
+                        DependencyClass::ImportedContent;
+                    candidate.requirement =
+                        DependencyRequirement::Required;
+                    candidate.provenance =
+                        provenancePrefix + assetId;
+                    emit(candidate);
+                    return true;
+                };
+
             for (const auto& instance : instances)
             {
-                const AssetRecord* product =
-                    FindAssetById(registry, instance.assetId);
-                const ImportedProductRecord* provenance =
-                    FindImportedProduct(registry, instance.assetId);
-                if (product == nullptr || provenance == nullptr ||
-                    product->dependencyClass != DependencyClass::ImportedContent ||
-                    !product->sourceAvailable ||
-                    LowerExtension(product->projectRelativePath) !=
-                        ReusableAssetExtension)
+                if (!emitGovernedProduct(
+                        instance.assetId,
+                        "lp07.reusable_asset_instance:",
+                        "Reusable asset scene instance"))
                 {
-                    error =
-                        "Reusable asset scene instance does not resolve to an available governed .rasset product in LC01: " +
-                        instance.assetId;
                     return false;
                 }
-
-                DependencyCandidate candidate;
-                candidate.declaredPath = product->projectRelativePath;
-                candidate.dependencyClass = DependencyClass::ImportedContent;
-                candidate.requirement = DependencyRequirement::Required;
-                candidate.provenance =
-                    "lp07.reusable_asset_instance:" + instance.assetId;
-                emit(candidate);
             }
 
+            if (!firstPersonArmsAssetId.empty() &&
+                !emitGovernedProduct(
+                    firstPersonArmsAssetId,
+                    "p1.player_first_person_arms:",
+                    "Player first-person arms assignment"))
+            {
+                return false;
+            }
+
+            if (!prefabId.empty())
+            {
+                PlayerPrefabDocument prefab;
+                if (!LoadPlayerPrefab(context.projectRoot, projectId_, prefabId, prefab, error))
+                    return false;
+                const auto* record = FindAssetById(registry, prefabId);
+                DependencyCandidate candidate;
+                candidate.declaredPath = record->projectRelativePath;
+                candidate.dependencyClass = DependencyClass::Data;
+                candidate.requirement = DependencyRequirement::Required;
+                candidate.provenance = "player.prefab:" + prefabId;
+                emit(candidate);
+            }
+            error.clear();
+            return true;
+        }
+        if (context.source->dependencyClass == DependencyClass::Data)
+        {
+            if (LowerExtension(context.source->projectRelativePath) != PlayerPrefabExtension)
+                return true;
+            const auto path = ResolveDependencyPath(context.projectRoot, context.source->projectRelativePath);
+            PlayerPrefabDocument prefab;
+            if (!path.accepted || !path.exists ||
+                !ReadPlayerPrefabFile(path.absolutePath, prefab, error) || prefab.projectId != projectId_)
+            {
+                if (error.empty()) error = "Invalid player prefab dependency.";
+                return false;
+            }
+            PlayerPrefabDocument registered;
+            if (!LoadPlayerPrefab(context.projectRoot, projectId_, prefab.assetId, registered, error))
+                return false;
+            if (!prefab.settings.firstPersonArmsAssetId.empty())
+            {
+                AssetRegistry registry;
+                if (!ReadRegistryForProvider(context, projectId_, registry, error)) return false;
+                const auto* arms = FindAssetById(registry, prefab.settings.firstPersonArmsAssetId);
+                DependencyCandidate candidate;
+                candidate.declaredPath = arms->projectRelativePath;
+                candidate.dependencyClass = DependencyClass::ImportedContent;
+                candidate.requirement = DependencyRequirement::Required;
+                candidate.provenance = "player.prefab.arms:" + arms->assetId;
+                emit(candidate);
+            }
             error.clear();
             return true;
         }

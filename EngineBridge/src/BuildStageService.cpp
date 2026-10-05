@@ -1,4 +1,5 @@
 #include "renegade/bridge/BuildStageService.h"
+#include "WindowsFileIoPath.h"
 
 #include <algorithm>
 #include <array>
@@ -29,6 +30,8 @@ namespace renegade::bridge
     namespace
     {
         namespace fs = std::filesystem;
+
+        using detail::FileIoPath;
 
         constexpr const char* RequiredPackageDocuments[] = {
             "ReadMe.txt",
@@ -379,7 +382,7 @@ namespace renegade::bridge
             std::string& error)
         {
             digest = {};
-            std::ifstream input(path, std::ios::binary);
+            std::ifstream input(FileIoPath(path), std::ios::binary);
             if (!input)
             {
                 error = "Gate 2 could not open file for hashing: " +
@@ -525,9 +528,11 @@ namespace renegade::bridge
                     destination;
                 return false;
             }
-            if (!fs::copy_file(source, output, fs::copy_options::none, ec) || ec)
+            if (!fs::copy_file(FileIoPath(source), FileIoPath(output),
+                    fs::copy_options::none, ec) || ec)
             {
-                error = "Gate 2 failed copying approved file: " + destination;
+                error = "Gate 2 failed copying approved file: " + destination +
+                    " (" + std::to_string(ec.value()) + ": " + ec.message() + ")";
                 return false;
             }
             FileDigest copiedDigest;

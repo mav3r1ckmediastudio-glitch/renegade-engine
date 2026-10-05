@@ -727,3 +727,131 @@ add_test(
     NAME RenegadeCharacterAiAnimationTests
     COMMAND RenegadeCharacterAiAnimationTests
 )
+
+# Alpha Playability P1 - first-person Player View Rig.
+add_executable(RenegadePlayerViewRigTests
+    PlayerViewRigTests.cpp
+)
+target_link_libraries(
+    RenegadePlayerViewRigTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+target_include_directories(
+    RenegadePlayerViewRigTests
+    PRIVATE
+        "${CMAKE_SOURCE_DIR}/Runtime/src"
+)
+target_compile_options(RenegadePlayerViewRigTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+        "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>"
+)
+set_target_properties(RenegadePlayerViewRigTests PROPERTIES
+    FOLDER "Renegade/Tests"
+)
+# Studio CI builds RenegadeBridgeTests before the complete CTest registry.
+add_dependencies(RenegadeBridgeTests RenegadePlayerViewRigTests)
+add_test(
+    NAME RenegadePlayerViewRigTests
+    COMMAND RenegadePlayerViewRigTests
+)
+add_test(
+    NAME RenegadePlayerViewRigSourceContract
+    COMMAND ${CMAKE_COMMAND}
+        -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/PlayerViewRigSourceContract.cmake
+)
+
+# Manual Windows GPU fixture generator; not an automatic gameplay acceptance test.
+# Writes a no-imported-arms scene for the standalone Runtime placeholder check.
+if(WIN32)
+    add_executable(RenegadePlayerViewRigFixture PlayerViewRigFixture.cpp)
+    target_link_libraries(RenegadePlayerViewRigFixture PRIVATE Renegade::EngineBridge)
+    target_include_directories(RenegadePlayerViewRigFixture PRIVATE
+        "${CMAKE_SOURCE_DIR}/Runtime/src")
+    target_compile_options(RenegadePlayerViewRigFixture PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    set_target_properties(RenegadePlayerViewRigFixture PROPERTIES
+        FOLDER "Renegade/Tests")
+endif()
+
+# Manual GPU snapshot/staging proof for the owner-verified proxy scene.
+if(WIN32)
+    add_executable(RenegadePlayerViewRigParityFixture PlayerViewRigParityFixture.cpp)
+    target_link_libraries(RenegadePlayerViewRigParityFixture PRIVATE Renegade::EngineBridge)
+    target_compile_options(RenegadePlayerViewRigParityFixture PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    set_target_properties(RenegadePlayerViewRigParityFixture PROPERTIES FOLDER "Renegade/Tests")
+endif()
+
+# Manual DX12 GPU regression, intentionally excluded from headless CTest.
+if(WIN32)
+    add_executable(RenegadeStudioShaderDx12Proof StudioShaderDx12Proof.cpp)
+    target_link_libraries(RenegadeStudioShaderDx12Proof PRIVATE Renegade::EngineBridge)
+    set_target_properties(RenegadeStudioShaderDx12Proof PROPERTIES FOLDER "Renegade/Tests")
+    add_custom_command(TARGET RenegadeStudioShaderDx12Proof POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+            "$<TARGET_FILE_DIR:RenegadeStudioShaderDx12Proof>")
+endif()
+
+# Manual first-person assembly inspection. No third-party asset in source/CTest.
+if(WIN32)
+    add_executable(RenegadeFirstPersonAssemblyGraphicsProof
+        FirstPersonAssemblyGraphicsProof.cpp
+        ${CMAKE_SOURCE_DIR}/Studio/src/ModelImportPreview.cpp)
+    target_link_libraries(RenegadeFirstPersonAssemblyGraphicsProof PRIVATE Renegade::EngineBridge)
+    target_compile_definitions(RenegadeFirstPersonAssemblyGraphicsProof PRIVATE UNICODE _UNICODE)
+    target_compile_options(RenegadeFirstPersonAssemblyGraphicsProof PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>" "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>")
+    set_target_properties(RenegadeFirstPersonAssemblyGraphicsProof PROPERTIES FOLDER "Renegade/Tests")
+    add_custom_command(TARGET RenegadeFirstPersonAssemblyGraphicsProof POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+            "$<TARGET_FILE_DIR:RenegadeFirstPersonAssemblyGraphicsProof>")
+endif()
+
+add_executable(RenegadeMatchingRigAnimationTests MatchingRigAnimationTests.cpp)
+target_link_libraries(RenegadeMatchingRigAnimationTests PRIVATE Renegade::EngineBridge)
+add_test(NAME MatchingRigAnimation COMMAND RenegadeMatchingRigAnimationTests)
+set_target_properties(RenegadeMatchingRigAnimationTests PROPERTIES FOLDER "Renegade/Tests")
+
+# Separate executable keeps the owner's accepted diagnostic preview running.
+if(WIN32)
+    add_executable(RenegadeFirstPersonAssemblyWorkflowProof
+        FirstPersonAssemblyGraphicsProof.cpp
+        ${CMAKE_SOURCE_DIR}/Studio/src/ModelImportPreview.cpp)
+    target_link_libraries(RenegadeFirstPersonAssemblyWorkflowProof PRIVATE Renegade::EngineBridge)
+    target_compile_definitions(RenegadeFirstPersonAssemblyWorkflowProof PRIVATE UNICODE _UNICODE)
+    target_compile_options(RenegadeFirstPersonAssemblyWorkflowProof PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>" "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>")
+    set_target_properties(RenegadeFirstPersonAssemblyWorkflowProof PROPERTIES FOLDER "Renegade/Tests")
+    add_custom_command(TARGET RenegadeFirstPersonAssemblyWorkflowProof POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+            "$<TARGET_FILE_DIR:RenegadeFirstPersonAssemblyWorkflowProof>")
+endif()
+
+add_dependencies(RenegadeBridgeTests RenegadeMatchingRigAnimationTests)
+
+add_executable(RenegadeFirstPersonAssemblySettingsTests FirstPersonAssemblySettingsTests.cpp)
+target_link_libraries(RenegadeFirstPersonAssemblySettingsTests PRIVATE Renegade::EngineBridge)
+add_test(NAME FirstPersonAssemblySettings COMMAND RenegadeFirstPersonAssemblySettingsTests)
+set_target_properties(RenegadeFirstPersonAssemblySettingsTests PROPERTIES FOLDER "Renegade/Tests")
+add_dependencies(RenegadeBridgeTests RenegadeFirstPersonAssemblySettingsTests)
+
+
+add_executable(RenegadeGameplayInputTests Phase6Gate2InputTests.cpp)
+target_link_libraries(RenegadeGameplayInputTests PRIVATE Renegade::EngineBridge)
+target_compile_options(RenegadeGameplayInputTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+set_target_properties(RenegadeGameplayInputTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeGameplayInputTests COMMAND RenegadeGameplayInputTests)
+
+add_dependencies(RenegadeBridgeTests RenegadeGameplayInputTests)
+
+add_executable(RenegadePlayerPrefabTests PlayerPrefabTests.cpp)
+target_link_libraries(RenegadePlayerPrefabTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadePlayerPrefabTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadePlayerPrefabTests COMMAND RenegadePlayerPrefabTests)
+add_dependencies(RenegadeBridgeTests RenegadePlayerPrefabTests)

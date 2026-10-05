@@ -39,7 +39,30 @@ The Alpha Playability target is:
 
 ### P1 — First-person Arms Rig
 
-**Status: NEXT.**
+**Status: IN PROGRESS — foundation implemented; shotgun diagnostic accepted; production assembly integration pending.**
+Owner accepts the authored shotgun diagnostic grip/reload on 4 October. Matching-rig
+clip ingestion and explicit retained-texture relinks now pass real-pack commit/reopen
+and fresh-process rendering. Native Studio assembly authoring now has retained part selection, explicit parent
+and transforms, paired preview, governed save/reopen and undoable Player Start
+assignment. Owner accepts the preview controls; Runtime movement pairs now evaluate
+on one clock and pass native roundtrip and real-product packaged-loader proofs.
+Owner Test Level and actual Build Game visuals are accepted. Stable-ID updates,
+Save as new and draft Undo/Redo are implemented with local lifecycle and Runtime
+proofs and owner acceptance. The supplied shotgun library now has all 14 paired
+preview actions and automatic draft refresh, with owner verification pending.
+Input-driven fire/reload, equip, aim and jump action ownership remain later work. See
+[P1_ASSEMBLY_AUTHORING](P1_ASSEMBLY_AUTHORING.md).
+Implementation baseline: `51513b9` on `feature/p1-first-person-arms-rig`.
+Camera synchronization repair `4dd9953` removes owner-reported proxy movement
+stutter. Owner accepts proxy gameplay through standalone Runtime and Studio Test
+Level, and confirms the actual Studio Build Game export launches and renders.
+Authored skeletal socket binding now has serialized/packaged-load regression and
+native DX12 animation proof. A native Studio Hand Grips editor now exposes bone
+selection, grip offsets, Undo/Redo and governed save/reopen; real skinned-asset
+acceptance remains open. See [P1_HAND_SOCKET_BINDINGS](P1_HAND_SOCKET_BINDINGS.md)
+and [P1_HAND_GRIP_EDITOR](P1_HAND_GRIP_EDITOR.md).
+See [P1_STATUS_AND_RECOVERY](P1_STATUS_AND_RECOVERY.md) for the commit inventory,
+local build/test evidence, missing acceptance and controlled recovery sequence.
 
 Extend the existing Player camera with a presentation-only first-person View Rig.
 Deliver primary hand, off hand and two-hand/support sockets, movement presentation
@@ -195,3 +218,76 @@ acceptance responsibilities.
 Historical programme evidence remains in subsystem handoffs/specifications.
 This roadmap describes current priority and should not be used as a release
 claim for unfinished gates.
+
+
+### Runtime fire and reload animation controls
+
+Left mouse triggers the assigned Attack pair once; R triggers the assigned Reload
+pair once. F8 resets the play session. Reload wins simultaneous presses; an active
+action completes before another action can start, then idle/walk/run resumes.
+Pause freezes the paired clock. Missing action assignments remain harmless.
+These controls currently drive animation only; ammunition, damage, sound and
+recoil gameplay remain later combat work. Legacy version-1 input maps gain fire
+and reload defaults; the old default R reset moves to F8 while custom bindings
+remain authored. Full-library Runtime must be rebuilt alongside the bridge.
+
+
+### Two-shell shotgun Runtime prototype
+
+The current paired shotgun starts with two loaded shells. Each accepted fire
+press consumes one shell; empty fire presses do not play Attack. R after one
+shot selects ReloadPartial, and R after two selects Reload. Reload at capacity
+is ignored. The shell count returns to two only when the paired reload finishes,
+including its weapon track. Busy actions and pause do not consume/refill shells.
+An absent partial pair uses an explicitly assigned full reload if available.
+Reset/reinitialization restores two shells. This is a bounded two-barrel prototype;
+creator-configurable weapon definitions, reserve ammunition, HUD, damage and
+reload interruption remain later work.
+
+
+### Right-mouse aiming
+
+Hold right mouse to play the assigned AimIn pair once and hold its final sight
+pose; release plays AimOut then returns to movement. Left mouse while aimed uses
+AimAttack and consumes the same two-shell ammunition. Reload lowers the sights,
+uses partial/full reload as appropriate, and resumes aim-in if right mouse is
+still held. Transitions finish before queued hold/release changes are reconciled;
+pause freezes them. This uses authored native animation only, with no zoom/FOV
+change or new camera/controller.
+
+
+### Equipment and jump animation routing
+
+Q toggles holster/equip using the assigned Unequip/Equip pairs. Holstered arms
+hold the final out-of-view pose; fire, aim and reload are blocked, with shells
+preserved. Existing Space jump physics drives grounded-to-airborne JumpStart,
+airborne JumpLoop and grounded-contact JumpLand. Busy actions finish before
+pending jump transitions. Jump animation ownership blocks fire/aim/reload until
+landing; movement physics remains authoritative. Pause freezes action clocks.
+Initial airborne spawn does not pretend a jump occurred. A collidable floor is
+required to exercise takeoff and landing; the empty preview fixture is not a
+complete gameplay level. No new controller or root-motion locomotion is added.
+
+### Editable firearm settings
+
+ASSEMBLY > WEAPON SETTINGS exposes loaded capacity, minimum seconds between shots
+and permission for partial reload. Assembly draft Undo/Redo and governed SAVE
+CHANGES / SAVE AS NEW persist these fields in the version-1 recipe and native
+payload. Player Start's existing assembly reference carries settings through
+Test Level snapshots and package loading. Old recipes retain the accepted two-shot
+defaults. Runtime reload fills configured capacity only at animation completion;
+shot cooldown advances only during gameplay. These are discrete shots, with no
+reserve ammunition or automatic firing yet. Gameplay capacity does not change the
+number of shells visible in authored clips. Independent equipment definitions and
+Player prefabs remain next stages; see PLAYER_AUTHORING_CONTINUATION.md.
+
+Player authoring continuation: reusable immutable player prefab capture and
+Inspector assignment/reset are implemented on the active P1 branch. They combine
+controller/camera defaults and arms assembly identity while keeping spawn
+transform level-specific. Local override status and Undo/Redo are included.
+Exact-build owner acceptance remains pending. Global updates, browser placement,
+equipment/loadout definitions and combat/HUD remain subsequent milestones.
+
+
+### Player placement from Content/Player
+New levels have no automatic Player Start. Project browsing ensures a registered Basic Player Start preset under Content/Player without creating a scene entity. Saved player prefabs appear by authored name in the Asset Browser and support drag-and-drop surface placement (ground-plane fallback) and the existing Place control. One command creates the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve identity, transform and baseline. The always-visible selectable capsule represents the placed player. Add no longer exposes Player Start. A second placement is refused: use the existing Inspector to change prefab, or delete the old start before placing another. Immutable saves refresh the browser. Owner/exact-commit verification remains required.
