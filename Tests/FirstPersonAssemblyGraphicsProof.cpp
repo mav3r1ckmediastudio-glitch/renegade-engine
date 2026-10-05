@@ -1,3 +1,4 @@
+#include "renegade/bridge/PlayerCameraPreviewService.h"
 // Manual owner-supplied asset inspection; assets never enter the repository.
 #include "renegade/bridge/ModelImportCandidateService.h"
 #include "renegade/bridge/ModelAnimationPreviewService.h"
@@ -1040,6 +1041,61 @@ static bool EquipmentSnapshotProof(const fs::path& input, const fs::path& output
  return true;
 }
 
+
+static bool PlayerCameraPreviewProof(const fs::path& input,const fs::path& output)
+{
+    ProjectMetadata project; std::string error;
+    if(!ProjectService().InspectProject(fs::absolute(input).generic_u8string(),project,error)) return false;
+    SceneService source;
+    if(!source.LoadScene((fs::u8path(project.rootPath)/fs::u8path(project.startupScene)).generic_u8string())) return false;
+    const auto start=ResolvePlayerStart(source.GetScene());
+    if(start.resolution!=PlayerStartResolution::Success) return false;
+    const auto objectCount=source.GetScene().objects.GetCount();
+    const auto transformCount=source.GetScene().transforms.GetCount();
+    const auto characterCount=source.GetScene().characters.GetCount();
+    const auto render=[&](const PlayerStart& authored,const char* name) {
+        PlayerCameraPreviewService preview;
+        if(!preview.Prepare(source.GetScene(),authored,project.rootPath,project.projectId,error)) {
+            std::cerr<<error<<"\n";return false;
+        }
+        std::cout<<"PREVIEW objects="<<preview.scene->objects.GetCount()<<" source="<<objectCount<<" arms="<<authored.settings.firstPersonArmsAssetId<<" primary="<<authored.settings.primaryEquipmentAssetId<<" eye="<<preview.camera->Eye.x<<","<<preview.camera->Eye.y<<","<<preview.camera->Eye.z<<" at="<<preview.camera->At.x<<","<<preview.camera->At.y<<","<<preview.camera->At.z<<"\n";
+        if(preview.scene->characters.GetCount() || preview.scene->sounds.GetCount() ||
+            preview.scene->scripts.GetCount() || preview.scene->rigidbodies.GetCount()) return false;
+        if(std::abs(preview.camera->Eye.y-authored.transform.translation.y-authored.settings.eyeHeight)>0.001f) return false;
+        for(int frame=0;frame<3000 && preview.NeedsRender();++frame) {
+            wi::eventhandler::FireEvent(wi::eventhandler::EVENT_THREAD_SAFE_POINT,0);
+            preview.PreUpdate();preview.Update(1);preview.PreRender();preview.Render();
+            wi::graphics::GetDevice()->SubmitCommandLists();
+            wi::renderer::UpdateGPUSuballocator();Sleep(10);
+        }
+        if(preview.NeedsRender()) return false;
+        wi::vector<uint8_t> pixels;
+        if(!wi::helper::saveTextureToMemory(preview.GetRenderResult3D(),pixels) ||
+            pixels.size()<432*243*4)return false;
+        size_t contrast=0;
+        for(size_t p=0;p+4<=432*243*4;p+=4)
+            if(std::abs(int(pixels[p])-int(pixels[0]))+
+               std::abs(int(pixels[p+1])-int(pixels[1]))+
+               std::abs(int(pixels[p+2])-int(pixels[2]))>30)++contrast;
+        if(contrast<1000) {std::cerr<<"Preview contains no visible world/model.\n";return false;}
+        wi::vector<uint8_t> png;
+        if(!wi::helper::saveTextureToMemoryFile(preview.GetRenderResult3D(),"PNG",png)) return false;
+        std::ofstream file(output/name,std::ios::binary);
+        file.write(reinterpret_cast<const char*>(png.data()),png.size());
+        return bool(file);
+    };
+    if(!render(start.start,"camera-preview.png"))return false;
+    auto moved=start.start;moved.settings.eyeHeight+=0.5f;
+    moved.transform.rotation=XMFLOAT4(0,1,0,0);
+    if(!render(moved,"camera-preview-turned.png"))return false;
+    if(source.GetScene().objects.GetCount()!=objectCount ||
+        source.GetScene().transforms.GetCount()!=transformCount ||
+        source.GetScene().characters.GetCount()!=characterCount ||
+        !PlayerSettingsEqual(ResolvePlayerStart(source.GetScene()).start.settings,start.start.settings))return false;
+    std::cout<<"PLAYER CAMERA PREVIEW PASS // cold world, native arms, paused gameplay, eye height, facing, unchanged document\n";
+    return true;
+}
+
 int main(int argc,char** argv)
 {
     if(argc<3 || argc>4) { std::cerr<<"Usage: proof pack-folder output-folder\n"; return 2; }
@@ -1055,6 +1111,7 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--camera-preview") return PlayerCameraPreviewProof(input,output)?0:21;
     if(argc==4 && std::string(argv[3])=="--charge-snapshot") return EquipmentSnapshotProof(input,output,true)?0:20;
     if(argc==4 && std::string(argv[3])=="--equipment-snapshot") return EquipmentSnapshotProof(input,output)?0:19;
     if(argc==4 && std::string(argv[3])=="--player-prefab") return PlayerPrefabProof(input,output)?0:18;

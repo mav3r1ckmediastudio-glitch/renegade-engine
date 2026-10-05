@@ -2,6 +2,7 @@
 
 #include <array>
 #include "ModelImportPreview.h"
+#include "renegade/bridge/PlayerCameraPreviewService.h"
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -67,6 +68,14 @@ namespace renegade::studio
         void QueueInspectorRefresh() noexcept;
         void RefreshProjectHub();
         void RefreshAssetBrowser();
+        void UpdatePlayerCameraPreview(float dt);
+        void DrawPlayerCameraPreview(wi::graphics::CommandList cmd) const;
+        XMFLOAT4 PlayerCameraPreviewBounds() const noexcept;
+        std::unique_ptr<bridge::PlayerCameraPreviewService> playerCameraPreview_;
+        std::string playerCameraPreviewKey_, playerCameraPreviewError_;
+        bool playerCameraPreviewVisible_ = false;
+        std::string playerCameraPreviewPendingKey_;
+        float playerCameraPreviewRefreshDelay_ = 0;
         void CreateEquipmentEditor();
         void OpenEquipmentEditor();
         void RefreshEquipmentEditor();

@@ -1,3 +1,4 @@
+#include <sstream>
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
 #include "renegade/bridge/PlayerPrefabService.h"
@@ -662,6 +663,7 @@ namespace renegade::studio
             modelImportPreview_->PreRender();
         if (assemblyPanel_.IsVisible() && assemblyPreview_ && assemblyPreview_->NeedsRender())
             assemblyPreview_->PreRender();
+        if (playerCameraPreviewVisible_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->PreRender();
         wi::RenderPath3D::PreRender();
     }
 
@@ -680,6 +682,7 @@ namespace renegade::studio
         }
         if (assemblyPanel_.IsVisible() && assemblyPreview_ && assemblyPreview_->NeedsRender())
             assemblyPreview_->Render();
+        if (playerCameraPreviewVisible_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->Render();
         if (pathTracePreviewActive_)
         {
             RenderPath3D_PathTracing::Render();
@@ -3341,6 +3344,7 @@ namespace renegade::studio
             // The child Runtime is the sole 3D owner while Test Level runs.
             // RenderPath2D keeps wiGUI/chrome responsive without ticking the
             // editor scene, visibility, physics, vegetation or render graph.
+            playerCameraPreviewVisible_ = false;
             wi::RenderPath2D::Update(dt);
 
             if (pendingAction_ == EditorAction::StopTestLevel)
@@ -3403,6 +3407,8 @@ namespace renegade::studio
         {
             RenderPath3D::Update(dt);
         }
+
+        UpdatePlayerCameraPreview(dt);
 
         if (inspectorRefreshPending_)
         {
@@ -3823,6 +3829,8 @@ namespace renegade::studio
         {
             gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);
         }
+
+        DrawPlayerCameraPreview(cmd);
 
         const wi::graphics::Rect fullScissor = {
             0,
@@ -7303,6 +7311,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     bool StudioRenderPath::IsPointerOverViewport(
         const XMFLOAT4& pointer) const noexcept
     {
+        const auto inset = PlayerCameraPreviewBounds();
+        if (playerCameraPreviewVisible_ && pointer.x >= inset.x && pointer.x < inset.z &&
+            pointer.y >= inset.y && pointer.y < inset.w) return false;
         return pointer.x >= viewportBounds_.x &&
             pointer.x < viewportBounds_.z &&
             pointer.y >= viewportBounds_.y &&
@@ -11017,5 +11028,87 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             storyFlowIntegration_.RequestStoryFlow();
         });
         ActivatePath(&renderer_);
+    }
+}
+
+namespace renegade::studio
+{
+    XMFLOAT4 StudioRenderPath::PlayerCameraPreviewBounds() const noexcept
+    {
+        const float width=std::min(432.0f,std::max(0.0f,(viewportBounds_.z-viewportBounds_.x)*0.38f));
+        const float height=width*9.0f/16.0f;
+        return XMFLOAT4(viewportBounds_.z-width-12,viewportBounds_.w-height-42,
+            viewportBounds_.z-12,viewportBounds_.w-12);
+    }
+    void StudioRenderPath::UpdatePlayerCameraPreview(float dt)
+    {
+        const bool wasVisible=playerCameraPreviewVisible_;
+        playerCameraPreviewVisible_=false;
+        if(!session_ || projectHubVisible_ || sceneOpenInProgress_ || pathTracePreviewActive_ ||
+            assemblyPanel_.IsVisible() || handGripPanel_.IsVisible() || modelImportPanel_.IsVisible() ||
+            !session_->Projects().HasProject()) return;
+        auto& source=session_->Scenes().GetScene();
+        const auto resolved=bridge::ResolvePlayerStart(source);
+        if(resolved.resolution!=bridge::PlayerStartResolution::Success ||
+            session_->Selection().SelectedEntity()!=resolved.start.entity ||
+            !session_->Scenes().IsHierarchyVisible(resolved.start.entity)) return;
+        playerCameraPreviewVisible_=true;
+        if(!wasVisible) { playerCameraPreviewKey_.clear(); playerCameraPreviewPendingKey_.clear(); }
+        const auto& project=session_->Projects().CurrentProject();
+        const auto& start=resolved.start;
+        const auto& settings=start.settings;
+        std::ostringstream key;
+        key.precision(9);
+        key<<project.projectId<<':'<<session_->Scenes().Revision()<<':'<<start.entity<<':'
+            <<session_->Commands().UndoCount()<<':'<<session_->Commands().RedoCount()<<':'
+            <<start.transform.translation.x<<':'<<start.transform.translation.y<<':'<<start.transform.translation.z<<':'
+            <<start.transform.rotation.x<<':'<<start.transform.rotation.y<<':'<<start.transform.rotation.z<<':'<<start.transform.rotation.w<<':'
+            <<settings.eyeHeight<<':'<<settings.firstPersonArmsAssetId<<':'
+            <<settings.primaryEquipmentAssetId<<':'<<settings.offHandEquipmentAssetId;
+        if(key.str()!=playerCameraPreviewPendingKey_) {
+            playerCameraPreviewPendingKey_=key.str();
+            playerCameraPreviewRefreshDelay_=playerCameraPreviewKey_.empty() ? 0 : 0.2f;
+        }
+        playerCameraPreviewRefreshDelay_-=std::max(0.0f,dt);
+        if(playerCameraPreviewPendingKey_!=playerCameraPreviewKey_ && playerCameraPreviewRefreshDelay_<=0) {
+            playerCameraPreviewKey_=playerCameraPreviewPendingKey_;
+            auto prepared=std::make_unique<bridge::PlayerCameraPreviewService>();
+            if(prepared->Prepare(source,start,project.rootPath,project.projectId,playerCameraPreviewError_))
+                playerCameraPreview_=std::move(prepared);
+            else playerCameraPreview_.reset();
+        }
+        if(playerCameraPreview_ && playerCameraPreview_->NeedsRender()) {
+            playerCameraPreview_->PreUpdate();
+            playerCameraPreview_->Update(0);
+        }
+    }
+    void StudioRenderPath::DrawPlayerCameraPreview(const wi::graphics::CommandList cmd) const
+    {
+        if(!playerCameraPreviewVisible_) return;
+        const auto bounds=PlayerCameraPreviewBounds();
+        if(bounds.z-bounds.x<120 || bounds.w-bounds.y<80) return;
+        wi::image::Params panel;
+        panel.pos=XMFLOAT3(bounds.x-1,bounds.y-1,0);
+        panel.siz=XMFLOAT2(bounds.z-bounds.x+2,bounds.w-bounds.y+2);
+        panel.color=wi::Color(51,214,255,255);
+        wi::image::Draw(nullptr,panel,cmd);
+        panel.pos=XMFLOAT3(bounds.x,bounds.y,0);
+        panel.siz=XMFLOAT2(bounds.z-bounds.x,bounds.w-bounds.y);
+        panel.color=wi::Color(16,22,30,255);
+        wi::image::Draw(nullptr,panel,cmd);
+        wi::font::Params title;
+        title.posX=bounds.x+10; title.posY=bounds.y+6; title.size=13;
+        title.color=wi::Color(180,231,244,255);
+        wi::font::Draw("PLAYER CAMERA PREVIEW",title,cmd);
+        if(playerCameraPreview_ && playerCameraPreview_->GetRenderResult3D().IsValid()) {
+            wi::image::Params picture;
+            picture.pos=XMFLOAT3(bounds.x,bounds.y+30,0);
+            picture.siz=XMFLOAT2(bounds.z-bounds.x,bounds.w-bounds.y-30);
+            picture.color=wi::Color::White();
+            wi::image::Draw(&playerCameraPreview_->GetRenderResult3D(),picture,cmd);
+        } else {
+            title.posY=bounds.y+44; title.size=12;
+            wi::font::Draw("Preview unavailable: check equipped presentation.",title,cmd);
+        }
     }
 }

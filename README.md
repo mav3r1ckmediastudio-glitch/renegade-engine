@@ -100,6 +100,7 @@ and [AI_IMPLEMENTATION_HANDOFF](docs/AI_IMPLEMENTATION_HANDOFF.md).
   foundation and Physics Lab workflow.
 - One governed Player Start, Runtime first-person possession and a Wicked/Jolt
   character capsule with movement, mouse look, sprint and jump.
+- Selected Player Start camera inset previews the paused world and equipped arms.
 - Versioned project action maps with governed gameplay input plus Pause/Resume
   and deterministic Reset lifecycle behaviour.
 - Native Wicked audio authoring for global/2D and movable positional 3D sources,

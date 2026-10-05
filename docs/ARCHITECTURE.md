@@ -1119,3 +1119,27 @@ Aim reconciliation cannot steal Charge; pre-active cancellation clears its pose.
 Release bridge/Runtime/Studio builds, six focused CTests, DX12 cold-load/pose/hand
 proof and standalone release/cancel check passed. Charge strength/projectiles and
 off-hand presentation remain pending. See P2_EQUIPMENT_ACTION_IMPLEMENTATION.md.
+
+
+### Frozen Player Camera Preview
+The selected Player Start exposes a small bottom-right scene inset. A bridge-owned
+PlayerCameraPreviewService prepares a private WISCENE copy, retains material
+resources, removes gameplay actors/physics/scripts/audio and uses paused native
+Idle presentation. PlayerViewRig, PlayerViewAsset and PlayerViewAnimation now
+live in EngineBridge; Runtime headers remain compatibility includes. Both
+consumers use the same attachment, asset-loading and native animation functions.
+
+The camera matches Runtime spawn yaw, upright eye height and current default
+60-degree perspective. Player settings currently have no separately authored FOV.
+Explicit equipment resolves the primary presentation and never inherits a legacy
+gun from an empty or invalid authored loadout. Independent off-hand rendering
+remains pending. Preview helpers never enter the authoring scene or its saves.
+
+Wicked requires positive scene update time for GPU mesh/instance preparation.
+The isolated preview uses a minimal render preparation tick and then supplies
+zero scene time to GPU effects; native clips remain paused. Eight prepared frames
+are cached until player/scene/history changes; edits settle for 0.2 seconds
+before rebuilding. Re-selecting the player refreshes the copy after asset edits.
+Assembly/import/grip workspaces and Test Level suppress the inset. Pointer
+selection/navigation ignores its rectangle. Large-world clone cost and complete
+render-settings parity still require profiling and acceptance.

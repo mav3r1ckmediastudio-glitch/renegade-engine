@@ -124,6 +124,15 @@ Camera Preview at the bottom-right of the scene viewport, beside the selected
 player capsule. It shows the authored world from the player camera with equipped
 first-person arms/weapon, using the same eye height, facing and field of view.
 This is an editor authoring preview with gameplay paused; Test Level continues
-to run the separate real Runtime. The inset has not been implemented and must
-remain an explicit player authoring/UX deliverable. Do not treat Assembly or
+to run the separate real Runtime. The inset is implemented on the P2 branch and remains subject to owner and
+independent verification. Do not treat Assembly or
 Hand Grips isolated previews as completion of this scene-camera preview.
+
+
+Implementation checkpoint: selected Player Start shows the frozen world plus
+equipped native Idle arms/weapon in a responsive bottom-right inset. Position,
+eye height and yaw come from the same spawn policy as Runtime; current FOV is
+Runtime's default 60 degrees. Preview is editor-only and does not author WISCENE.
+DX12 proof rejects empty images and verifies source settings/component counts
+are unchanged; native placement inspection is recorded in HANDOFF.md.
+Independent sword/shield presentation awaits the supplied animation pack.
