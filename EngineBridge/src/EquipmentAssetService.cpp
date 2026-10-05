@@ -187,7 +187,8 @@ bool PrepareEquipmentFromAssembly(const std::string& root,const StableId& projec
     constexpr Binding bindings[]={
         {EquipmentAction::Equip,"Equip"},{EquipmentAction::Unequip,"Unequip"},
         {EquipmentAction::PrimaryUse,"Attack"},{EquipmentAction::AlternateUse,"AimIn"},
-        {EquipmentAction::Reload,"Reload"}};
+        {EquipmentAction::Reload,"Reload"},{EquipmentAction::Charge,"Charge"},
+        {EquipmentAction::Release,"Release"}};
     for(const auto& binding:bindings) {
         float duration=0;unsigned count=0;
         for(size_t i=0;i<scene.animations.GetCount();++i) {
@@ -200,7 +201,8 @@ bool PrepareEquipmentFromAssembly(const std::string& root,const StableId& projec
             }
             duration=std::max(duration,clipDuration);++count;
         }
-        if(count==2)item.actions.push_back({binding.action,binding.semantic,0,0,duration,0,false,true});
+        if(count==2)item.actions.push_back({binding.action,binding.semantic,0,0,duration,0,
+            binding.action==EquipmentAction::Charge,true});
         else if(count!=0){error="Assembly action does not have exactly two presentation tracks.";return false;}
     }
     EquipmentAssetDocument d{project,item};

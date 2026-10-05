@@ -217,3 +217,56 @@ git diff --check passed. No owner/independent verification or release gate closu
 Next: separate semantic Charge/Release presentation and independent off-hand support,
 generic action editing and packaged gameplay verification. The approved small editor
 Player Camera Preview inset remains pending.
+
+
+## Explicit native Charge/Release presentation — 2026-10-05
+
+The assembly action whitelist now has 16 optional bindings: Charge and Release
+join the accepted 14. Version-1 recipes remain readable. Studio's More actions
+page exposes the new arms/weapon selectors and preview action choices.
+CREATE FROM ASSEMBLY derives Charge (hold-until-release) and Release definitions
+when those pairs exist. Leave Attack unassigned for the primary Charge/Release
+path; an explicit PrimaryUse retains precedence when both kinds are authored.
+
+Runtime requires matching Charge/Release definitions and both native pairs.
+Charge owns preparation/windup/Hold presentation, playing to the pair's endpoint
+and holding it. Fire release atomically retargets the active equipment channel to
+Release without freeing its hands. Native Release completion then enters the
+Release definition's recovery. Cancel clears charge presentation and pre-active
+ownership; pause keeps the charge pose. Aim transitions cannot overwrite Charge.
+Missing pairs or bindings never substitute Idle/Attack as Release.
+
+This adapter requires Charge holdUntilRelease and zero Release prepare/windup
+with no Release hold. Charge prepare/windup/cancel policy and Release recovery are
+used. Native release duration owns Active. Generic charge strength, damage and
+projectiles, independent off-hand presentation and complete packaged acceptance
+remain pending. Generic Release has no firearm ammunition effect. The proof maps
+existing AimIn/Attack clips to the new semantics; it does not claim a bow asset.
+
+Windows Release bridge, Runtime and Studio builds passed. Studio was built to
+BUILD/p2-charge-studio with OutDir override, preserving the open owner executable.
+Six focused CTests passed. DX12 held-primary regression and charge snapshot proof
+passed; the latter saves/cold-loads a new assembly and equipment definition,
+checks exact native pair counts, held endpoint, continuous hand ownership,
+Release playback/recovery and no firearm ammo mutation. Final Runtime/proof
+rebuild repeated both proofs after protecting Charge from aim reconciliation.
+The repeated charge fixture initially collided with its saved name; a unique short
+fixture name fixed repeatability and BUILD/p2_charge_proof.ps1 then passed.
+Standalone Charge/Release/cancel check passed; diagnostics/evidence live under
+BUILD/p2-charge-native-events.json. Native held-pose screenshot
+BUILD/p2-charge-held-pose.png was inspected; the fixture retains its washed-out
+lighting. Capture command: python BUILD/p2_charge_pose.py. No native Studio dropdown visual acceptance
+or independent verifier/owner acceptance is claimed for this slice.
+
+Commands from repo root: powershell -NoProfile -ExecutionPolicy Bypass -File
+BUILD/p2_charge_verify.ps1; same invocation for BUILD/p2_charge_final_verify.ps1,
+BUILD/p2_charge_proof.ps1,
+BUILD/p2_charge_launch.ps1 and BUILD/p2_route_capture.ps1;
+python BUILD/p2_charge_native.py. git diff --check passed.
+Only the launched test Runtime was closed; owner Studio remains open.
+Embedded build metadata may predate these compiled edits; no exact-head release
+verification is claimed. P2 and Alpha release gates remain open.
+
+Next: independent off-hand presentation, generic action editing, native authoring
+review and packaged gameplay verification. The small editor Player Camera Preview
+inset remains pending.

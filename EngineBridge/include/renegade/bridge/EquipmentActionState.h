@@ -103,6 +103,20 @@ public:
             }
         }
     }
+    // Replace an activated charge with its release definition without freeing hands.
+    bool RetargetActive(const EquipmentDefinition& item, EquipmentAction action) {
+        if(!ValidateEquipmentDefinition(item))return false;
+        const EquipmentActionDefinition* definition=nullptr;
+        for(const auto& d:item.actions)if(d.action==action)definition=&d;
+        if(!definition || definition->prepareSeconds!=0 || definition->windupSeconds!=0 ||
+           definition->holdUntilRelease)return false;
+        for(auto& c:channels_)if(c.itemId==item.assetId&&c.phase==EquipmentActionPhase::Active) {
+            c.definition=*definition;c.elapsed=0;
+            events_.push_back({c.itemId,c.definition.animationAction,action,c.phase,c.hands});
+            return true;
+        }
+        return false;
+    }
     // Native presentation completion releases Active into authored recovery.
     bool CompleteActive(const std::string& itemId) {
         for(auto& c:channels_)if(c.itemId==itemId&&c.phase==EquipmentActionPhase::Active) {

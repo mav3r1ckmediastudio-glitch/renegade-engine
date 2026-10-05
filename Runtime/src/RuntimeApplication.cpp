@@ -429,7 +429,9 @@ namespace renegade::runtime
                             (playerViewAnimation_.groundKnown && playerViewAnimation_.wasGrounded != grounded)));
                     const auto equipmentInput =
                         playerEquipment_.RouteStaged(gameplayInput, playerViewAnimation_.equipped,
-                            presentationBusy, paused_ ? 0.0f : dt, playerViewAnimation_.aiming);
+                            presentationBusy, paused_ ? 0.0f : dt, playerViewAnimation_.aiming,
+                            !playerViewAnimation_.clips[PlayerViewActionIndex(PlayerViewAction::Charge)].empty() &&
+                            !playerViewAnimation_.clips[PlayerViewActionIndex(PlayerViewAction::Release)].empty());
                     UpdateRuntimePlayerViewAnimations(
                         scenes_.GetScene(),
                         playerViewAnimation_,
@@ -439,7 +441,7 @@ namespace renegade::runtime
                         !paused_ && equipmentInput.reloadPressed,
                         equipmentInput.aimDown,
                         !paused_ && equipmentInput.toggleEquipmentPressed,
-                        grounded);
+                        grounded, playerEquipment_.chargePresentation, playerEquipment_.releasePresentation);
                 }
             }
         }

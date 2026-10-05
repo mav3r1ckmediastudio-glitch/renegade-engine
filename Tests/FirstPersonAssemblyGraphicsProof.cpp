@@ -898,7 +898,7 @@ static bool PlayerPrefabProof(const fs::path& input,const fs::path& output)
  return true;
 }
 
-static bool EquipmentSnapshotProof(const fs::path& input, const fs::path& output)
+static bool EquipmentSnapshotProof(const fs::path& input, const fs::path& output, bool charge = false)
 {
  using namespace renegade::runtime;
  std::string error;
@@ -919,15 +919,37 @@ static bool EquipmentSnapshotProof(const fs::path& input, const fs::path& output
  if(!scenes.LoadScene((root/fs::u8path(project.startupScene)).generic_u8string()))return false;
  const auto start=ResolvePlayerStart(scenes.GetScene());
  if(start.resolution!=PlayerStartResolution::Success)return false;
+ StableId presentationId=start.start.settings.firstPersonArmsAssetId;
+ if(charge) {
+  FirstPersonAssemblySettings recipe;
+  FirstPersonAssemblyService service;
+  if(!service.ReadSettings(project.rootPath,project.projectId,presentationId,recipe,error))return false;
+  auto aim=std::find_if(recipe.pairs.begin(),recipe.pairs.end(),[](const auto& p){return p.action=="AimIn";});
+  auto attack=std::find_if(recipe.pairs.begin(),recipe.pairs.end(),[](const auto& p){return p.action=="Attack";});
+  if(aim==recipe.pairs.end()||attack==recipe.pairs.end())return false;
+  auto charging=*aim;charging.action="Charge";
+  auto release=*attack;release.action="Release";
+  recipe.pairs.erase(std::remove_if(recipe.pairs.begin(),recipe.pairs.end(),
+   [](const auto& p){return p.action=="Attack";}),recipe.pairs.end());
+  recipe.pairs.push_back(charging);recipe.pairs.push_back(release);
+  if(!service.Save(project.rootPath,project.projectId,"ChargeProof"+GenerateStableId().substr(0,8),recipe,{},presentationId,error)){
+   std::cerr<<error<<"\n";return false;
+  }
+ }
  EquipmentDefinition item;
  if(!PrepareEquipmentFromAssembly(project.rootPath,project.projectId,
-      start.start.settings.firstPersonArmsAssetId,"Snapshot shotgun",EquipmentHandUse::TwoHanded,item,error))
+      presentationId,"Snapshot shotgun",EquipmentHandUse::TwoHanded,item,error))
  {std::cerr<<error<<"\n";return false;}
  for(auto& action:item.actions)
   if(action.action==EquipmentAction::PrimaryUse){
    action.prepareSeconds=.1f;action.windupSeconds=.1f;action.recoverySeconds=.1f;
    action.holdUntilRelease=true;
   }
+ if(charge) {
+  item.actions.erase(std::remove_if(item.actions.begin(),item.actions.end(),
+   [](const auto& a){return a.action==EquipmentAction::PrimaryUse;}),item.actions.end());
+  for(auto& a:item.actions)if(a.action==EquipmentAction::Release)a.recoverySeconds=.1f;
+ }
  const auto saved=SaveEquipmentAsset(project.rootPath,project.projectId,item);
  if(!saved.succeeded){std::cerr<<saved.error<<"\n";return false;}
  auto settings=start.start.settings;
@@ -960,6 +982,36 @@ static bool EquipmentSnapshotProof(const fs::path& input, const fs::path& output
        equipment.Presentation(""),error))return false;
  RuntimePlayerViewAnimationState animation;
  if(!InitializeRuntimePlayerViewAnimations(reopened.GetScene(),rig,animation,error))return false;
+ if(charge) {
+  if(!equipment.HasChargeRelease() ||
+     animation.clips[PlayerViewActionIndex(PlayerViewAction::Charge)].size()!=2 ||
+     animation.clips[PlayerViewActionIndex(PlayerViewAction::Release)].size()!=2)return false;
+  GameplayInputFrame use;use.firePressed=true;use.fireDown=true;
+  equipment.RouteStaged(use,true,false,.1f,false,true);
+  animation.aiming=true; // Charge must own presentation even when sights were raised.
+  UpdateRuntimePlayerViewAnimations(reopened.GetScene(),animation,PlayerViewAction::Idle,
+      10,false,false,true,false,true,equipment.chargePresentation,equipment.releasePresentation);
+  const auto chargedTime=animation.pairedTime;
+  if(animation.activeAction!=PlayerViewAction::Charge || animation.oneShotPlaying ||
+     animation.loadedShells!=animation.firearm.capacity)return false;
+  GameplayInputFrame held;held.fireDown=true;
+  equipment.RouteStaged(held,true,false,10,false,true);
+  UpdateRuntimePlayerViewAnimations(reopened.GetScene(),animation,PlayerViewAction::Idle,
+      10,false,false,false,false,true,equipment.chargePresentation,equipment.releasePresentation);
+  if(animation.pairedTime!=chargedTime)return false;
+  GameplayInputFrame up;
+  equipment.RouteStaged(up,true,false,.01f,false,true);
+  UpdateRuntimePlayerViewAnimations(reopened.GetScene(),animation,PlayerViewAction::Idle,
+      .01f,false,false,false,false,true,equipment.chargePresentation,equipment.releasePresentation);
+  if(animation.activeAction!=PlayerViewAction::Release || !animation.oneShotPlaying ||
+     equipment.actions.ReservedHands()!=3 || animation.loadedShells!=animation.firearm.capacity)return false;
+  UpdateRuntimePlayerViewAnimations(reopened.GetScene(),animation,PlayerViewAction::Idle,10);
+  equipment.RouteStaged(up,true,false,.2f,false,true);
+  if(equipment.actions.ReservedHands()!=0)return false;
+  std::ofstream(output/"equipment-snapshot-descriptor.txt")<<snapshot.descriptorPath;
+  std::cout<<"CHARGE RELEASE SNAPSHOT PASS // separate native pairs, held endpoint, continuous hands, no firearm ammo effect\n";
+  return true;
+ }
  GameplayInputFrame use;use.firePressed=true;use.fireDown=true;
  for(auto& action:equipment.primary.equipment.actions)
   if(action.action==EquipmentAction::PrimaryUse){action.prepareSeconds=.1f;action.windupSeconds=.1f;action.recoverySeconds=.1f;}
@@ -1003,6 +1055,7 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--charge-snapshot") return EquipmentSnapshotProof(input,output,true)?0:20;
     if(argc==4 && std::string(argv[3])=="--equipment-snapshot") return EquipmentSnapshotProof(input,output)?0:19;
     if(argc==4 && std::string(argv[3])=="--player-prefab") return PlayerPrefabProof(input,output)?0:18;
     if(argc==4 && std::string(argv[3])=="--jump-playground") return JumpPlaygroundProof(input,output)?0:17;

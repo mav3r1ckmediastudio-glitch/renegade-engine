@@ -163,6 +163,37 @@ int main() {
     staged.holdUntilRelease=false;
     runtime.primary.equipment.actions[0].animationAction="Reload";
     Check(!runtime.Route(input,true).firePressed,"semantic mismatch admitted as attack");
+    runtime.actions.Reset();runtime.dispatched=false;
+    runtime.primary.equipment.actions={
+        {EquipmentAction::Charge,"Charge",.1f,.1f,0,0,true,true},
+        {EquipmentAction::Release,"Release",0,0,1,.2f,false,true}};
+    press.fireDown=true;
+    Check(runtime.HasChargeRelease(),"explicit charge/release not admitted");
+    runtime.RouteStaged(press,true,false,1,false,false);
+    Check(runtime.actions.ReservedHands()==0,"missing native charge pairs admitted");
+    runtime.RouteStaged(press,true,false,1,false,true);
+    Check(runtime.chargePresentation && !runtime.releasePresentation &&
+        runtime.actions.Channels()[0].phase==EquipmentActionPhase::Hold,"charge hold presentation missing");
+    runtime.RouteStaged(quiet,true,false,0,false,true);
+    Check(runtime.chargePresentation && !runtime.releasePresentation,"pause lost charge pose");
+    runtime.RouteStaged(quiet,true,false,.01f,false,true);
+    Check(!runtime.chargePresentation && runtime.releasePresentation &&
+        runtime.actions.ReservedHands()==1 &&
+        runtime.actions.Channels()[0].definition.action==EquipmentAction::Release,"release lost reservation");
+    runtime.RouteStaged(press,true,true,10,false,true);
+    Check(!runtime.releasePresentation && runtime.actions.ReservedHands()==1,"release repeated or freed early");
+    runtime.RouteStaged(quiet,true,false,.3f,false,true);
+    Check(runtime.actions.ReservedHands()==0,"release recovery stuck");
+    runtime.RouteStaged(press,true,false,1,false,true);
+    cancel.fireDown=true;
+    runtime.RouteStaged(cancel,true,false,.01f,false,true);
+    Check(!runtime.chargePresentation && !runtime.releasePresentation &&
+        runtime.actions.ReservedHands()==0,"charge cancellation retained pose");
+    runtime.primary.equipment.actions[1].windupSeconds=.1f;
+    Check(!runtime.HasChargeRelease(),"unsupported release windup admitted");
+    runtime.primary.equipment.actions[1].windupSeconds=0;
+    runtime.primary.equipment.actions.push_back({EquipmentAction::PrimaryUse,"Attack"});
+    Check(!runtime.HasChargeRelease(),"primary-use precedence changed");
     loadout.primaryEquipmentAssetId=GenerateStableId();
     Check(!runtime.Load(root.generic_u8string(),project,loadout)&&runtime.authored&&
         !runtime.ready&&runtime.primary.equipment.assetId.empty()&&

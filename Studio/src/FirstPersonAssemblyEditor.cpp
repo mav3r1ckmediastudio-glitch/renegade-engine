@@ -109,7 +109,7 @@ void StudioRenderPath::CreateAssemblyEditor() {
  combo(assemblyActionPage_,"Action slots",550,105,130);assemblyActionPage_.SetText("");
  assemblyActionPage_.AddItem("Movement / use");
  assemblyActionPage_.AddItem("Aim / jump");
- assemblyActionPage_.AddItem("Land / partial");
+ assemblyActionPage_.AddItem("More actions");
  assemblyActionPage_.OnSelect([this](const wi::gui::EventArgs& a){
  for(size_t i=0;i<Actions.size();++i) {
  assemblyArmsClips_[i].SetVisible(i/6==size_t(std::max(a.iValue,0)));

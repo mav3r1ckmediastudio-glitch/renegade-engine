@@ -383,3 +383,13 @@ Fire binding) is released. C cancels eligible actions before activation; the
 cancel_equipment input binding is remappable. Immediate shotgun definitions still
 fire on a press. Held primary/cancellation are implemented; separate Charge/Release
 presentation, charge strength and independent off-hand presentation remain pending.
+
+
+### Charge and Release pairs
+
+ASSEMBLY > More actions includes Charge and Release arms/weapon mappings.
+Leave Attack unassigned when using the primary Charge/Release path, then create
+equipment from that saved assembly. Runtime holds the Charge pose until Fire is
+released, plays Release once, and preserves hand ownership through recovery.
+C cancels eligible charging actions. Charge strength, projectile effects and
+independent off-hand presentation remain later work.

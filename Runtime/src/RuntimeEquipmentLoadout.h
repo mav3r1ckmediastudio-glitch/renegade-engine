@@ -12,6 +12,7 @@ namespace renegade::runtime
         bridge::EquipmentAssetDocument primary, offHand;
         bridge::EquipmentActionState actions;
         bool dispatched = false;
+        bool chargePresentation = false, releasePresentation = false;
         bool authored = false;
         bool ready = false;
         std::string error;
@@ -61,9 +62,37 @@ namespace renegade::runtime
             return false;
         }
 
-        bridge::GameplayInputFrame RouteStaged(bridge::GameplayInputFrame input,
-            bool equipped, bool nativeBusy, float dt, bool currentAim = false)
+        bool HasChargeRelease() const
         {
+            const bridge::EquipmentActionDefinition* charge = nullptr;
+            const bridge::EquipmentActionDefinition* release = nullptr;
+            for (const auto& action : primary.equipment.actions) {
+                if (action.action == bridge::EquipmentAction::PrimaryUse) return false;
+                if (action.action == bridge::EquipmentAction::Charge) charge = &action;
+                if (action.action == bridge::EquipmentAction::Release) release = &action;
+            }
+            return charge && release && charge->animationAction == "Charge" &&
+                charge->holdUntilRelease && release->animationAction == "Release" &&
+                release->prepareSeconds == 0 && release->windupSeconds == 0 &&
+                !release->holdUntilRelease;
+        }
+
+        void RefreshChargePresentation()
+        {
+            chargePresentation = false;
+            for (const auto& channel : actions.Channels())
+                if (channel.definition.action == bridge::EquipmentAction::Charge &&
+                    channel.phase != bridge::EquipmentActionPhase::Ready &&
+                    channel.phase != bridge::EquipmentActionPhase::Active &&
+                    channel.phase != bridge::EquipmentActionPhase::Recovery)
+                    chargePresentation = true;
+        }
+
+        bridge::GameplayInputFrame RouteStaged(bridge::GameplayInputFrame input,
+            bool equipped, bool nativeBusy, float dt, bool currentAim = false, bool chargePairsAvailable = false)
+        {
+            releasePresentation = false;
+            RefreshChargePresentation();
             if (!authored) return input;
             auto output = Route(input, equipped);
             output.firePressed = output.reloadPressed = output.toggleEquipmentPressed = false;
@@ -80,7 +109,7 @@ namespace renegade::runtime
                     auto item = primary.equipment;
                     for (const auto& definition : item.actions)
                         if (definition.action == action && definition.animationAction == semantic &&
-                            (!definition.holdUntilRelease || action == bridge::EquipmentAction::PrimaryUse))
+                            (!definition.holdUntilRelease || action == bridge::EquipmentAction::PrimaryUse || action == bridge::EquipmentAction::Charge))
                             return actions.Begin(item, action, bridge::EquipmentHand::Primary);
                     return false;
                 };
@@ -89,22 +118,34 @@ namespace renegade::runtime
                         equipped ? "Unequip" : "Equip");
                 else if (equipped && input.reloadPressed)
                     begin(bridge::EquipmentAction::Reload, "Reload");
-                else if (equipped && input.firePressed)
-                    begin(bridge::EquipmentAction::PrimaryUse, "Attack");
+                else if (equipped && input.firePressed) {
+                    if (chargePairsAvailable && HasChargeRelease()) begin(bridge::EquipmentAction::Charge, "Charge");
+                    else begin(bridge::EquipmentAction::PrimaryUse, "Attack");
+                }
             }
             if (!input.fireDown) actions.Release(primary.equipment.assetId);
             if (actions.ReservedHands() != 0) output.aimDown = currentAim;
             // A jump/aim pair that began during preparation must finish before dispatch.
-            if (nativeBusy && !dispatched) return output;
+            if (nativeBusy && !dispatched) { RefreshChargePresentation(); return output; }
             actions.Update(dt, true);
-            for (const auto& event : actions.TakeEvents()) {
+            auto events = actions.TakeEvents();
+            for (const auto& event : events)
+                if (event.phase == bridge::EquipmentActionPhase::Active &&
+                    event.action == bridge::EquipmentAction::Charge)
+                    actions.RetargetActive(primary.equipment, bridge::EquipmentAction::Release);
+            auto releaseEvents = actions.TakeEvents();
+            events.insert(events.end(), releaseEvents.begin(), releaseEvents.end());
+            for (const auto& event : events) {
                 if (event.phase != bridge::EquipmentActionPhase::Active) continue;
+                if (event.action == bridge::EquipmentAction::Charge) continue;
                 dispatched = true;
+                releasePresentation = event.action == bridge::EquipmentAction::Release;
                 output.firePressed = event.action == bridge::EquipmentAction::PrimaryUse;
                 output.reloadPressed = event.action == bridge::EquipmentAction::Reload;
                 output.toggleEquipmentPressed = event.action == bridge::EquipmentAction::Equip ||
                     event.action == bridge::EquipmentAction::Unequip;
             }
+            RefreshChargePresentation();
             return output;
         }
 

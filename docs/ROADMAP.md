@@ -349,3 +349,15 @@ without rewriting custom controls. Release bridge/Runtime builds, focused CTest
 5/5, DX12 held-shotgun proof and standalone hold/release/cancel check passed.
 Separate Charge/Release clips, charge-power mechanics and off-hand presentation
 remain pending. See P2_EQUIPMENT_ACTION_IMPLEMENTATION.md for limits and evidence.
+
+
+### Explicit Charge/Release presentation checkpoint (2026-10-05)
+
+Assemblies optionally map Charge and Release as native arms/weapon pairs.
+CREATE FROM ASSEMBLY derives those definitions; an unassigned Attack selects the
+Charge/Release primary path. Runtime plays Charge to its held endpoint and
+retargets ownership to Release on mouse-up, preserving reservations into recovery.
+Aim reconciliation cannot steal Charge; pre-active cancellation clears its pose.
+Release bridge/Runtime/Studio builds, six focused CTests, DX12 cold-load/pose/hand
+proof and standalone release/cancel check passed. Charge strength/projectiles and
+off-hand presentation remain pending. See P2_EQUIPMENT_ACTION_IMPLEMENTATION.md.

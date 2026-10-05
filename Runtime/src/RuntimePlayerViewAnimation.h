@@ -26,7 +26,7 @@ namespace renegade::runtime
 
     struct RuntimePlayerViewAnimationState
     {
-        std::array<std::vector<RuntimePlayerViewAnimationClip>, 14> clips;
+        std::array<std::vector<RuntimePlayerViewAnimationClip>, 16> clips;
         wi::ecs::Entity activeClip = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity outgoingClip = wi::ecs::INVALID_ENTITY;
         PlayerViewAction activeAction = PlayerViewAction::Idle;
@@ -57,6 +57,8 @@ namespace renegade::runtime
     {
         switch (action)
         {
+        case PlayerViewAction::Charge: return 14;
+        case PlayerViewAction::Release: return 15;
         case PlayerViewAction::Equip: return 9;
         case PlayerViewAction::Unequip: return 10;
         case PlayerViewAction::JumpStart: return 11;
@@ -144,6 +146,11 @@ namespace renegade::runtime
         {
             action = authoredAction == "AimIn" ? PlayerViewAction::AimIn :
                 authoredAction == "AimOut" ? PlayerViewAction::AimOut : PlayerViewAction::AimAttack;
+            return true;
+        }
+        if (authoredAction == "Charge" || authoredAction == "Release")
+        {
+            action = authoredAction == "Charge" ? PlayerViewAction::Charge : PlayerViewAction::Release;
             return true;
         }
         if (authoredAction == "ReloadPartial")
@@ -572,7 +579,9 @@ namespace renegade::runtime
         const bool reloadPressed = false,
         const bool aimDown = false,
         const bool toggleEquipmentPressed = false,
-        const bool grounded = true) noexcept
+        const bool grounded = true,
+        const bool chargeHeld = false,
+        const bool releasePressed = false) noexcept
     {
         if (!state.initialized)
             return;
@@ -605,6 +614,10 @@ namespace renegade::runtime
             };
             if (state.oneShotPlaying)
                 next = state.activeAction;
+            else if (advancing && state.equipped && releasePressed)
+            {
+                if (startAction(PlayerViewAction::Release)) state.aiming = false;
+            }
             else if (advancing && toggleEquipmentPressed)
             {
                 if (startAction(state.equipped ? PlayerViewAction::Unequip : PlayerViewAction::Equip))
@@ -625,6 +638,11 @@ namespace renegade::runtime
             else if (state.equipped && state.jumpCycleActive && !grounded && !state.clips[PlayerViewActionIndex(PlayerViewAction::JumpLoop)].empty())
             {
                 next = PlayerViewAction::JumpLoop;
+                state.aiming = false;
+            }
+            else if (state.equipped && chargeHeld && !state.clips[PlayerViewActionIndex(PlayerViewAction::Charge)].empty())
+            {
+                next = PlayerViewAction::Charge;
                 state.aiming = false;
             }
             else if (advancing && state.equipped && (reloadPressed || firePressed))
@@ -653,7 +671,7 @@ namespace renegade::runtime
                 }
             }
             // Reconcile hold/release after a busy action. Never interrupt paired tracks.
-            if (!state.oneShotPlaying && advancing && state.equipped && !state.jumpCycleActive && aimDown != state.aiming)
+            if (!state.oneShotPlaying && advancing && state.equipped && !state.jumpCycleActive && !chargeHeld && aimDown != state.aiming)
             {
                 const auto transition = aimDown ? PlayerViewAction::AimIn : PlayerViewAction::AimOut;
                 if (!state.clips[PlayerViewActionIndex(transition)].empty())
@@ -715,6 +733,8 @@ namespace renegade::runtime
                         state.oneShotPlaying = false;
                     }
                 }
+                else if (chargeHeld && next == PlayerViewAction::Charge)
+                    state.pairedTime = std::min(state.pairedTime + dt, duration);
                 else if ((!state.equipped && next == PlayerViewAction::Unequip) ||
                     (state.aiming && next == PlayerViewAction::AimIn))
                     state.pairedTime = duration; // Hold the authored sight pose, do not loop aim-in.
