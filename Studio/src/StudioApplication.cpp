@@ -3485,7 +3485,7 @@ namespace renegade::studio
 
         viewportBounds_ = studioChrome_.ViewportBounds();
         const XMFLOAT4 pointer = wi::input::GetPointer();
-        const bool playerStartIconConsumed = HandlePlayerStartSceneIcon(pointer);
+        const bool playerStartCapsuleConsumed = HandlePlayerStartCapsule(pointer);
         const bool cameraIconConsumed = HandleCameraSceneIcons(pointer);
         const bool audioIconConsumed = HandleAudioSceneIcons(pointer);
         const bool decalProbeIconConsumed = HandleDecalProbeSceneIcons(pointer);
@@ -3539,7 +3539,7 @@ namespace renegade::studio
             return;
         }
 
-        if (playerStartIconConsumed || cameraIconConsumed || audioIconConsumed ||
+        if (playerStartCapsuleConsumed || cameraIconConsumed || audioIconConsumed ||
             decalProbeIconConsumed || lightIconConsumed)
         {
             diagnosticInput.StopAt("scene_icon");
@@ -6878,7 +6878,7 @@ bool StudioRenderPath::HandleDecalProbeSceneIcons(
     return false;
 }
 
-bool StudioRenderPath::HandlePlayerStartSceneIcon(
+bool StudioRenderPath::HandlePlayerStartCapsule(
     const XMFLOAT4& pointer)
 {
     if (session_ == nullptr || camera == nullptr || projectHubVisible_)
@@ -6897,63 +6897,18 @@ bool StudioRenderPath::HandlePlayerStartSceneIcon(
     if (transform == nullptr)
         return false;
 
+    const auto settings = bridge::SanitizePlayerControllerSettings(
+        resolved.start.settings);
     const XMFLOAT3 feet = transform->GetPosition();
-    const XMFLOAT3 euler = wi::math::QuaternionToRollPitchYaw(
-        resolved.start.transform.rotation);
-    const XMVECTOR forwardVector = XMVectorSet(
-        std::sin(euler.y), 0.0f, std::cos(euler.y), 0.0f);
-    const XMVECTOR rightVector = XMVectorSet(
-        std::cos(euler.y), 0.0f, -std::sin(euler.y), 0.0f);
-    const XMVECTOR origin = XMLoadFloat3(&feet) + XMVectorSet(0, 0.035f, 0, 0);
-    const auto worldPoint = [&](const float forward, const float right,
-        const float up = 0.0f)
-    {
-        XMFLOAT3 point;
-        XMStoreFloat3(&point,
-            origin + forwardVector * forward + rightVector * right +
-                XMVectorSet(0, up, 0, 0));
-        return point;
-    };
-
-    // Ground-plane silhouette follows the supplied arrow asset proportions:
-    // 2.4 m long, 0.72 m wide, with its tip aligned to Runtime +Z forward.
-    constexpr XMFLOAT2 Arrow[7] = {
-        XMFLOAT2(1.20f, 0.0f),
-        XMFLOAT2(0.28f, 0.36f),
-        XMFLOAT2(0.28f, 0.15f),
-        XMFLOAT2(-1.20f, 0.15f),
-        XMFLOAT2(-1.20f, -0.15f),
-        XMFLOAT2(0.28f, -0.15f),
-        XMFLOAT2(0.28f, -0.36f),
-    };
-    XMFLOAT2 projected[7] = {};
-    bool visible[7] = {};
-    for (int index = 0; index < 7; ++index)
-        visible[index] = ProjectEditorPoint(
-            worldPoint(Arrow[index].x, Arrow[index].y), projected[index]);
-
-    XMFLOAT2 center = {};
-    if (!ProjectEditorPoint(feet, center))
-        return false;
-    const float dx = pointer.x - center.x;
-    const float dy = pointer.y - center.y;
-    const bool hovered = dx * dx + dy * dy <= 28.0f * 28.0f;
-    const bool selected = session_->Selection().SelectedEntity() ==
-        resolved.start.entity;
-    const XMFLOAT4 color = selected
-        ? XMFLOAT4(1.0f, 0.55f, 0.15f, 1.0f)
-        : hovered
-            ? XMFLOAT4(0.58f, 0.95f, 1.0f, 1.0f)
-            : XMFLOAT4(0.20f, 0.84f, 1.0f, 0.95f);
-    for (int index = 0; index < 7; ++index)
-    {
-        const int next = (index + 1) % 7;
-        if (visible[index] && visible[next])
-            DrawEditorLine(projected[index], projected[next], color);
-    }
-
-    // The connected capsule is drawn in Compose after temporal postprocessing,
-    // for both selected and unselected starts. Keep only the arrow here.
+    const XMFLOAT3 top(feet.x,
+        feet.y + bridge::PlayerCapsuleTotalHeight(settings), feet.z);
+    // Pick the complete capsule volume, so its open wireframe interior is
+    // clickable as well as its edges. Use the same upright bounds as Compose.
+    const wi::primitive::Capsule capsule(feet, top, settings.capsuleRadius);
+    const auto ray = wi::renderer::GetPickRay(
+        static_cast<long>(pointer.x), static_cast<long>(pointer.y),
+        *this, *camera);
+    const bool hovered = capsule.intersects(ray);
 
     const bool selectRequested = hovered && !flyCameraActive_ &&
         !GetGUI().HasFocus() && !gizmo_.IsInteracting() &&

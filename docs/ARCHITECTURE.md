@@ -1007,3 +1007,5 @@ updates stretches the displayed scene/UI while input retains current client
 coordinates, causing offset hierarchy hitboxes and viewport marker selection.
 
 Player Start capsule guides remain visible in the level editor regardless of selection (cyan normally, orange when selected), using resolved controller dimensions and hierarchy visibility. Prefab-backed starts retain this editor representation. Compose owns the single connected capsule after temporal postprocessing; it is not serialized as a Runtime mesh.
+
+Player Start selection uses a camera pick ray against the same upright capsule bounds as its wireframe, including the open interior. The capsule replaces both the Player Start billboard icon and ground arrow. Other scene marker icons retain their existing workflow.

@@ -334,15 +334,8 @@ namespace renegade::studio
                     }
                 };
 
-                const auto player = bridge::ResolvePlayerStart(scene);
-                if (player.resolution == bridge::PlayerStartResolution::Success)
-                {
-                    emit(
-                        MarkerIconKind::PlayerStart,
-                        player.start.entity,
-                        player.start.transform.translation);
-                }
-
+                // Player Start uses its selectable wireframe capsule instead
+                // of a second billboard marker.
                 for (std::size_t index = 0; index < scene.lights.GetCount(); ++index)
                 {
                     const wi::ecs::Entity entity = scene.lights.GetEntity(index);
