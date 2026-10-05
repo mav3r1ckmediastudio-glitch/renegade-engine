@@ -80,7 +80,11 @@ int main()
     Check(Binding(map, GameplayAction::Aim).mouse == "MOUSE_RIGHT", "aim default is not right mouse");
     Check(Binding(map, GameplayAction::ToggleEquipment).keyboard == "Q", "equipment default is not Q");
     Check(Binding(map, GameplayAction::CancelEquipment).keyboard == "C", "cancel default is not C");
+    Check(Binding(map,GameplayAction::OffHandUse).mouse=="MOUSE_RIGHT",
+        "off-hand default is not right mouse");
     auto rebound = map;
+    rebound.bindings[static_cast<std::size_t>(GameplayAction::OffHandUse)].keyboard="B";
+    rebound.bindings[static_cast<std::size_t>(GameplayAction::OffHandUse)].mouse="";
     rebound.bindings[static_cast<std::size_t>(GameplayAction::CancelEquipment)].keyboard = "X";
     rebound.bindings[static_cast<std::size_t>(GameplayAction::MoveForward)].keyboard = "I";
     rebound.bindings[static_cast<std::size_t>(GameplayAction::MoveBackward)].keyboard = "K";
@@ -96,6 +100,10 @@ int main()
 
     Check(Binding(reopened, GameplayAction::CancelEquipment).keyboard == "X", "cancel binding did not round-trip");
 
+    Check(Binding(reopened,GameplayAction::OffHandUse).keyboard=="B" &&
+        Binding(reopened,GameplayAction::OffHandUse).mouse.empty(),"off-hand binding did not round-trip");
+    Check(TryParseGameplayAction("off_hand_use",reopened.bindings.back().action) &&
+        reopened.bindings.back().action==GameplayAction::OffHandUse,"stable off-hand action ID");
     created = true;
     GameplayInputMap ensured;
     Check(EnsureGameplayInputMap(
@@ -168,7 +176,7 @@ int main()
             "legacy migration disturbed an authored binding");
     }
 
-    // A recent v1 document lacking only Cancel must retain all authored bindings.
+    // A recent v1 document lacking Cancel and OffHandUse retains authored bindings.
     {
         std::ifstream source(inputMapPath, std::ios::binary);
         std::string text{std::istreambuf_iterator<char>(source),std::istreambuf_iterator<char>()};
@@ -181,7 +189,8 @@ int main()
         GameplayInputMap migrated;
         Check(ReadGameplayInputMapFile(path.generic_u8string(),migrated,error),"pre-cancel migration failed");
         Check(Binding(migrated,GameplayAction::CancelEquipment).keyboard=="C" &&
-            Binding(migrated,GameplayAction::MoveForward).keyboard=="I","cancel migration replaced authored controls");
+            Binding(migrated,GameplayAction::MoveForward).keyboard=="I" &&
+            Binding(migrated,GameplayAction::OffHandUse).mouse=="MOUSE_RIGHT","migration replaced authored controls");
         std::ifstream check(path,std::ios::binary);
         Check(std::string(std::istreambuf_iterator<char>(check),std::istreambuf_iterator<char>())==text,
             "in-memory migration rewrote authored document");

@@ -17,6 +17,7 @@ struct EquipmentActionDefinition {
     float prepareSeconds = 0, windupSeconds = 0, activeSeconds = 0, recoverySeconds = 0;
     bool holdUntilRelease = false;
     bool cancellableBeforeActive = true;
+    bool activeWhileHeld = false;
 };
 struct EquipmentDefinition {
     std::string assetId, name, presentationAssetId;
@@ -31,6 +32,7 @@ inline bool ValidateEquipmentDefinition(const EquipmentDefinition& item) {
         const auto index=unsigned(action.action);
         if(index>=seen.size()||seen[index]||action.animationAction.empty())return false;
         seen[index]=true;
+        if(action.activeWhileHeld && (action.holdUntilRelease || action.activeSeconds!=0))return false;
         for(float seconds:{action.prepareSeconds,action.windupSeconds,action.activeSeconds,action.recoverySeconds})
             if(!std::isfinite(seconds)||seconds<0||seconds>60)return false;
     }
@@ -47,12 +49,14 @@ public:
         float elapsed = 0;
         uint8_t hands = 0;
         bool released = false;
+        EquipmentHand ownerHand = EquipmentHand::Primary;
     };
     struct Event {
         std::string itemId, animationAction;
         EquipmentAction action;
         EquipmentActionPhase phase;
         uint8_t hands;
+        EquipmentHand ownerHand = EquipmentHand::Primary;
     };
     bool Begin(const EquipmentDefinition& item, EquipmentAction action, EquipmentHand hand) {
         if(!ValidateEquipmentDefinition(item))return false;
@@ -63,69 +67,104 @@ public:
         if(!definition)return false;
         for(const auto& c:channels_)if(c.phase!=EquipmentActionPhase::Ready&&(c.hands&hands))return false;
         for(auto& c:channels_)if(c.phase==EquipmentActionPhase::Ready) {
-            c={item.assetId,*definition,EquipmentActionPhase::Prepare,0,hands,false};
-            events_.push_back({c.itemId,c.definition.animationAction,action,c.phase,hands});
+            c={item.assetId,*definition,EquipmentActionPhase::Prepare,0,hands,false,hand};
+            events_.push_back({c.itemId,c.definition.animationAction,action,c.phase,hands,c.ownerHand});
             return true;
         }
         return false;
     }
-    bool Release(const std::string& itemId) {
+    // Legacy item-wide operations remain available. Runtime uses the scoped
+    // overloads: definition identity is not equipped-instance identity.
+    bool Release(const std::string& itemId) { return ReleaseMatching(itemId,3); }
+    bool Release(const std::string& itemId, EquipmentHand hand) {
+        return ReleaseMatching(itemId,OwnerMask(hand));
+    }
+    bool Cancel(const std::string& itemId) { return CancelMatching(itemId,3); }
+    bool Cancel(const std::string& itemId, EquipmentHand hand) {
+        return CancelMatching(itemId,OwnerMask(hand));
+    }
+private:
+    static uint8_t OwnerMask(EquipmentHand hand) {
+        return unsigned(hand)<=unsigned(EquipmentHand::OffHand) ? uint8_t(1u<<unsigned(hand)) : 0;
+    }
+    static bool OwnedBy(const Channel& c,uint8_t owners) {
+        return (OwnerMask(c.ownerHand)&owners)!=0;
+    }
+    bool ReleaseMatching(const std::string& itemId,uint8_t owners) {
         bool changed=false;
-        for(auto& c:channels_)if(c.phase!=EquipmentActionPhase::Ready&&c.itemId==itemId&&
-            c.definition.holdUntilRelease&&!c.released){c.released=true;changed=true;}
+        for(auto& c:channels_)if(c.phase!=EquipmentActionPhase::Ready&&c.itemId==itemId&&OwnedBy(c,owners)&&
+            (c.definition.holdUntilRelease||c.definition.activeWhileHeld)&&!c.released){c.released=true;changed=true;}
         return changed;
     }
-    bool Cancel(const std::string& itemId) {
+    bool CancelMatching(const std::string& itemId,uint8_t owners) {
         bool changed=false;
-        for(auto& c:channels_)if(c.phase!=EquipmentActionPhase::Ready&&c.itemId==itemId&&
+        for(auto& c:channels_)if(c.phase!=EquipmentActionPhase::Ready&&c.itemId==itemId&&OwnedBy(c,owners)&&
             c.definition.cancellableBeforeActive&&unsigned(c.phase)<unsigned(EquipmentActionPhase::Active)) {
-            events_.push_back({c.itemId,c.definition.animationAction,c.definition.action,EquipmentActionPhase::Ready,c.hands});
+            events_.push_back({c.itemId,c.definition.animationAction,c.definition.action,EquipmentActionPhase::Ready,c.hands,c.ownerHand});
             c={};changed=true;
         }
         return changed;
     }
-    void Update(float gameplaySeconds, bool nativeOwnsActive = false) {
+public:
+    void Update(float gameplaySeconds, bool nativeOwnsActive = false, uint8_t pausedOwners = 0) {
         // Zero is pause; negative/nonfinite time must not mutate ownership.
         if(!std::isfinite(gameplaySeconds)||gameplaySeconds<=0)return;
         for(auto& c:channels_) {
+            if(OwnedBy(c,pausedOwners))continue;
             float remaining=gameplaySeconds;
             // At most five transitions; no unbounded loop for instant actions.
             for(int step=0;step<6&&c.phase!=EquipmentActionPhase::Ready;++step) {
-                if(nativeOwnsActive&&c.phase==EquipmentActionPhase::Active)break;
+                if(c.phase==EquipmentActionPhase::Active) {
+                    if(c.definition.activeWhileHeld && !c.released)break;
+                    if(nativeOwnsActive && !c.definition.activeWhileHeld)break;
+                }
                 if(c.phase==EquipmentActionPhase::Hold&&!c.released)break;
                 const float duration=Duration(c);
                 const float needed=duration-c.elapsed;
                 if(remaining<needed){c.elapsed+=remaining;break;}
                 remaining-=needed;c.elapsed=0;
                 c.phase=Next(c);
-                events_.push_back({c.itemId,c.definition.animationAction,c.definition.action,c.phase,c.hands});
+                events_.push_back({c.itemId,c.definition.animationAction,c.definition.action,c.phase,c.hands,c.ownerHand});
                 if(c.phase==EquipmentActionPhase::Ready){c={};break;}
             }
         }
     }
     // Replace an activated charge with its release definition without freeing hands.
     bool RetargetActive(const EquipmentDefinition& item, EquipmentAction action) {
+        return RetargetActiveMatching(item,action,3);
+    }
+    bool RetargetActive(const EquipmentDefinition& item, EquipmentAction action,EquipmentHand hand) {
+        return RetargetActiveMatching(item,action,OwnerMask(hand));
+    }
+    bool CompleteActive(const std::string& itemId) { return CompleteActiveMatching(itemId,3); }
+    bool CompleteActive(const std::string& itemId,EquipmentHand hand) {
+        return CompleteActiveMatching(itemId,OwnerMask(hand));
+    }
+private:
+    bool RetargetActiveMatching(const EquipmentDefinition& item, EquipmentAction action,uint8_t owners) {
         if(!ValidateEquipmentDefinition(item))return false;
         const EquipmentActionDefinition* definition=nullptr;
         for(const auto& d:item.actions)if(d.action==action)definition=&d;
         if(!definition || definition->prepareSeconds!=0 || definition->windupSeconds!=0 ||
-           definition->holdUntilRelease)return false;
-        for(auto& c:channels_)if(c.itemId==item.assetId&&c.phase==EquipmentActionPhase::Active) {
+           definition->holdUntilRelease||definition->activeWhileHeld)return false;
+        for(auto& c:channels_)if(c.itemId==item.assetId&&OwnedBy(c,owners)&&c.phase==EquipmentActionPhase::Active) {
             c.definition=*definition;c.elapsed=0;
-            events_.push_back({c.itemId,c.definition.animationAction,action,c.phase,c.hands});
+            events_.push_back({c.itemId,c.definition.animationAction,action,c.phase,c.hands,c.ownerHand});
             return true;
         }
         return false;
     }
     // Native presentation completion releases Active into authored recovery.
-    bool CompleteActive(const std::string& itemId) {
-        for(auto& c:channels_)if(c.itemId==itemId&&c.phase==EquipmentActionPhase::Active) {
+    bool CompleteActiveMatching(const std::string& itemId,uint8_t owners) {
+        for(auto& c:channels_)if(c.itemId==itemId&&OwnedBy(c,owners)&&
+            c.phase==EquipmentActionPhase::Active&&!c.definition.activeWhileHeld) {
             c.phase=EquipmentActionPhase::Recovery;c.elapsed=0;
-            events_.push_back({c.itemId,c.definition.animationAction,c.definition.action,c.phase,c.hands});
+            events_.push_back({c.itemId,c.definition.animationAction,c.definition.action,c.phase,c.hands,c.ownerHand});
             return true;
         }
         return false;
     }
+public:
     uint8_t ReservedHands() const {
         uint8_t result=0;for(const auto& c:channels_)if(c.phase!=EquipmentActionPhase::Ready)result|=c.hands;return result;
     }

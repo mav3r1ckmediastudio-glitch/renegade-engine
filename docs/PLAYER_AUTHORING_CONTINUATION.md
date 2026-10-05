@@ -136,3 +136,7 @@ Runtime's default 60 degrees. Preview is editor-only and does not author WISCENE
 DX12 proof rejects empty images and verifies source settings/component counts
 are unchanged; native placement inspection is recorded in HANDOFF.md.
 Independent sword/shield presentation awaits the supplied animation pack.
+
+Off-hand preparation (2026-10-05): hand-scoped action channels, held Block policy,
+OffHandUse rebinding and pure Runtime adapter are tested. Live native off-hand
+capability remains disabled until the actual sword/shield pack is integrated.

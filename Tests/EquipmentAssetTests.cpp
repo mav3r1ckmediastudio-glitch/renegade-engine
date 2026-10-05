@@ -35,8 +35,19 @@ int main() {
     Check(parsed.equipment.assetId!=sword.assetId,"immutable save identity");
     Check(!LoadEquipmentAsset(root.generic_u8string(),GenerateStableId(),parsed.equipment.assetId,parsed,error),"foreign project accepted");
     auto shield=sword;shield.name="Shield";shield.handUse=EquipmentHandUse::OffHandOnly;
-    shield.actions={{EquipmentAction::Block,"Block",0,0,0,0,true,true}};
+    shield.actions={{EquipmentAction::Block,"Block",0,0,0,.2f,false,true,true}};
     auto savedShield=SaveEquipmentAsset(root.generic_u8string(),project,shield);
+    Check(savedShield.succeeded && LoadEquipmentAsset(root.generic_u8string(),project,
+        savedShield.document.equipment.assetId,parsed,error) &&
+        parsed.equipment.actions[0].activeWhileHeld,"active held shield persistence");
+    Check(SerializeEquipmentAsset(savedShield.document,text,error),"held serialize");
+    auto oldHeld=nlohmann::json::parse(text);oldHeld["actions"][0].erase("active_while_held");
+    Check(DeserializeEquipmentAsset(oldHeld.dump(),parsed,error) &&
+        !parsed.equipment.actions[0].activeWhileHeld,"old actions gain no held-active policy");
+    oldHeld=nlohmann::json::parse(text);oldHeld["actions"][0]["active_while_held"]=1;
+    Check(!DeserializeEquipmentAsset(oldHeld.dump(),parsed,error),"numeric active-held boolean");
+    oldHeld=nlohmann::json::parse(text);oldHeld["actions"][0]["unknown"]=true;
+    Check(!DeserializeEquipmentAsset(oldHeld.dump(),parsed,error),"unknown held action field");
     auto bow=sword;bow.name="Bow";bow.handUse=EquipmentHandUse::TwoHanded;
     auto savedBow=SaveEquipmentAsset(root.generic_u8string(),project,bow);
     const auto p=saved.document.equipment.assetId,o=savedShield.document.equipment.assetId,b=savedBow.document.equipment.assetId;
@@ -194,6 +205,57 @@ int main() {
     runtime.primary.equipment.actions[1].windupSeconds=0;
     runtime.primary.equipment.actions.push_back({EquipmentAction::PrimaryUse,"Attack"});
     Check(!runtime.HasChargeRelease(),"primary-use precedence changed");
+
+    // Native off-hand capability is deliberately false in live Runtime until
+    // the supplied pack is verified. These checks prove the action adapter only.
+    Check(runtime.Load(root.generic_u8string(),project,{}) ,"router reset");
+    runtime.authored=runtime.ready=true;
+    runtime.primary.equipment=sword;
+    runtime.primary.equipment.actions={{EquipmentAction::PrimaryUse,"Attack",0,0,1,.1f}};
+    runtime.offHand.equipment=shield;
+    GameplayInputFrame both;both.firePressed=both.fireDown=true;
+    both.offHandUsePressed=both.offHandUseDown=both.aimDown=true;
+    runtime.RouteStaged(both,true,false,.01f,false,false,false);
+    Check(runtime.actions.ReservedHands()==1 && !runtime.offHandBlockPresentation,
+        "unavailable native off-hand admitted");
+    runtime.actions.Reset();runtime.dispatched=false;
+    routed=runtime.RouteStaged(both,true,false,.01f,false,false,true);
+    Check(routed.firePressed && !routed.aimDown && runtime.offHandBlockPresentation &&
+        runtime.actions.ReservedHands()==3,"independent attack and held block dispatch");
+    GameplayInputFrame block;block.offHandUseDown=true;
+    runtime.RouteStaged(block,true,true,1,false,false,true);
+    Check(runtime.offHandBlockPresentation && runtime.actions.ReservedHands()==3,
+        "primary native playback stole shield hold");
+    runtime.RouteStaged(block,true,false,.2f,false,false,true);
+    Check(runtime.offHandBlockPresentation && runtime.actions.ReservedHands()==2,
+        "primary completion changed off-hand");
+    runtime.RouteStaged(quiet,true,false,0,false,false,true);
+    Check(runtime.offHandBlockPresentation,"pause released active block");
+    runtime.RouteStaged(quiet,true,false,.01f,false,false,true);
+    Check(!runtime.offHandBlockPresentation && runtime.actions.ReservedHands()==2,
+        "off-hand release did not enter its recovery");
+    runtime.RouteStaged(quiet,true,false,.3f,false,false,true);
+    Check(runtime.actions.ReservedHands()==0,"shield recovery stuck");
+    runtime.actions.Reset();runtime.dispatched=false;
+    runtime.primary.equipment.actions[0].windupSeconds=.5f;
+    runtime.RouteStaged(both,true,false,.01f,false,false,true);
+    const auto primaryPhase=runtime.actions.Channels()[1].phase;
+    runtime.RouteStaged(block,true,true,1,false,false,true);
+    Check(runtime.offHandBlockPresentation && runtime.actions.Channels()[1].phase==primaryPhase,
+        "primary busy paused off-hand or advanced primary");
+    runtime.actions.Reset();runtime.dispatched=false;
+    runtime.offHand.equipment.actions[0].windupSeconds=.5f;
+    auto offPress=block;offPress.offHandUsePressed=true;
+    runtime.RouteStaged(offPress,true,true,.01f,false,false,true);
+    runtime.RouteStaged(cancel,true,true,.01f,false,false,true);
+    Check(runtime.actions.ReservedHands()==0,"off-hand preparation cancel failed");
+    runtime.actions.Reset();runtime.dispatched=false;
+    runtime.primary.equipment.actions[0].activeWhileHeld=true;
+    runtime.primary.equipment.actions[0].activeSeconds=0;
+    Check(!runtime.Route(input,true).firePressed &&
+        !runtime.RouteStaged(press,true,false,1).firePressed,
+        "unsupported held primary silently admitted");
+
     loadout.primaryEquipmentAssetId=GenerateStableId();
     Check(!runtime.Load(root.generic_u8string(),project,loadout)&&runtime.authored&&
         !runtime.ready&&runtime.primary.equipment.assetId.empty()&&

@@ -61,6 +61,8 @@ bool SerializeEquipmentAsset(const EquipmentAssetDocument& d,std::string& text,s
         {"prepare_seconds",a.prepareSeconds},{"windup_seconds",a.windupSeconds},
         {"active_seconds",a.activeSeconds},{"recovery_seconds",a.recoverySeconds},
         {"hold_until_release",a.holdUntilRelease},{"cancellable_before_active",a.cancellableBeforeActive}});
+    for(size_t i=0;i<d.equipment.actions.size();++i)
+        if(d.equipment.actions[i].activeWhileHeld)actions[i]["active_while_held"]=true;
     text=json{{"format","renegade-equipment"},{"schema_version",1},{"project_id",d.projectId},
         {"asset_id",d.equipment.assetId},{"name",d.equipment.name},
         {"presentation_asset_id",d.equipment.presentationAssetId},
@@ -82,7 +84,7 @@ bool DeserializeEquipmentAsset(const std::string& text,EquipmentAssetDocument& o
         const auto& actions=j.at("actions");
         if(!actions.is_array()||actions.empty()||actions.size()>32)throw std::runtime_error("Invalid equipment action list.");
         for(const auto& v:actions) {
-            if(!v.is_object()||v.size()!=8)throw std::runtime_error("Incomplete equipment action.");
+            if(!v.is_object()||v.size()!=(v.contains("active_while_held")?9:8))throw std::runtime_error("Incomplete equipment action.");
             EquipmentActionDefinition a;
             a.action=static_cast<EquipmentAction>(Index(v.at("action").get<std::string>(),ActionNames));
             a.animationAction=v.at("animation_action").get<std::string>();
@@ -91,7 +93,9 @@ bool DeserializeEquipmentAsset(const std::string& text,EquipmentAssetDocument& o
             a.prepareSeconds=v.at("prepare_seconds").get<float>();a.windupSeconds=v.at("windup_seconds").get<float>();
             a.activeSeconds=v.at("active_seconds").get<float>();a.recoverySeconds=v.at("recovery_seconds").get<float>();
             a.holdUntilRelease=v.at("hold_until_release").get<bool>();
-            a.cancellableBeforeActive=v.at("cancellable_before_active").get<bool>();item.actions.push_back(a);
+            a.cancellableBeforeActive=v.at("cancellable_before_active").get<bool>();
+            if(v.contains("active_while_held"))a.activeWhileHeld=v.at("active_while_held").get<bool>();
+            item.actions.push_back(a);
         }
         if(!Valid(d,error))return false;
         out=std::move(d);error.clear();return true;
