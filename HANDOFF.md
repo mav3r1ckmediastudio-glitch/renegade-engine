@@ -2396,3 +2396,12 @@ Owner explicitly reports "that works fine now, thanks" at 10:25 UK time,
 confirming reported selection alignment repair. Corrected build left open.
 No serialized or gameplay state changes. No overall release gate closure,
 push or merge. Next: continue player inspector/prefab authoring per continuation doc.
+
+## 2026-10-05 — Always-visible player capsule
+Implementation commit: `0fa05df1cb59d9f06116922b66459611b471556e`.
+Owner requests the capsule remain visible without selection, including future full player prefabs.
+Changed Studio/src/StudioApplication.cpp, docs/ARCHITECTURE.md and docs/FEATURE_MATRIX.csv.
+Compose resolves the governed Player Start independently of selection, respects hierarchy visibility, draws cyan normally/orange selected, and uses the same live controller dimensions. Removed the duplicate older selected-only ring guide from scene-icon handling.
+Validation: `powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/build_capsule.ps1` builds Windows x64 Release Studio with MSBuild /m:2 /p:BuildProjectReferences=false, exit 0, 18.71 seconds; existing MSB8029 and C4834 warnings. `git diff --check` passes.
+Native DX12 visual inspection: reopened ArmsLibrary, unselected cyan capsule visible with empty Inspector (BUILD/capsule-unselected.png); selected orange capsule visible with Player Start Inspector (BUILD/full-arms-window.png). Correct build RenegadeStudioAlwaysCapsule.exe remains open. Previous editor retained.
+No serialized or Runtime changes, so save/reload and standalone gameplay checks are not applicable. Prefab-backed governed starts inherit this display; reusable player prefab authoring remains future work. Owner acceptance and overall release gate remain pending. Next: reusable player prefab setup.
