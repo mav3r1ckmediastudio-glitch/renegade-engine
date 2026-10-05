@@ -23,10 +23,12 @@ void StudioRenderPath::CreateAssemblyEditor() {
  b.Create(name);b.SetText(name);b.SetPos(XMFLOAT2(x,y));b.SetSize(XMFLOAT2(width,28));assemblyPanel_.AddWidget(&b);};
  combo(assemblyArms_,"Arms product",110,35,420);
  combo(assemblyWeapon_,"Weapon product",110,70,420);
+ assemblyArms_.SetTooltip("Arms folder: Content/Player/Arms. Existing assemblies also identify arms in shared pack folders.");
+ assemblyWeapon_.SetTooltip("Weapons folder: Content/Player/Weapons. Existing assemblies also identify weapons in shared pack folders.");
  auto partChanged=[this](const wi::gui::EventArgs&){
  if(assemblyRefreshing_)return;
  const auto before=assemblySettings_;
- int arms=assemblyArms_.GetSelected(),weapon=assemblyWeapon_.GetSelected();
+ const auto arms=assemblyArms_.GetSelectedUserdata(),weapon=assemblyWeapon_.GetSelectedUserdata();
  assemblySettings_={};
  if(arms>0&&size_t(arms)<assemblyPartIds_.size())assemblySettings_.armsAssetId=assemblyPartIds_[arms];
  if(weapon>0&&size_t(weapon)<assemblyPartIds_.size())assemblySettings_.weaponAssetId=assemblyPartIds_[weapon];
@@ -182,17 +184,15 @@ void StudioRenderPath::OpenAssemblyEditor() {
  assemblyArms_.AddItem("SELECT ARMS",0);assemblyWeapon_.AddItem("SELECT WEAPON",0);assemblyPartIds_.push_back({});
  bridge::AssetRegistry registry;std::string error;
  if(!bridge::CreatorAssetWorkflowService().RefreshRegistryFromDisk(project.rootPath,project.projectId,registry,error)){assemblyRefreshing_=false;studioChrome_.SetStatusText(error);return;}
- for(const auto& p:registry.importedProducts){
- const auto r=std::find_if(registry.records.begin(),registry.records.end(),[&](const auto& r){return r.assetId==p.productAssetId;});
- if(r==registry.records.end()||!r->sourceAvailable||std::filesystem::u8path(r->projectRelativePath).extension()!=".rasset"||
- p.importer=="renegade.first_person.assembly")continue;
- assemblyPartIds_.push_back(r->assetId);auto label=std::filesystem::u8path(r->projectRelativePath).filename().generic_u8string();
- assemblyArms_.AddItem(label,assemblyPartIds_.size()-1);assemblyWeapon_.AddItem(label,assemblyPartIds_.size()-1);
+ for(const auto& choice:bridge::CollectFirstPersonPartChoices(registry)) {
+ assemblyPartIds_.push_back(choice.assetId);const auto index=assemblyPartIds_.size()-1;
+ if(choice.arms)assemblyArms_.AddItem(choice.label,index);
+ if(choice.weapon)assemblyWeapon_.AddItem(choice.label,index);
  }
  assemblyArms_.SetSelected(0);assemblyWeapon_.SetSelected(0);assemblyBone_.ClearItems();assemblyBones_.clear();
  for(size_t i=0;i<Actions.size();++i){assemblyArmsClips_[i].ClearItems();assemblyWeaponClips_[i].ClearItems();}
  assemblySave_.SetEnabled(false);assemblyName_.SetValue("First Person Assembly");assemblyPanel_.SetVisible(true);
- assemblyStatus_.SetText("Select parts and LOAD PARTS. Save as new creates and assigns a product.");
+ assemblyStatus_.SetText("Choose player parts and LOAD PARTS. New parts: Content/Player/Arms or Weapons.");
  assemblyRefreshing_=false;assemblyPreviewRefreshPending_=false;assemblyDraftPreviewDirty_=true;
  if(!assigned.empty()&&bridge::FirstPersonAssemblyService().ReadSettings(project.rootPath,project.projectId,assigned,assemblySettings_,error)){
  const auto record=std::find_if(registry.records.begin(),registry.records.end(),
@@ -204,7 +204,11 @@ void StudioRenderPath::OpenAssemblyEditor() {
  assemblyRefreshing_=true;
  auto select=[&](wi::gui::ComboBox& box,const std::string& id){
  auto it=std::find(assemblyPartIds_.begin(),assemblyPartIds_.end(),id);
- if(it!=assemblyPartIds_.end())box.SetSelected(static_cast<int>(it-assemblyPartIds_.begin()));};
+ if(it!=assemblyPartIds_.end()) {
+ const auto index=static_cast<size_t>(it-assemblyPartIds_.begin());
+ for(size_t row=0;row<box.GetItemCount();++row)
+ if(box.GetItemUserData(int(row))==index){box.SetSelected(int(row));break;}
+ }};
  select(assemblyArms_,assemblySettings_.armsAssetId);select(assemblyWeapon_,assemblySettings_.weaponAssetId);assemblyRefreshing_=false;LoadAssemblyParts();
  RebuildAssemblyPreview();
  }
@@ -213,7 +217,7 @@ void StudioRenderPath::OpenAssemblyEditor() {
 }
 void StudioRenderPath::LoadAssemblyParts() {
  if(!session_||!session_->Projects().HasProject()||session_->Projects().CurrentProject().projectId!=assemblyProjectId_)return;
- int a=assemblyArms_.GetSelected(),w=assemblyWeapon_.GetSelected();
+ const auto a=assemblyArms_.GetSelectedUserdata(),w=assemblyWeapon_.GetSelectedUserdata();
  if(a<=0||w<=0||size_t(a)>=assemblyPartIds_.size()||size_t(w)>=assemblyPartIds_.size()){
  assemblyStatus_.SetText("Select both retained parts.");return;}
  auto& s=assemblySettings_;
@@ -252,7 +256,7 @@ void StudioRenderPath::LoadAssemblyParts() {
 void StudioRenderPath::RebuildAssemblyPreview() {
  assemblyPreviewRefreshPending_=false;assemblyDraftPreviewDirty_=true;
  if(!session_||!session_->Projects().HasProject()||session_->Projects().CurrentProject().projectId!=assemblyProjectId_)return;
- int armsIndex=assemblyArms_.GetSelected(),weaponIndex=assemblyWeapon_.GetSelected();
+ const auto armsIndex=assemblyArms_.GetSelectedUserdata(),weaponIndex=assemblyWeapon_.GetSelectedUserdata();
  if(armsIndex<=0||weaponIndex<=0||size_t(armsIndex)>=assemblyPartIds_.size()||size_t(weaponIndex)>=assemblyPartIds_.size()||
  assemblySettings_.armsAssetId!=assemblyPartIds_[armsIndex]||assemblySettings_.weaponAssetId!=assemblyPartIds_[weaponIndex]) {
  assemblyStatus_.SetText("LOAD PARTS for the selected products first.");return;
@@ -306,7 +310,12 @@ void StudioRenderPath::RefreshAssemblyDraft() {
  assemblyRefreshing_=true;
  auto select=[&](wi::gui::ComboBox& box,const bridge::StableId& id){
  auto it=std::find(assemblyPartIds_.begin(),assemblyPartIds_.end(),id);
- box.SetSelected(it==assemblyPartIds_.end()?0:int(it-assemblyPartIds_.begin()));};
+ box.SetSelected(0);
+ if(it!=assemblyPartIds_.end()) {
+ const auto index=static_cast<size_t>(it-assemblyPartIds_.begin());
+ for(size_t row=0;row<box.GetItemCount();++row)
+ if(box.GetItemUserData(int(row))==index){box.SetSelected(int(row));break;}
+ }};
  select(assemblyArms_,assemblySettings_.armsAssetId);select(assemblyWeapon_,assemblySettings_.weaponAssetId);
  assemblyRefreshing_=false;LoadAssemblyParts();
  assemblySaveNew_.SetEnabled(false);

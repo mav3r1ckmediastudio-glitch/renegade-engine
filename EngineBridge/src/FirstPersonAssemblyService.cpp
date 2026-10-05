@@ -12,6 +12,37 @@
 #include <cmath>
 #include <limits>
 namespace renegade::bridge {
+std::vector<FirstPersonPartChoice> CollectFirstPersonPartChoices(const AssetRegistry& registry) {
+ std::set<StableId> armsIds,weaponIds;
+ for(const auto& product:registry.importedProducts) {
+  if(product.importer!="renegade.first_person.assembly")continue;
+  try {
+   const auto recipe=nlohmann::json::parse(product.settingsJson);
+   const auto& options=recipe.at("options");
+   const auto arms=options.value("arms_asset_id",std::string{});
+   const auto weapon=options.value("weapon_asset_id",std::string{});
+   if(IsValidStableId(arms))armsIds.insert(arms);
+   if(IsValidStableId(weapon))weaponIds.insert(weapon);
+  } catch(const nlohmann::json::exception&) { /* Invalid provenance cannot classify parts. */ }
+ }
+ std::vector<FirstPersonPartChoice> result;
+ for(const auto& record:registry.records) {
+  const auto product=std::find_if(registry.importedProducts.begin(),registry.importedProducts.end(),
+   [&](const auto& p){return p.productAssetId==record.assetId;});
+  if(!record.sourceAvailable||record.dependencyClass!=DependencyClass::ImportedContent||
+     std::filesystem::u8path(record.projectRelativePath).extension()!=".rasset"||
+     product==registry.importedProducts.end()||product->importer=="renegade.first_person.assembly")continue;
+  const auto under=[&](const char* folder){const std::string prefix=folder;
+   return record.projectRelativePath.compare(0,prefix.size(),prefix)==0;};
+  const bool arms=under("Content/Player/Arms/")||armsIds.count(record.assetId)!=0;
+  const bool weapon=under("Content/Player/Weapons/")||weaponIds.count(record.assetId)!=0;
+  if(!arms&&!weapon)continue;
+  result.push_back({record.assetId,record.projectRelativePath,arms,weapon});
+ }
+ std::sort(result.begin(),result.end(),[](const auto& a,const auto& b){
+  return a.label!=b.label?a.label<b.label:a.assetId<b.assetId;});
+ return result;
+}
 namespace {
 namespace fs = std::filesystem;
 std::vector<std::uint8_t> Bytes(const std::string& s) { return {s.begin(),s.end()}; }

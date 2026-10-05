@@ -2,6 +2,7 @@
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/PlayerViewGripService.h"
 #include <memory>
+#include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/FirearmSettings.h"
 #include <array>
 #include "renegade/bridge/CommandService.h"
@@ -26,6 +27,13 @@ struct FirstPersonAssemblySettings {
 };
 bool SerializeFirstPersonAssemblySettings(const FirstPersonAssemblySettings&, std::string&, std::string&);
 bool ParseFirstPersonAssemblySettings(const std::string&, FirstPersonAssemblySettings&, std::string&);
+struct FirstPersonPartChoice {
+    StableId assetId;
+    std::string label;
+    bool arms = false, weapon = false;
+};
+// Folder-scoped choices plus explicit roles from existing assembly provenance.
+std::vector<FirstPersonPartChoice> CollectFirstPersonPartChoices(const AssetRegistry&);
 class SetFirstPersonAssemblySettingsCommand final : public ICommand {
 public:
     SetFirstPersonAssemblySettingsCommand(FirstPersonAssemblySettings& target,

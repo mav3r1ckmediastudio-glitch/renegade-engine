@@ -855,3 +855,11 @@ target_link_libraries(RenegadePlayerPrefabTests PRIVATE Renegade::EngineBridge)
 set_target_properties(RenegadePlayerPrefabTests PROPERTIES FOLDER "Renegade/Tests")
 add_test(NAME RenegadePlayerPrefabTests COMMAND RenegadePlayerPrefabTests)
 add_dependencies(RenegadeBridgeTests RenegadePlayerPrefabTests)
+
+# Pure action ownership/state proof; no graphics device or native skeleton required.
+add_executable(RenegadeEquipmentActionStateTests EquipmentActionStateTests.cpp)
+target_include_directories(RenegadeEquipmentActionStateTests PRIVATE ${CMAKE_SOURCE_DIR}/EngineBridge/include)
+target_compile_features(RenegadeEquipmentActionStateTests PRIVATE cxx_std_17)
+add_test(NAME EquipmentActionState COMMAND RenegadeEquipmentActionStateTests)
+set_target_properties(RenegadeEquipmentActionStateTests PROPERTIES FOLDER "Renegade/Tests")
+add_dependencies(RenegadeBridgeTests RenegadeEquipmentActionStateTests)

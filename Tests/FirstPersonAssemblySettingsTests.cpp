@@ -2,8 +2,39 @@
 #include <iostream>
 #include <limits>
 using namespace renegade::bridge;
+static bool PartPickerRegression() {
+ AssetRegistry registry;
+ auto add=[&](const std::string& path,bool available=true,const std::string& importer="wicked.fbx") {
+  AssetRecord record;record.assetId=GenerateStableId();record.projectRelativePath=path;
+  record.dependencyClass=DependencyClass::ImportedContent;record.sourceAvailable=available;
+  registry.records.push_back(record);ImportedProductRecord product;
+  product.productAssetId=record.assetId;product.importer=importer;
+  registry.importedProducts.push_back(product);return record.assetId;
+ };
+ const auto arms=add("Content/Player/Arms/Pack/Hands.rasset");
+ const auto weapon=add("Content/Player/Weapons/Shotgun.rasset");
+ const auto sharedArms=add("Content/Packs/Combined/Hands.rasset");
+ const auto sharedWeapon=add("Content/Packs/Combined/Gun.rasset");
+ for(int i=0;i<100;++i)add("Content/Models/Unrelated"+std::to_string(i)+".rasset");
+ add("Content/Player/ArmsBackup/Excluded.rasset");
+ add("Content/Player/Arms/Missing.rasset",false);
+ add("Content/Player/Weapons/Assembly.rasset",true,"renegade.first_person.assembly");
+ ImportedProductRecord recipe;recipe.importer="renegade.first_person.assembly";
+ recipe.settingsJson="{\"options\":{\"arms_asset_id\":\""+sharedArms+"\",\"weapon_asset_id\":\""+sharedWeapon+"\"}}";
+ registry.importedProducts.push_back(recipe);
+ const auto choices=CollectFirstPersonPartChoices(registry);
+ if(choices.size()!=4)return false;
+ for(const auto& c:choices) {
+  if(c.assetId==arms||c.assetId==sharedArms){if(!c.arms||c.weapon)return false;}
+  else if(c.assetId==weapon||c.assetId==sharedWeapon){if(!c.weapon||c.arms)return false;}
+  else return false;
+ }
+ registry.importedProducts.back().settingsJson="malformed";
+ return CollectFirstPersonPartChoices(registry).size()==2;
+}
 int main()
 {
+    if(!PartPickerRegression()){std::cerr<<"Part picker filtering regression";return 20;}
     FirstPersonAssemblySettings settings;
     settings.armsAssetId = GenerateStableId();
     settings.weaponAssetId = GenerateStableId();

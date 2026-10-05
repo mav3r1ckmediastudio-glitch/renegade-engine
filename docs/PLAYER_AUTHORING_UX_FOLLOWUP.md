@@ -11,17 +11,20 @@ P1 requirement or of the full Alpha Playability combat programme.
 
 The owner accepts the functionality but reports poor setup UX. Revisit the player
 Inspector, prefab placement and Assembly workflow in a separate bounded slice.
-The current arms and weapon dropdowns enumerate unrelated imported models across
-the whole project; dedicated picker filtering is not implemented by PR #178.
+PR #178 enumerated unrelated imported models across the whole project. The first
+P2 implementation slice now filters each picker by dedicated folder or saved
+assembly part role. This addresses the immediate selection problem; the broader
+workflow revision remains open.
 
 - Default Arms selection to an arms collection/folder and Weapon selection to a
   weapons collection/folder, rather than every imported project asset.
 - Proposed defaults: `Content/Player/Arms`, `Content/Player/Weapons` and
-  `Content/Player/Assemblies`. These are follow-up conventions, not enforced
-  directories in the merged implementation.
+  `Content/Player/Assemblies`. The first P2 slice recognizes Arms/Weapons folders without moving legacy parts.
+  Assemblies remains a proposed organization convention.
 - Support packs that keep both parts together. Explicit part roles should govern
   picker eligibility independently of physical folder layout; retain an explicit
-  browse/import route for other creator layouts. Role metadata is future work.
+  browse/import route for other creator layouts. Saved assembly provenance supplies legacy/shared-pack roles in the first P2 slice;
+  explicit new-pack role authoring and browse/import remain future work.
 - Show readable names and clearly distinguish raw parts, completed assemblies and
   player prefabs. Applying a finished prefab should not require rebuilding it.
 - Provide complete cross-project import/transfer of the prefab, assembly, authoring
@@ -35,3 +38,7 @@ Acceptance: in a project containing many unrelated models, pick the intended
 arms/weapon without trawling the whole project; also load a combined-folder pack,
 place/apply a finished player, save/reopen, and verify Test Level and packaged
 Runtime. The UX follow-up does not block the accepted PR #178 functionality.
+
+See [P2 implementation](P2_EQUIPMENT_ACTION_IMPLEMENTATION.md) for current scope
+and remaining work. Native filtered selections and restored preview were checked
+in an isolated copy of the accepted shotgun project.

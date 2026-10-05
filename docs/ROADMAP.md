@@ -75,6 +75,13 @@ pitch/yaw behaviour and a foundation that does not assume the right hand is the
 only gameplay hand.
 ### P2 — Equipment & Action Framework
 
+
+**Status: IN PROGRESS.** The owner authorized the small picker repair first,
+then P2 in the authored order on 2026-10-05. The initial shared action-state
+foundation covers semantic requests, staged phases and hand reservation;
+project equipment assets, loadout authoring and Runtime integration remain open.
+See [P2_EQUIPMENT_ACTION_IMPLEMENTATION](P2_EQUIPMENT_ACTION_IMPLEMENTATION.md).
+
 Implement generic item/ability ownership, equip/unequip, primary/alternate use,
 charge/release, reload, staged actions and hand reservation.
 
