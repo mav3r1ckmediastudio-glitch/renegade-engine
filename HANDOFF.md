@@ -2371,3 +2371,28 @@ Build left open on ArmsLibrary. Existing editors and Runtime retained.
 No persistence or gameplay changes; no overall gate closure, push or merge.
 Next: owner select Player Start and navigate to verify connected capsule,
 then continue reusable player inspector/prefab setup.
+
+## 2026-10-05 Window resize input alignment repair, owner accepted
+
+Implementation 4a38305584e779131a4b21fed287b98673c78314.
+Owner reported hierarchy header only toggles at top and viewport icons have
+large left offset. Window procedure skipped SetWindow on background resize/DPI
+change. Stale swapchain/canvas could stretch the displayed editor while pointer
+coordinates follow current client size. Refresh now runs even while inactive
+(except minimized), and on focus recovery. Changed main_Windows.cpp and
+architecture. Temporary click-coordinate probe was removed before final build.
+
+Studio Release x64 MSBuild BUILD/renegade/Studio/RenegadeStudio.vcxproj
+/m:2 /nologo /verbosity:quiet /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false with CL=/MP4: exit 0, 18.17s.
+git diff --check passes.
+Opened BUILD/renegade/Studio/Release/RenegadeStudioCoordinateFix.exe DX12.
+Reopened ArmsLibrary original fixture. Hub centre Open Project button works.
+Native hierarchy lower/header-centre clicks toggle Characters; Player Start
+row selects with Inspector/capsule. Native capture inspection confirms layout
+no longer stretched. Initial viewport-icon script used stale position after
+camera movement; do not count that capture as successful icon evidence.
+Owner explicitly reports "that works fine now, thanks" at 10:25 UK time,
+confirming reported selection alignment repair. Corrected build left open.
+No serialized or gameplay state changes. No overall release gate closure,
+push or merge. Next: continue player inspector/prefab authoring per continuation doc.
