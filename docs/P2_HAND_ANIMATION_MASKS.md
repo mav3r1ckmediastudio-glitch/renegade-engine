@@ -105,3 +105,24 @@ controller edge-case tests and v2 authoring controls; do not declare P2 complete
 
 
 Final TestLevel native smoke: snapshot load ready and simultaneous attack/block plus lowering observed in events; strict automated script assertion interrupted by foreground input changes, so no clean editor-button parity claim. Sword grip lowered 2cm; owner visual clipping acknowledged.
+
+## Four sword attacks - 2026-10-06
+Independent schema-v2 assemblies now admit multiple explicit Attack bindings
+to distinct source indices. Legacy paired assemblies still reject duplicate
+actions. Shield/movement/attack bindings cannot alias a source clip.
+Recipe order persists as native attack_order metadata and sorts generated
+primary clips, so LMB cycles Left, Right, Down, Stab in the owner fixture.
+Each swing completes before another is accepted; no click buffering added.
+Shared arms orientation and lowered grip retained. Independent held block retained.
+Five focused CTests pass; Release bridge/Runtime builds pass; saved/reopened
+fixture TestLevel closure passes; four unique generated attack clips exercised
+with shield phase2 maintained and rendered captures inspected.
+Evidence: BUILD/sword-playable-variants/sword-variant-0..3.png.
+Updated owner project stays Desktop/renegade tests/SwordShieldTest;
+prior single attack project preserved in SwordShieldTest-single-attack.
+Files: FirstPersonAssemblyService.cpp, FirstPersonHandAssemblyPreparation.h,
+PlayerViewHandAnimation.h, FirstPersonAssemblySettingsTests.cpp,
+SwordShieldPlayableProof.h. Reproduce BUILD/sword_variants_build.ps1.
+Still no directional input, charge mapping, damage, collision or parry.
+Sword/shield clipping remains visible; no P2 gate closure.
+Next: compatible attack/block poses and blending, then directional selection.

@@ -96,12 +96,17 @@ bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
    }
   }
  }
+ if(s.IndependentHands()) {
+  std::set<unsigned> bindings={s.blockStartClip,s.blockLoopClip,s.blockEndClip};
+  if(bindings.size()!=3){e="Shield actions need distinct clips.";return false;}
+  for(const auto& p:s.pairs)if(!bindings.insert(p.armsClip).second){e="Hand actions need distinct source clips.";return false;}
+ }
  std::set<std::string> actions;
  for(const auto& p:s.pairs) {
  if(std::none_of(FirstPersonAssemblyActions.begin(),FirstPersonAssemblyActions.end(),
  [&](const char* action){return p.action==action;})) {
  e="Unknown assembly action.";return false;}
- if(!actions.insert(p.action).second){e="Each assembly action needs one explicit pair.";return false;}
+ if(!actions.insert(p.action).second && !(s.IndependentHands() && p.action=="Attack")){e="Each assembly action needs one explicit pair except independent Attack variants.";return false;}
  }
  e.clear();return true;
 }
@@ -249,10 +254,14 @@ ModelDerivedMetadata FirstPersonAssemblyService::Describe(const wi::scene::Scene
 }
 bool FirstPersonAssemblyService::Pose(wi::scene::Scene& s,const std::string& action,float time,std::string& e) const {
  if(!std::isfinite(time)||time<0){e="Preview time must be finite and nonnegative.";return false;}
+ bool handVariants=false;
+ for(size_t i=0;i<s.metadatas.GetCount();++i)
+  handVariants=handVariants || (s.metadatas[i].bool_values.has("renegade.first_person.independent_hands") && s.metadatas[i].bool_values.get("renegade.first_person.independent_hands"));
  unsigned selected=0;
  for(size_t i=0;i<s.animations.GetCount();++i) {
  auto& c=s.animations[i];auto* m=s.metadatas.GetComponent(s.animations.GetEntity(i));
  bool use=m&&m->string_values.has(CreatorCharacterAnimationActionMetadataKey)&&m->string_values.get(CreatorCharacterAnimationActionMetadataKey)==action;
+ if(handVariants && action=="Attack" && selected!=0)use=false;
  c.Pause();c.RootMotionOff();c.amount=use?1.0f:0.0f;c.timer=std::clamp(c.start+time,c.start,c.end);
  c.last_update_time=-std::numeric_limits<float>::max();selected+=use;
  }

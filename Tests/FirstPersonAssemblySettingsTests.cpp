@@ -74,6 +74,7 @@ int main()
     hands.primaryLayerRootPath="[\"root\",\"right\"]";
     hands.offHandLayerRootPath="[\"root\",\"left\"]";
     hands.blockStartClip=17;hands.blockLoopClip=22;hands.blockEndClip=24;
+    hands.pairs.push_back({"Attack",5,0});hands.pairs.push_back({"Attack",9,0});
     std::string handsJson;
     if(!SerializeFirstPersonAssemblySettings(hands,handsJson,error)||
        !ParseFirstPersonAssemblySettings(handsJson,parsed,error)||

@@ -39,9 +39,12 @@ static bool PrepareIndependentHandAssembly(const std::string& root,const StableI
   auto& clip=arms.animations[i];clip.Pause();clip.RootMotionOff();clip.amount=0;
   arms.metadatas.Create(entity).string_values.set(CreatorCharacterAnimationActionMetadataKey,"Unassigned");
  }
- for(const auto& pair:s.pairs)
-  arms.metadatas.Create(arms.animations.GetEntity(pair.armsClip)).string_values.set(
-   CreatorCharacterAnimationActionMetadataKey,pair.action);
+ unsigned attackOrder=0;
+ for(const auto& pair:s.pairs) {
+  auto& metadata=arms.metadatas.Create(arms.animations.GetEntity(pair.armsClip));
+  metadata.string_values.set(CreatorCharacterAnimationActionMetadataKey,pair.action);
+  if(pair.action=="Attack")metadata.int_values.set("renegade.first_person.attack_order",attackOrder++);
+ }
  const unsigned blockIndices[]={s.blockStartClip,s.blockLoopClip,s.blockEndClip};
  const char* blockActions[]={"BlockStart","BlockLoop","BlockEnd"};
  for(size_t i=0;i<3;++i)

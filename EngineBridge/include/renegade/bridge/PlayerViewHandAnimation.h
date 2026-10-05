@@ -72,6 +72,14 @@ inline bool InitializeRuntimePlayerHandAnimations(wi::scene::Scene& scene,wi::ec
   sources.push_back({e,m->string_values.get(bridge::CreatorCharacterAnimationActionMetadataKey)});
   prepared.sourceClips.push_back(e);
  }
+ std::stable_sort(sources.begin(),sources.end(),[&](const auto& a,const auto& b) {
+  if(a.action!="Attack" || b.action!="Attack")return a.action=="Attack" && b.action!="Attack";
+  const auto order=[&](auto e) {
+   const auto* m=scene.metadatas.GetComponent(e);
+   return m&&m->int_values.has("renegade.first_person.attack_order")?m->int_values.get("renegade.first_person.attack_order"):0;
+  };
+  return order(a.entity)<order(b.entity);
+ });
  for(const auto& source:sources) {
   const int index=PlayerHandSemanticIndex(source.action);
   if(index>=0) {
