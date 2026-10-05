@@ -39,8 +39,9 @@ active and recovery phases emit events; conflicting hands cannot reserve togethe
 Zero/nonfinite/negative update time cannot advance phases. Hold requires release;
 cancellation is allowed only before active when authored. Reset clears reservations
 and queued events. Definitions reject invalid timing and duplicate action kinds.
-This foundation is not yet connected to the Runtime shotgun or persisted equipment
-assets; an authored animation string is a semantic action, not a clip filename.
+The action state is not yet connected to the Runtime shotgun; equipment
+asset persistence and starting-loadout authoring are now implemented. An authored
+animation string identifies a semantic action rather than a clip filename.
 
 ## Validation
 
@@ -53,6 +54,66 @@ assets; an authored animation string is a semantic action, not a clip filename.
 - Native picker visual/save/reopen and Windows build evidence is recorded in
   HANDOFF.md at the implementation checkpoint.
 
-Remaining: durable equipment identity/assets, starting loadout, Runtime integration,
-semantic animation binding and end-to-end snapshot/package acceptance. No P2 gate
+Remaining: Runtime ownership/integration, semantic animation binding and
+end-to-end snapshot/package gameplay acceptance. No P2 gate
 completion or new firearm/projectile capability is claimed by this foundation.
+
+## Equipment assets and starting loadout
+
+EquipmentAssetService persists schema-v1 .requipment definitions under
+Content/Player/Equipment with project/stable identity, hand-use policy, semantic
+actions, staged durations and an optional governed presentation .rasset. Immutable
+saves journal the definition and registry together, record presentation dependency
+edges and validate both files. Missing/foreign assets and unsupported schema are
+rejected. Names appear in the Asset Browser and scoped equipment selectors.
+
+PlayerControllerSettings now carries primaryEquipmentAssetId and
+offHandEquipmentAssetId in native WISCENE metadata. The existing settings command
+provides Undo/Redo. Player prefab schema v2 includes both slots; schema v1 remains
+readable with empty slots. Prefab apply/reset/placement retains the loadout and
+level-local overrides. Save validates hand compatibility and available equipment.
+
+Player Inspector > STARTING EQUIPMENT opens primary/off-hand selectors and an
+explicit APPLY LOADOUT command. SAVE LEVEL persists the assignment. CREATE FROM
+ASSEMBLY creates a new equipment definition from the player's assigned saved
+assembly: supported Equip, Unequip, Attack, AimIn and Reload bindings become
+semantic equipment actions, with active duration copied from the longer native
+paired track. It does not invent missing actions or alter the source assembly.
+Generic action/timing editing and richer inventory/ability authoring remain open.
+
+The existing dependency provider discovers scene/prefab equipment references and
+equipment presentation references. These edges feed the common snapshot/build
+graph; their end-to-end Runtime consumption still requires the next P2 slice.
+Assigning a loadout does not yet change gameplay. The accepted legacy shotgun
+path remains the current Runtime reference until semantic routing is integrated.
+
+## Second checkpoint verification
+
+Windows Release equipment asset, player prefab and equipment action tests pass
+(3/3). Native Studio created a definition from the full shotgun assembly, filtered
+the two-handed item out of the off-hand selector, applied the loadout, saved a
+schema-v2 player prefab and retained both after SAVE LEVEL / REOPEN SCENE.
+Standalone Runtime displayed the existing shotgun arms from this saved level.
+The naming field was subsequently initialized empty and Studio rebuilt.
+
+The initial Test Level ProjectRejected (22) was traced to a missing gameplay
+input map and a Windows path-length failure while Runtime tried to journal
+defaults. Snapshots now contain a validated input document before launch.
+Release snapshot regression and native Test Level startup on the same deeply
+nested validation project pass. The paired shotgun rig loads with both tracks.
+Equipment snapshot closure and semantic Runtime routing remain unverified;
+this checkpoint remains draft and does not establish packaged gameplay readiness.
+
+## Equipment snapshot closure checkpoint
+
+Test Level now preserves primary/off-hand equipment definitions from resolved
+level settings and from player prefab defaults, including equipment displaced
+by a local override. Equipment presentation products and governed texture bindings
+use the existing first-person presentation closure. Each copied equipment
+asset is reloaded against the snapshot registry; missing/foreign/incompatible
+loadouts abort snapshot creation. No Runtime equipment action routing is claimed.
+
+Release snapshot, prefab, action-state and equipment asset tests pass (4/4).
+DX12 equipment snapshot proof cold-loads the real shotgun definition, its paired
+presentation and the unchanged saved loadout in a cloned validation project.
+This establishes asset transport, not gameplay action or full Build Game acceptance.

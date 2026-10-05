@@ -2544,3 +2544,48 @@ P2 implementation/feature matrix working copies updated with recovery status.
 No push/merge or independent release-gate closure. Next: equipment dependency
 closure in Test Level (snapshot inventory had no .requipment documents), then
 semantic equipment Runtime routing and packaged gameplay acceptance per P2.
+
+## 2026-10-05 P2 equipment persistence and snapshot closure checkpoint
+
+Continued from 0d9e067. Preserved/completed the existing equipment asset and
+Starting Equipment UI candidate. EquipmentAssetService journals immutable
+.requipment assets; PlayerService retains primary/off-hand StableIds in WISCENE;
+PlayerPrefabService schema v2 preserves slots with v1 compatibility. Registry,
+asset catalogue and dependency provider expose equipment and presentation edges.
+Studio creates definitions from governed assemblies and applies hand-compatible
+loadouts with existing command history. Native UI save/reopen evidence for this
+candidate was recorded by the preceding session in P2 implementation document.
+
+New TestLevelSnapshotService closure copies resolved level equipment and prefab
+default equipment, including displaced defaults, and reuses governed arms/product
+texture closure for presentation. Copied definitions reload against the snapshot
+registry. Invalid/missing equipment fails snapshot creation. Regression preserves
+sword/shield prefab defaults and local two-hand bow override; snapshot prefab
+cold load, unchanged definition bytes and invalid-loadout rejection pass.
+FirstPersonAssemblyGraphicsProof --equipment-snapshot clones supplied project
+Content and registry, saves a real shotgun definition, assigns it in memory,
+creates a snapshot, cold-loads the definition and paired presentation, and reopens
+native level loadout. Original creator project remains untouched by this proof.
+
+Validation: BUILD/build_p2_snapshot_equipment.ps1 exit 0 / 10.93s; snapshot
+CTest 1/1 PASS / 0.65s. BUILD/p2_snapshot_finish_build.ps1 rebuilt Release equipment
+and prefab tests, Runtime and Studio: exit 0 / 17.71s. Focused CTest 4/4 PASS
+(snapshot, prefab, EquipmentActionState, EquipmentAsset) / 1.31s.
+BUILD/p2_equipment_proof.ps1 builds RenegadeFirstPersonAssemblyWorkflowProof and
+runs supplied validation descriptor with --equipment-snapshot into
+BUILD/p2-equipment-snapshot-evidence: exit 0 / 21.02s; EQUIPMENT SNAPSHOT PASS.
+Build flags CL=/MP4, MSBuild /m:2 /verbosity:quiet /nologo
+/p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false.
+Existing MSB8029 warnings. No claims of new combat feel or full Build Game parity.
+
+Owner reaffirmed approved Player Camera Preview inset at lower-right of scene
+viewport. PLAYER_AUTHORING_CONTINUATION.md records world + equipped arms/weapon,
+authored facing/eye height/FOV, preview-only paused gameplay. This inset is still
+unimplemented; isolated Assembly preview and separate Runtime do not fulfill it.
+
+Changed bridge equipment/player/prefab/catalogue/dependency/snapshot files,
+Studio equipment panel/Inspector and CMake, equipment/prefab/snapshot/graphics
+proof tests and CMake, plus changelog/architecture/roadmap/feature matrix/P2/player
+continuation documents. Unrelated Tools/__pycache__ and log.txt remain untouched.
+Next: semantic equipment Runtime ownership/action routing, then owner gameplay
+and packaged acceptance. P2 and independent release gate remain open.

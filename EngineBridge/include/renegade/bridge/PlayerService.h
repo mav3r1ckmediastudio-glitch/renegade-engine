@@ -32,6 +32,7 @@ namespace renegade::bridge
         float maximumSlopeDegrees = 50.0f;
         float gravityFactor = 1.0f;
         StableId firstPersonArmsAssetId;
+        StableId primaryEquipmentAssetId, offHandEquipmentAssetId;
     };
 
     struct PlayerStart

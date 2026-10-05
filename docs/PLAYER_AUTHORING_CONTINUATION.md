@@ -116,3 +116,14 @@ placed player. Add no longer exposes Player Start. A second placement is refused
 the existing Inspector to change prefab, or delete the old start before placing another.
 Immutable saves refresh the browser. PR #178 functionality is owner-accepted; the UI/UX
 follow-up remains open.
+
+### Approved Player Camera Preview inset (owner reaffirmed 2026-10-05)
+
+The accepted Player Start mockup remains the visual target: a small Player
+Camera Preview at the bottom-right of the scene viewport, beside the selected
+player capsule. It shows the authored world from the player camera with equipped
+first-person arms/weapon, using the same eye height, facing and field of view.
+This is an editor authoring preview with gameplay paused; Test Level continues
+to run the separate real Runtime. The inset has not been implemented and must
+remain an explicit player authoring/UX deliverable. Do not treat Assembly or
+Hand Grips isolated previews as completion of this scene-camera preview.

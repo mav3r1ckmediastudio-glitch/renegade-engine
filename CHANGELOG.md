@@ -265,3 +265,10 @@ All notable user-facing changes are recorded here. Newest first.
 
 - Build Wicked's Tests project directly instead of passing the colliding
   `Tests` target name to the entire Visual Studio solution.
+
+### P2 equipment persistence candidate (draft PR #180)
+
+- Added governed equipment definitions and compatible primary/off-hand starting
+  loadout authoring, WISCENE persistence and backward-compatible player prefab v2.
+- Runtime semantic routing and end-to-end snapshot/package verification remain
+  open. The broader player authoring UI/UX revisit is still required.

@@ -1135,6 +1135,10 @@ namespace renegade::studio
         playerAssembly_.SetText("ASSEMBLY");
         playerAssembly_.OnClick([this](const wi::gui::EventArgs&) { OpenAssemblyEditor(); });
         inspectorPanel_.AddWidget(&playerAssembly_);
+        playerEquipment_.Create("Player Equipment");
+        playerEquipment_.SetText("STARTING EQUIPMENT");
+        playerEquipment_.OnClick([this](const wi::gui::EventArgs&){OpenEquipmentEditor();});
+        inspectorPanel_.AddWidget(&playerEquipment_);
         playerPrefab_.Create("Player Prefab");
         playerPrefab_.SetText("");
         playerPrefab_.SetTooltip("Choose reusable player defaults. Spawn position and facing remain level-specific.");
@@ -2919,6 +2923,7 @@ namespace renegade::studio
         modelImportPanel_.SetVisible(false);
         CreateHandGripEditor();
         CreateAssemblyEditor();
+        CreateEquipmentEditor();
         GetGUI().AddWidget(&modelImportPanel_);
         GetGUI().AddWidget(&studioChrome_);
     }
@@ -4648,6 +4653,7 @@ namespace renegade::studio
         setPlayerVisible(playerFirstPersonArms_);
         setPlayerVisible(playerHandGrips_);
         setPlayerVisible(playerAssembly_);
+        setPlayerVisible(playerEquipment_);
         setPlayerVisible(playerCapsuleRadius_);
         setPlayerVisible(playerCapsuleHeight_);
         setPlayerVisible(playerEyeHeight_);

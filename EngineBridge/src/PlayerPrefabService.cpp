@@ -1,4 +1,5 @@
 #include "renegade/bridge/PlayerPrefabService.h"
+#include "renegade/bridge/EquipmentAssetService.h"
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/ReusableAssetService.h"
 #include "json.hpp"
@@ -72,7 +73,8 @@ namespace renegade::bridge
         for(const auto& f:Fields)
             if(!std::isfinite(a.*f.member)||!std::isfinite(b.*f.member)||
                 std::abs(a.*f.member-b.*f.member)>0.00001f)return false;
-        return a.firstPersonArmsAssetId==b.firstPersonArmsAssetId;
+        return a.firstPersonArmsAssetId==b.firstPersonArmsAssetId&&
+            a.primaryEquipmentAssetId==b.primaryEquipmentAssetId&&a.offHandEquipmentAssetId==b.offHandEquipmentAssetId;
     }
     bool SerializePlayerPrefab(const PlayerPrefabDocument& d,std::string& text,std::string& error)
     {
@@ -80,7 +82,9 @@ namespace renegade::bridge
         json values=json::object();
         for(const auto& f:Fields)values[f.name]=d.settings.*f.member;
         values["first_person_arms_asset_id"]=d.settings.firstPersonArmsAssetId;
-        text=json{{"format","renegade-player-prefab"},{"schema_version",1},
+        values["primary_equipment_asset_id"]=d.settings.primaryEquipmentAssetId;
+        values["off_hand_equipment_asset_id"]=d.settings.offHandEquipmentAssetId;
+        text=json{{"format","renegade-player-prefab"},{"schema_version",2},
             {"project_id",d.projectId},{"asset_id",d.assetId},{"name",d.name},{"settings",values}}.dump(2);
         return true;
     }
@@ -90,7 +94,8 @@ namespace renegade::bridge
         {
             auto j=json::parse(text);
             if(!j.is_object()||j.size()!=6||j.at("format")!="renegade-player-prefab"||
-                !j.at("schema_version").is_number_integer()||j.at("schema_version")!=1||
+                !j.at("schema_version").is_number_integer()||
+                (j.at("schema_version")!=1&&j.at("schema_version")!=2)||
                 !j.at("project_id").is_string()||!j.at("asset_id").is_string()||
                 !j.at("name").is_string())throw std::runtime_error("Unsupported player prefab schema.");
             PlayerPrefabDocument d;
@@ -98,7 +103,7 @@ namespace renegade::bridge
             d.assetId=j.at("asset_id").get<std::string>();
             d.name=j.at("name").get<std::string>();
             auto& values=j.at("settings");
-            if(!values.is_object()||values.size()!=12)throw std::runtime_error("Incomplete player settings.");
+            if(!values.is_object()||values.size()!=(j.at("schema_version")==1?12:14))throw std::runtime_error("Incomplete player settings.");
             for(const auto& f:Fields)
             {
                 if(!values.at(f.name).is_number())throw std::runtime_error("Player setting must be numeric.");
@@ -106,6 +111,10 @@ namespace renegade::bridge
             }
             if(!values.at("first_person_arms_asset_id").is_string())throw std::runtime_error("Malformed arms identity.");
             d.settings.firstPersonArmsAssetId=values.at("first_person_arms_asset_id").get<std::string>();
+            if(j.at("schema_version")==2) {
+                d.settings.primaryEquipmentAssetId=values.at("primary_equipment_asset_id").get<std::string>();
+                d.settings.offHandEquipmentAssetId=values.at("off_hand_equipment_asset_id").get<std::string>();
+            }
             if(!Validate(d,error))return false;
             out=std::move(d);error.clear();return true;
         }
@@ -135,6 +144,8 @@ namespace renegade::bridge
         if(loaded.projectId!=project||loaded.assetId!=id)
         {error="Player prefab identity does not match its registered project.";return false;}
         if(!ArmsAvailable(root,registry,loaded.settings.firstPersonArmsAssetId,error))return false;
+        if(!ValidateStartingEquipment(root,project,loaded.settings.primaryEquipmentAssetId,
+            loaded.settings.offHandEquipmentAssetId,error))return false;
         d=std::move(loaded);return true;
     }
     PlayerPrefabSaveResult SavePlayerPrefab(const std::string& projectRoot,const StableId& project,
@@ -143,7 +154,9 @@ namespace renegade::bridge
         PlayerPrefabSaveResult r;
         AssetRegistry registry;
         if(!ReadAssetRegistry(projectRoot,project,registry,r.error)||
-            !ArmsAvailable(projectRoot,registry,settings.firstPersonArmsAssetId,r.error))return r;
+            !ArmsAvailable(projectRoot,registry,settings.firstPersonArmsAssetId,r.error)||
+            !ValidateStartingEquipment(projectRoot,project,settings.primaryEquipmentAssetId,
+                settings.offHandEquipmentAssetId,r.error))return r;
         r.document={project,GenerateStableId(),name,settings};
         std::string text;
         if(!SerializePlayerPrefab(r.document,text,r.error))return r;
@@ -160,6 +173,9 @@ namespace renegade::bridge
         record.projectRelativePath=r.projectRelativePath;record.provider="renegade.player_prefab";
         record.contentHash=Hash(text);
         if(!settings.firstPersonArmsAssetId.empty())record.dependencyAssetIds={settings.firstPersonArmsAssetId};
+        for(const auto& id:{settings.primaryEquipmentAssetId,settings.offHandEquipmentAssetId})
+            if(!id.empty()&&std::find(record.dependencyAssetIds.begin(),record.dependencyAssetIds.end(),id)==record.dependencyAssetIds.end())
+                record.dependencyAssetIds.push_back(id);
         registry.records.push_back(record);
         std::string registryText,registryPath;
         if(!SerializeAssetRegistry(registry,registryText,r.error)||
@@ -258,7 +274,7 @@ namespace renegade::bridge
         const auto prefabs=ListPlayerPrefabs(root,project,error);
         if(!error.empty())return false;
         for(const auto& d:prefabs)
-            if(d.name=="Basic Player Start"&&d.settings.firstPersonArmsAssetId.empty())
+            if(d.name=="Basic Player Start"&&d.settings.firstPersonArmsAssetId.empty()&&d.settings.primaryEquipmentAssetId.empty()&&d.settings.offHandEquipmentAssetId.empty())
                 return true;
         const auto saved=SavePlayerPrefab(root,project,"Basic Player Start",{});
         error=saved.error;

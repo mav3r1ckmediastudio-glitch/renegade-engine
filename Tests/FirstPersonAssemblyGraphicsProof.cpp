@@ -26,6 +26,7 @@
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/TestLevelSnapshotService.h"
+#include "renegade/bridge/EquipmentAssetService.h"
 namespace fs = std::filesystem;
 using namespace renegade::bridge;
 static LRESULT CALLBACK WindowProc(HWND w, UINT m, WPARAM a, LPARAM b)
@@ -896,6 +897,56 @@ static bool PlayerPrefabProof(const fs::path& input,const fs::path& output)
  return true;
 }
 
+static bool EquipmentSnapshotProof(const fs::path& input, const fs::path& output)
+{
+ std::string error;
+ ProjectMetadata original;
+ if(!ProjectService().InspectProject(fs::absolute(input).generic_u8string(),original,error))
+ {std::cerr<<error<<"\n";return false;}
+ const auto root=output/"equipment-project";
+ fs::create_directories(root);
+ fs::copy(fs::u8path(original.rootPath)/"Content",root/"Content",
+     fs::copy_options::recursive|fs::copy_options::overwrite_existing);
+ fs::copy_file(fs::u8path(original.rootPath)/AssetRegistryDocumentName,
+     root/AssetRegistryDocumentName,fs::copy_options::overwrite_existing);
+ fs::copy_file(input,root/"EquipmentProof.renegade",fs::copy_options::overwrite_existing);
+ ProjectMetadata project;
+ if(!ProjectService().InspectProject((root/"EquipmentProof.renegade").generic_u8string(),project,error))
+ {std::cerr<<error<<"\n";return false;}
+ SceneService scenes;
+ if(!scenes.LoadScene((root/fs::u8path(project.startupScene)).generic_u8string()))return false;
+ const auto start=ResolvePlayerStart(scenes.GetScene());
+ if(start.resolution!=PlayerStartResolution::Success)return false;
+ EquipmentDefinition item;
+ if(!PrepareEquipmentFromAssembly(project.rootPath,project.projectId,
+      start.start.settings.firstPersonArmsAssetId,"Snapshot shotgun",EquipmentHandUse::TwoHanded,item,error))
+ {std::cerr<<error<<"\n";return false;}
+ const auto saved=SaveEquipmentAsset(project.rootPath,project.projectId,item);
+ if(!saved.succeeded){std::cerr<<saved.error<<"\n";return false;}
+ auto settings=start.start.settings;
+ settings.primaryEquipmentAssetId=saved.document.equipment.assetId;
+ settings.offHandEquipmentAssetId.clear();
+ SetPlayerControllerSettingsCommand apply(scenes.GetScene(),start.start.entity,settings);
+ if(!apply.Execute())return false;
+ CommandService commands;TestLevelSnapshotService snapshots(scenes,commands);TestLevelSnapshot snapshot;
+ if(!snapshots.Create(project,snapshot,error)){std::cerr<<error<<"\n";return false;}
+ EquipmentAssetDocument loaded;
+ if(!LoadEquipmentAsset(snapshot.sessionDirectory,project.projectId,
+      saved.document.equipment.assetId,loaded,error))
+ {std::cerr<<error<<"\n";return false;}
+ auto presentation=ReusableAssetService().PrepareModelAssetPlacement(
+     {snapshot.sessionDirectory,project.projectId,loaded.equipment.presentationAssetId});
+ if(!presentation.IsReady()){std::cerr<<presentation.Result().error<<"\n";return false;}
+ SceneService reopened;
+ if(!reopened.LoadScene(snapshot.scenePath))return false;
+ const auto copied=ResolvePlayerStart(reopened.GetScene());
+ if(copied.resolution!=PlayerStartResolution::Success ||
+    !PlayerSettingsEqual(copied.start.settings,settings))return false;
+ std::ofstream(output/"equipment-snapshot-descriptor.txt")<<snapshot.descriptorPath;
+ std::cout<<"EQUIPMENT SNAPSHOT PASS // saved loadout, definition, paired presentation cold load\n";
+ return true;
+}
+
 int main(int argc,char** argv)
 {
     if(argc<3 || argc>4) { std::cerr<<"Usage: proof pack-folder output-folder\n"; return 2; }
@@ -911,6 +962,7 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--equipment-snapshot") return EquipmentSnapshotProof(input,output)?0:19;
     if(argc==4 && std::string(argv[3])=="--player-prefab") return PlayerPrefabProof(input,output)?0:18;
     if(argc==4 && std::string(argv[3])=="--jump-playground") return JumpPlaygroundProof(input,output)?0:17;
     if(argc==4 && std::string(argv[3])=="--full-library") return FullLibraryProof(input,output)?0:15;

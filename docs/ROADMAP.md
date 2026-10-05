@@ -60,7 +60,8 @@ checks; owner gameplay acceptance followed. Cross-project adoption was manual.
 arms/weapon picker folders or role-filtered collections, combined-folder packs,
 readable names and complete dependency-aware transfer. See
 [PLAYER_AUTHORING_UX_FOLLOWUP](PLAYER_AUTHORING_UX_FOLLOWUP.md).
-This is a recorded product requirement, not an implemented filtering feature.
+The first P2 branch slice implements scoped filtering; broader UI/UX and transfer
+work remain recorded requirements.
 
 See [PLAYER_AUTHORING_CONTINUATION](PLAYER_AUTHORING_CONTINUATION.md),
 [P1_ASSEMBLY_AUTHORING](P1_ASSEMBLY_AUTHORING.md) and
@@ -79,7 +80,8 @@ only gameplay hand.
 **Status: IN PROGRESS.** The owner authorized the small picker repair first,
 then P2 in the authored order on 2026-10-05. The initial shared action-state
 foundation covers semantic requests, staged phases and hand reservation;
-project equipment assets, loadout authoring and Runtime integration remain open.
+project equipment assets and starting-loadout persistence/authoring are implemented
+on the P2 branch; Runtime integration and end-to-end acceptance remain open.
 See [P2_EQUIPMENT_ACTION_IMPLEMENTATION](P2_EQUIPMENT_ACTION_IMPLEMENTATION.md).
 
 Implement generic item/ability ownership, equip/unequip, primary/alternate use,

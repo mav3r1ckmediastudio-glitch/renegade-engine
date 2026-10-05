@@ -7,6 +7,7 @@
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/PlayerPrefabService.h"
 #include "renegade/bridge/GameplayInputService.h"
+#include "renegade/bridge/EquipmentAssetService.h"
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/ProjectService.h"
@@ -404,6 +405,73 @@ namespace
         const renegade::bridge::TestLevelSnapshot&,
         const wi::scene::Scene&, std::string&);
 
+    bool SnapshotEquipmentInputs(
+        const renegade::bridge::ProjectMetadata& project,
+        const renegade::bridge::TestLevelSnapshot& snapshot,
+        const renegade::bridge::PlayerControllerSettings& settings,
+        std::string& error)
+    {
+        using namespace renegade::bridge;
+        if (settings.primaryEquipmentAssetId.empty() &&
+            settings.offHandEquipmentAssetId.empty()) return true;
+        if (!ValidateStartingEquipment(project.rootPath, project.projectId,
+                settings.primaryEquipmentAssetId, settings.offHandEquipmentAssetId, error))
+            return false;
+        AssetRegistry registry;
+        if (!ReadAssetRegistry(project.rootPath, project.projectId, registry, error))
+            return false;
+        std::string registryPath;
+        if (!ResolveAssetRegistryDocumentPath(project.rootPath, registryPath, error))
+            return false;
+        std::error_code ec;
+        fs::copy_file(fs::u8path(registryPath),
+            fs::u8path(snapshot.sessionDirectory) / AssetRegistryDocumentName,
+            fs::copy_options::overwrite_existing, ec);
+        if (ec) { error = "Could not snapshot equipment registry: " + ec.message(); return false; }
+        std::unordered_set<StableId> copied;
+        for (const auto& id : {settings.primaryEquipmentAssetId, settings.offHandEquipmentAssetId})
+        {
+            if (id.empty() || !copied.insert(id).second) continue;
+            EquipmentAssetDocument document;
+            if (!LoadEquipmentAsset(project.rootPath, project.projectId, id, document, error))
+                return false;
+            const auto record = std::find_if(registry.records.begin(), registry.records.end(),
+                [&](const AssetRecord& value) { return value.assetId == id; });
+            if (record == registry.records.end())
+            { error = "Equipment is absent from snapshot registry: " + id; return false; }
+            const auto source = ResolveDependencyPath(project.rootPath, record->projectRelativePath);
+            if (!source.accepted || !source.exists ||
+                !IsSafeSnapshotContentPath(fs::u8path(record->projectRelativePath)))
+            { error = "Invalid equipment snapshot path: " + id; return false; }
+            const auto destination = fs::u8path(snapshot.sessionDirectory) /
+                fs::u8path(record->projectRelativePath);
+            fs::create_directories(destination.parent_path(), ec);
+            if (!ec) fs::copy_file(fs::u8path(source.absolutePath), destination,
+                fs::copy_options::overwrite_existing, ec);
+            if (ec) { error = "Could not snapshot equipment: " + ec.message(); return false; }
+            // Reuse the governed presentation/texture closure without modifying
+            // the authored player or assigning another runtime controller.
+            if (!document.equipment.presentationAssetId.empty())
+            {
+                wi::scene::Scene presentation;
+                CreatePlayerStartCommand create(presentation, {});
+                if (!create.Execute())
+                { error = "Could not prepare equipment presentation closure."; return false; }
+                PlayerControllerSettings view;
+                view.firstPersonArmsAssetId = document.equipment.presentationAssetId;
+                SetPlayerControllerSettingsCommand apply(presentation, create.CreatedEntity(), view);
+                (void)apply.Execute();
+                if (!SnapshotGovernedPlayerViewInputs(project, snapshot, presentation, error))
+                    return false;
+            }
+            EquipmentAssetDocument verified;
+            if (!LoadEquipmentAsset(snapshot.sessionDirectory, project.projectId, id, verified, error))
+                return false;
+        }
+        error.clear();
+        return true;
+    }
+
     bool SnapshotPlayerPrefab(
         const renegade::bridge::ProjectMetadata& project,
         const renegade::bridge::TestLevelSnapshot& snapshot,
@@ -439,6 +507,7 @@ namespace
             fs::u8path(snapshot.sessionDirectory) / AssetRegistryDocumentName,
             fs::copy_options::overwrite_existing, ec);
         if (ec) { error = "Could not snapshot player prefab registry: " + ec.message(); return false; }
+        if (!SnapshotEquipmentInputs(project, snapshot, document.settings, error)) return false;
         // Preserve the default arms closure as well as the level-local
         // assignment. It may differ after an explicit local override.
         if (!document.settings.firstPersonArmsAssetId.empty())
@@ -971,6 +1040,11 @@ namespace renegade::bridge
 
             if (!SnapshotGameplayInput(project, created, error))
                 return failAndCleanup("Could not snapshot gameplay input: " + error);
+
+            const auto equipmentStart = ResolvePlayerStart(scenes_.GetScene());
+            if (equipmentStart.resolution == PlayerStartResolution::Success &&
+                !SnapshotEquipmentInputs(project, created, equipmentStart.start.settings, error))
+                return failAndCleanup("Could not snapshot starting equipment: " + error);
 
             if (!SnapshotPlayerPrefab(project, created, scenes_.GetScene(), error))
                 return failAndCleanup("Could not snapshot player prefab: " + error);

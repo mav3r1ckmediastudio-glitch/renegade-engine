@@ -118,6 +118,7 @@ add_executable(RenegadeStudio WIN32
     src/StudioApplication.cpp
     src/FirstPersonAssemblyEditor.cpp
     src/PlayerPrefabEditor.cpp
+    src/PlayerEquipmentEditor.cpp
     src/StudioLiveDiagnostics.cpp
     src/StudioApplication.h
     src/StudioUserPreferences.cpp

@@ -12,6 +12,8 @@
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/GameplayInputService.h"
+#include "renegade/bridge/EquipmentAssetService.h"
+#include "renegade/bridge/PlayerPrefabService.h"
 #include "renegade/bridge/CreatorTextureWorkflowService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ProjectService.h"
@@ -257,6 +259,40 @@ int main()
         return Fail("unsaved LP04 Runtime edit did not execute");
     }
 
+    using namespace renegade::bridge;
+    EquipmentDefinition sword;
+    sword.name = "Snapshot sword";
+    sword.handUse = EquipmentHandUse::PrimaryOnly;
+    sword.actions = {{EquipmentAction::PrimaryUse, "Attack", 0, 0, 1, 0, false, true}};
+    const auto savedSword = SaveEquipmentAsset(project.rootPath, project.projectId, sword);
+    auto shield = sword;
+    shield.name = "Snapshot shield";
+    shield.handUse = EquipmentHandUse::OffHandOnly;
+    const auto savedShield = SaveEquipmentAsset(project.rootPath, project.projectId, shield);
+    auto bow = sword;
+    bow.name = "Local bow override";
+    bow.handUse = EquipmentHandUse::TwoHanded;
+    const auto savedBow = SaveEquipmentAsset(project.rootPath, project.projectId, bow);
+    if (!savedSword.succeeded || !savedShield.succeeded || !savedBow.succeeded)
+        return Fail("snapshot equipment fixture save failed");
+    PlayerControllerSettings defaults;
+    defaults.primaryEquipmentAssetId = savedSword.document.equipment.assetId;
+    defaults.offHandEquipmentAssetId = savedShield.document.equipment.assetId;
+    const auto equipmentPrefab = SavePlayerPrefab(
+        project.rootPath, project.projectId, "Equipment snapshot defaults", defaults);
+    CreatePlayerStartCommand createPlayer(session.Scenes().GetScene(), {});
+    if (!equipmentPrefab.succeeded || !createPlayer.Execute())
+        return Fail("snapshot equipment prefab fixture failed");
+    ApplyPlayerPrefabCommand applyPrefab(
+        session.Scenes().GetScene(), createPlayer.CreatedEntity(), equipmentPrefab.document);
+    if (!applyPrefab.Execute()) return Fail("snapshot equipment prefab apply failed");
+    auto local = defaults;
+    local.primaryEquipmentAssetId = savedBow.document.equipment.assetId;
+    local.offHandEquipmentAssetId.clear();
+    SetPlayerControllerSettingsCommand applyLocal(
+        session.Scenes().GetScene(), createPlayer.CreatedEntity(), local);
+    if (!applyLocal.Execute()) return Fail("snapshot equipment override failed");
+
     const std::size_t undoBeforeSnapshot = session.Commands().UndoCount();
     const std::size_t redoBeforeSnapshot = session.Commands().RedoCount();
     const std::string pathBeforeSnapshot = session.Scenes().CurrentPath();
@@ -286,6 +322,34 @@ int main()
     {
         return Fail("LP04 Test Level snapshot omitted governed material Runtime inputs");
     }
+
+    for (const auto& item : {savedSword, savedShield, savedBow})
+    {
+        EquipmentAssetDocument loaded;
+        if (!LoadEquipmentAsset(snapshot.sessionDirectory, project.projectId,
+                item.document.equipment.assetId, loaded, snapshotError) ||
+            ReadBytes(fs::u8path(snapshot.sessionDirectory) / item.projectRelativePath) !=
+                ReadBytes(fs::u8path(project.rootPath) / item.projectRelativePath))
+            return Fail("snapshot omitted local equipment or prefab default equipment bytes");
+    }
+    PlayerPrefabDocument snapshotPrefab;
+    if (!LoadPlayerPrefab(snapshot.sessionDirectory, project.projectId,
+            equipmentPrefab.document.assetId, snapshotPrefab, snapshotError) ||
+        !PlayerSettingsEqual(snapshotPrefab.settings, defaults))
+        return Fail("snapshot equipment prefab defaults changed");
+    auto missingEquipment = local;
+    missingEquipment.primaryEquipmentAssetId = GenerateStableId();
+    SetPlayerControllerSettingsCommand invalidLoadout(
+        session.Scenes().GetScene(), createPlayer.CreatedEntity(), missingEquipment);
+    if (!invalidLoadout.Execute()) return Fail("missing equipment fixture could not apply");
+    TestLevelSnapshot rejectedEquipment;
+    const bool invalidAccepted = snapshots.Create(project, rejectedEquipment, snapshotError);
+    invalidLoadout.Undo();
+    if (!PlayerSettingsEqual(CapturePlayerControllerSettings(
+            session.Scenes().GetScene(), createPlayer.CreatedEntity()), local))
+        return Fail("missing equipment fixture could not restore");
+    if (invalidAccepted || rejectedEquipment.IsRuntimeReady() || snapshotError.empty())
+        return Fail("missing equipment was accepted by Test Level");
 
     renegade::bridge::GameplayInputMap snapshotInput;
     bool inputCreated = true;

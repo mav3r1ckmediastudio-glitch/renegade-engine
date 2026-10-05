@@ -67,6 +67,9 @@ namespace renegade::studio
         void QueueInspectorRefresh() noexcept;
         void RefreshProjectHub();
         void RefreshAssetBrowser();
+        void CreateEquipmentEditor();
+        void OpenEquipmentEditor();
+        void RefreshEquipmentEditor();
         void CreateAssemblyEditor();
         void OpenAssemblyEditor();
         void LoadAssemblyParts();
@@ -1124,7 +1127,15 @@ namespace renegade::studio
         void ApplySelectedPlayerPrefab(std::string assetId);
         void ResetSelectedPlayerPrefab();
         void RefreshPlayerPrefabInspector();
-        wi::gui::Button playerAssembly_;
+        wi::gui::Button playerAssembly_, playerEquipment_;
+        wi::gui::Window equipmentPanel_;
+        wi::gui::ComboBox equipmentPrimary_, equipmentOffHand_, equipmentHandUse_;
+        wi::gui::TextInputField equipmentName_;
+        wi::gui::Button equipmentCreate_, equipmentApply_, equipmentClose_;
+        wi::gui::Label equipmentHelp_, equipmentStatus_;
+        std::vector<bridge::StableId> equipmentChoices_;
+        bridge::StableId equipmentProject_;
+        wi::ecs::Entity equipmentPlayer_=wi::ecs::INVALID_ENTITY;
         wi::gui::Window assemblyPanel_, assemblyFirearmPanel_;
         wi::gui::Button assemblyFirearmButton_;
         wi::gui::Label assemblyFirearmHelp_;

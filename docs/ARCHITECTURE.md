@@ -1043,3 +1043,20 @@ existing asset schema. Project identity, canonical registry/provenance and compl
 asset closure must be handled by a bridge adoption workflow; copying a prefab alone
 does not create a valid cross-project player. Keep this logic out of UI panels.
 See PLAYER_AUTHORING_UX_FOLLOWUP.md for requirements and acceptance criteria.
+
+## P2 equipment persistence boundary
+
+EquipmentAssetService owns immutable project-scoped .requipment definitions and
+journaled asset/registry writes. Equipment definitions reference existing governed
+presentation assets; the staged action state remains independent of skeleton
+evaluation. Player settings store primary/off-hand equipment identities through
+the existing WISCENE metadata/command boundary. Player prefab schema v2 copies
+those slots into defaults and overrides, while reading schema v1 with empty slots.
+
+Studio's equipment panel calls bridge preparation, save and hand-admission
+services. Assembly adoption copies semantic bindings and native paired duration
+without editing the assembly. ReusableAssetDependencyProvider discovers level,
+prefab and equipment presentation edges in the existing dependency graph.
+Runtime ownership, inventory/ability integration and semantic routing remain
+pending; this persistence slice does not create another movement or animation
+controller.
