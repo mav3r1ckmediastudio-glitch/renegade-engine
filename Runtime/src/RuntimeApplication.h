@@ -42,6 +42,7 @@ namespace renegade::runtime
             std::string projectRoot) noexcept;
         void SetPaused(bool paused) noexcept;
         void SetInteractionPrompt(std::string prompt) noexcept;
+        void SetMeleePrompt(std::string prompt) { meleePrompt_=std::move(prompt); }
         void Load() override;
         void Update(float dt) override;
         void Compose(wi::graphics::CommandList cmd) const override;
@@ -55,6 +56,7 @@ namespace renegade::runtime
         bool renderSettingsInitialized_ = false;
         bool paused_ = false;
         std::string interactionPrompt_;
+        std::string meleePrompt_;
         std::uint64_t renderSettingsSceneRevision_ = 0;
     };
 

@@ -28,6 +28,11 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
  settings.primaryLayerRootPath=choice("clavicle_r").path;settings.offHandLayerRootPath=choice("clavicle_l").path;
  settings.blockStartClip=index("BlockStart");settings.blockLoopClip=index("BlockLoop");settings.blockEndClip=index("BlockEnd");
  settings.pairs={{"Idle",index("Idle"),0},{"Walk",index("Walk"),0},{"Run",index("Sprint"),0},{"Attack",index("AttackLeft"),0},{"Attack",index("AttackRight"),0},{"Attack",index("AttackDown"),0},{"Attack",index("AttackStab"),0}};
+ for(const char* direction:{"Left","Right","Down","Stab"})
+  for(const char* stage:{"Charge","Hold","Release"}) {
+   const auto source=std::string("Attack")+direction+stage;
+   settings.pairs.push_back({std::string("Melee")+direction+stage,index(source.c_str()),0});
+  }
  settings.cameraPosition={0,-1.65f,0.08f};settings.cameraRotation={0,0.707106781f,-0.707106781f,0};
  XMStoreFloat4(&settings.cameraRotation,XMQuaternionMultiply(XMLoadFloat4(&settings.cameraRotation),XMQuaternionRotationAxis(XMVectorSet(0,1,0,0),XM_PIDIV2)));
  // UE socket metadata retained from supplied Blueprint/Skeleton, converted to
@@ -79,29 +84,46 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
  if(!renegade::runtime::InitializeRuntimePlayerViewAnimations(assembly,rig,animation,error)||!animation.handLayers.enabled){
   std::cerr<<"HAND INIT "<<error<<"\n";return false;
  }
- for(int frame=0;frame<80;++frame) {
+ if(!animation.handLayers.directional)return false;
+ const auto step=[&](float dt,bool charge,bool release,float yaw=0,float pitch=0,bool cancel=false) {
   renegade::runtime::UpdateRuntimePlayerViewAnimations(assembly,animation,renegade::runtime::PlayerViewAction::Idle,
-   1.0f/60,frame==40,false,false,false,true,false,false,true);
-  assembly.Update(1.0f/60);
- }
- if(!Capture(assembly,output/"sword-shield-block-attack.png"))return false;
- if(animation.handLayers.primary[3].size()!=4)return false;
+   dt,false,false,false,false,true,charge,release,true,yaw,pitch,cancel);
+  assembly.Update(dt);
+ };
+ for(int frame=0;frame<80;++frame)step(1.0f/60,false,false);
  std::set<wi::ecs::Entity> played;
- for(int variant=0;variant<4;++variant) {
+ for(unsigned direction=0;direction<4;++direction) {
+  const float yaw=direction==0?-0.1f:direction==1?0.1f:0;
+  const float pitch=direction==2?0.1f:direction==3?-0.1f:0;
+  step(1.0f/60,true,false,yaw,pitch);
+  if(animation.handLayers.direction!=direction || animation.handLayers.attacking)return false;
+  const auto before=animation.handLayers.chargeSeconds;
+  step(0,true,false,-yaw,-pitch);
+  if(animation.handLayers.chargeSeconds!=before || animation.handLayers.direction!=direction)return false;
+  for(int frame=0;frame<90;++frame)step(1.0f/60,true,false);
+  if(animation.handLayers.chargePhase!=2 || animation.handLayers.chargeSeconds<0.99f)return false;
+  if(!Capture(assembly,output/("sword-charge-"+std::to_string(direction)+".png")))return false;
+  step(1.0f/60,false,true);
+  if(!animation.handLayers.attacking || animation.handLayers.chargeStrength<0.99f)return false;
+  played.insert(animation.handLayers.right);
   for(int frame=0;frame<180;++frame) {
-   renegade::runtime::UpdateRuntimePlayerViewAnimations(assembly,animation,renegade::runtime::PlayerViewAction::Idle,
-    1.0f/60,frame==0,false,false,false,true,false,false,true);
-   assembly.Update(1.0f/60);
-   if(frame==0)played.insert(animation.handLayers.right);
-   if(frame==12 && !Capture(assembly,output/("sword-variant-"+std::to_string(variant)+".png")))return false;
+   step(1.0f/60,false,false);
+   if(frame==12 && !Capture(assembly,output/("sword-release-"+std::to_string(direction)+".png")))return false;
   }
-  if(animation.handLayers.blockPhase!=2)return false;
+  if(animation.handLayers.blockPhase!=2 || animation.handLayers.attacking)return false;
  }
  if(played.size()!=4)return false;
+ // A quick release carries low strength; cancel clears windup without a strike.
+ step(1.0f/60,true,false);step(1.0f/60,false,true);
+ if(!animation.handLayers.attacking || animation.handLayers.chargeStrength>0.1f)return false;
+ for(int frame=0;frame<180;++frame)step(1.0f/60,false,false);
+ step(1.0f/60,true,false);step(1.0f/60,false,false,0,0,true);
+ if(animation.handLayers.attacking || animation.handLayers.chargePhase!=0)return false;
  renegade::runtime::ResetRuntimePlayerViewAnimations(assembly,animation);
  EquipmentDefinition sword;sword.assetId=GenerateStableId();sword.name="Sword Test";
  sword.handUse=EquipmentHandUse::PrimaryOnly;sword.presentationAssetId=asset;
- sword.actions.push_back({EquipmentAction::PrimaryUse,"Attack",0,0,0,0.15f});
+ sword.actions.push_back({EquipmentAction::Charge,"Charge",0,0,0,0,true});
+ sword.actions.push_back({EquipmentAction::Release,"Release",0,0,0,0.15f});
  auto swordSaved=SaveEquipmentAsset(output.generic_u8string(),projectId,sword);
  if(!swordSaved.succeeded){std::cerr<<swordSaved.error<<"\n";return false;}
  EquipmentDefinition shield;shield.assetId=GenerateStableId();shield.name="Shield Test";

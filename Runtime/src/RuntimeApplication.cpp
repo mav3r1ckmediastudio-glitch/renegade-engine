@@ -98,6 +98,12 @@ namespace renegade::runtime
         RenderPath3D::Compose(cmd);
         const float width = std::max(1.0f, GetLogicalWidth());
         const float height = std::max(1.0f, GetLogicalHeight());
+        if(!paused_ && !meleePrompt_.empty()) {
+            wi::font::Params hint(width*0.5f,height*0.55f,18,
+                wi::font::WIFALIGN_CENTER,wi::font::WIFALIGN_CENTER,
+                wi::Color(245,245,245,255),wi::Color(0,0,0,180));
+            wi::font::Draw(meleePrompt_,hint,cmd);
+        }
         if (!paused_)
         {
             if (!interactionPrompt_.empty())
@@ -405,10 +411,13 @@ namespace renegade::runtime
                 {
                     if (!paused_)
                     {
+                        auto playerInput=gameplayInput.player;
+                        if(playerViewAnimation_.handLayers.directional && gameplayInput.fireDown)
+                            playerInput.lookYaw=playerInput.lookPitch=0;
                         (void)bridge::UpdateRuntimePlayer(
                             scenes_.GetScene(),
                             player_,
-                            gameplayInput.player,
+                            playerInput,
                             playerSettings_);
                     }
                     (void)PoseRuntimePlayerViewRig(
@@ -445,7 +454,13 @@ namespace renegade::runtime
                         equipmentInput.aimDown,
                         !paused_ && equipmentInput.toggleEquipmentPressed,
                         grounded, playerEquipment_.chargePresentation, playerEquipment_.releasePresentation,
-                        playerEquipment_.offHandBlockPresentation);
+                        playerEquipment_.offHandBlockPresentation, gameplayInput.player.lookYaw, gameplayInput.player.lookPitch, gameplayInput.cancelEquipmentPressed);
+                    const auto& hand=playerViewAnimation_.handLayers;
+                    const char* directions[]={"LEFT","RIGHT","DOWN","STAB"};
+                    renderer_.SetMeleePrompt(hand.directional?
+                        std::string(directions[hand.direction])+"  "+(hand.chargePhase?
+                            "CHARGE "+std::to_string(static_cast<int>(hand.chargeSeconds*100))+"%":
+                            hand.attacking?"STRIKE":"HOLD LMB + MOVE; RELEASE TO STRIKE"):"");
                 }
             }
         }

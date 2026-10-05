@@ -603,13 +603,13 @@ namespace renegade::runtime
         const bool grounded = true,
         const bool chargeHeld = false,
         const bool releasePressed = false,
-        const bool offHandBlockHeld = false) noexcept
+        const bool offHandBlockHeld = false, const float meleeLookYaw = 0, const float meleeLookPitch = 0, const bool cancelMelee = false) noexcept
     {
         if (!state.initialized)
             return;
 
         if(state.handLayers.enabled) {
-            UpdateRuntimePlayerHandAnimations(scene,state.handLayers,requested,dt,firePressed,offHandBlockHeld);
+            UpdateRuntimePlayerHandAnimations(scene,state.handLayers,requested,dt,firePressed,offHandBlockHeld,chargeHeld,releasePressed,meleeLookYaw,meleeLookPitch,cancelMelee);
             state.activeClip=state.handLayers.right;state.activeAction=state.handLayers.action;
             state.oneShotPlaying=state.handLayers.attacking;state.aiming=false;
             state.resolvedClipName=state.handLayers.action==PlayerViewAction::Attack?"Sword Attack":"Hand movement";

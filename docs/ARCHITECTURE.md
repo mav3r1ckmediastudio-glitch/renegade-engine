@@ -1188,3 +1188,5 @@ Next: correct clipping with compatible block/attack poses, meaningful per-hand
 controller edge-case tests and v2 authoring controls; do not declare P2 complete.
 
 Independent assembly v2 permits ordered distinct Attack bindings. Native attack_order metadata preserves authored order when transient hand masks are rebuilt. Legacy paired schema-v1 actions remain unique.
+
+Directional melee presentation uses explicit Melee{Left,Right,Down,Stab}{Charge,Hold,Release} semantic bindings. The staged primary equipment Charge/Release events remain gameplay authority; directional right-arm playback selects the corresponding native clips independently of shield state. Charge seconds and release strength are transient; damage remains unimplemented.

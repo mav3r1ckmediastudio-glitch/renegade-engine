@@ -101,10 +101,15 @@ bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
   if(bindings.size()!=3){e="Shield actions need distinct clips.";return false;}
   for(const auto& p:s.pairs)if(!bindings.insert(p.armsClip).second){e="Hand actions need distinct source clips.";return false;}
  }
+ const std::set<std::string> directionalActions={
+  "MeleeLeftCharge","MeleeLeftHold","MeleeLeftRelease",
+  "MeleeRightCharge","MeleeRightHold","MeleeRightRelease",
+  "MeleeDownCharge","MeleeDownHold","MeleeDownRelease",
+  "MeleeStabCharge","MeleeStabHold","MeleeStabRelease"};
  std::set<std::string> actions;
  for(const auto& p:s.pairs) {
  if(std::none_of(FirstPersonAssemblyActions.begin(),FirstPersonAssemblyActions.end(),
- [&](const char* action){return p.action==action;})) {
+ [&](const char* action){return p.action==action;}) && !(s.IndependentHands() && directionalActions.count(p.action))) {
  e="Unknown assembly action.";return false;}
  if(!actions.insert(p.action).second && !(s.IndependentHands() && p.action=="Attack")){e="Each assembly action needs one explicit pair except independent Attack variants.";return false;}
  }

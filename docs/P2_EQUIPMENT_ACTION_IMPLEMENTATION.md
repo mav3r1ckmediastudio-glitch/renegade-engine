@@ -280,3 +280,30 @@ clock pause/restart and five focused regressions pass. This proves isolated
 native arm-channel ownership, not live off-hand equipment. Authored mesh/layer
 bindings, procedural sanitation, blending and Runtime integration remain open.
 See P2_HAND_ANIMATION_MASKS.md and HANDOFF.md for commands and exact limits.
+
+## Directional charge playback - 2026-10-06
+Replaces automatic basic-attack cycling in the owner fixture with explicit
+four-direction Charge/Hold/Release bindings. Hold LMB, move left/right/down/up
+to select Left/Right/Down/Stab; release to strike. Quick tap uses last direction.
+Gesture threshold 0.025 radians ignores small motion; selection consumes camera
+look while LMB held. Charge strength saturates at 1 second and is recorded on
+release; no damage calculation or hit detection is claimed. RMB block independent.
+C cancels pending charge; zero dt freezes clocks and selection.
+Runtime shows selected direction and charge percent near screen centre.
+Legacy paired shotgun and existing basic-attack independent assemblies keep
+their existing path unless all 12 directional clips are explicitly bound.
+Native fixture proof checks all four charge-to-hold/release groups, four unique
+release clips, held shield, zero-dt freeze, low-strength quick release and cancel.
+Release bridge/Runtime builds and five focused CTests pass; fixture cold load
+and TestLevel equipment/presentation closure pass.
+Evidence BUILD/sword-playable-directional/sword-charge-0..3.png and
+sword-release-0..3.png. Owner project Desktop/renegade tests/SwordShieldTest;
+previous cycle fixture retained as SwordShieldTest-attack-cycle.
+Files: PlayerViewHandAnimation.h, PlayerViewAnimation.h,
+FirstPersonAssemblyService.cpp, RuntimeApplication.cpp/.h,
+RuntimeLiveDiagnostics.cpp, SwordShieldPlayableProof.h.
+Reproduce BUILD/sword_variants_build.ps1 (directional output).
+Remaining: animation fades, sword/shield clipping, authored charge settings,
+stamina, directional block/damage, collision and generic v2 UI. No P2 gate closure.
+
+Final native mouse PASS: four selected full-charge releases, independent held block and low-charge quick tap. Evidence BUILD/directional-native-events.json. Alternate Studio Release build also passes. Runtime left open on the updated owner project.
