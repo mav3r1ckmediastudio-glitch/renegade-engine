@@ -1,4 +1,5 @@
 #include "StudioApplication.h"
+#include <cmath>
 #include "renegade/bridge/PlayerPrefabService.h"
 
 namespace renegade::studio
@@ -24,7 +25,7 @@ namespace renegade::studio
                 {studioChrome_.SetStatusText("PLAYER PREFAB // "+result.error);return;}
                 (void)session_->Commands().Execute(std::make_unique<bridge::ApplyPlayerPrefabCommand>(
                     session_->Scenes().GetScene(),entity,result.document));
-                RefreshInspector();RefreshStatus();
+                RefreshAssetBrowser();RefreshInspector();RefreshStatus();
                 studioChrome_.SetStatusText("PLAYER PREFAB SAVED // "+result.document.name);
             });
     }
@@ -100,4 +101,46 @@ namespace renegade::studio
             : "CUSTOM PLAYER // NO PREFAB");
         playerPrefabStatus_.SetTooltip("Saved prefab defaults are copied into this level. Controller/arms edits are local overrides; reset restores the assigned defaults. Spawn transform is always level-specific. Save creates a new reusable prefab.");
     }
+    bool StudioRenderPath::PlacePlayerPrefabAt(const bridge::StableId& id,const XMFLOAT3& position)
+    {
+        if(!session_||!session_->Projects().HasProject())return false;
+        auto& scene=session_->Scenes().GetScene();
+        if(bridge::ResolvePlayerStart(scene).resolution!=bridge::PlayerStartResolution::Missing)
+        {
+            studioChrome_.SetStatusText("PLAYER ALREADY PLACED // SELECT ITS INSPECTOR TO CHANGE PREFAB, OR DELETE IT BEFORE PLACING ANOTHER");
+            return false;
+        }
+        const auto& project=session_->Projects().CurrentProject();
+        bridge::PlayerPrefabDocument d;std::string error;
+        if(!bridge::LoadPlayerPrefab(project.rootPath,project.projectId,id,d,error))
+        {studioChrome_.SetStatusText("PLAYER PLACEMENT // "+error);return false;}
+        bridge::TransformState pose;pose.translation=position;
+        auto command=std::make_unique<bridge::PlacePlayerPrefabCommand>(scene,pose,d);
+        auto* placed=command.get();
+        if(!session_->Commands().Execute(std::move(command)))return false;
+        session_->Selection().Select(placed->PlacedEntity());
+        RefreshHierarchy();RefreshInspector();RefreshStatus();SyncGizmoSelection();
+        studioChrome_.SetStatusText("PLAYER PLACED // "+d.name+" // SAVE LEVEL TO RETAIN");
+        return true;
+    }
+    void StudioRenderPath::ProcessPlayerPrefabDrop()
+    {
+        if(playerPrefabDropId_.empty())return;
+        const auto id=std::move(playerPrefabDropId_);playerPrefabDropId_.clear();
+        if(!camera||!session_||!session_->Projects().HasProject())return;
+        const XMFLOAT4 pointer(playerPrefabDropPoint_.x,playerPrefabDropPoint_.y,0,0);
+        if(!IsPointerOverViewport(pointer))return;
+        const auto ray=wi::renderer::GetPickRay(static_cast<long>(pointer.x),static_cast<long>(pointer.y),*this,*camera);
+        const auto picked=wi::scene::Pick(ray,wi::enums::FILTER_OBJECT_ALL|wi::enums::FILTER_TERRAIN,~0u,session_->Scenes().GetScene());
+        XMFLOAT3 position=picked.position;
+        if(picked.entity==wi::ecs::INVALID_ENTITY)
+        {
+            if(std::abs(ray.direction.y)<0.0001f)return;
+            const float t=-ray.origin.y/ray.direction.y;
+            if(t<ray.TMin||t>ray.TMax)return;
+            position={ray.origin.x+ray.direction.x*t,0,ray.origin.z+ray.direction.z*t};
+        }
+        PlacePlayerPrefabAt(id,position);
+    }
+
 }

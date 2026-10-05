@@ -1,4 +1,5 @@
 #include "renegade/bridge/AssetCatalogueService.h"
+#include "renegade/bridge/PlayerPrefabService.h"
 
 #include <algorithm>
 #include <cctype>
@@ -895,6 +896,13 @@ namespace renegade::bridge
             else
                 entry.state = AssetCatalogueState::Current;
 
+            if (entry.type == AssetType::Player && foundOnDisk)
+            {
+                PlayerPrefabDocument prefab; std::string prefabError;
+                if (LoadPlayerPrefab(projectRoot, expectedProjectId, record.assetId, prefab, prefabError))
+                    entry.name = prefab.name;
+                else entry.state = AssetCatalogueState::Invalid;
+            }
             const auto imported = importedByProduct.find(record.assetId);
             if (imported != importedByProduct.end())
             {

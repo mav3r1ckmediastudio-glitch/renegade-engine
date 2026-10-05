@@ -564,6 +564,10 @@ namespace renegade::studio
         [[nodiscard]] bridge::TransformState CaptureEditorCameraTransform() const;
         void CreateCameraFromView();
         void CreatePlayerStartFromView();
+        bool PlacePlayerPrefabAt(const bridge::StableId&, const XMFLOAT3&);
+        void ProcessPlayerPrefabDrop();
+        bridge::StableId playerPrefabDropId_;
+        XMFLOAT2 playerPrefabDropPoint_ = {};
         void AlignSelectedCameraToView();
         void ViewFromSelectedCamera();
         void CreateDecalFromView();

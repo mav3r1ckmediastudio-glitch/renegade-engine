@@ -358,3 +358,7 @@ level's start capsule to reuse it while retaining the level's spawn position and
 facing. Local edits are marked as overrides; RESET TO PREFAB restores the assigned
 defaults with Undo/Redo. Prefab saves create new assets; global propagation and
 starting inventories remain later work. See PLAYER_AUTHORING_CONTINUATION.md.
+
+
+### Player placement from Content/Player
+New levels have no automatic Player Start. Project browsing ensures a registered Basic Player Start preset under Content/Player without creating a scene entity. Saved player prefabs appear by authored name in the Asset Browser and support drag-and-drop surface placement (ground-plane fallback) and the existing Place control. One command creates the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve identity, transform and baseline. The always-visible selectable capsule represents the placed player. Add no longer exposes Player Start. A second placement is refused: use the existing Inspector to change prefab, or delete the old start before placing another. Immutable saves refresh the browser. Owner/exact-commit verification remains required.

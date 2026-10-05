@@ -1,6 +1,7 @@
 #include "renegade/bridge/PlayerPrefabService.h"
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/SceneDocumentService.h"
+#include "renegade/bridge/AssetCatalogueService.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -84,6 +85,37 @@ int main()
         "cross-project prefab accepted");
     Check(!SavePlayerPrefab(root.generic_u8string(),d.projectId,"Missing Arms",d.settings).succeeded,
         "unregistered arms accepted");
+    Check(EnsureBasicPlayerPrefab(root.generic_u8string(),d.projectId,error),"basic preset create "+error);
+    Check(EnsureBasicPlayerPrefab(root.generic_u8string(),d.projectId,error)&&
+        ListPlayerPrefabs(root.generic_u8string(),d.projectId,error).size()==2,"basic preset duplicated");
+    AssetRegistry indexed; Check(ReadAssetRegistry(root.generic_u8string(),d.projectId,indexed,error),"read catalogue index");
+    AssetCatalogueMetadataDocument metadata;metadata.projectId=d.projectId;
+    AssetCatalogue catalogue;
+    Check(BuildAssetCatalogue(root.generic_u8string(),d.projectId,indexed,metadata,catalogue,error),"player catalogue "+error);
+    bool namedBasic=false;
+    for(const auto& e:catalogue.entries)
+        if(e.name=="Basic Player Start"&&e.type==AssetType::Player&&e.state==AssetCatalogueState::Current)namedBasic=true;
+    Check(namedBasic,"basic browser name/type missing");
+    wi::scene::Scene emptyLevel;
+    Check(ResolvePlayerStart(emptyLevel).resolution==PlayerStartResolution::Missing,"empty level acquired player");
+    TransformState drop;drop.translation={12,3,-4};
+    CommandService placement;
+    auto place=std::make_unique<PlacePlayerPrefabCommand>(emptyLevel,drop,saved.document);
+    auto* placed=place.get();
+    Check(placement.Execute(std::move(place)),"browser placement");
+    const auto placedId=placed->PlacedEntity();
+    Check(CapturePlayerPrefabOrigin(emptyLevel,placedId)==saved.document.assetId&&
+        ResolvePlayerStart(emptyLevel).start.transform.translation.x==12,"drop settings/position");
+    PlacePlayerPrefabCommand duplicate(emptyLevel,drop,saved.document);
+    Check(!duplicate.Execute(),"second player admitted");
+    Check(placement.Undo()&&ResolvePlayerStart(emptyLevel).resolution==PlayerStartResolution::Missing,"placement undo");
+    Check(placement.Redo()&&ResolvePlayerStart(emptyLevel).start.entity==placedId&&
+        CapturePlayerPrefabOrigin(emptyLevel,placedId)==saved.document.assetId,"placement redo identity/settings");
+    wi::Archive levelArchive;emptyLevel.Serialize(levelArchive);levelArchive.SetReadModeAndResetPos(true);
+    wi::scene::Scene coldLevel;coldLevel.Serialize(levelArchive);
+    const auto coldStart=ResolvePlayerStart(coldLevel);
+    Check(coldStart.resolution==PlayerStartResolution::Success&&coldStart.start.transform.translation.x==12&&
+        CapturePlayerPrefabOrigin(coldLevel,coldStart.start.entity)==saved.document.assetId,"drop cold reopen");
     fs::remove_all(root);
     std::cout<<"PLAYER PREFAB PASS // schema, undo/redo, overrides, reset, spawn, scene reopen, registry, rollback\n";
 }

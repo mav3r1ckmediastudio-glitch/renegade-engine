@@ -69,7 +69,7 @@ serialized asset, does not enter Runtime, and is hidden behind assembly/grip wor
 The native Player Start Inspector exposes a project prefab selector, SAVE AS
 PLAYER PREFAB and RESET TO PREFAB. Saving captures all current controller/camera
 defaults and the first-person arms/assembly StableId into a registered version-1
-Content/Players/*.rplayerprefab asset. Its display name comes from the Player
+Content/Player/*.rplayerprefab asset. Its display name comes from the Player
 Start name; the asset filename uses its StableId. Each save creates a separate
 immutable prefab. The arms bundle remains a separate governed asset.
 
@@ -89,3 +89,7 @@ This first reusable stage does not update all placed players when another prefab
 is saved, duplicate the single governed Player Start in one level, or expose a
 starting inventory. Global prefab updates, per-field inheritance indicators,
 Asset Browser drag placement and equipment definitions remain subsequent work.
+
+
+### Player placement from Content/Player
+New levels have no automatic Player Start. Project browsing ensures a registered Basic Player Start preset under Content/Player without creating a scene entity. Saved player prefabs appear by authored name in the Asset Browser and support drag-and-drop surface placement (ground-plane fallback) and the existing Place control. One command creates the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve identity, transform and baseline. The always-visible selectable capsule represents the placed player. Add no longer exposes Player Start. A second placement is refused: use the existing Inspector to change prefab, or delete the old start before placing another. Immutable saves refresh the browser. Owner/exact-commit verification remains required.

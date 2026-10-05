@@ -1018,3 +1018,7 @@ settings remain the Runtime authority. Local overrides are explicit, with
 command-backed reset/assignment. Prefab selection never creates a second player
 controller or multiple starts. Dependency closure includes prefab defaults and
 local arms assignments; Test Level snapshots retain prefab data and identity.
+
+
+### Player placement from Content/Player
+New levels have no automatic Player Start. Project browsing ensures a registered Basic Player Start preset under Content/Player without creating a scene entity. Saved player prefabs appear by authored name in the Asset Browser and support drag-and-drop surface placement (ground-plane fallback) and the existing Place control. One command creates the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve identity, transform and baseline. The always-visible selectable capsule represents the placed player. Add no longer exposes Player Start. A second placement is refused: use the existing Inspector to change prefab, or delete the old start before placing another. Immutable saves refresh the browser. Owner/exact-commit verification remains required.

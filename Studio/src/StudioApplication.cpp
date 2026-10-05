@@ -1,5 +1,6 @@
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
+#include "renegade/bridge/PlayerPrefabService.h"
 #include <cctype>
 #include "StudioUserPreferences.h"
 
@@ -3483,6 +3484,7 @@ namespace renegade::studio
 
         // Process the asset browser's drag release after GUI callbacks and
         // before chrome input ownership can short-circuit this frame.
+        ProcessPlayerPrefabDrop();
         wi::ecs::Entity dragPlaced = wi::ecs::INVALID_ENTITY;
         if (camera != nullptr)
             dragPlaced = detail::UpdateCreatorAssetDragPreview(*this, *camera);
@@ -6382,6 +6384,11 @@ namespace renegade::studio
         const float screenX,
         const float screenY)
     {
+        if (fs::u8path(label).extension() == bridge::PlayerPrefabExtension)
+        {
+            playerPrefabDropId_ = assetId; playerPrefabDropPoint_ = {screenX, screenY};
+            return;
+        }
         if (detail::CreatorAssetDragPreviewOwnsDrop(assetId))
         {
             // The live cursor instance is committed by the Studio update in
@@ -6470,6 +6477,13 @@ namespace renegade::studio
             return true;
 
         const auto& project = session_->Projects().CurrentProject();
+        bridge::PlayerPrefabDocument playerPrefab; std::string playerError;
+        if (bridge::LoadPlayerPrefab(project.rootPath, project.projectId, creatorAssetPlacementId_, playerPrefab, playerError))
+        {
+            if (PlacePlayerPrefabAt(creatorAssetPlacementId_, surfacePosition))
+            { creatorAssetPlacementActive_ = false; creatorAssetPlacementId_.clear(); }
+            return true;
+        }
         bridge::CreatorAssetWorkflowService workflow;
         auto prepared = workflow.PrepareModelPlacement(
             project.rootPath,
@@ -9987,6 +10001,10 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             return;
         }
 
+        const auto& playerProject = session_->Projects().CurrentProject();
+        std::string playerError;
+        if (!bridge::EnsureBasicPlayerPrefab(playerProject.rootPath, playerProject.projectId, playerError))
+            studioChrome_.SetStatusText("PLAYERS // " + playerError);
         const auto snapshot = assetBrowserService_.Scan(
             session_->Projects().CurrentProject().rootPath,
             assetBrowserCurrentFolder_);

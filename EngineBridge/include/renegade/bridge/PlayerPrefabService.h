@@ -32,6 +32,21 @@ namespace renegade::bridge
         const PlayerControllerSettings&, ProjectDocumentTransactionHook hook = {});
     std::vector<PlayerPrefabDocument> ListPlayerPrefabs(const std::string& projectRoot,
         const StableId& projectId, std::string& error);
+    bool EnsureBasicPlayerPrefab(const std::string& root, const StableId& project, std::string& error);
+    class ApplyPlayerPrefabCommand;
+    class PlacePlayerPrefabCommand final : public ICommand
+    {
+    public:
+        PlacePlayerPrefabCommand(wi::scene::Scene&, TransformState, PlayerPrefabDocument);
+        bool Execute() override;
+        void Undo() override;
+        wi::ecs::Entity PlacedEntity() const noexcept;
+    private:
+        wi::scene::Scene* scene_;
+        CreatePlayerStartCommand create_;
+        PlayerPrefabDocument document_;
+        std::unique_ptr<ApplyPlayerPrefabCommand> apply_;
+    };
     StableId CapturePlayerPrefabOrigin(const wi::scene::Scene&, wi::ecs::Entity);
     bool CapturePlayerPrefabBaseline(const wi::scene::Scene&, wi::ecs::Entity,
         PlayerPrefabDocument&, std::string&);

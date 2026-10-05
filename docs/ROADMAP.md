@@ -287,3 +287,7 @@ controller/camera defaults and arms assembly identity while keeping spawn
 transform level-specific. Local override status and Undo/Redo are included.
 Exact-build owner acceptance remains pending. Global updates, browser placement,
 equipment/loadout definitions and combat/HUD remain subsequent milestones.
+
+
+### Player placement from Content/Player
+New levels have no automatic Player Start. Project browsing ensures a registered Basic Player Start preset under Content/Player without creating a scene entity. Saved player prefabs appear by authored name in the Asset Browser and support drag-and-drop surface placement (ground-plane fallback) and the existing Place control. One command creates the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve identity, transform and baseline. The always-visible selectable capsule represents the placed player. Add no longer exposes Player Start. A second placement is refused: use the existing Inspector to change prefab, or delete the old start before placing another. Immutable saves refresh the browser. Owner/exact-commit verification remains required.

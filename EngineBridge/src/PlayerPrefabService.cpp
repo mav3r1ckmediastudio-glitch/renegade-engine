@@ -151,7 +151,7 @@ namespace renegade::bridge
         auto root=fs::weakly_canonical(fs::u8path(projectRoot),ec);
         if(ec||!fs::is_directory(root)){r.error="Player prefab project root is unavailable.";return r;}
         // ID-based filenames avoid title collisions and path injection.
-        r.projectRelativePath="Content/Players/"+r.document.assetId+PlayerPrefabExtension;
+        r.projectRelativePath="Content/Player/"+r.document.assetId+PlayerPrefabExtension;
         const auto destination=root/fs::u8path(r.projectRelativePath);
         fs::create_directories(destination.parent_path(),ec);
         if(ec){r.error="Cannot create player prefab directory.";return r;}
@@ -253,4 +253,35 @@ namespace renegade::bridge
         SetString(*m,PlayerPrefabOriginKey,beforeOrigin_);
         SetString(*m,PlayerPrefabBaselineKey,beforeBaseline_);
     }
+    bool EnsureBasicPlayerPrefab(const std::string& root,const StableId& project,std::string& error)
+    {
+        const auto prefabs=ListPlayerPrefabs(root,project,error);
+        if(!error.empty())return false;
+        for(const auto& d:prefabs)
+            if(d.name=="Basic Player Start"&&d.settings.firstPersonArmsAssetId.empty())
+                return true;
+        const auto saved=SavePlayerPrefab(root,project,"Basic Player Start",{});
+        error=saved.error;
+        return saved.succeeded;
+    }
+    PlacePlayerPrefabCommand::PlacePlayerPrefabCommand(wi::scene::Scene& scene,
+        TransformState transform,PlayerPrefabDocument document)
+        :scene_(&scene),create_(scene,transform),document_(std::move(document)) {}
+    bool PlacePlayerPrefabCommand::Execute()
+    {
+        std::string text,error;
+        if(!SerializePlayerPrefab(document_,text,error)||!create_.Execute())return false;
+        // Create restores a stable entity on redo; assignment is one command with creation.
+        apply_=std::make_unique<ApplyPlayerPrefabCommand>(*scene_,create_.CreatedEntity(),document_);
+        if(!apply_->Execute()){create_.Undo();return false;}
+        return true;
+    }
+    void PlacePlayerPrefabCommand::Undo()
+    {
+        if(apply_)apply_->Undo();
+        create_.Undo();
+    }
+    wi::ecs::Entity PlacePlayerPrefabCommand::PlacedEntity() const noexcept
+    {return create_.CreatedEntity();}
+
 }
