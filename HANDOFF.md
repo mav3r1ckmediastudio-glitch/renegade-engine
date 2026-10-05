@@ -1,3 +1,63 @@
+## Selected Player Camera Preview inset — 2026-10-05
+
+Implementation commit: 6a2bf9753d7c7cc1aa2d6dd59832c11ad5fc13a5.
+Selected Player Start now shows a small bottom-right scene-camera inset with the
+world and equipped primary arms/weapon. It uses Runtime spawn yaw, eye height
+and default 60-degree FOV. No separately authored player FOV exists yet.
+
+Changed: bridge PlayerCameraPreviewService plus shared PlayerViewRig/Asset/
+Animation headers; Runtime compatibility headers; StudioApplication and live
+diagnostics; DX12 graphics proof and source contract; README, architecture,
+feature matrix and player continuation. No Wicked source or pin changed.
+
+Preview uses a private world copy, removes gameplay actors/physics/scripts/audio,
+poses native Idle, suppresses during specialist workspaces/Test Level and caches
+eight prepared frames. Edits settle 0.2 seconds; re-selection refreshes asset
+changes. Its rectangle blocks viewport picking/navigation. Helpers do not enter
+authoring WISCENE. Explicit equipment retains Runtime ownership rules.
+
+Windows Release Studio and Runtime builds passed. Five focused CTests passed
+(PlayerViewRig/source contract, prefab, equipment action/asset). DX12 proof checks
+cold world/arms loading, no gameplay components, changed eye height/yaw, unchanged
+source settings/component counts and contrasting rendered pixels. Images
+BUILD/player-camera-preview-evidence/camera-preview.png and
+camera-preview-turned.png were inspected. Initial dt==0 preview rendered sky only:
+Wicked skips GPU geometry/instance allocation at zero. Minimal positive render
+preparation followed by zero GPU effect time repaired it; native clips are paused.
+The proof now rejects empty images.
+
+Native Studio selected-capsule inspection shows the inset at bottom-right with
+world and shotgun; approximately 75 FPS in the tiny validation scene. Clicking
+inside the inset retains selection. BUILD/player-preview-window.png is evidence.
+Standalone Charge/Release/cancel regression passed after moving shared headers.
+Original owner Studio stayed open. Only the launched Runtime was closed; the
+alternate preview Studio remains open for review. Startup capture initially
+preceded the foreground window, and dialog SendKeys lost its first character;
+native pointer opening corrected test setup. These are not accepted product
+changes.
+
+Commands from repository root:
+powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/player_preview_build.ps1
+(same invocation for player_preview_verify.ps1 and player_preview_proof.ps1);
+the final build repeats after refresh/caching fixes.
+Graphics mode: BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+<validation-project> BUILD/player-camera-preview-evidence --camera-preview.
+Standalone: same PowerShell invocation for BUILD/p2_charge_launch.ps1 and
+BUILD/p2_route_capture.ps1; python BUILD/p2_charge_native.py.
+Native inspection: same PowerShell invocation for BUILD/player_preview_launch.ps1
+and BUILD/player_preview_capture.ps1, with pointer-only fixture navigation.
+git diff --check passed. Studio output is BUILD/player-preview-studio.
+Embedded build metadata still predates compiled edits; no exact-head independent
+verification or owner acceptance is claimed.
+
+Limits: private full-world cloning needs large-level memory/time profiling.
+Complete render-settings/postprocess parity and configurable FOV remain follow-ups.
+Preview currently presents the primary assembly; independent off-hand presentation
+remains pending. P2 and release gates remain open.
+Next: prepare separate hand input/routing and instance-scoped reservations, then
+validate actual independent sword/shield clips when the owner's pack arrives.
+A two-handed shotgun is only a reservation regression, never off-hand proof.
+
 ## Explicit native Charge/Release presentation â€” 2026-10-05
 
 The assembly action whitelist now has 16 optional bindings: Charge and Release

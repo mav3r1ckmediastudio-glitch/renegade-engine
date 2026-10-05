@@ -361,3 +361,11 @@ Aim reconciliation cannot steal Charge; pre-active cancellation clears its pose.
 Release bridge/Runtime/Studio builds, six focused CTests, DX12 cold-load/pose/hand
 proof and standalone release/cancel check passed. Charge strength/projectiles and
 off-hand presentation remain pending. See P2_EQUIPMENT_ACTION_IMPLEMENTATION.md.
+
+
+Player authoring checkpoint (2026-10-05): selected Player Camera Preview inset
+implemented in Studio with frozen world and native primary presentation.
+Windows Release build, five focused tests, DX12 image proof and native inset
+inspection pass; owner/independent acceptance remains pending. Large-world clone
+profiling and full render-settings parity remain follow-ups. Independent
+sword/shield input/presentation is next; owner animation pack is expected.
