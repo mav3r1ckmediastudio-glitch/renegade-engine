@@ -1005,3 +1005,5 @@ Studio window canvas and swapchain must refresh on background WM_SIZE / DPI
 changes and on focus recovery. Minimized windows are excluded. Skipping these
 updates stretches the displayed scene/UI while input retains current client
 coordinates, causing offset hierarchy hitboxes and viewport marker selection.
+
+Player Start capsule guides remain visible in the level editor regardless of selection (cyan normally, orange when selected), using resolved controller dimensions and hierarchy visibility. Prefab-backed starts retain this editor representation. Compose owns the single connected capsule after temporal postprocessing; it is not serialized as a Runtime mesh.

@@ -3675,16 +3675,19 @@ namespace renegade::studio
         // Draw the capsule after temporal postprocessing, alongside the gizmo.
         // Project its connected 3D edges using one camera matrix for this frame.
         if (!projectHubVisible_ && !assemblyPanel_.IsVisible() &&
-            !handGripPanel_.IsVisible() && session_ && camera &&
-            session_->Selection().HasSelection())
+            !handGripPanel_.IsVisible() && session_ && camera)
         {
             const auto& scene = session_->Scenes().GetScene();
-            const auto selected = session_->Selection().SelectedEntity();
-            const auto* transform = scene.transforms.GetComponent(selected);
-            if (transform && bridge::IsPlayerStart(scene, selected))
+            const auto resolved = bridge::ResolvePlayerStart(scene);
+            const auto entity = resolved.start.entity;
+            const auto* transform = scene.transforms.GetComponent(entity);
+            if (resolved.resolution == bridge::PlayerStartResolution::Success &&
+                transform && session_->Scenes().IsHierarchyVisible(entity))
             {
+                const bool selected =
+                    session_->Selection().SelectedEntity() == entity;
                 const auto settings = bridge::SanitizePlayerControllerSettings(
-                    bridge::CapturePlayerControllerSettings(scene, selected));
+                    resolved.start.settings);
                 const auto feet = transform->GetPosition();
                 const float radius = settings.capsuleRadius;
                 const float height = bridge::PlayerCapsuleTotalHeight(settings);
@@ -3723,7 +3726,8 @@ namespace renegade::studio
                     params.siz=XMFLOAT2(std::sqrt(dx*dx+dy*dy),1.5f);
                     params.pivot=XMFLOAT2(0.5f,0.5f);
                     params.rotation=std::atan2(dy,dx);
-                    params.color=wi::Color(255,122,31,255);
+                    params.color=selected ? wi::Color(255,122,31,255)
+                        : wi::Color(51,214,255,230);
                     params.blendFlag=wi::enums::BLENDMODE_ALPHA;
                     wi::image::Draw(nullptr,params,cmd);
                 };
@@ -6948,43 +6952,8 @@ bool StudioRenderPath::HandlePlayerStartSceneIcon(
             DrawEditorLine(projected[index], projected[next], color);
     }
 
-    // The arrow is always present. Selecting it adds the real configured
-    // capsule as a wire guide without creating a renderable Runtime mesh.
-    if (selected)
-    {
-        const auto settings = resolved.start.settings;
-        const float radius = settings.capsuleRadius;
-        const float totalHeight = bridge::PlayerCapsuleTotalHeight(settings);
-        constexpr int Segments = 20;
-        for (int ring = 0; ring < 2; ++ring)
-        {
-            const float height = ring == 0 ? radius : totalHeight - radius;
-            for (int segment = 0; segment < Segments; ++segment)
-            {
-                const float a0 = XM_2PI * static_cast<float>(segment) / Segments;
-                const float a1 = XM_2PI * static_cast<float>(segment + 1) / Segments;
-                XMFLOAT2 p0 = {}, p1 = {};
-                if (ProjectEditorPoint(
-                        worldPoint(std::cos(a0) * radius,
-                            std::sin(a0) * radius, height), p0) &&
-                    ProjectEditorPoint(
-                        worldPoint(std::cos(a1) * radius,
-                            std::sin(a1) * radius, height), p1))
-                {
-                    DrawEditorLine(p0, p1, XMFLOAT4(color.x, color.y, color.z, 0.72f));
-                }
-            }
-        }
-        for (const float side : {-radius, radius})
-        {
-            XMFLOAT2 bottom = {}, top = {};
-            if (ProjectEditorPoint(worldPoint(0, side, radius), bottom) &&
-                ProjectEditorPoint(worldPoint(0, side, totalHeight - radius), top))
-            {
-                DrawEditorLine(bottom, top, XMFLOAT4(color.x, color.y, color.z, 0.72f));
-            }
-        }
-    }
+    // The connected capsule is drawn in Compose after temporal postprocessing,
+    // for both selected and unselected starts. Keep only the arrow here.
 
     const bool selectRequested = hovered && !flyCameraActive_ &&
         !GetGUI().HasFocus() && !gizmo_.IsInteracting() &&
