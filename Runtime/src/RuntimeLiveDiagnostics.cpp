@@ -644,6 +644,8 @@ namespace renegade::runtime
             {"player_view_rig_proof_geometry",
                 playerViewRig_.primaryArmProof != wi::ecs::INVALID_ENTITY &&
                 playerViewRig_.offHandArmProof != wi::ecs::INVALID_ENTITY},
+            {"player_equipment_reserved_hands", static_cast<std::uint64_t>(playerEquipment_.actions.ReservedHands())},
+            {"player_equipment_primary_phase", static_cast<std::uint64_t>(playerEquipment_.actions.Channels()[0].phase)},
             {"player_equipment_authored", playerEquipment_.authored},
             {"player_equipment_ready", playerEquipment_.ready},
             {"player_primary_equipment", playerEquipment_.primary.equipment.assetId},

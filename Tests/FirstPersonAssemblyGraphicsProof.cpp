@@ -957,12 +957,24 @@ static bool EquipmentSnapshotProof(const fs::path& input, const fs::path& output
  RuntimePlayerViewAnimationState animation;
  if(!InitializeRuntimePlayerViewAnimations(reopened.GetScene(),rig,animation,error))return false;
  GameplayInputFrame use;use.firePressed=true;
- const auto routed=equipment.Route(use,true);
+ for(auto& action:equipment.primary.equipment.actions)
+  if(action.action==EquipmentAction::PrimaryUse){action.prepareSeconds=.1f;action.windupSeconds=.1f;action.recoverySeconds=.1f;}
+ if(equipment.RouteStaged(use,true,false,.05f).firePressed)return false;
+ GameplayInputFrame noPress;
+ const auto routed=equipment.RouteStaged(noPress,true,false,.2f);
+ if(!routed.firePressed)return false;
  UpdateRuntimePlayerViewAnimations(reopened.GetScene(),animation,PlayerViewAction::Idle,
      0.01f,routed.firePressed,routed.reloadPressed,routed.aimDown,routed.toggleEquipmentPressed,true);
  if(animation.loadedShells!=animation.firearm.capacity-1 ||
     animation.activeAction!=PlayerViewAction::Attack || !animation.oneShotPlaying)return false;
- std::cout<<"RUNTIME EQUIPMENT PRIMARY ACTION PASS // real paired Attack and one shell consumed\n";
+ if(equipment.RouteStaged(use,true,animation.oneShotPlaying,10).firePressed ||
+    equipment.actions.ReservedHands()==0)return false;
+ UpdateRuntimePlayerViewAnimations(reopened.GetScene(),animation,PlayerViewAction::Idle,10);
+ if(animation.oneShotPlaying || equipment.RouteStaged(use,true,false,.05f).firePressed ||
+    equipment.actions.ReservedHands()==0)return false;
+ equipment.RouteStaged(noPress,true,false,.1f);
+ if(equipment.actions.ReservedHands()!=0)return false;
+ std::cout<<"RUNTIME EQUIPMENT STAGED PRIMARY ACTION PASS // delayed paired Attack, one shell, native completion and recovery\n";
  std::ofstream(output/"equipment-snapshot-descriptor.txt")<<snapshot.descriptorPath;
  std::cout<<"EQUIPMENT SNAPSHOT PASS // saved loadout, definition, paired presentation cold load\n";
  return true;

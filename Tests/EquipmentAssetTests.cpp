@@ -112,6 +112,28 @@ int main() {
     Check(routed.firePressed&&routed.toggleEquipmentPressed&&!routed.reloadPressed&&
         !routed.aimDown&&!runtime.Route(input,false).toggleEquipmentPressed,
         "semantic primary and holster admission");
+    auto& staged = runtime.primary.equipment.actions[0];
+    staged.prepareSeconds=.1f; staged.windupSeconds=.2f; staged.recoverySeconds=.3f;
+    GameplayInputFrame press;press.firePressed=true;
+    Check(!runtime.RouteStaged(press,true,false,.05f).firePressed &&
+        runtime.actions.ReservedHands()==1,"prepare reservation");
+    GameplayInputFrame quiet;
+    Check(!runtime.RouteStaged(quiet,true,false,0).firePressed,"paused preparation");
+    Check(!runtime.RouteStaged(quiet,true,true,1).firePressed,"native busy stole staged action");
+    Check(!runtime.RouteStaged(quiet,true,false,.1f).firePressed,"windup dispatched early");
+    Check(runtime.RouteStaged(quiet,true,false,.2f).firePressed,"active dispatch missing");
+    Check(!runtime.RouteStaged(press,true,true,10).firePressed &&
+        runtime.actions.ReservedHands()==1,"native active duration released ownership");
+    Check(!runtime.RouteStaged(press,true,false,.1f).firePressed &&
+        runtime.actions.ReservedHands()==1,"recovery bypassed");
+    Check(!runtime.RouteStaged(quiet,true,false,.3f).firePressed &&
+        runtime.actions.ReservedHands()==0,"recovery reservation retained");
+    Check(runtime.RouteStaged(press,true,false,.4f).firePressed,"next action not admitted");
+    runtime.actions.Reset();runtime.dispatched=false;
+    staged.holdUntilRelease=true;
+    Check(!runtime.RouteStaged(press,true,false,1).firePressed &&
+        runtime.actions.ReservedHands()==0,"held action admitted without release input");
+    staged.holdUntilRelease=false;
     runtime.primary.equipment.actions[0].animationAction="Reload";
     Check(!runtime.Route(input,true).firePressed,"semantic mismatch admitted as attack");
     loadout.primaryEquipmentAssetId=GenerateStableId();

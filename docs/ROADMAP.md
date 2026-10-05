@@ -327,3 +327,14 @@ Diagnostics: BUILD/p2-route-runtime-diagnostics.json. No owner or independent ac
 
 
 Next: staged action routing, independent off-hand presentation and package verification.
+
+
+### Staged discrete Runtime equipment checkpoint (2026-10-05)
+
+Primary fire/reload/equip/unequip now use EquipmentActionState preparation, windup,
+native-completed Active and authored recovery. Pause/reset and hand reservations
+are retained; native animation remains the skeleton and ammo authority.
+Release Runtime build, focused CTest 4/4, staged DX12 paired Attack/ammo/completion
+proof and standalone immediate-definition routing passed. Held actions/cancellation
+input, off-hand presentation and packaged acceptance remain pending.
+See P2_EQUIPMENT_ACTION_IMPLEMENTATION.md and HANDOFF.md for exact evidence.

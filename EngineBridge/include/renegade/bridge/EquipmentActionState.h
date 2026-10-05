@@ -84,13 +84,14 @@ public:
         }
         return changed;
     }
-    void Update(float gameplaySeconds) {
+    void Update(float gameplaySeconds, bool nativeOwnsActive = false) {
         // Zero is pause; negative/nonfinite time must not mutate ownership.
         if(!std::isfinite(gameplaySeconds)||gameplaySeconds<=0)return;
         for(auto& c:channels_) {
             float remaining=gameplaySeconds;
             // At most five transitions; no unbounded loop for instant actions.
             for(int step=0;step<6&&c.phase!=EquipmentActionPhase::Ready;++step) {
+                if(nativeOwnsActive&&c.phase==EquipmentActionPhase::Active)break;
                 if(c.phase==EquipmentActionPhase::Hold&&!c.released)break;
                 const float duration=Duration(c);
                 const float needed=duration-c.elapsed;
@@ -101,6 +102,15 @@ public:
                 if(c.phase==EquipmentActionPhase::Ready){c={};break;}
             }
         }
+    }
+    // Native presentation completion releases Active into authored recovery.
+    bool CompleteActive(const std::string& itemId) {
+        for(auto& c:channels_)if(c.itemId==itemId&&c.phase==EquipmentActionPhase::Active) {
+            c.phase=EquipmentActionPhase::Recovery;c.elapsed=0;
+            events_.push_back({c.itemId,c.definition.animationAction,c.definition.action,c.phase,c.hands});
+            return true;
+        }
+        return false;
     }
     uint8_t ReservedHands() const {
         uint8_t result=0;for(const auto& c:channels_)if(c.phase!=EquipmentActionPhase::Ready)result|=c.hands;return result;

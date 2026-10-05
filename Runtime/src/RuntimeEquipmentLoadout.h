@@ -10,6 +10,8 @@ namespace renegade::runtime
     struct RuntimeEquipmentLoadout
     {
         bridge::EquipmentAssetDocument primary, offHand;
+        bridge::EquipmentActionState actions;
+        bool dispatched = false;
         bool authored = false;
         bool ready = false;
         std::string error;
@@ -57,6 +59,51 @@ namespace renegade::runtime
                     definition.recoverySeconds == 0 && !definition.holdUntilRelease;
             }
             return false;
+        }
+
+        bridge::GameplayInputFrame RouteStaged(bridge::GameplayInputFrame input,
+            bool equipped, bool nativeBusy, float dt, bool currentAim = false)
+        {
+            if (!authored) return input;
+            auto output = Route(input, equipped);
+            output.firePressed = output.reloadPressed = output.toggleEquipmentPressed = false;
+            if (!ready || !std::isfinite(dt) || dt <= 0) return output;
+            if (dispatched && !nativeBusy) {
+                actions.CompleteActive(primary.equipment.assetId);
+                dispatched = false;
+            }
+            // Consume a press only when both gameplay and native presentation are free.
+            // Existing native animation retains ammo, jump and paired completion rules.
+            if (!nativeBusy && actions.ReservedHands() == 0) {
+                const auto begin = [&](bridge::EquipmentAction action, const char* semantic) {
+                    auto item = primary.equipment;
+                    for (const auto& definition : item.actions)
+                        if (definition.action == action && definition.animationAction == semantic &&
+                            !definition.holdUntilRelease)
+                            return actions.Begin(item, action, bridge::EquipmentHand::Primary);
+                    return false;
+                };
+                if (input.toggleEquipmentPressed)
+                    begin(equipped ? bridge::EquipmentAction::Unequip : bridge::EquipmentAction::Equip,
+                        equipped ? "Unequip" : "Equip");
+                else if (equipped && input.reloadPressed)
+                    begin(bridge::EquipmentAction::Reload, "Reload");
+                else if (equipped && input.firePressed)
+                    begin(bridge::EquipmentAction::PrimaryUse, "Attack");
+            }
+            if (actions.ReservedHands() != 0) output.aimDown = currentAim;
+            // A jump/aim pair that began during preparation must finish before dispatch.
+            if (nativeBusy && !dispatched) return output;
+            actions.Update(dt, true);
+            for (const auto& event : actions.TakeEvents()) {
+                if (event.phase != bridge::EquipmentActionPhase::Active) continue;
+                dispatched = true;
+                output.firePressed = event.action == bridge::EquipmentAction::PrimaryUse;
+                output.reloadPressed = event.action == bridge::EquipmentAction::Reload;
+                output.toggleEquipmentPressed = event.action == bridge::EquipmentAction::Equip ||
+                    event.action == bridge::EquipmentAction::Unequip;
+            }
+            return output;
         }
 
         bridge::GameplayInputFrame Route(bridge::GameplayInputFrame input, bool equipped) const

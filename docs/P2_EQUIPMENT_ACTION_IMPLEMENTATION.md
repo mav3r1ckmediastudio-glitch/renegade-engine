@@ -39,8 +39,8 @@ active and recovery phases emit events; conflicting hands cannot reserve togethe
 Zero/nonfinite/negative update time cannot advance phases. Hold requires release;
 cancellation is allowed only before active when authored. Reset clears reservations
 and queued events. Definitions reject invalid timing and duplicate action kinds.
-The action state is not yet connected to the Runtime shotgun; equipment
-asset persistence and starting-loadout authoring are now implemented. An authored
+The action state now gates discrete primary Runtime actions; equipment
+asset persistence and starting-loadout authoring are implemented. An authored
 animation string identifies a semantic action rather than a clip filename.
 
 ## Validation
@@ -142,3 +142,38 @@ Diagnostics: BUILD/p2-route-runtime-diagnostics.json. No owner or independent ac
 
 
 Next: staged action routing, independent off-hand presentation and package verification.
+
+
+## Staged discrete Runtime equipment actions — 2026-10-05
+
+Runtime now routes authored primary fire, reload and equip/unequip through
+EquipmentActionState. Preparation and windup reserve the authored hands before
+one semantic dispatch. Active waits for native paired-animation completion;
+authored recovery then retains the reservation before the next press can start.
+Native ammo, partial reload, aim variants and jump presentation remain authoritative.
+Pause does not advance phases. Busy native jump/aim presentation defers dispatch;
+aim transitions cannot steal a staged reservation. Scene reload/shutdown clears state.
+No-equipment legacy players retain the existing input path.
+
+This slice covers canonical Attack/Reload/Equip/Unequip bindings. Immediate aim
+remains on the previous path. Held/charge/release and cancellation input, independent
+off-hand presentation, inventory and generic action editing remain pending.
+ActiveSeconds remains the standalone gameplay-state duration; paired Runtime uses
+native clip completion instead. Phase boundaries dispatch on gameplay frame updates.
+
+Windows Release Runtime build passed after correcting the new ground-check pointer
+and diagnostic integer types. Rebuilt EquipmentActionState and EquipmentAsset targets;
+focused snapshot/prefab/action/asset CTest passed 4/4. DX12 real paired shotgun proof
+verifies delayed dispatch, one shell consumed, native completion and recovery release.
+Standalone PID 34884 observed Attack and hand reservation returning to Ready; first
+focus click produced no action and the subsequent click passed. Its assigned definition
+uses immediate timing; nonzero phase delays are exercised by regression and DX12 proof.
+Evidence: BUILD/p2-staged-native-events.json and BUILD/p2-route-runtime-diagnostics.json.
+Commands: powershell -NoProfile -ExecutionPolicy Bypass -File
+BUILD/build_p2_assets_runtime.ps1; BUILD/p2_runtime_route_verify.ps1; and
+BUILD/p2_equipment_proof.ps1 (same PowerShell invocation).
+Standalone: BUILD/p2_route_launch.ps1 and BUILD/p2_route_capture.ps1 with that invocation;
+python BUILD/p2_staged_native.py. Test window closed; owner Studio left open.
+git diff --check passed. No owner/independent verification or packaged acceptance claimed.
+Next: held/charge/release input and cancellation, independent off-hand presentation,
+then package gameplay verification. The editor camera inset remains pending.

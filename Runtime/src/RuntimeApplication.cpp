@@ -421,8 +421,15 @@ namespace renegade::runtime
                         playerViewRig_,
                         gameplayInput.player,
                         paused_ ? 0.0f : dt);
+                    auto* body = scenes_.GetScene().rigidbodies.GetComponent(player_.entity);
+                    const bool grounded = body == nullptr || wi::physics::IsCharacterGroundSupported(*body);
+                    const bool presentationBusy = playerViewAnimation_.oneShotPlaying ||
+                        (playerViewAnimation_.equipped && (playerViewAnimation_.jumpCycleActive ||
+                            playerViewAnimation_.takeoffPending || playerViewAnimation_.landingPending ||
+                            (playerViewAnimation_.groundKnown && playerViewAnimation_.wasGrounded != grounded)));
                     const auto equipmentInput =
-                        playerEquipment_.Route(gameplayInput, playerViewAnimation_.equipped);
+                        playerEquipment_.RouteStaged(gameplayInput, playerViewAnimation_.equipped,
+                            presentationBusy, paused_ ? 0.0f : dt, playerViewAnimation_.aiming);
                     UpdateRuntimePlayerViewAnimations(
                         scenes_.GetScene(),
                         playerViewAnimation_,
@@ -432,9 +439,7 @@ namespace renegade::runtime
                         !paused_ && equipmentInput.reloadPressed,
                         equipmentInput.aimDown,
                         !paused_ && equipmentInput.toggleEquipmentPressed,
-                        scenes_.GetScene().rigidbodies.GetComponent(player_.entity) == nullptr ||
-                            wi::physics::IsCharacterGroundSupported(
-                                *scenes_.GetScene().rigidbodies.GetComponent(player_.entity)));
+                        grounded);
                 }
             }
         }
