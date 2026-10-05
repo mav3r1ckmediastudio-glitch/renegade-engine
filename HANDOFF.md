@@ -1,3 +1,46 @@
+## Off-hand action/input foundation - 2026-10-05
+
+Prepared independent hand ownership while waiting for real sword/shield clips.
+Channels/events identify the initiating hand; release/cancel/retarget/completion
+can be scoped even when both hands reference the same asset. Held Block uses
+active_while_held (optional v1 field): positive time enters Active, release enters
+Recovery, and native primary completion cannot finish the shield channel.
+OffHandUse defaults to right mouse with older input documents migrated only in
+memory. Authored rebinding survives round trip. Pure Runtime adapter can route
+concurrent primary attack and off-hand Block when explicitly capability-enabled.
+The live Runtime keeps this capability false until real native off-hand clips
+are integrated and checked; the shotgun remains a primary/two-hand regression.
+
+Release bridge, Runtime and focused test builds passed using
+BUILD/offhand_bridge_build.ps1 and BUILD/offhand_verify.ps1. Five CTests passed:
+GameplayInput, PlayerViewRig/source contract, EquipmentActionState, EquipmentAsset.
+Tests cover same-asset hand isolation, held shield release/recovery, paused
+primary with advancing shield, pre-active cancel, schema/rebinding migration and
+capability gating. No sword/shield native animation or independent gate proof
+is claimed. Original owner projects were not changed.
+
+## Player preview controls - 2026-10-05
+
+Owner accepted the selected-player camera inset and requested collapse and resize.
+Click the header to collapse/expand; collapse persists in Studio preferences and
+pauses preview preparation/rendering. Drag the upper-left handle to resize the
+16:9 image, anchored bottom-right, bounded by the scene viewport. Width is kept
+for the current Studio session. Header clicks and resizing consume viewport input
+so they cannot pick objects or move the editor camera behind the overlay.
+Preview remains available only while a visible Player Start is selected.
+
+Validation: Release bridge + clean Studio rebuild passed (BUILD/preview_clean_build.ps1,
+100.18 seconds). Initial incremental build produced a startup exception; rebuilding
+all Studio translation units repaired it. Native inspection passed enlarged
+596-pixel width, minimum 240-pixel width, collapse/expand and selected-marker
+retention. Collapse preference was read back from RenegadeStudio.ini and restored
+after selecting another object and returning to Player Start. Evidence:
+BUILD/player-preview-resized-large.png, player-preview-resized-small.png and
+player-preview-collapsed.png. Source diff check passed. Render image is the
+existing 432x243 cached texture; resizing changes its display bounds, not FOV.
+Off-hand foundation is separate commit cd94a28 and its five focused tests passed;
+native off-hand presentation is still disabled pending real sword/shield clips.
+
 ## Selected Player Camera Preview inset — 2026-10-05
 
 Implementation commit: 6a2bf9753d7c7cc1aa2d6dd59832c11ad5fc13a5.

@@ -663,7 +663,7 @@ namespace renegade::studio
             modelImportPreview_->PreRender();
         if (assemblyPanel_.IsVisible() && assemblyPreview_ && assemblyPreview_->NeedsRender())
             assemblyPreview_->PreRender();
-        if (playerCameraPreviewVisible_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->PreRender();
+        if (playerCameraPreviewVisible_ && !playerCameraPreviewCollapsed_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->PreRender();
         wi::RenderPath3D::PreRender();
     }
 
@@ -682,7 +682,7 @@ namespace renegade::studio
         }
         if (assemblyPanel_.IsVisible() && assemblyPreview_ && assemblyPreview_->NeedsRender())
             assemblyPreview_->Render();
-        if (playerCameraPreviewVisible_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->Render();
+        if (playerCameraPreviewVisible_ && !playerCameraPreviewCollapsed_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->Render();
         if (pathTracePreviewActive_)
         {
             RenderPath3D_PathTracing::Render();
@@ -7311,6 +7311,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     bool StudioRenderPath::IsPointerOverViewport(
         const XMFLOAT4& pointer) const noexcept
     {
+        if (playerCameraPreviewHeaderPressed_) return false;
         const auto inset = PlayerCameraPreviewBounds();
         if (playerCameraPreviewVisible_ && pointer.x >= inset.x && pointer.x < inset.z &&
             pointer.y >= inset.y && pointer.y < inset.w) return false;
@@ -11035,15 +11036,19 @@ namespace renegade::studio
 {
     XMFLOAT4 StudioRenderPath::PlayerCameraPreviewBounds() const noexcept
     {
-        const float width=std::min(432.0f,std::max(0.0f,(viewportBounds_.z-viewportBounds_.x)*0.38f));
-        const float height=width*9.0f/16.0f;
+        const float maxWidth=std::max(0.0f,std::min((viewportBounds_.z-viewportBounds_.x)-24.0f,
+            ((viewportBounds_.w-viewportBounds_.y)-54.0f)*16.0f/9.0f));
+        const float width=std::min(playerCameraPreviewWidth_,maxWidth);
+        const float height=playerCameraPreviewCollapsed_ ? 0.0f : width*9.0f/16.0f;
         return XMFLOAT4(viewportBounds_.z-width-12,viewportBounds_.w-height-42,
             viewportBounds_.z-12,viewportBounds_.w-12);
     }
     void StudioRenderPath::UpdatePlayerCameraPreview(float dt)
     {
+        playerCameraPreviewHeaderPressed_=false;
         const bool wasVisible=playerCameraPreviewVisible_;
         playerCameraPreviewVisible_=false;
+        if(!wi::input::Down(wi::input::MOUSE_BUTTON_LEFT)) playerCameraPreviewResizing_=false;
         if(!session_ || projectHubVisible_ || sceneOpenInProgress_ || pathTracePreviewActive_ ||
             assemblyPanel_.IsVisible() || handGripPanel_.IsVisible() || modelImportPanel_.IsVisible() ||
             !session_->Projects().HasProject()) return;
@@ -11053,6 +11058,36 @@ namespace renegade::studio
             session_->Selection().SelectedEntity()!=resolved.start.entity ||
             !session_->Scenes().IsHierarchyVisible(resolved.start.entity)) return;
         playerCameraPreviewVisible_=true;
+        if(!wasVisible)
+            playerCameraPreviewCollapsed_=session_->Projects().GetEditorPreference("player_camera_preview_collapsed",false);
+        const auto bounds=PlayerCameraPreviewBounds();
+        const auto pointer=wi::input::GetPointer();
+        const bool resizeHandle=!playerCameraPreviewCollapsed_ &&
+            pointer.x>=bounds.x && pointer.x<bounds.x+24 && pointer.y>=bounds.y && pointer.y<bounds.y+30;
+        if(resizeHandle && wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) {
+            playerCameraPreviewResizing_=true;
+            playerCameraPreviewResizeStartWidth_=bounds.z-bounds.x;
+            playerCameraPreviewResizeStartPointer_=pointer;
+        }
+        if(playerCameraPreviewResizing_) {
+            playerCameraPreviewHeaderPressed_=true;
+            const float dx=pointer.x-playerCameraPreviewResizeStartPointer_.x;
+            const float dy=pointer.y-playerCameraPreviewResizeStartPointer_.y;
+            constexpr float ratio=9.0f/16.0f;
+            const float maximum=std::max(0.0f,std::min((viewportBounds_.z-viewportBounds_.x)-24.0f,
+                ((viewportBounds_.w-viewportBounds_.y)-54.0f)/ratio));
+            playerCameraPreviewWidth_=std::clamp(playerCameraPreviewResizeStartWidth_-(dx+dy*ratio)/(1+ratio*ratio),
+                std::min(240.0f,maximum),maximum);
+        }
+        if(!resizeHandle && !playerCameraPreviewResizing_ && bounds.z-bounds.x>=120 &&
+            pointer.x>=bounds.x && pointer.x<bounds.z &&
+            pointer.y>=bounds.y && pointer.y<bounds.y+30 &&
+            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) {
+            playerCameraPreviewHeaderPressed_=true;
+            playerCameraPreviewCollapsed_=!playerCameraPreviewCollapsed_;
+            session_->Projects().SetEditorPreference("player_camera_preview_collapsed",playerCameraPreviewCollapsed_);
+        }
+        if(playerCameraPreviewCollapsed_) return;
         if(!wasVisible) { playerCameraPreviewKey_.clear(); playerCameraPreviewPendingKey_.clear(); }
         const auto& project=session_->Projects().CurrentProject();
         const auto& start=resolved.start;
@@ -11086,7 +11121,7 @@ namespace renegade::studio
     {
         if(!playerCameraPreviewVisible_) return;
         const auto bounds=PlayerCameraPreviewBounds();
-        if(bounds.z-bounds.x<120 || bounds.w-bounds.y<80) return;
+        if(bounds.z-bounds.x<120) return;
         wi::image::Params panel;
         panel.pos=XMFLOAT3(bounds.x-1,bounds.y-1,0);
         panel.siz=XMFLOAT2(bounds.z-bounds.x+2,bounds.w-bounds.y+2);
@@ -11097,9 +11132,12 @@ namespace renegade::studio
         panel.color=wi::Color(16,22,30,255);
         wi::image::Draw(nullptr,panel,cmd);
         wi::font::Params title;
-        title.posX=bounds.x+10; title.posY=bounds.y+6; title.size=13;
+        title.posX=bounds.x+(playerCameraPreviewCollapsed_ ? 10 : 30); title.posY=bounds.y+6; title.size=13;
         title.color=wi::Color(180,231,244,255);
-        wi::font::Draw("PLAYER CAMERA PREVIEW",title,cmd);
+        wi::font::Draw(playerCameraPreviewCollapsed_ ? "[+] PLAYER CAMERA PREVIEW" : "[-] PLAYER CAMERA PREVIEW",title,cmd);
+        if(playerCameraPreviewCollapsed_) return;
+        title.posX=bounds.x+7;
+        wi::font::Draw("/",title,cmd);
         if(playerCameraPreview_ && playerCameraPreview_->GetRenderResult3D().IsValid()) {
             wi::image::Params picture;
             picture.pos=XMFLOAT3(bounds.x,bounds.y+30,0);

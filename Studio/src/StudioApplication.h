@@ -74,6 +74,12 @@ namespace renegade::studio
         std::unique_ptr<bridge::PlayerCameraPreviewService> playerCameraPreview_;
         std::string playerCameraPreviewKey_, playerCameraPreviewError_;
         bool playerCameraPreviewVisible_ = false;
+        bool playerCameraPreviewCollapsed_ = false;
+        bool playerCameraPreviewHeaderPressed_ = false;
+        bool playerCameraPreviewResizing_ = false;
+        float playerCameraPreviewWidth_ = 432.0f;
+        float playerCameraPreviewResizeStartWidth_ = 432.0f;
+        XMFLOAT4 playerCameraPreviewResizeStartPointer_ = {};
         std::string playerCameraPreviewPendingKey_;
         float playerCameraPreviewRefreshDelay_ = 0;
         void CreateEquipmentEditor();

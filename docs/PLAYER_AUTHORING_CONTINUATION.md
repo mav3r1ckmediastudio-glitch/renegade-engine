@@ -140,3 +140,7 @@ Independent sword/shield presentation awaits the supplied animation pack.
 Off-hand preparation (2026-10-05): hand-scoped action channels, held Block policy,
 OffHandUse rebinding and pure Runtime adapter are tested. Live native off-hand
 capability remains disabled until the actual sword/shield pack is integrated.
+
+Player camera preview controls: click its header to collapse/expand (saved Studio
+preference); drag the upper-left handle to resize its 16:9 image. Width stays
+for the session. Native large/small/collapsed inspection passed on 2026-10-05.
