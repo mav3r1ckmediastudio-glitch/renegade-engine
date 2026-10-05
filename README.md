@@ -349,3 +349,12 @@ shot cooldown advances only during gameplay. These are discrete shots, with no
 reserve ammunition or automatic firing yet. Gameplay capacity does not change the
 number of shells visible in authored clips. Independent equipment definitions and
 Player prefabs remain next stages; see PLAYER_AUTHORING_CONTINUATION.md.
+
+### Reusable player prefabs
+
+Player Start's native Inspector can save controller/camera defaults and the
+assigned arms assembly as a project player prefab. Select that prefab on another
+level's start capsule to reuse it while retaining the level's spawn position and
+facing. Local edits are marked as overrides; RESET TO PREFAB restores the assigned
+defaults with Undo/Redo. Prefab saves create new assets; global propagation and
+starting inventories remain later work. See PLAYER_AUTHORING_CONTINUATION.md.

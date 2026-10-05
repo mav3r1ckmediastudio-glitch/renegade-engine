@@ -5,6 +5,7 @@
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/PlayerService.h"
+#include "renegade/bridge/PlayerPrefabService.h"
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/ProjectService.h"
@@ -362,6 +363,60 @@ namespace
         }
 
         error.clear();
+        return true;
+    }
+
+    bool SnapshotGovernedPlayerViewInputs(
+        const renegade::bridge::ProjectMetadata&,
+        const renegade::bridge::TestLevelSnapshot&,
+        const wi::scene::Scene&, std::string&);
+
+    bool SnapshotPlayerPrefab(
+        const renegade::bridge::ProjectMetadata& project,
+        const renegade::bridge::TestLevelSnapshot& snapshot,
+        const wi::scene::Scene& scene, std::string& error)
+    {
+        using namespace renegade::bridge;
+        const auto start = ResolvePlayerStart(scene);
+        if (start.resolution != PlayerStartResolution::Success) return true;
+        const auto id = CapturePlayerPrefabOrigin(scene, start.start.entity);
+        if (id.empty()) return true;
+        PlayerPrefabDocument document;
+        if (!LoadPlayerPrefab(project.rootPath, project.projectId, id, document, error))
+            return false;
+        AssetRegistry registry;
+        if (!ReadAssetRegistry(project.rootPath, project.projectId, registry, error)) return false;
+        const auto record = std::find_if(registry.records.begin(), registry.records.end(),
+            [&](const AssetRecord& r) { return r.assetId == id; });
+        if (record == registry.records.end()) return false;
+        const auto source = ResolveDependencyPath(project.rootPath, record->projectRelativePath);
+        if (!source.accepted || !source.exists ||
+            !IsSafeSnapshotContentPath(fs::u8path(record->projectRelativePath)))
+        { error = "Invalid player prefab snapshot path."; return false; }
+        std::error_code ec;
+        const auto destination = fs::u8path(snapshot.sessionDirectory) /
+            fs::u8path(record->projectRelativePath);
+        fs::create_directories(destination.parent_path(), ec);
+        if (!ec) fs::copy_file(fs::u8path(source.absolutePath), destination,
+            fs::copy_options::overwrite_existing, ec);
+        if (ec) { error = "Could not snapshot player prefab: " + ec.message(); return false; }
+        std::string registryPath;
+        if (!ResolveAssetRegistryDocumentPath(project.rootPath, registryPath, error)) return false;
+        fs::copy_file(fs::u8path(registryPath),
+            fs::u8path(snapshot.sessionDirectory) / AssetRegistryDocumentName,
+            fs::copy_options::overwrite_existing, ec);
+        if (ec) { error = "Could not snapshot player prefab registry: " + ec.message(); return false; }
+        // Preserve the default arms closure as well as the level-local
+        // assignment. It may differ after an explicit local override.
+        if (!document.settings.firstPersonArmsAssetId.empty())
+        {
+            wi::scene::Scene defaults;
+            CreatePlayerStartCommand create(defaults, {});
+            if (!create.Execute()) { error = "Could not prepare prefab defaults."; return false; }
+            SetPlayerControllerSettingsCommand settings(defaults, create.CreatedEntity(), document.settings);
+            (void)settings.Execute();
+            if (!SnapshotGovernedPlayerViewInputs(project, snapshot, defaults, error)) return false;
+        }
         return true;
     }
 
@@ -880,6 +935,9 @@ namespace renegade::bridge
                 return failAndCleanup(
                     "Could not snapshot governed material state: " + error);
             }
+
+            if (!SnapshotPlayerPrefab(project, created, scenes_.GetScene(), error))
+                return failAndCleanup("Could not snapshot player prefab: " + error);
 
             if (!SnapshotGovernedPlayerViewInputs(
                     project,

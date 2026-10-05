@@ -849,3 +849,8 @@ set_target_properties(RenegadeGameplayInputTests PROPERTIES FOLDER "Renegade/Tes
 add_test(NAME RenegadeGameplayInputTests COMMAND RenegadeGameplayInputTests)
 
 add_dependencies(RenegadeBridgeTests RenegadeGameplayInputTests)
+
+add_executable(RenegadePlayerPrefabTests PlayerPrefabTests.cpp)
+target_link_libraries(RenegadePlayerPrefabTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadePlayerPrefabTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadePlayerPrefabTests COMMAND RenegadePlayerPrefabTests)

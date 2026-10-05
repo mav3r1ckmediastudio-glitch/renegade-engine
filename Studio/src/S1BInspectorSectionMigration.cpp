@@ -619,6 +619,10 @@ namespace renegade::studio
             float y = bottom + 8.0f;
             fullAt(playerLabel_, y, 20.0f); y += 20.0f;
             fullAt(playerCameraMode_, y, 32.0f); y += 36.0f;
+            fullAt(playerPrefab_, y); y += 34.0f;
+            fullAt(playerPrefabSave_, y); y += 34.0f;
+            fullAt(playerPrefabReset_, y); y += 34.0f;
+            fullAt(playerPrefabStatus_, y, 28.0f); y += 34.0f;
             fullAt(playerFirstPersonArms_, y); y += 34.0f;
             fullAt(playerHandGrips_, y); y += 34.0f;
             fullAt(playerAssembly_, y); y += 34.0f;

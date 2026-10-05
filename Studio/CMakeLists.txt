@@ -117,6 +117,7 @@ add_executable(RenegadeStudio WIN32
     src/WD01Vegetation.cpp
     src/StudioApplication.cpp
     src/FirstPersonAssemblyEditor.cpp
+    src/PlayerPrefabEditor.cpp
     src/StudioLiveDiagnostics.cpp
     src/StudioApplication.h
     src/StudioUserPreferences.cpp

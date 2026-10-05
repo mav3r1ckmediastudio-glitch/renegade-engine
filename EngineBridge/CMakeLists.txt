@@ -142,6 +142,8 @@ add_library(RenegadeEngineBridge STATIC
     src/CollisionService.cpp
     src/PhysicsService.cpp
     src/PlayerService.cpp
+    src/PlayerPrefabService.cpp
+    include/renegade/bridge/PlayerPrefabService.h
     src/PlayerViewGripService.cpp
     src/NavigationService.cpp
     src/GameplayInputService.cpp

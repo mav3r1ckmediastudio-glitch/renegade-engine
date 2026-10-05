@@ -1009,3 +1009,12 @@ coordinates, causing offset hierarchy hitboxes and viewport marker selection.
 Player Start capsule guides remain visible in the level editor regardless of selection (cyan normally, orange when selected), using resolved controller dimensions and hierarchy visibility. Prefab-backed starts retain this editor representation. Compose owns the single connected capsule after temporal postprocessing; it is not serialized as a Runtime mesh.
 
 Player Start selection uses a camera pick ray against the same upright capsule bounds as its wireframe, including the open interior. The capsule replaces both the Player Start billboard icon and ground arrow. Other scene marker icons retain their existing workflow.
+
+Player prefab assets are immutable version-1 project Data documents with stable
+identity and a controller/camera settings snapshot plus arms StableId. Disk save
+and registry registration share ProjectDocumentTransaction. Player Start retains
+level spawn transform, applied prefab identity and baseline; resolved controller
+settings remain the Runtime authority. Local overrides are explicit, with
+command-backed reset/assignment. Prefab selection never creates a second player
+controller or multiple starts. Dependency closure includes prefab defaults and
+local arms assignments; Test Level snapshots retain prefab data and identity.

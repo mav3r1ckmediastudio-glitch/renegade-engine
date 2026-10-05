@@ -13,7 +13,7 @@ and the corrected runtime was owner accepted on 2026-10-05.
 ## Asset responsibilities
 
 - Player Start owns spawn transform and facing.
-- A future reusable Player definition owns controller/camera defaults, arms
+- A reusable Player prefab owns controller/camera defaults, arms
   selection and starting equipment; explicit level overrides remain visible.
 - First-person assembly owns presentation parts, anchors and paired animations.
 - Equipment definitions own gameplay rules independently of arm geometry.
@@ -52,7 +52,7 @@ falls back to the explicit full pair. No reserve ammunition is modelled yet.
 Capacity describes gameplay ammunition; changing it does not change the physical
 number of shells in an authored animation.
 
-Selected Player Start displays an editor-only orange wireframe collision capsule.
+Player Start displays an always-visible editor-only wireframe collision capsule, cyan normally and orange when selected. Click its interior or edges to select the player; the former icon and ground arrow are removed.
 It reads the runtime controller radius and total height each frame, follows the
 spawn feet position, and updates after inspector edits and Undo/Redo. It stays
 upright and unscaled like the runtime character, and is absent during Test Level.
@@ -62,3 +62,30 @@ Studio Compose after scene temporal postprocessing, beside the transform gizmo.
 This avoids the motion trails from temporal accumulation of debug-world lines.
 The overlay is clipped to the scene viewport and camera planes; it is not a
 serialized asset, does not enter Runtime, and is hidden behind assembly/grip workspaces.
+
+
+## Reusable player prefabs
+
+The native Player Start Inspector exposes a project prefab selector, SAVE AS
+PLAYER PREFAB and RESET TO PREFAB. Saving captures all current controller/camera
+defaults and the first-person arms/assembly StableId into a registered version-1
+Content/Players/*.rplayerprefab asset. Its display name comes from the Player
+Start name; the asset filename uses its StableId. Each save creates a separate
+immutable prefab. The arms bundle remains a separate governed asset.
+
+Selecting a prefab applies an undoable copy of its defaults without moving or
+rotating the level's Player Start. The scene retains the prefab StableId and
+serialized assignment baseline. Editing controller values or the arms reference
+is a level-local override, visibly reported in the Inspector. RESET TO PREFAB
+restores the assigned baseline through Undo/Redo. Reusing it in another level:
+add that level's Player Start, then select the prefab in its Inspector.
+
+Runtime consumes the resolved scene settings, preserving the existing controller,
+physics and animation boundaries. Test Level snapshots copy the registered prefab;
+Build Game dependency discovery includes scene -> prefab -> default arms as well
+as locally assigned arms. Save/reopen retains the baseline and overrides.
+
+This first reusable stage does not update all placed players when another prefab
+is saved, duplicate the single governed Player Start in one level, or expose a
+starting inventory. Global prefab updates, per-field inheritance indicators,
+Asset Browser drag placement and equipment definitions remain subsequent work.

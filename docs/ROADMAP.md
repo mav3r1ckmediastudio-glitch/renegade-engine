@@ -280,3 +280,10 @@ shot cooldown advances only during gameplay. These are discrete shots, with no
 reserve ammunition or automatic firing yet. Gameplay capacity does not change the
 number of shells visible in authored clips. Independent equipment definitions and
 Player prefabs remain next stages; see PLAYER_AUTHORING_CONTINUATION.md.
+
+Player authoring continuation: reusable immutable player prefab capture and
+Inspector assignment/reset are implemented on the active P1 branch. They combine
+controller/camera defaults and arms assembly identity while keeping spawn
+transform level-specific. Local override status and Undo/Redo are included.
+Exact-build owner acceptance remains pending. Global updates, browser placement,
+equipment/loadout definitions and combat/HUD remain subsequent milestones.

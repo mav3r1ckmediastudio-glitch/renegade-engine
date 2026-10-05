@@ -1134,6 +1134,29 @@ namespace renegade::studio
         playerAssembly_.SetText("ASSEMBLY");
         playerAssembly_.OnClick([this](const wi::gui::EventArgs&) { OpenAssemblyEditor(); });
         inspectorPanel_.AddWidget(&playerAssembly_);
+        playerPrefab_.Create("Player Prefab");
+        playerPrefab_.SetText("");
+        playerPrefab_.SetTooltip("Choose reusable player defaults. Spawn position and facing remain level-specific.");
+        playerPrefab_.OnSelect([this](const wi::gui::EventArgs& args) {
+            if (args.iValue <= 0) return;
+            if (static_cast<std::size_t>(args.iValue) < playerPrefabChoices_.size())
+                ApplySelectedPlayerPrefab(playerPrefabChoices_[args.iValue]);
+        });
+        inspectorPanel_.AddWidget(&playerPrefab_);
+        playerPrefabSave_.Create("Save Player Prefab");
+        playerPrefabSave_.SetText("SAVE AS PLAYER PREFAB");
+        playerPrefabSave_.OnClick([this](const wi::gui::EventArgs&) { SaveSelectedPlayerPrefab(); });
+        inspectorPanel_.AddWidget(&playerPrefabSave_);
+        playerPrefabReset_.Create("Reset Player Prefab");
+        playerPrefabReset_.SetText("RESET TO PREFAB");
+        playerPrefabReset_.OnClick([this](const wi::gui::EventArgs&) { ResetSelectedPlayerPrefab(); });
+        inspectorPanel_.AddWidget(&playerPrefabReset_);
+        playerPrefabStatus_.Create("Player Prefab Status");
+        playerPrefabStatus_.font.params.size = 11;
+        playerPrefabStatus_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        playerPrefabStatus_.SetColor(wi::Color::Transparent());
+        inspectorPanel_.AddWidget(&playerPrefabStatus_);
+
 
         const auto createPlayerSlider = [this](
             SceneInspectorSlider& slider,
@@ -3971,24 +3994,28 @@ namespace renegade::studio
         layoutObjectToggle(sceneObjectMainCamera_, 1, 558.0f);
         layoutObjectToggle(sceneObjectReflections_, 0, 590.0f);
         layoutObjectToggle(sceneObjectWetmap_, 1, 590.0f);
-        positionEnvironmentWidget(playerLabel_, 224.0f, 20.0f);
-        positionEnvironmentWidget(playerCameraMode_, 244.0f, 32.0f);
-        positionEnvironmentWidget(playerFirstPersonArms_, 280.0f);
-        positionEnvironmentWidget(playerHandGrips_, 314.0f);
+        positionEnvironmentWidget(playerPrefab_, 224.0f);
+        positionEnvironmentWidget(playerPrefabSave_, 258.0f);
+        positionEnvironmentWidget(playerPrefabReset_, 292.0f);
+        positionEnvironmentWidget(playerPrefabStatus_, 326.0f, 28.0f);
+        positionEnvironmentWidget(playerLabel_, 366.0f, 20.0f);
+        positionEnvironmentWidget(playerCameraMode_, 386.0f, 32.0f);
+        positionEnvironmentWidget(playerFirstPersonArms_, 422.0f);
+        positionEnvironmentWidget(playerHandGrips_, 456.0f);
         playerHandGrips_.SetSize(XMFLOAT2(environmentFieldWidth * 0.49f, 28));
         playerAssembly_.SetPos(XMFLOAT2(12 + environmentFieldWidth * 0.51f, 314));
         playerAssembly_.SetSize(XMFLOAT2(environmentFieldWidth * 0.49f, 28));
-        positionEnvironmentWidget(playerCapsuleRadius_, 348.0f);
-        positionEnvironmentWidget(playerCapsuleHeight_, 382.0f);
-        positionEnvironmentWidget(playerEyeHeight_, 416.0f);
-        positionEnvironmentWidget(playerWalkSpeed_, 450.0f);
-        positionEnvironmentWidget(playerSprintSpeed_, 484.0f);
-        positionEnvironmentWidget(playerJumpSpeed_, 518.0f);
-        positionEnvironmentWidget(playerLookSensitivity_, 552.0f);
-        positionEnvironmentWidget(playerMaximumSlope_, 586.0f);
-        positionEnvironmentWidget(playerGravityFactor_, 620.0f);
-        positionEnvironmentWidget(playerMinimumPitch_, 654.0f);
-        positionEnvironmentWidget(playerMaximumPitch_, 688.0f);
+        positionEnvironmentWidget(playerCapsuleRadius_, 490.0f);
+        positionEnvironmentWidget(playerCapsuleHeight_, 524.0f);
+        positionEnvironmentWidget(playerEyeHeight_, 558.0f);
+        positionEnvironmentWidget(playerWalkSpeed_, 592.0f);
+        positionEnvironmentWidget(playerSprintSpeed_, 626.0f);
+        positionEnvironmentWidget(playerJumpSpeed_, 660.0f);
+        positionEnvironmentWidget(playerLookSensitivity_, 694.0f);
+        positionEnvironmentWidget(playerMaximumSlope_, 728.0f);
+        positionEnvironmentWidget(playerGravityFactor_, 762.0f);
+        positionEnvironmentWidget(playerMinimumPitch_, 796.0f);
+        positionEnvironmentWidget(playerMaximumPitch_, 830.0f);
         LayoutMaterialInspector(environmentFieldWidth);
 
         positionEnvironmentWidget(cameraLabel_, 506.0f, 20.0f);
@@ -4610,6 +4637,10 @@ namespace renegade::studio
         {
             widget.SetVisible(hasPlayerStart);
         };
+        setPlayerVisible(playerPrefab_);
+        setPlayerVisible(playerPrefabSave_);
+        setPlayerVisible(playerPrefabReset_);
+        setPlayerVisible(playerPrefabStatus_);
         setPlayerVisible(playerLabel_);
         setPlayerVisible(playerCameraMode_);
         setPlayerVisible(playerFirstPersonArms_);
@@ -4628,6 +4659,7 @@ namespace renegade::studio
         setPlayerVisible(playerMaximumPitch_);
         if (hasPlayerStart)
         {
+            RefreshPlayerPrefabInspector();
             const auto settings = bridge::CapturePlayerControllerSettings(
                 session_->Scenes().GetScene(), selectedEntity);
 

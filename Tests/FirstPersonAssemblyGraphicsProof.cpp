@@ -12,6 +12,9 @@
 #include <Windows.h>
 #include "renegade/bridge/FirstPersonAssemblyService.h"
 #include "renegade/bridge/PlayerService.h"
+#include "renegade/bridge/PlayerPrefabService.h"
+#include "renegade/bridge/ReusableAssetDependencyService.h"
+#include "renegade/bridge/BuildService.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -799,6 +802,100 @@ static bool JumpPlaygroundProof(const fs::path& input,const fs::path& output)
  return true;
 }
 
+static bool PlayerPrefabProof(const fs::path& input,const fs::path& output)
+{
+ std::string error;
+ ProjectMetadata project;
+ if(!ProjectService().InspectProject(fs::absolute(input).generic_u8string(),project,error))
+ {std::cerr<<error<<"\n";return false;}
+ SceneService scenes;
+ const auto path=fs::u8path(project.rootPath)/fs::u8path(project.startupScene);
+ if(!scenes.LoadScene(path.generic_u8string()))return false;
+ const auto start=ResolvePlayerStart(scenes.GetScene());
+ if(start.resolution!=PlayerStartResolution::Success)return false;
+ const auto saved=SavePlayerPrefab(project.rootPath,project.projectId,"Reusable Shotgun Player",start.start.settings);
+ if(!saved.succeeded){std::cerr<<saved.error<<"\n";return false;}
+ ApplyPlayerPrefabCommand assign(scenes.GetScene(),start.start.entity,saved.document);
+ if(!assign.Execute())return false;
+ wi::Archive archive(path.generic_u8string(),false,false);scenes.GetScene().Serialize(archive);
+ if(!archive.SaveFile(path.generic_u8string()))return false;
+ archive=wi::Archive();
+ SceneService cold;if(!cold.LoadScene(path.generic_u8string()))return false;
+ const auto reopened=ResolvePlayerStart(cold.GetScene());
+ PlayerPrefabDocument baseline,loaded;
+ if(!CapturePlayerPrefabBaseline(cold.GetScene(),reopened.start.entity,baseline,error)||
+    !LoadPlayerPrefab(project.rootPath,project.projectId,saved.document.assetId,loaded,error)||
+    !PlayerSettingsEqual(loaded.settings,reopened.start.settings)||
+    reopened.start.transform.translation.x!=start.start.transform.translation.x)return false;
+ std::cout<<"PLAYER PREFAB SAVE AND COLD SCENE REOPEN PASS "<<saved.document.assetId<<"\n";
+
+ ReusableAssetDependencyProvider products(project.projectId);
+ WisceneDependencyProvider sceneProvider(MakeWisceneDependencyReader());
+ DependencyCollector collector(project.rootPath);
+ if(!collector.RegisterProvider(products,error)||!collector.RegisterProvider(sceneProvider,error)||
+    !collector.AddRoot({project.startupScene,DependencyClass::Scene,DependencyRequirement::Required,"player.prefab.proof"},error)||
+    !collector.DiscoverTransitiveDependencies(error))
+ {std::cerr<<error<<"\n";return false;}
+ bool sawPrefab=false,sawArms=false;
+ for(const auto& node:collector.Graph().nodes)
+ {
+    sawPrefab=sawPrefab||node.projectRelativePath==saved.projectRelativePath;
+    sawArms=sawArms||node.dependencyClass==DependencyClass::ImportedContent;
+ }
+ if(!sawPrefab||!sawArms)return false;
+ std::string graph;
+ if(!SerializeDependencyGraph(collector.Graph(),graph,error))return false;
+ std::ofstream(output/"player-prefab-dependencies.json")<<graph;
+ std::cout<<"SCENE TO PLAYER PREFAB TO DEFAULT ARMS DEPENDENCY CLOSURE PASS\n";
+
+ // Local NONE override must not lose the prefab's default arms dependency.
+ auto local = reopened.start.settings;
+ local.firstPersonArmsAssetId.clear();
+ SetPlayerControllerSettingsCommand overrideArms(cold.GetScene(), reopened.start.entity, local);
+ if (!overrideArms.Execute()) return false;
+ CommandService overrideCommands;
+ TestLevelSnapshotService overrideSnapshots(cold, overrideCommands);
+ TestLevelSnapshot overrideSnapshot;
+ if (!overrideSnapshots.Create(project, overrideSnapshot, error)) { std::cerr<<error<<"\n";return false; }
+ ProjectMetadata overrideProject;
+ if (!ProjectService().InspectProject(overrideSnapshot.descriptorPath, overrideProject, error) ||
+     !LoadPlayerPrefab(overrideProject.rootPath, project.projectId, saved.document.assetId, loaded, error))
+ { std::cerr<<error<<"\n";return false; }
+ SceneService overrideLevel;
+ if (!overrideLevel.LoadScene(overrideSnapshot.scenePath) ||
+     !ResolvePlayerStart(overrideLevel.GetScene()).start.settings.firstPersonArmsAssetId.empty()) return false;
+ if (!overrideSnapshots.Cleanup(overrideSnapshot,error)) return false;
+ std::cout<<"LOCAL ARMS OVERRIDE SNAPSHOT RETAINS PREFAB DEFAULT ARMS PASS\n";
+
+ // Existing paired Runtime proof produces a real Test Level snapshot and an
+ // isolated content-manifest-backed arms product.
+ if(!RuntimeAssemblyProof(input,output,false))return false;
+ std::ifstream descriptor(output/"snapshot-descriptor.txt");std::string snapshotPath;
+ std::getline(descriptor,snapshotPath);
+ ProjectMetadata snapshotProject;
+ if(!ProjectService().InspectProject(snapshotPath,snapshotProject,error)||
+    !LoadPlayerPrefab(snapshotProject.rootPath,project.projectId,saved.document.assetId,loaded,error))
+ {std::cerr<<error<<"\n";return false;}
+ std::cout<<"TEST LEVEL SNAPSHOT PLAYER PREFAB FILE AND DEFAULTS PASS\n";
+ const auto package=output/"isolated-package";
+ const auto packagedScene=package/"GameData"/fs::u8path(project.startupScene);
+ fs::create_directories(packagedScene.parent_path());
+ fs::copy_file(path,packagedScene,fs::copy_options::overwrite_existing);
+ const auto packagedPrefab=package/"GameData"/fs::u8path(saved.projectRelativePath);
+ fs::create_directories(packagedPrefab.parent_path());
+ fs::copy_file(fs::u8path(project.rootPath)/fs::u8path(saved.projectRelativePath),packagedPrefab,fs::copy_options::overwrite_existing);
+ SceneService packagedLevel;
+ if(!packagedLevel.LoadScene(packagedScene.generic_u8string()))return false;
+ const auto packagedStart=ResolvePlayerStart(packagedLevel.GetScene());
+ if(!ReadPlayerPrefabFile(packagedPrefab.generic_u8string(),loaded,error)||
+    !CapturePlayerPrefabBaseline(packagedLevel.GetScene(),packagedStart.start.entity,baseline,error)||
+    !PlayerSettingsEqual(packagedStart.start.settings,saved.document.settings)||
+    baseline.assetId!=loaded.assetId)return false;
+ if(!RuntimeAssemblyProof(package,output,true))return false;
+ std::cout<<"ISOLATED PLAYER SCENE PREFAB DEFAULTS AND PACKAGED PAIRED ARMS PASS\n";
+ return true;
+}
+
 int main(int argc,char** argv)
 {
     if(argc<3 || argc>4) { std::cerr<<"Usage: proof pack-folder output-folder\n"; return 2; }
@@ -814,6 +911,7 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--player-prefab") return PlayerPrefabProof(input,output)?0:18;
     if(argc==4 && std::string(argv[3])=="--jump-playground") return JumpPlaygroundProof(input,output)?0:17;
     if(argc==4 && std::string(argv[3])=="--full-library") return FullLibraryProof(input,output)?0:15;
     if(argc==4 && std::string(argv[3])=="--full-library-reopen") return FullLibraryReopenProof(input,output)?0:16;

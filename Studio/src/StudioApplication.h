@@ -1112,6 +1112,14 @@ namespace renegade::studio
         RenegadeButton hubNewProjectCancelButton_;
         wi::gui::Button gridToggleButton_;
         RenegadePhysicsLabStudioChrome studioChrome_;
+        std::vector<std::string> playerPrefabChoices_;
+        wi::gui::ComboBox playerPrefab_;
+        wi::gui::Button playerPrefabSave_, playerPrefabReset_;
+        wi::gui::Label playerPrefabStatus_;
+        void SaveSelectedPlayerPrefab();
+        void ApplySelectedPlayerPrefab(std::string assetId);
+        void ResetSelectedPlayerPrefab();
+        void RefreshPlayerPrefabInspector();
         wi::gui::Button playerAssembly_;
         wi::gui::Window assemblyPanel_, assemblyFirearmPanel_;
         wi::gui::Button assemblyFirearmButton_;
