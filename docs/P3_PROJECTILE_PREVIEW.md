@@ -69,3 +69,6 @@ Final native cold reopen confirms Custom / saved projectile, scale 2, rotation
 Typing 500 then clicking Save produced no new .rprojectile file (count unchanged);
 neutral invalid-state image and plain-language bounds were visually checked.
 Correcting to 2 restored the preview: p3-preview-final-{invalid,recovery}.png.
+
+Implementation commit: 833faa473ab9ca9ab187040998564430d98191c0.
+Exact implementation-commit targeted regression rerun: 10/10 PASS 1.95s.

@@ -1,3 +1,48 @@
+## P3 projectile preview checkpoint - 2026-10-06
+
+Implementation commit: 833faa473ab9ca9ab187040998564430d98191c0.
+Branch: feature/p3-projectile-impact. Dependent P2 PR #180 remains unmerged.
+
+Projectile editor now has an automatically refreshed isolated model preview.
+Camera orbit/elevation, side/rear, zoom and fit are inspection-only. Scale and
+XYZ rotation update a private appearance root using Runtime conventions;
+physical size is shown in metres. Mesh preparation only runs on model/project
+change. Hidden/project-changed previews release resources. Invalid appearance
+values clear the preview and disable Save; correction recovers it. Meshless
+projectiles remain valid. Saved copies display Custom / saved projectile.
+
+Fixed control-theme tint/background blur, capsule/gizmo/outline overlays and
+player-camera inset covering the modal editor. Number help is plain language.
+Changed: Studio ModelImportPreview h/cpp, PlayerProjectileEditor,
+StudioApplication h/cpp; architecture, roadmap, feature matrix, P3 continuation
+and new docs/P3_PROJECTILE_PREVIEW.md.
+
+Release Studio final build PASS 15.64s. Exact command: CL=/MP4; cmake --build
+BUILD/renegade --config Release --target RenegadeStudio -- /m:2
+/p:BuildProjectReferences=false /verbosity:minimal. Targeted ctest:
+ctest --test-dir BUILD/renegade -C Release -R
+'Projectile|EquipmentAsset|EquipmentActionState|PlayerViewRig|TestLevelSnapshot'
+--output-on-failure: 10/10 PASS. Diff check PASS. No Wicked source/pin change.
+
+Native supplied arrow proof: side view tip right; orbit, scale 1->2, X rotation
+0->30, fit and zoom visibly update. Native Save As New and cold Studio Edit Copy
+restore model ID, scale 2 and rotation [30,0,0]. Final cold reopen has no level
+overlays. Invalid scale 500 plus Save click created no file; correcting to 2
+restored image. Proof asset 63750c6e-86b7-43c1-9a56-3ac67c355f15 is disposable
+and not assigned to the shotgun; original Arrow assignment remains. Standalone
+source firing/ground impact/pause/dry fire/reload/reset PASS 11.52s. Earlier reset
+missed while Studio startup stole focus; stable-focus rerun passed. Exact native
+screenshots, commands, IDs and limits: docs/P3_PROJECTILE_PREVIEW.md.
+
+Next: explicit weapon/palm sockets, imported FIRESPOT resolution, click placement
+and orientation controls, action socket assignment and runtime launch/aim timing.
+Camera-eye launch remains current. Static inspection only; flight/effect preview,
+Hitscan/Beam, sticking, particles/trails, surface impacts, pellets, Jolt-only
+coverage and packaged firing remain open. Compact responsive layout and mouse
+orbit drag remain open. No health prerequisite or P3 gate closure is claimed;
+independent exact-commit verification is required. Do not merge P2 automatically.
+Unrelated Tools/__pycache__/ and log.txt are untouched.
+
 ## P3 projectile model/editor checkpoint - 2026-10-06
 
 Implementation commit: d4d216b0ca9ea5aaadff0429d919f1fed7709747.
