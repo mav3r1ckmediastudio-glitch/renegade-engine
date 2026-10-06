@@ -64,7 +64,7 @@ falls back to the explicit full pair. No reserve ammunition is modelled yet.
 Capacity describes gameplay ammunition; changing it does not change the physical
 number of shells in an authored animation.
 
-Player Start displays an always-visible editor-only wireframe collision capsule, cyan normally and orange when selected. Click its interior or edges to select the player; the former icon and ground arrow are removed.
+Player Start displays an always-visible editor-only wireframe collision capsule, cyan normally and orange when selected. Click its interior or edges to select the player; a camera body/lens marker at the authored eye height and an extruded ground-facing arrow show Runtime spawn yaw, including when unselected.
 It reads the runtime controller radius and total height each frame, follows the
 spawn feet position, and updates after inspector edits and Undo/Redo. It stays
 upright and unscaled like the runtime character, and is absent during Test Level.

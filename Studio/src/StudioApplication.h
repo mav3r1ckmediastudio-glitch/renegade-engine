@@ -1215,6 +1215,9 @@ namespace renegade::studio
         wi::graphics::Shader gridVertexShader_;
         wi::graphics::Shader gridPixelShader_;
         wi::graphics::PipelineState gridPipeline_;
+        wi::graphics::PipelineState playerMarkerPipeline_;
+        void LoadPlayerMarkerResources();
+        void DrawPlayerStartMarkers(wi::graphics::CommandList cmd) const;
         wi::graphics::Texture selectionOutlineMask_;
         wi::graphics::Texture selectionOutlineMaskMsaa_;
         wi::scene::TransformComponent editorCameraTransform_;

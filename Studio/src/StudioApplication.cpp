@@ -1,4 +1,5 @@
 #include <sstream>
+#include "shaders/ShaderInterop_Renderer.h"
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
 #include "renegade/bridge/PlayerPrefabService.h"
@@ -318,6 +319,7 @@ namespace renegade::studio
         // colours are hardcoded. It stays off permanently.
         wi::renderer::SetToDrawGridHelper(false);
         LoadGridResources();
+        LoadPlayerMarkerResources();
 
         // The generated Proving Ground is composed around the world origin so
         // that it shares the grid helper's footprint.
@@ -528,7 +530,8 @@ namespace renegade::studio
         const wi::graphics::CommandList cmd) const
     {
         RenderPath3D::RenderTransparents(cmd);
-        if (!gridVisible_ || !gridPipeline_.IsValid() || projectHubVisible_ || camera == nullptr) return;
+        if (projectHubVisible_ || camera == nullptr ||
+            (!gridPipeline_.IsValid() && !playerMarkerPipeline_.IsValid())) return;
 
         // Wicked ends every render pass before RenderTransparents() returns.
         // Open an explicit pass over the main colour and depth attachments so
@@ -570,7 +573,143 @@ namespace renegade::studio
         device->BindScissorRects(1, &scissor, cmd);
 
         DrawEditorGrid(cmd);
+        DrawPlayerStartMarkers(cmd);
         device->RenderPassEnd(cmd);
+    }
+
+    void StudioRenderPath::LoadPlayerMarkerResources()
+    {
+        auto* device = wi::graphics::GetDevice();
+        if (!device) return;
+        wi::graphics::PipelineStateDesc desc;
+        desc.vs = wi::renderer::GetShader(wi::enums::VSTYPE_VERTEXCOLOR);
+        desc.ps = wi::renderer::GetShader(wi::enums::PSTYPE_VERTEXCOLOR);
+        desc.il = wi::renderer::GetInputLayout(wi::enums::ILTYPE_VERTEXCOLOR);
+        desc.dss = wi::renderer::GetDepthStencilState(wi::enums::DSSTYPE_DEFAULT);
+        desc.rs = wi::renderer::GetRasterizerState(wi::enums::RSTYPE_DOUBLESIDED);
+        desc.bs = wi::renderer::GetBlendState(wi::enums::BSTYPE_OPAQUE);
+        desc.pt = wi::graphics::PrimitiveTopology::TRIANGLELIST;
+        if (!device->CreatePipelineState(&desc, &playerMarkerPipeline_))
+            wi::backlog::post("Renegade: Player Start marker geometry unavailable.",
+                wi::backlog::LogLevel::Warning);
+    }
+
+    void StudioRenderPath::DrawPlayerStartMarkers(wi::graphics::CommandList cmd) const
+    {
+        if (!playerMarkerPipeline_.IsValid() || !session_ || !camera ||
+            projectHubVisible_ || testLevelRuntime_.IsActive() ||
+            assemblyPanel_.IsVisible() || handGripPanel_.IsVisible() ||
+            modelImportPanel_.IsVisible()) return;
+        const auto& scene = session_->Scenes().GetScene();
+        const auto start = bridge::ResolvePlayerStart(scene);
+        if (start.resolution != bridge::PlayerStartResolution::Success ||
+            !session_->Scenes().IsHierarchyVisible(start.start.entity)) return;
+        const auto settings = bridge::SanitizePlayerControllerSettings(start.start.settings);
+        const bool selected = session_->Selection().SelectedEntity() == start.start.entity;
+        const float yaw = wi::math::QuaternionToRollPitchYaw(start.start.transform.rotation).y;
+        const auto feet = start.start.transform.translation;
+        const float eye = settings.eyeHeight;
+        const XMFLOAT4 accent = selected ? XMFLOAT4(1.0f,0.43f,0.10f,1)
+            : XMFLOAT4(0.18f,0.77f,0.95f,1);
+        struct Vertex { XMFLOAT4 position; XMFLOAT4 color; };
+        std::vector<Vertex> vertices;
+        vertices.reserve(5000);
+        const auto triangle = [&](const XMFLOAT3& a, const XMFLOAT3& b,
+            const XMFLOAT3& c, const XMFLOAT4& color)
+        {
+            const auto normal = XMVector3Normalize(XMVector3Cross(
+                XMLoadFloat3(&b)-XMLoadFloat3(&a), XMLoadFloat3(&c)-XMLoadFloat3(&a)));
+            const auto worldNormal = XMVector3TransformNormal(normal, XMMatrixRotationY(yaw));
+            const auto light = XMVector3Normalize(XMVectorSet(-0.45f,0.8f,-0.35f,0));
+            const float shade = 0.45f + 0.50f * std::abs(XMVectorGetX(XMVector3Dot(worldNormal,light)));
+            const XMFLOAT4 shaded(color.x*shade,color.y*shade,color.z*shade,1);
+            for (const auto& p : {a,b,c})
+                vertices.push_back({XMFLOAT4(p.x,p.y,p.z,1),shaded});
+        };
+        const auto quad = [&](const XMFLOAT3& a,const XMFLOAT3& b,
+            const XMFLOAT3& c,const XMFLOAT3& d,const XMFLOAT4& color)
+        { triangle(a,b,c,color); triangle(a,c,d,color); };
+        const auto box = [&](float cx,float cy,float cz,float hx,float hy,float hz,
+            float bevel,const XMFLOAT4& color)
+        {
+            // Chamfered body: four eight-sided perimeter rings, not a debug box.
+            std::array<std::array<XMFLOAT3,8>,4> rings;
+            for (int ring=0; ring<4; ++ring)
+            {
+                const bool end = ring==0 || ring==3;
+                const float x=hx-(end?bevel:0), y=hy-(end?bevel:0);
+                const float cut=std::min(bevel,std::min(x,y)*0.4f);
+                const float z=cz + (ring<2?-1:1)*(hz-(end?0:bevel));
+                rings[ring] = {XMFLOAT3(cx-x+cut,cy-y,z),XMFLOAT3(cx+x-cut,cy-y,z),
+                    XMFLOAT3(cx+x,cy-y+cut,z),XMFLOAT3(cx+x,cy+y-cut,z),
+                    XMFLOAT3(cx+x-cut,cy+y,z),XMFLOAT3(cx-x+cut,cy+y,z),
+                    XMFLOAT3(cx-x,cy+y-cut,z),XMFLOAT3(cx-x,cy-y+cut,z)};
+            }
+            for (int ring=0;ring<3;++ring)
+                for (int i=0;i<8;++i)
+                    quad(rings[ring][i],rings[ring][(i+1)%8],rings[ring+1][(i+1)%8],rings[ring+1][i],color);
+            for (int cap : {0,3})
+                for (int i=0;i<8;++i)
+                    triangle(XMFLOAT3(cx,cy,rings[cap][0].z),rings[cap][i],rings[cap][(i+1)%8],color);
+        };
+        const auto cylinder = [&](float cx,float cy,float z0,float z1,float radius,
+            const XMFLOAT4& color)
+        {
+            constexpr int segments=48;
+            for (int i=0;i<segments;++i)
+            {
+                const float a=i*XM_2PI/segments,b=(i+1)*XM_2PI/segments;
+                const XMFLOAT3 p(cx+radius*std::cos(a),cy+radius*std::sin(a),z0);
+                const XMFLOAT3 q(cx+radius*std::cos(b),cy+radius*std::sin(b),z0);
+                const XMFLOAT3 u(p.x,p.y,z1),v(q.x,q.y,z1);
+                quad(p,q,v,u,color);
+                triangle(XMFLOAT3(cx,cy,z0),q,p,color);
+                triangle(XMFLOAT3(cx,cy,z1),u,v,color);
+            }
+        };
+        // A recognisable camera housing, rubber grip, viewfinder and stepped lens.
+        const XMFLOAT4 body(0.27f,0.33f,0.39f,1), rubber(0.10f,0.13f,0.16f,1);
+        const XMFLOAT4 metal(0.55f,0.62f,0.69f,1), glass(0.08f,0.43f,0.62f,1);
+        box(0,eye,-0.07f,0.24f,0.16f,0.12f,0.025f,body);
+        box(0.205f,eye,-0.03f,0.065f,0.17f,0.14f,0.018f,rubber);
+        box(-0.04f,eye+0.19f,-0.06f,0.09f,0.055f,0.07f,0.018f,body);
+        box(-0.07f,eye,-0.195f,0.13f,0.095f,0.008f,0.004f,metal);
+        box(-0.07f,eye,-0.205f,0.115f,0.080f,0.003f,0.002f,glass);
+        box(-0.18f,eye+0.12f,0.057f,0.020f,0.015f,0.005f,0.003f,XMFLOAT4(0.90f,0.12f,0.10f,1));
+        cylinder(-0.045f,eye,0.045f,0.085f,0.135f,metal);
+        cylinder(-0.045f,eye,0.085f,0.20f,0.115f,rubber);
+        cylinder(-0.045f,eye,0.20f,0.225f,0.125f,accent);
+        cylinder(-0.045f,eye,0.225f,0.245f,0.110f,metal);
+        cylinder(-0.045f,eye,0.246f,0.249f,0.094f,glass);
+        // Raised arrow with a broad head and a solid shaft.
+        const float base=settings.capsuleRadius+0.05f,tip=base+1.10f;
+        const std::array<XMFLOAT2,7> shape = {XMFLOAT2(-0.075f,base),
+            XMFLOAT2(0.075f,base),XMFLOAT2(0.075f,tip-0.40f),
+            XMFLOAT2(0.29f,tip-0.40f),XMFLOAT2(0,tip),
+            XMFLOAT2(-0.29f,tip-0.40f),XMFLOAT2(-0.075f,tip-0.40f)};
+        const XMFLOAT3 top(0,0.12f,tip-0.43f),bottom(0,0.065f,tip-0.43f);
+        for (int i=0;i<7;++i)
+        {
+            const auto& a=shape[i];const auto& b=shape[(i+1)%7];
+            const XMFLOAT3 at(a.x,0.12f,a.y),bt(b.x,0.12f,b.y);
+            const XMFLOAT3 ab(a.x,0.065f,a.y),bb(b.x,0.065f,b.y);
+            triangle(top,at,bt,accent); triangle(bottom,bb,ab,accent);
+            quad(ab,bb,bt,at,XMFLOAT4(accent.x*0.60f,accent.y*0.60f,accent.z*0.60f,1));
+        }
+        auto* device=wi::graphics::GetDevice();
+        const auto memory=device->AllocateGPU(vertices.size()*sizeof(Vertex),cmd);
+        std::memcpy(memory.data,vertices.data(),vertices.size()*sizeof(Vertex));
+        const wi::graphics::GPUBuffer* buffers[]={&memory.buffer};
+        const uint32_t strides[]={sizeof(Vertex)};
+        const uint64_t offsets[]={memory.offset};
+        device->BindVertexBuffers(buffers,0,1,strides,offsets,cmd);
+        MiscCB constants={};
+        XMStoreFloat4x4(&constants.g_xTransform,XMMatrixRotationY(yaw)*
+            XMMatrixTranslation(feet.x,feet.y,feet.z)*camera->GetViewProjection());
+        constants.g_xColor=XMFLOAT4(1,1,1,1);
+        device->BindPipelineState(&playerMarkerPipeline_,cmd);
+        device->BindDynamicConstantBuffer(constants,CBSLOT_RENDERER_MISC,cmd);
+        device->Draw(static_cast<uint32_t>(vertices.size()),0,cmd);
     }
 
     void StudioRenderPath::SetGridVisible(const bool visible)
@@ -3829,6 +3968,7 @@ namespace renegade::studio
                         }
                     }
                 }
+
             }
         }
 

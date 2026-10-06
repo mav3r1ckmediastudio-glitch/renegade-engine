@@ -371,8 +371,11 @@ is the sole persistent editing path and Runtime consumes those authored values.
 
 The Player Start uses an always-visible Studio-only capsule, cyan normally and
 orange when selected. Picking uses its upright bounds, including the interior.
-The former billboard and ground arrow are removed. The overlay is composed after
-temporal postprocessing, does not serialize and cannot enter Runtime or packages.
+The capsule overlay is composed after temporal postprocessing. A solid camera
+housing/lens at authored eye height and an extruded ground-facing arrow share
+Runtime spawn yaw (+Z rotated about Y). They render as opaque, depth-tested
+triangle geometry in the Studio scene pass, independently of grid visibility.
+These editor guides do not serialize and cannot enter Runtime or packages.
 
 `PlayerService` resolves the marker deterministically and creates a native
 Wicked `RigidBodyPhysicsComponent` in character mode only inside Runtime. The
@@ -1010,7 +1013,7 @@ coordinates, causing offset hierarchy hitboxes and viewport marker selection.
 
 Player Start capsule guides remain visible in the level editor regardless of selection (cyan normally, orange when selected), using resolved controller dimensions and hierarchy visibility. Prefab-backed starts retain this editor representation. Compose owns the single connected capsule after temporal postprocessing; it is not serialized as a Runtime mesh.
 
-Player Start selection uses a camera pick ray against the same upright capsule bounds as its wireframe, including the open interior. The capsule replaces both the Player Start billboard icon and ground arrow. Other scene marker icons retain their existing workflow.
+Player Start selection uses a camera pick ray against the same upright capsule bounds as its wireframe, including the open interior. The selectable capsule retains an eye-height camera body/lens marker and ground-facing arrow; both use Runtime spawn yaw and render as solid depth-tested geometry in the Studio scene pass. Other scene marker icons retain their existing workflow.
 
 Player prefab assets are immutable version-1 project Data documents with stable
 identity and a controller/camera settings snapshot plus arms StableId. Disk save
