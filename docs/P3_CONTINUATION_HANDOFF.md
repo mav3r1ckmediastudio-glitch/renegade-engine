@@ -95,3 +95,20 @@ muzzles, pellet spread, effects, Jolt-only coverage, packaged firing and indepen
 verification remain open. Health is not required. See
 [P3 live shotgun evidence](P3_LIVE_SHOTGUN_PROJECTILES.md) for commands and limits.
 This checkpoint supersedes earlier statements that live Runtime firing is pending.
+
+## P3 projectile model/editor checkpoint — 2026-10-06
+
+Add → Projectile now creates model-backed projectile definitions without a Player
+selection. Imported model identity, scale and rotation persist in projectile schema
+v2 with v1 compatibility and required model/texture dependencies. Runtime render
+instances follow transient flight and retire on contact, expiry and reset; visual
+hierarchies are excluded from projectile collision queries. The supplied arrow was
+imported and assigned to the shotgun in the disposable native fixture, saved and
+cold-loaded. Model snapshot closure and source standalone firing were exercised.
+Evidence and limits: [Projectile model checkpoint](P3_PROJECTILE_MESH_CHECKPOINT.md).
+Target workflow: [Projectile editor design](P3_PROJECTILE_EDITOR_DESIGN.md).
+
+Next: dedicated model preview, explicit weapon/palm launch sockets, then first-class
+Hitscan/Beam authoring and surface impact profiles. Camera-eye launch remains the
+current policy. Packaged firing and Jolt-only coverage are open. Health is not a
+prerequisite; no P3 gate closure or automatic P2 merge is authorized.

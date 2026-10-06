@@ -1,6 +1,7 @@
 #pragma once
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ProjectileSimulation.h"
+#include <array>
 
 namespace renegade::bridge
 {
@@ -15,6 +16,10 @@ namespace renegade::bridge
         float lifetimeSeconds = 5;
         // Payload hook; no complete Player/NPC health feature implied.
         float damage = 10;
+        // Optional registered model appearance, independent of collision.
+        StableId meshAssetId;
+        float visualScale = 1;
+        std::array<float, 3> visualRotationDegrees{0, 0, 0};
     };
     struct ProjectileAssetSaveResult
     {

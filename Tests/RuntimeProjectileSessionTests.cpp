@@ -1,5 +1,6 @@
 #include "RuntimeEquipmentLoadout.h"
 #include "RuntimeProjectileSession.h"
+#include "RuntimeProjectileVisuals.h"
 #include <iostream>
 #include <memory>
 using namespace renegade;
@@ -88,6 +89,29 @@ int main()
     if(session.Update(-1,query,impacts)||session.simulation.Records()[0].ageSeconds!=age)
         return fail("invalid dt mutation");
     session.Reset();
-    std::cout<<"Runtime projectile acceptance, native contact, pause and reset PASS\n";
+    // Native cached instantiation follows simulation without file IO.
+    runtime::RuntimeProjectileVisuals visuals;
+    auto model=wi::allocator::make_shared<wi::scene::Scene>();
+    const auto object=model->Entity_CreateTransform("Visual arrow");
+    model->objects.Create(object);
+    bullet.visualScale=.5f;bullet.visualRotationDegrees={0,90,0};
+    visuals.templates.emplace(bullet.assetId,
+        runtime::RuntimeProjectileVisuals::Template{std::move(model),bullet});
+    const auto transformsBefore=scene->transforms.GetCount();
+    if(!session.Launch(bullet,source,{0,0,0},{0,0,1},id) ||
+        !visuals.Spawn(*scene,bullet.assetId,id))return fail("visual instantiate");
+    const auto clearFlight=[](const auto&,const auto&,const auto&){return bridge::ProjectileQueryResult{};};
+    if(!session.Update(.5f,clearFlight,impacts))return fail("visual movement");
+    visuals.Sync(*scene,session.simulation);
+    if(visuals.instances.size()!=1 || visuals.roots.size()!=1 ||
+        std::abs(scene->transforms.GetComponent(visuals.roots[0])->GetPosition().z-.5f)>.001f)
+        return fail("visual follows simulation");
+    session.Reset();visuals.Sync(*scene,session.simulation);
+    if(!visuals.instances.empty() || !visuals.roots.empty() ||
+        !visuals.instanceAssets.empty() || scene->transforms.GetCount()!=transformsBefore)
+        return fail("visual retirement leaks hierarchy");
+    visuals.Reset(*scene);
+    if(!visuals.templates.empty())return fail("visual template reset");
+    std::cout<<"Runtime projectile acceptance, native contact, visuals, pause and reset PASS\n";
     return 0;
 }

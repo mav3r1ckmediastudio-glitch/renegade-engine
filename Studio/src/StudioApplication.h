@@ -97,7 +97,7 @@ namespace renegade::studio
         void RecordAssemblyDraft(const bridge::FirstPersonAssemblySettings& before);
         void QueueAssemblyPreviewRefresh();
         void RefreshAssemblyDraft();
-        void OpenStaticModelImporter();
+        void OpenStaticModelImporter(bool fromProjectile = false);
         void AppendModelImportAnimations();
         void CommitStaticModelImporter();
         void RestoreGovernedMaterialTextures();
@@ -1149,6 +1149,8 @@ namespace renegade::studio
         wi::gui::Button playerAssembly_, playerEquipment_;
         void CreateProjectileEditor();
         void OpenWeaponProjectileEditor();
+        void OpenProjectileAssetEditor();
+        void RefreshProjectileMeshChoices();
         void RefreshWeaponProjectileEditor();
         void RefreshProjectileChoices();
         wi::gui::Window weaponProjectilePanel_, projectileCreatePanel_;
@@ -1162,6 +1164,13 @@ namespace renegade::studio
         std::vector<bridge::EquipmentAction> projectileActions_;
         bridge::StableId projectilePreferred_;
         float projectileDraftDamage_=10;
+        bridge::StableId projectileDraftMesh_, projectileEditorProject_;
+        std::vector<bridge::StableId> projectileMeshChoices_;
+        wi::gui::ComboBox projectileMesh_;
+        wi::gui::Slider projectileVisualScale_, projectileRotationX_, projectileRotationY_, projectileRotationZ_;
+        wi::gui::Button projectileImportMesh_;
+        bool projectileStandaloneEditor_=false;
+        bool modelImportFromProjectile_=false;
         wi::gui::Window equipmentPanel_;
         wi::gui::ComboBox equipmentPrimary_, equipmentOffHand_, equipmentHandUse_;
         wi::gui::TextInputField equipmentName_;

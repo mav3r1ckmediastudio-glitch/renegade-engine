@@ -15,6 +15,7 @@
 #include "RuntimePlayerViewRig.h"
 #include "RuntimeEquipmentLoadout.h"
 #include "RuntimeProjectileSession.h"
+#include "RuntimeProjectileVisuals.h"
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"
 #include "RuntimeScriptRuntime.h"
@@ -115,6 +116,7 @@ namespace renegade::runtime
         RuntimePlayerViewAnimationState playerViewAnimation_;
         RuntimeEquipmentLoadout playerEquipment_;
         RuntimeProjectileSession projectiles_;
+        RuntimeProjectileVisuals projectileVisuals_;
         std::vector<RuntimeEquipmentLoadout::ProjectileRequest> pendingProjectileShots_;
         bridge::PlayerControllerSettings playerSettings_;
         bridge::NavigationRuntimeState navigationState_;

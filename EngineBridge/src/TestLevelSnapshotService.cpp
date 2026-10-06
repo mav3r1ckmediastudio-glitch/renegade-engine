@@ -485,6 +485,16 @@ namespace
                 if (!ec) fs::copy_file(fs::u8path(projectileSource.absolutePath), projectileDestination,
                     fs::copy_options::overwrite_existing, ec);
                 if (ec) { error = "Could not snapshot projectile: " + ec.message(); return false; }
+                if (!projectile.meshAssetId.empty()) {
+                    wi::scene::Scene appearance;
+                    CreatePlayerStartCommand create(appearance, {});
+                    if (!create.Execute()) { error="Could not prepare projectile mesh closure."; return false; }
+                    PlayerControllerSettings settings;
+                    settings.firstPersonArmsAssetId=projectile.meshAssetId;
+                    SetPlayerControllerSettingsCommand apply(appearance, create.CreatedEntity(), settings);
+                    if (!apply.Execute() ||
+                        !SnapshotGovernedPlayerViewInputs(project, snapshot, appearance, error)) return false;
+                }
                 ProjectileAssetDocument verifiedProjectile;
                 if (!LoadProjectileAsset(snapshot.sessionDirectory, project.projectId,
                         binding.projectileAssetId, verifiedProjectile, error)) return false;

@@ -6,6 +6,7 @@
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/PlayerPrefabService.h"
 #include "renegade/bridge/EquipmentAssetService.h"
+#include "renegade/bridge/ProjectileAssetService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 
 #include <algorithm>
@@ -306,6 +307,28 @@ namespace renegade::bridge
         }
         if (context.source->dependencyClass == DependencyClass::Data)
         {
+            if (LowerExtension(context.source->projectRelativePath) == ProjectileAssetExtension)
+            {
+                const auto path=ResolveDependencyPath(context.projectRoot,context.source->projectRelativePath);
+                ProjectileAssetDocument d,registered;
+                if (!path.accepted || !path.exists || !ReadProjectileAssetFile(path.absolutePath,d,error) ||
+                    !LoadProjectileAsset(context.projectRoot,projectId_,d.assetId,registered,error)) return false;
+                AssetRegistry registry;
+                if (!ReadRegistryForProvider(context,projectId_,registry,error)) return false;
+                const auto* record=FindAssetById(registry,d.assetId);
+                if (record->projectRelativePath!=context.source->projectRelativePath) {
+                    error="Projectile dependency path does not match its registry."; return false;
+                }
+                if (!d.meshAssetId.empty()) {
+                    const auto* model=FindAssetById(registry,d.meshAssetId);
+                    DependencyCandidate candidate;
+                    candidate.declaredPath=model->projectRelativePath;
+                    candidate.dependencyClass=DependencyClass::ImportedContent;
+                    candidate.requirement=DependencyRequirement::Required;
+                    candidate.provenance="p3.projectile.mesh:"+model->assetId; emit(candidate);
+                }
+                error.clear(); return true;
+            }
             if(LowerExtension(context.source->projectRelativePath)==EquipmentAssetExtension)
             {
                 const auto path=ResolveDependencyPath(context.projectRoot,context.source->projectRelativePath);

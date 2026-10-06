@@ -86,6 +86,17 @@ int main()
         std::abs(hit.contact.position.x - 4.75f) > 0.001f ||
         !hit.contact.targetSubjectId.empty())
         return fail("world blocker must precede Character and exclude owner children");
+    // A projectile's render-only hierarchy must never become world cover.
+    const std::vector<wi::ecs::Entity> visualRoots{wall};
+    runtime::ProjectileOwnerBinding withVisuals{ownerId,owner,&visualRoots};
+    const auto visualHit=runtime::QueryProjectileSceneSegment(*scene,characters,
+        withVisuals,simulation.Records()[0],{0,0,0},{20,0,0});
+    if(visualHit.status!=bridge::ProjectileQueryStatus::Hit ||
+        visualHit.contact.targetSubjectId!=targetId)
+        return fail("projectile visual blocks world ray");
+    if(runtime::QueryProjectileSceneSegment(*scene,characters,withVisuals,
+        simulation.Records()[0],{5,0,0},{5.1f,0,0}).status!=bridge::ProjectileQueryStatus::Miss)
+        return fail("projectile visual blocks origin overlap");
     std::vector<bridge::ProjectileImpact> impacts;
     if (!simulation.Update(0.2f, query, impacts, error) || impacts.size() != 1)
         return fail("native simulation wall impact");

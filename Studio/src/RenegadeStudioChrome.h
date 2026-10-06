@@ -294,6 +294,7 @@ namespace renegade::studio
             CreateDecal,
             CreateEnvironmentProbe,
             ImportStaticGlb,
+            CreateProjectile,
             Focus,
             ToggleGrid,
             EnvironmentWorkspace,

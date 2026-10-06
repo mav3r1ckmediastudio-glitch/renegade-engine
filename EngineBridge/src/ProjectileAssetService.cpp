@@ -1,6 +1,7 @@
 #include "renegade/bridge/ProjectileAssetService.h"
 #include "renegade/bridge/AssetRegistryService.h"
 #include "json.hpp"
+#include "renegade/bridge/ReusableAssetService.h"
 
 #include <filesystem>
 #include <fstream>
@@ -19,6 +20,29 @@ namespace renegade::bridge
             for (const auto& record : registry.records)
                 if (record.assetId == id) return &record;
             return nullptr;
+        }
+        std::vector<StableId> VisualDependencies(const ProjectileAssetDocument& d)
+        {
+            return d.meshAssetId.empty() ? std::vector<StableId>{} :
+                std::vector<StableId>{d.meshAssetId};
+        }
+        bool ValidateMesh(const std::string& root, const StableId& project,
+                          const AssetRegistry& registry, const ProjectileAssetDocument& d,
+                          std::string& error)
+        {
+            if (d.meshAssetId.empty()) return true;
+            const auto* mesh = Find(registry, d.meshAssetId);
+            if (!mesh || !mesh->sourceAvailable ||
+                mesh->dependencyClass != DependencyClass::ImportedContent ||
+                fs::u8path(mesh->projectRelativePath).extension() != ReusableAssetExtension)
+            { error = "Projectile mesh must be an available imported model."; return false; }
+            const auto path = ResolveDependencyPath(root, mesh->projectRelativePath);
+            ReusableModelAssetDocument model;
+            if (!path.accepted || !path.exists ||
+                !ReadReusableModelAssetDocument(path.absolutePath, model, error)) return false;
+            if (model.manifest.projectId != project || model.manifest.assetId != d.meshAssetId)
+            { error = "Projectile mesh identity differs from its registry."; return false; }
+            return true;
         }
         std::string Hash(const std::string& text)
         {
@@ -77,7 +101,11 @@ namespace renegade::bridge
             !std::isfinite(d.gravityScale) || d.gravityScale < 0 || d.gravityScale > 10 ||
             !std::isfinite(d.lifetimeSeconds) || d.lifetimeSeconds < 0.05f ||
             d.lifetimeSeconds > 120 || !std::isfinite(d.damage) ||
-            d.damage < 0 || d.damage > 100000)
+            d.damage < 0 || d.damage > 100000 ||
+            (!d.meshAssetId.empty() && !IsValidStableId(d.meshAssetId)) ||
+            !std::isfinite(d.visualScale) || d.visualScale < 0.001f || d.visualScale > 100 ||
+            std::any_of(d.visualRotationDegrees.begin(), d.visualRotationDegrees.end(),
+                [](float v){ return !std::isfinite(v) || std::abs(v) > 360; }))
         {
             error = "Projectile requires a name, valid identity and bounded flight values.";
             return false;
@@ -89,10 +117,12 @@ namespace renegade::bridge
     bool SerializeProjectileAsset(const ProjectileAssetDocument& d, std::string& text, std::string& error)
     {
         if (!ValidateProjectileAsset(d, error)) return false;
-        text = json{{"format","renegade-projectile"},{"schema_version",1},
+        text = json{{"format","renegade-projectile"},{"schema_version",2},
             {"project_id",d.projectId},{"asset_id",d.assetId},{"name",d.name},
             {"speed_metres_per_second",d.speedMetresPerSecond},{"gravity_scale",d.gravityScale},
-            {"lifetime_seconds",d.lifetimeSeconds},{"damage",d.damage}}.dump(2);
+            {"lifetime_seconds",d.lifetimeSeconds},{"damage",d.damage},
+            {"mesh_asset_id",d.meshAssetId},{"visual_scale",d.visualScale},
+            {"visual_rotation_degrees",d.visualRotationDegrees}}.dump(2);
         return true;
     }
 
@@ -101,8 +131,10 @@ namespace renegade::bridge
         try
         {
             const auto j = json::parse(text);
-            if (!j.is_object() || j.size() != 9 || j.at("format") != "renegade-projectile" ||
-                !j.at("schema_version").is_number_integer() || j.at("schema_version") != 1)
+            if (!j.is_object() || j.at("format") != "renegade-projectile" ||
+                !j.at("schema_version").is_number_integer() ||
+                !((j.at("schema_version") == 1 && j.size() == 9) ||
+                  (j.at("schema_version") == 2 && j.size() == 12)))
                 throw std::runtime_error("Unsupported projectile schema.");
             for (const char* field : {"speed_metres_per_second","gravity_scale","lifetime_seconds","damage"})
                 if (!j.at(field).is_number()) throw std::runtime_error("Projectile flight values must be numeric.");
@@ -114,6 +146,17 @@ namespace renegade::bridge
             d.gravityScale=j.at("gravity_scale").get<float>();
             d.lifetimeSeconds=j.at("lifetime_seconds").get<float>();
             d.damage=j.at("damage").get<float>();
+            if (j.at("schema_version") == 2) {
+                if (!j.at("visual_scale").is_number() ||
+                    !j.at("visual_rotation_degrees").is_array() ||
+                    j.at("visual_rotation_degrees").size() != 3)
+                    throw std::runtime_error("Invalid projectile appearance values.");
+                for (const auto& v : j.at("visual_rotation_degrees"))
+                    if (!v.is_number()) throw std::runtime_error("Rotation must be numeric.");
+                d.meshAssetId = j.at("mesh_asset_id").get<std::string>();
+                d.visualScale = j.at("visual_scale").get<float>();
+                d.visualRotationDegrees = j.at("visual_rotation_degrees").get<std::array<float,3>>();
+            }
             if (!ValidateProjectileAsset(d, error)) return false;
             out=std::move(d); error.clear(); return true;
         }
@@ -137,8 +180,7 @@ namespace renegade::bridge
         const auto* record=Find(registry,id);
         if (!record || !record->sourceAvailable || record->dependencyClass!=DependencyClass::Data ||
             record->provider!="renegade.projectile" ||
-            fs::u8path(record->projectRelativePath).extension()!=ProjectileAssetExtension ||
-            !record->dependencyAssetIds.empty())
+            fs::u8path(record->projectRelativePath).extension()!=ProjectileAssetExtension)
         { error="Projectile is missing or invalid in the project registry."; return false; }
         const auto path=ResolveDependencyPath(root,record->projectRelativePath);
         ProjectileAssetDocument d;
@@ -147,6 +189,11 @@ namespace renegade::bridge
         if (!ReadProjectileAssetFile(path.absolutePath,d,error)) return false;
         if (d.projectId!=project || d.assetId!=id)
         { error="Projectile identity differs from its project registry."; return false; }
+        if (record->dependencyAssetIds != VisualDependencies(d) ||
+            !ValidateMesh(root, project, registry, d, error)) {
+            if (error.empty()) error = "Projectile mesh dependencies differ from its registry.";
+            return false;
+        }
         out=std::move(d); error.clear(); return true;
     }
 
@@ -158,7 +205,8 @@ namespace renegade::bridge
         if (!ReadAssetRegistry(root,project,registry,r.error)) return r;
         d.projectId=project; d.assetId=GenerateStableId(); r.document=std::move(d);
         std::string text;
-        if (!SerializeProjectileAsset(r.document,text,r.error)) return r;
+        if (!SerializeProjectileAsset(r.document,text,r.error) ||
+            !ValidateMesh(root, project, registry, r.document, r.error)) return r;
         std::error_code ec;
         const auto canonical=fs::weakly_canonical(fs::u8path(root),ec);
         if (ec || !fs::is_directory(canonical))
@@ -174,6 +222,7 @@ namespace renegade::bridge
         record.dependencyNodeId="projectile:"+record.assetId;
         record.projectRelativePath=r.projectRelativePath;
         record.provider="renegade.projectile"; record.contentHash=Hash(text);
+        record.dependencyAssetIds=VisualDependencies(r.document);
         registry.records.push_back(record);
         std::string registryText,registryPath;
         if (!SerializeAssetRegistry(registry,registryText,r.error) ||

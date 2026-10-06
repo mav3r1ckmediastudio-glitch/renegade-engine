@@ -229,6 +229,7 @@ namespace renegade::runtime
         StopCreatorScripts();
         playerEquipment_ = {};
         pendingProjectileShots_.clear();
+        projectileVisuals_.Reset(scenes_.GetScene());
         projectiles_.Reset();
         ResetRuntimePlayerViewAnimations(
             scenes_.GetScene(), playerViewAnimation_);
@@ -541,8 +542,10 @@ namespace renegade::runtime
         }
         else
         {
-            if (!projectiles_.simulation.Records().empty() || !projectiles_.markers.empty())
+            if (!projectiles_.simulation.Records().empty() || !projectiles_.markers.empty()) {
+                projectileVisuals_.Reset(scenes_.GetScene());
                 projectiles_.Reset();
+            }
             pendingProjectileShots_.clear();
             renderer_.SetProjectileAim(false);
             renderer_.SetProjectileContacts({});
@@ -568,7 +571,7 @@ namespace renegade::runtime
             return;
         }
         auto& scene = scenes_.GetScene();
-        const ProjectileOwnerBinding owner{RuntimePlayerKnowledgeId, player_.entity};
+        const ProjectileOwnerBinding owner{RuntimePlayerKnowledgeId, player_.entity, &projectileVisuals_.roots};
         const auto emit = [this](bridge::GameplayEvent event, std::string& error) {
             diagnosticService_.Record(bridge::DiagnosticSeverity::Info,
                 "runtime.projectile", event.name, event.payload);
@@ -590,6 +593,9 @@ namespace renegade::runtime
                 std::uint64_t id = 0;
                 if (projectiles_.Launch(request.projectile, source,
                         renderer_.camera->Eye, renderer_.camera->At, id)) {
+                    if(!projectileVisuals_.Spawn(scene,request.projectile.assetId,id,!request.projectile.meshAssetId.empty()))
+                        diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
+                            "runtime.projectile","projectile.visual_failed",projectileVisuals_.error);
                     std::string ignored;
                     (void)emit({0, "projectile.launched",
                         "projectile=" + std::to_string(id) +
@@ -627,6 +633,7 @@ namespace renegade::runtime
             (void)ApplyProjectileCharacterImpact(scene, characterAiState_,
                 characterPerceptionState_, combatState_, impact, emit);
         }
+        projectileVisuals_.Sync(scene,projectiles_.simulation);
         // Basic flight/contact feedback uses Wicked's bounded native primitives.
         // Runtime defaults debug drawing off; these confirmed contacts opt in.
         if (!playerEquipment_.resolvedProjectiles.empty())
@@ -671,6 +678,7 @@ namespace renegade::runtime
         playerViewAnimation_ = {};
         playerEquipment_ = {};
         pendingProjectileShots_.clear();
+        projectileVisuals_.Reset(scenes_.GetScene());
         projectiles_.Reset();
         renderer_.SetProjectileAim(false);
         renderer_.SetProjectileContacts({});
@@ -702,6 +710,12 @@ namespace renegade::runtime
             diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
                 "runtime.player.equipment", "player.equipment.load_failed", playerEquipment_.error);
         }
+        for(const auto& request:playerEquipment_.resolvedProjectiles)
+            if(!projectileVisuals_.Prepare(startupResult_.project.rootPath,
+                    startupResult_.packageRelativeLaunch?startupResult_.packageRootPath:"",
+                    startupResult_.project.projectId,request.projectile))
+                diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
+                    "runtime.projectile","projectile.visual_prepare_failed",projectileVisuals_.error);
         renderer_.SetProjectileAim(playerEquipment_.ready && !playerEquipment_.resolvedProjectiles.empty());
         // Authored equipment owns its presentation. Keep the original WISCENE
         // settings intact; this resolved copy belongs only to Runtime.
@@ -1035,6 +1049,7 @@ namespace renegade::runtime
         playerSettings_ = {};
         playerEquipment_ = {};
         pendingProjectileShots_.clear();
+        projectileVisuals_.Reset(scenes_.GetScene());
         projectiles_.Reset();
         playerSceneRevision_ = 0;
         audioSceneRevision_ = 0;

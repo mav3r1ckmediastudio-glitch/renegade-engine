@@ -11,6 +11,7 @@ namespace renegade::runtime
     {
         std::string subjectId;
         wi::ecs::Entity root = wi::ecs::INVALID_ENTITY;
+        const std::vector<wi::ecs::Entity>* excludedVisualRoots = nullptr;
     };
 
     inline XMFLOAT3 ProjectileNativeVector(const bridge::ProjectileVector& value)
@@ -72,6 +73,13 @@ namespace renegade::runtime
             result.status = ProjectileQueryStatus::Blocked;
             return result;
         }
+        const auto excluded = [&](wi::ecs::Entity entity) {
+            if (perception_detail::EntityBelongsToRoot(scene,entity,owner.root)) return true;
+            if(owner.excludedVisualRoots)
+                for(const auto root:*owner.excludedVisualRoots)
+                    if(perception_detail::EntityBelongsToRoot(scene,entity,root))return true;
+            return false;
+        };
         const XMFLOAT3 delta{to.x - from.x, to.y - from.y, to.z - from.z};
         const float length = std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
         if (!std::isfinite(length))
@@ -95,7 +103,7 @@ namespace renegade::runtime
         for (const auto& overlap : overlaps)
         {
             if (overlap.entity == wi::ecs::INVALID_ENTITY ||
-                perception_detail::EntityBelongsToRoot(scene, overlap.entity, owner.root))
+                excluded(overlap.entity))
                 continue;
             result.status = ProjectileQueryStatus::Hit;
             result.contact.position = from;
@@ -120,7 +128,7 @@ namespace renegade::runtime
         for (const auto& hit : hits)
         {
             if (hit.entity == wi::ecs::INVALID_ENTITY ||
-                perception_detail::EntityBelongsToRoot(scene, hit.entity, owner.root))
+                excluded(hit.entity))
                 continue;
             // Recheck limits: native collider intersection details differ from meshes.
             if (!std::isfinite(hit.distance) ||

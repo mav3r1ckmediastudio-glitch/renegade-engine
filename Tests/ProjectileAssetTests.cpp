@@ -6,6 +6,9 @@
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "json.hpp"
+#include "renegade/bridge/ReusableAssetService.h"
+#include <iomanip>
+#include <sstream>
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/PlayerPrefabService.h"
 #include "renegade/bridge/CommandService.h"
@@ -45,7 +48,7 @@ int main()
     if(!SerializeProjectileAsset(reopened,text,error))return fail("serialize");
     auto corrupt=nlohmann::json::parse(text); corrupt["speed_metres_per_second"]=true;
     if(DeserializeProjectileAsset(corrupt.dump(),reopened,error))return fail("boolean speed");
-    corrupt=nlohmann::json::parse(text); corrupt["schema_version"]=2;
+    corrupt=nlohmann::json::parse(text); corrupt["schema_version"]=3;
     if(DeserializeProjectileAsset(corrupt.dump(),reopened,error))return fail("future projectile schema");
     auto bad=arrow; bad.name="   ";
     if(SaveProjectileAsset(root.generic_u8string(),project,bad).succeeded)return fail("blank name");
@@ -140,6 +143,55 @@ int main()
        !LoadProjectileAsset(snapshot.sessionDirectory,project,saved.document.assetId,reopened,error))
     {std::cerr<<error;return fail("Test Level projectile closure");}
     if(!snapshots.Cleanup(snapshot,error))return fail("snapshot cleanup");
+    // Mesh appearance is a governed dependency, including legacy migration.
+    if(!SerializeProjectileAsset(saved.document,text,error))return fail("appearance serialize");
+    auto legacy=nlohmann::json::parse(text);
+    legacy["schema_version"]=1;legacy.erase("mesh_asset_id");
+    legacy.erase("visual_scale");legacy.erase("visual_rotation_degrees");
+    if(!DeserializeProjectileAsset(legacy.dump(),reopened,error)||!reopened.meshAssetId.empty()||
+        reopened.visualScale!=1)return fail("legacy appearance defaults");
+    auto invalidMesh=arrow;invalidMesh.meshAssetId=GenerateStableId();
+    if(SaveProjectileAsset(root.generic_u8string(),project,invalidMesh).succeeded)
+        return fail("missing appearance accepted");
+    ReusableModelAssetDocument modelDocument;
+    modelDocument.manifest.projectId=project;modelDocument.manifest.assetId=presentation;
+    modelDocument.manifest.sourceAssetId=GenerateStableId();modelDocument.manifest.sourceFormat="fbx";
+    modelDocument.manifest.importer="wicked.ufbx";
+    modelDocument.manifest.settingsJson=R"({"options":{},"source_format":"fbx"})";
+    modelDocument.payload={0x57,0x49,0x53,0x43,0x45,0x4e,0x45,0x01};
+    std::uint64_t hash=1469598103934665603ull;
+    for(auto byte:modelDocument.payload){hash^=byte;hash*=1099511628211ull;}
+    std::ostringstream hashText;hashText<<"fnv1a64:"<<std::hex<<std::setfill('0')<<std::setw(16)<<hash;
+    modelDocument.manifest.payloadHash=hashText.str();
+    std::vector<std::uint8_t> bytes;
+    if(!SerializeReusableModelAssetDocument(modelDocument,bytes,error))return fail("mesh document");
+    {std::ofstream out(root/"Content/Test.rasset",std::ios::binary|std::ios::trunc);
+     out.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());}
+    auto visible=arrow;visible.meshAssetId=presentation;visible.visualScale=.5f;
+    visible.visualRotationDegrees={90,0,-45};
+    const auto visualSaved=SaveProjectileAsset(root.generic_u8string(),project,visible);
+    if(!visualSaved.succeeded||!LoadProjectileAsset(root.generic_u8string(),project,
+        visualSaved.document.assetId,reopened,error)||reopened.meshAssetId!=presentation||
+        reopened.visualScale!=.5f||reopened.visualRotationDegrees!=visible.visualRotationDegrees)
+        return fail("appearance save/reopen");
+    source.projectRelativePath=visualSaved.projectRelativePath;candidates.clear();
+    if(!ReusableAssetDependencyProvider(project).Discover({root.generic_u8string(),&source},
+        [&](const auto& c){candidates.push_back(c);},{},error)||
+        candidates.size()!=1||candidates[0].declaredPath!="Content/Test.rasset"||
+        candidates[0].requirement!=DependencyRequirement::Required)
+        return fail("appearance package dependency");
+    if(!SerializeProjectileAsset(reopened,text,error))return fail("appearance json");
+    auto invalidAppearance=nlohmann::json::parse(text);invalidAppearance["visual_scale"]=true;
+    if(DeserializeProjectileAsset(invalidAppearance.dump(),reopened,error))return fail("boolean scale");
+    invalidAppearance=nlohmann::json::parse(text);invalidAppearance["visual_rotation_degrees"]={0,0,361};
+    if(DeserializeProjectileAsset(invalidAppearance.dump(),reopened,error))return fail("rotation bounds");
+    AssetRegistry tampered;
+    if(!ReadAssetRegistry(root.generic_u8string(),project,tampered,error))return fail("mesh registry");
+    for(auto& record:tampered.records)
+        if(record.assetId==visualSaved.document.assetId)record.dependencyAssetIds.clear();
+    if(!WriteAssetRegistry(root.generic_u8string(),tampered).success ||
+        LoadProjectileAsset(root.generic_u8string(),project,visualSaved.document.assetId,reopened,error))
+        return fail("appearance registry mismatch accepted");
     fs::remove(root/saved.projectRelativePath);
     if(LoadEquipmentAsset(root.generic_u8string(),project,equipped.document.equipment.assetId,item,error))
         return fail("missing bound projectile silently loaded");

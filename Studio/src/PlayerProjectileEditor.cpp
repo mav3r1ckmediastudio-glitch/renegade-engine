@@ -1,6 +1,8 @@
 #include "StudioApplication.h"
 #include "renegade/bridge/EquipmentAssetService.h"
 #include "renegade/bridge/ProjectileAssetService.h"
+#include "renegade/bridge/AssetRegistryService.h"
+#include <filesystem>
 
 #include <algorithm>
 #include <cctype>
@@ -93,7 +95,7 @@ namespace renegade::studio
         });
 
         projectileCreatePanel_.Create("New projectile");
-        projectileCreatePanel_.SetPos({120,100});projectileCreatePanel_.SetSize({640,410});
+        projectileCreatePanel_.SetPos({120,100});projectileCreatePanel_.SetSize({740,650});
         projectilePreset_.Create("Start with");
         projectilePreset_.SetPos({210,40});projectilePreset_.SetSize({390,26});
         for(unsigned i=0;i<5;++i)
@@ -109,12 +111,27 @@ namespace renegade::studio
         slider(projectileSpeed_,"Speed (m/s)",0.1f,2000,300,125);
         slider(projectileGravity_,"Gravity multiplier",0,10,0,170);
         slider(projectileLifetime_,"Lifetime (seconds)",0.05f,120,5,215);
+        projectileMesh_.Create("Visible model");
+        projectileMesh_.SetPos({210,255});projectileMesh_.SetSize({390,26});
+        projectileCreatePanel_.AddWidget(&projectileMesh_);
+        projectileMesh_.OnSelect([this](const wi::gui::EventArgs& args){
+            projectileDraftMesh_=args.iValue>0 && static_cast<size_t>(args.iValue)<=projectileMeshChoices_.size()
+                ? projectileMeshChoices_[args.iValue-1] : "";
+        });
+        slider(projectileVisualScale_,"Model scale",0.001f,10,1,305);
+        slider(projectileRotationX_,"Model rotation X",-180,180,0,345);
+        slider(projectileRotationY_,"Model rotation Y",-180,180,0,385);
+        slider(projectileRotationZ_,"Model rotation Z",-180,180,0,425);
+        button(projectileImportMesh_,"IMPORT MESH...",20,475,180,projectileCreatePanel_);
+        projectileImportMesh_.OnClick([this](const wi::gui::EventArgs&){
+            OpenStaticModelImporter(true);
+        });
         projectileCreateHelp_.Create("Projectile flight help");
         projectileCreateHelp_.SetText("Gravity 0 flies straight; 1 uses normal gravity.\nProjectile stops on contact or when its lifetime expires.\nSave adds it to this project's reusable projectile list.");
-        projectileCreateHelp_.SetPos({20,250});projectileCreateHelp_.SetSize({580,75});
+        projectileCreateHelp_.SetPos({20,515});projectileCreateHelp_.SetSize({680,65});
         projectileCreateHelp_.font.params.size=14;projectileCreatePanel_.AddWidget(&projectileCreateHelp_);
-        button(projectileSave_,"SAVE AS NEW",20,335,280,projectileCreatePanel_);
-        button(projectileCancel_,"CANCEL",320,335,280,projectileCreatePanel_);
+        button(projectileSave_,"SAVE AS NEW",20,590,280,projectileCreatePanel_);
+        button(projectileCancel_,"CANCEL",320,590,280,projectileCreatePanel_);
         projectileCancel_.OnClick([this](const wi::gui::EventArgs&){projectileCreatePanel_.SetVisible(false);});
         projectilePreset_.OnSelect([this](const wi::gui::EventArgs& args){
             const auto d=bridge::MakeProjectilePreset(static_cast<bridge::ProjectilePreset>(args.iValue));
@@ -124,6 +141,11 @@ namespace renegade::studio
         });
         projectileNew_.OnClick([this](const wi::gui::EventArgs&){
             const auto d=bridge::MakeProjectilePreset(bridge::ProjectilePreset::Bullet);
+            projectileStandaloneEditor_=false;
+            projectileEditorProject_=equipmentProject_;
+            projectileDraftMesh_.clear(); RefreshProjectileMeshChoices();
+            projectileVisualScale_.SetValue(1);
+            projectileRotationX_.SetValue(0);projectileRotationY_.SetValue(0);projectileRotationZ_.SetValue(0);
             projectileDraftDamage_=d.damage;
             projectilePreset_.SetSelectedWithoutCallback(0);projectileName_.SetText(d.name);
             projectileSpeed_.SetValue(d.speedMetresPerSecond);projectileGravity_.SetValue(d.gravityScale);
@@ -138,6 +160,13 @@ namespace renegade::studio
                 projectileSummary_.SetText(error);return;
             }
             projectileDraftDamage_=d.damage;
+            projectileStandaloneEditor_=false;
+            projectileEditorProject_=project.projectId;
+            projectileDraftMesh_=d.meshAssetId;RefreshProjectileMeshChoices();
+            projectileVisualScale_.SetValue(d.visualScale);
+            projectileRotationX_.SetValue(d.visualRotationDegrees[0]);
+            projectileRotationY_.SetValue(d.visualRotationDegrees[1]);
+            projectileRotationZ_.SetValue(d.visualRotationDegrees[2]);
             projectileName_.SetText(d.name+" copy");projectileSpeed_.SetValue(d.speedMetresPerSecond);
             projectileGravity_.SetValue(d.gravityScale);projectileLifetime_.SetValue(d.lifetimeSeconds);
             projectileCreatePanel_.SetVisible(true);projectileCreatePanel_.Activate();
@@ -146,18 +175,22 @@ namespace renegade::studio
             bridge::ProjectileAssetDocument d;
             d.name=projectileName_.GetText();d.speedMetresPerSecond=projectileSpeed_.GetValue();
             d.gravityScale=projectileGravity_.GetValue();d.lifetimeSeconds=projectileLifetime_.GetValue();
-            d.damage=projectileDraftDamage_;
-            const auto projectId=equipmentProject_;const auto target=equipmentPlayer_;
+            d.damage=projectileDraftDamage_;d.meshAssetId=projectileDraftMesh_;
+            d.visualScale=projectileVisualScale_.GetValue();
+            d.visualRotationDegrees={projectileRotationX_.GetValue(),projectileRotationY_.GetValue(),projectileRotationZ_.GetValue()};
+            const auto projectId=projectileEditorProject_;const auto target=equipmentPlayer_;
+            const bool standalone=projectileStandaloneEditor_;
             wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                [this,d,projectId,target](uint64_t){
+                [this,d,projectId,target,standalone](uint64_t){
                     if(!session_||!session_->Projects().HasProject()||
-                       session_->Projects().CurrentProject().projectId!=projectId||equipmentPlayer_!=target||
-                       !bridge::IsPlayerStart(session_->Scenes().GetScene(),target))return;
+                       session_->Projects().CurrentProject().projectId!=projectId||
+                       (!standalone && (equipmentPlayer_!=target||
+                       !bridge::IsPlayerStart(session_->Scenes().GetScene(),target))))return;
                     const auto& project=session_->Projects().CurrentProject();
                     const auto saved=bridge::SaveProjectileAsset(project.rootPath,projectId,d);
                     if(!saved.succeeded){projectileCreateHelp_.SetText(saved.error);return;}
                     projectilePreferred_=saved.document.assetId;projectileSearch_.SetText("");
-                    projectileCreatePanel_.SetVisible(false);RefreshProjectileChoices();
+                    projectileCreatePanel_.SetVisible(false);if(!standalone)RefreshProjectileChoices();
                     RefreshAssetBrowser();
                 });
         });
@@ -205,6 +238,43 @@ namespace renegade::studio
         });
         weaponProjectilePanel_.SetVisible(false);projectileCreatePanel_.SetVisible(false);
         GetGUI().AddWidget(&weaponProjectilePanel_);GetGUI().AddWidget(&projectileCreatePanel_);
+    }
+
+    void StudioRenderPath::RefreshProjectileMeshChoices()
+    {
+        projectileMesh_.ClearItems();projectileMesh_.AddItem("None (flight feedback only)");
+        projectileMeshChoices_.clear();
+        if(!session_||!session_->Projects().HasProject())return;
+        const auto& project=session_->Projects().CurrentProject();
+        bridge::AssetRegistry registry;std::string error;
+        if(!bridge::ReadAssetRegistry(project.rootPath,project.projectId,registry,error)){
+            projectileCreateHelp_.SetText(error);return;
+        }
+        int selected=0;
+        for(const auto& record:registry.records){
+            if(!record.sourceAvailable||record.dependencyClass!=bridge::DependencyClass::ImportedContent||
+                std::filesystem::u8path(record.projectRelativePath).extension()!=bridge::ReusableAssetExtension)continue;
+            projectileMeshChoices_.push_back(record.assetId);
+            projectileMesh_.AddItem(std::filesystem::u8path(record.projectRelativePath).stem().u8string());
+            if(record.assetId==projectileDraftMesh_)selected=static_cast<int>(projectileMeshChoices_.size());
+        }
+        projectileMesh_.SetSelectedWithoutCallback(selected);
+    }
+
+    void StudioRenderPath::OpenProjectileAssetEditor()
+    {
+        if(!session_||!session_->Projects().HasProject())return;
+        projectileStandaloneEditor_=true;
+        projectileEditorProject_=session_->Projects().CurrentProject().projectId;
+        const auto d=bridge::MakeProjectilePreset(bridge::ProjectilePreset::Arrow);
+        projectileDraftDamage_=d.damage;projectileDraftMesh_.clear();
+        projectilePreset_.SetSelectedWithoutCallback(1);projectileName_.SetText(d.name);
+        projectileSpeed_.SetValue(d.speedMetresPerSecond);projectileGravity_.SetValue(d.gravityScale);
+        projectileLifetime_.SetValue(d.lifetimeSeconds);projectileVisualScale_.SetValue(1);
+        projectileRotationX_.SetValue(0);projectileRotationY_.SetValue(0);projectileRotationZ_.SetValue(0);
+        RefreshProjectileMeshChoices();
+        projectileCreateHelp_.SetText("Choose an imported model or use IMPORT MESH. Save creates a reusable asset in Content/Projectiles.");
+        projectileCreatePanel_.SetVisible(true);projectileCreatePanel_.Activate();
     }
 
     void StudioRenderPath::OpenWeaponProjectileEditor()

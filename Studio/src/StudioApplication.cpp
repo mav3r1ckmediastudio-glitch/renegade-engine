@@ -2807,6 +2807,9 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::CreateEnvironmentProbe:
                 RequestDiagnosticAction(EditorAction::CreateEnvironmentProbe);
                 break;
+            case RenegadeStudioChrome::Action::CreateProjectile:
+                OpenProjectileAssetEditor();
+                break;
             case RenegadeStudioChrome::Action::ImportStaticGlb:
                 OpenStaticModelImporter();
                 break;
@@ -3082,6 +3085,14 @@ namespace renegade::studio
             modelImportCandidate_.reset();
             modelImportPreviewImage_.SetImage({});
             modelImportPreview_.reset();
+            if (modelImportFromProjectile_) {
+                modelImportFromProjectile_ = false;
+                if (session_ && session_->Projects().HasProject() &&
+                    session_->Projects().CurrentProject().projectId == projectileEditorProject_) {
+                    projectileCreatePanel_.SetVisible(true);
+                    projectileCreatePanel_.Activate();
+                }
+            }
         });
         modelImportPanel_.AddWidget(&modelImportCancel_);
         modelImportPanel_.SetVisible(false);
@@ -6011,7 +6022,7 @@ namespace renegade::studio
         }
     }
 
-    void StudioRenderPath::OpenStaticModelImporter()
+    void StudioRenderPath::OpenStaticModelImporter(bool fromProjectile)
     {
         if (session_ == nullptr || !session_->Projects().HasProject())
             return;
@@ -6027,11 +6038,11 @@ namespace renegade::studio
         params.description = "Select GLB or FBX model or rigged character";
         params.extensions = {"glb", "fbx"};
         wi::helper::FileDialog(params,
-            [this, projectId](const std::string& path)
+            [this, projectId, fromProjectile](const std::string& path)
             {
                 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, projectId, path](std::uint64_t)
+                    [this, projectId, path, fromProjectile](std::uint64_t)
                     {
                         if (path.empty() || session_ == nullptr ||
                             !session_->Projects().HasProject() ||
@@ -6119,6 +6130,11 @@ namespace renegade::studio
                                 std::to_string(summary.animations) + " clips" : "") +
                             (character ? "\nSelect a clip to assign its gameplay action." : "\nPreview controls do not change the imported asset."));
                         modelImportCandidate_ = std::move(candidate);
+                        modelImportFromProjectile_ = fromProjectile;
+                        if (fromProjectile) {
+                            modelImportFolder_.SetValue("Content/Projectiles/Models");
+                            projectileCreatePanel_.SetVisible(false);
+                        }
                         modelImportPanel_.SetVisible(true);
                         // Native Window visibility propagates to children: restore the role-specific controls last.
                         for(wi::gui::Widget* widget : {
@@ -6238,6 +6254,15 @@ namespace renegade::studio
                 modelImportPreviewImage_.SetImage({});
                 modelImportPreview_.reset();
                 RefreshAssetBrowser();
+                if (modelImportFromProjectile_) {
+                    modelImportFromProjectile_ = false;
+                    if (projectileEditorProject_ == projectId) {
+                        projectileDraftMesh_ = result.assetId;
+                        RefreshProjectileMeshChoices();
+                        projectileCreatePanel_.SetVisible(true);
+                        projectileCreatePanel_.Activate();
+                    }
+                }
                 studioChrome_.SetActiveBottomTab(0, true);
                 bridge::AssetCatalogue catalogue;
                 std::string revealError;
