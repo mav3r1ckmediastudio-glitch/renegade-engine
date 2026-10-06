@@ -68,3 +68,7 @@ window; importing ArrowReturn into the default Content/Projectiles/Models return
 to the original draft with ArrowReturn selected and flight values retained.
 Screenshot: BUILD/p3-projectile-import-return.png. The added model is disposable;
 the saved shotgun remains assigned to the original Arrow projectile above.
+
+Implementation commit: d4d216b0ca9ea5aaadff0429d919f1fed7709747.
+Final rebuilt standalone rerun: ground-contact/fire/reload/reset proof PASS
+11.38s; arrow visual pause/freeze/expiry/reset proof PASS 10.13s.

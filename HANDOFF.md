@@ -1,3 +1,50 @@
+## P3 projectile model/editor checkpoint - 2026-10-06
+
+Implementation commit: d4d216b0ca9ea5aaadff0429d919f1fed7709747.
+Branch: feature/p3-projectile-impact. Dependent P2 PR #180 remains unmerged.
+
+Add -> Projectile creates project-level definitions under Content/Projectiles.
+Imported model selection, uniform scale and XYZ rotation persist in schema v2;
+v1 defaults are preserved. Import Mesh defaults to Content/Projectiles/Models
+and returns to the retained draft with the committed model selected. Cancel
+restores the draft. Weapon Projectiles still assigns immutable equipment copies.
+
+Runtime caches prepared appearances per session, instances them on accepted
+shots, follows simulated position/velocity and removes complete hierarchies on
+impact, expiry and reset. Visuals are excluded from projectile world queries.
+Registry dependency discovery and Test Level closure include model and textures.
+Changed: ProjectileAssetService h/cpp; ReusableAssetDependencyService;
+TestLevelSnapshotService; RuntimeApplication h/cpp, RuntimeLiveDiagnostics,
+RuntimeProjectileWorld and new RuntimeProjectileVisuals; Studio projectile
+editor/chrome/application; asset, query and session tests; architecture, roadmap,
+feature matrix and P3 design/evidence/continuation docs.
+
+Release Runtime/Studio/session build PASS 102.56s. Current Runtime copied to
+Studio embedded Runtime. Exact build uses CL=/MP4 and cmake --build
+BUILD/renegade --config Release --target RenegadeRuntime RenegadeStudio
+RenegadeRuntimeProjectileSessionTests -- /m:2 /p:BuildProjectReferences=false
+/verbosity:minimal. ctest --test-dir BUILD/renegade -C Release -R
+'Projectile|EquipmentAsset|EquipmentActionState|PlayerViewRig|TestLevelSnapshot'
+--output-on-failure: 10/10 PASS 2.50s. Diff check PASS.
+
+Owner arrow ZIP converted via Blender 4.3 with supplied textures; original
+retained untouched. Disposable native importer preview and projectile save/
+shotgun assignment/scene save/cold standalone load verified. Rebuilt native
+Import Mesh Cancel and successful ArrowReturn import restored the draft;
+new model selected automatically. Standalone final ground-contact proof PASS
+11.38s: accepted shots, pause, dry fire, reload and reset. Visual instance,
+pause/freeze, expiry and reset proof also recorded. Paused arrow is small/distant;
+a dedicated inspection preview remains required. Exact evidence and fixture IDs:
+docs/P3_PROJECTILE_MESH_CHECKPOINT.md. Target design:
+docs/P3_PROJECTILE_EDITOR_DESIGN.md.
+
+Next: rotatable projectile preview, explicit weapon/palm launch sockets and
+shot direction/animation timing; then Hitscan/Beam and material impact profiles.
+Camera-eye launch is still current. Pellets, effects, sticking, damage authoring,
+Jolt-only collision coverage and actual packaged firing remain open. No Player/
+NPC health dependency, P3 gate closure, independent verification or P2 merge
+is claimed. Only unrelated Tools/__pycache__/ and log.txt remain untracked.
+
 ## P3 live shotgun firing checkpoint - 2026-10-06
 
 Implementation commit: 41308d3d68eeb8d2421bf57e21271c21309db180.
