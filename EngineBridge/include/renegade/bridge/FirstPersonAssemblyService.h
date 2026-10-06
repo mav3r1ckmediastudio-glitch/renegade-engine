@@ -52,7 +52,7 @@ struct FirstPersonPartChoice {
     bool arms = false, weapon = false;
 };
 // Folder-scoped choices plus explicit roles from existing assembly provenance.
-std::vector<FirstPersonPartChoice> CollectFirstPersonPartChoices(const AssetRegistry&);
+std::vector<FirstPersonPartChoice> CollectFirstPersonPartChoices(const AssetRegistry&, const AssetCatalogueMetadataDocument* metadata = nullptr);
 class SetFirstPersonAssemblySettingsCommand final : public ICommand {
 public:
     SetFirstPersonAssemblySettingsCommand(FirstPersonAssemblySettings& target,

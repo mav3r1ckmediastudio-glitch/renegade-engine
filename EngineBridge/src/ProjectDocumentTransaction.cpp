@@ -52,6 +52,7 @@ namespace
         renegade::bridge::ProjectDocumentValidator validator;
         bool existed = false;
         bool changed = true;
+        bool remove = false;
     };
 
     struct Journal
@@ -476,6 +477,10 @@ namespace
         std::string& error)
     {
         std::error_code fileError;
+        if (plan.remove) {
+            if (fs::exists(path,fileError) || fileError) {error="Deleted document still exists.";return false;}
+            error.clear();return true;
+        }
         if (!fs::is_regular_file(path, fileError) || fileError)
         {
             error = "The project document is not a readable regular file: " +
@@ -1142,6 +1147,11 @@ namespace renegade::bridge
             plan.content = std::move(document.content);
             plan.validator = std::move(document.validator);
             plan.existed = exists;
+            plan.remove = document.remove;
+            if (plan.remove && (!plan.content.empty() || plan.validator))
+                return FailureResult(std::move(result), ProjectDocumentTransactionStage::Prepare,
+                    sourceIndex, "invalid_delete", "Deletion cannot contain new bytes or a staged validator.");
+            if (plan.remove) plan.changed = exists;
 
             for (const fs::path* artifact :
                 {&plan.staged, &plan.backup, &plan.restore})
@@ -1158,7 +1168,7 @@ namespace renegade::bridge
                 }
             }
 
-            if (exists)
+            if (exists && !plan.remove)
             {
                 std::string compareError;
                 const bool matches = FileMatchesContent(
@@ -1395,7 +1405,7 @@ namespace renegade::bridge
                 document.staged,
                 operationError);
             if (action != ProjectDocumentTransactionHookAction::Continue ||
-                !WriteBytes(document.staged, document.content, operationError))
+                (!document.remove && !WriteBytes(document.staged, document.content, operationError)))
             {
                 return failBeforeCommit(
                     ProjectDocumentTransactionStage::StageWrite,
@@ -1422,7 +1432,7 @@ namespace renegade::bridge
                 document.staged,
                 operationError);
             if (action != ProjectDocumentTransactionHookAction::Continue ||
-                !ValidateStaged(document, operationError))
+                (!document.remove && !ValidateStaged(document, operationError)))
             {
                 return failBeforeCommit(
                     ProjectDocumentTransactionStage::Validate,
@@ -1582,7 +1592,9 @@ namespace renegade::bridge
                 document.destination,
                 operationError);
             std::error_code replaceError;
-            if (action == ProjectDocumentTransactionHookAction::Continue &&
+            if (action == ProjectDocumentTransactionHookAction::Continue && document.remove)
+                fs::remove(document.destination, replaceError);
+            if (action == ProjectDocumentTransactionHookAction::Continue && !document.remove &&
                 !ReplaceFileAtomically(
                     document.staged,
                     document.destination,

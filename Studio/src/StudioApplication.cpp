@@ -2902,6 +2902,28 @@ namespace renegade::studio
         modelImportName_.SetPos(XMFLOAT2(110.0f, 500.0f));
         modelImportName_.SetSize(XMFLOAT2(390.0f, 30.0f));
         modelImportPanel_.AddWidget(&modelImportName_);
+        modelImportFolderChoices_.Create("Existing Content folders");
+        modelImportFolderChoices_.SetText("Folder: ");
+        modelImportFolderChoices_.SetSize({390,26});
+        modelImportFolderChoices_.OnSelect([this](const wi::gui::EventArgs& a) {
+            modelImportFolder_.SetValue(modelImportFolderChoices_.GetItemText(a.iValue));
+        });
+        modelImportPanel_.AddWidget(&modelImportFolderChoices_);
+        modelImportFolder_.Create("Import destination");
+        modelImportFolder_.SetDescription("Import to: ");
+        modelImportFolder_.SetCancelInputEnabled(false);
+        modelImportFolder_.SetSize({390,26});
+        modelImportFolder_.SetTooltip("Project-relative Content folder. Type a new folder here; import creates it.");
+        modelImportPanel_.AddWidget(&modelImportFolder_);
+        modelImportRole_.Create("Asset role");
+        modelImportRole_.SetText("Asset role: ");
+        modelImportRole_.SetSize({390,26});
+        modelImportRole_.AddItem("General model");modelImportRole_.AddItem("Player arms");modelImportRole_.AddItem("Weapon");
+        modelImportPanel_.AddWidget(&modelImportRole_);
+        modelImportTags_.Create("Import tags");modelImportTags_.SetDescription("Tags: ");
+        modelImportTags_.SetCancelInputEnabled(false);modelImportTags_.SetSize({390,26});
+        modelImportTags_.SetTooltip("Optional comma-separated search labels. Tags do not choose the destination.");
+        modelImportPanel_.AddWidget(&modelImportTags_);
         modelImportCommit_.Create("Commit Model Asset");
         modelImportCommit_.SetText("IMPORT ASSET");
         modelImportCommit_.SetPos(XMFLOAT2(20.0f, 550.0f));
@@ -3854,7 +3876,7 @@ namespace renegade::studio
         assemblyHandPanel_.SetPos(XMFLOAT2(sideBySide?1120.0f:std::max(0.0f,(width-730)*0.5f),std::max(0.0f,(height-780)*0.5f)));
         modelImportPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
-            std::max(70.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));
+            std::max(0.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));
         handGripPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
             std::max(60.0f, (height - 550.0f) * 0.5f)));
@@ -5901,11 +5923,33 @@ namespace renegade::studio
                             return;
                         }
                         modelImportPreview_ = std::move(preview);
-                        modelImportPanel_.SetSize(XMFLOAT2(560.0f, character ? 850.0f : 610.0f));
+                        modelImportPanel_.SetSize(XMFLOAT2(560.0f, character ? 990.0f : 750.0f));
                         modelImportSummary_.SetSize(XMFLOAT2(480.0f, character ? 55.0f : 85.0f));
                         modelImportName_.SetPos(XMFLOAT2(110.0f, character ? 740.0f : 500.0f));
-                        modelImportCommit_.SetPos(XMFLOAT2(20.0f, character ? 790.0f : 550.0f));
-                        modelImportCancel_.SetPos(XMFLOAT2(260.0f, character ? 790.0f : 550.0f));
+                        const float destinationY = character ? 775.0f : 535.0f;
+                        modelImportFolderChoices_.SetPos({110,destinationY});
+                        modelImportFolder_.SetPos({110,destinationY+32});
+                        modelImportRole_.SetPos({110,destinationY+64});
+                        modelImportTags_.SetPos({110,destinationY+96});
+                        modelImportFolderChoices_.ClearItems();
+                        std::vector<std::string> folders={"Content","Content/Models","Content/Player/Arms","Content/Player/Weapons"};
+                        std::error_code folderError;
+                        const auto content=fs::u8path(session_->Projects().CurrentProject().rootPath)/"Content";
+                        for(fs::recursive_directory_iterator it(content,fs::directory_options::skip_permission_denied,folderError),end;
+                            it!=end && !folderError;it.increment(folderError)) {
+                            if(it->is_symlink()){it.disable_recursion_pending();continue;}
+                            if(it->is_directory())folders.push_back(it->path().lexically_relative(content.parent_path()).generic_u8string());
+                        }
+                        std::sort(folders.begin(),folders.end());folders.erase(std::unique(folders.begin(),folders.end()),folders.end());
+                        for(const auto& folder:folders)modelImportFolderChoices_.AddItem(folder);
+                        std::filesystem::path resolvedFolder;std::string folderValidation;
+                        modelImportFolder_.SetValue(bridge::ResolveCreatorContentFolder(session_->Projects().CurrentProject().rootPath,
+                            assetBrowserCurrentFolder_,resolvedFolder,folderValidation)?assetBrowserCurrentFolder_:"Content/Models");
+                        for(size_t i=0;i<modelImportFolderChoices_.GetItemCount();++i)
+                            if(modelImportFolderChoices_.GetItemText(int(i))==modelImportFolder_.GetValue())modelImportFolderChoices_.SetSelected(int(i));
+                        modelImportRole_.SetSelected(0);modelImportTags_.SetValue("");
+                        modelImportCommit_.SetPos(XMFLOAT2(20.0f, character ? 925.0f : 685.0f));
+                        modelImportCancel_.SetPos(XMFLOAT2(260.0f, character ? 925.0f : 685.0f));
                         modelImportActions_.assign(candidate->Summary().animations, "Unassigned");
                         modelImportAction_.SetVisible(character);
                         modelImportAction_.SetEnabled(false);
@@ -5936,6 +5980,12 @@ namespace renegade::studio
                             (character ? "\nSelect a clip to assign its gameplay action." : "\nPreview controls do not change the imported asset."));
                         modelImportCandidate_ = std::move(candidate);
                         modelImportPanel_.SetVisible(true);
+                        // Native Window visibility propagates to children: restore the role-specific controls last.
+                        for(wi::gui::Widget* widget : {
+                            static_cast<wi::gui::Widget*>(&modelImportAction_),static_cast<wi::gui::Widget*>(&modelImportAddAnimation_),
+                            static_cast<wi::gui::Widget*>(&modelImportClip_),static_cast<wi::gui::Widget*>(&modelImportPlay_),
+                            static_cast<wi::gui::Widget*>(&modelImportRestart_),static_cast<wi::gui::Widget*>(&modelImportTime_),
+                            static_cast<wi::gui::Widget*>(&modelImportSpeed_)})widget->SetVisible(character);
                         studioChrome_.SetStatusText("MODEL IMPORT // REVIEW AND IMPORT ASSET");
                     });
             });
@@ -5995,9 +6045,14 @@ namespace renegade::studio
             session_->Projects().CurrentProject().projectId != modelImportProjectId_)
             return;
         const std::string name = modelImportName_.GetValue();
+        const std::string folder = modelImportFolder_.GetValue();
+        const int role = modelImportRole_.GetSelected();
+        std::vector<std::string> tags;
+        std::stringstream tagStream(modelImportTags_.GetValue());std::string tag;
+        while(std::getline(tagStream,tag,','))if(!tag.empty())tags.push_back(tag);
         wi::eventhandler::Subscribe_Once(
             wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-            [this, name, projectId = modelImportProjectId_](std::uint64_t)
+            [this, name, folder, role, tags, projectId = modelImportProjectId_](std::uint64_t)
             {
                 if (!modelImportCandidate_ || session_ == nullptr ||
                     !session_->Projects().HasProject() ||
@@ -6007,6 +6062,9 @@ namespace renegade::studio
                 request.projectRoot = session_->Projects().CurrentProject().rootPath;
                 request.projectId = projectId;
                 request.assetName = name;
+                request.destinationFolder = folder;
+                request.creatorTags = tags;
+                request.playerRole = role == 1 ? "arms" : role == 2 ? "weapon" : "";
                 if (modelImportCandidate_->Evidence().skinnedMeshes != 0)
                     request.animationActions = modelImportActions_;
                 request.characterAsset = modelImportCandidate_ &&

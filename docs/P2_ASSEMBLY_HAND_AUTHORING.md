@@ -6,7 +6,7 @@ The main window retains paired firearm authoring and primary grip/view transform
 
 ## Replace the sword
 
-Import a static model into Content/Player/Weapons. Choose it as Weapon product
+Import a static model with Asset role Weapon into any Content folder (the legacy\nContent/Player/Weapons folder is also recognised). Choose it as Weapon product
 and LOAD PARTS. Keeping the same arms preserves shield, hand roots, directional
 bindings and timing. Adjust primary parent, position and rotation in the main
 window; adjust Sword scale in Attachments. Preview several strikes.

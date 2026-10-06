@@ -319,8 +319,14 @@ namespace renegade::studio
 
     void CreatorAssetStudioChrome::Update(const wi::Canvas& canvas, const float dt)
     {
-        RenegadeStudioChrome::Update(canvas, dt);
+        // The move dialog owns input while open. Base chrome otherwise
+        // collapses the drawer on a click outside its body, hiding this dialog.
+        const bool moving = creatorMovePanel_.IsVisible();
+        if (!moving)
+            RenegadeStudioChrome::Update(canvas, dt);
         UpdateCreatorAssetControls(canvas, dt);
+        if (moving)
+            creatorAssetControlConsumed_ = true;
     }
 
     void CreatorAssetStudioChrome::Render(
@@ -420,6 +426,48 @@ namespace renegade::studio
             SaveSelectedCreatorTags();
         });
 
+        creatorAssetMoveButton_.Create("Move model to folder");creatorAssetMoveButton_.SetText("MOVE");
+        creatorAssetMoveButton_.OnClick([this](const wi::gui::EventArgs&){OpenCreatorMovePanel();});
+        creatorMovePanel_.Create("Move model to Content folder");creatorMovePanel_.SetSize({560,240});
+        creatorMoveFolderChoices_.Create("Existing folders");creatorMoveFolderChoices_.SetText("Folder: ");
+        creatorMoveFolderChoices_.SetPos({110,40});creatorMoveFolderChoices_.SetSize({420,26});
+        creatorMoveFolderChoices_.OnSelect([this](const wi::gui::EventArgs& a){creatorMoveFolder_.SetValue(creatorMoveFolderChoices_.GetItemText(a.iValue));});
+        creatorMovePanel_.AddWidget(&creatorMoveFolderChoices_);
+        creatorMoveFolder_.Create("Move destination");creatorMoveFolder_.SetDescription("Move to: ");
+        creatorMoveFolder_.SetCancelInputEnabled(false);creatorMoveFolder_.SetPos({110,80});creatorMoveFolder_.SetSize({420,26});
+        creatorMoveFolder_.SetTooltip("Choose an existing folder or type a new Content folder. Source files and asset identity are preserved.");
+        creatorMovePanel_.AddWidget(&creatorMoveFolder_);
+        creatorMoveApply_.Create("Move selected model");creatorMoveApply_.SetText("MOVE ASSET");
+        creatorMoveApply_.SetPos({110,140});creatorMoveApply_.SetSize({180,30});
+        creatorMoveApply_.OnClick([this](const wi::gui::EventArgs&){
+            const auto folder=InputValue(creatorMoveFolder_);
+            const auto projectId=creatorMoveProjectId_,assetId=creatorMoveAssetId_;
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,folder,projectId,assetId](uint64_t){
+                auto* session=bridge::StudioSession::Current();
+                if(!session || !session->Projects().HasProject() || session->Projects().CurrentProject().projectId!=projectId)return;
+                std::string path,error;
+                if(!creatorAssetWorkflow_.MoveModelAsset(session->Projects().CurrentProject().rootPath,projectId,assetId,folder,path,error)) {
+                    SetStatusText("MOVE // "+error);return;
+                }
+                creatorMovePanel_.SetVisible(false);creatorSelectedAssetPath_=path;
+                creatorCurrentPath_=std::filesystem::u8path(path).parent_path().generic_u8string();
+                const auto snapshot=bridge::AssetBrowserService().Scan(session->Projects().CurrentProject().rootPath,creatorCurrentPath_);
+                if(snapshot.succeeded) {
+                    creatorFilesystemFolders_.clear();
+                    for(const auto& folder:snapshot.folders) {
+                        AssetFolderRow row;row.name=folder.name;row.relativePath=folder.projectRelativePath;
+                        row.depth=int(folder.depth);row.selected=folder.selected;creatorFilesystemFolders_.push_back(std::move(row));
+                    }
+                }
+                creatorAssetCatalogueDirty_=creatorAssetRefreshPending_=true;RefreshCreatorAssetBrowser();
+                SetStatusText("MOVED // "+path);
+            });
+        });creatorMovePanel_.AddWidget(&creatorMoveApply_);
+        creatorMoveCancel_.Create("Cancel move");creatorMoveCancel_.SetText("CANCEL");
+        creatorMoveCancel_.SetPos({310,140});creatorMoveCancel_.SetSize({180,30});
+        creatorMoveCancel_.OnClick([this](const wi::gui::EventArgs&){creatorMovePanel_.SetVisible(false);});
+        creatorMovePanel_.AddWidget(&creatorMoveCancel_);creatorMovePanel_.SetVisible(false);
+
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorAssetSearch_),
             static_cast<wi::gui::Widget*>(&creatorAssetTags_),
@@ -427,7 +475,8 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorAssetFormatCombo_),
             static_cast<wi::gui::Widget*>(&creatorAssetRigCombo_),
             static_cast<wi::gui::Widget*>(&creatorAssetPlaceButton_),
-            static_cast<wi::gui::Widget*>(&creatorAssetSaveTagsButton_)})
+            static_cast<wi::gui::Widget*>(&creatorAssetSaveTagsButton_),
+            static_cast<wi::gui::Widget*>(&creatorAssetMoveButton_)})
         {
             widget->SetVisible(false);
             widget->SetShadowRadius(0.0f);
@@ -441,7 +490,7 @@ namespace renegade::studio
         // the toolbar; creator filters begin after it and never share its hit
         // target.
         const float left = HierarchyWidth() + 45.0f;
-        const float right = creatorLayoutWidth_ - InspectorWidth() - 13.0f;
+        const float right = creatorLayoutWidth_ - InspectorWidth() - 48.0f;
         const float available = std::max(0.0f, right - left);
         const float drawerTop = creatorLayoutHeight_ - BottomTabsHeight -
             StatusBarHeight - DrawerHeight();
@@ -459,7 +508,7 @@ namespace renegade::studio
         // leaving the backend workflow effectively unreachable to creators.
         const float actionY = drawerTop + 8.0f;
         float actionX = right -
-            (placeWidth + saveWidth + gap);
+            (placeWidth + saveWidth + 65 + gap * 2);
         const auto placeAction = [&actionX, actionY, gap](
             wi::gui::Widget& widget, const float width)
         {
@@ -469,6 +518,7 @@ namespace renegade::studio
         };
         placeAction(creatorAssetPlaceButton_, placeWidth);
         placeAction(creatorAssetSaveTagsButton_, saveWidth);
+        placeAction(creatorAssetMoveButton_, 65);
 
         const float filterY = drawerTop + 45.0f;
         const float fixed = stateWidth + formatWidth + rigWidth + gap * 4.0f;
@@ -555,7 +605,8 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorAssetFormatCombo_),
             static_cast<wi::gui::Widget*>(&creatorAssetRigCombo_),
             static_cast<wi::gui::Widget*>(&creatorAssetPlaceButton_),
-            static_cast<wi::gui::Widget*>(&creatorAssetSaveTagsButton_)})
+            static_cast<wi::gui::Widget*>(&creatorAssetSaveTagsButton_),
+            static_cast<wi::gui::Widget*>(&creatorAssetMoveButton_)})
         {
             widget->SetVisible(visible);
         }
@@ -609,6 +660,9 @@ namespace renegade::studio
         }
         creatorAssetPlaceButton_.SetEnabled(modelProduct || textureAssignable);
         creatorAssetSaveTagsButton_.SetEnabled(registered);
+        creatorAssetMoveButton_.SetEnabled(modelProduct && selected->type != bridge::AssetType::Player);
+        creatorAssetMoveButton_.Update(canvas,dt);
+        creatorMovePanel_.Update(canvas,dt);
 
         creatorAssetPlaceButton_.Update(canvas, dt);
         creatorAssetSaveTagsButton_.Update(canvas, dt);
@@ -627,7 +681,7 @@ namespace renegade::studio
         creatorAssetControlConsumed_ =
             engaged(creatorAssetSearch_) || engaged(creatorAssetTags_) ||
             engaged(creatorAssetStateCombo_) || engaged(creatorAssetFormatCombo_) ||
-            engaged(creatorAssetSaveTagsButton_);
+            engaged(creatorAssetSaveTagsButton_) || engaged(creatorAssetMoveButton_) || creatorMovePanel_.IsVisible();
 
         if (creatorAssetRefreshPending_)
             RefreshCreatorAssetBrowser();
@@ -653,13 +707,23 @@ namespace renegade::studio
             34.0f,
             wi::Color(5, 10, 13, 255),
             cmd);
-        creatorAssetSearch_.Render(canvas, cmd);
-        creatorAssetTags_.Render(canvas, cmd);
-        creatorAssetStateCombo_.Render(canvas, cmd);
-        creatorAssetFormatCombo_.Render(canvas, cmd);
-        creatorAssetRigCombo_.Render(canvas, cmd);
-        creatorAssetPlaceButton_.Render(canvas, cmd);
-        creatorAssetSaveTagsButton_.Render(canvas, cmd);
+        // TextInputField leaves a narrow scissor bound. These controls are
+        // rendered manually, so restore the canvas clip before each sibling.
+        const wi::graphics::Rect clip = {0, 0,
+            int(canvas.GetPhysicalWidth()), int(canvas.GetPhysicalHeight())};
+        const auto render = [&](const wi::gui::Widget& widget) {
+            wi::graphics::GetDevice()->BindScissorRects(1, &clip, cmd);
+            widget.Render(canvas, cmd);
+        };
+        render(creatorAssetSearch_);
+        render(creatorAssetTags_);
+        render(creatorAssetStateCombo_);
+        render(creatorAssetFormatCombo_);
+        render(creatorAssetRigCombo_);
+        render(creatorAssetPlaceButton_);
+        render(creatorAssetSaveTagsButton_);
+        render(creatorAssetMoveButton_);
+        render(creatorMovePanel_);
     }
 
     void CreatorAssetStudioChrome::RefreshCreatorAssetBrowser()
@@ -860,6 +924,20 @@ namespace renegade::studio
     }
 
 
+
+    void CreatorAssetStudioChrome::OpenCreatorMovePanel()
+    {
+        auto* session=bridge::StudioSession::Current();
+        if(!session || !session->Projects().HasProject() || creatorSelectedAssetId_.empty())return;
+        creatorMoveProjectId_=session->Projects().CurrentProject().projectId;creatorMoveAssetId_=creatorSelectedAssetId_;
+        creatorMoveFolderChoices_.ClearItems();
+        for(const auto& f:creatorFilesystemFolders_)creatorMoveFolderChoices_.AddItem(f.relativePath);
+        creatorMoveFolder_.SetValue(std::filesystem::u8path(creatorSelectedAssetPath_).parent_path().generic_u8string());
+        for(size_t i=0;i<creatorMoveFolderChoices_.GetItemCount();++i)
+            if(creatorMoveFolderChoices_.GetItemText(int(i))==InputValue(creatorMoveFolder_))creatorMoveFolderChoices_.SetSelected(int(i));
+        creatorMovePanel_.SetPos({std::max(10.0f,(creatorLayoutWidth_-560)*0.5f),std::max(90.0f,(creatorLayoutHeight_-240)*0.5f)});
+        creatorMovePanel_.SetVisible(true);
+    }
 
     void CreatorAssetStudioChrome::PlaceSelectedCreatorAsset()
     {

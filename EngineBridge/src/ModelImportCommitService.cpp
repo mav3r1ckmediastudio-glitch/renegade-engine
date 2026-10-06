@@ -342,7 +342,13 @@ namespace renegade::bridge
         }
 
         const fs::path sourceFolder = root / "SourceAssets" / "Models";
-        const fs::path assetFolder = root / "Content" / "Models";
+        fs::path assetFolder;
+        if (!ResolveCreatorContentFolder(root.generic_u8string(), request.destinationFolder,
+                assetFolder, result.error)) return result;
+        if (request.playerRole != "" && request.playerRole != "arms" && request.playerRole != "weapon")
+        { result.error = "Unknown player asset role."; return result; }
+        if (request.playerRole == "arms" && (candidate.Evidence().skinnedMeshes == 0 || candidate.Evidence().armatureBones == 0))
+        { result.error = "Player arms require a skinned model with bones."; return result; }
         const fs::path workFolder = root / "Intermediate" / "Imports";
         for (const auto& folder : {sourceFolder, assetFolder, workFolder})
         {
@@ -692,6 +698,15 @@ namespace renegade::bridge
                 request.projectId, metadata, result.error) ||
             !SetAssetModelDerivedMetadata(metadata, result.assetId,
                 metadataValue, result.error)) return result;
+        auto tags = request.creatorTags;
+        for (auto tag : tags) {
+            tag.erase(0,tag.find_first_not_of(" \t\r\n"));
+            std::transform(tag.begin(),tag.end(),tag.begin(),[](unsigned char c){return char(std::tolower(c));});
+            if (tag.compare(0, 12, "player-role:") == 0)
+            { result.error = "Use the Asset role selector for player classification."; return result; }
+        }
+        if (!request.playerRole.empty()) tags.push_back("player-role:" + request.playerRole);
+        if (!SetAssetCreatorTags(metadata, result.assetId, std::move(tags), result.error)) return result;
         std::string registryJson, metadataJson;
         if (!SerializeAssetRegistry(registry, registryJson, result.error) ||
             !SerializeAssetCatalogueMetadata(metadata, metadataJson,

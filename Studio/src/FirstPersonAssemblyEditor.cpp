@@ -25,8 +25,8 @@ void StudioRenderPath::CreateAssemblyEditor() {
  b.Create(name);b.SetText(name);b.SetPos(XMFLOAT2(x,y));b.SetSize(XMFLOAT2(width,28));assemblyPanel_.AddWidget(&b);};
  combo(assemblyArms_,"Arms product",110,35,420);
  combo(assemblyWeapon_,"Weapon product",110,70,420);
- assemblyArms_.SetTooltip("Arms folder: Content/Player/Arms. Existing assemblies also identify arms in shared pack folders.");
- assemblyWeapon_.SetTooltip("Weapons folder: Content/Player/Weapons. Existing assemblies also identify weapons in shared pack folders.");
+ assemblyArms_.SetTooltip("Player arms role in any Content folder, legacy Content/Player/Arms, or an existing assembly part.");
+ assemblyWeapon_.SetTooltip("Weapon role in any Content folder, legacy Content/Player/Weapons, or an existing assembly part.");
  auto partChanged=[this](const wi::gui::EventArgs&){
  if(assemblyRefreshing_)return;
  const auto before=assemblySettings_;
@@ -194,7 +194,9 @@ void StudioRenderPath::OpenAssemblyEditor() {
  assemblyArms_.AddItem("SELECT ARMS",0);assemblyWeapon_.AddItem("SELECT WEAPON",0);assemblyPartIds_.push_back({});
  bridge::AssetRegistry registry;std::string error;
  if(!bridge::CreatorAssetWorkflowService().RefreshRegistryFromDisk(project.rootPath,project.projectId,registry,error)){assemblyRefreshing_=false;studioChrome_.SetStatusText(error);return;}
- for(const auto& choice:bridge::CollectFirstPersonPartChoices(registry)) {
+ bridge::AssetCatalogueMetadataDocument metadata;
+ if(!bridge::ReadAssetCatalogueMetadata(project.rootPath,project.projectId,metadata,error)){assemblyRefreshing_=false;studioChrome_.SetStatusText(error);return;}
+ for(const auto& choice:bridge::CollectFirstPersonPartChoices(registry,&metadata)) {
  assemblyPartIds_.push_back(choice.assetId);const auto index=assemblyPartIds_.size()-1;
  if(choice.arms)assemblyArms_.AddItem(choice.label,index);
  if(choice.weapon){assemblyWeapon_.AddItem(choice.label,index);assemblyOffWeapon_.AddItem(choice.label,index);}
@@ -202,7 +204,7 @@ void StudioRenderPath::OpenAssemblyEditor() {
  assemblyArms_.SetSelected(0);assemblyWeapon_.SetSelected(0);assemblyOffWeapon_.SetSelected(0);assemblyBone_.ClearItems();assemblyBones_.clear();
  for(size_t i=0;i<Actions.size();++i){assemblyArmsClips_[i].ClearItems();assemblyWeaponClips_[i].ClearItems();}
  assemblySave_.SetEnabled(false);assemblyName_.SetValue("First Person Assembly");assemblyPanel_.SetVisible(true);
- assemblyStatus_.SetText("Choose player parts and LOAD PARTS. New parts: Content/Player/Arms or Weapons.");
+ assemblyStatus_.SetText("Choose player parts and LOAD PARTS. Mark new imports as Player arms or Weapon, in any Content folder.");
  assemblyRefreshing_=false;assemblyPreviewRefreshPending_=false;assemblyDraftPreviewDirty_=true;
  if(!assigned.empty()&&bridge::FirstPersonAssemblyService().ReadSettings(project.rootPath,project.projectId,assigned,assemblySettings_,error)){
  const auto record=std::find_if(registry.records.begin(),registry.records.end(),

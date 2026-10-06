@@ -103,8 +103,47 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
   if(!candidate.IsReady()){std::cerr<<candidate.Error()<<"\n";{std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}}
   ModelImportCommitRequest request;request.projectRoot=output.generic_u8string();request.projectId=projectId;
   request.assetName="Replacement Sword";
+  const bool folderProof=std::getenv("RENEGADE_IMPORT_FOLDERS")!=nullptr;
+  if(folderProof) {
+   request.destinationFolder="Content/My Gear/Blades";
+   request.creatorTags={"iron","test sword"};request.playerRole="weapon";
+   if(const char* thumbnail=std::getenv("RENEGADE_IMPORT_THUMBNAIL")) {
+    std::ifstream image(thumbnail,std::ios::binary);
+    request.thumbnailPng.assign(std::istreambuf_iterator<char>(image),{});
+    if(request.thumbnailPng.empty())return false;
+   }
+   auto invalid=request;invalid.destinationFolder="Content/../Escaped";
+   if(ModelImportCommitService().CommitStaticModel(invalid,candidate).committed)return false;
+   invalid=request;invalid.destinationFolder="Content/My Gear";invalid.playerRole="arms";
+   if(ModelImportCommitService().CommitStaticModel(invalid,candidate).committed)return false;
+  }
   const auto committed=ModelImportCommitService().CommitStaticModel(request,candidate);
   if(!committed.succeeded){std::cerr<<committed.error<<"\n";{std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}}
+
+  if(folderProof) {
+   AssetCatalogueMetadataDocument metadata;AssetRegistry registry;
+   if(!ReadAssetCatalogueMetadata(output.generic_u8string(),projectId,metadata,error) ||
+      !ReadAssetRegistry(output.generic_u8string(),projectId,registry,error))return false;
+   const auto choices=CollectFirstPersonPartChoices(registry,&metadata);
+   if(std::none_of(choices.begin(),choices.end(),[&](const auto& c){return c.assetId==committed.assetId&&c.weapon;}))return false;
+   const auto tagged=std::find_if(metadata.records.begin(),metadata.records.end(),[&](const auto& m){return m.assetId==committed.assetId;});
+   if(tagged==metadata.records.end() || tagged->creatorTags.size()!=3)return false;
+   std::string moved;
+   const auto old=output/fs::u8path(committed.assetProjectRelativePath);
+   auto fail=[](auto stage,size_t,const std::string&,std::string&) {
+    return stage==ProjectDocumentTransactionStage::AfterReplace?ProjectDocumentTransactionHookAction::Fail:ProjectDocumentTransactionHookAction::Continue;
+   };
+   if(CreatorAssetWorkflowService().MoveModelAsset(output.generic_u8string(),projectId,committed.assetId,"Content/Reorganised/Blades",moved,error,fail) || !fs::exists(old))return false;
+   if(!CreatorAssetWorkflowService().MoveModelAsset(output.generic_u8string(),projectId,committed.assetId,"Content/Reorganised/Blades",moved,error) ||
+      fs::exists(old)||!fs::exists(output/fs::u8path(moved)) ||
+      (!request.thumbnailPng.empty() && (fs::exists(output/fs::u8path(ResolveReusableModelThumbnailPath(committed.assetProjectRelativePath))) ||
+       !fs::exists(output/fs::u8path(ResolveReusableModelThumbnailPath(moved)))))) {std::cerr<<"MOVE "<<error<<"\n";return false;}
+   auto placement=CreatorAssetWorkflowService().PrepareModelPlacement(output.generic_u8string(),projectId,committed.assetId);
+   if(!placement.IsReady())return false;
+   const auto duplicate=ModelImportCommitService().CommitStaticModel(request,candidate);
+   if(duplicate.committed)return false; // Retained source name still protects duplicate import.
+   std::cout<<"IMPORT FOLDER PASS: explicit role in custom folder; tags; move rollback; stable-ID cold placement\n";
+  }
   auto edited=reopenedSettings;edited.weaponAssetId=committed.assetId;
   edited.bladeTip.y*=1.2f;
   edited.weaponScale=0.9f;edited.offHandWeaponScale=1.1f;edited.fullChargeSeconds=1.25f;

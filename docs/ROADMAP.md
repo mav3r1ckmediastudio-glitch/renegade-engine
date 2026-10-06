@@ -379,3 +379,11 @@ weapon-only swap. Draft Undo/Redo, automatic masked preview and governed save
 are shared with paired firearm assemblies. See [hand assembly authoring](P2_ASSEMBLY_HAND_AUTHORING.md).
 Local validation is recorded in HANDOFF; owner UI acceptance and independent
 verification remain open. This does not complete NPC combat or the wider P2 gate.
+
+### Import destinations and model organisation
+
+Native model import now exposes a general Content destination, optional tags and
+explicit player arms/weapon roles independent of folder. Registered model MOVE
+preserves stable IDs and source provenance through journaled rollback/recovery.
+See [import destinations](MODEL_IMPORT_DESTINATIONS.md).
+Owner UX and independent exact-commit verification remain pending.

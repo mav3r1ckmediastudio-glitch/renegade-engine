@@ -30,7 +30,11 @@ static bool PartPickerRegression() {
   else return false;
  }
  registry.importedProducts.back().settingsJson="malformed";
- return CollectFirstPersonPartChoices(registry).size()==2;
+ if(CollectFirstPersonPartChoices(registry).size()!=2)return false;
+ AssetCatalogueMetadataDocument metadata;
+ AssetCatalogueMetadataRecord role;role.assetId=sharedWeapon;role.creatorTags={"sword","player-role:weapon"};metadata.records.push_back(role);
+ const auto marked=CollectFirstPersonPartChoices(registry,&metadata);
+ return marked.size()==3 && std::any_of(marked.begin(),marked.end(),[&](const auto& c){return c.assetId==sharedWeapon&&c.weapon&&!c.arms;});
 }
 int main()
 {

@@ -1203,6 +1203,8 @@ namespace renegade::studio
         wi::gui::Slider modelImportSpeed_;
         std::unique_ptr<ModelImportPreview> modelImportPreview_;
         wi::gui::TextInputField modelImportName_;
+        wi::gui::ComboBox modelImportFolderChoices_, modelImportRole_;
+        wi::gui::TextInputField modelImportFolder_, modelImportTags_;
         wi::gui::Button modelImportCommit_;
         wi::gui::Button modelImportCancel_;
         std::unique_ptr<bridge::ModelImportCandidate> modelImportCandidate_;

@@ -1260,3 +1260,19 @@ preview uses Runtime's native masks and avoidance in its private scene, includin
 shield-held comparison and each Attack variant. Paired firearm preview retains
 its two-track clock. Preview state and generated masked clips never enter the
 saved product. Gameplay equipment phase timings remain separate authority.
+
+### Model destinations and identity-preserving product moves
+
+ModelImportCommitRequest adds a project-relative Content folder, creator tags and
+an explicit player role. The bridge validates containment before writing products;
+retained sources remain under SourceAssets/Models. Catalogue metadata stores role
+tags keyed by existing StableIds, with reserved prefixes excluded from free-text
+import tags. Assembly joins this metadata with legacy folders and saved recipes.
+
+CreatorAssetWorkflowService::MoveModelAsset keeps product bytes/hash/identity and
+dependency edges unchanged, updates managed projection paths and registry path,
+and moves thumbnails. ProjectDocumentWrite::remove extends the existing journaled
+transaction with protected deletions. Recovery needs only previous-existence and
+backup bytes: interrupted operations roll back, committed operations clean their
+artifacts. The existing journal format is unchanged. Sources and textures are
+retained in their original governed locations; no scene mutation or reimport occurs.

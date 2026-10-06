@@ -50,6 +50,8 @@ namespace renegade::bridge
         std::string destinationPath;
         std::vector<std::uint8_t> content;
         ProjectDocumentValidator validator;
+        // Journaled deletion: protected previous bytes participate in rollback/recovery.
+        bool remove = false;
     };
 
     struct ProjectDocumentTransactionOptions

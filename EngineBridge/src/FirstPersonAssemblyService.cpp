@@ -14,8 +14,12 @@
 #include <limits>
 namespace renegade::bridge {
 static bool PrepareIndependentHandAssembly(const std::string&,const StableId&,const FirstPersonAssemblySettings&,wi::scene::Scene&,wi::scene::Scene&,wi::scene::Scene&,std::string&);
-std::vector<FirstPersonPartChoice> CollectFirstPersonPartChoices(const AssetRegistry& registry) {
+std::vector<FirstPersonPartChoice> CollectFirstPersonPartChoices(const AssetRegistry& registry, const AssetCatalogueMetadataDocument* metadata) {
  std::set<StableId> armsIds,weaponIds;
+ if(metadata)for(const auto& m:metadata->records)for(const auto& tag:m.creatorTags) {
+  if(tag=="player-role:arms")armsIds.insert(m.assetId);
+  if(tag=="player-role:weapon")weaponIds.insert(m.assetId);
+ }
  for(const auto& product:registry.importedProducts) {
   if(product.importer!="renegade.first_person.assembly")continue;
   try {
