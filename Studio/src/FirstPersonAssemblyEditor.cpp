@@ -178,13 +178,13 @@ void StudioRenderPath::CreateAssemblyEditor() {
  assemblyStatus_.SetSize(XMFLOAT2(1030,25));assemblyStatus_.SetText("Select parts, explicit parent and clip pairs. Positions in metres; rotations in degrees.");
  assemblyPanel_.AddWidget(&assemblyStatus_);assemblyPanel_.SetVisible(false);GetGUI().AddWidget(&assemblyPanel_);
 }
-void StudioRenderPath::OpenAssemblyEditor() {
+void StudioRenderPath::OpenAssemblyEditor(const bridge::StableId& presentation,bool sockets) {
  if(!session_||!session_->Projects().HasProject()||!session_->Selection().HasSelection())return;
  auto entity=session_->Selection().SelectedEntity();auto& scene=session_->Scenes().GetScene();
  if(!bridge::IsPlayerStart(scene,entity))return;
  const auto project=session_->Projects().CurrentProject();
- const auto assigned=bridge::CapturePlayerControllerSettings(scene,entity).firstPersonArmsAssetId;
- wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,project,entity,assigned](std::uint64_t){
+ auto assigned=presentation.empty()?bridge::CapturePlayerControllerSettings(scene,entity).firstPersonArmsAssetId:presentation;
+ wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,project,entity,assigned,sockets](std::uint64_t){
  if(!session_->Projects().HasProject()||session_->Projects().CurrentProject().projectId!=project.projectId)return;
  assemblyFirearmPanel_.SetVisible(false);assemblyHandPanel_.SetVisible(false);
  assemblyProjectId_=project.projectId;assemblyPlayer_=entity;assemblySettings_={};
@@ -225,6 +225,7 @@ void StudioRenderPath::OpenAssemblyEditor() {
  RebuildAssemblyPreview();
  }
  assemblyCommands_.Clear();assemblyCommands_.MarkSaved();
+ if(sockets && !assemblyAssetId_.empty())OpenLaunchSocketEditor();
  });
 }
 void StudioRenderPath::LoadAssemblyParts() {

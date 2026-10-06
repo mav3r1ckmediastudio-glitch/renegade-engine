@@ -3,6 +3,7 @@
 #include "renegade/bridge/ModelAnimationPreviewService.h"
 #include <string>
 #include <array>
+#include "renegade/bridge/LaunchSocketService.h"
 #include "renegade/bridge/FirstPersonAssemblyService.h"
 #include <vector>
 #include "renegade/bridge/PlayerViewHandAnimation.h"
@@ -23,6 +24,9 @@ namespace renegade::studio
         void FitModel();
         void SetModelAppearance(float scale, const std::array<float,3>& rotation);
         XMFLOAT3 ModelSize() const { return modelSize_; }
+        std::vector<bridge::PlayerViewBoneChoice> SocketParents() const;
+        bool PickSocket(float u,float v,const bridge::LaunchSocketDefinition&,XMFLOAT3&,std::string&) const;
+        bool ShowSocket(const bridge::LaunchSocketDefinition&,std::string&);
         std::vector<bridge::AnimationClipInfo> Clips() const { return animationPreview_.Clips(); }
         bool SelectClip(int index);
         bool PlayPause();
@@ -57,6 +61,7 @@ namespace renegade::studio
         float sourceRadius_ = 1, appearanceScale_ = 1;
         XMFLOAT3 sourceCenter_ = {}, modelSize_ = {};
         wi::ecs::Entity appearanceRoot_ = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity socketMarker_ = wi::ecs::INVALID_ENTITY;
         mutable unsigned renderedFrames_ = 0;
     };
 }

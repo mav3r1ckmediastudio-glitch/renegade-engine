@@ -22,6 +22,7 @@ struct EquipmentActionDefinition {
 struct EquipmentProjectileBinding {
     EquipmentAction action = EquipmentAction::PrimaryUse;
     std::string projectileAssetId;
+    std::string launchSocketName;
 };
 struct EquipmentDefinition {
     std::string assetId, name, presentationAssetId;
@@ -45,7 +46,8 @@ inline bool ValidateEquipmentDefinition(const EquipmentDefinition& item) {
     for(const auto& binding:item.projectiles) {
         const auto index=unsigned(binding.action);
         if(index>=seen.size()||!seen[index]||projectileSeen[index]||
-           binding.projectileAssetId.empty()||
+           binding.projectileAssetId.empty()||binding.launchSocketName.size()>64||
+           binding.launchSocketName.find_first_of("\r\n\t")!=std::string::npos||
            (binding.action!=EquipmentAction::PrimaryUse&&binding.action!=EquipmentAction::Release&&
             binding.action!=EquipmentAction::Cast&&binding.action!=EquipmentAction::AlternateUse&&
             binding.action!=EquipmentAction::Use))return false;

@@ -14,18 +14,20 @@ namespace renegade::runtime
         std::vector<Marker> markers;
         std::uint64_t launched = 0, impacted = 0, generation = 0;
         bridge::ProjectileContact lastContact;
+        XMFLOAT3 lastLaunchPosition = {};
+        std::string lastLaunchSocket;
         std::string lastError;
 
         void Reset()
         {
             simulation.Reset(); traces.clear(); markers.clear();
             launched = impacted = 0; lastContact = {}; lastError.clear();
+            lastLaunchPosition={};lastLaunchSocket.clear();
             ++generation;
         }
 
-        // Initial point-launch policy: camera eye and current forward direction.
-        // An eye-origin sweep cannot skip nearby cover. Authored muzzle sockets
-        // and muzzle-to-aim convergence are a subsequent presentation slice.
+        // Callers resolve legacy camera launch or authored post-animation muzzle
+        // pose and cover-aware aim before entering the shared simulation.
         bool Launch(const bridge::ProjectileAssetDocument& asset,
                     const bridge::ProjectileSource& source,
                     const XMFLOAT3& eye, const XMFLOAT3& forward,
@@ -43,7 +45,7 @@ namespace renegade::runtime
             const float speed = asset.speedMetresPerSecond / length;
             launch.velocity = {forward.x*speed, forward.y*speed, forward.z*speed};
             if (!simulation.Launch(launch, id, lastError)) return false;
-            ++launched;
+            ++launched;lastLaunchPosition=eye;
             return true;
         }
 

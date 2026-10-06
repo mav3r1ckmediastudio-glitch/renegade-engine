@@ -43,7 +43,8 @@ namespace renegade::studio
     void StudioRenderPath::CreateProjectileEditor()
     {
         weaponProjectilePanel_.Create("Weapon projectiles");
-        weaponProjectilePanel_.SetPos({70,80});weaponProjectilePanel_.SetSize({740,400});
+        CreateLaunchSocketEditor();
+        weaponProjectilePanel_.SetPos({70,80});weaponProjectilePanel_.SetSize({740,480});
         const auto combo=[&](wi::gui::ComboBox& box,const char* name,float y) {
             box.Create(name);box.SetPos({220,y});box.SetSize({480,26});
             weaponProjectilePanel_.AddWidget(&box);
@@ -58,20 +59,32 @@ namespace renegade::studio
         weaponProjectilePanel_.AddWidget(&projectileSearch_);
         projectileSearch_.OnInputAccepted([this](const wi::gui::EventArgs&){RefreshProjectileChoices();});
         combo(projectileChoice_,"Projectile",160);
+        combo(projectileSocket_,"Fire from",200);
         projectileSummary_.Create("Projectile summary");
-        projectileSummary_.SetPos({20,200});projectileSummary_.SetSize({680,90});
+        projectileSummary_.SetPos({20,285});projectileSummary_.SetSize({680,90});
         projectileSummary_.font.params.size=14;weaponProjectilePanel_.AddWidget(&projectileSummary_);
         const auto button=[&](wi::gui::Button& b,const char* label,float x,float y,float width,
                               wi::gui::Window& panel) {
             b.Create(label);b.SetText(label);b.SetPos({x,y});b.SetSize({width,30});panel.AddWidget(&b);
         };
-        button(projectileAssign_,"APPLY TO THIS PLAYER",20,300,260,weaponProjectilePanel_);
-        button(projectileNew_,"NEW",295,300,105,weaponProjectilePanel_);
-        button(projectileEditCopy_,"EDIT COPY",415,300,145,weaponProjectilePanel_);
-        button(projectileClose_,"CLOSE",575,300,125,weaponProjectilePanel_);
+        button(projectileAssign_,"APPLY TO THIS PLAYER",20,390,260,weaponProjectilePanel_);
+        button(projectileNew_,"NEW",295,390,105,weaponProjectilePanel_);
+        button(projectileEditCopy_,"EDIT COPY",415,390,145,weaponProjectilePanel_);
+        button(projectileClose_,"CLOSE",575,390,125,weaponProjectilePanel_);
+        button(projectileSocketEdit_,"EDIT LAUNCH SOCKETS...",220,240,300,weaponProjectilePanel_);
+        projectileSocketEdit_.OnClick([this](const wi::gui::EventArgs&){
+            if(!session_||!session_->Projects().HasProject())return;
+            const auto& project=session_->Projects().CurrentProject();
+            const auto settings=bridge::CapturePlayerControllerSettings(session_->Scenes().GetScene(),equipmentPlayer_);
+            const auto id=projectileWeapon_.GetSelected()==1?settings.offHandEquipmentAssetId:settings.primaryEquipmentAssetId;
+            bridge::EquipmentAssetDocument item;std::string error;
+            if(!bridge::LoadEquipmentAsset(project.rootPath,project.projectId,id,item,error)){projectileSummary_.SetText(error);return;}
+            weaponProjectilePanel_.SetVisible(false);
+            OpenAssemblyEditor(item.equipment.presentationAssetId,true);
+        });
         projectileWeapon_.OnSelect([this](const wi::gui::EventArgs&){RefreshWeaponProjectileEditor();});
         projectileAction_.OnSelect([this](const wi::gui::EventArgs&){
-            projectilePreferred_.clear();
+            projectilePreferred_.clear();projectileSocketNames_.clear();projectileSocket_.ClearItems();
             if(!session_||!session_->Projects().HasProject())return;
             const auto& project=session_->Projects().CurrentProject();
             if(project.projectId!=equipmentProject_||
@@ -246,7 +259,8 @@ namespace renegade::studio
                     auto& bindings=item.equipment.projectiles;
                     bindings.erase(std::remove_if(bindings.begin(),bindings.end(),
                         [action](const auto& binding){return binding.action==action;}),bindings.end());
-                    if(!id.empty())bindings.push_back({action,id});
+                    const auto socketRow=projectileSocket_.GetSelectedUserdata();
+                    if(!id.empty())bindings.push_back({action,id,socketRow<projectileSocketNames_.size()?projectileSocketNames_[socketRow]:std::string{}});
                     const auto saved=bridge::SaveEquipmentAsset(project.rootPath,projectId,item.equipment);
                     if(!saved.succeeded){projectileSummary_.SetText(saved.error);return;}
                     if(offHand)settings.offHandEquipmentAssetId=saved.document.equipment.assetId;
@@ -406,6 +420,7 @@ namespace renegade::studio
     void StudioRenderPath::RefreshWeaponProjectileEditor()
     {
         projectileAction_.ClearItems();projectileActions_.clear();projectilePreferred_.clear();
+        projectileSocketNames_.clear();projectileSocket_.ClearItems();
         if(!session_||!session_->Projects().HasProject()||
            session_->Projects().CurrentProject().projectId!=equipmentProject_||
            !bridge::IsPlayerStart(session_->Scenes().GetScene(),equipmentPlayer_))return;
@@ -437,6 +452,35 @@ namespace renegade::studio
         if(!session_||!session_->Projects().HasProject()||
            session_->Projects().CurrentProject().projectId!=equipmentProject_)return;
         const auto& project=session_->Projects().CurrentProject();std::string error;
+        std::string previousSocket;
+        if(projectileSocket_.GetSelectedUserdata()<projectileSocketNames_.size())
+            previousSocket=projectileSocketNames_[projectileSocket_.GetSelectedUserdata()];
+        projectileSocket_.ClearItems();projectileSocketNames_={""};
+        projectileSocket_.AddItem("Camera aim (legacy)",0);
+        const auto settings=bridge::CapturePlayerControllerSettings(session_->Scenes().GetScene(),equipmentPlayer_);
+        const auto equipmentId=projectileWeapon_.GetSelected()==1?settings.offHandEquipmentAssetId:settings.primaryEquipmentAssetId;
+        bridge::EquipmentAssetDocument equipment;bridge::FirstPersonAssemblySettings assembly;
+        if(bridge::LoadEquipmentAsset(project.rootPath,project.projectId,equipmentId,equipment,error)) {
+            if(previousSocket.empty()&&!projectileActions_.empty())
+                for(const auto& binding:equipment.equipment.projectiles)
+                    if(binding.action==projectileActions_[std::max(0,projectileAction_.GetSelected())])
+                        previousSocket=binding.launchSocketName;
+            std::string socketError;
+            if(bridge::FirstPersonAssemblyService().ReadSettings(project.rootPath,project.projectId,
+                    equipment.equipment.presentationAssetId,assembly,socketError))
+                for(const auto& socket:assembly.launchSockets) {
+                    projectileSocketNames_.push_back(socket.name);
+                    projectileSocket_.AddItem(socket.name,projectileSocketNames_.size()-1);
+                }
+        }
+        if(!previousSocket.empty()&&std::find(projectileSocketNames_.begin(),projectileSocketNames_.end(),previousSocket)==projectileSocketNames_.end()) {
+            projectileSocketNames_.push_back(previousSocket);
+            projectileSocket_.AddItem("Unavailable: "+previousSocket,projectileSocketNames_.size()-1);
+        }
+        int socketSelection=0;
+        for(size_t i=1;i<projectileSocketNames_.size();++i)
+            if(projectileSocketNames_[i]==previousSocket)socketSelection=int(i);
+        projectileSocket_.SetSelectedWithoutCallback(socketSelection);
         const auto items=bridge::ListProjectileAssets(project.rootPath,project.projectId,error);
         const auto search=LowerProjectileSearch(projectileSearch_.GetText());int selected=0;
         std::map<std::string,unsigned> labels;

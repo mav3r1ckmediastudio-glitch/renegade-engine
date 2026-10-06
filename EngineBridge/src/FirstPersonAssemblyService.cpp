@@ -73,7 +73,10 @@ ProjectDocumentWrite Write(const fs::path& p,const std::vector<std::uint8_t>& b)
  if(!Read(fs::u8path(p),a)||a!=b){e="Assembly staged bytes changed.";return false;}return true;};return w;
 }
 bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
- if(!ValidateFirearmSettings(s.firearm,e))return false;
+ if(!ValidateFirearmSettings(s.firearm,e)||!ValidateLaunchSockets(s.launchSockets,e))return false;
+ for(const auto& socket:s.launchSockets)if(socket.part==LaunchSocketPart::OffHandWeapon&&!s.IndependentHands()) {
+  e="An off-hand launch socket requires an off-hand weapon.";return false;
+ }
  for(float scale:{s.weaponScale,s.offHandWeaponScale})
   if(!std::isfinite(scale)||scale<0.01f||scale>100){e="Weapon scale must be between 0.01 and 100.";return false;}
  if(!std::isfinite(s.fullChargeSeconds)||s.fullChargeSeconds<0.1f||s.fullChargeSeconds>10 ||
@@ -186,11 +189,19 @@ bool SerializeFirstPersonAssemblySettings(const FirstPersonAssemblySettings& s,s
   j["authoring"]={{"weapon_scale",s.weaponScale},{"off_hand_scale",s.offHandWeaponScale},
    {"full_charge_seconds",s.fullChargeSeconds},{"chain_window_seconds",s.chainWindowSeconds},
    {"queued_release_seconds",s.queuedReleaseSeconds}};
+ if(!s.launchSockets.empty()) {
+  std::string sockets;if(!SerializeLaunchSockets(s.launchSockets,sockets,e))return false;
+  j["launch_sockets"]=nlohmann::json::parse(sockets);
+ }
  out=j.dump();return true;
 }
 bool ParseFirstPersonAssemblySettings(const std::string& text,FirstPersonAssemblySettings& s,std::string& e) {
  s={};try {
  auto j=nlohmann::json::parse(text);
+ if(j.is_object()&&j.contains("launch_sockets")) {
+  if(!ParseLaunchSockets(j.at("launch_sockets").dump(),s.launchSockets,e))return false;
+  j.erase("launch_sockets");
+ }
  if(j.is_object() && j.contains("authoring")) {
   const auto a=j.at("authoring");
   if(!a.is_object()||a.size()!=5)throw std::runtime_error("authoring");
@@ -293,6 +304,8 @@ bool FirstPersonAssemblyService::Prepare(const std::string& root,const StableId&
  };
  wi::scene::Scene ac,wc;
  if(!tracks(a,true,ac)||!tracks(w,false,wc))return false;
+ if(!AttachLaunchSockets(ac,s.launchSockets,LaunchSocketPart::Arms,e)||
+    !AttachLaunchSockets(wc,s.launchSockets,LaunchSocketPart::PrimaryWeapon,e))return false;
  // Clone archives remap entity IDs: resolve the explicit hierarchy path again.
  if(!CollectPlayerViewBones(ac,bones,e))return false;
  b=std::find_if(bones.begin(),bones.end(),[&](const auto& b){return b.path==s.parentBonePath;});

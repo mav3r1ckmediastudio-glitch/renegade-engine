@@ -17,6 +17,7 @@ namespace renegade::runtime
             bridge::StableId equipmentId;
             bridge::EquipmentAction action;
             bridge::ProjectileAssetDocument projectile;
+            std::string launchSocketName;
         };
         std::vector<ProjectileRequest> resolvedProjectiles, pendingProjectiles;
         std::vector<ProjectileRequest> TakeProjectileRequests() {
@@ -63,7 +64,7 @@ namespace renegade::runtime
                 bridge::ProjectileAssetDocument projectile;
                 if (!bridge::LoadProjectileAsset(root, project, binding.projectileAssetId, projectile, error))
                     return false;
-                resolved.push_back({p.equipment.assetId, binding.action, std::move(projectile)});
+                resolved.push_back({p.equipment.assetId, binding.action, std::move(projectile),binding.launchSocketName});
             }
             primary = std::move(p);
             offHand = std::move(o);

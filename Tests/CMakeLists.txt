@@ -870,3 +870,10 @@ set_target_properties(RenegadeEquipmentAssetTests PROPERTIES FOLDER "Renegade/Te
 add_test(NAME EquipmentAsset COMMAND RenegadeEquipmentAssetTests)
 add_dependencies(RenegadeBridgeTests RenegadeEquipmentAssetTests)
 target_include_directories(RenegadeEquipmentAssetTests PRIVATE "${CMAKE_SOURCE_DIR}/WickedEngine/Editor")
+
+add_executable(RenegadeLaunchSocketTests LaunchSocketTests.cpp)
+target_link_libraries(RenegadeLaunchSocketTests PRIVATE Renegade::EngineBridge)
+target_include_directories(RenegadeLaunchSocketTests PRIVATE "${CMAKE_SOURCE_DIR}/Runtime/src")
+add_test(NAME LaunchSocket COMMAND RenegadeLaunchSocketTests)
+set_target_properties(RenegadeLaunchSocketTests PROPERTIES FOLDER "Renegade/Tests")
+add_dependencies(RenegadeBridgeTests RenegadeLaunchSocketTests)

@@ -79,6 +79,7 @@ add_executable(RenegadeStudio WIN32
     "${CMAKE_SOURCE_DIR}/WickedEngine/Samples/Example_ImGui/ImGui/imgui_widgets.cpp"
     "${CMAKE_SOURCE_DIR}/ThirdParty/imnodes/imnodes.cpp"
     src/CreatorAssetDragPreview.cpp
+    src/LaunchSocketEditor.cpp
     src/ModelImportPreview.cpp
     src/ModelImportPreview.h
     src/RenegadeImGuiBridge.cpp

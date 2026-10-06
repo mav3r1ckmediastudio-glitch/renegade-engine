@@ -474,3 +474,11 @@ View state is transient; saved appearance and Runtime launch rules are unchanged
 Other importer controls and the Wicked pin are unchanged. See
 [P3 preview evidence](P3_PROJECTILE_PREVIEW.md). Native verification is recorded
 there; weapon/palm launch sockets remain the next gameplay increment.
+
+P3 continuation (2026-10-06): named weapon/bone/palm socket authoring, assembly
+recipe/native persistence and primary Runtime muzzle launch are implemented
+candidates. See P3_LAUNCH_SOCKETS.md for proof and limits. Precise animation release
+markers, barrel/pellet policies, animated socket-preview action selection,
+direct importer editing, gizmos, effects, hitscan and surface-impact profiles
+remain open. Player/NPC health remains outside this increment. No P3 gate closure;
+independent exact-commit verification and package/Jolt-only proof remain required.

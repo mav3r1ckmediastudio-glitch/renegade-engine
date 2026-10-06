@@ -90,7 +90,11 @@ namespace renegade::studio
         void CreateAssemblyHandEditor();
         void RefreshAssemblyHandEditor(const wi::scene::Scene& arms);
         void ShowAssemblyHandPage(int page);
-        void OpenAssemblyEditor();
+        void OpenAssemblyEditor(const bridge::StableId& presentation = {},bool sockets = false);
+        void CreateLaunchSocketEditor();
+        void OpenLaunchSocketEditor();
+        void RefreshLaunchSocketEditor();
+        void UpdateLaunchSocketEditor(float dt);
         void LoadAssemblyParts();
         void RebuildAssemblyPreview();
         void SaveAssemblyEditor(bool asNew);
@@ -1169,7 +1173,23 @@ namespace renegade::studio
         std::vector<bridge::StableId> projectileMeshChoices_;
         wi::gui::ComboBox projectileMesh_;
         wi::gui::Slider projectileVisualScale_, projectileRotationX_, projectileRotationY_, projectileRotationZ_;
-        wi::gui::Button projectileImportMesh_;
+        wi::gui::Button projectileImportMesh_, projectileSocketEdit_;
+        wi::gui::ComboBox projectileSocket_;
+        std::vector<std::string> projectileSocketNames_;
+        wi::gui::Window launchSocketPanel_;
+        wi::gui::ComboBox launchSocketChoice_, launchSocketPart_, launchSocketParent_;
+        wi::gui::TextInputField launchSocketName_;
+        wi::gui::Button launchSocketNew_, launchSocketRemove_, launchSocketPlace_,
+            launchSocketFireSpot_, launchSocketApply_, launchSocketClose_, launchSocketFit_;
+        std::array<SceneInspectorSlider,6> launchSocketValues_;
+        wi::gui::Label launchSocketImage_, launchSocketHelp_;
+        std::vector<bridge::LaunchSocketDefinition> launchSocketDraft_;
+        std::vector<bridge::PlayerViewBoneChoice> launchSocketParents_;
+        std::unique_ptr<ModelImportPreview> launchSocketPreview_;
+        int launchSocketSelected_=0, launchSocketDrag_=0;
+        bool launchSocketRefreshing_=false, launchSocketReload_=false, launchSocketChanged_=false,
+            launchSocketPlacing_=false, launchSocketRestoreAssembly_=false;
+        XMFLOAT2 launchSocketPointer_ = {};
         std::unique_ptr<ModelImportPreview> projectilePreview_;
         wi::gui::Label projectilePreviewImage_, projectilePreviewInfo_;
         wi::gui::Button projectilePreviewFit_;

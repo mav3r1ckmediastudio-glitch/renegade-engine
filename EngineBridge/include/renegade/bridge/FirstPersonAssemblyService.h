@@ -5,6 +5,7 @@
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/FirearmSettings.h"
 #include <array>
+#include "renegade/bridge/LaunchSocketService.h"
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
 namespace renegade::bridge {
@@ -29,6 +30,7 @@ struct FirstPersonAssemblySettings {
     XMFLOAT4 cameraRotation = {0,0,0,1};
     std::vector<FirstPersonAssemblyPair> pairs;
     FirearmSettings firearm;
+    std::vector<LaunchSocketDefinition> launchSockets;
     float weaponScale = 1, offHandWeaponScale = 1;
     float fullChargeSeconds = 1, chainWindowSeconds = 0.30f, queuedReleaseSeconds = 0.75f;
     // Schema-v2 static dual-hand presentation; v1 paired shotgun stays unchanged.

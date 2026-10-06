@@ -1,4 +1,6 @@
 #include "RuntimeApplication.h"
+#include "RuntimeProjectileAim.h"
+#include "renegade/bridge/LaunchSocketService.h"
 
 #include "renegade/bridge/PhysicsLuaService.h"
 #include "renegade/bridge/ScreenService.h"
@@ -590,9 +592,25 @@ namespace renegade::runtime
                 source.factionId = "Player";
                 source.knownPosition = ProjectileBridgeVector(position);
                 source.knownVelocity = ProjectileBridgeVector(velocity);
+                XMFLOAT3 origin=renderer_.camera->Eye,direction=renderer_.camera->At;
+                if(!request.launchSocketName.empty()) {
+                    XMFLOAT3 muzzle,forward;std::string error;
+                    const auto query=[&](const auto& record,const auto& from,const auto& to){
+                        return QueryProjectileSceneSegment(scene,characterAiState_,owner,record,from,to);
+                    };
+                    if(!bridge::ReadLaunchSocketPose(scene,playerViewRig_.viewModelRoot,
+                            request.launchSocketName,muzzle,forward,error) ||
+                       !ResolveProjectileMuzzleAim(request.projectile,source,origin,direction,
+                            muzzle,forward,query,origin,direction,error)) {
+                        projectiles_.lastError=error;
+                        diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
+                            "runtime.projectile","projectile.socket_failed",error);
+                        continue;
+                    }
+                }
                 std::uint64_t id = 0;
-                if (projectiles_.Launch(request.projectile, source,
-                        renderer_.camera->Eye, renderer_.camera->At, id)) {
+                if (projectiles_.Launch(request.projectile, source,origin,direction,id)) {
+                    projectiles_.lastLaunchSocket=request.launchSocketName;
                     if(!projectileVisuals_.Spawn(scene,request.projectile.assetId,id,!request.projectile.meshAssetId.empty()))
                         diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
                             "runtime.projectile","projectile.visual_failed",projectileVisuals_.error);

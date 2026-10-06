@@ -54,6 +54,9 @@ static bool PrepareIndependentHandAssembly(const std::string& root,const StableI
  arms.metadatas.Create(offRoot).bool_values.set("renegade.first_person.off_hand_layer_root",true);
  // This view-model has no procedural character controller or look-at authority.
  arms.humanoids.Clear();arms.characters.Clear();arms.rigidbodies.Clear();arms.springs.Clear();
+ if(!AttachLaunchSockets(arms,s.launchSockets,LaunchSocketPart::Arms,error)||
+    !AttachLaunchSockets(weapon,s.launchSockets,LaunchSocketPart::PrimaryWeapon,error)||
+    !AttachLaunchSockets(shield,s.launchSockets,LaunchSocketPart::OffHandWeapon,error))return false;
  const auto armRoots=Roots(arms);
  const auto weaponRoot=weaponRoots.front(),shieldRoot=shieldRoots.front();
  arms.Merge(weapon);arms.Merge(shield);

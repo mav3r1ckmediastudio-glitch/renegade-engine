@@ -38,7 +38,7 @@ namespace renegade::studio
         sourceCenter_ = center_; sourceRadius_ = radius_; appearanceScale_ = 1;
         modelSize_ = {extent.x*2,extent.y*2,extent.z*2};
         angle_ = 0.5f; elevation_ = 0.2425f; zoom_ = 1; pan_ = {};
-        appearanceRoot_ = wi::ecs::INVALID_ENTITY;
+        appearanceRoot_ = socketMarker_ = wi::ecs::INVALID_ENTITY;
         // Discard source lights/weather on the copy only, then use neutral
         // fixed illumination so the preview doesn't depend on the open level.
         scene->lights.Clear();
@@ -207,6 +207,55 @@ namespace renegade::studio
         transform.ClearTransform();transform.MatrixTransform(matrix);transform.UpdateTransform();
         XMStoreFloat3(&center_,XMVector3TransformCoord(XMLoadFloat3(&sourceCenter_),matrix));
         FitCamera();renderedFrames_=0;
+    }
+
+    std::vector<bridge::PlayerViewBoneChoice> ModelImportPreview::SocketParents() const
+    {
+        return scene?bridge::CollectLaunchSocketParents(*scene):std::vector<bridge::PlayerViewBoneChoice>{};
+    }
+    bool ModelImportPreview::PickSocket(float u,float v,const bridge::LaunchSocketDefinition& socket,
+        XMFLOAT3& position,std::string& error) const
+    {
+        if(!scene || u<0 || u>1 || v<0 || v>1) {error="Click inside the model preview.";return false;}
+        const auto ray=wi::renderer::GetPickRay(long(u*512),long(v*320),*this,previewCamera_);
+        return bridge::LaunchSocketSurfacePoint(*scene,ray,socket.parentPath,position,error);
+    }
+    bool ModelImportPreview::ShowSocket(const bridge::LaunchSocketDefinition& socket,std::string& error)
+    {
+        XMFLOAT3 position,direction;
+        if(!scene || !bridge::LaunchSocketInspectionPose(*scene,socket,position,direction,error))return false;
+        const auto parent=bridge::ResolveLaunchSocketParent(*scene,socket.parentPath);
+        if(socketMarker_==wi::ecs::INVALID_ENTITY) {
+            scene->rigidbodies.Clear();scene->softbodies.Clear();scene->colliders.Clear();
+            scene->scripts.Clear();scene->characters.Clear();scene->springs.Clear();scene->animations.Clear();
+            socketMarker_=scene->Entity_CreateObject("Inspection launch direction");
+            scene->metadatas.Create(socketMarker_).string_values.set(bridge::LaunchSocketNameKey,"__inspection");
+            const auto meshEntity=wi::ecs::CreateEntity(),materialEntity=wi::ecs::CreateEntity();
+            auto& material=scene->materials.Create(materialEntity);
+            material.shaderType=wi::scene::MaterialComponent::SHADERTYPE_UNLIT;
+            material.SetDoubleSided(true);material.SetBaseColor({1,0.55f,0.05f,1});
+            auto& mesh=scene->meshes.Create(meshEntity);
+            const float length=sourceRadius_*0.35f,width=length*0.16f,shaft=width*0.25f;
+            // Two crossed arrows remain visible when orbiting around the muzzle.
+            mesh.vertex_positions={{-shaft,0,0},{shaft,0,0},{shaft,0,length*0.65f},
+                {-shaft,0,length*0.65f},{-width,0,length*0.65f},{width,0,length*0.65f},{0,0,length},
+                {0,-shaft,0},{0,shaft,0},{0,shaft,length*0.65f},{0,-shaft,length*0.65f},
+                {0,-width,length*0.65f},{0,width,length*0.65f},{0,0,length}};
+            mesh.indices={0,1,2,0,2,3,4,5,6,7,8,9,7,9,10,11,12,13};
+            mesh.vertex_normals.resize(mesh.vertex_positions.size(),{0,1,0});
+            mesh.vertex_uvset_0.resize(mesh.vertex_positions.size());
+            wi::scene::MeshComponent::MeshSubset subset;subset.materialID=materialEntity;
+            subset.indexCount=unsigned(mesh.indices.size());mesh.subsets.push_back(subset);mesh.CreateRenderData();
+            scene->objects.GetComponent(socketMarker_)->meshID=meshEntity;
+        }
+        auto& transform=*scene->transforms.GetComponent(socketMarker_);
+        if(scene->hierarchy.Contains(socketMarker_))scene->Component_Detach(socketMarker_);
+        scene->Component_Attach(socketMarker_,parent,true);
+        transform.ClearTransform();
+        transform.RotateRollPitchYaw(XMFLOAT3(XMConvertToRadians(socket.rotationDegrees.x),
+            XMConvertToRadians(socket.rotationDegrees.y),XMConvertToRadians(socket.rotationDegrees.z)));
+        transform.Translate(socket.position);transform.UpdateTransform();
+        renderedFrames_=0;error.clear();return true;
     }
 
     bool ModelImportPreview::SelectClip(int index)

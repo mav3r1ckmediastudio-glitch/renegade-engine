@@ -1362,3 +1362,17 @@ View state is transient; saved appearance and Runtime launch rules are unchanged
 Other importer controls and the Wicked pin are unchanged. See
 [P3 preview evidence](P3_PROJECTILE_PREVIEW.md). Native verification is recorded
 there; weapon/palm launch sockets remain the next gameplay increment.
+
+## P3 launch socket candidate - 2026-10-06
+
+LaunchSocketService owns validated named native transform attachments and
+parent-local surface placement. First-person assembly recipes carry optional
+launch_sockets; equipment action bindings carry optional launch_socket names.
+Studio edits sockets on a private mouse-controlled model preview, applies an
+undoable assembly draft, and persists through existing assembly Save/Update.
+Weapon Projectiles selects the saved launch socket independently of projectile
+appearance. Runtime resolves its post-animation world pose under the player
+view rig; camera aim chooses a target, muzzle cover queries own the obstruction.
+Empty names retain legacy camera-origin launch. Shared projectile simulation,
+attribution and native scene contact adapter remain unchanged. See
+[P3 launch socket evidence and limits](P3_LAUNCH_SOCKETS.md).

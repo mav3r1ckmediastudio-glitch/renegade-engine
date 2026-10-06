@@ -640,6 +640,10 @@ namespace renegade::runtime
             {"projectile_last_target", projectiles_.lastContact.targetSubjectId},
             {"projectile_last_surface", projectiles_.lastContact.surfaceId},
             {"projectile_error", projectiles_.lastError},
+            {"projectile_launch_socket", projectiles_.lastLaunchSocket},
+            {"projectile_launch_x", std::to_string(projectiles_.lastLaunchPosition.x)},
+            {"projectile_launch_y", std::to_string(projectiles_.lastLaunchPosition.y)},
+            {"projectile_launch_z", std::to_string(projectiles_.lastLaunchPosition.z)},
             {"player_loaded_shells", static_cast<std::uint64_t>(std::max(0,playerViewAnimation_.loadedShells))}}, "Runtime/src/RuntimeApplication.cpp");
 
         diagnosticService_.Observe("runtime", {

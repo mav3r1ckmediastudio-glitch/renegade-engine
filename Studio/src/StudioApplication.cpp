@@ -599,7 +599,7 @@ namespace renegade::studio
         if (!playerMarkerPipeline_.IsValid() || !session_ || !camera ||
             projectHubVisible_ || testLevelRuntime_.IsActive() ||
             assemblyPanel_.IsVisible() || handGripPanel_.IsVisible() ||
-            modelImportPanel_.IsVisible() || projectileCreatePanel_.IsVisible()) return;
+            modelImportPanel_.IsVisible() || projectileCreatePanel_.IsVisible() || launchSocketPanel_.IsVisible()) return;
         const auto& scene = session_->Scenes().GetScene();
         const auto start = bridge::ResolvePlayerStart(scene);
         if (start.resolution != bridge::PlayerStartResolution::Success ||
@@ -805,6 +805,8 @@ namespace renegade::studio
         if (projectileCreatePanel_.IsVisible() && projectilePreview_ && projectilePreview_->NeedsRender())
             projectilePreview_->PreRender();
         if (playerCameraPreviewVisible_ && !playerCameraPreviewCollapsed_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->PreRender();
+        if(launchSocketPanel_.IsVisible()&&launchSocketPreview_&&launchSocketPreview_->NeedsRender())
+            launchSocketPreview_->PreRender();
         wi::RenderPath3D::PreRender();
     }
 
@@ -825,6 +827,8 @@ namespace renegade::studio
             assemblyPreview_->Render();
         if (projectileCreatePanel_.IsVisible() && projectilePreview_ && projectilePreview_->NeedsRender())
             projectilePreview_->Render();
+        if(launchSocketPanel_.IsVisible()&&launchSocketPreview_&&launchSocketPreview_->NeedsRender())
+            launchSocketPreview_->Render();
         if (playerCameraPreviewVisible_ && !playerCameraPreviewCollapsed_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->Render();
         if (pathTracePreviewActive_)
         {
@@ -3599,6 +3603,11 @@ namespace renegade::studio
             return;
         }
 
+        UpdateLaunchSocketEditor(dt);
+        if(launchSocketPanel_.IsVisible()) {
+            diagnosticInput.StopAt("launch_socket_editor");detail::ClearCreatorAssetDragPreview();
+            pendingAction_=EditorAction::None;return;
+        }
         if(!assemblyPanel_.IsVisible()){assemblyHandPanel_.SetVisible(false);assemblyFirearmPanel_.SetVisible(false);}
         if (assemblyPanel_.IsVisible())
         {
@@ -3896,7 +3905,7 @@ namespace renegade::studio
         // Project its connected 3D edges using one camera matrix for this frame.
         if (!projectHubVisible_ && !assemblyPanel_.IsVisible() &&
             !handGripPanel_.IsVisible() && !modelImportPanel_.IsVisible() &&
-            !projectileCreatePanel_.IsVisible() && session_ && camera)
+            !projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible() && session_ && camera)
         {
             const auto& scene = session_->Scenes().GetScene();
             const auto resolved = bridge::ResolvePlayerStart(scene);
@@ -3995,7 +4004,7 @@ namespace renegade::studio
         }
 
         if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
-            !projectileCreatePanel_.IsVisible() &&
+            !projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible() &&
             outlinedSelection_ != wi::ecs::INVALID_ENTITY &&
             selectionOutlineMask_.IsValid())
         {
@@ -4011,14 +4020,14 @@ namespace renegade::studio
         }
 
         if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
-            !projectileCreatePanel_.IsVisible() &&
+            !projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible() &&
             !gizmoSuppressedForCameraView_ &&
             gizmoEntity_ != wi::ecs::INVALID_ENTITY)
         {
             gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);
         }
 
-        if (!projectileCreatePanel_.IsVisible()) DrawPlayerCameraPreview(cmd);
+        if (!projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible()) DrawPlayerCameraPreview(cmd);
 
         const wi::graphics::Rect fullScissor = {
             0,
