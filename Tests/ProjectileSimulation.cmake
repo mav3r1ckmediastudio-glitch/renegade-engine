@@ -8,3 +8,13 @@ target_compile_features(RenegadeProjectileSimulationTests PRIVATE cxx_std_17)
 set_target_properties(RenegadeProjectileSimulationTests PROPERTIES FOLDER "Renegade/Tests")
 add_dependencies(RenegadeBridgeTests RenegadeProjectileSimulationTests)
 add_test(NAME RenegadeProjectileSimulationTests COMMAND RenegadeProjectileSimulationTests)
+
+add_executable(RenegadeProjectileWorldTests
+    ${CMAKE_CURRENT_LIST_DIR}/ProjectileWorldTests.cpp
+)
+target_link_libraries(RenegadeProjectileWorldTests PRIVATE Renegade::EngineBridge)
+target_include_directories(RenegadeProjectileWorldTests PRIVATE ${CMAKE_SOURCE_DIR}/Runtime/src)
+target_compile_features(RenegadeProjectileWorldTests PRIVATE cxx_std_17)
+set_target_properties(RenegadeProjectileWorldTests PROPERTIES FOLDER "Renegade/Tests")
+add_dependencies(RenegadeBridgeTests RenegadeProjectileWorldTests)
+add_test(NAME RenegadeProjectileWorldTests COMMAND RenegadeProjectileWorldTests)

@@ -1,5 +1,55 @@
 # P3 projectile and impact implementation
 
+## Native scene-query and Character damage checkpoint - 2026-10-06
+
+RuntimeProjectileWorld now adapts projectile segments to the pinned native
+Scene::IntersectsAll path. Explicit subject/root binding excludes all contacts
+belonging to the shooter hierarchy; the remaining nearest valid contact wins.
+Character child geometry resolves to the governed Character root. Material subset
+identity is retained as a surface lookup seam; no material-name inference or
+complete surface/effect profile authoring is implemented.
+
+The adapter checks origin overlaps with a tiny native sphere query. A confirmed
+overlap is an immediate impact. At a coincident sphere centre, native overlap
+math produces an undefined normal; an incoming-facing normal preserves the
+confirmed blocker. Native malformed ray contact values fail closed. A missing
+or mismatched owner binding also fails closed.
+
+ApplyProjectileCharacterImpact delegates to ApplyAttributedCombatDamage for
+health, legitimate DamagedBy knowledge and the existing ai.damage event. Static
+world contacts do not mutate Character health. Invalid source asset identity,
+self damage, invalid faction and already-dead targets are rejected through the
+adapter/existing damage authority. Zero damage remains a contact without damage.
+
+Windows x64 VS18 Release and Debug native test builds pass using:
+cmake --build BUILD/renegade --config <Release|Debug>
+ --target RenegadeProjectileWorldTests --
+ /m:2 /p:BuildProjectReferences=false /verbosity:minimal
+The retained P2 engine/bridge libraries supply unchanged dependencies; this is
+not a clean-checkout full Runtime build. Final Release build/test cycle exit 0,
+9.20s; Debug cycle exit 0, 6.16s. Existing MSB8029 warnings remain.
+Logs: BUILD/p3-world-final-build.log and BUILD/p3-world-debug-build.log.
+
+CTest Release expression:
+RenegadeProjectile(Simulation|World)Tests|RenegadeCharacterAiCombatTests
+passed 3/3, 0.14s total. Debug projectile expression passed 2/2, 0.14s.
+An intermediate Release test exposed the coincident-origin normal edge case;
+the corrected final build passes that regression.
+
+ProjectileWorldTests uses the real native Scene ray/sphere/BVH/primitive code
+with fixture-populated CPU collider query caches. It proves owner exclusion
+through ten child colliders, nearest wall blocking, segment bounds, origin inside
+a collider, Character child resolution, existing health/death/perception/events,
+invalid source/faction/self/dead-target rejection and material subset lookup.
+It does not exercise Scene::Update cache construction, GPU/native mesh skinning,
+terrain, physics-only Jolt bodies, or live weapon input.
+
+Current boundary is implemented and tested but is not yet installed into the
+live Runtime update/action lifecycle. Physics-only Jolt coverage, owner binding
+from real Runtime actors, persisted definitions/effects and live Test Level/
+standalone Build Game proof remain next. No P3 gate closure or full collision
+coverage is claimed. Historical initial checkpoint below remains dated evidence.
+
 ## First implementation checkpoint - 2026-10-06
 
 Dependent branch: feature/p3-projectile-impact, based on P2 PR #180 head

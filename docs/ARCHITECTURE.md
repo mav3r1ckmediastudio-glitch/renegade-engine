@@ -1291,3 +1291,12 @@ neither world physics nor health, audio, rendering or another Player controller.
 Its initial point-projectile segment queries do not establish finite-radius
 sweeps, throwables or directional melee. Native adapter and Runtime lifecycle
 integration remain pending. See P3_PROJECTILE_IMPACT_IMPLEMENTATION.md.
+
+P3 native boundary checkpoint: RuntimeProjectileWorld resolves nearest eligible
+Scene contacts after explicit shooter-hierarchy exclusion, maps Character
+children to the governed root and preserves material subset identity. Origin
+overlaps stop at time zero; coincident sphere-centre normals use an incoming-
+facing fallback. Character contacts delegate to ApplyAttributedCombatDamage
+for existing health/perception/events. This tested adapter is not yet live in
+Runtime's action/update loop. Scene cache construction and physics-only Jolt
+coverage still require proof before general gameplay integration.

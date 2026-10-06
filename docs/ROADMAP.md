@@ -404,3 +404,10 @@ world-query contract. Windows x64 Debug and Release builds and the simulation
 test pass. Native collision/damage integration, effects, persisted definitions
 and Test Level/packaged gameplay proof remain open.
 See [P3 implementation](P3_PROJECTILE_IMPACT_IMPLEMENTATION.md).
+
+P3 continuation: native scene-query/Character-damage adapter is implemented.
+Release 3/3 projectile and existing combat tests pass; Debug 2/2 projectile tests
+pass. CPU collider query proof covers owner hierarchy exclusion, nearest cover,
+Character root resolution, attributed health/death/perception/events and origin
+overlap. Live Runtime integration, physics-only body coverage and Test Level/
+packaged gameplay acceptance remain open.
