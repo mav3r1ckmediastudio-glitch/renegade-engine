@@ -87,6 +87,32 @@ int main()
        !ParseFirstPersonAssemblySettings(handsJson,parsed,error)||
        !parsed.avoidOffHand||parsed.bladeTip.y!=0.8f||
        !SerializeFirstPersonAssemblySettings(parsed,reopened,error)||reopened!=handsJson)return 24;
+    auto authored=avoidance;authored.weaponScale=0.85f;authored.offHandWeaponScale=1.2f;
+    authored.fullChargeSeconds=2;authored.chainWindowSeconds=0.45f;authored.queuedReleaseSeconds=1.5f;
+    if(!SerializeFirstPersonAssemblySettings(authored,handsJson,error)||
+       !ParseFirstPersonAssemblySettings(handsJson,parsed,error)||
+       parsed.weaponScale!=0.85f||parsed.offHandWeaponScale!=1.2f||parsed.fullChargeSeconds!=2||
+       parsed.chainWindowSeconds!=0.45f||parsed.queuedReleaseSeconds!=1.5f||
+       !SerializeFirstPersonAssemblySettings(parsed,reopened,error)||reopened!=handsJson)return 26;
+    for(int failure=0;failure<5;++failure) {
+     auto bad=authored;
+     if(failure==0)bad.weaponScale=0;
+     if(failure==1)bad.offHandWeaponScale=std::numeric_limits<float>::quiet_NaN();
+     if(failure==2)bad.fullChargeSeconds=0;
+     if(failure==3)bad.chainWindowSeconds=-1;
+     if(failure==4)bad.queuedReleaseSeconds=6;
+     if(SerializeFirstPersonAssemblySettings(bad,reopened,error))return 27;
+    }
+    auto directional=authored;
+    for(unsigned i=0;i<12;++i)directional.pairs.push_back({FirstPersonDirectionalActions[i],100+i,0});
+    if(!SerializeFirstPersonAssemblySettings(directional,handsJson,error)||
+       !ParseFirstPersonAssemblySettings(handsJson,parsed,error)||parsed.pairs.size()!=directional.pairs.size())return 28;
+    directional.pairs.pop_back();
+    if(SerializeFirstPersonAssemblySettings(directional,reopened,error))return 29;
+    auto swapped=authored;swapped.weaponAssetId=GenerateStableId();CommandService swapHistory;
+    if(!swapHistory.Execute(std::make_unique<SetFirstPersonAssemblySettingsCommand>(authored,swapped))||
+       authored.offHandWeaponAssetId!=avoidance.offHandWeaponAssetId||authored.pairs.size()!=avoidance.pairs.size()||
+       !swapHistory.Undo()||authored.weaponAssetId!=avoidance.weaponAssetId||!swapHistory.Redo())return 30;
     for(int failure=0;failure<4;++failure) {
      auto bad=avoidance;
      if(failure==0)bad.bladeTip=bad.bladeBase;

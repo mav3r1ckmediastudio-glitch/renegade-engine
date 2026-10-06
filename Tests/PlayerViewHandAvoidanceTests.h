@@ -10,6 +10,16 @@ static bool TestPlayerViewHandAvoidance() {
     !PlayerBladeIntersectsBox({0,0,0},{0,0,0},half))return false;
  const auto escape=PlayerBladeEscapeBox({-2,0,0},{2,0,0},half);
  if(PlayerBladeIntersectsBox({-2+escape.x,escape.y,escape.z},{2+escape.x,escape.y,escape.z},half))return false;
+ // Proxy radius follows the relative authored sword/shield scale.
+ RuntimePlayerHandAvoidance scaled;scaled.pose=std::make_unique<wi::scene::Scene>();
+ scaled.blade=scaled.pose->Entity_CreateTransform("Scaled blade");
+ scaled.shield=scaled.pose->Entity_CreateTransform("Scaled shield");
+ scaled.radius=0.02f;scaled.halfExtents={0.1f,0.2f,0.3f};
+ scaled.pose->transforms.GetComponent(scaled.blade)->scale_local={2,2,2};
+ scaled.pose->transforms.GetComponent(scaled.shield)->scale_local={0.5f,0.5f,0.5f};
+ UpdatePlayerHandPoseWorld(*scaled.pose);XMFLOAT3 sa,sb,se;
+ RuntimePlayerBladeIntersection(scaled,sa,sb,se);
+ if(std::abs(se.x-0.18f)>0.0001f||std::abs(se.y-0.28f)>0.0001f||std::abs(se.z-0.38f)>0.0001f)return false;
  wi::scene::Scene scene;
  const auto root=scene.Entity_CreateTransform("Root"),upper=scene.Entity_CreateTransform("Upper");
  const auto lower=scene.Entity_CreateTransform("Lower"),hand=scene.Entity_CreateTransform("Hand");

@@ -394,3 +394,13 @@ equipment from that saved assembly. Runtime holds the Charge pose until Fire is
 released, plays Release once, and preserves hand ownership through recovery.
 C cancels eligible charging actions. Charge strength, projectile effects and
 independent off-hand presentation remain later work.
+
+### Independent hand assembly authoring
+
+ASSEMBLY > HAND / MELEE SETUP exposes sword/shield mesh attachments, explicit hand roots,
+directional Charge/Hold/Release groups, block clips, attack variants, scales,
+charge/chaining timing and collision proxies. Existing arms bindings survive a
+weapon-only swap. Draft Undo/Redo, automatic masked preview and governed save
+are shared with paired firearm assemblies. See [hand assembly authoring](docs/P2_ASSEMBLY_HAND_AUTHORING.md).
+Local validation is recorded in HANDOFF; owner UI acceptance and independent
+verification remain open. This does not complete NPC combat or the wider P2 gate.

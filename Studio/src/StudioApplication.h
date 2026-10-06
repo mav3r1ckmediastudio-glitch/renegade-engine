@@ -86,6 +86,9 @@ namespace renegade::studio
         void OpenEquipmentEditor();
         void RefreshEquipmentEditor();
         void CreateAssemblyEditor();
+        void CreateAssemblyHandEditor();
+        void RefreshAssemblyHandEditor(const wi::scene::Scene& arms);
+        void ShowAssemblyHandPage(int page);
         void OpenAssemblyEditor();
         void LoadAssemblyParts();
         void RebuildAssemblyPreview();
@@ -1152,7 +1155,16 @@ namespace renegade::studio
         bridge::StableId equipmentProject_;
         wi::ecs::Entity equipmentPlayer_=wi::ecs::INVALID_ENTITY;
         wi::gui::Window assemblyPanel_, assemblyFirearmPanel_;
-        wi::gui::Button assemblyFirearmButton_;
+        wi::gui::Button assemblyFirearmButton_, assemblyHandButton_;
+        wi::gui::Window assemblyHandPanel_;
+        wi::gui::ComboBox assemblyHandPage_, assemblyOffWeapon_;
+        std::array<wi::gui::ComboBox,3> assemblyHandBones_, assemblyBlockClips_;
+        std::array<wi::gui::ComboBox,12> assemblyDirectionalClips_;
+        std::array<wi::gui::ComboBox,4> assemblyAttackVariants_;
+        std::array<SceneInspectorSlider,25> assemblyHandValues_;
+        wi::gui::CheckBox assemblyAvoidance_, assemblyPreviewShield_;
+        std::vector<std::string> assemblyPreviewActions_;
+        wi::gui::Label assemblyHandHelp_;
         wi::gui::Label assemblyFirearmHelp_;
         SceneInspectorSlider assemblyCapacity_, assemblyShotInterval_;
         wi::gui::CheckBox assemblyPartialReload_;
@@ -1171,7 +1183,7 @@ namespace renegade::studio
         std::vector<bridge::StableId> assemblyPartIds_;
         std::vector<bridge::PlayerViewBoneChoice> assemblyBones_;
         bridge::StableId assemblyProjectId_;
-        std::array<std::string,2> assemblyPartHashes_;
+        std::array<std::string,3> assemblyPartHashes_;
         wi::ecs::Entity assemblyPlayer_ = wi::ecs::INVALID_ENTITY;
         bool assemblyRefreshing_ = false;
         bool assemblyPreviewRefreshPending_ = false, assemblyDraftPreviewDirty_ = true;

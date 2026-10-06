@@ -111,7 +111,7 @@ namespace renegade::runtime
         }
 
         bridge::GameplayInputFrame RouteStaged(bridge::GameplayInputFrame input,
-            bool equipped, bool nativeBusy, float dt, bool currentAim = false, bool chargePairsAvailable = false, bool offHandBlockAvailable = false, bool directionalMelee = false, bool chainWindow = false, unsigned direction = 0)
+            bool equipped, bool nativeBusy, float dt, bool currentAim = false, bool chargePairsAvailable = false, bool offHandBlockAvailable = false, bool directionalMelee = false, bool chainWindow = false, unsigned direction = 0, float fullChargeSeconds = 1, float queuedReleaseSeconds = 0.75f)
         {
             releasePresentation = false;
             chainedChargeStarted = false;
@@ -141,7 +141,7 @@ namespace renegade::runtime
             }
             if(queuedStrike.pending) {
                 if(!queuedStrike.released) {
-                    queuedStrike.seconds=std::min(queuedStrike.seconds+dt,1.0f);
+                    queuedStrike.seconds=std::min(queuedStrike.seconds+dt,fullChargeSeconds);
                     if(std::isfinite(input.player.lookYaw)&&std::isfinite(input.player.lookPitch)) {
                         queuedStrike.gestureX+=input.player.lookYaw;
                         queuedStrike.gestureY+=input.player.lookPitch;
@@ -155,7 +155,7 @@ namespace renegade::runtime
                 }
                 if(queuedStrike.released) {
                     queuedStrike.age+=dt;
-                    if(queuedStrike.age>0.75f)queuedStrike={};
+                    if(queuedStrike.age>queuedReleaseSeconds)queuedStrike={};
                 }
             }
             if (dispatched && !nativeBusy) {

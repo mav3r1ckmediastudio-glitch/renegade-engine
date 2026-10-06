@@ -369,3 +369,13 @@ Windows Release build, five focused tests, DX12 image proof and native inset
 inspection pass; owner/independent acceptance remains pending. Large-world clone
 profiling and full render-settings parity remain follow-ups. Independent
 sword/shield input/presentation is next; owner animation pack is expected.
+
+### Independent hand assembly authoring
+
+ASSEMBLY > HAND / MELEE SETUP exposes sword/shield mesh attachments, explicit hand roots,
+directional Charge/Hold/Release groups, block clips, attack variants, scales,
+charge/chaining timing and collision proxies. Existing arms bindings survive a
+weapon-only swap. Draft Undo/Redo, automatic masked preview and governed save
+are shared with paired firearm assemblies. See [hand assembly authoring](P2_ASSEMBLY_HAND_AUTHORING.md).
+Local validation is recorded in HANDOFF; owner UI acceptance and independent
+verification remain open. This does not complete NPC combat or the wider P2 gate.

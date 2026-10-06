@@ -12,6 +12,7 @@ struct RuntimePlayerHandAnimationState {
  std::array<std::array<wi::ecs::Entity,3>,4> directionalClips={};
  unsigned direction=0,chargePhase=0;
  float chargeSeconds=0,chargeStrength=0,gestureX=0,gestureY=0;
+ float fullChargeSeconds=1,chainWindowSeconds=0.30f,queuedReleaseSeconds=0.75f;
  std::array<std::vector<wi::ecs::Entity>,16> primary;
  std::array<wi::ecs::Entity,3> offMovement={wi::ecs::INVALID_ENTITY,wi::ecs::INVALID_ENTITY,wi::ecs::INVALID_ENTITY};
  std::array<wi::ecs::Entity,3> block={wi::ecs::INVALID_ENTITY,wi::ecs::INVALID_ENTITY,wi::ecs::INVALID_ENTITY};
@@ -43,6 +44,13 @@ inline bool InitializeRuntimePlayerHandAnimations(wi::scene::Scene& scene,wi::ec
   const auto& m=scene.metadatas[i];
   if(m.bool_values.has("renegade.first_person.independent_hands")&&m.bool_values.get("renegade.first_person.independent_hands"))
    prepared.enabled=true;
+  const auto timing=[&](const char* key,float fallback,float low,float high) {
+   if(!m.float_values.has(key))return fallback;
+   float value=m.float_values.get(key);return std::isfinite(value)&&value>=low&&value<=high?value:fallback;
+  };
+  prepared.fullChargeSeconds=timing("renegade.first_person.full_charge_seconds",prepared.fullChargeSeconds,0.1f,10);
+  prepared.chainWindowSeconds=timing("renegade.first_person.chain_window_seconds",prepared.chainWindowSeconds,0,2);
+  prepared.queuedReleaseSeconds=timing("renegade.first_person.queued_release_seconds",prepared.queuedReleaseSeconds,0.05f,5);
  }
  if(!prepared.enabled)return true;
  for(size_t i=0;i<scene.armatures.GetCount();++i)if(within(scene.armatures.GetEntity(i))) {
@@ -146,7 +154,7 @@ inline void UpdateRuntimePlayerHandAnimations(wi::scene::Scene& scene,RuntimePla
   if(cancel){state.chargePhase=0;state.chargeSeconds=0;state.gestureX=state.gestureY=0;}
   if(chargeHeld && !state.attacking && !cancel) {
    if(state.chargePhase==0){state.chargePhase=1;state.chargeSeconds=0;state.rightTime=0;state.gestureX=state.gestureY=0;}
-   state.chargeSeconds=std::min(state.chargeSeconds+dt,1.0f);
+   state.chargeSeconds=std::min(state.chargeSeconds+dt,state.fullChargeSeconds);
    if(std::isfinite(lookYaw)&&std::isfinite(lookPitch)) {
     state.gestureX+=lookYaw;state.gestureY+=lookPitch;
     if(std::max(std::abs(state.gestureX),std::abs(state.gestureY))>=0.025f) {
@@ -160,7 +168,7 @@ inline void UpdateRuntimePlayerHandAnimations(wi::scene::Scene& scene,RuntimePla
    state.action=PlayerViewAction::Charge;
   }
   if(releasePressed && !state.attacking && !cancel) {
-   state.chargeStrength=std::clamp(state.chargeSeconds,0.0f,1.0f);
+   state.chargeStrength=std::clamp(state.chargeSeconds/state.fullChargeSeconds,0.0f,1.0f);
    state.chargePhase=0;state.chargeSeconds=0;
    state.attacking=true;state.action=PlayerViewAction::Attack;state.rightTime=0;
    state.right=state.directionalClips[state.direction][2];

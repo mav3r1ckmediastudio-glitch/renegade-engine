@@ -4,6 +4,7 @@
 #include <string>
 #include "renegade/bridge/FirstPersonAssemblyService.h"
 #include <vector>
+#include "renegade/bridge/PlayerViewHandAnimation.h"
 
 namespace renegade::studio
 {
@@ -21,6 +22,7 @@ namespace renegade::studio
         bool SetSpeed(float speed);
         bool SetPairedAction(const std::string& action);
         void UseFirstPersonCamera();
+        void SetAssemblyShieldHeld(bool held) { assemblyShieldHeld_=held; }
         bool IsPlaying() const { return paired_ ? pairedPlaying_ : animationPreview_.IsPlaying(); }
         bool HasClip() const { return paired_ || animationPreview_.HasSelection(); }
         float ClipTime() const { return paired_ ? pairedTime_ : animationPreview_.Time(); }
@@ -30,6 +32,9 @@ namespace renegade::studio
         bool CapturePng(std::vector<std::uint8_t>& png, std::string& error) const;
         bool IsReady() const { return renderedFrames_ >= 8; }
     private:
+        bool PoseAssembly(const std::string& action,float time,std::string& error);
+        runtime::RuntimePlayerHandAnimationState assemblyHands_;
+        bool assemblyShieldHeld_=false;
         bool paired_ = false, pairedPlaying_ = false;
         float pairedTime_ = 0, pairedEnd_ = 0;
         std::string pairedAction_;

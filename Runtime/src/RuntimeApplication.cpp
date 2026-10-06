@@ -439,7 +439,7 @@ namespace renegade::runtime
                     const auto& melee=playerViewAnimation_.handLayers;
                     const auto* strike=scenes_.GetScene().animations.GetComponent(melee.right);
                     const bool chainWindow=melee.directional && melee.attacking && strike &&
-                        strike->end-strike->start-melee.rightTime<=0.30f;
+                        strike->end-strike->start-melee.rightTime<=melee.chainWindowSeconds;
                     const auto equipmentInput =
                         playerEquipment_.RouteStaged(gameplayInput, playerViewAnimation_.equipped,
                             presentationBusy, paused_ ? 0.0f : dt, playerViewAnimation_.aiming,
@@ -448,7 +448,7 @@ namespace renegade::runtime
                             playerViewAnimation_.handLayers.enabled &&
                             !playerEquipment_.offHand.equipment.assetId.empty() &&
                             playerEquipment_.offHand.equipment.presentationAssetId == playerViewRig_.viewModelAssetId,
-                            melee.directional, chainWindow, melee.direction);
+                            melee.directional, chainWindow, melee.direction, melee.fullChargeSeconds, melee.queuedReleaseSeconds);
                     if(playerEquipment_.chainedChargeStarted) {
                         auto& hand=playerViewAnimation_.handLayers;
                         hand.direction=playerEquipment_.chainedDirection;
@@ -476,7 +476,7 @@ namespace renegade::runtime
                             std::string("NEXT ")+directions[playerEquipment_.queuedStrike.direction]+" "+
                                 (playerEquipment_.queuedStrike.released?"QUEUED":"CHARGING"):
                             hand.chargePhase?
-                            "CHARGE "+std::to_string(static_cast<int>(hand.chargeSeconds*100))+"%":
+                            "CHARGE "+std::to_string(static_cast<int>(hand.chargeSeconds/hand.fullChargeSeconds*100))+"%":
                             hand.attacking?(playerEquipment_.chainInputWindow?"STRIKE; PREPARE NEXT":"STRIKE"):"HOLD LMB + MOVE; RELEASE TO STRIKE"):"");
                 }
             }

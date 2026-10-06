@@ -668,7 +668,7 @@ namespace renegade::runtime
             {"player_melee_chained", static_cast<std::uint64_t>(playerEquipment_.chainedCount)},
             {"player_view_melee_direction", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.direction)},
             {"player_view_melee_charge_phase", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.chargePhase)},
-            {"player_view_melee_charge_percent", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.chargeSeconds*100)},
+            {"player_view_melee_charge_percent", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.chargeSeconds/playerViewAnimation_.handLayers.fullChargeSeconds*100)},
             {"player_view_melee_release_percent", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.chargeStrength*100)},
             {"player_view_primary_attacking", playerViewAnimation_.handLayers.attacking},
             {"player_view_shield_time_ms", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.leftTime * 1000.0f)},

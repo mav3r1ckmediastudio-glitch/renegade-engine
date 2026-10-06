@@ -122,7 +122,10 @@ inline bool RuntimePlayerBladeIntersection(RuntimePlayerHandAvoidance& state,XMF
  const auto matrix=blade*inverse;
  XMStoreFloat3(&a,XMVector3TransformCoord(XMLoadFloat3(&state.bladeBase),matrix)-XMLoadFloat3(&state.shieldCenter));
  XMStoreFloat3(&b,XMVector3TransformCoord(XMLoadFloat3(&state.bladeTip),matrix)-XMLoadFloat3(&state.shieldCenter));
- extents={state.halfExtents.x+state.radius,state.halfExtents.y+state.radius,state.halfExtents.z+state.radius};
+ // Capsule radius, like endpoints, is authored before the uniform mesh scale.
+ const float radius=state.radius*std::max({XMVectorGetX(XMVector3Length(matrix.r[0])),
+  XMVectorGetX(XMVector3Length(matrix.r[1])),XMVectorGetX(XMVector3Length(matrix.r[2]))});
+ extents={state.halfExtents.x+radius,state.halfExtents.y+radius,state.halfExtents.z+radius};
  return PlayerBladeIntersectsBox(a,b,extents);
 }
 // Native evaluation happens once on this small private pose scene. Its resulting

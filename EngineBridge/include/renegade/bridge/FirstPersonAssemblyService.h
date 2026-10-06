@@ -11,6 +11,11 @@ namespace renegade::bridge {
 inline constexpr std::array<const char*,16> FirstPersonAssemblyActions = {
  "Idle","Reload","Walk","Run","Attack","Equip","Unequip","AimIn","AimOut",
  "AimAttack","JumpStart","JumpLoop","JumpLand","ReloadPartial","Charge","Release"};
+inline constexpr std::array<const char*,12> FirstPersonDirectionalActions = {
+ "MeleeLeftCharge","MeleeLeftHold","MeleeLeftRelease",
+ "MeleeRightCharge","MeleeRightHold","MeleeRightRelease",
+ "MeleeDownCharge","MeleeDownHold","MeleeDownRelease",
+ "MeleeStabCharge","MeleeStabHold","MeleeStabRelease"};
 struct FirstPersonAssemblyPair {
     std::string action = "Idle";
     unsigned armsClip = 0, weaponClip = 0;
@@ -24,6 +29,8 @@ struct FirstPersonAssemblySettings {
     XMFLOAT4 cameraRotation = {0,0,0,1};
     std::vector<FirstPersonAssemblyPair> pairs;
     FirearmSettings firearm;
+    float weaponScale = 1, offHandWeaponScale = 1;
+    float fullChargeSeconds = 1, chainWindowSeconds = 0.30f, queuedReleaseSeconds = 0.75f;
     // Schema-v2 static dual-hand presentation; v1 paired shotgun stays unchanged.
     StableId offHandWeaponAssetId;
     std::string offHandParentBonePath, primaryLayerRootPath, offHandLayerRootPath;

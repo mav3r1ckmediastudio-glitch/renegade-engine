@@ -6,7 +6,7 @@ namespace renegade::studio
 {
     bool ModelImportPreview::Prepare(wi::scene::Scene& source, std::string& error)
     {
-        paired_ = pairedPlaying_ = false;
+        paired_ = pairedPlaying_ = false;assemblyHands_={};assemblyShieldHeld_=false;
         previewScene_ = wi::allocator::make_shared<wi::scene::Scene>();
         wi::Archive archive;
         source.Serialize(archive);
@@ -75,12 +75,54 @@ namespace renegade::studio
         camera->TransformCamera(XMMatrixIdentity()); camera->UpdateCamera();
         renderedFrames_ = 0;
     }
+    bool ModelImportPreview::PoseAssembly(const std::string& action,float time,std::string& error)
+    {
+        wi::ecs::Entity root=wi::ecs::INVALID_ENTITY;
+        for(size_t i=0;i<scene->metadatas.GetCount();++i) {
+            const auto& m=scene->metadatas[i];
+            if(m.bool_values.has("renegade.first_person.independent_hands") &&
+               m.bool_values.get("renegade.first_person.independent_hands"))root=scene->metadatas.GetEntity(i);
+        }
+        if(root==wi::ecs::INVALID_ENTITY)return bridge::FirstPersonAssemblyService().Pose(*scene,action,time,error);
+        if(!assemblyHands_.enabled && !runtime::InitializeRuntimePlayerHandAnimations(*scene,root,assemblyHands_,error))return false;
+        auto& h=assemblyHands_;
+        auto right=h.primary[0].front(),left=assemblyShieldHeld_?h.block[1]:h.offMovement[0];
+        bool offAction=false;
+        unsigned variant=0;
+        std::string semantic=action;
+        if(action.compare(0,7,"Attack#")==0){semantic="Attack";variant=unsigned(std::stoul(action.substr(7)));}
+        const int index=runtime::PlayerHandSemanticIndex(semantic);
+        if(index>=0 && !h.primary[index].empty())right=h.primary[index][std::min<size_t>(variant,h.primary[index].size()-1)];
+        else {
+            bool found=false;
+            for(unsigned i=0;i<12;++i)if(action==bridge::FirstPersonDirectionalActions[i]) {
+                right=h.directionalClips[i/3][i%3];found=true;
+            }
+            const char* blocks[]={"BlockStart","BlockLoop","BlockEnd"};
+            for(unsigned i=0;i<3;++i)if(action==blocks[i]){left=h.block[i];offAction=found=true;}
+            if(!found){error="Preview action is unavailable.";return false;}
+        }
+        if(left==wi::ecs::INVALID_ENTITY)left=h.block[1];
+        pairedEnd_=scene->animations.GetComponent(offAction?left:right)->end-scene->animations.GetComponent(offAction?left:right)->start;
+        for(auto e:h.generated)scene->animations.GetComponent(e)->amount=0;
+        const auto pose=[&](wi::ecs::Entity e,float seconds) {
+            auto& c=*scene->animations.GetComponent(e);c.Pause();c.RootMotionOff();c.amount=1;
+            c.timer=std::clamp(c.start+seconds,c.start,c.end);c.last_update_time=-std::numeric_limits<float>::max();
+        };
+        pose(h.base,0);pose(right,offAction?0:time);pose(left,offAction?time:0);
+        h.avoidance.offset={};
+        runtime::EvaluateRuntimePlayerHandAvoidance(*scene,h.avoidance,h.generated,1.0f/60);
+        scene->Update(1.0f/60);
+        error.clear();return true;
+    }
+
     bool ModelImportPreview::SetPairedAction(const std::string& action)
     {
         std::string error;
-        if (!bridge::FirstPersonAssemblyService().Pose(*scene, action, 0, error)) return false;
-        paired_ = true; pairedPlaying_ = false; pairedTime_ = pairedEnd_ = 0; pairedAction_ = action;
-        for (size_t i = 0; i < scene->animations.GetCount(); ++i)
+        if (!PoseAssembly(action,0,error)) return false;
+        paired_ = true; pairedPlaying_ = false; pairedTime_ = 0; pairedAction_ = action;
+        if(!assemblyHands_.enabled)pairedEnd_=0;
+        for (size_t i = 0; !assemblyHands_.enabled && i < scene->animations.GetCount(); ++i)
             if (scene->animations[i].amount > 0)
                 pairedEnd_ = std::max(pairedEnd_, scene->animations[i].end - scene->animations[i].start);
         renderedFrames_ = 0; return true;
@@ -115,7 +157,7 @@ namespace renegade::studio
         if (paired_) {
             if (!pairedPlaying_ && pairedTime_ >= pairedEnd_) {
                 std::string error;
-                if (!bridge::FirstPersonAssemblyService().Pose(*scene, pairedAction_, 0, error)) return false;
+                if (!PoseAssembly(pairedAction_,0,error)) return false;
                 pairedTime_ = 0;
             }
             pairedPlaying_ = !pairedPlaying_; renderedFrames_ = 0; return true;
@@ -129,7 +171,7 @@ namespace renegade::studio
         if (paired_) {
             std::string error;
             pairedTime_ = std::clamp(time, 0.0f, pairedEnd_); pairedPlaying_ = false;
-            if (!bridge::FirstPersonAssemblyService().Pose(*scene, pairedAction_, pairedTime_, error)) return false;
+            if (!PoseAssembly(pairedAction_,pairedTime_,error)) return false;
             renderedFrames_ = 0; return true;
         }
         if (!animationPreview_.Scrub(time)) return false;
@@ -147,7 +189,7 @@ namespace renegade::studio
         if (paired_ && pairedPlaying_) {
             pairedTime_ = std::min(pairedEnd_, pairedTime_ + dt);
             std::string error;
-            (void)bridge::FirstPersonAssemblyService().Pose(*scene, pairedAction_, pairedTime_, error);
+            (void)PoseAssembly(pairedAction_,pairedTime_,error);
             if (pairedTime_ >= pairedEnd_) pairedPlaying_ = false;
         }
         wi::RenderPath3D::Update(dt);

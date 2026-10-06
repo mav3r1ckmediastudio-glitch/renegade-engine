@@ -3423,6 +3423,7 @@ namespace renegade::studio
             return;
         }
 
+        if(!assemblyPanel_.IsVisible()){assemblyHandPanel_.SetVisible(false);assemblyFirearmPanel_.SetVisible(false);}
         if (assemblyPanel_.IsVisible())
         {
             if (!session_->Projects().HasProject() ||
@@ -3432,8 +3433,9 @@ namespace renegade::studio
                 // Window visibility propagates to children; enforce the selected page afterwards.
                 for(size_t i=0;i<bridge::FirstPersonAssemblyActions.size();++i) {
                     const bool visible=i/6==size_t(std::max(assemblyActionPage_.GetSelected(),0));
-                    assemblyArmsClips_[i].SetVisible(visible);assemblyWeaponClips_[i].SetVisible(visible);
+                    assemblyArmsClips_[i].SetVisible(visible);assemblyWeaponClips_[i].SetVisible(visible && !assemblySettings_.IndependentHands());
                 }
+                if(assemblyHandPanel_.IsVisible())ShowAssemblyHandPage(std::max(assemblyHandPage_.GetSelected(),0));
                 if(assemblyPreviewRefreshPending_) {
                     assemblyPreviewRefreshDelay_-=dt;
                     if(assemblyPreviewRefreshDelay_<=0) {
@@ -3847,7 +3849,9 @@ namespace renegade::studio
 
         const float width = GetLogicalWidth();
         const float height = GetLogicalHeight();
-        assemblyPanel_.SetPos(XMFLOAT2(std::max(0.0f, (width-1080)*0.5f), std::max(0.0f, (height-810)*0.5f)));
+        const bool sideBySide=assemblyHandPanel_.IsVisible() && width>=1840;
+        assemblyPanel_.SetPos(XMFLOAT2(sideBySide?20.0f:std::max(0.0f,(width-1080)*0.5f),std::max(0.0f,(height-810)*0.5f)));
+        assemblyHandPanel_.SetPos(XMFLOAT2(sideBySide?1120.0f:std::max(0.0f,(width-730)*0.5f),std::max(0.0f,(height-780)*0.5f)));
         modelImportPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
             std::max(70.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));

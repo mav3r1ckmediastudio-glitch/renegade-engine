@@ -98,6 +98,74 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
  }
  FirstPersonAssemblySettings reopenedSettings;
  if(!service.ReadSettings(output.generic_u8string(),projectId,asset,reopenedSettings,error)||!reopenedSettings.IndependentHands())return false;
+ if(const char* replacement=std::getenv("RENEGADE_ASSEMBLY_SWAP")) {
+  auto candidate=ModelImportCandidateService().PrepareStaticModel(replacement);
+  if(!candidate.IsReady()){std::cerr<<candidate.Error()<<"\n";{std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}}
+  ModelImportCommitRequest request;request.projectRoot=output.generic_u8string();request.projectId=projectId;
+  request.assetName="Replacement Sword";
+  const auto committed=ModelImportCommitService().CommitStaticModel(request,candidate);
+  if(!committed.succeeded){std::cerr<<committed.error<<"\n";{std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}}
+  auto edited=reopenedSettings;edited.weaponAssetId=committed.assetId;
+  edited.bladeTip.y*=1.2f;
+  edited.weaponScale=0.9f;edited.offHandWeaponScale=1.1f;edited.fullChargeSeconds=1.25f;
+  edited.chainWindowSeconds=0.4f;edited.queuedReleaseSeconds=1.2f;
+  AssetRegistry registry;if(!ReadAssetRegistry(output.generic_u8string(),projectId,registry,error)){std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}
+  const auto record=std::find_if(registry.records.begin(),registry.records.end(),[&](const auto& r){return r.assetId==asset;});
+  if(record==registry.records.end() || !service.Update(output.generic_u8string(),projectId,asset,record->contentHash,edited,{},error)){std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}
+  FirstPersonAssemblySettings roundtrip;
+  if(!service.ReadSettings(output.generic_u8string(),projectId,asset,roundtrip,error)||
+     roundtrip.weaponAssetId!=committed.assetId||roundtrip.offHandWeaponAssetId!=shieldId||
+     roundtrip.pairs.size()!=settings.pairs.size()||roundtrip.fullChargeSeconds!=1.25f||
+     roundtrip.weaponScale!=0.9f||roundtrip.offHandWeaponScale!=1.1f){std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}
+  wi::scene::Scene swapped;if(!service.Prepare(output.generic_u8string(),projectId,roundtrip,swapped,error)){std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}
+  renegade::runtime::RuntimePlayerHandAnimationState hands;wi::ecs::Entity root=0;
+  for(size_t i=0;i<swapped.metadatas.GetCount();++i)
+   if(swapped.metadatas[i].bool_values.has("renegade.first_person.independent_hands"))root=swapped.metadatas.GetEntity(i);
+  if(!renegade::runtime::InitializeRuntimePlayerHandAnimations(swapped,root,hands,error)||
+     hands.fullChargeSeconds!=1.25f||hands.chainWindowSeconds!=0.4f||hands.queuedReleaseSeconds!=1.2f){std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}
+  for(int frame=0;frame<90;++frame) {
+   renegade::runtime::UpdateRuntimePlayerHandAnimations(swapped,hands,renegade::runtime::PlayerViewAction::Idle,
+    1.0f/60,false,true,true);swapped.Update(1.0f/60);
+  }
+  if(std::abs(hands.chargeSeconds-1.25f)>0.001f){std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}
+  renegade::runtime::UpdateRuntimePlayerHandAnimations(swapped,hands,renegade::runtime::PlayerViewAction::Idle,
+    1.0f/60,false,true,false,true);
+  if(hands.chargeStrength<0.99f){std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}
+  renegade::runtime::ResetRuntimePlayerHandAnimations(swapped,hands);
+  renegade::studio::ModelImportPreview preview;
+  if(!preview.Prepare(swapped,error)){std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}preview.UseFirstPersonCamera();preview.SetAssemblyShieldHeld(true);
+  for(const char* action:FirstPersonDirectionalActions)
+   if(!preview.SetPairedAction(action)||!preview.Scrub(0.1f)){std::cerr<<"PREVIEW "<<action<<"\n";{std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}}
+  for(const char* action:{"Attack#0","Attack#1","Attack#2","Attack#3","BlockStart","BlockLoop","BlockEnd"})
+   if(!preview.SetPairedAction(action)||!preview.Scrub(0.1f)){std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}
+  preview.SetPairedAction("MeleeRightRelease");preview.Scrub(0.12f);
+  for(size_t i=0;i<preview.scene->names.GetCount();++i) {
+   const auto& name=preview.scene->names[i].name;
+   if(name=="hand_l"||name=="hand_r"||name==CreatorAuthoredTransformRootName) {
+    const auto* t=preview.scene->transforms.GetComponent(preview.scene->names.GetEntity(i));
+    if(t){const auto p=t->GetPosition();std::cout<<"PREVIEW "<<name<<" "<<p.x<<","<<p.y<<","<<p.z<<"\n";}
+   }
+  }
+  for(int frame=0;frame<3000;++frame){wi::eventhandler::FireEvent(wi::eventhandler::EVENT_THREAD_SAFE_POINT,0);preview.PreUpdate();preview.Update(1.0f/60);preview.PreRender();preview.Render();wi::graphics::GetDevice()->SubmitCommandLists();wi::renderer::UpdateGPUSuballocator();Sleep(10);if(preview.IsReady())break;}
+  std::vector<std::uint8_t> png;
+  if(!preview.CapturePng(png,error)){std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}
+  const auto texture=wi::resourcemanager::Load("replacement-proof-"+GenerateStableId()+".png",wi::resourcemanager::Flags::NONE,png.data(),png.size());
+  wi::vector<std::uint8_t> pixels;
+  if(!texture.IsValid()||!wi::helper::saveTextureToMemory(texture.GetTexture(),pixels)||pixels.size()<512*320*4)return false;
+  size_t contrasting=0;
+  for(size_t p=0;p+4<=512*320*4;p+=4)
+   contrasting+=std::abs(int(pixels[p])-int(pixels[0]))+std::abs(int(pixels[p+1])-int(pixels[1]))+std::abs(int(pixels[p+2])-int(pixels[2]))>20;
+  if(contrasting<50){std::cerr<<"Replacement preview is empty\n";return false;}
+  std::ofstream image(output/"replacement-sword-held-shield.png",std::ios::binary);
+  image.write(reinterpret_cast<const char*>(png.data()),png.size());image.close();
+  // Restore defaults on the original assembly; retain an authored copy for native UI.
+  StableId editedAsset;
+  if(!service.Save(output.generic_u8string(),projectId,"Authored Replacement Sword",roundtrip,png,editedAsset,error)){std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}
+  if(!ReadAssetRegistry(output.generic_u8string(),projectId,registry,error)){std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}
+  const auto latest=std::find_if(registry.records.begin(),registry.records.end(),[&](const auto& r){return r.assetId==asset;});
+  if(latest==registry.records.end()||!service.Update(output.generic_u8string(),projectId,asset,latest->contentHash,settings,{},error)){std::cerr<<"AUTHORING LINE "<<__LINE__<<" "<<error<<"\n";return false;}
+  std::cout<<"ASSEMBLY AUTHORING PASS: different sword mesh; scale; timing; update/reopen; all masked preview slots\n";
+ }
  wi::scene::Scene assembly;if(!service.Prepare(output.generic_u8string(),projectId,reopenedSettings,assembly,error))return false;
  for(size_t i=0;i<assembly.materials.GetCount();++i) {
   assembly.materials[i].baseColor=XMFLOAT4(0.7f,0.75f,0.8f,1);assembly.materials[i].metalness=0;assembly.materials[i].roughness=0.8f;

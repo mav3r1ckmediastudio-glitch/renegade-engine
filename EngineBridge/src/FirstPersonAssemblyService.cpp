@@ -70,6 +70,13 @@ ProjectDocumentWrite Write(const fs::path& p,const std::vector<std::uint8_t>& b)
 }
 bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
  if(!ValidateFirearmSettings(s.firearm,e))return false;
+ for(float scale:{s.weaponScale,s.offHandWeaponScale})
+  if(!std::isfinite(scale)||scale<0.01f||scale>100){e="Weapon scale must be between 0.01 and 100.";return false;}
+ if(!std::isfinite(s.fullChargeSeconds)||s.fullChargeSeconds<0.1f||s.fullChargeSeconds>10 ||
+    !std::isfinite(s.chainWindowSeconds)||s.chainWindowSeconds<0||s.chainWindowSeconds>2 ||
+    !std::isfinite(s.queuedReleaseSeconds)||s.queuedReleaseSeconds<0.05f||s.queuedReleaseSeconds>5) {
+  e="Melee timing is outside the supported range.";return false;
+ }
  if(!IsValidStableId(s.armsAssetId)||!IsValidStableId(s.weaponAssetId)||s.parentBonePath.empty()||
  s.armsAssetId==s.weaponAssetId||s.pairs.empty()||s.pairs.size()>32) {
  e="Select distinct arms and weapon products, an explicit parent bone and at least one clip pair.";return false;}
@@ -118,6 +125,13 @@ bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
   "MeleeRightCharge","MeleeRightHold","MeleeRightRelease",
   "MeleeDownCharge","MeleeDownHold","MeleeDownRelease",
   "MeleeStabCharge","MeleeStabHold","MeleeStabRelease"};
+ unsigned directionalCount=0;
+ for(const auto& p:s.pairs)directionalCount+=directionalActions.count(p.action)!=0;
+ if(directionalCount!=0 && directionalCount!=12){e="Map all twelve directional Charge/Hold/Release slots, or NONE for all.";return false;}
+ if(s.IndependentHands() && (std::none_of(s.pairs.begin(),s.pairs.end(),[](const auto& p){return p.action=="Idle";}) ||
+    std::none_of(s.pairs.begin(),s.pairs.end(),[](const auto& p){return p.action=="Attack";}))) {
+  e="Independent hands require Idle and at least one Attack fallback.";return false;
+ }
  std::set<std::string> actions;
  for(const auto& p:s.pairs) {
  if(std::none_of(FirstPersonAssemblyActions.begin(),FirstPersonAssemblyActions.end(),
@@ -163,11 +177,24 @@ bool SerializeFirstPersonAssemblySettings(const FirstPersonAssemblySettings& s,s
    {"shield_half_extents",{s.shieldHalfExtents.x,s.shieldHalfExtents.y,s.shieldHalfExtents.z}},
    {"blade_radius",s.bladeRadius},{"maximum_correction",s.maximumHandCorrection}};
  }
+ if(s.weaponScale!=1 || s.offHandWeaponScale!=1 || s.fullChargeSeconds!=1 ||
+    s.chainWindowSeconds!=0.30f || s.queuedReleaseSeconds!=0.75f)
+  j["authoring"]={{"weapon_scale",s.weaponScale},{"off_hand_scale",s.offHandWeaponScale},
+   {"full_charge_seconds",s.fullChargeSeconds},{"chain_window_seconds",s.chainWindowSeconds},
+   {"queued_release_seconds",s.queuedReleaseSeconds}};
  out=j.dump();return true;
 }
 bool ParseFirstPersonAssemblySettings(const std::string& text,FirstPersonAssemblySettings& s,std::string& e) {
  s={};try {
  auto j=nlohmann::json::parse(text);
+ if(j.is_object() && j.contains("authoring")) {
+  const auto a=j.at("authoring");
+  if(!a.is_object()||a.size()!=5)throw std::runtime_error("authoring");
+  s.weaponScale=a.at("weapon_scale").get<float>();s.offHandWeaponScale=a.at("off_hand_scale").get<float>();
+  s.fullChargeSeconds=a.at("full_charge_seconds").get<float>();
+  s.chainWindowSeconds=a.at("chain_window_seconds").get<float>();
+  s.queuedReleaseSeconds=a.at("queued_release_seconds").get<float>();j.erase("authoring");
+ }
  const bool independent=j.is_object() && j.value("schema_version",0)==2;
  if(!j.is_object() || (independent ? (j.size()!=11 || !j.contains("hand_layers") || !j.contains("firearm")) :
    ((j.size()!=9 && !(j.size()==10 && j.contains("firearm"))) || j.at("schema_version")!=1)))throw std::runtime_error("schema");
@@ -269,6 +296,8 @@ bool FirstPersonAssemblyService::Prepare(const std::string& root,const StableId&
  const auto anchor=b->entity;roots=Roots(wc);const auto weaponRoot=roots.front();
  auto armRoots=Roots(ac);ac.Merge(wc);
  ac.Component_Attach(weaponRoot,anchor,true);Set(*ac.transforms.GetComponent(weaponRoot),s.weaponPosition,s.weaponRotation);
+ ac.transforms.GetComponent(weaponRoot)->scale_local={s.weaponScale,s.weaponScale,s.weaponScale};
+ ac.transforms.GetComponent(weaponRoot)->SetDirty();
  const auto viewRoot=ac.Entity_CreateTransform(CreatorAuthoredTransformRootName);
  Set(*ac.transforms.GetComponent(viewRoot),s.cameraPosition,s.cameraRotation);
  for(auto r:armRoots)ac.Component_Attach(r,viewRoot,true);

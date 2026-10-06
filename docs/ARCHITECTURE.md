@@ -1242,3 +1242,21 @@ equipment identity and load reset clear queued intent. One accepted request cann
 dispatch twice. Ordinary firearms and other non-directional presentations retain
 their existing routing. Runtime prompt exposes PREPARE NEXT and queued direction.
 Damage, stamina, hit windows and configurable combo authoring remain later work.
+
+### Assembly hand authoring and compatible recipe extensions
+
+FirstPersonAssemblySettings owns uniform primary/off-hand mesh scale and melee
+full-charge/tail-input/released-queue times. Optional authoring members extend
+strict schema-v1/v2 parsing; absent values preserve accepted defaults. Validation
+bounds finite scales/timings and requires all twelve directional slots or none.
+Generated independent native metadata carries timings into hand animation and
+the staged equipment router. Charge strength is normalized by authored duration.
+Primary-only part replacement preserves the retained hand setup; changing arms
+resets paths/indices rather than guessing a new rig. Off-hand product hashes join
+the preview-to-save stale-part guard. Journaled asset identity remains unchanged.
+
+The hand setup window edits the same command-backed assembly draft. Independent
+preview uses Runtime's native masks and avoidance in its private scene, including
+shield-held comparison and each Attack variant. Paired firearm preview retains
+its two-track clock. Preview state and generated masked clips never enter the
+saved product. Gameplay equipment phase timings remain separate authority.

@@ -61,10 +61,17 @@ static bool PrepareIndependentHandAssembly(const std::string& root,const StableI
  arms.Component_Attach(shieldRoot,offAnchor,true);
  Set(*arms.transforms.GetComponent(weaponRoot),s.weaponPosition,s.weaponRotation);
  Set(*arms.transforms.GetComponent(shieldRoot),s.offHandWeaponPosition,s.offHandWeaponRotation);
+ arms.transforms.GetComponent(weaponRoot)->scale_local={s.weaponScale,s.weaponScale,s.weaponScale};
+ arms.transforms.GetComponent(shieldRoot)->scale_local={s.offHandWeaponScale,s.offHandWeaponScale,s.offHandWeaponScale};
+ arms.transforms.GetComponent(weaponRoot)->SetDirty();arms.transforms.GetComponent(shieldRoot)->SetDirty();
  const auto viewRoot=arms.Entity_CreateTransform(CreatorAuthoredTransformRootName);
  Set(*arms.transforms.GetComponent(viewRoot),s.cameraPosition,s.cameraRotation);
  for(const auto entity:armRoots)arms.Component_Attach(entity,viewRoot,true);
  arms.metadatas.Create(viewRoot).bool_values.set("renegade.first_person.independent_hands",true);
+ auto& timing=arms.metadatas.Create(viewRoot);
+ timing.float_values.set("renegade.first_person.full_charge_seconds",s.fullChargeSeconds);
+ timing.float_values.set("renegade.first_person.chain_window_seconds",s.chainWindowSeconds);
+ timing.float_values.set("renegade.first_person.queued_release_seconds",s.queuedReleaseSeconds);
  if(s.avoidOffHand) {
   auto& m=arms.metadatas.Create(viewRoot);
   m.bool_values.set("renegade.first_person.avoid_off_hand",true);
