@@ -99,3 +99,13 @@ claim is made; prior save/reopen and firing evidence remains above. A scripted
 pixel comparison was unavailable because Python Pillow is not installed;
 release behaviour was visually inspected. Mouse orbit backlog is now resolved;
 responsive compact layout and launch socket work remain open.
+
+Implementation commit: 1303ce75f5fc7bd2f89968afede416746beb6fdb.
+Final hidden-drag cleanup build PASS 16.02s. Exact-head full targeted rerun
+stalled in RenegadeRuntimeProjectileSessionTests; a Studio-closed retry also
+stalled. Both owned test processes were terminated. Cause is unresolved;
+no inference that Studio startup caused it is claimed. Earlier 10/10 passed
+2.21s, including that unchanged Runtime test. Exact-head command with
+-E 'RenegadeRuntimeProjectileSessionTests' passed remaining 9/9 in 1.98s.
+Do not describe this as a complete final-head 10/10 pass; investigate the
+intermittent native session-test stall before the P3 verification gate.

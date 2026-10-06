@@ -1,3 +1,35 @@
+## P3 mouse preview checkpoint - 2026-10-06
+
+Implementation commit: 1303ce75f5fc7bd2f89968afede416746beb6fdb.
+Branch: feature/p3-projectile-impact. P2 PR #180 remains unmerged.
+
+Projectile preview replaces nine buttons with left-drag orbit, right-drag pan,
+wheel zoom and FIT / RESET VIEW. Fit clears camera pan/zoom and restores side
+view. Drag begins in the image, continues outside and ends on button release;
+hidden/model-changed/invalid previews clear drag. Saved appearance is unchanged.
+Changed: Studio ModelImportPreview h/cpp, PlayerProjectileEditor,
+StudioApplication.h; architecture, roadmap, feature matrix and preview evidence.
+
+Release build PASS 77.69s; include rebuild PASS 16.82s; final hidden-drag cleanup
+build PASS 16.02s. Commands: CL=/MP4; cmake --build BUILD/renegade --config
+Release --target RenegadeStudio -- /m:2 /p:BuildProjectReferences=false
+/verbosity:minimal. ctest --test-dir BUILD/renegade -C Release -R
+'Projectile|EquipmentAsset|EquipmentActionState|PlayerViewRig|TestLevelSnapshot'
+--output-on-failure: 10/10 PASS 2.21s before final cleanup. Exact-head full
+rerun and Studio-closed retry stalled in unchanged RuntimeProjectileSessionTests;
+owned tests were terminated, cause unresolved. Same command with
+-E 'RenegadeRuntimeProjectileSessionTests': remaining 9/9 PASS 1.98s.
+Investigate this intermittent test stall before P3 gate verification.
+Diff check PASS. No Wicked source/pin or Runtime code change.
+
+Native arrow orbit/pan/zoom/Fit/outside-edge drag/release visually passed.
+Scale 1 and rotation [0,0,0] remain unchanged. Owner reports "Works perfect".
+Evidence/commands/limits: docs/P3_PROJECTILE_PREVIEW.md, BUILD/p3-mouse-*.png.
+No new serialized state; previous save/reopen and standalone firing proof remain.
+No P3 gate closure or broader Sketchfab parity claim. Responsive compact layout
+remains open. Next: weapon/palm sockets and runtime muzzle launch, as below.
+Do not merge P2 automatically. Unrelated Tools/__pycache__/ and log.txt untouched.
+
 ## P3 projectile preview checkpoint - 2026-10-06
 
 Implementation commit: 833faa473ab9ca9ab187040998564430d98191c0.
