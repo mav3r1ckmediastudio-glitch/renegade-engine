@@ -77,12 +77,18 @@ only gameplay hand.
 ### P2 — Equipment & Action Framework
 
 
-**Status: IN PROGRESS.** The owner authorized the small picker repair first,
-then P2 in the authored order on 2026-10-05. The initial shared action-state
-foundation covers semantic requests, staged phases and hand reservation;
-project equipment assets and starting-loadout persistence/authoring are implemented
-on the P2 branch; Runtime integration and end-to-end acceptance remain open.
-See [P2_EQUIPMENT_ACTION_IMPLEMENTATION](P2_EQUIPMENT_ACTION_IMPLEMENTATION.md).
+**Status: OWNER-ACCEPTED IMPLEMENTATION CHECKPOINT; PR #180 / CI / independent review pending.**
+
+On 2026-10-06 the owner confirmed movement and Build Game both act as expected.
+The P2 branch includes equipment/loadout persistence and Runtime routing,
+staged/held/cancelled actions, independent sword/shield presentation, directional
+charge/chaining, blending, presentation contact correction, hand assembly
+editing/mesh swaps and explicit model import roles/folders/moves. This is bounded
+acceptance of the tested setup, not every combat/Alpha requirement. Generic
+editing, inventory, reserve ammunition and wider UX/transfer remain follow-ups.
+See [P2 implementation](P2_EQUIPMENT_ACTION_IMPLEMENTATION.md) and
+[P3 continuation handoff](P3_CONTINUATION_HANDOFF.md). Historical checkpoints
+later in this document retain their original evidence and limits.
 
 Implement generic item/ability ownership, equip/unequip, primary/alternate use,
 charge/release, reload, staged actions and hand reservation.

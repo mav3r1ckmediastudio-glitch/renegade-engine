@@ -24,7 +24,7 @@ workflow revision remains open.
 - Support packs that keep both parts together. Explicit part roles should govern
   picker eligibility independently of physical folder layout; retain an explicit
   browse/import route for other creator layouts. Saved assembly provenance supplies legacy/shared-pack roles in the first P2 slice;
-  explicit new-pack role authoring and browse/import remain future work.
+  explicit new-pack role authoring and general Content import destinations are implemented on the P2 branch. Broader browse/transfer UX remains open.
 - Show readable names and clearly distinguish raw parts, completed assemblies and
   player prefabs. Applying a finished prefab should not require rebuilding it.
 - Provide complete cross-project import/transfer of the prefab, assembly, authoring
@@ -42,3 +42,7 @@ Runtime. The UX follow-up does not block the accepted PR #178 functionality.
 See [P2 implementation](P2_EQUIPMENT_ACTION_IMPLEMENTATION.md) for current scope
 and remaining work. Native filtered selections and restored preview were checked
 in an isolated copy of the accepted shotgun project.
+
+Owner checkpoint 2026-10-06: movement and Build Game behave as expected.
+Saved hand assembly editing, mesh replacement, import roles/folders and stable-ID
+model moves are implemented. This does not close the wider UX/transfer backlog.

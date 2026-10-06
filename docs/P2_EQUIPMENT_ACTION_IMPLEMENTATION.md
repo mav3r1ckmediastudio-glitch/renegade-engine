@@ -1,5 +1,31 @@
 # P2 equipment and action framework
 
+## Current P2 checkpoint - 2026-10-06
+
+Owner accepted movement and Build Game behavior: "ive checked movement and build
+game, and both act as expected". This supplements the native and automated
+checks recorded in HANDOFF.md; the owner-built package was not independently
+identified by executable hash or source revision. PR #180 integrates this branch;
+Windows CI and independent exact-head review remain required before merge.
+
+Implemented: governed equipment assets and starting loadouts, staged semantic
+actions, hold/release/cancel, independent sword/shield hand presentation,
+directional charge and chaining, native transition blends, collision-aware arm
+pose correction, saved hand assembly authoring and mesh replacement. Import
+folders, explicit roles, optional tags and stable-ID-preserving model moves are
+implemented. Player Start has solid camera/facing guides and a frozen camera inset.
+
+P2 is an owner-accepted implementation checkpoint, not full Alpha/combat gate
+closure. Generic action editing, unused animation routing, broader inventory,
+reserve ammunition and cross-project transfer remain follow-ups. Sword/shield
+pose avoidance is presentation correction, not world hit detection or NPC damage.
+Historical checkpoints below describe progress at their recorded time.
+
+Next programme: P3 shared hit/projectile/impact framework, using existing
+Wicked/Jolt queries, Character damage and governed identity/event seams. See
+[P3 continuation handoff](P3_CONTINUATION_HANDOFF.md).
+
+
 Design authority: [PLAYER_ARMS_COMBAT_FRAMEWORK](PLAYER_ARMS_COMBAT_FRAMEWORK.md)
 and [ROADMAP](ROADMAP.md). P2 is in progress; the accepted shotgun remains the
 compatibility reference. This document does not close a release gate.

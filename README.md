@@ -137,13 +137,22 @@ player prefab save/assignment/reset, local overrides and selectable always-visib
 player capsules are integrated. Named prefabs can be dragged from `Content/Player`;
 new levels remain player-free until the creator places a start.
 
-The owner verified the shotgun in the existing v2 project. Authoring UX remains a
-required follow-up: arms/weapon pickers currently include unrelated project models,
-and cross-project transfer still needs manual registration/dependency handling.
-See [player authoring UI/UX follow-up](docs/PLAYER_AUTHORING_UX_FOLLOWUP.md),
-[player authoring continuation](docs/PLAYER_AUTHORING_CONTINUATION.md) and
-[P1 assembly authoring](docs/P1_ASSEMBLY_AUTHORING.md). Independent equipment,
-reserve ammunition, hits/damage, recoil and the wider combat programme remain open.
+The owner verified the shotgun in the existing v2 project. The P2 branch now
+adds equipment/loadout assets, staged actions, independent sword/shield layers,
+directional charge/chaining, native blending, collision-aware pose correction,
+and saved hand assembly editing with weapon mesh replacement. Imported parts
+have explicit roles and general Content destinations; stable-ID-preserving model
+moves and optional tags are supported. Player Start includes solid camera/facing
+guides and a frozen equipped camera inset.
+
+On 6 October 2026 the owner confirmed movement and Build Game behave as expected.
+PR #180 remains subject to Windows CI and independent exact-head review before
+merge. Authoring UX and complete dependency-aware cross-project transfer remain
+follow-ups. Reserve ammunition, hits/damage, recoil and wider Alpha combat scope
+remain open; pose correction does not establish weapon hit detection.
+See [P2 implementation](docs/P2_EQUIPMENT_ACTION_IMPLEMENTATION.md),
+[player authoring UI/UX follow-up](docs/PLAYER_AUTHORING_UX_FOLLOWUP.md) and
+[P3 continuation handoff](docs/P3_CONTINUATION_HANDOFF.md).
 
 ## Governed Lua scripting
 
