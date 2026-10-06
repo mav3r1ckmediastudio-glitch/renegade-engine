@@ -3,6 +3,7 @@
 #include "renegade/bridge/ProjectileAssetService.h"
 #include "renegade/bridge/AssetRegistryService.h"
 #include <filesystem>
+#include <cmath>
 
 #include <algorithm>
 #include <cctype>
@@ -144,27 +145,14 @@ namespace renegade::studio
         projectilePreviewInfo_.SetPos({720,550});projectilePreviewInfo_.SetSize({512,72});
         projectilePreviewInfo_.font.params.size=14;
         projectileCreatePanel_.AddWidget(&projectilePreviewInfo_);
-        const char* viewNames[]={"TURN LEFT","TURN RIGHT","LOOK UP","LOOK DOWN",
-            "SIDE VIEW","REAR VIEW","FIT MODEL","ZOOM IN","ZOOM OUT"};
-        for (unsigned i=0;i<9;++i) {
-            const float x=720+(i<4?i*128:(i<7?(i-4)*170:(i-7)*170));
-            const float y=i<4?420:(i<7?465:510);
-            button(projectilePreviewControls_[i],viewNames[i],x,y,i<4?122:164,projectileCreatePanel_);
-            projectilePreviewControls_[i].OnClick([this,i](const wi::gui::EventArgs&){
-                if (!projectilePreview_) return;
-                switch(i) {
-                case 0:projectilePreview_->Orbit(-XM_PIDIV4,0);break;
-                case 1:projectilePreview_->Orbit(XM_PIDIV4,0);break;
-                case 2:projectilePreview_->Orbit(0,0.25f);break;
-                case 3:projectilePreview_->Orbit(0,-0.25f);break;
-                case 4:projectilePreview_->SetView(XM_PIDIV2,0);break;
-                case 5:projectilePreview_->SetView(0,0);break;
-                case 6:projectilePreview_->FitModel();break;
-                case 7:projectilePreview_->Zoom(0.8f);break;
-                case 8:projectilePreview_->Zoom(1.25f);break;
-                }
-            });
-        }
+        button(projectilePreviewFit_,"FIT / RESET VIEW",720,420,180,projectileCreatePanel_);
+        projectilePreviewFit_.OnClick([this](const wi::gui::EventArgs&){
+            if (!projectilePreview_) return;
+            projectilePreviewDrag_=0;
+            projectilePreview_->FitModel();projectilePreview_->SetView(XM_PIDIV2,0);
+        });
+        projectilePreviewImage_.SetTooltip("Left-drag to orbit; right-drag to pan; mouse wheel to zoom.");
+        projectilePreviewInfo_.SetPos({720,475});projectilePreviewInfo_.SetSize({512,140});
         projectileCancel_.OnClick([this](const wi::gui::EventArgs&){projectileCreatePanel_.SetVisible(false);});
         projectilePreset_.OnSelect([this](const wi::gui::EventArgs& args){
             if (args.iValue>=5) return;
@@ -280,13 +268,14 @@ namespace renegade::studio
         if (!projectileCreatePanel_.IsVisible() || !session_ ||
             !session_->Projects().HasProject() ||
             session_->Projects().CurrentProject().projectId != projectileEditorProject_) {
-            projectileCreatePanel_.SetVisible(false);
+            projectileCreatePanel_.SetVisible(false);projectilePreviewDrag_=0;
             projectilePreview_.reset();projectilePreviewImage_.SetColor(wi::Color(22,26,33));
             projectilePreviewImage_.SetImage({});
             projectilePreviewMesh_.clear();projectilePreviewProject_.clear();return;
         }
         const auto& project=session_->Projects().CurrentProject();
         if (projectilePreviewMesh_!=projectileDraftMesh_ || projectilePreviewProject_!=project.projectId) {
+            projectilePreviewDrag_=0;
             projectilePreview_.reset();projectilePreviewImage_.SetColor(wi::Color(22,26,33));
             projectilePreviewImage_.SetImage({});
             projectilePreviewMesh_=projectileDraftMesh_;projectilePreviewProject_=project.projectId;
@@ -304,7 +293,7 @@ namespace renegade::studio
                 if (!projectilePreview_) projectilePreviewInfo_.SetText("Cannot preview model: "+error);
             }
         }
-        for (auto& control:projectilePreviewControls_) control.SetEnabled(projectilePreview_!=nullptr);
+        projectilePreviewFit_.SetEnabled(projectilePreview_!=nullptr);
         if (projectileDraftMesh_.empty()) {
             projectilePreviewInfo_.SetText("Choose a visible model to inspect it here.\nView controls change only your inspection camera.");
             projectileSave_.SetEnabled(true);return;
@@ -321,7 +310,7 @@ namespace renegade::studio
         std::string validationError;
         if (!bridge::ValidateProjectileAsset(appearance,validationError)) {
             projectilePreviewInfo_.SetText("Model scale must be between 0.001 and 100.\nModel rotations must be between -360 and 360 degrees.");
-            projectilePreviewScale_=-1;
+            projectilePreviewScale_=-1;projectilePreviewDrag_=0;
             projectilePreviewImage_.SetColor(wi::Color(22,26,33));
             projectilePreviewImage_.SetImage({});projectileSave_.SetEnabled(false);return;
         }
@@ -333,9 +322,31 @@ namespace renegade::studio
             const auto size=projectilePreview_->ModelSize();
             projectilePreviewInfo_.SetText("Model size: "+ProjectileFlightLabel(size.x*scale)+" x "+
                 ProjectileFlightLabel(size.y*scale)+" x "+ProjectileFlightLabel(size.z*scale)+" m\n"+
-                "In SIDE VIEW, point the tip to the right (+Z flight direction).\n"+
-                "View controls do not change the saved model orientation.");
+                "Left-drag: orbit | Right-drag: pan | Wheel: zoom\n"+
+                "FIT resets to side view: tip points right (+Z flight).\n"+
+                "Moving the view does not change saved model orientation.");
         }
+        const auto pointer=wi::input::GetPointer();
+        const auto pos=projectilePreviewImage_.GetPos();
+        const auto size=projectilePreviewImage_.GetSize();
+        const bool inside=pointer.x>=pos.x && pointer.x<pos.x+size.x &&
+            pointer.y>=pos.y && pointer.y<pos.y+size.y;
+        const auto dragButton=projectilePreviewDrag_==2?wi::input::MOUSE_BUTTON_RIGHT:wi::input::MOUSE_BUTTON_LEFT;
+        if (projectilePreviewDrag_ && !wi::input::Down(dragButton)) projectilePreviewDrag_=0;
+        if (!projectilePreviewDrag_ && inside) {
+            if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) projectilePreviewDrag_=1;
+            else if (wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT)) projectilePreviewDrag_=2;
+            if (projectilePreviewDrag_) projectilePreviewPointer_={pointer.x,pointer.y};
+        }
+        if (projectilePreviewDrag_) {
+            const float dx=pointer.x-projectilePreviewPointer_.x,dy=pointer.y-projectilePreviewPointer_.y;
+            if (dx!=0 || dy!=0) {
+                if (projectilePreviewDrag_==1) projectilePreview_->Orbit(-dx*0.008f,dy*0.008f);
+                else projectilePreview_->Pan(dx/std::max(1.0f,size.y),dy/std::max(1.0f,size.y));
+            }
+            projectilePreviewPointer_={pointer.x,pointer.y};
+        }
+        if (inside && pointer.z!=0) projectilePreview_->Zoom(std::pow(0.85f,std::clamp(pointer.z,-8.0f,8.0f)));
         if (projectilePreview_->NeedsRender()) {
             projectilePreview_->PreUpdate();projectilePreview_->Update(dt);
         }

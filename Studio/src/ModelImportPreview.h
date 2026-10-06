@@ -19,6 +19,7 @@ namespace renegade::studio
         void Orbit(float yaw, float pitch);
         void SetView(float yaw, float pitch);
         void Zoom(float factor);
+        void Pan(float horizontal, float vertical);
         void FitModel();
         void SetModelAppearance(float scale, const std::array<float,3>& rotation);
         XMFLOAT3 ModelSize() const { return modelSize_; }
@@ -49,7 +50,7 @@ namespace renegade::studio
         bridge::ModelAnimationPreviewService animationPreview_;
         wi::allocator::shared_ptr<wi::scene::Scene> previewScene_;
         wi::scene::CameraComponent previewCamera_;
-        XMFLOAT3 center_ = {};
+        XMFLOAT3 center_ = {}, pan_ = {};
         float radius_ = 1;
         float angle_ = 0.5f;
         float elevation_ = 0.2425f, zoom_ = 1;

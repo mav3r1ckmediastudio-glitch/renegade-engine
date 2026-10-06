@@ -1172,7 +1172,9 @@ namespace renegade::studio
         wi::gui::Button projectileImportMesh_;
         std::unique_ptr<ModelImportPreview> projectilePreview_;
         wi::gui::Label projectilePreviewImage_, projectilePreviewInfo_;
-        std::array<wi::gui::Button,9> projectilePreviewControls_;
+        wi::gui::Button projectilePreviewFit_;
+        int projectilePreviewDrag_ = 0;
+        XMFLOAT2 projectilePreviewPointer_ = {};
         bridge::StableId projectilePreviewMesh_, projectilePreviewProject_;
         float projectilePreviewScale_ = -1;
         std::array<float,3> projectilePreviewRotation_ = {};

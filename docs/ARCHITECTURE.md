@@ -1352,3 +1352,13 @@ preset. See [Projectile preview evidence](P3_PROJECTILE_PREVIEW.md).
 Next: explicit weapon/palm sockets, placement and runtime launch/aim timing.
 Camera-eye launch remains current; Hitscan/Beam, effects, Jolt-only coverage,
 packaged firing and independent P3 verification remain open.
+
+### Projectile preview mouse navigation - 2026-10-06
+
+Projectile inspection now uses left-drag orbit, right-drag pan and wheel zoom.
+FIT / RESET VIEW recentres and returns to the tip-right side view. Drag starts
+inside the image and remains owned until release, including outside the image.
+View state is transient; saved appearance and Runtime launch rules are unchanged.
+Other importer controls and the Wicked pin are unchanged. See
+[P3 preview evidence](P3_PROJECTILE_PREVIEW.md). Native verification is recorded
+there; weapon/palm launch sockets remain the next gameplay increment.

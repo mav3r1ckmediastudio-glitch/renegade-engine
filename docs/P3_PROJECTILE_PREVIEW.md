@@ -72,3 +72,30 @@ Correcting to 2 restored the preview: p3-preview-final-{invalid,recovery}.png.
 
 Implementation commit: 833faa473ab9ca9ab187040998564430d98191c0.
 Exact implementation-commit targeted regression rerun: 10/10 PASS 1.95s.
+
+## Mouse inspection controls
+
+The projectile preview replaces its nine view buttons with left-drag orbit,
+right-drag camera-plane pan, wheel zoom and FIT / RESET VIEW. Fit clears pan and
+zoom and returns to the tip-right side view. Drag begins only inside the image;
+once started it continues outside the image until the initiating button is
+released. Closing/changing the model or invalid appearance clears drag state.
+These camera values are transient and never enter projectile definitions.
+Mouse movement uses pointer displacement rather than frame time; wheel zoom
+and vertical orbit retain bounded limits. The level remains behind the existing
+projectile editor input owner. Other importer previews retain their controls.
+
+Mouse validation: Release Studio build PASS 77.69s, explicit-include rebuild
+PASS 16.82s. Targeted Projectile / EquipmentAsset / EquipmentActionState /
+PlayerViewRig / TestLevelSnapshot CTest: 10/10 PASS 2.21s; diff check PASS.
+Native supplied Arrow: left-drag changes yaw/elevation, right-drag translates
+in the camera plane, three wheel notches enlarge the image, Fit restores the
+centred tip-right side view. Orbit continued past the right image edge; moving
+the pointer back after release left the view stationary. Scale stayed 1 and
+XYZ rotation stayed 0 throughout. Screenshots: BUILD/p3-mouse-{side,orbit,pan,
+zoom,fit,outside,released}.png. Owner reports 'Works perfect' on 2026-10-06.
+No serialized format or Runtime code changed, so no new standalone gameplay
+claim is made; prior save/reopen and firing evidence remains above. A scripted
+pixel comparison was unavailable because Python Pillow is not installed;
+release behaviour was visually inspected. Mouse orbit backlog is now resolved;
+responsive compact layout and launch socket work remain open.

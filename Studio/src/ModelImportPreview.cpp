@@ -37,7 +37,7 @@ namespace renegade::studio
         }
         sourceCenter_ = center_; sourceRadius_ = radius_; appearanceScale_ = 1;
         modelSize_ = {extent.x*2,extent.y*2,extent.z*2};
-        angle_ = 0.5f; elevation_ = 0.2425f; zoom_ = 1;
+        angle_ = 0.5f; elevation_ = 0.2425f; zoom_ = 1; pan_ = {};
         appearanceRoot_ = wi::ecs::INVALID_ENTITY;
         // Discard source lights/weather on the copy only, then use neutral
         // fixed illumination so the preview doesn't depend on the open level.
@@ -135,7 +135,7 @@ namespace renegade::studio
     void ModelImportPreview::FitCamera()
     {
         const float distance = radius_ / std::sin(XM_PI / 8.0f) * 1.12f * zoom_;
-        const XMVECTOR target = XMLoadFloat3(&center_);
+        const XMVECTOR target = XMLoadFloat3(&center_) + XMLoadFloat3(&pan_);
         const XMVECTOR eye = target + XMVectorSet(std::sin(angle_) * distance * std::cos(elevation_),
             distance * std::sin(elevation_), -std::cos(angle_) * distance * std::cos(elevation_), 0);
         previewCamera_.TransformCamera(XMMatrixInverse(nullptr,
@@ -165,9 +165,20 @@ namespace renegade::studio
         zoom_ = std::clamp(zoom_ * factor, 0.15f, 8.0f);
         FitCamera(); renderedFrames_ = 0;
     }
+    void ModelImportPreview::Pan(float horizontal, float vertical)
+    {
+        // Fractions of the preview height become camera-plane world movement.
+        const float distance = radius_ / std::sin(XM_PI / 8.0f) * 1.12f * zoom_;
+        const float span = 2 * distance * std::tan(XM_PI / 8.0f);
+        const XMVECTOR right = XMVectorSet(std::cos(angle_),0,std::sin(angle_),0);
+        const XMVECTOR up = XMVectorSet(-std::sin(angle_)*std::sin(elevation_),
+            std::cos(elevation_),std::cos(angle_)*std::sin(elevation_),0);
+        XMStoreFloat3(&pan_,XMLoadFloat3(&pan_) + span*(-horizontal*right + vertical*up));
+        FitCamera(); renderedFrames_ = 0;
+    }
     void ModelImportPreview::FitModel()
     {
-        radius_ = sourceRadius_ * appearanceScale_; zoom_ = 1;
+        radius_ = sourceRadius_ * appearanceScale_; zoom_ = 1; pan_ = {};
         previewCamera_.CreatePerspective(512,320,std::max(0.00001f,radius_*0.001f),
             radius_*20.0f,XM_PI/4.0f);
         FitCamera(); renderedFrames_ = 0;
