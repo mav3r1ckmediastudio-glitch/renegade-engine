@@ -3323,3 +3323,30 @@ BUILD/player-markers-final-build.log. CTest --test-dir BUILD/renegade -C Release
 passed /0.32s (only prefab test matched). git diff --check passed.
 The visually accepted solid-marker Studio remains open; final binary is also
 available in BUILD/player-markers-final. No UI interaction after owner acceptance.
+
+
+## P2 owner acceptance and P3 continuation - 2026-10-06
+
+Acceptance/documentation commit c1375eb9770cea6b9a2a9ecfa89eb9f64211ab4c;
+implementation through 6135b2d5395b4718b3adf198a95a08805307a919.
+Owner confirmed movement and Build Game both act as expected and authorized
+updating documentation, pushing the P2 branch and starting CI on PR #180.
+Owner intends to begin P3 in a separate chat. README, ROADMAP, P2 implementation,
+player continuation/UX follow-up, FEATURE_MATRIX and hand authoring documentation
+now record the accepted bounded checkpoint; docs/P3_CONTINUATION_HANDOFF.md gives
+the new chat its starting authority, scope, branch policy and remaining limits.
+Historical checks remain dated evidence, superseded by the new current checkpoint.
+
+Validation for this documentation-only change: git diff --check passed.
+Prior compiled implementation/build/native/focused regression evidence is above;
+no new source changes or rebuild required. Owner's exported executable hash/source
+revision was not independently captured. CI and independent exact-head review
+remain required; no merge or full P2/Alpha release gate closure claimed.
+Existing PR #180 description is being replaced to match the complete branch.
+Commands: git fetch origin; gh pr view 180; git push origin
+feature/p2-equipment-actions; gh pr edit 180 --title ... --body-file
+BUILD/p2-pr-body.md; gh pr checks 180; gh run list --branch
+feature/p2-equipment-actions. GitHub links/status are reported to the owner after
+push. Unrelated Tools/__pycache__ and log.txt remain untouched.
+Next: P3 shared hits/projectiles/impact framework on a separate dependent branch
+(or updated main after P2 merge). Read docs/P3_CONTINUATION_HANDOFF.md first.
