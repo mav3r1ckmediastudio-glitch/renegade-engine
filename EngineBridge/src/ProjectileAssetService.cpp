@@ -1,0 +1,231 @@
+#include "renegade/bridge/ProjectileAssetService.h"
+#include "renegade/bridge/AssetRegistryService.h"
+#include "json.hpp"
+
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+#include <iterator>
+
+namespace renegade::bridge
+{
+    namespace
+    {
+        namespace fs = std::filesystem;
+        using json = nlohmann::json;
+        const AssetRecord* Find(const AssetRegistry& registry, const StableId& id)
+        {
+            for (const auto& record : registry.records)
+                if (record.assetId == id) return &record;
+            return nullptr;
+        }
+        std::string Hash(const std::string& text)
+        {
+            std::uint64_t hash = 1469598103934665603ull;
+            for (unsigned char c : text) { hash ^= c; hash *= 1099511628211ull; }
+            std::ostringstream out;
+            out << "fnv1a64:" << std::hex << std::setfill('0') << std::setw(16) << hash;
+            return out.str();
+        }
+    }
+
+    const char* ProjectilePresetName(ProjectilePreset preset) noexcept
+    {
+        switch (preset)
+        {
+        case ProjectilePreset::Bullet: return "Bullet";
+        case ProjectilePreset::Arrow: return "Arrow";
+        case ProjectilePreset::Bolt: return "Bolt";
+        case ProjectilePreset::Thrown: return "Thrown projectile";
+        case ProjectilePreset::Spell: return "Spell projectile";
+        default: return "Projectile";
+        }
+    }
+
+    ProjectileAssetDocument MakeProjectilePreset(ProjectilePreset preset)
+    {
+        ProjectileAssetDocument result;
+        result.name = ProjectilePresetName(preset);
+        switch (preset)
+        {
+        case ProjectilePreset::Bullet: result.speedMetresPerSecond = 300; break;
+        case ProjectilePreset::Arrow:
+            result.speedMetresPerSecond = 45; result.gravityScale = 1; break;
+        case ProjectilePreset::Bolt:
+            result.speedMetresPerSecond = 65; result.gravityScale = 1; break;
+        case ProjectilePreset::Thrown:
+            result.speedMetresPerSecond = 15; result.gravityScale = 1; break;
+        case ProjectilePreset::Spell:
+            result.speedMetresPerSecond = 20; result.lifetimeSeconds = 8; break;
+        }
+        return result;
+    }
+
+    bool ValidateProjectileAsset(const ProjectileAssetDocument& d, std::string& error)
+    {
+        bool nameValid = !d.name.empty() && d.name.size() <= 96;
+        bool nonSpace = false;
+        for (unsigned char c : d.name)
+        {
+            if (c < 32 || c == 127) nameValid = false;
+            if (c != ' ') nonSpace = true;
+        }
+        if (!IsValidStableId(d.projectId) || !IsValidStableId(d.assetId) ||
+            !nameValid || !nonSpace || !std::isfinite(d.speedMetresPerSecond) ||
+            d.speedMetresPerSecond <= 0 || d.speedMetresPerSecond > 2000 ||
+            !std::isfinite(d.gravityScale) || d.gravityScale < 0 || d.gravityScale > 10 ||
+            !std::isfinite(d.lifetimeSeconds) || d.lifetimeSeconds < 0.05f ||
+            d.lifetimeSeconds > 120 || !std::isfinite(d.damage) ||
+            d.damage < 0 || d.damage > 100000)
+        {
+            error = "Projectile requires a name, valid identity and bounded flight values.";
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    bool SerializeProjectileAsset(const ProjectileAssetDocument& d, std::string& text, std::string& error)
+    {
+        if (!ValidateProjectileAsset(d, error)) return false;
+        text = json{{"format","renegade-projectile"},{"schema_version",1},
+            {"project_id",d.projectId},{"asset_id",d.assetId},{"name",d.name},
+            {"speed_metres_per_second",d.speedMetresPerSecond},{"gravity_scale",d.gravityScale},
+            {"lifetime_seconds",d.lifetimeSeconds},{"damage",d.damage}}.dump(2);
+        return true;
+    }
+
+    bool DeserializeProjectileAsset(const std::string& text, ProjectileAssetDocument& out, std::string& error)
+    {
+        try
+        {
+            const auto j = json::parse(text);
+            if (!j.is_object() || j.size() != 9 || j.at("format") != "renegade-projectile" ||
+                !j.at("schema_version").is_number_integer() || j.at("schema_version") != 1)
+                throw std::runtime_error("Unsupported projectile schema.");
+            for (const char* field : {"speed_metres_per_second","gravity_scale","lifetime_seconds","damage"})
+                if (!j.at(field).is_number()) throw std::runtime_error("Projectile flight values must be numeric.");
+            ProjectileAssetDocument d;
+            d.projectId=j.at("project_id").get<std::string>();
+            d.assetId=j.at("asset_id").get<std::string>();
+            d.name=j.at("name").get<std::string>();
+            d.speedMetresPerSecond=j.at("speed_metres_per_second").get<float>();
+            d.gravityScale=j.at("gravity_scale").get<float>();
+            d.lifetimeSeconds=j.at("lifetime_seconds").get<float>();
+            d.damage=j.at("damage").get<float>();
+            if (!ValidateProjectileAsset(d, error)) return false;
+            out=std::move(d); error.clear(); return true;
+        }
+        catch (const std::exception& e) { error=e.what(); return false; }
+    }
+
+    bool ReadProjectileAssetFile(const std::string& path, ProjectileAssetDocument& d, std::string& error)
+    {
+        std::ifstream in(fs::u8path(path), std::ios::binary);
+        if (!in) { error="Cannot read projectile asset."; return false; }
+        const std::string text((std::istreambuf_iterator<char>(in)), {});
+        if (in.bad()) { error="Cannot read complete projectile asset."; return false; }
+        return DeserializeProjectileAsset(text,d,error);
+    }
+
+    bool LoadProjectileAsset(const std::string& root, const StableId& project, const StableId& id,
+                             ProjectileAssetDocument& out, std::string& error)
+    {
+        AssetRegistry registry;
+        if (!ReadAssetRegistry(root,project,registry,error)) return false;
+        const auto* record=Find(registry,id);
+        if (!record || !record->sourceAvailable || record->dependencyClass!=DependencyClass::Data ||
+            record->provider!="renegade.projectile" ||
+            fs::u8path(record->projectRelativePath).extension()!=ProjectileAssetExtension ||
+            !record->dependencyAssetIds.empty())
+        { error="Projectile is missing or invalid in the project registry."; return false; }
+        const auto path=ResolveDependencyPath(root,record->projectRelativePath);
+        ProjectileAssetDocument d;
+        if (!path.accepted || !path.exists)
+        { error="Projectile file is missing or outside the project."; return false; }
+        if (!ReadProjectileAssetFile(path.absolutePath,d,error)) return false;
+        if (d.projectId!=project || d.assetId!=id)
+        { error="Projectile identity differs from its project registry."; return false; }
+        out=std::move(d); error.clear(); return true;
+    }
+
+    ProjectileAssetSaveResult SaveProjectileAsset(const std::string& root, const StableId& project,
+        ProjectileAssetDocument d, ProjectDocumentTransactionHook hook)
+    {
+        ProjectileAssetSaveResult r;
+        AssetRegistry registry;
+        if (!ReadAssetRegistry(root,project,registry,r.error)) return r;
+        d.projectId=project; d.assetId=GenerateStableId(); r.document=std::move(d);
+        std::string text;
+        if (!SerializeProjectileAsset(r.document,text,r.error)) return r;
+        std::error_code ec;
+        const auto canonical=fs::weakly_canonical(fs::u8path(root),ec);
+        if (ec || !fs::is_directory(canonical))
+        { r.error="Projectile project root is unavailable."; return r; }
+        r.projectRelativePath="Content/Projectiles/"+r.document.assetId+ProjectileAssetExtension;
+        const auto admitted=ResolveDependencyPath(canonical.generic_u8string(),r.projectRelativePath);
+        if (!admitted.accepted) { r.error=admitted.error; return r; }
+        const auto destination=canonical/fs::u8path(r.projectRelativePath);
+        fs::create_directories(destination.parent_path(),ec);
+        if (ec) { r.error="Cannot create projectile directory."; return r; }
+        AssetRecord record;
+        record.assetId=r.document.assetId;
+        record.dependencyNodeId="projectile:"+record.assetId;
+        record.projectRelativePath=r.projectRelativePath;
+        record.provider="renegade.projectile"; record.contentHash=Hash(text);
+        registry.records.push_back(record);
+        std::string registryText,registryPath;
+        if (!SerializeAssetRegistry(registry,registryText,r.error) ||
+            !ResolveAssetRegistryDocumentPath(canonical.generic_u8string(),registryPath,r.error)) return r;
+        ProjectDocumentWrite asset{destination.generic_u8string(),{text.begin(),text.end()},
+            [text](const std::string& path,std::string& error) {
+                ProjectileAssetDocument d; std::string canonicalText;
+                return ReadProjectileAssetFile(path,d,error) &&
+                    SerializeProjectileAsset(d,canonicalText,error) && canonicalText==text;
+            }};
+        ProjectDocumentWrite index{registryPath,{registryText.begin(),registryText.end()},
+            [project,id=record.assetId](const std::string& path,std::string& error) {
+                std::ifstream in(fs::u8path(path),std::ios::binary);
+                const std::string text((std::istreambuf_iterator<char>(in)),{});
+                AssetRegistry registry;
+                return DeserializeAssetRegistry(text,registry,error) &&
+                    registry.projectId==project && Find(registry,id);
+            }};
+        ProjectDocumentTransactionOptions options;
+        options.allowedRoot=canonical.generic_u8string();
+        options.journalDirectory=(canonical/"Intermediate/Transactions").generic_u8string();
+        options.operationHook=std::move(hook);
+        r.transaction=ProjectDocumentTransaction().Execute({std::move(asset),std::move(index)},options);
+        r.succeeded=r.transaction.success;
+        if (!r.succeeded) r.error=r.transaction.message;
+        return r;
+    }
+
+    std::vector<ProjectileAssetDocument> ListProjectileAssets(
+        const std::string& root,const StableId& project,std::string& error)
+    {
+        AssetRegistry registry; std::vector<ProjectileAssetDocument> result;
+        if (!ReadAssetRegistry(root,project,registry,error)) return result;
+        for (const auto& record:registry.records)
+        {
+            if (record.provider!="renegade.projectile") continue;
+            ProjectileAssetDocument d;
+            if (!LoadProjectileAsset(root,project,record.assetId,d,error)) return {};
+            result.push_back(std::move(d));
+        }
+        std::sort(result.begin(),result.end(),[](const auto& a,const auto& b) {
+            return a.name==b.name ? a.assetId<b.assetId : a.name<b.name;
+        });
+        error.clear(); return result;
+    }
+
+    ProjectileDefinition ProjectileSimulationDefinition(const ProjectileAssetDocument& d) noexcept
+    {
+        ProjectileDefinition result;
+        result.acceleration={0,-9.81f*d.gravityScale,0};
+        result.lifetimeSeconds=d.lifetimeSeconds;
+        result.damage=d.damage;
+        return result;
+    }
+}

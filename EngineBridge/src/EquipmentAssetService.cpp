@@ -1,4 +1,5 @@
 #include "renegade/bridge/EquipmentAssetService.h"
+#include "renegade/bridge/ProjectileAssetService.h"
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/ReusableAssetService.h"
 #include "json.hpp"
@@ -33,7 +34,27 @@ bool Valid(const EquipmentAssetDocument& d,std::string& error) {
     for(const auto& a:d.equipment.actions)if(a.animationAction.size()>96) {
         error="Equipment semantic animation action is too long.";return false;
     }
+    for(const auto& binding:d.equipment.projectiles)if(!IsValidStableId(binding.projectileAssetId)) {
+        error="Equipment projectile identity is invalid.";return false;
+    }
     error.clear();return true;
+}
+std::vector<StableId> EquipmentDependencies(const EquipmentDefinition& item) {
+    std::vector<StableId> result;
+    if(!item.presentationAssetId.empty())result.push_back(item.presentationAssetId);
+    for(const auto& binding:item.projectiles)
+        if(std::find(result.begin(),result.end(),binding.projectileAssetId)==result.end())
+            result.push_back(binding.projectileAssetId);
+    std::sort(result.begin(),result.end());
+    return result;
+}
+bool ProjectilesAvailable(const std::string& root,const StableId& project,
+    const EquipmentDefinition& item,std::string& error) {
+    for(const auto& binding:item.projectiles) {
+        ProjectileAssetDocument projectile;
+        if(!LoadProjectileAsset(root,project,binding.projectileAssetId,projectile,error))return false;
+    }
+    return true;
 }
 bool PresentationAvailable(const std::string& root,const AssetRegistry& registry,
     const StableId& id,std::string& error) {
@@ -63,17 +84,28 @@ bool SerializeEquipmentAsset(const EquipmentAssetDocument& d,std::string& text,s
         {"hold_until_release",a.holdUntilRelease},{"cancellable_before_active",a.cancellableBeforeActive}});
     for(size_t i=0;i<d.equipment.actions.size();++i)
         if(d.equipment.actions[i].activeWhileHeld)actions[i]["active_while_held"]=true;
-    text=json{{"format","renegade-equipment"},{"schema_version",1},{"project_id",d.projectId},
+    auto document=json{{"format","renegade-equipment"},{"schema_version",d.equipment.projectiles.empty()?1:2},{"project_id",d.projectId},
         {"asset_id",d.equipment.assetId},{"name",d.equipment.name},
         {"presentation_asset_id",d.equipment.presentationAssetId},
-        {"hand_use",HandNames[unsigned(d.equipment.handUse)]},{"actions",actions}}.dump(2);
+        {"hand_use",HandNames[unsigned(d.equipment.handUse)]},{"actions",actions}};
+    if(!d.equipment.projectiles.empty()) {
+        document["projectiles"]=json::array();
+        for(const auto& binding:d.equipment.projectiles)
+            document["projectiles"].push_back({{"action",ActionNames[unsigned(binding.action)]},
+                {"projectile_asset_id",binding.projectileAssetId}});
+    }
+    text=document.dump(2);
     return true;
 }
 bool DeserializeEquipmentAsset(const std::string& text,EquipmentAssetDocument& out,std::string& error) {
     try {
         const auto j=json::parse(text);
-        if(!j.is_object()||j.size()!=8||j.at("format")!="renegade-equipment"||
-           !j.at("schema_version").is_number_integer()||j.at("schema_version")!=1)
+        if(!j.is_object()||j.at("format")!="renegade-equipment"||
+           !j.at("schema_version").is_number_integer())
+            throw std::runtime_error("Unsupported equipment schema.");
+        const auto schema=j.at("schema_version").get<int>();
+        if(!((schema==1&&j.size()==8&&!j.contains("projectiles"))||
+             (schema==2&&j.size()==9&&j.contains("projectiles"))))
             throw std::runtime_error("Unsupported equipment schema.");
         EquipmentAssetDocument d;
         d.projectId=j.at("project_id").get<std::string>();
@@ -96,6 +128,18 @@ bool DeserializeEquipmentAsset(const std::string& text,EquipmentAssetDocument& o
             a.cancellableBeforeActive=v.at("cancellable_before_active").get<bool>();
             if(v.contains("active_while_held"))a.activeWhileHeld=v.at("active_while_held").get<bool>();
             item.actions.push_back(a);
+        }
+        if(schema==2) {
+            const auto& bindings=j.at("projectiles");
+            if(!bindings.is_array()||bindings.empty()||bindings.size()>5)
+                throw std::runtime_error("Invalid equipment projectile list.");
+            for(const auto& binding:bindings) {
+                if(!binding.is_object()||binding.size()!=2)
+                    throw std::runtime_error("Invalid equipment projectile binding.");
+                item.projectiles.push_back({static_cast<EquipmentAction>(
+                    Index(binding.at("action").get<std::string>(),ActionNames)),
+                    binding.at("projectile_asset_id").get<std::string>()});
+            }
         }
         if(!Valid(d,error))return false;
         out=std::move(d);error.clear();return true;
@@ -121,17 +165,18 @@ bool LoadEquipmentAsset(const std::string& root,const StableId& project,const St
     if(!path.accepted||!path.exists){error="Equipment asset file is missing or outside the project.";return false;}
     if(!ReadEquipmentAssetFile(path.absolutePath,d,error))return false;
     if(d.projectId!=project||d.equipment.assetId!=id){error="Equipment identity does not match its project registry.";return false;}
-    const std::vector<StableId> expected=d.equipment.presentationAssetId.empty()?std::vector<StableId>{}:
-        std::vector<StableId>{d.equipment.presentationAssetId};
+    const auto expected=EquipmentDependencies(d.equipment);
     if(record->dependencyAssetIds!=expected){error="Equipment presentation dependencies do not match its registry.";return false;}
-    if(!PresentationAvailable(root,registry,d.equipment.presentationAssetId,error))return false;
+    if(!PresentationAvailable(root,registry,d.equipment.presentationAssetId,error)||
+       !ProjectilesAvailable(root,project,d.equipment,error))return false;
     out=std::move(d);error.clear();return true;
 }
 EquipmentAssetSaveResult SaveEquipmentAsset(const std::string& root,const StableId& project,
     EquipmentDefinition item,ProjectDocumentTransactionHook hook) {
     EquipmentAssetSaveResult r;AssetRegistry registry;
     if(!ReadAssetRegistry(root,project,registry,r.error)||
-       !PresentationAvailable(root,registry,item.presentationAssetId,r.error))return r;
+       !PresentationAvailable(root,registry,item.presentationAssetId,r.error)||
+       !ProjectilesAvailable(root,project,item,r.error))return r;
     item.assetId=GenerateStableId();r.document={project,std::move(item)};
     std::string text;if(!SerializeEquipmentAsset(r.document,text,r.error))return r;
     r.projectRelativePath="Content/Player/Equipment/"+r.document.equipment.assetId+EquipmentAssetExtension;
@@ -145,7 +190,7 @@ EquipmentAssetSaveResult SaveEquipmentAsset(const std::string& root,const Stable
     AssetRecord record;record.assetId=r.document.equipment.assetId;
     record.dependencyNodeId="equipment:"+record.assetId;record.projectRelativePath=r.projectRelativePath;
     record.provider="renegade.equipment";record.contentHash=Hash(text);
-    if(!r.document.equipment.presentationAssetId.empty())record.dependencyAssetIds={r.document.equipment.presentationAssetId};
+    record.dependencyAssetIds=EquipmentDependencies(r.document.equipment);
     registry.records.push_back(record);
     std::string registryText,registryPath;
     if(!SerializeAssetRegistry(registry,registryText,r.error)||

@@ -326,6 +326,14 @@ namespace renegade::bridge
                     candidate.requirement=DependencyRequirement::Required;
                     candidate.provenance="p2.equipment.presentation:"+presentation->assetId;emit(candidate);
                 }
+                for(const auto& binding:d.equipment.projectiles) {
+                    const auto* projectile=FindAssetById(registry,binding.projectileAssetId);
+                    DependencyCandidate candidate;
+                    candidate.declaredPath=projectile->projectRelativePath;
+                    candidate.dependencyClass=DependencyClass::Data;
+                    candidate.requirement=DependencyRequirement::Required;
+                    candidate.provenance="p3.equipment.projectile:"+projectile->assetId;emit(candidate);
+                }
                 error.clear();return true;
             }
             if (LowerExtension(context.source->projectRelativePath) != PlayerPrefabExtension)

@@ -19,10 +19,15 @@ struct EquipmentActionDefinition {
     bool cancellableBeforeActive = true;
     bool activeWhileHeld = false;
 };
+struct EquipmentProjectileBinding {
+    EquipmentAction action = EquipmentAction::PrimaryUse;
+    std::string projectileAssetId;
+};
 struct EquipmentDefinition {
     std::string assetId, name, presentationAssetId;
     EquipmentHandUse handUse = EquipmentHandUse::PrimaryOnly;
     std::vector<EquipmentActionDefinition> actions;
+    std::vector<EquipmentProjectileBinding> projectiles;
 };
 inline bool ValidateEquipmentDefinition(const EquipmentDefinition& item) {
     if(item.assetId.empty()||item.name.empty()||item.actions.empty()||item.actions.size()>32||
@@ -35,6 +40,16 @@ inline bool ValidateEquipmentDefinition(const EquipmentDefinition& item) {
         if(action.activeWhileHeld && (action.holdUntilRelease || action.activeSeconds!=0))return false;
         for(float seconds:{action.prepareSeconds,action.windupSeconds,action.activeSeconds,action.recoverySeconds})
             if(!std::isfinite(seconds)||seconds<0||seconds>60)return false;
+    }
+    std::array<bool,12> projectileSeen{};
+    for(const auto& binding:item.projectiles) {
+        const auto index=unsigned(binding.action);
+        if(index>=seen.size()||!seen[index]||projectileSeen[index]||
+           binding.projectileAssetId.empty()||
+           (binding.action!=EquipmentAction::PrimaryUse&&binding.action!=EquipmentAction::Release&&
+            binding.action!=EquipmentAction::Cast&&binding.action!=EquipmentAction::AlternateUse&&
+            binding.action!=EquipmentAction::Use))return false;
+        projectileSeen[index]=true;
     }
     return true;
 }

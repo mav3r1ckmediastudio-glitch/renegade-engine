@@ -48,3 +48,36 @@ Blade/shield pose avoidance is not hit detection. Directional melee world sweeps
 guards/parry/stamina remain P5; the complete firearm reference remains P4.
 Preserve independent-hand semantics and do not substitute a centre-camera ray
 for the later swept directional melee design.
+
+## Projectile authoring checkpoint - 2026-10-06
+
+See P3_PROJECTILE_AUTHORING_UX.md for the native weapon assignment workflow.
+ProjectileAssetService adds registered, journaled .rprojectile flight definitions.
+Equipment schema v2 binds a projectile to an authored launch action and retains
+schema-v1 compatibility. Dependency discovery follows those references.
+Starting Equipment now opens Weapon Projectiles with named project-only choices,
+search, preset creation and Edit Copy. Apply creates an immutable equipment copy
+and assigns it through the existing Player settings command; Undo and Save Level
+use the existing loadout lifecycle. Shared definitions are not silently mutated.
+
+The owner clarified that usable Player/NPC health is not implemented. Existing
+internal damage fields and seam tests do not prove gameplay health. Projectile
+implementation continues independently, with damage as an integration hook.
+
+This slice does not yet connect the binding to live Runtime emission, provide
+projectile visuals or prove independently packaged firing. Native rendered UI,
+flight/contact proof and package parity remain required for P3 acceptance.
+
+Latest authoring checkpoint:
+The shotgun is the owner-selected reference weapon. Native authoring assignment
+and saved level reopen were verified on BUILD/p3-shotgun-ui-project; the saved
+Shotgun retains its presentation, hand policy and Equip/Unequip/Attack/Aim/Reload
+metadata, with Bullet bound to PrimaryUse. This is not live emission proof.
+Tests include presentation-plus-projectile sorted dependencies, actual assignment
+command Undo/Redo and cold native scene serialization (Release 5/5, 0.73s).
+The creator picker excludes AimIn/AimOut animation actions from launch choices.
+Weapon projectiles UI uses native activation when opening create/edit windows.
+User-friendly reusable weapon asset editing, muzzle socket, visual/effect pickers,
+live emission, Jolt collision coverage and packaged firing remain open.
+No usable Player/NPC health implementation is claimed or required for this slice.
+See docs/P3_PROJECTILE_AUTHORING_UX.md for exact commands and native evidence.

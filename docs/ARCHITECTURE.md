@@ -1300,3 +1300,11 @@ facing fallback. Character contacts delegate to ApplyAttributedCombatDamage
 for existing health/perception/events. This tested adapter is not yet live in
 Runtime's action/update loop. Scene cache construction and physics-only Jolt
 coverage still require proof before general gameplay integration.
+
+P3 authoring now persists registered .rprojectile flight definitions and semantic-action
+equipment bindings with governed dependency edges. Native Weapon Projectiles exposes
+named project choices, presets and safe local immutable equipment assignment. Shotgun
+primary-fire assignment, unchanged held presentation and saved level reopen are verified.
+Live launches and packaged projectile proof remain pending. Usable Player/NPC health is
+not implemented; existing damage seams are not a gameplay health claim.
+See P3_PROJECTILE_AUTHORING_UX.md.

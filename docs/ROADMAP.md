@@ -411,3 +411,12 @@ pass. CPU collider query proof covers owner hierarchy exclusion, nearest cover,
 Character root resolution, attributed health/death/perception/events and origin
 overlap. Live Runtime integration, physics-only body coverage and Test Level/
 packaged gameplay acceptance remain open.
+
+P3 authoring continuation: registered projectile assets and equipment semantic-action
+bindings now have a native named picker, presets and safe local assignment. Shotgun
+PrimaryUse/Bullet assignment and saved level reopen were inspected with held
+presentation preserved. Release targeted tests pass 5/5, including registry
+ordering, rollback, legacy schemas, assignment Undo/Redo and cold scene reload.
+Live emission, visuals, impact effects and packaged firing remain open. Usable
+Player/NPC health is not implemented and must not become a prerequisite.
+See P3_PROJECTILE_AUTHORING_UX.md.

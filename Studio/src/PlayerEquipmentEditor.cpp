@@ -70,7 +70,14 @@ void StudioRenderPath::CreateEquipmentEditor() {
                 equipmentStatus_.SetText("Loadout applied. SAVE LEVEL to retain; Undo restores the previous loadout.");
             });
     });
+    equipmentProjectile_.Create("WEAPON PROJECTILES");
+    equipmentProjectile_.SetText("WEAPON PROJECTILES");
+    equipmentProjectile_.SetPos({20,390});equipmentProjectile_.SetSize({280,30});
+    equipmentPanel_.AddWidget(&equipmentProjectile_);
+    equipmentProjectile_.OnClick([this](const wi::gui::EventArgs&) {OpenWeaponProjectileEditor();});
+    equipmentPanel_.SetSize({700,460});
     equipmentPanel_.SetVisible(false);GetGUI().AddWidget(&equipmentPanel_);
+    CreateProjectileEditor();
 }
 void StudioRenderPath::OpenEquipmentEditor() {
     if(!session_||!session_->Projects().HasProject())return;

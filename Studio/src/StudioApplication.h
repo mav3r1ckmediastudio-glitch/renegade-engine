@@ -1,4 +1,5 @@
 #pragma once
+#include "renegade/bridge/EquipmentActionState.h"
 
 #include <array>
 #include "ModelImportPreview.h"
@@ -1146,6 +1147,21 @@ namespace renegade::studio
         void ResetSelectedPlayerPrefab();
         void RefreshPlayerPrefabInspector();
         wi::gui::Button playerAssembly_, playerEquipment_;
+        void CreateProjectileEditor();
+        void OpenWeaponProjectileEditor();
+        void RefreshWeaponProjectileEditor();
+        void RefreshProjectileChoices();
+        wi::gui::Window weaponProjectilePanel_, projectileCreatePanel_;
+        wi::gui::ComboBox projectileWeapon_, projectileAction_, projectileChoice_, projectilePreset_;
+        wi::gui::TextInputField projectileSearch_, projectileName_;
+        wi::gui::Slider projectileSpeed_, projectileGravity_, projectileLifetime_;
+        wi::gui::Button equipmentProjectile_, projectileAssign_, projectileNew_, projectileEditCopy_,
+            projectileClose_, projectileSave_, projectileCancel_;
+        wi::gui::Label projectileSummary_, projectileCreateHelp_;
+        std::vector<bridge::StableId> projectileChoices_;
+        std::vector<bridge::EquipmentAction> projectileActions_;
+        bridge::StableId projectilePreferred_;
+        float projectileDraftDamage_=10;
         wi::gui::Window equipmentPanel_;
         wi::gui::ComboBox equipmentPrimary_, equipmentOffHand_, equipmentHandUse_;
         wi::gui::TextInputField equipmentName_;

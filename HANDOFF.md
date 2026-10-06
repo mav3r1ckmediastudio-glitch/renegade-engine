@@ -1,3 +1,26 @@
+## P3 projectile authoring and shotgun assignment - 2026-10-06
+
+On feature/p3-projectile-impact, dependent on P2 PR #180. ProjectileAssetService
+adds registered journaled .rprojectile assets; equipment schema v2 binds named
+projectiles to authored semantic actions and retains v1 compatibility.
+Native Starting Equipment -> Weapon Projectiles offers presets, project-only
+name picking, search and Edit Copy. Assignment saves an immutable equipment copy
+through the existing Player settings command; shared assets are unaffected.
+The owner requires shotgun reference proof. Its PrimaryUse/Bullet assignment,
+held presentation and Save Level/Reopen were verified on the disposable
+BUILD/p3-shotgun-ui-project. Sword use was preservation testing, not firing proof.
+
+Release targeted tests pass 5/5 (0.73s), including presentation-plus-projectile
+sorted registry edges, save/reopen, rollback, legacy files, actual command
+Undo/Redo and native scene cold reload. Studio and Runtime builds pass.
+Native inspection found and fixed dependency ordering and create-window priority.
+Exact commands/evidence/limitations: docs/P3_PROJECTILE_AUTHORING_UX.md.
+
+Usable Player/NPC health is not implemented. Continue projectiles independently
+with damage as an integration seam. Live shotgun launches, muzzle/aim rules,
+visual/effect assets, Jolt coverage and packaged firing remain open. No P3 gate
+closure or independent exact-head review is claimed. Do not merge P2 automatically.
+
 ## Explicit import folders, player roles and safe model moves - 2026-10-06
 
 Implementation commit: b7471e2b0f1dedcc6efa4b4386fde358f04af2ed.
@@ -296,7 +319,7 @@ existing 432x243 cached texture; resizing changes its display bounds, not FOV.
 Off-hand foundation is separate commit cd94a28 and its five focused tests passed;
 native off-hand presentation is still disabled pending real sword/shield clips.
 
-## Selected Player Camera Preview inset — 2026-10-05
+## Selected Player Camera Preview inset ï¿½ 2026-10-05
 
 Implementation commit: 6a2bf9753d7c7cc1aa2d6dd59832c11ad5fc13a5.
 Selected Player Start now shows a small bottom-right scene-camera inset with the

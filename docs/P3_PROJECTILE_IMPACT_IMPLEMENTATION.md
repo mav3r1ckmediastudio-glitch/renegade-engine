@@ -141,3 +141,22 @@ P4 firearm and P5 swept directional melee remain separately scoped.
 
 Debug cross-check: the same build command with --config Debug passed.
 CTest with -C Debug and the same expression passed 1/1, 0.09 seconds total.
+
+## Projectile authoring checkpoint - 2026-10-06
+
+See P3_PROJECTILE_AUTHORING_UX.md for the native weapon assignment workflow.
+ProjectileAssetService adds registered, journaled .rprojectile flight definitions.
+Equipment schema v2 binds a projectile to an authored launch action and retains
+schema-v1 compatibility. Dependency discovery follows those references.
+Starting Equipment now opens Weapon Projectiles with named project-only choices,
+search, preset creation and Edit Copy. Apply creates an immutable equipment copy
+and assigns it through the existing Player settings command; Undo and Save Level
+use the existing loadout lifecycle. Shared definitions are not silently mutated.
+
+The owner clarified that usable Player/NPC health is not implemented. Existing
+internal damage fields and seam tests do not prove gameplay health. Projectile
+implementation continues independently, with damage as an integration hook.
+
+This slice does not yet connect the binding to live Runtime emission, provide
+projectile visuals or prove independently packaged firing. Native rendered UI,
+flight/contact proof and package parity remain required for P3 acceptance.
