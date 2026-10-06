@@ -2,6 +2,7 @@
 #include <WickedEngine.h>
 #include "renegade/bridge/ModelAnimationPreviewService.h"
 #include <string>
+#include <array>
 #include "renegade/bridge/FirstPersonAssemblyService.h"
 #include <vector>
 #include "renegade/bridge/PlayerViewHandAnimation.h"
@@ -15,6 +16,12 @@ namespace renegade::studio
     public:
         bool Prepare(wi::scene::Scene& source, std::string& error);
         void Rotate(float radians);
+        void Orbit(float yaw, float pitch);
+        void SetView(float yaw, float pitch);
+        void Zoom(float factor);
+        void FitModel();
+        void SetModelAppearance(float scale, const std::array<float,3>& rotation);
+        XMFLOAT3 ModelSize() const { return modelSize_; }
         std::vector<bridge::AnimationClipInfo> Clips() const { return animationPreview_.Clips(); }
         bool SelectClip(int index);
         bool PlayPause();
@@ -45,6 +52,10 @@ namespace renegade::studio
         XMFLOAT3 center_ = {};
         float radius_ = 1;
         float angle_ = 0.5f;
+        float elevation_ = 0.2425f, zoom_ = 1;
+        float sourceRadius_ = 1, appearanceScale_ = 1;
+        XMFLOAT3 sourceCenter_ = {}, modelSize_ = {};
+        wi::ecs::Entity appearanceRoot_ = wi::ecs::INVALID_ENTITY;
         mutable unsigned renderedFrames_ = 0;
     };
 }

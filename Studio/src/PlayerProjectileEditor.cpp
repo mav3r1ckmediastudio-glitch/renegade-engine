@@ -95,17 +95,20 @@ namespace renegade::studio
         });
 
         projectileCreatePanel_.Create("New projectile");
-        projectileCreatePanel_.SetPos({120,100});projectileCreatePanel_.SetSize({740,650});
+        projectileCreatePanel_.SetPos({120,100});projectileCreatePanel_.SetSize({1260,650});
         projectilePreset_.Create("Start with");
         projectilePreset_.SetPos({210,40});projectilePreset_.SetSize({390,26});
         for(unsigned i=0;i<5;++i)
             projectilePreset_.AddItem(bridge::ProjectilePresetName(static_cast<bridge::ProjectilePreset>(i)));
+        projectilePreset_.AddItem("Custom / saved projectile");
         projectileCreatePanel_.AddWidget(&projectilePreset_);
         projectileName_.Create("Projectile name");projectileName_.SetDescription("Name: ");
         projectileName_.SetPos({210,80});projectileName_.SetSize({390,26});
         projectileName_.SetCancelInputEnabled(false);projectileCreatePanel_.AddWidget(&projectileName_);
         const auto slider=[&](wi::gui::Slider& value,const char* label,float min,float max,float initial,float y) {
             value.Create(min,max,initial,1000,label);value.SetPos({210,y});value.SetSize({340,22});
+            value.SetTooltip("Drag to adjust, or click the number and type a value. Press Enter to apply.");
+            value.valueInputField.SetTooltip("Type a value and press Enter. Double-click the number to replace it.");
             projectileCreatePanel_.AddWidget(&value);
         };
         slider(projectileSpeed_,"Speed (m/s)",0.1f,2000,300,125);
@@ -132,8 +135,39 @@ namespace renegade::studio
         projectileCreateHelp_.font.params.size=14;projectileCreatePanel_.AddWidget(&projectileCreateHelp_);
         button(projectileSave_,"SAVE AS NEW",20,590,280,projectileCreatePanel_);
         button(projectileCancel_,"CANCEL",320,590,280,projectileCreatePanel_);
+        projectilePreviewImage_.Create("Projectile model preview");
+        projectilePreviewImage_.SetText("");
+        projectilePreviewImage_.SetPos({720,80});projectilePreviewImage_.SetSize({512,320});
+        projectilePreviewImage_.SetColor(wi::Color::White());
+        projectileCreatePanel_.AddWidget(&projectilePreviewImage_);
+        projectilePreviewInfo_.Create("Projectile preview information");
+        projectilePreviewInfo_.SetPos({720,550});projectilePreviewInfo_.SetSize({512,72});
+        projectilePreviewInfo_.font.params.size=14;
+        projectileCreatePanel_.AddWidget(&projectilePreviewInfo_);
+        const char* viewNames[]={"TURN LEFT","TURN RIGHT","LOOK UP","LOOK DOWN",
+            "SIDE VIEW","REAR VIEW","FIT MODEL","ZOOM IN","ZOOM OUT"};
+        for (unsigned i=0;i<9;++i) {
+            const float x=720+(i<4?i*128:(i<7?(i-4)*170:(i-7)*170));
+            const float y=i<4?420:(i<7?465:510);
+            button(projectilePreviewControls_[i],viewNames[i],x,y,i<4?122:164,projectileCreatePanel_);
+            projectilePreviewControls_[i].OnClick([this,i](const wi::gui::EventArgs&){
+                if (!projectilePreview_) return;
+                switch(i) {
+                case 0:projectilePreview_->Orbit(-XM_PIDIV4,0);break;
+                case 1:projectilePreview_->Orbit(XM_PIDIV4,0);break;
+                case 2:projectilePreview_->Orbit(0,0.25f);break;
+                case 3:projectilePreview_->Orbit(0,-0.25f);break;
+                case 4:projectilePreview_->SetView(XM_PIDIV2,0);break;
+                case 5:projectilePreview_->SetView(0,0);break;
+                case 6:projectilePreview_->FitModel();break;
+                case 7:projectilePreview_->Zoom(0.8f);break;
+                case 8:projectilePreview_->Zoom(1.25f);break;
+                }
+            });
+        }
         projectileCancel_.OnClick([this](const wi::gui::EventArgs&){projectileCreatePanel_.SetVisible(false);});
         projectilePreset_.OnSelect([this](const wi::gui::EventArgs& args){
+            if (args.iValue>=5) return;
             const auto d=bridge::MakeProjectilePreset(static_cast<bridge::ProjectilePreset>(args.iValue));
             projectileDraftDamage_=d.damage;
             projectileName_.SetText(d.name);projectileSpeed_.SetValue(d.speedMetresPerSecond);
@@ -167,6 +201,7 @@ namespace renegade::studio
             projectileRotationX_.SetValue(d.visualRotationDegrees[0]);
             projectileRotationY_.SetValue(d.visualRotationDegrees[1]);
             projectileRotationZ_.SetValue(d.visualRotationDegrees[2]);
+            projectilePreset_.SetSelectedWithoutCallback(5);
             projectileName_.SetText(d.name+" copy");projectileSpeed_.SetValue(d.speedMetresPerSecond);
             projectileGravity_.SetValue(d.gravityScale);projectileLifetime_.SetValue(d.lifetimeSeconds);
             projectileCreatePanel_.SetVisible(true);projectileCreatePanel_.Activate();
@@ -238,6 +273,79 @@ namespace renegade::studio
         });
         weaponProjectilePanel_.SetVisible(false);projectileCreatePanel_.SetVisible(false);
         GetGUI().AddWidget(&weaponProjectilePanel_);GetGUI().AddWidget(&projectileCreatePanel_);
+    }
+
+    void StudioRenderPath::UpdateProjectilePreview(float dt)
+    {
+        if (!projectileCreatePanel_.IsVisible() || !session_ ||
+            !session_->Projects().HasProject() ||
+            session_->Projects().CurrentProject().projectId != projectileEditorProject_) {
+            projectileCreatePanel_.SetVisible(false);
+            projectilePreview_.reset();projectilePreviewImage_.SetColor(wi::Color(22,26,33));
+            projectilePreviewImage_.SetImage({});
+            projectilePreviewMesh_.clear();projectilePreviewProject_.clear();return;
+        }
+        const auto& project=session_->Projects().CurrentProject();
+        if (projectilePreviewMesh_!=projectileDraftMesh_ || projectilePreviewProject_!=project.projectId) {
+            projectilePreview_.reset();projectilePreviewImage_.SetColor(wi::Color(22,26,33));
+            projectilePreviewImage_.SetImage({});
+            projectilePreviewMesh_=projectileDraftMesh_;projectilePreviewProject_=project.projectId;
+            projectilePreviewScale_=-1;
+            if (!projectileDraftMesh_.empty()) {
+                auto prepared=bridge::ReusableAssetService().PrepareModelAssetPlacement(
+                    {project.rootPath,project.projectId,projectileDraftMesh_});
+                std::string error;
+                if (!prepared.IsReady()) error=prepared.Result().error;
+                else {
+                    auto model=prepared.ReleaseScene();
+                    auto preview=std::make_unique<ModelImportPreview>();
+                    if (preview->Prepare(*model,error)) projectilePreview_=std::move(preview);
+                }
+                if (!projectilePreview_) projectilePreviewInfo_.SetText("Cannot preview model: "+error);
+            }
+        }
+        for (auto& control:projectilePreviewControls_) control.SetEnabled(projectilePreview_!=nullptr);
+        if (projectileDraftMesh_.empty()) {
+            projectilePreviewInfo_.SetText("Choose a visible model to inspect it here.\nView controls change only your inspection camera.");
+            projectileSave_.SetEnabled(true);return;
+        }
+        if (!projectilePreview_) {projectileSave_.SetEnabled(false);return;}
+        const float scale=projectileVisualScale_.GetValue();
+        const std::array<float,3> rotation={projectileRotationX_.GetValue(),
+            projectileRotationY_.GetValue(),projectileRotationZ_.GetValue()};
+        bridge::ProjectileAssetDocument appearance;
+        // Validate a transient definition; this identity is never saved.
+        appearance.projectId=project.projectId;appearance.assetId=projectileDraftMesh_;
+        appearance.name="Preview";appearance.meshAssetId=projectileDraftMesh_;
+        appearance.visualScale=scale;appearance.visualRotationDegrees=rotation;
+        std::string validationError;
+        if (!bridge::ValidateProjectileAsset(appearance,validationError)) {
+            projectilePreviewInfo_.SetText("Model scale must be between 0.001 and 100.\nModel rotations must be between -360 and 360 degrees.");
+            projectilePreviewScale_=-1;
+            projectilePreviewImage_.SetColor(wi::Color(22,26,33));
+            projectilePreviewImage_.SetImage({});projectileSave_.SetEnabled(false);return;
+        }
+        if (scale!=projectilePreviewScale_ || rotation!=projectilePreviewRotation_) {
+            const bool first=projectilePreviewScale_<0;
+            projectilePreviewScale_=scale;projectilePreviewRotation_=rotation;
+            projectilePreview_->SetModelAppearance(scale,rotation);
+            if (first) {projectilePreview_->FitModel();projectilePreview_->SetView(XM_PIDIV2,0);}
+            const auto size=projectilePreview_->ModelSize();
+            projectilePreviewInfo_.SetText("Model size: "+ProjectileFlightLabel(size.x*scale)+" x "+
+                ProjectileFlightLabel(size.y*scale)+" x "+ProjectileFlightLabel(size.z*scale)+" m\n"+
+                "In SIDE VIEW, point the tip to the right (+Z flight direction).\n"+
+                "View controls do not change the saved model orientation.");
+        }
+        if (projectilePreview_->NeedsRender()) {
+            projectilePreview_->PreUpdate();projectilePreview_->Update(dt);
+        }
+        if (projectilePreview_->IsReady()) {
+            wi::Resource image;image.SetTexture(projectilePreview_->GetRenderResult3D());
+            projectilePreviewImage_.SetColor(wi::Color::White());
+            for (auto& sprite:projectilePreviewImage_.sprites) sprite.params.disableBackground();
+            projectilePreviewImage_.SetImage(image);
+        }
+        projectileSave_.SetEnabled(projectilePreview_->IsReady());
     }
 
     void StudioRenderPath::RefreshProjectileMeshChoices()

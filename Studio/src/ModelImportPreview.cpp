@@ -35,6 +35,10 @@ namespace renegade::studio
             error = "Model has no finite preview bounds.";
             return false;
         }
+        sourceCenter_ = center_; sourceRadius_ = radius_; appearanceScale_ = 1;
+        modelSize_ = {extent.x*2,extent.y*2,extent.z*2};
+        angle_ = 0.5f; elevation_ = 0.2425f; zoom_ = 1;
+        appearanceRoot_ = wi::ecs::INVALID_ENTITY;
         // Discard source lights/weather on the copy only, then use neutral
         // fixed illumination so the preview doesn't depend on the open level.
         scene->lights.Clear();
@@ -130,10 +134,10 @@ namespace renegade::studio
 
     void ModelImportPreview::FitCamera()
     {
-        const float distance = radius_ / std::sin(XM_PI / 8.0f) * 1.12f;
+        const float distance = radius_ / std::sin(XM_PI / 8.0f) * 1.12f * zoom_;
         const XMVECTOR target = XMLoadFloat3(&center_);
-        const XMVECTOR eye = target + XMVectorSet(std::sin(angle_) * distance * 0.97f,
-            distance * 0.24f, -std::cos(angle_) * distance * 0.97f, 0);
+        const XMVECTOR eye = target + XMVectorSet(std::sin(angle_) * distance * std::cos(elevation_),
+            distance * std::sin(elevation_), -std::cos(angle_) * distance * std::cos(elevation_), 0);
         previewCamera_.TransformCamera(XMMatrixInverse(nullptr,
             XMMatrixLookAtLH(eye, target, XMVectorSet(0, 1, 0, 0))));
         previewCamera_.UpdateCamera();
@@ -144,6 +148,54 @@ namespace renegade::studio
         angle_ += radians;
         FitCamera();
         renderedFrames_ = 0;
+    }
+
+    void ModelImportPreview::Orbit(float yaw, float pitch)
+    {
+        angle_ += yaw; elevation_ = std::clamp(elevation_ + pitch, -1.45f, 1.45f);
+        FitCamera(); renderedFrames_ = 0;
+    }
+    void ModelImportPreview::SetView(float yaw, float pitch)
+    {
+        angle_ = yaw; elevation_ = std::clamp(pitch,-1.45f,1.45f);
+        FitCamera(); renderedFrames_ = 0;
+    }
+    void ModelImportPreview::Zoom(float factor)
+    {
+        zoom_ = std::clamp(zoom_ * factor, 0.15f, 8.0f);
+        FitCamera(); renderedFrames_ = 0;
+    }
+    void ModelImportPreview::FitModel()
+    {
+        radius_ = sourceRadius_ * appearanceScale_; zoom_ = 1;
+        previewCamera_.CreatePerspective(512,320,std::max(0.00001f,radius_*0.001f),
+            radius_*20.0f,XM_PI/4.0f);
+        FitCamera(); renderedFrames_ = 0;
+    }
+    void ModelImportPreview::SetModelAppearance(float scale, const std::array<float,3>& rotation)
+    {
+        if (!scene) return;
+        if (appearanceRoot_ == wi::ecs::INVALID_ENTITY) {
+            scene->rigidbodies.Clear();scene->softbodies.Clear();scene->colliders.Clear();
+            scene->scripts.Clear();scene->characters.Clear();scene->animations.Clear();
+            std::vector<wi::ecs::Entity> parents;
+            for (size_t i=0;i<scene->transforms.GetCount();++i) {
+                const auto e=scene->transforms.GetEntity(i);
+                if (scene->lights.Contains(e)) continue;
+                const auto* h=scene->hierarchy.GetComponent(e);
+                if (!h || h->parentID==wi::ecs::INVALID_ENTITY) parents.push_back(e);
+            }
+            appearanceRoot_=scene->Entity_CreateTransform("Projectile preview appearance");
+            for (const auto e:parents) scene->Component_Attach(e,appearanceRoot_,true);
+        }
+        appearanceScale_=scale;
+        const auto matrix=XMMatrixScaling(scale,scale,scale) *
+            XMMatrixRotationRollPitchYaw(XMConvertToRadians(rotation[0]),
+                XMConvertToRadians(rotation[1]),XMConvertToRadians(rotation[2]));
+        auto& transform=*scene->transforms.GetComponent(appearanceRoot_);
+        transform.ClearTransform();transform.MatrixTransform(matrix);transform.UpdateTransform();
+        XMStoreFloat3(&center_,XMVector3TransformCoord(XMLoadFloat3(&sourceCenter_),matrix));
+        FitCamera();renderedFrames_=0;
     }
 
     bool ModelImportPreview::SelectClip(int index)

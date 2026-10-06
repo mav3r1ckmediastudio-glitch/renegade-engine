@@ -1337,3 +1337,18 @@ Next: dedicated model preview, explicit weapon/palm launch sockets, then first-c
 Hitscan/Beam authoring and surface impact profiles. Camera-eye launch remains the
 current policy. Packaged firing and Jolt-only coverage are open. Health is not a
 prerequisite; no P3 gate closure or automatic P2 merge is authorized.
+
+## P3 projectile preview checkpoint — 2026-10-06
+
+The projectile editor now includes an automatically refreshed isolated model
+preview with camera orbit, elevation, side/rear views, zoom and fit. Authored
+scale/rotation use the Runtime convention and are validated before rendering;
+camera inspection does not change those values. Physical model size is shown.
+Private preview resources are released when hidden/project changes. Level
+markers, gizmo, selection outline and player-camera inset do not cover this
+editor. Saved copies display Custom / saved projectile rather than a misleading
+preset. See [Projectile preview evidence](P3_PROJECTILE_PREVIEW.md).
+
+Next: explicit weapon/palm sockets, placement and runtime launch/aim timing.
+Camera-eye launch remains current; Hitscan/Beam, effects, Jolt-only coverage,
+packaged firing and independent P3 verification remain open.

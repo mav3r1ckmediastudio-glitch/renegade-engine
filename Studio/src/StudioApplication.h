@@ -1151,6 +1151,7 @@ namespace renegade::studio
         void OpenWeaponProjectileEditor();
         void OpenProjectileAssetEditor();
         void RefreshProjectileMeshChoices();
+        void UpdateProjectilePreview(float dt);
         void RefreshWeaponProjectileEditor();
         void RefreshProjectileChoices();
         wi::gui::Window weaponProjectilePanel_, projectileCreatePanel_;
@@ -1169,6 +1170,12 @@ namespace renegade::studio
         wi::gui::ComboBox projectileMesh_;
         wi::gui::Slider projectileVisualScale_, projectileRotationX_, projectileRotationY_, projectileRotationZ_;
         wi::gui::Button projectileImportMesh_;
+        std::unique_ptr<ModelImportPreview> projectilePreview_;
+        wi::gui::Label projectilePreviewImage_, projectilePreviewInfo_;
+        std::array<wi::gui::Button,9> projectilePreviewControls_;
+        bridge::StableId projectilePreviewMesh_, projectilePreviewProject_;
+        float projectilePreviewScale_ = -1;
+        std::array<float,3> projectilePreviewRotation_ = {};
         bool projectileStandaloneEditor_=false;
         bool modelImportFromProjectile_=false;
         wi::gui::Window equipmentPanel_;

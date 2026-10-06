@@ -599,7 +599,7 @@ namespace renegade::studio
         if (!playerMarkerPipeline_.IsValid() || !session_ || !camera ||
             projectHubVisible_ || testLevelRuntime_.IsActive() ||
             assemblyPanel_.IsVisible() || handGripPanel_.IsVisible() ||
-            modelImportPanel_.IsVisible()) return;
+            modelImportPanel_.IsVisible() || projectileCreatePanel_.IsVisible()) return;
         const auto& scene = session_->Scenes().GetScene();
         const auto start = bridge::ResolvePlayerStart(scene);
         if (start.resolution != bridge::PlayerStartResolution::Success ||
@@ -802,6 +802,8 @@ namespace renegade::studio
             modelImportPreview_->PreRender();
         if (assemblyPanel_.IsVisible() && assemblyPreview_ && assemblyPreview_->NeedsRender())
             assemblyPreview_->PreRender();
+        if (projectileCreatePanel_.IsVisible() && projectilePreview_ && projectilePreview_->NeedsRender())
+            projectilePreview_->PreRender();
         if (playerCameraPreviewVisible_ && !playerCameraPreviewCollapsed_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->PreRender();
         wi::RenderPath3D::PreRender();
     }
@@ -821,6 +823,8 @@ namespace renegade::studio
         }
         if (assemblyPanel_.IsVisible() && assemblyPreview_ && assemblyPreview_->NeedsRender())
             assemblyPreview_->Render();
+        if (projectileCreatePanel_.IsVisible() && projectilePreview_ && projectilePreview_->NeedsRender())
+            projectilePreview_->Render();
         if (playerCameraPreviewVisible_ && !playerCameraPreviewCollapsed_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->Render();
         if (pathTracePreviewActive_)
         {
@@ -3665,6 +3669,12 @@ namespace renegade::studio
                 modelImportTime_.SetValue(modelImportPreview_->ClipTime());
         }
 
+        UpdateProjectilePreview(dt);
+        if (projectileCreatePanel_.IsVisible()) {
+            diagnosticInput.StopAt("projectile_editor");detail::ClearCreatorAssetDragPreview();
+            pendingAction_=EditorAction::None;return;
+        }
+
         TickWd01Vegetation();
 
         // Process the asset browser's drag release after GUI callbacks and
@@ -3885,7 +3895,8 @@ namespace renegade::studio
         // Draw the capsule after temporal postprocessing, alongside the gizmo.
         // Project its connected 3D edges using one camera matrix for this frame.
         if (!projectHubVisible_ && !assemblyPanel_.IsVisible() &&
-            !handGripPanel_.IsVisible() && session_ && camera)
+            !handGripPanel_.IsVisible() && !modelImportPanel_.IsVisible() &&
+            !projectileCreatePanel_.IsVisible() && session_ && camera)
         {
             const auto& scene = session_->Scenes().GetScene();
             const auto resolved = bridge::ResolvePlayerStart(scene);
@@ -3984,6 +3995,7 @@ namespace renegade::studio
         }
 
         if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
+            !projectileCreatePanel_.IsVisible() &&
             outlinedSelection_ != wi::ecs::INVALID_ENTITY &&
             selectionOutlineMask_.IsValid())
         {
@@ -3999,13 +4011,14 @@ namespace renegade::studio
         }
 
         if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
+            !projectileCreatePanel_.IsVisible() &&
             !gizmoSuppressedForCameraView_ &&
             gizmoEntity_ != wi::ecs::INVALID_ENTITY)
         {
             gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);
         }
 
-        DrawPlayerCameraPreview(cmd);
+        if (!projectileCreatePanel_.IsVisible()) DrawPlayerCameraPreview(cmd);
 
         const wi::graphics::Rect fullScissor = {
             0,
