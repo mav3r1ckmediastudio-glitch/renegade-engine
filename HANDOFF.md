@@ -3254,3 +3254,39 @@ movement routing. Independent exact-commit review remains required; no release
 gate or Wicked Editor parity closure. Unrelated Tools/__pycache__ and log.txt untouched.
 Next: owner authoring/mesh-swap review, then movement/transition checks and targeted
 contact continuity refinement if observed. Damage awaits NPC system integration.
+
+
+## Owner fantasy sword mesh swap - 2026-10-06
+Engine implementation unchanged at fcac40314952edb3f5d6130d93906f904c6da56d.
+Owner supplied fantasy-sword.zip, SHA256
+b57474266f43b2bd9898844743a033964d044d99985a3fbb46e74dce7a4ae82f.
+The matching local Downloads copy was inspected in Blender 5.1.1. Static FBX:
+1042 source vertices, original bounds about 5.72m end-to-end. Prepared GLB
+uses 0.18 source scale (about 1.03m overall), blade +Y and upper-grip pivot,
+with supplied base colour, metallic, roughness, normal and emissive maps.
+Original ZIP/FBX/textures untouched; preparation scripts and GLB are in BUILD.
+
+RENEGADE_ASSEMBLY_SWAP=BUILD/fantasy-sword.glb; RENEGADE_HAND_COLLISION=1;
+RENEGADE_IMPORT_FOLDERS=1; WorkflowProof BUILD/sword-ue-proof4
+BUILD/fantasy-sword-proof1 --sword-playable: exit0 /12.61s.
+Custom folder/weapon role/tag/move rollback/cold placement checks and all
+replacement masked preview slots passed. The fixture restores its original
+playable assembly after checking the replacement: its 965 corrected/zero
+unresolved counter therefore describes the original sword, not this new mesh.
+
+Native Studio opened the disposable proof project, selected the imported
+Replacement Sword, LOAD PARTS, and saved changes to the existing assigned
+assembly. Animation mappings, shield, default scales and charge/chain timing
+retained. Blade proxy edited to base (0,0.10,0), tip (0,0.797,0), radius 0.037m;
+source projection inspected after journaled save. The updated project was copied
+to a separate owner desktop FantasySwordTest, with a Play Fantasy Sword.cmd
+launcher and prepared Fantasy Sword.glb for reuse. The original SwordShieldTest
+was not modified. Native standalone cold-loaded this desktop copy; rendered
+grip, metal blade and decorated guard inspected.
+BUILD/chain_focus.ps1 against the new standalone: exit0 /8.95s, released
+follow-up and held charged stab, two single chain dispatches, shield independence,
+unresolved counters 0 -> 0 -> 0. Evidence BUILD/fantasy-sword-native-events.json
+and BUILD/fantasy-sword-proof1.log. This is bounded presentation acceptance,
+not universal no-clipping, damage collision, or NPC combat validation.
+New Runtime left open for owner feedback. Only handoff documentation changed;
+no new engine implementation, no push and no release gate closure.
