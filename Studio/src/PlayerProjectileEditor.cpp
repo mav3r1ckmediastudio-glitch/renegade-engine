@@ -200,7 +200,7 @@ namespace renegade::studio
                         projectileSummary_.SetText("Could not apply the saved weapon setup.");return;
                     }
                     RefreshEquipmentEditor();RefreshWeaponProjectileEditor();RefreshInspector();RefreshAssetBrowser();
-                    projectileSummary_.SetText("Projectile assigned to this player's weapon. SAVE LEVEL to retain.\nUndo restores its previous setup. Other players and prefabs are unchanged.\nLive projectile firing is still being integrated.");
+                    projectileSummary_.SetText("Projectile assigned to this player's weapon. SAVE LEVEL to retain.\nUndo restores its previous setup. Other players and prefabs are unchanged.\nTest Level: fire the equipped weapon to test flight and impact.");
                 });
         });
         weaponProjectilePanel_.SetVisible(false);projectileCreatePanel_.SetVisible(false);
@@ -264,11 +264,11 @@ namespace renegade::studio
         const bool hiddenSelection=!projectilePreferred_.empty()&&selected==0;
         projectileAssign_.SetEnabled(!projectileActions_.empty()&&error.empty()&&!hiddenSelection);
         projectileEditCopy_.SetEnabled(selected!=0);
-        std::string summary="Choose a projectile or create one from a preset.\nAssignment changes this player's weapon setup. Other prefabs are unchanged.\nLive projectile firing is still being integrated.";
+        std::string summary="Choose a projectile or create one from a preset.\nAssignment changes this player's weapon setup. Other prefabs are unchanged.\nTest Level: fire the equipped weapon to test flight and impact.";
         for(const auto& d:items)if(d.assetId==projectilePreferred_)
             summary=d.name+" / "+ProjectileFlightLabel(d.speedMetresPerSecond)+" m/s / gravity "+
                 ProjectileFlightLabel(d.gravityScale)+" / lifetime "+ProjectileFlightLabel(d.lifetimeSeconds)+" s\n"+
-                "Applies to this player's weapon; save the level to retain.\nLive projectile firing is still being integrated.";
+                "Applies to this player's weapon; save the level to retain.\nTest Level: fire the equipped weapon to test flight and impact.";
         if(hiddenSelection)summary="The selected projectile is hidden by your search.\nChoose a result or clear the search before applying.";
         projectileSummary_.SetText(error.empty()?summary:error);
     }

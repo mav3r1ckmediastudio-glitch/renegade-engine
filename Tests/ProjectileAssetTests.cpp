@@ -2,6 +2,9 @@
 #include "renegade/bridge/EquipmentAssetService.h"
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/ReusableAssetDependencyService.h"
+#include "renegade/bridge/TestLevelSnapshotService.h"
+#include "renegade/bridge/SceneService.h"
+#include "renegade/bridge/ProjectService.h"
 #include "json.hpp"
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/PlayerPrefabService.h"
@@ -116,6 +119,27 @@ int main()
         candidates.size()!=2||candidates[1].declaredPath!=saved.projectRelativePath||
         candidates[1].dependencyClass!=DependencyClass::Data)
         return fail("projectile packaging dependency");
+    // Test Level must contain the actual projectile, not only registry edges.
+    auto snapshotWeapon=weapon;snapshotWeapon.presentationAssetId.clear();
+    auto snapshotItem=SaveEquipmentAsset(root.generic_u8string(),project,snapshotWeapon);
+    if(!snapshotItem.succeeded)return fail("snapshot equipment fixture");
+    SceneService snapshotScenes;
+    CreatePlayerStartCommand snapshotPlayer(snapshotScenes.GetScene(),{});
+    if(!snapshotPlayer.Execute())return fail("snapshot player");
+    PlayerControllerSettings snapshotSettings;
+    snapshotSettings.primaryEquipmentAssetId=snapshotItem.document.equipment.assetId;
+    SetPlayerControllerSettingsCommand snapshotAssignment(snapshotScenes.GetScene(),
+        snapshotPlayer.CreatedEntity(),snapshotSettings);
+    if(!snapshotAssignment.Execute())return fail("snapshot assignment");
+    ProjectMetadata metadata;metadata.projectId=project;metadata.rootPath=root.generic_u8string();
+    metadata.name="Projectile snapshot";
+    TestLevelSnapshotService snapshots(snapshotScenes,commands);
+    TestLevelSnapshot snapshot;
+    if(!snapshots.Create(metadata,snapshot,error)||
+       !LoadEquipmentAsset(snapshot.sessionDirectory,project,snapshotSettings.primaryEquipmentAssetId,item,error)||
+       !LoadProjectileAsset(snapshot.sessionDirectory,project,saved.document.assetId,reopened,error))
+    {std::cerr<<error;return fail("Test Level projectile closure");}
+    if(!snapshots.Cleanup(snapshot,error))return fail("snapshot cleanup");
     fs::remove(root/saved.projectRelativePath);
     if(LoadEquipmentAsset(root.generic_u8string(),project,equipped.document.equipment.assetId,item,error))
         return fail("missing bound projectile silently loaded");

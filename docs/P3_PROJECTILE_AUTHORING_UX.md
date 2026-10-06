@@ -155,3 +155,15 @@ This proves authoring, not shotgun projectile emission or pellet spread.
 The launch picker excludes authored AimIn/AimOut actions, so shotgun aim cannot be mistaken for secondary fire.
 
 Final Studio-only polish build passed (13.11s). Reopened the saved shotgun project in that build: Edit Copy now appears in front with Bullet copy, speed 300, gravity 0 and lifetime 5; Cancel leaves the saved assignment intact. Screenshot: BUILD/p3-shotgun-edit-copy-front.png.
+
+
+## P3 live shotgun checkpoint - 2026-10-06
+
+Accepted shotgun shots now launch cached projectile definitions in Runtime, with
+native scene contacts and bounded flight/contact feedback. Test Level snapshots
+include projectile dependencies. Release targeted tests and native Test Level /
+standalone source firing pass. Initial camera-eye origin is explicit; authored
+muzzles, pellet spread, effects, Jolt-only coverage, packaged firing and independent
+verification remain open. Health is not required. See
+[P3 live shotgun evidence](P3_LIVE_SHOTGUN_PROJECTILES.md) for commands and limits.
+This checkpoint supersedes earlier statements that live Runtime firing is pending.

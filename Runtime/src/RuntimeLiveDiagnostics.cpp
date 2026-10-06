@@ -625,6 +625,20 @@ namespace renegade::runtime
             {"scene_attempt_revision", characterSceneAttemptRevision_}},
             "Runtime/src/RuntimeLiveDiagnostics.cpp");
 
+        diagnosticService_.Observe("projectiles", {
+            {"projectile_generation", projectiles_.generation},
+            {"projectile_launched", projectiles_.launched},
+            {"projectile_impacted", projectiles_.impacted},
+            {"projectile_active", static_cast<std::uint64_t>(projectiles_.simulation.Records().size())},
+            {"projectile_markers", static_cast<std::uint64_t>(projectiles_.markers.size())},
+            {"projectile_last_x", std::to_string(projectiles_.lastContact.position.x)},
+            {"projectile_last_y", std::to_string(projectiles_.lastContact.position.y)},
+            {"projectile_last_z", std::to_string(projectiles_.lastContact.position.z)},
+            {"projectile_last_target", projectiles_.lastContact.targetSubjectId},
+            {"projectile_last_surface", projectiles_.lastContact.surfaceId},
+            {"projectile_error", projectiles_.lastError},
+            {"player_loaded_shells", static_cast<std::uint64_t>(std::max(0,playerViewAnimation_.loadedShells))}}, "Runtime/src/RuntimeApplication.cpp");
+
         diagnosticService_.Observe("runtime", {
             {"project", startupResult_.projectDescriptorPath},
             {"scene", scenes_.CurrentPath()},

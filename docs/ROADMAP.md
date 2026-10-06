@@ -420,3 +420,15 @@ ordering, rollback, legacy schemas, assignment Undo/Redo and cold scene reload.
 Live emission, visuals, impact effects and packaged firing remain open. Usable
 Player/NPC health is not implemented and must not become a prerequisite.
 See P3_PROJECTILE_AUTHORING_UX.md.
+
+
+## P3 live shotgun checkpoint - 2026-10-06
+
+Accepted shotgun shots now launch cached projectile definitions in Runtime, with
+native scene contacts and bounded flight/contact feedback. Test Level snapshots
+include projectile dependencies. Release targeted tests and native Test Level /
+standalone source firing pass. Initial camera-eye origin is explicit; authored
+muzzles, pellet spread, effects, Jolt-only coverage, packaged firing and independent
+verification remain open. Health is not required. See
+[P3 live shotgun evidence](P3_LIVE_SHOTGUN_PROJECTILES.md) for commands and limits.
+This checkpoint supersedes earlier statements that live Runtime firing is pending.

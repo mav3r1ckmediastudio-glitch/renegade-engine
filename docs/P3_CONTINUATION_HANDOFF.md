@@ -83,3 +83,15 @@ No usable Player/NPC health implementation is claimed or required for this slice
 See docs/P3_PROJECTILE_AUTHORING_UX.md for exact commands and native evidence.
 
 Projectile authoring implementation commit: 6f5401db2a7fa8d487aea09df781a4fd3a08ea13. Final native polish also verified Edit Copy priority, Cancel, concise flight values and shotgun PrimaryUse-only launch choices.
+
+
+## P3 live shotgun checkpoint - 2026-10-06
+
+Accepted shotgun shots now launch cached projectile definitions in Runtime, with
+native scene contacts and bounded flight/contact feedback. Test Level snapshots
+include projectile dependencies. Release targeted tests and native Test Level /
+standalone source firing pass. Initial camera-eye origin is explicit; authored
+muzzles, pellet spread, effects, Jolt-only coverage, packaged firing and independent
+verification remain open. Health is not required. See
+[P3 live shotgun evidence](P3_LIVE_SHOTGUN_PROJECTILES.md) for commands and limits.
+This checkpoint supersedes earlier statements that live Runtime firing is pending.

@@ -48,6 +48,8 @@ namespace renegade::runtime
         float shotCooldown = 0;
         // Loaded ammunition; reserve ammunition is not modelled yet.
         int loadedShells = 2;
+        // Per-update acceptance pulse: only a successfully started, ammo-backed shot.
+        bool shotAccepted = false;
         wi::ecs::Entity activeWeaponClip = wi::ecs::INVALID_ENTITY;
         float pairedTime = 0.0f;
         std::vector<wi::ecs::Entity> ownedAssemblyClips;
@@ -605,6 +607,7 @@ namespace renegade::runtime
         const bool releasePressed = false,
         const bool offHandBlockHeld = false, const float meleeLookYaw = 0, const float meleeLookPitch = 0, const bool cancelMelee = false) noexcept
     {
+        state.shotAccepted = false;
         if (!state.initialized)
             return;
 
@@ -724,6 +727,7 @@ namespace renegade::runtime
                 return;
             }
             if (startingShot) {
+                state.shotAccepted = true;
                 --state.loadedShells;
                 state.shotCooldown = state.firearm.minimumShotInterval;
             }

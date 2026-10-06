@@ -98,6 +98,18 @@ namespace renegade::runtime
         RenderPath3D::Compose(cmd);
         const float width = std::max(1.0f, GetLogicalWidth());
         const float height = std::max(1.0f, GetLogicalHeight());
+        if (!paused_ && projectileAim_) {
+            wi::font::Params aim(width*0.5f,height*0.5f,18,
+                wi::font::WIFALIGN_CENTER,wi::font::WIFALIGN_CENTER,
+                wi::Color(245,245,245,220),wi::Color(0,0,0,160));
+            wi::font::Draw("+",aim,cmd);
+        }
+        for (const auto& contact : projectileContacts_) {
+            wi::font::Params marker(contact.x,contact.y,24,
+                wi::font::WIFALIGN_CENTER,wi::font::WIFALIGN_CENTER,
+                wi::Color(255,105,25,255),wi::Color(0,0,0,200));
+            wi::font::Draw("x",marker,cmd);
+        }
         if(!paused_ && !meleePrompt_.empty()) {
             wi::font::Params hint(width*0.5f,height*0.55f,18,
                 wi::font::WIFALIGN_CENTER,wi::font::WIFALIGN_CENTER,
@@ -216,6 +228,8 @@ namespace renegade::runtime
         diagnosticService_.StopLocalEndpoint();
         StopCreatorScripts();
         playerEquipment_ = {};
+        pendingProjectileShots_.clear();
+        projectiles_.Reset();
         ResetRuntimePlayerViewAnimations(
             scenes_.GetScene(), playerViewAnimation_);
         DespawnRuntimePlayerViewRig(scenes_.GetScene(), playerViewRig_);
@@ -468,6 +482,16 @@ namespace renegade::runtime
                         !paused_ && equipmentInput.toggleEquipmentPressed,
                         grounded, playerEquipment_.chargePresentation, playerEquipment_.releasePresentation,
                         playerEquipment_.offHandBlockPresentation, gameplayInput.player.lookYaw, gameplayInput.player.lookPitch, gameplayInput.cancelEquipmentPressed);
+                    for (auto& request : playerEquipment_.TakeProjectileRequests()) {
+                        // Native firearm acceptance includes ammunition, cooldown,
+                        // equipped state and successfully resolved paired clips.
+                        const bool accepted = request.action == bridge::EquipmentAction::PrimaryUse
+                            ? playerViewAnimation_.shotAccepted
+                            : request.action == bridge::EquipmentAction::Release &&
+                              playerViewAnimation_.pairedAssembly && playerViewAnimation_.oneShotPlaying &&
+                              playerViewAnimation_.activeAction == PlayerViewAction::Release;
+                        if (!paused_ && accepted) pendingProjectileShots_.push_back(std::move(request));
+                    }
                     if(playerEquipment_.releasePresentation)playerEquipment_.chainedReleasedCharge=false;
                     const auto& hand=playerViewAnimation_.handLayers;
                     const char* directions[]={"LEFT","RIGHT","DOWN","STAB"};
@@ -509,6 +533,7 @@ namespace renegade::runtime
                 wi::input::HidePointer(false);
             }
 
+            UpdatePlayerProjectiles(paused_ ? 0.0f : dt);
             if (!paused_)
                 creatorScripts_.Update(dt);
             renderer_.SetInteractionPrompt(creatorScripts_.CurrentPrompt());
@@ -516,6 +541,11 @@ namespace renegade::runtime
         }
         else
         {
+            if (!projectiles_.simulation.Records().empty() || !projectiles_.markers.empty())
+                projectiles_.Reset();
+            pendingProjectileShots_.clear();
+            renderer_.SetProjectileAim(false);
+            renderer_.SetProjectileContacts({});
             renderer_.SetInteractionPrompt({});
             StopCreatorScripts();
             if (paused_)
@@ -529,6 +559,108 @@ namespace renegade::runtime
             StopCreatorScripts();
     }
 
+    void RuntimeApplication::UpdatePlayerProjectiles(const float dt)
+    {
+        if (!player_.IsSpawned() || playerSceneRevision_ != scenes_.Revision() ||
+            renderer_.camera == nullptr) {
+            pendingProjectileShots_.clear();
+            renderer_.SetProjectileContacts({});
+            return;
+        }
+        auto& scene = scenes_.GetScene();
+        const ProjectileOwnerBinding owner{RuntimePlayerKnowledgeId, player_.entity};
+        const auto emit = [this](bridge::GameplayEvent event, std::string& error) {
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Info,
+                "runtime.projectile", event.name, event.payload);
+            // Governed queue remains the shared script/event boundary.
+            return creatorScripts_.EnqueueGameplayEvent(std::move(event), error);
+        };
+        if (std::isfinite(dt) && dt > 0) {
+            XMFLOAT3 position{}, velocity{};
+            const auto* transform = scene.transforms.GetComponent(player_.entity);
+            if (transform) position = transform->GetPosition();
+            (void)bridge::GetLinearVelocity(scene, player_.entity, velocity);
+            for (const auto& request : pendingProjectileShots_) {
+                bridge::ProjectileSource source;
+                source.ownerSubjectId = owner.subjectId;
+                source.sourceAssetId = request.equipmentId;
+                source.factionId = "Player";
+                source.knownPosition = ProjectileBridgeVector(position);
+                source.knownVelocity = ProjectileBridgeVector(velocity);
+                std::uint64_t id = 0;
+                if (projectiles_.Launch(request.projectile, source,
+                        renderer_.camera->Eye, renderer_.camera->At, id)) {
+                    std::string ignored;
+                    (void)emit({0, "projectile.launched",
+                        "projectile=" + std::to_string(id) +
+                        ";asset=" + request.projectile.assetId +
+                        ";equipment=" + request.equipmentId,
+                        owner.subjectId, {}}, ignored);
+                } else {
+                    diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
+                        "runtime.projectile", "projectile.launch_failed", projectiles_.lastError);
+                }
+            }
+        }
+        pendingProjectileShots_.clear();
+        std::vector<bridge::ProjectileImpact> impacts;
+        const auto query = [&](const bridge::ProjectileRecord& record,
+                               const bridge::ProjectileVector& from,
+                               const bridge::ProjectileVector& to) {
+            return QueryProjectileSceneSegment(scene, characterAiState_, owner, record, from, to);
+        };
+        if (!projectiles_.Update(dt, query, impacts)) {
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
+                "runtime.projectile", "projectile.update_failed", projectiles_.lastError);
+        }
+        for (const auto& impact : impacts) {
+            std::string ignored;
+            const auto& p = impact.contact.position;
+            (void)emit({0, "projectile.impact",
+                "projectile=" + std::to_string(impact.projectileId) +
+                ";surface=" + impact.contact.surfaceId +
+                ";x=" + std::to_string(p.x) + ";y=" + std::to_string(p.y) +
+                ";z=" + std::to_string(p.z),
+                impact.source.ownerSubjectId, impact.contact.targetSubjectId}, ignored);
+            // Existing damage integration seam; contacts/effects work independently
+            // of usable Player/NPC health authoring.
+            (void)ApplyProjectileCharacterImpact(scene, characterAiState_,
+                characterPerceptionState_, combatState_, impact, emit);
+        }
+        // Basic flight/contact feedback uses Wicked's bounded native primitives.
+        // Runtime defaults debug drawing off; these confirmed contacts opt in.
+        if (!playerEquipment_.resolvedProjectiles.empty())
+            wi::renderer::SetDebugDrawEnabled(true);
+        projectiles_.Draw();
+        std::vector<XMFLOAT2> contacts;
+        for (const auto& marker : projectiles_.markers) {
+            auto p = marker.contact.position;
+            p.x += marker.contact.normal.x*0.015f;
+            p.y += marker.contact.normal.y*0.015f;
+            p.z += marker.contact.normal.z*0.015f;
+            const auto eye = ProjectileBridgeVector(renderer_.camera->Eye);
+            bridge::ProjectileRecord probe;
+            probe.launch.source.ownerSubjectId = owner.subjectId;
+            const auto visibility = QueryProjectileSceneSegment(scene, characterAiState_, owner, probe, eye, p);
+            const float dx=p.x-eye.x,dy=p.y-eye.y,dz=p.z-eye.z;
+            if (visibility.status == bridge::ProjectileQueryStatus::Blocked) continue;
+            if (visibility.status == bridge::ProjectileQueryStatus::Hit) {
+                const auto h=visibility.contact.position;
+                const float hx=h.x-eye.x,hy=h.y-eye.y,hz=h.z-eye.z;
+                if (std::sqrt(hx*hx+hy*hy+hz*hz)+0.05f < std::sqrt(dx*dx+dy*dy+dz*dz)) continue;
+            }
+            XMFLOAT4 clip;
+            XMStoreFloat4(&clip,XMVector4Transform(XMVectorSet(p.x,p.y,p.z,1),
+                XMLoadFloat4x4(&renderer_.camera->VP)));
+            if (clip.w <= 0 || clip.z < 0 || clip.z > clip.w) continue;
+            const float x=clip.x/clip.w,y=clip.y/clip.w;
+            if (std::abs(x)>1 || std::abs(y)>1) continue;
+            contacts.push_back({(x+1)*0.5f*renderer_.GetLogicalWidth(),
+                (1-y)*0.5f*renderer_.GetLogicalHeight()});
+        }
+        renderer_.SetProjectileContacts(std::move(contacts));
+    }
+
     void RuntimeApplication::SyncPlayerForScene()
     {
         if (playerSceneRevision_ == scenes_.Revision())
@@ -538,6 +670,10 @@ namespace renegade::runtime
         playerViewRig_ = {};
         playerViewAnimation_ = {};
         playerEquipment_ = {};
+        pendingProjectileShots_.clear();
+        projectiles_.Reset();
+        renderer_.SetProjectileAim(false);
+        renderer_.SetProjectileContacts({});
         playerSceneRevision_ = scenes_.Revision();
         const auto resolved = bridge::ResolvePlayerStart(scenes_.GetScene());
         if (resolved.resolution == bridge::PlayerStartResolution::Missing)
@@ -566,6 +702,7 @@ namespace renegade::runtime
             diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
                 "runtime.player.equipment", "player.equipment.load_failed", playerEquipment_.error);
         }
+        renderer_.SetProjectileAim(playerEquipment_.ready && !playerEquipment_.resolvedProjectiles.empty());
         // Authored equipment owns its presentation. Keep the original WISCENE
         // settings intact; this resolved copy belongs only to Runtime.
         playerSettings_.firstPersonArmsAssetId =
@@ -896,6 +1033,9 @@ namespace renegade::runtime
         bridge::DespawnRuntimePlayer(scenes_.GetScene(), player_);
         player_ = {};
         playerSettings_ = {};
+        playerEquipment_ = {};
+        pendingProjectileShots_.clear();
+        projectiles_.Reset();
         playerSceneRevision_ = 0;
         audioSceneRevision_ = 0;
         audioPauseState_ = {};

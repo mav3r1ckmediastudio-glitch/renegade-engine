@@ -8,6 +8,7 @@
 #include "renegade/bridge/PlayerPrefabService.h"
 #include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/EquipmentAssetService.h"
+#include "renegade/bridge/ProjectileAssetService.h"
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/ProjectService.h"
@@ -463,6 +464,30 @@ namespace
                 (void)apply.Execute();
                 if (!SnapshotGovernedPlayerViewInputs(project, snapshot, presentation, error))
                     return false;
+            }
+            for (const auto& binding : document.equipment.projectiles)
+            {
+                if (!copied.insert(binding.projectileAssetId).second) continue;
+                ProjectileAssetDocument projectile;
+                if (!LoadProjectileAsset(project.rootPath, project.projectId,
+                        binding.projectileAssetId, projectile, error)) return false;
+                const auto dependency = std::find_if(registry.records.begin(), registry.records.end(),
+                    [&](const AssetRecord& value) { return value.assetId == binding.projectileAssetId; });
+                if (dependency == registry.records.end())
+                { error = "Projectile is absent from snapshot registry."; return false; }
+                const auto projectileSource = ResolveDependencyPath(project.rootPath, dependency->projectRelativePath);
+                if (!projectileSource.accepted || !projectileSource.exists ||
+                    !IsSafeSnapshotContentPath(fs::u8path(dependency->projectRelativePath)))
+                { error = "Invalid projectile snapshot path."; return false; }
+                const auto projectileDestination = fs::u8path(snapshot.sessionDirectory) /
+                    fs::u8path(dependency->projectRelativePath);
+                fs::create_directories(projectileDestination.parent_path(), ec);
+                if (!ec) fs::copy_file(fs::u8path(projectileSource.absolutePath), projectileDestination,
+                    fs::copy_options::overwrite_existing, ec);
+                if (ec) { error = "Could not snapshot projectile: " + ec.message(); return false; }
+                ProjectileAssetDocument verifiedProjectile;
+                if (!LoadProjectileAsset(snapshot.sessionDirectory, project.projectId,
+                        binding.projectileAssetId, verifiedProjectile, error)) return false;
             }
             EquipmentAssetDocument verified;
             if (!LoadEquipmentAsset(snapshot.sessionDirectory, project.projectId, id, verified, error))

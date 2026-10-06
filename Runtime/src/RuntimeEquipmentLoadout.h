@@ -4,6 +4,7 @@
 #include "renegade/bridge/EquipmentAssetService.h"
 #include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/PlayerService.h"
+#include "renegade/bridge/ProjectileAssetService.h"
 
 namespace renegade::runtime
 {
@@ -12,6 +13,17 @@ namespace renegade::runtime
     {
         bridge::EquipmentAssetDocument primary, offHand;
         bridge::EquipmentActionState actions;
+        struct ProjectileRequest {
+            bridge::StableId equipmentId;
+            bridge::EquipmentAction action;
+            bridge::ProjectileAssetDocument projectile;
+        };
+        std::vector<ProjectileRequest> resolvedProjectiles, pendingProjectiles;
+        std::vector<ProjectileRequest> TakeProjectileRequests() {
+            std::vector<ProjectileRequest> result;
+            result.swap(pendingProjectiles);
+            return result;
+        }
         bool dispatched = false;
         bool chargePresentation = false, releasePresentation = false;
         bool offHandBlockPresentation = false;
@@ -45,8 +57,17 @@ namespace renegade::runtime
             if (!settings.offHandEquipmentAssetId.empty() &&
                 !bridge::LoadEquipmentAsset(root, project, settings.offHandEquipmentAssetId, o, error))
                 return false;
+            std::vector<ProjectileRequest> resolved;
+            // Resolve once per loadout, never read project files in the fire loop.
+            for (const auto& binding : p.equipment.projectiles) {
+                bridge::ProjectileAssetDocument projectile;
+                if (!bridge::LoadProjectileAsset(root, project, binding.projectileAssetId, projectile, error))
+                    return false;
+                resolved.push_back({p.equipment.assetId, binding.action, std::move(projectile)});
+            }
             primary = std::move(p);
             offHand = std::move(o);
+            resolvedProjectiles = std::move(resolved);
             ready = true;
             return true;
         }
@@ -113,6 +134,7 @@ namespace renegade::runtime
         bridge::GameplayInputFrame RouteStaged(bridge::GameplayInputFrame input,
             bool equipped, bool nativeBusy, float dt, bool currentAim = false, bool chargePairsAvailable = false, bool offHandBlockAvailable = false, bool directionalMelee = false, bool chainWindow = false, unsigned direction = 0, float fullChargeSeconds = 1, float queuedReleaseSeconds = 0.75f)
         {
+            pendingProjectiles.clear();
             releasePresentation = false;
             chainedChargeStarted = false;
             RefreshChargePresentation();
@@ -221,6 +243,9 @@ namespace renegade::runtime
                 if (event.ownerHand != bridge::EquipmentHand::Primary ||
                     event.phase != bridge::EquipmentActionPhase::Active) continue;
                 if (event.action == bridge::EquipmentAction::Charge) continue;
+                for (const auto& request : resolvedProjectiles)
+                    if (request.action == event.action)
+                        pendingProjectiles.push_back(request);
                 dispatched = true;
                 releasePresentation = event.action == bridge::EquipmentAction::Release;
                 output.firePressed = event.action == bridge::EquipmentAction::PrimaryUse;
