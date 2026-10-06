@@ -1,3 +1,65 @@
+## Explicit import folders, player roles and safe model moves - 2026-10-06
+
+Implementation commit: b7471e2b0f1dedcc6efa4b4386fde358f04af2ed.
+
+Model import now accepts any valid project-relative Content folder, including
+new folders, with the selected browser folder as its default. Search tags are
+optional labels and never route files. Explicit General model / Player arms /
+Weapon roles let Assembly discover player parts outside the legacy folders.
+Role metadata joins the existing import transaction. MOVE uses one journaled
+transaction for the model, managed projection, optional thumbnail and registry;
+asset IDs, dependency edges, tags and retained source bundles are preserved.
+Transaction deletion supports rollback and interrupted recovery. Scope remains
+reusable registered model .rasset products, not arbitrary assets or folders.
+See docs/MODEL_IMPORT_DESTINATIONS.md.
+
+Validation (Release x64, local owner device):
+- BUILD/import_folder_verify.ps1 builds bridge, Runtime, assembly settings,
+  assembly workflow proof, transaction tests and Studio using MSBuild /m:2
+  /p:BuildProjectReferences=false, CL=/MP4. Final complete build PASS.
+- ctest --test-dir BUILD/renegade -C Release
+  -R 'ProjectDocumentTransaction|FirstPersonAssemblySettings|PlayerViewRig|Equipment|AssetCatalogue'
+  --output-on-failure --timeout 30: 7/7 PASS, 1.40s.
+- RENEGADE_ASSEMBLY_SWAP=BUILD/replacement-sword.glb;
+  RENEGADE_HAND_COLLISION=1; RENEGADE_IMPORT_FOLDERS=1;
+  RENEGADE_IMPORT_THUMBNAIL=BUILD/sword-assembly-authoring-proof5/replacement-sword-held-shield.png.
+  BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+  BUILD/sword-ue-proof4 BUILD/sword-import-folder-proof3 --sword-playable:
+  PASS, 8.86s. Custom folder + role + tags, invalid path/arms role rejection,
+  forced move rollback, retained-source collision rejection, thumbnail move,
+  stable-ID cold placement, assembly update/reopen, all masked preview slots,
+  965 corrected frames / zero unresolved, saved-level and dependency closure.
+- Native disposable BUILD/assembly-hand-ui-project: static GLB preview/import
+  into Content/My Gear/Blades with Weapon role and iron,test tags; reopen editor
+  and find card/tags; MOVE into new Content/Reorganised/Native; all three files
+  verified in destination; selected card and tags retained. Assembly lists the
+  moved weapon, loads it with the original shield/bindings, and SAVE CHANGES
+  preserves the Player Start assignment. Standalone opens this saved project.
+- BUILD/chain_focus.ps1 against that standalone: PASS, 9.77s. Released
+  directional queue, held charged chain, single dispatch, shield independence;
+  unresolved counters 0 -> 0. BUILD/chain-native-events.json and native capture.
+- Static and character importer layouts visually inspected at 1920x1080.
+  Fixed static animation-control visibility, sibling render scissor clipping,
+  MOVE/collapse hit-target overlap, move-dialog click-through and taller
+  character panel positioning. Final Studio-only refresh PASS.
+- git diff --check PASS.
+
+Failures retained as evidence: initial Studio link failed while the test editor
+held the executable open; closed only that test editor and rebuilt. An edit made
+during an earlier bridge build left the transaction object stale; touching and
+rebuilding corrected it. First model-move proof found a Windows projection
+stream lock; explicitly closing that stream before transaction fixed it.
+Proof2 passed all new import/move checks but hit one existing bounded collision
+fallback at direction0/time0.533333/residual0.00798244; proof3 and native chain
+passed with zero unresolved. This does not establish universal no-clipping.
+No animation/avoidance algorithm changes in this work.
+
+Owner's original project/editor were not modified by these native checks.
+Local commits only; no push. Independent exact-commit review and owner usability
+approval remain pending; no release gate or Wicked parity claims are closed.
+Fixed-height importer still needs a compact/scrolling treatment for smaller
+displays; this check covers the owner's 1080p layout.
+
 
 ## Independent hand transition blending - 2026-10-06
 Implementation commit: 8810af7a675f7a8a86d5f3d6b9dd085cdaca0020.
