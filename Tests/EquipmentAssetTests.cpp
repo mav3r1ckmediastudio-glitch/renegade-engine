@@ -13,6 +13,7 @@ namespace fs=std::filesystem;
 void Check(bool ok,const std::string& message) {
     if(!ok){std::cerr<<"EQUIPMENT ASSET FAIL // "<<message<<"\n";std::exit(1);}
 }
+#include "EquipmentMeleeChainTests.h"
 int main() {
     const auto root=fs::temp_directory_path()/("renegade-equipment-"+GenerateStableId());
     fs::create_directories(root);const auto project=GenerateStableId();
@@ -262,6 +263,7 @@ int main() {
         !runtime.error.empty()&&!runtime.Route(input,true).firePressed&&
         runtime.Presentation("legacy").empty(),"failed load retained stale or legacy equipment");
 
+    TestEquipmentMeleeChains(sword,shield);
     fs::remove_all(root);
     std::cout<<"EQUIPMENT ASSET PASS // schema, identity, journal rollback, hand admission, prefab migration, undo/reopen, dependency edges\n";
 }

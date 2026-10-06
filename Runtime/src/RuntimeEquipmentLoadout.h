@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include "renegade/bridge/EquipmentAssetService.h"
 #include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/PlayerService.h"
@@ -14,6 +15,15 @@ namespace renegade::runtime
         bool dispatched = false;
         bool chargePresentation = false, releasePresentation = false;
         bool offHandBlockPresentation = false;
+        struct QueuedStrike {
+            bool pending=false, released=false;
+            unsigned direction=0;
+            float seconds=0, age=0, gestureX=0, gestureY=0;
+            std::string item;
+        } queuedStrike;
+        bool chainedChargeStarted=false, chainedReleasedCharge=false, chainInputWindow=false;
+        unsigned chainedDirection=0, chainedCount=0;
+        float chainedSeconds=0;
         bool authored = false;
         bool ready = false;
         std::string error;
@@ -101,15 +111,53 @@ namespace renegade::runtime
         }
 
         bridge::GameplayInputFrame RouteStaged(bridge::GameplayInputFrame input,
-            bool equipped, bool nativeBusy, float dt, bool currentAim = false, bool chargePairsAvailable = false, bool offHandBlockAvailable = false)
+            bool equipped, bool nativeBusy, float dt, bool currentAim = false, bool chargePairsAvailable = false, bool offHandBlockAvailable = false, bool directionalMelee = false, bool chainWindow = false, unsigned direction = 0)
         {
             releasePresentation = false;
+            chainedChargeStarted = false;
             RefreshChargePresentation();
             RefreshOffHandBlockPresentation();
             if (!authored) return input;
             auto output = Route(input, equipped);
             output.firePressed = output.reloadPressed = output.toggleEquipmentPressed = false;
             if (!ready || !std::isfinite(dt) || dt <= 0) return output;
+            bool releaseOwned=false, recoveryOwned=false;
+            for(const auto& c:actions.Channels())
+                if(c.ownerHand==bridge::EquipmentHand::Primary && c.definition.action==bridge::EquipmentAction::Release &&
+                   c.phase!=bridge::EquipmentActionPhase::Ready) {
+                    releaseOwned=true;
+                    recoveryOwned=c.phase==bridge::EquipmentActionPhase::Recovery || (dispatched && !nativeBusy);
+                }
+            chainInputWindow=directionalMelee && releaseOwned && (chainWindow || recoveryOwned);
+            const bool chainsAvailable=directionalMelee && chargePairsAvailable && HasChargeRelease() && equipped;
+            if(!chainsAvailable || (queuedStrike.pending && queuedStrike.item!=primary.equipment.assetId) ||
+               input.cancelEquipmentPressed || input.reloadPressed || input.toggleEquipmentPressed)
+                {queuedStrike={};chainedReleasedCharge=false;}
+            if(chainsAvailable && releaseOwned && (chainWindow || recoveryOwned) &&
+               input.firePressed && !queuedStrike.pending && !input.cancelEquipmentPressed &&
+               !input.reloadPressed && !input.toggleEquipmentPressed) {
+                queuedStrike={};queuedStrike.pending=true;
+                queuedStrike.direction=std::min(direction,3u);queuedStrike.item=primary.equipment.assetId;
+            }
+            if(queuedStrike.pending) {
+                if(!queuedStrike.released) {
+                    queuedStrike.seconds=std::min(queuedStrike.seconds+dt,1.0f);
+                    if(std::isfinite(input.player.lookYaw)&&std::isfinite(input.player.lookPitch)) {
+                        queuedStrike.gestureX+=input.player.lookYaw;
+                        queuedStrike.gestureY+=input.player.lookPitch;
+                        if(std::max(std::abs(queuedStrike.gestureX),std::abs(queuedStrike.gestureY))>=0.025f) {
+                            queuedStrike.direction=std::abs(queuedStrike.gestureX)>=std::abs(queuedStrike.gestureY)?
+                                (queuedStrike.gestureX<0?0:1):(queuedStrike.gestureY>0?2:3);
+                            queuedStrike.gestureX=queuedStrike.gestureY=0;
+                        }
+                    }
+                    queuedStrike.released=!input.fireDown;
+                }
+                if(queuedStrike.released) {
+                    queuedStrike.age+=dt;
+                    if(queuedStrike.age>0.75f)queuedStrike={};
+                }
+            }
             if (dispatched && !nativeBusy) {
                 actions.CompleteActive(primary.equipment.assetId, bridge::EquipmentHand::Primary);
                 dispatched = false;
@@ -143,8 +191,16 @@ namespace renegade::runtime
                         equipped ? "Unequip" : "Equip");
                 else if (equipped && input.reloadPressed)
                     begin(bridge::EquipmentAction::Reload, "Reload");
-                else if (equipped && input.firePressed) {
-                    if (chargePairsAvailable && HasChargeRelease()) begin(bridge::EquipmentAction::Charge, "Charge");
+                else if (equipped && (input.firePressed || queuedStrike.pending)) {
+                    if (chargePairsAvailable && HasChargeRelease()) {
+                        if(begin(bridge::EquipmentAction::Charge, "Charge")) {
+                            chainedReleasedCharge=queuedStrike.pending && queuedStrike.released;
+                            if(queuedStrike.pending) {
+                            chainedChargeStarted=true;chainedDirection=queuedStrike.direction;
+                            chainedSeconds=queuedStrike.seconds;++chainedCount;queuedStrike={};
+                            }
+                        }
+                    }
                     else begin(bridge::EquipmentAction::PrimaryUse, "Attack");
                 }
             }

@@ -436,6 +436,10 @@ namespace renegade::runtime
                         (playerViewAnimation_.equipped && (playerViewAnimation_.jumpCycleActive ||
                             playerViewAnimation_.takeoffPending || playerViewAnimation_.landingPending ||
                             (playerViewAnimation_.groundKnown && playerViewAnimation_.wasGrounded != grounded)));
+                    const auto& melee=playerViewAnimation_.handLayers;
+                    const auto* strike=scenes_.GetScene().animations.GetComponent(melee.right);
+                    const bool chainWindow=melee.directional && melee.attacking && strike &&
+                        strike->end-strike->start-melee.rightTime<=0.30f;
                     const auto equipmentInput =
                         playerEquipment_.RouteStaged(gameplayInput, playerViewAnimation_.equipped,
                             presentationBusy, paused_ ? 0.0f : dt, playerViewAnimation_.aiming,
@@ -443,7 +447,16 @@ namespace renegade::runtime
                             !playerViewAnimation_.clips[PlayerViewActionIndex(PlayerViewAction::Release)].empty(),
                             playerViewAnimation_.handLayers.enabled &&
                             !playerEquipment_.offHand.equipment.assetId.empty() &&
-                            playerEquipment_.offHand.equipment.presentationAssetId == playerViewRig_.viewModelAssetId);
+                            playerEquipment_.offHand.equipment.presentationAssetId == playerViewRig_.viewModelAssetId,
+                            melee.directional, chainWindow, melee.direction);
+                    if(playerEquipment_.chainedChargeStarted) {
+                        auto& hand=playerViewAnimation_.handLayers;
+                        hand.direction=playerEquipment_.chainedDirection;
+                        hand.chargePhase=1;hand.chargeSeconds=std::max(0.0f,playerEquipment_.chainedSeconds-(playerEquipment_.chargePresentation?dt:0.0f));
+                        hand.rightTime=0;hand.gestureX=hand.gestureY=0;
+                    }
+                    if(!paused_ && playerEquipment_.chainedReleasedCharge)
+                        playerViewAnimation_.handLayers.chargeSeconds=std::max(0.0f,playerEquipment_.chainedSeconds-(playerEquipment_.chargePresentation?dt:0.0f));
                     UpdateRuntimePlayerViewAnimations(
                         scenes_.GetScene(),
                         playerViewAnimation_,
@@ -455,12 +468,16 @@ namespace renegade::runtime
                         !paused_ && equipmentInput.toggleEquipmentPressed,
                         grounded, playerEquipment_.chargePresentation, playerEquipment_.releasePresentation,
                         playerEquipment_.offHandBlockPresentation, gameplayInput.player.lookYaw, gameplayInput.player.lookPitch, gameplayInput.cancelEquipmentPressed);
+                    if(playerEquipment_.releasePresentation)playerEquipment_.chainedReleasedCharge=false;
                     const auto& hand=playerViewAnimation_.handLayers;
                     const char* directions[]={"LEFT","RIGHT","DOWN","STAB"};
                     renderer_.SetMeleePrompt(hand.directional?
-                        std::string(directions[hand.direction])+"  "+(hand.chargePhase?
+                        std::string(directions[hand.direction])+"  "+(playerEquipment_.queuedStrike.pending?
+                            std::string("NEXT ")+directions[playerEquipment_.queuedStrike.direction]+" "+
+                                (playerEquipment_.queuedStrike.released?"QUEUED":"CHARGING"):
+                            hand.chargePhase?
                             "CHARGE "+std::to_string(static_cast<int>(hand.chargeSeconds*100))+"%":
-                            hand.attacking?"STRIKE":"HOLD LMB + MOVE; RELEASE TO STRIKE"):"");
+                            hand.attacking?(playerEquipment_.chainInputWindow?"STRIKE; PREPARE NEXT":"STRIKE"):"HOLD LMB + MOVE; RELEASE TO STRIKE"):"");
                 }
             }
         }

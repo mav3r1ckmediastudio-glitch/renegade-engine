@@ -1222,3 +1222,23 @@ a native singularity in the supplied pack. No upstream changes were made.
 This is presentation correction, not weapon rigid-body physics, damage or NPC contact.
 Conservative corners, frame-discrete contact, absent joint/pole constraints and
 unreachable targets remain limitations. Generic avoidance authoring UI is deferred.
+
+
+## Directional melee input chaining
+RuntimeEquipmentLoadout owns one transient follow-up Charge request for explicitly
+directional shared-arm presentations with compatible Charge/Release equipment.
+The last 0.30 seconds of native Release playback and authored equipment recovery
+accept a fresh primary press. Direction gestures and held charge accumulate in the
+queue without interrupting the active strike or stealing off-hand reservations.
+Existing gameplay Ready/Prepare/Windup/Hold/Active/Recovery phases remain authority.
+The queue starts only after native completion and authored recovery free the primary
+hand. Its direction and charge seed the hand controller; native fades retain the
+last displayed pose. A released queued request preserves its charge through any
+new preparation/windup. A held queued request continues charging and still needs
+button release. No automatic repeating strike is introduced.
+Released requests expire after 0.75 gameplay seconds; held requests remain deliberate
+input. Pause/nonfinite dt freezes queue data. Cancel, reload, equip/unequip, changed
+equipment identity and load reset clear queued intent. One accepted request cannot
+dispatch twice. Ordinary firearms and other non-directional presentations retain
+their existing routing. Runtime prompt exposes PREPARE NEXT and queued direction.
+Damage, stamina, hit windows and configurable combo authoring remain later work.
