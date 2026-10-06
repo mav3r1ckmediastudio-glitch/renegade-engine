@@ -65,6 +65,19 @@ static bool PrepareIndependentHandAssembly(const std::string& root,const StableI
  Set(*arms.transforms.GetComponent(viewRoot),s.cameraPosition,s.cameraRotation);
  for(const auto entity:armRoots)arms.Component_Attach(entity,viewRoot,true);
  arms.metadatas.Create(viewRoot).bool_values.set("renegade.first_person.independent_hands",true);
+ if(s.avoidOffHand) {
+  auto& m=arms.metadatas.Create(viewRoot);
+  m.bool_values.set("renegade.first_person.avoid_off_hand",true);
+  const auto vector=[&](const char* key,const XMFLOAT3& v) {
+   m.float_values.set(std::string(key)+"_x",v.x);m.float_values.set(std::string(key)+"_y",v.y);m.float_values.set(std::string(key)+"_z",v.z);
+  };
+  vector("blade_base",s.bladeBase);vector("blade_tip",s.bladeTip);
+  vector("shield_center",s.shieldCenter);vector("shield_half_extents",s.shieldHalfExtents);
+  m.float_values.set("blade_radius",s.bladeRadius);m.float_values.set("maximum_correction",s.maximumHandCorrection);
+  arms.metadatas.Create(weaponRoot).bool_values.set("renegade.first_person.blade_proxy",true);
+  arms.metadatas.Create(shieldRoot).bool_values.set("renegade.first_person.shield_proxy",true);
+ }
+
  for(size_t i=0;i<arms.metadatas.GetCount();++i) {
   arms.metadatas[i].bool_values.erase(CharacterAssetTemplateMetadataKey);
   arms.metadatas[i].int_values.erase(CharacterAssetTemplateVersionMetadataKey);

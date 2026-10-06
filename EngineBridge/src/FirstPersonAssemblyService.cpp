@@ -96,6 +96,18 @@ bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
    }
   }
  }
+ if(s.avoidOffHand) {
+  if(!s.IndependentHands()){e="Hand avoidance requires an independent assembly.";return false;}
+  for(auto v:{s.bladeBase,s.bladeTip,s.shieldCenter,s.shieldHalfExtents})
+   if(!std::isfinite(v.x)||!std::isfinite(v.y)||!std::isfinite(v.z)||
+      std::abs(v.x)>10||std::abs(v.y)>10||std::abs(v.z)>10){e="Invalid hand collision proxy.";return false;}
+  if(s.shieldHalfExtents.x<=0||s.shieldHalfExtents.y<=0||s.shieldHalfExtents.z<=0||
+     !std::isfinite(s.bladeRadius)||s.bladeRadius<=0||s.bladeRadius>0.1f||
+     !std::isfinite(s.maximumHandCorrection)||s.maximumHandCorrection<=0||s.maximumHandCorrection>0.5f||
+     XMVectorGetX(XMVector3Length(XMLoadFloat3(&s.bladeTip)-XMLoadFloat3(&s.bladeBase)))<0.01f) {
+   e="Hand collision proxy dimensions are invalid.";return false;
+  }
+ }
  if(s.IndependentHands()) {
   std::set<unsigned> bindings={s.blockStartClip,s.blockLoopClip,s.blockEndClip};
   if(bindings.size()!=3){e="Shield actions need distinct clips.";return false;}
@@ -144,6 +156,12 @@ bool SerializeFirstPersonAssemblySettings(const FirstPersonAssemblySettings& s,s
    {"off_hand_position",{s.offHandWeaponPosition.x,s.offHandWeaponPosition.y,s.offHandWeaponPosition.z}},
    {"off_hand_rotation",{s.offHandWeaponRotation.x,s.offHandWeaponRotation.y,s.offHandWeaponRotation.z,s.offHandWeaponRotation.w}},
    {"block_start",s.blockStartClip},{"block_loop",s.blockLoopClip},{"block_end",s.blockEndClip}};
+  if(s.avoidOffHand)j["hand_layers"]["avoidance"]={
+   {"blade_base",{s.bladeBase.x,s.bladeBase.y,s.bladeBase.z}},
+   {"blade_tip",{s.bladeTip.x,s.bladeTip.y,s.bladeTip.z}},
+   {"shield_center",{s.shieldCenter.x,s.shieldCenter.y,s.shieldCenter.z}},
+   {"shield_half_extents",{s.shieldHalfExtents.x,s.shieldHalfExtents.y,s.shieldHalfExtents.z}},
+   {"blade_radius",s.bladeRadius},{"maximum_correction",s.maximumHandCorrection}};
  }
  out=j.dump();return true;
 }
@@ -173,7 +191,7 @@ bool ParseFirstPersonAssemblySettings(const std::string& text,FirstPersonAssembl
  s.weaponPosition=position("weapon_position");s.cameraPosition=position("camera_position");
  s.weaponRotation=rotation("weapon_rotation");s.cameraRotation=rotation("camera_rotation");
  if(independent) {
-  const auto& h=j.at("hand_layers");if(!h.is_object()||h.size()!=9)throw std::runtime_error("hand layers");
+  const auto& h=j.at("hand_layers");if(!h.is_object()||(h.size()!=9 && !(h.size()==10&&h.contains("avoidance"))))throw std::runtime_error("hand layers");
   s.offHandWeaponAssetId=h.at("off_hand_asset_id").get<std::string>();
   s.offHandParentBonePath=h.at("off_hand_parent").get<std::string>();
   s.primaryLayerRootPath=h.at("primary_root").get<std::string>();s.offHandLayerRootPath=h.at("off_hand_root").get<std::string>();
@@ -181,6 +199,16 @@ bool ParseFirstPersonAssemblySettings(const std::string& text,FirstPersonAssembl
   if(!p.is_array()||p.size()!=3||!q.is_array()||q.size()!=4)throw std::runtime_error("hand transform");
   s.offHandWeaponPosition={p[0].get<float>(),p[1].get<float>(),p[2].get<float>()};
   s.offHandWeaponRotation={q[0].get<float>(),q[1].get<float>(),q[2].get<float>(),q[3].get<float>()};
+  if(h.contains("avoidance")) {
+   const auto& a=h.at("avoidance");if(!a.is_object()||a.size()!=6)throw std::runtime_error("avoidance");
+   const auto vector=[&](const char* k) {
+    const auto& v=a.at(k);if(!v.is_array()||v.size()!=3)throw std::runtime_error("avoidance vector");
+    return XMFLOAT3(v[0].get<float>(),v[1].get<float>(),v[2].get<float>());
+   };
+   s.avoidOffHand=true;s.bladeBase=vector("blade_base");s.bladeTip=vector("blade_tip");
+   s.shieldCenter=vector("shield_center");s.shieldHalfExtents=vector("shield_half_extents");
+   s.bladeRadius=a.at("blade_radius").get<float>();s.maximumHandCorrection=a.at("maximum_correction").get<float>();
+  }
   s.blockStartClip=h.at("block_start").get<unsigned>();s.blockLoopClip=h.at("block_loop").get<unsigned>();s.blockEndClip=h.at("block_end").get<unsigned>();
  }
  for(const auto& p:j.at("pairs"))s.pairs.push_back({p.at("action").get<std::string>(),p.at("arms_clip").get<unsigned>(),p.at("weapon_clip").get<unsigned>()});

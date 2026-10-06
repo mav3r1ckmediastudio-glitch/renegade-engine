@@ -30,6 +30,11 @@ struct FirstPersonAssemblySettings {
     XMFLOAT3 offHandWeaponPosition = {};
     XMFLOAT4 offHandWeaponRotation = {0,0,0,1};
     unsigned blockStartClip = 0, blockLoopClip = 0, blockEndClip = 0;
+    // Optional authored presentation proxies, in the static attachment roots.
+    bool avoidOffHand = false;
+    XMFLOAT3 bladeBase = {}, bladeTip = {0,1,0};
+    XMFLOAT3 shieldCenter = {}, shieldHalfExtents = {0.3f,0.3f,0.04f};
+    float bladeRadius = 0.015f, maximumHandCorrection = 0.35f;
     bool IndependentHands() const noexcept { return !offHandWeaponAssetId.empty(); }
 };
 bool SerializeFirstPersonAssemblySettings(const FirstPersonAssemblySettings&, std::string&, std::string&);

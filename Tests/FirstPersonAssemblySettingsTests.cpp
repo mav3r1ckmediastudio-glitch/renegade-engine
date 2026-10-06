@@ -80,6 +80,21 @@ int main()
        !ParseFirstPersonAssemblySettings(handsJson,parsed,error)||
        !SerializeFirstPersonAssemblySettings(parsed,reopened,error)||reopened!=handsJson||
        !parsed.IndependentHands())return 21;
+    auto avoidance=hands;avoidance.avoidOffHand=true;
+    avoidance.bladeBase={0,0.02f,0};avoidance.bladeTip={0,0.8f,0};
+    avoidance.shieldCenter={0.03f,0,0};avoidance.shieldHalfExtents={0.05f,0.27f,0.27f};
+    if(!SerializeFirstPersonAssemblySettings(avoidance,handsJson,error)||
+       !ParseFirstPersonAssemblySettings(handsJson,parsed,error)||
+       !parsed.avoidOffHand||parsed.bladeTip.y!=0.8f||
+       !SerializeFirstPersonAssemblySettings(parsed,reopened,error)||reopened!=handsJson)return 24;
+    for(int failure=0;failure<4;++failure) {
+     auto bad=avoidance;
+     if(failure==0)bad.bladeTip=bad.bladeBase;
+     if(failure==1)bad.shieldHalfExtents.z=0;
+     if(failure==2)bad.bladeRadius=-1;
+     if(failure==3)bad.maximumHandCorrection=std::numeric_limits<float>::quiet_NaN();
+     if(SerializeFirstPersonAssemblySettings(bad,reopened,error))return 25;
+    }
     for(int i=0;i<3;++i) {
         auto bad=hands;
         if(i==0)bad.offHandWeaponAssetId=bad.weaponAssetId;

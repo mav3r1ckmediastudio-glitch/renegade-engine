@@ -1199,3 +1199,26 @@ the last displayed pose when interrupted; bones remain disjoint and shared-base
 ownership does not move into either hand. Blend state is transient, not serialized.
 Presentation fades never delay gameplay phases or implement weapon collision.
 Paired assemblies retain their existing native action crossfade path.
+
+
+## First-person blade/shield pose avoidance
+Independent-hand assemblies can opt into schema-v2 authored blade endpoints/radius,
+shield centre/half-extents and a maximum correction target distance. Static part
+roots carry explicit proxy roles; Runtime derives the primary IK chain from the
+validated partition, without importing filename or bone-name assumptions.
+Wicked evaluates the generated masked clips once in a private CPU pose scene.
+Native CCD corrects the primary arm; authored world wrist orientation is restored.
+Native IK rotations retain authored bone translations and scale. A near-contact
+fallback permits at most 4cm of shoulder-root translation within the total bound.
+Solved local poses are committed before ordinary world hierarchy/skinning updates;
+world animation and the shield arm retain their existing authority. Native world-only
+IK output is converted back through its solved temporary locals.
+Collision tests use a full blade segment against a radius-expanded shield box.
+Entry separates immediately; return eases over 0.10 seconds. Six candidate faces
+and bounded refinements handle reachability. Invalid native IK poses are rejected;
+unresolved contacts restore the authored pose and increment live diagnostics.
+The solver uses four native iterations per refinement: longer convergence exposed
+a native singularity in the supplied pack. No upstream changes were made.
+This is presentation correction, not weapon rigid-body physics, damage or NPC contact.
+Conservative corners, frame-discrete contact, absent joint/pole constraints and
+unreachable targets remain limitations. Generic avoidance authoring UI is deferred.

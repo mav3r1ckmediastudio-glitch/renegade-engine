@@ -65,6 +65,33 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
   const auto lower=XMVector3Rotate(XMVectorSet(0,-0.02f,0,0),XMLoadFloat4(&settings.weaponRotation));
   XMStoreFloat3(&settings.weaponPosition,localGrip-handle+lower);
  }
+
+
+ if(std::getenv("RENEGADE_HAND_COLLISION")) {
+  settings.avoidOffHand=true;
+  for(const auto& id:{swordId,shieldId}) {
+   auto part=CreatorAssetWorkflowService().PrepareModelPlacement(output.generic_u8string(),projectId,id);
+   if(!part.IsReady())return false;auto& ps=*part.PeekMutableScene();
+   wi::ecs::Entity root=0;
+   for(size_t j=0;j<ps.transforms.GetCount();++j)
+    if(!ps.hierarchy.Contains(ps.transforms.GetEntity(j)))root=ps.transforms.GetEntity(j);
+   const auto inverse=XMMatrixInverse(nullptr,renegade::runtime::PlayerHandWorld(ps,root));
+   XMFLOAT3 minimum={100,100,100},maximum={-100,-100,-100};float bladeRadius=0;
+   for(size_t j=0;j<ps.objects.GetCount();++j) {
+    const auto* mesh=ps.meshes.GetComponent(ps.objects[j].meshID);if(!mesh)return false;
+    const auto matrix=renegade::runtime::PlayerHandWorld(ps,ps.objects.GetEntity(j))*inverse;
+    for(const auto& vertex:mesh->vertex_positions) {
+     XMFLOAT3 v;XMStoreFloat3(&v,XMVector3TransformCoord(XMLoadFloat3(&vertex),matrix));
+     for(int axis=0;axis<3;++axis) {(&minimum.x)[axis]=std::min((&minimum.x)[axis],(&v.x)[axis]);(&maximum.x)[axis]=std::max((&maximum.x)[axis],(&v.x)[axis]);}
+     if(v.y>0.03f)bladeRadius=std::max(bladeRadius,std::sqrt(v.x*v.x+v.z*v.z));
+    }
+   }
+   std::cout<<"ROOT PART "<<id<<" "<<minimum.x<<","<<minimum.y<<","<<minimum.z<<" .. "<<maximum.x<<","<<maximum.y<<","<<maximum.z<<"\n";
+   if(id==swordId) {settings.bladeBase={0,0.03f,0};settings.bladeTip={0,maximum.y,0};settings.bladeRadius=bladeRadius+0.005f;}
+   else {settings.shieldCenter={(minimum.x+maximum.x)/2,(minimum.y+maximum.y)/2,(minimum.z+maximum.z)/2};
+    settings.shieldHalfExtents={(maximum.x-minimum.x)/2+0.005f,(maximum.y-minimum.y)/2+0.005f,(maximum.z-minimum.z)/2+0.005f};}
+  }
+ }
  FirstPersonAssemblyService service;StableId asset;
  if(!service.Save(output.generic_u8string(),projectId,"Sword Shield Test",settings,{},asset,error)){
   std::cerr<<"ASSEMBLY "<<error<<"\n";return false;
@@ -86,9 +113,11 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
  }
  if(!animation.handLayers.directional)return false;
  const auto step=[&](float dt,bool charge,bool release,float yaw=0,float pitch=0,bool cancel=false) {
+  const auto unresolved=animation.handLayers.avoidance.unresolved;
   renegade::runtime::UpdateRuntimePlayerViewAnimations(assembly,animation,renegade::runtime::PlayerViewAction::Idle,
    dt,false,false,false,false,true,charge,release,true,yaw,pitch,cancel);
   assembly.Update(dt);
+  if(animation.handLayers.avoidance.unresolved!=unresolved)std::cerr<<"CONTACT direction="<<unsigned(animation.handLayers.direction)<<" time="<<animation.handLayers.rightTime<<" residual="<<animation.handLayers.avoidance.residual<<"\n";
  };
  for(int frame=0;frame<80;++frame)step(1.0f/60,false,false);
 
@@ -103,6 +132,10 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
   for(size_t i=0;i<amounts.size();++i)assembly.animations[i].amount=amounts[i];
   return ok;
  };
+ const auto rightAmount=[&]() {
+  auto& h=animation.handLayers;
+  return (h.avoidance.enabled?h.avoidance.pose.get():&assembly)->animations.GetComponent(h.right)->amount;
+ };
  std::set<wi::ecs::Entity> played;
  for(unsigned direction=0;direction<4;++direction) {
   const float yaw=direction==0?-0.1f:direction==1?0.1f:0;
@@ -115,7 +148,7 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
   bool chargeFade=false,holdFade=false;
   for(int frame=0;frame<90;++frame) {
    step(1.0f/60,true,false);
-   const float weight=assembly.animations.GetComponent(animation.handLayers.right)->amount;
+   const float weight=rightAmount();
    if(weight>0 && weight<1) {
     if(animation.handLayers.chargePhase==1)chargeFade=true;
     if(animation.handLayers.chargePhase==2)holdFade=true;
@@ -131,7 +164,7 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
   for(int frame=0;frame<180;++frame) {
    step(1.0f/60,false,false);
    if(direction==3 && frame==1) {
-    const auto weight=assembly.animations.GetComponent(animation.handLayers.right)->amount;
+    const auto weight=rightAmount();
     if(!(weight>0 && weight<1)||!capturePose("stab-blend-release.png"))return false;
    }
    if(frame==12 && !Capture(assembly,output/("sword-release-"+std::to_string(direction)+".png")))return false;
@@ -153,6 +186,12 @@ static bool SwordShieldPlayableProof(const fs::path& input,const fs::path& outpu
  step(1.0f/60,false,false,0,0,true);
  for(int frame=0;frame<20;++frame)step(1.0f/60,false,false);
  if(!capturePose("blend-cancel-idle.png"))return false;
+
+ if(animation.handLayers.avoidance.enabled) {
+  const auto& collision=animation.handLayers.avoidance;
+  std::cout<<"AVOIDANCE corrected_frames="<<collision.corrections<<" unresolved_frames="<<collision.unresolved<<"\n";
+  if(!collision.corrections||collision.unresolved)return false;
+ }
  renegade::runtime::ResetRuntimePlayerViewAnimations(assembly,animation);
  EquipmentDefinition sword;sword.assetId=GenerateStableId();sword.name="Sword Test";
  sword.handUse=EquipmentHandUse::PrimaryOnly;sword.presentationAssetId=asset;

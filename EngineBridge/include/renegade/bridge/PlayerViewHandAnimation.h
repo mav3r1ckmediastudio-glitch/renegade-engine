@@ -3,6 +3,7 @@
 #include "renegade/bridge/PlayerViewRig.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include <array>
+#include "renegade/bridge/PlayerViewHandAvoidance.h"
 #include "renegade/bridge/PlayerViewHandBlend.h"
 
 namespace renegade::runtime {
@@ -17,6 +18,7 @@ struct RuntimePlayerHandAnimationState {
  std::vector<wi::ecs::Entity> generated,sourceClips;
  wi::ecs::Entity base=wi::ecs::INVALID_ENTITY,right=wi::ecs::INVALID_ENTITY,left=wi::ecs::INVALID_ENTITY;
  RuntimePlayerHandBlend rightBlend,leftBlend;
+ RuntimePlayerHandAvoidance avoidance;
  float baseTime=0,rightTime=0,leftTime=0;
  unsigned blockPhase=0,attackVariant=0;
  PlayerViewAction action=PlayerViewAction::Idle;
@@ -129,6 +131,7 @@ inline bool InitializeRuntimePlayerHandAnimations(wi::scene::Scene& scene,wi::ec
     std::any_of(prepared.block.begin(),prepared.block.end(),[](auto e){return e==wi::ecs::INVALID_ENTITY;})) {
   error="Independent hands require Idle, Attack and shield start/loop/end clips.";cleanup();return false;
  }
+ if(!InitializeRuntimePlayerHandAvoidance(scene,viewRoot,partition,prepared.generated,prepared.avoidance,error)) {cleanup();return false;}
  for(const auto e:prepared.sourceClips){auto& clip=*scene.animations.GetComponent(e);clip.Pause();clip.RootMotionOff();clip.amount=0;}
  state=std::move(prepared);error.clear();return true;
 }
@@ -205,6 +208,7 @@ inline void UpdateRuntimePlayerHandAnimations(wi::scene::Scene& scene,RuntimePla
  const float rightWeight=PrepareRuntimePlayerHandBlend(scene,state.rightBlend,state.right,state.rightTime,dt,rightFade);
  const float leftWeight=PrepareRuntimePlayerHandBlend(scene,state.leftBlend,state.left,state.leftTime,dt,0.12f);
  pose(state.base,state.baseTime,1);pose(state.right,state.rightTime,rightWeight);pose(state.left,state.leftTime,leftWeight);
+ EvaluateRuntimePlayerHandAvoidance(scene,state.avoidance,state.generated,dt);
  if(advancing&&state.chargePhase==1&&attackEnded){state.chargePhase=2;state.rightTime=0;}
  if(advancing&&state.attacking&&attackEnded)state.attacking=false;
  if(advancing&&leftEnded&&state.blockPhase==1){state.blockPhase=2;state.leftTime=0;}
