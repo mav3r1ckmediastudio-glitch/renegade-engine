@@ -1,5 +1,7 @@
 # P3 launch sockets - 2026-10-06
 
+Implementation commit: ec1a4166c5187cbac8091b15fee527cd4a68bff3.
+
 Status: implementation candidate on feature/p3-projectile-impact. No P3 gate closure;
 independent exact-commit review remains required. P2 PR #180 remains unmerged.
 

@@ -1,3 +1,63 @@
+## P3 launch socket checkpoint - 2026-10-06
+
+Implementation commit: ec1a4166c5187cbac8091b15fee527cd4a68bff3.
+Branch: feature/p3-projectile-impact. P2 PR #180 remains unmerged.
+
+Named launch sockets now have a native editor reached through Player Start >
+Starting Equipment > Weapon Projectiles > Edit Launch Sockets. It edits an
+existing assembly with model/bone/palm selection, one-click surface placement,
+FIRESPOT reuse, orange direction arrow, six committed position/direction controls,
+mouse orbit/pan/wheel and Fit. Unique short bone labels retain full-path tooltips.
+Apply changes the undoable assembly draft; SAVE CHANGES persists recipe/native
+transform attachments and registry through the existing journal. Weapon
+Projectiles selects a saved socket independently of the projectile. Empty names
+explicitly retain legacy camera-origin launch.
+
+Runtime reads named world pose after native animation/hierarchy evaluation.
+Camera aim converges from muzzle; eye-to-muzzle cover clips before obstruction.
+Missing/backwards/blocked poses refuse launch with diagnostics; accepted ammo has
+already been consumed in this failure case. No Player/NPC health prerequisite.
+One selected primary socket/record per accepted shot; off-hand generic dispatch,
+pellets/barrel policies, precise animation release markers and effects remain open.
+
+Changed: bridge LaunchSocketService plus assembly/settings/equipment integration;
+Runtime muzzle aim/session/loadout/diagnostics; Studio socket editor, model preview,
+Weapon Projectiles and modal lifecycle; CMake and LaunchSocketTests; architecture,
+roadmap, feature matrix and docs/P3_LAUNCH_SOCKETS.md. No Wicked source/pin change.
+Independent exact-commit verification remains required; no P3 gate closure.
+
+Release commands: CL=/MP4; cmake --build BUILD/renegade --config Release --target
+RenegadeEngineBridge -- /m:2 /p:BuildProjectReferences=false /verbosity:minimal.
+Bridge initial PASS 188.96s. Runtime/Studio + selected test build PASS 72.51s.
+Studio private-preview rebuild PASS 13.40s; modal rebuilds PASS 15.64s/15.57s;
+binding layout PASS 15.56s; final one-time modal restore rebuild PASS 78.50s.
+Full selected targets and commands are in docs/P3_LAUNCH_SOCKETS.md.
+ctest --test-dir BUILD/renegade -C Release -R
+'LaunchSocket|FirstPersonAssemblySettings|EquipmentAsset|RuntimeProjectileSession'
+--output-on-failure --timeout 30: Studio-closed final 4/4 PASS 0.61s.
+CPU fixture uses native transform/hierarchy systems; full Scene.Update without
+graphics initially crashed. Studio-open test rerun timed out in Runtime Session
+and LaunchSocket; cold retry passed. Intermittent job-test stall remains open.
+
+Native shotgun socket placement, direction, Apply/Save and cold Studio reopen
+PASS. Saved Muzzle primary root offset [0.013476461,-0.246668816,-0.062851310],
+pitch 90. Assembly 07858b1d-4b5a-4be9-90ab-c9dd5629761c. Final modal Cancel restores
+assembly once; closing it stays closed. Fire from Muzzle / Arrow assignment saved
+to equipment b8e8ca55-55f3-49f9-bde7-2ad27a758562 and File > Save persisted scene.
+Cold standalone --project BUILD/p3-shotgun-ui-project/ProjectileTest.renegade dx12
+PASS 20.25s launch/check process: named Muzzle, real ground impact, pause, dry fire,
+reload and reset. Impact-state muzzle [0.067675,3.238707,0.635946].
+Evidence: BUILD/p3-socket-placement.png, p3-socket-final-reopen.png,
+p3-socket-binding.png, p3-socket-native.log, p3-socket-native-events.json and
+p3-socket-shot-impact.png / p3-socket-paused-impact.png. Colour quality of native
+PrintWindow captures is not renderer parity. Standalone source proof is not
+Build Game/package proof. Runtime copy also updated in Studio/Release/Runtime.
+
+Next: precise animation release timing, then barrel/pellet policies and projectile
+effects. Direct model-importer sockets, animated socket preview, gizmos, compact
+layout, hitscan/surface decal profiles and Jolt-only/package proof remain open.
+Do not merge P2 automatically. Unrelated Tools/__pycache__/ and log.txt untouched.
+
 ## P3 mouse preview checkpoint - 2026-10-06
 
 Implementation commit: 1303ce75f5fc7bd2f89968afede416746beb6fdb.
