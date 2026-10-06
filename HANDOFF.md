@@ -3350,3 +3350,39 @@ feature/p2-equipment-actions. GitHub links/status are reported to the owner afte
 push. Unrelated Tools/__pycache__ and log.txt remain untouched.
 Next: P3 shared hits/projectiles/impact framework on a separate dependent branch
 (or updated main after P2 merge). Read docs/P3_CONTINUATION_HANDOFF.md first.
+
+
+## P3 initial simulation foundation - 2026-10-06
+
+Implementation commit 4eaf5ec5371df730e631a7ca8a52acaceb8ac80e.
+Branch feature/p3-projectile-impact depends on P2 PR #180 head
+cde41068fcf38b8dd293a9defc85ebbf93435dcc. PR #180 remains open;
+four Windows checks were pending when inspected. No merge or gate closure.
+
+Changed CMakeLists.txt; ProjectileSimulation.h; ProjectileSimulation.cmake;
+ProjectileSimulationTests.cpp; ARCHITECTURE.md; FEATURE_MATRIX.csv; ROADMAP.md;
+P3_PROJECTILE_IMPACT_IMPLEMENTATION.md. Added bridge-owned transient point
+projectile simulation with bounded travel steps, explicit source attribution,
+gravity/lifetime, injected segment-query contract and typed single impact output.
+Existing health/events/physics remain authoritative. This is not live gameplay.
+
+Commands:
+cmake --build BUILD/renegade --config Release
+ --target RenegadeProjectileSimulationTests -- /m:2 /verbosity:minimal
+exit 0 /8.99s; BUILD/p3-foundation-build.log. Same Debug build exit 0;
+BUILD/p3-foundation-debug-build.log. Existing MSB8029 warnings remain.
+ctest --test-dir BUILD/renegade -C Release
+ -R '^RenegadeProjectileSimulationTests$' --output-on-failure
+1/1 passed /0.23s total. Same Debug test 1/1 passed /0.09s.
+git diff --check passed.
+
+Tests use deterministic query callbacks; no native world collision, weapon input,
+Character damage, effects, persistence, Test Level or packaged Runtime behavior
+has been added or verified. No owner visual/gameplay acceptance claimed.
+Unrelated Tools/__pycache__/ and log.txt untouched. Studio not closed or replaced.
+
+Next: native nearest-contact query and source-hierarchy exclusion with coverage
+proof for scene/Jolt/terrain/animated Character targets; map contact to governed
+target/surface identity and existing ApplyAttributedCombatDamage; integrate Runtime
+pause/reset and semantic actions; then Test Level and packaged-runtime parity.
+Read docs/P3_PROJECTILE_IMPACT_IMPLEMENTATION.md for audit and limits.
