@@ -3133,3 +3133,62 @@ Player preview authoring controls, NPC damage/stamina/parry and production comba
 acceptance remain separate follow-ups. No release gate closure or editor parity claim.
 Unrelated Tools/__pycache__ and log.txt untouched. Next: owner chain feel review,
 then movement/transition checks and targeted collision continuity refinement.
+
+## Independent hand assembly authoring checkpoint - 2026-10-06
+Implementation commit: 744f9d63f24296a2b60bc32a9a9331786e45d0b2.
+Changed FirstPersonAssemblyService settings/preparation, PlayerViewHandAnimation
+and avoidance, Runtime timing/HUD/routing, Studio assembly panels and native preview,
+three test fixtures, README, ARCHITECTURE, ROADMAP, FEATURE_MATRIX and new
+docs/P2_ASSEMBLY_HAND_AUTHORING.md. No upstream changes.
+Select Player Start -> ASSEMBLY -> HAND / MELEE SETUP. Five pages expose off-hand
+mesh/grip/roots, uniform weapon scales, twelve directional stages, three block
+stages, four fallback attacks, collision proxies and charge/chain/queue timings.
+Weapon-only swaps preserve bindings. Arms replacement resets skeleton bindings.
+Optional authoring settings retain old recipe defaults and validate finite bounds.
+Runtime loads authored timings; preview uses native independent masks/avoidance.
+Undo/Redo, automatic preview and journaled save retain all three part hash guards.
+SAVE CHANGES retains equipment references; SAVE AS NEW requires equipment
+presentations referencing the new identity. Level assignment alone is insufficient.
+
+Verification: BUILD/assembly_build.ps1 builds Release x64 Bridge, Runtime,
+FirstPersonAssemblySettingsTests, PlayerViewRigTests, EquipmentAssetTests,
+FirstPersonAssemblyWorkflowProof and alternate Studio.
+MSBuild /m:2 /verbosity:quiet /nologo /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false, CL=/MP4.
+Final production build exit0 /115.25s; all five focused CTests pass /0.78s:
+ctest --test-dir BUILD/renegade -C Release
+-R "FirstPersonAssemblySettings|PlayerViewRig|Equipment" --output-on-failure --timeout 30.
+Final Studio-only button/layout refresh exit0 /16.35s.
+Existing MSB8029/C4834 warnings. git diff --check passed.
+
+Real supplied-pack proof: RENEGADE_ASSEMBLY_SWAP=BUILD/replacement-sword.glb,
+RENEGADE_HAND_COLLISION=1; WorkflowProof BUILD/sword-ue-proof4
+BUILD/sword-assembly-authoring-proof5 --sword-playable.
+Final exit0 /22.04s: governed import of a different, longer sword; retained asset
+update and cold reopen; scale/timing metadata; charge cap; all twelve directional
+preview stages, four variants and three shield stages; saved new assembly;
+965 corrected contacts and zero unresolved; saved level/snapshot closure.
+Replacement held-shield strike PNG visually inspected, nonempty pixel assertion passes.
+Earlier empty captures were a proof harness omission of EVENT_THREAD_SAFE_POINT;
+the final harness supplies the same event as native Studio. Production preview
+was visually correct throughout.
+
+Native Studio on BUILD/assembly-hand-ui-project disposable copy: numeric full
+charge edit to 1.25, saved product/source projection inspected, panel closed and
+reopened with 1.25 retained. All directional/block mappings retained. Attachments,
+Idle, held-shield strike, Directional, Block, Collision and Timing views inspected.
+Undo restored an accidental scale slider click; no oversized mesh was saved.
+Window title click brings setup ahead of the inspector after inspector interaction;
+normal native window priority applies. Broader responsive UX remains owner review.
+Owner's preexisting Studio and original desktop project were not modified by UI tests.
+Updated Studio remains open on the disposable copy; original project Runtime open.
+
+Native BUILD/chain_focus.ps1 exit0 /8.48s: released follow-up, held charged chain,
+single dispatch, shield independence; unresolved counters 0 at start/chain/end.
+Default original loadout remains playable. No universal no-clipping claim:
+conservative discrete proxies and bounded correction retain authored fallback
+for unreachable contacts. No NPC damage, stamina, parry, world collision or new
+movement routing. Independent exact-commit review remains required; no release
+gate or Wicked Editor parity closure. Unrelated Tools/__pycache__ and log.txt untouched.
+Next: owner authoring/mesh-swap review, then movement/transition checks and targeted
+contact continuity refinement if observed. Damage awaits NPC system integration.
