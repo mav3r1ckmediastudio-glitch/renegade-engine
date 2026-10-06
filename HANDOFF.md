@@ -3290,3 +3290,36 @@ and BUILD/fantasy-sword-proof1.log. This is bounded presentation acceptance,
 not universal no-clipping, damage collision, or NPC combat validation.
 New Runtime left open for owner feedback. Only handoff documentation changed;
 no new engine implementation, no push and no release gate closure.
+
+
+## 2026-10-06 — Solid Player Start facing guides
+
+Base implementation commit 4f16567; resulting implementation commit is recorded
+by the following documentation-only checkpoint. Changed StudioApplication.cpp/.h,
+ARCHITECTURE.md, FEATURE_MATRIX.csv and PLAYER_AUTHORING_CONTINUATION.md.
+Player Start retains its selectable capsule and now renders a solid camera body,
+grip, viewfinder, stepped lens and raised arrow in Studio's native depth-tested
+scene pass. Both follow resolved Runtime spawn yaw; camera height follows the
+sanitized authored eye height. Grid visibility does not control these guides.
+No scene entities, asset IDs, serialized schema or Runtime behavior changed.
+
+Release x64 Studio MSBuild with BuildProjectReferences=false, /m:2, CL=/MP4 and
+OutDir=BUILD/player-solid-marker-studio: exit0, 75.40s. Existing MSB8029 temporary
+output warnings and C4834 at the existing importer return-value site remain.
+Native DX12 Studio opened BUILD/player-marker-ui-project, selected Player Start,
+focused it and visually verified solid camera and extruded arrow. Owner replied
+"much better thanks". Final cleanup restores the unchanged capsule edge signature
+and corrects geometry documentation; final rebuild evidence follows below.
+Rotation/save/reopen interaction was not exercised in this visual pass; these
+markers consume the existing resolved authored transform rather than persisting
+new state. Independent exact-commit verification/release gates remain open.
+No upstream edits, no push. Next: owner continuation of equipment work.
+
+Implementation commit: 6135b2d5395b4718b3adf198a95a08805307a919.
+Final Release x64 Studio rebuild with the same flags and
+OutDir=BUILD/player-markers-final: exit0 /20.36s; log
+BUILD/player-markers-final-build.log. CTest --test-dir BUILD/renegade -C Release
+-R 'PlayerFoundation|PlayerPrefab' --output-on-failure: PlayerPrefabTests 1/1
+passed /0.32s (only prefab test matched). git diff --check passed.
+The visually accepted solid-marker Studio remains open; final binary is also
+available in BUILD/player-markers-final. No UI interaction after owner acceptance.
