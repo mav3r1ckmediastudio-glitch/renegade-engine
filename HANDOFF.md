@@ -1,3 +1,38 @@
+## P3 live shotgun firing checkpoint - 2026-10-06
+
+Implementation commit: 41308d3d68eeb8d2421bf57e21271c21309db180.
+Branch: feature/p3-projectile-impact; dependent P2 PR #180 remains unmerged.
+
+Accepted shotgun shots now launch cached Bullet definitions through the Runtime
+session. Ammo/cooldown/equipped animation acceptance gates each launch; dry fire
+and pause do not launch. Native scene queries produce attributed impacts and
+bounded flight/contact feedback without requiring Player/NPC health. Test Level
+snapshots include projectile dependencies. Initial camera-eye launch policy is
+explicit; authorable muzzle sockets and pellet spread remain pending.
+
+Changed files: RuntimeApplication h/cpp, RuntimeEquipmentLoadout,
+RuntimeLiveDiagnostics, new RuntimeProjectileSession; bridge PlayerViewAnimation
+and TestLevelSnapshotService; Studio PlayerProjectileEditor; PlayerViewRigTests,
+ProjectileAssetTests, ProjectileSimulation.cmake and new Runtime session tests.
+Architecture, roadmap, feature matrix and P3 authoring/continuation docs updated.
+Exact commands, native evidence and limits: docs/P3_LIVE_SHOTGUN_PROJECTILES.md.
+
+Release Runtime/Studio/bridge and targeted test builds PASS. Final Runtime build
+PASS 15.49s; current exe copied to Studio embedded Runtime. Final targeted ctest
+regex Projectile|EquipmentAsset|EquipmentActionState|PlayerViewRig|TestLevelSnapshot:
+10/10 PASS 2.12s. Native Test Level firing PASS; standalone source proof PASS
+11.15s including impacts, pause, dry fire, reload and reset. Orange ground contact
+marker visually inspected. Save/reopen assignment verified in prior checkpoint.
+Final overlay cleanup clears contacts on Screen/no-player paths; diff check PASS.
+
+Next: authorable muzzle/aim convergence and shotgun pellets/effects, then packaged
+firing proof. CPU scene mesh/collider coverage excludes Jolt-only bodies. Generic
+Cast/AlternateUse/offhand launch acceptance is not claimed. P3 is open; independent
+exact-commit verification required before gate closure. Do not add health as a
+prerequisite or merge P2 automatically. Sky-shot distance was expected lifetime
+behaviour; owner clarified it was not a defect. Unrelated untracked cache/log files
+were left untouched.
+
 ## P3 projectile authoring and shotgun assignment - 2026-10-06
 
 Implementation commit: 6f5401db2a7fa8d487aea09df781a4fd3a08ea13.

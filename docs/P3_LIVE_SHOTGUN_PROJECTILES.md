@@ -60,3 +60,5 @@ decals/lights and packaged firing proof remain open. Standalone source proof is
 not packaged-game parity. Generic Cast/AlternateUse/offhand launch acceptance
 is not claimed. Independent exact-commit verification is required before gate
 closure. Do not merge dependent P2 PR #180 automatically.
+
+Final overlay-cleanup Runtime rebuild PASS (15.49s); final targeted ctest 10/10 PASS (2.12s). Implementation commit: 41308d3d68eeb8d2421bf57e21271c21309db180.
