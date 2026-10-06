@@ -3386,3 +3386,49 @@ proof for scene/Jolt/terrain/animated Character targets; map contact to governed
 target/surface identity and existing ApplyAttributedCombatDamage; integrate Runtime
 pause/reset and semantic actions; then Test Level and packaged-runtime parity.
 Read docs/P3_PROJECTILE_IMPACT_IMPLEMENTATION.md for audit and limits.
+
+
+## P3 native scene contacts and Character damage boundary - 2026-10-06
+
+Implementation commit bc470286122bedf4345250237dcd4701637cfead on
+feature/p3-projectile-impact, still dependent on P2 PR #180. Changed
+RuntimeProjectileWorld.h, ProjectileWorldTests.cpp, ProjectileSimulation.cmake,
+ARCHITECTURE.md, ROADMAP.md, FEATURE_MATRIX.csv and P3 implementation document.
+
+Native Scene ray/overlap queries exclude the explicitly bound shooter hierarchy,
+choose nearest eligible contact, resolve Character child hits to their governed
+root and retain material-subset stable identity. Origin overlap stops at time
+zero; coincident sphere-centre undefined normals use an incoming-facing fallback.
+Character damage delegates to existing ApplyAttributedCombatDamage and existing
+health/death/perception/ai.damage ownership. No second Player/physics/damage stack.
+
+Commands:
+cmake --build BUILD/renegade --config Release --target
+ RenegadeProjectileWorldTests -- /m:2 /p:BuildProjectReferences=false
+ /verbosity:minimal
+Final Release build/test cycle exit0 /9.20s; BUILD/p3-world-final-build.log.
+Same Debug build/test cycle exit0 /6.16s; BUILD/p3-world-debug-build.log.
+Retained unchanged P2 engine/bridge dependencies used; no clean full Runtime build.
+Existing MSB8029 warnings remain.
+ctest --test-dir BUILD/renegade -C Release -R
+ 'RenegadeProjectile(Simulation|World)Tests|RenegadeCharacterAiCombatTests'
+ --output-on-failure: 3/3 passed /0.14s.
+Same Debug projectile-only expression: 2/2 passed /0.14s.
+git diff --check passed.
+
+Intermediate origin-overlap test failed because native overlap normal was
+undefined at the collider centre; final implementation fixes and passes it.
+Fixture directly populates native CPU collider query caches and uses real Scene
+BVH/primitive queries. It proves ten-owner-child exclusion, nearest world cover,
+Character child resolution, bounded segment and origin overlap, health/death/
+legitimate knowledge/events, source/faction/self/dead-target rejection and material
+identity lookup. It does not prove Scene::Update query-cache construction,
+animated mesh/terrain/Jolt coverage, owner gameplay or package behavior.
+
+This adapter is not yet installed into Runtime action/update lifecycle.
+Next: physics-only Jolt blocker coverage and real actor owner bindings;
+then Runtime lifecycle/semantic emission and Test Level plus independent
+package proof. Impact profiles/effects/persisted asset definitions remain open.
+No release gate closure. Owner Studio left untouched. Tools/__pycache__/ and
+log.txt remain unrelated. P2 baseline Debug and Release checks passed when
+last inspected; two Studio checks still pending.
