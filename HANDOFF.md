@@ -1,3 +1,43 @@
+## P3 mesh visibility repair - 2026-10-06
+
+Implementation commit: ca0a5a26710840d74cf2d6c0f87aa6673f0b0b9b.
+Branch: feature/p3-projectile-impact. P2 PR #180 remains unmerged.
+
+Owner reported seeing only sphere/trail despite arrow assignment. Runtime did
+instantiate the arrow, but unconditional debug flight feedback obscured its
+appearance. Model-backed launches now suppress flight sphere/trail; meshless
+shots keep basic feedback, impacts keep existing markers. Transient ID tracking
+retires/reset-clears; retained traces remember their appearance policy. No asset
+schema/settings change. Changed RuntimeProjectileSession.h, its tests,
+architecture and feature matrix. Wicked source/pin untouched.
+
+Release build: CL=/MP4; cmake --build BUILD/renegade --config Release --target
+RenegadeRuntime RenegadeRuntimeProjectileSessionTests -- /m:2
+/p:BuildProjectReferences=false /verbosity:minimal: PASS 26.13s.
+ctest --test-dir BUILD/renegade -C Release -R
+'^RenegadeRuntimeProjectileSessionTests$' --output-on-failure --timeout 30:
+1/1 PASS 0.11s including new mesh feedback suppression assertion. Diff check PASS.
+Runtime copied to Studio/Release/Runtime for Test Level.
+
+Native standalone slow-copy proof (BUILD/p3-arrow-visibility-proof) changed ONLY
+its copied Arrow to speed 2, zero gravity, lifetime 10 for inspection. Actual
+fixture Arrow remains speed 45, gravity 1, lifetime 5, scale 1. Captures
+BUILD/p3-arrow-slow.png and p3-arrow-profile.png show arrow appearance without
+sphere/trail. Owner confirms 'yeah i can see it now'. PrintWindow colour/exposure
+is not renderer parity. No package proof. Source fixture equipment had meanwhile
+changed to 6c1a5d17-09b0-4a6a-b2ed-1e5bd36726c3; standalone resolves this saved
+loadout with Muzzle and Arrow.
+Original fixture standalone native regression PASS 16.31s: named Muzzle, ground
+impact, pause, dry fire, reload, reset. Evidence BUILD/p3-socket-native-events.json,
+p3-socket-shot-impact.png and p3-socket-paused-impact.png. No new serialized state
+so original fixture cold load covers unchanged saved assignment.
+
+No P3 gate closure; independent exact-commit review and package/Jolt-only proof
+remain required. Next: precise animation release timing and authored effects.
+User-facing naming preference from manual: Projectile Spawn Point (PSP), not
+FIRESPOT; compatibility bone lookup may retain that imported bone name.
+Unrelated Tools/__pycache__/ and log.txt untouched.
+
 ## P3 launch socket checkpoint - 2026-10-06
 
 Implementation commit: ec1a4166c5187cbac8091b15fee527cd4a68bff3.
