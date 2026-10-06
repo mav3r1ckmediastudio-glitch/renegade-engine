@@ -81,3 +81,5 @@ User-friendly reusable weapon asset editing, muzzle socket, visual/effect picker
 live emission, Jolt collision coverage and packaged firing remain open.
 No usable Player/NPC health implementation is claimed or required for this slice.
 See docs/P3_PROJECTILE_AUTHORING_UX.md for exact commands and native evidence.
+
+Projectile authoring implementation commit: 6f5401db2a7fa8d487aea09df781a4fd3a08ea13. Final native polish also verified Edit Copy priority, Cancel, concise flight values and shotgun PrimaryUse-only launch choices.

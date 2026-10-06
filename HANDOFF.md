@@ -1,5 +1,7 @@
 ## P3 projectile authoring and shotgun assignment - 2026-10-06
 
+Implementation commit: 6f5401db2a7fa8d487aea09df781a4fd3a08ea13.
+
 On feature/p3-projectile-impact, dependent on P2 PR #180. ProjectileAssetService
 adds registered journaled .rprojectile assets; equipment schema v2 binds named
 projectiles to authored semantic actions and retains v1 compatibility.
