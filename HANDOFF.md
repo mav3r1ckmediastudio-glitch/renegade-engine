@@ -3094,3 +3094,42 @@ This fixes presentation against the player's shield only. Damage, NPC/world coll
 stamina/parry, generic proxy editing UI and production combat acceptance remain open.
 No release gate closure or universal weapon collision claim. Owner gameplay feedback
 and independent exact-commit review are next; refine contact continuity if needed.
+
+## Directional melee chaining checkpoint - 2026-10-06
+Implementation commit: c2ffb4f64c046f8c123232ca621161880244d7b6.
+Changed RuntimeApplication.cpp, RuntimeEquipmentLoadout.h, RuntimeLiveDiagnostics.cpp,
+EquipmentAssetTests.cpp, new EquipmentMeleeChainTests.h, ARCHITECTURE.md and FEATURE_MATRIX.csv.
+One follow-up can be prepared in the final 0.30s of a directional release or recovery.
+Released requests expire after 0.75s of gameplay time; held requests carry their
+direction and capped charge into the next charge. Existing authored action phases
+remain authoritative. Shield ownership is independent. Cancel/reload/equip/item
+replacement clear the queue; pause/nonfinite dt freeze progress.
+Released queued charge is pinned through authored preparation/windup until dispatch.
+The HUD exposes PREPARE NEXT and queued direction/charge. Damage is unchanged.
+
+Verification: BUILD/chain_build.ps1 builds Release x64 Runtime, then
+BUILD/chain_tests.ps1 builds RenegadeEquipmentAssetTests and runs
+ctest -C Release --output-on-failure --timeout 30 -R "FirstPersonAssemblySettings|PlayerViewRig|Equipment"
+from BUILD/renegade. Final build exit0 / 27.40s, all five focused CTests pass / 0.77s.
+MSBuild /m:2 /verbosity:quiet /nologo /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false; CL=/MP4. Existing MSB8029 warnings.
+Tests include held/released queues, exact single dispatch, authored recovery,
+preparation/windup charge retention, cancel/equip/item change, expiry, pause/NaN
+and unchanged nondirectional routing. No serialized state was added.
+Native BUILD/chain_focus.ps1 -> chain_native.py -> chain-native-events.json:
+final exit0 / 8.58s. Short charged right follow-up then held full-charge stab,
+two chain dispatches, shield phase2 throughout. Runtime left open.
+Final idle render inspected. Window Alt-menu activation froze the initial test's
+frame loop; clearing the menu and removing Alt from the focus harness resolved it.
+Snapshot sampling is coarse; short follow-up was below 75% charge in native proof.
+Unit tests explicitly verify a released request waits through recovery.
+
+Collision limitation: an earlier opening left strike observed one unresolved
+bounded correction (authored-pose fallback). Final native run counter stayed 1
+from start through both chains, so chaining introduced no new unresolved correction
+in that run. This is not a universal zero-clipping claim; investigate contact
+continuity during rapid shield/strike transitions next if owner observes clipping.
+Player preview authoring controls, NPC damage/stamina/parry and production combat
+acceptance remain separate follow-ups. No release gate closure or editor parity claim.
+Unrelated Tools/__pycache__ and log.txt untouched. Next: owner chain feel review,
+then movement/transition checks and targeted collision continuity refinement.
