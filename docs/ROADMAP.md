@@ -393,3 +393,14 @@ explicit player arms/weapon roles independent of folder. Registered model MOVE
 preserves stable IDs and source provenance through journaled rollback/recovery.
 See [import destinations](MODEL_IMPORT_DESTINATIONS.md).
 Owner UX and independent exact-commit verification remain pending.
+
+
+### P3 first foundation checkpoint - 2026-10-06
+
+P3 began on feature/p3-projectile-impact, dependent on P2 PR #180 head cde4106.
+Shared transient projectile records now retain owner/source/faction attribution,
+gravity/lifetime policy and typed collision-to-impact output through an injected
+world-query contract. Windows x64 Debug and Release builds and the simulation
+test pass. Native collision/damage integration, effects, persisted definitions
+and Test Level/packaged gameplay proof remain open.
+See [P3 implementation](P3_PROJECTILE_IMPACT_IMPLEMENTATION.md).

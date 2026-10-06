@@ -1,0 +1,10 @@
+add_executable(RenegadeProjectileSimulationTests
+    ${CMAKE_CURRENT_LIST_DIR}/ProjectileSimulationTests.cpp
+)
+target_include_directories(RenegadeProjectileSimulationTests PRIVATE
+    ${CMAKE_SOURCE_DIR}/EngineBridge/include
+)
+target_compile_features(RenegadeProjectileSimulationTests PRIVATE cxx_std_17)
+set_target_properties(RenegadeProjectileSimulationTests PROPERTIES FOLDER "Renegade/Tests")
+add_dependencies(RenegadeBridgeTests RenegadeProjectileSimulationTests)
+add_test(NAME RenegadeProjectileSimulationTests COMMAND RenegadeProjectileSimulationTests)

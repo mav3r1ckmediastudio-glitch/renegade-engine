@@ -1279,3 +1279,15 @@ transaction with protected deletions. Recovery needs only previous-existence and
 backup bytes: interrupted operations roll back, committed operations clean their
 artifacts. The existing journal format is unchanged. Sources and textures are
 retained in their original governed locations; no scene mutation or reimport occurs.
+
+
+## P3 transient projectile simulation boundary
+
+ProjectileSimulation is a bridge-owned transient record service. Gameplay
+supplies launch/source data and advances it with simulation time. A Runtime
+adapter must supply nearest eligible native world contacts; typed impact records
+then feed existing damage/event and presentation services. The simulator owns
+neither world physics nor health, audio, rendering or another Player controller.
+Its initial point-projectile segment queries do not establish finite-radius
+sweeps, throwables or directional melee. Native adapter and Runtime lifecycle
+integration remain pending. See P3_PROJECTILE_IMPACT_IMPLEMENTATION.md.
