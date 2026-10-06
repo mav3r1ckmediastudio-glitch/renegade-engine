@@ -1376,3 +1376,13 @@ view rig; camera aim chooses a target, muzzle cover queries own the obstruction.
 Empty names retain legacy camera-origin launch. Shared projectile simulation,
 attribution and native scene contact adapter remain unchanged. See
 [P3 launch socket evidence and limits](P3_LAUNCH_SOCKETS.md).
+
+### P3 mesh projectile visibility repair - 2026-10-06
+
+Runtime flight feedback now distinguishes model-backed projectiles from meshless
+ones. Model-backed shots draw their native scene appearance without the temporary
+sphere/trail overlay. Meshless definitions retain bounded basic flight feedback;
+confirmed impact feedback is unchanged. The flag is transient per launch and per
+trace, cleaned on retirement/reset; projectile asset serialization is unchanged.
+Native slowed-copy arrow inspection and owner visibility confirmation supersede
+the earlier assignment-only visual claim. No effects/tracer authoring is implied.

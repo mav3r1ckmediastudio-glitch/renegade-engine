@@ -94,6 +94,7 @@ int main()
     auto model=wi::allocator::make_shared<wi::scene::Scene>();
     const auto object=model->Entity_CreateTransform("Visual arrow");
     model->objects.Create(object);
+    bullet.meshAssetId=bridge::GenerateStableId();
     bullet.visualScale=.5f;bullet.visualRotationDegrees={0,90,0};
     visuals.templates.emplace(bullet.assetId,
         runtime::RuntimeProjectileVisuals::Template{std::move(model),bullet});
@@ -102,6 +103,9 @@ int main()
         !visuals.Spawn(*scene,bullet.assetId,id))return fail("visual instantiate");
     const auto clearFlight=[](const auto&,const auto&,const auto&){return bridge::ProjectileQueryResult{};};
     if(!session.Update(.5f,clearFlight,impacts))return fail("visual movement");
+    if(session.meshProjectiles.count(id)!=1 || session.traces.empty() ||
+        std::any_of(session.traces.begin(),session.traces.end(),[](const auto& t){return t.meshless;}))
+        return fail("mesh projectile draws fallback flight feedback");
     visuals.Sync(*scene,session.simulation);
     if(visuals.instances.size()!=1 || visuals.roots.size()!=1 ||
         std::abs(scene->transforms.GetComponent(visuals.roots[0])->GetPosition().z-.5f)>.001f)

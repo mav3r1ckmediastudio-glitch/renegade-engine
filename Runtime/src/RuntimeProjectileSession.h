@@ -1,5 +1,6 @@
 #pragma once
 #include "RuntimeProjectileWorld.h"
+#include <unordered_set>
 #include "renegade/bridge/ProjectileAssetService.h"
 
 namespace renegade::runtime
@@ -8,9 +9,10 @@ namespace renegade::runtime
     struct RuntimeProjectileSession
     {
         bridge::ProjectileSimulation simulation;
-        struct Trace { bridge::ProjectileVector from, to; float seconds; };
+        struct Trace { bridge::ProjectileVector from, to; float seconds; bool meshless = true; };
         struct Marker { bridge::ProjectileContact contact; float seconds; };
         std::vector<Trace> traces;
+        std::unordered_set<std::uint64_t> meshProjectiles;
         std::vector<Marker> markers;
         std::uint64_t launched = 0, impacted = 0, generation = 0;
         bridge::ProjectileContact lastContact;
@@ -20,7 +22,7 @@ namespace renegade::runtime
 
         void Reset()
         {
-            simulation.Reset(); traces.clear(); markers.clear();
+            simulation.Reset(); traces.clear(); markers.clear(); meshProjectiles.clear();
             launched = impacted = 0; lastContact = {}; lastError.clear();
             lastLaunchPosition={};lastLaunchSocket.clear();
             ++generation;
@@ -45,6 +47,7 @@ namespace renegade::runtime
             const float speed = asset.speedMetresPerSecond / length;
             launch.velocity = {forward.x*speed, forward.y*speed, forward.z*speed};
             if (!simulation.Launch(launch, id, lastError)) return false;
+            if (!asset.meshAssetId.empty()) meshProjectiles.insert(id);
             ++launched;lastLaunchPosition=eye;
             return true;
         }
@@ -73,7 +76,7 @@ namespace renegade::runtime
                     if (traces.size() >= 2048) traces.erase(traces.begin());
                     traces.push_back({from,
                         result.status == bridge::ProjectileQueryStatus::Hit ? result.contact.position : to,
-                        0.10f});
+                        0.10f, meshProjectiles.count(record.id) == 0});
                 }
                 return result;
             };
@@ -90,12 +93,19 @@ namespace renegade::runtime
                 }
                 remaining -= step;
             }
+            for (auto it = meshProjectiles.begin(); it != meshProjectiles.end();) {
+                const auto& records = simulation.Records();
+                if (std::none_of(records.begin(), records.end(), [&](const auto& r){ return r.id == *it; }))
+                    it = meshProjectiles.erase(it);
+                else ++it;
+            }
             return true;
         }
 
         void Draw() const
         {
             for (const auto& trace : traces) {
+                if (!trace.meshless) continue;
                 wi::renderer::RenderableLine line;
                 line.start = ProjectileNativeVector(trace.from);
                 line.end = ProjectileNativeVector(trace.to);
@@ -104,6 +114,7 @@ namespace renegade::runtime
                 wi::renderer::DrawLine(line, true);
             }
             for (const auto& record : simulation.Records())
+                if (meshProjectiles.count(record.id) == 0)
                 wi::renderer::DrawSphere(wi::primitive::Sphere(
                     ProjectileNativeVector(record.launch.position), 0.025f),
                     {1, 0.75f, 0.2f, 1}, true);
