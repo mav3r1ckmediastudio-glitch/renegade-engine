@@ -3051,3 +3051,46 @@ Final TestLevel native smoke: snapshot load ready and simultaneous attack/block 
 Native mouse sequence PASS: four successive attacks while shield held, BUILD/sword-variants-native-events.json.
 
 Final native mouse PASS: four selected full-charge releases, independent held block and low-charge quick tap. Evidence BUILD/directional-native-events.json. Alternate Studio Release build also passes. Runtime left open on the updated owner project.
+
+
+## Sword/shield pose avoidance checkpoint - 2026-10-06
+Implementation commit: 3160f690badea5fc45c92b39964bc86b3c6c2d7e.
+Changed: FirstPersonAssemblyService.h/.cpp, FirstPersonHandAssemblyPreparation.h,
+PlayerViewHandAnimation.h, new PlayerViewHandAvoidance.h, RuntimeLiveDiagnostics.cpp,
+FirstPersonAssemblySettingsTests.cpp, PlayerViewRigTests.cpp, new
+PlayerViewHandAvoidanceTests.h, SwordShieldPlayableProof.h, ARCHITECTURE and FEATURE_MATRIX.
+Optional schema-v2 collision proxies persist through settings and generated native
+metadata. Old v1/v2 content remains disabled by default. CPU native masked evaluation
+plus bounded native CCD corrects the primary arm before world hierarchy/skinning.
+Wrist orientation, bone lengths, off-hand isolation and zero-dt pose are tested.
+Finite local/world and decomposition guards reject singular native IK; unresolved
+contacts restore authored pose and increment diagnostics. No upstream changes.
+Five focused Release CTests pass: PlayerViewRig, source contract,
+FirstPersonAssemblySettings, EquipmentActionState, EquipmentAsset.
+Commands: BUILD/collision_verify.ps1 builds bridge and proof/tests then runs
+five CTests and the real-pack fixture. Final run exit0 / 33.11s; five CTests 0.85s.
+BUILD/collision_final.ps1 rebuilds Bridge/Runtime and incremental alternate Studio,
+then relaunches the player. Clean alternate Studio exit0 / 113.25s.
+Native rotations preserve authored lengths and scale. A near-contact fallback
+permits up to 4cm of shoulder-root translation within the authored total bound.
+MSBuild /m:2 /verbosity:quiet /nologo /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false with CL=/MP4. Existing MSB8029/C4834 warnings.
+Collision fixture: RENEGADE_HAND_COLLISION=1
+BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+BUILD/sword-ue-proof4 BUILD/sword-collision-proof9 --sword-playable.
+Result: 965 corrected frames, zero unresolved; saved asset reopen and TestLevel closure pass.
+Straight-chain finite pose and bone-length regression passes in PlayerViewRig.
+Final Bridge/Runtime/alternate Studio refresh passed: collision_final.ps1 exit0 / 87.98s.
+Final native mouse collision_focus.ps1 exit0 / 27.10s. Player Runtime remains open.
+Native mouse proof BUILD/collision_focus.ps1 -> collision-native-events.json:
+four charged directional releases, shield phase2, quick low-charge tap,
+avoidance enabled, corrections nonzero, all observed unresolved counters zero.
+Rendered four directional release poses inspected; native player idle image inspected.
+Desktop SwordShieldTest replaced with collision-enabled proof4 project; old
+blending-only project retained beside it. Existing launcher preserved. Player left open.
+Risks: conservative box corners; discrete frame contacts can miss fast swept crossings;
+no joint/pole limits; unreachable contacts can retain clipping via safe fallback.
+This fixes presentation against the player's shield only. Damage, NPC/world collision,
+stamina/parry, generic proxy editing UI and production combat acceptance remain open.
+No release gate closure or universal weapon collision claim. Owner gameplay feedback
+and independent exact-commit review are next; refine contact continuity if needed.
