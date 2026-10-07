@@ -1,3 +1,36 @@
+## P3 grouped authored projectile candidate - 2026-10-07
+
+Implementation commit: 8de29c1c82f3d546a9c83c82cdbce38ab8b7467f.
+Branch: feature/p3-projectile-impact. P2 PR #180 remains unmerged.
+
+Four owner checks are grouped: animation release, multiple PSPs, layered flight/
+impact effects, disappear/stick. Implemented and targeted/native proofs recorded
+in docs/P3_AUTHORED_PROJECTILES_GATE.md. Player/NPC health is not implemented or
+a prerequisite. Wicked pin/source unchanged. No gate closure or independent
+exact-commit review claim.
+
+Native disposable Projectile Playground: saved 350ms release pending at 12ms and
+launch at 359ms; Left then Right; Both launches two per shell; dry fire none;
+disappear/stick contacts; moving-native-object follow and pause/lifetime tests.
+Impact burst crash resolved by burst_on_create deferred native initialization.
+Shared radial-alpha emitter texture fixes square fallback; native editor preview
+soft mask pass. Editor cold reopen and SAVE AS NEW copy observed; assignment/
+reopen and package acceptance still in progress.
+
+Build Game exposed catalog issues: loaders reject generic lp07.rasset discovery
+provider; source catalog refresh tombstones unrelated still-present assets and
+recovery loses edges. Both fixed with regression tests. Package state still
+includes only the reachable closure. The disposable fixture's embedded arrow
+textures were extracted into exact generated paths; general importer/dependency
+embedded-resource behavior remains a separate limitation.
+
+Release latest bridge/Runtime/Studio/build-project-test build PASS 28.08s.
+Build-project CTest 2/2 PASS 0.59s; provider compatibility build PASS 45.23s;
+ProjectileAsset/RuntimeProjectileSession/EquipmentAsset/LaunchSocket 4/4 PASS 1.79s.
+Runtime recopied to Studio embedded Runtime. Diff check PASS.
+Implementation candidate is committed; docs may follow with final UI/package
+evidence. Unrelated Tools/__pycache__/ and log.txt remain untouched.
+
 ## P3 mesh visibility repair - 2026-10-06
 
 Implementation commit: ca0a5a26710840d74cf2d6c0f87aa6673f0b0b9b.

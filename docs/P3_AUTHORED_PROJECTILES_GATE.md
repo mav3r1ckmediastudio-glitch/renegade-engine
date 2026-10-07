@@ -93,3 +93,15 @@ The disposable fixture's legacy imported arrow referenced three generated textur
 files that existed only as GLB-embedded image data. They were extracted using
 Wicked's exact byte hashes into the expected fixture paths. This repairs this
 fixture; it does not claim a general embedded-resource dependency/importer repair.
+
+### Runtime registry package repair
+
+Native Build Game completed in 33 s, including DX12/isolation smoke. Manual
+packaged firing then correctly failed acceptance: Runtime reported the missing
+GameData/AssetRegistry.renegade-assets and withheld authored equipment. Build
+workflow now passes canonical reachable registry data to staging. The generated
+registry is a governed package-manifest file with hashes; staging validates its
+project identity/canonical bytes and tamper detection. Release bridge/Runtime/
+Studio/BuildStage build PASS 36.63 s; BuildStage CTest 1/1 PASS 0.50 s. Native
+package firing acceptance is being repeated on this repair. The earlier smoke
+alone is not evidence of authored equipment/projectile gameplay.

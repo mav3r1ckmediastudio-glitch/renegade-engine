@@ -1,5 +1,6 @@
 #include "renegade/bridge/BuildStageService.h"
 #include "WindowsFileIoPath.h"
+#include "renegade/bridge/AssetRegistryService.h"
 
 #include <algorithm>
 #include <array>
@@ -865,6 +866,26 @@ namespace renegade::bridge
                     staged,
                     error))
                 return false;
+            result.files.push_back(std::move(staged));
+        }
+
+        if (!request.assetRegistryJson.empty())
+        {
+            AssetRegistry registry;
+            std::string canonical;
+            if (!DeserializeAssetRegistry(request.assetRegistryJson, registry, error) ||
+                registry.projectId != plan.projectId ||
+                !SerializeAssetRegistry(registry, canonical, error) ||
+                canonical != request.assetRegistryJson)
+            {
+                if (error.empty()) error = "Runtime asset registry identity or canonical form is invalid.";
+                return false;
+            }
+            WindowsGameStagedFile staged;
+            if (!EnsureUniqueDestination(destinations, "GameData/AssetRegistry.renegade-assets", error) ||
+                !WriteTextFile(stagingRoot, "GameData/AssetRegistry.renegade-assets",
+                    canonical, "asset_registry", {"renegade:runtime:reachable-asset-registry"},
+                    staged, error)) return false;
             result.files.push_back(std::move(staged));
         }
 
