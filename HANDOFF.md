@@ -1,6 +1,6 @@
 ## P3 grouped authored projectile candidate - 2026-10-07
 
-Implementation commit: 8de29c1c82f3d546a9c83c82cdbce38ab8b7467f.
+Implementation commits: 8de29c1c82f3d546a9c83c82cdbce38ab8b7467f (authored projectile gate) and 74c0eb0 (governed Runtime asset-registry staging).
 Branch: feature/p3-projectile-impact. P2 PR #180 remains unmerged.
 
 Four owner checks are grouped: animation release, multiple PSPs, layered flight/
@@ -14,8 +14,8 @@ launch at 359ms; Left then Right; Both launches two per shell; dry fire none;
 disappear/stick contacts; moving-native-object follow and pause/lifetime tests.
 Impact burst crash resolved by burst_on_create deferred native initialization.
 Shared radial-alpha emitter texture fixes square fallback; native editor preview
-soft mask pass. Editor cold reopen and SAVE AS NEW copy observed; assignment/
-reopen and package acceptance still in progress.
+soft mask pass. Editor cold reopen, SAVE AS NEW, assignment/reopen and packaged
+runtime gameplay acceptance now pass.
 
 Build Game exposed catalog issues: loaders reject generic lp07.rasset discovery
 provider; source catalog refresh tombstones unrelated still-present assets and
@@ -27,9 +27,15 @@ embedded-resource behavior remains a separate limitation.
 Release latest bridge/Runtime/Studio/build-project-test build PASS 28.08s.
 Build-project CTest 2/2 PASS 0.59s; provider compatibility build PASS 45.23s;
 ProjectileAsset/RuntimeProjectileSession/EquipmentAsset/LaunchSocket 4/4 PASS 1.79s.
-Runtime recopied to Studio embedded Runtime. Diff check PASS.
-Implementation candidate is committed; docs may follow with final UI/package
-evidence. Unrelated Tools/__pycache__/ and log.txt remain untouched.
+Runtime recopied to Studio embedded Runtime. Diff check PASS. Build Game initially
+exposed a missing staged Runtime asset registry; 74c0eb0 adds canonical governed
+GameData/AssetRegistry.renegade-assets staging plus tamper validation. Rebuilt
+packaged gameplay then loaded authored equipment and fired two accepted shots:
+PSP_Left then PSP_Right, 2 impacts, layered emitters observed (max 3), and 2 stuck
+arrows retained. Evidence: BUILD/p3-package-native-proof.json,
+BUILD/p3-package-acceptance.json and BUILD/p3-package-impact.png. Owner visual
+acceptance and independent exact-commit CI review remain before final gate closure.
+Unrelated Tools/__pycache__/ and log.txt remain untouched.
 
 ## P3 mesh visibility repair - 2026-10-06
 

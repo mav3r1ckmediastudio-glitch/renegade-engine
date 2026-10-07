@@ -102,6 +102,13 @@ GameData/AssetRegistry.renegade-assets and withheld authored equipment. Build
 workflow now passes canonical reachable registry data to staging. The generated
 registry is a governed package-manifest file with hashes; staging validates its
 project identity/canonical bytes and tamper detection. Release bridge/Runtime/
-Studio/BuildStage build PASS 36.63 s; BuildStage CTest 1/1 PASS 0.50 s. Native
-package firing acceptance is being repeated on this repair. The earlier smoke
-alone is not evidence of authored equipment/projectile gameplay.
+Studio/BuildStage build PASS 36.63 s; BuildStage CTest 1/1 PASS 0.50 s.
+
+The rebuilt package then passed authored gameplay acceptance. Runtime loaded the
+saved primary equipment, queued and released the authored shot, fired PSP_Left
+then PSP_Right across two accepted actions, produced 2 impacts, observed up to 3
+projectile effect emitters, and retained 2 stuck arrows. Loaded shells reached 0
+after the two shots. Evidence is BUILD/p3-package-native-proof.json,
+BUILD/p3-package-acceptance.json and BUILD/p3-package-impact.png. This closes the
+package-gameplay evidence gap for this bounded gate; owner visual acceptance and
+independent exact-commit/CI review remain before final gate closure.
