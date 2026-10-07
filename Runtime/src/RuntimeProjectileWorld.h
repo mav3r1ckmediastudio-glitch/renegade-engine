@@ -61,9 +61,10 @@ namespace renegade::runtime
         const bridge::ProjectileRecord& projectile,
         const bridge::ProjectileVector& from,
         const bridge::ProjectileVector& to,
-        const std::uint32_t layerMask = ~0u)
+        const std::uint32_t layerMask = ~0u, wi::ecs::Entity* hitEntity = nullptr)
     {
         using bridge::ProjectileQueryStatus;
+        if(hitEntity)*hitEntity=wi::ecs::INVALID_ENTITY;
         bridge::ProjectileQueryResult result;
         if (owner.root == wi::ecs::INVALID_ENTITY ||
             !scene.transforms.Contains(owner.root) ||
@@ -118,6 +119,7 @@ namespace renegade::runtime
             surfaceHit.entity = overlap.entity;
             surfaceHit.subsetIndex = overlap.subsetIndex;
             result.contact.surfaceId = ProjectileContactSurface(scene, surfaceHit);
+            if(hitEntity)*hitEntity=overlap.entity;
             return result;
         }
 
@@ -152,6 +154,7 @@ namespace renegade::runtime
         result.contact.normal = ProjectileBridgeVector(nearest->normal);
         result.contact.targetSubjectId = ProjectileContactSubject(scene, characters, nearest->entity);
         result.contact.surfaceId = ProjectileContactSurface(scene, *nearest);
+        if(hitEntity)*hitEntity=nearest->entity;
         return result;
     }
 

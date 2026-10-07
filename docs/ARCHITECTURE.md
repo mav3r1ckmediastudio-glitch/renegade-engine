@@ -1386,3 +1386,18 @@ confirmed impact feedback is unchanged. The flag is transient per launch and per
 trace, cleaned on retirement/reset; projectile asset serialization is unchanged.
 Native slowed-copy arrow inspection and owner visibility confirmation supersede
 the earlier assignment-only visual claim. No effects/tracer authoring is implied.
+
+## Authored projectile gate candidate (2026-10-07)
+
+Equipment v2 bindings carry animation release seconds and first/alternate/both
+named PSP policy. Runtime schedules only accepted actions, reads the native paired
+animation clock, and resolves sockets after animation update. One accepted action
+consumes ammunition once even when two PSPs launch.
+
+Projectile v3 definitions retain v1/v2 compatibility and save bounded flight effect
+layers plus impact/stick policy. Shared ProjectileEffectRuntime configures native
+Wicked emitters for preview and Runtime. Impact emitters defer burst activation
+until the next native update so indirect GPU buffers exist before drawing.
+Retained arrows attach to the contacted native object's transform; transient
+instances, scheduled releases and particles clear on scene/reset transitions.
+See [the grouped gate evidence](P3_AUTHORED_PROJECTILES_GATE.md) for proof and limits.

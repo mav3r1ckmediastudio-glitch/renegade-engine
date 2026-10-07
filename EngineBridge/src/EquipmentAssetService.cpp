@@ -51,12 +51,16 @@ std::vector<StableId> EquipmentDependencies(const EquipmentDefinition& item) {
 bool ProjectilesAvailable(const std::string& root,const StableId& project,
     const EquipmentDefinition& item,std::string& error) {
     FirstPersonAssemblySettings presentation;
-    const bool needsSocket=std::any_of(item.projectiles.begin(),item.projectiles.end(),[](const auto& b){return !b.launchSocketName.empty();});
+    const bool needsSocket=std::any_of(item.projectiles.begin(),item.projectiles.end(),[](const auto& b){return !b.launchSocketName.empty() || !b.secondSocketName.empty();});
     if(needsSocket&&!FirstPersonAssemblyService().ReadSettings(root,project,item.presentationAssetId,presentation,error))return false;
     for(const auto& binding:item.projectiles) {
         if(!binding.launchSocketName.empty()&&std::none_of(presentation.launchSockets.begin(),presentation.launchSockets.end(),
            [&](const auto& socket){return socket.name==binding.launchSocketName;})) {
             error="Assigned launch socket does not exist in the weapon assembly.";return false;
+        }
+        if(!binding.secondSocketName.empty()&&std::none_of(presentation.launchSockets.begin(),presentation.launchSockets.end(),
+           [&](const auto& socket){return socket.name==binding.secondSocketName;})) {
+            error="Second PSP does not exist in the weapon assembly.";return false;
         }
         ProjectileAssetDocument projectile;
         if(!LoadProjectileAsset(root,project,binding.projectileAssetId,projectile,error))return false;
@@ -99,7 +103,9 @@ bool SerializeEquipmentAsset(const EquipmentAssetDocument& d,std::string& text,s
         document["projectiles"]=json::array();
         for(const auto& binding:d.equipment.projectiles)
             document["projectiles"].push_back({{"action",ActionNames[unsigned(binding.action)]},
-                {"projectile_asset_id",binding.projectileAssetId},{"launch_socket",binding.launchSocketName}});
+                {"projectile_asset_id",binding.projectileAssetId},{"launch_socket",binding.launchSocketName},
+                {"release_seconds",binding.releaseSeconds},{"socket_policy",binding.socketPolicy},
+                {"second_socket",binding.secondSocketName}});
     }
     text=document.dump(2);
     return true;
@@ -141,12 +147,15 @@ bool DeserializeEquipmentAsset(const std::string& text,EquipmentAssetDocument& o
             if(!bindings.is_array()||bindings.empty()||bindings.size()>5)
                 throw std::runtime_error("Invalid equipment projectile list.");
             for(const auto& binding:bindings) {
-                if(!binding.is_object()||!(binding.size()==2 || (binding.size()==3&&binding.contains("launch_socket"))))
+                if(!binding.is_object()||!(binding.size()==2 || (binding.size()==3&&binding.contains("launch_socket")) ||
+                    (binding.size()==6&&binding.contains("launch_socket")&&binding.contains("release_seconds")&&
+                     binding.contains("socket_policy")&&binding.contains("second_socket"))))
                     throw std::runtime_error("Invalid equipment projectile binding.");
                 item.projectiles.push_back({static_cast<EquipmentAction>(
                     Index(binding.at("action").get<std::string>(),ActionNames)),
                     binding.at("projectile_asset_id").get<std::string>(),
-                    binding.value("launch_socket",std::string{})});
+                    binding.value("launch_socket",std::string{}),binding.value("release_seconds",0.0f),
+                    binding.value("socket_policy",0u),binding.value("second_socket",std::string{})});
             }
         }
         if(!Valid(d,error))return false;
@@ -165,7 +174,7 @@ bool LoadEquipmentAsset(const std::string& root,const StableId& project,const St
     AssetRegistry registry;if(!ReadAssetRegistry(root,project,registry,error))return false;
     const auto* record=Find(registry,id);
     if(!record||!record->sourceAvailable||record->dependencyClass!=DependencyClass::Data||
-       record->provider!="renegade.equipment"||fs::u8path(record->projectRelativePath).extension()!=EquipmentAssetExtension) {
+       (record->provider!="renegade.equipment" && record->provider!="lp07.rasset")||fs::u8path(record->projectRelativePath).extension()!=EquipmentAssetExtension) {
         error="Equipment asset is missing from the project registry.";return false;
     }
     const auto path=ResolveDependencyPath(root,record->projectRelativePath);

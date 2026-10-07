@@ -4,6 +4,7 @@
 #include <string>
 #include <array>
 #include "renegade/bridge/LaunchSocketService.h"
+#include "renegade/bridge/ProjectileAssetService.h"
 #include "renegade/bridge/FirstPersonAssemblyService.h"
 #include <vector>
 #include "renegade/bridge/PlayerViewHandAnimation.h"
@@ -23,6 +24,7 @@ namespace renegade::studio
         void Pan(float horizontal, float vertical);
         void FitModel();
         void SetModelAppearance(float scale, const std::array<float,3>& rotation);
+        void SetProjectileEffects(const std::vector<bridge::ProjectileEffectLayer>&);
         XMFLOAT3 ModelSize() const { return modelSize_; }
         std::vector<bridge::PlayerViewBoneChoice> SocketParents() const;
         bool PickSocket(float u,float v,const bridge::LaunchSocketDefinition&,XMFLOAT3&,std::string&) const;
@@ -38,7 +40,7 @@ namespace renegade::studio
         bool IsPlaying() const { return paired_ ? pairedPlaying_ : animationPreview_.IsPlaying(); }
         bool HasClip() const { return paired_ || animationPreview_.HasSelection(); }
         float ClipTime() const { return paired_ ? pairedTime_ : animationPreview_.Time(); }
-        bool NeedsRender() const { return !IsReady() || IsPlaying(); }
+        bool NeedsRender() const { return !IsReady() || IsPlaying() || !projectileEffects_.empty(); }
         void Update(float dt) override;
         void Render() const override;
         bool CapturePng(std::vector<std::uint8_t>& png, std::string& error) const;
@@ -62,6 +64,8 @@ namespace renegade::studio
         XMFLOAT3 sourceCenter_ = {}, modelSize_ = {};
         wi::ecs::Entity appearanceRoot_ = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity socketMarker_ = wi::ecs::INVALID_ENTITY;
+        std::vector<bridge::ProjectileEffectLayer> projectileEffects_;
+        std::vector<wi::ecs::Entity> projectileEmitters_;
         mutable unsigned renderedFrames_ = 0;
     };
 }

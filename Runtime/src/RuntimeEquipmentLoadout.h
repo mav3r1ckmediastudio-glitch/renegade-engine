@@ -18,7 +18,37 @@ namespace renegade::runtime
             bridge::EquipmentAction action;
             bridge::ProjectileAssetDocument projectile;
             std::string launchSocketName;
+            float releaseSeconds = 0;
+            unsigned socketPolicy = 0;
+            std::string secondSocketName;
         };
+        struct ScheduledProjectile { ProjectileRequest request; wi::ecs::Entity animation; };
+        std::vector<ScheduledProjectile> scheduledProjectiles;
+        std::array<unsigned,12> projectileSequence{};
+        // Call only after native animation/ammunition accepted the action.
+        void ScheduleProjectile(ProjectileRequest request, wi::ecs::Entity animation) {
+            const unsigned index=unsigned(request.action);
+            if(request.socketPolicy==1 && projectileSequence[index]%2)
+                request.launchSocketName=request.secondSocketName;
+            ++projectileSequence[index];
+            const bool both=request.socketPolicy==2;
+            request.socketPolicy=0;
+            if(both) {
+                auto second=request;second.launchSocketName=request.secondSocketName;
+                scheduledProjectiles.push_back({std::move(second),animation});
+            }
+            scheduledProjectiles.push_back({std::move(request),animation});
+        }
+        std::vector<ProjectileRequest> ReleaseProjectiles(wi::ecs::Entity animation,float time,bool cancelled) {
+            std::vector<ProjectileRequest> result;
+            for(auto it=scheduledProjectiles.begin();it!=scheduledProjectiles.end();) {
+                if(cancelled || it->animation!=animation)it=scheduledProjectiles.erase(it);
+                else if(std::isfinite(time) && time+0.000001f>=it->request.releaseSeconds) {
+                    result.push_back(std::move(it->request));it=scheduledProjectiles.erase(it);
+                } else ++it;
+            }
+            return result;
+        }
         std::vector<ProjectileRequest> resolvedProjectiles, pendingProjectiles;
         std::vector<ProjectileRequest> TakeProjectileRequests() {
             std::vector<ProjectileRequest> result;
@@ -64,11 +94,13 @@ namespace renegade::runtime
                 bridge::ProjectileAssetDocument projectile;
                 if (!bridge::LoadProjectileAsset(root, project, binding.projectileAssetId, projectile, error))
                     return false;
-                resolved.push_back({p.equipment.assetId, binding.action, std::move(projectile),binding.launchSocketName});
+                resolved.push_back({p.equipment.assetId, binding.action, std::move(projectile),binding.launchSocketName,binding.releaseSeconds,
+                    binding.socketPolicy,binding.secondSocketName});
             }
             primary = std::move(p);
             offHand = std::move(o);
             resolvedProjectiles = std::move(resolved);
+            scheduledProjectiles.clear();projectileSequence={};
             ready = true;
             return true;
         }

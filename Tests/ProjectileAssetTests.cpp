@@ -48,7 +48,7 @@ int main()
     if(!SerializeProjectileAsset(reopened,text,error))return fail("serialize");
     auto corrupt=nlohmann::json::parse(text); corrupt["speed_metres_per_second"]=true;
     if(DeserializeProjectileAsset(corrupt.dump(),reopened,error))return fail("boolean speed");
-    corrupt=nlohmann::json::parse(text); corrupt["schema_version"]=3;
+    corrupt=nlohmann::json::parse(text); corrupt["schema_version"]=4;
     if(DeserializeProjectileAsset(corrupt.dump(),reopened,error))return fail("future projectile schema");
     auto bad=arrow; bad.name="   ";
     if(SaveProjectileAsset(root.generic_u8string(),project,bad).succeeded)return fail("blank name");
@@ -148,6 +148,7 @@ int main()
     auto legacy=nlohmann::json::parse(text);
     legacy["schema_version"]=1;legacy.erase("mesh_asset_id");
     legacy.erase("visual_scale");legacy.erase("visual_rotation_degrees");
+    for(const char* field:{"flight_effects","impact_effect","stick_on_impact","stuck_lifetime_seconds","embed_depth_metres"})legacy.erase(field);
     if(!DeserializeProjectileAsset(legacy.dump(),reopened,error)||!reopened.meshAssetId.empty()||
         reopened.visualScale!=1)return fail("legacy appearance defaults");
     auto invalidMesh=arrow;invalidMesh.meshAssetId=GenerateStableId();
@@ -169,11 +170,29 @@ int main()
      out.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());}
     auto visible=arrow;visible.meshAssetId=presentation;visible.visualScale=.5f;
     visible.visualRotationDegrees={90,0,-45};
+    visible.flightEffects={{ProjectileEffectKind::Flame,{0,0,.3f},.08f,60,.3f},
+                           {ProjectileEffectKind::Smoke,{0,0,.3f},.08f,60,.3f}};
+    visible.impactEffect=ProjectileEffectKind::Sparks;visible.stickOnImpact=true;
+    visible.stuckLifetimeSeconds=20;visible.embedDepthMetres=.04f;
     const auto visualSaved=SaveProjectileAsset(root.generic_u8string(),project,visible);
     if(!visualSaved.succeeded||!LoadProjectileAsset(root.generic_u8string(),project,
         visualSaved.document.assetId,reopened,error)||reopened.meshAssetId!=presentation||
         reopened.visualScale!=.5f||reopened.visualRotationDegrees!=visible.visualRotationDegrees)
         return fail("appearance save/reopen");
+    if(reopened.flightEffects.size()!=2||reopened.flightEffects[0].kind!=ProjectileEffectKind::Flame||
+       !reopened.stickOnImpact||reopened.impactEffect!=ProjectileEffectKind::Sparks||
+       reopened.stuckLifetimeSeconds!=20||reopened.embedDepthMetres!=.04f)
+        return fail("effects and stick persistence");
+    auto invalidEffect=reopened;invalidEffect.flightEffects[0].particlesPerSecond=501;
+    if(ValidateProjectileAsset(invalidEffect,error))return fail("effect budget validation");
+    invalidEffect=reopened;invalidEffect.meshAssetId.clear();
+    if(ValidateProjectileAsset(invalidEffect,error))return fail("meshless stick validation");
+    if(!SerializeProjectileAsset(reopened,text,error))return fail("v3 serial");
+    auto old2=nlohmann::json::parse(text);old2["schema_version"]=2;
+    for(const char* field:{"flight_effects","impact_effect","stick_on_impact","stuck_lifetime_seconds","embed_depth_metres"})old2.erase(field);
+    ProjectileAssetDocument oldAppearance;
+    if(!DeserializeProjectileAsset(old2.dump(),oldAppearance,error)||oldAppearance.stickOnImpact||
+       !oldAppearance.flightEffects.empty())return fail("v2 policy defaults");
     source.projectRelativePath=visualSaved.projectRelativePath;candidates.clear();
     if(!ReusableAssetDependencyProvider(project).Discover({root.generic_u8string(),&source},
         [&](const auto& c){candidates.push_back(c);},{},error)||
@@ -185,6 +204,19 @@ int main()
     if(DeserializeProjectileAsset(invalidAppearance.dump(),reopened,error))return fail("boolean scale");
     invalidAppearance=nlohmann::json::parse(text);invalidAppearance["visual_rotation_degrees"]={0,0,361};
     if(DeserializeProjectileAsset(invalidAppearance.dump(),reopened,error))return fail("rotation bounds");
+    // Build Game records the dependency discovery provider while retaining
+    // authored IDs, paths and dependencies. Saved assets must still load/list.
+    AssetRegistry packagedRegistry;
+    if(!ReadAssetRegistry(root.generic_u8string(),project,packagedRegistry,error))
+        return fail("package registry");
+    for(auto& record:packagedRegistry.records)
+        if(record.provider=="renegade.equipment" || record.provider=="renegade.projectile")
+            record.provider="lp07.rasset";
+    if(!WriteAssetRegistry(root.generic_u8string(),packagedRegistry).success ||
+       !LoadEquipmentAsset(root.generic_u8string(),project,equipped.document.equipment.assetId,item,error) ||
+       !LoadProjectileAsset(root.generic_u8string(),project,visualSaved.document.assetId,reopened,error) ||
+       ListProjectileAssets(root.generic_u8string(),project,error).empty())
+        return fail("build discovery provider rejected saved equipment/projectiles");
     AssetRegistry tampered;
     if(!ReadAssetRegistry(root.generic_u8string(),project,tampered,error))return fail("mesh registry");
     for(auto& record:tampered.records)

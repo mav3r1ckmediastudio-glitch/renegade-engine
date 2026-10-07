@@ -110,6 +110,21 @@ namespace renegade::bridge
             error = "Projectile requires a name, valid identity and bounded flight values.";
             return false;
         }
+        if(d.flightEffects.size()>2 || unsigned(d.impactEffect)>4 ||
+           !std::isfinite(d.stuckLifetimeSeconds)||d.stuckLifetimeSeconds<.1f||d.stuckLifetimeSeconds>120 ||
+           !std::isfinite(d.embedDepthMetres)||d.embedDepthMetres<0||d.embedDepthMetres>2 ||
+           (d.stickOnImpact && d.meshAssetId.empty())) {
+            error="Stick needs a visible model; retained lifetime/depth and effect values must be bounded.";return false;
+        }
+        for(const auto& effect:d.flightEffects) {
+            if(unsigned(effect.kind)==0||unsigned(effect.kind)>4 ||
+               !std::isfinite(effect.sizeMetres)||effect.sizeMetres<.005f||effect.sizeMetres>2 ||
+               !std::isfinite(effect.particlesPerSecond)||effect.particlesPerSecond<1||effect.particlesPerSecond>500 ||
+               !std::isfinite(effect.particleLifeSeconds)||effect.particleLifeSeconds<.02f||effect.particleLifeSeconds>5 ||
+               std::any_of(effect.offset.begin(),effect.offset.end(),[](float v){return !std::isfinite(v)||std::abs(v)>10;})) {
+                error="Projectile effect layer contains invalid size, rate, lifetime or offset.";return false;
+            }
+        }
         error.clear();
         return true;
     }
@@ -117,12 +132,17 @@ namespace renegade::bridge
     bool SerializeProjectileAsset(const ProjectileAssetDocument& d, std::string& text, std::string& error)
     {
         if (!ValidateProjectileAsset(d, error)) return false;
-        text = json{{"format","renegade-projectile"},{"schema_version",2},
+        json effects=json::array();
+        for(const auto& e:d.flightEffects)effects.push_back({{"kind",unsigned(e.kind)},{"offset",e.offset},
+            {"size_metres",e.sizeMetres},{"rate",e.particlesPerSecond},{"life_seconds",e.particleLifeSeconds}});
+        text = json{{"format","renegade-projectile"},{"schema_version",3},
             {"project_id",d.projectId},{"asset_id",d.assetId},{"name",d.name},
             {"speed_metres_per_second",d.speedMetresPerSecond},{"gravity_scale",d.gravityScale},
             {"lifetime_seconds",d.lifetimeSeconds},{"damage",d.damage},
             {"mesh_asset_id",d.meshAssetId},{"visual_scale",d.visualScale},
-            {"visual_rotation_degrees",d.visualRotationDegrees}}.dump(2);
+            {"visual_rotation_degrees",d.visualRotationDegrees},{"flight_effects",effects},
+            {"impact_effect",unsigned(d.impactEffect)},{"stick_on_impact",d.stickOnImpact},
+            {"stuck_lifetime_seconds",d.stuckLifetimeSeconds},{"embed_depth_metres",d.embedDepthMetres}}.dump(2);
         return true;
     }
 
@@ -134,7 +154,8 @@ namespace renegade::bridge
             if (!j.is_object() || j.at("format") != "renegade-projectile" ||
                 !j.at("schema_version").is_number_integer() ||
                 !((j.at("schema_version") == 1 && j.size() == 9) ||
-                  (j.at("schema_version") == 2 && j.size() == 12)))
+                  (j.at("schema_version") == 2 && j.size() == 12) ||
+                  (j.at("schema_version") == 3 && j.size() == 17)))
                 throw std::runtime_error("Unsupported projectile schema.");
             for (const char* field : {"speed_metres_per_second","gravity_scale","lifetime_seconds","damage"})
                 if (!j.at(field).is_number()) throw std::runtime_error("Projectile flight values must be numeric.");
@@ -146,7 +167,7 @@ namespace renegade::bridge
             d.gravityScale=j.at("gravity_scale").get<float>();
             d.lifetimeSeconds=j.at("lifetime_seconds").get<float>();
             d.damage=j.at("damage").get<float>();
-            if (j.at("schema_version") == 2) {
+            if (j.at("schema_version") >= 2) {
                 if (!j.at("visual_scale").is_number() ||
                     !j.at("visual_rotation_degrees").is_array() ||
                     j.at("visual_rotation_degrees").size() != 3)
@@ -156,6 +177,25 @@ namespace renegade::bridge
                 d.meshAssetId = j.at("mesh_asset_id").get<std::string>();
                 d.visualScale = j.at("visual_scale").get<float>();
                 d.visualRotationDegrees = j.at("visual_rotation_degrees").get<std::array<float,3>>();
+            }
+            if(j.at("schema_version")==3) {
+                const auto& effects=j.at("flight_effects");
+                if(!effects.is_array()||effects.size()>2)throw std::runtime_error("Invalid flight effect list.");
+                for(const auto& e:effects) {
+                    if(!e.is_object()||e.size()!=5||!e.at("kind").is_number_unsigned()||
+                       !e.at("offset").is_array()||e.at("offset").size()!=3 ||
+                       !e.at("size_metres").is_number()||!e.at("rate").is_number()||!e.at("life_seconds").is_number())
+                        throw std::runtime_error("Invalid projectile effect layer.");
+                    ProjectileEffectLayer layer;
+                    layer.kind=static_cast<ProjectileEffectKind>(e.at("kind").get<unsigned>());
+                    layer.offset=e.at("offset").get<std::array<float,3>>();
+                    layer.sizeMetres=e.at("size_metres").get<float>();layer.particlesPerSecond=e.at("rate").get<float>();
+                    layer.particleLifeSeconds=e.at("life_seconds").get<float>();d.flightEffects.push_back(layer);
+                }
+                d.impactEffect=static_cast<ProjectileEffectKind>(j.at("impact_effect").get<unsigned>());
+                d.stickOnImpact=j.at("stick_on_impact").get<bool>();
+                d.stuckLifetimeSeconds=j.at("stuck_lifetime_seconds").get<float>();
+                d.embedDepthMetres=j.at("embed_depth_metres").get<float>();
             }
             if (!ValidateProjectileAsset(d, error)) return false;
             out=std::move(d); error.clear(); return true;
@@ -179,7 +219,7 @@ namespace renegade::bridge
         if (!ReadAssetRegistry(root,project,registry,error)) return false;
         const auto* record=Find(registry,id);
         if (!record || !record->sourceAvailable || record->dependencyClass!=DependencyClass::Data ||
-            record->provider!="renegade.projectile" ||
+            (record->provider!="renegade.projectile" && record->provider!="lp07.rasset") ||
             fs::u8path(record->projectRelativePath).extension()!=ProjectileAssetExtension)
         { error="Projectile is missing or invalid in the project registry."; return false; }
         const auto path=ResolveDependencyPath(root,record->projectRelativePath);
@@ -258,7 +298,8 @@ namespace renegade::bridge
         if (!ReadAssetRegistry(root,project,registry,error)) return result;
         for (const auto& record:registry.records)
         {
-            if (record.provider!="renegade.projectile") continue;
+            if ((record.provider!="renegade.projectile" && record.provider!="lp07.rasset") ||
+                fs::u8path(record.projectRelativePath).extension()!=ProjectileAssetExtension) continue;
             ProjectileAssetDocument d;
             if (!LoadProjectileAsset(root,project,record.assetId,d,error)) return {};
             result.push_back(std::move(d));

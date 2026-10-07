@@ -877,3 +877,9 @@ target_include_directories(RenegadeLaunchSocketTests PRIVATE "${CMAKE_SOURCE_DIR
 add_test(NAME LaunchSocket COMMAND RenegadeLaunchSocketTests)
 set_target_properties(RenegadeLaunchSocketTests PROPERTIES FOLDER "Renegade/Tests")
 add_dependencies(RenegadeBridgeTests RenegadeLaunchSocketTests)
+
+if(WIN32)
+    add_executable(RenegadeProjectilePlayground ../Tools/ProjectilePlayground.cpp)
+    target_link_libraries(RenegadeProjectilePlayground PRIVATE Renegade::EngineBridge)
+    set_target_properties(RenegadeProjectilePlayground PROPERTIES FOLDER "Renegade/Tools")
+endif()

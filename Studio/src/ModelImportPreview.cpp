@@ -1,4 +1,5 @@
 #include "ModelImportPreview.h"
+#include "renegade/bridge/ProjectileEffectRuntime.h"
 #include <algorithm>
 #include <cmath>
 
@@ -39,6 +40,7 @@ namespace renegade::studio
         modelSize_ = {extent.x*2,extent.y*2,extent.z*2};
         angle_ = 0.5f; elevation_ = 0.2425f; zoom_ = 1; pan_ = {};
         appearanceRoot_ = socketMarker_ = wi::ecs::INVALID_ENTITY;
+        projectileEffects_.clear();projectileEmitters_.clear();
         // Discard source lights/weather on the copy only, then use neutral
         // fixed illumination so the preview doesn't depend on the open level.
         scene->lights.Clear();
@@ -182,6 +184,27 @@ namespace renegade::studio
         previewCamera_.CreatePerspective(512,320,std::max(0.00001f,radius_*0.001f),
             radius_*20.0f,XM_PI/4.0f);
         FitCamera(); renderedFrames_ = 0;
+    }
+    void ModelImportPreview::SetProjectileEffects(const std::vector<bridge::ProjectileEffectLayer>& effects)
+    {
+        if(!scene)return;
+        bool same=effects.size()==projectileEffects_.size();
+        if(same)for(size_t i=0;i<effects.size();++i) {
+            const auto& a=effects[i];const auto& b=projectileEffects_[i];
+            if(a.kind!=b.kind||a.offset!=b.offset||a.sizeMetres!=b.sizeMetres||
+               a.particlesPerSecond!=b.particlesPerSecond||a.particleLifeSeconds!=b.particleLifeSeconds)same=false;
+        }
+        if(same)return;
+        for(const auto e:projectileEmitters_)scene->Entity_Remove(e);
+        projectileEmitters_.clear();projectileEffects_=effects;
+        for(const auto& layer:effects) {
+            const auto e=bridge::CreateProjectileEffectEmitter(*scene,layer,{0,0,0});
+            if(appearanceRoot_!=wi::ecs::INVALID_ENTITY)scene->Component_Attach(e,appearanceRoot_,true);
+            auto& t=*scene->transforms.GetComponent(e);t.ClearTransform();
+            t.Translate(XMFLOAT3{layer.offset[0],layer.offset[1],layer.offset[2]});t.UpdateTransform();
+            projectileEmitters_.push_back(e);
+        }
+        renderedFrames_=0;
     }
     void ModelImportPreview::SetModelAppearance(float scale, const std::array<float,3>& rotation)
     {

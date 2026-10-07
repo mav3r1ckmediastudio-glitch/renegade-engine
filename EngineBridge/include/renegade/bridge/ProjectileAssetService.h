@@ -7,6 +7,12 @@ namespace renegade::bridge
 {
     inline constexpr const char* ProjectileAssetExtension = ".rprojectile";
     enum class ProjectilePreset { Bullet, Arrow, Bolt, Thrown, Spell };
+    enum class ProjectileEffectKind { None, Flame, Smoke, Sparks, Tracer };
+    struct ProjectileEffectLayer {
+        ProjectileEffectKind kind = ProjectileEffectKind::None;
+        std::array<float,3> offset{0,0,0};
+        float sizeMetres = .08f, particlesPerSecond = 60, particleLifeSeconds = .3f;
+    };
     struct ProjectileAssetDocument
     {
         StableId projectId, assetId;
@@ -20,6 +26,10 @@ namespace renegade::bridge
         StableId meshAssetId;
         float visualScale = 1;
         std::array<float, 3> visualRotationDegrees{0, 0, 0};
+        std::vector<ProjectileEffectLayer> flightEffects;
+        ProjectileEffectKind impactEffect = ProjectileEffectKind::None;
+        bool stickOnImpact = false;
+        float stuckLifetimeSeconds = 30, embedDepthMetres = .05f;
     };
     struct ProjectileAssetSaveResult
     {

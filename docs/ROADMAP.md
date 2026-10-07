@@ -482,3 +482,12 @@ markers, barrel/pellet policies, animated socket-preview action selection,
 direct importer editing, gizmos, effects, hitscan and surface-impact profiles
 remain open. Player/NPC health remains outside this increment. No P3 gate closure;
 independent exact-commit verification and package/Jolt-only proof remain required.
+
+## P3 grouped authored projectile candidate - 2026-10-07
+
+The owner's four checks are one bounded gate: native animation release timing,
+first/alternate/both PSPs, saved layered flight/impact effects, and disappear/stick.
+Implementation and targeted tests pass; standalone saved timing/barrel/impact
+proof is recorded in [P3_AUTHORED_PROJECTILES_GATE.md](P3_AUTHORED_PROJECTILES_GATE.md).
+Editor/package acceptance and independent exact-commit review remain open.
+Health remains outside this increment; P2 PR #180 remains unmerged.

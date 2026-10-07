@@ -350,8 +350,13 @@ namespace renegade::runtime
 
         diagnosticService_.Heartbeat();
         const auto now = diagnosticService_.ElapsedMs();
-        if (now - lastDiagnosticSampleMs_ < 250) return;
+        const auto pendingRelease=playerEquipment_.scheduledProjectiles.size();
+        const bool projectileTransition=projectiles_.launched!=lastDiagnosticProjectileLaunched_ ||
+            pendingRelease!=lastDiagnosticProjectilePending_;
+        if (now - lastDiagnosticSampleMs_ < 250 && !projectileTransition) return;
         lastDiagnosticSampleMs_ = now;
+        lastDiagnosticProjectileLaunched_=projectiles_.launched;
+        lastDiagnosticProjectilePending_=pendingRelease;
 
         std::uint64_t navigationArrived = 0;
         for (const auto& agent : navigationState_.agents)
@@ -634,6 +639,10 @@ namespace renegade::runtime
             {"projectile_visuals", static_cast<std::uint64_t>(projectileVisuals_.instances.size())},
             {"projectile_visual_templates", static_cast<std::uint64_t>(projectileVisuals_.templates.size())},
             {"projectile_visual_error", projectileVisuals_.error},
+            {"projectile_stuck", static_cast<std::uint64_t>(projectileVisuals_.retained.size())},
+            {"projectile_effect_emitters", static_cast<std::uint64_t>(projectileVisuals_.EffectCount())},
+            {"projectile_pending_release", static_cast<std::uint64_t>(playerEquipment_.scheduledProjectiles.size())},
+            {"projectile_animation_time_ms", static_cast<std::uint64_t>(std::max(0.0f,playerViewAnimation_.pairedTime)*1000)},
             {"projectile_last_x", std::to_string(projectiles_.lastContact.position.x)},
             {"projectile_last_y", std::to_string(projectiles_.lastContact.position.y)},
             {"projectile_last_z", std::to_string(projectiles_.lastContact.position.z)},

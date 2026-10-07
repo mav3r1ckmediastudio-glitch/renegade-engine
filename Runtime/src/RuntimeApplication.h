@@ -104,6 +104,8 @@ namespace renegade::runtime
         bridge::SceneService scenes_;
         void UpdateLiveDiagnostics();
         std::uint64_t lastDiagnosticSampleMs_ = 0;
+        std::uint64_t lastDiagnosticProjectileLaunched_ = 0;
+        size_t lastDiagnosticProjectilePending_ = 0;
         bridge::DiagnosticService diagnosticService_;
         RuntimeFlowController flow_;
         RuntimeRenderPath renderer_;

@@ -1,5 +1,6 @@
 #pragma once
 #include "renegade/bridge/EquipmentActionState.h"
+#include "renegade/bridge/ProjectileAssetService.h"
 
 #include <array>
 #include "ModelImportPreview.h"
@@ -1174,7 +1175,13 @@ namespace renegade::studio
         wi::gui::ComboBox projectileMesh_;
         wi::gui::Slider projectileVisualScale_, projectileRotationX_, projectileRotationY_, projectileRotationZ_;
         wi::gui::Button projectileImportMesh_, projectileSocketEdit_;
-        wi::gui::ComboBox projectileSocket_;
+        wi::gui::ComboBox projectileSocket_, projectileSecondSocket_, projectileSocketPolicy_;
+        wi::gui::Slider projectileReleaseTime_;
+        wi::gui::ComboBox projectileEffectA_, projectileEffectB_, projectileImpactEffect_, projectileImpactMode_;
+        wi::gui::Slider projectileEffectSize_, projectileEffectRate_, projectileEffectLife_, projectileEffectOffset_,
+            projectileDamage_, projectileStuckLife_, projectileEmbedDepth_;
+        void SetProjectileEffectControls(const bridge::ProjectileAssetDocument&);
+        std::vector<bridge::ProjectileEffectLayer> ProjectileEffectControls() const;
         std::vector<std::string> projectileSocketNames_;
         wi::gui::Window launchSocketPanel_;
         wi::gui::ComboBox launchSocketChoice_, launchSocketPart_, launchSocketParent_;

@@ -44,7 +44,7 @@ namespace renegade::studio
     {
         weaponProjectilePanel_.Create("Weapon projectiles");
         CreateLaunchSocketEditor();
-        weaponProjectilePanel_.SetPos({70,80});weaponProjectilePanel_.SetSize({740,480});
+        weaponProjectilePanel_.SetPos({70,80});weaponProjectilePanel_.SetSize({740,630});
         const auto combo=[&](wi::gui::ComboBox& box,const char* name,float y) {
             box.Create(name);box.SetPos({220,y});box.SetSize({480,26});
             weaponProjectilePanel_.AddWidget(&box);
@@ -59,19 +59,28 @@ namespace renegade::studio
         weaponProjectilePanel_.AddWidget(&projectileSearch_);
         projectileSearch_.OnInputAccepted([this](const wi::gui::EventArgs&){RefreshProjectileChoices();});
         combo(projectileChoice_,"Projectile",160);
-        combo(projectileSocket_,"Fire from",200);
+        combo(projectileSocket_,"First PSP",200);
+        combo(projectileSecondSocket_,"Second PSP",240);
+        combo(projectileSocketPolicy_,"Spawn points",280);
+        projectileSocketPolicy_.AddItem("First PSP only");
+        projectileSocketPolicy_.AddItem("Alternate first / second PSP");
+        projectileSocketPolicy_.AddItem("Both PSPs together");
+        projectileReleaseTime_.Create(0,5,0,1000,"Release at (seconds)");
+        projectileReleaseTime_.SetPos({220,325});projectileReleaseTime_.SetSize({400,22});
+        projectileReleaseTime_.SetTooltip("Seconds from the start of the firing/release animation. 0 fires immediately. Must be before the animation ends.");
+        weaponProjectilePanel_.AddWidget(&projectileReleaseTime_);
         projectileSummary_.Create("Projectile summary");
-        projectileSummary_.SetPos({20,285});projectileSummary_.SetSize({680,90});
+        projectileSummary_.SetPos({20,410});projectileSummary_.SetSize({680,90});
         projectileSummary_.font.params.size=14;weaponProjectilePanel_.AddWidget(&projectileSummary_);
         const auto button=[&](wi::gui::Button& b,const char* label,float x,float y,float width,
                               wi::gui::Window& panel) {
             b.Create(label);b.SetText(label);b.SetPos({x,y});b.SetSize({width,30});panel.AddWidget(&b);
         };
-        button(projectileAssign_,"APPLY TO THIS PLAYER",20,390,260,weaponProjectilePanel_);
-        button(projectileNew_,"NEW",295,390,105,weaponProjectilePanel_);
-        button(projectileEditCopy_,"EDIT COPY",415,390,145,weaponProjectilePanel_);
-        button(projectileClose_,"CLOSE",575,390,125,weaponProjectilePanel_);
-        button(projectileSocketEdit_,"EDIT LAUNCH SOCKETS...",220,240,300,weaponProjectilePanel_);
+        button(projectileAssign_,"APPLY TO THIS PLAYER",20,540,260,weaponProjectilePanel_);
+        button(projectileNew_,"NEW",295,540,105,weaponProjectilePanel_);
+        button(projectileEditCopy_,"EDIT COPY",415,540,145,weaponProjectilePanel_);
+        button(projectileClose_,"CLOSE",575,540,125,weaponProjectilePanel_);
+        button(projectileSocketEdit_,"EDIT PROJECTILE SPAWN POINTS...",220,370,300,weaponProjectilePanel_);
         projectileSocketEdit_.OnClick([this](const wi::gui::EventArgs&){
             if(!session_||!session_->Projects().HasProject())return;
             const auto& project=session_->Projects().CurrentProject();
@@ -109,7 +118,7 @@ namespace renegade::studio
         });
 
         projectileCreatePanel_.Create("New projectile");
-        projectileCreatePanel_.SetPos({120,100});projectileCreatePanel_.SetSize({1260,650});
+        projectileCreatePanel_.SetPos({120,100});projectileCreatePanel_.SetSize({1260,820});
         projectilePreset_.Create("Start with");
         projectilePreset_.SetPos({210,40});projectilePreset_.SetSize({390,26});
         for(unsigned i=0;i<5;++i)
@@ -139,16 +148,16 @@ namespace renegade::studio
         slider(projectileRotationX_,"Model rotation X",-180,180,0,345);
         slider(projectileRotationY_,"Model rotation Y",-180,180,0,385);
         slider(projectileRotationZ_,"Model rotation Z",-180,180,0,425);
-        button(projectileImportMesh_,"IMPORT MESH...",20,475,180,projectileCreatePanel_);
+        button(projectileImportMesh_,"IMPORT MESH...",20,700,180,projectileCreatePanel_);
         projectileImportMesh_.OnClick([this](const wi::gui::EventArgs&){
             OpenStaticModelImporter(true);
         });
         projectileCreateHelp_.Create("Projectile flight help");
         projectileCreateHelp_.SetText("Gravity 0 flies straight; 1 uses normal gravity.\nProjectile stops on contact or when its lifetime expires.\nSave adds it to this project's reusable projectile list.");
-        projectileCreateHelp_.SetPos({20,515});projectileCreateHelp_.SetSize({680,65});
+        projectileCreateHelp_.SetPos({20,735});projectileCreateHelp_.SetSize({680,30});
         projectileCreateHelp_.font.params.size=14;projectileCreatePanel_.AddWidget(&projectileCreateHelp_);
-        button(projectileSave_,"SAVE AS NEW",20,590,280,projectileCreatePanel_);
-        button(projectileCancel_,"CANCEL",320,590,280,projectileCreatePanel_);
+        button(projectileSave_,"SAVE AS NEW",20,770,280,projectileCreatePanel_);
+        button(projectileCancel_,"CANCEL",320,770,280,projectileCreatePanel_);
         projectilePreviewImage_.Create("Projectile model preview");
         projectilePreviewImage_.SetText("");
         projectilePreviewImage_.SetPos({720,80});projectilePreviewImage_.SetSize({512,320});
@@ -165,12 +174,39 @@ namespace renegade::studio
             projectilePreview_->FitModel();projectilePreview_->SetView(XM_PIDIV2,0);
         });
         projectilePreviewImage_.SetTooltip("Left-drag to orbit; right-drag to pan; mouse wheel to zoom.");
-        projectilePreviewInfo_.SetPos({720,475});projectilePreviewInfo_.SetSize({512,140});
+        projectilePreviewInfo_.SetPos({920,410});projectilePreviewInfo_.SetSize({315,46});
+        projectilePreviewInfo_.font.params.size=12;
+        slider(projectileDamage_,"Damage",0,1000,10,470);
+        projectileImpactMode_.Create("On impact");projectileImpactMode_.SetPos({210,515});projectileImpactMode_.SetSize({390,26});
+        projectileImpactMode_.AddItem("Disappear");projectileImpactMode_.AddItem("Stick into the object");
+        projectileCreatePanel_.AddWidget(&projectileImpactMode_);
+        slider(projectileStuckLife_,"Stay for (seconds)",.1f,120,30,560);
+        slider(projectileEmbedDepth_,"Embed depth (metres)",0,2,.05f,605);
+        const auto effectChoice=[&](wi::gui::ComboBox& box,const char* label,float y) {
+            box.Create(label);box.SetPos({930,y});box.SetSize({300,26});
+            for(const char* name:{"None","Flame","Smoke","Sparks","Tracer"})box.AddItem(name);
+            projectileCreatePanel_.AddWidget(&box);
+        };
+        effectChoice(projectileEffectA_,"Flight effect 1",470);
+        effectChoice(projectileEffectB_,"Flight effect 2",510);
+        effectChoice(projectileImpactEffect_,"Impact effect",550);
+        const auto effectSlider=[&](wi::gui::Slider& value,const char* label,float min,float max,float initial,float y) {
+            value.Create(min,max,initial,1000,label);value.SetPos({930,y});value.SetSize({250,22});
+            value.SetTooltip("Applies to both flight effect layers. Type a number and press Enter.");
+            projectileCreatePanel_.AddWidget(&value);
+        };
+        effectSlider(projectileEffectSize_,"Particle size (m)",.005f,2,.08f,595);
+        effectSlider(projectileEffectRate_,"Particles / second",1,500,60,640);
+        effectSlider(projectileEffectLife_,"Particle life (s)",.02f,5,.3f,685);
+        effectSlider(projectileEffectOffset_,"Along arrow (m)",-10,10,.3f,730);
+        projectileImpactMode_.SetTooltip("Stick retains the model at contact and follows the hit object until Stay for expires.");
+        projectileEffectOffset_.SetTooltip("Forward offset in model space: positive moves effects towards the tip (+Z).");
+
         projectileCancel_.OnClick([this](const wi::gui::EventArgs&){projectileCreatePanel_.SetVisible(false);});
         projectilePreset_.OnSelect([this](const wi::gui::EventArgs& args){
             if (args.iValue>=5) return;
             const auto d=bridge::MakeProjectilePreset(static_cast<bridge::ProjectilePreset>(args.iValue));
-            projectileDraftDamage_=d.damage;
+            projectileDraftDamage_=d.damage;SetProjectileEffectControls(d);
             projectileName_.SetText(d.name);projectileSpeed_.SetValue(d.speedMetresPerSecond);
             projectileGravity_.SetValue(d.gravityScale);projectileLifetime_.SetValue(d.lifetimeSeconds);
         });
@@ -181,7 +217,7 @@ namespace renegade::studio
             projectileDraftMesh_.clear(); RefreshProjectileMeshChoices();
             projectileVisualScale_.SetValue(1);
             projectileRotationX_.SetValue(0);projectileRotationY_.SetValue(0);projectileRotationZ_.SetValue(0);
-            projectileDraftDamage_=d.damage;
+            projectileDraftDamage_=d.damage;SetProjectileEffectControls(d);
             projectilePreset_.SetSelectedWithoutCallback(0);projectileName_.SetText(d.name);
             projectileSpeed_.SetValue(d.speedMetresPerSecond);projectileGravity_.SetValue(d.gravityScale);
             projectileLifetime_.SetValue(d.lifetimeSeconds);projectileCreatePanel_.SetVisible(true);projectileCreatePanel_.Activate();
@@ -194,7 +230,7 @@ namespace renegade::studio
             if(!bridge::LoadProjectileAsset(project.rootPath,project.projectId,projectilePreferred_,d,error)) {
                 projectileSummary_.SetText(error);return;
             }
-            projectileDraftDamage_=d.damage;
+            projectileDraftDamage_=d.damage;SetProjectileEffectControls(d);
             projectileStandaloneEditor_=false;
             projectileEditorProject_=project.projectId;
             projectileDraftMesh_=d.meshAssetId;RefreshProjectileMeshChoices();
@@ -211,7 +247,11 @@ namespace renegade::studio
             bridge::ProjectileAssetDocument d;
             d.name=projectileName_.GetText();d.speedMetresPerSecond=projectileSpeed_.GetValue();
             d.gravityScale=projectileGravity_.GetValue();d.lifetimeSeconds=projectileLifetime_.GetValue();
-            d.damage=projectileDraftDamage_;d.meshAssetId=projectileDraftMesh_;
+            d.damage=projectileDamage_.GetValue();d.meshAssetId=projectileDraftMesh_;
+            d.flightEffects=ProjectileEffectControls();
+            d.impactEffect=static_cast<bridge::ProjectileEffectKind>(projectileImpactEffect_.GetSelected());
+            d.stickOnImpact=projectileImpactMode_.GetSelected()==1;
+            d.stuckLifetimeSeconds=projectileStuckLife_.GetValue();d.embedDepthMetres=projectileEmbedDepth_.GetValue();
             d.visualScale=projectileVisualScale_.GetValue();
             d.visualRotationDegrees={projectileRotationX_.GetValue(),projectileRotationY_.GetValue(),projectileRotationZ_.GetValue()};
             const auto projectId=projectileEditorProject_;const auto target=equipmentPlayer_;
@@ -260,7 +300,11 @@ namespace renegade::studio
                     bindings.erase(std::remove_if(bindings.begin(),bindings.end(),
                         [action](const auto& binding){return binding.action==action;}),bindings.end());
                     const auto socketRow=projectileSocket_.GetSelectedUserdata();
-                    if(!id.empty())bindings.push_back({action,id,socketRow<projectileSocketNames_.size()?projectileSocketNames_[socketRow]:std::string{}});
+                    const auto secondRow=projectileSecondSocket_.GetSelectedUserdata();
+                    if(!id.empty())bindings.push_back({action,id,
+                        socketRow<projectileSocketNames_.size()?projectileSocketNames_[socketRow]:std::string{},
+                        projectileReleaseTime_.GetValue(),unsigned(std::max(0,projectileSocketPolicy_.GetSelected())),
+                        secondRow<projectileSocketNames_.size()?projectileSocketNames_[secondRow]:std::string{}});
                     const auto saved=bridge::SaveEquipmentAsset(project.rootPath,projectId,item.equipment);
                     if(!saved.succeeded){projectileSummary_.SetText(saved.error);return;}
                     if(offHand)settings.offHandEquipmentAssetId=saved.document.equipment.assetId;
@@ -277,6 +321,30 @@ namespace renegade::studio
         GetGUI().AddWidget(&weaponProjectilePanel_);GetGUI().AddWidget(&projectileCreatePanel_);
     }
 
+    void StudioRenderPath::SetProjectileEffectControls(const bridge::ProjectileAssetDocument& d)
+    {
+        projectileDamage_.SetValue(d.damage);
+        projectileImpactMode_.SetSelectedWithoutCallback(d.stickOnImpact?1:0);
+        projectileStuckLife_.SetValue(d.stuckLifetimeSeconds);projectileEmbedDepth_.SetValue(d.embedDepthMetres);
+        projectileImpactEffect_.SetSelectedWithoutCallback(int(d.impactEffect));
+        projectileEffectA_.SetSelectedWithoutCallback(d.flightEffects.empty()?0:int(d.flightEffects[0].kind));
+        projectileEffectB_.SetSelectedWithoutCallback(d.flightEffects.size()<2?0:int(d.flightEffects[1].kind));
+        const auto layer=d.flightEffects.empty()?bridge::ProjectileEffectLayer{}:d.flightEffects[0];
+        projectileEffectSize_.SetValue(layer.sizeMetres);projectileEffectRate_.SetValue(layer.particlesPerSecond);
+        projectileEffectLife_.SetValue(layer.particleLifeSeconds);projectileEffectOffset_.SetValue(layer.offset[2]);
+    }
+    std::vector<bridge::ProjectileEffectLayer> StudioRenderPath::ProjectileEffectControls() const
+    {
+        std::vector<bridge::ProjectileEffectLayer> layers;
+        for(const auto kind:{projectileEffectA_.GetSelected(),projectileEffectB_.GetSelected()})
+            if(kind>0) {
+                bridge::ProjectileEffectLayer layer;layer.kind=static_cast<bridge::ProjectileEffectKind>(kind);
+                layer.sizeMetres=projectileEffectSize_.GetValue();layer.particlesPerSecond=projectileEffectRate_.GetValue();
+                layer.particleLifeSeconds=projectileEffectLife_.GetValue();layer.offset[2]=projectileEffectOffset_.GetValue();
+                layers.push_back(layer);
+            }
+        return layers;
+    }
     void StudioRenderPath::UpdateProjectilePreview(float dt)
     {
         if (!projectileCreatePanel_.IsVisible() || !session_ ||
@@ -334,11 +402,9 @@ namespace renegade::studio
             projectilePreview_->SetModelAppearance(scale,rotation);
             if (first) {projectilePreview_->FitModel();projectilePreview_->SetView(XM_PIDIV2,0);}
             const auto size=projectilePreview_->ModelSize();
-            projectilePreviewInfo_.SetText("Model size: "+ProjectileFlightLabel(size.x*scale)+" x "+
+            projectilePreviewInfo_.SetText("Size: "+ProjectileFlightLabel(size.x*scale)+" x "+
                 ProjectileFlightLabel(size.y*scale)+" x "+ProjectileFlightLabel(size.z*scale)+" m\n"+
-                "Left-drag: orbit | Right-drag: pan | Wheel: zoom\n"+
-                "FIT resets to side view: tip points right (+Z flight).\n"+
-                "Moving the view does not change saved model orientation.");
+                "LMB orbit / RMB pan / Wheel zoom");
         }
         const auto pointer=wi::input::GetPointer();
         const auto pos=projectilePreviewImage_.GetPos();
@@ -361,6 +427,7 @@ namespace renegade::studio
             projectilePreviewPointer_={pointer.x,pointer.y};
         }
         if (inside && pointer.z!=0) projectilePreview_->Zoom(std::pow(0.85f,std::clamp(pointer.z,-8.0f,8.0f)));
+        projectilePreview_->SetProjectileEffects(ProjectileEffectControls());
         if (projectilePreview_->NeedsRender()) {
             projectilePreview_->PreUpdate();projectilePreview_->Update(dt);
         }
@@ -400,7 +467,7 @@ namespace renegade::studio
         projectileStandaloneEditor_=true;
         projectileEditorProject_=session_->Projects().CurrentProject().projectId;
         const auto d=bridge::MakeProjectilePreset(bridge::ProjectilePreset::Arrow);
-        projectileDraftDamage_=d.damage;projectileDraftMesh_.clear();
+        projectileDraftDamage_=d.damage;SetProjectileEffectControls(d);projectileDraftMesh_.clear();
         projectilePreset_.SetSelectedWithoutCallback(1);projectileName_.SetText(d.name);
         projectileSpeed_.SetValue(d.speedMetresPerSecond);projectileGravity_.SetValue(d.gravityScale);
         projectileLifetime_.SetValue(d.lifetimeSeconds);projectileVisualScale_.SetValue(1);
@@ -452,25 +519,40 @@ namespace renegade::studio
         if(!session_||!session_->Projects().HasProject()||
            session_->Projects().CurrentProject().projectId!=equipmentProject_)return;
         const auto& project=session_->Projects().CurrentProject();std::string error;
+        const bool preserveDraft=projectileSocket_.GetItemCount()>0;
+        const float previousRelease=projectileReleaseTime_.GetValue();
+        const int previousPolicy=projectileSocketPolicy_.GetSelected();
+        std::string previousSecond;
+        if(projectileSecondSocket_.GetSelectedUserdata()<projectileSocketNames_.size())
+            previousSecond=projectileSocketNames_[projectileSecondSocket_.GetSelectedUserdata()];
         std::string previousSocket;
         if(projectileSocket_.GetSelectedUserdata()<projectileSocketNames_.size())
             previousSocket=projectileSocketNames_[projectileSocket_.GetSelectedUserdata()];
-        projectileSocket_.ClearItems();projectileSocketNames_={""};
+        projectileSocket_.ClearItems();projectileSecondSocket_.ClearItems();projectileSocketNames_={""};
+        projectileSecondSocket_.AddItem("None",0);
+        projectileSocketPolicy_.SetSelectedWithoutCallback(preserveDraft?previousPolicy:0);
+        projectileReleaseTime_.SetValue(preserveDraft?previousRelease:0);
+        std::string secondSocket=preserveDraft?previousSecond:std::string{};
         projectileSocket_.AddItem("Camera aim (legacy)",0);
         const auto settings=bridge::CapturePlayerControllerSettings(session_->Scenes().GetScene(),equipmentPlayer_);
         const auto equipmentId=projectileWeapon_.GetSelected()==1?settings.offHandEquipmentAssetId:settings.primaryEquipmentAssetId;
         bridge::EquipmentAssetDocument equipment;bridge::FirstPersonAssemblySettings assembly;
         if(bridge::LoadEquipmentAsset(project.rootPath,project.projectId,equipmentId,equipment,error)) {
-            if(previousSocket.empty()&&!projectileActions_.empty())
+            if(!projectileActions_.empty())
                 for(const auto& binding:equipment.equipment.projectiles)
-                    if(binding.action==projectileActions_[std::max(0,projectileAction_.GetSelected())])
-                        previousSocket=binding.launchSocketName;
+                    if(!preserveDraft && binding.action==projectileActions_[std::max(0,projectileAction_.GetSelected())])
+                    {
+                        if(previousSocket.empty())previousSocket=binding.launchSocketName;secondSocket=binding.secondSocketName;
+                        projectileReleaseTime_.SetValue(binding.releaseSeconds);
+                        projectileSocketPolicy_.SetSelectedWithoutCallback(int(binding.socketPolicy));
+                    }
             std::string socketError;
             if(bridge::FirstPersonAssemblyService().ReadSettings(project.rootPath,project.projectId,
                     equipment.equipment.presentationAssetId,assembly,socketError))
                 for(const auto& socket:assembly.launchSockets) {
                     projectileSocketNames_.push_back(socket.name);
                     projectileSocket_.AddItem(socket.name,projectileSocketNames_.size()-1);
+                    projectileSecondSocket_.AddItem(socket.name,projectileSocketNames_.size()-1);
                 }
         }
         if(!previousSocket.empty()&&std::find(projectileSocketNames_.begin(),projectileSocketNames_.end(),previousSocket)==projectileSocketNames_.end()) {
@@ -481,6 +563,10 @@ namespace renegade::studio
         for(size_t i=1;i<projectileSocketNames_.size();++i)
             if(projectileSocketNames_[i]==previousSocket)socketSelection=int(i);
         projectileSocket_.SetSelectedWithoutCallback(socketSelection);
+        int secondSelection=0;
+        for(size_t i=1;i<projectileSocketNames_.size();++i)
+            if(projectileSocketNames_[i]==secondSocket)secondSelection=int(i);
+        projectileSecondSocket_.SetSelectedWithoutCallback(secondSelection);
         const auto items=bridge::ListProjectileAssets(project.rootPath,project.projectId,error);
         const auto search=LowerProjectileSearch(projectileSearch_.GetText());int selected=0;
         std::map<std::string,unsigned> labels;

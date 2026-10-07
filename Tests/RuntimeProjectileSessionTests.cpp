@@ -101,6 +101,23 @@ int main()
     const auto transformsBefore=scene->transforms.GetCount();
     if(!session.Launch(bullet,source,{0,0,0},{0,0,1},id) ||
         !visuals.Spawn(*scene,bullet.assetId,id))return fail("visual instantiate");
+    runtime::RuntimeEquipmentLoadout release;
+    runtime::RuntimeEquipmentLoadout::ProjectileRequest delayed{bullet.assetId,bridge::EquipmentAction::PrimaryUse,bullet,"Left",.2f,1,"Right"};
+    release.ScheduleProjectile(delayed,101);
+    if(!release.ReleaseProjectiles(101,.1f,false).empty())return fail("release marker early");
+    auto first=release.ReleaseProjectiles(101,.2f,false);
+    if(first.size()!=1||first[0].launchSocketName!="Left"||
+       !release.ReleaseProjectiles(101,.5f,false).empty())return fail("release marker exactly once");
+    release.ScheduleProjectile(delayed,101);
+    auto second=release.ReleaseProjectiles(101,.3f,false);
+    if(second.size()!=1||second[0].launchSocketName!="Right")return fail("accepted PSP alternation");
+    delayed.socketPolicy=2;release.ScheduleProjectile(delayed,101);
+    if(release.ReleaseProjectiles(101,.3f,false).size()!=2)return fail("both PSPs");
+    release.ScheduleProjectile(delayed,101);
+    if(!release.ReleaseProjectiles(102,.3f,false).empty()||!release.scheduledProjectiles.empty())
+        return fail("changed animation retained pending projectile");
+    release.ScheduleProjectile(delayed,101);
+    if(!release.ReleaseProjectiles(101,.3f,true).empty())return fail("cancelled release");
     const auto clearFlight=[](const auto&,const auto&,const auto&){return bridge::ProjectileQueryResult{};};
     if(!session.Update(.5f,clearFlight,impacts))return fail("visual movement");
     if(session.meshProjectiles.count(id)!=1 || session.traces.empty() ||
@@ -116,6 +133,39 @@ int main()
         return fail("visual retirement leaks hierarchy");
     visuals.Reset(*scene);
     if(!visuals.templates.empty())return fail("visual template reset");
+    auto stickyModel=wi::allocator::make_shared<wi::scene::Scene>();
+    stickyModel->objects.Create(stickyModel->Entity_CreateTransform("Sticky arrow"));
+    bullet.stickOnImpact=true;bullet.stuckLifetimeSeconds=1;
+    visuals.templates.emplace(bullet.assetId,runtime::RuntimeProjectileVisuals::Template{std::move(stickyModel),bullet});
+    if(!session.Launch(bullet,source,{0,0,0},{0,0,1},id)||
+       !visuals.Spawn(*scene,bullet.assetId,id))return fail("sticky spawn");
+    bridge::ProjectileImpact stick;stick.projectileId=id;stick.contact.position={0,0,5};stick.incomingVelocity={0,0,1};
+    session.Reset();visuals.Impact(*scene,stick,wall);visuals.Sync(*scene,session.simulation);
+    if(visuals.retained.size()!=1||visuals.instances.size()!=0||
+       scene->hierarchy.GetComponent(visuals.retained[0].root)->parentID!=wall)
+        return fail("stick at exact hit object");
+    const auto stuck=visuals.retained[0].root;
+    auto* wallTransform=scene->transforms.GetComponent(wall);
+    wallTransform->Translate(XMFLOAT3{2,0,0});wallTransform->UpdateTransform();
+    wi::jobsystem::Initialize();
+    wi::jobsystem::context ctx;scene->RunTransformUpdateSystem(ctx);wi::jobsystem::Wait(ctx);
+    scene->RunHierarchyUpdateSystem(ctx);wi::jobsystem::Wait(ctx);
+    if(std::abs(scene->transforms.GetComponent(stuck)->GetPosition().x-2)>.001f)
+        return fail("stuck projectile follows moving object");
+    visuals.Sync(*scene,session.simulation,0);
+    if(visuals.retained.size()!=1)return fail("pause retained lifetime");
+    visuals.Sync(*scene,session.simulation,1.1f);
+    if(!visuals.retained.empty()||scene->transforms.Contains(stuck))return fail("stuck expiry");
+    bridge::ProjectileEffectLayer flame;flame.kind=bridge::ProjectileEffectKind::Flame;
+    const auto effect=bridge::CreateProjectileEffectEmitter(*scene,flame,{0,0,0});
+    if(!scene->emitters.Contains(effect)||scene->emitters.GetComponent(effect)->GetMaxParticleCount()!=256)
+        return fail("native bounded effect emitter");
+    scene->Entity_Remove(effect);
+    const auto burstEffect=bridge::CreateProjectileEffectEmitter(*scene,flame,{0,0,0},true);
+    const auto* burstEmitter=scene->emitters.GetComponent(burstEffect);
+    if(!burstEmitter || burstEmitter->burst_on_create!=48 || !burstEmitter->IsInactive())
+        return fail("impact burst stays inactive until native update initializes buffers");
+    scene->Entity_Remove(burstEffect);visuals.Reset(*scene);
     std::cout<<"Runtime projectile acceptance, native contact, visuals, pause and reset PASS\n";
     return 0;
 }

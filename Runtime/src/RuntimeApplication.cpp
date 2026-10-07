@@ -493,7 +493,8 @@ namespace renegade::runtime
                             : request.action == bridge::EquipmentAction::Release &&
                               playerViewAnimation_.pairedAssembly && playerViewAnimation_.oneShotPlaying &&
                               playerViewAnimation_.activeAction == PlayerViewAction::Release;
-                        if (!paused_ && accepted) pendingProjectileShots_.push_back(std::move(request));
+                        if (!paused_ && accepted)
+                            playerEquipment_.ScheduleProjectile(std::move(request),playerViewAnimation_.activeClip);
                     }
                     if(playerEquipment_.releasePresentation)playerEquipment_.chainedReleasedCharge=false;
                     const auto& hand=playerViewAnimation_.handLayers;
@@ -544,11 +545,13 @@ namespace renegade::runtime
         }
         else
         {
-            if (!projectiles_.simulation.Records().empty() || !projectiles_.markers.empty()) {
+            if (!projectiles_.simulation.Records().empty() || !projectiles_.markers.empty() ||
+                !projectileVisuals_.roots.empty() || projectileVisuals_.EffectCount()>0) {
                 projectileVisuals_.Reset(scenes_.GetScene());
                 projectiles_.Reset();
             }
             pendingProjectileShots_.clear();
+            playerEquipment_.scheduledProjectiles.clear();
             renderer_.SetProjectileAim(false);
             renderer_.SetProjectileContacts({});
             renderer_.SetInteractionPrompt({});
@@ -573,6 +576,14 @@ namespace renegade::runtime
             return;
         }
         auto& scene = scenes_.GetScene();
+        if(dt>0) {
+            const auto* clip=scene.animations.GetComponent(playerViewAnimation_.activeClip);
+            const float time=playerViewAnimation_.pairedAssembly ? playerViewAnimation_.pairedTime :
+                clip ? clip->timer-clip->start : 0;
+            auto due=playerEquipment_.ReleaseProjectiles(playerViewAnimation_.activeClip,time,!playerViewAnimation_.equipped);
+            pendingProjectileShots_.insert(pendingProjectileShots_.end(),
+                std::make_move_iterator(due.begin()),std::make_move_iterator(due.end()));
+        }
         const ProjectileOwnerBinding owner{RuntimePlayerKnowledgeId, player_.entity, &projectileVisuals_.roots};
         const auto emit = [this](bridge::GameplayEvent event, std::string& error) {
             diagnosticService_.Record(bridge::DiagnosticSeverity::Info,
@@ -628,16 +639,21 @@ namespace renegade::runtime
         }
         pendingProjectileShots_.clear();
         std::vector<bridge::ProjectileImpact> impacts;
+        std::map<std::uint64_t,wi::ecs::Entity> impactParents;
         const auto query = [&](const bridge::ProjectileRecord& record,
                                const bridge::ProjectileVector& from,
                                const bridge::ProjectileVector& to) {
-            return QueryProjectileSceneSegment(scene, characterAiState_, owner, record, from, to);
+            wi::ecs::Entity hit=wi::ecs::INVALID_ENTITY;
+            auto result=QueryProjectileSceneSegment(scene, characterAiState_, owner, record, from, to,~0u,&hit);
+            if(result.status==bridge::ProjectileQueryStatus::Hit)impactParents[record.id]=hit;
+            return result;
         };
         if (!projectiles_.Update(dt, query, impacts)) {
             diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
                 "runtime.projectile", "projectile.update_failed", projectiles_.lastError);
         }
         for (const auto& impact : impacts) {
+            projectileVisuals_.Impact(scene,impact,impactParents[impact.projectileId]);
             std::string ignored;
             const auto& p = impact.contact.position;
             (void)emit({0, "projectile.impact",
@@ -651,7 +667,7 @@ namespace renegade::runtime
             (void)ApplyProjectileCharacterImpact(scene, characterAiState_,
                 characterPerceptionState_, combatState_, impact, emit);
         }
-        projectileVisuals_.Sync(scene,projectiles_.simulation);
+        projectileVisuals_.Sync(scene,projectiles_.simulation,dt);
         // Basic flight/contact feedback uses Wicked's bounded native primitives.
         // Runtime defaults debug drawing off; these confirmed contacts opt in.
         if (!playerEquipment_.resolvedProjectiles.empty())

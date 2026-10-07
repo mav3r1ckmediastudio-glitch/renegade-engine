@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <string>
@@ -23,6 +24,10 @@ struct EquipmentProjectileBinding {
     EquipmentAction action = EquipmentAction::PrimaryUse;
     std::string projectileAssetId;
     std::string launchSocketName;
+    float releaseSeconds = 0;
+    // 0: first PSP, 1: alternate accepted shots, 2: both PSPs.
+    unsigned socketPolicy = 0;
+    std::string secondSocketName;
 };
 struct EquipmentDefinition {
     std::string assetId, name, presentationAssetId;
@@ -51,6 +56,15 @@ inline bool ValidateEquipmentDefinition(const EquipmentDefinition& item) {
            (binding.action!=EquipmentAction::PrimaryUse&&binding.action!=EquipmentAction::Release&&
             binding.action!=EquipmentAction::Cast&&binding.action!=EquipmentAction::AlternateUse&&
             binding.action!=EquipmentAction::Use))return false;
+        if(!std::isfinite(binding.releaseSeconds)||binding.releaseSeconds<0||binding.releaseSeconds>60||
+           binding.socketPolicy>2||binding.secondSocketName.size()>64||
+           binding.secondSocketName.find_first_of("\r\n\t")!=std::string::npos||
+           (binding.socketPolicy && (binding.launchSocketName.empty()||binding.secondSocketName.empty()||
+                                   binding.launchSocketName==binding.secondSocketName)))return false;
+        const auto definition=std::find_if(item.actions.begin(),item.actions.end(),
+            [&](const auto& a){return a.action==binding.action;});
+        if(binding.releaseSeconds>0 && (definition==item.actions.end()||
+            binding.releaseSeconds>=definition->activeSeconds))return false;
         projectileSeen[index]=true;
     }
     return true;
