@@ -118,14 +118,8 @@ namespace renegade::runtime
                 wi::renderer::DrawSphere(wi::primitive::Sphere(
                     ProjectileNativeVector(record.launch.position), 0.025f),
                     {1, 0.75f, 0.2f, 1}, true);
-            for (const auto& marker : markers) {
-                auto position = ProjectileNativeVector(marker.contact.position);
-                position.x += marker.contact.normal.x*0.015f;
-                position.y += marker.contact.normal.y*0.015f;
-                position.z += marker.contact.normal.z*0.015f;
-                wi::renderer::DrawSphere(wi::primitive::Sphere(position, 0.06f),
-                    {1, 0.4f, 0.1f, 1}, true);
-            }
+            // Contact markers remain in diagnostics; native surface VFX/decals present hits.
+
         }
     };
 }

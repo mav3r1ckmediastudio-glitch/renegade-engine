@@ -343,3 +343,18 @@ else()
     message(STATUS
         "Gate 2C identity-handshake media is not present in this checkout; runtime will fail soft and owner test packaging must inject both accepted assets under Content/startup/.")
 endif()
+
+# Optional private supplied impact library. Governed resources are adopted into
+# each creator project; licensed art is supplied by the distributor, not Git.
+set(RENEGADE_IMPACT_DEFAULTS_DIRECTORY "" CACHE PATH
+    "Folder containing the private ImpactDefaults.renegade library")
+if(RENEGADE_IMPACT_DEFAULTS_DIRECTORY)
+    if(NOT EXISTS "${RENEGADE_IMPACT_DEFAULTS_DIRECTORY}/ImpactDefaults.renegade")
+        message(FATAL_ERROR "Impact defaults directory has no ImpactDefaults.renegade descriptor")
+    endif()
+    add_custom_command(TARGET RenegadeStudio POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${RENEGADE_IMPACT_DEFAULTS_DIRECTORY}"
+            "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ImpactDefaults"
+        VERBATIM)
+endif()

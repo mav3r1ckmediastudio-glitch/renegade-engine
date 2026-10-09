@@ -20,6 +20,7 @@
 #include "RuntimeScreen.h"
 #include "RuntimeScriptRuntime.h"
 #include "renegade/bridge/AudioService.h"
+#include "renegade/bridge/ImpactAudioService.h"
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/DiagnosticService.h"
 #include "renegade/bridge/GameplayInputService.h"
@@ -47,6 +48,8 @@ namespace renegade::runtime
         void SetMeleePrompt(std::string prompt) { meleePrompt_=std::move(prompt); }
         void SetProjectileAim(bool enabled) { projectileAim_=enabled; }
         void SetProjectileContacts(std::vector<XMFLOAT2> contacts) { projectileContacts_=std::move(contacts); }
+        void ConfirmTargetHit() { hitConfirmSeconds_=0.12f; }
+        void ClearHitConfirmation() { hitConfirmSeconds_=0; }
         void Load() override;
         void Update(float dt) override;
         void Compose(wi::graphics::CommandList cmd) const override;
@@ -63,6 +66,7 @@ namespace renegade::runtime
         std::string meleePrompt_;
         bool projectileAim_ = false;
         std::vector<XMFLOAT2> projectileContacts_;
+        float hitConfirmSeconds_ = 0;
         std::uint64_t renderSettingsSceneRevision_ = 0;
     };
 
@@ -119,6 +123,7 @@ namespace renegade::runtime
         RuntimeEquipmentLoadout playerEquipment_;
         RuntimeProjectileSession projectiles_;
         RuntimeProjectileVisuals projectileVisuals_;
+        bridge::ImpactAudioPlayer impactAudio_;
         std::vector<RuntimeEquipmentLoadout::ProjectileRequest> pendingProjectileShots_;
         bridge::PlayerControllerSettings playerSettings_;
         bridge::NavigationRuntimeState navigationState_;

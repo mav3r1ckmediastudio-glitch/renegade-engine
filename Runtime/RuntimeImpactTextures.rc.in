@@ -1,0 +1,7 @@
+#include <windows.h>
+7301 RCDATA "@CMAKE_SOURCE_DIR@/Runtime/Content/Effects/Impacts/ConcreteDust.png"
+
+7302 RCDATA "@CMAKE_SOURCE_DIR@/Runtime/Content/Effects/Impacts/BloodSpray.png"
+7303 RCDATA "@CMAKE_SOURCE_DIR@/Runtime/Content/Effects/Impacts/BloodSplat.png"
+
+7304 RCDATA "@CMAKE_SOURCE_DIR@/Runtime/Content/Effects/Impacts/BloodSprayAtlas.png"

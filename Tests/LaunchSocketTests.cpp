@@ -5,9 +5,9 @@
 #include <limits>
 using namespace renegade;
 int main() {
- std::cerr<<"initializing jobs\n";
- wi::jobsystem::Initialize();
- std::cerr<<"jobs ready\n";
+ // Socket semantics are deterministic and do not require worker scheduling.
+ // Keep Wicked jobs uninitialized: Execute/Dispatch use their synchronous mode.
+ // Threaded hierarchy scheduling remains covered by Runtime/native validation.
  const auto update=[](wi::scene::Scene& native) {
   wi::jobsystem::context ctx;
   native.RunTransformUpdateSystem(ctx);wi::jobsystem::Wait(ctx);
@@ -72,6 +72,20 @@ int main() {
  };
  if(runtime::ResolveProjectileMuzzleAim(projectile,source,{0,0,0},{0,0,1},{0,0,.6f},
     {0,0,1},blocked,origin,dir,error))return fail("blocked query admitted");
+ bridge::ProjectileQueryResult ray;
+ float observedRange=0;
+ const auto hitscan=[&](const auto&,const auto& from,const auto& to) {
+  const float dx=to.x-from.x,dy=to.y-from.y,dz=to.z-from.z;
+  observedRange=std::sqrt(dx*dx+dy*dy+dz*dz);
+  bridge::ProjectileQueryResult r;r.status=bridge::ProjectileQueryStatus::Hit;
+  r.contact.position=to;return r;
+ };
+ if(!runtime::QueryHitscan(source,{0,0,0},{0,0,2},75,hitscan,ray,error)||
+    ray.status!=bridge::ProjectileQueryStatus::Hit||std::abs(observedRange-75)>.001f)
+  return fail("authored hitscan range");
+ if(runtime::QueryHitscan(source,{0,0,0},{0,0,1},0,hitscan,ray,error)||
+    runtime::QueryHitscan(source,{0,0,0},{0,0,1},10,blocked,ray,error))
+  return fail("invalid or blocked hitscan admitted");
  // Input/output aliasing is supported by the Runtime call site.
  origin={0,0,0};dir={0,0,1};
  if(!runtime::ResolveProjectileMuzzleAim(projectile,source,origin,dir,{0,0,.6f},

@@ -1,0 +1,19 @@
+# Blood artwork candidate
+Created with the built-in OpenAI image generation tool on 2026-10-09. Original transparent RGBA PNGs retained without image editing or resizing. These are single-frame candidate sprites, not simulation-derived animation sheets. Visual realism is not yet accepted by owner.
+
+BloodSpray.png: 761576 bytes; SHA-256 71cf92a15c0d939a5f0e2066f6f0acc9f71cbdcddd9830a49965e12a86739784.
+BloodSplat.png: 568730 bytes; SHA-256 d8f11d0c4d1f796a9802869a63309eca3f5cde9149c922657fa8a6951b747a4c.
+Embedded Runtime resource IDs 7302 and 7303 respectively, decoded by Wicked ResourceManager.
+
+Spray prompt:
+Use case: photorealistic-natural. Asset type: realistic game VFX single particle sprite, transparent RGBA. High-speed macro photograph of an isolated small burst of dark crimson blood-like viscous liquid suspended in air, no person, no injury, no body. Fine branching liquid ligaments and separated small droplets, asymmetric elongated compact spray, physically plausible fluid surface tension. Sparse fragmented liquid, not a dense solid blob, no mist cloud. Neutral diffuse light, restrained small wet highlights, deep red burgundy albedo, no glow, no pink or orange, no cartoon, no painting. Centered square 1024 image, all droplets contained with 15 percent transparent padding. True alpha transparent backdrop, no floor, no environment, no text, no checkerboard. Single sprite only, not a sheet.
+
+Splat prompt:
+Use case: photorealistic-natural. Asset type: realistic game impact blood decal, single transparent RGBA sprite. Orthographic top-down macro image of an irregular small wet dark crimson blood-like liquid splatter, no body or injury. Several connected uneven thin splashes with tiny satellite droplets, realistic fluid edges and fine branching rivulets. Modest small impact stain, not a large pool; asymmetrical detailed uneven edges. Dark red burgundy diffuse colour, restrained wet sheen under broad neutral light, no exaggerated bright highlights, no black outline, no cartoon, no red smoke. Square 1024 image with 15 percent completely transparent margin, actual transparent alpha background, no physical floor or background surface baked into image, no text, no watermark, no checkerboard. One splatter only.
+
+Sprite spray uses native SOFT_LIGHTING, alpha blending and zero emission. Surface stains use the coloured splatter under native decal lighting with zero emission. Shared native mesh droplets provide trajectory and scene ray collision; source Character and transient visual meshes are ignored. No-body wound decals or skinned attachment are claimed. Dedicated melee integration and multi-frame fluid animation remain follow-up work.
+
+## Animated spray revision — 2026-10-09
+Owner rejected static spray and reported missing floor stains. BloodSprayAtlas.png is original built-in imagegen RGBA output, 1254x1254, 1,121,053 bytes, SHA256 b1447ad2dd702d1707b4078630bd81d9ce137a57c87b5061922ea82430bb426e. Original alpha and dimensions retained. Uniform normalized 4x4 cell coordinates (canvas dimension is not divisible by four; transparent gutters separate artwork). 16 cells in row-major order, played over particle lifetime with native frame blending, no repeat. RCDATA 7304. Original single-frame BloodSpray.png retained as earlier candidate/provenance, no longer used for Character bursts.
+Generation brief: Transparent 4x4, 16 successive samples of the same dark crimson viscous blood jet: emerging compact liquid, unfurling branching sheets, breakup into weighted droplets, near-empty final frame. Fixed camera/scale/origin, equal cells, transparent gutters, no text/dividers/body/wounds/floor, photographic rather than stylised.
+This is generated temporal artwork, not an offline fluid simulation bake. Temporal coherence and final realism require native rendered inspection and owner judgement. No parity claim with another game.

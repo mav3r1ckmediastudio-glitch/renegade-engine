@@ -1,4 +1,5 @@
 #include "renegade/bridge/WindowsGameBuildProjectService.h"
+#include "renegade/bridge/ImpactAudioService.h"
 
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/ResourceAssetDependencyService.h"
@@ -311,6 +312,8 @@ namespace renegade::bridge
                 error = "Build Windows Game dependency discovery failed: " + error;
                 return false;
             }
+            if (!AddImpactAudioDependencies(project.rootPath, project.projectId, collector, error))
+                return false;
             if (!AddImportedSourceFreshnessRoots(project, collector, error))
                 return false;
 

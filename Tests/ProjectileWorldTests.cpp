@@ -114,8 +114,9 @@ int main()
     cache.back().layerMask = 0;
     if (!simulation.Launch(launch, id, error) ||
         !simulation.Update(0.2f, query, impacts, error) ||
-        impacts.size() != 1 || impacts[0].contact.targetSubjectId != targetId)
-        return fail("Character child target resolution");
+        impacts.size() != 1 || impacts[0].contact.targetSubjectId != targetId ||
+        impacts[0].contact.surfaceType != bridge::ImpactSurfaceType::Character)
+        return fail("Character child target resolution/classification");
     damage = runtime::ApplyProjectileCharacterImpact(
         *scene, characters, perception, combat, impacts[0], emitter);
     if (!damage.damageApplied || native.health != 90 ||
@@ -185,6 +186,7 @@ int main()
         return fail("dead target damaged again");
 
     const auto material = scene->Entity_CreateTransform("Surface Material");
+    scene->materials.Create(material);
     const auto materialId = bridge::GenerateStableId();
     if (!bridge::AssignPersistentEntityId(*scene, material, materialId, error))
         return fail("material identity");
@@ -197,6 +199,114 @@ int main()
     surfaceHit.subsetIndex = 0;
     if (runtime::ProjectileContactSurface(*scene, surfaceHit) != materialId)
         return fail("material subset identity");
+    if (!bridge::ApplyMaterialImpactSurface(
+            *scene, material, bridge::ImpactSurfaceType::Metal) ||
+        bridge::CaptureMaterialImpactSurface(*scene, material) !=
+            bridge::ImpactSurfaceType::Metal ||
+        runtime::ProjectileContactSurfaceType(
+            *scene, characters, surfaceHit, {}) !=
+            bridge::ImpactSurfaceType::Metal)
+        return fail("authored impact surface classification");
+    bridge::SetMaterialImpactSurfaceCommand surfaceCommand(
+        *scene, material, bridge::ImpactSurfaceType::Wood);
+    if (!surfaceCommand.Execute() ||
+        bridge::CaptureMaterialImpactSurface(*scene, material) !=
+            bridge::ImpactSurfaceType::Wood)
+        return fail("impact surface command execute");
+    surfaceCommand.Undo();
+    if (bridge::CaptureMaterialImpactSurface(*scene, material) !=
+        bridge::ImpactSurfaceType::Metal)
+        return fail("impact surface command undo");
+    // Two instances share one mesh and material: authoring one must not leak.
+    const auto secondObject = scene->Entity_CreateTransform("Shared mesh instance");
+    scene->objects.Create(secondObject).meshID = meshEntity;
+    bridge::SetObjectImpactSurfaceCommand objectSurface(
+        *scene, meshEntity, bridge::ImpactSurfaceType::Wood);
+    if (!objectSurface.Execute() ||
+        runtime::ProjectileContactSurfaceType(*scene, characters, surfaceHit, {}) !=
+            bridge::ImpactSurfaceType::Wood ||
+        bridge::ResolveObjectImpactSurface(*scene, secondObject, 0) !=
+            bridge::ImpactSurfaceType::Metal ||
+        scene->meshes.GetComponent(meshEntity)->subsets[0].materialID != material ||
+        bridge::CaptureMaterialImpactSurface(*scene, material) !=
+            bridge::ImpactSurfaceType::Metal)
+        return fail("object surface leaks across shared mesh/material");
+    objectSurface.Undo();
+    if (bridge::HasObjectImpactSurface(*scene, meshEntity) ||
+        bridge::ResolveObjectImpactSurface(*scene, meshEntity, 0) !=
+            bridge::ImpactSurfaceType::Metal)
+        return fail("undo does not restore absence/inherited surface");
+    if (!objectSurface.Execute())
+        return fail("object surface redo");
+    bridge::SetObjectImpactSurfaceCommand genericSurface(
+        *scene, meshEntity, bridge::ImpactSurfaceType::Default);
+    if (!genericSurface.Execute() ||
+        bridge::ResolveObjectImpactSurface(*scene, meshEntity, 0) !=
+            bridge::ImpactSurfaceType::Default)
+        return fail("explicit Default must not inherit Metal");
+    genericSurface.Undo();
+    if (bridge::ResolveObjectImpactSurface(*scene, meshEntity, 0) !=
+            bridge::ImpactSurfaceType::Wood ||
+        bridge::ApplyObjectImpactSurface(
+            *scene, meshEntity, bridge::ImpactSurfaceType::Character) ||
+        bridge::ApplyObjectImpactSurface(
+            *scene, material, bridge::ImpactSurfaceType::Metal))
+        return fail("object surface undo/authoring validation");
+    surfaceHit.subsetIndex = -1;
+    if (runtime::ProjectileContactSurfaceType(*scene, characters, surfaceHit, {}) !=
+            bridge::ImpactSurfaceType::Wood)
+        return fail("object surface must work without a mesh subset");
+    if (runtime::ProjectileContactSurfaceType(*scene, characters, surfaceHit, targetId) !=
+            bridge::ImpactSurfaceType::Character)
+        return fail("governed Character must retain automatic classification");
+
+    const auto assetRoot = scene->Entity_CreateTransform("Imported asset root");
+    scene->Component_Attach(secondObject, assetRoot);
+    bridge::SetObjectImpactSurfaceCommand assetSurface(
+        *scene, assetRoot, bridge::ImpactSurfaceType::Stone);
+    if (!assetSurface.Execute() ||
+        bridge::ResolveObjectImpactSurface(*scene, secondObject, 0) !=
+            bridge::ImpactSurfaceType::Stone ||
+        bridge::ResolveObjectImpactSurface(*scene, meshEntity, 0) !=
+            bridge::ImpactSurfaceType::Wood)
+        return fail("asset root surface must affect only its own descendants");
+    if (!bridge::ApplyObjectImpactSurface(
+            *scene, secondObject, bridge::ImpactSurfaceType::Glass) ||
+        bridge::ResolveObjectImpactSurface(*scene, secondObject, 0) !=
+            bridge::ImpactSurfaceType::Glass)
+        return fail("nearest selected object surface precedence");
+    assetSurface.Undo();
+    if (bridge::HasObjectImpactSurface(*scene, assetRoot))
+        return fail("asset root undo must restore absence");
+
+    // Native WISCENE archive roundtrip, not a custom persistence substitute.
+    {
+        auto authored = wi::allocator::make_shared<wi::scene::Scene>();
+        const auto persistedObject = authored->Entity_CreateTransform("Surface roundtrip");
+        authored->objects.Create(persistedObject);
+        const auto persistedId = bridge::GenerateStableId();
+        if (!bridge::AssignPersistentEntityId(*authored, persistedObject, persistedId, error) ||
+            !bridge::ApplyObjectImpactSurface(
+                *authored, persistedObject, bridge::ImpactSurfaceType::Glass))
+            return fail("roundtrip source");
+        wi::Archive archive;
+        authored->Serialize(archive);
+        archive.SetReadModeAndResetPos(true);
+        auto reopened = wi::allocator::make_shared<wi::scene::Scene>();
+        reopened->Serialize(archive);
+        bool found = false;
+        for (std::size_t i = 0; i < reopened->objects.GetCount(); ++i)
+        {
+            const auto entity = reopened->objects.GetEntity(i);
+            if (bridge::PersistentEntityId(*reopened, entity) == persistedId)
+            {
+                found = bridge::ResolveObjectImpactSurface(*reopened, entity) ==
+                    bridge::ImpactSurfaceType::Glass;
+            }
+        }
+        if (!found)
+            return fail("object surface lost in native scene save/reload");
+    }
     surfaceHit.subsetIndex = 99;
     if (!runtime::ProjectileContactSurface(*scene, surfaceHit).empty())
         return fail("invalid subset fallback");

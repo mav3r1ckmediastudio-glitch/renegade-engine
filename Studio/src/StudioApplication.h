@@ -25,6 +25,7 @@
 #include "renegade/bridge/PlayerViewGripService.h"
 #include "renegade/bridge/DecalProbeService.h"
 #include "renegade/bridge/MaterialService.h"
+#include "renegade/bridge/ImpactSurface.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/SceneComponentService.h"
 #include "renegade/bridge/RenderSettingsService.h"
@@ -617,6 +618,7 @@ namespace renegade::studio
         void ApplySelectedMaterialShader(
             wi::scene::MaterialComponent::SHADERTYPE shaderType);
         void ApplySelectedMaterialBlend(wi::enums::BLENDMODE blendMode);
+        void ApplySelectedMaterialImpactSurface(bridge::ImpactSurfaceType type);
         void ApplySelectedMaterialToggle(MaterialToggle toggle, bool value);
         void BeginMaterialSlider(MaterialField field);
         void PreviewMaterialSlider(MaterialField field, float value);
@@ -857,6 +859,8 @@ namespace renegade::studio
         SceneInspectorComboBox materialSelector_;
         SceneInspectorComboBox materialShaderType_;
         SceneInspectorComboBox materialBlendMode_;
+        wi::gui::Label objectSurfaceLabel_;
+        SceneInspectorComboBox materialImpactSurface_;
         wi::gui::Label materialCoreLabel_;
         SceneInspectorSlider materialBaseColorRed_;
         SceneInspectorSlider materialBaseColorGreen_;
@@ -1159,8 +1163,10 @@ namespace renegade::studio
         void UpdateProjectilePreview(float dt);
         void RefreshWeaponProjectileEditor();
         void RefreshProjectileChoices();
+        void RefreshProjectileEditorLayout();
+        void RefreshWeaponProjectileLayout();
         wi::gui::Window weaponProjectilePanel_, projectileCreatePanel_;
-        wi::gui::ComboBox projectileWeapon_, projectileAction_, projectileChoice_, projectilePreset_;
+        wi::gui::ComboBox projectileWeapon_, projectileAction_, projectileFireMode_, projectileChoice_, projectilePreset_;
         wi::gui::TextInputField projectileSearch_, projectileName_;
         wi::gui::Slider projectileSpeed_, projectileGravity_, projectileLifetime_;
         wi::gui::Button equipmentProjectile_, projectileAssign_, projectileNew_, projectileEditCopy_,
@@ -1176,7 +1182,20 @@ namespace renegade::studio
         wi::gui::Slider projectileVisualScale_, projectileRotationX_, projectileRotationY_, projectileRotationZ_;
         wi::gui::Button projectileImportMesh_, projectileSocketEdit_;
         wi::gui::ComboBox projectileSocket_, projectileSecondSocket_, projectileSocketPolicy_;
-        wi::gui::Slider projectileReleaseTime_;
+        wi::gui::Slider projectileReleaseTime_, projectileHitscanRange_, projectileHitscanDamage_;
+        wi::gui::ComboBox projectileReleaseMode_;
+        wi::gui::Button projectileAdvanced_;
+        wi::gui::Window projectileTimingPanel_;
+        wi::gui::Button projectileTimingOpen_, projectileTimingPlay_, projectileTimingMark_, projectileTimingUse_, projectileTimingClose_;
+        wi::gui::Slider projectileTimingCursor_, projectileTimingMarker_;
+        wi::gui::Label projectileTimingImage_, projectileTimingInfo_;
+        std::unique_ptr<ModelImportPreview> projectileTimingPreview_;
+        void OpenProjectileTiming();
+        void UpdateProjectileTiming(float dt);
+        float projectileTimingDuration_=0;
+        bool projectileAdvancedVisible_=false;
+        size_t projectileAvailableSocketCount_=0;
+        int projectileEditorLayout_=-1, projectileWeaponLayout_=-1;
         wi::gui::ComboBox projectileEffectA_, projectileEffectB_, projectileImpactEffect_, projectileImpactMode_;
         wi::gui::Slider projectileEffectSize_, projectileEffectRate_, projectileEffectLife_, projectileEffectOffset_,
             projectileDamage_, projectileStuckLife_, projectileEmbedDepth_;

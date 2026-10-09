@@ -1164,7 +1164,7 @@ explicit clavicle partitions, transient native per-hand clips and independent cl
 Runtime routes LMB Attack and RMB held Block only for a matching shared presentation.
 Fixed missing MOUSE_RIGHT press support in GameplayInputService.
 Owner requested camera-local 90-degree right yaw and sword 2cm lower in grip.
-Saved project: C:/Users/paulw/OneDrive/Desktop/renegade tests/SwordShieldTest.
+Saved project: <USER_HOME>/OneDrive/Desktop/renegade tests/SwordShieldTest.
 Launcher: Play Sword Shield Test.cmd. All 35 source clips retained; only Idle,
 Walk, Sprint, AttackLeft and BlockStart/Loop/End wired for tonight.
 Release bridge and Runtime builds pass. Alternate Studio build passes at
@@ -1401,3 +1401,261 @@ until the next native update so indirect GPU buffers exist before drawing.
 Retained arrows attach to the contacted native object's transform; transient
 instances, scheduled releases and particles clear on scene/reset transitions.
 See [the grouped gate evidence](P3_AUTHORED_PROJECTILES_GATE.md) for proof and limits.
+
+## Projectile progressive disclosure
+
+Studio owns transient Basic/Advanced state; hidden controls retain their draft
+values and use existing ProjectileAssetService and equipment transactions.
+Layout positions change only when the disclosure state changes: repeatedly
+setting native widget positions after GUI update invalidates cached dropdown
+geometry. Child visibility is reapplied after Window visibility propagation.
+New one-PSP bindings select that authored point; saved camera-origin choices,
+named points and multi-point policies remain explicit. Immediate/delayed release
+maps to existing releaseSeconds without a schema or Runtime change.
+
+## Visual release timing candidate
+Adds SET RELEASE IN ANIMATION to Weapon projectiles. Uses saved equipment action animation and production FirstPersonAssemblyService in a private ModelImportPreview. Preview cursor scrubs the synchronized assembly; release marker scrubs to its pose; Mark current pose copies playhead time. Use release time transfers marker seconds to the existing draft releaseSeconds control. Cancel discards marker changes; Apply to this player and Save level remain the persistence path. No assembly edits or new schema. Missing assembly/action reports a message and keeps numeric timing available. Marker must be finite, nonnegative, before clip end and at most five seconds.
+Changed: Studio/src/PlayerProjectileEditor.cpp, Studio/src/StudioApplication.h, Studio/src/StudioApplication.cpp, Studio/src/ModelImportPreview.h. Based on cf04bd38434dbc3e84c90ce22ee628e3c3953a80. Build/visual verification pending; no release-gate closure. This is projectile release authoring; a general multi-event persisted timeline remains future work.
+
+## P3 first-class Hitscan checkpoint — 2026-10-08
+
+Weapon firing now supports an explicit Physical projectile or Hitscan / instant
+ray mode per semantic action. Hitscan is not represented by fake projectile
+speed/gravity values. Equipment schema v3 persists fire_mode, range and damage,
+while schema v1/v2 physical-projectile equipment remains readable and unchanged.
+A Hitscan binding has no projectile asset dependency.
+
+Studio's Weapon firing panel exposes Fire mode, Range and Damage for Hitscan and
+retains the same named PSP, first/alternate/both policy and animation fire marker
+used by travelling projectiles. Projectile search/New/Edit Copy are hidden in
+Hitscan mode. Hitscan authoring does not depend on the projectile asset catalogue.
+
+Runtime resolves Hitscan without loading a projectile asset, preserves accepted
+weapon action/ammunition/animation timing, applies the existing muzzle-to-camera
+aim and cover rules, then performs one bounded nearest-contact scene query.
+Character contacts use the existing attributed combat-damage seam and display a
+brief centre hit confirmation; static world contacts do not require a usable
+health system. hitscan.fired and hitscan.impact use the governed gameplay event
+boundary. Beam/continuous casts and pellet spread remain separate work.
+The shared surface presentation checkpoint below supersedes the earlier
+decal-profile limitation; governed per-surface audio asset binding remains open.
+
+Validation: Release EngineBridge, Runtime and normal Studio compile passed; the
+normal Studio link was blocked only because the owner's existing Studio process
+held RenegadeStudio.exe. A separate BUILD/hitscan-studio/RenegadeStudio.exe
+linked successfully without closing that session. EquipmentAsset, LaunchSocket
+and RuntimeProjectileSession focused executables pass. Tests cover schema-v3
+roundtrip/invalid values, Runtime resolution without a projectile asset, authored
+ray range, blocked-query failure, and unchanged projectile simulation behavior.
+git diff --check passes. Native owner visual/gameplay acceptance, package parity,
+Jolt-only blockers and independent exact-head review remain open; no P3 gate
+closure, commit, push or merge is claimed.
+
+## P3 shared impact-surface contract — 2026-10-08
+
+Impact surface meaning is explicit authoring metadata, not a renderer heuristic.
+`ImpactSurfaceType` is the shared semantic enum. Ordinary editable materials
+store `renegade.impact_surface`; MaterialImpactSurfaceService owns capture,
+sanitised application and command-backed Undo. Character is a runtime-only
+semantic type. Terrain creation writes explicit Dirt / Stone metadata.
+
+RuntimeProjectileWorld remains contact authority. It resolves the stable material
+ID into `ProjectileContact.surfaceId` and the semantic response into
+`ProjectileContact.surfaceType`. Character ownership wins over material
+classification. Missing / invalid material metadata fails safely to Default.
+Hitscan and ProjectileSimulation therefore feed the same downstream contact
+contract.
+
+RuntimeProjectileVisuals owns presentation only. `PresentSurfaceImpact` consumes
+the shared contact contract and creates bounded native emitter feedback plus
+short-lived Wicked decals for eligible world surfaces. It does not affect hit
+authority, health, attribution, projectile movement or scene-query policy.
+Impact decals attach to the contacted transform when available, are capped at 64
+and expire after 18 seconds; emitter lifetime/cap cleanup remains transient.
+Water, Glass and Character omit the generic persistent mark. Existing authored
+projectile impact effects are additive and remain projectile-definition owned.
+
+Both `hitscan.impact` and `projectile.impact` expose the stable material ID and
+semantic `surface_type` token through the existing GameplayEvent boundary.
+That is the current integration seam for scripting and future sound cues.
+AudioService currently governs scene SoundSources by filename and does not expose
+a one-shot asset-ID operation, so impact presentation must not create unmanaged
+filename-backed sounds. A governed one-shot audio cue API/profile can extend this
+contract later without changing contact classification.
+
+## P3 object Surface Type continuation - 2026-10-08
+
+Supersedes the material-first creator workflow in the preceding checkpoint.
+Creator steps: select an object; choose Surface Type directly in its Inspector.
+The field stays visible independently of collapsed Transform/Rendering/Materials
+sections. Choices: Default, Metal, Wood, Concrete, Stone, Dirt / Ground, Glass,
+Water. No creator-facing impact profile or override chain is introduced.
+
+EngineBridge ObjectImpactSurfaceService stores the classification on the
+selected Object/Collider entity's native MetadataComponent. No mesh subset
+binding or shared MaterialComponent is changed. Runtime checks governed Character
+first, then explicit object metadata, then existing material classification for
+untouched objects. Explicit Default means generic response. Older material
+tags and terrain defaults remain compatible. Both firing modes already share
+the same classification and impact presentation/event path. Audio binding
+remains future work; surface_type is the event seam, not a claim of finished SFX.
+
+The command restores both prior value and prior absence on Undo; Redo reapplies.
+ProjectileWorldTests adds shared-mesh instance isolation, untouched material and
+subset assertions, explicit Default, subset-free object response, automatic
+Character precedence, invalid authoring rejection and native WISCENE archive
+save/reload. This does not claim packaged gameplay or owner visual acceptance.
+
+Visual material assignment is a separate visual property. Material Target still
+selects an already-bound material to edit; it is not relabelled as assignment.
+A future assignment command must create a private mesh derivative for the selected
+instance before altering subset bindings, preserve skinning/LOD/resource identity,
+and restore the original mesh on Undo. Surface Type needs none of those changes.
+
+Imported asset roots are supported: a selected transform parent with Object/Collider descendants can carry Surface Type. Runtime uses the nearest authored object/ancestor, then legacy material metadata. This changes only the selected asset instance hierarchy; automatic Character classification remains first. Shared-mesh sibling and imported-root precedence/Undo are regression checked.
+
+## P3 governed impact audio - 2026-10-08
+
+ImpactAudioService adds a project-owned schema-v1 bank at
+Content/Audio/Impacts/ImpactAudio.renegade-impact-audio. It maps explicit semantic
+surface tokens to bounded lists of governed LP08 Audio .rasset stable IDs.
+No filenames or renderer material names classify contacts. Ordinary creation stays
+select object -> Surface Type -> done; there is no per-object sound setup.
+Default and Character have no supplied cues and remain silent unless an explicit
+Default/Character bank entry is provided.
+
+Both Hitscan and travelling-projectile contacts dispatch the same transient native
+3D audio player. It resolves and validates all bank assets once per scene revision
+before activation, uses the SoundEffect bus, avoids consecutive variant repeats,
+caps voices at 32, updates listener spatialization, removes ended voices with a
+ten-second safety lifetime, pauses/resumes existing voices and stops them on reset,
+screen transitions, scene replacement and shutdown. It never serializes playback
+voices into the scene. Legacy projects without a bank remain compatible/silent.
+
+Audio products live in Content/Audio/Impacts/<Surface>/Impact_1.rasset and
+Impact_2.rasset. Byte-identical supplied WAVs are retained in SourceAssets/Audio/Impacts
+for governed reimport. Test Level snapshots include bank, registry and required
+products; Build Game discovery adds the bank and all required audio products to
+the normal dependency graph. Packaged Runtime resolves audio stable IDs through
+content-manifest.json and never needs retained SourceAssets.
+
+Tests/ImpactAudioTests.cpp covers bank identity/save-reload, duplicate rejection,
+bounded PCM WAV validation, governed import/resolution, snapshot closure, package
+lookup without sources/registry, native voice playback/variant isolation, cap,
+pause lifetime and reset. Its --install helper imports the explicitly mapped
+supplied packs; --verify and --tag-metal run graphics-enabled real-scene Build Game
+discovery plus supplied WAV decode checks. --tag-metal is for the disposable Bow
+Playground only. New-project automatic starter-bank installation and bank editing
+UI are not added by this checkpoint.
+
+
+### P3 impact VFX first three surfaces (local candidate, 2026-10-08)
+Metal, Wood and Concrete now have separate generated 64x64 masks and bounded presets:
+Metal narrow short sparks and a dent/scuff mask; Wood pointed splinters, a small tan dust puff and a split mask; Concrete irregular chips, a broader grey dust puff and a chipped mask. GetImpactTexture shares seven built-in GPU textures; no external texture paths, imports, profiles or new inspector controls. Other categories retain their earlier presets. Hit normals direct bursts outward; random velocity spread uses native normal_factor with random_factor=1 to avoid negative starting sizes. Dust expands and fades, fragments shrink/fall. Embedding projectile definitions use reduced particle counts and decal size; this is an internal stick-on-impact heuristic, not a dedicated weapon-class system.
+Native effect cleanup remains capped at 128 emitters, each polished burst capped at 64 particles; decals remain capped at 64 and expire after 18 seconds or reset. Both Hitscan and physical projectile presentation use this common function. Contact diagnostic records remain, but orange debug contact spheres are removed from normal gameplay rendering.
+No change to select-object -> Surface Type -> done workflow. No authored custom flipbook UI, mesh debris physics, or final remaining-surface art added.
+Changed files: Runtime/src/RuntimeImpactTextures.h (new), Runtime/src/RuntimeProjectileVisuals.h, Runtime/src/RuntimeProjectileSession.h, Runtime/CMakeLists.txt; Tests/ImpactAudioTests.cpp adds disposable --tag-wood/--tag-concrete and governed --quiet-projectile <descriptor> <asset-id> validation helpers.
+Bow Playground original flaming-arrow definition retained at BUILD/p3-audio-before/FlamingArrow-before-vfx.rprojectile. Quiet-arrow test clears only its flight layers and explicit projectile impact overlay through SaveProjectileAsset, to make surface response visible. Test wall surface is set using the normal scene-document authoring service.
+First visual captures failed acceptance: flaming-arrow overlay obscured surface bursts; debug spheres persisted; native spread was disabled and fragments were too small. Corrected emitter spread and size before accepting later visual evidence. Runtime link initially failed because the test game locked the binary; test game closed and rebuilt. Quiet-projectile helper initially lacked ProjectileAssetService include; fixed before use.
+Verification results and any remaining visual limits follow in HANDOFF. No commit/push/merge; existing broad working-tree provenance remains under review.
+
+### Built-in impact powder resource (P3 candidate, 2026-10-08)
+Runtime embeds the source RGBA ConcreteDust.png in Windows RCDATA 7301 and lazily decodes it with Wicked ResourceManager from memory. Native resource lifetime is cached; exported Runtime needs no loose sprite file. Concrete powder and smaller Wood powder share this neutral texture with separate tint/scale/count/lifetime presets; Metal has no dust. Small spark/splinter/chip/decal masks remain procedural, with chips using an angular polygon. Object Surface Type remains the sole creator classification. Tests embed the same source independently of the Runtime CMake target. Generated asset prompt/hash are in Runtime/Content/Effects/Impacts/PROVENANCE.md. In-motion owner acceptance pending after rejection of the first procedural look.
+
+### Glass / Water impact behaviour prototype (2026-10-09)
+RuntimeImpactGeometry owns bounded transient mesh entities (Glass prism shards; Water crown/rings), each with private same-entity mesh/material, analytic presentation motion/fade, reset/expiry cleanup and projectile-query exclusion through RuntimeProjectileVisuals roots. No rigid bodies, scene-object destruction or fluid simulation. Glass adds a crack decal; Water adds droplets without bullet holes and retires sticky-arrow appearance. The Surface Type UX is unchanged. Owner accepts behaviour as a test but explicitly rejects ALL current impact art as low-quality generic/stylised; realistic authored assets and an approved visual reference remain required. Native rendering is used, but no visual parity or production-quality claim is made.
+
+### Earlier generated Character blood candidate (2026-10-09; owner rejected)
+Character surface presentation now uses an embedded 4x4 16-frame liquid spray atlas played once over lifetime with native frame blending with native SOFT_LIGHTING and zero emission, plus RuntimeBloodEffects droplets sharing a private per-scene mesh/material. Droplet presentation integrates gravity and traces one bounded short scene segment per update, excluding Characters and transient visuals; a confirmed world contact produces an attached blood decal, with native Water excluded. Caps: 96 droplets and 128 stains with oldest eviction; droplets 1.6s, stains 600s of gameplay with final 30s fade. Stains darken and increase material roughness while reducing reflectance over 90s; pause freezes ageing, reset retires shared resources. Enlarged spray and 0.15-0.20m collision-derived stain radius are internal presets. RCDATA 7304/7303 and BLOOD_PROVENANCE.md govern packaged artwork. Arrows/non-sticky projectile or Hitscan strength differs internally. Stain attachment preserves the world contact when parenting to scaled/translated receivers; the previous local-space flag hid stains beneath the playground floor. Native decal drying binds shared bounded surface textures because material roughness scalars alone do not drive decals; dielectric reflectance is .04 fresh and .02 dry. This is a generated-frame projectile candidate; dedicated melee contacts, skinned wounds and fluid animation remain open. Owner rejected this generated version: behind-dummy appearance, rushed timing, unrealistic spray and furry floor stains. Creator Character classification stays automatic.
+
+### KNIFE authored blood experiment (2026-10-09)
+
+The private-project replacement uses governed scene material bindings and two bounded native PBR liquid-sheet objects with a 64-frame mask/normal atlas adapted from the supplied KNIFE pack. Existing tracked droplets and native attached stains remain. Floor masks are compact procedural wet-footprint fallbacks; proper authored floor art is still missing. No SPH, renderer fork, custom serializer, new normal-user profile chain or quality acceptance. See [candidate design and limits](P3_KNIFE_BLOOD_CANDIDATE.md).
+
+### Projectile visual update ordering
+
+Runtime must create/update/remove transient projectile presentation before
+Wicked's Scene update builds GPU instance data. Component-array deletion after
+that upload can mismatch CPU render selection and uploaded instance transforms;
+blood-sheet expiration reproduced a one-frame metre-scale droplet. Runtime aims
+against the currently completed scene and refreshes its displayed player camera
+after the subsequent native physics step. No second native Scene update is added.
+
+### Rigid retained projectile presentation
+Retained projectile roots track receiver contact and rotation explicitly during
+pre-upload Sync. They do not inherit nonuniform receiver scale through native
+TRS parenting, which can introduce shear and distort an oblique arrow. Contact
+position follows receiver geometry; authored projectile proportions remain fixed.
+This is transient presentation state and does not alter scene serialization.
+
+### Native water impact ripple presentation
+Water semantic contacts create transient transmissive crown/drop geometry.
+Horizontal contacts also call Wicked Scene::PutWaterRipple with its built-in
+normal texture; this path requires an actual native WATER shader receiver for
+surface distortion. Surface Type classification never silently changes visual
+materials. Impact-owned native ripples are capped and selectively reset; native
+Character ripples remain independent. No renderer fork or fluid simulation.
+
+
+### Governed impact debris artwork
+
+Optional scene materials tagged renegade.impact.glass_shards, rock_shards or
+wood_shards provide governed 2x2 static alpha atlases. RuntimeImpactGeometry
+uses four independent native lit cards with bounded ballistic motion and expiry;
+metadata-backed texture dependencies follow normal Save/Reload and Build Game
+resource discovery. Missing donors retain procedural fallbacks. This is an
+internal candidate path, with no authoring UI or custom picker exposed.
+
+
+### Governed surface impact marks
+
+Optional scene material keys renegade.impact.mark.<surface> own colour/normal/
+surface atlas ResourceAssets. Native projected decals use one static 2x2 quarter
+with per-hit roll/size; asset discovery follows existing material metadata.
+Character marks require a resolved contact triangle and follow its barycentric
+centre/basis through native GetPositionOnSurface. This tracks a local projection,
+not UV paint, and lacks skin-versus-clothing authoring or live animation parity
+acceptance. Donor absence retains prior world-mark/no-Character-mark fallback.
+
+Governed world impact marks also use triangle anchors, so their dimensions avoid
+nonuniform receiver-parent scale. Existing procedural fallback marks retain
+legacy attachment. Projector depth tolerance is .035 world-space half-depth.
+
+
+### Local wound trickle presentation
+
+Embedded projectile Character wounds can add one short gravity-aligned projected
+blood trail at the tracked triangle. Transient mark age drives four-second growth
+and later drying; after flow stops the stain retains its orientation relative to
+the receiver triangle. It shares bounded impact mark lifetime/reset ownership.
+No cross-triangle runoff simulation or live animated attachment parity is claimed.
+
+
+### Impact mark completed-pose refresh
+
+Runtime projectile entity lifecycle stays before native scene upload. After native skinning completes, a transform-only mark anchor refresh and public native RunDecalUpdateSystem refresh render-facing decal matrices and bounds before PreRender visibility/upload. No second full Scene update and no post-upload entity mutation. See P3_ANIMATED_WOUND_VERIFICATION.md for same-pose and loop-transition evidence.
+
+
+### Retained projectile skin frame
+
+Character retained projectiles can capture a contacted mesh triangle and retain a rigid impact pose relative to its orthonormal barycentric frame. Completed native skinning supplies the current frame. Post-update refresh changes only retained arrow world transforms and existing render-slot pose/bounds/TLAS data while preserving local hierarchy, previous-frame history and allocation. Entity lifecycle remains in pre-upload Sync. Unresolved contacts keep the object-relative fallback; invalid captured receivers retire on pre-upload cleanup. See P3_ANIMATED_WOUND_VERIFICATION.md.
+
+## Project-owned impact defaults
+
+Studio Surface Type selection calls EngineBridge PrepareImpactDefaults against
+an optional private library beside Studio. The service copies only tagged material
+donors and their governed texture bindings, importing payloads through the existing
+ResourceAssetService into the target project's canonical Textures/Audio folders.
+Stable source library IDs identify default import paths; target products have
+target project identity and stable IDs. Existing matching donor tags and audio
+banks win; imports do not overwrite different payloads. Native material settings
+are preserved, all source texture handles cleared, then target bindings restored.
+The scene command adds missing donors with Undo/Redo; asset imports/audio bank are
+durable project resources and remain after Undo. Save, Test Level and Build Game
+reuse existing material/audio dependency closure; no new package lookup policy.
+A persisted impact-defaults donor flag selects accepted directional blood without
+a process diagnostic switch. Reset prevents cross-scene profile leakage.
+Private art is an optional distributor input RENEGADE_IMPACT_DEFAULTS_DIRECTORY,
+copied beside Studio after build; it is not committed. Missing kit keeps existing
+baseline presentation. Partial preparation failure may leave unused imported
+resources, but scene donors are not committed and custom resources are preserved.

@@ -91,6 +91,8 @@ namespace renegade::runtime
         {
             SyncRenderSettings(true);
         }
+        if (!paused_ && std::isfinite(dt) && dt > 0)
+            hitConfirmSeconds_ = std::max(0.0f, hitConfirmSeconds_ - dt);
         RenderPath3D::Update(dt);
     }
 
@@ -105,6 +107,12 @@ namespace renegade::runtime
                 wi::font::WIFALIGN_CENTER,wi::font::WIFALIGN_CENTER,
                 wi::Color(245,245,245,220),wi::Color(0,0,0,160));
             wi::font::Draw("+",aim,cmd);
+        }
+        if (!paused_ && hitConfirmSeconds_ > 0) {
+            wi::font::Params confirm(width*0.5f,height*0.5f,24,
+                wi::font::WIFALIGN_CENTER,wi::font::WIFALIGN_CENTER,
+                wi::Color(255,245,245,255),wi::Color(0,0,0,200));
+            wi::font::Draw("x",confirm,cmd);
         }
         for (const auto& contact : projectileContacts_) {
             wi::font::Params marker(contact.x,contact.y,24,
@@ -231,6 +239,7 @@ namespace renegade::runtime
         StopCreatorScripts();
         playerEquipment_ = {};
         pendingProjectileShots_.clear();
+        impactAudio_.StopVoices();
         projectileVisuals_.Reset(scenes_.GetScene());
         projectiles_.Reset();
         ResetRuntimePlayerViewAnimations(
@@ -510,10 +519,28 @@ namespace renegade::runtime
             }
         }
 
+        // Transient visual creation/removal must precede Wicked's GPU instance
+        // upload. Erasing a sheet afterwards can move a droplet into its CPU slot
+        // while the GPU still holds the sheet's metre-scale transform.
+        // Sample the current completed scene for aiming, then refresh the camera
+        // again after physics below for the rendered view.
+        if (!screenPresenter_.IsLoaded())
+        {
+            if (player_.IsSpawned() && renderer_.camera != nullptr)
+                bridge::ApplyRuntimePlayerCamera(scenes_.GetScene(), player_,
+                    *renderer_.camera, playerSettings_);
+            UpdatePlayerProjectiles(paused_ ? 0.0f : dt);
+        }
+
         // Wicked owns the actual Jolt step, hierarchy propagation and GPU
         // instance update. A paused session still refreshes the device while
         // advancing the active 3D path with zero simulation time.
         wi::Application::Update(paused_ ? 0.0f : dt);
+        // Current-pose marks must reach decal visibility/render upload after
+        // native skinning, while transient entity mutation remains before it.
+        if (!screenPresenter_.IsLoaded())
+            projectileVisuals_.RefreshImpactMarkPose(scenes_.GetScene());
+
 
         if (!screenPresenter_.IsLoaded())
         {
@@ -537,7 +564,6 @@ namespace renegade::runtime
                 wi::input::HidePointer(false);
             }
 
-            UpdatePlayerProjectiles(paused_ ? 0.0f : dt);
             if (!paused_)
                 creatorScripts_.Update(dt);
             renderer_.SetInteractionPrompt(creatorScripts_.CurrentPrompt());
@@ -545,8 +571,10 @@ namespace renegade::runtime
         }
         else
         {
+            impactAudio_.StopVoices();
             if (!projectiles_.simulation.Records().empty() || !projectiles_.markers.empty() ||
                 !projectileVisuals_.roots.empty() || projectileVisuals_.EffectCount()>0) {
+                impactAudio_.StopVoices();
                 projectileVisuals_.Reset(scenes_.GetScene());
                 projectiles_.Reset();
             }
@@ -554,6 +582,7 @@ namespace renegade::runtime
             playerEquipment_.scheduledProjectiles.clear();
             renderer_.SetProjectileAim(false);
             renderer_.SetProjectileContacts({});
+            renderer_.ClearHitConfirmation();
             renderer_.SetInteractionPrompt({});
             StopCreatorScripts();
             if (paused_)
@@ -576,6 +605,21 @@ namespace renegade::runtime
             return;
         }
         auto& scene = scenes_.GetScene();
+        wi::audio::SoundInstance3D impactListener;
+        impactListener.listenerPos = renderer_.camera->Eye;
+        impactListener.listenerFront = renderer_.camera->At;
+        impactListener.listenerUp = renderer_.camera->Up;
+        impactAudio_.Update(dt, impactListener);
+        const auto presentImpactAudio = [&](const bridge::ProjectileImpact& impact)
+        {
+            bridge::StableId played;
+            if (impactAudio_.Play(impact.contact.surfaceType,
+                ProjectileNativeVector(impact.contact.position), impactListener, played))
+                diagnosticService_.Record(bridge::DiagnosticSeverity::Info,
+                    "runtime.audio", "impact.audio.played",
+                    "surface_type=" + std::string(bridge::ImpactSurfaceTypeToken(impact.contact.surfaceType)) +
+                    ";asset=" + played + ";voices=" + std::to_string(impactAudio_.VoiceCount()));
+        };
         if(dt>0) {
             const auto* clip=scene.animations.GetComponent(playerViewAnimation_.activeClip);
             const float time=playerViewAnimation_.pairedAssembly ? playerViewAnimation_.pairedTime :
@@ -604,20 +648,68 @@ namespace renegade::runtime
                 source.knownPosition = ProjectileBridgeVector(position);
                 source.knownVelocity = ProjectileBridgeVector(velocity);
                 XMFLOAT3 origin=renderer_.camera->Eye,direction=renderer_.camera->At;
+                wi::ecs::Entity queryHitEntity = wi::ecs::INVALID_ENTITY;
+                const auto query=[&](const auto& record,const auto& from,const auto& to){
+                    wi::ecs::Entity hitEntity = wi::ecs::INVALID_ENTITY;
+                    auto result = QueryProjectileSceneSegment(
+                        scene,characterAiState_,owner,record,from,to,~0u,&hitEntity);
+                    if (result.status == bridge::ProjectileQueryStatus::Hit)
+                        queryHitEntity = hitEntity;
+                    return result;
+                };
                 if(!request.launchSocketName.empty()) {
                     XMFLOAT3 muzzle,forward;std::string error;
-                    const auto query=[&](const auto& record,const auto& from,const auto& to){
-                        return QueryProjectileSceneSegment(scene,characterAiState_,owner,record,from,to);
-                    };
-                    if(!bridge::ReadLaunchSocketPose(scene,playerViewRig_.viewModelRoot,
-                            request.launchSocketName,muzzle,forward,error) ||
-                       !ResolveProjectileMuzzleAim(request.projectile,source,origin,direction,
-                            muzzle,forward,query,origin,direction,error)) {
+                    const bool aimed = bridge::ReadLaunchSocketPose(scene,playerViewRig_.viewModelRoot,
+                            request.launchSocketName,muzzle,forward,error) &&
+                        (request.fireMode==bridge::EquipmentFireMode::Hitscan
+                            ? ResolveMuzzleAim(source,request.hitscanRangeMetres,origin,direction,
+                                muzzle,forward,query,origin,direction,error)
+                            : ResolveProjectileMuzzleAim(request.projectile,source,origin,direction,
+                                muzzle,forward,query,origin,direction,error));
+                    if(!aimed) {
                         projectiles_.lastError=error;
                         diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
-                            "runtime.projectile","projectile.socket_failed",error);
+                            "runtime.projectile",
+                            request.fireMode==bridge::EquipmentFireMode::Hitscan?
+                                "hitscan.socket_failed":"projectile.socket_failed",error);
                         continue;
                     }
+                }
+                if(request.fireMode==bridge::EquipmentFireMode::Hitscan) {
+                    bridge::ProjectileQueryResult contact;std::string error;
+                    queryHitEntity = wi::ecs::INVALID_ENTITY;
+                    if(!QueryHitscan(source,origin,direction,request.hitscanRangeMetres,query,contact,error)) {
+                        diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
+                            "runtime.projectile","hitscan.query_failed",error);
+                        continue;
+                    }
+                    std::string ignored;
+                    (void)emit({0,"hitscan.fired",
+                        "equipment="+request.equipmentId+
+                        ";range="+std::to_string(request.hitscanRangeMetres),
+                        owner.subjectId,{}},ignored);
+                    if(contact.status==bridge::ProjectileQueryStatus::Hit) {
+                        bridge::ProjectileImpact impact;
+                        impact.source=source;impact.contact=contact.contact;
+                        impact.damage=request.hitscanDamage;
+                        impact.incomingVelocity=ProjectileBridgeVector(direction);
+                        const auto& p=contact.contact.position;
+                        (void)emit({0,"hitscan.impact",
+                            "equipment="+request.equipmentId+
+                            ";surface="+contact.contact.surfaceId+
+                            ";surface_type="+std::string(
+                                bridge::ImpactSurfaceTypeToken(contact.contact.surfaceType))+
+                            ";x="+std::to_string(p.x)+";y="+std::to_string(p.y)+
+                            ";z="+std::to_string(p.z),
+                            owner.subjectId,contact.contact.targetSubjectId},ignored);
+                        projectileVisuals_.PresentSurfaceImpact(
+                            scene, impact, queryHitEntity);
+                        presentImpactAudio(impact);
+                        const auto damage=ApplyProjectileCharacterImpact(scene,characterAiState_,
+                            characterPerceptionState_,combatState_,impact,emit);
+                        if(damage.characterContact)renderer_.ConfirmTargetHit();
+                    }
+                    continue;
                 }
                 std::uint64_t id = 0;
                 if (projectiles_.Launch(request.projectile, source,origin,direction,id)) {
@@ -653,19 +745,27 @@ namespace renegade::runtime
                 "runtime.projectile", "projectile.update_failed", projectiles_.lastError);
         }
         for (const auto& impact : impacts) {
-            projectileVisuals_.Impact(scene,impact,impactParents[impact.projectileId]);
+            const auto parent = impactParents[impact.projectileId];
+            projectileVisuals_.PresentSurfaceImpact(scene,impact,parent);
+            presentImpactAudio(impact);
+            projectileVisuals_.Impact(scene,impact,parent);
             std::string ignored;
             const auto& p = impact.contact.position;
             (void)emit({0, "projectile.impact",
                 "projectile=" + std::to_string(impact.projectileId) +
                 ";surface=" + impact.contact.surfaceId +
+                ";surface_type=" + std::string(
+                    bridge::ImpactSurfaceTypeToken(impact.contact.surfaceType)) +
                 ";x=" + std::to_string(p.x) + ";y=" + std::to_string(p.y) +
                 ";z=" + std::to_string(p.z),
                 impact.source.ownerSubjectId, impact.contact.targetSubjectId}, ignored);
             // Existing damage integration seam; contacts/effects work independently
             // of usable Player/NPC health authoring.
-            (void)ApplyProjectileCharacterImpact(scene, characterAiState_,
-                characterPerceptionState_, combatState_, impact, emit);
+            const auto damage = ApplyProjectileCharacterImpact(
+                scene, characterAiState_, characterPerceptionState_,
+                combatState_, impact, emit);
+            if (damage.characterContact)
+                renderer_.ConfirmTargetHit();
         }
         projectileVisuals_.Sync(scene,projectiles_.simulation,dt);
         // Basic flight/contact feedback uses Wicked's bounded native primitives.
@@ -673,33 +773,8 @@ namespace renegade::runtime
         if (!playerEquipment_.resolvedProjectiles.empty())
             wi::renderer::SetDebugDrawEnabled(true);
         projectiles_.Draw();
-        std::vector<XMFLOAT2> contacts;
-        for (const auto& marker : projectiles_.markers) {
-            auto p = marker.contact.position;
-            p.x += marker.contact.normal.x*0.015f;
-            p.y += marker.contact.normal.y*0.015f;
-            p.z += marker.contact.normal.z*0.015f;
-            const auto eye = ProjectileBridgeVector(renderer_.camera->Eye);
-            bridge::ProjectileRecord probe;
-            probe.launch.source.ownerSubjectId = owner.subjectId;
-            const auto visibility = QueryProjectileSceneSegment(scene, characterAiState_, owner, probe, eye, p);
-            const float dx=p.x-eye.x,dy=p.y-eye.y,dz=p.z-eye.z;
-            if (visibility.status == bridge::ProjectileQueryStatus::Blocked) continue;
-            if (visibility.status == bridge::ProjectileQueryStatus::Hit) {
-                const auto h=visibility.contact.position;
-                const float hx=h.x-eye.x,hy=h.y-eye.y,hz=h.z-eye.z;
-                if (std::sqrt(hx*hx+hy*hy+hz*hz)+0.05f < std::sqrt(dx*dx+dy*dy+dz*dz)) continue;
-            }
-            XMFLOAT4 clip;
-            XMStoreFloat4(&clip,XMVector4Transform(XMVectorSet(p.x,p.y,p.z,1),
-                XMLoadFloat4x4(&renderer_.camera->VP)));
-            if (clip.w <= 0 || clip.z < 0 || clip.z > clip.w) continue;
-            const float x=clip.x/clip.w,y=clip.y/clip.w;
-            if (std::abs(x)>1 || std::abs(y)>1) continue;
-            contacts.push_back({(x+1)*0.5f*renderer_.GetLogicalWidth(),
-                (1-y)*0.5f*renderer_.GetLogicalHeight()});
-        }
-        renderer_.SetProjectileContacts(std::move(contacts));
+        // Surface VFX/decals own world-impact presentation. Keep target-hit HUD feedback.
+        renderer_.SetProjectileContacts({});
     }
 
     void RuntimeApplication::SyncPlayerForScene()
@@ -712,10 +787,12 @@ namespace renegade::runtime
         playerViewAnimation_ = {};
         playerEquipment_ = {};
         pendingProjectileShots_.clear();
+        impactAudio_.StopVoices();
         projectileVisuals_.Reset(scenes_.GetScene());
         projectiles_.Reset();
         renderer_.SetProjectileAim(false);
         renderer_.SetProjectileContacts({});
+        renderer_.ClearHitConfirmation();
         playerSceneRevision_ = scenes_.Revision();
         const auto resolved = bridge::ResolvePlayerStart(scenes_.GetScene());
         if (resolved.resolution == bridge::PlayerStartResolution::Missing)
@@ -745,7 +822,8 @@ namespace renegade::runtime
                 "runtime.player.equipment", "player.equipment.load_failed", playerEquipment_.error);
         }
         for(const auto& request:playerEquipment_.resolvedProjectiles)
-            if(!projectileVisuals_.Prepare(startupResult_.project.rootPath,
+            if(request.fireMode==bridge::EquipmentFireMode::Projectile &&
+               !projectileVisuals_.Prepare(startupResult_.project.rootPath,
                     startupResult_.packageRelativeLaunch?startupResult_.packageRootPath:"",
                     startupResult_.project.projectId,request.projectile))
                 diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
@@ -881,6 +959,16 @@ namespace renegade::runtime
             return;
 
         audioPauseState_ = {};
+        std::string impactAudioError;
+        if (!impactAudio_.Prepare(startupResult_.project.rootPath,
+                startupResult_.packageRelativeLaunch ? startupResult_.packageRootPath : "",
+                startupResult_.project.projectId, impactAudioError))
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
+                "runtime.audio", "impact.audio.prepare_failed", impactAudioError);
+        else
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Info,
+                "runtime.audio", "impact.audio.ready", "clips=" + std::to_string(impactAudio_.ClipCount()));
+        impactAudio_.SetPaused(paused_);
         bridge::ActivateSceneAudio(scenes_.GetScene());
         if (paused_)
         {
@@ -1054,6 +1142,7 @@ namespace renegade::runtime
             wi::physics::SetSimulationEnabled(physicsSimulationBeforePause_);
         }
         paused_ = paused;
+        impactAudio_.SetPaused(paused_);
         renderer_.SetPaused(paused_);
         bridge::SetSceneAudioPaused(
             scenes_.GetScene(), paused_, audioPauseState_);
@@ -1083,6 +1172,7 @@ namespace renegade::runtime
         playerSettings_ = {};
         playerEquipment_ = {};
         pendingProjectileShots_.clear();
+        impactAudio_.StopVoices();
         projectileVisuals_.Reset(scenes_.GetScene());
         projectiles_.Reset();
         playerSceneRevision_ = 0;

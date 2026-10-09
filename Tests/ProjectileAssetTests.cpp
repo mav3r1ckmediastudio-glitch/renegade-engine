@@ -35,6 +35,20 @@ int main()
     auto fail=[](const char* reason) { std::cerr<<reason<<'\n'; return 1; };
     if(!WriteAssetRegistry(root.generic_u8string(),registry).success)return fail("registry");
     std::string error,text;
+    // Every starting preset must save without a model, and retain its feedback on reload.
+    for(unsigned i=0;i<5;++i) {
+        auto preset=MakeProjectilePreset(static_cast<ProjectilePreset>(i));
+        preset.projectId=project;preset.assetId=GenerateStableId();
+        ProjectileAssetDocument copy;
+        if(!SerializeProjectileAsset(preset,text,error)||
+           !DeserializeProjectileAsset(text,copy,error)||
+           copy.name!=preset.name||copy.flightEffects.size()!=preset.flightEffects.size()||
+           copy.impactEffect!=preset.impactEffect||copy.gravityScale!=preset.gravityScale)
+            return fail("preset serialization");
+        if((i==0||i==4) && (copy.flightEffects.empty()||
+           copy.flightEffects[0].kind==ProjectileEffectKind::None))
+            return fail("model-free preset feedback");
+    }
     auto arrow=MakeProjectilePreset(ProjectilePreset::Arrow);
     auto saved=SaveProjectileAsset(root.generic_u8string(),project,arrow);
     ProjectileAssetDocument reopened;

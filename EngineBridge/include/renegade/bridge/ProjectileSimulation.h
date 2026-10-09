@@ -1,5 +1,7 @@
 #pragma once
 
+#include "renegade/bridge/ImpactSurface.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -55,7 +57,8 @@ namespace renegade::bridge
         ProjectileVector position;
         ProjectileVector normal;
         std::string targetSubjectId; // Empty for ungoverned static world geometry.
-        std::string surfaceId;       // Empty means default impact profile.
+        std::string surfaceId;       // Stable material identity when available.
+        ImpactSurfaceType surfaceType = ImpactSurfaceType::Default;
     };
 
     struct ProjectileQueryResult

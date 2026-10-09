@@ -1213,6 +1213,48 @@ static bool SwordShieldInspect(const fs::path& input,const fs::path& output)
 #include "SwordShieldLayerGraphicsProof.h"
 #include "SwordShieldPlayableProof.h"
 
+
+static bool BowMountSweepProof(const fs::path& input,const fs::path& output)
+{
+    std::string error; ProjectMetadata project;
+    if(!ProjectService().InspectProject(fs::absolute(input).generic_u8string(),project,error)) return false;
+    AssetRegistry registry; if(!ReadAssetRegistry(project.rootPath,project.projectId,registry,error)) return false;
+    StableId armsId,weaponId;
+    for(const auto& r:registry.records){
+      if(r.projectRelativePath=="Content/SK_FPSArms.rasset")armsId=r.assetId;
+      if(r.projectRelativePath=="Content/LongBow_Combined.rasset")weaponId=r.assetId;
+    }
+    auto arms=ReusableAssetService().PrepareModelAssetPlacement({project.rootPath,project.projectId,armsId});
+    if(!arms.IsReady())return false;
+    std::vector<PlayerViewBoneChoice> bones;if(!CollectPlayerViewBones(*arms.PeekScene(),bones,error))return false;
+    std::vector<PlayerViewBoneChoice> candidates;
+    for(const auto& b:bones){
+      std::string s=b.label+" "+b.path;
+      if(s.find("ik_hand_gun")!=std::string::npos ||
+         s.find("weapon_mount")!=std::string::npos ||
+         s.find("hand_l")!=std::string::npos ||
+         s.find("hand_r")!=std::string::npos) candidates.push_back(b);
+    }
+    fs::create_directories(output);
+    std::cout<<"CANDIDATES="<<candidates.size()<<"\n";
+    size_t idx=0;
+    for(const auto& b:candidates){
+      FirstPersonAssemblySettings s;
+      s.armsAssetId=armsId;s.weaponAssetId=weaponId;s.parentBonePath=b.path;s.weaponScale=100.0f;
+      s.pairs={{"Idle",0,2},{"Attack",3,3}};
+      FirstPersonAssemblyService service;wi::scene::Scene scene;
+      if(!service.Prepare(project.rootPath,project.projectId,s,scene,error)){
+        std::cerr<<"MOUNT FAIL "<<b.label<<" "<<error<<"\n";continue;
+      }
+      std::string safe=b.label.empty()?("candidate"+std::to_string(idx)):b.label;
+      for(char& c:safe)if(!(std::isalnum((unsigned char)c)||c=='_'||c=='-'))c='_';
+      std::cout<<"MOUNT "<<idx<<" label="<<b.label<<" path="<<b.path<<"\n";
+      if(!Capture(scene,output/(std::string("bow-mount-")+std::to_string(idx)+"-"+safe+".png"),false,false,true))return false;
+      ++idx;
+    }
+    return idx>0;
+}
+
 int main(int argc,char** argv)
 {
     if(argc<3 || argc>4) { std::cerr<<"Usage: proof pack-folder output-folder\n"; return 2; }
@@ -1228,6 +1270,7 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--bow-mount-sweep") return BowMountSweepProof(input,output)?0:34;
     if(argc==4 && std::string(argv[3])=="--sword-playable") return SwordShieldPlayableProof(input,output)?0:24;
     if(argc==4 && std::string(argv[3])=="--sword-layers") return SwordShieldLayerProof(input,output)?0:23;
     if(argc==4 && std::string(argv[3])=="--sword-inspect") return SwordShieldInspect(input,output)?0:22;

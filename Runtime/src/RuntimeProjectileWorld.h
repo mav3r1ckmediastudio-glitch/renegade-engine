@@ -1,6 +1,7 @@
 #pragma once
 
 #include "RuntimeCombatDamage.h"
+#include "renegade/bridge/ObjectImpactSurfaceService.h"
 #include "renegade/bridge/ProjectileSimulation.h"
 
 #include <limits>
@@ -50,6 +51,20 @@ namespace renegade::runtime
             static_cast<std::size_t>(hit.subsetIndex) >= mesh->subsets.size())
             return {};
         return bridge::PersistentEntityId(scene, mesh->subsets[hit.subsetIndex].materialID);
+    }
+
+    inline bridge::ImpactSurfaceType ProjectileContactSurfaceType(
+        const wi::scene::Scene& scene,
+        const RuntimeCharacterSystemState& characters,
+        const wi::scene::Scene::RayIntersectionResult& hit,
+        const bridge::StableId& targetSubjectId)
+    {
+        if (!targetSubjectId.empty() &&
+            FindRuntimeCharacter(characters, targetSubjectId) != nullptr)
+            return bridge::ImpactSurfaceType::Character;
+
+        return bridge::ResolveObjectImpactSurface(
+            scene, hit.entity, hit.subsetIndex);
     }
 
     // Scene-query slice: mesh instances (including native skinning), terrain
@@ -119,6 +134,8 @@ namespace renegade::runtime
             surfaceHit.entity = overlap.entity;
             surfaceHit.subsetIndex = overlap.subsetIndex;
             result.contact.surfaceId = ProjectileContactSurface(scene, surfaceHit);
+            result.contact.surfaceType = ProjectileContactSurfaceType(
+                scene, characters, surfaceHit, result.contact.targetSubjectId);
             if(hitEntity)*hitEntity=overlap.entity;
             return result;
         }
@@ -154,6 +171,8 @@ namespace renegade::runtime
         result.contact.normal = ProjectileBridgeVector(nearest->normal);
         result.contact.targetSubjectId = ProjectileContactSubject(scene, characters, nearest->entity);
         result.contact.surfaceId = ProjectileContactSurface(scene, *nearest);
+        result.contact.surfaceType = ProjectileContactSurfaceType(
+            scene, characters, *nearest, result.contact.targetSubjectId);
         if(hitEntity)*hitEntity=nearest->entity;
         return result;
     }

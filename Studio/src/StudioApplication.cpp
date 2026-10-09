@@ -827,6 +827,8 @@ namespace renegade::studio
             assemblyPreview_->Render();
         if (projectileCreatePanel_.IsVisible() && projectilePreview_ && projectilePreview_->NeedsRender())
             projectilePreview_->Render();
+        if (projectileTimingPreview_ && projectileTimingPanel_.IsVisible() && projectileTimingPreview_->NeedsRender())
+            projectileTimingPreview_->Render();
         if(launchSocketPanel_.IsVisible()&&launchSocketPreview_&&launchSocketPreview_->NeedsRender())
             launchSocketPreview_->Render();
         if (playerCameraPreviewVisible_ && !playerCameraPreviewCollapsed_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->Render();

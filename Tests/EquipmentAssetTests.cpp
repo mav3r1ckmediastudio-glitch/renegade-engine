@@ -31,6 +31,35 @@ int main() {
     Check(!DeserializeEquipmentAsset(malformed.dump(),parsed,error),"numeric boolean accepted");
     auto invalid=sword;invalid.actions.push_back(invalid.actions[0]);
     Check(!SerializeEquipmentAsset({project,invalid},text,error),"duplicate action");
+    auto hitscan=sword;hitscan.name="Hitscan rifle";
+    hitscan.projectiles={{EquipmentAction::PrimaryUse,"","",0,0,"",EquipmentFireMode::Hitscan,125.0f,18.0f}};
+    Check(SerializeEquipmentAsset({project,hitscan},text,error),"hitscan serialize "+error);
+    auto hitscanJson=nlohmann::json::parse(text);
+    Check(hitscanJson.at("schema_version")==3 &&
+        hitscanJson.at("projectiles")[0].at("fire_mode")=="Hitscan","hitscan schema v3");
+    Check(DeserializeEquipmentAsset(text,parsed,error)&&
+        parsed.equipment.projectiles.size()==1&&
+        parsed.equipment.projectiles[0].fireMode==EquipmentFireMode::Hitscan&&
+        parsed.equipment.projectiles[0].projectileAssetId.empty()&&
+        parsed.equipment.projectiles[0].hitscanRangeMetres==125.0f&&
+        parsed.equipment.projectiles[0].hitscanDamage==18.0f,"hitscan roundtrip "+error);
+    auto invalidHitscan=hitscan;invalidHitscan.projectiles[0].projectileAssetId=GenerateStableId();
+    Check(!SerializeEquipmentAsset({project,invalidHitscan},text,error),"hitscan accepted projectile asset");
+    invalidHitscan=hitscan;invalidHitscan.projectiles[0].hitscanRangeMetres=0;
+    Check(!SerializeEquipmentAsset({project,invalidHitscan},text,error),"zero hitscan range accepted");
+    auto savedHitscan=SaveEquipmentAsset(root.generic_u8string(),project,hitscan);
+    Check(savedHitscan.succeeded&&LoadEquipmentAsset(root.generic_u8string(),project,
+        savedHitscan.document.equipment.assetId,parsed,error)&&
+        parsed.equipment.projectiles[0].fireMode==EquipmentFireMode::Hitscan,
+        "hitscan save/reopen "+error);
+    renegade::runtime::RuntimeEquipmentLoadout hitscanRuntime;
+    PlayerControllerSettings hitscanSettings;hitscanSettings.primaryEquipmentAssetId=savedHitscan.document.equipment.assetId;
+    Check(hitscanRuntime.Load(root.generic_u8string(),project,hitscanSettings)&&
+        hitscanRuntime.resolvedProjectiles.size()==1&&
+        hitscanRuntime.resolvedProjectiles[0].fireMode==EquipmentFireMode::Hitscan&&
+        hitscanRuntime.resolvedProjectiles[0].projectile.assetId.empty()&&
+        hitscanRuntime.resolvedProjectiles[0].hitscanRangeMetres==125.0f,
+        "hitscan Runtime resolution "+hitscanRuntime.error);
     auto saved=SaveEquipmentAsset(root.generic_u8string(),project,sword);
     Check(saved.succeeded&&LoadEquipmentAsset(root.generic_u8string(),project,saved.document.equipment.assetId,parsed,error),"save/reopen "+error);
     Check(parsed.equipment.assetId!=sword.assetId,"immutable save identity");

@@ -1,4 +1,5 @@
 #include "renegade/bridge/TestLevelSnapshotService.h"
+#include "renegade/bridge/ImpactAudioService.h"
 
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/AssetRegistryService.h"
@@ -1073,6 +1074,8 @@ namespace renegade::bridge
                     "Could not snapshot governed material state: " + error);
             }
 
+            if (!SnapshotImpactAudio(project.rootPath, created.sessionDirectory, project.projectId, error))
+                return failAndCleanup("Could not snapshot impact audio: " + error);
             if (!SnapshotGameplayInput(project, created, error))
                 return failAndCleanup("Could not snapshot gameplay input: " + error);
 

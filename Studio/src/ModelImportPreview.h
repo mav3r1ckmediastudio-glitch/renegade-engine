@@ -39,6 +39,7 @@ namespace renegade::studio
         void SetAssemblyShieldHeld(bool held) { assemblyShieldHeld_=held; }
         bool IsPlaying() const { return paired_ ? pairedPlaying_ : animationPreview_.IsPlaying(); }
         bool HasClip() const { return paired_ || animationPreview_.HasSelection(); }
+        float ClipDuration() const { return paired_ ? pairedEnd_ : 0; }
         float ClipTime() const { return paired_ ? pairedTime_ : animationPreview_.Time(); }
         bool NeedsRender() const { return !IsReady() || IsPlaying() || !projectileEffects_.empty(); }
         void Update(float dt) override;

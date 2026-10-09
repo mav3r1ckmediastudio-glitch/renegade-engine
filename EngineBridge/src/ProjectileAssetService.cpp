@@ -73,7 +73,11 @@ namespace renegade::bridge
         result.name = ProjectilePresetName(preset);
         switch (preset)
         {
-        case ProjectilePreset::Bullet: result.speedMetresPerSecond = 300; break;
+        case ProjectilePreset::Bullet:
+            result.speedMetresPerSecond = 300;
+            result.flightEffects.push_back({ProjectileEffectKind::Tracer, {0,0,0}, .02f, 120, .08f});
+            result.impactEffect = ProjectileEffectKind::Sparks;
+            break;
         case ProjectilePreset::Arrow:
             result.speedMetresPerSecond = 45; result.gravityScale = 1; break;
         case ProjectilePreset::Bolt:
@@ -81,7 +85,10 @@ namespace renegade::bridge
         case ProjectilePreset::Thrown:
             result.speedMetresPerSecond = 15; result.gravityScale = 1; break;
         case ProjectilePreset::Spell:
-            result.speedMetresPerSecond = 20; result.lifetimeSeconds = 8; break;
+            result.speedMetresPerSecond = 20; result.lifetimeSeconds = 8;
+            result.flightEffects.push_back({ProjectileEffectKind::Flame, {0,0,0}, .12f, 60, .3f});
+            result.impactEffect = ProjectileEffectKind::Sparks;
+            break;
         }
         return result;
     }

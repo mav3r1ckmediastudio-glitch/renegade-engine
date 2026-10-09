@@ -12,6 +12,7 @@ enum class EquipmentHandUse { PrimaryOnly, OffHandOnly, EitherHand, TwoHanded, P
 enum class EquipmentAction { Equip, Unequip, PrimaryUse, AlternateUse, Reload, Charge, Release, Block, Parry, Cast, Use, Inspect };
 enum class EquipmentActionPhase { Ready, Prepare, Windup, Hold, Active, Recovery };
 enum class EquipmentHand { Primary, OffHand };
+enum class EquipmentFireMode { Projectile, Hitscan };
 struct EquipmentActionDefinition {
     EquipmentAction action = EquipmentAction::PrimaryUse;
     std::string animationAction;
@@ -28,6 +29,11 @@ struct EquipmentProjectileBinding {
     // 0: first PSP, 1: alternate accepted shots, 2: both PSPs.
     unsigned socketPolicy = 0;
     std::string secondSocketName;
+    // Existing bindings default to a travelling projectile. Hitscan is an
+    // instant governed scene query and does not require a projectile asset.
+    EquipmentFireMode fireMode = EquipmentFireMode::Projectile;
+    float hitscanRangeMetres = 100.0f;
+    float hitscanDamage = 10.0f;
 };
 struct EquipmentDefinition {
     std::string assetId, name, presentationAssetId;
@@ -50,8 +56,11 @@ inline bool ValidateEquipmentDefinition(const EquipmentDefinition& item) {
     std::array<bool,12> projectileSeen{};
     for(const auto& binding:item.projectiles) {
         const auto index=unsigned(binding.action);
+        const bool physical=binding.fireMode==EquipmentFireMode::Projectile;
         if(index>=seen.size()||!seen[index]||projectileSeen[index]||
-           binding.projectileAssetId.empty()||binding.launchSocketName.size()>64||
+           unsigned(binding.fireMode)>unsigned(EquipmentFireMode::Hitscan)||
+           (physical?binding.projectileAssetId.empty():!binding.projectileAssetId.empty())||
+           binding.launchSocketName.size()>64||
            binding.launchSocketName.find_first_of("\r\n\t")!=std::string::npos||
            (binding.action!=EquipmentAction::PrimaryUse&&binding.action!=EquipmentAction::Release&&
             binding.action!=EquipmentAction::Cast&&binding.action!=EquipmentAction::AlternateUse&&
@@ -60,7 +69,11 @@ inline bool ValidateEquipmentDefinition(const EquipmentDefinition& item) {
            binding.socketPolicy>2||binding.secondSocketName.size()>64||
            binding.secondSocketName.find_first_of("\r\n\t")!=std::string::npos||
            (binding.socketPolicy && (binding.launchSocketName.empty()||binding.secondSocketName.empty()||
-                                   binding.launchSocketName==binding.secondSocketName)))return false;
+                                   binding.launchSocketName==binding.secondSocketName))||
+           !std::isfinite(binding.hitscanRangeMetres)||binding.hitscanRangeMetres<0.1f||
+           binding.hitscanRangeMetres>5000.0f||
+           !std::isfinite(binding.hitscanDamage)||binding.hitscanDamage<0||
+           binding.hitscanDamage>100000.0f)return false;
         const auto definition=std::find_if(item.actions.begin(),item.actions.end(),
             [&](const auto& a){return a.action==binding.action;});
         if(binding.releaseSeconds>0 && (definition==item.actions.end()||

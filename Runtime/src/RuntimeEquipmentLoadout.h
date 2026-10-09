@@ -21,6 +21,9 @@ namespace renegade::runtime
             float releaseSeconds = 0;
             unsigned socketPolicy = 0;
             std::string secondSocketName;
+            bridge::EquipmentFireMode fireMode = bridge::EquipmentFireMode::Projectile;
+            float hitscanRangeMetres = 100.0f;
+            float hitscanDamage = 10.0f;
         };
         struct ScheduledProjectile { ProjectileRequest request; wi::ecs::Entity animation; };
         std::vector<ScheduledProjectile> scheduledProjectiles;
@@ -92,10 +95,11 @@ namespace renegade::runtime
             // Resolve once per loadout, never read project files in the fire loop.
             for (const auto& binding : p.equipment.projectiles) {
                 bridge::ProjectileAssetDocument projectile;
-                if (!bridge::LoadProjectileAsset(root, project, binding.projectileAssetId, projectile, error))
+                if (binding.fireMode == bridge::EquipmentFireMode::Projectile &&
+                    !bridge::LoadProjectileAsset(root, project, binding.projectileAssetId, projectile, error))
                     return false;
                 resolved.push_back({p.equipment.assetId, binding.action, std::move(projectile),binding.launchSocketName,binding.releaseSeconds,
-                    binding.socketPolicy,binding.secondSocketName});
+                    binding.socketPolicy,binding.secondSocketName,binding.fireMode,binding.hitscanRangeMetres,binding.hitscanDamage});
             }
             primary = std::move(p);
             offHand = std::move(o);

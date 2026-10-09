@@ -491,3 +491,151 @@ Implementation and targeted tests pass; standalone saved timing/barrel/impact
 proof is recorded in [P3_AUTHORED_PROJECTILES_GATE.md](P3_AUTHORED_PROJECTILES_GATE.md).
 Editor/package acceptance and independent exact-commit review remain open.
 Health remains outside this increment; P2 PR #180 remains unmerged.
+
+## Projectile authoring UX sequence — owner-directed 7 October 2026
+
+After owner gameplay acceptance of the repaired disposable bow, continue the
+previous conversation's sequence: UX cleanup, preset refinement, visual animation
+event authoring. Basic/Advanced disclosure and conditional spawn-point/release
+controls are implemented candidates; evidence is in
+[P3_PROJECTILE_UX_CLEANUP](P3_PROJECTILE_UX_CLEANUP.md).
+Existing physical Bullet/Arrow/Bolt/Thrown/Spell presets are reused. The draggable
+animation fire marker is implemented and locally verified. This sequence does not close wider P3 or full P6
+draw/hold gameplay. Human arms replacement and retargeting remain deferred.
+
+## P3 first-class Hitscan checkpoint — 2026-10-08
+
+Weapon firing now supports an explicit Physical projectile or Hitscan / instant
+ray mode per semantic action. Hitscan is not represented by fake projectile
+speed/gravity values. Equipment schema v3 persists fire_mode, range and damage,
+while schema v1/v2 physical-projectile equipment remains readable and unchanged.
+A Hitscan binding has no projectile asset dependency.
+
+Studio's Weapon firing panel exposes Fire mode, Range and Damage for Hitscan and
+retains the same named PSP, first/alternate/both policy and animation fire marker
+used by travelling projectiles. Projectile search/New/Edit Copy are hidden in
+Hitscan mode. Hitscan authoring does not depend on the projectile asset catalogue.
+
+Runtime resolves Hitscan without loading a projectile asset, preserves accepted
+weapon action/ammunition/animation timing, applies the existing muzzle-to-camera
+aim and cover rules, then performs one bounded nearest-contact scene query.
+Character contacts use the existing attributed combat-damage seam and display a
+brief centre hit confirmation; static world contacts do not require a usable
+health system. hitscan.fired and hitscan.impact use the governed gameplay event
+boundary. Beam/continuous casts and pellet spread remain separate work.
+The shared surface presentation checkpoint below supersedes the earlier
+decal-profile limitation; governed per-surface audio asset binding remains open.
+
+Validation: Release EngineBridge, Runtime and normal Studio compile passed; the
+normal Studio link was blocked only because the owner's existing Studio process
+held RenegadeStudio.exe. A separate BUILD/hitscan-studio/RenegadeStudio.exe
+linked successfully without closing that session. EquipmentAsset, LaunchSocket
+and RuntimeProjectileSession focused executables pass. Tests cover schema-v3
+roundtrip/invalid values, Runtime resolution without a projectile asset, authored
+ray range, blocked-query failure, and unchanged projectile simulation behavior.
+git diff --check passes. Native owner visual/gameplay acceptance, package parity,
+Jolt-only blockers and independent exact-head review remain open; no P3 gate
+closure, commit, push or merge is claimed.
+
+## P3 shared impact-surface presentation checkpoint — 2026-10-08
+
+Shared surface response is now an implemented candidate for both Hitscan and
+travelling projectiles. Material Inspector exposes an undoable explicit Impact
+Surface classification: Default, Metal, Wood, Concrete, Stone, Dirt / ground,
+Glass or Water. Governed Character contacts classify automatically; new Renegade
+terrain tags slope as Stone and other terrain materials as Dirt. Runtime keeps the
+stable material identity and adds the semantic surface type without filename,
+colour or texture inference.
+
+The shared presentation layer emits bounded surface-tuned native particle bursts
+and transient Wicked impact marks on eligible world contacts. Marks follow the
+contacted transform when available, cap at 64 and expire after 18 seconds.
+Water, Glass and Character intentionally do not receive the generic bullet-hole
+mark. Existing projectile-authored effects and stick/disappear behaviour remain
+independent. Both Hitscan and travelling-projectile Character contacts show the
+same short centre hit confirmation. Impact gameplay events include
+`surface_type` for scripts and future sound-cue routing.
+
+Per-surface audio asset binding remains open because the current governed audio
+system has no one-shot asset-ID API; raw filename bypasses are not accepted.
+Beam/continuous casts, pellet spread, Jolt-only blocker parity, package parity and
+independent exact-head review also remain open. Release Bridge/Runtime/normal
+Studio build and ProjectileWorld, RuntimeProjectileSession and LaunchSocket
+focused tests pass. No P3 gate closure or merge is implied.
+
+## P3 object Surface Type continuation - 2026-10-08
+
+Supersedes the material-first creator workflow in the preceding checkpoint.
+Creator steps: select an object; choose Surface Type directly in its Inspector.
+The field stays visible independently of collapsed Transform/Rendering/Materials
+sections. Choices: Default, Metal, Wood, Concrete, Stone, Dirt / Ground, Glass,
+Water. No creator-facing impact profile or override chain is introduced.
+
+EngineBridge ObjectImpactSurfaceService stores the classification on the
+selected Object/Collider entity's native MetadataComponent. No mesh subset
+binding or shared MaterialComponent is changed. Runtime checks governed Character
+first, then explicit object metadata, then existing material classification for
+untouched objects. Explicit Default means generic response. Older material
+tags and terrain defaults remain compatible. Both firing modes already share
+the same classification and impact presentation/event path. Audio binding
+remains future work; surface_type is the event seam, not a claim of finished SFX.
+
+The command restores both prior value and prior absence on Undo; Redo reapplies.
+ProjectileWorldTests adds shared-mesh instance isolation, untouched material and
+subset assertions, explicit Default, subset-free object response, automatic
+Character precedence, invalid authoring rejection and native WISCENE archive
+save/reload. This does not claim packaged gameplay or owner visual acceptance.
+
+Visual material assignment is a separate visual property. Material Target still
+selects an already-bound material to edit; it is not relabelled as assignment.
+A future assignment command must create a private mesh derivative for the selected
+instance before altering subset bindings, preserve skinning/LOD/resource identity,
+and restore the original mesh on Undo. Surface Type needs none of those changes.
+
+## P3 governed impact audio - 2026-10-08
+
+ImpactAudioService adds a project-owned schema-v1 bank at
+Content/Audio/Impacts/ImpactAudio.renegade-impact-audio. It maps explicit semantic
+surface tokens to bounded lists of governed LP08 Audio .rasset stable IDs.
+No filenames or renderer material names classify contacts. Ordinary creation stays
+select object -> Surface Type -> done; there is no per-object sound setup.
+Default and Character have no supplied cues and remain silent unless an explicit
+Default/Character bank entry is provided.
+
+Both Hitscan and travelling-projectile contacts dispatch the same transient native
+3D audio player. It resolves and validates all bank assets once per scene revision
+before activation, uses the SoundEffect bus, avoids consecutive variant repeats,
+caps voices at 32, updates listener spatialization, removes ended voices with a
+ten-second safety lifetime, pauses/resumes existing voices and stops them on reset,
+screen transitions, scene replacement and shutdown. It never serializes playback
+voices into the scene. Legacy projects without a bank remain compatible/silent.
+
+Audio products live in Content/Audio/Impacts/<Surface>/Impact_1.rasset and
+Impact_2.rasset. Byte-identical supplied WAVs are retained in SourceAssets/Audio/Impacts
+for governed reimport. Test Level snapshots include bank, registry and required
+products; Build Game discovery adds the bank and all required audio products to
+the normal dependency graph. Packaged Runtime resolves audio stable IDs through
+content-manifest.json and never needs retained SourceAssets.
+
+Tests/ImpactAudioTests.cpp covers bank identity/save-reload, duplicate rejection,
+bounded PCM WAV validation, governed import/resolution, snapshot closure, package
+lookup without sources/registry, native voice playback/variant isolation, cap,
+pause lifetime and reset. Its --install helper imports the explicitly mapped
+supplied packs; --verify and --tag-metal run graphics-enabled real-scene Build Game
+discovery plus supplied WAV decode checks. --tag-metal is for the disposable Bow
+Playground only. New-project automatic starter-bank installation and bank editing
+UI are not added by this checkpoint.
+
+P3 impact VFX first pass: Metal sparks/scuff, Wood splinters/dust/split and Concrete chips/dust/chip masks implemented with shared procedural defaults; orange diagnostic contact visuals removed. Focused Release tests pass. Final owner appearance acceptance remains pending; remaining-surface art and realistic flipbook quality are not complete. See HANDOFF for failed/retried visual capture evidence. No gate closure.
+
+P3 2026-10-08: owner rejected first-pass surface VFX as cartoonish/too similar. Revised Metal/Wood/Concrete candidate uses sparse brief sparks, brown splinters, and embedded detailed Concrete powder with angular chips. Release builds plus four focused checks pass; native save/reload, package sprite inclusion, and live three-surface impacts verified. Owner motion/appearance acceptance remains open; no gate closure. Comparison targets are in the disposable Bow playground. Material assignment safety and working-tree provenance review remain open.
+
+P3 2026-10-09: Glass shard/crack and Water splash/ripple behaviour prototypes added and five-target playground save/reload verified. Four focused tests pass, including cap/expiry/reset and Water arrow retirement. Owner says behaviour test is very successful but ALL impact visuals are too generic/stylised and rejects their quality. Next: authored realistic art pass with a single approved Concrete reference, then remaining surfaces. No visual acceptance or P3 gate closure; no commit/push/merge until working-tree provenance reviewed.
+
+P3 2026-10-09 blood prioritised by owner ahead of Concrete art reference. Projectile/Hitscan Character blood candidate adds detailed embedded spray/splat art, native lit rendering with no emission, bounded falling mesh droplets and collision-derived world stains. Release build/four focused tests/native floor collision and package inclusion pass. Standalone dummy ready; motion and owner quality acceptance pending after foreground guard aborted input proof. Melee contacts, skinned wounds and fluid animation remain open. All earlier impact art remains quality-rejected; no gate closure or commits.
+
+P3 blood size/retention follow-up: owner requests exaggerated readable spray and visible floor residue. Candidate now enlarges spray ~2.5x, doubles droplets, increases floor splash radius to 0.15-0.20m, retains stains ten gameplay minutes and dries/darkens them over 90s. Bounded 96 drops/128 stains; oldest eviction and reset remain. Visual acceptance still pending; no Ghost of Tsushima parity claim.
+
+P3 owner rejects static blood and missing floor stains. Current revision replaces spray with embedded 4x4/16-frame lifetime-driven atlas and fixes wrong local-space attachment flag on blood and generic impact decals. Actual-scene offscreen proof and atlas-age captures added; new live blood_drops/blood_stains counters aid diagnosis. Visual owner acceptance remains pending.
+
+P3 2026-10-09 owner rejects generated blood atlas and floor art. Current bounded experiment adapts KNIFE authored liquid sheets with matching normal maps to 64-frame native PBR cards, slower separate lifetimes and corrected incoming-side normal handling. Native droplets/stain persistence retained; compact procedural floor masks replace furry art but remain below realistic artwork target. No SPH or gate closure. See P3_KNIFE_BLOOD_CANDIDATE.md; actual gameplay owner check and proper floor art remain open.

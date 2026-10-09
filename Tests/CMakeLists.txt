@@ -875,6 +875,7 @@ add_executable(RenegadeLaunchSocketTests LaunchSocketTests.cpp)
 target_link_libraries(RenegadeLaunchSocketTests PRIVATE Renegade::EngineBridge)
 target_include_directories(RenegadeLaunchSocketTests PRIVATE "${CMAKE_SOURCE_DIR}/Runtime/src")
 add_test(NAME LaunchSocket COMMAND RenegadeLaunchSocketTests)
+set_tests_properties(LaunchSocket PROPERTIES TIMEOUT 20)
 set_target_properties(RenegadeLaunchSocketTests PROPERTIES FOLDER "Renegade/Tests")
 add_dependencies(RenegadeBridgeTests RenegadeLaunchSocketTests)
 

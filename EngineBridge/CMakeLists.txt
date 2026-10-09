@@ -1,4 +1,8 @@
 add_library(RenegadeEngineBridge STATIC
+    src/ImpactDefaultsService.cpp
+    include/renegade/bridge/ImpactDefaultsService.h
+    src/ImpactAudioService.cpp
+    include/renegade/bridge/ImpactAudioService.h
     src/LaunchSocketService.cpp
     include/renegade/bridge/LaunchSocketService.h
     src/ProjectileAssetService.cpp

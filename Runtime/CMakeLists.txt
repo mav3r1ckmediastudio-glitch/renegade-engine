@@ -32,10 +32,18 @@ set_target_properties(RenegadeRuntimeBootstrap PROPERTIES
     FOLDER "Renegade"
 )
 
+enable_language(RC)
+configure_file(RuntimeImpactTextures.rc.in "${CMAKE_CURRENT_BINARY_DIR}/RuntimeImpactTextures.rc" @ONLY)
+
 add_executable(RenegadeRuntime WIN32
     src/RuntimeApplication.cpp
     src/RuntimeLiveDiagnostics.cpp
     src/RuntimeApplication.h
+    src/RuntimeBloodEffects.h
+    src/RuntimeImpactGeometry.h
+    src/RuntimeImpactTextures.h
+    src/RuntimeImpactDustResource.cpp
+    "${CMAKE_CURRENT_BINARY_DIR}/RuntimeImpactTextures.rc"
     src/RuntimePlayerViewAsset.h
     src/RuntimePlayerViewAnimation.h
     src/RuntimePlayerViewRig.h

@@ -1,4 +1,5 @@
 #include "renegade/bridge/TerrainService.h"
+#include "renegade/bridge/ImpactSurface.h"
 
 #include <algorithm>
 #include <array>
@@ -634,6 +635,11 @@ namespace renegade::bridge
             material.SetRoughness(index == wi::terrain::MATERIAL_SLOPE ? 0.82f : 0.95f);
             material.SetReflectance(0.02f);
             ConfigureDefaultGrassMaterial(material);
+            auto& metadata = scene.metadatas.Create(materialEntity);
+            const auto impactSurface = index == wi::terrain::MATERIAL_SLOPE
+                ? ImpactSurfaceType::Stone : ImpactSurfaceType::Dirt;
+            metadata.string_values.set(
+                ImpactSurfaceMetadataKey, ImpactSurfaceTypeToken(impactSurface));
             scene.Component_Attach(materialEntity, entity);
         }
 

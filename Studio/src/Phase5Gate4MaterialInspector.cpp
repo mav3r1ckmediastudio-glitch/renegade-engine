@@ -2,9 +2,15 @@
 
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/CreatorTextureWorkflowService.h"
+#include "renegade/bridge/ObjectImpactSurfaceService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 
 #include <algorithm>
+#include <filesystem>
+#include "renegade/bridge/ImpactDefaultsService.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include <array>
 #include <filesystem>
 #include <memory>
@@ -174,6 +180,36 @@ namespace renegade::studio
                 static_cast<wi::enums::BLENDMODE>(args.userdata));
         });
         inspectorPanel_.AddWidget(&materialBlendMode_);
+
+        objectSurfaceLabel_.Create("Object Surface Type Label");
+        objectSurfaceLabel_.SetText("SURFACE TYPE");
+        objectSurfaceLabel_.SetVisible(false);
+        inspectorPanel_.AddWidget(&objectSurfaceLabel_);
+        materialImpactSurface_.Create("Surface Type");
+        materialImpactSurface_.SetVisible(false);
+        for (const auto type : {
+            bridge::ImpactSurfaceType::Default,
+            bridge::ImpactSurfaceType::Metal,
+            bridge::ImpactSurfaceType::Wood,
+            bridge::ImpactSurfaceType::Concrete,
+            bridge::ImpactSurfaceType::Stone,
+            bridge::ImpactSurfaceType::Dirt,
+            bridge::ImpactSurfaceType::Glass,
+            bridge::ImpactSurfaceType::Water})
+        {
+            materialImpactSurface_.AddItem(
+                bridge::ImpactSurfaceTypeName(type),
+                static_cast<std::uint64_t>(type));
+        }
+        materialImpactSurface_.SetTooltip(
+            "Choose this object's surface. Hitscan and travelling projectiles automatically "
+            "use matching impact effects and marks. Other objects are unchanged.");
+        materialImpactSurface_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            ApplySelectedMaterialImpactSurface(
+                static_cast<bridge::ImpactSurfaceType>(args.userdata));
+        });
+        inspectorPanel_.AddWidget(&materialImpactSurface_);
 
         createSection(materialCoreLabel_, "Gate 4 Material Core",
             "PBR // CORE PROPERTIES");
@@ -744,6 +780,43 @@ namespace renegade::studio
         auto state = bridge::CaptureMaterial(*material);
         state.blendMode = blendMode;
         CommitSelectedMaterial(state);
+    }
+
+    void StudioRenderPath::ApplySelectedMaterialImpactSurface(
+        const bridge::ImpactSurfaceType type)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+            return;
+        auto& scene = session_->Scenes().GetScene();
+        const auto entity = session_->Selection().SelectedEntity();
+#ifdef _WIN32
+        if(session_->Projects().HasProject()) {
+            wchar_t executable[MAX_PATH]{};
+            if(GetModuleFileNameW(nullptr,executable,MAX_PATH)) {
+                const auto library=std::filesystem::path(executable).parent_path()/
+                    "Content/ImpactDefaults/ImpactDefaults.renegade";
+                if(std::filesystem::exists(library)) {
+                    std::string error;
+                    auto defaults=bridge::PrepareImpactDefaults(scene,session_->Projects().CurrentProject(),
+                        library.generic_u8string(),error);
+                    if(defaults)session_->Commands().Execute(std::move(defaults));
+                    else if(!error.empty()) {
+                        studioChrome_.SetStatusText("IMPACT SETUP // "+error);
+                        return;
+                    }
+                }
+            }
+        }
+#endif
+        if (session_->Commands().Execute(
+                std::make_unique<bridge::SetObjectImpactSurfaceCommand>(
+                    scene, entity, type)))
+        {
+            // Keep the native popup active until GUI dispatch finishes.
+            // Synchronous relayout would pass this click to a section beneath it.
+            QueueInspectorRefresh();
+            RefreshStatus();
+        }
     }
 
     void StudioRenderPath::ApplySelectedMaterialToggle(
