@@ -184,7 +184,10 @@ inline void EvaluateRuntimePlayerHandAvoidance(wi::scene::Scene& scene,
   return true;
  };
  const auto solve=[&](XMVECTOR target) -> bool {
-  auto& ik=pose.inverse_kinematics.Create(state.hand);ik.chain_length=state.chainLength;ik.iteration_count=4;
+  // Candidate/iteration solves share one transient IK component this frame.
+  auto* existing=pose.inverse_kinematics.GetComponent(state.hand);
+  auto& ik=existing ? *existing : pose.inverse_kinematics.Create(state.hand);
+  ik.chain_length=state.chainLength;ik.iteration_count=4;
   ik.use_target_position=true;XMStoreFloat3(&ik.target_position,target);
   pose.RunProceduralAnimationUpdateSystem(ctx);wi::jobsystem::Wait(ctx);
   for(const auto e:state.bones) {

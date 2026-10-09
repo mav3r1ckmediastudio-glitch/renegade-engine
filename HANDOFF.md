@@ -5093,3 +5093,36 @@ Validation (repo root, VS18 CMake tools):
 Final standalone Runtime PID50772 opened at disposable Bow Playground for ordinary owner testing. No mouse/key automation this turn. Earlier live hits from preceding static build do not establish this atlas's live acceptance. Next: owner judges atlas motion and looks down at residue around Character dummy; improve texture quality/coherence from that feedback. ALL earlier impact quality rejection remains, no Ghost of Tsushima parity claim, no P3 gate closure. Safe Inspector material assignment, broad-tree provenance review and intermittent native worker stall remain open.
 
 Owner rejection at 09:45 London 2026-10-09: current atlas is WORSE. Specific failures: effect appears BEHIND dummy, animation too fast, not remotely realistic, floor decals look like red fur. This overrides preceding native rendering success; do not count current blood as accepted. Owner directs inspection of Unity KNIFE impact pack in Downloads, containing multiple material impacts and bullet-hole decals. Next work uses authored pack resources/presets rather than further AI-generated sheet/preset inflation. Nothing committed/pushed/merged.
+## P2 CI repair - 2026-10-06
+
+Fix commit 38e5305ee9bd18fd8e5df7fb89b8c90b254e85e7 on
+feature/p2-equipment-actions / PR #180. Separate BUILD/p2-ci-repair worktree;
+the main checkout is actively authoring P3 and was not edited or switched.
+CI head cde4106: Windows baseline Debug/Release passed; Studio compiled both
+configurations but source contract failed on retired importer dimensions.
+Debug PlayerViewRigTests also asserted !Contains(entity) in native ECS and
+waited until its 1500-second timeout. The avoidance solver created the same
+hand IK component for every candidate/iteration. It now gets the existing
+transient component or creates it once; end-of-frame cleanup remains unchanged.
+The importer contract checks the expanded panel and commit/cancel positions
+plus the added destination, folder, role and tags rows. No checks removed.
+Changed PlayerViewHandAvoidance.h and CreatorImporterReviewLayoutSourceContract.cmake.
+
+Local validation: cmake -DRENEGADE_SOURCE_DIR=<P2-worktree>
+-P Tests/SceneUiGate6SourceContract.cmake: both consolidated and importer checks
+passed. Isolated PlayerViewRigTests translation unit built against existing
+native Debug and Release libraries, using the P2 worktree Runtime/bridge headers.
+Temporary vcxproj copied from the generated test project with generation/reference
+steps removed; main build intermediates and active P3 source untouched.
+MSBuild P2CiRepairTests.vcxproj /m:2 /verbosity:quiet /nologo
+/p:Configuration=Debug (then Release) /p:Platform=x64
+/p:BuildProjectReferences=false with isolated IntDir/OutDir and CL=/MP4:
+both exit0 (7.16s Debug build; Release build/test sequence 12.15s).
+Both isolated RenegadePlayerViewRigTests.exe runs exit0: avoidance evaluated,
+hand grip Undo/Redo rollback save/reopen reimport and stale-save rejection passed;
+parented dual-hand rig/skeletal socket/foreground policy passed.
+Logs BUILD/p2-ci-debug-build.log and BUILD/p2-ci-release-build.log in main checkout.
+git -c diff.ignoreSubmodules=all diff --check passed. No Wicked source edits.
+Full clean-build CI remains required. Push this repair and verify new PR jobs.
+P3 continuation must incorporate 38e5305 via cherry-pick or eventual merged main;
+do not interrupt/discard its current uncommitted authoring work. No merge performed.

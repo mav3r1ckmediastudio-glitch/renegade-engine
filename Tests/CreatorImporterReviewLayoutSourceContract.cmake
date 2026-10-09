@@ -42,16 +42,16 @@ require_text(importer_header
 # Static assets keep the compact layout; Characters expand the same native
 # importer and expose real clip/action controls rather than a painted panel.
 require_text(importer
-    "modelImportPanel_.SetSize(XMFLOAT2(560.0f, character ? 850.0f : 610.0f));"
+    "modelImportPanel_.SetSize(XMFLOAT2(560.0f, character ? 990.0f : 750.0f));"
     "static/Character adaptive panel height")
 require_text(importer
     "modelImportName_.SetPos(XMFLOAT2(110.0f, character ? 740.0f : 500.0f));"
     "asset-name position below active controls")
 require_text(importer
-    "modelImportCommit_.SetPos(XMFLOAT2(20.0f, character ? 790.0f : 550.0f));"
+    "modelImportCommit_.SetPos(XMFLOAT2(20.0f, character ? 925.0f : 685.0f));"
     "commit action remains reachable")
 require_text(importer
-    "modelImportCancel_.SetPos(XMFLOAT2(260.0f, character ? 790.0f : 550.0f));"
+    "modelImportCancel_.SetPos(XMFLOAT2(260.0f, character ? 925.0f : 685.0f));"
     "cancel action remains reachable")
 require_text(importer
     "modelImportAddAnimation_.SetPos(XMFLOAT2(20.0f, 685.0f));"
@@ -68,6 +68,18 @@ require_text(importer
 require_text(importer
     "modelImportSpeed_.SetVisible(character);"
     "Character-only preview speed control")
+
+# Destination, role and optional tags occupy the added rows in both layouts.
+require_text(importer "const float destinationY = character ? 775.0f : 535.0f;"
+    "destination controls below the asset name")
+require_text(importer "modelImportFolderChoices_.SetPos({110,destinationY});"
+    "existing Content folder selector")
+require_text(importer "modelImportFolder_.SetPos({110,destinationY+32});"
+    "editable Content destination")
+require_text(importer "modelImportRole_.SetPos({110,destinationY+64});"
+    "explicit player asset role")
+require_text(importer "modelImportTags_.SetPos({110,destinationY+96});"
+    "optional tags above commit and cancel")
 
 # Import is only committed after a rendered preview is ready and a thumbnail
 # can be captured from that same preview.
