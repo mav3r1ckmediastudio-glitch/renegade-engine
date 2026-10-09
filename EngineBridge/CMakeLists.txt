@@ -236,11 +236,11 @@ target_link_libraries(RenegadeEngineBridge
         WickedEngine
 )
 
-# EngineBridge includes several large translation units. MSVC Debug CI can exceed
-# the default COFF section limit (C1128), so match Studio's /bigobj policy.
+# Native scene/combat headers can exceed MSVC's Debug COFF section limit.
+# Consumers (including gameplay tests) need the same policy as the bridge.
 target_compile_options(RenegadeEngineBridge
-    PRIVATE
-        "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>"
+    PUBLIC
+        "$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:/bigobj>"
 )
 
 if(WIN32)

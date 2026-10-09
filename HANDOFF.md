@@ -1,3 +1,23 @@
+## PR181 shared-header Debug COFF build repair - 2026-10-09
+
+CI head531b34032a13c8d6274b0b7c7a98c3644b4f15e2: Runtime C1128 repaired;
+local Debug Runtime build completed successfully. Baseline Debug/Release passed.
+Studio Debug job113988948071 then failed C1128 in RuntimeProjectileSessionTests,
+ImpactAudioTests and EquipmentAssetTests. First fix omitted header consumers.
+EngineBridge /bigobj is now PUBLIC for MSVC C++ compilation, so linked gameplay
+test targets inherit the same native-header compilation requirement. Does not
+change Wicked upstream or C/RC/non-MSVC flags.
+cmake -S . -B BUILD/renegade PASS; generated vcxproj for all three failed targets
+shows /bigobj in all four build configurations.
+cmake --build BUILD/renegade --config Debug --target
+RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests
+RenegadeEquipmentAssetTests --parallel 4
+launched, still rebuilding EngineBridge at publication; no completed test-build
+success claimed. Log BUILD/p3-ci-shared-bigobj-debug.log.
+Source CI log BUILD/p3-ci-debug-failed2.log. git diff --check PASS.
+Require fresh full GitHub CI and remaining verification before merging PR181.
+No gate closure.
+
 ## PR181 Runtime Debug COFF build repair - 2026-10-09
 
 CI head 1cdf169da72ca8cc7662e35da54bec2b8c7cfd40: baseline Debug/Release
