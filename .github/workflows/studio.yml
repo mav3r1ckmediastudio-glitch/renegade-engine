@@ -31,7 +31,9 @@ jobs:
   studio:
     name: Renegade Studio Windows x64 ${{ matrix.configuration }}
     runs-on: windows-2025
-    timeout-minutes: 60
+    # The full Windows Release Studio build exceeded 60 minutes before CTest finished.
+    # Preserve complete Debug/Release compilation, tests, startup proof and packaging.
+    timeout-minutes: 90
     env:
       # GitHub-hosted Windows runners expose a DX12 device but do not provide
       # the reliable visible-model presentation path used by the owner-hardware
