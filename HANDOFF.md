@@ -1,3 +1,25 @@
+## GitHub combined P2/P3 checkpoint - 2026-10-09
+
+Owner requested publishing accumulated work to GitHub. Latest local P3 code,
+tests, docs and generated fallback resources committed as
+8bfa6e7b2c73c8eeeed1614f6bf03eefb769c6a8 (70 files). Merged complete remote P2
+branch including hand-IK Debug/importer-layout fixes; code checkpoint is
+70862b6a191eee8f6907ba00d96b7b7c9bb7d3c1. Only HANDOFF prepend conflict:
+both branches' entries preserved and shared history retained once.
+git push -u origin feature/p3-projectile-impact succeeded; remote hash verified.
+Draft combined PR #181:
+https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/pull/181
+Includes all current P2 work; PR #180 left open until combined integration ready.
+Main unchanged. Windows baseline and Studio CI both observed in progress.
+Post-checkpoint focused CTest PASS4/4 .54s, log
+BUILD/p3-github-checkpoint-ctest.log. P2 code integration still needs rebuilt
+native verification and exact-commit independent review. No release gate closed.
+Private supplied art, WAVs and playground/build data remain local/private kit,
+not source Git. Generated fallback PNGs have committed provenance.
+Only remaining untracked files are Tools/__pycache__/ and log.txt.
+Remaining editor/Jolt-only/Hitscan verification and owner-ready test-build work
+are recorded above in the ordinary-project entry.
+
 ## Ordinary-project impact defaults - 2026-10-09
 
 Implemented local Studio impact-library adoption through stable bridge service.
