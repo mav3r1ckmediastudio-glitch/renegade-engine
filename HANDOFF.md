@@ -1,3 +1,18 @@
+## 2026-10-09: PR 181 Debug test repair (base 77b8b9d)
+
+The latest Studio Debug CI compiled successfully, then failed two obsolete source contracts and timed out ImpactAudioTests after 1500 seconds. The audio worker had no render endpoint; Wicked's Debug assertion opened a dialog. Baseline Debug/Release passed on that revision.
+
+Updated the ADD menu contract for the ninth projectile entry and the player-view contract to inspect the rendered camera after physics, allowing the separate pre-physics aiming sample. Split impact audio coverage into an always-running governance/save/reload/snapshot/package test and a native voice test. The latter enumerates active render endpoints before native initialization and skips with code 77 only when no endpoint exists; enumeration failures remain failures. Both audio tests have a 30-second timeout; assertions report to stderr. No production gameplay or upstream Wicked code changed.
+
+Local validation passed:
+- `cmake -S . -B BUILD/renegade`
+- `cmake --build BUILD/renegade --config Debug --target RenegadeImpactAudioTests --parallel 4`
+- `ctest --test-dir BUILD/renegade -C Debug -R '(SourceContract|RenegadeImpactAudio.*Tests|RenegadeRuntimeProjectileSessionTests|RenegadeEquipmentAssetTests)' --timeout 30 --output-on-failure`: 58/58 passed, 3.31 seconds, including real native voices.
+- With the test-only environment variable `RENEGADE_TEST_NO_AUDIO_DEVICE=1`, `ctest --test-dir BUILD/renegade -C Debug -R '^RenegadeImpactAudioNativeVoiceTests$' --timeout 30 --output-on-failure`: correctly skipped in 0.49 seconds. The variable was removed afterward.
+- All 55 source contracts also passed independently; `git diff --check` passed.
+
+Local logs: BUILD/p3-ci-tests-debug-build.log, BUILD/p3-ci-repaired-debug-tests.log, BUILD/p3-ci-headless-audio-proof.log, BUILD/p3-ci-all-source-contracts.log. Fresh CI remains required; PR stays draft and no release gate or main merge is claimed.
+
 ## PR181 shared-header Debug COFF build repair - 2026-10-09
 
 CI head531b34032a13c8d6274b0b7c7a98c3644b4f15e2: Runtime C1128 repaired;

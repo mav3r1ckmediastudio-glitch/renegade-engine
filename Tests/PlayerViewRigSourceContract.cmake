@@ -73,7 +73,16 @@ string(FIND "${runtime_text}" "PoseRuntimePlayerViewRig" rig_pose_pos)
 string(FIND "${runtime_text}" "UpdateRuntimePlayerViewRigPresentation" rig_presentation_pos)
 string(FIND "${runtime_text}" "UpdateRuntimePlayerViewAnimations" rig_animation_pos)
 string(FIND "${runtime_text}" "wi::Application::Update(paused_ ? 0.0f : dt);" scene_update_pos)
-string(FIND "${runtime_text}" "bridge::ApplyRuntimePlayerCamera" camera_pos)
+# Projectile aiming also samples the camera before physics. The rendered camera
+# must still sample the post-physics position; inspect that part of Update.
+set(camera_pos -1)
+if(NOT scene_update_pos EQUAL -1)
+    string(SUBSTRING "${runtime_text}" ${scene_update_pos} -1 post_physics_text)
+    string(FIND "${post_physics_text}" "bridge::ApplyRuntimePlayerCamera" camera_offset)
+    if(NOT camera_offset EQUAL -1)
+        math(EXPR camera_pos "${scene_update_pos} + ${camera_offset}")
+    endif()
+endif()
 
 if(rig_pose_pos EQUAL -1 OR scene_update_pos EQUAL -1 OR
    NOT rig_pose_pos LESS scene_update_pos)

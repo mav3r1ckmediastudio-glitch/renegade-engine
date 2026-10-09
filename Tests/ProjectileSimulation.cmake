@@ -38,6 +38,11 @@ target_link_libraries(RenegadeImpactAudioTests PRIVATE Renegade::EngineBridge)
 target_include_directories(RenegadeImpactAudioTests PRIVATE ${CMAKE_SOURCE_DIR}/WickedEngine/Editor)
 target_compile_features(RenegadeImpactAudioTests PRIVATE cxx_std_17)
 add_test(NAME RenegadeImpactAudioTests COMMAND RenegadeImpactAudioTests)
+add_test(NAME RenegadeImpactAudioNativeVoiceTests COMMAND RenegadeImpactAudioTests --native-voices)
+set_tests_properties(RenegadeImpactAudioTests PROPERTIES TIMEOUT 30)
+set_tests_properties(RenegadeImpactAudioNativeVoiceTests PROPERTIES
+    SKIP_RETURN_CODE 77 TIMEOUT 30 LABELS "AudioHardware")
+
 add_dependencies(RenegadeBridgeTests RenegadeImpactAudioTests)
 
 add_executable(RenegadeRuntimeProjectileSessionTests ${CMAKE_CURRENT_LIST_DIR}/RuntimeProjectileSessionTests.cpp

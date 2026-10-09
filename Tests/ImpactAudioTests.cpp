@@ -6,6 +6,8 @@
 #include "renegade/bridge/ImpactDefaultsService.h"
 #include "renegade/bridge/StoryFlowLevelReferenceService.h"
 #include <set>
+#include <mmdeviceapi.h>
+#include <cstdlib>
 #include "renegade/bridge/ProjectileAssetService.h"
 #include "renegade/bridge/EquipmentAssetService.h"
 #include "renegade/bridge/PlayerService.h"
@@ -1443,6 +1445,7 @@ static int VerifyImpactDefaults(const fs::path& library,const fs::path& folder)
 
 int main(int argc,char** argv)
 {
+    _set_error_mode(_OUT_TO_STDERR);
     if(argc==4 && std::string(argv[1])=="--export-impact-library")return ExportImpactLibrary(argv[2],argv[3]);
     if(argc==4 && std::string(argv[1])=="--impact-defaults-proof")return VerifyImpactDefaults(argv[2],argv[3]);
     if(argc==4 && std::string(argv[1])=="--quiet-projectile")
@@ -1561,6 +1564,30 @@ int main(int argc,char** argv)
         restored!=wav)return fail("package lookup: "+error);
     if(PrepareImpactAudioAsset("",package.generic_u8string(),projectId,GenerateStableId(),restored,error))
         return fail("missing package product accepted");
+    const bool nativeVoices=argc==2 && std::string(argv[1])=="--native-voices";
+    if(!nativeVoices) {
+        std::cout<<"ImpactAudioTests passed: governance, save/reload, snapshot, package"<<std::endl;
+        return 0;
+    }
+    // CI workers can have XAudio2 but no render endpoint. Probe before Wicked's
+    // asserting native initializer; only absent hardware is a CTest skip.
+    const HRESULT com=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
+    if(FAILED(com))return fail("audio preflight COM initialization failed");
+    IMMDeviceEnumerator* enumerator=nullptr;IMMDeviceCollection* endpoints=nullptr;UINT endpointCount=0;
+    HRESULT hr=CoCreateInstance(__uuidof(MMDeviceEnumerator),nullptr,CLSCTX_ALL,
+        __uuidof(IMMDeviceEnumerator),reinterpret_cast<void**>(&enumerator));
+    if(SUCCEEDED(hr))hr=enumerator->EnumAudioEndpoints(eRender,DEVICE_STATE_ACTIVE,&endpoints);
+    if(SUCCEEDED(hr))hr=endpoints->GetCount(&endpointCount);
+    if(endpoints)endpoints->Release();
+    if(enumerator)enumerator->Release();
+    CoUninitialize();
+    if(FAILED(hr))return fail("audio render endpoint enumeration failed");
+    // Explicit test-only seam to reproduce absent hardware on a developer PC.
+    if(std::getenv("RENEGADE_TEST_NO_AUDIO_DEVICE"))endpointCount=0;
+    if(endpointCount==0) {
+        std::cout<<"SKIP native impact voices: no active audio render endpoint"<<std::endl;
+        return 77;
+    }
     wi::audio::Initialize();
     ImpactAudioPlayer player;
     if(!player.Prepare((package/"GameData").generic_u8string(),package.generic_u8string(),projectId,error) ||
