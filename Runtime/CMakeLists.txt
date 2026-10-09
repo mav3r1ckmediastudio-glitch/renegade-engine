@@ -65,6 +65,8 @@ target_compile_definitions(RenegadeRuntime
 
 target_compile_options(RenegadeRuntime
     PRIVATE
+        # Debug Runtime scene/VFX templates exceed the standard COFF section limit.
+        "$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:/bigobj>"
         "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
 )
 

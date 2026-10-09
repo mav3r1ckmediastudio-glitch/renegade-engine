@@ -1,3 +1,19 @@
+## PR181 Runtime Debug COFF build repair - 2026-10-09
+
+CI head 1cdf169da72ca8cc7662e35da54bec2b8c7cfd40: baseline Debug/Release
+passed; Studio Debug job113976234739 failed compiling RuntimeApplication.cpp
+with MSVC C1128 (object section limit). Studio Release still in progress.
+Added MSVC C++ /bigobj to RenegadeRuntime target, matching existing Studio/
+EngineBridge policy; no gameplay, resource format or upstream change.
+cmake -S . -B BUILD/renegade PASS; generated Runtime vcxproj confirms /bigobj
+for Debug, Release, MinSizeRel and RelWithDebInfo C++ compilation.
+cmake --build BUILD/renegade --config Debug --target RenegadeRuntime --parallel 4
+launched; local build still in progress at publication, log
+BUILD/p3-ci-bigobj-debug.log. No local Debug success claimed yet.
+Source CI log BUILD/p3-ci-debug-failed.log retrieved through GitHub job logs API.
+Publish fix to same PR181 branch and require fresh CI before merging.
+No release gate closed.
+
 ## GitHub combined P2/P3 checkpoint - 2026-10-09
 
 Owner requested publishing accumulated work to GitHub. Latest local P3 code,
