@@ -245,7 +245,7 @@ namespace renegade::runtime
                     }
                     if(texture==ImpactTexture::BloodSpray)
                     {emitter->shaderType=wi::EmittedParticleSystem::SOFT_LIGHTING;emitter->random_color=0;
-                        emitter->framesX=4;emitter->framesY=4;emitter->frameCount=16;emitter->frameStart=0;
+                        emitter->framesX=8;emitter->framesY=8;emitter->frameCount=64;emitter->frameStart=0;
                         emitter->frameRate=0;emitter->SetFrameBlendingEnabled(true);
                         emitter->random_life=0;emitter->random_factor=0;emitter->normal_factor=0;
                         emitter->rotation=0;emitter->gravity={0,0,0};emitter->scaleX=1;emitter->scaleY=1;}
@@ -399,8 +399,23 @@ namespace renegade::runtime
             }
 
             const auto markDonor=RuntimeImpactMarks::FindMaterial(scene,surface);
+            // The 2x2 original marks are static variations, not animation frames.
+            const wi::graphics::Texture* authoredMark=nullptr;
+            switch(surface) {
+            case Surface::Metal: authoredMark=&GetBuiltinImpactAtlas(BuiltinImpactAtlas::MetalMarks);break;
+            case Surface::Wood: authoredMark=&GetBuiltinImpactAtlas(BuiltinImpactAtlas::WoodMarks);break;
+            case Surface::Concrete: authoredMark=&GetBuiltinImpactAtlas(BuiltinImpactAtlas::ConcreteMarks);break;
+            case Surface::Stone: authoredMark=&GetBuiltinImpactAtlas(BuiltinImpactAtlas::StoneMarks);break;
+            case Surface::Dirt: authoredMark=&GetBuiltinImpactAtlas(BuiltinImpactAtlas::DirtMarks);break;
+            case Surface::Glass: authoredMark=&GetBuiltinImpactAtlas(BuiltinImpactAtlas::GlassMarks);break;
+            case Surface::Character: authoredMark=&GetBuiltinImpactAtlas(
+                embedded?BuiltinImpactAtlas::SkinEntryMarks:BuiltinImpactAtlas::SkinMarks);break;
+            default:break;
+            }
+            const bool builtInMark=authoredMark && authoredMark->IsValid();
+            const bool detailedMark=builtInMark || markDonor!=wi::ecs::INVALID_ENTITY;
             RuntimeImpactMarks::Anchor skinAnchor;
-            if(surface==Surface::Character && (markDonor==wi::ecs::INVALID_ENTITY ||
+            if(surface==Surface::Character && (!detailedMark ||
                 !RuntimeImpactMarks::Capture(scene,ProjectileNativeVector(impact.contact.position),direction,parent,skinAnchor)))
                 return;
             if(surface==Surface::Water)return;
@@ -474,12 +489,20 @@ namespace renegade::runtime
                     : surface==Surface::Concrete?XMFLOAT4{.58f,.56f,.52f,.95f}:XMFLOAT4{.16f,.16f,.15f,.95f};
             material->SetRoughness(1.0f);
             const unsigned markSeed=static_cast<unsigned>(impact.projectileId)+ ++markSerial*101u;
-            if(markDonor!=wi::ecs::INVALID_ENTITY) {
+            if(builtInMark) {
+                material->textures[wi::scene::MaterialComponent::BASECOLORMAP].resource.SetTexture(*authoredMark);
+                const auto variant=markSeed%4;
+                material->texMulAdd={.5f,.5f,float(variant%2)*.5f,float(variant/2)*.5f};
+                material->baseColor={1,1,1,1};
+                material->SetRoughness(surface==Surface::Glass?.28f:.92f);
+                material->SetReflectance(surface==Surface::Glass?.08f:.02f);
+                material->SetAlphaRef(1.f);material->emissiveColor={0,0,0,0};
+            }
+            else if(markDonor!=wi::ecs::INVALID_ENTITY) {
                 *material=*scene.materials.GetComponent(markDonor);
                 const auto variant=markSeed%4;
                 material->texMulAdd={.5f,.5f,float(variant%2)*.5f,float(variant/2)*.5f};
                 if(surface==Surface::Glass) {
-                    // Thin fracture edges need higher contrast than ordinary grey surface paint.
                     material->baseColor={3.f,3.f,3.f,1};material->SetNormalMapStrength(.25f);
                 }
             }
@@ -495,8 +518,8 @@ namespace renegade::runtime
                 surface == Surface::Concrete || surface == Surface::Stone
                     ? .075f : .065f;
             const float variedSize=size*(embedded?.65f:1.f)*
-                (markDonor!=wi::ecs::INVALID_ENTITY?(.85f+float(markSeed%31)*.01f):1.f);
-            const float roll=markDonor!=wi::ecs::INVALID_ENTITY?float(markSeed%628)*.01f:0;
+                (detailedMark?(.85f+float(markSeed%31)*.01f):1.f);
+            const float roll=detailedMark?float(markSeed%628)*.01f:0;
             const auto n = direction;
             const auto p = impact.contact.position;
             transform->ClearTransform();
@@ -512,7 +535,7 @@ namespace renegade::runtime
                 if(!RuntimeImpactMarks::Follow(scene,entity,skinAnchor)){scene.Entity_Remove(entity);return;}
             } else if (parent != wi::ecs::INVALID_ENTITY && scene.transforms.Contains(parent))
                 scene.Component_Attach(entity, parent);
-            impactDecals.push_back({entity,markDonor!=wi::ecs::INVALID_ENTITY?120.f:18.f,skinAnchor});
+            impactDecals.push_back({entity,detailedMark?120.f:18.f,skinAnchor});
             if(surface==Surface::Character && embedded && skinAnchor.receiver!=wi::ecs::INVALID_ENTITY &&
                 RuntimeImpactMarks::BloodTrickle(markSeed%4).IsValid()) {
                 if(impactDecals.size()>=64){scene.Entity_Remove(impactDecals.front().entity);impactDecals.erase(impactDecals.begin());}

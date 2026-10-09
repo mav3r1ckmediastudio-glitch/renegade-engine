@@ -1,4 +1,5 @@
 #pragma once
+#include "RuntimeImpactTextures.h"
 #include <wiScene.h>
 #include <algorithm>
 #include <cmath>
@@ -87,9 +88,20 @@ namespace renegade::runtime
             };
             const auto donor=(kind==Kind::Glass || kind==Kind::Rock || kind==Kind::Wood)?
                 FindDebrisMaterial(scene,kind):wi::ecs::INVALID_ENTITY;
-            if(donor!=wi::ecs::INVALID_ENTITY)
+            const wi::graphics::Texture* atlas=nullptr;
+            if(kind==Kind::Glass)atlas=&GetBuiltinImpactAtlas(BuiltinImpactAtlas::GlassDebris);
+            else if(kind==Kind::Rock)atlas=&GetBuiltinImpactAtlas(BuiltinImpactAtlas::RockDebris);
+            else if(kind==Kind::Wood)atlas=&GetBuiltinImpactAtlas(BuiltinImpactAtlas::WoodDebris);
+            if((atlas && atlas->IsValid()) || donor!=wi::ecs::INVALID_ENTITY)
             {
-                material=*scene.materials.GetComponent(donor);
+                if(atlas && atlas->IsValid()) {
+                    material.textures[wi::scene::MaterialComponent::BASECOLORMAP].resource.SetTexture(*atlas);
+                    material.baseColor={1,1,1,1};
+                    material.userBlendMode=wi::enums::BLENDMODE_ALPHA;
+                    material.SetAlphaRef(1.f);material.emissiveColor={0,0,0,0};
+                    material.SetRoughness(kind==Kind::Glass?.1f:.85f);
+                    material.SetReflectance(kind==Kind::Glass?.08f:.025f);
+                } else material=*scene.materials.GetComponent(donor);
                 material.SetCastShadow(false);material.SetDoubleSided(true);
                 // Four independent static atlas shapes; they never animate into one another.
                 const float u=float(variant%2)*.5f,v=float((variant/2)%2)*.5f;
@@ -218,7 +230,10 @@ namespace renegade::runtime
         bool Debris(wi::scene::Scene& scene,Kind kind,const XMFLOAT3& point,
             const XMFLOAT3& normal,float strength,unsigned seed)
         {
-            if(FindDebrisMaterial(scene,kind)==wi::ecs::INVALID_ENTITY)return false;
+            const auto builtin=kind==Kind::Wood?BuiltinImpactAtlas::WoodDebris:
+                kind==Kind::Rock?BuiltinImpactAtlas::RockDebris:BuiltinImpactAtlas::GlassDebris;
+            if(!GetBuiltinImpactAtlas(builtin).IsValid() &&
+                FindDebrisMaterial(scene,kind)==wi::ecs::INVALID_ENTITY)return false;
             const auto basis=Basis(normal);const auto matrix=XMLoadFloat4x4(&basis);
             const unsigned count=std::max(4u,unsigned((kind==Kind::Wood?18:14)*strength));
             for(unsigned i=0;i<count;++i) {

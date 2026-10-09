@@ -1093,6 +1093,21 @@ static int VerifyNative(const fs::path& descriptor, bool tagMetal, bool stagePac
         !renegade::runtime::GetBloodSprayAtlasTexture().IsValid())
     {std::cerr<<"Embedded blood art decode failed";return 30;}
     std::cout<<"Embedded blood spray and splat: GPU decode valid"<<std::endl;
+    // Verify every distributable core impact image is actually embedded and
+    // decodable by Wicked in a native executable (not merely present on disk).
+    {
+        constexpr unsigned sides[]={4096,1254,2048,2048,2048,2048,2048,1254,2048,2048,1254,2048};
+        for(unsigned i=0;i<static_cast<unsigned>(renegade::runtime::BuiltinImpactAtlas::Count);++i) {
+            const auto& image=renegade::runtime::GetBuiltinImpactAtlas(
+                static_cast<renegade::runtime::BuiltinImpactAtlas>(i));
+            if(!image.IsValid() || image.GetDesc().width!=sides[i] ||
+                image.GetDesc().height!=sides[i]) {
+                std::cerr<<"Original impact atlas decode failed at index "<<i;
+                return 36;
+            }
+        }
+        std::cout<<"All 12 original impact atlases decoded as native GPU textures"<<std::endl;
+    }
     {
         auto proof=std::make_unique<wi::scene::Scene>();
         const auto floor=proof->Entity_CreatePlane("Blood collision proof floor");
