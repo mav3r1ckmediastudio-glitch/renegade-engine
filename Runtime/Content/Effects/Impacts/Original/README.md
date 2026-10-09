@@ -30,5 +30,5 @@ No PNG was copied from the KNIFE Unity directory. The assets are the exact user-
 ## Validation
 Build Release targets RenegadeRuntime, RenegadeImpactAudioTests, RenegadeRuntimeProjectileSessionTests and run associated CTests. Verify the original marked surfaces in Test Game and packaged Build Game before merging.
 
-## Remaining private content boundary
-This integration replaces the default impact **visuals** only. The old optional KNIFE donor workflow and any third-party impact audio used by local sample projects are not redistributed here. Independent sounds and any project-only content must be reviewed separately before a fully unrestricted default asset pack can be declared. No new editor asset-browser panel is claimed by this change.
+## Owner-authored impact SFX and core packaging
+This integration replaces the default impact **visuals** only. The owner confirms that the 14 impact WAV files in `Downloads/impact sfx` and `Downloads/impact sfx 2` were created by the owner and are **original Renegade content, not Unity-pack audio**. Those WAVs can already be imported into the governed project impact-audio bank and included in an exported game using that bank. Automatic core-library bundling of these owner-authored WAVs is still a separate implementation task; it is **not** a need to replace their contents or resolve third-party rights. No new editor asset-browser panel is claimed by this change.
