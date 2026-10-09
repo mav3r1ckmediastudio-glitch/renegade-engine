@@ -1625,6 +1625,16 @@ int main(int argc,char** argv)
     if(player.ClipCount()!=2)return fail("screen discarded prepared bank");
     player.Reset();
     if(player.VoiceCount()!=0 || player.ClipCount()!=0)return fail("reset retained audio");
-    std::cout<<"ImpactAudioTests passed: governance, save/reload, snapshot, package, native voices, variants, cap, pause/reset\n";
+    // With core defaults enabled, the two governed Metal variants stay intact;
+    // the six other surface families receive 12 bundled original WAVs.
+    ImpactAudioPlayer core;
+    if(!core.Prepare((package/"GameData").generic_u8string(),
+            package.generic_u8string(),projectId,error,true) || core.ClipCount()!=14)
+        return fail("owner-authored core audio preparation/override: "+error);
+    if(!core.Play(ImpactSurfaceType::Glass,{0,0,2},listener,played) ||
+       !core.Play(ImpactSurfaceType::Water,{0,0,2},listener,played))
+        return fail("glass/water core voice playback");
+    core.Reset();
+    std::cout<<"ImpactAudioTests passed: governance, save/reload, snapshot, package, native voices, variants, cap, pause/reset and 14 core defaults\n";
     return 0;
 }

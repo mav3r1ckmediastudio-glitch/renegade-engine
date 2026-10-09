@@ -60,4 +60,6 @@ find_package(Python3 QUIET COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
     add_test(NAME RenegadeOriginalImpactArtContract
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/OriginalImpactArtContract.py" "${CMAKE_SOURCE_DIR}")
+    add_test(NAME RenegadeOriginalImpactAudioContract
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/OriginalImpactAudioContract.py" "${CMAKE_SOURCE_DIR}")
 endif()

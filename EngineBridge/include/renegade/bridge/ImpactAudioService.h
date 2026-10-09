@@ -36,8 +36,11 @@ namespace renegade::bridge
     {
     public:
         static constexpr std::size_t MaxVoices = 32;
+        // Optional original core sounds fill missing surface slots; project-authored
+        // governed bank recordings always override the corresponding core default.
         bool Prepare(const std::string& projectRoot, const std::string& packageRoot,
-            const StableId& projectId, std::string& error);
+            const StableId& projectId, std::string& error,
+            bool useCoreDefaults = false);
         bool Play(ImpactSurfaceType surface, const XMFLOAT3& position,
             const wi::audio::SoundInstance3D& listener, StableId& playedAssetId);
         void Update(float dt, const wi::audio::SoundInstance3D& listener);

@@ -6,6 +6,9 @@
 #include <fstream>
 #include <set>
 #include "json.hpp"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace renegade::bridge
 {
@@ -229,7 +232,7 @@ namespace renegade::bridge
     }
 
     bool ImpactAudioPlayer::Prepare(const std::string& root, const std::string& packageRoot,
-        const StableId& projectId, std::string& error)
+        const StableId& projectId, std::string& error, bool useCoreDefaults)
     {
         Reset();
         ImpactAudioBank bank;
@@ -243,6 +246,48 @@ namespace renegade::bridge
             if (!wi::audio::CreateSound(payload.data(),payload.size(),&clip.sound))
             { error="Wicked could not decode governed impact sound."; return false; }
             loaded[i].push_back(std::move(clip));
+        }
+        // Built-in owner-authored WAVs are packaged in the executable itself.
+        // A project-owned bank wins on each populated surface; no silent overrides.
+        if (useCoreDefaults)
+        {
+#ifdef _WIN32
+            struct CoreClip { unsigned surface, resourceId; const char* label; };
+            static constexpr CoreClip core[] = {
+                {1,7400,"metal1"},{1,7401,"metal2"},
+                {2,7402,"wood1"},{2,7403,"wood2"},
+                {3,7404,"concrete1"},{3,7405,"concrete2"},
+                {4,7406,"stone1"},{4,7407,"stone2"},
+                {5,7408,"dirt1"},{5,7409,"dirt2"},
+                {6,7410,"glass1"},{6,7411,"glass2"},
+                {7,7412,"water1"},{7,7413,"water2"},
+            };
+            const auto module=GetModuleHandleW(nullptr);
+            if (!module) {error="Could not access embedded impact audio module.";return false;}
+            for (const auto& item : core)
+            {
+                if (!bank.surfaces[item.surface].empty()) continue;
+                const auto found=FindResourceW(module,MAKEINTRESOURCEW(item.resourceId),RT_RCDATA);
+                if (!found) {error="Missing original built-in impact audio: "+
+                    std::string(item.label);return false;}
+                const auto length=SizeofResource(module,found);
+                const auto data=LockResource(LoadResource(module,found));
+                if (!data || length==0)
+                {error="Unreadable built-in impact audio: "+std::string(item.label);return false;}
+                const auto begin=static_cast<const std::uint8_t*>(data);
+                const std::vector<std::uint8_t> payload(begin,begin+length);
+                if (!ValidateImpactAudioPayload(payload,error))
+                {error="Invalid built-in impact audio "+std::string(item.label)+": "+error;return false;}
+                Clip clip;clip.id="renegade.core.impact."+std::string(item.label);
+                if (!wi::audio::CreateSound(payload.data(),payload.size(),&clip.sound))
+                {error="Wicked could not decode built-in impact sound: "+
+                    std::string(item.label);return false;}
+                loaded[item.surface].push_back(std::move(clip));
+            }
+#else
+            error="Original built-in impact SFX currently require a Windows Runtime.";
+            return false;
+#endif
         }
         clips_=std::move(loaded); error.clear(); return true;
     }
