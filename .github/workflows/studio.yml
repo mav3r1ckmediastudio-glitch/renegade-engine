@@ -23,6 +23,12 @@ on:
       - main
 
   workflow_dispatch:
+    inputs:
+      diagnostic_only:
+        description: "Build and run only the projectile-world Release diagnostic"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,6 +41,7 @@ concurrency:
 
 jobs:
   studio:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.diagnostic_only != true }}
     name: Renegade Studio Windows x64 ${{ matrix.configuration }}
     runs-on: windows-2025
     # The full Windows Release Studio build exceeded 60 minutes before CTest finished.
@@ -140,3 +147,35 @@ jobs:
           path: artifacts/studio/ci-${{ matrix.configuration }}
           if-no-files-found: warn
           retention-days: 14
+
+  release-world-diagnostic:
+    name: Release Projectile World Diagnostic
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnostic_only == true }}
+    runs-on: windows-2025
+    timeout-minutes: 65
+    steps:
+      - name: Check out pinned Wicked and Renegade
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Configure Release diagnostic
+        shell: pwsh
+        run: cmake -S . -B BUILD/renegade -A x64 -DRENEGADE_EMBED_SHADERS=ON
+
+      - name: Build ONLY Release Projectile World test
+        shell: pwsh
+        run: cmake --build BUILD/renegade --config Release --target RenegadeProjectileWorldTests --parallel 2
+
+      - name: Run isolated Release test with checkpoints
+        shell: pwsh
+        env:
+          RENEGADE_HOSTED_HEADLESS_GRAPHICS: "1"
+        run: |
+          ctest --test-dir BUILD/renegade -C Release -R "^RenegadeProjectileWorldTests$" -V --output-on-failure --timeout 75
+          if ($LASTEXITCODE -ne 0) { throw "Isolated Release projectile-world test failed." }
