@@ -189,16 +189,56 @@ jobs:
           New-ItemProperty -Path $key -Name DumpCount -Value 2 -PropertyType DWord -Force | Out-Null
           Get-ItemProperty -Path $key | Format-List
 
-      - name: Run ONLY failing Release test, preserve exit code
+      - name: Reproduce and capture live hang or crash
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Continue'
-          ctest --test-dir BUILD/renegade -C Release -R "^RenegadeProjectileWorldTests$" -V --output-on-failure --timeout 30 2>&1 |
-            Tee-Object -FilePath artifacts/p3-release-crash/ctest-output.txt
-          "CTest returned $LASTEXITCODE" | Out-File -Append artifacts/p3-release-crash/ctest-output.txt
+          $ErrorActionPreference = 'Stop'
+          $dumpDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/p3-release-crash'
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'BUILD/renegade/Release/RenegadeProjectileWorldTests.exe'
+          $stdout = Join-Path $dumpDir 'stdout.txt'
+          $stderr = Join-Path $dumpDir 'stderr.txt'
+          $cdb = 'C:/Program Files (x86)/Windows Kits/10/Debuggers/x64/cdb.exe'
+          $status = Join-Path $dumpDir 'status.txt'
+          $hadFailure = $false
+
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            Write-Host "RUNNING_ISOLATED_ATTEMPT=$attempt"
+            $p = Start-Process -FilePath $exe -PassThru -WorkingDirectory 'BUILD/renegade' -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+            try {
+              Wait-Process -Id $p.Id -Timeout 12 -ErrorAction Stop
+              $p.Refresh()
+              "Attempt $attempt exited code $($p.ExitCode)" | Tee-Object -FilePath $status -Append
+              if ($p.ExitCode -ne 0) {
+                $hadFailure = $true
+                Start-Sleep -Seconds 4
+                break
+              }
+            } catch {
+              $hadFailure = $true
+              "Attempt $attempt HUNG PID=$($p.Id)" | Tee-Object -FilePath $status -Append
+              $fullDump = Join-Path $dumpDir 'hung-projectile-world.dmp'
+              if (Test-Path -LiteralPath $cdb) {
+                "Attaching CDB to PID $($p.Id)" | Tee-Object -FilePath $status -Append
+                $commands = "~* kb; .dump /ma \"$fullDump\"; q"
+                & $cdb -p $p.Id -c $commands 2>&1 | Out-File -FilePath (Join-Path $dumpDir 'hung-stacks.txt')
+              } else {
+                "CDB absent, falling back to comsvcs MiniDump" | Tee-Object -FilePath $status -Append
+                & rundll32.exe C:/Windows/System32/comsvcs.dll, MiniDump $p.Id $fullDump full
+              }
+              break
+            } finally {
+              if (-not $p.HasExited) {
+                Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+              }
+            }
+          }
           Start-Sleep -Seconds 3
-          Get-ChildItem artifacts/p3-release-crash -File | Format-Table Name,Length
-          if ($LASTEXITCODE -ne 0) { Write-Warning "Isolated test failed; preserve dump for debugger." }
+          Get-ChildItem $dumpDir -File | Select-Object Name,Length | Format-Table | Out-String | Tee-Object -FilePath $status -Append
+          if ($hadFailure) {
+            Write-Host "Expected failure reproduced; captured diagnostic evidence."
+          } else {
+            Write-Host "Three isolated Release attempts passed; intermittent CI-specific failure."
+          }
 
       - name: Upload only isolated crash evidence
         if: always()
