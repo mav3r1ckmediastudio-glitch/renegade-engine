@@ -23,6 +23,12 @@ on:
       - main
 
   workflow_dispatch:
+    inputs:
+      diagnostic_only:
+        description: "Run only Release projectile-world crash-dump diagnostic"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -35,6 +41,7 @@ concurrency:
 
 jobs:
   studio:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.diagnostic_only != true }}
     name: Renegade Studio Windows x64 ${{ matrix.configuration }}
     runs-on: windows-2025
     # The full Windows Release Studio build exceeded 60 minutes before CTest finished.
@@ -140,3 +147,64 @@ jobs:
           path: artifacts/studio/ci-${{ matrix.configuration }}
           if-no-files-found: warn
           retention-days: 14
+
+  projectile-release-crash-diagnostic:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnostic_only == true }}
+    name: Targeted Release crash dump (no Studio)
+    runs-on: windows-2025
+    timeout-minutes: 65
+    env:
+      RENEGADE_HOSTED_HEADLESS_GRAPHICS: "1"
+    steps:
+      - name: Checkout pinned source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Configure exact Release build
+        shell: pwsh
+        run: cmake -S . -B BUILD/renegade -A x64 -DRENEGADE_EMBED_SHADERS=ON
+
+      - name: Build only projectile-world Release executable
+        shell: pwsh
+        run: |
+          cmake --build BUILD/renegade --config Release --target RenegadeProjectileWorldTests --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw "Test executable compilation failed" }
+
+      - name: Configure Windows crash dump capture
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dumpDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/p3-release-crash'
+          New-Item -Path $dumpDir -ItemType Directory -Force | Out-Null
+          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\RenegadeProjectileWorldTests.exe'
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpFolder -Value $dumpDir -PropertyType ExpandString -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpType -Value 2 -PropertyType DWord -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpCount -Value 2 -PropertyType DWord -Force | Out-Null
+          Get-ItemProperty -Path $key | Format-List
+
+      - name: Run ONLY failing Release test, preserve exit code
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          ctest --test-dir BUILD/renegade -C Release -R "^RenegadeProjectileWorldTests$" -V --output-on-failure --timeout 30 2>&1 |
+            Tee-Object -FilePath artifacts/p3-release-crash/ctest-output.txt
+          "CTest returned $LASTEXITCODE" | Out-File -Append artifacts/p3-release-crash/ctest-output.txt
+          Start-Sleep -Seconds 3
+          Get-ChildItem artifacts/p3-release-crash -File | Format-Table Name,Length
+          if ($LASTEXITCODE -ne 0) { Write-Warning "Isolated test failed; preserve dump for debugger." }
+
+      - name: Upload only isolated crash evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p3-projectile-release-crash-dump
+          path: artifacts/p3-release-crash
+          if-no-files-found: warn
+          retention-days: 7
