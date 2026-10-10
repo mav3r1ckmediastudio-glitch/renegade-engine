@@ -9,6 +9,7 @@ int main()
 {
     // Exercise the real Scene::IntersectsAll and native BVH/primitive path.
     // Populate its CPU query cache without a renderer or advancing gameplay.
+    std::cerr << "CI_WORLD_CHECKPOINT_00" << std::endl;
     auto scene = std::make_unique<wi::scene::Scene>();
     std::string error;
     const auto owner = scene->Entity_CreateTransform("Projectile Owner");
@@ -42,6 +43,7 @@ int main()
     addSphere(targetChild, 10, 1);
     addSphere(wall, 5, 0.25f);
     scene->colliders_cpu = cache.data();
+    std::cerr << "CI_WORLD_CHECKPOINT_01" << std::endl;
     scene->collider_bvh.Build(bounds.data(), static_cast<std::uint32_t>(bounds.size()));
 
     runtime::RuntimeCharacterSystemState characters;
@@ -56,6 +58,7 @@ int main()
     native.health = 100;
     native.SetActive(true);
     runtime::RuntimeCombatState combat;
+    std::cerr << "CI_WORLD_CHECKPOINT_02" << std::endl;
     if (!runtime::InitializeRuntimeCombat(*scene, characters, combat, error))
     {
         std::cerr << error;
@@ -73,6 +76,7 @@ int main()
     bridge::ProjectileSimulation simulation;
     std::uint64_t id;
     auto fail = [](const char* reason) { std::cerr << reason << '\n'; return 1; };
+    std::cerr << "CI_WORLD_CHECKPOINT_03" << std::endl;
     if (!simulation.Launch(launch, id, error))
         return fail("launch");
     const runtime::ProjectileOwnerBinding binding{ownerId, owner};
@@ -81,6 +85,7 @@ int main()
                            const bridge::ProjectileVector& to) {
         return runtime::QueryProjectileSceneSegment(*scene, characters, binding, record, from, to);
     };
+    std::cerr << "CI_WORLD_CHECKPOINT_04" << std::endl;
     auto hit = query(simulation.Records()[0], {0,0,0}, {20,0,0});
     if (hit.status != bridge::ProjectileQueryStatus::Hit ||
         std::abs(hit.contact.position.x - 4.75f) > 0.001f ||
@@ -97,6 +102,7 @@ int main()
     if(runtime::QueryProjectileSceneSegment(*scene,characters,withVisuals,
         simulation.Records()[0],{5,0,0},{5.1f,0,0}).status!=bridge::ProjectileQueryStatus::Miss)
         return fail("projectile visual blocks origin overlap");
+    std::cerr << "CI_WORLD_CHECKPOINT_05" << std::endl;
     std::vector<bridge::ProjectileImpact> impacts;
     if (!simulation.Update(0.2f, query, impacts, error) || impacts.size() != 1)
         return fail("native simulation wall impact");
@@ -105,6 +111,7 @@ int main()
                                                    std::string& eventError) {
         return events.Enqueue(std::move(event), eventError);
     };
+    std::cerr << "CI_WORLD_CHECKPOINT_06" << std::endl;
     auto damage = runtime::ApplyProjectileCharacterImpact(
         *scene, characters, perception, combat, impacts[0], emitter);
     if (damage.damageApplied || native.health != 100 || events.Size() != 0)
@@ -153,6 +160,7 @@ int main()
         *scene, characters, perception, combat, malformed, emitter);
     if (damage.damageApplied || damage.error.empty() || native.health != 90)
         return fail("malformed source mutates health");
+    std::cerr << "CI_WORLD_CHECKPOINT_07" << std::endl;
     malformed.source.sourceAssetId = sourceId;
     malformed.source.ownerSubjectId = targetId;
     damage = runtime::ApplyProjectileCharacterImpact(
@@ -173,6 +181,7 @@ int main()
     cache.back().layerMask = 0;
 
     // Existing damage path remains death authority.
+    std::cerr << "CI_WORLD_CHECKPOINT_08" << std::endl;
     malformed.source.factionId = "Player";
     malformed.damage = 100;
     damage = runtime::ApplyProjectileCharacterImpact(
@@ -185,11 +194,14 @@ int main()
     if (damage.damageApplied)
         return fail("dead target damaged again");
 
+    std::cerr << "CI_WORLD_CHECKPOINT_09" << std::endl;
     const auto material = scene->Entity_CreateTransform("Surface Material");
+    std::cerr << "CI_WORLD_CHECKPOINT_10" << std::endl;
     scene->materials.Create(material);
     const auto materialId = bridge::GenerateStableId();
     if (!bridge::AssignPersistentEntityId(*scene, material, materialId, error))
         return fail("material identity");
+    std::cerr << "CI_WORLD_CHECKPOINT_11" << std::endl;
     const auto meshEntity = scene->Entity_CreateTransform("Surface Mesh");
     scene->meshes.Create(meshEntity).subsets.resize(1);
     scene->meshes.GetComponent(meshEntity)->subsets[0].materialID = material;
@@ -220,6 +232,7 @@ int main()
     // Two instances share one mesh and material: authoring one must not leak.
     const auto secondObject = scene->Entity_CreateTransform("Shared mesh instance");
     scene->objects.Create(secondObject).meshID = meshEntity;
+    std::cerr << "CI_WORLD_CHECKPOINT_12" << std::endl;
     bridge::SetObjectImpactSurfaceCommand objectSurface(
         *scene, meshEntity, bridge::ImpactSurfaceType::Wood);
     if (!objectSurface.Execute() ||
@@ -260,6 +273,7 @@ int main()
             bridge::ImpactSurfaceType::Character)
         return fail("governed Character must retain automatic classification");
 
+    std::cerr << "CI_WORLD_CHECKPOINT_13" << std::endl;
     const auto assetRoot = scene->Entity_CreateTransform("Imported asset root");
     scene->Component_Attach(secondObject, assetRoot);
     bridge::SetObjectImpactSurfaceCommand assetSurface(
@@ -281,6 +295,7 @@ int main()
 
     // Native WISCENE archive roundtrip, not a custom persistence substitute.
     {
+        std::cerr << "CI_WORLD_CHECKPOINT_14" << std::endl;
         auto authored = wi::allocator::make_shared<wi::scene::Scene>();
         const auto persistedObject = authored->Entity_CreateTransform("Surface roundtrip");
         authored->objects.Create(persistedObject);
@@ -290,9 +305,12 @@ int main()
                 *authored, persistedObject, bridge::ImpactSurfaceType::Glass))
             return fail("roundtrip source");
         wi::Archive archive;
+        std::cerr << "CI_WORLD_CHECKPOINT_15" << std::endl;
         authored->Serialize(archive);
+        std::cerr << "CI_WORLD_CHECKPOINT_16" << std::endl;
         archive.SetReadModeAndResetPos(true);
         auto reopened = wi::allocator::make_shared<wi::scene::Scene>();
+        std::cerr << "CI_WORLD_CHECKPOINT_17" << std::endl;
         reopened->Serialize(archive);
         bool found = false;
         for (std::size_t i = 0; i < reopened->objects.GetCount(); ++i)
@@ -311,11 +329,14 @@ int main()
     if (!runtime::ProjectileContactSurface(*scene, surfaceHit).empty())
         return fail("invalid subset fallback");
 
+    std::cerr << "CI_WORLD_CHECKPOINT_18" << std::endl;
     scene->colliders_cpu = nullptr; // Cache belongs to this fixture.
     // The native Scene was created before the temporary collider cache/bounds.
     // Destroy it while those fixture buffers are still alive, rather than
     // relying on reverse-order local teardown after the buffers are freed.
+    std::cerr << "CI_WORLD_CHECKPOINT_19" << std::endl;
     scene.reset();
+    std::cerr << "CI_WORLD_CHECKPOINT_20" << std::endl;
     std::cout << "ProjectileWorldTests passed\n";
     return 0;
 }
