@@ -219,7 +219,7 @@ jobs:
               $fullDump = Join-Path $dumpDir 'hung-projectile-world.dmp'
               if (Test-Path -LiteralPath $cdb) {
                 "Attaching CDB to PID $($p.Id)" | Tee-Object -FilePath $status -Append
-                $commands = "~* kb; .dump /ma \"$fullDump\"; q"
+                $commands = "~* kb; .dump /ma $fullDump; q"
                 & $cdb -p $p.Id -c $commands 2>&1 | Out-File -FilePath (Join-Path $dumpDir 'hung-stacks.txt')
               } else {
                 "CDB absent, falling back to comsvcs MiniDump" | Tee-Object -FilePath $status -Append
