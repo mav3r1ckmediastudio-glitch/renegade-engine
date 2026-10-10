@@ -270,3 +270,21 @@ if(WIN32)
 else()
     message(STATUS "Renegade Studio is currently enabled for the Windows-first Phase 2 proof.")
 endif()
+
+# CI builds these products in one MSBuild dependency graph. Passing separate
+# --target arguments to the Visual Studio generator starts repeated MSBuild
+# invocations; on GitHub-hosted Windows the Release job exhausted its 90-minute
+# deadline before the CTest stage. Keep every existing product/test dependency.
+if(WIN32)
+    add_custom_target(RenegadeStudioCI)
+    add_dependencies(RenegadeStudioCI
+        RenegadeStudio
+        RenegadeRuntime
+        RenegadeBridgeTests
+        RenegadePlayerPrefabTests
+        RenegadeDiagnosticServiceTests
+        RenegadeDependencyProcessFixture
+        RenegadeAssetRegistryProcessFixture
+    )
+    set_target_properties(RenegadeStudioCI PROPERTIES FOLDER "Renegade/CI")
+endif()
