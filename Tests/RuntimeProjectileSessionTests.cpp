@@ -246,7 +246,9 @@ int main()
     if(visuals.blood.drops.size()!=60 || scene->rigidbodies.GetCount()!=0)
         return fail("character impact directional blood droplets without rigid bodies");
     const auto& spray=scene->emitters[scene->emitters.GetCount()-1];
-    if(spray.framesX!=4 || spray.framesY!=4 || spray.frameCount!=16 ||
+    // The original 4x4 atlas was replaced by an 8x8 atlas with 64 ordered frames.
+    // frameRate == 0 still plays all frames across each particle's lifetime.
+    if(spray.framesX!=8 || spray.framesY!=8 || spray.frameCount!=64 ||
        spray.frameRate!=0 || !spray.IsFrameBlendingEnabled() || spray.burst_on_create!=1)
         return fail("blood requires one animated lifetime-driven atlas");
     const auto bloodDrop=visuals.blood.drops.front().entity;
