@@ -85,8 +85,9 @@ try {
             -ArgumentList @(
                 "--build", $buildRoot,
                 "--config", $currentConfiguration,
-                "--target", "RenegadeStudio", "RenegadeRuntime", "RenegadeBridgeTests", "RenegadePlayerPrefabTests", "RenegadeDiagnosticServiceTests",
-                "RenegadeAssetRegistryProcessFixture",
+                # One aggregate MSBuild graph avoids rebuilding/checking the same
+                # Wicked and Renegade dependencies for six separate root targets.
+                "--target", "RenegadeStudioCI",
                 "--parallel"
             ) `
             -WorkingDirectory $repositoryRoot `
