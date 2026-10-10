@@ -98,6 +98,9 @@ try {
             -ArgumentList @(
                 "--test-dir", $buildRoot,
                 "-C", $currentConfiguration,
+                # A hung CTest case must fail with a diagnostic instead of
+                # consuming the remaining GitHub job runtime.
+                "--timeout", "180",
                 "--output-on-failure"
             ) `
             -WorkingDirectory $repositoryRoot `
