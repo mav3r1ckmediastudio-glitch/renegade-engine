@@ -1,5 +1,7 @@
 # Renegade Engine
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/mav3r1ckmediastudio-glitch/renegade-engine)
+
 Renegade is a Windows-first game engine and creator environment built on
 [Wicked Engine](https://github.com/turanszkij/WickedEngine). Wicked supplies the
 renderer, ECS, Jolt physics integration and other low-level engine systems;
