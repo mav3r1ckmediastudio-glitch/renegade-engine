@@ -1,3 +1,5 @@
+#include <sstream>
+#include "shaders/ShaderInterop_Renderer.h"
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
 #include "renegade/bridge/PlayerPrefabService.h"
@@ -317,6 +319,7 @@ namespace renegade::studio
         // colours are hardcoded. It stays off permanently.
         wi::renderer::SetToDrawGridHelper(false);
         LoadGridResources();
+        LoadPlayerMarkerResources();
 
         // The generated Proving Ground is composed around the world origin so
         // that it shares the grid helper's footprint.
@@ -527,7 +530,8 @@ namespace renegade::studio
         const wi::graphics::CommandList cmd) const
     {
         RenderPath3D::RenderTransparents(cmd);
-        if (!gridVisible_ || !gridPipeline_.IsValid() || projectHubVisible_ || camera == nullptr) return;
+        if (projectHubVisible_ || camera == nullptr ||
+            (!gridPipeline_.IsValid() && !playerMarkerPipeline_.IsValid())) return;
 
         // Wicked ends every render pass before RenderTransparents() returns.
         // Open an explicit pass over the main colour and depth attachments so
@@ -569,7 +573,143 @@ namespace renegade::studio
         device->BindScissorRects(1, &scissor, cmd);
 
         DrawEditorGrid(cmd);
+        DrawPlayerStartMarkers(cmd);
         device->RenderPassEnd(cmd);
+    }
+
+    void StudioRenderPath::LoadPlayerMarkerResources()
+    {
+        auto* device = wi::graphics::GetDevice();
+        if (!device) return;
+        wi::graphics::PipelineStateDesc desc;
+        desc.vs = wi::renderer::GetShader(wi::enums::VSTYPE_VERTEXCOLOR);
+        desc.ps = wi::renderer::GetShader(wi::enums::PSTYPE_VERTEXCOLOR);
+        desc.il = wi::renderer::GetInputLayout(wi::enums::ILTYPE_VERTEXCOLOR);
+        desc.dss = wi::renderer::GetDepthStencilState(wi::enums::DSSTYPE_DEFAULT);
+        desc.rs = wi::renderer::GetRasterizerState(wi::enums::RSTYPE_DOUBLESIDED);
+        desc.bs = wi::renderer::GetBlendState(wi::enums::BSTYPE_OPAQUE);
+        desc.pt = wi::graphics::PrimitiveTopology::TRIANGLELIST;
+        if (!device->CreatePipelineState(&desc, &playerMarkerPipeline_))
+            wi::backlog::post("Renegade: Player Start marker geometry unavailable.",
+                wi::backlog::LogLevel::Warning);
+    }
+
+    void StudioRenderPath::DrawPlayerStartMarkers(wi::graphics::CommandList cmd) const
+    {
+        if (!playerMarkerPipeline_.IsValid() || !session_ || !camera ||
+            projectHubVisible_ || testLevelRuntime_.IsActive() ||
+            assemblyPanel_.IsVisible() || handGripPanel_.IsVisible() ||
+            modelImportPanel_.IsVisible() || projectileCreatePanel_.IsVisible() || launchSocketPanel_.IsVisible()) return;
+        const auto& scene = session_->Scenes().GetScene();
+        const auto start = bridge::ResolvePlayerStart(scene);
+        if (start.resolution != bridge::PlayerStartResolution::Success ||
+            !session_->Scenes().IsHierarchyVisible(start.start.entity)) return;
+        const auto settings = bridge::SanitizePlayerControllerSettings(start.start.settings);
+        const bool selected = session_->Selection().SelectedEntity() == start.start.entity;
+        const float yaw = wi::math::QuaternionToRollPitchYaw(start.start.transform.rotation).y;
+        const auto feet = start.start.transform.translation;
+        const float eye = settings.eyeHeight;
+        const XMFLOAT4 accent = selected ? XMFLOAT4(1.0f,0.43f,0.10f,1)
+            : XMFLOAT4(0.18f,0.77f,0.95f,1);
+        struct Vertex { XMFLOAT4 position; XMFLOAT4 color; };
+        std::vector<Vertex> vertices;
+        vertices.reserve(5000);
+        const auto triangle = [&](const XMFLOAT3& a, const XMFLOAT3& b,
+            const XMFLOAT3& c, const XMFLOAT4& color)
+        {
+            const auto normal = XMVector3Normalize(XMVector3Cross(
+                XMLoadFloat3(&b)-XMLoadFloat3(&a), XMLoadFloat3(&c)-XMLoadFloat3(&a)));
+            const auto worldNormal = XMVector3TransformNormal(normal, XMMatrixRotationY(yaw));
+            const auto light = XMVector3Normalize(XMVectorSet(-0.45f,0.8f,-0.35f,0));
+            const float shade = 0.45f + 0.50f * std::abs(XMVectorGetX(XMVector3Dot(worldNormal,light)));
+            const XMFLOAT4 shaded(color.x*shade,color.y*shade,color.z*shade,1);
+            for (const auto& p : {a,b,c})
+                vertices.push_back({XMFLOAT4(p.x,p.y,p.z,1),shaded});
+        };
+        const auto quad = [&](const XMFLOAT3& a,const XMFLOAT3& b,
+            const XMFLOAT3& c,const XMFLOAT3& d,const XMFLOAT4& color)
+        { triangle(a,b,c,color); triangle(a,c,d,color); };
+        const auto box = [&](float cx,float cy,float cz,float hx,float hy,float hz,
+            float bevel,const XMFLOAT4& color)
+        {
+            // Chamfered body: four eight-sided perimeter rings, not a debug box.
+            std::array<std::array<XMFLOAT3,8>,4> rings;
+            for (int ring=0; ring<4; ++ring)
+            {
+                const bool end = ring==0 || ring==3;
+                const float x=hx-(end?bevel:0), y=hy-(end?bevel:0);
+                const float cut=std::min(bevel,std::min(x,y)*0.4f);
+                const float z=cz + (ring<2?-1:1)*(hz-(end?0:bevel));
+                rings[ring] = {XMFLOAT3(cx-x+cut,cy-y,z),XMFLOAT3(cx+x-cut,cy-y,z),
+                    XMFLOAT3(cx+x,cy-y+cut,z),XMFLOAT3(cx+x,cy+y-cut,z),
+                    XMFLOAT3(cx+x-cut,cy+y,z),XMFLOAT3(cx-x+cut,cy+y,z),
+                    XMFLOAT3(cx-x,cy+y-cut,z),XMFLOAT3(cx-x,cy-y+cut,z)};
+            }
+            for (int ring=0;ring<3;++ring)
+                for (int i=0;i<8;++i)
+                    quad(rings[ring][i],rings[ring][(i+1)%8],rings[ring+1][(i+1)%8],rings[ring+1][i],color);
+            for (int cap : {0,3})
+                for (int i=0;i<8;++i)
+                    triangle(XMFLOAT3(cx,cy,rings[cap][0].z),rings[cap][i],rings[cap][(i+1)%8],color);
+        };
+        const auto cylinder = [&](float cx,float cy,float z0,float z1,float radius,
+            const XMFLOAT4& color)
+        {
+            constexpr int segments=48;
+            for (int i=0;i<segments;++i)
+            {
+                const float a=i*XM_2PI/segments,b=(i+1)*XM_2PI/segments;
+                const XMFLOAT3 p(cx+radius*std::cos(a),cy+radius*std::sin(a),z0);
+                const XMFLOAT3 q(cx+radius*std::cos(b),cy+radius*std::sin(b),z0);
+                const XMFLOAT3 u(p.x,p.y,z1),v(q.x,q.y,z1);
+                quad(p,q,v,u,color);
+                triangle(XMFLOAT3(cx,cy,z0),q,p,color);
+                triangle(XMFLOAT3(cx,cy,z1),u,v,color);
+            }
+        };
+        // A recognisable camera housing, rubber grip, viewfinder and stepped lens.
+        const XMFLOAT4 body(0.27f,0.33f,0.39f,1), rubber(0.10f,0.13f,0.16f,1);
+        const XMFLOAT4 metal(0.55f,0.62f,0.69f,1), glass(0.08f,0.43f,0.62f,1);
+        box(0,eye,-0.07f,0.24f,0.16f,0.12f,0.025f,body);
+        box(0.205f,eye,-0.03f,0.065f,0.17f,0.14f,0.018f,rubber);
+        box(-0.04f,eye+0.19f,-0.06f,0.09f,0.055f,0.07f,0.018f,body);
+        box(-0.07f,eye,-0.195f,0.13f,0.095f,0.008f,0.004f,metal);
+        box(-0.07f,eye,-0.205f,0.115f,0.080f,0.003f,0.002f,glass);
+        box(-0.18f,eye+0.12f,0.057f,0.020f,0.015f,0.005f,0.003f,XMFLOAT4(0.90f,0.12f,0.10f,1));
+        cylinder(-0.045f,eye,0.045f,0.085f,0.135f,metal);
+        cylinder(-0.045f,eye,0.085f,0.20f,0.115f,rubber);
+        cylinder(-0.045f,eye,0.20f,0.225f,0.125f,accent);
+        cylinder(-0.045f,eye,0.225f,0.245f,0.110f,metal);
+        cylinder(-0.045f,eye,0.246f,0.249f,0.094f,glass);
+        // Raised arrow with a broad head and a solid shaft.
+        const float base=settings.capsuleRadius+0.05f,tip=base+1.10f;
+        const std::array<XMFLOAT2,7> shape = {XMFLOAT2(-0.075f,base),
+            XMFLOAT2(0.075f,base),XMFLOAT2(0.075f,tip-0.40f),
+            XMFLOAT2(0.29f,tip-0.40f),XMFLOAT2(0,tip),
+            XMFLOAT2(-0.29f,tip-0.40f),XMFLOAT2(-0.075f,tip-0.40f)};
+        const XMFLOAT3 top(0,0.12f,tip-0.43f),bottom(0,0.065f,tip-0.43f);
+        for (int i=0;i<7;++i)
+        {
+            const auto& a=shape[i];const auto& b=shape[(i+1)%7];
+            const XMFLOAT3 at(a.x,0.12f,a.y),bt(b.x,0.12f,b.y);
+            const XMFLOAT3 ab(a.x,0.065f,a.y),bb(b.x,0.065f,b.y);
+            triangle(top,at,bt,accent); triangle(bottom,bb,ab,accent);
+            quad(ab,bb,bt,at,XMFLOAT4(accent.x*0.60f,accent.y*0.60f,accent.z*0.60f,1));
+        }
+        auto* device=wi::graphics::GetDevice();
+        const auto memory=device->AllocateGPU(vertices.size()*sizeof(Vertex),cmd);
+        std::memcpy(memory.data,vertices.data(),vertices.size()*sizeof(Vertex));
+        const wi::graphics::GPUBuffer* buffers[]={&memory.buffer};
+        const uint32_t strides[]={sizeof(Vertex)};
+        const uint64_t offsets[]={memory.offset};
+        device->BindVertexBuffers(buffers,0,1,strides,offsets,cmd);
+        MiscCB constants={};
+        XMStoreFloat4x4(&constants.g_xTransform,XMMatrixRotationY(yaw)*
+            XMMatrixTranslation(feet.x,feet.y,feet.z)*camera->GetViewProjection());
+        constants.g_xColor=XMFLOAT4(1,1,1,1);
+        device->BindPipelineState(&playerMarkerPipeline_,cmd);
+        device->BindDynamicConstantBuffer(constants,CBSLOT_RENDERER_MISC,cmd);
+        device->Draw(static_cast<uint32_t>(vertices.size()),0,cmd);
     }
 
     void StudioRenderPath::SetGridVisible(const bool visible)
@@ -662,6 +802,11 @@ namespace renegade::studio
             modelImportPreview_->PreRender();
         if (assemblyPanel_.IsVisible() && assemblyPreview_ && assemblyPreview_->NeedsRender())
             assemblyPreview_->PreRender();
+        if (projectileCreatePanel_.IsVisible() && projectilePreview_ && projectilePreview_->NeedsRender())
+            projectilePreview_->PreRender();
+        if (playerCameraPreviewVisible_ && !playerCameraPreviewCollapsed_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->PreRender();
+        if(launchSocketPanel_.IsVisible()&&launchSocketPreview_&&launchSocketPreview_->NeedsRender())
+            launchSocketPreview_->PreRender();
         wi::RenderPath3D::PreRender();
     }
 
@@ -680,6 +825,13 @@ namespace renegade::studio
         }
         if (assemblyPanel_.IsVisible() && assemblyPreview_ && assemblyPreview_->NeedsRender())
             assemblyPreview_->Render();
+        if (projectileCreatePanel_.IsVisible() && projectilePreview_ && projectilePreview_->NeedsRender())
+            projectilePreview_->Render();
+        if (projectileTimingPreview_ && projectileTimingPanel_.IsVisible() && projectileTimingPreview_->NeedsRender())
+            projectileTimingPreview_->Render();
+        if(launchSocketPanel_.IsVisible()&&launchSocketPreview_&&launchSocketPreview_->NeedsRender())
+            launchSocketPreview_->Render();
+        if (playerCameraPreviewVisible_ && !playerCameraPreviewCollapsed_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->Render();
         if (pathTracePreviewActive_)
         {
             RenderPath3D_PathTracing::Render();
@@ -1135,6 +1287,10 @@ namespace renegade::studio
         playerAssembly_.SetText("ASSEMBLY");
         playerAssembly_.OnClick([this](const wi::gui::EventArgs&) { OpenAssemblyEditor(); });
         inspectorPanel_.AddWidget(&playerAssembly_);
+        playerEquipment_.Create("Player Equipment");
+        playerEquipment_.SetText("STARTING EQUIPMENT");
+        playerEquipment_.OnClick([this](const wi::gui::EventArgs&){OpenEquipmentEditor();});
+        inspectorPanel_.AddWidget(&playerEquipment_);
         playerPrefab_.Create("Player Prefab");
         playerPrefab_.SetText("");
         playerPrefab_.SetTooltip("Choose reusable player defaults. Spawn position and facing remain level-specific.");
@@ -2661,6 +2817,9 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::CreateEnvironmentProbe:
                 RequestDiagnosticAction(EditorAction::CreateEnvironmentProbe);
                 break;
+            case RenegadeStudioChrome::Action::CreateProjectile:
+                OpenProjectileAssetEditor();
+                break;
             case RenegadeStudioChrome::Action::ImportStaticGlb:
                 OpenStaticModelImporter();
                 break;
@@ -2895,6 +3054,28 @@ namespace renegade::studio
         modelImportName_.SetPos(XMFLOAT2(110.0f, 500.0f));
         modelImportName_.SetSize(XMFLOAT2(390.0f, 30.0f));
         modelImportPanel_.AddWidget(&modelImportName_);
+        modelImportFolderChoices_.Create("Existing Content folders");
+        modelImportFolderChoices_.SetText("Folder: ");
+        modelImportFolderChoices_.SetSize({390,26});
+        modelImportFolderChoices_.OnSelect([this](const wi::gui::EventArgs& a) {
+            modelImportFolder_.SetValue(modelImportFolderChoices_.GetItemText(a.iValue));
+        });
+        modelImportPanel_.AddWidget(&modelImportFolderChoices_);
+        modelImportFolder_.Create("Import destination");
+        modelImportFolder_.SetDescription("Import to: ");
+        modelImportFolder_.SetCancelInputEnabled(false);
+        modelImportFolder_.SetSize({390,26});
+        modelImportFolder_.SetTooltip("Project-relative Content folder. Type a new folder here; import creates it.");
+        modelImportPanel_.AddWidget(&modelImportFolder_);
+        modelImportRole_.Create("Asset role");
+        modelImportRole_.SetText("Asset role: ");
+        modelImportRole_.SetSize({390,26});
+        modelImportRole_.AddItem("General model");modelImportRole_.AddItem("Player arms");modelImportRole_.AddItem("Weapon");
+        modelImportPanel_.AddWidget(&modelImportRole_);
+        modelImportTags_.Create("Import tags");modelImportTags_.SetDescription("Tags: ");
+        modelImportTags_.SetCancelInputEnabled(false);modelImportTags_.SetSize({390,26});
+        modelImportTags_.SetTooltip("Optional comma-separated search labels. Tags do not choose the destination.");
+        modelImportPanel_.AddWidget(&modelImportTags_);
         modelImportCommit_.Create("Commit Model Asset");
         modelImportCommit_.SetText("IMPORT ASSET");
         modelImportCommit_.SetPos(XMFLOAT2(20.0f, 550.0f));
@@ -2914,11 +3095,20 @@ namespace renegade::studio
             modelImportCandidate_.reset();
             modelImportPreviewImage_.SetImage({});
             modelImportPreview_.reset();
+            if (modelImportFromProjectile_) {
+                modelImportFromProjectile_ = false;
+                if (session_ && session_->Projects().HasProject() &&
+                    session_->Projects().CurrentProject().projectId == projectileEditorProject_) {
+                    projectileCreatePanel_.SetVisible(true);
+                    projectileCreatePanel_.Activate();
+                }
+            }
         });
         modelImportPanel_.AddWidget(&modelImportCancel_);
         modelImportPanel_.SetVisible(false);
         CreateHandGripEditor();
         CreateAssemblyEditor();
+        CreateEquipmentEditor();
         GetGUI().AddWidget(&modelImportPanel_);
         GetGUI().AddWidget(&studioChrome_);
     }
@@ -3336,6 +3526,7 @@ namespace renegade::studio
             // The child Runtime is the sole 3D owner while Test Level runs.
             // RenderPath2D keeps wiGUI/chrome responsive without ticking the
             // editor scene, visibility, physics, vegetation or render graph.
+            playerCameraPreviewVisible_ = false;
             wi::RenderPath2D::Update(dt);
 
             if (pendingAction_ == EditorAction::StopTestLevel)
@@ -3399,6 +3590,8 @@ namespace renegade::studio
             RenderPath3D::Update(dt);
         }
 
+        UpdatePlayerCameraPreview(dt);
+
         if (inspectorRefreshPending_)
         {
             inspectorRefreshPending_ = false;
@@ -3412,6 +3605,12 @@ namespace renegade::studio
             return;
         }
 
+        UpdateLaunchSocketEditor(dt);
+        if(launchSocketPanel_.IsVisible()) {
+            diagnosticInput.StopAt("launch_socket_editor");detail::ClearCreatorAssetDragPreview();
+            pendingAction_=EditorAction::None;return;
+        }
+        if(!assemblyPanel_.IsVisible()){assemblyHandPanel_.SetVisible(false);assemblyFirearmPanel_.SetVisible(false);}
         if (assemblyPanel_.IsVisible())
         {
             if (!session_->Projects().HasProject() ||
@@ -3421,8 +3620,9 @@ namespace renegade::studio
                 // Window visibility propagates to children; enforce the selected page afterwards.
                 for(size_t i=0;i<bridge::FirstPersonAssemblyActions.size();++i) {
                     const bool visible=i/6==size_t(std::max(assemblyActionPage_.GetSelected(),0));
-                    assemblyArmsClips_[i].SetVisible(visible);assemblyWeaponClips_[i].SetVisible(visible);
+                    assemblyArmsClips_[i].SetVisible(visible);assemblyWeaponClips_[i].SetVisible(visible && !assemblySettings_.IndependentHands());
                 }
+                if(assemblyHandPanel_.IsVisible())ShowAssemblyHandPage(std::max(assemblyHandPage_.GetSelected(),0));
                 if(assemblyPreviewRefreshPending_) {
                     assemblyPreviewRefreshDelay_-=dt;
                     if(assemblyPreviewRefreshDelay_<=0) {
@@ -3478,6 +3678,12 @@ namespace renegade::studio
             modelImportPlay_.SetText(modelImportPreview_->IsPlaying() ? "PAUSE" : "PLAY");
             if (modelImportPreview_->HasClip())
                 modelImportTime_.SetValue(modelImportPreview_->ClipTime());
+        }
+
+        UpdateProjectilePreview(dt);
+        if (projectileCreatePanel_.IsVisible()) {
+            diagnosticInput.StopAt("projectile_editor");detail::ClearCreatorAssetDragPreview();
+            pendingAction_=EditorAction::None;return;
         }
 
         TickWd01Vegetation();
@@ -3700,7 +3906,8 @@ namespace renegade::studio
         // Draw the capsule after temporal postprocessing, alongside the gizmo.
         // Project its connected 3D edges using one camera matrix for this frame.
         if (!projectHubVisible_ && !assemblyPanel_.IsVisible() &&
-            !handGripPanel_.IsVisible() && session_ && camera)
+            !handGripPanel_.IsVisible() && !modelImportPanel_.IsVisible() &&
+            !projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible() && session_ && camera)
         {
             const auto& scene = session_->Scenes().GetScene();
             const auto resolved = bridge::ResolvePlayerStart(scene);
@@ -3794,10 +4001,12 @@ namespace renegade::studio
                         }
                     }
                 }
+
             }
         }
 
         if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
+            !projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible() &&
             outlinedSelection_ != wi::ecs::INVALID_ENTITY &&
             selectionOutlineMask_.IsValid())
         {
@@ -3813,11 +4022,14 @@ namespace renegade::studio
         }
 
         if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
+            !projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible() &&
             !gizmoSuppressedForCameraView_ &&
             gizmoEntity_ != wi::ecs::INVALID_ENTITY)
         {
             gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);
         }
+
+        if (!projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible()) DrawPlayerCameraPreview(cmd);
 
         const wi::graphics::Rect fullScissor = {
             0,
@@ -3834,10 +4046,12 @@ namespace renegade::studio
 
         const float width = GetLogicalWidth();
         const float height = GetLogicalHeight();
-        assemblyPanel_.SetPos(XMFLOAT2(std::max(0.0f, (width-1080)*0.5f), std::max(0.0f, (height-810)*0.5f)));
+        const bool sideBySide=assemblyHandPanel_.IsVisible() && width>=1840;
+        assemblyPanel_.SetPos(XMFLOAT2(sideBySide?20.0f:std::max(0.0f,(width-1080)*0.5f),std::max(0.0f,(height-810)*0.5f)));
+        assemblyHandPanel_.SetPos(XMFLOAT2(sideBySide?1120.0f:std::max(0.0f,(width-730)*0.5f),std::max(0.0f,(height-780)*0.5f)));
         modelImportPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
-            std::max(70.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));
+            std::max(0.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));
         handGripPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
             std::max(60.0f, (height - 550.0f) * 0.5f)));
@@ -4648,6 +4862,7 @@ namespace renegade::studio
         setPlayerVisible(playerFirstPersonArms_);
         setPlayerVisible(playerHandGrips_);
         setPlayerVisible(playerAssembly_);
+        setPlayerVisible(playerEquipment_);
         setPlayerVisible(playerCapsuleRadius_);
         setPlayerVisible(playerCapsuleHeight_);
         setPlayerVisible(playerEyeHeight_);
@@ -5831,7 +6046,7 @@ namespace renegade::studio
         }
     }
 
-    void StudioRenderPath::OpenStaticModelImporter()
+    void StudioRenderPath::OpenStaticModelImporter(bool fromProjectile)
     {
         if (session_ == nullptr || !session_->Projects().HasProject())
             return;
@@ -5847,11 +6062,11 @@ namespace renegade::studio
         params.description = "Select GLB or FBX model or rigged character";
         params.extensions = {"glb", "fbx"};
         wi::helper::FileDialog(params,
-            [this, projectId](const std::string& path)
+            [this, projectId, fromProjectile](const std::string& path)
             {
                 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, projectId, path](std::uint64_t)
+                    [this, projectId, path, fromProjectile](std::uint64_t)
                     {
                         if (path.empty() || session_ == nullptr ||
                             !session_->Projects().HasProject() ||
@@ -5883,11 +6098,33 @@ namespace renegade::studio
                             return;
                         }
                         modelImportPreview_ = std::move(preview);
-                        modelImportPanel_.SetSize(XMFLOAT2(560.0f, character ? 850.0f : 610.0f));
+                        modelImportPanel_.SetSize(XMFLOAT2(560.0f, character ? 990.0f : 750.0f));
                         modelImportSummary_.SetSize(XMFLOAT2(480.0f, character ? 55.0f : 85.0f));
                         modelImportName_.SetPos(XMFLOAT2(110.0f, character ? 740.0f : 500.0f));
-                        modelImportCommit_.SetPos(XMFLOAT2(20.0f, character ? 790.0f : 550.0f));
-                        modelImportCancel_.SetPos(XMFLOAT2(260.0f, character ? 790.0f : 550.0f));
+                        const float destinationY = character ? 775.0f : 535.0f;
+                        modelImportFolderChoices_.SetPos({110,destinationY});
+                        modelImportFolder_.SetPos({110,destinationY+32});
+                        modelImportRole_.SetPos({110,destinationY+64});
+                        modelImportTags_.SetPos({110,destinationY+96});
+                        modelImportFolderChoices_.ClearItems();
+                        std::vector<std::string> folders={"Content","Content/Models","Content/Player/Arms","Content/Player/Weapons"};
+                        std::error_code folderError;
+                        const auto content=fs::u8path(session_->Projects().CurrentProject().rootPath)/"Content";
+                        for(fs::recursive_directory_iterator it(content,fs::directory_options::skip_permission_denied,folderError),end;
+                            it!=end && !folderError;it.increment(folderError)) {
+                            if(it->is_symlink()){it.disable_recursion_pending();continue;}
+                            if(it->is_directory())folders.push_back(it->path().lexically_relative(content.parent_path()).generic_u8string());
+                        }
+                        std::sort(folders.begin(),folders.end());folders.erase(std::unique(folders.begin(),folders.end()),folders.end());
+                        for(const auto& folder:folders)modelImportFolderChoices_.AddItem(folder);
+                        std::filesystem::path resolvedFolder;std::string folderValidation;
+                        modelImportFolder_.SetValue(bridge::ResolveCreatorContentFolder(session_->Projects().CurrentProject().rootPath,
+                            assetBrowserCurrentFolder_,resolvedFolder,folderValidation)?assetBrowserCurrentFolder_:"Content/Models");
+                        for(size_t i=0;i<modelImportFolderChoices_.GetItemCount();++i)
+                            if(modelImportFolderChoices_.GetItemText(int(i))==modelImportFolder_.GetValue())modelImportFolderChoices_.SetSelected(int(i));
+                        modelImportRole_.SetSelected(0);modelImportTags_.SetValue("");
+                        modelImportCommit_.SetPos(XMFLOAT2(20.0f, character ? 925.0f : 685.0f));
+                        modelImportCancel_.SetPos(XMFLOAT2(260.0f, character ? 925.0f : 685.0f));
                         modelImportActions_.assign(candidate->Summary().animations, "Unassigned");
                         modelImportAction_.SetVisible(character);
                         modelImportAction_.SetEnabled(false);
@@ -5917,7 +6154,18 @@ namespace renegade::studio
                                 std::to_string(summary.animations) + " clips" : "") +
                             (character ? "\nSelect a clip to assign its gameplay action." : "\nPreview controls do not change the imported asset."));
                         modelImportCandidate_ = std::move(candidate);
+                        modelImportFromProjectile_ = fromProjectile;
+                        if (fromProjectile) {
+                            modelImportFolder_.SetValue("Content/Projectiles/Models");
+                            projectileCreatePanel_.SetVisible(false);
+                        }
                         modelImportPanel_.SetVisible(true);
+                        // Native Window visibility propagates to children: restore the role-specific controls last.
+                        for(wi::gui::Widget* widget : {
+                            static_cast<wi::gui::Widget*>(&modelImportAction_),static_cast<wi::gui::Widget*>(&modelImportAddAnimation_),
+                            static_cast<wi::gui::Widget*>(&modelImportClip_),static_cast<wi::gui::Widget*>(&modelImportPlay_),
+                            static_cast<wi::gui::Widget*>(&modelImportRestart_),static_cast<wi::gui::Widget*>(&modelImportTime_),
+                            static_cast<wi::gui::Widget*>(&modelImportSpeed_)})widget->SetVisible(character);
                         studioChrome_.SetStatusText("MODEL IMPORT // REVIEW AND IMPORT ASSET");
                     });
             });
@@ -5977,9 +6225,14 @@ namespace renegade::studio
             session_->Projects().CurrentProject().projectId != modelImportProjectId_)
             return;
         const std::string name = modelImportName_.GetValue();
+        const std::string folder = modelImportFolder_.GetValue();
+        const int role = modelImportRole_.GetSelected();
+        std::vector<std::string> tags;
+        std::stringstream tagStream(modelImportTags_.GetValue());std::string tag;
+        while(std::getline(tagStream,tag,','))if(!tag.empty())tags.push_back(tag);
         wi::eventhandler::Subscribe_Once(
             wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-            [this, name, projectId = modelImportProjectId_](std::uint64_t)
+            [this, name, folder, role, tags, projectId = modelImportProjectId_](std::uint64_t)
             {
                 if (!modelImportCandidate_ || session_ == nullptr ||
                     !session_->Projects().HasProject() ||
@@ -5989,6 +6242,9 @@ namespace renegade::studio
                 request.projectRoot = session_->Projects().CurrentProject().rootPath;
                 request.projectId = projectId;
                 request.assetName = name;
+                request.destinationFolder = folder;
+                request.creatorTags = tags;
+                request.playerRole = role == 1 ? "arms" : role == 2 ? "weapon" : "";
                 if (modelImportCandidate_->Evidence().skinnedMeshes != 0)
                     request.animationActions = modelImportActions_;
                 request.characterAsset = modelImportCandidate_ &&
@@ -6022,6 +6278,15 @@ namespace renegade::studio
                 modelImportPreviewImage_.SetImage({});
                 modelImportPreview_.reset();
                 RefreshAssetBrowser();
+                if (modelImportFromProjectile_) {
+                    modelImportFromProjectile_ = false;
+                    if (projectileEditorProject_ == projectId) {
+                        projectileDraftMesh_ = result.assetId;
+                        RefreshProjectileMeshChoices();
+                        projectileCreatePanel_.SetVisible(true);
+                        projectileCreatePanel_.Activate();
+                    }
+                }
                 studioChrome_.SetActiveBottomTab(0, true);
                 bridge::AssetCatalogue catalogue;
                 std::string revealError;
@@ -7297,6 +7562,10 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     bool StudioRenderPath::IsPointerOverViewport(
         const XMFLOAT4& pointer) const noexcept
     {
+        if (playerCameraPreviewHeaderPressed_) return false;
+        const auto inset = PlayerCameraPreviewBounds();
+        if (playerCameraPreviewVisible_ && pointer.x >= inset.x && pointer.x < inset.z &&
+            pointer.y >= inset.y && pointer.y < inset.w) return false;
         return pointer.x >= viewportBounds_.x &&
             pointer.x < viewportBounds_.z &&
             pointer.y >= viewportBounds_.y &&
@@ -11011,5 +11280,124 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             storyFlowIntegration_.RequestStoryFlow();
         });
         ActivatePath(&renderer_);
+    }
+}
+
+namespace renegade::studio
+{
+    XMFLOAT4 StudioRenderPath::PlayerCameraPreviewBounds() const noexcept
+    {
+        const float maxWidth=std::max(0.0f,std::min((viewportBounds_.z-viewportBounds_.x)-24.0f,
+            ((viewportBounds_.w-viewportBounds_.y)-54.0f)*16.0f/9.0f));
+        const float width=std::min(playerCameraPreviewWidth_,maxWidth);
+        const float height=playerCameraPreviewCollapsed_ ? 0.0f : width*9.0f/16.0f;
+        return XMFLOAT4(viewportBounds_.z-width-12,viewportBounds_.w-height-42,
+            viewportBounds_.z-12,viewportBounds_.w-12);
+    }
+    void StudioRenderPath::UpdatePlayerCameraPreview(float dt)
+    {
+        playerCameraPreviewHeaderPressed_=false;
+        const bool wasVisible=playerCameraPreviewVisible_;
+        playerCameraPreviewVisible_=false;
+        if(!wi::input::Down(wi::input::MOUSE_BUTTON_LEFT)) playerCameraPreviewResizing_=false;
+        if(!session_ || projectHubVisible_ || sceneOpenInProgress_ || pathTracePreviewActive_ ||
+            assemblyPanel_.IsVisible() || handGripPanel_.IsVisible() || modelImportPanel_.IsVisible() ||
+            !session_->Projects().HasProject()) return;
+        auto& source=session_->Scenes().GetScene();
+        const auto resolved=bridge::ResolvePlayerStart(source);
+        if(resolved.resolution!=bridge::PlayerStartResolution::Success ||
+            session_->Selection().SelectedEntity()!=resolved.start.entity ||
+            !session_->Scenes().IsHierarchyVisible(resolved.start.entity)) return;
+        playerCameraPreviewVisible_=true;
+        if(!wasVisible)
+            playerCameraPreviewCollapsed_=session_->Projects().GetEditorPreference("player_camera_preview_collapsed",false);
+        const auto bounds=PlayerCameraPreviewBounds();
+        const auto pointer=wi::input::GetPointer();
+        const bool resizeHandle=!playerCameraPreviewCollapsed_ &&
+            pointer.x>=bounds.x && pointer.x<bounds.x+24 && pointer.y>=bounds.y && pointer.y<bounds.y+30;
+        if(resizeHandle && wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) {
+            playerCameraPreviewResizing_=true;
+            playerCameraPreviewResizeStartWidth_=bounds.z-bounds.x;
+            playerCameraPreviewResizeStartPointer_=pointer;
+        }
+        if(playerCameraPreviewResizing_) {
+            playerCameraPreviewHeaderPressed_=true;
+            const float dx=pointer.x-playerCameraPreviewResizeStartPointer_.x;
+            const float dy=pointer.y-playerCameraPreviewResizeStartPointer_.y;
+            constexpr float ratio=9.0f/16.0f;
+            const float maximum=std::max(0.0f,std::min((viewportBounds_.z-viewportBounds_.x)-24.0f,
+                ((viewportBounds_.w-viewportBounds_.y)-54.0f)/ratio));
+            playerCameraPreviewWidth_=std::clamp(playerCameraPreviewResizeStartWidth_-(dx+dy*ratio)/(1+ratio*ratio),
+                std::min(240.0f,maximum),maximum);
+        }
+        if(!resizeHandle && !playerCameraPreviewResizing_ && bounds.z-bounds.x>=120 &&
+            pointer.x>=bounds.x && pointer.x<bounds.z &&
+            pointer.y>=bounds.y && pointer.y<bounds.y+30 &&
+            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) {
+            playerCameraPreviewHeaderPressed_=true;
+            playerCameraPreviewCollapsed_=!playerCameraPreviewCollapsed_;
+            session_->Projects().SetEditorPreference("player_camera_preview_collapsed",playerCameraPreviewCollapsed_);
+        }
+        if(playerCameraPreviewCollapsed_) return;
+        if(!wasVisible) { playerCameraPreviewKey_.clear(); playerCameraPreviewPendingKey_.clear(); }
+        const auto& project=session_->Projects().CurrentProject();
+        const auto& start=resolved.start;
+        const auto& settings=start.settings;
+        std::ostringstream key;
+        key.precision(9);
+        key<<project.projectId<<':'<<session_->Scenes().Revision()<<':'<<start.entity<<':'
+            <<session_->Commands().UndoCount()<<':'<<session_->Commands().RedoCount()<<':'
+            <<start.transform.translation.x<<':'<<start.transform.translation.y<<':'<<start.transform.translation.z<<':'
+            <<start.transform.rotation.x<<':'<<start.transform.rotation.y<<':'<<start.transform.rotation.z<<':'<<start.transform.rotation.w<<':'
+            <<settings.eyeHeight<<':'<<settings.firstPersonArmsAssetId<<':'
+            <<settings.primaryEquipmentAssetId<<':'<<settings.offHandEquipmentAssetId;
+        if(key.str()!=playerCameraPreviewPendingKey_) {
+            playerCameraPreviewPendingKey_=key.str();
+            playerCameraPreviewRefreshDelay_=playerCameraPreviewKey_.empty() ? 0 : 0.2f;
+        }
+        playerCameraPreviewRefreshDelay_-=std::max(0.0f,dt);
+        if(playerCameraPreviewPendingKey_!=playerCameraPreviewKey_ && playerCameraPreviewRefreshDelay_<=0) {
+            playerCameraPreviewKey_=playerCameraPreviewPendingKey_;
+            auto prepared=std::make_unique<bridge::PlayerCameraPreviewService>();
+            if(prepared->Prepare(source,start,project.rootPath,project.projectId,playerCameraPreviewError_))
+                playerCameraPreview_=std::move(prepared);
+            else playerCameraPreview_.reset();
+        }
+        if(playerCameraPreview_ && playerCameraPreview_->NeedsRender()) {
+            playerCameraPreview_->PreUpdate();
+            playerCameraPreview_->Update(0);
+        }
+    }
+    void StudioRenderPath::DrawPlayerCameraPreview(const wi::graphics::CommandList cmd) const
+    {
+        if(!playerCameraPreviewVisible_) return;
+        const auto bounds=PlayerCameraPreviewBounds();
+        if(bounds.z-bounds.x<120) return;
+        wi::image::Params panel;
+        panel.pos=XMFLOAT3(bounds.x-1,bounds.y-1,0);
+        panel.siz=XMFLOAT2(bounds.z-bounds.x+2,bounds.w-bounds.y+2);
+        panel.color=wi::Color(51,214,255,255);
+        wi::image::Draw(nullptr,panel,cmd);
+        panel.pos=XMFLOAT3(bounds.x,bounds.y,0);
+        panel.siz=XMFLOAT2(bounds.z-bounds.x,bounds.w-bounds.y);
+        panel.color=wi::Color(16,22,30,255);
+        wi::image::Draw(nullptr,panel,cmd);
+        wi::font::Params title;
+        title.posX=bounds.x+(playerCameraPreviewCollapsed_ ? 10 : 30); title.posY=bounds.y+6; title.size=13;
+        title.color=wi::Color(180,231,244,255);
+        wi::font::Draw(playerCameraPreviewCollapsed_ ? "[+] PLAYER CAMERA PREVIEW" : "[-] PLAYER CAMERA PREVIEW",title,cmd);
+        if(playerCameraPreviewCollapsed_) return;
+        title.posX=bounds.x+7;
+        wi::font::Draw("/",title,cmd);
+        if(playerCameraPreview_ && playerCameraPreview_->GetRenderResult3D().IsValid()) {
+            wi::image::Params picture;
+            picture.pos=XMFLOAT3(bounds.x,bounds.y+30,0);
+            picture.siz=XMFLOAT2(bounds.z-bounds.x,bounds.w-bounds.y-30);
+            picture.color=wi::Color::White();
+            wi::image::Draw(&playerCameraPreview_->GetRenderResult3D(),picture,cmd);
+        } else {
+            title.posY=bounds.y+44; title.size=12;
+            wi::font::Draw("Preview unavailable: check equipped presentation.",title,cmd);
+        }
     }
 }

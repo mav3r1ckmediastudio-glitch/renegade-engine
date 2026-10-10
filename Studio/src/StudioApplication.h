@@ -1,7 +1,10 @@
 #pragma once
+#include "renegade/bridge/EquipmentActionState.h"
+#include "renegade/bridge/ProjectileAssetService.h"
 
 #include <array>
 #include "ModelImportPreview.h"
+#include "renegade/bridge/PlayerCameraPreviewService.h"
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -22,6 +25,7 @@
 #include "renegade/bridge/PlayerViewGripService.h"
 #include "renegade/bridge/DecalProbeService.h"
 #include "renegade/bridge/MaterialService.h"
+#include "renegade/bridge/ImpactSurface.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/SceneComponentService.h"
 #include "renegade/bridge/RenderSettingsService.h"
@@ -67,15 +71,39 @@ namespace renegade::studio
         void QueueInspectorRefresh() noexcept;
         void RefreshProjectHub();
         void RefreshAssetBrowser();
+        void UpdatePlayerCameraPreview(float dt);
+        void DrawPlayerCameraPreview(wi::graphics::CommandList cmd) const;
+        XMFLOAT4 PlayerCameraPreviewBounds() const noexcept;
+        std::unique_ptr<bridge::PlayerCameraPreviewService> playerCameraPreview_;
+        std::string playerCameraPreviewKey_, playerCameraPreviewError_;
+        bool playerCameraPreviewVisible_ = false;
+        bool playerCameraPreviewCollapsed_ = false;
+        bool playerCameraPreviewHeaderPressed_ = false;
+        bool playerCameraPreviewResizing_ = false;
+        float playerCameraPreviewWidth_ = 432.0f;
+        float playerCameraPreviewResizeStartWidth_ = 432.0f;
+        XMFLOAT4 playerCameraPreviewResizeStartPointer_ = {};
+        std::string playerCameraPreviewPendingKey_;
+        float playerCameraPreviewRefreshDelay_ = 0;
+        void CreateEquipmentEditor();
+        void OpenEquipmentEditor();
+        void RefreshEquipmentEditor();
         void CreateAssemblyEditor();
-        void OpenAssemblyEditor();
+        void CreateAssemblyHandEditor();
+        void RefreshAssemblyHandEditor(const wi::scene::Scene& arms);
+        void ShowAssemblyHandPage(int page);
+        void OpenAssemblyEditor(const bridge::StableId& presentation = {},bool sockets = false);
+        void CreateLaunchSocketEditor();
+        void OpenLaunchSocketEditor();
+        void RefreshLaunchSocketEditor();
+        void UpdateLaunchSocketEditor(float dt);
         void LoadAssemblyParts();
         void RebuildAssemblyPreview();
         void SaveAssemblyEditor(bool asNew);
         void RecordAssemblyDraft(const bridge::FirstPersonAssemblySettings& before);
         void QueueAssemblyPreviewRefresh();
         void RefreshAssemblyDraft();
-        void OpenStaticModelImporter();
+        void OpenStaticModelImporter(bool fromProjectile = false);
         void AppendModelImportAnimations();
         void CommitStaticModelImporter();
         void RestoreGovernedMaterialTextures();
@@ -590,6 +618,7 @@ namespace renegade::studio
         void ApplySelectedMaterialShader(
             wi::scene::MaterialComponent::SHADERTYPE shaderType);
         void ApplySelectedMaterialBlend(wi::enums::BLENDMODE blendMode);
+        void ApplySelectedMaterialImpactSurface(bridge::ImpactSurfaceType type);
         void ApplySelectedMaterialToggle(MaterialToggle toggle, bool value);
         void BeginMaterialSlider(MaterialField field);
         void PreviewMaterialSlider(MaterialField field, float value);
@@ -830,6 +859,8 @@ namespace renegade::studio
         SceneInspectorComboBox materialSelector_;
         SceneInspectorComboBox materialShaderType_;
         SceneInspectorComboBox materialBlendMode_;
+        wi::gui::Label objectSurfaceLabel_;
+        SceneInspectorComboBox materialImpactSurface_;
         wi::gui::Label materialCoreLabel_;
         SceneInspectorSlider materialBaseColorRed_;
         SceneInspectorSlider materialBaseColorGreen_;
@@ -1124,9 +1155,96 @@ namespace renegade::studio
         void ApplySelectedPlayerPrefab(std::string assetId);
         void ResetSelectedPlayerPrefab();
         void RefreshPlayerPrefabInspector();
-        wi::gui::Button playerAssembly_;
+        wi::gui::Button playerAssembly_, playerEquipment_;
+        void CreateProjectileEditor();
+        void OpenWeaponProjectileEditor();
+        void OpenProjectileAssetEditor();
+        void RefreshProjectileMeshChoices();
+        void UpdateProjectilePreview(float dt);
+        void RefreshWeaponProjectileEditor();
+        void RefreshProjectileChoices();
+        void RefreshProjectileEditorLayout();
+        void RefreshWeaponProjectileLayout();
+        wi::gui::Window weaponProjectilePanel_, projectileCreatePanel_;
+        wi::gui::ComboBox projectileWeapon_, projectileAction_, projectileFireMode_, projectileChoice_, projectilePreset_;
+        wi::gui::TextInputField projectileSearch_, projectileName_;
+        wi::gui::Slider projectileSpeed_, projectileGravity_, projectileLifetime_;
+        wi::gui::Button equipmentProjectile_, projectileAssign_, projectileNew_, projectileEditCopy_,
+            projectileClose_, projectileSave_, projectileCancel_;
+        wi::gui::Label projectileSummary_, projectileCreateHelp_;
+        std::vector<bridge::StableId> projectileChoices_;
+        std::vector<bridge::EquipmentAction> projectileActions_;
+        bridge::StableId projectilePreferred_;
+        float projectileDraftDamage_=10;
+        bridge::StableId projectileDraftMesh_, projectileEditorProject_;
+        std::vector<bridge::StableId> projectileMeshChoices_;
+        wi::gui::ComboBox projectileMesh_;
+        wi::gui::Slider projectileVisualScale_, projectileRotationX_, projectileRotationY_, projectileRotationZ_;
+        wi::gui::Button projectileImportMesh_, projectileSocketEdit_;
+        wi::gui::ComboBox projectileSocket_, projectileSecondSocket_, projectileSocketPolicy_;
+        wi::gui::Slider projectileReleaseTime_, projectileHitscanRange_, projectileHitscanDamage_;
+        wi::gui::ComboBox projectileReleaseMode_;
+        wi::gui::Button projectileAdvanced_;
+        wi::gui::Window projectileTimingPanel_;
+        wi::gui::Button projectileTimingOpen_, projectileTimingPlay_, projectileTimingMark_, projectileTimingUse_, projectileTimingClose_;
+        wi::gui::Slider projectileTimingCursor_, projectileTimingMarker_;
+        wi::gui::Label projectileTimingImage_, projectileTimingInfo_;
+        std::unique_ptr<ModelImportPreview> projectileTimingPreview_;
+        void OpenProjectileTiming();
+        void UpdateProjectileTiming(float dt);
+        float projectileTimingDuration_=0;
+        bool projectileAdvancedVisible_=false;
+        size_t projectileAvailableSocketCount_=0;
+        int projectileEditorLayout_=-1, projectileWeaponLayout_=-1;
+        wi::gui::ComboBox projectileEffectA_, projectileEffectB_, projectileImpactEffect_, projectileImpactMode_;
+        wi::gui::Slider projectileEffectSize_, projectileEffectRate_, projectileEffectLife_, projectileEffectOffset_,
+            projectileDamage_, projectileStuckLife_, projectileEmbedDepth_;
+        void SetProjectileEffectControls(const bridge::ProjectileAssetDocument&);
+        std::vector<bridge::ProjectileEffectLayer> ProjectileEffectControls() const;
+        std::vector<std::string> projectileSocketNames_;
+        wi::gui::Window launchSocketPanel_;
+        wi::gui::ComboBox launchSocketChoice_, launchSocketPart_, launchSocketParent_;
+        wi::gui::TextInputField launchSocketName_;
+        wi::gui::Button launchSocketNew_, launchSocketRemove_, launchSocketPlace_,
+            launchSocketFireSpot_, launchSocketApply_, launchSocketClose_, launchSocketFit_;
+        std::array<SceneInspectorSlider,6> launchSocketValues_;
+        wi::gui::Label launchSocketImage_, launchSocketHelp_;
+        std::vector<bridge::LaunchSocketDefinition> launchSocketDraft_;
+        std::vector<bridge::PlayerViewBoneChoice> launchSocketParents_;
+        std::unique_ptr<ModelImportPreview> launchSocketPreview_;
+        int launchSocketSelected_=0, launchSocketDrag_=0;
+        bool launchSocketRefreshing_=false, launchSocketReload_=false, launchSocketChanged_=false,
+            launchSocketPlacing_=false, launchSocketRestoreAssembly_=false;
+        XMFLOAT2 launchSocketPointer_ = {};
+        std::unique_ptr<ModelImportPreview> projectilePreview_;
+        wi::gui::Label projectilePreviewImage_, projectilePreviewInfo_;
+        wi::gui::Button projectilePreviewFit_;
+        int projectilePreviewDrag_ = 0;
+        XMFLOAT2 projectilePreviewPointer_ = {};
+        bridge::StableId projectilePreviewMesh_, projectilePreviewProject_;
+        float projectilePreviewScale_ = -1;
+        std::array<float,3> projectilePreviewRotation_ = {};
+        bool projectileStandaloneEditor_=false;
+        bool modelImportFromProjectile_=false;
+        wi::gui::Window equipmentPanel_;
+        wi::gui::ComboBox equipmentPrimary_, equipmentOffHand_, equipmentHandUse_;
+        wi::gui::TextInputField equipmentName_;
+        wi::gui::Button equipmentCreate_, equipmentApply_, equipmentClose_;
+        wi::gui::Label equipmentHelp_, equipmentStatus_;
+        std::vector<bridge::StableId> equipmentChoices_;
+        bridge::StableId equipmentProject_;
+        wi::ecs::Entity equipmentPlayer_=wi::ecs::INVALID_ENTITY;
         wi::gui::Window assemblyPanel_, assemblyFirearmPanel_;
-        wi::gui::Button assemblyFirearmButton_;
+        wi::gui::Button assemblyFirearmButton_, assemblyHandButton_;
+        wi::gui::Window assemblyHandPanel_;
+        wi::gui::ComboBox assemblyHandPage_, assemblyOffWeapon_;
+        std::array<wi::gui::ComboBox,3> assemblyHandBones_, assemblyBlockClips_;
+        std::array<wi::gui::ComboBox,12> assemblyDirectionalClips_;
+        std::array<wi::gui::ComboBox,4> assemblyAttackVariants_;
+        std::array<SceneInspectorSlider,25> assemblyHandValues_;
+        wi::gui::CheckBox assemblyAvoidance_, assemblyPreviewShield_;
+        std::vector<std::string> assemblyPreviewActions_;
+        wi::gui::Label assemblyHandHelp_;
         wi::gui::Label assemblyFirearmHelp_;
         SceneInspectorSlider assemblyCapacity_, assemblyShotInterval_;
         wi::gui::CheckBox assemblyPartialReload_;
@@ -1145,7 +1263,7 @@ namespace renegade::studio
         std::vector<bridge::StableId> assemblyPartIds_;
         std::vector<bridge::PlayerViewBoneChoice> assemblyBones_;
         bridge::StableId assemblyProjectId_;
-        std::array<std::string,2> assemblyPartHashes_;
+        std::array<std::string,3> assemblyPartHashes_;
         wi::ecs::Entity assemblyPlayer_ = wi::ecs::INVALID_ENTITY;
         bool assemblyRefreshing_ = false;
         bool assemblyPreviewRefreshPending_ = false, assemblyDraftPreviewDirty_ = true;
@@ -1165,6 +1283,8 @@ namespace renegade::studio
         wi::gui::Slider modelImportSpeed_;
         std::unique_ptr<ModelImportPreview> modelImportPreview_;
         wi::gui::TextInputField modelImportName_;
+        wi::gui::ComboBox modelImportFolderChoices_, modelImportRole_;
+        wi::gui::TextInputField modelImportFolder_, modelImportTags_;
         wi::gui::Button modelImportCommit_;
         wi::gui::Button modelImportCancel_;
         std::unique_ptr<bridge::ModelImportCandidate> modelImportCandidate_;
@@ -1175,6 +1295,9 @@ namespace renegade::studio
         wi::graphics::Shader gridVertexShader_;
         wi::graphics::Shader gridPixelShader_;
         wi::graphics::PipelineState gridPipeline_;
+        wi::graphics::PipelineState playerMarkerPipeline_;
+        void LoadPlayerMarkerResources();
+        void DrawPlayerStartMarkers(wi::graphics::CommandList cmd) const;
         wi::graphics::Texture selectionOutlineMask_;
         wi::graphics::Texture selectionOutlineMaskMsaa_;
         wi::scene::TransformComponent editorCameraTransform_;

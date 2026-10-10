@@ -13,10 +13,14 @@
 #include "RuntimePlayerViewAsset.h"
 #include "RuntimePlayerViewAnimation.h"
 #include "RuntimePlayerViewRig.h"
+#include "RuntimeEquipmentLoadout.h"
+#include "RuntimeProjectileSession.h"
+#include "RuntimeProjectileVisuals.h"
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"
 #include "RuntimeScriptRuntime.h"
 #include "renegade/bridge/AudioService.h"
+#include "renegade/bridge/ImpactAudioService.h"
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/DiagnosticService.h"
 #include "renegade/bridge/GameplayInputService.h"
@@ -41,6 +45,11 @@ namespace renegade::runtime
             std::string projectRoot) noexcept;
         void SetPaused(bool paused) noexcept;
         void SetInteractionPrompt(std::string prompt) noexcept;
+        void SetMeleePrompt(std::string prompt) { meleePrompt_=std::move(prompt); }
+        void SetProjectileAim(bool enabled) { projectileAim_=enabled; }
+        void SetProjectileContacts(std::vector<XMFLOAT2> contacts) { projectileContacts_=std::move(contacts); }
+        void ConfirmTargetHit() { hitConfirmSeconds_=0.12f; }
+        void ClearHitConfirmation() { hitConfirmSeconds_=0; }
         void Load() override;
         void Update(float dt) override;
         void Compose(wi::graphics::CommandList cmd) const override;
@@ -54,6 +63,10 @@ namespace renegade::runtime
         bool renderSettingsInitialized_ = false;
         bool paused_ = false;
         std::string interactionPrompt_;
+        std::string meleePrompt_;
+        bool projectileAim_ = false;
+        std::vector<XMFLOAT2> projectileContacts_;
+        float hitConfirmSeconds_ = 0;
         std::uint64_t renderSettingsSceneRevision_ = 0;
     };
 
@@ -86,6 +99,7 @@ namespace renegade::runtime
         void ProcessPendingActions();
         void RecordAction(const RuntimeActionResult& result);
         void SyncPlayerForScene();
+        void UpdatePlayerProjectiles(float dt);
         void SyncAudioForScene();
         void SyncCreatorScriptsForScene();
         void StopCreatorScripts() noexcept;
@@ -94,6 +108,8 @@ namespace renegade::runtime
         bridge::SceneService scenes_;
         void UpdateLiveDiagnostics();
         std::uint64_t lastDiagnosticSampleMs_ = 0;
+        std::uint64_t lastDiagnosticProjectileLaunched_ = 0;
+        size_t lastDiagnosticProjectilePending_ = 0;
         bridge::DiagnosticService diagnosticService_;
         RuntimeFlowController flow_;
         RuntimeRenderPath renderer_;
@@ -104,6 +120,11 @@ namespace renegade::runtime
         bridge::RuntimePlayerState player_;
         RuntimePlayerViewRigState playerViewRig_;
         RuntimePlayerViewAnimationState playerViewAnimation_;
+        RuntimeEquipmentLoadout playerEquipment_;
+        RuntimeProjectileSession projectiles_;
+        RuntimeProjectileVisuals projectileVisuals_;
+        bridge::ImpactAudioPlayer impactAudio_;
+        std::vector<RuntimeEquipmentLoadout::ProjectileRequest> pendingProjectileShots_;
         bridge::PlayerControllerSettings playerSettings_;
         bridge::NavigationRuntimeState navigationState_;
         bridge::CharacterRuntimeState characterState_;

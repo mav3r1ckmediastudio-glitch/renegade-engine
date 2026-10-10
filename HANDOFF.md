@@ -1,3 +1,1912 @@
+## 2026-10-09: PR 181 Debug test repair (base 77b8b9d)
+
+The latest Studio Debug CI compiled successfully, then failed two obsolete source contracts and timed out ImpactAudioTests after 1500 seconds. The audio worker had no render endpoint; Wicked's Debug assertion opened a dialog. Baseline Debug/Release passed on that revision.
+
+Updated the ADD menu contract for the ninth projectile entry and the player-view contract to inspect the rendered camera after physics, allowing the separate pre-physics aiming sample. Split impact audio coverage into an always-running governance/save/reload/snapshot/package test and a native voice test. The latter enumerates active render endpoints before native initialization and skips with code 77 only when no endpoint exists; enumeration failures remain failures. Both audio tests have a 30-second timeout; assertions report to stderr. No production gameplay or upstream Wicked code changed.
+
+Local validation passed:
+- `cmake -S . -B BUILD/renegade`
+- `cmake --build BUILD/renegade --config Debug --target RenegadeImpactAudioTests --parallel 4`
+- `ctest --test-dir BUILD/renegade -C Debug -R '(SourceContract|RenegadeImpactAudio.*Tests|RenegadeRuntimeProjectileSessionTests|RenegadeEquipmentAssetTests)' --timeout 30 --output-on-failure`: 58/58 passed, 3.31 seconds, including real native voices.
+- With the test-only environment variable `RENEGADE_TEST_NO_AUDIO_DEVICE=1`, `ctest --test-dir BUILD/renegade -C Debug -R '^RenegadeImpactAudioNativeVoiceTests$' --timeout 30 --output-on-failure`: correctly skipped in 0.49 seconds. The variable was removed afterward.
+- All 55 source contracts also passed independently; `git diff --check` passed.
+
+Local logs: BUILD/p3-ci-tests-debug-build.log, BUILD/p3-ci-repaired-debug-tests.log, BUILD/p3-ci-headless-audio-proof.log, BUILD/p3-ci-all-source-contracts.log. Fresh CI remains required; PR stays draft and no release gate or main merge is claimed.
+
+## PR181 shared-header Debug COFF build repair - 2026-10-09
+
+CI head531b34032a13c8d6274b0b7c7a98c3644b4f15e2: Runtime C1128 repaired;
+local Debug Runtime build completed successfully. Baseline Debug/Release passed.
+Studio Debug job113988948071 then failed C1128 in RuntimeProjectileSessionTests,
+ImpactAudioTests and EquipmentAssetTests. First fix omitted header consumers.
+EngineBridge /bigobj is now PUBLIC for MSVC C++ compilation, so linked gameplay
+test targets inherit the same native-header compilation requirement. Does not
+change Wicked upstream or C/RC/non-MSVC flags.
+cmake -S . -B BUILD/renegade PASS; generated vcxproj for all three failed targets
+shows /bigobj in all four build configurations.
+cmake --build BUILD/renegade --config Debug --target
+RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests
+RenegadeEquipmentAssetTests --parallel 4
+launched, still rebuilding EngineBridge at publication; no completed test-build
+success claimed. Log BUILD/p3-ci-shared-bigobj-debug.log.
+Source CI log BUILD/p3-ci-debug-failed2.log. git diff --check PASS.
+Require fresh full GitHub CI and remaining verification before merging PR181.
+No gate closure.
+
+## PR181 Runtime Debug COFF build repair - 2026-10-09
+
+CI head 1cdf169da72ca8cc7662e35da54bec2b8c7cfd40: baseline Debug/Release
+passed; Studio Debug job113976234739 failed compiling RuntimeApplication.cpp
+with MSVC C1128 (object section limit). Studio Release still in progress.
+Added MSVC C++ /bigobj to RenegadeRuntime target, matching existing Studio/
+EngineBridge policy; no gameplay, resource format or upstream change.
+cmake -S . -B BUILD/renegade PASS; generated Runtime vcxproj confirms /bigobj
+for Debug, Release, MinSizeRel and RelWithDebInfo C++ compilation.
+cmake --build BUILD/renegade --config Debug --target RenegadeRuntime --parallel 4
+launched; local build still in progress at publication, log
+BUILD/p3-ci-bigobj-debug.log. No local Debug success claimed yet.
+Source CI log BUILD/p3-ci-debug-failed.log retrieved through GitHub job logs API.
+Publish fix to same PR181 branch and require fresh CI before merging.
+No release gate closed.
+
+## GitHub combined P2/P3 checkpoint - 2026-10-09
+
+Owner requested publishing accumulated work to GitHub. Latest local P3 code,
+tests, docs and generated fallback resources committed as
+8bfa6e7b2c73c8eeeed1614f6bf03eefb769c6a8 (70 files). Merged complete remote P2
+branch including hand-IK Debug/importer-layout fixes; code checkpoint is
+70862b6a191eee8f6907ba00d96b7b7c9bb7d3c1. Only HANDOFF prepend conflict:
+both branches' entries preserved and shared history retained once.
+git push -u origin feature/p3-projectile-impact succeeded; remote hash verified.
+Draft combined PR #181:
+https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/pull/181
+Includes all current P2 work; PR #180 left open until combined integration ready.
+Main unchanged. Windows baseline and Studio CI both observed in progress.
+Post-checkpoint focused CTest PASS4/4 .54s, log
+BUILD/p3-github-checkpoint-ctest.log. P2 code integration still needs rebuilt
+native verification and exact-commit independent review. No release gate closed.
+Private supplied art, WAVs and playground/build data remain local/private kit,
+not source Git. Generated fallback PNGs have committed provenance.
+Only remaining untracked files are Tools/__pycache__/ and log.txt.
+Remaining editor/Jolt-only/Hitscan verification and owner-ready test-build work
+are recorded above in the ordinary-project entry.
+
+## Ordinary-project impact defaults - 2026-10-09
+
+Implemented local Studio impact-library adoption through stable bridge service.
+Base cf04bd38434dbc3e84c90ce22ee628e3c3953a80 on feature/p3-projectile-impact;
+working tree remains uncommitted, with broad pre-existing changes. Wicked unchanged.
+Owner accepted animated wounds and skin-attached arrows in actual gameplay.
+This updates the earlier pending owner judgement; independent exact-commit review
+and the P3 release gate remain open.
+
+Changed EngineBridge ImpactDefaultsService header/source and CMake; Studio
+Phase5Gate4MaterialInspector and optional private-kit CMake deployment; Runtime
+ProjectileVisuals profile selection and unresolved-resource guards in marks,
+geometry and blood sheets; Tests/ImpactAudioTests.cpp; architecture/feature docs.
+Selecting Object Surface Type finds Content/ImpactDefaults beside Studio,
+adopts missing tagged donor materials through CommandService, imports governed
+textures/WAVs with target-project IDs, and supplies audio bank only when absent.
+Existing matching material tags and existing audio banks are preserved.
+Scene donor addition is Undo/Redo; imported assets and bank remain project-owned
+on Undo, matching the existing resource-import lifecycle. Surface classification
+is a separate command. Installed donor metadata enables directional blood without
+the diagnostic environment switch; Reset clears that selection between scenes.
+No projectile/Character/level objects are copied from the playground.
+
+Private kit exported from accepted playground: 11 donor materials, 40 resource
+products (26 textures, 14 WAVs). Licensed supplied art stays in BUILD and installed
+Studio Content, not Git. Optional RENEGADE_IMPACT_DEFAULTS_DIRECTORY CMake PATH
+deploys it beside Studio. Clean builds without private kit retain baseline effects;
+distribution still must provide that kit. Scene adoption is committed only after
+preparation succeeds; failed preparation can leave unused imported project assets
+and source files, but does not replace owner material/bank or execute scene command.
+
+Exact command shapes, run from repository root with VS CMake/CTest binaries:
+cmake --build BUILD/renegade --config Release --target RenegadeRuntime
+RenegadeStudio RenegadeImpactAudioTests --parallel 4
+PASS build2/build3/build4 logs; final helper proof-build2 log.
+RenegadeImpactAudioTests.exe --export-impact-library
+BUILD/bow-projectile-playground/Bow-Playground.renegade BUILD/impact-defaults-library
+PASS BUILD/p3-impact-defaults-export.log, 11 donors/40 products.
+RenegadeImpactAudioTests.exe --impact-defaults-proof
+BUILD/impact-defaults-library/ImpactDefaults.renegade BUILD/impact-defaults-proof
+PASS BUILD/p3-impact-defaults-native5.log: new project ID; 12 materials including
+preserved custom default; 80 source/product registry records; 14 native-valid WAVs;
+Undo/Redo, repeat adoption without duplicates, save/reload and texture restoration.
+Proof creates governed level reference and Game Start -> Level -> Complete Game
+Story Flow. Earlier package attempts rejected missing Flow and missing completion
+route; fixture corrected. Earlier import attempt rejected noncanonical resource
+folders; service now imports Audio and Textures under their own class folders.
+RenegadeImpactAudioTests.exe --marks-scene <fresh proof project descriptor>
+PASS BUILD/p3-impact-defaults-marks.log all seven native atlas maps, wound growth,
+triangle tracking, distance visibility and expiry. Glass native PNG inspected.
+RenegadeImpactAudioTests.exe --stage <fresh proof project descriptor>
+PASS BUILD/p3-impact-defaults-stage3.log: audio=14, bank=1, native WAV decode=14.
+RenegadeImpactAudioTests.exe --marks-scene <staged GameData project descriptor>
+PASS BUILD/p3-impact-defaults-packaged-marks.log; same seven-surface assertions.
+Staged executable launched from its package directory with no blood environment
+switch: proof PID17980; diagnostics responsive, scene_loaded=true, projectile and
+visual errors empty, correct staged project/scene. Native screenshot inspected:
+empty proof level sky expected, no authored gameplay actor. Proof runtime was
+verified by executable path and stopped. Owner's prior runtime was already absent;
+no other runtime was stopped.
+ctest --test-dir BUILD/renegade -C Release -R
+'(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)'
+--timeout 20 --output-on-failure
+PASS4/4 .63s BUILD/p3-impact-defaults-ctest.log.
+cmake -S . -B BUILD/renegade -DRENEGADE_IMPACT_DEFAULTS_DIRECTORY=<private-kit-folder>
+cmake --build BUILD/renegade --config Release --target RenegadeStudio --parallel 4
+PASS configure/studio-deploy logs. Local installed kit present; embedded Runtime
+copy refreshed. Existing compiler temporary-directory warnings remain.
+git diff --check PASS; Wicked git status empty.
+Evidence BUILD/p3-impact-defaults-*; native mark PNGs p3-knife-mark-*-full.png.
+
+Next: explicit Jolt-only receiver and shared Hitscan integration checks, then
+review/checkpoint the broad P3 branch, CI and independent exact-commit verification.
+Local Studio selection callback compiled but owner/UI click smoke after installing
+the kit remains to be exercised. Blood/water/glass realism refinement is deferred.
+
+## Animated skin-attached retained arrows - 2026-10-09
+
+Owner accepted animated wounds as brilliant/effective, and identified arrows
+remaining in object-relative space. Owner authorised triangle-attached arrows.
+Retained now captures Character contact triangle independently of mark artwork.
+Store arrow rigid pose relative to orthonormal triangle frame at impact, including
+authored embed depth and incoming-angle appearance. Recompose with current native
+skinned triangle frame; never inherit triangle stretch or nonuniform receiver
+scale. Unresolved skin contact retains prior rigid object fallback. Deleted or
+invalid captured receiver/topology retires arrow on next pre-upload Sync.
+
+Existing completed-pose refresh now handles retained skin arrows too. It updates
+arrow root and descendant world matrices while preserving their local transforms,
+then refreshes only existing arrow object render slots: CPU matrices/bounds,
+GPU current/raw pose and centre/radius, and native TLAS instance transform.
+Previous-frame transforms, meshlet allocation, instance identity and occlusion
+history are preserved. No repeated whole-object update, animation or physics
+step, and no entity/component creation/removal after native scene upload.
+Uses public pinned Scene mapped instance surface; review with upstream upgrades.
+Arrow remains rigid; extreme joint folds can intersect body. Trail curvature
+quality is still deferred. No upstream shader/source or schema change.
+
+Base cf04bd38434dbc3e84c90ce22ee628e3c3953a80 feature/p3-projectile-impact.
+Changes Runtime/src/RuntimeImpactMarks.h, Runtime/src/RuntimeProjectileVisuals.h,
+Tests/ImpactAudioTests.cpp, HANDOFF and docs. Broad pre-existing dirty tree remains.
+No commit/push/release gate closure. Owner gameplay judgement pending.
+
+Commands/results:
+cmake --build BUILD/renegade --config Release --target RenegadeRuntime
+RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests --parallel 4
+PASS BUILD/p3-skin-arrow-build.log.
+cmake --build BUILD/renegade --config Release --target RenegadeImpactAudioTests --parallel 4
+PASS BUILD/p3-skin-arrow-proof-build.log for native real-arrow assertions.
+Helper --animated-marks BUILD/bow-projectile-playground/Bow-Playground.renegade
+<owner-v2-descriptor> 7ee33e61-fad0-497c-8d63-725497cb927b
+PASS EXIT0 BUILD/p3-skin-arrow-native.log: three actual governed arrows at different
+incoming angles, rigid full-pose relation to animated skin, child CPU/GPU matrices,
+current culling bound centres, wound/trail contact accuracy, receiver deletion.
+Walk/swipe/run clips and loop reset exercised; contact travel up to1.97425m, wound
+max .00100005m equals intended1mm outward offset. Initial proof selected duplicate
+clip names on pre-existing hidden playground Mutant and failed motion assertion;
+corrected selection restricted to new proof rig entity IDs. No false pass accepted.
+Native swiping/run frame70 PNGs inspected: arrows stay at visible wounds.
+ctest --test-dir BUILD/renegade -C Release -R
+'(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)'
+--timeout 20 --output-on-failure
+PASS4/4 .57s BUILD/p3-skin-arrow-ctest.log.
+Helper --stage Bow descriptor PASS BUILD/p3-skin-arrow-stage.log.
+Same animated helper with staged GameData/Bow-Playground.renegade descriptor
+PASS BUILD/p3-skin-arrow-packaged-native.log. Governed arrow product read from
+staged project; extra diagnostic rig still read from owner v2 project.
+Process-local RENEGADE_ARROW_POSE_PROOF=1 helper --blood-scene Bow descriptor
+PASS BUILD/p3-skin-arrow-rigid-native.log: front/oblique/grazing nonuniform receiver.
+Old owned PID44864 verified executable path and stopped. Studio embedded Runtime
+refreshed; rebuilt staged standalone with saved animated Mutant opened PID36576,
+process-local directional blood opt-in then environment removed.
+python Tools/Read-RenegadeDiagnostics.py --process runtime
+responsive true BUILD/p3-skin-arrow-runtime.json; both playground Characters loaded.
+No serialized runtime changes; playground Mutant Save/Reload already verified.
+Next: owner shoot moving Mutant and assess arrows travelling with wounds, then
+ordinary-project impact dependencies and authored P3 completion work.
+
+## Playable animated Mutant in Bow playground - 2026-10-09
+
+Owner requested actual animated Mutant target in playground after previous
+diagnostic-only proof. Added governed passive Character named Animated Mutant
+impact target at world2,0,5.5 beside old dummy. Mutant001 reusable skinned payload
+read from owner v2 project; source project untouched. Native flexing-muscles clip
+loops for visible body motion; autonomous pursuit disabled. Saved and reloaded
+playground verifies Character identity and playing loop. Original dummy retained.
+
+Source product contains no live/governed textures and stale paths to missing
+Mutant_diffuse.png from original FBX exporter. Test installation clears those
+missing native texture names from new target only; neutral grey appearance.
+Initial texture-slot iteration crashed due null Resource::GetTexture without
+Resource::IsValid; corrected guard. Initial Stage rejected missing texture path;
+existing-target repair clears missing names and saves/reloads. Final stage passes.
+Source reusable asset and owner v2 scene not modified.
+
+Base cf04bd38434dbc3e84c90ce22ee628e3c3953a80 feature/p3-projectile-impact.
+Changed Tests/ImpactAudioTests.cpp --install-mutant helper and disposable BUILD
+Bow scene; docs. No production code/upstream/schema changes, commit or gate closure.
+
+cmake --build BUILD/renegade --config Release --target RenegadeImpactAudioTests --parallel 4
+PASS BUILD/p3-mutant-playground-build.log.
+Helper --install-mutant BUILD/bow-projectile-playground/Bow-Playground.renegade
+<owner-v2-descriptor> 7ee33e61-fad0-497c-8d63-725497cb927b
+PASS Save/Reload BUILD/p3-mutant-playground-install.log; existing-target texture
+repair PASS BUILD/p3-mutant-playground-repair.log.
+Helper --stage same Bow descriptor PASS BUILD/p3-mutant-playground-stage.log.
+Owned old PID40304 verified executable path and stopped. New staged standalone
+PID44864 opened with process-local RENEGADE_DIRECTIONAL_BLOOD=1; env removed.
+python Tools/Read-RenegadeDiagnostics.py --process runtime
+responsive true BUILD/p3-mutant-playground-runtime.json, Character count2.
+Native desktop capture BUILD/p3-mutant-playground-live.png inspected: animated
+Mutant visible right of dummy with bow, retained arrows and wounds/blood present.
+Owner was already testing during screenshot; appearance acceptance not inferred.
+Next owner assess animated wounds/trails directly. Known retained arrows still
+follow contacted object rather than exact skinned triangle; same-pose mark fix
+does not establish exact animated arrow embedding. Curved runoff remains deferred.
+
+## Same-pose animated wound attachment correction - 2026-10-09
+
+Owner authorised fixing measured previous-pose wound delay. Runtime now performs
+transform-only RefreshImpactMarkPose after wi::Application::Update completes
+native skinning and before PreRender visibility/decal renderer upload.
+Runs native public Scene::RunDecalUpdateSystem to refresh render-facing world,
+position and AABB data. No second Scene::Update, no extra physics/animation step.
+Transient creation, removal, expiry and growth remain exclusively in earlier
+Sync. Invalid late anchors are left for next pre-upload cleanup. All governed
+triangle marks benefit; mark art, growth and accepted blood/water/glass unchanged.
+No upstream changes or serialized state changes.
+
+Actual Mutant walking/swiping/running proof now asserts wound centre error below
+3mm including raw locomotion loop resets. Maximum .00100005m across all clips,
+equal intended 1mm outward normal offset (previous maximum1.89457m at root reset).
+Verifies render-facing decal world translations and culling-bound centres, and
+fully-grown trail top remains within3mm of current wound contact. Six tracked
+entities retained; paused refresh and receiver deletion cleanup pass. Native
+walking/swiping/running frame70 images inspected: wounds follow deformed body.
+Flat trails still clip on curved skin; this fix is timing, not curved runoff.
+Diagnostic character is grey because texture restoration not performed on merged
+Character product; no final character-material quality claim.
+
+Base cf04bd38434dbc3e84c90ce22ee628e3c3953a80 feature/p3-projectile-impact.
+Changed Runtime/src/RuntimeProjectileVisuals.h, Runtime/src/RuntimeApplication.cpp,
+Tests/ImpactAudioTests.cpp, HANDOFF and docs. Pre-existing dirty tree preserved.
+No commit/push/gate closure or final owner animated gameplay acceptance.
+Historical diagnostic section below describes pre-fix failure.
+
+Commands/results:
+cmake --build BUILD/renegade --config Release --target RenegadeRuntime
+RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests --parallel 4
+PASS BUILD/p3-same-pose-marks-build.log.
+cmake --build BUILD/renegade --config Release --target RenegadeImpactAudioTests --parallel 4
+PASS BUILD/p3-same-pose-trail-build.log after stronger trail assertions.
+BUILD/renegade/Release/RenegadeImpactAudioTests.exe --animated-marks
+BUILD/bow-projectile-playground/Bow-Playground.renegade <owner-v2-descriptor>
+7ee33e61-fad0-497c-8d63-725497cb927b
+PASS EXIT0 BUILD/p3-same-pose-marks-native.log. Native rest/walking/swiping/run PNGs
+BUILD/p3-animated-wounds-*.png; inspected three frame70 captures.
+ctest --test-dir BUILD/renegade -C Release -R
+'(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)'
+--timeout 20 --output-on-failure
+PASS4/4 .63s BUILD/p3-same-pose-marks-ctest.log.
+Helper --stage BUILD/bow-projectile-playground/Bow-Playground.renegade
+PASS BUILD/p3-same-pose-marks-stage.log.
+Same --animated-marks with staged GameData/Bow-Playground.renegade descriptor
+PASS BUILD/p3-same-pose-marks-packaged-native.log. Character still read from owner
+project, so this proves packaged mark resources, not packaged Character closure.
+Existing owned PID65852 verified path and stopped; Studio embedded Runtime copied
+from final Release. Staged standalone PID40304 launched with process-local
+RENEGADE_DIRECTIONAL_BLOOD=1, environment removed after launch.
+python Tools/Read-RenegadeDiagnostics.py --process runtime
+PASS responsive true BUILD/p3-same-pose-marks-runtime.json.
+No serialization test needed for transient timing-only change.
+Next: owner animated gameplay judgement; ordinary-project impact dependency
+availability and remaining authored P3 completion checks. Curved runoff quality
+stays in later blood pass.
+
+## Animated wound verification - 2026-10-09
+
+Owner provisionally accepts short trickle ("not a natural run ... it'll do");
+retain current artwork for later blood realism pass. Owner authorised checking
+wounds/trails through animated characters. Added read-only helper mode in
+Tests/ImpactAudioTests.cpp: --animated-marks <Bow descriptor> <Character project
+descriptor> <Character asset ID>. Prepares governed reusable skinned product,
+merges only in memory with Bow lighting/mark donors, hides original objects,
+uses native ray contacts for three skin hits (upper body and leg), plays walking,
+swiping and running clips, captures native frames and measures pose mismatch.
+No owner project Save, runtime code or upstream edits. Character textures were
+not restored by this diagnostic merge; grey presentation frames assess attachment,
+not final character material quality. Native images rest/walking/swiping/run
+inspected; dark wounds move with body but trails clip and can be hard to see.
+
+RESULT: functional anchoring/lifecycle passes; animated appearance NOT ACCEPTED.
+Same completed pose wound centres are accurate to intended 1mm normal offset
+(max .00100005m). At representative frame70, pre-update wound versus current
+skin errors are .014-.020m walking, .017-.045m swiping, .034-.040m running.
+Maximum includes root-translation loop resets/clip transitions: walking1.72946m,
+swiping1.75983m, running1.89457m; swiping after first3frames max .0487016m.
+These are discontinuities in this raw clip fixture, not a claim of metre-scale
+continuous gameplay drift. Runtime also Syncs projectile marks before native
+Scene animation/skinning Update; helper reproduces that order. Consequently
+the known one-pose latency is now measured on an actual governed character.
+Six wound/trail entities retain valid anchors through clips; paused refresh and
+deleted-receiver cleanup pass. Trail gravity freezes after growth as authored,
+but local tangent projection does not wrap over skin or joints.
+
+Base cf04bd38434dbc3e84c90ce22ee628e3c3953a80 on feature/p3-projectile-impact;
+broad pre-existing dirty tree remains. Changed Tests/ImpactAudioTests.cpp and docs.
+No runtime rebuild/deployment required for test-only addition; existing owner
+standalone retained. No serialized changes, commit, push or release gate closure.
+
+Commands:
+cmake --build BUILD/renegade --config Release --target RenegadeImpactAudioTests --parallel 4
+PASS BUILD/p3-animated-marks-build.log. Initial proof compile assignment mismatch
+corrected to explicit ProjectileVector fields. Initial bounds-based contacts
+missed; final proof uses native ray contacts rather than assuming broad bounds.
+BUILD/renegade/Release/RenegadeImpactAudioTests.exe --animated-marks
+BUILD/bow-projectile-playground/Bow-Playground.renegade <owner-v2-descriptor>
+7ee33e61-fad0-497c-8d63-725497cb927b
+EXIT0 BUILD/p3-animated-marks-native.log. This exit covers functional assertions,
+and explicitly logs ANIMATED APPEARANCE NOT ACCEPTED; do not treat exit0 as visual
+acceptance. Images BUILD/p3-animated-wounds-{rest,walking-70,swiping-70,run-70}.png.
+ctest --test-dir BUILD/renegade -C Release -R
+'(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)'
+--timeout 20 --output-on-failure
+PASS4/4 .54s BUILD/p3-animated-marks-ctest.log.
+
+Next bounded task: design same-pose skin attachment that reaches the native GPU
+decal upload in the correct frame. Do not move transient creation/removal after
+Scene upload: this previously caused giant close-camera blood artifacts.
+Do not casually add a second full Scene::Update(0), which can affect temporal
+skinning/physics and doubles scene work. Keep accepted static effects unchanged.
+Then rerun actual walking/running/swiping appearance and retained-arrow following.
+Full playable character gameplay acceptance remains open.
+
+## Short arrow-wound blood trickle candidate - 2026-10-09
+
+Owner asked for slow blood line beneath character arrow wound and authorised
+short local prototype. For embedded/stick-on-impact projectile Character hits
+with resolved skin donor and mesh triangle, add one thin native projected blood
+trail beside wound decal. Growth starts after.2s, reaches12cm over4s, then stops
+and persists within120s mark lifetime. Four procedural64x128 uneven masks; dark
+red material and existing quantised blood stain surface wet-to-dry over90s.
+Gravity projected onto contact tangent plane determines downward growth. Once
+stopped, roll is retained relative to triangle so old stain moves with receiver.
+Trail uses existing64 mark-entity cap/reset/removal; one extra slot per wound.
+No donor/triangle means no trickle; horizontal surfaces with no tangent gravity
+omit trail. No falling drops or floor drips added in this scoped prototype.
+This is a shallow local projection, not fluid simulation or traced skin runoff;
+curved limbs can clip it and full live animation acceptance remains open.
+
+Native mid-growth and fully-grown frames inspected: narrow red line extends
+beneath wound. Existing blood splash, glass and other surface behaviour retained.
+Owner previously said glass contrast version is better; retain provisionally
+and revisit alongside later blood/water/glass quality pass.
+
+Base cf04bd38434dbc3e84c90ce22ee628e3c3953a80; feature/p3-projectile-impact.
+Changes Runtime/src/RuntimeImpactMarks.h, RuntimeProjectileVisuals.h,
+Tests/ImpactAudioTests.cpp and docs. Transient state only; no scene schema or
+serialized preset changes. No upstream changes, commits, push or gate closure.
+
+cmake --build BUILD/renegade --config Release --target RenegadeRuntime
+RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests --parallel4 PASS
+BUILD/p3-wound-trickle-build.log. Helper-only proof rebuild PASS
+BUILD/p3-wound-trickle-proof-build.log. Helper --marks-scene Bow descriptor PASS
+BUILD/p3-wound-trickle-native.log: native growth/pause/stop, wound movement and
+triangle deformation, mark expiry; native mid/full-grown screenshots inspected.
+ctest --test-dir BUILD/renegade -C Release -R
+'(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)'
+--timeout20 --output-on-failure PASS4/4 BUILD/p3-wound-trickle-ctest.log.
+Helper --stage Bow descriptor PASS BUILD/p3-wound-trickle-stage.log.
+--marks-scene packaged GameData descriptor PASS
+BUILD/p3-wound-trickle-packaged-native.log. Studio embedded Runtime refreshed;
+standalone PID65852 launched with process-local directional blood opt-in;
+BUILD/p3-wound-trickle-runtime.json diagnostics. Next owner test: hit dummy with
+arrow and watch wound for4-5s; assess trail length/width and curved-body attachment.
+
+## Glass crack contrast and puncture - 2026-10-09
+
+Owner reports pale spider silhouette and missing dark centre, not a see-through
+hole requirement. Native full material vs colour-only comparison (diagnostic
+RENEGADE_GLASS_COLOR_ONLY) was nearly identical. Source GlassBase pixel inspection:
+RGB188-226; opaque average222; all four tile centres alpha0. Thus source has no
+painted dark puncture and lighting dims grey crack colour; normal/surface maps
+are not principal cause. Runtime glass crack tint now3x white, normal strength.25.
+Adds separate small native projected dark puncture with grey irregular rim, using
+bounded64x64 procedural mask; same contact triangle anchor and120s expiry.
+Both layers share existing64 decal-entity cap (glass uses two slots per hit).
+No original asset altered; four source atlas shapes retained; no true hole cut.
+Other surfaces and shard effects unchanged. Native final glass frame inspected:
+bright crack detail and distinct dark centre visible; owner quality review pending.
+
+Base cf04bd38434dbc3e84c90ce22ee628e3c3953a80; feature/p3-projectile-impact.
+Changed Runtime/src/RuntimeImpactMarks.h, RuntimeProjectileVisuals.h,
+Tests/ImpactAudioTests.cpp, docs. No upstream edit/commit/push/gate closure.
+Comparison helper build PASS BUILD/p3-glass-compare-build.log; --marks-scene full
+PASS p3-glass-compare-full.log and process-local colour-only PASS
+p3-glass-compare-colour.log. Final Runtime/session/helper Release build PASS
+BUILD/p3-glass-contrast-build.log, same three targets --parallel4.
+Native --marks-scene Bow descriptor PASS BUILD/p3-glass-contrast-native.log;
+verifies glass has two layers and complete expiry. Focused ctest initial run
+BUILD/p3-glass-contrast-ctest.log had unchanged ProjectileWorldTests20s timeout;
+retry exact four-test Release regex --timeout20 --output-on-failure PASS4/4
+BUILD/p3-glass-contrast-ctest-retry.log. Stage PASS
+BUILD/p3-glass-contrast-stage.log. Studio embedded Runtime refreshed; standalone
+PID68748 process-local directional blood opt-in. Diagnostics
+BUILD/p3-glass-contrast-runtime.json. Next: owner judge cracks/puncture around
+embedded arrow in actual target lighting. Contrast factor remains artistic,
+not physical calibration or final glass-quality acceptance.
+
+## Surface mark scale/visibility correction - 2026-10-09
+
+Owner screenshot image(20261009-153454).png shows elongated KNIFE marks and reports
+marks disappear with distance after retained arrow expiry. Governed world marks
+were still Component_Attach children of nonuniform receiver transforms, allowing
+rotated footprints to distort. They now use the same native triangle contact
+anchor path as skin; width/height remain world-space independent and receiver
+motion follows surface barycentrics without hierarchical scale. Projector half
+ depth increased .008 to .035 for surface-volume tolerance. Distance symptoms
+have not been reproduced in a complete live arrow-expiry sequence; do not claim
+proven cause. Native no-arrow proof now shows marks at1.2/2.5/4 metres. Four-metre
+first proof was occluded by unrelated fixture object; read-only diagnostic now
+hides unrelated renderables and repeated proof inspected successfully.
+
+Base cf04bd38434dbc3e84c90ce22ee628e3c3953a80; branch feature/p3-projectile-impact.
+Changes Runtime/src/RuntimeImpactMarks.h, RuntimeProjectileVisuals.h,
+Tests/ImpactAudioTests.cpp, docs. Build Runtime/session/helper PASS
+BUILD/p3-marks-scale-build.log. Helper --marks-scene disposable Bow descriptor
+PASS BUILD/p3-marks-scale-native.log, verifies seven marks retain equal world
+axis lengths under nonuniform receiver(.4,.8,.2) and have no hierarchy parent.
+Focused ctest4/4 PASS BUILD/p3-marks-scale-ctest.log, same prior regex/Release
+configuration. Helper-only rebuild PASS BUILD/p3-marks-distance-build.log;
+repeat --marks-scene PASS BUILD/p3-marks-distance-native.log. Distance images
+BUILD/p3-mark-distance-{12,25,40}.png inspected. --stage Bow descriptor PASS
+BUILD/p3-marks-scale-stage.log. Studio embedded Runtime refreshed; staged
+standalone PID63392 process-local directional blood opt-in; diagnostics
+BUILD/p3-marks-scale-runtime.json. No commit/push/upstream change/gate closure.
+Next owner check: several angled hits, wait arrow expiry then retreat/approach;
+report whether pop-in persists. New launch starts with clean transient marks.
+
+## KNIFE surface mark candidate - 2026-10-09
+
+Owner requested supplied bullet holes including skin. Seven governed 2x2 atlas
+sets now cover Metal Wood Concrete Stone Glass Dirt and Character. Water leaves
+no bullet hole; Default retains procedural fallback. Each set imports colour-alpha,
+normal and repacked surface PNG ResourceAssets. Source Unity gloss alpha inverted
+to roughness G; grayscale specular approximates F0 in A; AO R=1 and metalness B=0.
+No pack artwork embedded in source or committed. Optional material metadata keys
+renegade.impact.mark.{metal,wood,concrete,stone,glass,dirt,skin} govern assets and
+normal package discovery. No authoring picker/UI exposure added.
+
+Runtime selects one static atlas quarter and varies roll/size per hit. Embedded
+projectile marks remain .65 scale. Governed marks persist120s with64 oldest-eviction
+cap; reset/expiry retained. Missing donors retain previous art and18s lifetime.
+Skin only spawns if a donor and near-contact mesh triangle can be resolved; no
+floating mark fallback. Native GetPositionOnSurface tracks barycentric centre and
+triangle basis across rigid movement, CPU skinning and mesh deformation. Invalid
+or deleted receiver/topology retires mark. This is a shallow projected decal, not
+UV-painted skin; it does not wrap perfectly across joints and full live character
+animation acceptance remains open. Current Character classification does not
+separate exposed skin from clothing. Latest native CPU pose can introduce pose
+latency; do not claim exact skin attachment parity. Blood effects unchanged.
+
+Base cf04bd38434dbc3e84c90ce22ee628e3c3953a80, feature/p3-projectile-impact.
+Changed Runtime/src/RuntimeImpactMarks.h, RuntimeProjectileVisuals.h,
+Tests/ImpactAudioTests.cpp and documentation; disposable Bow scene/products.
+Broad dirty tree predates task; no commits/push/gate closure.
+
+Verification exact commands/results:
+cmake --build BUILD/renegade --config Release --target RenegadeRuntime
+RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests --parallel 4 PASS
+BUILD/p3-knife-marks-build.log. Earlier compile failures corrected token spacing
+and explicit XMFLOAT3 helper overloads; final build passed.
+Helper --install-knife-marks BUILD/bow-projectile-playground/Bow-Playground.renegade
+BUILD/knife-marks-candidate PASS BUILD/p3-knife-marks-native.log: all21 governed
+slots retain identities on Save/Reload; seven native marks render and expire;
+skin anchor follows receiver translation and CPU triangle deformation.
+Seven BUILD/p3-knife-mark-{Metal,Wood,Concrete,Stone,Glass,Dirt,Character}.png
+images inspected; marks visible but somewhat soft/dark in the proof lighting.
+ctest --test-dir BUILD/renegade -C Release -R
+'(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)'
+--timeout20 --output-on-failure PASS4/4 BUILD/p3-knife-marks-ctest.log.
+Helper --stage same descriptor PASS BUILD/p3-knife-marks-stage.log.
+Helper --marks-scene packaged GameData/Bow-Playground.renegade PASS
+BUILD/p3-knife-marks-packaged-native.log; packaged21 map restoration and native
+mark proof no Downloads/source-folder dependency. Studio embedded Runtime
+refreshed; standalone PID68548 with process-local directional blood opt-in.
+Diagnostics BUILD/p3-knife-marks-runtime.json. Next: owner visual judgement of
+marks on actual targets/dummy, then animated Character wound verification.
+
+## KNIFE debris candidate - 2026-10-09
+
+Owner requested KNIFE glass, rock and wood shard artwork for surface impacts.
+Converted the three original 2x2 TGA alpha atlases to lossless PNG in disposable
+BUILD/knife-debris-candidate. Imported governed ResourceAsset products into Bow
+playground; no pack artwork embedded in source or committed. Scene material
+metadata renegade.impact.{glass,rock,wood}_shards owns dependencies. Runtime
+renders individual static atlas quarters on native double-sided lit cards with
+ballistic motion/spin and existing128-piece cap/reset/expiry. Glass retains12
+pieces at strength1; wood18; rock14. Stone and Concrete use rock donor. Missing
+donors preserve procedural fallback. Dust remains separate. Glass uses native
+transmission/refraction; source is white mask, and native proof still looks fairly
+flat. Wood/rock cards are thin and can disappear edge-on. No physical shard
+collision/rigid bodies; no upstream renderer changes. Blood/water unchanged.
+
+Base cf04bd38434dbc3e84c90ce22ee628e3c3953a80 on feature/p3-projectile-impact;
+changes Runtime/src/RuntimeImpactGeometry.h, RuntimeProjectileVisuals.h,
+Tests/ImpactAudioTests.cpp, documentation. Broad pre-existing dirty tree remains.
+No commits/push/gate closure. Owner appearance review next.
+
+Commands/results:
+cmake --build BUILD/renegade --config Release --target RenegadeRuntime
+RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests --parallel4 PASS
+BUILD/p3-knife-debris-build.log (initial helper build failed; corrected native
+application/project inspection setup; final build passed).
+Helper --install-knife-debris BUILD/bow-projectile-playground/Bow-Playground.renegade
+BUILD/knife-debris-candidate PASS BUILD/p3-knife-debris-native.log: governed identity
+Save/Reload, UV quartet geometry and bounded expiry. Native Glass/Rock/Wood frame5
+images visually inspected. Focused ctest regex
+'(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)'
+-C Release --test-dir BUILD/renegade --timeout20 --output-on-failure PASS4/4
+BUILD/p3-knife-debris-ctest.log. Helper --stage same descriptor PASS
+BUILD/p3-knife-debris-stage.log. Helper --debris-scene packaged GameData descriptor
+PASS BUILD/p3-knife-debris-packaged-native.log; no source-folder dependency.
+Studio embedded Runtime refreshed; staged standalone PID42984 launched with
+process-local directional blood opt-in. Diagnostics BUILD/p3-knife-debris-runtime.json.
+
+## Owner water review - 2026-10-09
+
+Owner: smaller droplets are better; water is acceptable for now. Crown explicitly
+accepted as superb. Schedule further water spray/droplet realism refinement
+alongside the future blood effects quality pass. This is provisional visual
+acceptance, not final reference-quality completion or overall P3 gate closure.
+
+## Smaller water droplets - 2026-10-09
+
+Owner accepted crown as superb; crown geometry/material/motion unchanged.
+Water mesh drops increased32 to64 and linear dimensions reduced to about39-40%
+(.0035-.007 X/Z, .0045-.010 Y). Fine plume/skirt sprites unchanged.
+Existing shared128-piece cap retained. Native frame20 inspected: small scattered
+highlights replace large round drops. Owner droplet acceptance pending.
+Release build/native proof/focused ctest4of4/staging PASS; logs respectively
+BUILD/p3-water-small-drops-build.log, -native.log, -ctest.log, -stage.log.
+Studio runtime refreshed; standalone PID59412 launched with directional blood
+process-local opt-in. Diagnostics BUILD/p3-water-small-drops-runtime.json.
+No upstream changes, commits, push or gate closure.
+
+## Fine noisy water spray candidate - 2026-10-09
+
+Owner reference image(20261009-145221).png requests dense fine irregular spray.
+Crown now uses white vertex RGB with alpha .07 at body rising to .85 at lip;
+native PBR transmission .98, roughness .025, reflectance .08, refraction .003,
+zero emission. Thirty-two ballistic transmissive mesh drops provide larger accents.
+Native soft-lighting sprite bursts add 160 fine upward particles and 96 wider base
+particles at strength1 (projectile strength scales counts). Per water emitter cap192;
+random size/life/color, gravity and motion stretch break up uniformity. Sprite mask
+has clearer centres and stronger rims/glints; sprites are presentation accents,
+not physically refractive droplets. Crown and larger drops use native PBR.
+
+Release Runtime/session/helper build PASS BUILD/p3-water-noisy-build.log.
+Native --water-scene proof PASS BUILD/p3-water-noisy-native.log; frames12/20
+inspected. Fine plume is denser, but still compact; reference parity not claimed.
+Focused ctest PASS4/4 BUILD/p3-water-noisy-ctest.log. Stage PASS
+BUILD/p3-water-noisy-stage.log. Studio embedded Runtime refreshed; staged standalone
+PID45752 launched with process-local directional blood enabled. Diagnostics in
+BUILD/p3-water-noisy-runtime.json. Base cf04bd38434dbc3e84c90ce22ee628e3c3953a80,
+branch feature/p3-projectile-impact. No upstream edits, commits, push or gate closure.
+Owner appearance acceptance remains pending. Earlier sections are historical.
+
+## Water refined candidate completion evidence - 2026-10-09
+
+Final native inspection rejected the pointed film as too glass-like; refined to
+low-frequency rounded rolling lip with small top breaks, transmission .98,
+roughness .035, reflectance .02, refraction .003, zero emission. Frame12 of the
+refined run inspected; prior frames5/12/35 inspected during iteration. Crown
+still has a procedural silhouette; reference-quality irregular jet/sheets remain
+open. Native surface waves are visually subtle in this shallow basin, so ripple
+quality is not accepted solely from successful API/texture/lifecycle checks.
+
+cmake --build BUILD/renegade --config Release --target RenegadeRuntime
+RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests --parallel 4:
+PASS BUILD/p3-water-clear-refined-build.log.
+Helper --water-scene BUILD/bow-projectile-playground/Bow-Playground.renegade:
+PASS BUILD/p3-water-clear-refined-native.log (native render/pause/reset isolation).
+ctest --test-dir BUILD/renegade -C Release -R
+'(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)'
+--timeout 20 --output-on-failure: PASS4/4 BUILD/p3-water-clear-refined-ctest.log.
+Helper --stage same descriptor: PASS BUILD/p3-water-clear-refined-stage.log.
+Studio embedded Runtime refreshed; candidate standalone PID48248 launched with
+accepted directional blood opt-in. Native pool sits right of existing targets.
+No changes to upstream submodule/source; no commits or gate closure. Owner
+appearance acceptance is next; simple material checks do not establish realism.
+
+## Clear water impact candidate - 2026-10-09
+
+Owner accepted the prior directional blood/arrow revision as SIGNIFICANTLY better.
+Working standalone continues process-local RENEGADE_DIRECTIONAL_BLOOD=1.
+Water movement accepted, prior pale crown/mesh hoops rejected as cartoonish.
+Reference: transparent splash sheets, broken strands, lit curved rims and drops
+in uploaded image(20261009-140149).png. No reference parity claim.
+
+RuntimeImpactGeometry replaces water mesh hoops with native Scene::PutWaterRipple
+normal distortion for horizontal contacts. This is visible on native WATER shader
+surfaces, not an ordinary opaque object merely tagged Water. Semantic impact
+classification remains independent of visual material. Native ripples use the
+built-in texture, gameplay ageing, 32 owned-ripple cap and reset removes only
+impact-owned ripples; unrelated Character/native ripples survive. Vertical Water
+fixtures still receive splash geometry but no horizontal ripple.
+
+Crown geometry is a curved smooth-normal film with uneven lip and upper breaks;
+duration .38s preserved, readable size/fade increased. Eighteen small transmissive
+ellipsoid drops replace pale sprite drops, under gravity with bounded expiry.
+Native PBR material: transmission .94, roughness .065, reflectance .02,
+refraction .012, zero emission. No rigid bodies, SPH or renderer/upstream edits.
+Shared 128 geometry-piece cap and scene reset retained. Geometry remains a
+procedural candidate; the reference's complex rebound jet is not implemented.
+
+A native water-shader test pool beside the target row was added only to the
+disposable Bow playground, with patterned basin/light for reflection inspection.
+Normal scene document Save/Reload and semantic Water classification verified.
+Helper --water-scene is read-only; --install-water-proof saves the test fixture.
+Native proof checks valid ripple texture, zero-dt pause and reset isolation.
+
+Changed Runtime/src/RuntimeImpactGeometry.h, RuntimeProjectileVisuals.h,
+Tests/RuntimeProjectileSessionTests.cpp, Tests/ImpactAudioTests.cpp.
+Branch feature/p3-projectile-impact; base cf04bd38434dbc3e84c90ce22ee628e3c3953a80.
+No serialization/UI exposure change, commits, push or gate closure.
+
+Verification:
+- Release Runtime/session/helper initial build PASS BUILD/p3-water-clear-build.log.
+- Focused tests PASS4/4 BUILD/p3-water-clear-ctest.log.
+- Native pool save/reload/proof PASS BUILD/p3-water-clear-native.log.
+- Lighting proof rebuild/native PASS p3-water-proof-lit-build.log,
+  p3-water-lit-native.log. Initial grey proof lacked useful specular contrast;
+  lit proof was too washed out and drove a lower test-light intensity.
+- Final candidate build/native logs: BUILD/p3-water-clear-final-build.log,
+  BUILD/p3-water-clear-final-native.log. Final completion recorded separately.
+Native frames5/12/35 inspected from earlier run; final run needs final inspection.
+Owner acceptance is pending; do not mark realistic water artwork completed.
+
+Final evidence: native governed Flaming Arrow - Stick proof PASS and image
+BUILD/p3-hit-pose-arrow-final-12.png inspected: front / oblique / grazing arrows
+remain slim with visibly different projected trajectories on a scaled receiver.
+Template native bounds confirm its authored longitudinal Z axis (0.801m vs
+0.039m width), BUILD/p3-hit-pose-arrow-debug-native.log. Perspective explains
+the off-centre front arrow's screen-space slant. Final helper rebuild PASS:
+BUILD/p3-hit-pose-proof-final-build.log. No Runtime source changes after tested
+package stage. Studio embedded Runtime refreshed; standalone PID55204 responsive,
+BUILD/p3-hit-pose-runtime.json. Owner gameplay check remains next.
+
+## Arrow retention and blood-sheet visibility - 2026-10-09
+
+Owner: directional candidate feels substantially better, but some dummy regions
+show only droplets; angled arrows appear perpendicular and become flattened/wide.
+
+RuntimeProjectileVisuals now retains an explicit receiver reference and a rigid
+relative pose instead of attaching the rotated arrow root under nonuniform
+receiver scale. Origin follows receiver geometry through an inverse contact
+mapping; orientation follows receiver rotation, while authored arrow scale is
+preserved. Updated each pre-upload Sync, including paused Sync; expiry/reset
+remain bounded. Receiver deletion leaves the arrow in its last world pose until
+expiry. Existing mesh children retain their original authored transforms.
+
+Directional blood sheets now face the incoming-shot side independently of their
+travel direction. Start offset combines corrected outward normal and incoming
+side, reducing burial and edge-on views on curved surfaces. Droplet cone and
+gravity remain directional. Baseline sheet behaviour stays unchanged.
+
+Changed Runtime/src/RuntimeProjectileVisuals.h, RuntimeBloodSheets.h,
+Tests/RuntimeProjectileSessionTests.cpp and Tests/ImpactAudioTests.cpp.
+Branch feature/p3-projectile-impact, HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80.
+No upstream edits, serialization/UI change, commits, push or gate closure.
+
+Release Runtime/helper/session build PASS: BUILD/p3-hit-pose-build.log.
+Severe oblique impact on rotated nonuniform receiver regression checks basis
+preservation and moving-receiver scale. Focused ctest initial ProjectileWorld
+timeout (other 3 pass); after stopping prior live candidate, retry PASS4/4:
+BUILD/p3-hit-pose-ctest-retry.log. Do not hide the initial timeout.
+Native side/upper/lower blood helper runs PASS; images at12 inspected.
+Lower frame5 inspected: splash visible early, then downward jet reaches floor.
+Native governed arrow front/oblique/grazing proof added on nonuniform wall.
+Package stage PASS: BUILD/p3-hit-pose-stage.log.
+Commands: cmake --build BUILD/renegade --config Release --target RenegadeRuntime
+RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests --parallel 4;
+ctest --test-dir BUILD/renegade -C Release -R
+'(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)'
+--timeout 20 --output-on-failure; helper --blood-scene / --stage with
+BUILD/bow-projectile-playground/Bow-Playground.renegade.
+No owner acceptance claim for this revision. Next: check dummy regions and
+wall arrow angle/proportions in standalone gameplay.
+
+## Directional blood prototype â€” 2026-10-09
+
+Owner requested an experiment beyond the repeating large animated sprite.
+Engineering opt-in: RENEGADE_DIRECTIONAL_BLOOD=1. Default retains the accepted
+frame-order / density baseline. No serialized setting or creator UI added.
+
+Candidate reflects incoming direction against the struck surface and blends the
+outward normal. Tracked droplets vary cone trajectory and speed, with gravity,
+collision traces and existing stain caps. A per-hit seed changes the pattern.
+The two authored sheets become smaller moving accents with varied rotation,
+size and lifetime. A native GPU BloodDrop emitter supplies additional fine spray;
+those presentation particles do not create collision stains. This is not SPH.
+
+Changed Runtime/src/RuntimeBloodEffects.h, RuntimeBloodSheets.h,
+RuntimeImpactTextures.h, RuntimeProjectileVisuals.h, Tests/ImpactAudioTests.cpp
+and Tests/RuntimeProjectileSessionTests.cpp. WickedEngine source unchanged.
+Branch feature/p3-projectile-impact; base cf04bd38434dbc3e84c90ce22ee628e3c3953a80.
+Broad pre-existing dirty tree retained; no commit, push or gate closure.
+
+Verification: Release Runtime/helper/session build PASS (BUILD/p3-directional-
+blood-build.log and p3-directional-blood-tests-build.log). Direction, gravity,
+pause and seed variation assertions pass. Focused ImpactAudio, ProjectileWorld,
+RuntimeProjectileSession and LaunchSocket tests PASS 4/4 in
+BUILD/p3-directional-blood-focused-ctest.log. Additional ProjectileSimulation
+suite passes in p3-directional-blood-ctest.log.
+Native --blood-scene front/side/angled runs PASS. Frames12/20/40 saved as
+BUILD/p3-directional-{front,side,angled}-{frame}.png; frame12 inspected for all
+angles and front frame20 inspected. Side and oblique jets visibly differ.
+Package --stage PASS in BUILD/p3-directional-blood-stage.log; embedded Studio
+Runtime updated. Candidate standalone launched with process-local opt-in.
+
+Limitations: disconnected round droplets remain visually apparent; floor masks
+are procedural fallback art; repeated sheet source remains but is less dominant.
+Owner gameplay judgement is pending. Do not mark realism/visual acceptance done.
+
+## Blood airborne / floor balance - 2026-10-09
+
+Owner: frame-order fix MUCH better; large spray has too few airborne droplets but
+massive floor coverage. RuntimeBloodEffects.h triples emission from20*strength
+(min8) to60*strength (min18): reference arrow .55 strength now33 instead of11;
+full strength60 instead of20. Drop radius varies continuously3-10mm rather than
+three repeated5/7.5/10mm choices. Collision mark radius changes from .14+14*r
+to .025+5*r, about4x smaller linear extent for comparable droplets. This corrects
+oversized floor stamps independently of the larger airborne population. Existing
+96 live-drop /128 stain caps, traces, ten-minute retention, drying, pause/reset,
+spray timing/size and confirmed pre-GPU-upload lifecycle order retained.
+
+Changed Runtime/src/RuntimeBloodEffects.h and count expectation in
+Tests/RuntimeProjectileSessionTests.cpp. No new serialized settings or creator
+steps. Native floor/motion inspection and owner judgement govern acceptance.
+
+Verification from repository root:
+- cmake --build BUILD/renegade --config Release --target RenegadeRuntime
+  RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests --parallel4:
+  PASS, BUILD/p3-blood-density-build.log.
+- ctest --test-dir BUILD/renegade -C Release -R
+  '(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)'
+  --timeout20 --output-on-failure: PASS4/4, BUILD/p3-blood-density-ctest.log.
+- Helper --blood-scene BUILD/bow-projectile-playground/Bow-Playground.renegade:
+  PASS, BUILD/p3-blood-density-native.log; floor capture and motion inspected.
+- Helper --stage same descriptor: PASS, BUILD/p3-blood-density-stage.log.
+- Studio embedded Runtime refreshed; newly staged standalone responsive:
+  BUILD/p3-blood-density-runtime.json. Owner gameplay inspection still pending.
+- git diff --check PASS (existing CRLF warnings).
+Pure transient presentation change; no serialized authoring state changed.
+HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80, branch feature/p3-projectile-impact;
+Wicked unchanged; no commit/push/merge or P3 gate closure. Final authored floor
+art and broad working-tree provenance remain open.
+
+## Confirmed one-frame blood sphere: visual mutation order - 2026-10-09
+
+Owner screenshot shows a giant blood sphere for one frame at spray retirement.
+Supersedes the prior unconfirmed faceting diagnosis: smoother mesh alone did not
+fix this artifact. RuntimeApplication::Update ran UpdatePlayerProjectiles AFTER
+wi::Application::Update had populated Wicked's GPU instances. Retiring sheet
+entities then changes CPU object/mesh component indices against that frame's old
+GPU data; native diagnostic reproduces a droplet with a sheet-scale transform.
+
+Tests/ImpactAudioTests.cpp now supports opt-in RENEGADE_BLOOD_LATE_SYNC to reproduce
+the original ordering, with captures around both sheet expiration boundaries.
+Late-sync frame29 reproduces the owner's giant burgundy sphere exactly in kind
+(BUILD/p3-blood-late-sync-29.png). Correct pre-upload sync at the same frame shows
+only ordinary small droplets (BUILD/p3-blood-early-sync-29.png). Both inspected.
+
+Runtime/src/RuntimeApplication.cpp now executes UpdatePlayerProjectiles before
+wi::Application::Update. Camera is sampled from the currently completed native
+scene for shot queries, then refreshed after native physics for the displayed view.
+Native Wicked code/pin is unchanged. Pause still passes zero dt. The helper's
+ordinary pre-upload order now matches Runtime; previous helper captures had
+hidden this Runtime-only ordering defect.
+
+Verification:
+- cmake --build BUILD/renegade --config Release --target RenegadeImpactAudioTests
+  --parallel 4: PASS exit0 14.83s, BUILD/p3-blood-frame-order-helper-build.log.
+- Same --target RenegadeRuntime: PASS exit0 18.40s,
+  BUILD/p3-blood-frame-order-runtime-build.log.
+- Helper --blood-scene BUILD/bow-projectile-playground/Bow-Playground.renegade
+  with/without RENEGADE_BLOOD_LATE_SYNC: both exit0, native same-age visual
+  comparison above. Logs BUILD/p3-blood-late-sync.log and p3-blood-early-sync.log.
+- ctest --test-dir BUILD/renegade -C Release -R
+  '(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)'
+  --timeout 20 --output-on-failure: PASS4/4 .52s,
+  BUILD/p3-blood-frame-order-ctest.log.
+- Helper --stage with descriptor: PASS, BUILD/p3-blood-frame-order-stage.log.
+  Studio embedded Runtime refreshed; newly staged standalone made available.
+  Read-only Runtime liveness stored in BUILD/p3-blood-frame-order-runtime.json.
+- git diff --check PASS (existing CRLF warnings).
+No serialized authoring state changed. Owner regression check of moving/aimed
+shots and sheet-end flash still required in gameplay. Prior speed/stain changes
+retained; realistic floor artwork still pending. HEAD
+cf04bd38434dbc3e84c90ce22ee628e3c3953a80, branch feature/p3-projectile-impact;
+no commit/push/merge, broad provenance review still open. No P3 gate closure.
+
+## Blood presentation refinement - 2026-10-09
+
+Owner feedback: octagonal near-camera artifact, spray still too slow/stuttery,
+floor puddles too uniform. Branch feature/p3-projectile-impact, HEAD
+cf04bd38434dbc3e84c90ce22ee628e3c3953a80; Wicked pinned unchanged at
+3a800b7134aafe58461093c8abb2e274d4e64033. Broad working tree remains uncommitted;
+no push/merge or P3 gate closure.
+
+Changed Runtime/src/RuntimeBloodSheets.h: main/secondary life .55/.70s -> .38/.48s.
+Still 64 baked/interpolated frames from 16 authored poses, not new motion samples.
+Changed Runtime/src/RuntimeBloodEffects.h: shared droplet mesh 6x8 -> 12x24
+tessellation; visual radius reduces smoothly with age, while original collision
+tracking/mark radius continues. Native close-camera drops-only capture showed
+faceted beads before and smoother beads after. This supports fixing faceting,
+but does not establish that the exact owner-reported final octagon is eliminated.
+
+Floor fallback now has 16 asymmetric connected-lobe/satellite masks, per-mark
+size/aspect/tint/opacity, monotonic serial selection unaffected by oldest eviction,
+and retained tint/opacity during drying. Ten-minute lifetime, water exclusion,
+attachment, bounded counts, pause/reset retained. These remain procedural fallback
+art, not final realistic authored pools. Native floor capture inspected; variation
+is visible, but quality target and motion stutter require owner gameplay judgement.
+
+Tests/ImpactAudioTests.cpp adds opt-in RENEGADE_BLOOD_DROPS_ONLY,
+RENEGADE_BLOOD_SHEETS_ONLY, RENEGADE_BLOOD_CLOSE_CAMERA diagnostic isolation and
+more capture ages; no scene saves or desktop input injection. Session test checks
+multiple marks vary in scale/tint alongside existing ageing/attachment/reset cases.
+Candidate doc and feature ledger updated without new creator-facing steps.
+
+Verification from repository root:
+- cmake --build BUILD/renegade --config Release --target RenegadeRuntime
+  RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests --parallel 4:
+  PASS exit0, 68.16s; BUILD/p3-blood-refinement-build.log. Remote tool timeout
+  interrupted status retrieval, not the completed build.
+- ctest --test-dir BUILD/renegade -C Release -R
+  '(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)'
+  --timeout 20 --output-on-failure: PASS 4/4, .67s;
+  BUILD/p3-blood-refinement-ctest.log.
+- BUILD/renegade/Release/RenegadeImpactAudioTests.exe --blood-scene
+  BUILD/bow-projectile-playground/Bow-Playground.renegade: PASS cold reopen/native
+  render, actual-floor screenshot and seven motion ages;
+  BUILD/p3-blood-refinement-native.log.
+- Same --blood-scene with close-camera/drops-only environment: PASS,
+  BUILD/p3-blood-close-drops-after.log and .png. Before screenshot at same age
+  is BUILD/p3-blood-atlas-frame-12.png from the prior drops-only run (overwritten);
+  persistent earlier capture BUILD/p3-blood-close-drops-before.png is age20.
+  Do not claim a persistent byte-exact same-frame before/after image pair.
+- Same helper --stage with playground descriptor: PASS dependency/native integrity,
+  20 collision-derived stains retained after31s, audio14 clips;
+  BUILD/p3-blood-refinement-stage.log. Helper applies executable icon/identity,
+  so staged EXE hash deliberately differs from original; stage validation passes.
+- Studio embedded Runtime copy updated. Newly staged standalone launched;
+  python Tools/Read-RenegadeDiagnostics.py --process runtime: available/responsive,
+  scene one Character; BUILD/p3-blood-refinement-runtime-before.json.
+  No injected input or new live owner-shot acceptance.
+- git diff --check: PASS, existing CRLF warnings only.
+No serialized authoring fields changed. Full Studio Build Game UI flow, GPU costs,
+exact reported-artifact reproduction, eliminated-stutter proof and realistic art
+acceptance remain open. Leave standalone for owner testing; continue from feedback.
+
+## P3 blood playback speed revision � 2026-10-09
+
+Owner: candidate better, animation too slow and stuttery. RuntimeBloodSheets.h
+main/secondary lifetimes reduced 1.25/1.5s -> 0.55/0.70s. The 64 atlas frames are
+interpolated from 16 authored poses; faster playback reduces stretched pose gaps,
+but no eliminated-stutter or framerate claim. Size/artwork/normal maps and floor
+stain lifetime unchanged. Session test checks UV advancement at 0.2s, pause and
+complete transient spray retirement at 0.71s. Candidate documentation updated.
+
+Release Runtime/session/helper build PASS 63.72s (BUILD/p3-knife-blood-timing-build.log).
+Four focused tests PASS 0.65s (BUILD/p3-knife-blood-timing-ctest.log). Native cold
+render proof PASS (BUILD/p3-knife-blood-timing-native.log); inspected frames 5/20/40
+show compact burst, dispersal and retired main spray. Native package staging PASS
+(BUILD/p3-knife-blood-timing-stage.log); latest Runtime copied into Studio embedded
+Runtime and opened new standalone package. Diagnostics responsive, scene loaded,
+equipment ready, no projectile error (BUILD/p3-knife-blood-timing-runtime.json).
+Own Runtime PID and package path remain in the existing ignored BUILD records.
+No injected input. Owner motion review pending. Native shaders/pin unchanged.
+HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80; no commit/push/merge; broad provenance
+review and final realistic floor art remain outstanding. No P3 gate closure.
+
+## P3 KNIFE blood candidate and atlas reload repair � 2026-10-09
+
+Branch feature/p3-projectile-impact; HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80.
+Uncommitted broad working tree; no commit/push/merge. Provenance of unrelated
+changes has not been reviewed. Wicked pin/source unchanged at
+3a800b7134aafe58461093c8abb2e274d4e64033. No gate closure or art acceptance.
+
+Owner rejected generated blood spray/atlas and furry floor marks. Read the supplied
+Wicked SPH research ZIP and actual pinned native APIs: use authored hybrid baseline
+first; no SPH enabled or GPU/VRAM benchmark claimed. Supplied KNIFE private assets
+are adapted by Tools/Prepare-KnifeBloodCandidate.ps1 into 64 mask/normal frames
+from its 16 authored liquid tiles, linear red alpha and prefab erosion curve.
+No third-party image payload is added to engine Runtime resources/repository.
+
+RuntimeBloodSheets.h adds bounded native PBR planes, two per Character hit, ordinary
+alpha/depth, authored normals, 1.25/1.5s lifetime, incoming-side hemisphere repair,
+1.04/.62m card half-widths, 24-sheet cap, pause/reset cleanup. RuntimeBloodEffects.h
+retains tracked droplets/actual segment contacts and attached native floor decals;
+compact four-mask procedural wet patches replace rejected furry AI marks. Stains
+persist 600s and dry over 90s. These are temporary footprints below the realism goal.
+RuntimeProjectileVisuals.h routes Character presentation and excludes transient
+sheets from queries; RuntimeLiveDiagnostics.cpp exposes blood_sheets. Tests add
+placement, animation/pause, eviction and native transient ownership checks.
+
+Tests/ImpactAudioTests.cpp manual --install-knife-blood installs governed textures
+into the disposable Bow playground, binds the internal blood material, saves/
+reloads, checks exact stable IDs and unique metadata, and captures a native sequence.
+The initial installer mistakenly called metadata Create on an existing component;
+seven duplicate records accumulated. Reload selected the older 4x4 atlas while
+presentation expected 8x8, causing apparent behind-dummy fragments. Dummy-hidden
+comparison showed identical gaps; native GPU readback proved the old atlas.
+Installer now reuses metadata and repairs its fixture duplicates. No native renderer
+fix was required. Temporary opaque alpha-test experiment is reverted. Helper also
+restores governed bindings on plain --blood-scene, freezes the Character only in
+read-only diagnostics after saving, and captures loaded atlas for inspection.
+
+Active mask stable ID cabf411a-1279-46a1-951c-1abe43afe47d;
+normal e3602e3f-d366-4525-91d2-4b7d43482967. Governed products are in
+Content/Textures/Impacts/Blood; source images/provenance under corresponding
+SourceAssets/Textures/Impacts/Blood in the ignored private playground. The supplied
+Puddle material texture GUIDs are absent in both pack copies; Skin decals include
+surrounding skin and are unsuitable floor art. Normal creators still select object
+and Surface Type; Character automatic. No material/profile/override UX introduced.
+
+Final Release build Runtime + session tests + ImpactAudio helper PASS 64.23s:
+BUILD/p3-knife-blood-verified-build.log. Four focused CTests PASS 0.53s:
+BUILD/p3-knife-blood-verified-ctest.log (ProjectileWorld, ImpactAudio,
+RuntimeProjectileSession, LaunchSocket). Native repeat installation/save/reload PASS:
+BUILD/p3-knife-blood-verified-install.log. Separate cold reopen native rendering PASS:
+BUILD/p3-knife-blood-cold-reopen.log. Captures at frames 5/20/40/60/90 in
+BUILD/p3-blood-atlas-frame-*.png; floor proof BUILD/p3-blood-actual-floor.png.
+A diagnostic helper link initially failed because tests overlapped its link step;
+sequential rebuild and final checks passed. No normal Studio rebuild this iteration;
+latest Runtime copied to its embedded Runtime folder.
+
+Native Build Game staging/integrity PASS BUILD/p3-knife-blood-stage.log. Both active
+64-frame .rassets appear as material texture binding dependencies in content manifest;
+staged SHA256 checks match. Stage path recorded BUILD/p3-impact-audio-stage-path.txt.
+Opened that standalone package for owner inspection; own PID recorded in
+BUILD/p3-vfx-runtime-pid.txt. Diagnostics confirm responsive loaded package, authored
+weapon ready, no projectile error; observed owner gameplay 10 launches/9 impacts and
+77 persistent stains (no injected input). Evidence
+BUILD/p3-knife-blood-runtime-diagnostics.json. This is loading/lifecycle evidence,
+not visual acceptance or GPU cost proof. Runtime remains open for owner inspection.
+
+Docs: docs/P3_KNIFE_BLOOD_CANDIDATE.md, ARCHITECTURE, ROADMAP, FEATURE_MATRIX updated.
+Next: owner visual review of larger authored spray; replace temporary floor art
+with proper realistic splatter/pool assets, review grazing angles and layering;
+then consider native SPH only as a measured optional layer. Glass/water/other surface
+art, melee/skinned wounds, full preset content UX and broad-tree provenance remain
+open. Review provenance before commit/push/merge; independent exact-commit review
+still required for gate closure.
+
+## P3 grouped authored projectile candidate - 2026-10-07
+
+Implementation commits: 8de29c1c82f3d546a9c83c82cdbce38ab8b7467f (authored projectile gate) and 74c0eb0 (governed Runtime asset-registry staging).
+Branch: feature/p3-projectile-impact. P2 PR #180 remains unmerged.
+
+Four owner checks are grouped: animation release, multiple PSPs, layered flight/
+impact effects, disappear/stick. Implemented and targeted/native proofs recorded
+in docs/P3_AUTHORED_PROJECTILES_GATE.md. Player/NPC health is not implemented or
+a prerequisite. Wicked pin/source unchanged. No gate closure or independent
+exact-commit review claim.
+
+Native disposable Projectile Playground: saved 350ms release pending at 12ms and
+launch at 359ms; Left then Right; Both launches two per shell; dry fire none;
+disappear/stick contacts; moving-native-object follow and pause/lifetime tests.
+Impact burst crash resolved by burst_on_create deferred native initialization.
+Shared radial-alpha emitter texture fixes square fallback; native editor preview
+soft mask pass. Editor cold reopen, SAVE AS NEW, assignment/reopen and packaged
+runtime gameplay acceptance now pass.
+
+Build Game exposed catalog issues: loaders reject generic lp07.rasset discovery
+provider; source catalog refresh tombstones unrelated still-present assets and
+recovery loses edges. Both fixed with regression tests. Package state still
+includes only the reachable closure. The disposable fixture's embedded arrow
+textures were extracted into exact generated paths; general importer/dependency
+embedded-resource behavior remains a separate limitation.
+
+Release latest bridge/Runtime/Studio/build-project-test build PASS 28.08s.
+Build-project CTest 2/2 PASS 0.59s; provider compatibility build PASS 45.23s;
+ProjectileAsset/RuntimeProjectileSession/EquipmentAsset/LaunchSocket 4/4 PASS 1.79s.
+Runtime recopied to Studio embedded Runtime. Diff check PASS. Build Game initially
+exposed a missing staged Runtime asset registry; 74c0eb0 adds canonical governed
+GameData/AssetRegistry.renegade-assets staging plus tamper validation. Rebuilt
+packaged gameplay then loaded authored equipment and fired two accepted shots:
+PSP_Left then PSP_Right, 2 impacts, layered emitters observed (max 3), and 2 stuck
+arrows retained. Evidence: BUILD/p3-package-native-proof.json,
+BUILD/p3-package-acceptance.json and BUILD/p3-package-impact.png. Owner visual
+acceptance and independent exact-commit CI review remain before final gate closure.
+Unrelated Tools/__pycache__/ and log.txt remain untouched.
+
+## P3 mesh visibility repair - 2026-10-06
+
+Implementation commit: ca0a5a26710840d74cf2d6c0f87aa6673f0b0b9b.
+Branch: feature/p3-projectile-impact. P2 PR #180 remains unmerged.
+
+Owner reported seeing only sphere/trail despite arrow assignment. Runtime did
+instantiate the arrow, but unconditional debug flight feedback obscured its
+appearance. Model-backed launches now suppress flight sphere/trail; meshless
+shots keep basic feedback, impacts keep existing markers. Transient ID tracking
+retires/reset-clears; retained traces remember their appearance policy. No asset
+schema/settings change. Changed RuntimeProjectileSession.h, its tests,
+architecture and feature matrix. Wicked source/pin untouched.
+
+Release build: CL=/MP4; cmake --build BUILD/renegade --config Release --target
+RenegadeRuntime RenegadeRuntimeProjectileSessionTests -- /m:2
+/p:BuildProjectReferences=false /verbosity:minimal: PASS 26.13s.
+ctest --test-dir BUILD/renegade -C Release -R
+'^RenegadeRuntimeProjectileSessionTests$' --output-on-failure --timeout 30:
+1/1 PASS 0.11s including new mesh feedback suppression assertion. Diff check PASS.
+Runtime copied to Studio/Release/Runtime for Test Level.
+
+Native standalone slow-copy proof (BUILD/p3-arrow-visibility-proof) changed ONLY
+its copied Arrow to speed 2, zero gravity, lifetime 10 for inspection. Actual
+fixture Arrow remains speed 45, gravity 1, lifetime 5, scale 1. Captures
+BUILD/p3-arrow-slow.png and p3-arrow-profile.png show arrow appearance without
+sphere/trail. Owner confirms 'yeah i can see it now'. PrintWindow colour/exposure
+is not renderer parity. No package proof. Source fixture equipment had meanwhile
+changed to 6c1a5d17-09b0-4a6a-b2ed-1e5bd36726c3; standalone resolves this saved
+loadout with Muzzle and Arrow.
+Original fixture standalone native regression PASS 16.31s: named Muzzle, ground
+impact, pause, dry fire, reload, reset. Evidence BUILD/p3-socket-native-events.json,
+p3-socket-shot-impact.png and p3-socket-paused-impact.png. No new serialized state
+so original fixture cold load covers unchanged saved assignment.
+
+No P3 gate closure; independent exact-commit review and package/Jolt-only proof
+remain required. Next: precise animation release timing and authored effects.
+User-facing naming preference from manual: Projectile Spawn Point (PSP), not
+FIRESPOT; compatibility bone lookup may retain that imported bone name.
+Unrelated Tools/__pycache__/ and log.txt untouched.
+
+## P3 launch socket checkpoint - 2026-10-06
+
+Implementation commit: ec1a4166c5187cbac8091b15fee527cd4a68bff3.
+Branch: feature/p3-projectile-impact. P2 PR #180 remains unmerged.
+
+Named launch sockets now have a native editor reached through Player Start >
+Starting Equipment > Weapon Projectiles > Edit Launch Sockets. It edits an
+existing assembly with model/bone/palm selection, one-click surface placement,
+FIRESPOT reuse, orange direction arrow, six committed position/direction controls,
+mouse orbit/pan/wheel and Fit. Unique short bone labels retain full-path tooltips.
+Apply changes the undoable assembly draft; SAVE CHANGES persists recipe/native
+transform attachments and registry through the existing journal. Weapon
+Projectiles selects a saved socket independently of the projectile. Empty names
+explicitly retain legacy camera-origin launch.
+
+Runtime reads named world pose after native animation/hierarchy evaluation.
+Camera aim converges from muzzle; eye-to-muzzle cover clips before obstruction.
+Missing/backwards/blocked poses refuse launch with diagnostics; accepted ammo has
+already been consumed in this failure case. No Player/NPC health prerequisite.
+One selected primary socket/record per accepted shot; off-hand generic dispatch,
+pellets/barrel policies, precise animation release markers and effects remain open.
+
+Changed: bridge LaunchSocketService plus assembly/settings/equipment integration;
+Runtime muzzle aim/session/loadout/diagnostics; Studio socket editor, model preview,
+Weapon Projectiles and modal lifecycle; CMake and LaunchSocketTests; architecture,
+roadmap, feature matrix and docs/P3_LAUNCH_SOCKETS.md. No Wicked source/pin change.
+Independent exact-commit verification remains required; no P3 gate closure.
+
+Release commands: CL=/MP4; cmake --build BUILD/renegade --config Release --target
+RenegadeEngineBridge -- /m:2 /p:BuildProjectReferences=false /verbosity:minimal.
+Bridge initial PASS 188.96s. Runtime/Studio + selected test build PASS 72.51s.
+Studio private-preview rebuild PASS 13.40s; modal rebuilds PASS 15.64s/15.57s;
+binding layout PASS 15.56s; final one-time modal restore rebuild PASS 78.50s.
+Full selected targets and commands are in docs/P3_LAUNCH_SOCKETS.md.
+ctest --test-dir BUILD/renegade -C Release -R
+'LaunchSocket|FirstPersonAssemblySettings|EquipmentAsset|RuntimeProjectileSession'
+--output-on-failure --timeout 30: Studio-closed final 4/4 PASS 0.61s.
+CPU fixture uses native transform/hierarchy systems; full Scene.Update without
+graphics initially crashed. Studio-open test rerun timed out in Runtime Session
+and LaunchSocket; cold retry passed. Intermittent job-test stall remains open.
+
+Native shotgun socket placement, direction, Apply/Save and cold Studio reopen
+PASS. Saved Muzzle primary root offset [0.013476461,-0.246668816,-0.062851310],
+pitch 90. Assembly 07858b1d-4b5a-4be9-90ab-c9dd5629761c. Final modal Cancel restores
+assembly once; closing it stays closed. Fire from Muzzle / Arrow assignment saved
+to equipment b8e8ca55-55f3-49f9-bde7-2ad27a758562 and File > Save persisted scene.
+Cold standalone --project BUILD/p3-shotgun-ui-project/ProjectileTest.renegade dx12
+PASS 20.25s launch/check process: named Muzzle, real ground impact, pause, dry fire,
+reload and reset. Impact-state muzzle [0.067675,3.238707,0.635946].
+Evidence: BUILD/p3-socket-placement.png, p3-socket-final-reopen.png,
+p3-socket-binding.png, p3-socket-native.log, p3-socket-native-events.json and
+p3-socket-shot-impact.png / p3-socket-paused-impact.png. Colour quality of native
+PrintWindow captures is not renderer parity. Standalone source proof is not
+Build Game/package proof. Runtime copy also updated in Studio/Release/Runtime.
+
+Next: precise animation release timing, then barrel/pellet policies and projectile
+effects. Direct model-importer sockets, animated socket preview, gizmos, compact
+layout, hitscan/surface decal profiles and Jolt-only/package proof remain open.
+Do not merge P2 automatically. Unrelated Tools/__pycache__/ and log.txt untouched.
+
+## P3 mouse preview checkpoint - 2026-10-06
+
+Implementation commit: 1303ce75f5fc7bd2f89968afede416746beb6fdb.
+Branch: feature/p3-projectile-impact. P2 PR #180 remains unmerged.
+
+Projectile preview replaces nine buttons with left-drag orbit, right-drag pan,
+wheel zoom and FIT / RESET VIEW. Fit clears camera pan/zoom and restores side
+view. Drag begins in the image, continues outside and ends on button release;
+hidden/model-changed/invalid previews clear drag. Saved appearance is unchanged.
+Changed: Studio ModelImportPreview h/cpp, PlayerProjectileEditor,
+StudioApplication.h; architecture, roadmap, feature matrix and preview evidence.
+
+Release build PASS 77.69s; include rebuild PASS 16.82s; final hidden-drag cleanup
+build PASS 16.02s. Commands: CL=/MP4; cmake --build BUILD/renegade --config
+Release --target RenegadeStudio -- /m:2 /p:BuildProjectReferences=false
+/verbosity:minimal. ctest --test-dir BUILD/renegade -C Release -R
+'Projectile|EquipmentAsset|EquipmentActionState|PlayerViewRig|TestLevelSnapshot'
+--output-on-failure: 10/10 PASS 2.21s before final cleanup. Exact-head full
+rerun and Studio-closed retry stalled in unchanged RuntimeProjectileSessionTests;
+owned tests were terminated, cause unresolved. Same command with
+-E 'RenegadeRuntimeProjectileSessionTests': remaining 9/9 PASS 1.98s.
+Investigate this intermittent test stall before P3 gate verification.
+Diff check PASS. No Wicked source/pin or Runtime code change.
+
+Native arrow orbit/pan/zoom/Fit/outside-edge drag/release visually passed.
+Scale 1 and rotation [0,0,0] remain unchanged. Owner reports "Works perfect".
+Evidence/commands/limits: docs/P3_PROJECTILE_PREVIEW.md, BUILD/p3-mouse-*.png.
+No new serialized state; previous save/reopen and standalone firing proof remain.
+No P3 gate closure or broader Sketchfab parity claim. Responsive compact layout
+remains open. Next: weapon/palm sockets and runtime muzzle launch, as below.
+Do not merge P2 automatically. Unrelated Tools/__pycache__/ and log.txt untouched.
+
+## P3 projectile preview checkpoint - 2026-10-06
+
+Implementation commit: 833faa473ab9ca9ab187040998564430d98191c0.
+Branch: feature/p3-projectile-impact. Dependent P2 PR #180 remains unmerged.
+
+Projectile editor now has an automatically refreshed isolated model preview.
+Camera orbit/elevation, side/rear, zoom and fit are inspection-only. Scale and
+XYZ rotation update a private appearance root using Runtime conventions;
+physical size is shown in metres. Mesh preparation only runs on model/project
+change. Hidden/project-changed previews release resources. Invalid appearance
+values clear the preview and disable Save; correction recovers it. Meshless
+projectiles remain valid. Saved copies display Custom / saved projectile.
+
+Fixed control-theme tint/background blur, capsule/gizmo/outline overlays and
+player-camera inset covering the modal editor. Number help is plain language.
+Changed: Studio ModelImportPreview h/cpp, PlayerProjectileEditor,
+StudioApplication h/cpp; architecture, roadmap, feature matrix, P3 continuation
+and new docs/P3_PROJECTILE_PREVIEW.md.
+
+Release Studio final build PASS 15.64s. Exact command: CL=/MP4; cmake --build
+BUILD/renegade --config Release --target RenegadeStudio -- /m:2
+/p:BuildProjectReferences=false /verbosity:minimal. Targeted ctest:
+ctest --test-dir BUILD/renegade -C Release -R
+'Projectile|EquipmentAsset|EquipmentActionState|PlayerViewRig|TestLevelSnapshot'
+--output-on-failure: 10/10 PASS. Diff check PASS. No Wicked source/pin change.
+
+Native supplied arrow proof: side view tip right; orbit, scale 1->2, X rotation
+0->30, fit and zoom visibly update. Native Save As New and cold Studio Edit Copy
+restore model ID, scale 2 and rotation [30,0,0]. Final cold reopen has no level
+overlays. Invalid scale 500 plus Save click created no file; correcting to 2
+restored image. Proof asset 63750c6e-86b7-43c1-9a56-3ac67c355f15 is disposable
+and not assigned to the shotgun; original Arrow assignment remains. Standalone
+source firing/ground impact/pause/dry fire/reload/reset PASS 11.52s. Earlier reset
+missed while Studio startup stole focus; stable-focus rerun passed. Exact native
+screenshots, commands, IDs and limits: docs/P3_PROJECTILE_PREVIEW.md.
+
+Next: explicit weapon/palm sockets, imported FIRESPOT resolution, click placement
+and orientation controls, action socket assignment and runtime launch/aim timing.
+Camera-eye launch remains current. Static inspection only; flight/effect preview,
+Hitscan/Beam, sticking, particles/trails, surface impacts, pellets, Jolt-only
+coverage and packaged firing remain open. Compact responsive layout and mouse
+orbit drag remain open. No health prerequisite or P3 gate closure is claimed;
+independent exact-commit verification is required. Do not merge P2 automatically.
+Unrelated Tools/__pycache__/ and log.txt are untouched.
+
+## P3 projectile model/editor checkpoint - 2026-10-06
+
+Implementation commit: d4d216b0ca9ea5aaadff0429d919f1fed7709747.
+Branch: feature/p3-projectile-impact. Dependent P2 PR #180 remains unmerged.
+
+Add -> Projectile creates project-level definitions under Content/Projectiles.
+Imported model selection, uniform scale and XYZ rotation persist in schema v2;
+v1 defaults are preserved. Import Mesh defaults to Content/Projectiles/Models
+and returns to the retained draft with the committed model selected. Cancel
+restores the draft. Weapon Projectiles still assigns immutable equipment copies.
+
+Runtime caches prepared appearances per session, instances them on accepted
+shots, follows simulated position/velocity and removes complete hierarchies on
+impact, expiry and reset. Visuals are excluded from projectile world queries.
+Registry dependency discovery and Test Level closure include model and textures.
+Changed: ProjectileAssetService h/cpp; ReusableAssetDependencyService;
+TestLevelSnapshotService; RuntimeApplication h/cpp, RuntimeLiveDiagnostics,
+RuntimeProjectileWorld and new RuntimeProjectileVisuals; Studio projectile
+editor/chrome/application; asset, query and session tests; architecture, roadmap,
+feature matrix and P3 design/evidence/continuation docs.
+
+Release Runtime/Studio/session build PASS 102.56s. Current Runtime copied to
+Studio embedded Runtime. Exact build uses CL=/MP4 and cmake --build
+BUILD/renegade --config Release --target RenegadeRuntime RenegadeStudio
+RenegadeRuntimeProjectileSessionTests -- /m:2 /p:BuildProjectReferences=false
+/verbosity:minimal. ctest --test-dir BUILD/renegade -C Release -R
+'Projectile|EquipmentAsset|EquipmentActionState|PlayerViewRig|TestLevelSnapshot'
+--output-on-failure: 10/10 PASS 2.50s. Diff check PASS.
+
+Owner arrow ZIP converted via Blender 4.3 with supplied textures; original
+retained untouched. Disposable native importer preview and projectile save/
+shotgun assignment/scene save/cold standalone load verified. Rebuilt native
+Import Mesh Cancel and successful ArrowReturn import restored the draft;
+new model selected automatically. Standalone final ground-contact proof PASS
+11.38s: accepted shots, pause, dry fire, reload and reset. Visual instance,
+pause/freeze, expiry and reset proof also recorded. Paused arrow is small/distant;
+a dedicated inspection preview remains required. Exact evidence and fixture IDs:
+docs/P3_PROJECTILE_MESH_CHECKPOINT.md. Target design:
+docs/P3_PROJECTILE_EDITOR_DESIGN.md.
+
+Next: rotatable projectile preview, explicit weapon/palm launch sockets and
+shot direction/animation timing; then Hitscan/Beam and material impact profiles.
+Camera-eye launch is still current. Pellets, effects, sticking, damage authoring,
+Jolt-only collision coverage and actual packaged firing remain open. No Player/
+NPC health dependency, P3 gate closure, independent verification or P2 merge
+is claimed. Only unrelated Tools/__pycache__/ and log.txt remain untracked.
+
+## P3 live shotgun firing checkpoint - 2026-10-06
+
+Implementation commit: 41308d3d68eeb8d2421bf57e21271c21309db180.
+Branch: feature/p3-projectile-impact; dependent P2 PR #180 remains unmerged.
+
+Accepted shotgun shots now launch cached Bullet definitions through the Runtime
+session. Ammo/cooldown/equipped animation acceptance gates each launch; dry fire
+and pause do not launch. Native scene queries produce attributed impacts and
+bounded flight/contact feedback without requiring Player/NPC health. Test Level
+snapshots include projectile dependencies. Initial camera-eye launch policy is
+explicit; authorable muzzle sockets and pellet spread remain pending.
+
+Changed files: RuntimeApplication h/cpp, RuntimeEquipmentLoadout,
+RuntimeLiveDiagnostics, new RuntimeProjectileSession; bridge PlayerViewAnimation
+and TestLevelSnapshotService; Studio PlayerProjectileEditor; PlayerViewRigTests,
+ProjectileAssetTests, ProjectileSimulation.cmake and new Runtime session tests.
+Architecture, roadmap, feature matrix and P3 authoring/continuation docs updated.
+Exact commands, native evidence and limits: docs/P3_LIVE_SHOTGUN_PROJECTILES.md.
+
+Release Runtime/Studio/bridge and targeted test builds PASS. Final Runtime build
+PASS 15.49s; current exe copied to Studio embedded Runtime. Final targeted ctest
+regex Projectile|EquipmentAsset|EquipmentActionState|PlayerViewRig|TestLevelSnapshot:
+10/10 PASS 2.12s. Native Test Level firing PASS; standalone source proof PASS
+11.15s including impacts, pause, dry fire, reload and reset. Orange ground contact
+marker visually inspected. Save/reopen assignment verified in prior checkpoint.
+Final overlay cleanup clears contacts on Screen/no-player paths; diff check PASS.
+
+Next: authorable muzzle/aim convergence and shotgun pellets/effects, then packaged
+firing proof. CPU scene mesh/collider coverage excludes Jolt-only bodies. Generic
+Cast/AlternateUse/offhand launch acceptance is not claimed. P3 is open; independent
+exact-commit verification required before gate closure. Do not add health as a
+prerequisite or merge P2 automatically. Sky-shot distance was expected lifetime
+behaviour; owner clarified it was not a defect. Unrelated untracked cache/log files
+were left untouched.
+
+## P3 projectile authoring and shotgun assignment - 2026-10-06
+
+Implementation commit: 6f5401db2a7fa8d487aea09df781a4fd3a08ea13.
+
+On feature/p3-projectile-impact, dependent on P2 PR #180. ProjectileAssetService
+adds registered journaled .rprojectile assets; equipment schema v2 binds named
+projectiles to authored semantic actions and retains v1 compatibility.
+Native Starting Equipment -> Weapon Projectiles offers presets, project-only
+name picking, search and Edit Copy. Assignment saves an immutable equipment copy
+through the existing Player settings command; shared assets are unaffected.
+The owner requires shotgun reference proof. Its PrimaryUse/Bullet assignment,
+held presentation and Save Level/Reopen were verified on the disposable
+BUILD/p3-shotgun-ui-project. Sword use was preservation testing, not firing proof.
+
+Release targeted tests pass 5/5 (0.73s), including presentation-plus-projectile
+sorted registry edges, save/reopen, rollback, legacy files, actual command
+Undo/Redo and native scene cold reload. Studio and Runtime builds pass.
+Native inspection found and fixed dependency ordering and create-window priority.
+Exact commands/evidence/limitations: docs/P3_PROJECTILE_AUTHORING_UX.md.
+
+Usable Player/NPC health is not implemented. Continue projectiles independently
+with damage as an integration seam. Live shotgun launches, muzzle/aim rules,
+visual/effect assets, Jolt coverage and packaged firing remain open. No P3 gate
+closure or independent exact-head review is claimed. Do not merge P2 automatically.
+
+## Explicit import folders, player roles and safe model moves - 2026-10-06
+
+Implementation commit: b7471e2b0f1dedcc6efa4b4386fde358f04af2ed.
+
+Model import now accepts any valid project-relative Content folder, including
+new folders, with the selected browser folder as its default. Search tags are
+optional labels and never route files. Explicit General model / Player arms /
+Weapon roles let Assembly discover player parts outside the legacy folders.
+Role metadata joins the existing import transaction. MOVE uses one journaled
+transaction for the model, managed projection, optional thumbnail and registry;
+asset IDs, dependency edges, tags and retained source bundles are preserved.
+Transaction deletion supports rollback and interrupted recovery. Scope remains
+reusable registered model .rasset products, not arbitrary assets or folders.
+See docs/MODEL_IMPORT_DESTINATIONS.md.
+
+Validation (Release x64, local owner device):
+- BUILD/import_folder_verify.ps1 builds bridge, Runtime, assembly settings,
+  assembly workflow proof, transaction tests and Studio using MSBuild /m:2
+  /p:BuildProjectReferences=false, CL=/MP4. Final complete build PASS.
+- ctest --test-dir BUILD/renegade -C Release
+  -R 'ProjectDocumentTransaction|FirstPersonAssemblySettings|PlayerViewRig|Equipment|AssetCatalogue'
+  --output-on-failure --timeout 30: 7/7 PASS, 1.40s.
+- RENEGADE_ASSEMBLY_SWAP=BUILD/replacement-sword.glb;
+  RENEGADE_HAND_COLLISION=1; RENEGADE_IMPORT_FOLDERS=1;
+  RENEGADE_IMPORT_THUMBNAIL=BUILD/sword-assembly-authoring-proof5/replacement-sword-held-shield.png.
+  BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+  BUILD/sword-ue-proof4 BUILD/sword-import-folder-proof3 --sword-playable:
+  PASS, 8.86s. Custom folder + role + tags, invalid path/arms role rejection,
+  forced move rollback, retained-source collision rejection, thumbnail move,
+  stable-ID cold placement, assembly update/reopen, all masked preview slots,
+  965 corrected frames / zero unresolved, saved-level and dependency closure.
+- Native disposable BUILD/assembly-hand-ui-project: static GLB preview/import
+  into Content/My Gear/Blades with Weapon role and iron,test tags; reopen editor
+  and find card/tags; MOVE into new Content/Reorganised/Native; all three files
+  verified in destination; selected card and tags retained. Assembly lists the
+  moved weapon, loads it with the original shield/bindings, and SAVE CHANGES
+  preserves the Player Start assignment. Standalone opens this saved project.
+- BUILD/chain_focus.ps1 against that standalone: PASS, 9.77s. Released
+  directional queue, held charged chain, single dispatch, shield independence;
+  unresolved counters 0 -> 0. BUILD/chain-native-events.json and native capture.
+- Static and character importer layouts visually inspected at 1920x1080.
+  Fixed static animation-control visibility, sibling render scissor clipping,
+  MOVE/collapse hit-target overlap, move-dialog click-through and taller
+  character panel positioning. Final Studio-only refresh PASS.
+- git diff --check PASS.
+
+Failures retained as evidence: initial Studio link failed while the test editor
+held the executable open; closed only that test editor and rebuilt. An edit made
+during an earlier bridge build left the transaction object stale; touching and
+rebuilding corrected it. First model-move proof found a Windows projection
+stream lock; explicitly closing that stream before transaction fixed it.
+Proof2 passed all new import/move checks but hit one existing bounded collision
+fallback at direction0/time0.533333/residual0.00798244; proof3 and native chain
+passed with zero unresolved. This does not establish universal no-clipping.
+No animation/avoidance algorithm changes in this work.
+
+Owner's original project/editor were not modified by these native checks.
+Local commits only; no push. Independent exact-commit review and owner usability
+approval remain pending; no release gate or Wicked parity claims are closed.
+Fixed-height importer still needs a compact/scrolling treatment for smaller
+displays; this check covers the owner's 1080p layout.
+
+
+## Independent hand transition blending - 2026-10-06
+Implementation commit: 8810af7a675f7a8a86d5f3d6b9dd085cdaca0020.
+PlayerViewHandBlend.h captures the last evaluated local pose per hand and
+restores it as a fixed transition origin before Wicked evaluates the destination
+masked clip. Native AnimationComponent.amount supplies translation/scale lerp
+and quaternion slerp; no custom clip sampler or Wicked source change.
+Smoothstep fades: strike entry 60ms; charge/direction/hold 100ms;
+shield start/loop/end 120ms; primary locomotion/recovery/cancel 140ms.
+Interrupted fades snapshot the displayed pose. Loop wraps do not restart fades.
+Zero or nonfinite dt leaves initialized hand state and blend clocks unchanged.
+Shared base and gameplay charge/release/completion ownership remain unchanged.
+The paired shotgun already uses its existing native crossfade path.
+Scope is the currently bound sword/shield locomotion, attacks, directional
+Charge/Hold/Release and BlockStart/Loop/End; unbound pack actions are retained
+but not newly routed by this task. No new animation authoring UI or schema.
+
+Changed files: EngineBridge/include/renegade/bridge/PlayerViewHandBlend.h,
+PlayerViewHandAnimation.h; Tests/PlayerViewHandBlendTests.h,
+PlayerViewRigTests.cpp and SwordShieldPlayableProof.h.
+Validation:
+- BUILD/blend_build.ps1: MSBuild Release x64 bridge, Runtime, PlayerViewRig
+  and assembly proof using /m:2 /p:BuildProjectReferences=false, CL=/MP4 PASS.
+- ctest --test-dir BUILD/renegade -C Release
+  -R 'FirstPersonAssemblySettings|PlayerViewRig|Equipment'
+  --output-on-failure: 5/5 PASS, 0.78s.
+- Native T/R/S midpoint, fixed-origin drift, interrupted restart, paused elapsed
+  and disjoint hand tests PASS in PlayerViewRig.
+- BUILD/blend_proof_build.ps1 builds the expanded manual fixture proof.
+  Run BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+  BUILD/sword-ue-proof4 BUILD/sword-playable-blend-proof2 --sword-playable:
+  PASS, 7.46s. Four charge and hold fades, release midpoint, direction
+  interruption, cancel, save/reopen and TestLevel dependency closure checked.
+  Second output directory used because repeat save correctly rejects an existing
+  assembly destination; original proof output preserved.
+- Captures stab-blend-charge.png, stab-blend-release.png and
+  blend-cancel-idle.png in BUILD/sword-playable-blend-proof2 inspected.
+- BUILD/directional_focus.ps1 native mouse test PASS, 27.07s:
+  four selected charged releases, independent held shield, low-charge quick tap.
+  Evidence BUILD/directional-native-events.json.
+- BUILD/sword_studio_build.ps1 clean alternate Studio Release PASS, 108.43s.
+- Owner playing updated standalone reports: 'they do look better'.
+- git diff --check PASS. Existing desktop SwordShieldTest uses rebuilt Runtime;
+  no asset migration needed. Owner editor stays open.
+A separate screenshot automation attempt lacked PIL; no dependency installed;
+native input and offscreen evaluated-pose captures supply the evidence instead.
+No Wicked Editor parity or packaged acceptance claim for this new slice.
+No release gate closure.
+
+Next priority explicitly requested by owner: blade/shield collision-aware arm
+pose correction (shoulder/elbow/wrist while preserving grip), separate from NPC
+damage. Blending does not prevent interpenetration. Collision correction, generic
+authoring, unused action routing, damage, stamina and parries remain open.
+
+## Directional charge playback - 2026-10-06
+Replaces automatic basic-attack cycling in the owner fixture with explicit
+four-direction Charge/Hold/Release bindings. Hold LMB, move left/right/down/up
+to select Left/Right/Down/Stab; release to strike. Quick tap uses last direction.
+Gesture threshold 0.025 radians ignores small motion; selection consumes camera
+look while LMB held. Charge strength saturates at 1 second and is recorded on
+release; no damage calculation or hit detection is claimed. RMB block independent.
+C cancels pending charge; zero dt freezes clocks and selection.
+Runtime shows selected direction and charge percent near screen centre.
+Legacy paired shotgun and existing basic-attack independent assemblies keep
+their existing path unless all 12 directional clips are explicitly bound.
+Native fixture proof checks all four charge-to-hold/release groups, four unique
+release clips, held shield, zero-dt freeze, low-strength quick release and cancel.
+Release bridge/Runtime builds and five focused CTests pass; fixture cold load
+and TestLevel equipment/presentation closure pass.
+Evidence BUILD/sword-playable-directional/sword-charge-0..3.png and
+sword-release-0..3.png. Owner project Desktop/renegade tests/SwordShieldTest;
+previous cycle fixture retained as SwordShieldTest-attack-cycle.
+Files: PlayerViewHandAnimation.h, PlayerViewAnimation.h,
+FirstPersonAssemblyService.cpp, RuntimeApplication.cpp/.h,
+RuntimeLiveDiagnostics.cpp, SwordShieldPlayableProof.h.
+Reproduce BUILD/sword_variants_build.ps1 (directional output).
+Remaining: animation fades, sword/shield clipping, authored charge settings,
+stamina, directional block/damage, collision and generic v2 UI. No P2 gate closure.
+
+## Four sword attacks - 2026-10-06
+Independent schema-v2 assemblies now admit multiple explicit Attack bindings
+to distinct source indices. Legacy paired assemblies still reject duplicate
+actions. Shield/movement/attack bindings cannot alias a source clip.
+Recipe order persists as native attack_order metadata and sorts generated
+primary clips, so LMB cycles Left, Right, Down, Stab in the owner fixture.
+Each swing completes before another is accepted; no click buffering added.
+Shared arms orientation and lowered grip retained. Independent held block retained.
+Five focused CTests pass; Release bridge/Runtime builds pass; saved/reopened
+fixture TestLevel closure passes; four unique generated attack clips exercised
+with shield phase2 maintained and rendered captures inspected.
+Evidence: BUILD/sword-playable-variants/sword-variant-0..3.png.
+Updated owner project stays Desktop/renegade tests/SwordShieldTest;
+prior single attack project preserved in SwordShieldTest-single-attack.
+Files: FirstPersonAssemblyService.cpp, FirstPersonHandAssemblyPreparation.h,
+PlayerViewHandAnimation.h, FirstPersonAssemblySettingsTests.cpp,
+SwordShieldPlayableProof.h. Reproduce BUILD/sword_variants_build.ps1.
+Still no directional input, charge mapping, damage, collision or parry.
+Sword/shield clipping remains visible; no P2 gate closure.
+Next: compatible attack/block poses and blending, then directional selection.
+
+# Sword/shield playable checkpoint - 2026-10-05
+Implemented schema-v2 shared arms with static primary/off-hand attachments,
+explicit clavicle partitions, transient native per-hand clips and independent clocks.
+Runtime routes LMB Attack and RMB held Block only for a matching shared presentation.
+Fixed missing MOUSE_RIGHT press support in GameplayInputService.
+Owner requested camera-local 90-degree right yaw and sword 2cm lower in grip.
+Saved project: <USER_HOME>/OneDrive/Desktop/renegade tests/SwordShieldTest.
+Launcher: Play Sword Shield Test.cmd. All 35 source clips retained; only Idle,
+Walk, Sprint, AttackLeft and BlockStart/Loop/End wired for tonight.
+Release bridge and Runtime builds pass. Alternate Studio build passes at
+BUILD/sword-studio (owner Studio untouched). Five focused CTests pass:
+PlayerViewRig, source contract, FirstPersonAssemblySettings (v1/v2/undo),
+EquipmentActionState, EquipmentAsset.
+Native input evidence: BUILD/sword-native-events.json: equipment ready,
+independent hands enabled; held block phase2 concurrent primary attack;
+release phase3 then phase0. Fixture save/reopen and TestLevel closure checked
+by --sword-playable in Tests/SwordShieldPlayableProof.h (final output proof6).
+No gate closure. Remaining: sword/shield clipping is visible and unsolved;
+no collision, hit damage, directional selection, parry, charge or equip wiring.
+Hard animation transitions currently; blends and compatible combined poses need work.
+Generic v2 assembly editor controls not yet exposed; fixture authored through service.
+Native TestLevel snapshot smoke is required before claiming editor-button parity.
+Files: FirstPersonAssemblyService.h/.cpp, FirstPersonHandAssemblyPreparation.h,
+PlayerViewHandAnimation.h, PlayerViewAnimation.h, GameplayInputService.cpp,
+RuntimeApplication.cpp, RuntimeLiveDiagnostics.cpp, RuntimeEquipmentLoadout.h,
+FirstPersonAssemblyGraphicsProof.cpp, FirstPersonAssemblySettingsTests.cpp,
+SwordShieldPlayableProof.h.
+Reproduce: BUILD/sword_bridge_runtime_build.ps1, sword_playable_build.ps1,
+sword_tests.ps1; manual native input BUILD/sword_native.py.
+Next: correct clipping with compatible block/attack poses, meaningful per-hand
+controller edge-case tests and v2 authoring controls; do not declare P2 complete.
+
+## 2026-10-05 - Native independent hand animation masks
+
+Implementation commit: 7c7f7b3692a3f0c647a922ac9e3b310c1afe6052.
+Changed: EngineBridge/include/renegade/bridge/PlayerViewAnimationMask.h;
+Tests/PlayerViewAnimationMaskTests.h; Tests/SwordShieldLayerGraphicsProof.h;
+Tests/PlayerViewRigTests.cpp; Tests/FirstPersonAssemblyGraphicsProof.cpp.
+Documentation follow-up: docs/P2_HAND_ANIMATION_MASKS.md, architecture,
+equipment implementation notes and feature matrix.
+
+Bridge candidate partitions explicit roots on one armature into disjoint hand
+and base bones; transient transform-only native clips share retained keyframes.
+No source clip mutation, custom evaluator or Wicked source/pin change.
+Synthetic native regression checks distinct hand times, fingers, lifetime and
+atomic overlap/foreign/cyclic/retarget/external-data rejection.
+
+Commands/results:
+- powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/sword_layer_verify.ps1
+  builds Release RenegadePlayerViewRigTests and assembly graphics proof with
+  MSBuild /m:2 /verbosity:quiet /nologo /p:Configuration=Release
+  /p:Platform=x64 /p:BuildProjectReferences=false, CL=/MP4.
+  Final build/test/graphics run passed (29.54 seconds).
+- BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+  BUILD/sword-normalized-source BUILD/sword-layer-proof --sword-layers
+  PASS: 21 primary + 21 off-hand + 26 base bones on one 68-bone armature;
+  four attacks preserve held left world matrices within 4.17233e-07;
+  block start/end preserve attacking right matrices within 8.9407e-07;
+  0.0001 tolerance, right motion 1.43963. Native loop progression, pause
+  and right-clip restart without resetting left clock pass.
+- ctest --test-dir BUILD/renegade -C Release --output-on-failure
+  -R 'PlayerViewRig|EquipmentActionState|EquipmentAsset|GameplayInput'
+  passed 5/5, 1.38 seconds.
+- Visual inspection: held-block.png, AttackLeft-0.350000.png,
+  BlockEnd-0.950000.png and released-idle.png in BUILD/sword-layer-proof
+  show distinct masked poses with neutral matte diagnostic material.
+  Twenty captures produced. git diff --check passed.
+
+Initial mask proof failed a base-bone invariant on procedural head movement
+(delta 0.0798943); the arms stayed independent. Clearing the imported humanoid
+modifier on the private proof scene isolates native clip evaluation and fixes
+that diagnostic. No production sanitation change is made by this checkpoint.
+
+Limits/next: no final textures, weapon attachments, first-person framing,
+authored layer schema or live input/controller integration. Generated mask
+clips are ephemeral and require caller-owned cleanup before view-model unload.
+Live off-hand capability remains false. Next is governed two-hand mesh/layer
+authoring and socket alignment, then Runtime start/held/end, recovery/blending,
+Test Level and independent package verification. No gate closure claimed.
+No editor foreground takeover; owner projects untouched.
+
+## 2026-10-05 - Sword/shield source verification (parent da550c8)
+
+Changed: Tests/FirstPersonAssemblyGraphicsProof.cpp adds manual --sword-inspect owner-asset proof. No gameplay capability enabled, no gate closure.
+
+Inputs: user Idle.FBX with arms mesh (SHA256 6025ad752595c3a0210e496d8c538208737d2cfaf2565d29bb8711dafb528633) and sword/shield pack (SHA256 64d46273d6fff7ca321200eff551cfd1a2f5a8b82606c71e977284b73404d451). Original animation-only source FBXs fail strict inverse-bind matching; humanoid fallback produces unacceptable grip poses. Strict matching was not weakened.
+
+Preparation: isolated BUILD/sword-unreal-project copies supplied Unreal Content; UE 5.7 commandlet exports animation-only FBXs with export_preview_mesh=false. Maps BlockIdle to BlockLoop. Both X/Y sample exports match the supplied 68-bone arms directly. Preview-mesh export with null RHI failed; animation-only export succeeded. BUILD/sword-normalized-source holds the supplied Idle plus normalized clips and original weapon FBXs. Blender headless converts original static weapon meshes to GLB with export_animations=false because their FBXs contain empty animation takes. Original sources unchanged. Export helper scripts remain ignored BUILD diagnostics; owner assets are not committed.
+
+Validation: Release RenegadeFirstPersonAssemblyWorkflowProof build, then executable BUILD/sword-normalized-source BUILD/sword-ue-proof4 --sword-inspect. Asserts 35 native clips, 34 retained matching-rig external sources, unchanged skin indices/inverse binds, saved asset reopen and retained-source recipe rebuild. Sword and shield static mesh assets save/reopen/render. Diagnostic action labels are reapplied for rebuilt pose selection; source recipe reconstruction does not preserve these temporary labels. Earlier rebuilt screenshots blended all tracks due absent labels; corrected diagnostic selection before final inspection.
+
+Limits: neutral/static weapon previews and dark arms material; no final texture proof, socket alignment, simultaneous left-block/right-attack masking or standalone gameplay proof. Live off-hand capability remains disabled. Next task: one native arms rig with independent left/right channel masks and correct weapon attachments; verify idle, attack and held block before enabling gameplay. No editor foreground takeover in this source check.
+
+## Off-hand action/input foundation - 2026-10-05
+
+Prepared independent hand ownership while waiting for real sword/shield clips.
+Channels/events identify the initiating hand; release/cancel/retarget/completion
+can be scoped even when both hands reference the same asset. Held Block uses
+active_while_held (optional v1 field): positive time enters Active, release enters
+Recovery, and native primary completion cannot finish the shield channel.
+OffHandUse defaults to right mouse with older input documents migrated only in
+memory. Authored rebinding survives round trip. Pure Runtime adapter can route
+concurrent primary attack and off-hand Block when explicitly capability-enabled.
+The live Runtime keeps this capability false until real native off-hand clips
+are integrated and checked; the shotgun remains a primary/two-hand regression.
+
+Release bridge, Runtime and focused test builds passed using
+BUILD/offhand_bridge_build.ps1 and BUILD/offhand_verify.ps1. Five CTests passed:
+GameplayInput, PlayerViewRig/source contract, EquipmentActionState, EquipmentAsset.
+Tests cover same-asset hand isolation, held shield release/recovery, paused
+primary with advancing shield, pre-active cancel, schema/rebinding migration and
+capability gating. No sword/shield native animation or independent gate proof
+is claimed. Original owner projects were not changed.
+
+## Player preview controls - 2026-10-05
+
+Owner accepted the selected-player camera inset and requested collapse and resize.
+Click the header to collapse/expand; collapse persists in Studio preferences and
+pauses preview preparation/rendering. Drag the upper-left handle to resize the
+16:9 image, anchored bottom-right, bounded by the scene viewport. Width is kept
+for the current Studio session. Header clicks and resizing consume viewport input
+so they cannot pick objects or move the editor camera behind the overlay.
+Preview remains available only while a visible Player Start is selected.
+
+Validation: Release bridge + clean Studio rebuild passed (BUILD/preview_clean_build.ps1,
+100.18 seconds). Initial incremental build produced a startup exception; rebuilding
+all Studio translation units repaired it. Native inspection passed enlarged
+596-pixel width, minimum 240-pixel width, collapse/expand and selected-marker
+retention. Collapse preference was read back from RenegadeStudio.ini and restored
+after selecting another object and returning to Player Start. Evidence:
+BUILD/player-preview-resized-large.png, player-preview-resized-small.png and
+player-preview-collapsed.png. Source diff check passed. Render image is the
+existing 432x243 cached texture; resizing changes its display bounds, not FOV.
+Off-hand foundation is separate commit cd94a28 and its five focused tests passed;
+native off-hand presentation is still disabled pending real sword/shield clips.
+
+## Selected Player Camera Preview inset � 2026-10-05
+
+Implementation commit: 6a2bf9753d7c7cc1aa2d6dd59832c11ad5fc13a5.
+Selected Player Start now shows a small bottom-right scene-camera inset with the
+world and equipped primary arms/weapon. It uses Runtime spawn yaw, eye height
+and default 60-degree FOV. No separately authored player FOV exists yet.
+
+Changed: bridge PlayerCameraPreviewService plus shared PlayerViewRig/Asset/
+Animation headers; Runtime compatibility headers; StudioApplication and live
+diagnostics; DX12 graphics proof and source contract; README, architecture,
+feature matrix and player continuation. No Wicked source or pin changed.
+
+Preview uses a private world copy, removes gameplay actors/physics/scripts/audio,
+poses native Idle, suppresses during specialist workspaces/Test Level and caches
+eight prepared frames. Edits settle 0.2 seconds; re-selection refreshes asset
+changes. Its rectangle blocks viewport picking/navigation. Helpers do not enter
+authoring WISCENE. Explicit equipment retains Runtime ownership rules.
+
+Windows Release Studio and Runtime builds passed. Five focused CTests passed
+(PlayerViewRig/source contract, prefab, equipment action/asset). DX12 proof checks
+cold world/arms loading, no gameplay components, changed eye height/yaw, unchanged
+source settings/component counts and contrasting rendered pixels. Images
+BUILD/player-camera-preview-evidence/camera-preview.png and
+camera-preview-turned.png were inspected. Initial dt==0 preview rendered sky only:
+Wicked skips GPU geometry/instance allocation at zero. Minimal positive render
+preparation followed by zero GPU effect time repaired it; native clips are paused.
+The proof now rejects empty images.
+
+Native Studio selected-capsule inspection shows the inset at bottom-right with
+world and shotgun; approximately 75 FPS in the tiny validation scene. Clicking
+inside the inset retains selection. BUILD/player-preview-window.png is evidence.
+Standalone Charge/Release/cancel regression passed after moving shared headers.
+Original owner Studio stayed open. Only the launched Runtime was closed; the
+alternate preview Studio remains open for review. Startup capture initially
+preceded the foreground window, and dialog SendKeys lost its first character;
+native pointer opening corrected test setup. These are not accepted product
+changes.
+
+Commands from repository root:
+powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/player_preview_build.ps1
+(same invocation for player_preview_verify.ps1 and player_preview_proof.ps1);
+the final build repeats after refresh/caching fixes.
+Graphics mode: BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+<validation-project> BUILD/player-camera-preview-evidence --camera-preview.
+Standalone: same PowerShell invocation for BUILD/p2_charge_launch.ps1 and
+BUILD/p2_route_capture.ps1; python BUILD/p2_charge_native.py.
+Native inspection: same PowerShell invocation for BUILD/player_preview_launch.ps1
+and BUILD/player_preview_capture.ps1, with pointer-only fixture navigation.
+git diff --check passed. Studio output is BUILD/player-preview-studio.
+Embedded build metadata still predates compiled edits; no exact-head independent
+verification or owner acceptance is claimed.
+
+Limits: private full-world cloning needs large-level memory/time profiling.
+Complete render-settings/postprocess parity and configurable FOV remain follow-ups.
+Preview currently presents the primary assembly; independent off-hand presentation
+remains pending. P2 and release gates remain open.
+Next: prepare separate hand input/routing and instance-scoped reservations, then
+validate actual independent sword/shield clips when the owner's pack arrives.
+A two-handed shotgun is only a reservation regression, never off-hand proof.
+
+## Explicit native Charge/Release presentation — 2026-10-05
+
+The assembly action whitelist now has 16 optional bindings: Charge and Release
+join the accepted 14. Version-1 recipes remain readable. Studio's More actions
+page exposes the new arms/weapon selectors and preview action choices.
+CREATE FROM ASSEMBLY derives Charge (hold-until-release) and Release definitions
+when those pairs exist. Leave Attack unassigned for the primary Charge/Release
+path; an explicit PrimaryUse retains precedence when both kinds are authored.
+
+Runtime requires matching Charge/Release definitions and both native pairs.
+Charge owns preparation/windup/Hold presentation, playing to the pair's endpoint
+and holding it. Fire release atomically retargets the active equipment channel to
+Release without freeing its hands. Native Release completion then enters the
+Release definition's recovery. Cancel clears charge presentation and pre-active
+ownership; pause keeps the charge pose. Aim transitions cannot overwrite Charge.
+Missing pairs or bindings never substitute Idle/Attack as Release.
+
+This adapter requires Charge holdUntilRelease and zero Release prepare/windup
+with no Release hold. Charge prepare/windup/cancel policy and Release recovery are
+used. Native release duration owns Active. Generic charge strength, damage and
+projectiles, independent off-hand presentation and complete packaged acceptance
+remain pending. Generic Release has no firearm ammunition effect. The proof maps
+existing AimIn/Attack clips to the new semantics; it does not claim a bow asset.
+
+Windows Release bridge, Runtime and Studio builds passed. Studio was built to
+BUILD/p2-charge-studio with OutDir override, preserving the open owner executable.
+Six focused CTests passed. DX12 held-primary regression and charge snapshot proof
+passed; the latter saves/cold-loads a new assembly and equipment definition,
+checks exact native pair counts, held endpoint, continuous hand ownership,
+Release playback/recovery and no firearm ammo mutation. Final Runtime/proof
+rebuild repeated both proofs after protecting Charge from aim reconciliation.
+The repeated charge fixture initially collided with its saved name; a unique short
+fixture name fixed repeatability and BUILD/p2_charge_proof.ps1 then passed.
+Standalone Charge/Release/cancel check passed; diagnostics/evidence live under
+BUILD/p2-charge-native-events.json. Native held-pose screenshot
+BUILD/p2-charge-held-pose.png was inspected; the fixture retains its washed-out
+lighting. Capture command: python BUILD/p2_charge_pose.py. No native Studio dropdown visual acceptance
+or independent verifier/owner acceptance is claimed for this slice.
+
+Commands from repo root: powershell -NoProfile -ExecutionPolicy Bypass -File
+BUILD/p2_charge_verify.ps1; same invocation for BUILD/p2_charge_final_verify.ps1,
+BUILD/p2_charge_proof.ps1,
+BUILD/p2_charge_launch.ps1 and BUILD/p2_route_capture.ps1;
+python BUILD/p2_charge_native.py. git diff --check passed.
+Only the launched test Runtime was closed; owner Studio remains open.
+Embedded build metadata may predate these compiled edits; no exact-head release
+verification is claimed. P2 and Alpha release gates remain open.
+
+Next: independent off-hand presentation, generic action editing, native authoring
+review and packaged gameplay verification. The small editor Player Camera Preview
+inset remains pending.
+
+## Held primary action input and cancellation — 2026-10-05
+
+GameplayInputFrame now carries Fire's held state from the existing authored binding.
+Version-1 maps append cancel_equipment (default C); old maps receive it in memory
+without rewriting their bytes or replacing custom controls. Cancel can be rebound.
+
+Authored PrimaryUse/Attack with holdUntilRelease reserves the hands through
+prepare/windup and Hold, then dispatches exactly once when Fire is released.
+A short tap latches release during windup. Pause advances neither release nor
+cancellation; held state is reconciled on the next gameplay frame.
+Cancel uses the authored cancellableBeforeActive policy in prepare/windup/hold.
+It never interrupts active native playback or recovery. Holding after a cancel
+cannot restart without a fresh press; releasing the cancelled hold does not fire.
+Existing immediate shotgun behavior retains discrete press semantics.
+
+This is held PrimaryUse with canonical Attack presentation, not a complete bow,
+charge-power mechanic or separate Charge/Release animation adapter. Hold currently
+retains ordinary movement/aim presentation. Generic action editing and independent
+off-hand presentation remain pending; full package acceptance remains pending.
+
+Verification: updated Release bridge, input/action/equipment/prefab/snapshot targets;
+focused CTest 5/5 and real DX12 held-shotgun snapshot proof passed.
+Runtime Release build passed. Standalone saved held-definition check passed:
+no Attack while held, Attack after release, hand reservation returned to Ready,
+C cancelled another hold, and its subsequent release did not play Attack.
+Evidence: BUILD/p2-held-native-events.json and BUILD/p2-route-runtime-diagnostics.json.
+Commands: powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/p2_held_verify.ps1;
+same invocation for BUILD/p2_held_runtime_build.ps1, BUILD/p2_route_launch.ps1 and
+BUILD/p2_route_capture.ps1; python BUILD/p2_held_native.py.
+The native harness was corrected for the diagnostics PID location and for a fresh
+F8 reset with a focus click before testing. Binary metadata still embeds ef399ac;
+compiled implementation includes this working slice, with no exact-head independent
+verification claimed. Owner Studio was left open; only the launched test Runtime was closed.
+git diff --check passed. No owner/independent verification or release gate closure.
+
+Next: separate semantic Charge/Release presentation and independent off-hand support,
+generic action editing and packaged gameplay verification. The approved small editor
+Player Camera Preview inset remains pending.
+
+## Staged discrete Runtime equipment actions — 2026-10-05
+
+Runtime now routes authored primary fire, reload and equip/unequip through
+EquipmentActionState. Preparation and windup reserve the authored hands before
+one semantic dispatch. Active waits for native paired-animation completion;
+authored recovery then retains the reservation before the next press can start.
+Native ammo, partial reload, aim variants and jump presentation remain authoritative.
+Pause does not advance phases. Busy native jump/aim presentation defers dispatch;
+aim transitions cannot steal a staged reservation. Scene reload/shutdown clears state.
+No-equipment legacy players retain the existing input path.
+
+This slice covers canonical Attack/Reload/Equip/Unequip bindings. Immediate aim
+remains on the previous path. Held/charge/release and cancellation input, independent
+off-hand presentation, inventory and generic action editing remain pending.
+ActiveSeconds remains the standalone gameplay-state duration; paired Runtime uses
+native clip completion instead. Phase boundaries dispatch on gameplay frame updates.
+
+Windows Release Runtime build passed after correcting the new ground-check pointer
+and diagnostic integer types. Rebuilt EquipmentActionState and EquipmentAsset targets;
+focused snapshot/prefab/action/asset CTest passed 4/4. DX12 real paired shotgun proof
+verifies delayed dispatch, one shell consumed, native completion and recovery release.
+Standalone PID 34884 observed Attack and hand reservation returning to Ready; first
+focus click produced no action and the subsequent click passed. Its assigned definition
+uses immediate timing; nonzero phase delays are exercised by regression and DX12 proof.
+Evidence: BUILD/p2-staged-native-events.json and BUILD/p2-route-runtime-diagnostics.json.
+Commands: powershell -NoProfile -ExecutionPolicy Bypass -File
+BUILD/build_p2_assets_runtime.ps1; BUILD/p2_runtime_route_verify.ps1; and
+BUILD/p2_equipment_proof.ps1 (same PowerShell invocation).
+Standalone: BUILD/p2_route_launch.ps1 and BUILD/p2_route_capture.ps1 with that invocation;
+python BUILD/p2_staged_native.py. Test window closed; owner Studio left open.
+git diff --check passed. No owner/independent verification or packaged acceptance claimed.
+Next: held/charge/release input and cancellation, independent off-hand presentation,
+then package gameplay verification. The editor camera inset remains pending.
+
+## Runtime equipment ownership and immediate action checkpoint — 2026-10-05
+
+Runtime resolves primary/off-hand equipment atomically on player scene synchronization.
+Authored primary equipment owns the effective presentation; empty or invalid authored
+loadouts do not inherit a legacy gun. Original WISCENE authoring settings remain intact.
+Legacy players with no equipment assignment retain their accepted animation path.
+
+The adapter admits matching immediate PrimaryUse/Attack, Reload/Reload,
+AlternateUse/AimIn and Equip/Unequip definitions. Missing, mismatched, staged or held
+definitions block their input. Active duration and ammo remain native paired-animation
+authority. This does not integrate the staged EquipmentActionState clock, charge/release,
+independent off-hand presentation, inventory, or packaged gameplay acceptance.
+
+Windows Release Runtime build passed. Release CTest snapshot, prefab, EquipmentActionState
+and EquipmentAsset passed 4/4. The DX12 equipment snapshot proof cold-loads the real
+paired shotgun, routes PrimaryUse to Attack and verifies one shell consumed.
+Standalone Runtime PID 40508 loaded the generated snapshot: equipment authored/ready,
+no equipment error, presentation loaded, paired animation initialized, two active tracks.
+Screenshot BUILD/p2-route-runtime.png retains the fixture's existing washed-out lighting.
+Diagnostics: BUILD/p2-route-runtime-diagnostics.json. No owner or independent acceptance.
+
+Verification commands from repository root:
+- powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/build_p2_assets_runtime.ps1
+- powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/p2_runtime_route_verify.ps1
+  (four tests passed; proof compilation initially failed on a missing namespace import)
+- powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/p2_equipment_proof.ps1
+  (passed after fixing the proof namespace)
+- powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/p2_route_launch.ps1
+- python BUILD/p2_route_diagnostics.py
+- powershell -NoProfile -ExecutionPolicy Bypass -File BUILD/p2_route_capture.ps1
+
+Next: staged action clock and native presentation transition integration, then independent
+off-hand support and package verification. The approved small Player Camera Preview inset
+inside the editor remains pending. P2 and release gates remain open.
+
+## Latest checkpoint: PR #178 merged; owner acceptance and UX follow-up - 5 October 2026
+
+## 2026-10-05: first P2 checkpoint (in progress)
+
+Implementation commit: `f685c5144668859d7e8ad9f4315666f16cfb3819`.
+Branch: `feature/p2-equipment-actions`. Authored P2 remains the governing scope;
+this checkpoint does not close P2, P1 or the Alpha release gate.
+
+- Assembly Arms/Weapon pickers now use dedicated folder eligibility and saved
+  assembly recipe roles. Existing/shared-pack parts remain usable without moving
+  files. Completed assemblies and unrelated imported models are excluded.
+  Stable-ID user-data preserves selection across different filtered row orders.
+- Pure bridge equipment action foundation covers all five hand-use policies,
+  phased events, hold/release, cancellation before active, pause and reset.
+  It is not yet persisted or wired into Runtime; existing shotgun behavior is
+  unchanged by this gameplay foundation.
+- Windows Release Studio build passed before the checkpoint commit. Native
+  filtered Arms/Weapon dropdowns, saved assembly opening and close/reopen retained
+  the paired textured preview and action mappings in an isolated validation copy.
+  The visual build embeds the earlier documentation revision `59e705e9`;
+  its picker implementation matches this checkpoint. No exact-head independent
+  verifier or owner acceptance of this new slice is claimed.
+- Release CTest `FirstPersonAssemblySettings` and `EquipmentActionState`:
+  2/2 passed after the final hand-policy test additions. Regression covers 100
+  unrelated models, dedicated/shared folders, malformed provenance, all five
+  hand policies, phase/event behavior, hold/release, pause, cancellation and reset.
+- `git diff --check` passed. Existing untracked local files were left untouched.
+
+Next authored P2 work: durable equipment assets/identity, starting-loadout
+Inspector and prefab persistence, Runtime ownership and semantic action routing,
+then snapshot/transitive packaging and owner gameplay acceptance.
+See [P2 implementation](docs/P2_EQUIPMENT_ACTION_IMPLEMENTATION.md) and
+[remaining UI/UX work](docs/PLAYER_AUTHORING_UX_FOLLOWUP.md).
+
+Implementation merge: `7105a95ddcc103d6a024a17fddefd62f705a86b3` on main.
+PR #178 head before merge: `207ba864e79211992b6eb11465c5a23850c36d3c`.
+Documentation branch: `docs/player-pr178-acceptance-ux-followup`.
+The documentation commit immediately following this checkpoint records these edits.
+
+PR #178 merged into main on 2026-10-05 at `7105a95ddcc103d6a024a17fddefd62f705a86b3`.
+All four pre-merge Windows checks passed: Studio Debug/Release and baseline
+Debug/Release. The owner confirmed the expected player/shotgun behaviour in the
+existing v2 game project and explicitly accepted the PR's functionality.
+This records functional acceptance of the merged scope, not completion of every
+P1 requirement or of the full Alpha Playability combat programme.
+
+Changed documentation: README.md, CHANGELOG.md, HANDOFF.md, docs/ROADMAP.md,
+ARCHITECTURE.md, FEATURE_MATRIX.csv, PLAYER_AUTHORING_CONTINUATION.md,
+P1_ASSEMBLY_AUTHORING.md, P1_STATUS_AND_RECOVERY.md,
+PLAYER_ARMS_COMBAT_FRAMEWORK.md and new PLAYER_AUTHORING_UX_FOLLOWUP.md.
+No engine code, assets, schema or Wicked pin changes.
+
+Evidence:
+- `gh pr view 178 --json state,mergeCommit,mergedAt`: MERGED at
+  2026-10-05T15:30:48Z, merge commit above.
+- Exact pre-merge head had four successful checks: Studio Windows x64
+  Debug/Release and Windows baseline Debug/Release.
+- `RenegadeFirstPersonAssemblyWorkflowProof.exe <isolated-transfer-project>
+  <evidence> --full-library-reopen`: exit 0; 14 paired actions, 28 native tracks,
+  two armatures and ten retained textures.
+- `RenegadeFirstPersonAssemblyWorkflowProof.exe <isolated-package>
+  <evidence> --runtime-package`: exit 0; paired load/pose/pause/cleanup,
+  capacity 2, partial reload enabled.
+- Native v2 Runtime visual inspection showed textured arms/shotgun reloading.
+  Owner then confirmed everything works as expected and accepted PR scope.
+- Transfer required manual project identity, dependency/provenance registration
+  and exact canonical serialization. It is not a shipped one-click importer.
+- Documentation validation: git diff --check, CSV width/identity and Markdown
+  local-link checks; exact results recorded in the documentation PR.
+
+Risks/next task: functionality accepted; authoring UX explicitly needs a revisit.
+Scope dedicated arms/weapon picker collections or folders, combined-folder pack
+roles, readable prefab/assembly names and dependency-aware project adoption.
+Preserve existing automatic preview refresh and check loading/error feedback.
+Independent equipment, reserve ammo, hits/damage, recoil and wider combat gates
+remain open. Do not mark the whole Alpha programme or every P1 requirement closed.
+Keep earlier checkpoints below as historical evidence.
+
 ## Latest checkpoint: Wander normal role with 2x2 terrain-chunk extent - 2 October 2026
 
 Branch: feature/character-animation-crossfades.
@@ -301,11 +2210,11 @@ The owner-supplied PR58 Gate 2C Release package also provided the accepted start
 - The pending playback-footer styling checkpoint turns the real `PLAY SELECTED CLIP` control into a full-width native strip between Previous/Next. It delegates to the existing native animation preview, is disabled unless a Character has a selectable clip, and introduces no simulated transport or invented playhead.
 - Read `docs/importer-v3/IMPORTER_V3_HANDOFF.md` for complete current importer evidence and the exact next action. A focused Windows build and visual inspection of the pushed exact head remain required.
 
-**Date:** 12 September 2026  
-**Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`  
-**Merged baseline:** PR #156 — Phase 7F native mesh blending parity  
-**Merged commit:** `3d305be84fedf73f5b3cfbb0522be2a732c1adca`  
-**Active repair branch:** `repair/phase7-integrated-audit`  
+**Date:** 12 September 2026
+**Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
+**Merged baseline:** PR #156 — Phase 7F native mesh blending parity
+**Merged commit:** `3d305be84fedf73f5b3cfbb0522be2a732c1adca`
+**Active repair branch:** `repair/phase7-integrated-audit`
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Programme state
@@ -2431,3 +4340,862 @@ Inspected GitHub Studio run 37308122911: Debug and Release fail during CTest, af
 Preserved and completed existing local fixes in Tests/CMakeLists.txt (prefab test dependency of bridge test aggregate), Tests/Phase5Gate3SourceContract.cmake (eight Add entries), Tests/Phase6Gate1SourceContract.cmake (browser drop, capsule and prefab card requirements). Tools/Build-Studio-Windows.ps1 now explicitly builds RenegadePlayerPrefabTests and records that target in build evidence. No runtime/editor feature change in this repair.
 Validation: BUILD/validate_prefab_ci.ps1 configures CMake -S . -B BUILD/renegade -A x64 -DRENEGADE_EMBED_SHADERS=ON, builds RenegadePlayerPrefabTests --parallel 4 in Debug and Release, then CTest -R 'RenegadePlayerPrefabTests|RenegadePhase5Gate3SourceContract|RenegadePhase6Gate1SourceContract' --output-on-failure in each configuration. Exit 0, 682.34s including Release bridge recompilation. Debug 3/3 pass (0.41s); Release 3/3 pass (0.38s). Existing MSB8029 and C4834 warnings only. Generated bridge-test project includes prefab-test reference. git diff --check passes. Full fresh hosted Studio workflow remains required; focused local passes do not claim full CI acceptance or release gate closure.
 Next: push repair on existing feature branch and inspect new PR 178 Debug/Release jobs. Do not merge until required checks pass. Preexisting Tools/__pycache__ and log.txt remain untouched.
+
+## 2026-10-05 Test Level gameplay input snapshot recovery
+
+Resumed feature/p2-equipment-actions at c07877a with the existing uncommitted
+P2 equipment persistence/UI candidate retained. Bounded outcome: restore native
+Test Level startup on the previously rejected deeply nested validation project.
+RuntimeBootstrap.log identified ProjectRejected (22): GameplayInput defaults were
+absent from the snapshot; Runtime's journal .writing path exceeded Windows path
+limits. Completed existing SnapshotGameplayInput candidate in
+EngineBridge/src/TestLevelSnapshotService.cpp; snapshots copy validated authored
+input bytes or generate defaults under a short temporary root and copy them.
+Source project input is not changed. No Runtime/player architecture replacement.
+Tests/TestLevelSnapshotRuntimeTests.cpp fixes a non-static Cleanup call and verifies
+Runtime EnsureGameplayInputMap reads defaults without creating them, source has
+no new default document, and custom bytes/mouse sensitivity remain unchanged.
+
+Validation: Release bridge MSBuild then powershell -NoProfile -ExecutionPolicy
+Bypass -File BUILD/p2_snapshot_build.ps1. Final chain exit 0 / 14.10s;
+RenegadeTestLevelSnapshotRuntimeTests 1/1 PASS, 0.25s; Studio Release rebuilt.
+Existing MSB8029 warnings only. git diff --check passes.
+Native DX12: rebuilt Studio PID 40740, validation project opened via Hub and Story
+Flow, PLAY launched Runtime child PID 23200. Bootstrap PASS/SUCCESS/exit_code=0.
+Live diagnostics confirm same build identity, real Studio child, player spawned,
+scene loaded, paired rig/animation initialized, two active Idle tracks and no
+error events. BUILD/p2-snapshot-recovery-diagnostics.json records evidence.
+BUILD/p2-snapshot-runtime-success.png visually inspected: shotgun/arms present,
+75 FPS; existing washed-out fixture lighting remains. This is startup/rig evidence,
+not new combat, gameplay feel, or equipment action acceptance.
+
+Only snapshot source, snapshot regression and this handoff form the bounded
+recovery commit. Other existing P2 changes remain uncommitted and preserved;
+P2 implementation/feature matrix working copies updated with recovery status.
+No push/merge or independent release-gate closure. Next: equipment dependency
+closure in Test Level (snapshot inventory had no .requipment documents), then
+semantic equipment Runtime routing and packaged gameplay acceptance per P2.
+
+## 2026-10-05 P2 equipment persistence and snapshot closure checkpoint
+
+Continued from 0d9e067. Preserved/completed the existing equipment asset and
+Starting Equipment UI candidate. EquipmentAssetService journals immutable
+.requipment assets; PlayerService retains primary/off-hand StableIds in WISCENE;
+PlayerPrefabService schema v2 preserves slots with v1 compatibility. Registry,
+asset catalogue and dependency provider expose equipment and presentation edges.
+Studio creates definitions from governed assemblies and applies hand-compatible
+loadouts with existing command history. Native UI save/reopen evidence for this
+candidate was recorded by the preceding session in P2 implementation document.
+
+New TestLevelSnapshotService closure copies resolved level equipment and prefab
+default equipment, including displaced defaults, and reuses governed arms/product
+texture closure for presentation. Copied definitions reload against the snapshot
+registry. Invalid/missing equipment fails snapshot creation. Regression preserves
+sword/shield prefab defaults and local two-hand bow override; snapshot prefab
+cold load, unchanged definition bytes and invalid-loadout rejection pass.
+FirstPersonAssemblyGraphicsProof --equipment-snapshot clones supplied project
+Content and registry, saves a real shotgun definition, assigns it in memory,
+creates a snapshot, cold-loads the definition and paired presentation, and reopens
+native level loadout. Original creator project remains untouched by this proof.
+
+Validation: BUILD/build_p2_snapshot_equipment.ps1 exit 0 / 10.93s; snapshot
+CTest 1/1 PASS / 0.65s. BUILD/p2_snapshot_finish_build.ps1 rebuilt Release equipment
+and prefab tests, Runtime and Studio: exit 0 / 17.71s. Focused CTest 4/4 PASS
+(snapshot, prefab, EquipmentActionState, EquipmentAsset) / 1.31s.
+BUILD/p2_equipment_proof.ps1 builds RenegadeFirstPersonAssemblyWorkflowProof and
+runs supplied validation descriptor with --equipment-snapshot into
+BUILD/p2-equipment-snapshot-evidence: exit 0 / 21.02s; EQUIPMENT SNAPSHOT PASS.
+Build flags CL=/MP4, MSBuild /m:2 /verbosity:quiet /nologo
+/p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false.
+Existing MSB8029 warnings. No claims of new combat feel or full Build Game parity.
+
+Owner reaffirmed approved Player Camera Preview inset at lower-right of scene
+viewport. PLAYER_AUTHORING_CONTINUATION.md records world + equipped arms/weapon,
+authored facing/eye height/FOV, preview-only paused gameplay. This inset is still
+unimplemented; isolated Assembly preview and separate Runtime do not fulfill it.
+
+Changed bridge equipment/player/prefab/catalogue/dependency/snapshot files,
+Studio equipment panel/Inspector and CMake, equipment/prefab/snapshot/graphics
+proof tests and CMake, plus changelog/architecture/roadmap/feature matrix/P2/player
+continuation documents. Unrelated Tools/__pycache__ and log.txt remain untouched.
+Next: semantic equipment Runtime ownership/action routing, then owner gameplay
+and packaged acceptance. P2 and independent release gate remain open.
+
+Final TestLevel native smoke: snapshot load ready and simultaneous attack/block plus lowering observed in events; strict automated script assertion interrupted by foreground input changes, so no clean editor-button parity claim. Sword grip lowered 2cm; owner visual clipping acknowledged.
+
+Native mouse sequence PASS: four successive attacks while shield held, BUILD/sword-variants-native-events.json.
+
+Final native mouse PASS: four selected full-charge releases, independent held block and low-charge quick tap. Evidence BUILD/directional-native-events.json. Alternate Studio Release build also passes. Runtime left open on the updated owner project.
+
+
+## Sword/shield pose avoidance checkpoint - 2026-10-06
+Implementation commit: 3160f690badea5fc45c92b39964bc86b3c6c2d7e.
+Changed: FirstPersonAssemblyService.h/.cpp, FirstPersonHandAssemblyPreparation.h,
+PlayerViewHandAnimation.h, new PlayerViewHandAvoidance.h, RuntimeLiveDiagnostics.cpp,
+FirstPersonAssemblySettingsTests.cpp, PlayerViewRigTests.cpp, new
+PlayerViewHandAvoidanceTests.h, SwordShieldPlayableProof.h, ARCHITECTURE and FEATURE_MATRIX.
+Optional schema-v2 collision proxies persist through settings and generated native
+metadata. Old v1/v2 content remains disabled by default. CPU native masked evaluation
+plus bounded native CCD corrects the primary arm before world hierarchy/skinning.
+Wrist orientation, bone lengths, off-hand isolation and zero-dt pose are tested.
+Finite local/world and decomposition guards reject singular native IK; unresolved
+contacts restore authored pose and increment diagnostics. No upstream changes.
+Five focused Release CTests pass: PlayerViewRig, source contract,
+FirstPersonAssemblySettings, EquipmentActionState, EquipmentAsset.
+Commands: BUILD/collision_verify.ps1 builds bridge and proof/tests then runs
+five CTests and the real-pack fixture. Final run exit0 / 33.11s; five CTests 0.85s.
+BUILD/collision_final.ps1 rebuilds Bridge/Runtime and incremental alternate Studio,
+then relaunches the player. Clean alternate Studio exit0 / 113.25s.
+Native rotations preserve authored lengths and scale. A near-contact fallback
+permits up to 4cm of shoulder-root translation within the authored total bound.
+MSBuild /m:2 /verbosity:quiet /nologo /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false with CL=/MP4. Existing MSB8029/C4834 warnings.
+Collision fixture: RENEGADE_HAND_COLLISION=1
+BUILD/renegade/Tests/Release/RenegadeFirstPersonAssemblyWorkflowProof.exe
+BUILD/sword-ue-proof4 BUILD/sword-collision-proof9 --sword-playable.
+Result: 965 corrected frames, zero unresolved; saved asset reopen and TestLevel closure pass.
+Straight-chain finite pose and bone-length regression passes in PlayerViewRig.
+Final Bridge/Runtime/alternate Studio refresh passed: collision_final.ps1 exit0 / 87.98s.
+Final native mouse collision_focus.ps1 exit0 / 27.10s. Player Runtime remains open.
+Native mouse proof BUILD/collision_focus.ps1 -> collision-native-events.json:
+four charged directional releases, shield phase2, quick low-charge tap,
+avoidance enabled, corrections nonzero, all observed unresolved counters zero.
+Rendered four directional release poses inspected; native player idle image inspected.
+Desktop SwordShieldTest replaced with collision-enabled proof4 project; old
+blending-only project retained beside it. Existing launcher preserved. Player left open.
+Risks: conservative box corners; discrete frame contacts can miss fast swept crossings;
+no joint/pole limits; unreachable contacts can retain clipping via safe fallback.
+This fixes presentation against the player's shield only. Damage, NPC/world collision,
+stamina/parry, generic proxy editing UI and production combat acceptance remain open.
+No release gate closure or universal weapon collision claim. Owner gameplay feedback
+and independent exact-commit review are next; refine contact continuity if needed.
+
+## Directional melee chaining checkpoint - 2026-10-06
+Implementation commit: c2ffb4f64c046f8c123232ca621161880244d7b6.
+Changed RuntimeApplication.cpp, RuntimeEquipmentLoadout.h, RuntimeLiveDiagnostics.cpp,
+EquipmentAssetTests.cpp, new EquipmentMeleeChainTests.h, ARCHITECTURE.md and FEATURE_MATRIX.csv.
+One follow-up can be prepared in the final 0.30s of a directional release or recovery.
+Released requests expire after 0.75s of gameplay time; held requests carry their
+direction and capped charge into the next charge. Existing authored action phases
+remain authoritative. Shield ownership is independent. Cancel/reload/equip/item
+replacement clear the queue; pause/nonfinite dt freeze progress.
+Released queued charge is pinned through authored preparation/windup until dispatch.
+The HUD exposes PREPARE NEXT and queued direction/charge. Damage is unchanged.
+
+Verification: BUILD/chain_build.ps1 builds Release x64 Runtime, then
+BUILD/chain_tests.ps1 builds RenegadeEquipmentAssetTests and runs
+ctest -C Release --output-on-failure --timeout 30 -R "FirstPersonAssemblySettings|PlayerViewRig|Equipment"
+from BUILD/renegade. Final build exit0 / 27.40s, all five focused CTests pass / 0.77s.
+MSBuild /m:2 /verbosity:quiet /nologo /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false; CL=/MP4. Existing MSB8029 warnings.
+Tests include held/released queues, exact single dispatch, authored recovery,
+preparation/windup charge retention, cancel/equip/item change, expiry, pause/NaN
+and unchanged nondirectional routing. No serialized state was added.
+Native BUILD/chain_focus.ps1 -> chain_native.py -> chain-native-events.json:
+final exit0 / 8.58s. Short charged right follow-up then held full-charge stab,
+two chain dispatches, shield phase2 throughout. Runtime left open.
+Final idle render inspected. Window Alt-menu activation froze the initial test's
+frame loop; clearing the menu and removing Alt from the focus harness resolved it.
+Snapshot sampling is coarse; short follow-up was below 75% charge in native proof.
+Unit tests explicitly verify a released request waits through recovery.
+
+Collision limitation: an earlier opening left strike observed one unresolved
+bounded correction (authored-pose fallback). Final native run counter stayed 1
+from start through both chains, so chaining introduced no new unresolved correction
+in that run. This is not a universal zero-clipping claim; investigate contact
+continuity during rapid shield/strike transitions next if owner observes clipping.
+Player preview authoring controls, NPC damage/stamina/parry and production combat
+acceptance remain separate follow-ups. No release gate closure or editor parity claim.
+Unrelated Tools/__pycache__ and log.txt untouched. Next: owner chain feel review,
+then movement/transition checks and targeted collision continuity refinement.
+
+## Independent hand assembly authoring checkpoint - 2026-10-06
+Implementation commit: 744f9d63f24296a2b60bc32a9a9331786e45d0b2.
+Changed FirstPersonAssemblyService settings/preparation, PlayerViewHandAnimation
+and avoidance, Runtime timing/HUD/routing, Studio assembly panels and native preview,
+three test fixtures, README, ARCHITECTURE, ROADMAP, FEATURE_MATRIX and new
+docs/P2_ASSEMBLY_HAND_AUTHORING.md. No upstream changes.
+Select Player Start -> ASSEMBLY -> HAND / MELEE SETUP. Five pages expose off-hand
+mesh/grip/roots, uniform weapon scales, twelve directional stages, three block
+stages, four fallback attacks, collision proxies and charge/chain/queue timings.
+Weapon-only swaps preserve bindings. Arms replacement resets skeleton bindings.
+Optional authoring settings retain old recipe defaults and validate finite bounds.
+Runtime loads authored timings; preview uses native independent masks/avoidance.
+Undo/Redo, automatic preview and journaled save retain all three part hash guards.
+SAVE CHANGES retains equipment references; SAVE AS NEW requires equipment
+presentations referencing the new identity. Level assignment alone is insufficient.
+
+Verification: BUILD/assembly_build.ps1 builds Release x64 Bridge, Runtime,
+FirstPersonAssemblySettingsTests, PlayerViewRigTests, EquipmentAssetTests,
+FirstPersonAssemblyWorkflowProof and alternate Studio.
+MSBuild /m:2 /verbosity:quiet /nologo /p:Configuration=Release /p:Platform=x64
+/p:BuildProjectReferences=false, CL=/MP4.
+Final production build exit0 /115.25s; all five focused CTests pass /0.78s:
+ctest --test-dir BUILD/renegade -C Release
+-R "FirstPersonAssemblySettings|PlayerViewRig|Equipment" --output-on-failure --timeout 30.
+Final Studio-only button/layout refresh exit0 /16.35s.
+Existing MSB8029/C4834 warnings. git diff --check passed.
+
+Real supplied-pack proof: RENEGADE_ASSEMBLY_SWAP=BUILD/replacement-sword.glb,
+RENEGADE_HAND_COLLISION=1; WorkflowProof BUILD/sword-ue-proof4
+BUILD/sword-assembly-authoring-proof5 --sword-playable.
+Final exit0 /22.04s: governed import of a different, longer sword; retained asset
+update and cold reopen; scale/timing metadata; charge cap; all twelve directional
+preview stages, four variants and three shield stages; saved new assembly;
+965 corrected contacts and zero unresolved; saved level/snapshot closure.
+Replacement held-shield strike PNG visually inspected, nonempty pixel assertion passes.
+Earlier empty captures were a proof harness omission of EVENT_THREAD_SAFE_POINT;
+the final harness supplies the same event as native Studio. Production preview
+was visually correct throughout.
+
+Native Studio on BUILD/assembly-hand-ui-project disposable copy: numeric full
+charge edit to 1.25, saved product/source projection inspected, panel closed and
+reopened with 1.25 retained. All directional/block mappings retained. Attachments,
+Idle, held-shield strike, Directional, Block, Collision and Timing views inspected.
+Undo restored an accidental scale slider click; no oversized mesh was saved.
+Window title click brings setup ahead of the inspector after inspector interaction;
+normal native window priority applies. Broader responsive UX remains owner review.
+Owner's preexisting Studio and original desktop project were not modified by UI tests.
+Updated Studio remains open on the disposable copy; original project Runtime open.
+
+Native BUILD/chain_focus.ps1 exit0 /8.48s: released follow-up, held charged chain,
+single dispatch, shield independence; unresolved counters 0 at start/chain/end.
+Default original loadout remains playable. No universal no-clipping claim:
+conservative discrete proxies and bounded correction retain authored fallback
+for unreachable contacts. No NPC damage, stamina, parry, world collision or new
+movement routing. Independent exact-commit review remains required; no release
+gate or Wicked Editor parity closure. Unrelated Tools/__pycache__ and log.txt untouched.
+Next: owner authoring/mesh-swap review, then movement/transition checks and targeted
+contact continuity refinement if observed. Damage awaits NPC system integration.
+
+
+## Owner fantasy sword mesh swap - 2026-10-06
+Engine implementation unchanged at fcac40314952edb3f5d6130d93906f904c6da56d.
+Owner supplied fantasy-sword.zip, SHA256
+b57474266f43b2bd9898844743a033964d044d99985a3fbb46e74dce7a4ae82f.
+The matching local Downloads copy was inspected in Blender 5.1.1. Static FBX:
+1042 source vertices, original bounds about 5.72m end-to-end. Prepared GLB
+uses 0.18 source scale (about 1.03m overall), blade +Y and upper-grip pivot,
+with supplied base colour, metallic, roughness, normal and emissive maps.
+Original ZIP/FBX/textures untouched; preparation scripts and GLB are in BUILD.
+
+RENEGADE_ASSEMBLY_SWAP=BUILD/fantasy-sword.glb; RENEGADE_HAND_COLLISION=1;
+RENEGADE_IMPORT_FOLDERS=1; WorkflowProof BUILD/sword-ue-proof4
+BUILD/fantasy-sword-proof1 --sword-playable: exit0 /12.61s.
+Custom folder/weapon role/tag/move rollback/cold placement checks and all
+replacement masked preview slots passed. The fixture restores its original
+playable assembly after checking the replacement: its 965 corrected/zero
+unresolved counter therefore describes the original sword, not this new mesh.
+
+Native Studio opened the disposable proof project, selected the imported
+Replacement Sword, LOAD PARTS, and saved changes to the existing assigned
+assembly. Animation mappings, shield, default scales and charge/chain timing
+retained. Blade proxy edited to base (0,0.10,0), tip (0,0.797,0), radius 0.037m;
+source projection inspected after journaled save. The updated project was copied
+to a separate owner desktop FantasySwordTest, with a Play Fantasy Sword.cmd
+launcher and prepared Fantasy Sword.glb for reuse. The original SwordShieldTest
+was not modified. Native standalone cold-loaded this desktop copy; rendered
+grip, metal blade and decorated guard inspected.
+BUILD/chain_focus.ps1 against the new standalone: exit0 /8.95s, released
+follow-up and held charged stab, two single chain dispatches, shield independence,
+unresolved counters 0 -> 0 -> 0. Evidence BUILD/fantasy-sword-native-events.json
+and BUILD/fantasy-sword-proof1.log. This is bounded presentation acceptance,
+not universal no-clipping, damage collision, or NPC combat validation.
+New Runtime left open for owner feedback. Only handoff documentation changed;
+no new engine implementation, no push and no release gate closure.
+
+
+## 2026-10-06 — Solid Player Start facing guides
+
+Base implementation commit 4f16567; resulting implementation commit is recorded
+by the following documentation-only checkpoint. Changed StudioApplication.cpp/.h,
+ARCHITECTURE.md, FEATURE_MATRIX.csv and PLAYER_AUTHORING_CONTINUATION.md.
+Player Start retains its selectable capsule and now renders a solid camera body,
+grip, viewfinder, stepped lens and raised arrow in Studio's native depth-tested
+scene pass. Both follow resolved Runtime spawn yaw; camera height follows the
+sanitized authored eye height. Grid visibility does not control these guides.
+No scene entities, asset IDs, serialized schema or Runtime behavior changed.
+
+Release x64 Studio MSBuild with BuildProjectReferences=false, /m:2, CL=/MP4 and
+OutDir=BUILD/player-solid-marker-studio: exit0, 75.40s. Existing MSB8029 temporary
+output warnings and C4834 at the existing importer return-value site remain.
+Native DX12 Studio opened BUILD/player-marker-ui-project, selected Player Start,
+focused it and visually verified solid camera and extruded arrow. Owner replied
+"much better thanks". Final cleanup restores the unchanged capsule edge signature
+and corrects geometry documentation; final rebuild evidence follows below.
+Rotation/save/reopen interaction was not exercised in this visual pass; these
+markers consume the existing resolved authored transform rather than persisting
+new state. Independent exact-commit verification/release gates remain open.
+No upstream edits, no push. Next: owner continuation of equipment work.
+
+Implementation commit: 6135b2d5395b4718b3adf198a95a08805307a919.
+Final Release x64 Studio rebuild with the same flags and
+OutDir=BUILD/player-markers-final: exit0 /20.36s; log
+BUILD/player-markers-final-build.log. CTest --test-dir BUILD/renegade -C Release
+-R 'PlayerFoundation|PlayerPrefab' --output-on-failure: PlayerPrefabTests 1/1
+passed /0.32s (only prefab test matched). git diff --check passed.
+The visually accepted solid-marker Studio remains open; final binary is also
+available in BUILD/player-markers-final. No UI interaction after owner acceptance.
+
+
+## P2 owner acceptance and P3 continuation - 2026-10-06
+
+Acceptance/documentation commit c1375eb9770cea6b9a2a9ecfa89eb9f64211ab4c;
+implementation through 6135b2d5395b4718b3adf198a95a08805307a919.
+Owner confirmed movement and Build Game both act as expected and authorized
+updating documentation, pushing the P2 branch and starting CI on PR #180.
+Owner intends to begin P3 in a separate chat. README, ROADMAP, P2 implementation,
+player continuation/UX follow-up, FEATURE_MATRIX and hand authoring documentation
+now record the accepted bounded checkpoint; docs/P3_CONTINUATION_HANDOFF.md gives
+the new chat its starting authority, scope, branch policy and remaining limits.
+Historical checks remain dated evidence, superseded by the new current checkpoint.
+
+Validation for this documentation-only change: git diff --check passed.
+Prior compiled implementation/build/native/focused regression evidence is above;
+no new source changes or rebuild required. Owner's exported executable hash/source
+revision was not independently captured. CI and independent exact-head review
+remain required; no merge or full P2/Alpha release gate closure claimed.
+Existing PR #180 description is being replaced to match the complete branch.
+Commands: git fetch origin; gh pr view 180; git push origin
+feature/p2-equipment-actions; gh pr edit 180 --title ... --body-file
+BUILD/p2-pr-body.md; gh pr checks 180; gh run list --branch
+feature/p2-equipment-actions. GitHub links/status are reported to the owner after
+push. Unrelated Tools/__pycache__ and log.txt remain untouched.
+Next: P3 shared hits/projectiles/impact framework on a separate dependent branch
+(or updated main after P2 merge). Read docs/P3_CONTINUATION_HANDOFF.md first.
+
+
+## P3 initial simulation foundation - 2026-10-06
+
+Implementation commit 4eaf5ec5371df730e631a7ca8a52acaceb8ac80e.
+Branch feature/p3-projectile-impact depends on P2 PR #180 head
+cde41068fcf38b8dd293a9defc85ebbf93435dcc. PR #180 remains open;
+four Windows checks were pending when inspected. No merge or gate closure.
+
+Changed CMakeLists.txt; ProjectileSimulation.h; ProjectileSimulation.cmake;
+ProjectileSimulationTests.cpp; ARCHITECTURE.md; FEATURE_MATRIX.csv; ROADMAP.md;
+P3_PROJECTILE_IMPACT_IMPLEMENTATION.md. Added bridge-owned transient point
+projectile simulation with bounded travel steps, explicit source attribution,
+gravity/lifetime, injected segment-query contract and typed single impact output.
+Existing health/events/physics remain authoritative. This is not live gameplay.
+
+Commands:
+cmake --build BUILD/renegade --config Release
+ --target RenegadeProjectileSimulationTests -- /m:2 /verbosity:minimal
+exit 0 /8.99s; BUILD/p3-foundation-build.log. Same Debug build exit 0;
+BUILD/p3-foundation-debug-build.log. Existing MSB8029 warnings remain.
+ctest --test-dir BUILD/renegade -C Release
+ -R '^RenegadeProjectileSimulationTests$' --output-on-failure
+1/1 passed /0.23s total. Same Debug test 1/1 passed /0.09s.
+git diff --check passed.
+
+Tests use deterministic query callbacks; no native world collision, weapon input,
+Character damage, effects, persistence, Test Level or packaged Runtime behavior
+has been added or verified. No owner visual/gameplay acceptance claimed.
+Unrelated Tools/__pycache__/ and log.txt untouched. Studio not closed or replaced.
+
+Next: native nearest-contact query and source-hierarchy exclusion with coverage
+proof for scene/Jolt/terrain/animated Character targets; map contact to governed
+target/surface identity and existing ApplyAttributedCombatDamage; integrate Runtime
+pause/reset and semantic actions; then Test Level and packaged-runtime parity.
+Read docs/P3_PROJECTILE_IMPACT_IMPLEMENTATION.md for audit and limits.
+
+
+## P3 native scene contacts and Character damage boundary - 2026-10-06
+
+Implementation commit bc470286122bedf4345250237dcd4701637cfead on
+feature/p3-projectile-impact, still dependent on P2 PR #180. Changed
+RuntimeProjectileWorld.h, ProjectileWorldTests.cpp, ProjectileSimulation.cmake,
+ARCHITECTURE.md, ROADMAP.md, FEATURE_MATRIX.csv and P3 implementation document.
+
+Native Scene ray/overlap queries exclude the explicitly bound shooter hierarchy,
+choose nearest eligible contact, resolve Character child hits to their governed
+root and retain material-subset stable identity. Origin overlap stops at time
+zero; coincident sphere-centre undefined normals use an incoming-facing fallback.
+Character damage delegates to existing ApplyAttributedCombatDamage and existing
+health/death/perception/ai.damage ownership. No second Player/physics/damage stack.
+
+Commands:
+cmake --build BUILD/renegade --config Release --target
+ RenegadeProjectileWorldTests -- /m:2 /p:BuildProjectReferences=false
+ /verbosity:minimal
+Final Release build/test cycle exit0 /9.20s; BUILD/p3-world-final-build.log.
+Same Debug build/test cycle exit0 /6.16s; BUILD/p3-world-debug-build.log.
+Retained unchanged P2 engine/bridge dependencies used; no clean full Runtime build.
+Existing MSB8029 warnings remain.
+ctest --test-dir BUILD/renegade -C Release -R
+ 'RenegadeProjectile(Simulation|World)Tests|RenegadeCharacterAiCombatTests'
+ --output-on-failure: 3/3 passed /0.14s.
+Same Debug projectile-only expression: 2/2 passed /0.14s.
+git diff --check passed.
+
+Intermediate origin-overlap test failed because native overlap normal was
+undefined at the collider centre; final implementation fixes and passes it.
+Fixture directly populates native CPU collider query caches and uses real Scene
+BVH/primitive queries. It proves ten-owner-child exclusion, nearest world cover,
+Character child resolution, bounded segment and origin overlap, health/death/
+legitimate knowledge/events, source/faction/self/dead-target rejection and material
+identity lookup. It does not prove Scene::Update query-cache construction,
+animated mesh/terrain/Jolt coverage, owner gameplay or package behavior.
+
+This adapter is not yet installed into Runtime action/update lifecycle.
+Next: physics-only Jolt blocker coverage and real actor owner bindings;
+then Runtime lifecycle/semantic emission and Test Level plus independent
+package proof. Impact profiles/effects/persisted asset definitions remain open.
+No release gate closure. Owner Studio left untouched. Tools/__pycache__/ and
+log.txt remain unrelated. P2 baseline Debug and Release checks passed when
+last inspected; two Studio checks still pending.
+
+
+## 2026-10-07 disposable supplied-ZIP bow proof
+
+Asset-only work on feature/p3-projectile-impact, base commit cf04bd3. No tracked engine source changes. Bow Playground now uses the supplied ZIP mannequin arms and SampleBow, corrected skinned mesh-object spaces, Idle/QuickShot pairs and one nock PSP. A new bow equipment product reuses the existing authored sticking arrow. Standalone DX12 evidence: three LMB shots, three launches, three target impacts, stuck state, no projectile/visual errors. Save/reopen pose comparison at ten samples: zero vertex difference. Editor reopened and Player Camera Preview and assembly editor display the bow instead of shotgun. Original shotgun assembly/equipment untouched; all bow work stays disposable. Proof capacity is 1000 using existing generic setting; draw/hold/ADS and proper ammo design remain deferred.
+
+Detailed asset IDs, transforms, commands and evidence paths are in docs/CODEX_BOW_PROJECTILE_HANDOFF.md and the disposable project's ZipPackSource directory. Temporary C++ diagnostics were built with generated Tests/CodexBowNativeInspect.vcxproj, Release x64, BuildProjectReferences=false; all final builds succeeded. Existing GraphicsProof working-tree modification predates this session and was not touched. No release gate marked complete; independent visual verification remains required.
+
+2026-10-07 bow visual correction: latest disposable weapon is ZIP Pack Bow Grip Verified 63994e63-eb90-4e9e-9e14-bc99516948ac. Source cant restored and 110 zero-weight grip vertices repaired with static bind root; preserve all existing weighted vertices. Idle and QuickShot native/source error below 1 micrometre at .25 seconds; restarted runtime screenshots show full grip and launch. Earlier Full Grip assets and upright pose superseded. See final authoritative section docs/CODEX_BOW_PROJECTILE_HANDOFF.md. Runtime left running; Studio assembly panel may have stale draft. Shotgun untouched. No release signoff.
+
+## Projectile UX cleanup candidate — 2026-10-07
+
+Base commit cf04bd38434dbc3e84c90ce22ee628e3c3953a80 on feature/p3-projectile-impact.
+Owner reports extensive testing of the repaired bow and accepts its behaviour.
+Previous-chat attachment establishes next work: UX cleanup, preset refinement,
+then visual animation event authoring. Human arms work is deferred.
+
+Changed Studio/src/PlayerProjectileEditor.cpp and StudioApplication.h:
+Basic/Advanced disclosure; conditional stick fields; readable firing/release
+labels; conditional multiple spawn points; sole authored point default for new
+bindings; preserve saved legacy and missing names. Native layout geometry moves
+only on state transitions. Runtime/schemas/shotgun assembly unchanged.
+
+Release Studio build and four focused Release tests pass. Native hidden X rotation
+30 survives hide/show, Save As New and Edit Copy reload from the asset service.
+Disposable proof projectile 66c57800-f4b0-40d1-bdd7-d7ae632e32fc remains unassigned.
+Bow binding reopens Bow_Nock and .133333 delay with no multi-point controls.
+Final footer/dropdown visual checks and exact commands are in
+docs/P3_PROJECTILE_UX_CLEANUP.md. Docs/roadmap/architecture/feature matrix updated.
+Pre-existing Tests/FirstPersonAssemblyGraphicsProof.cpp modification,
+Tools/__pycache__ and log.txt remain untouched. Bow products stay in BUILD.
+No commit/push/merge or release-gate closure. Next: owner inspect cleanup, refine
+existing presets, then reusable visual animation release marker.
+
+Preset refinement based on cf04bd38434dbc3e84c90ce22ee628e3c3953a80: Bullet tracer/sparks and Spell flame/sparks defaults; explanatory Studio preset help, model transforms retained. Changes: EngineBridge/src/ProjectileAssetService.cpp, Studio/src/PlayerProjectileEditor.cpp, Tests/ProjectileAssetTests.cpp. Release Studio build PASS, preset serialization/model-free feedback CTest PASS 1/1. Logs BUILD/projectile-presets-build.log and projectile-presets-tests-build.log. Native Spell selection verified (flame, sparks, gravity 0, readable help), BUILD/projectile-presets-spell.png. Saved bow/shotgun assets untouched; no migration or gate closure. Next: animation markers; two-spawn visual proof pending.
+
+## Visual release timing candidate
+Adds SET RELEASE IN ANIMATION to Weapon projectiles. Uses saved equipment action animation and production FirstPersonAssemblyService in a private ModelImportPreview. Preview cursor scrubs the synchronized assembly; release marker scrubs to its pose; Mark current pose copies playhead time. Use release time transfers marker seconds to the existing draft releaseSeconds control. Cancel discards marker changes; Apply to this player and Save level remain the persistence path. No assembly edits or new schema. Missing assembly/action reports a message and keeps numeric timing available. Marker must be finite, nonnegative, before clip end and at most five seconds.
+Changed: Studio/src/PlayerProjectileEditor.cpp, Studio/src/StudioApplication.h, Studio/src/StudioApplication.cpp, Studio/src/ModelImportPreview.h. Based on cf04bd38434dbc3e84c90ce22ee628e3c3953a80. Build/visual verification pending; no release-gate closure. This is projectile release authoring; a general multi-event persisted timeline remains future work.
+
+Marker native verification PASS on final rebuilt Studio: correct saved mannequin/bow assembly shown at QuickShot 0.133333 s, duration 0.833333 s. Numeric marker 0.3 scrubs both tracks and transfers 0.3 into draft delay. Cancel retains original 0.133333. Closing without Apply/reopening restores saved timing. Play reaches clip end; Mark current pose copies 0.833333; end marker is rejected by Use time validation. Restored marker to 0.133333 and left window open. No Apply, asset save or level save during marker verification. Evidence: BUILD/projectile-marker-bow.png, projectile-marker-scrub.png, projectile-marker-transfer.png, projectile-marker-end-rejected.png. Release build logs projectile-marker-build.log and projectile-marker-build-final.log PASS. CTest --test-dir BUILD/renegade -C Release -R '^(RenegadeProjectileAssetTests|EquipmentAsset|LaunchSocket)$' --output-on-failure PASS 3/3 in 1.09 s; git diff --check PASS. Runtime launch at a newly authored marker, two-spawn visual check, independent exact-commit review and generic multi-event timeline remain pending. No gate closure or push.
+
+## Saved release marker runtime proof
+Native marker set to 0.3 s, Use release time then Apply produced NEW equipment 8be37877-0bec-4c93-99fb-23bf2032e28c. Persisted .requipment has release_seconds 0.30000001192092896, Bow_Nock, existing assembly and Flaming Arrow - Stick identities. Original equipment 14a147e6-be41-45e2-adda-67b9d00abb77 remains unchanged. Test Game snapshot launched from current unsaved scene through production Studio Play. Runtime startup took longer than expected; initial lack of visible window was startup, not a failed Play action.
+Controlled shot diagnostic samples show pending=1 at animation 266 ms (launch count 1 baseline), pending=0 and launch count 2 at 306 ms. Impact count becomes 2 at 813 ms. Exactly one new launch and one impact for the controlled click; launch socket Bow_Nock; no projectile_error or projectile_visual_error. This brackets launch to (266,306] ms using sampled diagnostics; does not claim frame-exact timing. Existing effect/stick presentation visibly intact. Evidence BUILD/projectile-marker-runtime-before.json and projectile-marker-runtime-timing.json.
+Runtime closed; Ctrl+Z restored original equipment assignment (Undo 0 / Redo 1), native Weapon projectiles reopened Bow_Nock and 0.133333 seconds. No level save during this validation; original scene on disk retained. Disposable 0.3 s proof copy remains unassigned for review. All work confined to Bow Playground; shotgun untouched. No new source/build change this validation turn. Independent exact-commit review and two-spawn visual check remain; no release gate closure.
+
+## Two-spawn native UX verification complete
+Temporarily assigned existing Shotgun - Both PSPs equipment 0733db52-8b6f-472c-a9bd-948e9567ab5c in disposable Bow Playground through Apply loadout. Weapon projectiles correctly reopened PSP_Left, Both together, PSP_Right and 0.1 second delay. All controls/footer remain visible without overlap. Firing dropdown correctly positioned. Selected spawn point hides second selector and moves timing/PSP/marker controls up; Alternate between two restores PSP_Right selection. Draft policy changes discarded without Apply to this player. Closed panel and Ctrl+Z restored original ZIP Bow QuickShot Arrow Proof 14a147e6-be41-45e2-adda-67b9d00abb77, confirmed in Starting Equipment and bow camera preview. No equipment/assembly or level save during check. Evidence BUILD/projectile-ux-two-spawn-both.png, projectile-ux-two-spawn-single.png, projectile-ux-two-spawn-alternate.png, projectile-ux-two-spawn-restored.png.
+This resolves the previously pending two-spawn visual check. Three owner-directed local implementation stages now have local build, persistence/native UI evidence, and saved-release runtime timing evidence. General multi-event animation timeline and independent exact-commit release review remain outside this completed local pass. No commit, push, merge or release-gate closure.
+
+## P3 first-class Hitscan checkpoint — 2026-10-08
+
+Weapon firing now supports an explicit Physical projectile or Hitscan / instant
+ray mode per semantic action. Hitscan is not represented by fake projectile
+speed/gravity values. Equipment schema v3 persists fire_mode, range and damage,
+while schema v1/v2 physical-projectile equipment remains readable and unchanged.
+A Hitscan binding has no projectile asset dependency.
+
+Studio's Weapon firing panel exposes Fire mode, Range and Damage for Hitscan and
+retains the same named PSP, first/alternate/both policy and animation fire marker
+used by travelling projectiles. Projectile search/New/Edit Copy are hidden in
+Hitscan mode. Hitscan authoring does not depend on the projectile asset catalogue.
+
+Runtime resolves Hitscan without loading a projectile asset, preserves accepted
+weapon action/ammunition/animation timing, applies the existing muzzle-to-camera
+aim and cover rules, then performs one bounded nearest-contact scene query.
+Character contacts use the existing attributed combat-damage seam and display a
+brief centre hit confirmation; static world contacts do not require a usable
+health system. hitscan.fired and hitscan.impact use the governed gameplay event
+boundary. Beam/continuous casts and pellet spread remain separate work.
+The shared surface presentation checkpoint below supersedes the earlier
+decal-profile limitation; governed per-surface audio asset binding remains open.
+
+Validation: Release EngineBridge, Runtime and normal Studio compile passed; the
+normal Studio link was blocked only because the owner's existing Studio process
+held RenegadeStudio.exe. A separate BUILD/hitscan-studio/RenegadeStudio.exe
+linked successfully without closing that session. EquipmentAsset, LaunchSocket
+and RuntimeProjectileSession focused executables pass. Tests cover schema-v3
+roundtrip/invalid values, Runtime resolution without a projectile asset, authored
+ray range, blocked-query failure, and unchanged projectile simulation behavior.
+git diff --check passes. Native owner visual/gameplay acceptance, package parity,
+Jolt-only blockers and independent exact-head review remain open; no P3 gate
+closure, commit, push or merge is claimed.
+
+## P3 shared impact-surface presentation checkpoint — 2026-10-08
+
+Projectile contacts now carry both the existing stable material identity and an
+explicit semantic impact surface. Creator materials author
+`renegade.impact_surface` through a normal Material Inspector **Impact Surface**
+dropdown: Default / generic, Metal, Wood, Concrete, Stone, Dirt / ground, Glass
+or Water. The edit is command-backed and undoable. Character is runtime-owned
+rather than authorable; confirmed governed Character contacts classify
+automatically. Newly created Renegade terrain explicitly tags slope material as
+Stone and the other terrain materials as Dirt. No type is inferred from material
+names, filenames, colours or textures.
+
+Hitscan and travelling projectiles now use the same presentation path. Confirmed
+contacts create a bounded surface-tuned native burst; Metal / Glass / generic use
+spark-style feedback while Wood / Concrete / Stone / Dirt / Water / Character use
+surface-tuned particulate feedback. Non-Water / non-Glass / non-Character world
+contacts also receive a generated transient Wicked decal aligned to the contact
+normal and attached to the contacted transform when available. Impact marks are
+capped at 64 and expire after 18 seconds; impact emitters remain under the existing
+bounded effect cap and clean up through RuntimeProjectileVisuals. Physical
+projectiles retain their authored impact layer and stick/disappear policy in
+addition to the shared surface response. Character contacts in both firing modes
+use the same centre hit confirmation.
+
+`hitscan.impact` and `projectile.impact` payloads now include
+`surface_type=<token>` as well as the stable `surface` material identity. This
+is the governed sound-cue/script seam. Current AudioService authoring is
+scene-SoundSource / filename based and has no governed one-shot asset-ID API, so
+this checkpoint deliberately does not bypass audio governance with raw file
+paths. Per-surface audio cue asset binding remains follow-on work.
+
+Validation: Release RenegadeEngineBridge, RenegadeRuntime and the normal
+RenegadeStudio.exe compile/link pass using VS 2026/v145. ProjectileWorldTests
+passes explicit Metal metadata classification, command Undo and automatic
+Character classification. RuntimeProjectileSessionTests passes shared Metal burst
++ attached mark creation, bounded cleanup and Character no-decal policy.
+LaunchSocketTests passes the existing muzzle aim / cover / Hitscan query
+regression. Two stale LaunchSocket test processes were the only cause of an
+intermediate LNK1104 and were terminated; Studio was not killed. No P3 gate
+closure, commit, push or merge is claimed.
+
+## P3 object Surface Type continuation - 2026-10-08
+
+Supersedes the material-first creator workflow in the preceding checkpoint.
+Creator steps: select an object; choose Surface Type directly in its Inspector.
+The field stays visible independently of collapsed Transform/Rendering/Materials
+sections. Choices: Default, Metal, Wood, Concrete, Stone, Dirt / Ground, Glass,
+Water. No creator-facing impact profile or override chain is introduced.
+
+EngineBridge ObjectImpactSurfaceService stores the classification on the
+selected Object/Collider entity's native MetadataComponent. No mesh subset
+binding or shared MaterialComponent is changed. Runtime checks governed Character
+first, then explicit object metadata, then existing material classification for
+untouched objects. Explicit Default means generic response. Older material
+tags and terrain defaults remain compatible. Both firing modes already share
+the same classification and impact presentation/event path. Audio binding
+remains future work; surface_type is the event seam, not a claim of finished SFX.
+
+The command restores both prior value and prior absence on Undo; Redo reapplies.
+ProjectileWorldTests adds shared-mesh instance isolation, untouched material and
+subset assertions, explicit Default, subset-free object response, automatic
+Character precedence, invalid authoring rejection and native WISCENE archive
+save/reload. This does not claim packaged gameplay or owner visual acceptance.
+
+Visual material assignment is a separate visual property. Material Target still
+selects an already-bound material to edit; it is not relabelled as assignment.
+A future assignment command must create a private mesh derivative for the selected
+instance before altering subset bindings, preserve skinning/LOD/resource identity,
+and restore the original mesh on Undo. Surface Type needs none of those changes.
+
+Working-tree provenance: HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80, branch feature/p3-projectile-impact.
+Before this continuation: 29 modified tracked files plus ImpactSurface.h,
+MaterialImpactSurfaceService.h, two P3/bow documents, Tools/__pycache__ and log.txt.
+Existing HANDOFF records account for preset refinement, visual marker authoring,
+Hitscan and shared impact presentation. FirstPersonAssemblyGraphicsProof.cpp was
+already modified before the supplied bow work; its 43-line change is preserved
+and remains separately unverified. Tools/__pycache__ and log.txt are untouched.
+Complete pre-edit tracked binary diff plus both untracked impact headers retained
+in BUILD/p3-surface-before. This is provenance triage, not independent review of
+every earlier change. No commit/push/merge authorized or performed.
+
+This continuation changes ObjectImpactSurfaceService.h (new), ImpactSurface.h
+(display labels), RuntimeProjectileWorld.h, Phase5Gate4MaterialInspector.cpp,
+S1BInspectorSectionMigration.cpp, StudioApplication.h, ProjectileWorldTests.cpp and the four context
+documents plus FEATURE_MATRIX. No Wicked source/submodule or asset edits.
+Build command: cmake --build BUILD/renegade --config Release --target
+RenegadeStudio RenegadeRuntime RenegadeProjectileWorldTests
+RenegadeRuntimeProjectileSessionTests -- /m:2 /verbosity:minimal
+Log: BUILD/p3-object-surface-build.log. Verification results follow below.
+
+Imported asset roots are supported: a selected transform parent with Object/Collider descendants can carry Surface Type. Runtime uses the nearest authored object/ancestor, then legacy material metadata. This changes only the selected asset instance hierarchy; automatic Character classification remains first. Shared-mesh sibling and imported-root precedence/Undo are regression checked.
+
+Standalone DX12 Runtime final executable launched the disposable saved Bow Playground. Controlled LMB: one launch, one target impact at z=7.8, one stuck arrow, four live effect emitters, no projectile/visual errors. Evidence BUILD/p3-surface-runtime-shot.json and p3-surface-runtime-impact.png; this is unchanged saved-scene regression, not object-authored Metal/SFX or package proof. Runtime closed normally after check.
+
+Final verification: full Release EngineBridge/Studio/Runtime and both modified focused test targets build PASS (BUILD/p3-object-surface-build.log, exit 0, 421.06 s). Final complete Studio rebuild after UI label/header and imported-root changes PASS (BUILD/p3-object-surface-studio-final.log, exit 0, 273.20 s); command cmake --build BUILD/renegade --config Release --target RenegadeStudio -- /m:4 /p:BuildProjectReferences=false /verbosity:minimal. CTest Release expression ^(RenegadeProjectileWorldTests|RenegadeRuntimeProjectileSessionTests|LaunchSocket)$ PASS 3/3, 0.20 s (BUILD/p3-object-surface-final-ctest.log). git diff --check PASS. Existing MSB8029 and Studio nodiscard warning remain. Pre-existing GraphicsProof diff compared with the pre-edit checkpoint and preserved exactly. Native Inspector visual verification follows; no release gate closure.
+
+Native Studio object selection verified Surface Type visible above collapsed component sections. Dropdown shows all eight exact categories; selecting Metal authors the object and creates one Undo entry; Ctrl+Z restores Default and removes the dirty marker. Evidence BUILD/p3-surface-object-inspector.png, p3-surface-dropdown.png, p3-surface-metal-selected.png, p3-surface-undo-default.png. Visual check caught click-through opening the underlying Character section: surface callback now queues Inspector refresh until after native GUI dispatch instead of synchronously hiding/relaying out the active popup. BUILD/p3-object-surface-click-build.log and final native retest follow. No level/asset save was performed.
+
+Click-through fix Release Studio incremental rebuild PASS, exit 0, 12.36 s, log BUILD/p3-object-surface-click-build.log. Runtime/test binaries unchanged by this GUI-only fix. Final git diff --check PASS.
+
+Final native click-through retest PASS on the rebuilt executable: with Character collapsed and Surface Type Default, opening dropdown and selecting Metal changes only Surface Type and creates one Undo entry; Character stays collapsed. Evidence BUILD/p3-surface-clickfix-before.png and p3-surface-clickfix-after.png. Ctrl+Z restores Default and the clean scene, final evidence BUILD/p3-surface-final-restored.png. Studio left open in disposable Bow Playground with Projectile test wall selected. No scene/equipment/asset save, commit, push or merge. Surface Type local implementation verified; actual visual material reassignment, governed SFX and packaged/exact-commit release review remain separate open work.
+
+## P3 continuation state verification - 2026-10-08
+
+The continuation checkout already contained the completed object Surface Type implementation and final native click-through fix described above. No code was rewritten during this verification. Reviewed ObjectImpactSurfaceService, RuntimeProjectileWorld classification, the Inspector dropdown/section, focused regression assertions and saved native dropdown evidence (BUILD/p3-surface-dropdown.png). Existing Release build results remain historical evidence; no new build or live UI run is claimed here.
+
+Fresh command: ctest --test-dir BUILD/renegade -C Release -R '^(RenegadeProjectileWorldTests|RenegadeRuntimeProjectileSessionTests|LaunchSocket)$' --output-on-failure (using the CMAKE_CTEST_COMMAND executable recorded in CMakeCache). Result PASS 3/3, 0.21 s, exit 0. git diff --check PASS, exit 0. FirstPersonAssemblyGraphicsProof diff matches its BUILD/p3-surface-before/tracked.patch checkpoint exactly. This confirms preservation, not independent validation of that pre-existing proof addition. Broad-tree provenance review remains incomplete; branch remains feature/p3-projectile-impact at cf04bd38434dbc3e84c90ce22ee628e3c3953a80. No commit/push/merge.
+
+Current surface target is locally implemented. Material Target still only chooses a bound material to edit; visual material reassignment and governed impact SFX are not implemented. For future visual assignment, use a bridge-owned command that privately derives the selected instance mesh before changing bindings, preserves skinning/LOD/asset dependencies, restores the original mesh on Undo, and covers shared-instance isolation plus save/reload and native rendering. Keep Surface Type independent and two-step. No release gate closure.
+
+## P3 governed impact audio - 2026-10-08
+
+ImpactAudioService adds a project-owned schema-v1 bank at
+Content/Audio/Impacts/ImpactAudio.renegade-impact-audio. It maps explicit semantic
+surface tokens to bounded lists of governed LP08 Audio .rasset stable IDs.
+No filenames or renderer material names classify contacts. Ordinary creation stays
+select object -> Surface Type -> done; there is no per-object sound setup.
+Default and Character have no supplied cues and remain silent unless an explicit
+Default/Character bank entry is provided.
+
+Both Hitscan and travelling-projectile contacts dispatch the same transient native
+3D audio player. It resolves and validates all bank assets once per scene revision
+before activation, uses the SoundEffect bus, avoids consecutive variant repeats,
+caps voices at 32, updates listener spatialization, removes ended voices with a
+ten-second safety lifetime, pauses/resumes existing voices and stops them on reset,
+screen transitions, scene replacement and shutdown. It never serializes playback
+voices into the scene. Legacy projects without a bank remain compatible/silent.
+
+Audio products live in Content/Audio/Impacts/<Surface>/Impact_1.rasset and
+Impact_2.rasset. Byte-identical supplied WAVs are retained in SourceAssets/Audio/Impacts
+for governed reimport. Test Level snapshots include bank, registry and required
+products; Build Game discovery adds the bank and all required audio products to
+the normal dependency graph. Packaged Runtime resolves audio stable IDs through
+content-manifest.json and never needs retained SourceAssets.
+
+Tests/ImpactAudioTests.cpp covers bank identity/save-reload, duplicate rejection,
+bounded PCM WAV validation, governed import/resolution, snapshot closure, package
+lookup without sources/registry, native voice playback/variant isolation, cap,
+pause lifetime and reset. Its --install helper imports the explicitly mapped
+supplied packs; --verify and --tag-metal run graphics-enabled real-scene Build Game
+discovery plus supplied WAV decode checks. --tag-metal is for the disposable Bow
+Playground only. New-project automatic starter-bank installation and bank editing
+UI are not added by this checkpoint.
+
+Working-tree continuity: HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80,
+feature/p3-projectile-impact. Existing broad P3 changes are preserved; no
+commit/push/merge. Pre-edit copies of touched tracked implementation files are
+in BUILD/p3-audio-before. New bridge header/source, test executable/source and
+CMake registrations; RuntimeApplication h/cpp, TestLevelSnapshotService,
+WindowsGameBuildProjectService and context docs changed. No Wicked edits.
+Native test wall Metal authoring is confined to BUILD/bow-projectile-playground;
+pre-edit scene retained in BUILD/p3-audio-before/ArmsPlayground.wiscene.
+Verification and live evidence follow below.
+
+Verification: Release EngineBridge/Runtime/normal Studio and focused targets build PASS
+(exit 0, BUILD/p3-impact-audio-build-final.log). Test fixture product-folder setup
+and native helper compilation fixes were followed by successful test-only builds
+(BUILD/p3-impact-audio-tests-build.log and p3-impact-audio-native-build.log).
+CTest Release expression ^(RenegadeImpactAudioTests|RenegadeProjectileWorldTests|
+RenegadeRuntimeProjectileSessionTests|LaunchSocket)$ PASS 4/4 (0.70 s initial;
+final rerun recorded in BUILD/p3-impact-audio-final-ctest.log).
+Command: cmake --build BUILD/renegade --config Release --target
+RenegadeImpactAudioTests RenegadeRuntime RenegadeStudio
+RenegadeProjectileWorldTests RenegadeRuntimeProjectileSessionTests --
+/m:3 /verbosity:minimal. Existing MSB8029 warnings remain.
+
+Supplied pack import: RenegadeImpactAudioTests --install
+BUILD/bow-projectile-playground/Bow-Playground.renegade <first-pack-directory>
+<alternate-pack-directory>. All 14 governed products and bank were imported.
+The initial helper then crashed in native scene dependency extraction without a
+graphics device (exit -1073741819); no Runtime gameplay crash occurred. Import is
+now separated from graphics-enabled --verify/--tag-metal. Native --tag-metal
+verification PASS exit 0: saved disposable wall Metal; Build Game discovery
+audio=14 bank=1; native supplied WAV decode clips=14
+(BUILD/p3-impact-audio-native-verify.log).
+
+Standalone final DX12 Runtime launched the disposable Bow Playground and reported
+impact.audio.ready clips=14. Live-session diagnostics capture shows 23 physical
+projectile impacts and alternating supplied Metal asset IDs in impact.audio.played.
+Evidence BUILD/p3-impact-audio-runtime-before.json,
+p3-impact-audio-runtime-live.json and p3-impact-audio-runtime-ready.png.
+No additional simulated fire input was sent during that live session; observed
+input was already occurring on DESIGN. Runtime remains open for owner listening.
+This is live physical-projectile response evidence; final live Hitscan audio,
+all-surface listening and full exported-game playback remain owner/next-check work.
+Package lookup and dependency discovery pass focused proof; do not claim a newly
+promoted package was run. No gate closure, commit, push or merge.
+
+
+P3 impact audio validation follow-up (local uncommitted tree on feature/p3-projectile-impact)
+HEAD remains cf04bd38434dbc3e84c90ce22ee628e3c3953a80; no commit/push/merge.
+This supersedes the previous final-rerun warning in HANDOFF and P3_IMPACT_AUDIO_FINAL_CHECK.
+
+LaunchSocket reproduced a timeout after jobs initialization, localized with temporary checkpoints to native copy-scene transform/hierarchy updates. Pinned Wicked workers unconditionally sleep after draining queues, suggesting a possible missed notification; this is an inference, not a proven upstream fix. No Wicked source/submodule changes made. The LaunchSocket unit fixture now uses Wicked's documented uninitialized synchronous Execute/Dispatch mode, retaining all archive remap, hierarchy/animation, save/reload, PSP/muzzle and Hitscan assertions. Its worker-scheduling coverage is explicitly absent; Runtime/native validation still uses normal workers. Added CTest timeout 20 seconds. Temporary checkpoints removed, pre-edit file retained in BUILD/p3-audio-before/LaunchSocketTests.cpp.
+Commands: cmake --build BUILD/renegade --config Release --target RenegadeLaunchSocketTests RenegadeImpactAudioTests -- /m:3 /verbosity:minimal; PASS.
+ctest --test-dir BUILD/renegade -C Release -R '^LaunchSocket$' --repeat until-fail:50 --timeout 10 --output-on-failure: PASS 50 consecutive runs, 0.81 seconds (BUILD/p3-launchsocket-synchronous-repeat.log).
+Final focused CTest expression '^(RenegadeImpactAudioTests|RenegadeProjectileWorldTests|RenegadeRuntimeProjectileSessionTests|LaunchSocket)$' --timeout 30 --output-on-failure: PASS 4/4, 0.53 seconds (BUILD/p3-impact-audio-export-final-ctest.log).
+
+Tests/ImpactAudioTests.cpp adds explicit --stage <descriptor> manual GPU fixture using production dependency preparation, build plan, staging, executable identity and stage validation. Root-level BUILD/renegade/Release/RenegadeImpactAudioTests.exe is the correct binary (not Tests/Release). Invoke from repo root with --stage BUILD/bow-projectile-playground/Bow-Playground.renegade. Runtime support/BuildInputs come from Release outputs; proof icon is generated. This stages a diagnostic export; does not run the full Studio workflow smoke/promotion, and does not overwrite an owner-visible final build.
+Build logs p3-impact-audio-export-build.log, p3-impact-audio-stage-build.log and p3-impact-audio-identity-build.log all exit 0. Helper initially rejected incorrect governed licence labels and omitted Gate 3 identity; corrected through native production services before acceptance. No product engine fix required for these helper mistakes.
+Stage log BUILD/p3-impact-audio-stage.log: PASS, discovery audio=14 bank=1, native decode clips=14. Package root recorded in BUILD/p3-impact-audio-stage-path.txt. Launch its RenegadeRuntime.exe without arguments, with package root as working directory.
+Native packaged runtime PID 46088 at validation: no explicit project argument, no source WAV directory; GameData descriptor/resources load, clips=14, 8 projectile launches and 8 Metal impacts with alternating supplied stable IDs. Captured BUILD/p3-impact-audio-package-live.json and p3-impact-audio-package-play.log. Native package bootstrap reaches gameplay only after package integrity/identity checks. Screenshot BUILD/p3-impact-audio-package.png inspected: DX12 75 FPS, bow/arms, test wall and visible impact/stuck-arrow feedback. Runtime left open; owner audio quality/volume judgement remains pending. Only Metal bow playback was exercised live; all 14 decode successfully, but live all-surface/Hitscan audio remains unclaimed.
+Additional changed files this follow-up: Tests/LaunchSocketTests.cpp, Tests/CMakeLists.txt, Tests/ImpactAudioTests.cpp, HANDOFF.md and docs/P3_IMPACT_AUDIO_FINAL_CHECK.md. Earlier broad working tree and FirstPersonAssemblyGraphicsProof.cpp retained; provenance review/independent gate verification still required.
+
+
+### P3 impact VFX first three surfaces (local candidate, 2026-10-08)
+Metal, Wood and Concrete now have separate generated 64x64 masks and bounded presets:
+Metal narrow short sparks and a dent/scuff mask; Wood pointed splinters, a small tan dust puff and a split mask; Concrete irregular chips, a broader grey dust puff and a chipped mask. GetImpactTexture shares seven built-in GPU textures; no external texture paths, imports, profiles or new inspector controls. Other categories retain their earlier presets. Hit normals direct bursts outward; random velocity spread uses native normal_factor with random_factor=1 to avoid negative starting sizes. Dust expands and fades, fragments shrink/fall. Embedding projectile definitions use reduced particle counts and decal size; this is an internal stick-on-impact heuristic, not a dedicated weapon-class system.
+Native effect cleanup remains capped at 128 emitters, each polished burst capped at 64 particles; decals remain capped at 64 and expire after 18 seconds or reset. Both Hitscan and physical projectile presentation use this common function. Contact diagnostic records remain, but orange debug contact spheres are removed from normal gameplay rendering.
+No change to select-object -> Surface Type -> done workflow. No authored custom flipbook UI, mesh debris physics, or final remaining-surface art added.
+Changed files: Runtime/src/RuntimeImpactTextures.h (new), Runtime/src/RuntimeProjectileVisuals.h, Runtime/src/RuntimeProjectileSession.h, Runtime/CMakeLists.txt; Tests/ImpactAudioTests.cpp adds disposable --tag-wood/--tag-concrete and governed --quiet-projectile <descriptor> <asset-id> validation helpers.
+Bow Playground original flaming-arrow definition retained at BUILD/p3-audio-before/FlamingArrow-before-vfx.rprojectile. Quiet-arrow test clears only its flight layers and explicit projectile impact overlay through SaveProjectileAsset, to make surface response visible. Test wall surface is set using the normal scene-document authoring service.
+First visual captures failed acceptance: flaming-arrow overlay obscured surface bursts; debug spheres persisted; native spread was disabled and fragments were too small. Corrected emitter spread and size before accepting later visual evidence. Runtime link initially failed because the test game locked the binary; test game closed and rebuilt. Quiet-projectile helper initially lacked ProjectileAssetService include; fixed before use.
+Verification results and any remaining visual limits follow in HANDOFF. No commit/push/merge; existing broad working-tree provenance remains under review.
+
+
+P3 VFX validation follow-up (supersedes preliminary visual scope notes above)
+HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80 remains unchanged on feature/p3-projectile-impact. No commit/push/merge.
+Final changes additionally remove the legacy projected orange X contact overlay in RuntimeApplication.cpp; ordinary target-hit HUD confirmation remains. RuntimeProjectileSession keeps diagnostic marker counts while omitting debug contact sphere drawing.
+Immutable-save correction: SaveProjectileAsset creates a NEW stable asset. The first quiet helper saved a copy but did not reassign the bow, so its first screenshots still showed the original flaming overlay. Updated helper now saves the quiet projectile, saves a new equipment copy, then changes Player Start assignment through SetPlayerControllerSettingsCommand and SceneDocumentService.Save. All original projectile/equipment definitions remain; test scene assignment changes are confined to BUILD/bow-projectile-playground. Latest quiet projectile ID 500fb466-f3aa-4856-a4e3-464c233abf10 (BUILD/p3-vfx-quiet-assignment.log); wall is Concrete. Original scene and flaming-arrow backups remain under BUILD/p3-audio-before.
+Final build: cmake --build BUILD/renegade --config Release --target RenegadeRuntime RenegadeImpactAudioTests -- /m:3 /verbosity:minimal PASS, BUILD/p3-impact-vfx-presentation-build.log. RuntimeProjectileSession target also rebuilt successfully in p3-impact-vfx-accepted-build.log; native header masks compile into Runtime. Existing MSB8029 warnings remain. Link retries were needed while a test Runtime held its executable open; no engine linker defect.
+Final focused CTest: ctest --test-dir BUILD/renegade -C Release -R '^(RenegadeImpactAudioTests|RenegadeProjectileWorldTests|RenegadeRuntimeProjectileSessionTests|LaunchSocket)$' --timeout 30 --output-on-failure PASS 4/4, 0.60 s (BUILD/p3-impact-vfx-final-ctest.log). Earlier CTest ran while the session-test binary was being rebuilt and reported BAD_COMMAND; final completed-build run supersedes it. git diff --check passed.
+Live captures before the last overlay/quiet-assignment fix show the corrected scattered fragments on Wood and Concrete, with matching surface/audio events, but the old flaming overlay still dominated. Do not count these as final polished VFX acceptance. Latest quiet-arrow captures could not establish acceptance: automated input lost focus or camera aim and assertion found no Concrete impact. Automated mouse input stopped to avoid interfering with owner desktop use. Owner final appearance check is pending; these generated masks are a built-in first pass, not final realistic art. No final live Hitscan/all-surface visual claim.
+Diagnostic export uses --stage via native build plan/staging/identity services, does not promote an owner final directory; result log BUILD/p3-impact-vfx-stage.log. This does not replace full Studio Build Game workflow/owner playback validation. No VFX paths/imports/settings added; shared-mesh/material safety and two-step Surface Type UX retained.
+Additional source file modifications beyond previous P3 audio work: Runtime/CMakeLists.txt; Runtime/src/RuntimeImpactTextures.h (new); Runtime/src/RuntimeProjectileVisuals.h; Runtime/src/RuntimeProjectileSession.h; Runtime/src/RuntimeApplication.cpp; Tests/ImpactAudioTests.cpp. Docs updated here plus ARCHITECTURE, ROADMAP, FEATURE_MATRIX and P3_PROJECTILE_AUTHORING_UX. No Wicked or unrelated proof-file edits.
+Next: owner checks quiet-arrow Concrete dust/chips, then Wood and Metal; improve realistic texture/flipbook quality if needed. Remaining surfaces retain earlier visuals. Do not close P3 gate before independent exact-commit verification and broad-tree provenance review.
+
+### P3 impact VFX revision — 2026-10-08 (uncommitted candidate)
+Owner rejected the first procedural dust/chip presentation as cartoonish and insufficiently differentiated. This overrides nominal first-pass build success. Creator UX remains select object then Surface Type; no new creator settings.
+
+At HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80, with Wicked pinned to 3a800b7134aafe58461093c8abb2e274d4e64033, this revision adds Runtime/Content/Effects/Impacts/ConcreteDust.png and PROVENANCE.md, Runtime/RuntimeImpactTextures.rc.in and Runtime/src/RuntimeImpactDustResource.cpp; modifies Runtime/CMakeLists.txt, RuntimeImpactTextures.h, RuntimeProjectileVisuals.h, Tests/ImpactAudioTests.cpp and Tests/ProjectileSimulation.cmake. Existing broad working tree remains preserved and provenance review is still pending. Nothing committed/pushed/merged.
+
+The original generated RGBA PNG is embedded as Windows RCDATA 7301, loaded with native Wicked resource decoding and cached for reuse; source provenance records prompt and SHA-256. No loose project sprite dependency. Concrete has fewer/larger powder sprites and polygon chips; Wood has sparse brown splinters with a smaller brown powder accent; Metal has fewer/shorter pale warm sparks. No impact audio category or authoring changes. Other surface presets and authored overlays retain their previous behaviour. Native random_factor remains 1 because it affects initial size as well as velocity; spread uses normal_factor. scaleX is end-of-life size, not sprite aspect.
+
+Exact commands (repository root; cmake/ctest are the Visual Studio CMake tools):
+- cmake --build BUILD/renegade --config Release --target RenegadeRuntime RenegadeImpactAudioTests --parallel 4 — PASS; BUILD/p3-realistic-impact-final-build.log. Earlier attempts failed on an incorrect Resource namespace and ambiguous initializer-list transform overloads; corrected before final build. Existing MSB8029 warnings remain.
+- ctest --test-dir BUILD/renegade -C Release -R 'Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession|LaunchSocket)Tests' --output-on-failure — 3/3 PASS (LaunchSocket actual CTest name is LaunchSocket).
+- ctest --test-dir BUILD/renegade -C Release -R LaunchSocket --output-on-failure — 1/1 PASS. Logs BUILD/p3-realistic-impact-ctest.log and BUILD/p3-realistic-impact-launchsocket.log.
+- BUILD/renegade/Release/RenegadeImpactAudioTests.exe --surface-range BUILD/bow-projectile-playground/Bow-Playground.renegade — PASS; embedded GPU texture 1254x1254; three targets persist their semantic categories and private factory meshes across save/reload; native discovery audio=14 bank=1 and 14 decoded clips. BUILD/p3-realistic-impact-range-final.log.
+- Same executable --stage with that descriptor — PASS native staging/integrity validation; BUILD/p3-realistic-impact-stage.log. Studio full Build Game smoke/promotion not repeated.
+- python BUILD/p3_verify_dust_resource.py — PASS: built Runtime and staged Runtime both contain exact 1,417,201-byte PNG SHA-256 matching source. BUILD/p3-realistic-impact-resource.log.
+- python Tools/Read-RenegadeDiagnostics.py --process runtime — responsive standalone Runtime; no projectile or projectile_visual_error; owner live firing recorded 31 impacts with concrete/wood/metal surface_type events and native audio playback. BUILD/p3-realistic-impact-live-final.json.
+- git diff --check — PASS (existing CRLF notices).
+
+Disposable playground adds Metal left / Concrete centre / Wood right in front of the existing wall. Factory cubes own separate mesh/materials; no shared mesh subset mutation. Runtime-only scene capture BUILD/p3-realistic-impact-range.png visually confirms the three targets and retained arrows. Source bitmap visually inspected; final in-motion VFX appearance has NOT been accepted by owner and impact frames were not captured in this checkpoint. Runtime left open for owner comparison; no automated mouse/key shooting. Next: owner judges these three responses, refine appearance from that feedback, then return to safe Inspector material assignment and broad-tree provenance review. Do not close P3 gate. Previously documented threaded job-scheduler concern remains unresolved.
+
+### Glass / Water behaviour prototype — 2026-10-09; owner rejects visual quality
+HEAD remains cf04bd38434dbc3e84c90ce22ee628e3c3953a80; Wicked remains pinned at 3a800b7134aafe58461093c8abb2e274d4e64033. No commits/push/merge; broad working-tree provenance still not reviewed.
+
+User verdict: "as a test, its very successful, but the quality of all impact effects is far too low. they look generic and stylised where they should really look realistic". This is authoritative: behaviour proof successful, ALL impact art rejected, no visual acceptance or P3 gate closure. Earlier candidate descriptions must not be interpreted as production quality.
+
+Added Runtime/src/RuntimeImpactGeometry.h: short-lived triangular-prism Glass shards with ballistic movement/spin; translucent Water crown and two expanding rings aligned to contact normal. Maximum 128 geometry pieces, oldest eviction, expiry/pause/reset cleanup. Each transient entity owns mesh/material on the same entity; no shared authored mesh mutation or gameplay rigidbody. RuntimeProjectileVisuals adds these entities to excluded visual roots so projectile queries ignore them. Glass gains procedural crack decal, Water gets pale droplet mask and no bullet-hole decal. Water arrow appearance now retires after contact rather than sticking to the water plane; contact still stops the travelling projectile, no underwater trajectory simulation.
+
+Updated Runtime/CMakeLists.txt, RuntimeImpactTextures.h, RuntimeProjectileVisuals.h, Tests/ImpactAudioTests.cpp, Tests/RuntimeProjectileSessionTests.cpp and Tests/ProjectileSimulation.cmake. RuntimeSession tests now link embedded dust loader/resource, verify Glass geometry movement/pause/query exclusion/reset, Water plane alignment/crown/ring expiry/no decal, water-arrow retirement, repeated-fire cap and no orphan mesh/material after cleanup. These are behaviour tests, not visual realism tests.
+
+Validation from repository root:
+- cmake --build BUILD/renegade --config Release --target RenegadeRuntime RenegadeImpactAudioTests RenegadeRuntimeProjectileSessionTests --parallel 4: Runtime and Audio helper built; first Session build failed on unqualified RuntimeImpactGeometry in test. Qualified it and rebuilt successfully. A PowerShell Set-Content rewrite also failed with a sharing violation; Python rewrite succeeded.
+- Final cmake --build BUILD/renegade --config Release --target RenegadeRuntime RenegadeRuntimeProjectileSessionTests --parallel 4: PASS, BUILD/p3-glass-water-final-build.log.
+- ctest --test-dir BUILD/renegade -C Release -R '(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)' --output-on-failure: 4/4 PASS, 0.81 sec, BUILD/p3-glass-water-final-ctest.log.
+- BUILD/renegade/Release/RenegadeImpactAudioTests.exe --surface-range BUILD/bow-projectile-playground/Bow-Playground.renegade: PASS; five targets, semantic classifications/private meshes verified after save/reload, 14 native audio decodes; BUILD/p3-glass-water-range.log.
+- Same helper --stage with descriptor: native staging/integrity checks PASS before and after water-arrow change; BUILD/p3-glass-water-final-stage.log. Studio full Build Game UI workflow/promotion not repeated.
+- python Tools/Read-RenegadeDiagnostics.py --process runtime: standalone responsive, Glass and Water surface_type contacts observed during owner firing with no projectile visual error; BUILD/p3-glass-water-live-final.json (before final arrow-retirement rebuild).
+- Runtime-only read-only captures from owner-driven firing: BUILD/p3-glass-water-motion-0.png through -11.png. Inspected water droplets and five-target layout; all artwork nevertheless rejected by owner. No mouse/key automation used.
+- git diff --check PASS, existing CRLF warnings only.
+
+Comparison layout: Glass far left; Metal / Concrete / Wood in previous positions; horizontal native Water-material pool far right. Stored only in disposable BUILD playground. Glass pane remains intact; no full destruction. Water uses presentation geometry, not fluid simulation. Geometry is deliberately small/simple and currently untextured. These limitations explain why successful behaviour checks do not establish visual quality.
+
+Next work: keep the shared Surface Type response plumbing, replace prototype art with authored realistic VFX assets (dust/splash animation sheets, textured debris and surface-specific impact marks); establish one close-range Concrete visual quality reference before extending the art pass. Do not repeat preset-only tweaks and label them realistic. No extra normal-user authoring steps. Safe Inspector material assignment and broad-tree provenance review remain open. Native job-scheduler concern remains unresolved.
+
+### Blood priority: projectile/Hitscan candidate — 2026-10-09
+Owner prioritised blood and requested continuation after agreeing on directional spray, weighted droplets and stains at actual landing surfaces. This supersedes Concrete-first art-pass ordering. Prior ALL-impact visual-quality rejection still stands; new blood artwork has not been accepted.
+
+HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80; Wicked pin 3a800b7134aafe58461093c8abb2e274d4e64033. No commit/push/merge, broad-tree provenance review still outstanding.
+
+Added Runtime/src/RuntimeBloodEffects.h and original generated Runtime/Content/Effects/Impacts/BloodSpray.png, BloodSplat.png, BLOOD_PROVENANCE.md. Updated Runtime/CMakeLists.txt, RuntimeImpactTextures.h, RuntimeImpactDustResource.cpp, RuntimeImpactTextures.rc.in, RuntimeProjectileVisuals.h, Tests/RuntimeProjectileSessionTests.cpp, Tests/ImpactAudioTests.cpp. Original PNG alpha retained without image editing/resizing; built-in image-generation prompts/hashes recorded in BLOOD_PROVENANCE.md. Embedded RCDATA 7302/7303 makes packaged Runtime self-contained.
+
+Character impacts now bypass generic red Smoke. A brief liquid sprite uses native SOFT_LIGHTING, alpha blending and zero emission; direction combines outward hit normal and incoming projectile direction. Sticky arrows use smaller spray and fewer droplets than Hitscan/non-sticky projectiles. Single-frame artwork is a candidate, not a simulation-derived flipbook. Droplets are tiny lit native meshes sharing one per-scene mesh/material; analytic gravity, bounded 48 live drops, at most one short ray per drop/update (step capped .05s), 1.6s expiry. Ignore source Character, other native Characters, and transient visual roots. Nearest world intersection retires the droplet and creates an attached irregular blood decal, except on native Water materials. At most 48 stains, 30s lifetime with final 4s fade. Reset removes droplets/stains/shared resource. No gameplay rigidbodies, damage mutation, body wound/skinned decal or exit-wound inference.
+
+Tests cover direction, pause, shared mesh/caps, stain target attachment, lifetime and complete resource cleanup. Native graphical helper creates a separate floor proof: 10 droplets collide with floor and create 10 attached stains; all drops retire. Both embedded blood sprites decode on native GPU. Disposable playground adds a passive governed Character dummy (grey torso/head meshes) in front of the centre target via MakeCharacterCommand; runtime sees one Character. This is a response fixture, not a production Character art asset.
+
+Exact validation commands from repository root:
+- cmake --build BUILD/renegade --config Release --target RenegadeRuntime RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests --parallel 4: PASS; BUILD/p3-blood-build.log.
+- After native collision proof / Character fixture helper changes: cmake --build BUILD/renegade --config Release --target RenegadeImpactAudioTests --parallel 4: PASS; BUILD/p3-blood-proof-build.log.
+- ctest --test-dir BUILD/renegade -C Release -R '(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)' --output-on-failure: 4/4 PASS, .66s; BUILD/p3-blood-final-ctest.log.
+- BUILD/renegade/Release/RenegadeImpactAudioTests.exe --surface-range BUILD/bow-projectile-playground/Bow-Playground.renegade: PASS; embedded blood GPU decode, 10 native floor stains, all drops retired, governed dummy promotion, five other surfaces save/reload, audio14/bank1; BUILD/p3-blood-native-proof.log.
+- Same helper --stage with descriptor: PASS native staging/integrity, embedded art native decode / floor collision / 14 audio clips; BUILD/p3-blood-stage.log. Studio full Build Game UI flow not repeated.
+- python BUILD/p3_verify_blood_resources.py: PASS built and staged Runtime embed byte-exact BloodSpray/BloodSplat PNGs; BUILD/p3-blood-resource-proof.log.
+- python Tools/Read-RenegadeDiagnostics.py --process runtime: responsive standalone with one governed Character, no projectile visual error before testing; BUILD/p3-blood-live-final.json. No confirmed live Character shot in this checkpoint.
+- git diff --check: PASS (pre-existing CRLF notices).
+
+Visual evidence: source liquid PNG artwork visually inspected; Runtime-only fixture screenshot inspected (grey dummy visible). In-motion blood rendering NOT verified/accepted. One tightly guarded automation attempt required correct foreground PID and >=30s idle; focus changed during hold, so it immediately released input and aborted. No retries, focus activation or cursor repositioning. Capture harness produced no confirmed impact frames. Do not report a successful live shot or realistic blood acceptance. Runtime remains available for owner testing.
+
+Next: verify blood spray/stains in standalone motion under representative lighting; get owner art feedback and refine/simulate animation as required. Dedicated melee contact integration, persistent/skinned body wounds and true fluid animation remain open. Keep creator workflow automatic for Character contacts; no extra normal-user profiles/settings. Previous broad-tree provenance, Inspector material assignment safety and threaded-scheduler concerns remain open; no P3 gate closure.
+
+### Enlarged blood and persistent floor residue — 2026-10-09
+Owner requests larger, somewhat exaggerated blood and visible floor splashes that remain. HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80 on feature/p3-projectile-impact; Wicked pin unchanged at 3a800b7134aafe58461093c8abb2e274d4e64033. No commit/push/merge; broad working-tree provenance remains open.
+
+Changed this follow-up: Runtime/src/RuntimeBloodEffects.h, Runtime/src/RuntimeProjectileVisuals.h, Tests/RuntimeProjectileSessionTests.cpp, Tests/ImpactAudioTests.cpp, HANDOFF.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/FEATURE_MATRIX.csv. Original blood PNGs unchanged. Spray size increases from .13/.22 to .32/.55m (sticky/non-sticky), life .32s, three requested sprites before strength reduction. Droplets double to 11 sticky /20 other, radii 5-10mm, broader spread; live cap96. Collision-derived stain radius .15-.20m. Stains remain 600 gameplay seconds, fade only in last30s, darken over90s, material roughness .25 -> .85 and reflectance .65 -> .20. Cap128 oldest eviction; pause and reset retained. These are internal presets, no additional creator steps. Native decal response to material sheen changes requires visual judgement; no fluid flipbook or skinned wound implementation.
+
+Validation (repo root; VS18 CMake tools):
+- cmake --build BUILD/renegade --config Release --target RenegadeRuntime RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests --parallel 4: PASS exit0, 80.16s; BUILD/p3-blood-retention-build.log. Existing MSB8029 warnings.
+- ctest --test-dir BUILD/renegade -C Release -R '(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)' --output-on-failure: PASS4/4, .85s; BUILD/p3-blood-retention-ctest.log. Tests cover cap, pause, persistence after31s, colour/roughness/reflectance ageing, final fade, expiry and reset resources.
+- BUILD/renegade/Release/RenegadeImpactAudioTests.exe --verify BUILD/bow-projectile-playground/Bow-Playground.renegade: PASS; GPU art decode; 20 attached floor stains from native ray collisions, all drops retired; stains retained/drying after31s; 14 native audio decodes. BUILD/p3-blood-retention-native.log.
+- Same helper --stage with same descriptor: PASS native staging/integrity; BUILD/p3-blood-retention-stage.log. Full Studio Build Game UI smoke not repeated.
+- python BUILD/p3_verify_blood_resources.py: PASS byte-exact original blood PNGs in built/staged Runtime; BUILD/p3-blood-retention-resources.log.
+- python Tools/Read-RenegadeDiagnostics.py --process runtime: responsive standalone PID20656, one Character, three owner-fired Character impacts with surface_type=character, no projectile_visual_error; BUILD/p3-blood-retention-live.json.
+- git diff --check: PASS, pre-existing CRLF notices; HEAD/submodule checked unchanged.
+
+Runtime left open at disposable Bow Playground. Read-only foreground Runtime captures inspected: dummy/retained arrows visible; no useful spray/floor-stain close-up captured, so final visual quality and floor readability remain UNVERIFIED. No mouse/key automation this turn. Native hidden floor proof verifies behaviour, not realistic visual acceptance. This supersedes previous 48-drop/48-stain/30s settings only. Owner's prior ALL-impact art rejection remains authoritative; no Ghost of Tsushima parity claim, no P3 gate closure. Next: owner inspects floor splashes and spray in motion; improve actual blood animation/art from feedback. Safe Inspector material assignment and broader provenance review remain open.
+
+### Animated blood atlas and hidden-floor-stain fix — 2026-10-09
+Owner rejects previous static spray: "it needs to be a spritesheet or atlas ... there's no stains on the floor". This overrides preceding nominal test success; floor visibility was a real bug. HEAD remains cf04bd38434dbc3e84c90ce22ee628e3c3953a80, branch feature/p3-projectile-impact, Wicked pin3a800b7134aafe58461093c8abb2e274d4e64033. No commit/push/merge; broad-tree provenance review remains pending.
+
+New BloodSprayAtlas.png is original built-in imagegen RGBA, 1254x1254, 1,121,053 bytes, SHA256 b1447ad2dd702d1707b4078630bd81d9ce137a57c87b5061922ea82430bb426e, embedded as RCDATA7304. Prompt/provenance recorded in Runtime/Content/Effects/Impacts/BLOOD_PROVENANCE.md. No pixel edits/resizing. Normalized 4x4 tiles with transparent gutters; sixteen row-major frames. Character sprite uses one particle, .60s lifetime, frameRate0 (lifetime progression), frame blending, fixed size .70m sticky/1m other, no sprite gravity/rotation/size shrink (motion is authored in frames), native SOFT_LIGHTING/zero emission. Original static BloodSpray.png remains but common Character bursts now select atlas.
+
+Root cause of hidden stains: Component_Attach's third bool means child_already_in_local_space, not preserve-world. Passing true to already-world-positioned decals added the floor's -0.5m transform. Actual scene proof reproduced stains at y=-.496 below the y=0 floor. Blood and ordinary shared impact decals now use default world-to-parent conversion, yielding world y=.004. Scaled/translated receiver regression checks preserved placement and subsequent parent motion without initializing GPU. Original isolated identity-plane test missed this bug. RuntimeLiveDiagnostics now exposes blood_drops and blood_stains counts.
+
+Native decal renderer ignores material roughness/reflectance scalars alone; blood now binds shared 16-level 1x1 surface maps. Excessive .65 reflectance produced blue-grey sheen; revised dielectric reflectance .04 fresh -> .02 dry, roughness .25 -> .85 over90s. Ten-minute gameplay retention, last30s fade, 96 drop/128 stain caps, pause/reset unchanged. Native floor rendering now visibly shows red residue, but texture/shape realism still requires owner judgement; do not label all art accepted.
+
+Changed this turn: Runtime/Content/Effects/Impacts/BloodSprayAtlas.png, BLOOD_PROVENANCE.md, Runtime/RuntimeImpactTextures.rc.in, Runtime/src/RuntimeImpactDustResource.cpp, RuntimeImpactTextures.h, RuntimeProjectileVisuals.h, RuntimeBloodEffects.h, RuntimeLiveDiagnostics.cpp, Tests/RuntimeProjectileSessionTests.cpp, Tests/ImpactAudioTests.cpp, HANDOFF.md and docs/ARCHITECTURE.md, ROADMAP.md, FEATURE_MATRIX.csv. No other prior changes overwritten; no Wicked source/pointer changes.
+
+Manual --blood-scene <descriptor> in ImpactAudioTests loads actual scene read-only, traces downward receivers, simulates arrow-strength blood from representative Character hit, renders offscreen and saves floor/frame/decoded-source PNGs. It never saves the scene, injects input or controls desktop focus. Its TAA-disabled render is a diagnostic view, not a full Studio/Test Level render-settings parity proof. Native scenario creates eleven floor stains and retires all droplets. Four common presentation-path atlas captures show different spray breakup ages. GPU decoded BloodSplat matches the expected red artwork. Earlier floor proof output showed hidden stamps, later corrected-floor renders show visible marks.
+
+Validation (repo root, VS18 CMake tools):
+- cmake --build BUILD/renegade --config Release --target RenegadeRuntime RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests --parallel 4: PASS, BUILD/p3-blood-atlas-build.log (89.99s).
+- Helper proof builds: --target RenegadeRuntimeProjectileSessionTests RenegadeImpactAudioTests and --target RenegadeImpactAudioTests: PASS, p3-blood-atlas-proof-build.log / p3-blood-atlas-sheen-build.log / p3-blood-atlas-aa-build.log. Initial new manual Ray constructor needed explicit XMFLOAT3; corrected. Initial new CPU test called full scene.Update without a graphics device and segfaulted; replaced with native UpdateTransform_Parented, retaining world-placement/movement assertions. This was test setup, not a Runtime crash.
+- BUILD/renegade/Release/RenegadeImpactAudioTests.exe --blood-scene BUILD/bow-projectile-playground/Bow-Playground.renegade: PASS after corrected placement, sheen and atlas captures; BUILD/p3-blood-atlas-aa-proof.log. Images BUILD/p3-blood-actual-floor.png, p3-blood-native-splat.png, p3-blood-atlas-frame-5/-12/-20/-30.png inspected. Floor marks now above surface and visible; atlas changes in native render. Source PNG itself is generated temporal artwork, not a fluid simulation bake.
+- ctest --test-dir BUILD/renegade -C Release -R '(Renegade(ImpactAudio|ProjectileWorld|RuntimeProjectileSession)Tests|^LaunchSocket$)' --timeout20 --output-on-failure: all4 passed .65s after CPU test repair. Final post-sheen rebuild run passed Audio/Session/LaunchSocket but ProjectileWorld timed out20s (p3-blood-atlas-final-ctest.log); immediately rerunning -R '^RenegadeProjectileWorldTests$' --timeout20 PASS .03s (p3-blood-atlas-final-world-retry.log). Earlier run also had unchanged World stall (own child PID69516 stopped after43s) and LaunchSocket timeout; separate retries passed. Native scheduler intermittency remains unresolved; do not hide it behind final success or claim CI-ready.
+- Final cmake --build BUILD/renegade --config Release --target RenegadeRuntime RenegadeRuntimeProjectileSessionTests --parallel4: PASS, BUILD/p3-blood-atlas-final-build.log; existing MSB8029 warnings.
+- Audio helper --stage with playground descriptor: PASS native package staging/integrity; BUILD/p3-blood-atlas-stage.log. Full Studio Build Game UI flow not repeated.
+- python BUILD/p3_verify_blood_atlas_resources.py: PASS source/built/staged byte-exact atlas7304 and splat7303; BUILD/p3-blood-atlas-resources.log.
+- git diff --check: PASS, pre-existing CRLF notices; HEAD/submodule unchanged.
+
+Final standalone Runtime PID50772 opened at disposable Bow Playground for ordinary owner testing. No mouse/key automation this turn. Earlier live hits from preceding static build do not establish this atlas's live acceptance. Next: owner judges atlas motion and looks down at residue around Character dummy; improve texture quality/coherence from that feedback. ALL earlier impact quality rejection remains, no Ghost of Tsushima parity claim, no P3 gate closure. Safe Inspector material assignment, broad-tree provenance review and intermittent native worker stall remain open.
+
+Owner rejection at 09:45 London 2026-10-09: current atlas is WORSE. Specific failures: effect appears BEHIND dummy, animation too fast, not remotely realistic, floor decals look like red fur. This overrides preceding native rendering success; do not count current blood as accepted. Owner directs inspection of Unity KNIFE impact pack in Downloads, containing multiple material impacts and bullet-hole decals. Next work uses authored pack resources/presets rather than further AI-generated sheet/preset inflation. Nothing committed/pushed/merged.
+## P2 CI repair - 2026-10-06
+
+Fix commit 38e5305ee9bd18fd8e5df7fb89b8c90b254e85e7 on
+feature/p2-equipment-actions / PR #180. Separate BUILD/p2-ci-repair worktree;
+the main checkout is actively authoring P3 and was not edited or switched.
+CI head cde4106: Windows baseline Debug/Release passed; Studio compiled both
+configurations but source contract failed on retired importer dimensions.
+Debug PlayerViewRigTests also asserted !Contains(entity) in native ECS and
+waited until its 1500-second timeout. The avoidance solver created the same
+hand IK component for every candidate/iteration. It now gets the existing
+transient component or creates it once; end-of-frame cleanup remains unchanged.
+The importer contract checks the expanded panel and commit/cancel positions
+plus the added destination, folder, role and tags rows. No checks removed.
+Changed PlayerViewHandAvoidance.h and CreatorImporterReviewLayoutSourceContract.cmake.
+
+Local validation: cmake -DRENEGADE_SOURCE_DIR=<P2-worktree>
+-P Tests/SceneUiGate6SourceContract.cmake: both consolidated and importer checks
+passed. Isolated PlayerViewRigTests translation unit built against existing
+native Debug and Release libraries, using the P2 worktree Runtime/bridge headers.
+Temporary vcxproj copied from the generated test project with generation/reference
+steps removed; main build intermediates and active P3 source untouched.
+MSBuild P2CiRepairTests.vcxproj /m:2 /verbosity:quiet /nologo
+/p:Configuration=Debug (then Release) /p:Platform=x64
+/p:BuildProjectReferences=false with isolated IntDir/OutDir and CL=/MP4:
+both exit0 (7.16s Debug build; Release build/test sequence 12.15s).
+Both isolated RenegadePlayerViewRigTests.exe runs exit0: avoidance evaluated,
+hand grip Undo/Redo rollback save/reopen reimport and stale-save rejection passed;
+parented dual-hand rig/skeletal socket/foreground policy passed.
+Logs BUILD/p2-ci-debug-build.log and BUILD/p2-ci-release-build.log in main checkout.
+git -c diff.ignoreSubmodules=all diff --check passed. No Wicked source edits.
+Full clean-build CI remains required. Push this repair and verify new PR jobs.
+P3 continuation must incorporate 38e5305 via cherry-pick or eventual merged main;
+do not interrupt/discard its current uncommitted authoring work. No merge performed.

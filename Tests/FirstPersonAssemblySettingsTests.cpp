@@ -2,8 +2,43 @@
 #include <iostream>
 #include <limits>
 using namespace renegade::bridge;
+static bool PartPickerRegression() {
+ AssetRegistry registry;
+ auto add=[&](const std::string& path,bool available=true,const std::string& importer="wicked.fbx") {
+  AssetRecord record;record.assetId=GenerateStableId();record.projectRelativePath=path;
+  record.dependencyClass=DependencyClass::ImportedContent;record.sourceAvailable=available;
+  registry.records.push_back(record);ImportedProductRecord product;
+  product.productAssetId=record.assetId;product.importer=importer;
+  registry.importedProducts.push_back(product);return record.assetId;
+ };
+ const auto arms=add("Content/Player/Arms/Pack/Hands.rasset");
+ const auto weapon=add("Content/Player/Weapons/Shotgun.rasset");
+ const auto sharedArms=add("Content/Packs/Combined/Hands.rasset");
+ const auto sharedWeapon=add("Content/Packs/Combined/Gun.rasset");
+ for(int i=0;i<100;++i)add("Content/Models/Unrelated"+std::to_string(i)+".rasset");
+ add("Content/Player/ArmsBackup/Excluded.rasset");
+ add("Content/Player/Arms/Missing.rasset",false);
+ add("Content/Player/Weapons/Assembly.rasset",true,"renegade.first_person.assembly");
+ ImportedProductRecord recipe;recipe.importer="renegade.first_person.assembly";
+ recipe.settingsJson="{\"options\":{\"arms_asset_id\":\""+sharedArms+"\",\"weapon_asset_id\":\""+sharedWeapon+"\"}}";
+ registry.importedProducts.push_back(recipe);
+ const auto choices=CollectFirstPersonPartChoices(registry);
+ if(choices.size()!=4)return false;
+ for(const auto& c:choices) {
+  if(c.assetId==arms||c.assetId==sharedArms){if(!c.arms||c.weapon)return false;}
+  else if(c.assetId==weapon||c.assetId==sharedWeapon){if(!c.weapon||c.arms)return false;}
+  else return false;
+ }
+ registry.importedProducts.back().settingsJson="malformed";
+ if(CollectFirstPersonPartChoices(registry).size()!=2)return false;
+ AssetCatalogueMetadataDocument metadata;
+ AssetCatalogueMetadataRecord role;role.assetId=sharedWeapon;role.creatorTags={"sword","player-role:weapon"};metadata.records.push_back(role);
+ const auto marked=CollectFirstPersonPartChoices(registry,&metadata);
+ return marked.size()==3 && std::any_of(marked.begin(),marked.end(),[&](const auto& c){return c.assetId==sharedWeapon&&c.weapon&&!c.arms;});
+}
 int main()
 {
+    if(!PartPickerRegression()){std::cerr<<"Part picker filtering regression";return 20;}
     FirstPersonAssemblySettings settings;
     settings.armsAssetId = GenerateStableId();
     settings.weaponAssetId = GenerateStableId();
@@ -37,6 +72,70 @@ int main()
         if(i==3)bad.firearm.minimumShotInterval=std::numeric_limits<float>::quiet_NaN();
         if(SerializeFirstPersonAssemblySettings(bad,reopened,error))return 12;
     }
+    auto hands=settings;
+    hands.offHandWeaponAssetId=GenerateStableId();
+    hands.offHandParentBonePath="[\"root\",\"left\"]";
+    hands.primaryLayerRootPath="[\"root\",\"right\"]";
+    hands.offHandLayerRootPath="[\"root\",\"left\"]";
+    hands.blockStartClip=17;hands.blockLoopClip=22;hands.blockEndClip=24;
+    hands.pairs.push_back({"Attack",5,0});hands.pairs.push_back({"Attack",9,0});
+    std::string handsJson;
+    if(!SerializeFirstPersonAssemblySettings(hands,handsJson,error)||
+       !ParseFirstPersonAssemblySettings(handsJson,parsed,error)||
+       !SerializeFirstPersonAssemblySettings(parsed,reopened,error)||reopened!=handsJson||
+       !parsed.IndependentHands())return 21;
+    auto avoidance=hands;avoidance.avoidOffHand=true;
+    avoidance.bladeBase={0,0.02f,0};avoidance.bladeTip={0,0.8f,0};
+    avoidance.shieldCenter={0.03f,0,0};avoidance.shieldHalfExtents={0.05f,0.27f,0.27f};
+    if(!SerializeFirstPersonAssemblySettings(avoidance,handsJson,error)||
+       !ParseFirstPersonAssemblySettings(handsJson,parsed,error)||
+       !parsed.avoidOffHand||parsed.bladeTip.y!=0.8f||
+       !SerializeFirstPersonAssemblySettings(parsed,reopened,error)||reopened!=handsJson)return 24;
+    auto authored=avoidance;authored.weaponScale=0.85f;authored.offHandWeaponScale=1.2f;
+    authored.fullChargeSeconds=2;authored.chainWindowSeconds=0.45f;authored.queuedReleaseSeconds=1.5f;
+    if(!SerializeFirstPersonAssemblySettings(authored,handsJson,error)||
+       !ParseFirstPersonAssemblySettings(handsJson,parsed,error)||
+       parsed.weaponScale!=0.85f||parsed.offHandWeaponScale!=1.2f||parsed.fullChargeSeconds!=2||
+       parsed.chainWindowSeconds!=0.45f||parsed.queuedReleaseSeconds!=1.5f||
+       !SerializeFirstPersonAssemblySettings(parsed,reopened,error)||reopened!=handsJson)return 26;
+    for(int failure=0;failure<5;++failure) {
+     auto bad=authored;
+     if(failure==0)bad.weaponScale=0;
+     if(failure==1)bad.offHandWeaponScale=std::numeric_limits<float>::quiet_NaN();
+     if(failure==2)bad.fullChargeSeconds=0;
+     if(failure==3)bad.chainWindowSeconds=-1;
+     if(failure==4)bad.queuedReleaseSeconds=6;
+     if(SerializeFirstPersonAssemblySettings(bad,reopened,error))return 27;
+    }
+    auto directional=authored;
+    for(unsigned i=0;i<12;++i)directional.pairs.push_back({FirstPersonDirectionalActions[i],100+i,0});
+    if(!SerializeFirstPersonAssemblySettings(directional,handsJson,error)||
+       !ParseFirstPersonAssemblySettings(handsJson,parsed,error)||parsed.pairs.size()!=directional.pairs.size())return 28;
+    directional.pairs.pop_back();
+    if(SerializeFirstPersonAssemblySettings(directional,reopened,error))return 29;
+    auto swapped=authored;swapped.weaponAssetId=GenerateStableId();CommandService swapHistory;
+    if(!swapHistory.Execute(std::make_unique<SetFirstPersonAssemblySettingsCommand>(authored,swapped))||
+       authored.offHandWeaponAssetId!=avoidance.offHandWeaponAssetId||authored.pairs.size()!=avoidance.pairs.size()||
+       !swapHistory.Undo()||authored.weaponAssetId!=avoidance.weaponAssetId||!swapHistory.Redo())return 30;
+    for(int failure=0;failure<4;++failure) {
+     auto bad=avoidance;
+     if(failure==0)bad.bladeTip=bad.bladeBase;
+     if(failure==1)bad.shieldHalfExtents.z=0;
+     if(failure==2)bad.bladeRadius=-1;
+     if(failure==3)bad.maximumHandCorrection=std::numeric_limits<float>::quiet_NaN();
+     if(SerializeFirstPersonAssemblySettings(bad,reopened,error))return 25;
+    }
+    for(int i=0;i<3;++i) {
+        auto bad=hands;
+        if(i==0)bad.offHandWeaponAssetId=bad.weaponAssetId;
+        if(i==1)bad.offHandLayerRootPath="[1]";
+        if(i==2)bad.offHandWeaponRotation.w=5;
+        if(SerializeFirstPersonAssemblySettings(bad,reopened,error))return 22;
+    }
+    CommandService handHistory;auto handDraft=settings;
+    if(!handHistory.Execute(std::make_unique<SetFirstPersonAssemblySettingsCommand>(handDraft,hands))||
+       !handDraft.IndependentHands()||!handHistory.Undo()||handDraft.IndependentHands()||
+       !handHistory.Redo()||handDraft.blockLoopClip!=22)return 23;
     CommandService history;
     auto draft=settings;
     auto next=draft;next.firearm=tuned.firearm;next.weaponPosition.x+=0.01f;next.cameraPosition.z+=0.02f;
@@ -61,7 +160,7 @@ int main()
     auto full=settings;full.pairs.clear();
     for(unsigned i=0;i<FirstPersonAssemblyActions.size();++i)full.pairs.push_back({FirstPersonAssemblyActions[i],i,0});
     if(!SerializeFirstPersonAssemblySettings(full,reopened,error)||
-        !ParseFirstPersonAssemblySettings(reopened,parsed,error)||parsed.pairs.size()!=14)return 8;
+        !ParseFirstPersonAssemblySettings(reopened,parsed,error)||parsed.pairs.size()!=FirstPersonAssemblyActions.size())return 8;
     for (int failure = 0; failure < 7; ++failure)
     {
         auto bad = settings;

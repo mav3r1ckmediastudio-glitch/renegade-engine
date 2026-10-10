@@ -2,6 +2,9 @@
 #include "RuntimePlayerViewAnimation.h"
 #include "RuntimePlayerViewRig.h"
 #include "PlayerViewSocketFixture.h"
+#include "PlayerViewAnimationMaskTests.h"
+#include "PlayerViewHandBlendTests.h"
+#include "PlayerViewHandAvoidanceTests.h"
 
 #include <cmath>
 #include <cstdint>
@@ -236,11 +239,11 @@ namespace
         if (state.activeClip != armsWalk || !Near(state.pairedTime, 0.1f))
             Fail("completed action did not return to movement");
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 0.1f, true);
-        if (state.activeClip != fire || state.activeWeaponClip != fireWeapon)
-            Fail("fire press did not select its explicit pair");
+        if (state.activeClip != fire || state.activeWeaponClip != fireWeapon || !state.shotAccepted)
+            Fail("fire press did not select its explicit pair and emit shot acceptance");
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 1);
-        if (state.oneShotPlaying || !Near(state.pairedTime, 0.5f))
-            Fail("fire did not complete once");
+        if (state.oneShotPlaying || !Near(state.pairedTime, 0.5f) || state.shotAccepted)
+            Fail("fire did not complete once or shot acceptance repeated");
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 0.1f, true);
         if (!state.oneShotPlaying || !Near(state.pairedTime, 0.1f))
             Fail("second fire press did not restart at the beginning");
@@ -248,7 +251,7 @@ namespace
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f);
         if (state.loadedShells != 0) Fail("two shots did not consume both shells");
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Walk, 0.1f, true);
-        if (state.oneShotPlaying || state.activeClip != armsWalk || state.loadedShells != 0)
+        if (state.oneShotPlaying || state.activeClip != armsWalk || state.loadedShells != 0 || state.shotAccepted)
             Fail("empty shotgun accepted a third shot");
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 0.1f, false, true);
         if (state.activeClip != reload || state.loadedShells != 0)
@@ -262,8 +265,8 @@ namespace
         if (state.activeClip != partial || state.activeWeaponClip != partialWeapon || state.loadedShells != 1)
             Fail("one-shell reload did not select partial native pair");
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 0, true, true);
-        if (state.loadedShells != 1 || !Near(state.pairedTime, 0.1f))
-            Fail("paused partial reload refilled ammo or advanced time");
+        if (state.loadedShells != 1 || !Near(state.pairedTime, 0.1f) || state.shotAccepted)
+            Fail("paused partial reload refilled ammo, fired or advanced time");
         UpdateRuntimePlayerViewAnimations(scene, state, PlayerViewAction::Idle, 2, true);
         if (state.loadedShells != 2 || state.oneShotPlaying)
             Fail("partial reload did not complete with two shells");
@@ -475,6 +478,10 @@ namespace
 
 int main()
 {
+    std::string maskError;
+    if(!TestPlayerViewAnimationMasks(maskError))Fail("Native hand mask validation: "+maskError);
+    if(!TestPlayerViewHandBlends())Fail("Native independent hand blending");
+    if(!TestPlayerViewHandAvoidance())Fail("Native hand collision avoidance");
     TestPairedAssemblyPlayback();
     TestPlayerViewGripAuthoring();
     using namespace renegade::runtime;

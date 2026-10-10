@@ -1,8 +1,20 @@
 # P1 first-person assembly authoring candidate
 
-This slice turns retained arms and weapon products into one reusable first-person
-assembly. The owner-accepted shotgun attachment remains the reference. P1 is still
-in progress; this is not acceptance of firing, reload gameplay, inventory or P2.
+This merged slice turns retained arms and weapon products into one reusable
+first-person assembly. PR #178 also supplies the accepted shotgun fire/reload,
+aim/equip/jump routing and reusable player authoring baseline. It does not complete
+generic equipment, inventory, hits/damage or the wider combat programme.
+
+PR #178 merged into main on 2026-10-05 at `7105a95ddcc103d6a024a17fddefd62f705a86b3`.
+All four pre-merge Windows checks passed: Studio Debug/Release and baseline
+Debug/Release. The owner confirmed the expected player/shotgun behaviour in the
+existing v2 game project and explicitly accepted the PR's functionality.
+This records functional acceptance of the merged scope, not completion of every
+P1 requirement or of the full Alpha Playability combat programme.
+
+The arms and weapon dropdowns currently list unrelated imported models. Dedicated
+folder/role filtering and dependency-aware transfer are required UX follow-ups;
+see [PLAYER_AUTHORING_UX_FOLLOWUP](PLAYER_AUTHORING_UX_FOLLOWUP.md).
 
 ## Creator workflow
 

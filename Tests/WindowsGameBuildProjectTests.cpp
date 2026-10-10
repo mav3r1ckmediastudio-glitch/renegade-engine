@@ -259,6 +259,34 @@ int main(int argc, char** argv)
     if (!PrepareWindowsGameBuildProjectState(project, state, error))
         return Fail(root, "owner-build project preparation failed: " + error);
 
+    // A package closure must not delete unrelated saved creator assets or
+    // their dependencies from the source project's catalog.
+    AssetRegistry catalog;
+    if(!ReadAssetRegistry(project.rootPath,project.projectId,catalog,error) ||
+       catalog.records.empty()) return Fail(root,"read creator catalog: "+error);
+    AssetRecord unused = catalog.records.front();
+    unused.assetId = "79ad7e34-8ddd-4f65-9a54-764b43acf518";
+    unused.dependencyNodeId = "fixture:unused-authoring";
+    unused.projectRelativePath = "Content/UnusedCreatorAsset.data";
+    unused.dependencyClass = DependencyClass::Data;
+    unused.provider = "fixture.unused-authoring";
+    unused.root = false;
+    unused.dependencyAssetIds = {catalog.records.front().assetId};
+    std::ofstream(projectRoot / unused.projectRelativePath) << "unused authoring";
+    catalog.records.push_back(unused);
+    if(!WriteAssetRegistry(project.rootPath,catalog).success ||
+       !PrepareWindowsGameBuildProjectState(project,state,error) ||
+       !ReadAssetRegistry(project.rootPath,project.projectId,catalog,error))
+        return Fail(root,"creator catalog build preservation: "+error);
+    const auto retained=std::find_if(catalog.records.begin(),catalog.records.end(),
+        [&unused](const auto& entry){return entry.assetId==unused.assetId;});
+    if(retained==catalog.records.end() ||
+       retained->dependencyAssetIds!=unused.dependencyAssetIds ||
+       FindNode(state.dependencyGraph,unused.projectRelativePath)!=nullptr ||
+       std::any_of(state.assetRegistry.records.begin(),state.assetRegistry.records.end(),
+           [&unused](const auto& entry){return entry.assetId==unused.assetId;}))
+        return Fail(root,"build changed creator catalog or packaged unused asset");
+
     const std::string levelOnePath = "Content/Scenes/LevelOne.wiscene";
     const std::string levelTwoPath = "Content/Scenes/LevelTwo.wiscene";
     const std::string levelOneMeta = levelOnePath + ".rmeta";

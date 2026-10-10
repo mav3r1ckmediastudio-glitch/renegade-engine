@@ -25,6 +25,9 @@ namespace renegade::bridge
         constexpr const char* KeyFirstPersonArmsAssetId =
             "renegade.player.first_person_arms_asset_id";
 
+        constexpr const char* KeyPrimaryEquipment = "renegade.player.primary_equipment_asset_id";
+        constexpr const char* KeyOffHandEquipment = "renegade.player.off_hand_equipment_asset_id";
+
         float FiniteOr(const float value, const float fallback) noexcept
         {
             return std::isfinite(value) ? value : fallback;
@@ -60,6 +63,11 @@ namespace renegade::bridge
             wi::scene::MetadataComponent& metadata,
             const PlayerControllerSettings& settings)
         {
+            const auto setId=[&](const char* key,const StableId& id) {
+                if(id.empty())metadata.string_values.erase(key);else metadata.string_values.set(key,id);
+            };
+            setId(KeyPrimaryEquipment,settings.primaryEquipmentAssetId);
+            setId(KeyOffHandEquipment,settings.offHandEquipmentAssetId);
             metadata.float_values.set(KeyWalkSpeed, settings.walkSpeed);
             metadata.float_values.set(KeySprintSpeed, settings.sprintSpeed);
             metadata.float_values.set(KeyJumpSpeed, settings.jumpSpeed);
@@ -102,7 +110,9 @@ namespace renegade::bridge
                 different(left.eyeHeight, right.eyeHeight) ||
                 different(left.maximumSlopeDegrees, right.maximumSlopeDegrees) ||
                 different(left.gravityFactor, right.gravityFactor) ||
-                left.firstPersonArmsAssetId != right.firstPersonArmsAssetId;
+                left.firstPersonArmsAssetId != right.firstPersonArmsAssetId ||
+                left.primaryEquipmentAssetId != right.primaryEquipmentAssetId ||
+                left.offHandEquipmentAssetId != right.offHandEquipmentAssetId;
         }
     }
 
@@ -184,6 +194,10 @@ namespace renegade::bridge
             settings.firstPersonArmsAssetId =
                 metadata->string_values.get(KeyFirstPersonArmsAssetId);
         }
+        if(metadata->string_values.has(KeyPrimaryEquipment))
+            settings.primaryEquipmentAssetId=metadata->string_values.get(KeyPrimaryEquipment);
+        if(metadata->string_values.has(KeyOffHandEquipment))
+            settings.offHandEquipmentAssetId=metadata->string_values.get(KeyOffHandEquipment);
         return SanitizePlayerControllerSettings(settings);
     }
 
@@ -340,6 +354,8 @@ namespace renegade::bridge
         {
             result.firstPersonArmsAssetId.clear();
         }
+        for(auto* id:{&result.primaryEquipmentAssetId,&result.offHandEquipmentAssetId})
+            if(!id->empty()&&!IsValidStableId(*id))id->clear();
         return result;
     }
 

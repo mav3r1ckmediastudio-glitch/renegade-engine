@@ -3,11 +3,16 @@
 #include "renegade/bridge/AssetCatalogueService.h"
 #include "renegade/bridge/ReusableAssetService.h"
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
 namespace renegade::bridge
 {
+    // Validated project-relative Content folder, including not-yet-created folders.
+    [[nodiscard]] bool ResolveCreatorContentFolder(const std::string& projectRoot,
+        const std::string& folder, std::filesystem::path& resolved, std::string& error);
+
     // Creator-facing orchestration. This service does not own Studio UI and
     // does not bypass LC01/LP07/LP08 services: it stages external sources into
     // project-owned SourceAssets, delegates governed import/reimport/placement,
@@ -46,6 +51,13 @@ namespace renegade::bridge
             const std::string& projectRoot,
             const StableId& projectId,
             const StableId& assetId) const;
+
+        // Moves only registered model products and their managed companions.
+        // Source bundles stay in SourceAssets; all StableIds and dependencies stay unchanged.
+        [[nodiscard]] bool MoveModelAsset(const std::string& projectRoot,
+            const StableId& projectId, const StableId& assetId,
+            const std::string& destinationFolder, std::string& newPath,
+            std::string& error, ProjectDocumentTransactionHook hook = {}) const;
 
         [[nodiscard]] bool SetCreatorTags(
             const std::string& projectRoot,

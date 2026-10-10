@@ -14,6 +14,10 @@ namespace renegade::bridge
         StableId projectId;
         std::string assetName;
         bool characterAsset = false;
+        std::string destinationFolder = "Content/Models";
+        std::vector<std::string> creatorTags;
+        // Explicit classification, independent of folder. Empty, arms or weapon.
+        std::string playerRole;
         // Native clip order; empty defaults new clips to Unassigned.
         std::vector<std::string> animationActions;
         // Optional for headless callers; Studio supplies its rendered PNG.

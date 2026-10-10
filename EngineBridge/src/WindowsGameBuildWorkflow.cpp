@@ -30,9 +30,12 @@ namespace renegade::bridge
             return false;
         }
 
+        WindowsGameBuildStagingRequest staging = request.staging;
+        if (!SerializeAssetRegistry(request.assetRegistry, staging.assetRegistryJson, error))
+            return false;
         if (!StageWindowsGameBuild(
                 result.plan,
-                request.staging,
+                staging,
                 result.stage,
                 error))
         {

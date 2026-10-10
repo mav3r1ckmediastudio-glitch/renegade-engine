@@ -170,6 +170,7 @@ namespace
     bool Pressed(const GameplayActionBinding& binding) noexcept
     {
         return (binding.mouse == "MOUSE_LEFT" && wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) ||
+            (binding.mouse == "MOUSE_RIGHT" && wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT)) ||
             KeyboardPress(binding.keyboard) ||
             GamepadPress(binding.gamepad);
     }
@@ -245,6 +246,8 @@ namespace renegade::bridge
         case GameplayAction::Reload: return "reload";
         case GameplayAction::Aim: return "aim";
         case GameplayAction::ToggleEquipment: return "toggle_equipment";
+        case GameplayAction::CancelEquipment: return "cancel_equipment";
+        case GameplayAction::OffHandUse: return "off_hand_use";
         case GameplayAction::Count: break;
         }
         return "unknown";
@@ -287,6 +290,8 @@ namespace renegade::bridge
             {GameplayAction::Reload, "R", "", ""},
             {GameplayAction::Aim, "", "MOUSE_RIGHT", ""},
             {GameplayAction::ToggleEquipment, "Q", "", ""},
+            {GameplayAction::CancelEquipment, "C", "", ""},
+            {GameplayAction::OffHandUse, "", "MOUSE_RIGHT", ""},
         }};
         return map;
     }
@@ -502,6 +507,8 @@ namespace renegade::bridge
         seen[reloadIndex] = true;
         seen[static_cast<std::size_t>(GameplayAction::Aim)] = true;
         seen[static_cast<std::size_t>(GameplayAction::ToggleEquipment)] = true;
+        seen[static_cast<std::size_t>(GameplayAction::CancelEquipment)] = true;
+        seen[static_cast<std::size_t>(GameplayAction::OffHandUse)] = true;
 
         if (!formatSeen || !versionSeen ||
             std::any_of(seen.begin(), seen.end(), [](const bool value) { return !value; }))
@@ -663,6 +670,10 @@ namespace renegade::bridge
         frame.pausePressed = Pressed(Binding(map, GameplayAction::Pause));
         frame.resetPressed = Pressed(Binding(map, GameplayAction::Reset));
         frame.firePressed = Pressed(Binding(map, GameplayAction::Fire));
+        frame.fireDown = Down(Binding(map, GameplayAction::Fire));
+        frame.offHandUsePressed = Pressed(Binding(map, GameplayAction::OffHandUse));
+        frame.offHandUseDown = Down(Binding(map, GameplayAction::OffHandUse));
+        frame.cancelEquipmentPressed = Pressed(Binding(map, GameplayAction::CancelEquipment));
         frame.reloadPressed = Pressed(Binding(map, GameplayAction::Reload));
         frame.aimDown = Down(Binding(map, GameplayAction::Aim));
         frame.toggleEquipmentPressed = Pressed(Binding(map, GameplayAction::ToggleEquipment));

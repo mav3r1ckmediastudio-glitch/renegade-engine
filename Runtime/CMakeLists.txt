@@ -32,13 +32,22 @@ set_target_properties(RenegadeRuntimeBootstrap PROPERTIES
     FOLDER "Renegade"
 )
 
+enable_language(RC)
+configure_file(RuntimeImpactTextures.rc.in "${CMAKE_CURRENT_BINARY_DIR}/RuntimeImpactTextures.rc" @ONLY)
+
 add_executable(RenegadeRuntime WIN32
     src/RuntimeApplication.cpp
     src/RuntimeLiveDiagnostics.cpp
     src/RuntimeApplication.h
+    src/RuntimeBloodEffects.h
+    src/RuntimeImpactGeometry.h
+    src/RuntimeImpactTextures.h
+    src/RuntimeImpactDustResource.cpp
+    "${CMAKE_CURRENT_BINARY_DIR}/RuntimeImpactTextures.rc"
     src/RuntimePlayerViewAsset.h
     src/RuntimePlayerViewAnimation.h
     src/RuntimePlayerViewRig.h
+    src/RuntimeEquipmentLoadout.h
     src/main_Windows.cpp
 )
 add_dependencies(RenegadeRuntime RenegadeTerrainSurfacePacker)
@@ -56,6 +65,8 @@ target_compile_definitions(RenegadeRuntime
 
 target_compile_options(RenegadeRuntime
     PRIVATE
+        # Debug Runtime scene/VFX templates exceed the standard COFF section limit.
+        "$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:CXX>>:/bigobj>"
         "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
 )
 

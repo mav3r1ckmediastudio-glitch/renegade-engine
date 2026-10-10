@@ -362,16 +362,20 @@ legacy LP01/LP02 immediate startup route.
 Phase 6 uses one authored Player Start and one Runtime-only player. The Player
 Start is an ordinary WISCENE Transform/Name/Metadata entity identified by a
 Renegade-owned metadata key in addition to Wicked's broader `Player` preset.
-`CreatePlayerStartCommand` owns creation and Undo/Redo; Studio exposes it through
-the Renegade Add menu and existing transform workflow. The same native Metadata
+`PlacePlayerPrefabCommand` creates and assigns a start from the Content/Player
+Asset Browser through command-backed creation and Undo/Redo. New levels do not
+contain an automatic start, and Add no longer exposes Player Start. The same
+native Metadata
 stores the curated `PlayerControllerSettings`; `SetPlayerControllerSettingsCommand`
 is the sole persistent editing path and Runtime consumes those authored values.
 
-The Player Start's flat forward arrow and selected capsule are Studio-only
-visualizers projected from the authored transform and settings. They are not
-mesh/object entities, do not serialize, and cannot enter Runtime or packages.
-The arrow deliberately uses only yaw so it remains on the ground while matching
-the exact first-person spawn heading.
+The Player Start uses an always-visible Studio-only capsule, cyan normally and
+orange when selected. Picking uses its upright bounds, including the interior.
+The capsule overlay is composed after temporal postprocessing. A solid camera
+housing/lens at authored eye height and an extruded ground-facing arrow share
+Runtime spawn yaw (+Z rotated about Y). They render as opaque, depth-tested
+triangle geometry in the Studio scene pass, independently of grid visibility.
+These editor guides do not serialize and cannot enter Runtime or packages.
 
 `PlayerService` resolves the marker deterministically and creates a native
 Wicked `RigidBodyPhysicsComponent` in character mode only inside Runtime. The
@@ -987,10 +991,11 @@ Test Level snapshots and package loading. Old recipes retain the accepted two-sh
 defaults. Runtime reload fills configured capacity only at animation completion;
 shot cooldown advances only during gameplay. These are discrete shots, with no
 reserve ammunition or automatic firing yet. Gameplay capacity does not change the
-number of shells visible in authored clips. Independent equipment definitions and
-Player prefabs remain next stages; see PLAYER_AUTHORING_CONTINUATION.md.
+number of shells visible in authored clips. Independent equipment definitions
+remain a next stage; player prefabs are implemented. See PLAYER_AUTHORING_CONTINUATION.md.
 
-Selected Player Start displays an editor-only orange wireframe collision capsule.
+Player Start displays an always-visible editor-only wireframe collision capsule,
+cyan normally and orange when selected.
 It reads the runtime controller radius and total height each frame, follows the
 spawn feet position, and updates after inspector edits and Undo/Redo. It stays
 upright and unscaled like the runtime character, and is absent during Test Level.
@@ -1008,7 +1013,7 @@ coordinates, causing offset hierarchy hitboxes and viewport marker selection.
 
 Player Start capsule guides remain visible in the level editor regardless of selection (cyan normally, orange when selected), using resolved controller dimensions and hierarchy visibility. Prefab-backed starts retain this editor representation. Compose owns the single connected capsule after temporal postprocessing; it is not serialized as a Runtime mesh.
 
-Player Start selection uses a camera pick ray against the same upright capsule bounds as its wireframe, including the open interior. The capsule replaces both the Player Start billboard icon and ground arrow. Other scene marker icons retain their existing workflow.
+Player Start selection uses a camera pick ray against the same upright capsule bounds as its wireframe, including the open interior. The selectable capsule retains an eye-height camera body/lens marker and ground-facing arrow; both use Runtime spawn yaw and render as solid depth-tested geometry in the Studio scene pass. Other scene marker icons retain their existing workflow.
 
 Player prefab assets are immutable version-1 project Data documents with stable
 identity and a controller/camera settings snapshot plus arms StableId. Disk save
@@ -1021,4 +1026,636 @@ local arms assignments; Test Level snapshots retain prefab data and identity.
 
 
 ### Player placement from Content/Player
-New levels have no automatic Player Start. Project browsing ensures a registered Basic Player Start preset under Content/Player without creating a scene entity. Saved player prefabs appear by authored name in the Asset Browser and support drag-and-drop surface placement (ground-plane fallback) and the existing Place control. One command creates the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve identity, transform and baseline. The always-visible selectable capsule represents the placed player. Add no longer exposes Player Start. A second placement is refused: use the existing Inspector to change prefab, or delete the old start before placing another. Immutable saves refresh the browser. Owner/exact-commit verification remains required.
+New levels have no automatic Player Start. Project browsing ensures a registered Basic
+Player Start preset under Content/Player without creating a scene entity. Saved player
+prefabs appear by authored name in the Asset Browser and support drag-and-drop surface
+placement (ground-plane fallback) and the existing Place control. One command creates
+the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve
+identity, transform and baseline. The always-visible selectable capsule represents the
+placed player. Add no longer exposes Player Start. A second placement is refused: use
+the existing Inspector to change prefab, or delete the old start before placing another.
+Immutable saves refresh the browser. PR #178 functionality is owner-accepted; the UI/UX
+follow-up remains open.
+
+### Player authoring UX and project adoption follow-up
+
+PR #178 is merged and owner-accepted. The current Assembly pickers enumerate
+imported model products without arms/weapon role filtering. Dedicated folders or
+collections and explicit role eligibility are a future UX contract, not an
+existing asset schema. Project identity, canonical registry/provenance and complete
+asset closure must be handled by a bridge adoption workflow; copying a prefab alone
+does not create a valid cross-project player. Keep this logic out of UI panels.
+See PLAYER_AUTHORING_UX_FOLLOWUP.md for requirements and acceptance criteria.
+
+## P2 equipment persistence boundary
+
+EquipmentAssetService owns immutable project-scoped .requipment definitions and
+journaled asset/registry writes. Equipment definitions reference existing governed
+presentation assets; the staged action state remains independent of skeleton
+evaluation. Player settings store primary/off-hand equipment identities through
+the existing WISCENE metadata/command boundary. Player prefab schema v2 copies
+those slots into defaults and overrides, while reading schema v1 with empty slots.
+
+Studio's equipment panel calls bridge preparation, save and hand-admission
+services. Assembly adoption copies semantic bindings and native paired duration
+without editing the assembly. ReusableAssetDependencyProvider discovers level,
+prefab and equipment presentation edges in the existing dependency graph.
+Runtime ownership, inventory/ability integration and semantic routing remain
+pending; this persistence slice does not create another movement or animation
+controller.
+
+
+## Runtime equipment ownership and immediate action checkpoint — 2026-10-05
+
+Runtime resolves primary/off-hand equipment atomically on player scene synchronization.
+Authored primary equipment owns the effective presentation; empty or invalid authored
+loadouts do not inherit a legacy gun. Original WISCENE authoring settings remain intact.
+Legacy players with no equipment assignment retain their accepted animation path.
+
+The adapter admits matching immediate PrimaryUse/Attack, Reload/Reload,
+AlternateUse/AimIn and Equip/Unequip definitions. Missing, mismatched, staged or held
+definitions block their input. Active duration and ammo remain native paired-animation
+authority. This does not integrate the staged EquipmentActionState clock, charge/release,
+independent off-hand presentation, inventory, or packaged gameplay acceptance.
+
+Windows Release Runtime build passed. Release CTest snapshot, prefab, EquipmentActionState
+and EquipmentAsset passed 4/4. The DX12 equipment snapshot proof cold-loads the real
+paired shotgun, routes PrimaryUse to Attack and verifies one shell consumed.
+Standalone Runtime PID 40508 loaded the generated snapshot: equipment authored/ready,
+no equipment error, presentation loaded, paired animation initialized, two active tracks.
+Screenshot BUILD/p2-route-runtime.png retains the fixture's existing washed-out lighting.
+Diagnostics: BUILD/p2-route-runtime-diagnostics.json. No owner or independent acceptance.
+
+
+Next: staged action routing, independent off-hand presentation and package verification.
+
+
+### Staged discrete Runtime equipment checkpoint (2026-10-05)
+
+Primary fire/reload/equip/unequip now use EquipmentActionState preparation, windup,
+native-completed Active and authored recovery. Pause/reset and hand reservations
+are retained; native animation remains the skeleton and ammo authority.
+Release Runtime build, focused CTest 4/4, staged DX12 paired Attack/ammo/completion
+proof and standalone immediate-definition routing passed. Held actions/cancellation
+input, off-hand presentation and packaged acceptance remain pending.
+See P2_EQUIPMENT_ACTION_IMPLEMENTATION.md and HANDOFF.md for exact evidence.
+
+
+### Held primary input and cancellation (2026-10-05)
+
+Authored PrimaryUse/Attack can wait in Hold until release of its Fire binding.
+Cancel (default C; remappable) respects pre-active cancellation and leaves native
+Active/recovery untouched. Old version-1 input documents adopt Cancel in memory
+without rewriting custom controls. Release bridge/Runtime builds, focused CTest
+5/5, DX12 held-shotgun proof and standalone hold/release/cancel check passed.
+Separate Charge/Release clips, charge-power mechanics and off-hand presentation
+remain pending. See P2_EQUIPMENT_ACTION_IMPLEMENTATION.md for limits and evidence.
+
+
+### Explicit Charge/Release presentation checkpoint (2026-10-05)
+
+Assemblies optionally map Charge and Release as native arms/weapon pairs.
+CREATE FROM ASSEMBLY derives those definitions; an unassigned Attack selects the
+Charge/Release primary path. Runtime plays Charge to its held endpoint and
+retargets ownership to Release on mouse-up, preserving reservations into recovery.
+Aim reconciliation cannot steal Charge; pre-active cancellation clears its pose.
+Release bridge/Runtime/Studio builds, six focused CTests, DX12 cold-load/pose/hand
+proof and standalone release/cancel check passed. Charge strength/projectiles and
+off-hand presentation remain pending. See P2_EQUIPMENT_ACTION_IMPLEMENTATION.md.
+
+
+### Frozen Player Camera Preview
+The selected Player Start exposes a small bottom-right scene inset. A bridge-owned
+PlayerCameraPreviewService prepares a private WISCENE copy, retains material
+resources, removes gameplay actors/physics/scripts/audio and uses paused native
+Idle presentation. PlayerViewRig, PlayerViewAsset and PlayerViewAnimation now
+live in EngineBridge; Runtime headers remain compatibility includes. Both
+consumers use the same attachment, asset-loading and native animation functions.
+
+The camera matches Runtime spawn yaw, upright eye height and current default
+60-degree perspective. Player settings currently have no separately authored FOV.
+Explicit equipment resolves the primary presentation and never inherits a legacy
+gun from an empty or invalid authored loadout. Independent off-hand rendering
+remains pending. Preview helpers never enter the authoring scene or its saves.
+
+Wicked requires positive scene update time for GPU mesh/instance preparation.
+The isolated preview uses a minimal render preparation tick and then supplies
+zero scene time to GPU effects; native clips remain paused. Eight prepared frames
+are cached until player/scene/history changes; edits settle for 0.2 seconds
+before rebuilding. Re-selecting the player refreshes the copy after asset edits.
+Assembly/import/grip workspaces and Test Level suppress the inset. Pointer
+selection/navigation ignores its rectangle. Large-world clone cost and complete
+render-settings parity still require profiling and acceptance.
+
+## P2 native hand mask candidate
+
+PlayerViewAnimationMask.h is a bridge-owned transient native-clip preparation seam.
+Explicit subtree-root entities partition one armature into disjoint primary,
+off-hand and base bones. Generated transform-only AnimationComponents share
+retained native keyframe data; Wicked evaluates them. The caller owns generated
+clip cleanup and source-data lifetime. This checkpoint is exercised by a private
+sword/shield graphics proof; authored layer identity, procedural sanitation and
+live equipment integration remain pending. See P2_HAND_ANIMATION_MASKS.md.
+
+
+# Sword/shield playable checkpoint - 2026-10-05
+Implemented schema-v2 shared arms with static primary/off-hand attachments,
+explicit clavicle partitions, transient native per-hand clips and independent clocks.
+Runtime routes LMB Attack and RMB held Block only for a matching shared presentation.
+Fixed missing MOUSE_RIGHT press support in GameplayInputService.
+Owner requested camera-local 90-degree right yaw and sword 2cm lower in grip.
+Saved project: <USER_HOME>/OneDrive/Desktop/renegade tests/SwordShieldTest.
+Launcher: Play Sword Shield Test.cmd. All 35 source clips retained; only Idle,
+Walk, Sprint, AttackLeft and BlockStart/Loop/End wired for tonight.
+Release bridge and Runtime builds pass. Alternate Studio build passes at
+BUILD/sword-studio (owner Studio untouched). Five focused CTests pass:
+PlayerViewRig, source contract, FirstPersonAssemblySettings (v1/v2/undo),
+EquipmentActionState, EquipmentAsset.
+Native input evidence: BUILD/sword-native-events.json: equipment ready,
+independent hands enabled; held block phase2 concurrent primary attack;
+release phase3 then phase0. Fixture save/reopen and TestLevel closure checked
+by --sword-playable in Tests/SwordShieldPlayableProof.h (final output proof6).
+No gate closure. Remaining: sword/shield clipping is visible and unsolved;
+no collision, hit damage, directional selection, parry, charge or equip wiring.
+Hard animation transitions currently; blends and compatible combined poses need work.
+Generic v2 assembly editor controls not yet exposed; fixture authored through service.
+Native TestLevel snapshot smoke is required before claiming editor-button parity.
+Files: FirstPersonAssemblyService.h/.cpp, FirstPersonHandAssemblyPreparation.h,
+PlayerViewHandAnimation.h, PlayerViewAnimation.h, GameplayInputService.cpp,
+RuntimeApplication.cpp, RuntimeLiveDiagnostics.cpp, RuntimeEquipmentLoadout.h,
+FirstPersonAssemblyGraphicsProof.cpp, FirstPersonAssemblySettingsTests.cpp,
+SwordShieldPlayableProof.h.
+Reproduce: BUILD/sword_bridge_runtime_build.ps1, sword_playable_build.ps1,
+sword_tests.ps1; manual native input BUILD/sword_native.py.
+Next: correct clipping with compatible block/attack poses, meaningful per-hand
+controller edge-case tests and v2 authoring controls; do not declare P2 complete.
+
+Independent assembly v2 permits ordered distinct Attack bindings. Native attack_order metadata preserves authored order when transient hand masks are rebuilt. Legacy paired schema-v1 actions remain unique.
+
+Directional melee presentation uses explicit Melee{Left,Right,Down,Stab}{Charge,Hold,Release} semantic bindings. The staged primary equipment Charge/Release events remain gameplay authority; directional right-arm playback selects the corresponding native clips independently of shield state. Charge seconds and release strength are transient; damage remains unimplemented.
+
+## Independent first-person hand fades
+For explicitly partitioned shared-arm assemblies, Runtime restores a frozen
+outgoing local pose per hand before the native destination mask is evaluated.
+Wicked AnimationComponent.amount owns T/R/S interpolation. Fades restart from
+the last displayed pose when interrupted; bones remain disjoint and shared-base
+ownership does not move into either hand. Blend state is transient, not serialized.
+Presentation fades never delay gameplay phases or implement weapon collision.
+Paired assemblies retain their existing native action crossfade path.
+
+
+## First-person blade/shield pose avoidance
+Independent-hand assemblies can opt into schema-v2 authored blade endpoints/radius,
+shield centre/half-extents and a maximum correction target distance. Static part
+roots carry explicit proxy roles; Runtime derives the primary IK chain from the
+validated partition, without importing filename or bone-name assumptions.
+Wicked evaluates the generated masked clips once in a private CPU pose scene.
+Native CCD corrects the primary arm; authored world wrist orientation is restored.
+Native IK rotations retain authored bone translations and scale. A near-contact
+fallback permits at most 4cm of shoulder-root translation within the total bound.
+Solved local poses are committed before ordinary world hierarchy/skinning updates;
+world animation and the shield arm retain their existing authority. Native world-only
+IK output is converted back through its solved temporary locals.
+Collision tests use a full blade segment against a radius-expanded shield box.
+Entry separates immediately; return eases over 0.10 seconds. Six candidate faces
+and bounded refinements handle reachability. Invalid native IK poses are rejected;
+unresolved contacts restore the authored pose and increment live diagnostics.
+The solver uses four native iterations per refinement: longer convergence exposed
+a native singularity in the supplied pack. No upstream changes were made.
+This is presentation correction, not weapon rigid-body physics, damage or NPC contact.
+Conservative corners, frame-discrete contact, absent joint/pole constraints and
+unreachable targets remain limitations. Generic avoidance authoring UI is deferred.
+
+
+## Directional melee input chaining
+RuntimeEquipmentLoadout owns one transient follow-up Charge request for explicitly
+directional shared-arm presentations with compatible Charge/Release equipment.
+The last 0.30 seconds of native Release playback and authored equipment recovery
+accept a fresh primary press. Direction gestures and held charge accumulate in the
+queue without interrupting the active strike or stealing off-hand reservations.
+Existing gameplay Ready/Prepare/Windup/Hold/Active/Recovery phases remain authority.
+The queue starts only after native completion and authored recovery free the primary
+hand. Its direction and charge seed the hand controller; native fades retain the
+last displayed pose. A released queued request preserves its charge through any
+new preparation/windup. A held queued request continues charging and still needs
+button release. No automatic repeating strike is introduced.
+Released requests expire after 0.75 gameplay seconds; held requests remain deliberate
+input. Pause/nonfinite dt freezes queue data. Cancel, reload, equip/unequip, changed
+equipment identity and load reset clear queued intent. One accepted request cannot
+dispatch twice. Ordinary firearms and other non-directional presentations retain
+their existing routing. Runtime prompt exposes PREPARE NEXT and queued direction.
+Damage, stamina, hit windows and configurable combo authoring remain later work.
+
+### Assembly hand authoring and compatible recipe extensions
+
+FirstPersonAssemblySettings owns uniform primary/off-hand mesh scale and melee
+full-charge/tail-input/released-queue times. Optional authoring members extend
+strict schema-v1/v2 parsing; absent values preserve accepted defaults. Validation
+bounds finite scales/timings and requires all twelve directional slots or none.
+Generated independent native metadata carries timings into hand animation and
+the staged equipment router. Charge strength is normalized by authored duration.
+Primary-only part replacement preserves the retained hand setup; changing arms
+resets paths/indices rather than guessing a new rig. Off-hand product hashes join
+the preview-to-save stale-part guard. Journaled asset identity remains unchanged.
+
+The hand setup window edits the same command-backed assembly draft. Independent
+preview uses Runtime's native masks and avoidance in its private scene, including
+shield-held comparison and each Attack variant. Paired firearm preview retains
+its two-track clock. Preview state and generated masked clips never enter the
+saved product. Gameplay equipment phase timings remain separate authority.
+
+### Model destinations and identity-preserving product moves
+
+ModelImportCommitRequest adds a project-relative Content folder, creator tags and
+an explicit player role. The bridge validates containment before writing products;
+retained sources remain under SourceAssets/Models. Catalogue metadata stores role
+tags keyed by existing StableIds, with reserved prefixes excluded from free-text
+import tags. Assembly joins this metadata with legacy folders and saved recipes.
+
+CreatorAssetWorkflowService::MoveModelAsset keeps product bytes/hash/identity and
+dependency edges unchanged, updates managed projection paths and registry path,
+and moves thumbnails. ProjectDocumentWrite::remove extends the existing journaled
+transaction with protected deletions. Recovery needs only previous-existence and
+backup bytes: interrupted operations roll back, committed operations clean their
+artifacts. The existing journal format is unchanged. Sources and textures are
+retained in their original governed locations; no scene mutation or reimport occurs.
+
+
+## P3 transient projectile simulation boundary
+
+ProjectileSimulation is a bridge-owned transient record service. Gameplay
+supplies launch/source data and advances it with simulation time. A Runtime
+adapter must supply nearest eligible native world contacts; typed impact records
+then feed existing damage/event and presentation services. The simulator owns
+neither world physics nor health, audio, rendering or another Player controller.
+Its initial point-projectile segment queries do not establish finite-radius
+sweeps, throwables or directional melee. Native adapter and Runtime lifecycle
+integration remain pending. See P3_PROJECTILE_IMPACT_IMPLEMENTATION.md.
+
+P3 native boundary checkpoint: RuntimeProjectileWorld resolves nearest eligible
+Scene contacts after explicit shooter-hierarchy exclusion, maps Character
+children to the governed root and preserves material subset identity. Origin
+overlaps stop at time zero; coincident sphere-centre normals use an incoming-
+facing fallback. Character contacts delegate to ApplyAttributedCombatDamage
+for existing health/perception/events. This tested adapter is not yet live in
+Runtime's action/update loop. Scene cache construction and physics-only Jolt
+coverage still require proof before general gameplay integration.
+
+P3 authoring now persists registered .rprojectile flight definitions and semantic-action
+equipment bindings with governed dependency edges. Native Weapon Projectiles exposes
+named project choices, presets and safe local immutable equipment assignment. Shotgun
+primary-fire assignment, unchanged held presentation and saved level reopen are verified.
+Live launches and packaged projectile proof remain pending. Usable Player/NPC health is
+not implemented; existing damage seams are not a gameplay health claim.
+See P3_PROJECTILE_AUTHORING_UX.md.
+
+
+## P3 live shotgun checkpoint - 2026-10-06
+
+Accepted shotgun shots now launch cached projectile definitions in Runtime, with
+native scene contacts and bounded flight/contact feedback. Test Level snapshots
+include projectile dependencies. Release targeted tests and native Test Level /
+standalone source firing pass. Initial camera-eye origin is explicit; authored
+muzzles, pellet spread, effects, Jolt-only coverage, packaged firing and independent
+verification remain open. Health is not required. See
+[P3 live shotgun evidence](P3_LIVE_SHOTGUN_PROJECTILES.md) for commands and limits.
+This checkpoint supersedes earlier statements that live Runtime firing is pending.
+
+## P3 projectile model/editor checkpoint — 2026-10-06
+
+Add → Projectile now creates model-backed projectile definitions without a Player
+selection. Imported model identity, scale and rotation persist in projectile schema
+v2 with v1 compatibility and required model/texture dependencies. Runtime render
+instances follow transient flight and retire on contact, expiry and reset; visual
+hierarchies are excluded from projectile collision queries. The supplied arrow was
+imported and assigned to the shotgun in the disposable native fixture, saved and
+cold-loaded. Model snapshot closure and source standalone firing were exercised.
+Evidence and limits: [Projectile model checkpoint](P3_PROJECTILE_MESH_CHECKPOINT.md).
+Target workflow: [Projectile editor design](P3_PROJECTILE_EDITOR_DESIGN.md).
+
+Next: dedicated model preview, explicit weapon/palm launch sockets, then first-class
+Hitscan/Beam authoring and surface impact profiles. Camera-eye launch remains the
+current policy. Packaged firing and Jolt-only coverage are open. Health is not a
+prerequisite; no P3 gate closure or automatic P2 merge is authorized.
+
+## P3 projectile preview checkpoint — 2026-10-06
+
+The projectile editor now includes an automatically refreshed isolated model
+preview with camera orbit, elevation, side/rear views, zoom and fit. Authored
+scale/rotation use the Runtime convention and are validated before rendering;
+camera inspection does not change those values. Physical model size is shown.
+Private preview resources are released when hidden/project changes. Level
+markers, gizmo, selection outline and player-camera inset do not cover this
+editor. Saved copies display Custom / saved projectile rather than a misleading
+preset. See [Projectile preview evidence](P3_PROJECTILE_PREVIEW.md).
+
+Next: explicit weapon/palm sockets, placement and runtime launch/aim timing.
+Camera-eye launch remains current; Hitscan/Beam, effects, Jolt-only coverage,
+packaged firing and independent P3 verification remain open.
+
+### Projectile preview mouse navigation - 2026-10-06
+
+Projectile inspection now uses left-drag orbit, right-drag pan and wheel zoom.
+FIT / RESET VIEW recentres and returns to the tip-right side view. Drag starts
+inside the image and remains owned until release, including outside the image.
+View state is transient; saved appearance and Runtime launch rules are unchanged.
+Other importer controls and the Wicked pin are unchanged. See
+[P3 preview evidence](P3_PROJECTILE_PREVIEW.md). Native verification is recorded
+there; weapon/palm launch sockets remain the next gameplay increment.
+
+## P3 launch socket candidate - 2026-10-06
+
+LaunchSocketService owns validated named native transform attachments and
+parent-local surface placement. First-person assembly recipes carry optional
+launch_sockets; equipment action bindings carry optional launch_socket names.
+Studio edits sockets on a private mouse-controlled model preview, applies an
+undoable assembly draft, and persists through existing assembly Save/Update.
+Weapon Projectiles selects the saved launch socket independently of projectile
+appearance. Runtime resolves its post-animation world pose under the player
+view rig; camera aim chooses a target, muzzle cover queries own the obstruction.
+Empty names retain legacy camera-origin launch. Shared projectile simulation,
+attribution and native scene contact adapter remain unchanged. See
+[P3 launch socket evidence and limits](P3_LAUNCH_SOCKETS.md).
+
+### P3 mesh projectile visibility repair - 2026-10-06
+
+Runtime flight feedback now distinguishes model-backed projectiles from meshless
+ones. Model-backed shots draw their native scene appearance without the temporary
+sphere/trail overlay. Meshless definitions retain bounded basic flight feedback;
+confirmed impact feedback is unchanged. The flag is transient per launch and per
+trace, cleaned on retirement/reset; projectile asset serialization is unchanged.
+Native slowed-copy arrow inspection and owner visibility confirmation supersede
+the earlier assignment-only visual claim. No effects/tracer authoring is implied.
+
+## Authored projectile gate candidate (2026-10-07)
+
+Equipment v2 bindings carry animation release seconds and first/alternate/both
+named PSP policy. Runtime schedules only accepted actions, reads the native paired
+animation clock, and resolves sockets after animation update. One accepted action
+consumes ammunition once even when two PSPs launch.
+
+Projectile v3 definitions retain v1/v2 compatibility and save bounded flight effect
+layers plus impact/stick policy. Shared ProjectileEffectRuntime configures native
+Wicked emitters for preview and Runtime. Impact emitters defer burst activation
+until the next native update so indirect GPU buffers exist before drawing.
+Retained arrows attach to the contacted native object's transform; transient
+instances, scheduled releases and particles clear on scene/reset transitions.
+See [the grouped gate evidence](P3_AUTHORED_PROJECTILES_GATE.md) for proof and limits.
+
+## Projectile progressive disclosure
+
+Studio owns transient Basic/Advanced state; hidden controls retain their draft
+values and use existing ProjectileAssetService and equipment transactions.
+Layout positions change only when the disclosure state changes: repeatedly
+setting native widget positions after GUI update invalidates cached dropdown
+geometry. Child visibility is reapplied after Window visibility propagation.
+New one-PSP bindings select that authored point; saved camera-origin choices,
+named points and multi-point policies remain explicit. Immediate/delayed release
+maps to existing releaseSeconds without a schema or Runtime change.
+
+## Visual release timing candidate
+Adds SET RELEASE IN ANIMATION to Weapon projectiles. Uses saved equipment action animation and production FirstPersonAssemblyService in a private ModelImportPreview. Preview cursor scrubs the synchronized assembly; release marker scrubs to its pose; Mark current pose copies playhead time. Use release time transfers marker seconds to the existing draft releaseSeconds control. Cancel discards marker changes; Apply to this player and Save level remain the persistence path. No assembly edits or new schema. Missing assembly/action reports a message and keeps numeric timing available. Marker must be finite, nonnegative, before clip end and at most five seconds.
+Changed: Studio/src/PlayerProjectileEditor.cpp, Studio/src/StudioApplication.h, Studio/src/StudioApplication.cpp, Studio/src/ModelImportPreview.h. Based on cf04bd38434dbc3e84c90ce22ee628e3c3953a80. Build/visual verification pending; no release-gate closure. This is projectile release authoring; a general multi-event persisted timeline remains future work.
+
+## P3 first-class Hitscan checkpoint — 2026-10-08
+
+Weapon firing now supports an explicit Physical projectile or Hitscan / instant
+ray mode per semantic action. Hitscan is not represented by fake projectile
+speed/gravity values. Equipment schema v3 persists fire_mode, range and damage,
+while schema v1/v2 physical-projectile equipment remains readable and unchanged.
+A Hitscan binding has no projectile asset dependency.
+
+Studio's Weapon firing panel exposes Fire mode, Range and Damage for Hitscan and
+retains the same named PSP, first/alternate/both policy and animation fire marker
+used by travelling projectiles. Projectile search/New/Edit Copy are hidden in
+Hitscan mode. Hitscan authoring does not depend on the projectile asset catalogue.
+
+Runtime resolves Hitscan without loading a projectile asset, preserves accepted
+weapon action/ammunition/animation timing, applies the existing muzzle-to-camera
+aim and cover rules, then performs one bounded nearest-contact scene query.
+Character contacts use the existing attributed combat-damage seam and display a
+brief centre hit confirmation; static world contacts do not require a usable
+health system. hitscan.fired and hitscan.impact use the governed gameplay event
+boundary. Beam/continuous casts and pellet spread remain separate work.
+The shared surface presentation checkpoint below supersedes the earlier
+decal-profile limitation; governed per-surface audio asset binding remains open.
+
+Validation: Release EngineBridge, Runtime and normal Studio compile passed; the
+normal Studio link was blocked only because the owner's existing Studio process
+held RenegadeStudio.exe. A separate BUILD/hitscan-studio/RenegadeStudio.exe
+linked successfully without closing that session. EquipmentAsset, LaunchSocket
+and RuntimeProjectileSession focused executables pass. Tests cover schema-v3
+roundtrip/invalid values, Runtime resolution without a projectile asset, authored
+ray range, blocked-query failure, and unchanged projectile simulation behavior.
+git diff --check passes. Native owner visual/gameplay acceptance, package parity,
+Jolt-only blockers and independent exact-head review remain open; no P3 gate
+closure, commit, push or merge is claimed.
+
+## P3 shared impact-surface contract — 2026-10-08
+
+Impact surface meaning is explicit authoring metadata, not a renderer heuristic.
+`ImpactSurfaceType` is the shared semantic enum. Ordinary editable materials
+store `renegade.impact_surface`; MaterialImpactSurfaceService owns capture,
+sanitised application and command-backed Undo. Character is a runtime-only
+semantic type. Terrain creation writes explicit Dirt / Stone metadata.
+
+RuntimeProjectileWorld remains contact authority. It resolves the stable material
+ID into `ProjectileContact.surfaceId` and the semantic response into
+`ProjectileContact.surfaceType`. Character ownership wins over material
+classification. Missing / invalid material metadata fails safely to Default.
+Hitscan and ProjectileSimulation therefore feed the same downstream contact
+contract.
+
+RuntimeProjectileVisuals owns presentation only. `PresentSurfaceImpact` consumes
+the shared contact contract and creates bounded native emitter feedback plus
+short-lived Wicked decals for eligible world surfaces. It does not affect hit
+authority, health, attribution, projectile movement or scene-query policy.
+Impact decals attach to the contacted transform when available, are capped at 64
+and expire after 18 seconds; emitter lifetime/cap cleanup remains transient.
+Water, Glass and Character omit the generic persistent mark. Existing authored
+projectile impact effects are additive and remain projectile-definition owned.
+
+Both `hitscan.impact` and `projectile.impact` expose the stable material ID and
+semantic `surface_type` token through the existing GameplayEvent boundary.
+That is the current integration seam for scripting and future sound cues.
+AudioService currently governs scene SoundSources by filename and does not expose
+a one-shot asset-ID operation, so impact presentation must not create unmanaged
+filename-backed sounds. A governed one-shot audio cue API/profile can extend this
+contract later without changing contact classification.
+
+## P3 object Surface Type continuation - 2026-10-08
+
+Supersedes the material-first creator workflow in the preceding checkpoint.
+Creator steps: select an object; choose Surface Type directly in its Inspector.
+The field stays visible independently of collapsed Transform/Rendering/Materials
+sections. Choices: Default, Metal, Wood, Concrete, Stone, Dirt / Ground, Glass,
+Water. No creator-facing impact profile or override chain is introduced.
+
+EngineBridge ObjectImpactSurfaceService stores the classification on the
+selected Object/Collider entity's native MetadataComponent. No mesh subset
+binding or shared MaterialComponent is changed. Runtime checks governed Character
+first, then explicit object metadata, then existing material classification for
+untouched objects. Explicit Default means generic response. Older material
+tags and terrain defaults remain compatible. Both firing modes already share
+the same classification and impact presentation/event path. Audio binding
+remains future work; surface_type is the event seam, not a claim of finished SFX.
+
+The command restores both prior value and prior absence on Undo; Redo reapplies.
+ProjectileWorldTests adds shared-mesh instance isolation, untouched material and
+subset assertions, explicit Default, subset-free object response, automatic
+Character precedence, invalid authoring rejection and native WISCENE archive
+save/reload. This does not claim packaged gameplay or owner visual acceptance.
+
+Visual material assignment is a separate visual property. Material Target still
+selects an already-bound material to edit; it is not relabelled as assignment.
+A future assignment command must create a private mesh derivative for the selected
+instance before altering subset bindings, preserve skinning/LOD/resource identity,
+and restore the original mesh on Undo. Surface Type needs none of those changes.
+
+Imported asset roots are supported: a selected transform parent with Object/Collider descendants can carry Surface Type. Runtime uses the nearest authored object/ancestor, then legacy material metadata. This changes only the selected asset instance hierarchy; automatic Character classification remains first. Shared-mesh sibling and imported-root precedence/Undo are regression checked.
+
+## P3 governed impact audio - 2026-10-08
+
+ImpactAudioService adds a project-owned schema-v1 bank at
+Content/Audio/Impacts/ImpactAudio.renegade-impact-audio. It maps explicit semantic
+surface tokens to bounded lists of governed LP08 Audio .rasset stable IDs.
+No filenames or renderer material names classify contacts. Ordinary creation stays
+select object -> Surface Type -> done; there is no per-object sound setup.
+Default and Character have no supplied cues and remain silent unless an explicit
+Default/Character bank entry is provided.
+
+Both Hitscan and travelling-projectile contacts dispatch the same transient native
+3D audio player. It resolves and validates all bank assets once per scene revision
+before activation, uses the SoundEffect bus, avoids consecutive variant repeats,
+caps voices at 32, updates listener spatialization, removes ended voices with a
+ten-second safety lifetime, pauses/resumes existing voices and stops them on reset,
+screen transitions, scene replacement and shutdown. It never serializes playback
+voices into the scene. Legacy projects without a bank remain compatible/silent.
+
+Audio products live in Content/Audio/Impacts/<Surface>/Impact_1.rasset and
+Impact_2.rasset. Byte-identical supplied WAVs are retained in SourceAssets/Audio/Impacts
+for governed reimport. Test Level snapshots include bank, registry and required
+products; Build Game discovery adds the bank and all required audio products to
+the normal dependency graph. Packaged Runtime resolves audio stable IDs through
+content-manifest.json and never needs retained SourceAssets.
+
+Tests/ImpactAudioTests.cpp covers bank identity/save-reload, duplicate rejection,
+bounded PCM WAV validation, governed import/resolution, snapshot closure, package
+lookup without sources/registry, native voice playback/variant isolation, cap,
+pause lifetime and reset. Its --install helper imports the explicitly mapped
+supplied packs; --verify and --tag-metal run graphics-enabled real-scene Build Game
+discovery plus supplied WAV decode checks. --tag-metal is for the disposable Bow
+Playground only. New-project automatic starter-bank installation and bank editing
+UI are not added by this checkpoint.
+
+
+### P3 impact VFX first three surfaces (local candidate, 2026-10-08)
+Metal, Wood and Concrete now have separate generated 64x64 masks and bounded presets:
+Metal narrow short sparks and a dent/scuff mask; Wood pointed splinters, a small tan dust puff and a split mask; Concrete irregular chips, a broader grey dust puff and a chipped mask. GetImpactTexture shares seven built-in GPU textures; no external texture paths, imports, profiles or new inspector controls. Other categories retain their earlier presets. Hit normals direct bursts outward; random velocity spread uses native normal_factor with random_factor=1 to avoid negative starting sizes. Dust expands and fades, fragments shrink/fall. Embedding projectile definitions use reduced particle counts and decal size; this is an internal stick-on-impact heuristic, not a dedicated weapon-class system.
+Native effect cleanup remains capped at 128 emitters, each polished burst capped at 64 particles; decals remain capped at 64 and expire after 18 seconds or reset. Both Hitscan and physical projectile presentation use this common function. Contact diagnostic records remain, but orange debug contact spheres are removed from normal gameplay rendering.
+No change to select-object -> Surface Type -> done workflow. No authored custom flipbook UI, mesh debris physics, or final remaining-surface art added.
+Changed files: Runtime/src/RuntimeImpactTextures.h (new), Runtime/src/RuntimeProjectileVisuals.h, Runtime/src/RuntimeProjectileSession.h, Runtime/CMakeLists.txt; Tests/ImpactAudioTests.cpp adds disposable --tag-wood/--tag-concrete and governed --quiet-projectile <descriptor> <asset-id> validation helpers.
+Bow Playground original flaming-arrow definition retained at BUILD/p3-audio-before/FlamingArrow-before-vfx.rprojectile. Quiet-arrow test clears only its flight layers and explicit projectile impact overlay through SaveProjectileAsset, to make surface response visible. Test wall surface is set using the normal scene-document authoring service.
+First visual captures failed acceptance: flaming-arrow overlay obscured surface bursts; debug spheres persisted; native spread was disabled and fragments were too small. Corrected emitter spread and size before accepting later visual evidence. Runtime link initially failed because the test game locked the binary; test game closed and rebuilt. Quiet-projectile helper initially lacked ProjectileAssetService include; fixed before use.
+Verification results and any remaining visual limits follow in HANDOFF. No commit/push/merge; existing broad working-tree provenance remains under review.
+
+### Built-in impact powder resource (P3 candidate, 2026-10-08)
+Runtime embeds the source RGBA ConcreteDust.png in Windows RCDATA 7301 and lazily decodes it with Wicked ResourceManager from memory. Native resource lifetime is cached; exported Runtime needs no loose sprite file. Concrete powder and smaller Wood powder share this neutral texture with separate tint/scale/count/lifetime presets; Metal has no dust. Small spark/splinter/chip/decal masks remain procedural, with chips using an angular polygon. Object Surface Type remains the sole creator classification. Tests embed the same source independently of the Runtime CMake target. Generated asset prompt/hash are in Runtime/Content/Effects/Impacts/PROVENANCE.md. In-motion owner acceptance pending after rejection of the first procedural look.
+
+### Glass / Water impact behaviour prototype (2026-10-09)
+RuntimeImpactGeometry owns bounded transient mesh entities (Glass prism shards; Water crown/rings), each with private same-entity mesh/material, analytic presentation motion/fade, reset/expiry cleanup and projectile-query exclusion through RuntimeProjectileVisuals roots. No rigid bodies, scene-object destruction or fluid simulation. Glass adds a crack decal; Water adds droplets without bullet holes and retires sticky-arrow appearance. The Surface Type UX is unchanged. Owner accepts behaviour as a test but explicitly rejects ALL current impact art as low-quality generic/stylised; realistic authored assets and an approved visual reference remain required. Native rendering is used, but no visual parity or production-quality claim is made.
+
+### Earlier generated Character blood candidate (2026-10-09; owner rejected)
+Character surface presentation now uses an embedded 4x4 16-frame liquid spray atlas played once over lifetime with native frame blending with native SOFT_LIGHTING and zero emission, plus RuntimeBloodEffects droplets sharing a private per-scene mesh/material. Droplet presentation integrates gravity and traces one bounded short scene segment per update, excluding Characters and transient visuals; a confirmed world contact produces an attached blood decal, with native Water excluded. Caps: 96 droplets and 128 stains with oldest eviction; droplets 1.6s, stains 600s of gameplay with final 30s fade. Stains darken and increase material roughness while reducing reflectance over 90s; pause freezes ageing, reset retires shared resources. Enlarged spray and 0.15-0.20m collision-derived stain radius are internal presets. RCDATA 7304/7303 and BLOOD_PROVENANCE.md govern packaged artwork. Arrows/non-sticky projectile or Hitscan strength differs internally. Stain attachment preserves the world contact when parenting to scaled/translated receivers; the previous local-space flag hid stains beneath the playground floor. Native decal drying binds shared bounded surface textures because material roughness scalars alone do not drive decals; dielectric reflectance is .04 fresh and .02 dry. This is a generated-frame projectile candidate; dedicated melee contacts, skinned wounds and fluid animation remain open. Owner rejected this generated version: behind-dummy appearance, rushed timing, unrealistic spray and furry floor stains. Creator Character classification stays automatic.
+
+### KNIFE authored blood experiment (2026-10-09)
+
+The private-project replacement uses governed scene material bindings and two bounded native PBR liquid-sheet objects with a 64-frame mask/normal atlas adapted from the supplied KNIFE pack. Existing tracked droplets and native attached stains remain. Floor masks are compact procedural wet-footprint fallbacks; proper authored floor art is still missing. No SPH, renderer fork, custom serializer, new normal-user profile chain or quality acceptance. See [candidate design and limits](P3_KNIFE_BLOOD_CANDIDATE.md).
+
+### Projectile visual update ordering
+
+Runtime must create/update/remove transient projectile presentation before
+Wicked's Scene update builds GPU instance data. Component-array deletion after
+that upload can mismatch CPU render selection and uploaded instance transforms;
+blood-sheet expiration reproduced a one-frame metre-scale droplet. Runtime aims
+against the currently completed scene and refreshes its displayed player camera
+after the subsequent native physics step. No second native Scene update is added.
+
+### Rigid retained projectile presentation
+Retained projectile roots track receiver contact and rotation explicitly during
+pre-upload Sync. They do not inherit nonuniform receiver scale through native
+TRS parenting, which can introduce shear and distort an oblique arrow. Contact
+position follows receiver geometry; authored projectile proportions remain fixed.
+This is transient presentation state and does not alter scene serialization.
+
+### Native water impact ripple presentation
+Water semantic contacts create transient transmissive crown/drop geometry.
+Horizontal contacts also call Wicked Scene::PutWaterRipple with its built-in
+normal texture; this path requires an actual native WATER shader receiver for
+surface distortion. Surface Type classification never silently changes visual
+materials. Impact-owned native ripples are capped and selectively reset; native
+Character ripples remain independent. No renderer fork or fluid simulation.
+
+
+### Governed impact debris artwork
+
+Optional scene materials tagged renegade.impact.glass_shards, rock_shards or
+wood_shards provide governed 2x2 static alpha atlases. RuntimeImpactGeometry
+uses four independent native lit cards with bounded ballistic motion and expiry;
+metadata-backed texture dependencies follow normal Save/Reload and Build Game
+resource discovery. Missing donors retain procedural fallbacks. This is an
+internal candidate path, with no authoring UI or custom picker exposed.
+
+
+### Governed surface impact marks
+
+Optional scene material keys renegade.impact.mark.<surface> own colour/normal/
+surface atlas ResourceAssets. Native projected decals use one static 2x2 quarter
+with per-hit roll/size; asset discovery follows existing material metadata.
+Character marks require a resolved contact triangle and follow its barycentric
+centre/basis through native GetPositionOnSurface. This tracks a local projection,
+not UV paint, and lacks skin-versus-clothing authoring or live animation parity
+acceptance. Donor absence retains prior world-mark/no-Character-mark fallback.
+
+Governed world impact marks also use triangle anchors, so their dimensions avoid
+nonuniform receiver-parent scale. Existing procedural fallback marks retain
+legacy attachment. Projector depth tolerance is .035 world-space half-depth.
+
+
+### Local wound trickle presentation
+
+Embedded projectile Character wounds can add one short gravity-aligned projected
+blood trail at the tracked triangle. Transient mark age drives four-second growth
+and later drying; after flow stops the stain retains its orientation relative to
+the receiver triangle. It shares bounded impact mark lifetime/reset ownership.
+No cross-triangle runoff simulation or live animated attachment parity is claimed.
+
+
+### Impact mark completed-pose refresh
+
+Runtime projectile entity lifecycle stays before native scene upload. After native skinning completes, a transform-only mark anchor refresh and public native RunDecalUpdateSystem refresh render-facing decal matrices and bounds before PreRender visibility/upload. No second full Scene update and no post-upload entity mutation. See P3_ANIMATED_WOUND_VERIFICATION.md for same-pose and loop-transition evidence.
+
+
+### Retained projectile skin frame
+
+Character retained projectiles can capture a contacted mesh triangle and retain a rigid impact pose relative to its orthonormal barycentric frame. Completed native skinning supplies the current frame. Post-update refresh changes only retained arrow world transforms and existing render-slot pose/bounds/TLAS data while preserving local hierarchy, previous-frame history and allocation. Entity lifecycle remains in pre-upload Sync. Unresolved contacts keep the object-relative fallback; invalid captured receivers retire on pre-upload cleanup. See P3_ANIMATED_WOUND_VERIFICATION.md.
+
+## Project-owned impact defaults
+
+Studio Surface Type selection calls EngineBridge PrepareImpactDefaults against
+an optional private library beside Studio. The service copies only tagged material
+donors and their governed texture bindings, importing payloads through the existing
+ResourceAssetService into the target project's canonical Textures/Audio folders.
+Stable source library IDs identify default import paths; target products have
+target project identity and stable IDs. Existing matching donor tags and audio
+banks win; imports do not overwrite different payloads. Native material settings
+are preserved, all source texture handles cleared, then target bindings restored.
+The scene command adds missing donors with Undo/Redo; asset imports/audio bank are
+durable project resources and remain after Undo. Save, Test Level and Build Game
+reuse existing material/audio dependency closure; no new package lookup policy.
+A persisted impact-defaults donor flag selects accepted directional blood without
+a process diagnostic switch. Reset prevents cross-scene profile leakage.
+Private art is an optional distributor input RENEGADE_IMPACT_DEFAULTS_DIRECTORY,
+copied beside Studio after build; it is not committed. Missing kit keeps existing
+baseline presentation. Partial preparation failure may leave unused imported
+resources, but scene donors are not committed and custom resources are preserved.

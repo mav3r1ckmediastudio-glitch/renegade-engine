@@ -1,5 +1,6 @@
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
 
+#include "../../WickedEngine/Editor/json.hpp"
 #include <chrono>
 #include <WickedEngine.h>
 #include <algorithm>
@@ -15,6 +16,41 @@
 
 namespace renegade::bridge
 {
+    bool ResolveCreatorContentFolder(const std::string& projectRoot,
+        const std::string& folder, std::filesystem::path& resolved, std::string& error)
+    {
+        namespace fs = std::filesystem;
+        const auto relative = fs::u8path(folder);
+        if (folder.empty() || relative.is_absolute() || relative.has_root_name() ||
+            relative.generic_u8string() != folder || relative.lexically_normal() != relative ||
+            relative.begin() == relative.end() || *relative.begin() != "Content")
+        { error = "Choose a project-relative folder under Content, using / separators."; return false; }
+        for (const auto& part : relative) {
+            const auto name = part.generic_u8string();
+            if (name.empty() || name == "." || name == ".." || name.back() == '.' || name.back() == ' ' ||
+                name.find_first_of("<>:\\|?*") != std::string::npos ||
+                std::any_of(name.begin(),name.end(),[](unsigned char c){return c < 32;}))
+            { error = "The Content folder contains an invalid name."; return false; }
+        }
+        std::error_code ec;
+        const auto root = fs::weakly_canonical(fs::u8path(projectRoot),ec);
+        if(ec){error=ec.message();return false;}
+        auto component=root;
+        for(const auto& part:relative) {
+            component/=part;
+            if(fs::is_symlink(fs::symlink_status(component,ec))) {
+                error="Content folders cannot traverse symbolic links.";return false;
+            }
+            ec.clear();
+        }
+        resolved = fs::weakly_canonical(root/relative,ec);
+        if(ec){error=ec.message();return false;}
+        auto b=resolved.begin();
+        for(auto a=root.begin();a!=root.end();++a,++b)
+            if(b==resolved.end() || *a!=*b){error="Destination escapes the project.";return false;}
+        error.clear();return true;
+    }
+
     namespace
     {
         namespace fs = std::filesystem;
@@ -1026,4 +1062,94 @@ namespace renegade::bridge
         error.clear();
         return true;
     }
+    bool CreatorAssetWorkflowService::MoveModelAsset(const std::string& projectRoot,
+        const StableId& projectId, const StableId& assetId, const std::string& folder,
+        std::string& newPath, std::string& error, ProjectDocumentTransactionHook hook) const
+    {
+        namespace fs = std::filesystem;
+        newPath.clear();
+        fs::path target;
+        if(!ResolveCreatorContentFolder(projectRoot,folder,target,error))return false;
+        const auto root=fs::weakly_canonical(fs::u8path(projectRoot));
+        AssetRegistry registry;
+        if(!ReadAssetRegistry(projectRoot,projectId,registry,error))return false;
+        auto record=std::find_if(registry.records.begin(),registry.records.end(),
+            [&](const auto& a){return a.assetId==assetId;});
+        if(record==registry.records.end() || record->provider!="lp07.rasset" ||
+            !record->sourceAvailable || fs::u8path(record->projectRelativePath).extension()!=".rasset")
+        {error="Select a current registered model product.";return false;}
+        const auto oldRelative=record->projectRelativePath;
+        fs::path sourceFolder;
+        if(!ResolveCreatorContentFolder(projectRoot,fs::u8path(oldRelative).parent_path().generic_u8string(),sourceFolder,error))return false;
+        const auto oldAsset=sourceFolder/fs::u8path(oldRelative).filename();
+        const auto destination=target/oldAsset.filename();
+        const auto next=destination.lexically_relative(root).generic_u8string();
+        if(target==sourceFolder){newPath=oldRelative;error.clear();return true;}
+        std::string hash;
+        if(!HashFile(oldAsset,hash,error) || hash!=record->contentHash)
+        {error="The registered model changed on disk; refresh before moving.";return false;}
+        ReusableModelAssetDocument document;
+        if(!ReadReusableModelAssetDocument(oldAsset.generic_u8string(),document,error) ||
+            document.manifest.assetId!=assetId || document.manifest.projectId!=projectId)
+        {error="Model identity does not match its registry.";return false;}
+        const auto oldProjection=root/fs::u8path(ResolveReusableModelManagedProjectionPath(oldRelative));
+        const auto newProjection=root/fs::u8path(ResolveReusableModelManagedProjectionPath(next));
+        std::ifstream projectionStream(oldProjection);
+        nlohmann::json projection;
+        try {projectionStream>>projection;
+            if(projection.at("asset_id")!=assetId || projection.at("project_id")!=projectId ||
+               projection.at("asset_path")!=oldRelative)throw std::runtime_error("identity");
+        } catch(const std::exception&){error="The managed model projection is missing or invalid.";return false;}
+        projectionStream.close();
+        std::vector<ProjectDocumentWrite> writes;
+        auto bytes=[](const fs::path& p,std::vector<std::uint8_t>& out) {
+            std::ifstream f(p,std::ios::binary);if(!f)return false;
+            out.assign(std::istreambuf_iterator<char>(f),{});return !f.bad();
+        };
+        auto add=[&](const fs::path& old,const fs::path& dest,const std::vector<std::uint8_t>* replacement=nullptr) {
+            std::error_code ec;
+            if(fs::exists(dest,ec)||ec){error="Destination already contains a model or companion file.";return false;}
+            ProjectDocumentWrite w;w.destinationPath=dest.generic_u8string();
+            if(replacement)w.content=*replacement;else if(!bytes(old,w.content)){error="Could not read model companion.";return false;}
+            const auto expected=w.content;
+            w.validator=[expected,bytes](const std::string& p,std::string& e) {
+                std::vector<std::uint8_t> found;if(!bytes(fs::u8path(p),found)||found!=expected){e="Moved bytes failed validation.";return false;}return true;
+            };
+            writes.push_back(std::move(w));
+            ProjectDocumentWrite removal;removal.destinationPath=old.generic_u8string();removal.remove=true;
+            writes.push_back(std::move(removal));return true;
+        };
+        if(!add(oldAsset,destination))return false;
+        const std::string oldThumb=projection.value("thumbnail_path",std::string{});
+        if(!oldThumb.empty()) {
+            const auto expected=ResolveReusableModelThumbnailPath(oldRelative);
+            if(oldThumb!=expected){error="Unsupported model thumbnail location.";return false;}
+            const auto nextThumb=ResolveReusableModelThumbnailPath(next);
+            if(!add(root/fs::u8path(oldThumb),root/fs::u8path(nextThumb)))return false;
+            projection["thumbnail_path"]=nextThumb;
+        }
+        projection["asset_path"]=next;
+        const auto projectionJson=projection.dump();
+        const std::vector<std::uint8_t> projectionBytes(projectionJson.begin(),projectionJson.end());
+        if(!add(oldProjection,newProjection,&projectionBytes))return false;
+        record->projectRelativePath=next;
+        std::string registryJson;
+        if(!SerializeAssetRegistry(registry,registryJson,error))return false;
+        ProjectDocumentWrite registryWrite;
+        registryWrite.destinationPath=(root/AssetRegistryDocumentName).generic_u8string();
+        registryWrite.content={registryJson.begin(),registryJson.end()};
+        registryWrite.validator=[projectId](const std::string& p,std::string& e) {
+            std::ifstream f(p);std::string json((std::istreambuf_iterator<char>(f)),{});
+            AssetRegistry value;return DeserializeAssetRegistry(json,value,e)&&value.projectId==projectId;
+        };
+        writes.push_back(std::move(registryWrite));
+        ProjectDocumentTransactionOptions options;
+        options.allowedRoot=root.generic_u8string();
+        options.journalDirectory=(root/"Intermediate/Transactions").generic_u8string();
+        options.operationHook=std::move(hook);
+        const auto result=ProjectDocumentTransaction().Execute(std::move(writes),std::move(options));
+        if(!result.success){error=result.message;return false;}
+        newPath=next;error.clear();return true;
+    }
+
 }

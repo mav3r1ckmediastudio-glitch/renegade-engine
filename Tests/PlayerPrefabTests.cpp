@@ -21,8 +21,8 @@ int main()
     d.settings.firstPersonArmsAssetId=GenerateStableId();
     Check(SerializePlayerPrefab(d,text,error)&&DeserializePlayerPrefab(text,parsed,error)&&
         PlayerSettingsEqual(parsed.settings,d.settings),"typed settings roundtrip "+error);
-    auto bad=text;auto pos=bad.find("\"schema_version\": 1");
-    bad.replace(pos,19,"\"schema_version\": 2");
+    auto bad=text;auto pos=bad.find("\"schema_version\": 2");
+    bad.replace(pos,19,"\"schema_version\": 3");
     Check(!DeserializePlayerPrefab(bad,parsed,error),"future schema accepted");
     auto invalid=d;invalid.settings.capsuleRadius=-1;
     Check(!SerializePlayerPrefab(invalid,bad,error),"negative capsule accepted");

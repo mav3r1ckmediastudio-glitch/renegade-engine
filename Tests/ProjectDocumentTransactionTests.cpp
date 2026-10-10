@@ -641,6 +641,33 @@ int main()
         fs::u8path("renegade-project-transaction-" + std::to_string(unique));
     fs::create_directories(root);
 
+
+    {
+        const auto dir=root/"17-delete";fs::create_directories(dir);
+        const auto original=dir/"A-original",destination=dir/"B-destination";
+        auto deletion=[&]{ProjectDocumentWrite d;d.destinationPath=original.generic_u8string();d.remove=true;return d;};
+        ProjectDocumentTransactionOptions options;
+        options.journalDirectory=(dir/"journal").generic_u8string();options.allowedRoot=dir.generic_u8string();
+        for(int mode=0;mode<3;++mode) {
+            WriteText(original,"protected");std::error_code ec;fs::remove(destination,ec);
+            options.transactionId="delete-"+std::to_string(mode);
+            options.operationHook=[mode](auto stage,size_t,const std::string&,std::string&) {
+                if(mode!=0 && stage==ProjectDocumentTransactionStage::AfterReplace)
+                    return mode==1?ProjectDocumentTransactionHookAction::Fail:ProjectDocumentTransactionHookAction::Interrupt;
+                return ProjectDocumentTransactionHookAction::Continue;
+            };
+            const auto result=ProjectDocumentTransaction().Execute({deletion(),TextDocument(destination,"protected")},options);
+            if(mode==0)Check(result.success&&!fs::exists(original)&&ReadText(destination)=="protected",("journaled deletion commit failed: "+result.code+" "+result.message).c_str());
+            else {
+                Check(!result.success,"delete fault was ignored");
+                if(mode==2) {
+                    options.operationHook={};
+                    Check(ProjectDocumentTransaction().Recover(result.journalPath,options).success,"delete recovery failed");
+                }
+                Check(ReadText(original)=="protected"&&!fs::exists(destination),"delete rollback lost original");
+            }
+        }
+    }
     TestSuccessfulDeterministicCommit(root / "01-success");
     TestNoOp(root / "02-noop");
     TestPreparationFailure(root / "03-preparation");

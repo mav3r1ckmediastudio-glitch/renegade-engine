@@ -29,6 +29,7 @@ namespace renegade::bridge
         std::string stagingId;
         std::string renegadeRevision;
         std::string wickedRevision;
+        std::string assetRegistryJson; // canonical reachable Runtime registry
         std::vector<WindowsRuntimeSupportSource> runtimeSupportSources;
         std::vector<WindowsPackageDocumentInput> packageDocuments;
     };

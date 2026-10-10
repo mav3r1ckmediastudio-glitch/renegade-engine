@@ -350,8 +350,13 @@ namespace renegade::runtime
 
         diagnosticService_.Heartbeat();
         const auto now = diagnosticService_.ElapsedMs();
-        if (now - lastDiagnosticSampleMs_ < 250) return;
+        const auto pendingRelease=playerEquipment_.scheduledProjectiles.size();
+        const bool projectileTransition=projectiles_.launched!=lastDiagnosticProjectileLaunched_ ||
+            pendingRelease!=lastDiagnosticProjectilePending_;
+        if (now - lastDiagnosticSampleMs_ < 250 && !projectileTransition) return;
         lastDiagnosticSampleMs_ = now;
+        lastDiagnosticProjectileLaunched_=projectiles_.launched;
+        lastDiagnosticProjectilePending_=pendingRelease;
 
         std::uint64_t navigationArrived = 0;
         for (const auto& agent : navigationState_.agents)
@@ -625,6 +630,34 @@ namespace renegade::runtime
             {"scene_attempt_revision", characterSceneAttemptRevision_}},
             "Runtime/src/RuntimeLiveDiagnostics.cpp");
 
+        diagnosticService_.Observe("projectiles", {
+            {"projectile_generation", projectiles_.generation},
+            {"projectile_launched", projectiles_.launched},
+            {"projectile_impacted", projectiles_.impacted},
+            {"projectile_active", static_cast<std::uint64_t>(projectiles_.simulation.Records().size())},
+            {"projectile_markers", static_cast<std::uint64_t>(projectiles_.markers.size())},
+            {"projectile_visuals", static_cast<std::uint64_t>(projectileVisuals_.instances.size())},
+            {"projectile_visual_templates", static_cast<std::uint64_t>(projectileVisuals_.templates.size())},
+            {"projectile_visual_error", projectileVisuals_.error},
+            {"blood_sheets", static_cast<std::uint64_t>(projectileVisuals_.blood.liquidSheets.sheets.size())},
+            {"blood_drops", static_cast<std::uint64_t>(projectileVisuals_.blood.drops.size())},
+            {"blood_stains", static_cast<std::uint64_t>(projectileVisuals_.blood.stains.size())},
+            {"projectile_stuck", static_cast<std::uint64_t>(projectileVisuals_.retained.size())},
+            {"projectile_effect_emitters", static_cast<std::uint64_t>(projectileVisuals_.EffectCount())},
+            {"projectile_pending_release", static_cast<std::uint64_t>(playerEquipment_.scheduledProjectiles.size())},
+            {"projectile_animation_time_ms", static_cast<std::uint64_t>(std::max(0.0f,playerViewAnimation_.pairedTime)*1000)},
+            {"projectile_last_x", std::to_string(projectiles_.lastContact.position.x)},
+            {"projectile_last_y", std::to_string(projectiles_.lastContact.position.y)},
+            {"projectile_last_z", std::to_string(projectiles_.lastContact.position.z)},
+            {"projectile_last_target", projectiles_.lastContact.targetSubjectId},
+            {"projectile_last_surface", projectiles_.lastContact.surfaceId},
+            {"projectile_error", projectiles_.lastError},
+            {"projectile_launch_socket", projectiles_.lastLaunchSocket},
+            {"projectile_launch_x", std::to_string(projectiles_.lastLaunchPosition.x)},
+            {"projectile_launch_y", std::to_string(projectiles_.lastLaunchPosition.y)},
+            {"projectile_launch_z", std::to_string(projectiles_.lastLaunchPosition.z)},
+            {"player_loaded_shells", static_cast<std::uint64_t>(std::max(0,playerViewAnimation_.loadedShells))}}, "Runtime/src/RuntimeApplication.cpp");
+
         diagnosticService_.Observe("runtime", {
             {"project", startupResult_.projectDescriptorPath},
             {"scene", scenes_.CurrentPath()},
@@ -644,12 +677,35 @@ namespace renegade::runtime
             {"player_view_rig_proof_geometry",
                 playerViewRig_.primaryArmProof != wi::ecs::INVALID_ENTITY &&
                 playerViewRig_.offHandArmProof != wi::ecs::INVALID_ENTITY},
+            {"player_equipment_reserved_hands", static_cast<std::uint64_t>(playerEquipment_.actions.ReservedHands())},
+            {"player_equipment_primary_phase", static_cast<std::uint64_t>(playerEquipment_.actions.Channels()[0].phase)},
+            {"player_equipment_authored", playerEquipment_.authored},
+            {"player_equipment_ready", playerEquipment_.ready},
+            {"player_primary_equipment", playerEquipment_.primary.equipment.assetId},
+            {"player_off_hand_equipment", playerEquipment_.offHand.equipment.assetId},
+            {"player_equipment_error", playerEquipment_.error},
             {"player_view_asset_loaded",
                 playerViewRig_.viewModelRoot != wi::ecs::INVALID_ENTITY},
             {"player_view_action", PlayerViewActionName(playerViewRig_.action)},
             {"player_view_animation_initialized", playerViewAnimation_.initialized},
             {"player_view_animation_clip", playerViewAnimation_.resolvedClipName},
             {"player_view_paired_assembly", playerViewAnimation_.pairedAssembly},
+            {"player_view_independent_hands", playerViewAnimation_.handLayers.enabled},
+            {"player_view_hand_avoidance", playerViewAnimation_.handLayers.avoidance.enabled},
+            {"player_view_hand_corrections", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.avoidance.corrections)},
+            {"player_view_hand_unresolved", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.avoidance.unresolved)},
+            {"player_view_shield_phase", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.blockPhase)},
+            {"player_melee_chain_window", playerEquipment_.chainInputWindow},
+            {"player_melee_queued_direction", static_cast<std::uint64_t>(playerEquipment_.queuedStrike.direction)},
+            {"player_melee_queued", playerEquipment_.queuedStrike.pending},
+            {"player_melee_chained", static_cast<std::uint64_t>(playerEquipment_.chainedCount)},
+            {"player_view_melee_direction", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.direction)},
+            {"player_view_melee_charge_phase", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.chargePhase)},
+            {"player_view_melee_charge_percent", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.chargeSeconds/playerViewAnimation_.handLayers.fullChargeSeconds*100)},
+            {"player_view_melee_release_percent", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.chargeStrength*100)},
+            {"player_view_primary_attacking", playerViewAnimation_.handLayers.attacking},
+            {"player_view_shield_time_ms", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.leftTime * 1000.0f)},
+            {"player_view_primary_time_ms", static_cast<std::uint64_t>(playerViewAnimation_.handLayers.rightTime * 1000.0f)},
             {"player_view_active_tracks", static_cast<std::uint64_t>(
                 (playerViewAnimation_.activeClip != wi::ecs::INVALID_ENTITY ? 1 : 0) +
                 (playerViewAnimation_.activeWeaponClip != wi::ecs::INVALID_ENTITY ? 1 : 0))},

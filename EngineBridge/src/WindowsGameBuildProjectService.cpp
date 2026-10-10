@@ -1,4 +1,5 @@
 #include "renegade/bridge/WindowsGameBuildProjectService.h"
+#include "renegade/bridge/ImpactAudioService.h"
 
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/ResourceAssetDependencyService.h"
@@ -311,6 +312,8 @@ namespace renegade::bridge
                 error = "Build Windows Game dependency discovery failed: " + error;
                 return false;
             }
+            if (!AddImpactAudioDependencies(project.rootPath, project.projectId, collector, error))
+                return false;
             if (!AddImportedSourceFreshnessRoots(project, collector, error))
                 return false;
 
@@ -446,8 +449,29 @@ namespace renegade::bridge
                 return false;
             }
 
+            // Packaging uses the reachable closure below; the creator catalog
+            // also owns saved assets outside this particular Story Flow.
+            // Do not tombstone still-present authoring assets merely because
+            // they are not needed by this build (recovery loses their edges).
+            AssetRegistry authoringRegistry = refresh.registry;
+            if (existingRegistry != nullptr)
+            {
+                for (const auto& old : existingRegistry->records)
+                {
+                    if (FindAssetRecord(authoringRegistry, old.assetId) != nullptr ||
+                        !old.sourceAvailable) continue;
+                    const auto path = ResolveDependencyPath(
+                        project.rootPath, old.projectRelativePath);
+                    if (!path.accepted || !path.exists) continue;
+                    authoringRegistry.records.push_back(old);
+                    auto& missing = authoringRegistry.missingAssets;
+                    missing.erase(std::remove_if(missing.begin(), missing.end(),
+                        [&old](const auto& entry) { return entry.assetId == old.assetId; }),
+                        missing.end());
+                }
+            }
             const ProjectDocumentTransactionResult write =
-                WriteAssetRegistry(project.rootPath, refresh.registry);
+                WriteAssetRegistry(project.rootPath, authoringRegistry);
             if (!write.success)
             {
                 error = "Build Windows Game could not persist the LC01 registry: " +

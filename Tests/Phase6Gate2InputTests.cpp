@@ -79,7 +79,13 @@ int main()
         "fire/reload defaults were not assigned");
     Check(Binding(map, GameplayAction::Aim).mouse == "MOUSE_RIGHT", "aim default is not right mouse");
     Check(Binding(map, GameplayAction::ToggleEquipment).keyboard == "Q", "equipment default is not Q");
+    Check(Binding(map, GameplayAction::CancelEquipment).keyboard == "C", "cancel default is not C");
+    Check(Binding(map,GameplayAction::OffHandUse).mouse=="MOUSE_RIGHT",
+        "off-hand default is not right mouse");
     auto rebound = map;
+    rebound.bindings[static_cast<std::size_t>(GameplayAction::OffHandUse)].keyboard="B";
+    rebound.bindings[static_cast<std::size_t>(GameplayAction::OffHandUse)].mouse="";
+    rebound.bindings[static_cast<std::size_t>(GameplayAction::CancelEquipment)].keyboard = "X";
     rebound.bindings[static_cast<std::size_t>(GameplayAction::MoveForward)].keyboard = "I";
     rebound.bindings[static_cast<std::size_t>(GameplayAction::MoveBackward)].keyboard = "K";
     Check(WriteGameplayInputMap(root.generic_u8string(), rebound, error),
@@ -92,6 +98,12 @@ int main()
             Binding(reopened, GameplayAction::MoveBackward).keyboard == "K",
         "keyboard rebinds did not round-trip");
 
+    Check(Binding(reopened, GameplayAction::CancelEquipment).keyboard == "X", "cancel binding did not round-trip");
+
+    Check(Binding(reopened,GameplayAction::OffHandUse).keyboard=="B" &&
+        Binding(reopened,GameplayAction::OffHandUse).mouse.empty(),"off-hand binding did not round-trip");
+    Check(TryParseGameplayAction("off_hand_use",reopened.bindings.back().action) &&
+        reopened.bindings.back().action==GameplayAction::OffHandUse,"stable off-hand action ID");
     created = true;
     GameplayInputMap ensured;
     Check(EnsureGameplayInputMap(
@@ -162,6 +174,26 @@ int main()
             "old R reset map did not adopt fire/reload safely");
         Check(Binding(legacyMap, GameplayAction::MoveForward).keyboard == "I",
             "legacy migration disturbed an authored binding");
+    }
+
+    // A recent v1 document lacking Cancel and OffHandUse retains authored bindings.
+    {
+        std::ifstream source(inputMapPath, std::ios::binary);
+        std::string text{std::istreambuf_iterator<char>(source),std::istreambuf_iterator<char>()};
+        const auto begin=text.find("[action.cancel_equipment]");
+        const auto end=text.find("[settings]",begin);
+        Check(begin!=std::string::npos && end!=std::string::npos,"cancel section missing");
+        if(begin!=std::string::npos && end!=std::string::npos)text.erase(begin,end-begin);
+        const auto path=root/"pre-cancel.renegade-input";
+        {std::ofstream out(path,std::ios::binary);out<<text;}
+        GameplayInputMap migrated;
+        Check(ReadGameplayInputMapFile(path.generic_u8string(),migrated,error),"pre-cancel migration failed");
+        Check(Binding(migrated,GameplayAction::CancelEquipment).keyboard=="C" &&
+            Binding(migrated,GameplayAction::MoveForward).keyboard=="I" &&
+            Binding(migrated,GameplayAction::OffHandUse).mouse=="MOUSE_RIGHT","migration replaced authored controls");
+        std::ifstream check(path,std::ios::binary);
+        Check(std::string(std::istreambuf_iterator<char>(check),std::istreambuf_iterator<char>())==text,
+            "in-memory migration rewrote authored document");
     }
 
     // Production Studio project creation/opening must govern the document and

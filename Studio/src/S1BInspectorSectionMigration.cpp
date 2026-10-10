@@ -1,6 +1,7 @@
 #include "StudioApplication.h"
 
 #include "InspectorSectionFramework.h"
+#include "renegade/bridge/ObjectImpactSurfaceService.h"
 #include "S4BScriptAttachmentInspector.h"
 #include "S4DGlobalScriptInspector.h"
 #include "Phase7Gate7AAnimationInspector.h"
@@ -162,6 +163,40 @@ namespace renegade::studio
             "materials");
 
         std::string error;
+        auto surfaceDescriptor = MakeSection("surface", "SURFACE", 5, true);
+        surfaceDescriptor.headerHeight = 1.0f;
+        auto surface = std::make_shared<CallbackInspectorSectionProvider>(
+            std::move(surfaceDescriptor),
+            [this](const InspectorSectionContext&)
+            {
+                return session_ != nullptr && !environmentWorkspaceActive_ &&
+                    !terrainWorkspaceActive_ && session_->Selection().HasSelection() &&
+                    bridge::CanAuthorObjectImpactSurface(
+                        session_->Scenes().GetScene(),
+                        session_->Selection().SelectedEntity());
+            },
+            [](const InspectorSectionContext&, float) { return 58.0f; },
+            [this](const InspectorSectionContext&)
+            {
+                materialImpactSurface_.SetVisible(false);
+            },
+            [this](const InspectorSectionContext&, const InspectorSectionLayout& layout)
+            {
+                objectSurfaceLabel_.SetVisible(true);
+                objectSurfaceLabel_.SetPos(XMFLOAT2(12.0f, layout.contentTop));
+                objectSurfaceLabel_.SetSize(XMFLOAT2(layout.width, 20.0f));
+                materialImpactSurface_.SetVisible(true);
+                materialImpactSurface_.SetPos(XMFLOAT2(12.0f, layout.contentTop + 24.0f));
+                materialImpactSurface_.SetSize(XMFLOAT2(layout.width, 28.0f));
+                const auto& scene = session_->Scenes().GetScene();
+                const auto entity = session_->Selection().SelectedEntity();
+                materialImpactSurface_.SetSelectedByUserdataWithoutCallback(
+                    static_cast<std::uint64_t>(
+                        bridge::ResolveObjectImpactSurface(scene, entity, 0)));
+            });
+        if (!inspectorSectionRegistry_.Register(std::move(surface), error))
+            studioChrome_.SetStatusText("SURFACE INSPECTOR // " + error);
+        error.clear();
         auto transform = std::make_shared<CallbackInspectorSectionProvider>(
             MakeSection("transform", "TRANSFORM", 10, false),
             [this](const InspectorSectionContext&)
@@ -490,6 +525,8 @@ namespace renegade::studio
 
     void StudioRenderPath::LayoutS1BInspectorSections()
     {
+        objectSurfaceLabel_.SetVisible(false);
+        materialImpactSurface_.SetVisible(false);
         PreparePhase7Gate7AAnimationInspector(*this);
         PrepareS4BScriptAttachmentInspector(*this);
         PrepareS4DGlobalScriptInspector(*this);
@@ -626,6 +663,7 @@ namespace renegade::studio
             fullAt(playerFirstPersonArms_, y); y += 34.0f;
             fullAt(playerHandGrips_, y); y += 34.0f;
             fullAt(playerAssembly_, y); y += 34.0f;
+            fullAt(playerEquipment_, y); y += 34.0f;
             for (wi::gui::Widget* widget : {
                 static_cast<wi::gui::Widget*>(&playerCapsuleRadius_),
                 static_cast<wi::gui::Widget*>(&playerCapsuleHeight_),

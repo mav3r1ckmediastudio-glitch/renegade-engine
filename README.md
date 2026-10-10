@@ -100,6 +100,7 @@ and [AI_IMPLEMENTATION_HANDOFF](docs/AI_IMPLEMENTATION_HANDOFF.md).
   foundation and Physics Lab workflow.
 - One governed Player Start, Runtime first-person possession and a Wicked/Jolt
   character capsule with movement, mouse look, sprint and jump.
+- Selected Player Start camera inset previews the paused world and equipped arms.
 - Versioned project action maps with governed gameplay input plus Pause/Resume
   and deterministic Reset lifecycle behaviour.
 - Native Wicked audio authoring for global/2D and movable positional 3D sources,
@@ -111,7 +112,7 @@ and [AI_IMPLEMENTATION_HANDOFF](docs/AI_IMPLEMENTATION_HANDOFF.md).
 ### Player Arms & Combat — active programme
 
 The next Alpha Playability programme extends the existing Player rather than
-replacing it. A camera-mounted first-person View Rig will provide first-class
+replacing it. A camera-mounted first-person View Rig provides first-class
 primary/off-hand/two-hand presentation while world movement/collision remains
 owned by the accepted Player controller.
 
@@ -129,18 +130,29 @@ required gate because passing damage/state tests cannot prove that combat feels
 good.
 
 See [PLAYER_ARMS_COMBAT_FRAMEWORK](docs/PLAYER_ARMS_COMBAT_FRAMEWORK.md).
-P1's rig, asset binding and movement-animation foundation is implemented on the
-active P1 branch. The owner accepts the authored shotgun diagnostic grip/reload;
-native Studio assembly authoring now supports retained parts, explicit attachment,
-paired preview and governed save/reopen with Player Start assignment. Owner accepts
-the preview controls. Runtime movement playback now evaluates both native tracks
-on one clock; owner Test Level and actual Build Game visuals are accepted. Save
-changes, Save as new and draft Undo/Redo are owner accepted. The complete supplied
-shotgun library now has 14 paired preview actions and automatic draft refresh;
-owner verification of that new UI remains pending. See
-[P1 assembly authoring](docs/P1_ASSEMBLY_AUTHORING.md). The
-[P1 status and recovery checkpoint](docs/P1_STATUS_AND_RECOVERY.md) distinguishes
-implemented code, passing automated checks and the unresolved gameplay result.
+PR #178 is merged into main and owner-accepted on 5 October 2026. The supplied
+shotgun setup provides 14 paired actions, movement/aim/equip/jump presentation,
+discrete two-shot firing, dry fire and partial/full reload. Native assembly editing,
+player prefab save/assignment/reset, local overrides and selectable always-visible
+player capsules are integrated. Named prefabs can be dragged from `Content/Player`;
+new levels remain player-free until the creator places a start.
+
+The owner verified the shotgun in the existing v2 project. The P2 branch now
+adds equipment/loadout assets, staged actions, independent sword/shield layers,
+directional charge/chaining, native blending, collision-aware pose correction,
+and saved hand assembly editing with weapon mesh replacement. Imported parts
+have explicit roles and general Content destinations; stable-ID-preserving model
+moves and optional tags are supported. Player Start includes solid camera/facing
+guides and a frozen equipped camera inset.
+
+On 6 October 2026 the owner confirmed movement and Build Game behave as expected.
+PR #180 remains subject to Windows CI and independent exact-head review before
+merge. Authoring UX and complete dependency-aware cross-project transfer remain
+follow-ups. Reserve ammunition, hits/damage, recoil and wider Alpha combat scope
+remain open; pose correction does not establish weapon hit detection.
+See [P2 implementation](docs/P2_EQUIPMENT_ACTION_IMPLEMENTATION.md),
+[player authoring UI/UX follow-up](docs/PLAYER_AUTHORING_UX_FOLLOWUP.md) and
+[P3 continuation handoff](docs/P3_CONTINUATION_HANDOFF.md).
 
 ## Governed Lua scripting
 
@@ -347,8 +359,9 @@ Test Level snapshots and package loading. Old recipes retain the accepted two-sh
 defaults. Runtime reload fills configured capacity only at animation completion;
 shot cooldown advances only during gameplay. These are discrete shots, with no
 reserve ammunition or automatic firing yet. Gameplay capacity does not change the
-number of shells visible in authored clips. Independent equipment definitions and
-Player prefabs remain next stages; see PLAYER_AUTHORING_CONTINUATION.md.
+number of shells visible in authored clips. Independent equipment definitions
+remain a next stage; player prefabs are implemented.
+See [player authoring continuation](docs/PLAYER_AUTHORING_CONTINUATION.md).
 
 ### Reusable player prefabs
 
@@ -361,4 +374,50 @@ starting inventories remain later work. See PLAYER_AUTHORING_CONTINUATION.md.
 
 
 ### Player placement from Content/Player
-New levels have no automatic Player Start. Project browsing ensures a registered Basic Player Start preset under Content/Player without creating a scene entity. Saved player prefabs appear by authored name in the Asset Browser and support drag-and-drop surface placement (ground-plane fallback) and the existing Place control. One command creates the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve identity, transform and baseline. The always-visible selectable capsule represents the placed player. Add no longer exposes Player Start. A second placement is refused: use the existing Inspector to change prefab, or delete the old start before placing another. Immutable saves refresh the browser. Owner/exact-commit verification remains required.
+New levels have no automatic Player Start. Project browsing ensures a registered Basic
+Player Start preset under Content/Player without creating a scene entity. Saved player
+prefabs appear by authored name in the Asset Browser and support drag-and-drop surface
+placement (ground-plane fallback) and the existing Place control. One command creates
+the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve
+identity, transform and baseline. The always-visible selectable capsule represents the
+placed player. Add no longer exposes Player Start. A second placement is refused: use
+the existing Inspector to change prefab, or delete the old start before placing another.
+Immutable saves refresh the browser. PR #178 functionality is owner-accepted; the UI/UX
+follow-up remains open.
+
+
+### Authored held equipment actions
+
+Equipment definitions can make PrimaryUse wait until left mouse (or the authored
+Fire binding) is released. C cancels eligible actions before activation; the
+cancel_equipment input binding is remappable. Immediate shotgun definitions still
+fire on a press. Held primary/cancellation are implemented; separate Charge/Release
+presentation, charge strength and independent off-hand presentation remain pending.
+
+
+### Charge and Release pairs
+
+ASSEMBLY > More actions includes Charge and Release arms/weapon mappings.
+Leave Attack unassigned when using the primary Charge/Release path, then create
+equipment from that saved assembly. Runtime holds the Charge pose until Fire is
+released, plays Release once, and preserves hand ownership through recovery.
+C cancels eligible charging actions. Charge strength, projectile effects and
+independent off-hand presentation remain later work.
+
+### Independent hand assembly authoring
+
+ASSEMBLY > HAND / MELEE SETUP exposes sword/shield mesh attachments, explicit hand roots,
+directional Charge/Hold/Release groups, block clips, attack variants, scales,
+charge/chaining timing and collision proxies. Existing arms bindings survive a
+weapon-only swap. Draft Undo/Redo, automatic masked preview and governed save
+are shared with paired firearm assemblies. See [hand assembly authoring](docs/P2_ASSEMBLY_HAND_AUTHORING.md).
+Local validation is recorded in HANDOFF; owner UI acceptance and independent
+verification remain open. This does not complete NPC combat or the wider P2 gate.
+
+### Import destinations and model organisation
+
+Native model import now exposes a general Content destination, optional tags and
+explicit player arms/weapon roles independent of folder. Registered model MOVE
+preserves stable IDs and source provenance through journaled rollback/recovery.
+See [import destinations](docs/MODEL_IMPORT_DESTINATIONS.md).
+Owner UX and independent exact-commit verification remain pending.

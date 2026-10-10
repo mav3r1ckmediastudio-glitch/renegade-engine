@@ -1,7 +1,45 @@
 # Player authoring continuation
 
+## Current P2 checkpoint - 2026-10-06
+
+Owner accepted movement and Build Game behavior: "ive checked movement and build
+game, and both act as expected". This supplements the native and automated
+checks recorded in HANDOFF.md; the owner-built package was not independently
+identified by executable hash or source revision. PR #180 integrates this branch;
+Windows CI and independent exact-head review remain required before merge.
+
+Implemented: governed equipment assets and starting loadouts, staged semantic
+actions, hold/release/cancel, independent sword/shield hand presentation,
+directional charge and chaining, native transition blends, collision-aware arm
+pose correction, saved hand assembly authoring and mesh replacement. Import
+folders, explicit roles, optional tags and stable-ID-preserving model moves are
+implemented. Player Start has solid camera/facing guides and a frozen camera inset.
+
+P2 is an owner-accepted implementation checkpoint, not full Alpha/combat gate
+closure. Generic action editing, unused animation routing, broader inventory,
+reserve ammunition and cross-project transfer remain follow-ups. Sword/shield
+pose avoidance is presentation correction, not world hit detection or NPC damage.
+Historical checkpoints below describe progress at their recorded time.
+
+Next programme: P3 shared hit/projectile/impact framework, using existing
+Wicked/Jolt queries, Character damage and governed identity/event seams. See
+[P3 continuation handoff](P3_CONTINUATION_HANDOFF.md).
+
+
 This document records the owner-requested player authoring programme, alongside
 PLAYER_ARMS_COMBAT_FRAMEWORK.md. It does not close a release gate.
+
+## Merged acceptance checkpoint - 2026-10-05
+
+PR #178 merged into main on 2026-10-05 at `7105a95ddcc103d6a024a17fddefd62f705a86b3`.
+All four pre-merge Windows checks passed: Studio Debug/Release and baseline
+Debug/Release. The owner confirmed the expected player/shotgun behaviour in the
+existing v2 game project and explicitly accepted the PR's functionality.
+This records functional acceptance of the merged scope, not completion of every
+P1 requirement or of the full Alpha Playability combat programme.
+
+See [PLAYER_AUTHORING_UX_FOLLOWUP](PLAYER_AUTHORING_UX_FOLLOWUP.md) for the required
+UI/UX revisit. Functionality is accepted; the setup experience is not final.
 
 ## Accepted baseline
 
@@ -22,9 +60,9 @@ and the corrected runtime was owner accepted on 2026-10-05.
 
 ## Implementation sequence
 
-1. Editable firearm settings through the existing assembly save path.
-2. Complete Player Start and native Player Inspector workflow.
-3. Reusable Player definitions, placement, duplication and explicit overrides.
+1. Implemented: editable firearm settings through the existing assembly save path.
+2. Implemented functional baseline: Player Start and native Player Inspector; UX revisit pending.
+3. Implemented: reusable Player defaults, placement and explicit overrides. Multiple starts/duplication remain outside the single-player contract.
 4. Complete arms authoring validation, automatic preview and replacement workflow.
 5. Extract reusable equipment definitions and starting loadout; add ammunition
    reserve, fire modes, switching and staged action rules.
@@ -52,7 +90,7 @@ falls back to the explicit full pair. No reserve ammunition is modelled yet.
 Capacity describes gameplay ammunition; changing it does not change the physical
 number of shells in an authored animation.
 
-Player Start displays an always-visible editor-only wireframe collision capsule, cyan normally and orange when selected. Click its interior or edges to select the player; the former icon and ground arrow are removed.
+Player Start displays an always-visible editor-only wireframe collision capsule, cyan normally and orange when selected. Click its interior or edges to select the player; a camera body/lens marker at the authored eye height and an extruded ground-facing arrow show Runtime spawn yaw, including when unselected.
 It reads the runtime controller radius and total height each frame, follows the
 spawn feet position, and updates after inspector edits and Undo/Redo. It stays
 upright and unscaled like the runtime character, and is absent during Test Level.
@@ -78,7 +116,8 @@ rotating the level's Player Start. The scene retains the prefab StableId and
 serialized assignment baseline. Editing controller values or the arms reference
 is a level-local override, visibly reported in the Inspector. RESET TO PREFAB
 restores the assigned baseline through Undo/Redo. Reusing it in another level:
-add that level's Player Start, then select the prefab in its Inspector.
+drag the named prefab from Content/Player into the level, or select it in an
+existing Player Start's Inspector.
 
 Runtime consumes the resolved scene settings, preserving the existing controller,
 physics and animation boundaries. Test Level snapshots copy the registered prefab;
@@ -88,8 +127,46 @@ as locally assigned arms. Save/reopen retains the baseline and overrides.
 This first reusable stage does not update all placed players when another prefab
 is saved, duplicate the single governed Player Start in one level, or expose a
 starting inventory. Global prefab updates, per-field inheritance indicators,
-Asset Browser drag placement and equipment definitions remain subsequent work.
+Asset Browser drag placement is implemented. Equipment definitions remain
+subsequent work.
 
 
 ### Player placement from Content/Player
-New levels have no automatic Player Start. Project browsing ensures a registered Basic Player Start preset under Content/Player without creating a scene entity. Saved player prefabs appear by authored name in the Asset Browser and support drag-and-drop surface placement (ground-plane fallback) and the existing Place control. One command creates the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve identity, transform and baseline. The always-visible selectable capsule represents the placed player. Add no longer exposes Player Start. A second placement is refused: use the existing Inspector to change prefab, or delete the old start before placing another. Immutable saves refresh the browser. Owner/exact-commit verification remains required.
+New levels have no automatic Player Start. Project browsing ensures a registered Basic
+Player Start preset under Content/Player without creating a scene entity. Saved player
+prefabs appear by authored name in the Asset Browser and support drag-and-drop surface
+placement (ground-plane fallback) and the existing Place control. One command creates
+the governed start and assigns resolved prefab defaults; Undo/Redo and WISCENE preserve
+identity, transform and baseline. The always-visible selectable capsule represents the
+placed player. Add no longer exposes Player Start. A second placement is refused: use
+the existing Inspector to change prefab, or delete the old start before placing another.
+Immutable saves refresh the browser. PR #178 functionality is owner-accepted; the UI/UX
+follow-up remains open.
+
+### Approved Player Camera Preview inset (owner reaffirmed 2026-10-05)
+
+The accepted Player Start mockup remains the visual target: a small Player
+Camera Preview at the bottom-right of the scene viewport, beside the selected
+player capsule. It shows the authored world from the player camera with equipped
+first-person arms/weapon, using the same eye height, facing and field of view.
+This is an editor authoring preview with gameplay paused; Test Level continues
+to run the separate real Runtime. The inset is implemented on the P2 branch and remains subject to owner and
+independent verification. Do not treat Assembly or
+Hand Grips isolated previews as completion of this scene-camera preview.
+
+
+Implementation checkpoint: selected Player Start shows the frozen world plus
+equipped native Idle arms/weapon in a responsive bottom-right inset. Position,
+eye height and yaw come from the same spawn policy as Runtime; current FOV is
+Runtime's default 60 degrees. Preview is editor-only and does not author WISCENE.
+DX12 proof rejects empty images and verifies source settings/component counts
+are unchanged; native placement inspection is recorded in HANDOFF.md.
+Independent sword/shield presentation awaits the supplied animation pack.
+
+Off-hand preparation (2026-10-05): hand-scoped action channels, held Block policy,
+OffHandUse rebinding and pure Runtime adapter are tested. Live native off-hand
+capability remains disabled until the actual sword/shield pack is integrated.
+
+Player camera preview controls: click its header to collapse/expand (saved Studio
+preference); drag the upper-left handle to resize its 16:9 image. Width stays
+for the session. Native large/small/collapsed inspection passed on 2026-10-05.

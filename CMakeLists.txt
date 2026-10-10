@@ -42,6 +42,7 @@ set(WICKED_ENABLE_SYMLINKS OFF CACHE BOOL "" FORCE)
 set(WICKED_EMBED_SHADERS ${RENEGADE_EMBED_SHADERS} CACHE BOOL "" FORCE)
 
 add_subdirectory(WickedEngine)
+include(cmake/WickedBacklogShutdownFix.cmake)
 include(cmake/RenegadePhysicsTempAllocator.cmake)
 add_subdirectory(EngineBridge)
 include(EngineBridge/JP01PhysicsLua.cmake)
@@ -198,6 +199,7 @@ if(WIN32)
     include(Tests/Phase7Gate7E.cmake)
     include(Tests/Phase7Gate7F.cmake)
     include(Tests/CharacterAiFoundation.cmake)
+    include(Tests/ProjectileSimulation.cmake)
     include(Tests/S1AInspectorSectionFramework.cmake)
     include(Tests/S1BInspectorMigration.cmake)
     include(Tests/S2ScriptDocument.cmake)
@@ -268,4 +270,22 @@ if(WIN32)
     include(Tests/LP08Gate5.cmake)
 else()
     message(STATUS "Renegade Studio is currently enabled for the Windows-first Phase 2 proof.")
+endif()
+
+# CI builds these products in one MSBuild dependency graph. Passing separate
+# --target arguments to the Visual Studio generator starts repeated MSBuild
+# invocations; on GitHub-hosted Windows the Release job exhausted its 90-minute
+# deadline before the CTest stage. Keep every existing product/test dependency.
+if(WIN32)
+    add_custom_target(RenegadeStudioCI)
+    add_dependencies(RenegadeStudioCI
+        RenegadeStudio
+        RenegadeRuntime
+        RenegadeBridgeTests
+        RenegadePlayerPrefabTests
+        RenegadeDiagnosticServiceTests
+        RenegadeDependencyProcessFixture
+        RenegadeAssetRegistryProcessFixture
+    )
+    set_target_properties(RenegadeStudioCI PROPERTIES FOLDER "Renegade/CI")
 endif()

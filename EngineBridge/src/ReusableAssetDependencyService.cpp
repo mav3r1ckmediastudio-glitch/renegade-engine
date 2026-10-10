@@ -5,6 +5,8 @@
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/PlayerPrefabService.h"
+#include "renegade/bridge/EquipmentAssetService.h"
+#include "renegade/bridge/ProjectileAssetService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 
 #include <algorithm>
@@ -203,7 +205,9 @@ namespace renegade::bridge
 
             const StableId prefabId = playerStart.resolution == PlayerStartResolution::Success
                 ? CapturePlayerPrefabOrigin(inspectedScene, playerStart.start.entity) : StableId{};
-            if (instances.empty() && firstPersonArmsAssetId.empty() && prefabId.empty())
+            if (instances.empty() && firstPersonArmsAssetId.empty() && prefabId.empty() &&
+                playerStart.start.settings.primaryEquipmentAssetId.empty() &&
+                playerStart.start.settings.offHandEquipmentAssetId.empty())
             {
                 error.clear();
                 return true;
@@ -272,6 +276,19 @@ namespace renegade::bridge
                 return false;
             }
 
+            const auto& loadout=playerStart.start.settings;
+            if(!ValidateStartingEquipment(context.projectRoot,projectId_,
+                loadout.primaryEquipmentAssetId,loadout.offHandEquipmentAssetId,error))return false;
+            for(const auto& id:{loadout.primaryEquipmentAssetId,loadout.offHandEquipmentAssetId})
+            {
+                if(id.empty()||!emittedAssetIds.insert(id).second)continue;
+                const auto* record=FindAssetById(registry,id);
+                DependencyCandidate candidate;
+                candidate.declaredPath=record->projectRelativePath;
+                candidate.dependencyClass=DependencyClass::Data;
+                candidate.requirement=DependencyRequirement::Required;
+                candidate.provenance="p2.player.equipment:"+id;emit(candidate);
+            }
             if (!prefabId.empty())
             {
                 PlayerPrefabDocument prefab;
@@ -290,6 +307,58 @@ namespace renegade::bridge
         }
         if (context.source->dependencyClass == DependencyClass::Data)
         {
+            if (LowerExtension(context.source->projectRelativePath) == ProjectileAssetExtension)
+            {
+                const auto path=ResolveDependencyPath(context.projectRoot,context.source->projectRelativePath);
+                ProjectileAssetDocument d,registered;
+                if (!path.accepted || !path.exists || !ReadProjectileAssetFile(path.absolutePath,d,error) ||
+                    !LoadProjectileAsset(context.projectRoot,projectId_,d.assetId,registered,error)) return false;
+                AssetRegistry registry;
+                if (!ReadRegistryForProvider(context,projectId_,registry,error)) return false;
+                const auto* record=FindAssetById(registry,d.assetId);
+                if (record->projectRelativePath!=context.source->projectRelativePath) {
+                    error="Projectile dependency path does not match its registry."; return false;
+                }
+                if (!d.meshAssetId.empty()) {
+                    const auto* model=FindAssetById(registry,d.meshAssetId);
+                    DependencyCandidate candidate;
+                    candidate.declaredPath=model->projectRelativePath;
+                    candidate.dependencyClass=DependencyClass::ImportedContent;
+                    candidate.requirement=DependencyRequirement::Required;
+                    candidate.provenance="p3.projectile.mesh:"+model->assetId; emit(candidate);
+                }
+                error.clear(); return true;
+            }
+            if(LowerExtension(context.source->projectRelativePath)==EquipmentAssetExtension)
+            {
+                const auto path=ResolveDependencyPath(context.projectRoot,context.source->projectRelativePath);
+                EquipmentAssetDocument d,registered;
+                if(!path.accepted||!path.exists||!ReadEquipmentAssetFile(path.absolutePath,d,error)||
+                    !LoadEquipmentAsset(context.projectRoot,projectId_,d.equipment.assetId,registered,error))return false;
+                AssetRegistry registry;
+                if(!ReadRegistryForProvider(context,projectId_,registry,error))return false;
+                const auto* record=FindAssetById(registry,d.equipment.assetId);
+                if(record->projectRelativePath!=context.source->projectRelativePath) {
+                    error="Equipment dependency path does not match its registry.";return false;
+                }
+                if(!d.equipment.presentationAssetId.empty()) {
+                    const auto* presentation=FindAssetById(registry,d.equipment.presentationAssetId);
+                    DependencyCandidate candidate;
+                    candidate.declaredPath=presentation->projectRelativePath;
+                    candidate.dependencyClass=DependencyClass::ImportedContent;
+                    candidate.requirement=DependencyRequirement::Required;
+                    candidate.provenance="p2.equipment.presentation:"+presentation->assetId;emit(candidate);
+                }
+                for(const auto& binding:d.equipment.projectiles) {
+                    const auto* projectile=FindAssetById(registry,binding.projectileAssetId);
+                    DependencyCandidate candidate;
+                    candidate.declaredPath=projectile->projectRelativePath;
+                    candidate.dependencyClass=DependencyClass::Data;
+                    candidate.requirement=DependencyRequirement::Required;
+                    candidate.provenance="p3.equipment.projectile:"+projectile->assetId;emit(candidate);
+                }
+                error.clear();return true;
+            }
             if (LowerExtension(context.source->projectRelativePath) != PlayerPrefabExtension)
                 return true;
             const auto path = ResolveDependencyPath(context.projectRoot, context.source->projectRelativePath);
@@ -303,6 +372,17 @@ namespace renegade::bridge
             PlayerPrefabDocument registered;
             if (!LoadPlayerPrefab(context.projectRoot, projectId_, prefab.assetId, registered, error))
                 return false;
+            for(const auto& id:{prefab.settings.primaryEquipmentAssetId,prefab.settings.offHandEquipmentAssetId}) {
+                if(id.empty())continue;
+                AssetRegistry registry;
+                if(!ReadRegistryForProvider(context,projectId_,registry,error))return false;
+                const auto* item=FindAssetById(registry,id);
+                DependencyCandidate candidate;
+                candidate.declaredPath=item->projectRelativePath;
+                candidate.dependencyClass=DependencyClass::Data;
+                candidate.requirement=DependencyRequirement::Required;
+                candidate.provenance="p2.player.prefab.equipment:"+id;emit(candidate);
+            }
             if (!prefab.settings.firstPersonArmsAssetId.empty())
             {
                 AssetRegistry registry;

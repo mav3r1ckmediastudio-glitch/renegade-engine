@@ -4,6 +4,20 @@
 **Scope:** Player first-person presentation, equipment/actions, ranged combat, directional melee, bows, crossbows, magic, projectiles, impact feedback and combat feel.
 **Underlying rule:** extend the accepted Renegade Player; do not create a second player controller, physics world, animation runtime or damage/event system.
 
+## Implementation checkpoint - 2026-10-05
+
+PR #178 merged into main on 2026-10-05 at `7105a95ddcc103d6a024a17fddefd62f705a86b3`.
+All four pre-merge Windows checks passed: Studio Debug/Release and baseline
+Debug/Release. The owner confirmed the expected player/shotgun behaviour in the
+existing v2 game project and explicitly accepted the PR's functionality.
+This records functional acceptance of the merged scope, not completion of every
+P1 requirement or of the full Alpha Playability combat programme.
+
+The reusable shotgun/player baseline is integrated. Generic equipment, reserve
+ammunition, world hits/projectiles, damage, recoil, inventory and the remaining
+combat families still require their planned gates. Player authoring UI/UX must be
+revisited; see [PLAYER_AUTHORING_UX_FOLLOWUP](PLAYER_AUTHORING_UX_FOLLOWUP.md).
+
 ## Product goal
 
 Renegade needs a combat framework broad enough for a conventional FPS and for

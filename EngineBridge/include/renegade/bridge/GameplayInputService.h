@@ -32,6 +32,8 @@ namespace renegade::bridge
         Reload,
         Aim,
         ToggleEquipment,
+        CancelEquipment,
+        OffHandUse,
         Count,
     };
 
@@ -59,6 +61,10 @@ namespace renegade::bridge
         bool pausePressed = false;
         bool resetPressed = false;
         bool firePressed = false;
+        bool fireDown = false;
+        bool offHandUsePressed = false;
+        bool offHandUseDown = false;
+        bool cancelEquipmentPressed = false;
         bool reloadPressed = false;
         bool aimDown = false;
         bool toggleEquipmentPressed = false;

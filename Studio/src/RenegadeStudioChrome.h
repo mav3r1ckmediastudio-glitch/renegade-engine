@@ -294,6 +294,7 @@ namespace renegade::studio
             CreateDecal,
             CreateEnvironmentProbe,
             ImportStaticGlb,
+            CreateProjectile,
             Focus,
             ToggleGrid,
             EnvironmentWorkspace,
@@ -659,6 +660,12 @@ namespace renegade::studio
         bool SelectCreatorAsset(const std::string& relativePath);
         void PlaceSelectedCreatorAsset();
         void SaveSelectedCreatorTags();
+        void OpenCreatorMovePanel();
+        wi::gui::Window creatorMovePanel_;
+        CreatorAssetComboBox creatorMoveFolderChoices_;
+        CreatorAssetTextInputField creatorMoveFolder_;
+        CreatorAssetButton creatorMoveApply_, creatorMoveCancel_, creatorAssetMoveButton_;
+        bridge::StableId creatorMoveProjectId_, creatorMoveAssetId_;
         void RefreshCreatorHierarchyRows();
         [[nodiscard]] bridge::AssetCatalogueQuery CreatorAssetQuery() const;
         [[nodiscard]] std::vector<std::string> CreatorTagInput() const;

@@ -1,5 +1,6 @@
 #include "renegade/bridge/BuildStageService.h"
 #include "renegade/bridge/PackageIntegrityService.h"
+#include "renegade/bridge/AssetRegistryService.h"
 
 #include <algorithm>
 #include <chrono>
@@ -288,6 +289,24 @@ int main(int argc, char** argv)
         fs::remove_all(cleanupRoot);
         return Fail(error);
     }
+    // The generated Runtime registry is governed by the package manifest,
+    // and its staged bytes must load under the packaged project root.
+    auto registryRequest = request;
+    registryRequest.stagingId = "stage-runtime-registry";
+    AssetRegistry runtimeRegistry; runtimeRegistry.projectId = plan.projectId;
+    WindowsGameBuildStageResult withRegistry;
+    AssetRegistry reopenedRegistry;
+    if (!SerializeAssetRegistry(runtimeRegistry, registryRequest.assetRegistryJson, error) ||
+        !StageWindowsGameBuild(plan,registryRequest,withRegistry,error) ||
+        Find(withRegistry,"GameData/AssetRegistry.renegade-assets")==nullptr ||
+        !ReadAssetRegistry((fs::u8path(withRegistry.stagingPath)/"GameData").generic_u8string(),
+            plan.projectId,reopenedRegistry,error) ||
+        !ValidateWindowsGameBuildStage(withRegistry,error))
+        return Fail("Runtime registry staging failed: "+error);
+    if (!WriteFile(fs::u8path(withRegistry.stagingPath)/"GameData/AssetRegistry.renegade-assets",
+            "tampered",error) || ValidateWindowsGameBuildStage(withRegistry,error))
+        return Fail("Runtime registry tampering escaped package validation");
+
     if (first.stagingPath.find(".renegade-staging") == std::string::npos ||
         fs::exists(fs::u8path(first.finalOutputPath)))
     {
