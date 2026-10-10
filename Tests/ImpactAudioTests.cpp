@@ -1093,6 +1093,21 @@ static int VerifyNative(const fs::path& descriptor, bool tagMetal, bool stagePac
         !renegade::runtime::GetBloodSprayAtlasTexture().IsValid())
     {std::cerr<<"Embedded blood art decode failed";return 30;}
     std::cout<<"Embedded blood spray and splat: GPU decode valid"<<std::endl;
+    // Verify every distributable core impact image is actually embedded and
+    // decodable by Wicked in a native executable (not merely present on disk).
+    {
+        constexpr unsigned sides[]={4096,1254,2048,2048,2048,2048,2048,1254,2048,2048,1254,2048};
+        for(unsigned i=0;i<static_cast<unsigned>(renegade::runtime::BuiltinImpactAtlas::Count);++i) {
+            const auto& image=renegade::runtime::GetBuiltinImpactAtlas(
+                static_cast<renegade::runtime::BuiltinImpactAtlas>(i));
+            if(!image.IsValid() || image.GetDesc().width!=sides[i] ||
+                image.GetDesc().height!=sides[i]) {
+                std::cerr<<"Original impact atlas decode failed at index "<<i;
+                return 36;
+            }
+        }
+        std::cout<<"All 12 original impact atlases decoded as native GPU textures"<<std::endl;
+    }
     {
         auto proof=std::make_unique<wi::scene::Scene>();
         const auto floor=proof->Entity_CreatePlane("Blood collision proof floor");
@@ -1610,6 +1625,16 @@ int main(int argc,char** argv)
     if(player.ClipCount()!=2)return fail("screen discarded prepared bank");
     player.Reset();
     if(player.VoiceCount()!=0 || player.ClipCount()!=0)return fail("reset retained audio");
-    std::cout<<"ImpactAudioTests passed: governance, save/reload, snapshot, package, native voices, variants, cap, pause/reset\n";
+    // With core defaults enabled, the two governed Metal variants stay intact;
+    // the six other surface families receive 12 bundled original WAVs.
+    ImpactAudioPlayer core;
+    if(!core.Prepare((package/"GameData").generic_u8string(),
+            package.generic_u8string(),projectId,error,true) || core.ClipCount()!=14)
+        return fail("owner-authored core audio preparation/override: "+error);
+    if(!core.Play(ImpactSurfaceType::Glass,{0,0,2},listener,played) ||
+       !core.Play(ImpactSurfaceType::Water,{0,0,2},listener,played))
+        return fail("glass/water core voice playback");
+    core.Reset();
+    std::cout<<"ImpactAudioTests passed: governance, save/reload, snapshot, package, native voices, variants, cap, pause/reset and 14 core defaults\n";
     return 0;
 }

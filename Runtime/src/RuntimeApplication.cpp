@@ -962,7 +962,7 @@ namespace renegade::runtime
         std::string impactAudioError;
         if (!impactAudio_.Prepare(startupResult_.project.rootPath,
                 startupResult_.packageRelativeLaunch ? startupResult_.packageRootPath : "",
-                startupResult_.project.projectId, impactAudioError))
+                startupResult_.project.projectId, impactAudioError, true))
             diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
                 "runtime.audio", "impact.audio.prepare_failed", impactAudioError);
         else

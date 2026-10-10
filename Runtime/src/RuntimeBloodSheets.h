@@ -1,4 +1,5 @@
 #pragma once
+#include "RuntimeImpactTextures.h"
 #include <wiScene.h>
 #include <algorithm>
 #include <vector>
@@ -41,8 +42,15 @@ namespace renegade::runtime
         bool Spawn(wi::scene::Scene& scene,const XMFLOAT3& point,const XMFLOAT3& direction,unsigned seed,bool directional=false,const XMFLOAT3* facing=nullptr,const XMFLOAT3* outward=nullptr)
         {
             const auto donor=FindMaterial(scene);
-            if(donor==wi::ecs::INVALID_ENTITY)return false;
-            const auto material=*scene.materials.GetComponent(donor);
+            const auto& builtin=GetBuiltinImpactAtlas(BuiltinImpactAtlas::Blood8x8);
+            if(donor==wi::ecs::INVALID_ENTITY && !builtin.IsValid())return false;
+            wi::scene::MaterialComponent material;
+            if(donor!=wi::ecs::INVALID_ENTITY)material=*scene.materials.GetComponent(donor);
+            if(builtin.IsValid()) {
+                material.textures[wi::scene::MaterialComponent::BASECOLORMAP].resource.SetTexture(builtin);
+                material.baseColor={1,1,1,1};
+                material.SetRoughness(.25f);material.SetReflectance(.04f);
+            }
             if(wi::graphics::GetDevice() &&
                (!material.textures[wi::scene::MaterialComponent::BASECOLORMAP].resource.IsValid() ||
                 !material.textures[wi::scene::MaterialComponent::BASECOLORMAP].resource.GetTexture().IsValid()))

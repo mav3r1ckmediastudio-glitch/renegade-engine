@@ -8,6 +8,24 @@ namespace renegade::runtime
 {
     enum class ImpactTexture { Dust, Spark, Splinter, Chip, MetalMark, WoodMark, ConcreteMark, ConcreteDust, WaterDrop, GlassMark, BloodSpray, BloodSplat, BloodDrop, Count };
 
+    enum class BuiltinImpactAtlas : unsigned {
+        Blood8x8,
+        ConcreteMarks,
+        DirtMarks,
+        GlassDebris,
+        GlassMarks,
+        MetalMarks,
+        SkinEntryMarks,
+        RockDebris,
+        SkinMarks,
+        StoneMarks,
+        WoodDebris,
+        WoodMarks,
+        Count
+    };
+    // Original Renegade art, embedded in the Runtime executable.
+    const wi::graphics::Texture& GetBuiltinImpactAtlas(BuiltinImpactAtlas kind);
+
     const wi::graphics::Texture& GetConcreteDustTexture();
     const wi::graphics::Texture& GetBloodSprayTexture();
     const wi::graphics::Texture& GetBloodSprayAtlasTexture();
@@ -16,7 +34,7 @@ namespace renegade::runtime
     // Built-in masks are independent of project paths and are shared by all bursts.
     inline const wi::graphics::Texture& GetImpactTexture(ImpactTexture kind)
     {
-        if(kind==ImpactTexture::BloodSpray)return GetBloodSprayAtlasTexture();
+        if(kind==ImpactTexture::BloodSpray)return GetBuiltinImpactAtlas(BuiltinImpactAtlas::Blood8x8);
         if(kind==ImpactTexture::BloodSplat)return GetBloodSplatTexture();
         if(kind==ImpactTexture::ConcreteDust)return GetConcreteDustTexture();
         static std::array<wi::graphics::Texture,static_cast<unsigned>(ImpactTexture::Count)> textures;

@@ -54,3 +54,12 @@ target_compile_features(RenegadeRuntimeProjectileSessionTests PRIVATE cxx_std_17
 set_target_properties(RenegadeRuntimeProjectileSessionTests PROPERTIES FOLDER "Renegade/Tests")
 add_dependencies(RenegadeBridgeTests RenegadeRuntimeProjectileSessionTests)
 add_test(NAME RenegadeRuntimeProjectileSessionTests COMMAND RenegadeRuntimeProjectileSessionTests)
+
+# The original Renegade impact textures are real distributable core resources.
+find_package(Python3 QUIET COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME RenegadeOriginalImpactArtContract
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/OriginalImpactArtContract.py" "${CMAKE_SOURCE_DIR}")
+    add_test(NAME RenegadeOriginalImpactAudioContract
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/OriginalImpactAudioContract.py" "${CMAKE_SOURCE_DIR}")
+endif()
