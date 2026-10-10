@@ -235,10 +235,18 @@ jobs:
           Start-Sleep -Seconds 3
           Get-ChildItem $dumpDir -File | Select-Object Name,Length | Format-Table | Out-String | Tee-Object -FilePath $status -Append
           if ($hadFailure) {
-            Write-Host "Expected failure reproduced; captured diagnostic evidence."
+            throw "Isolated Release process failed; captured evidence for investigation."
           } else {
-            Write-Host "Three isolated Release attempts passed; intermittent CI-specific failure."
+            Write-Host "Three isolated Release attempts passed."
           }
+
+      - name: Verify 100 consecutive Release CTest passes
+        shell: pwsh
+        run: |
+          ctest --test-dir BUILD/renegade -C Release -R "^RenegadeProjectileWorldTests$" --repeat until-fail:100 --timeout 12 --output-on-failure > artifacts/p3-release-crash/100-ctest-repeats.txt
+          $code = $LASTEXITCODE
+          Get-Content artifacts/p3-release-crash/100-ctest-repeats.txt | Select-Object -Last 18
+          if ($code -ne 0) { throw "Repeated isolated Release CTest failed with code $code" }
 
       - name: Upload only isolated crash evidence
         if: always()
