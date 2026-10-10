@@ -312,6 +312,10 @@ int main()
         return fail("invalid subset fallback");
 
     scene->colliders_cpu = nullptr; // Cache belongs to this fixture.
+    // The native Scene was created before the temporary collider cache/bounds.
+    // Destroy it while those fixture buffers are still alive, rather than
+    // relying on reverse-order local teardown after the buffers are freed.
+    scene.reset();
     std::cout << "ProjectileWorldTests passed\n";
     return 0;
 }
