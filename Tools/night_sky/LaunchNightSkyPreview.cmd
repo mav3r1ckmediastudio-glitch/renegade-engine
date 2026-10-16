@@ -2,16 +2,17 @@
 setlocal
 for %%I in ("%~dp0..\..") do set "ROOT=%%~fI"
 set "PREVIEW=%ROOT%\BUILD\night-sky-check\Studio\Release"
-if not exist "%PREVIEW%\RenegadeStudio.exe" (
-  echo Night Sky preview not built. Expected "%PREVIEW%\RenegadeStudio.exe"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0CheckNightSkyPreview.ps1"
+if errorlevel 1 (
+  echo.
+  echo The Night Sky preview is not validated. No Studio was launched.
+  pause
   exit /b 1
 )
-if not exist "%PREVIEW%\Content" (
-  echo Night Sky preview resources are missing. Finish the standalone Studio build first.
-  exit /b 2
-)
-echo Starting the isolated Renegade Night Sky preview.
-echo Active Renegade Studio will not be replaced, but use a COPY of any project for testing.
+echo.
+echo Starting the isolated Night Sky Studio, NOT your normal Renegade build.
+echo Open Project: Downloads\Renegade Night Sky Preview\Renegade Night Sky Visual Test
+echo.
 pushd "%PREVIEW%"
 start "Renegade Night Sky Preview" "%PREVIEW%\RenegadeStudio.exe" %*
 popd

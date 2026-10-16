@@ -48,7 +48,7 @@ _ns_replace("shaders/skyHF.hlsli"
     "totalColor += RenegadeNightGradient(")
 _ns_replace("shaders/ShaderInterop_Weather.h"
     "float aurora_speed;"
-    "float aurora_speed;\n    float4 night_zenith;\n    float4 night_horizon;\n    float aurora_coverage;\n    float3 night_padding;"
+    "float aurora_speed;\n    float night_alignment_padding;\n    float4 night_zenith;\n    float4 night_horizon;\n    float aurora_coverage;\n    float3 night_padding;"
     "float4 night_zenith;")
 _ns_replace("wiScene_Components.h"
     "float aurora_speed = 0.35f;"
@@ -56,7 +56,7 @@ _ns_replace("wiScene_Components.h"
     "XMFLOAT4 night_zenith =")
 _ns_replace("wiScene.cpp"
     "shaderscene.weather.aurora_speed = weather.aurora_speed;"
-    "shaderscene.weather.aurora_speed = weather.aurora_speed;\n        shaderscene.weather.night_zenith = weather.night_zenith;\n        shaderscene.weather.night_horizon = weather.night_horizon;\n        shaderscene.weather.aurora_coverage = weather.aurora_coverage;\n        shaderscene.weather.night_padding = XMFLOAT3(0,0,0);"
+    "shaderscene.weather.aurora_speed = weather.aurora_speed;\n        shaderscene.weather.night_alignment_padding = 0.0f;\n        shaderscene.weather.night_zenith = weather.night_zenith;\n        shaderscene.weather.night_horizon = weather.night_horizon;\n        shaderscene.weather.aurora_coverage = weather.aurora_coverage;\n        shaderscene.weather.night_padding = XMFLOAT3(0,0,0);"
     "shaderscene.weather.night_zenith =")
 _ns_replace("shaders/skyHF.hlsli"
     "RenegadeNightGradient(worldDirection, sunDirection, GetWeather().night_sky_gradient)"
@@ -66,4 +66,15 @@ _ns_replace("shaders/skyHF.hlsli"
     "GetWeather().aurora_speed, GetTime())"
     "GetWeather().aurora_speed, GetWeather().aurora_coverage, GetTime())"
     "GetWeather().aurora_coverage, GetTime())")
+# Migration for worktrees already overlaid by the original prototype.
+# Older authoring inserted float4 fields without the CPU/HLSL register pad,
+# causing sky_exposure to read as rain_amount (black daytime sky and stars).
+_ns_replace("shaders/ShaderInterop_Weather.h"
+    "float aurora_speed;\n    float4 night_zenith;"
+    "float aurora_speed;\n    float night_alignment_padding;\n    float4 night_zenith;"
+    "float night_alignment_padding;")
+_ns_replace("wiScene.cpp"
+    "shaderscene.weather.aurora_speed = weather.aurora_speed;\n        shaderscene.weather.night_zenith"
+    "shaderscene.weather.aurora_speed = weather.aurora_speed;\n        shaderscene.weather.night_alignment_padding = 0.0f;\n        shaderscene.weather.night_zenith"
+    "shaderscene.weather.night_alignment_padding = 0.0f;")
 message(STATUS "Renegade Night Sky overlay ready (pinned WickedEngine)")

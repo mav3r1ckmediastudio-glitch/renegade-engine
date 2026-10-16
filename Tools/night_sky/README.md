@@ -1,39 +1,42 @@
-# Night Sky + Aurora: isolated branch checkpoint
+# Renegade Night Sky — isolated corrective checkpoint
 
-**Branch:** `feature/night-sky-aurora-v1`
-**Worktree:** `C:\Users\paulw\source\repos\renegade-night-sky`
-**Active UI Designer worktree:** unchanged; nothing merged.
+Branch: `feature/night-sky-aurora-v1`
+Worktree: `C:\Users\paulw\source\repos\renegade-night-sky`
+The user's normal Renegade Studio build has not been overwritten or merged.
 
-## Implemented
+## Critical black-sky regression (fixed in source, visual QA pending)
 
-- Uses Wicked Engine's **existing realistic sky** (no new skybox).
-- Configurable dark-blue/indigo zenith, muted blue-violet horizon and horizon glow, with smooth night/day sun gating. Existing native stars and twinkling are preserved.
-- Independent procedural aurora HLSL with animated curtains, strength, coverage and speed; default off.
-- Dedicated **Night Sky** Studio pane with gradient, zenith/horizon RGB, horizon glow, existing Stars, Aurora Enabled, intensity, coverage and speed controls. Skybox texture mode disables the procedural controls.
-- Versioned settings metadata on the existing Environment weather entity; scene-reopen restoration, runtime weather hydration and Undo/Redo.
-- The idempotent CMake overlay applies the Renegade shader fields to the pinned Wicked checkout *in this worktree only*. No unrelated code has been modified.
+The first Night Sky preview **was broken**: the entire procedural sky went black in daytime and the existing native stars disappeared.
 
-## Verified
+Root cause: our new `ShaderWeather` GPU data fields inserted a `float4` immediately after three `float` values. HLSL aligned that `float4` to the next 16-byte register, while C++ packed it at the next 4-byte offset. Subsequent fields were wrong: **HLSL sky_exposure offset 136**, **native C++ offset 132**. The shader read the wrong exposure value and multiplied the sky/stars by it.
 
-- Actual sky shaders (`skyPS_dynamic`, `skyPS_static`, `envMap_skyPS_dynamic`, `envMap_skyPS_static`, `sunPS`) compile to **both DirectX 12 DXIL and Vulkan SPIR-V**.
-- Full Wicked Engine shader package rebuilt and embedded consistently with the expanded `ShaderScene.weather` GPU data layout. Build and link succeeded (exit 0). The generated `wiShaderDump.h` is approximately 40 MB.
-- The **final embedded-shader Studio Release build and link succeeded (exit 0)**. Executable: `BUILD/night-sky-check/Studio/Release/RenegadeStudio.exe`. It was built *after* the generated shader bundle.
-- Night Sky CTest suite **2 of 2 passed**, including metadata persistence, native scene serialization, defaults, sanitizer, Undo/Redo and source integration.
-- `Tests/NightSkyStateTests.cpp --fixture <path.wiscene>` generated the standalone night scene `BUILD/night-sky-check/Preview/NightSky-Midnight-Aurora.wiscene` (~4 KB).
-- The generated preview file was reopened **from disk** with Wicked's native archive loader: midnight sun, gradient 0.85, stars 0.85, aurora 0.75 and coverage 0.65 verified, plus runtime hydration. Check command `--verify-fixture <path.wiscene>` passed with exit code 0.
-- The official Microsoft DXC `v1.9.2609` archive was checksum-verified and its DLL used **only under BUILD/** for the full shader bundle. No global installation or replacement of the pinned source DLL.
+Fix: an explicit `float night_alignment_padding` in `ShaderInterop_Weather.h`, initialised in `wiScene.cpp` and applied reproducibly by the CMake overlay (including migration of already-patched worktrees). **Native sky_exposure now lives at offset 136**. Permanent C++ `static_assert` checks pin the ShaderScene/Weather offsets, and DXC assembly reflection was cross-checked for the affected fields.
 
-## Runtime startup smoke check
+## What is built and verified
 
-- Launched the isolated embedded Studio Release minimised with no project; it remained alive after 10 seconds and logged Wicked Engine subsystem initialisation and runtime compilation of Studio-owned grid shaders. The preview process was then closed; no RenegadeStudio process remained. This is **not** proof of correct gradient/aurora appearance.
+- The existing Wicked realistic sky, not a replacement skybox. Procedural indigo/violet zenith-to-horizon gradient, native stars and independent animated aurora HLSL module with intensity, coverage and speed.
+- Dedicated Night Sky pane, separate from Environment, with editable gradient, zenith/horizon RGB, glow, Stars, Aurora Enabled, intensity, coverage and speed. Command-backed Undo/Redo.
+- Versioned settings metadata attached to the existing Environment weather entity; missing metadata preserves legacy scenes.
+- DX12 and Vulkan sky shader variants compiled successfully; the entire embedded Wicked Engine shader dump rebuilt after the ABI fix.
+- **CPU/HLSL layout corrected and independently verified**. Native Release `RenegadeNightSkyTests` pass, including native archive roundtrip, Undo/Redo and legacy behavior. CTest suite **2/2 passed** after the fix.
+- **Corrected embedded-shader RenegadeStudio.exe rebuilt and linked**, isolated Release exit code 0, newer than the shader dump.
+- A real standalone preview project was generated via `ProjectService::CreateProject`, not a loose scene import. Its scene disk load, settings and weather hydration validated successfully.
+- Executable `--startup-smoke` exit code 0 after the fix. This does not constitute visual validation.
+- A guarded launcher runs `CheckNightSkyPreview.ps1` before opening the corrected exe; the launcher refuses old/unverified builds.
 
-## Next gate: visual owner acceptance
+## Correct preview instructions
 
-**Do not merge or claim shipped.** The executable has not been launched while the user is running the active Studio/UI Designer. GPU performance and on-screen appearance have not yet been measured.
+Open `C:\Users\paulw\Downloads\Renegade Night Sky Preview` and double-click `Open Night Sky Studio.cmd`.
 
-1. When the user's active Studio/UI Designer session is finished, run `Tools/night_sky/LaunchNightSkyPreview.cmd`. This launcher starts **only the isolated Studio**.
-2. Use File > Open to load `BUILD/night-sky-check/Preview/NightSky-Midnight-Aurora.wiscene`, not a working project. Follow `Tools/night_sky/PreviewChecklist.md`.
-3. Verify dark blue/violet gradient against the originally pitch-black midnight sky, live aurora curtains, native stars, dusk/dawn fading and existing clouds/fog.
-4. Verify save/reopen and controls in Studio and profile GPU frametime at target resolution. Adjust authored colours/animation only after reviewing actual visuals.
+In the isolated Studio choose **Open Project**, selecting:
+`Renegade Night Sky Visual Test\Renegade Night Sky Visual Test.renegade`
 
-**Do not run a new Studio concurrently on the same editable project.**
+The midnight starter scene is `Content\Scenes\Main.wiscene` **inside that project**. Opening a standalone scene from outside an active project is not supported by the current Studio Story Flow lifecycle; do not repeat that earlier failed workflow.
+
+See `PreviewChecklist.md` for sky, stars, sunrise/sunset, aurora, save/reopen and GPU performance validation.
+
+## Remaining gate
+
+**The corrected build has not yet had owner or independently observed on-screen visual acceptance.** Do not claim the gradient or stars are visually proven until the actual sky is viewed in Studio. Do not merge or ship before that check and regression/performance testing.
+
+Never test this feature by changing the user's real UI Designer project. A dedicated preview project is provided.

@@ -1,12 +1,27 @@
 #include "renegade/bridge/NightSkyService.h"
+#include "renegade/bridge/ProjectService.h"
 
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <limits>
 
+// Wicked weather data lives inside a GPU constant buffer. HLSL packs every
+// float4 on a 16-byte boundary: verify the corresponding native C++ layout.
+static_assert(offsetof(ShaderScene, weather) == 112);
+static_assert(offsetof(ShaderWeather, stars) == 28);
+static_assert(offsetof(ShaderWeather, night_sky_gradient) == 64);
+static_assert(offsetof(ShaderWeather, night_zenith) == 80);
+static_assert(offsetof(ShaderWeather, night_horizon) == 96);
+static_assert(offsetof(ShaderWeather, aurora_coverage) == 112);
+static_assert(offsetof(ShaderWeather, sky_rotation_sin) == 128);
+static_assert(offsetof(ShaderWeather, sky_exposure) == 136);
+static_assert(offsetof(ShaderWeather, rain_color) == 160);
+static_assert(offsetof(ShaderWeather, fog) == 176);
+static_assert(offsetof(ShaderWeather, atmosphere) == 272);
 namespace
 {
     bool Near(float a, float b) noexcept { return std::fabs(a - b) < 0.0001f; }
@@ -20,7 +35,31 @@ namespace
 
 int main(int argc, char** argv)
 {
-    if (argc == 3 && std::string(argv[1]) == "--verify-fixture")
+    std::fprintf(stderr, "CXX WEATHER ABI: scene.weather=%zu stars=%zu gradient=%zu zenith=%zu horizon=%zu coverage=%zu sky_rotation=%zu fog=%zu atmosphere=%zu sizeof_weather=%zu scene_size=%zu\n",
+        offsetof(ShaderScene, weather), offsetof(ShaderWeather, stars),
+        offsetof(ShaderWeather, night_sky_gradient), offsetof(ShaderWeather, night_zenith),
+        offsetof(ShaderWeather, night_horizon), offsetof(ShaderWeather, aurora_coverage),
+        offsetof(ShaderWeather, sky_rotation_sin), offsetof(ShaderWeather, fog),
+        offsetof(ShaderWeather, atmosphere), sizeof(ShaderWeather), sizeof(ShaderScene));
+    if (argc == 4 && std::string(argv[1]) == "--make-preview-project")
+    {
+        const auto parent = std::filesystem::absolute(std::filesystem::u8path(argv[2]));
+        const auto fixture = std::filesystem::absolute(std::filesystem::u8path(argv[3]));
+        if (!std::filesystem::is_directory(parent) || !std::filesystem::is_regular_file(fixture))
+            Fail("preview parent folder or night fixture is missing");
+        renegade::bridge::ProjectService projects;
+        projects.Initialize((parent / ".night-sky-preview-recents.json").generic_u8string());
+        if (!projects.CreateProject(parent.generic_u8string(),
+                "Renegade Night Sky Visual Test", fixture.generic_u8string()))
+            Fail(projects.LastError().c_str());
+        renegade::bridge::ProjectMetadata verified;
+        std::string verifyError;
+        if (!projects.InspectProject(projects.CurrentProject().descriptorPath, verified, verifyError))
+            Fail(verifyError.c_str());
+        std::printf("NIGHT SKY PROJECT CREATED: %s\n", verified.descriptorPath.c_str());
+        std::fflush(stdout);
+        std::_Exit(0);
+    }    if (argc == 3 && std::string(argv[1]) == "--verify-fixture")
     {
         wi::Archive archive(argv[2], true, false);
         if (!archive.IsOpen()) Fail("preview fixture cannot be opened from disk");
