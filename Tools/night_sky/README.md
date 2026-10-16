@@ -21,10 +21,16 @@ Branch: `feature/night-sky-aurora-v1`. Active UI Designer worktree and Studio bi
 - Isolated CMake VS18 x64 configure and `RenegadeNightSkySourceContract` CTest pass.
 - Targeted MSVC C++ syntax compiles pass for `NightSkyStudioIntegration.cpp`, `StudioApplication.cpp`, `RenegadeStudioChrome.cpp`, `Phase5Gate5RenderWorkspace.cpp`, `NightSkyStateTests.cpp`.
 
+## Embedded renderer packaging checkpoint
+
+- Full `RenegadeNightSkyTests` Release executable compiled and linked. CTest 2/2 passed, including native WISCENE archive save/restore, command Undo/Redo, legacy versioning and invalid values. This test follows the existing Wicked static teardown convention (`std::_Exit`) used by the Gate4 scene fixture to avoid teardown hangs after assertions pass.
+- Full independent Studio Release executable compiled and linked in `BUILD/night-sky-check/Studio/Release/RenegadeStudio.exe` with external shaders (exit 0); not launched or installed.
+- Reconfigured that same isolated build to `RENEGADE_EMBED_SHADERS=ON` and fully rebuilt Wicked Engine's shader dump for DX12 and Vulkan using the verified official 1.9.2609 compiler DLL copied only into the isolated BUILD output directories. `WickedEngine_emb_shaders` built and linked successfully (exit 0); generated `BUILD/night-sky-check/WickedEngine/WickedEngine/wiShaderDump.h` is approximately 40 MB.
+- Final embedded Studio relink is separate and must be checked for exit code 0. Do not attempt runtime visual acceptance with the earlier external-shader executable.
 ## Mandatory before shipping or owner visual acceptance
 
-- **Recompile the entire Wicked shader package** for the updated `ShaderScene.weather` GPU data layout; reusing old packaged shader binaries is unsafe even if the five sky passes compile. The new fields enlarge weather, which is nested before DDGI and other scene data in ShaderScene. Do not mix old shader cache/shader dump with new ShaderScene layout.
-- Complete Release compile, link and **execute** `RenegadeNightSkyTests`, including actual Wicked scene archive save/reopen.
+- **Shader ABI prerequisite was fulfilled in isolated build** by regenerating the entire embedded shader dump for the updated `ShaderScene.weather` GPU data layout. Reusing old packaged shader binaries is still unsafe. The final embedded Studio target must link this exact shader library.
+- Release compile, link and CTest for `RenegadeNightSkyTests` now pass (2/2).
 - Build a completely separate RenegadeStudio Release with a consistent, newly compiled complete shader package. No changes to the user's active Studio binary.
 - Visual assessment at midday, dusk, midnight, dawn, stars at 0 and 1, clouds, fog, reflections, ocean and Aurora Off/On. Measure GPU frame-time at 1080p/1440p.
 - UI polish: full colour-picker swatches and optional aurora palettes are not yet implemented; current night colour controls are linear-HDR RGB sliders.
