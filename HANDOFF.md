@@ -1,3 +1,14 @@
+## 2026-10-16: Owner accepted all three sky effects; PR preparation
+
+Owner explicitly accepted night atmosphere, soft green/pink aurora and the
+reference-colour Milky Way. Accepted code checkpoint f5ef376; this checkpoint
+updates documentation only. See docs/NIGHT_SKY_OWNER_ACCEPTANCE.md for the binary
+hash, validation and explicit remaining merge/release checks. The draft PR must
+retain the manual Milky Way editor Save/Undo, complex-scene/performance,
+standalone Runtime visual and independent exact-head checks as outstanding.
+58/58 focused tests passed; actual Studio and DX12/Vulkan rendering inspected.
+No main checkout/UI Designer changes. No merge or release gate closure.
+
 ## 2026-10-16: Separate Milky Way reference-colour candidate
 
 Owner accepted the soft green/pink aurora baseline. Separate Milky Way intensity

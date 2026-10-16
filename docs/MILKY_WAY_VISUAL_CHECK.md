@@ -58,4 +58,5 @@ Validation:
 - Empty-scene timing CSVs are diagnostic only; complex-scene GPU performance,
   clouds/fog/reflection scene acceptance and packaged Runtime visual acceptance
   remain open. No full release gate or independent exact-head review claimed.
-- Owner artistic acceptance of this Milky Way revision remains open.
+- Owner artistic acceptance confirmed on 2026-10-16. See NIGHT_SKY_OWNER_ACCEPTANCE.md;
+  the remaining integration/manual/release checks above stay open.

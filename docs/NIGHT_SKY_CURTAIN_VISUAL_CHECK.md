@@ -52,7 +52,7 @@ and compiler load; they are not representative complex-scene GPU benchmarks.
 
 ## Open acceptance and session limits
 
-Owner artistic acceptance remains open. Complex cloud/fog/reflection scenes,
+Owner artistic acceptance was confirmed on 2026-10-16; see NIGHT_SKY_OWNER_ACCEPTANCE.md. Complex cloud/fog/reflection scenes,
 representative high-resolution performance, standalone packaged Runtime and
 independent exact-head release review remain unverified. Final softer Studio
 control interaction still needs an uninterrupted native pass; the final shader's
