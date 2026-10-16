@@ -118,7 +118,7 @@ namespace renegade::studio
         const bool procedural = visible && session_->Scenes().GetScene().weathers.GetComponent(EditableWeatherEntity())->IsRealisticSky();
         nightZenithColour_.SetEnabled(procedural);
         nightHorizonColour_.SetEnabled(procedural);
-        if (nightColourOpen_ && (!visible || EditableWeatherEntity() != nightColourEntity_))
+        if (nightColourOpen_ && (!procedural || EditableWeatherEntity() != nightColourEntity_))
             FinishNightColour(false);
         float y = 44.0f;
         for (std::size_t i = 0; i < children.size(); ++i)

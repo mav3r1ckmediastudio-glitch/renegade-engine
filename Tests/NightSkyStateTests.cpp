@@ -106,7 +106,15 @@ int main(int argc, char** argv)
         night.auroraSpeed = 0.35f;
         if (!renegade::bridge::StoreNightSky(fixture, environment, night))
             Fail("could not set Night Sky fixture values");
-        fixture.weather = weather;
+        // Match the real editor lifecycle: a serialized directional Sun owns
+        // the same midnight direction as Weather, so opening Environment is read-only.
+        if (renegade::bridge::EnsurePrimarySunLight(fixture, environment) == wi::ecs::INVALID_ENTITY)
+            Fail("could not create fixture sun");
+        auto midnight = renegade::bridge::CaptureSun(fixture, environment);
+        renegade::bridge::SetSunTime(midnight, 0.0f);
+        if (!renegade::bridge::ApplySun(fixture, environment, midnight))
+            Fail("could not apply fixture midnight sun");
+        fixture.weather = *fixture.weathers.GetComponent(environment);
         wi::Archive archive;
         fixture.Serialize(archive);
         if (!archive.SaveFile(destination.generic_u8string()))
@@ -119,7 +127,7 @@ int main(int argc, char** argv)
     if (argc != 1) Fail("usage: RenegadeNightSkyTests [--fixture|--verify-fixture <path.wiscene>]");
     // Every disclosure combination: collapsed children consume no rows and
     // the next header follows exactly, including the last group's action rows.
-    const std::size_t counts[] = {7, 5, 4, 1, 5, 20, 7, 8, 4};
+    const std::size_t counts[] = {7, 5, 4, 1, 5, 20, 7, 4, 4};
     for (unsigned mask = 0; mask < 512; ++mask)
     {
         float top = 44.0f;
