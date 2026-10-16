@@ -1,3 +1,11 @@
+## 2026-10-17: Retain main aggregate CI build during sky integration
+
+Merged origin/main 380dcc0 into the isolated feature branch after the CI target
+fix exposed a script conflict. Retained main's RenegadeStudioCI aggregate and
+CTest timeout; added RenegadeNightSkyTests to its CMake dependency graph and
+kept the manifest entry. No main working-copy edits or shader changes.
+Fresh integrated-head CI required; see docs/NIGHT_SKY_PR_CI_FIX.md.
+
 ## 2026-10-17: PR #183 Studio CI test-target repair
 
 PR head 3ce02fe failed Studio Debug CTest because RenegadeNightSkyTests was

@@ -86,8 +86,9 @@ try {
             -ArgumentList @(
                 "--build", $buildRoot,
                 "--config", $currentConfiguration,
-                "--target", "RenegadeStudio", "RenegadeRuntime", "RenegadeBridgeTests", "RenegadePlayerPrefabTests", "RenegadeDiagnosticServiceTests", "RenegadeNightSkyTests",
-                "RenegadeAssetRegistryProcessFixture",
+                # One aggregate MSBuild graph avoids rebuilding/checking the same
+                # Wicked and Renegade dependencies for separate root targets.
+                "--target", "RenegadeStudioCI",
                 "--parallel"
             ) `
             -WorkingDirectory $repositoryRoot `
@@ -98,6 +99,9 @@ try {
             -ArgumentList @(
                 "--test-dir", $buildRoot,
                 "-C", $currentConfiguration,
+                # A hung CTest case must fail with a diagnostic instead of
+                # consuming the remaining GitHub job runtime.
+                "--timeout", "180",
                 "--output-on-failure"
             ) `
             -WorkingDirectory $repositoryRoot `
