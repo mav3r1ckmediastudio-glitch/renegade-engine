@@ -884,3 +884,10 @@ if(WIN32)
     target_link_libraries(RenegadeProjectilePlayground PRIVATE Renegade::EngineBridge)
     set_target_properties(RenegadeProjectilePlayground PROPERTIES FOLDER "Renegade/Tools")
 endif()
+
+
+# Night Sky feature bridge contract (isolated branch only).
+add_executable(RenegadeNightSkyTests NightSkyStateTests.cpp)
+target_link_libraries(RenegadeNightSkyTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeNightSkyTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeNightSkyTests COMMAND RenegadeNightSkyTests)

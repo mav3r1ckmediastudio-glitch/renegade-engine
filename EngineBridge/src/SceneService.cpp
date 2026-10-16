@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/LightmapBakeService.h"
+#include "renegade/bridge/NightSkyService.h"
 #include "renegade/bridge/TerrainService.h"
 #include "renegade/bridge/VegetationService.h"
 #include "renegade/bridge/PlayerService.h"
@@ -610,6 +611,7 @@ namespace renegade::bridge
                 weather.windDirection = XMFLOAT3(0.05f, 0.0f, 0.02f);
                 weather.windSpeed = 0.5f;
                 weather.stars = 0.0f;
+                StoreNightSky(scene_, entity, NightSkyState{0.70f, 0.0f, 0.35f});
                 scene_.weather = weather;
                 break;
             }
@@ -722,6 +724,9 @@ namespace renegade::bridge
         }
         RebindDefaultTerrainMaterials(scene_);
         RebindWickedVegetationResources(scene_);
+        // Night-sky shader parameters are transient on native WeatherComponent;
+        // restore their namespaced serialized values after each scene adoption.
+        RestoreNightSky(scene_);
         currentPath_ = std::move(prepared.path_);
         lastError_.clear();
         ++revision_;

@@ -3,6 +3,7 @@
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/CollisionService.h"
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/NightSkyService.h"
 #include "renegade/bridge/SunService.h"
 
 #include <algorithm>
@@ -297,6 +298,9 @@ namespace renegade::bridge
             scene.weather = resolvedWeather;
             return wi::ecs::INVALID_ENTITY;
         }
+        // New Environment authoring gets the natural night floor; legacy files
+        // without v1 metadata retain the original untouched sky.
+        StoreNightSky(scene, entity, NightSkyState{0.70f, 0.0f, 0.35f});
         if (sunWasCreated && createdSun != nullptr)
         {
             *createdSun = sun;
@@ -424,6 +428,7 @@ namespace renegade::bridge
             }
         }
         scene_->weather = *weather;
+        RestoreNightSky(*scene_);
         return true;
     }
 
