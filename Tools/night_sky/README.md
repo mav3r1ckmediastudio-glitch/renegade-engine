@@ -15,7 +15,7 @@ Fix: an explicit `float night_alignment_padding` in `ShaderInterop_Weather.h`, i
 ## What is built and verified
 
 - The existing Wicked realistic sky, not a replacement skybox. Procedural indigo/violet zenith-to-horizon gradient, native stars and independent animated aurora HLSL module with intensity, coverage and speed.
-- Dedicated Night Sky pane, separate from Environment, with editable gradient, zenith/horizon RGB, glow, Stars, Aurora Enabled, intensity, coverage and speed. Command-backed Undo/Redo.
+- Recovery candidate: one Environment pane, with every group behind a collapsible heading, including Night Atmosphere, native Stars and Aurora. The separate Night Sky workspace is removed. Disclosure is session state; values remain command-backed. Native visual acceptance is still required.
 - Versioned settings metadata attached to the existing Environment weather entity; missing metadata preserves legacy scenes.
 - DX12 and Vulkan sky shader variants compiled successfully; the entire embedded Wicked Engine shader dump rebuilt after the ABI fix.
 - **CPU/HLSL layout corrected and independently verified**. Native Release `RenegadeNightSkyTests` pass, including native archive roundtrip, Undo/Redo and legacy behavior. CTest suite **2/2 passed** after the fix.

@@ -298,7 +298,6 @@ namespace renegade::studio
             Focus,
             ToggleGrid,
             EnvironmentWorkspace,
-            NightSkyWorkspace,
             TerrainWorkspace,
             RenderWorkspace,
             SceneWorkspace,
@@ -352,7 +351,6 @@ namespace renegade::studio
         void SetGridVisible(bool visible) noexcept;
         void SetEnvironmentWorkspaceActive(bool active) noexcept;
         void SetTerrainWorkspaceActive(bool active) noexcept;
-        void SetNightSkyWorkspaceActive(bool active) noexcept;
         void SetRenderWorkspaceActive(bool active) noexcept;
         [[nodiscard]] bool IsRenderWorkspaceActive() const noexcept
         {
@@ -360,7 +358,7 @@ namespace renegade::studio
         }
         [[nodiscard]] bool IsSceneWorkspaceActive() const noexcept
         {
-            return !nightSkyWorkspaceActive_ && !environmentWorkspaceActive_ &&
+            return !environmentWorkspaceActive_ &&
                 !terrainWorkspaceActive_ && !renderWorkspaceActive_;
         }
         void SetTestLevelState(TestLevelState state) noexcept;
@@ -399,7 +397,7 @@ namespace renegade::studio
         {
             if (!action_)
                 return;
-            action_(nightSkyWorkspaceActive_ ? Action::NightSkyWorkspace : environmentWorkspaceActive_
+            action_(environmentWorkspaceActive_
                 ? Action::EnvironmentWorkspace
                 : terrainWorkspaceActive_
                     ? Action::TerrainWorkspace
@@ -502,7 +500,6 @@ namespace renegade::studio
         int activeViewportMenu_ = -1;
         bool gridVisible_ = true;
         bool environmentWorkspaceActive_ = false;
-        bool nightSkyWorkspaceActive_ = false;
         bool terrainWorkspaceActive_ = false;
         bool renderWorkspaceActive_ = false;
         TestLevelState testLevelState_ = TestLevelState::Idle;

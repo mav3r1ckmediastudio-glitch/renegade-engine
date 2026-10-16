@@ -716,7 +716,6 @@ namespace renegade::studio
             return;
 
         renderWorkspaceActive_ = active && session_ != nullptr;
-        if (renderWorkspaceActive_) { nightSkyWorkspaceActive_ = false; studioChrome_.SetNightSkyWorkspaceActive(false); }
         if (renderWorkspaceActive_)
         {
             if (sunPreviewPlaying_)

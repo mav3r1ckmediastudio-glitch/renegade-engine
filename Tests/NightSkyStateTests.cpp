@@ -1,5 +1,7 @@
 #include "renegade/bridge/NightSkyService.h"
+#include "../Studio/src/EnvironmentSectionLayout.h"
 #include "renegade/bridge/ProjectService.h"
+#include "renegade/bridge/SunService.h"
 
 #include <cmath>
 #include <cstddef>
@@ -115,10 +117,60 @@ int main(int argc, char** argv)
         std::_Exit(0);
     }
     if (argc != 1) Fail("usage: RenegadeNightSkyTests [--fixture|--verify-fixture <path.wiscene>]");
+    // Every disclosure combination: collapsed children consume no rows and
+    // the next header follows exactly, including the last group's action rows.
+    const std::size_t counts[] = {7, 5, 4, 1, 5, 20, 7, 8, 4};
+    for (unsigned mask = 0; mask < 512; ++mask)
+    {
+        float top = 44.0f;
+        std::size_t rows = 9;
+        for (unsigned i = 0; i < 9; ++i)
+        {
+            const bool expanded = (mask & (1u << i)) != 0;
+            const auto bounds = renegade::studio::MeasureEnvironmentSection(top, expanded, counts[i]);
+            if (!Near(bounds.headerTop, top) || !Near(bounds.contentTop, top + 34.0f) ||
+                bounds.nextTop < bounds.contentTop)
+                Fail("Environment disclosure overlaps or leaves a header gap");
+            top = bounds.nextTop;
+            if (expanded) rows += counts[i];
+        }
+        if (!Near(top, 44.0f + rows * 34.0f))
+            Fail("Environment collapsed children left empty scroll rows");
+    }
     using namespace renegade::bridge;
+    // Opening Environment repairs a weather-only scene by creating a sun.
+    // That operation must not silently turn its authored night into midday.
+    {
+        wi::scene::Scene legacyNight;
+        const auto entity = wi::ecs::CreateEntity();
+        auto& weather = legacyNight.weathers.Create(entity);
+        weather.sunDirection = XMFLOAT3(0.0f, -0.96f, 0.28f);
+        legacyNight.weather = weather;
+        const auto before = CaptureSun(legacyNight, entity);
+        CreateSunCommand createSun(legacyNight, entity);
+        if (!createSun.Execute()) Fail("weather-only sun repair failed");
+        const auto after = CaptureSun(legacyNight, entity);
+        const auto lightUp = legacyNight.transforms.GetComponent(after.lightEntity)->GetUp();
+        if (!Near(lightUp.y, before.direction.y) || !Near(lightUp.z, before.direction.z))
+            Fail("repaired sun transform would replace night on the next native update");
+        if (!Near(before.direction.y, after.direction.y) ||
+            !Near(before.direction.z, after.direction.z))
+            Fail("opening Environment replaced authored nighttime direction");
+        createSun.Undo();
+        if (FindPrimarySunLight(legacyNight) != wi::ecs::INVALID_ENTITY ||
+            !Near(CaptureSun(legacyNight, entity).direction.y, before.direction.y))
+            Fail("sun repair Undo lost original weather-only direction");
+        if (!createSun.Execute() ||
+            !Near(CaptureSun(legacyNight, entity).direction.y, before.direction.y))
+            Fail("sun repair Redo lost authored night direction");
+        legacyNight.Clear();
+    }
     wi::scene::Scene scene;
     const auto environment = wi::ecs::CreateEntity();
     scene.weathers.Create(environment);
+    auto* baselineWeather = scene.weathers.GetComponent(environment);
+    baselineWeather->stars = 0.83f;
+    baselineWeather->skyExposure = 1.7f;
 
     const auto legacy = CaptureNightSky(scene, environment);
     if (!Near(legacy.gradient, 0.0f) || !Near(legacy.aurora, 0.0f))
@@ -201,6 +253,29 @@ int main(int argc, char** argv)
         reopened.Clear();
     }
 
+    // Reopen actual file bytes, rather than relying only on the memory archive.
+    {
+        const std::string path = "NightSkyState-roundtrip.wiscene";
+        wi::Archive output;
+        scene.Serialize(output);
+        if (!output.SaveFile(path)) Fail("disk save failed");
+        wi::Archive input(path, true, false);
+        if (!input.IsOpen()) Fail("disk reopen failed");
+        wi::scene::Scene reopened;
+        reopened.Serialize(input);
+        RestoreNightSky(reopened);
+        const auto loadedEntity = reopened.weathers.GetEntity(0);
+        const auto* loadedWeather = reopened.weathers.GetComponent(loadedEntity);
+        if (!Near(CaptureNightSky(reopened, loadedEntity).aurora, 0.90f) ||
+            !Near(loadedWeather->stars, 0.83f) || !Near(loadedWeather->skyExposure, 1.7f))
+            Fail("disk reopen changed native stars/exposure or lost aurora");
+        reopened.Clear();
+        std::filesystem::remove(path);
+    }
+    ClearNightSky(scene, environment);
+    if (!Near(scene.weathers.GetComponent(environment)->stars, 0.83f) ||
+        !Near(scene.weathers.GetComponent(environment)->skyExposure, 1.7f))
+        Fail("disabling extensions changed native stars or sky exposure");
     const auto missing = wi::ecs::CreateEntity();
     if (StoreNightSky(scene, missing, requested))
         Fail("non-Environment accepted authoring settings");

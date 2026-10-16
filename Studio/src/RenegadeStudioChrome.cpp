@@ -1185,20 +1185,8 @@ namespace renegade::studio
         const bool active) noexcept
     {
         environmentWorkspaceActive_ = active;
-        if (active) nightSkyWorkspaceActive_ = false;
         if (active)
         {
-            terrainWorkspaceActive_ = false;
-            renderWorkspaceActive_ = false;
-        }
-    }
-
-    void RenegadeStudioChrome::SetNightSkyWorkspaceActive(const bool active) noexcept
-    {
-        nightSkyWorkspaceActive_ = active;
-        if (active)
-        {
-            environmentWorkspaceActive_ = false;
             terrainWorkspaceActive_ = false;
             renderWorkspaceActive_ = false;
         }
@@ -1208,7 +1196,6 @@ namespace renegade::studio
         const bool active) noexcept
     {
         terrainWorkspaceActive_ = active;
-        if (active) nightSkyWorkspaceActive_ = false;
         if (active)
         {
             environmentWorkspaceActive_ = false;
@@ -1220,7 +1207,6 @@ namespace renegade::studio
         const bool active) noexcept
     {
         renderWorkspaceActive_ = active;
-        if (active) nightSkyWorkspaceActive_ = false;
         if (active)
         {
             environmentWorkspaceActive_ = false;
@@ -2019,18 +2005,13 @@ namespace renegade::studio
                         action_(Action::EnvironmentWorkspace);
                     consumed = true;
                 }
-                else if (x >= sceneMetaX + 164.0f && x < sceneMetaX + 248.0f)
-                {
-                    if (action_) action_(Action::NightSkyWorkspace);
-                    consumed = true;
-                }
-                else if (x >= sceneMetaX + 250.0f && x < sceneMetaX + 310.0f)
+                else if (x >= sceneMetaX + 164.0f && x < sceneMetaX + 224.0f)
                 {
                     if (action_)
                         action_(Action::TerrainWorkspace);
                     consumed = true;
                 }
-                else if (x >= sceneMetaX + 312.0f && x < sceneMetaX + 372.0f)
+                else if (x >= sceneMetaX + 226.0f && x < sceneMetaX + 286.0f)
                 {
                     if (action_)
                         action_(Action::RenderWorkspace);
@@ -2810,14 +2791,12 @@ namespace renegade::studio
             1.25f,
             0.08f);
         const bool sceneWorkspaceActive =
-            !nightSkyWorkspaceActive_ && !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
+            !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
             !renderWorkspaceActive_;
         const wi::Color sceneWorkspaceColor =
             sceneWorkspaceActive ? TextStrong : TextSecondary;
         const wi::Color environmentWorkspaceColor =
             environmentWorkspaceActive_ ? TextStrong : TextSecondary;
-        const wi::Color nightSkyWorkspaceColor =
-            nightSkyWorkspaceActive_ ? TextStrong : TextSecondary;
         const wi::Color terrainWorkspaceColor =
             terrainWorkspaceActive_ ? TextStrong : TextSecondary;
         const wi::Color renderWorkspaceColor =
@@ -2841,17 +2820,8 @@ namespace renegade::studio
             1.1f,
             environmentWorkspaceActive_ ? 0.12f : 0.0f);
         DrawText(
-            "NIGHT SKY",
-            sceneMetaX + 166.0f,
-            38.0f,
-            SceneChromeSmallTextSize,
-            nightSkyWorkspaceColor,
-            cmd,
-            1.05f,
-            nightSkyWorkspaceActive_ ? 0.12f : 0.0f);
-        DrawText(
             "TERRAIN",
-            sceneMetaX + 252.0f,
+            sceneMetaX + 166.0f,
             38.0f,
             SceneChromeSmallTextSize,
             terrainWorkspaceColor,
@@ -2860,7 +2830,7 @@ namespace renegade::studio
             terrainWorkspaceActive_ ? 0.12f : 0.0f);
         DrawText(
             "RENDER",
-            sceneMetaX + 314.0f,
+            sceneMetaX + 228.0f,
             38.0f,
             SceneChromeSmallTextSize,
             renderWorkspaceColor,
@@ -2869,12 +2839,10 @@ namespace renegade::studio
             renderWorkspaceActive_ ? 0.12f : 0.0f);
         DrawRect(
             renderWorkspaceActive_
-                ? sceneMetaX + 312.0f
+                ? sceneMetaX + 226.0f
                 : terrainWorkspaceActive_
-                    ? sceneMetaX + 250.0f
-                    : nightSkyWorkspaceActive_
-                        ? sceneMetaX + 164.0f
-                        : environmentWorkspaceActive_
+                    ? sceneMetaX + 164.0f
+                    : environmentWorkspaceActive_
                         ? sceneMetaX + 64.0f
                         : sceneMetaX + 12.0f,
             57.0f,
@@ -2882,7 +2850,6 @@ namespace renegade::studio
                 ? 60.0f
                 : terrainWorkspaceActive_
                     ? 60.0f
-                    : nightSkyWorkspaceActive_ ? 84.0f
                     : environmentWorkspaceActive_ ? 98.0f : 50.0f,
             2.0f,
             Forge,

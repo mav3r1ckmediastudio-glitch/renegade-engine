@@ -244,7 +244,6 @@ namespace renegade::studio
             ScaleTool,
             ToggleGrid,
             OpenEnvironmentWorkspace,
-            OpenNightSkyWorkspace,
             OpenTerrainWorkspace,
             OpenRenderWorkspace,
             OpenSceneWorkspace,
@@ -679,7 +678,6 @@ namespace renegade::studio
         bool HandleWd01Vegetation(const XMFLOAT4& pointer);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
-        void SetNightSkyWorkspaceActive(bool active);
         void SetTerrainWorkspaceActive(bool active);
         void SetRenderWorkspaceActive(bool active);
         void CreateRenderWorkspace();
@@ -963,30 +961,37 @@ namespace renegade::studio
         SceneInspectorCheckBox lightCastShadow_;
         SceneInspectorCheckBox lightVolumetrics_;
         SceneInspectorSlider lightVolumetricBoost_;
-        wi::gui::Label environmentSkyLabel_;
+        void LayoutEnvironmentSections();
+        void OpenNightColour(bool horizon);
+        void FinishNightColour(bool apply);
+        void CreateNightColourEditor();
+        wi::gui::ColorPicker nightColourPicker_;
+        SceneInspectorButton nightZenithColour_, nightHorizonColour_;
+        wi::gui::Button nightColourApply_, nightColourCancel_;
+        bool nightColourOpen_ = false, nightColourIsHorizon_ = false;
+        wi::ecs::Entity nightColourEntity_ = wi::ecs::INVALID_ENTITY;
+        XMFLOAT3 nightColourValue_;
+
+        std::array<SceneInspectorButton, 9> environmentSectionHeaders_;
+        std::array<bool, 9> environmentSectionExpanded_ = {true, false, false, false, false, false, false, false, false};
+        bool environmentSectionsCreated_ = false;
         SceneInspectorComboBox environmentPreset_;
         SceneInspectorComboBox skyMode_;
         SceneInspectorCheckBox aerialPerspective_;
         SceneInspectorSlider skyExposure_;
         SceneInspectorSlider stars_;
-        wi::gui::Label nightAtmosphereLabel_;
-        wi::gui::Label nightStarsLabel_;
-        wi::gui::Label nightAuroraLabel_;
         SceneInspectorCheckBox nightAuroraEnabled_;
         std::array<SceneInspectorSlider, static_cast<std::size_t>(NightField::Count)> nightSkySliders_;
         SceneInspectorSlider ambientIntensity_;
-        wi::gui::Label environmentFogLabel_;
         SceneInspectorSlider fogStart_;
         SceneInspectorSlider fogDensity_;
         SceneInspectorCheckBox heightFog_;
         SceneInspectorSlider fogHeightStart_;
         SceneInspectorSlider fogHeightEnd_;
-        wi::gui::Label environmentCloudLabel_;
         SceneInspectorSlider cloudCoverage_;
         SceneInspectorSlider cloudStartHeight_;
         SceneInspectorSlider cloudThickness_;
         SceneInspectorCheckBox cloudsCastShadow_;
-        wi::gui::Label precipitationLabel_;
         SceneInspectorComboBox precipitationMode_;
         SceneInspectorSlider precipitationIntensity_;
         SceneInspectorSlider precipitationFallSpeed_;
@@ -994,7 +999,6 @@ namespace renegade::studio
         SceneInspectorSlider precipitationWindAzimuth_;
         SceneInspectorSlider precipitationWindSpeed_;
         SceneInspectorSlider precipitationTurbulence_;
-        wi::gui::Label sunLabel_;
         SceneInspectorComboBox sunPreset_;
         SceneInspectorSlider sunTime_;
         SceneInspectorSlider sunAzimuth_;
@@ -1002,7 +1006,6 @@ namespace renegade::studio
         SceneInspectorSlider sunPreviewSpeed_;
         SceneInspectorButton sunPlayButton_;
         SceneInspectorButton sunPauseButton_;
-        wi::gui::Label oceanLabel_;
         SceneInspectorCheckBox oceanEnabled_;
         SceneInspectorComboBox oceanPreset_;
         SceneInspectorComboBox oceanResolution_;
@@ -1341,7 +1344,6 @@ namespace renegade::studio
         bridge::WeatherState weatherSliderBefore_;
         bridge::WeatherState weatherSliderAfter_;
         bool environmentWorkspaceActive_ = false;
-        bool nightSkyWorkspaceActive_ = false;
         bool nightSliderActive_ = false;
         NightField nightSliderField_ = NightField::Gradient;
         wi::ecs::Entity nightSliderEntity_ = wi::ecs::INVALID_ENTITY;

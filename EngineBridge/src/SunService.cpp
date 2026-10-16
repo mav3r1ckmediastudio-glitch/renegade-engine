@@ -61,9 +61,9 @@ namespace
             std::sin(elevation),
             horizontal * std::cos(azimuth));
 
-        // Wicked directional lights point down at identity and use local +Y
-        // as their authored axis. Elevation 90 is therefore pitch 0.
-        const float pitch = elevation - XM_PIDIV2;
+        // Wicked RunLightUpdateSystem transforms local +Y into sunDirection.
+        // Positive pitch turns +Y toward +Z; elevation 90 has pitch zero.
+        const float pitch = XM_PIDIV2 - elevation;
         const XMVECTOR rotation = XMQuaternionRotationRollPitchYaw(
             pitch,
             azimuth,
@@ -138,10 +138,12 @@ namespace renegade::bridge
         light->volumetric_boost = 0.55f;
         light->cascade_distances = wi::vector<float>{ 14.0f, 55.0f, 180.0f };
 
-        auto midday = CaptureSun(scene, weatherEntity);
-        midday.lightEntity = entity;
-        SetSunTime(midday, 12.0f);
-        if (!ApplySun(scene, weatherEntity, midday))
+        // Adding the editor's directional light must preserve the authored
+        // weather direction (including legacy weather-only nighttime scenes).
+        auto authoredSun = CaptureSun(scene, weatherEntity);
+        authoredSun.lightEntity = entity;
+        UpdateDerivedState(authoredSun);
+        if (!ApplySun(scene, weatherEntity, authoredSun))
         {
             scene.Entity_Remove(entity);
             return wi::ecs::INVALID_ENTITY;
@@ -367,10 +369,7 @@ namespace renegade::bridge
         }
         if (auto* light = scene.lights.GetComponent(state.lightEntity))
         {
-            light->direction = XMFLOAT3(
-                -state.direction.x,
-                -state.direction.y,
-                -state.direction.z);
+            light->direction = state.direction;
         }
         return true;
     }
