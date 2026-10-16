@@ -23,6 +23,10 @@
 - The generated preview file was reopened **from disk** with Wicked's native archive loader: midnight sun, gradient 0.85, stars 0.85, aurora 0.75 and coverage 0.65 verified, plus runtime hydration. Check command `--verify-fixture <path.wiscene>` passed with exit code 0.
 - The official Microsoft DXC `v1.9.2609` archive was checksum-verified and its DLL used **only under BUILD/** for the full shader bundle. No global installation or replacement of the pinned source DLL.
 
+## Runtime startup smoke check
+
+- Launched the isolated embedded Studio Release minimised with no project; it remained alive after 10 seconds and logged Wicked Engine subsystem initialisation and runtime compilation of Studio-owned grid shaders. The preview process was then closed; no RenegadeStudio process remained. This is **not** proof of correct gradient/aurora appearance.
+
 ## Next gate: visual owner acceptance
 
 **Do not merge or claim shipped.** The executable has not been launched while the user is running the active Studio/UI Designer. GPU performance and on-screen appearance have not yet been measured.
