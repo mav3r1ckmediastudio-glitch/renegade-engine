@@ -1,3 +1,13 @@
+## 2026-10-17: PR #183 Studio CI test-target repair
+
+PR head 3ce02fe failed Studio Debug CTest because RenegadeNightSkyTests was
+registered but absent from the explicit Build-Studio-Windows.ps1 build targets.
+The Studio build itself succeeded; Windows baseline Debug and Release passed.
+Added the night-sky executable to both the build command and target manifest.
+No renderer, accepted appearance, submodule pin or main checkout changes.
+Validation and CI follow-up are recorded in docs/NIGHT_SKY_PR_CI_FIX.md.
+The existing manual and independent verification gates remain open.
+
 ## 2026-10-16: Owner accepted all three sky effects; PR preparation
 
 Owner explicitly accepted night atmosphere, soft green/pink aurora and the
