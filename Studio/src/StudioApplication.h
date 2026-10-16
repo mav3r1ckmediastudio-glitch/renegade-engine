@@ -34,6 +34,7 @@
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
 #include "renegade/bridge/SunService.h"
+#include "renegade/bridge/NightSkyService.h"
 #include "renegade/bridge/TerrainService.h"
 #include "InspectorSectionFramework.h"
 #include "RenegadeStudioChrome.h"
@@ -243,6 +244,7 @@ namespace renegade::studio
             ScaleTool,
             ToggleGrid,
             OpenEnvironmentWorkspace,
+            OpenNightSkyWorkspace,
             OpenTerrainWorkspace,
             OpenRenderWorkspace,
             OpenSceneWorkspace,
@@ -296,6 +298,13 @@ namespace renegade::studio
             CloudThickness,
         };
 
+        enum class NightField
+        {
+            Gradient, ZenithR, ZenithG, ZenithB,
+            HorizonR, HorizonG, HorizonB, HorizonGlow,
+            AuroraIntensity, AuroraCoverage, AuroraSpeed,
+            Count
+        };
         enum class WeatherToggle
         {
             AerialPerspective,
@@ -509,6 +518,10 @@ namespace renegade::studio
         void ApplySelectedWeatherToggle(WeatherToggle toggle, bool value);
         void ApplySelectedSkyMode(bridge::WeatherState::SkyMode mode);
         void ApplyWeatherPreset(int preset);
+        void BeginNightSlider(NightField field);
+        void PreviewNightSlider(NightField field, float value);
+        void CommitNightSlider(NightField field, float value);
+        static void SetNightFieldValue(bridge::NightSkyState& state, NightField field, float value) noexcept;
         void BeginWeatherSlider(WeatherField field);
         void PreviewWeatherSlider(WeatherField field, float value);
         void CommitWeatherSlider(WeatherField field, float value);
@@ -666,6 +679,7 @@ namespace renegade::studio
         bool HandleWd01Vegetation(const XMFLOAT4& pointer);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
+        void SetNightSkyWorkspaceActive(bool active);
         void SetTerrainWorkspaceActive(bool active);
         void SetRenderWorkspaceActive(bool active);
         void CreateRenderWorkspace();
@@ -955,6 +969,11 @@ namespace renegade::studio
         SceneInspectorCheckBox aerialPerspective_;
         SceneInspectorSlider skyExposure_;
         SceneInspectorSlider stars_;
+        wi::gui::Label nightAtmosphereLabel_;
+        wi::gui::Label nightStarsLabel_;
+        wi::gui::Label nightAuroraLabel_;
+        SceneInspectorCheckBox nightAuroraEnabled_;
+        std::array<SceneInspectorSlider, static_cast<std::size_t>(NightField::Count)> nightSkySliders_;
         SceneInspectorSlider ambientIntensity_;
         wi::gui::Label environmentFogLabel_;
         SceneInspectorSlider fogStart_;
@@ -1322,6 +1341,11 @@ namespace renegade::studio
         bridge::WeatherState weatherSliderBefore_;
         bridge::WeatherState weatherSliderAfter_;
         bool environmentWorkspaceActive_ = false;
+        bool nightSkyWorkspaceActive_ = false;
+        bool nightSliderActive_ = false;
+        NightField nightSliderField_ = NightField::Gradient;
+        wi::ecs::Entity nightSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::NightSkyState nightSliderBefore_, nightSliderAfter_;
         bool terrainWorkspaceActive_ = false;
         bool renderWorkspaceActive_ = false;
         bool renderSliderActive_ = false;

@@ -2151,6 +2151,48 @@ namespace renegade::studio
             20.0f,
             400.0f);
 
+        createSectionLabel(nightAtmosphereLabel_, "Night Sky Section", "NIGHT SKY // GRADIENT");
+        createSectionLabel(nightStarsLabel_, "Night Sky Stars Section", "STARS // NATIVE");
+        createSectionLabel(nightAuroraLabel_, "Aurora Section", "AURORA BOREALIS");
+        nightAuroraEnabled_.Create("Aurora Enabled: ");
+        nightAuroraEnabled_.SetTooltip("Enable animated Northern Lights. Aurora intensity 0 disables the effect.");
+        nightAuroraEnabled_.OnClick([this](const wi::gui::EventArgs& args)
+        {
+            if (!session_) return;
+            const auto entity = EditableWeatherEntity();
+            if (entity == wi::ecs::INVALID_ENTITY) return;
+            auto& scene = session_->Scenes().GetScene();
+            auto next = bridge::CaptureNightSky(scene, entity);
+            next.aurora = args.bValue ? std::max(next.aurora, 0.60f) : 0.0f;
+            session_->Commands().Execute(std::make_unique<bridge::SetNightSkyCommand>(scene, entity, next));
+            RefreshInspector();
+            RefreshStatus();
+        });
+        inspectorPanel_.AddWidget(&nightAuroraEnabled_);
+        const std::array<const char*, 11> nightNames = {
+            "Gradient Brightness", "Zenith Red", "Zenith Green", "Zenith Blue",
+            "Horizon Red", "Horizon Green", "Horizon Blue", "Horizon Glow",
+            "Aurora Intensity", "Aurora Coverage", "Aurora Speed"
+        };
+        const std::array<const char*, 11> nightLabels = {
+            "BRIGHTNESS", "ZENITH R", "ZENITH G", "ZENITH B",
+            "HORIZON R", "HORIZON G", "HORIZON B", "HORIZON GLOW",
+            "AURORA INTENSITY", "COVERAGE", "ANIMATION SPEED"
+        };
+        for (std::size_t i=0; i<nightSkySliders_.size(); ++i)
+        {
+            const auto field = static_cast<NightField>(i);
+            const float upper = i >= 1 && i <= 6 ? 0.10f :
+                i == 7 || i == 10 ? 2.0f : 1.0f;
+            auto& slider = nightSkySliders_[i];
+            slider.Create(0.0f, upper, 0.0f, 200.0f, nightNames[i], nightLabels[i]);
+            slider.SetTooltip("Live night sky authoring. Commit is a single Undo action.");
+            slider.OnDragStarted([this,field](float){BeginNightSlider(field);});
+            slider.OnValuePreview([this,field](float v){PreviewNightSlider(field,v);});
+            slider.OnValueCommitted([this,field](float v){CommitNightSlider(field,v);});
+            inspectorPanel_.AddWidget(&slider);
+        }
+
         createSectionLabel(
             sunLabel_,
             "Environment Sun Section",
@@ -2755,6 +2797,7 @@ namespace renegade::studio
             if (action == RenegadeStudioChrome::Action::ProjectHub ||
                 action == RenegadeStudioChrome::Action::SceneWorkspace ||
                 action == RenegadeStudioChrome::Action::EnvironmentWorkspace ||
+                action == RenegadeStudioChrome::Action::NightSkyWorkspace ||
                 action == RenegadeStudioChrome::Action::TerrainWorkspace ||
                 action == RenegadeStudioChrome::Action::RenderWorkspace)
             {
@@ -2831,6 +2874,9 @@ namespace renegade::studio
                 break;
             case RenegadeStudioChrome::Action::EnvironmentWorkspace:
                 RequestDiagnosticAction(EditorAction::OpenEnvironmentWorkspace);
+                break;
+            case RenegadeStudioChrome::Action::NightSkyWorkspace:
+                RequestDiagnosticAction(EditorAction::OpenNightSkyWorkspace);
                 break;
             case RenegadeStudioChrome::Action::TerrainWorkspace:
                 RequestDiagnosticAction(EditorAction::OpenTerrainWorkspace);
@@ -4286,8 +4332,18 @@ namespace renegade::studio
         positionEnvironmentWidget(skyMode_, 98.0f);
         positionEnvironmentWidget(aerialPerspective_, 132.0f);
         positionEnvironmentWidget(skyExposure_, 164.0f);
-        positionEnvironmentWidget(stars_, 198.0f);
+        positionEnvironmentWidget(stars_, nightSkyWorkspaceActive_ ? 354.0f : 198.0f);
         positionEnvironmentWidget(ambientIntensity_, 232.0f);
+        positionEnvironmentWidget(nightAtmosphereLabel_, 44.0f, 20.0f);
+        positionEnvironmentWidget(nightStarsLabel_, 334.0f, 20.0f);
+        positionEnvironmentWidget(nightAuroraLabel_, 388.0f, 20.0f);
+        positionEnvironmentWidget(nightAuroraEnabled_, 408.0f);
+        const std::array<float, static_cast<std::size_t>(NightField::Count)> nightPositions = {
+            64.0f, 98.0f, 132.0f, 166.0f, 200.0f, 234.0f,
+            268.0f, 302.0f, 442.0f, 476.0f, 510.0f
+        };
+        for (std::size_t i = 0; i < nightSkySliders_.size(); ++i)
+            positionEnvironmentWidget(nightSkySliders_[i], nightPositions[i]);
         positionEnvironmentWidget(environmentFogLabel_, 266.0f, 20.0f);
         positionEnvironmentWidget(fogStart_, 286.0f);
         positionEnvironmentWidget(fogDensity_, 320.0f);
@@ -5134,16 +5190,30 @@ namespace renegade::studio
         setLightVisible(lightVolumetricBoost_);
 
         const auto setEnvironmentVisible =
-            [hasWeather](wi::gui::Widget& widget)
+            [this, hasWeather](wi::gui::Widget& widget)
         {
-            widget.SetVisible(hasWeather);
+            widget.SetVisible(hasWeather && !nightSkyWorkspaceActive_);
         };
         setEnvironmentVisible(environmentSkyLabel_);
         setEnvironmentVisible(environmentPreset_);
         setEnvironmentVisible(skyMode_);
         setEnvironmentVisible(aerialPerspective_);
         setEnvironmentVisible(skyExposure_);
-        setEnvironmentVisible(stars_);
+        stars_.SetVisible(hasWeather && nightSkyWorkspaceActive_);
+        nightAtmosphereLabel_.SetVisible(hasWeather && nightSkyWorkspaceActive_);
+        nightStarsLabel_.SetVisible(hasWeather && nightSkyWorkspaceActive_);
+        nightAuroraLabel_.SetVisible(hasWeather && nightSkyWorkspaceActive_);
+        nightAuroraEnabled_.SetVisible(hasWeather && nightSkyWorkspaceActive_);
+        // Procedural Night Sky runs only with Wicked realistic sky, not texture skyboxes.
+        const bool nightSkySupported = hasWeather &&
+            bridge::CaptureWeather(*weather).skyMode != bridge::WeatherState::SkyMode::Skybox;
+        nightAuroraEnabled_.SetEnabled(nightSkySupported);
+        stars_.SetEnabled(nightSkySupported);
+        for (auto& slider : nightSkySliders_)
+        {
+            slider.SetVisible(hasWeather && nightSkyWorkspaceActive_);
+            slider.SetEnabled(nightSkySupported);
+        }
         setEnvironmentVisible(ambientIntensity_);
         setEnvironmentVisible(environmentFogLabel_);
         setEnvironmentVisible(fogStart_);
@@ -5255,6 +5325,7 @@ namespace renegade::studio
             const auto* name =
                 session_->Scenes().GetScene().names.GetComponent(entity);
             inspectorLabel_.SetText(
+                nightSkyWorkspaceActive_ ? "NIGHT SKY // ATMOSPHERE & AURORA" :
                 environmentWorkspaceActive_
                     ? "ENVIRONMENT // SCENE WEATHER"
                     : "ENVIRONMENT // " +
@@ -5269,6 +5340,15 @@ namespace renegade::studio
             aerialPerspective_.SetCheck(state.aerialPerspective);
             skyExposure_.SetValue(state.skyExposure);
             stars_.SetValue(state.stars);
+            const auto nightState = bridge::CaptureNightSky(session_->Scenes().GetScene(), entity);
+            nightAuroraEnabled_.SetCheck(nightState.aurora > 0.0f);
+            const std::array<float, static_cast<std::size_t>(NightField::Count)> nightValues = {
+                nightState.gradient, nightState.zenith.x, nightState.zenith.y, nightState.zenith.z,
+                nightState.horizon.x, nightState.horizon.y, nightState.horizon.z, nightState.horizonGlow,
+                nightState.aurora, nightState.auroraCoverage, nightState.auroraSpeed
+            };
+            for (std::size_t i = 0; i < nightValues.size(); ++i)
+                nightSkySliders_[i].SetValue(nightValues[i]);
             ambientIntensity_.SetValue(state.ambientIntensity);
             fogStart_.SetValue(state.fogStart);
             fogDensity_.SetValue(state.fogDensity);
@@ -5718,6 +5798,9 @@ namespace renegade::studio
         case EditorAction::OpenEnvironmentWorkspace:
             SetEnvironmentWorkspaceActive(true);
             break;
+        case EditorAction::OpenNightSkyWorkspace:
+            SetNightSkyWorkspaceActive(true);
+            break;
         case EditorAction::OpenTerrainWorkspace:
             SetTerrainWorkspaceActive(true);
             break;
@@ -5821,8 +5904,24 @@ namespace renegade::studio
             : wi::ecs::INVALID_ENTITY;
     }
 
+    void StudioRenderPath::SetNightSkyWorkspaceActive(const bool active)
+    {
+        if (active)
+        {
+            SetEnvironmentWorkspaceActive(true);
+            if (!environmentWorkspaceActive_) return;
+        }
+        nightSkyWorkspaceActive_ = active;
+        studioChrome_.SetNightSkyWorkspaceActive(active);
+        ResizeLayout();
+        RefreshInspector();
+        RefreshStatus();
+    }
+
     void StudioRenderPath::SetEnvironmentWorkspaceActive(const bool active)
     {
+        nightSkyWorkspaceActive_ = false;
+        studioChrome_.SetNightSkyWorkspaceActive(false);
         if (active && renderWorkspaceActive_)
             SetRenderWorkspaceActive(false);
         if (!active && sunPreviewPlaying_)
@@ -5871,7 +5970,10 @@ namespace renegade::studio
 
     void StudioRenderPath::SetTerrainWorkspaceActive(const bool active)
     {
-        if (active && renderWorkspaceActive_)
+        if (active) {
+            nightSkyWorkspaceActive_ = false;
+            studioChrome_.SetNightSkyWorkspaceActive(false);
+        }        if (active && renderWorkspaceActive_)
             SetRenderWorkspaceActive(false);
         if (sunPreviewPlaying_)
         {

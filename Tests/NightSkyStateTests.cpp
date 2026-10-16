@@ -43,6 +43,33 @@ int main()
         !Near(safe.auroraSpeed, 0.0f))
         return Fail("non-finite/out-of-bounds authoring was not sanitized");
 
+    // User-authored channel colours and horizon lift survive a v1 metadata roundtrip.
+    NightSkyState painted = CaptureNightSky(scene, environment);
+    painted.zenith = XMFLOAT3(0.003f,0.007f,0.015f);
+    painted.horizon = XMFLOAT3(0.024f,0.020f,0.032f);
+    painted.horizonGlow = 1.3f;
+    painted.auroraCoverage = 0.65f;
+    if (!StoreNightSky(scene, environment, painted))
+        return Fail("painted night sky could not be stored");
+    const auto restoredPaint = CaptureNightSky(scene, environment);
+    if (!Near(restoredPaint.zenith.z, 0.015f) ||
+        !Near(restoredPaint.horizon.y, 0.020f) ||
+        !Near(restoredPaint.horizonGlow, 1.3f) ||
+        !Near(restoredPaint.auroraCoverage, 0.65f))
+        return Fail("colour and coverage round-trip failed");
+    NightSkyState changed = painted;
+    changed.aurora = 0.9f;
+    SetNightSkyCommand command(scene, environment, changed);
+    if (!command.Execute() || !Near(CaptureNightSky(scene, environment).aurora, 0.9f))
+        return Fail("Night Sky command Execute failed");
+    command.Undo();
+    if (!Near(CaptureNightSky(scene, environment).aurora, painted.aurora))
+        return Fail("Night Sky command Undo failed");
+    if (!command.Execute() || !Near(CaptureNightSky(scene, environment).aurora, 0.9f))
+        return Fail("Night Sky command Redo failed");
+    SetNightSkyCommand noOp(scene, environment, CaptureNightSky(scene, environment));
+    if (noOp.Execute()) return Fail("unchanged Night Sky should not create an Undo command");
+
     const auto missing = wi::ecs::CreateEntity();
     if (StoreNightSky(scene, missing, requested))
         return Fail("non-Environment accepted authoring settings");
