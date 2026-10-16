@@ -3,7 +3,7 @@
 $ErrorActionPreference = 'Stop'
 try {
     $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-    $studio = Join-Path $root 'BUILD/night-sky-check/Studio/Release/RenegadeStudioAuroraPreview.exe'
+    $studio = Join-Path $root 'BUILD/night-sky-check/Studio/Release/RenegadeStudioMilkyWayColourPreview.exe'
     $shaderDump = Join-Path $root 'BUILD/night-sky-check/WickedEngine/WickedEngine/wiShaderDump.h'
     $interop = Join-Path $root 'WickedEngine/WickedEngine/shaders/ShaderInterop_Weather.h'
     $testExe = Join-Path $root 'BUILD/night-sky-check/Tests/Release/RenegadeNightSkyTests.exe'

@@ -4,4 +4,5 @@
 #define RENEGADE_NIGHT_SKY_HLSLI
 #include "renegadeNightAtmosphere.hlsli"
 #include "renegadeAurora.hlsli"
+#include "renegadeMilkyWay.hlsli"
 #endif

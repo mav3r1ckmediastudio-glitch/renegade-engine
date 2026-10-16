@@ -77,4 +77,10 @@ _ns_replace("wiScene.cpp"
     "shaderscene.weather.aurora_speed = weather.aurora_speed;\n        shaderscene.weather.night_zenith"
     "shaderscene.weather.aurora_speed = weather.aurora_speed;\n        shaderscene.weather.night_alignment_padding = 0.0f;\n        shaderscene.weather.night_zenith"
     "shaderscene.weather.night_alignment_padding = 0.0f;")
+configure_file("${CMAKE_SOURCE_DIR}/Tools/night_sky/renegadeMilkyWay.hlsli" "${_ns_wicked}/shaders/renegadeMilkyWay.hlsli" COPYONLY)
+# Reserved night_zenith.w is an authored scalar; preserve all GPU ABI offsets.
+_ns_replace("shaders/skyHF.hlsli"
+    "totalColor += RenegadeNightGradient("
+    "totalColor += RenegadeMilkyWay(worldDirection, sunDirection, GetWeather().night_zenith.w);\n        totalColor += RenegadeNightGradient("
+    "totalColor += RenegadeMilkyWay(")
 message(STATUS "Renegade Night Sky overlay ready (pinned WickedEngine)")

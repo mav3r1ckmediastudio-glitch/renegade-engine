@@ -23,6 +23,7 @@ namespace renegade::studio
         case NightField::AuroraIntensity: s.aurora = v; break;
         case NightField::AuroraCoverage: s.auroraCoverage = v; break;
         case NightField::AuroraSpeed: s.auroraSpeed = v; break;
+        case NightField::MilkyWay: s.milkyWay = v; break;
         case NightField::Count: break;
         }
         s = bridge::SanitizeNightSky(s);
@@ -89,7 +90,7 @@ namespace renegade::studio
             {&sunPreset_, &sunTime_, &sunAzimuth_, &sunElevation_, &sunPreviewSpeed_, &sunPlayButton_, &sunPauseButton_},
             {&environmentPreset_, &skyMode_, &aerialPerspective_, &skyExposure_, &ambientIntensity_},
             {&cloudCoverage_, &cloudStartHeight_, &cloudThickness_, &cloudsCastShadow_},
-            {&stars_},
+            {&stars_, &nightSkySliders_[11]},
             {&fogStart_, &fogDensity_, &heightFog_, &fogHeightStart_, &fogHeightEnd_},
             {&oceanEnabled_, &oceanPreset_, &oceanResolution_, &oceanWaterHeight_, &oceanPatchLength_, &oceanWaveAmplitude_, &oceanChoppyScale_, &oceanTimeScale_, &oceanWindAzimuth_, &oceanWindSpeed_, &oceanWindDependency_, &oceanSurfaceDetail_, &oceanDisplacementTolerance_, &oceanWaterRed_, &oceanWaterGreen_, &oceanWaterBlue_, &oceanWaterOpacity_, &oceanExtinctionRed_, &oceanExtinctionGreen_, &oceanExtinctionBlue_},
             {&precipitationMode_, &precipitationIntensity_, &precipitationFallSpeed_, &precipitationParticleScale_, &precipitationWindAzimuth_, &precipitationWindSpeed_, &precipitationTurbulence_},

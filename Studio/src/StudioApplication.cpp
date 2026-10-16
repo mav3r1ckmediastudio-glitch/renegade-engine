@@ -2150,15 +2150,15 @@ namespace renegade::studio
             RefreshStatus();
         });
         inspectorPanel_.AddWidget(&nightAuroraEnabled_);
-        const std::array<const char*, 11> nightNames = {
+        const std::array<const char*, 12> nightNames = {
             "Gradient Brightness", "Zenith Red", "Zenith Green", "Zenith Blue",
             "Horizon Red", "Horizon Green", "Horizon Blue", "Horizon Glow",
-            "Aurora Intensity", "Aurora Coverage", "Aurora Speed"
+            "Aurora Intensity", "Aurora Coverage", "Aurora Speed", "Milky Way intensity"
         };
-        const std::array<const char*, 11> nightLabels = {
+        const std::array<const char*, 12> nightLabels = {
             "BRIGHTNESS", "ZENITH R", "ZENITH G", "ZENITH B",
             "HORIZON R", "HORIZON G", "HORIZON B", "HORIZON GLOW",
-            "AURORA INTENSITY", "COVERAGE", "ANIMATION SPEED"
+            "AURORA INTENSITY", "COVERAGE", "ANIMATION SPEED", "MILKY WAY INTENSITY"
         };
         for (std::size_t i=0; i<nightSkySliders_.size(); ++i)
         {
@@ -2170,6 +2170,8 @@ namespace renegade::studio
             slider.SetTooltip("Live procedural sky; unavailable with a skybox texture. Commit is a single Undo action.");
             if (field == NightField::AuroraCoverage)
                 slider.SetTooltip("Amount of sky occupied by aurora. Increase for broken curtains around you and higher overhead; clear gaps remain. Single Undo action.");
+            if (field == NightField::MilkyWay)
+                slider.SetTooltip("Procedural galactic band with star clusters and dark dust lanes. Zero disables it; fades with daylight. Single Undo action.");
             slider.OnDragStarted([this,field](float){BeginNightSlider(field);});
             slider.OnValuePreview([this,field](float v){PreviewNightSlider(field,v);});
             slider.OnValueCommitted([this,field](float v){CommitNightSlider(field,v);});
@@ -5228,7 +5230,7 @@ namespace renegade::studio
             const std::array<float, static_cast<std::size_t>(NightField::Count)> nightValues = {
                 nightState.gradient, nightState.zenith.x, nightState.zenith.y, nightState.zenith.z,
                 nightState.horizon.x, nightState.horizon.y, nightState.horizon.z, nightState.horizonGlow,
-                nightState.aurora, nightState.auroraCoverage, nightState.auroraSpeed
+                nightState.aurora, nightState.auroraCoverage, nightState.auroraSpeed, nightState.milkyWay
             };
             for (std::size_t i = 0; i < nightValues.size(); ++i)
                 nightSkySliders_[i].SetValue(nightValues[i]);

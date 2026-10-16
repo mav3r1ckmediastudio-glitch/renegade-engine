@@ -1677,3 +1677,9 @@ The modular aurora integrates folded emissive sheets into the existing realistic
 sky, with green lower folds and pink upper wisps. Optional GPU proof mode captures
 real DX12/Vulkan RenderPath3D frames without desktop input; it is not a substitute
 for native editor interaction or complex-scene performance acceptance.
+
+The optional procedural Milky Way is independently authored under Environment >
+Stars and shares the versioned NightSkyService command/metadata path. Its scalar
+uses reserved night_zenith.w without changing the shared GPU ABI. Old schema-v1
+scenes without the optional key remain off. Both DX12 and Vulkan were rendered;
+see [Milky Way validation and remaining limits](MILKY_WAY_VISUAL_CHECK.md).

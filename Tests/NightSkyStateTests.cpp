@@ -103,6 +103,7 @@ int main(int argc, char** argv)
                 !Near(native->aurora_intensity, authored.aurora) ||
                 !Near(native->aurora_coverage, authored.auroraCoverage) ||
                 !Near(native->aurora_speed, authored.auroraSpeed) ||
+                !Near(native->night_zenith.w, authored.milkyWay) ||
                 !Near(native->night_zenith.x, authored.zenith.x) ||
                 !Near(native->night_zenith.y, authored.zenith.y) ||
                 !Near(native->night_zenith.z, authored.zenith.z) ||
@@ -112,15 +113,15 @@ int main(int argc, char** argv)
                 !Near(native->night_horizon.w, authored.horizonGlow) ||
                 !std::isfinite(native->skyExposure) || !std::isfinite(native->stars))
                 Fail("saved preview failed renderer hydration");
-            std::printf("Saved Environment: gradient=%g aurora=%g speed=%g coverage=%g stars=%g glow=%g\n",
+            std::printf("Saved Environment: gradient=%g aurora=%g speed=%g coverage=%g stars=%g glow=%g milky_way=%g\n",
                 authored.gradient, authored.aurora, authored.auroraSpeed,
-                authored.auroraCoverage, native->stars, authored.horizonGlow);
+                authored.auroraCoverage, native->stars, authored.horizonGlow, authored.milkyWay);
         }
         std::puts("Saved preview scene reopened and renderer settings hydrated successfully");
         std::fflush(stdout);
         std::_Exit(0);
     }
-    if (argc == 3 && std::string(argv[1]) == "--fixture")
+    if (argc == 3 && (std::string(argv[1]) == "--fixture" || std::string(argv[1]) == "--milky-way-fixture"))
     {
         namespace fs = std::filesystem;
         const fs::path destination = fs::absolute(fs::u8path(argv[2]));
@@ -141,6 +142,7 @@ int main(int argc, char** argv)
         night.aurora = 0.75f;
         night.auroraCoverage = 0.65f;
         night.auroraSpeed = 0.35f;
+        if (std::string(argv[1]) == "--milky-way-fixture") { night.aurora = 0; night.milkyWay = 0.8f; }
         if (!renegade::bridge::StoreNightSky(fixture, environment, night))
             Fail("could not set Night Sky fixture values");
         // Match the real editor lifecycle: a serialized directional Sun owns
@@ -164,7 +166,7 @@ int main(int argc, char** argv)
     if (argc != 1) Fail("usage: RenegadeNightSkyTests [--fixture|--verify-fixture <path.wiscene>]");
     // Every disclosure combination: collapsed children consume no rows and
     // the next header follows exactly, including the last group's action rows.
-    const std::size_t counts[] = {7, 5, 4, 1, 5, 20, 7, 4, 4};
+    const std::size_t counts[] = {7, 5, 4, 2, 5, 20, 7, 4, 4};
     for (unsigned mask = 0; mask < 512; ++mask)
     {
         float top = 44.0f;
@@ -218,7 +220,7 @@ int main(int argc, char** argv)
     baselineWeather->skyExposure = 1.7f;
 
     const auto legacy = CaptureNightSky(scene, environment);
-    if (!Near(legacy.gradient, 0.0f) || !Near(legacy.aurora, 0.0f))
+    if (!Near(legacy.gradient, 0.0f) || !Near(legacy.aurora, 0.0f) || !Near(legacy.milkyWay, 0.0f))
         Fail("legacy scene must remain unchanged");
 
     const NightSkyState requested{0.70f, 0.25f, 0.45f};
@@ -228,6 +230,11 @@ int main(int argc, char** argv)
     if (!Near(stored.gradient, 0.70f) || !Near(stored.aurora, 0.25f) ||
         !Near(stored.auroraSpeed, 0.45f))
         Fail("versioned metadata round-trip failed");
+
+    // Existing schema-v1 skies predate this optional key and must stay unchanged.
+    scene.metadatas.GetComponent(environment)->float_values.erase(NightSkyMilkyWayKey);
+    if (!Near(CaptureNightSky(scene, environment).milkyWay, 0))
+        Fail("legacy Night Sky metadata implicitly enabled the Milky Way");
 
     // Native weather parameters are transient; rehydrate them from scene metadata.
     scene.weathers.GetComponent(environment)->night_sky_gradient = 0.0f;
@@ -249,15 +256,38 @@ int main(int argc, char** argv)
     painted.horizon = XMFLOAT3(0.024f, 0.020f, 0.032f);
     painted.horizonGlow = 1.3f;
     painted.auroraCoverage = 0.65f;
+    painted.milkyWay = 0.65f;
     if (!StoreNightSky(scene, environment, painted))
         Fail("painted night sky could not be stored");
     const auto restoredPaint = CaptureNightSky(scene, environment);
     if (!Near(restoredPaint.zenith.z, 0.015f) ||
         !Near(restoredPaint.horizon.y, 0.020f) ||
         !Near(restoredPaint.horizonGlow, 1.3f) ||
-        !Near(restoredPaint.auroraCoverage, 0.65f))
+        !Near(restoredPaint.auroraCoverage, 0.65f) || !Near(restoredPaint.milkyWay, 0.65f))
         Fail("colour and coverage metadata round-trip failed");
 
+    // The galactic band is independently authored and command-backed.
+    {
+        NightSkyState galaxy = painted;
+        galaxy.milkyWay = 0.95f;
+        SetNightSkyCommand galaxyCommand(scene, environment, galaxy);
+        if (!galaxyCommand.Execute() ||
+            !Near(CaptureNightSky(scene, environment).milkyWay, 0.95f) ||
+            !Near(CaptureNightSky(scene, environment).aurora, painted.aurora) ||
+            !Near(scene.weathers.GetComponent(environment)->night_zenith.w, 0.95f))
+            Fail("Milky Way edit changed aurora or failed runtime hydration");
+        galaxyCommand.Undo();
+        if (!Near(CaptureNightSky(scene, environment).milkyWay, 0.65f))
+            Fail("Milky Way Undo failed");
+        if (!galaxyCommand.Execute() ||
+            !Near(CaptureNightSky(scene, environment).milkyWay, 0.95f))
+            Fail("Milky Way Redo failed");
+        galaxyCommand.Undo();
+        auto invalid = painted;
+        invalid.milkyWay = nan;
+        if (!Near(SanitizeNightSky(invalid).milkyWay, 0))
+            Fail("Milky Way nonfinite input was not sanitized");
+    }
     NightSkyState changed = painted;
     changed.aurora = 0.90f;
     SetNightSkyCommand command(scene, environment, changed);
@@ -289,7 +319,7 @@ int main(int argc, char** argv)
             !Near(loadedSettings.aurora, 0.90f) ||
             !Near(loadedSettings.zenith.z, 0.015f) ||
             !Near(loadedSettings.horizon.y, 0.020f) ||
-            !Near(loadedSettings.auroraCoverage, 0.65f))
+            !Near(loadedSettings.auroraCoverage, 0.65f) || !Near(loadedSettings.milkyWay, 0.65f))
             Fail("WISCENE archive did not persist Night Sky settings");
         RestoreNightSky(reopened);
         if (!Near(reopened.weathers.GetComponent(loadedEntity)->night_sky_gradient, 0.70f) ||
@@ -312,12 +342,15 @@ int main(int argc, char** argv)
         const auto loadedEntity = reopened.weathers.GetEntity(0);
         const auto* loadedWeather = reopened.weathers.GetComponent(loadedEntity);
         if (!Near(CaptureNightSky(reopened, loadedEntity).aurora, 0.90f) ||
-            !Near(loadedWeather->stars, 0.83f) || !Near(loadedWeather->skyExposure, 1.7f))
+            !Near(loadedWeather->stars, 0.83f) || !Near(loadedWeather->skyExposure, 1.7f) ||
+            !Near(loadedWeather->night_zenith.w, 0.65f))
             Fail("disk reopen changed native stars/exposure or lost aurora");
         reopened.Clear();
         std::filesystem::remove(path);
     }
     ClearNightSky(scene, environment);
+    if (!Near(scene.weathers.GetComponent(environment)->night_zenith.w, 0))
+        Fail("clearing Milky Way did not disable runtime contribution");
     if (!Near(scene.weathers.GetComponent(environment)->stars, 0.83f) ||
         !Near(scene.weathers.GetComponent(environment)->skyExposure, 1.7f))
         Fail("disabling extensions changed native stars or sky exposure");

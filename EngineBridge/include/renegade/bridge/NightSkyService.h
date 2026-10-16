@@ -21,6 +21,8 @@ namespace renegade::bridge
     inline constexpr const char* NightSkyHorizonGlowKey = "renegade.night_sky.horizon_glow";
     inline constexpr const char* NightSkyCoverageKey = "renegade.night_sky.aurora_coverage";
 
+    inline constexpr const char* NightSkyMilkyWayKey = "renegade.night_sky.milky_way";
+
     struct NightSkyState
     {
         float gradient = 0.0f;           // 0 preserves legacy sky
@@ -30,6 +32,7 @@ namespace renegade::bridge
         XMFLOAT3 horizon = XMFLOAT3(0.0130f, 0.0120f, 0.0220f);
         float horizonGlow = 1.0f;
         float auroraCoverage = 0.4f;
+        float milkyWay = 0.0f; // optional; missing legacy key remains off
     };
     inline float SafeNight(float v, float fallback, float max) noexcept
     {
@@ -49,6 +52,7 @@ namespace renegade::bridge
         s.horizon.z = SafeNight(s.horizon.z, 0.0220f, 0.1f);
         s.horizonGlow = SafeNight(s.horizonGlow, 1, 2);
         s.auroraCoverage = SafeNight(s.auroraCoverage, 0.4f, 1);
+        s.milkyWay = SafeNight(s.milkyWay, 0, 1);
         return s;
     }
     inline bool HasNightSky(const wi::scene::Scene& scene, wi::ecs::Entity entity) noexcept
@@ -74,6 +78,7 @@ namespace renegade::bridge
         REN_NIGHT_READ(NightSkyHorizonBKey, s.horizon.z);
         REN_NIGHT_READ(NightSkyHorizonGlowKey, s.horizonGlow);
         REN_NIGHT_READ(NightSkyCoverageKey, s.auroraCoverage);
+        REN_NIGHT_READ(NightSkyMilkyWayKey, s.milkyWay);
 #undef REN_NIGHT_READ
         return SanitizeNightSky(s);
     }
@@ -86,7 +91,8 @@ namespace renegade::bridge
         w->night_sky_gradient = s.gradient;
         w->aurora_intensity = s.aurora;
         w->aurora_speed = s.auroraSpeed;
-        w->night_zenith = XMFLOAT4(s.zenith.x, s.zenith.y, s.zenith.z, 0);
+        // Existing reserved alpha carries Milky Way intensity; GPU offsets do not change.
+        w->night_zenith = XMFLOAT4(s.zenith.x, s.zenith.y, s.zenith.z, s.milkyWay);
         w->night_horizon = XMFLOAT4(s.horizon.x, s.horizon.y, s.horizon.z, s.horizonGlow);
         w->aurora_coverage = s.auroraCoverage;
         if (scene.weathers.GetCount() && scene.weathers.GetEntity(0) == entity)
@@ -113,6 +119,7 @@ namespace renegade::bridge
         m->float_values.set(NightSkyHorizonBKey, s.horizon.z);
         m->float_values.set(NightSkyHorizonGlowKey, s.horizonGlow);
         m->float_values.set(NightSkyCoverageKey, s.auroraCoverage);
+        m->float_values.set(NightSkyMilkyWayKey, s.milkyWay);
         ApplyNightSkyRuntime(scene, entity, s);
         return true;
     }
@@ -126,7 +133,7 @@ namespace renegade::bridge
                 NightSkyGradientKey, NightSkyAuroraKey, NightSkySpeedKey,
                 NightSkyZenithRKey, NightSkyZenithGKey, NightSkyZenithBKey,
                 NightSkyHorizonRKey, NightSkyHorizonGKey, NightSkyHorizonBKey,
-                NightSkyHorizonGlowKey, NightSkyCoverageKey
+                NightSkyHorizonGlowKey, NightSkyCoverageKey, NightSkyMilkyWayKey
             }) m->float_values.erase(key);
         }
         ApplyNightSkyRuntime(scene, entity, NightSkyState{});
@@ -147,7 +154,7 @@ namespace renegade::bridge
             nearlyEqual(a.zenith.x,b.zenith.x) && nearlyEqual(a.zenith.y,b.zenith.y) &&
             nearlyEqual(a.zenith.z,b.zenith.z) && nearlyEqual(a.horizon.x,b.horizon.x) &&
             nearlyEqual(a.horizon.y,b.horizon.y) && nearlyEqual(a.horizon.z,b.horizon.z) &&
-            nearlyEqual(a.horizonGlow,b.horizonGlow);
+            nearlyEqual(a.horizonGlow,b.horizonGlow) && nearlyEqual(a.milkyWay,b.milkyWay);
     }
     class SetNightSkyCommand final : public ICommand
     {

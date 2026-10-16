@@ -1,3 +1,13 @@
+## 2026-10-16: Separate Milky Way reference-colour candidate
+
+Owner accepted the soft green/pink aurora baseline. Separate Milky Way intensity
+now lives under Environment > Stars; off by default, independent of aurora and
+native stars. Final richer-colour Studio viewport and actual DX12/Vulkan captures
+inspected; native command/disk tests and 58 contracts pass. Launcher selects
+RenegadeStudioMilkyWayColourPreview.exe. Runtime Release rebuilt. See
+[Milky Way evidence and explicit remaining limits](docs/MILKY_WAY_VISUAL_CHECK.md).
+No main/UI Designer edits, merge or push; no full release gate closure.
+
 ## 2026-10-16: Green/pink curtain candidate; actual Studio/GPU inspection
 
 See [current visual evidence and remaining limits](docs/NIGHT_SKY_CURTAIN_VISUAL_CHECK.md).

@@ -36,3 +36,8 @@ endforeach()
 require_contains("Studio/src/NightSkyStudioIntegration.cpp" "QueueInspectorRefresh();")
 require_contains("Studio/src/NightSkyStudioIntegration.cpp" "child->SetVisible(visible && environmentSectionExpanded_[i]);")
 message(STATUS "Night Sky source integration contract passed")
+
+require_contains("Tools/night_sky/renegadeNightSky.hlsli" "renegadeMilkyWay.hlsli")
+require_contains("WickedEngine/WickedEngine/shaders/skyHF.hlsli" "RenegadeMilkyWay(")
+require_contains("EngineBridge/include/renegade/bridge/NightSkyService.h" "NightSkyMilkyWayKey")
+require_contains("Studio/src/NightSkyStudioIntegration.cpp" "{&stars_, &nightSkySliders_[11]}")

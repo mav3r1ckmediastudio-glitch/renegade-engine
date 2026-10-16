@@ -301,7 +301,7 @@ namespace renegade::studio
         {
             Gradient, ZenithR, ZenithG, ZenithB,
             HorizonR, HorizonG, HorizonB, HorizonGlow,
-            AuroraIntensity, AuroraCoverage, AuroraSpeed,
+            AuroraIntensity, AuroraCoverage, AuroraSpeed, MilkyWay,
             Count
         };
         enum class WeatherToggle

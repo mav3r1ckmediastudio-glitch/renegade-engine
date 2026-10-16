@@ -62,12 +62,14 @@ inline int RunNightSkyGraphicsProof(int argc, char** argv)
         file.write(reinterpret_cast<const char*>(png.data()), png.size());
         return bool(file);
     };
-    struct Case { const char* name; float time, gradient, aurora, stars; };
+    struct Case { const char* name; float time, gradient, aurora, stars, milkyWay = 0; };
     const Case cases[] = {
-        {"day-native",12,0,0,.85f}, {"day-extensions",12,.85f,.75f,.85f},
+        {"day-native",12,0,0,.85f}, {"day-extensions",12,.85f,.75f,.85f,1},
         {"night-empty",0,0,0,0}, {"night-native-stars",0,0,0,.85f},
         {"night-gradient",0,.85f,0,.85f}, {"night-aurora",0,.85f,.75f,.85f},
-        {"dusk",18.2f,.85f,.75f,.85f}, {"dawn",6.5f,.85f,.75f,.85f}
+        {"dusk",18.2f,.85f,.75f,.85f,1}, {"dawn",6.5f,.85f,.75f,.85f,1},
+        {"milky-way-only",0,0,0,0,1}, {"milky-way-stars",0,.85f,0,.85f,.8f},
+        {"milky-way-aurora",0,.85f,.6f,.85f,.8f}
     };
     std::ofstream metrics(output / "frame-times.csv");
     metrics << "case,cpu_gpu_serialized_ms\n";
@@ -80,6 +82,7 @@ inline int RunNightSkyGraphicsProof(int argc, char** argv)
         NightSkyState night;
         night.gradient = c.gradient;
         night.aurora = c.aurora;
+        night.milkyWay = c.milkyWay;
         night.auroraCoverage = .85f;
         StoreNightSky(*scene, entity, night);
         for (unsigned i = 0; i < 24; ++i) frame();
@@ -96,6 +99,7 @@ inline int RunNightSkyGraphicsProof(int argc, char** argv)
     SetSunTime(sun, 0);
     ApplySun(*scene, entity, sun);
     auto night = CaptureNightSky(*scene, entity);
+    night.milkyWay = 0;
     night.aurora = .8f;
     night.auroraSpeed = 1.0f;
     StoreNightSky(*scene, entity, night);
