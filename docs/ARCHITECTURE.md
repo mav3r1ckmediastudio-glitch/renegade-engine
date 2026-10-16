@@ -1659,3 +1659,16 @@ Private art is an optional distributor input RENEGADE_IMPACT_DEFAULTS_DIRECTORY,
 copied beside Studio after build; it is not committed. Missing kit keeps existing
 baseline presentation. Partial preparation failure may leave unused imported
 resources, but scene donors are not committed and custom resources are preserved.
+
+
+## Environment night authoring recovery (2026-10-16 candidate)
+
+Environment is the single authoring pane for weather, sun, native stars, night
+atmosphere and aurora. There is no separate Night Sky workspace or navigation
+state. Session-owned disclosure controls hide children and lay out every section
+and the following history/save actions in flow order; they do not create scene
+commands. Existing Weather/Sun/Ocean/Precipitation services retain their mutation
+boundaries. NightSkyService retains versioned Environment metadata and runtime
+hydration; zero extension intensities preserve the original shader path.
+The UI recovery does not change the pinned Wicked pointer or Weather GPU ABI.
+See [recovery evidence and visual blockers](NIGHT_SKY_ENVIRONMENT_RECOVERY.md).

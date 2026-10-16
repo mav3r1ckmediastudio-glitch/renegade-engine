@@ -26,6 +26,12 @@ Fix: an explicit `float night_alignment_padding` in `ShaderInterop_Weather.h`, i
 
 ## Correct preview instructions
 
+Recovery checkpoint: use `BUILD/night-sky-check/Studio/Release/RenegadeStudioRecovery.exe`
+for the latest fixes. The original isolated executable was locked by another
+session during the final relink; the existing launcher still targets that earlier
+executable. See `docs/NIGHT_SKY_ENVIRONMENT_RECOVERY.md` for exact evidence and
+remaining desktop-inspection blockers.
+
 Open `C:\Users\paulw\Downloads\Renegade Night Sky Preview` and double-click `Open Night Sky Studio.cmd`.
 
 In the isolated Studio choose **Open Project**, selecting:

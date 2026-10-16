@@ -1,3 +1,58 @@
+## 2026-10-16: Environment / Night Sky candidate; VISUAL ACCEPTANCE BLOCKED
+
+Code checkpoint `642339498b094d92ffc3fee776ebe5789cec7bc9`, following
+`45473834a7734d6894bb60688680e230e86a9bc6`, on isolated
+`feature/night-sky-aurora-v1`. No merge/push. Wicked pointer remains
+`3a800b7134aafe58461093c8abb2e274d4e64033`; pre-existing overlay retained.
+No edits to main, UI Designer source or live project content.
+
+One Environment pane owns all nine collapsible option groups; separate Night Sky
+navigation/state is removed. Session disclosure hides children and reflows actions.
+Native Stars keeps its existing commands. Concurrent colour-picker and Sun-repair
+edits were preserved and audited. The picker now cancels on switching to skybox.
+A stronger native-transform test exposed the old Sun service's mirrored pitch/Z
+and opposite light seed. Both now agree with Wicked's actual local +Y light axis.
+Opening Environment preserves authored night in weather-only scenes.
+
+Changed: EngineBridge/src/SunService.cpp; Studio/src/StudioApplication.cpp/.h,
+RenegadeStudioChrome.cpp/.h, NightSkyStudioIntegration.cpp,
+EnvironmentSectionLayout.h, S1BInspectorSectionMigration.cpp,
+Phase5Gate5RenderWorkspace.cpp; Tests/NightSkyStateTests.cpp,
+NightSkySourceContract.cmake, SceneUiGate3SourceContract.cmake, SunTests.cpp;
+Tools/night_sky README/checklist; architecture/feature ledger and recovery evidence.
+Exact commands/logs/hashes/risks: `docs/NIGHT_SKY_ENVIRONMENT_RECOVERY.md`.
+
+Evidence:
+- Release stable-source Studio build passed. Final Sun relink hit LNK1104 after
+  another session launched the isolated Studio. That process was left running.
+  Final corrected objects linked successfully via MSBuild with
+  `/p:TargetName=RenegadeStudioRecovery /p:BuildProjectReferences=false` as
+  `BUILD/night-sky-check/Studio/Release/RenegadeStudioRecovery.exe`.
+- `ctest --test-dir BUILD/night-sky-check -C Release -R
+  '(SourceContract|^RenegadeNightSkyTests$|^RenegadeSunTests$)'
+  --output-on-failure`: **58/58 PASS** (512 disclosure combinations; native
+  metadata/disk reopen/Undo/Redo; stars/exposure preservation; weather-only night
+  repair; six solar-time native-transform checks).
+- Five real sky variants per DX12/SPIR-V backend PASS. Full offline shaderdump
+  rebuild exit 0, 400 entries each backend. Fresh reflection/native ABI agree on
+  exposure byte 136; overlay idempotence leaves four patched-source hashes unchanged.
+- Fresh native fixture/disk verification PASS in BUILD/night-sky-recovery-evidence.
+- `RenegadeStudioRecovery.exe startup-smoke`: exit 0, allocation-only. Bare argument
+  required; `--startup-smoke` is unrecognized. An initially mis-invoked owned probe
+  was stopped after 60 seconds. No unrelated process stopped. Diff check PASS.
+
+Blocker: Windows computer-use `sky.list_windows()` fails with native pipe
+unavailable / system cannot find file (os error 2), including retry and reset.
+No framebuffer was inspected or screenshot collected. Actual native section and
+picker interaction, bright midday, visible/twinkling midnight stars, aurora
+animation/dawn fading, onscreen persistence/Undo, performance and standalone
+Runtime rendering remain UNVERIFIED. No completion, parity or gate closure.
+
+Next: restore desktop inspection; use only the recovery exe and a disposable
+preview project. Verify bright day and native stars FIRST, then execute
+Tools/night_sky/PreviewChecklist.md including standalone Runtime/performance.
+Require independent exact-code-commit review via docs/VERIFICATION_CHECKLIST.md.
+
 ## 2026-10-09: PR 181 Debug test repair (base 77b8b9d)
 
 The latest Studio Debug CI compiled successfully, then failed two obsolete source contracts and timed out ImpactAudioTests after 1500 seconds. The audio worker had no render endpoint; Wicked's Debug assertion opened a dialog. Baseline Debug/Release passed on that revision.
