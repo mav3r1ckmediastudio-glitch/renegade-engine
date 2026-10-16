@@ -3,6 +3,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <string>
 #include <limits>
 
 namespace
@@ -16,8 +18,64 @@ namespace
     }
 }
 
-int main()
+int main(int argc, char** argv)
 {
+    if (argc == 3 && std::string(argv[1]) == "--verify-fixture")
+    {
+        wi::Archive archive(argv[2], true, false);
+        if (!archive.IsOpen()) Fail("preview fixture cannot be opened from disk");
+        wi::scene::Scene loaded;
+        loaded.Serialize(archive);
+        if (loaded.weathers.GetCount() != 1)
+            Fail("preview fixture has no Environment weather entity");
+        const auto environment = loaded.weathers.GetEntity(0);
+        const auto authored = renegade::bridge::CaptureNightSky(loaded, environment);
+        const auto* nativeWeather = loaded.weathers.GetComponent(environment);
+        if (!Near(authored.gradient, 0.85f) || !Near(authored.aurora, 0.75f) ||
+            !Near(authored.auroraCoverage, 0.65f) || !Near(nativeWeather->stars, 0.85f) ||
+            nativeWeather->sunDirection.y > -0.85f)
+            Fail("preview fixture has incorrect or missing midnight sky settings");
+        renegade::bridge::RestoreNightSky(loaded);
+        if (!Near(loaded.weathers.GetComponent(environment)->aurora_intensity, 0.75f))
+            Fail("preview fixture did not hydrate aurora into the renderer");
+        std::puts("NightSky preview fixture: disk reopen, midnight sun, stars and aurora PASSED");
+        std::fflush(stdout);
+        std::_Exit(0);
+    }
+    if (argc == 3 && std::string(argv[1]) == "--fixture")
+    {
+        namespace fs = std::filesystem;
+        const fs::path destination = fs::absolute(fs::u8path(argv[2]));
+        std::error_code ec;
+        fs::create_directories(destination.parent_path(), ec);
+        if (ec) Fail("could not create Night Sky fixture directory");
+        wi::scene::Scene fixture;
+        const auto environment = wi::ecs::CreateEntity();
+        fixture.names.Create(environment) = "Night Sky Preview - Midnight Aurora";
+        auto& weather = fixture.weathers.Create(environment);
+        weather.SetRealisticSky(true);
+        weather.SetRealisticSkyAerialPerspective(true);
+        weather.skyExposure = 0.85f;
+        weather.stars = 0.85f;
+        weather.sunDirection = XMFLOAT3(0.0f, -0.96f, 0.28f);
+        renegade::bridge::NightSkyState night;
+        night.gradient = 0.85f;
+        night.aurora = 0.75f;
+        night.auroraCoverage = 0.65f;
+        night.auroraSpeed = 0.35f;
+        if (!renegade::bridge::StoreNightSky(fixture, environment, night))
+            Fail("could not set Night Sky fixture values");
+        fixture.weather = weather;
+        wi::Archive archive;
+        fixture.Serialize(archive);
+        if (!archive.SaveFile(destination.generic_u8string()))
+            Fail("could not save Night Sky preview WISCENE");
+        std::printf("NightSky preview WISCENE: %s\n", destination.generic_u8string().c_str());
+        std::fflush(stdout);
+        // Gate4SceneFixture convention: avoid unrelated Wicked process teardown.
+        std::_Exit(0);
+    }
+    if (argc != 1) Fail("usage: RenegadeNightSkyTests [--fixture|--verify-fixture <path.wiscene>]");
     using namespace renegade::bridge;
     wi::scene::Scene scene;
     const auto environment = wi::ecs::CreateEntity();
