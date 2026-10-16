@@ -1,34 +1,31 @@
-# Renegade Night Sky & Aurora — isolated implementation checkpoint
+# Renegade Night Sky & Aurora — isolated integration checkpoint
 
-Local worktree: `C:\Users\paulw\source\repos\renegade-night-sky`
-Development branch: `feature/night-sky-aurora-v1`
-Main UI Designer worktree: **untouched**.
+Worktree: `C:\Users\paulw\source\repos\renegade-night-sky`
+Branch: `feature/night-sky-aurora-v1`. Active UI Designer worktree and Studio binary are untouched.
 
-## Implemented in source
+## Source implementation
 
-- Separate `renegadeNightAtmosphere.hlsli` and `renegadeAurora.hlsli`, joined by the short `renegadeNightSky.hlsli` include and called from Wicked's native realistic sky shader.
-- Night gradient uses direction-based interpolation from near-black indigo zenith to softly lifted violet/blue-grey horizon; fades in from dusk using existing sun direction. No new skybox, texture, or geometry.
-- Aurora uses time-animated procedural curtains with intensity, coverage and speed; does no work when intensity is zero.
-- 3 new GPU uniforms for gradient/aurora; named scene metadata authoring persisted on the existing Environment weather entity. Missing metadata preserves legacy scenes. Newly created environments get gradient 0.7, aurora intensity 0.
-- A Night Sky workspace in Studio's top navigation, separate from Environment, containing gradient brightness, zenith RGB, horizon RGB, horizon glow, existing Stars, Aurora Enabled checkbox, intensity, coverage and animation speed.
-- Authoring sliders preview live, then use one undoable command on commit. No-op changes are filtered. Aurora Enabled maps to intensity 0/0.6. When using a skybox texture, night controls are disabled.
-- Existing native stars/twinkling and original physical atmosphere remain intact.
-- CMake overlay reproducibly modifies only the branch's pinned Wicked submodule checkout during configure, instead of committing changes to the upstream Wicked submodule SHA.
+- Independent `renegadeNightAtmosphere.hlsli` and `renegadeAurora.hlsli` HLSL modules, composed into Wicked's native atmospheric sky pipeline without a replacement sky.
+- Smooth dusk/night sun gating, subtle blue/indigo zenith-to-violet horizon gradient, and animated flowing aurora; zero intensity yields zero contribution.
+- Scene-owned `NightSkyState` and versioned weather-entity metadata. Missing metadata retains legacy scene visuals. New environments default to gradient strength 0.7, aurora off.
+- Dedicated **Night Sky** Studio workspace: Gradient, Zenith R/G/B, Horizon R/G/B, Horizon Glow, native Stars, Aurora Enabled, Aurora Intensity, Coverage, and Speed. Controls are disabled in skybox texture mode.
+- Live preview plus command-backed single-gesture Undo/Redo; zero-change authoring does not create a command.
+- Idempotent `cmake/RenegadeNightSkyOverlay.cmake` reapplies the pinned Wicked shader edits from superproject-owned files when configuring this feature branch.
 
-## Checks that have actually passed
+## Verified to date
 
-- DirectX Shader Compiler PS 6.0 smoke compilation of the Night/Aurora modules.
-- Isolated CMake x64 Visual Studio 18 2026 configure.
-- Isolated source-integration CTest (`RenegadeNightSkySourceContract`).
-- Targeted MSVC C++ syntax compilation: `NightSkyStudioIntegration.cpp`, `StudioApplication.cpp`, `RenegadeStudioChrome.cpp`, `Phase5Gate5RenderWorkspace.cpp`, and `NightSkyStateTests.cpp`.
+- Single-file Night Sky/Aurora HLSL module PS 6.0 compilation.
+- **Five actual Wicked sky shader variants compiled to DXIL (DX12)** using pinned Wicked Engine DXC 1.9.2602.24: `skyPS_dynamic`, `skyPS_static`, `envMap_skyPS_dynamic`, `envMap_skyPS_static`, `sunPS`. Reproduce: `powershell -ExecutionPolicy Bypass -File Tools/night_sky/verify_wicked_sky_dx12.ps1`.
+- **The same five variants compiled to SPIR-V (Vulkan)** with an isolated official SPIR-V-capable DXC 1.9.2609, reproducing the exact binding shifts and descriptor set constants used by `wiShaderCompiler.cpp`. Reproduce: `powershell -ExecutionPolicy Bypass -File Tools/night_sky/verify_wicked_sky_vulkan.ps1`.
+- The optional compiler ZIP was downloaded from [microsoft/DirectXShaderCompiler v1.9.2609](https://github.com/microsoft/DirectXShaderCompiler/releases/tag/v1.9.2609) into `BUILD/night-sky-check/shader-check/official-dxc` and verified against the GitHub release's SHA-256 digest `ad31b1fc8443175d204f77a611fdb3ef2ec42759bdc2f1167368de24a4a7e7f1`. **It was not installed globally or substituted into the Wicked source checkout.** This ZIP is NOT checked in.
+- Isolated CMake VS18 x64 configure and `RenegadeNightSkySourceContract` CTest pass.
+- Targeted MSVC C++ syntax compiles pass for `NightSkyStudioIntegration.cpp`, `StudioApplication.cpp`, `RenegadeStudioChrome.cpp`, `Phase5Gate5RenderWorkspace.cpp`, `NightSkyStateTests.cpp`.
 
-## Still required before a testable release
+## Mandatory before shipping or owner visual acceptance
 
-- Full build + link of `RenegadeStudio`, `RenegadeNightSkyTests` executable; actually run the Night Sky unit tests.
-- Full Wicked Engine DX12 and Vulkan shader build, plus packaged Release startup.
-- Visual sky check at midday, dusk, midnight and dawn on the owner scene; colour values require art-direction tuning.
-- Aurora cloud interactions and GPU frametime profiling.
-- UX polish: colour-picker swatches and optional palette choices (v1 currently provides linear RGB sliders).
-- Visual and functional owner acceptance. **Do not merge into the UI Designer worktree or claim shipped before these pass.**
-
-Build directory: `BUILD/night-sky-check` under isolated worktree; never use or overwrite the active Studio release binary. Build was intentionally restricted to source-level checks to avoid substantial CPU load during concurrent UI Designer development.
+- **Recompile the entire Wicked shader package** for the updated `ShaderScene.weather` GPU data layout; reusing old packaged shader binaries is unsafe even if the five sky passes compile. The new fields enlarge weather, which is nested before DDGI and other scene data in ShaderScene. Do not mix old shader cache/shader dump with new ShaderScene layout.
+- Complete Release compile, link and **execute** `RenegadeNightSkyTests`, including actual Wicked scene archive save/reopen.
+- Build a completely separate RenegadeStudio Release with a consistent, newly compiled complete shader package. No changes to the user's active Studio binary.
+- Visual assessment at midday, dusk, midnight, dawn, stars at 0 and 1, clouds, fog, reflections, ocean and Aurora Off/On. Measure GPU frame-time at 1080p/1440p.
+- UI polish: full colour-picker swatches and optional aurora palettes are not yet implemented; current night colour controls are linear-HDR RGB sliders.
+- Owner sign-off and full Windows CI. **Do not merge into the active UI Designer worktree or claim shipped before all tests pass.**
