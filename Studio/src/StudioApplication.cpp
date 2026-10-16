@@ -2168,6 +2168,8 @@ namespace renegade::studio
             auto& slider = nightSkySliders_[i];
             slider.Create(0.0f, upper, 0.0f, 200.0f, nightNames[i], nightLabels[i]);
             slider.SetTooltip("Live procedural sky; unavailable with a skybox texture. Commit is a single Undo action.");
+            if (field == NightField::AuroraCoverage)
+                slider.SetTooltip("Amount of sky occupied by aurora. Increase for broken curtains around you and higher overhead; clear gaps remain. Single Undo action.");
             slider.OnDragStarted([this,field](float){BeginNightSlider(field);});
             slider.OnValuePreview([this,field](float v){PreviewNightSlider(field,v);});
             slider.OnValueCommitted([this,field](float v){CommitNightSlider(field,v);});

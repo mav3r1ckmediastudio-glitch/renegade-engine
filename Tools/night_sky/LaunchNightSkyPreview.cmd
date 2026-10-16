@@ -14,6 +14,6 @@ echo Starting the isolated Night Sky Studio, NOT your normal Renegade build.
 echo Open Project: Downloads\Renegade Night Sky Preview\Renegade Night Sky Visual Test
 echo.
 pushd "%PREVIEW%"
-start "Renegade Night Sky Preview" "%PREVIEW%\RenegadeStudio.exe" %*
+start "Renegade Night Sky Preview" "%PREVIEW%\RenegadeStudioAuroraPreview.exe" %*
 popd
 endlocal

@@ -1671,4 +1671,9 @@ commands. Existing Weather/Sun/Ocean/Precipitation services retain their mutatio
 boundaries. NightSkyService retains versioned Environment metadata and runtime
 hydration; zero extension intensities preserve the original shader path.
 The UI recovery does not change the pinned Wicked pointer or Weather GPU ABI.
-See [recovery evidence and visual blockers](NIGHT_SKY_ENVIRONMENT_RECOVERY.md).
+See [recovery evidence](NIGHT_SKY_ENVIRONMENT_RECOVERY.md) and
+[current curtain visual checks and limits](NIGHT_SKY_CURTAIN_VISUAL_CHECK.md).
+The modular aurora integrates folded emissive sheets into the existing realistic
+sky, with green lower folds and pink upper wisps. Optional GPU proof mode captures
+real DX12/Vulkan RenderPath3D frames without desktop input; it is not a substitute
+for native editor interaction or complex-scene performance acceptance.

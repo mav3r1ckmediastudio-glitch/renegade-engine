@@ -1,3 +1,17 @@
+## 2026-10-16: Green/pink curtain candidate; actual Studio/GPU inspection
+
+See [current visual evidence and remaining limits](docs/NIGHT_SKY_CURTAIN_VISUAL_CHECK.md).
+Actual Studio controls, colour wheel, Undo/Redo and Save/Reopen inspected;
+DX12/Vulkan GPU frames captured. Launcher selects the recovery executable.
+Latest follow-up expands Coverage around the sides/rear and higher overhead;
+launcher selects RenegadeStudioAuroraPreview.exe. The pronounced straight-line
+coverage revision was rejected; the final shader restores soft folds with wide
+coverage. Final softer Studio interaction still needs an uninterrupted pass;
+its actual directional DX12/Vulkan
+captures passed. Owner artistic and complex-scene/Runtime acceptance remain open.
+No main/UI Designer edits, merge or push. This supersedes the earlier lack of
+framebuffer inspection, but does not close the full acceptance gate.
+
 ## 2026-10-16: Environment / Night Sky candidate; VISUAL ACCEPTANCE BLOCKED
 
 Code checkpoint `642339498b094d92ffc3fee776ebe5789cec7bc9`, following
@@ -949,7 +963,7 @@ No serialized authoring fields changed. Full Studio Build Game UI flow, GPU cost
 exact reported-artifact reproduction, eliminated-stutter proof and realistic art
 acceptance remain open. Leave standalone for owner testing; continue from feedback.
 
-## P3 blood playback speed revision — 2026-10-09
+## P3 blood playback speed revision ï¿½ 2026-10-09
 
 Owner: candidate better, animation too slow and stuttery. RuntimeBloodSheets.h
 main/secondary lifetimes reduced 1.25/1.5s -> 0.55/0.70s. The 64 atlas frames are
@@ -970,7 +984,7 @@ No injected input. Owner motion review pending. Native shaders/pin unchanged.
 HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80; no commit/push/merge; broad provenance
 review and final realistic floor art remain outstanding. No P3 gate closure.
 
-## P3 KNIFE blood candidate and atlas reload repair — 2026-10-09
+## P3 KNIFE blood candidate and atlas reload repair ï¿½ 2026-10-09
 
 Branch feature/p3-projectile-impact; HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80.
 Uncommitted broad working tree; no commit/push/merge. Provenance of unrelated

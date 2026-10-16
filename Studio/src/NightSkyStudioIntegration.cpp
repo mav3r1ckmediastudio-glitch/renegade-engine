@@ -197,9 +197,9 @@ namespace renegade::studio
             if (!scene.weathers.Contains(nightColourEntity_)) { FinishNightColour(false); return; }
             const auto rgb = args.color.toFloat3();
             nightColourValue_ = XMFLOAT3(
-                std::min(0.1f, NightSRGBToLinear(rgb.x)),
-                std::min(0.1f, NightSRGBToLinear(rgb.y)),
-                std::min(0.1f, NightSRGBToLinear(rgb.z)));
+                0.1f * NightSRGBToLinear(rgb.x),
+                0.1f * NightSRGBToLinear(rgb.y),
+                0.1f * NightSRGBToLinear(rgb.z));
             auto preview = bridge::CaptureNightSky(scene, nightColourEntity_);
             (nightColourIsHorizon_ ? preview.horizon : preview.zenith) = nightColourValue_;
             bridge::ApplyNightSkyRuntime(scene, nightColourEntity_, preview);
@@ -231,9 +231,9 @@ namespace renegade::studio
         nightColourValue_ = horizon ? state.horizon : state.zenith;
         nightColourPicker_.SetText(horizon ? "Horizon colour" : "Zenith colour");
         nightColourPicker_.SetPickColor(wi::Color(
-            NightLinearToSRGB(nightColourValue_.x),
-            NightLinearToSRGB(nightColourValue_.y),
-            NightLinearToSRGB(nightColourValue_.z)));
+            NightLinearToSRGB(nightColourValue_.x / 0.1f),
+            NightLinearToSRGB(nightColourValue_.y / 0.1f),
+            NightLinearToSRGB(nightColourValue_.z / 0.1f)));
         const float x = std::max(16.0f, inspectorPanel_.GetPos().x - 356.0f);
         nightColourPicker_.SetPos(XMFLOAT2(x, 100));
         nightColourApply_.SetPos(XMFLOAT2(x, 448));

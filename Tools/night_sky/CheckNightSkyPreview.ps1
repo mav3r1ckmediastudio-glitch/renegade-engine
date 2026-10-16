@@ -3,7 +3,7 @@
 $ErrorActionPreference = 'Stop'
 try {
     $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-    $studio = Join-Path $root 'BUILD/night-sky-check/Studio/Release/RenegadeStudio.exe'
+    $studio = Join-Path $root 'BUILD/night-sky-check/Studio/Release/RenegadeStudioAuroraPreview.exe'
     $shaderDump = Join-Path $root 'BUILD/night-sky-check/WickedEngine/WickedEngine/wiShaderDump.h'
     $interop = Join-Path $root 'WickedEngine/WickedEngine/shaders/ShaderInterop_Weather.h'
     $testExe = Join-Path $root 'BUILD/night-sky-check/Tests/Release/RenegadeNightSkyTests.exe'
@@ -18,7 +18,7 @@ try {
     if (-not ([IO.File]::ReadAllText($interop)).Contains('float night_alignment_padding;')) {
         throw 'Unsafe GPU weather field layout: padding fix is absent'
     }
-    & $testExe --verify-fixture $scene
+    & $testExe --verify-saved-scene $scene
     if ($LASTEXITCODE -ne 0) { throw 'Preview project failed the saved WISCENE test' }
     Write-Host 'Night Sky ABI + scene-file safety checks passed.'
     Write-Host "Use Open Project to select: $project"

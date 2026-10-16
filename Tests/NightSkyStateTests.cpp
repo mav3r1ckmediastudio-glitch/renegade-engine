@@ -24,6 +24,7 @@ static_assert(offsetof(ShaderWeather, sky_exposure) == 136);
 static_assert(offsetof(ShaderWeather, rain_color) == 160);
 static_assert(offsetof(ShaderWeather, fog) == 176);
 static_assert(offsetof(ShaderWeather, atmosphere) == 272);
+#include "NightSkyGraphicsProof.h"
 namespace
 {
     bool Near(float a, float b) noexcept { return std::fabs(a - b) < 0.0001f; }
@@ -37,6 +38,8 @@ namespace
 
 int main(int argc, char** argv)
 {
+    if (argc >= 3 && std::string(argv[1]) == "--graphics-proof")
+        return RunNightSkyGraphicsProof(argc, argv);
     std::fprintf(stderr, "CXX WEATHER ABI: scene.weather=%zu stars=%zu gradient=%zu zenith=%zu horizon=%zu coverage=%zu sky_rotation=%zu fog=%zu atmosphere=%zu sizeof_weather=%zu scene_size=%zu\n",
         offsetof(ShaderScene, weather), offsetof(ShaderWeather, stars),
         offsetof(ShaderWeather, night_sky_gradient), offsetof(ShaderWeather, night_zenith),
@@ -80,6 +83,40 @@ int main(int argc, char** argv)
         if (!Near(loaded.weathers.GetComponent(environment)->aurora_intensity, 0.75f))
             Fail("preview fixture did not hydrate aurora into the renderer");
         std::puts("NightSky preview fixture: disk reopen, midnight sun, stars and aurora PASSED");
+        std::fflush(stdout);
+        std::_Exit(0);
+    }
+    if (argc == 3 && std::string(argv[1]) == "--verify-saved-scene")
+    {
+        wi::Archive archive(argv[2], true, false);
+        if (!archive.IsOpen()) Fail("saved preview scene cannot be reopened");
+        wi::scene::Scene loaded;
+        loaded.Serialize(archive);
+        if (!loaded.weathers.GetCount()) Fail("saved preview has no Environment");
+        renegade::bridge::RestoreNightSky(loaded);
+        for (std::size_t i = 0; i < loaded.weathers.GetCount(); ++i)
+        {
+            const auto entity = loaded.weathers.GetEntity(i);
+            const auto authored = renegade::bridge::CaptureNightSky(loaded, entity);
+            const auto* native = loaded.weathers.GetComponent(entity);
+            if (!Near(native->night_sky_gradient, authored.gradient) ||
+                !Near(native->aurora_intensity, authored.aurora) ||
+                !Near(native->aurora_coverage, authored.auroraCoverage) ||
+                !Near(native->aurora_speed, authored.auroraSpeed) ||
+                !Near(native->night_zenith.x, authored.zenith.x) ||
+                !Near(native->night_zenith.y, authored.zenith.y) ||
+                !Near(native->night_zenith.z, authored.zenith.z) ||
+                !Near(native->night_horizon.x, authored.horizon.x) ||
+                !Near(native->night_horizon.y, authored.horizon.y) ||
+                !Near(native->night_horizon.z, authored.horizon.z) ||
+                !Near(native->night_horizon.w, authored.horizonGlow) ||
+                !std::isfinite(native->skyExposure) || !std::isfinite(native->stars))
+                Fail("saved preview failed renderer hydration");
+            std::printf("Saved Environment: gradient=%g aurora=%g speed=%g coverage=%g stars=%g glow=%g\n",
+                authored.gradient, authored.aurora, authored.auroraSpeed,
+                authored.auroraCoverage, native->stars, authored.horizonGlow);
+        }
+        std::puts("Saved preview scene reopened and renderer settings hydrated successfully");
         std::fflush(stdout);
         std::_Exit(0);
     }
