@@ -32,8 +32,10 @@ The coverage candidate was inspected in Studio (qa-coverage-environment.png).
 The final softer shader is directly verified through real RenderPath3D GPU
 captures on DX12 and Vulkan, not a generated mockup or CPU approximation:
 BUILD/night-sky-soft-coverage-dx12 and BUILD/night-sky-soft-coverage-vulkan.
-The final softer Studio executable was launched; further automated clicks were
-stopped because concurrent desktop interaction made native panel targeting unsafe.
+The final softer Studio executable was launched and its actual scene framebuffer
+was inspected in qa-soft-final-state.png: soft green/pink light and native stars.
+Further automated clicks were stopped because concurrent desktop interaction
+made native panel targeting unsafe.
 
 GPU captures cover day, dusk, dawn, midnight, native stars, gradient and animation;
 Coverage 0/30/60/100 looking front/right/back/left and upwards. The final soft
@@ -53,8 +55,8 @@ and compiler load; they are not representative complex-scene GPU benchmarks.
 Owner artistic acceptance remains open. Complex cloud/fog/reflection scenes,
 representative high-resolution performance, standalone packaged Runtime and
 independent exact-head release review remain unverified. Final softer Studio
-scene interaction still needs an uninterrupted native pass; the final shader's
-DX12/Vulkan rendering itself is visually verified. No full release/gate closure.
+control interaction still needs an uninterrupted native pass; the final shader's
+actual Studio and DX12/Vulkan rendering is visually verified. No full release/gate closure.
 
 A late automated native click hit New Clip after the active panel changed,
 creating an unsaved empty animation clip in the disposable preview. Automation
