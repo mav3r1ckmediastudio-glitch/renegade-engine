@@ -57,6 +57,7 @@ $result = [ordered]@{
         "RenegadeBridgeTests",
         "RenegadePlayerPrefabTests",
         "RenegadeDiagnosticServiceTests",
+        "RenegadeNightSkyTests",
         "RenegadeDependencyProcessFixture",
         "RenegadeAssetRegistryProcessFixture"
     )
@@ -86,7 +87,7 @@ try {
                 "--build", $buildRoot,
                 "--config", $currentConfiguration,
                 # One aggregate MSBuild graph avoids rebuilding/checking the same
-                # Wicked and Renegade dependencies for six separate root targets.
+                # Wicked and Renegade dependencies for separate root targets.
                 "--target", "RenegadeStudioCI",
                 "--parallel"
             ) `

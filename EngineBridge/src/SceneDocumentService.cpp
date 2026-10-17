@@ -4,6 +4,7 @@
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/LightmapBakeService.h"
+#include "renegade/bridge/NightSkyService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
@@ -224,6 +225,7 @@ namespace renegade::bridge
         }
         RebindDefaultTerrainMaterials(scenes_.scene_);
         RebindWickedVegetationResources(scenes_.scene_);
+        RestoreNightSky(scenes_.scene_);
         scenes_.currentPath_ = std::move(prepared.path_);
         scenes_.lastError_.clear();
         ++scenes_.revision_;

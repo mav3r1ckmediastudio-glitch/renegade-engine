@@ -1836,10 +1836,6 @@ namespace renegade::studio
             10.0f,
             1000.0f);
 
-        createSectionLabel(
-            environmentSkyLabel_,
-            "Environment Sky Section",
-            "SKY // ATMOSPHERE");
         environmentPreset_.Create("Environment Preset");
         environmentPreset_.AddItem("CUSTOM", 0);
         environmentPreset_.AddItem("CLEAR", 1);
@@ -1962,10 +1958,6 @@ namespace renegade::studio
             2.0f,
             400.0f);
 
-        createSectionLabel(
-            environmentFogLabel_,
-            "Environment Fog Section",
-            "FOG // HEIGHT LAYER");
         createWeatherSlider(
             fogStart_,
             "Fog Start",
@@ -2008,10 +2000,6 @@ namespace renegade::studio
             200.0f,
             600.0f);
 
-        createSectionLabel(
-            environmentCloudLabel_,
-            "Environment Cloud Section",
-            "VOLUMETRIC CLOUDS");
         createWeatherSlider(
             cloudCoverage_,
             "Cloud Coverage",
@@ -2045,10 +2033,6 @@ namespace renegade::studio
             "Allow volumetric clouds to cast moving shadows on the world.",
             WeatherToggle::CloudsCastShadow);
 
-        createSectionLabel(
-            precipitationLabel_,
-            "Environment Precipitation Section",
-            "PRECIPITATION // NATIVE PARTICLES");
 
         precipitationMode_.Create("Precipitation Mode");
         precipitationMode_.AddItem(
@@ -2151,10 +2135,49 @@ namespace renegade::studio
             20.0f,
             400.0f);
 
-        createSectionLabel(
-            sunLabel_,
-            "Environment Sun Section",
-            "SUN // TIME OF DAY");
+        nightAuroraEnabled_.Create("Aurora Enabled: ");
+        nightAuroraEnabled_.SetTooltip("Enable animated Northern Lights in procedural sky; unavailable with a skybox texture. Intensity 0 disables the effect.");
+        nightAuroraEnabled_.OnClick([this](const wi::gui::EventArgs& args)
+        {
+            if (!session_) return;
+            const auto entity = EditableWeatherEntity();
+            if (entity == wi::ecs::INVALID_ENTITY) return;
+            auto& scene = session_->Scenes().GetScene();
+            auto next = bridge::CaptureNightSky(scene, entity);
+            next.aurora = args.bValue ? std::max(next.aurora, 0.60f) : 0.0f;
+            session_->Commands().Execute(std::make_unique<bridge::SetNightSkyCommand>(scene, entity, next));
+            RefreshInspector();
+            RefreshStatus();
+        });
+        inspectorPanel_.AddWidget(&nightAuroraEnabled_);
+        const std::array<const char*, 12> nightNames = {
+            "Gradient Brightness", "Zenith Red", "Zenith Green", "Zenith Blue",
+            "Horizon Red", "Horizon Green", "Horizon Blue", "Horizon Glow",
+            "Aurora Intensity", "Aurora Coverage", "Aurora Speed", "Milky Way intensity"
+        };
+        const std::array<const char*, 12> nightLabels = {
+            "BRIGHTNESS", "ZENITH R", "ZENITH G", "ZENITH B",
+            "HORIZON R", "HORIZON G", "HORIZON B", "HORIZON GLOW",
+            "AURORA INTENSITY", "COVERAGE", "ANIMATION SPEED", "MILKY WAY INTENSITY"
+        };
+        for (std::size_t i=0; i<nightSkySliders_.size(); ++i)
+        {
+            const auto field = static_cast<NightField>(i);
+            const float upper = i >= 1 && i <= 6 ? 0.10f :
+                i == 7 || i == 10 ? 2.0f : 1.0f;
+            auto& slider = nightSkySliders_[i];
+            slider.Create(0.0f, upper, 0.0f, 200.0f, nightNames[i], nightLabels[i]);
+            slider.SetTooltip("Live procedural sky; unavailable with a skybox texture. Commit is a single Undo action.");
+            if (field == NightField::AuroraCoverage)
+                slider.SetTooltip("Amount of sky occupied by aurora. Increase for broken curtains around you and higher overhead; clear gaps remain. Single Undo action.");
+            if (field == NightField::MilkyWay)
+                slider.SetTooltip("Procedural galactic band with star clusters and dark dust lanes. Zero disables it; fades with daylight. Single Undo action.");
+            slider.OnDragStarted([this,field](float){BeginNightSlider(field);});
+            slider.OnValuePreview([this,field](float v){PreviewNightSlider(field,v);});
+            slider.OnValueCommitted([this,field](float v){CommitNightSlider(field,v);});
+            inspectorPanel_.AddWidget(&slider);
+        }
+
         sunPreset_.Create("Sun Preset");
         sunPreset_.AddItem("CUSTOM", 0);
         sunPreset_.AddItem(
@@ -2278,10 +2301,6 @@ namespace renegade::studio
         });
         inspectorPanel_.AddWidget(&sunPauseButton_);
 
-        createSectionLabel(
-            oceanLabel_,
-            "Environment Ocean Section",
-            "OCEAN // NATIVE FFT");
         oceanEnabled_.Create("Ocean enabled: ");
         oceanEnabled_.SetTooltip(
             "Enable Wicked's infinite camera-relative FFT ocean surface.");
@@ -3434,12 +3453,6 @@ namespace renegade::studio
         ownLabel(materialShaderSpecificLabel_);
         ownLabel(environmentProbeLabel_);
         ownLabel(lightLabel_);
-        ownLabel(environmentSkyLabel_);
-        ownLabel(environmentFogLabel_);
-        ownLabel(environmentCloudLabel_);
-        ownLabel(precipitationLabel_);
-        ownLabel(sunLabel_);
-        ownLabel(oceanLabel_);
         ownLabel(workspaceTitle_);
         ownLabel(statusLabel_);
         ownLabel(hierarchyLabel_);
@@ -4281,69 +4294,7 @@ namespace renegade::studio
         positionEnvironmentWidget(lightCastShadow_, 1024.0f);
         positionEnvironmentWidget(lightVolumetrics_, 1056.0f);
         positionEnvironmentWidget(lightVolumetricBoost_, 1088.0f);
-        positionEnvironmentWidget(environmentSkyLabel_, 44.0f, 20.0f);
-        positionEnvironmentWidget(environmentPreset_, 64.0f);
-        positionEnvironmentWidget(skyMode_, 98.0f);
-        positionEnvironmentWidget(aerialPerspective_, 132.0f);
-        positionEnvironmentWidget(skyExposure_, 164.0f);
-        positionEnvironmentWidget(stars_, 198.0f);
-        positionEnvironmentWidget(ambientIntensity_, 232.0f);
-        positionEnvironmentWidget(environmentFogLabel_, 266.0f, 20.0f);
-        positionEnvironmentWidget(fogStart_, 286.0f);
-        positionEnvironmentWidget(fogDensity_, 320.0f);
-        positionEnvironmentWidget(heightFog_, 354.0f);
-        positionEnvironmentWidget(fogHeightStart_, 386.0f);
-        positionEnvironmentWidget(fogHeightEnd_, 420.0f);
-        positionEnvironmentWidget(environmentCloudLabel_, 454.0f, 20.0f);
-        positionEnvironmentWidget(cloudCoverage_, 474.0f);
-        positionEnvironmentWidget(cloudStartHeight_, 508.0f);
-        positionEnvironmentWidget(cloudThickness_, 542.0f);
-        positionEnvironmentWidget(cloudsCastShadow_, 576.0f);
-        positionEnvironmentWidget(precipitationLabel_, 610.0f, 20.0f);
-        positionEnvironmentWidget(precipitationMode_, 630.0f);
-        positionEnvironmentWidget(precipitationIntensity_, 664.0f);
-        positionEnvironmentWidget(precipitationFallSpeed_, 698.0f);
-        positionEnvironmentWidget(precipitationParticleScale_, 732.0f);
-        positionEnvironmentWidget(precipitationWindAzimuth_, 766.0f);
-        positionEnvironmentWidget(precipitationWindSpeed_, 800.0f);
-        positionEnvironmentWidget(precipitationTurbulence_, 834.0f);
-        positionEnvironmentWidget(sunLabel_, 868.0f, 20.0f);
-        positionEnvironmentWidget(sunPreset_, 888.0f);
-        positionEnvironmentWidget(sunTime_, 922.0f);
-        positionEnvironmentWidget(sunAzimuth_, 956.0f);
-        positionEnvironmentWidget(sunElevation_, 990.0f);
-        positionEnvironmentWidget(sunPreviewSpeed_, 1024.0f);
-        sunPlayButton_.SetPos(XMFLOAT2(12.0f, 1058.0f));
-        sunPauseButton_.SetPos(XMFLOAT2(
-            20.0f + (environmentFieldWidth - 8.0f) * 0.5f,
-            1058.0f));
-        sunPlayButton_.SetSize(XMFLOAT2(
-            (environmentFieldWidth - 8.0f) * 0.5f,
-            28.0f));
-        sunPauseButton_.SetSize(XMFLOAT2(
-            (environmentFieldWidth - 8.0f) * 0.5f,
-            28.0f));
-        positionEnvironmentWidget(oceanLabel_, 1094.0f, 20.0f);
-        positionEnvironmentWidget(oceanEnabled_, 1114.0f);
-        positionEnvironmentWidget(oceanPreset_, 1148.0f);
-        positionEnvironmentWidget(oceanResolution_, 1182.0f);
-        positionEnvironmentWidget(oceanWaterHeight_, 1216.0f);
-        positionEnvironmentWidget(oceanPatchLength_, 1250.0f);
-        positionEnvironmentWidget(oceanWaveAmplitude_, 1284.0f);
-        positionEnvironmentWidget(oceanChoppyScale_, 1318.0f);
-        positionEnvironmentWidget(oceanTimeScale_, 1352.0f);
-        positionEnvironmentWidget(oceanWindAzimuth_, 1386.0f);
-        positionEnvironmentWidget(oceanWindSpeed_, 1420.0f);
-        positionEnvironmentWidget(oceanWindDependency_, 1454.0f);
-        positionEnvironmentWidget(oceanSurfaceDetail_, 1488.0f);
-        positionEnvironmentWidget(oceanDisplacementTolerance_, 1522.0f);
-        positionEnvironmentWidget(oceanWaterRed_, 1556.0f);
-        positionEnvironmentWidget(oceanWaterGreen_, 1590.0f);
-        positionEnvironmentWidget(oceanWaterBlue_, 1624.0f);
-        positionEnvironmentWidget(oceanWaterOpacity_, 1658.0f);
-        positionEnvironmentWidget(oceanExtinctionRed_, 1692.0f);
-        positionEnvironmentWidget(oceanExtinctionGreen_, 1726.0f);
-        positionEnvironmentWidget(oceanExtinctionBlue_, 1760.0f);
+        // Environment children are positioned by LayoutEnvironmentSections().
 
         positionEnvironmentWidget(terrainLabel_, 44.0f, 20.0f);
         positionEnvironmentWidget(createTerrainButton_, 64.0f);
@@ -5138,25 +5089,32 @@ namespace renegade::studio
         {
             widget.SetVisible(hasWeather);
         };
-        setEnvironmentVisible(environmentSkyLabel_);
         setEnvironmentVisible(environmentPreset_);
         setEnvironmentVisible(skyMode_);
         setEnvironmentVisible(aerialPerspective_);
         setEnvironmentVisible(skyExposure_);
-        setEnvironmentVisible(stars_);
+        stars_.SetVisible(hasWeather);
+        nightAuroraEnabled_.SetVisible(hasWeather);
+        // Procedural Night Sky runs only with Wicked realistic sky, not texture skyboxes.
+        const bool nightSkySupported = hasWeather &&
+            bridge::CaptureWeather(*weather).skyMode != bridge::WeatherState::SkyMode::Skybox;
+        nightAuroraEnabled_.SetEnabled(nightSkySupported);
+        stars_.SetEnabled(nightSkySupported);
+        for (auto& slider : nightSkySliders_)
+        {
+            slider.SetVisible(hasWeather);
+            slider.SetEnabled(nightSkySupported);
+        }
         setEnvironmentVisible(ambientIntensity_);
-        setEnvironmentVisible(environmentFogLabel_);
         setEnvironmentVisible(fogStart_);
         setEnvironmentVisible(fogDensity_);
         setEnvironmentVisible(heightFog_);
         setEnvironmentVisible(fogHeightStart_);
         setEnvironmentVisible(fogHeightEnd_);
-        setEnvironmentVisible(environmentCloudLabel_);
         setEnvironmentVisible(cloudCoverage_);
         setEnvironmentVisible(cloudStartHeight_);
         setEnvironmentVisible(cloudThickness_);
         setEnvironmentVisible(cloudsCastShadow_);
-        setEnvironmentVisible(precipitationLabel_);
         setEnvironmentVisible(precipitationMode_);
         setEnvironmentVisible(precipitationIntensity_);
         setEnvironmentVisible(precipitationFallSpeed_);
@@ -5164,7 +5122,6 @@ namespace renegade::studio
         setEnvironmentVisible(precipitationWindAzimuth_);
         setEnvironmentVisible(precipitationWindSpeed_);
         setEnvironmentVisible(precipitationTurbulence_);
-        setEnvironmentVisible(sunLabel_);
         setEnvironmentVisible(sunPreset_);
         setEnvironmentVisible(sunTime_);
         setEnvironmentVisible(sunAzimuth_);
@@ -5172,7 +5129,6 @@ namespace renegade::studio
         setEnvironmentVisible(sunPreviewSpeed_);
         setEnvironmentVisible(sunPlayButton_);
         setEnvironmentVisible(sunPauseButton_);
-        setEnvironmentVisible(oceanLabel_);
         setEnvironmentVisible(oceanEnabled_);
         setEnvironmentVisible(oceanPreset_);
         setEnvironmentVisible(oceanResolution_);
@@ -5269,6 +5225,15 @@ namespace renegade::studio
             aerialPerspective_.SetCheck(state.aerialPerspective);
             skyExposure_.SetValue(state.skyExposure);
             stars_.SetValue(state.stars);
+            const auto nightState = bridge::CaptureNightSky(session_->Scenes().GetScene(), entity);
+            nightAuroraEnabled_.SetCheck(nightState.aurora > 0.0f);
+            const std::array<float, static_cast<std::size_t>(NightField::Count)> nightValues = {
+                nightState.gradient, nightState.zenith.x, nightState.zenith.y, nightState.zenith.z,
+                nightState.horizon.x, nightState.horizon.y, nightState.horizon.z, nightState.horizonGlow,
+                nightState.aurora, nightState.auroraCoverage, nightState.auroraSpeed, nightState.milkyWay
+            };
+            for (std::size_t i = 0; i < nightValues.size(); ++i)
+                nightSkySliders_[i].SetValue(nightValues[i]);
             ambientIntensity_.SetValue(state.ambientIntensity);
             fogStart_.SetValue(state.fogStart);
             fogDensity_.SetValue(state.fogDensity);

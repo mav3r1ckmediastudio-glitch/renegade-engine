@@ -1971,7 +1971,7 @@ namespace renegade::studio
                 toolX += widths[index] + 5.0f;
             }
 
-            const float sceneMetaX = width_ - 360.0f;
+            const float sceneMetaX = width_ - 445.0f;
             if (!consumed &&
                 x >= sceneMetaX - 108.0f && x < sceneMetaX - 8.0f &&
                 y >= 15.0f && y < 49.0f)
@@ -2734,7 +2734,7 @@ namespace renegade::studio
             toolX += controlWidth + 5.0f;
         }
 
-        const float sceneMetaWidth = 360.0f;
+        const float sceneMetaWidth = 445.0f;
         const float sceneMetaX = width_ - sceneMetaWidth;
         DrawRect(
             sceneMetaX - 116.0f,

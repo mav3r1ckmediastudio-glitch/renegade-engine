@@ -525,6 +525,7 @@ namespace renegade::studio
 
     void StudioRenderPath::LayoutS1BInspectorSections()
     {
+        LayoutEnvironmentSections();
         objectSurfaceLabel_.SetVisible(false);
         materialImpactSurface_.SetVisible(false);
         PreparePhase7Gate7AAnimationInspector(*this);

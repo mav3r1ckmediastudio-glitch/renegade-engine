@@ -1659,3 +1659,27 @@ Private art is an optional distributor input RENEGADE_IMPACT_DEFAULTS_DIRECTORY,
 copied beside Studio after build; it is not committed. Missing kit keeps existing
 baseline presentation. Partial preparation failure may leave unused imported
 resources, but scene donors are not committed and custom resources are preserved.
+
+
+## Environment night authoring recovery (2026-10-16 candidate)
+
+Environment is the single authoring pane for weather, sun, native stars, night
+atmosphere and aurora. There is no separate Night Sky workspace or navigation
+state. Session-owned disclosure controls hide children and lay out every section
+and the following history/save actions in flow order; they do not create scene
+commands. Existing Weather/Sun/Ocean/Precipitation services retain their mutation
+boundaries. NightSkyService retains versioned Environment metadata and runtime
+hydration; zero extension intensities preserve the original shader path.
+The UI recovery does not change the pinned Wicked pointer or Weather GPU ABI.
+See [recovery evidence](NIGHT_SKY_ENVIRONMENT_RECOVERY.md) and
+[current curtain visual checks and limits](NIGHT_SKY_CURTAIN_VISUAL_CHECK.md).
+The modular aurora integrates folded emissive sheets into the existing realistic
+sky, with green lower folds and pink upper wisps. Optional GPU proof mode captures
+real DX12/Vulkan RenderPath3D frames without desktop input; it is not a substitute
+for native editor interaction or complex-scene performance acceptance.
+
+The optional procedural Milky Way is independently authored under Environment >
+Stars and shares the versioned NightSkyService command/metadata path. Its scalar
+uses reserved night_zenith.w without changing the shared GPU ABI. Old schema-v1
+scenes without the optional key remain off. Both DX12 and Vulkan were rendered;
+see [Milky Way validation and remaining limits](MILKY_WAY_VISUAL_CHECK.md).

@@ -137,9 +137,10 @@ require_text(studio_source
 require_text(studio_source
     "inspectorPanel_.SetColor(\n            wi::Color(8, 11, 13, 255),\n            wi::gui::WIDGET_ID_WINDOW_BASE);"
     "opaque Inspector host")
-require_text(studio_source
-    "positionEnvironmentWidget(environmentSkyLabel_, 44.0f, 20.0f);"
-    "Environment content remains owned by Inspector layout")
+file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/S1BInspectorSectionMigration.cpp" inspector_layout_source)
+require_text(inspector_layout_source
+    "LayoutEnvironmentSections();"
+    "Environment disclosure remains owned by Inspector layout")
 require_text(studio_source
     "positionEnvironmentWidget(terrainLabel_, 44.0f, 20.0f);"
     "Terrain content remains owned by Inspector layout")

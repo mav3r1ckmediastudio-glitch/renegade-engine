@@ -1,3 +1,111 @@
+## 2026-10-17: Retain main aggregate CI build during sky integration
+
+Merged origin/main 380dcc0 into the isolated feature branch after the CI target
+fix exposed a script conflict. Retained main's RenegadeStudioCI aggregate and
+CTest timeout; added RenegadeNightSkyTests to its CMake dependency graph and
+kept the manifest entry. No main working-copy edits or shader changes.
+Fresh integrated-head CI required; see docs/NIGHT_SKY_PR_CI_FIX.md.
+
+## 2026-10-17: PR #183 Studio CI test-target repair
+
+PR head 3ce02fe failed Studio Debug CTest because RenegadeNightSkyTests was
+registered but absent from the explicit Build-Studio-Windows.ps1 build targets.
+The Studio build itself succeeded; Windows baseline Debug and Release passed.
+Added the night-sky executable to both the build command and target manifest.
+No renderer, accepted appearance, submodule pin or main checkout changes.
+Validation and CI follow-up are recorded in docs/NIGHT_SKY_PR_CI_FIX.md.
+The existing manual and independent verification gates remain open.
+
+## 2026-10-16: Owner accepted all three sky effects; PR preparation
+
+Owner explicitly accepted night atmosphere, soft green/pink aurora and the
+reference-colour Milky Way. Accepted code checkpoint f5ef376; this checkpoint
+updates documentation only. See docs/NIGHT_SKY_OWNER_ACCEPTANCE.md for the binary
+hash, validation and explicit remaining merge/release checks. The draft PR must
+retain the manual Milky Way editor Save/Undo, complex-scene/performance,
+standalone Runtime visual and independent exact-head checks as outstanding.
+58/58 focused tests passed; actual Studio and DX12/Vulkan rendering inspected.
+No main checkout/UI Designer changes. No merge or release gate closure.
+
+## 2026-10-16: Separate Milky Way reference-colour candidate
+
+Owner accepted the soft green/pink aurora baseline. Separate Milky Way intensity
+now lives under Environment > Stars; off by default, independent of aurora and
+native stars. Final richer-colour Studio viewport and actual DX12/Vulkan captures
+inspected; native command/disk tests and 58 contracts pass. Launcher selects
+RenegadeStudioMilkyWayColourPreview.exe. Runtime Release rebuilt. See
+[Milky Way evidence and explicit remaining limits](docs/MILKY_WAY_VISUAL_CHECK.md).
+No main/UI Designer edits, merge or push; no full release gate closure.
+
+## 2026-10-16: Green/pink curtain candidate; actual Studio/GPU inspection
+
+See [current visual evidence and remaining limits](docs/NIGHT_SKY_CURTAIN_VISUAL_CHECK.md).
+Actual Studio controls, colour wheel, Undo/Redo and Save/Reopen inspected;
+DX12/Vulkan GPU frames captured. Launcher selects the recovery executable.
+Latest follow-up expands Coverage around the sides/rear and higher overhead;
+launcher selects RenegadeStudioAuroraPreview.exe. The pronounced straight-line
+coverage revision was rejected; the final shader restores soft folds with wide
+coverage. Final softer Studio interaction still needs an uninterrupted pass;
+its actual directional DX12/Vulkan
+captures passed. Owner artistic and complex-scene/Runtime acceptance remain open.
+No main/UI Designer edits, merge or push. This supersedes the earlier lack of
+framebuffer inspection, but does not close the full acceptance gate.
+
+## 2026-10-16: Environment / Night Sky candidate; VISUAL ACCEPTANCE BLOCKED
+
+Code checkpoint `642339498b094d92ffc3fee776ebe5789cec7bc9`, following
+`45473834a7734d6894bb60688680e230e86a9bc6`, on isolated
+`feature/night-sky-aurora-v1`. No merge/push. Wicked pointer remains
+`3a800b7134aafe58461093c8abb2e274d4e64033`; pre-existing overlay retained.
+No edits to main, UI Designer source or live project content.
+
+One Environment pane owns all nine collapsible option groups; separate Night Sky
+navigation/state is removed. Session disclosure hides children and reflows actions.
+Native Stars keeps its existing commands. Concurrent colour-picker and Sun-repair
+edits were preserved and audited. The picker now cancels on switching to skybox.
+A stronger native-transform test exposed the old Sun service's mirrored pitch/Z
+and opposite light seed. Both now agree with Wicked's actual local +Y light axis.
+Opening Environment preserves authored night in weather-only scenes.
+
+Changed: EngineBridge/src/SunService.cpp; Studio/src/StudioApplication.cpp/.h,
+RenegadeStudioChrome.cpp/.h, NightSkyStudioIntegration.cpp,
+EnvironmentSectionLayout.h, S1BInspectorSectionMigration.cpp,
+Phase5Gate5RenderWorkspace.cpp; Tests/NightSkyStateTests.cpp,
+NightSkySourceContract.cmake, SceneUiGate3SourceContract.cmake, SunTests.cpp;
+Tools/night_sky README/checklist; architecture/feature ledger and recovery evidence.
+Exact commands/logs/hashes/risks: `docs/NIGHT_SKY_ENVIRONMENT_RECOVERY.md`.
+
+Evidence:
+- Release stable-source Studio build passed. Final Sun relink hit LNK1104 after
+  another session launched the isolated Studio. That process was left running.
+  Final corrected objects linked successfully via MSBuild with
+  `/p:TargetName=RenegadeStudioRecovery /p:BuildProjectReferences=false` as
+  `BUILD/night-sky-check/Studio/Release/RenegadeStudioRecovery.exe`.
+- `ctest --test-dir BUILD/night-sky-check -C Release -R
+  '(SourceContract|^RenegadeNightSkyTests$|^RenegadeSunTests$)'
+  --output-on-failure`: **58/58 PASS** (512 disclosure combinations; native
+  metadata/disk reopen/Undo/Redo; stars/exposure preservation; weather-only night
+  repair; six solar-time native-transform checks).
+- Five real sky variants per DX12/SPIR-V backend PASS. Full offline shaderdump
+  rebuild exit 0, 400 entries each backend. Fresh reflection/native ABI agree on
+  exposure byte 136; overlay idempotence leaves four patched-source hashes unchanged.
+- Fresh native fixture/disk verification PASS in BUILD/night-sky-recovery-evidence.
+- `RenegadeStudioRecovery.exe startup-smoke`: exit 0, allocation-only. Bare argument
+  required; `--startup-smoke` is unrecognized. An initially mis-invoked owned probe
+  was stopped after 60 seconds. No unrelated process stopped. Diff check PASS.
+
+Blocker: Windows computer-use `sky.list_windows()` fails with native pipe
+unavailable / system cannot find file (os error 2), including retry and reset.
+No framebuffer was inspected or screenshot collected. Actual native section and
+picker interaction, bright midday, visible/twinkling midnight stars, aurora
+animation/dawn fading, onscreen persistence/Undo, performance and standalone
+Runtime rendering remain UNVERIFIED. No completion, parity or gate closure.
+
+Next: restore desktop inspection; use only the recovery exe and a disposable
+preview project. Verify bright day and native stars FIRST, then execute
+Tools/night_sky/PreviewChecklist.md including standalone Runtime/performance.
+Require independent exact-code-commit review via docs/VERIFICATION_CHECKLIST.md.
+
 ## 2026-10-09: PR 181 Debug test repair (base 77b8b9d)
 
 The latest Studio Debug CI compiled successfully, then failed two obsolete source contracts and timed out ImpactAudioTests after 1500 seconds. The audio worker had no render endpoint; Wicked's Debug assertion opened a dialog. Baseline Debug/Release passed on that revision.
@@ -894,7 +1002,7 @@ No serialized authoring fields changed. Full Studio Build Game UI flow, GPU cost
 exact reported-artifact reproduction, eliminated-stutter proof and realistic art
 acceptance remain open. Leave standalone for owner testing; continue from feedback.
 
-## P3 blood playback speed revision — 2026-10-09
+## P3 blood playback speed revision ï¿½ 2026-10-09
 
 Owner: candidate better, animation too slow and stuttery. RuntimeBloodSheets.h
 main/secondary lifetimes reduced 1.25/1.5s -> 0.55/0.70s. The 64 atlas frames are
@@ -915,7 +1023,7 @@ No injected input. Owner motion review pending. Native shaders/pin unchanged.
 HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80; no commit/push/merge; broad provenance
 review and final realistic floor art remain outstanding. No P3 gate closure.
 
-## P3 KNIFE blood candidate and atlas reload repair — 2026-10-09
+## P3 KNIFE blood candidate and atlas reload repair ï¿½ 2026-10-09
 
 Branch feature/p3-projectile-impact; HEAD cf04bd38434dbc3e84c90ce22ee628e3c3953a80.
 Uncommitted broad working tree; no commit/push/merge. Provenance of unrelated

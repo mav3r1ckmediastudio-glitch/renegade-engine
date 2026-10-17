@@ -84,10 +84,27 @@ int main()
     }
     if (!NearlyEqual(weather.sunDirection.y, noon.direction.y) ||
         !NearlyEqual(scene.weather.sunDirection.y, noon.direction.y) ||
-        !NearlyEqual(light.direction.y, -noon.direction.y))
+        !NearlyEqual(light.direction.y, noon.direction.y))
     {
         return Fail("sun state did not reach weather and directional light");
     }
+
+    // Match the actual native directional-light update axis, rather than only
+    // inspecting the Weather values seeded by the authoring service.
+    for (float hour : {0.0f, 6.5f, 12.0f, 17.0f, 18.5f, 23.0f})
+    {
+        auto authored = noon;
+        renegade::bridge::SetSunTime(authored, hour);
+        if (!renegade::bridge::ApplySun(scene, environment, authored))
+            return Fail("native-axis preset application failed");
+        const auto nativeDirection = scene.transforms.GetComponent(sunEntity)->GetUp();
+        if (!NearlyEqual(nativeDirection.x, authored.direction.x) ||
+            !NearlyEqual(nativeDirection.y, authored.direction.y) ||
+            !NearlyEqual(nativeDirection.z, authored.direction.z) ||
+            !NearlyEqual(light.direction.z, nativeDirection.z))
+            return Fail("native light transform would change the authored sun direction");
+    }
+    renegade::bridge::ApplySun(scene, environment, noon);
 
     const auto dusk = renegade::bridge::MakeSunPreset(
         noon,

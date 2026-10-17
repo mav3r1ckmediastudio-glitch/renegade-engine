@@ -34,6 +34,7 @@
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
 #include "renegade/bridge/SunService.h"
+#include "renegade/bridge/NightSkyService.h"
 #include "renegade/bridge/TerrainService.h"
 #include "InspectorSectionFramework.h"
 #include "RenegadeStudioChrome.h"
@@ -296,6 +297,13 @@ namespace renegade::studio
             CloudThickness,
         };
 
+        enum class NightField
+        {
+            Gradient, ZenithR, ZenithG, ZenithB,
+            HorizonR, HorizonG, HorizonB, HorizonGlow,
+            AuroraIntensity, AuroraCoverage, AuroraSpeed, MilkyWay,
+            Count
+        };
         enum class WeatherToggle
         {
             AerialPerspective,
@@ -509,6 +517,10 @@ namespace renegade::studio
         void ApplySelectedWeatherToggle(WeatherToggle toggle, bool value);
         void ApplySelectedSkyMode(bridge::WeatherState::SkyMode mode);
         void ApplyWeatherPreset(int preset);
+        void BeginNightSlider(NightField field);
+        void PreviewNightSlider(NightField field, float value);
+        void CommitNightSlider(NightField field, float value);
+        static void SetNightFieldValue(bridge::NightSkyState& state, NightField field, float value) noexcept;
         void BeginWeatherSlider(WeatherField field);
         void PreviewWeatherSlider(WeatherField field, float value);
         void CommitWeatherSlider(WeatherField field, float value);
@@ -949,25 +961,37 @@ namespace renegade::studio
         SceneInspectorCheckBox lightCastShadow_;
         SceneInspectorCheckBox lightVolumetrics_;
         SceneInspectorSlider lightVolumetricBoost_;
-        wi::gui::Label environmentSkyLabel_;
+        void LayoutEnvironmentSections();
+        void OpenNightColour(bool horizon);
+        void FinishNightColour(bool apply);
+        void CreateNightColourEditor();
+        wi::gui::ColorPicker nightColourPicker_;
+        SceneInspectorButton nightZenithColour_, nightHorizonColour_;
+        wi::gui::Button nightColourApply_, nightColourCancel_;
+        bool nightColourOpen_ = false, nightColourIsHorizon_ = false;
+        wi::ecs::Entity nightColourEntity_ = wi::ecs::INVALID_ENTITY;
+        XMFLOAT3 nightColourValue_;
+
+        std::array<SceneInspectorButton, 9> environmentSectionHeaders_;
+        std::array<bool, 9> environmentSectionExpanded_ = {true, false, false, false, false, false, false, false, false};
+        bool environmentSectionsCreated_ = false;
         SceneInspectorComboBox environmentPreset_;
         SceneInspectorComboBox skyMode_;
         SceneInspectorCheckBox aerialPerspective_;
         SceneInspectorSlider skyExposure_;
         SceneInspectorSlider stars_;
+        SceneInspectorCheckBox nightAuroraEnabled_;
+        std::array<SceneInspectorSlider, static_cast<std::size_t>(NightField::Count)> nightSkySliders_;
         SceneInspectorSlider ambientIntensity_;
-        wi::gui::Label environmentFogLabel_;
         SceneInspectorSlider fogStart_;
         SceneInspectorSlider fogDensity_;
         SceneInspectorCheckBox heightFog_;
         SceneInspectorSlider fogHeightStart_;
         SceneInspectorSlider fogHeightEnd_;
-        wi::gui::Label environmentCloudLabel_;
         SceneInspectorSlider cloudCoverage_;
         SceneInspectorSlider cloudStartHeight_;
         SceneInspectorSlider cloudThickness_;
         SceneInspectorCheckBox cloudsCastShadow_;
-        wi::gui::Label precipitationLabel_;
         SceneInspectorComboBox precipitationMode_;
         SceneInspectorSlider precipitationIntensity_;
         SceneInspectorSlider precipitationFallSpeed_;
@@ -975,7 +999,6 @@ namespace renegade::studio
         SceneInspectorSlider precipitationWindAzimuth_;
         SceneInspectorSlider precipitationWindSpeed_;
         SceneInspectorSlider precipitationTurbulence_;
-        wi::gui::Label sunLabel_;
         SceneInspectorComboBox sunPreset_;
         SceneInspectorSlider sunTime_;
         SceneInspectorSlider sunAzimuth_;
@@ -983,7 +1006,6 @@ namespace renegade::studio
         SceneInspectorSlider sunPreviewSpeed_;
         SceneInspectorButton sunPlayButton_;
         SceneInspectorButton sunPauseButton_;
-        wi::gui::Label oceanLabel_;
         SceneInspectorCheckBox oceanEnabled_;
         SceneInspectorComboBox oceanPreset_;
         SceneInspectorComboBox oceanResolution_;
@@ -1322,6 +1344,10 @@ namespace renegade::studio
         bridge::WeatherState weatherSliderBefore_;
         bridge::WeatherState weatherSliderAfter_;
         bool environmentWorkspaceActive_ = false;
+        bool nightSliderActive_ = false;
+        NightField nightSliderField_ = NightField::Gradient;
+        wi::ecs::Entity nightSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::NightSkyState nightSliderBefore_, nightSliderAfter_;
         bool terrainWorkspaceActive_ = false;
         bool renderWorkspaceActive_ = false;
         bool renderSliderActive_ = false;

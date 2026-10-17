@@ -41,6 +41,8 @@ set(WICKED_LINUX_TEMPLATE OFF CACHE BOOL "" FORCE)
 set(WICKED_ENABLE_SYMLINKS OFF CACHE BOOL "" FORCE)
 set(WICKED_EMBED_SHADERS ${RENEGADE_EMBED_SHADERS} CACHE BOOL "" FORCE)
 
+# Isolated Night Sky branch: apply Renegade shader overlay before Wicked config.
+include(cmake/RenegadeNightSkyOverlay.cmake)
 add_subdirectory(WickedEngine)
 include(cmake/WickedBacklogShutdownFix.cmake)
 include(cmake/RenegadePhysicsTempAllocator.cmake)
@@ -284,6 +286,7 @@ if(WIN32)
         RenegadeBridgeTests
         RenegadePlayerPrefabTests
         RenegadeDiagnosticServiceTests
+        RenegadeNightSkyTests
         RenegadeDependencyProcessFixture
         RenegadeAssetRegistryProcessFixture
     )
