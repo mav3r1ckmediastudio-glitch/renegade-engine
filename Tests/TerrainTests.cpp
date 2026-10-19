@@ -44,6 +44,47 @@ namespace
 
 int main()
 {
+    // Height sculpting preserves mesh topology. A BVH refit must track peaks
+    // outside the original AABB or subsequent viewport picking will miss them.
+    wi::scene::MeshComponent pickingMesh;
+    pickingMesh.vertex_positions={
+        XMFLOAT3(-6.0f,0.0f,-1.0f),XMFLOAT3(-4.0f,0.0f,-1.0f),XMFLOAT3(-5.0f,0.0f,1.0f),
+        XMFLOAT3(-1.0f,0.0f,-1.0f),XMFLOAT3(1.0f,0.0f,-1.0f),XMFLOAT3(0.0f,0.0f,1.0f),
+        XMFLOAT3(4.0f,0.0f,-1.0f),XMFLOAT3(6.0f,0.0f,-1.0f),XMFLOAT3(5.0f,0.0f,1.0f)};
+    // Spatially separated triangles force an internal BVH root.
+    pickingMesh.indices={0,1,2,3,4,5,6,7,8};
+    auto& pickingSubset=pickingMesh.subsets.emplace_back();
+    pickingSubset.indexOffset=0;
+    pickingSubset.indexCount=static_cast<std::uint32_t>(pickingMesh.indices.size());
+    pickingMesh.BuildBVH();
+    pickingMesh.vertex_positions[8].y=12.0f;
+    if(pickingMesh.bvh.node_count<3 ||
+        !renegade::bridge::RefitTerrainPickingBVH(pickingMesh) ||
+        pickingMesh.bvh.nodes[0].aabb.getMax().y<11.9f)
+    {
+        return Fail("terrain picking BVH fast refit missed newly raised height");
+    }
+    const wi::primitive::Ray sculptRay(
+        XMFLOAT3(5.0f,20.0f,0.5f),XMFLOAT3(0.0f,-1.0f,0.0f));
+    bool pickingCandidate=false;
+    pickingMesh.bvh.Intersects(sculptRay,0,[&](std::uint32_t index)
+    {
+        pickingCandidate |= pickingMesh.bvh_leaf_aabbs[index].intersects(sculptRay);
+    });
+    if(!pickingCandidate)
+        return Fail("updated terrain BVH does not return candidates for raised geometry");
+    pickingMesh.vertex_positions[8].y=-8.0f;
+    if(!renegade::bridge::RefitTerrainPickingBVH(pickingMesh) ||
+        pickingMesh.bvh.nodes[0].aabb.getMin().y>-7.9f ||
+        pickingMesh.bvh.nodes[0].aabb.getMax().y>0.1f)
+        return Fail("terrain picking BVH refit did not track lowering terrain");
+    pickingMesh.bvh_leaf_aabbs.front().userdata=~0u;
+    if(renegade::bridge::RefitTerrainPickingBVH(pickingMesh))
+        return Fail("invalid terrain BVH did not trigger safe rebuild fallback");
+    pickingMesh.BuildBVH();
+    if(!pickingMesh.bvh.IsValid())
+        return Fail("invalid terrain BVH could not recover with full rebuild");
+
     wi::scene::Scene blankScene;
     if (renegade::bridge::CreateTerrain(
             blankScene,
