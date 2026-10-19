@@ -1,8 +1,11 @@
 ## 2026-10-19 22:41: Terrain VT test candidate CRASHED and withdrawn
 
-User reported Renegade Studio crashes to desktop when attempting to sculpt
-using Downloads/Renegade-Terrain-VT-Test-2026-10-19. Windows Application Error
-1000 at 22:37:49 recorded exception code 0xC0000005 (read at null+0x10),
+User reported Renegade Studio pauses unresponsive for approximately 10 seconds
+with Windows' spinning/buffering cursor during an attempted terrain sculpt,
+THEN crashes to desktop (not an instant click-to-crash), using
+Downloads/Renegade-Terrain-VT-Test-2026-10-19. Precise mouse-button phase
+(still held vs after release) is unknown. Windows Application Error 1000
+at 22:37:49 recorded exception code 0xC0000005 (read at null+0x10),
 fault offset RenegadeStudio+0xA33E37 on a non-main worker thread. The matching
 50 MB dump is in %LOCALAPPDATA%/CrashDumps/RenegadeStudio.exe.29228.dmp.
 CDB verified the exception but Release Studio has no PDB symbols, so the
