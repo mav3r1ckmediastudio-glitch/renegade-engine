@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "id": "starting-equipment",
+  "title": "Create equipment from assembly and apply starting loadout",
+  "status": "source_checked_prior_owner_checkpoint_native_service_pass",
+  "manual_path": "docs/P2_EQUIPMENT_ACTION_IMPLEMENTATION.md",
+  "end_to_end_acceptance": {
+    "status": "source_checked_prior_owner_checkpoint_native_service_pass",
+    "date": "2026-10-14",
+    "receipt": "Tools/assistant_knowledge/EQUIPMENT_VERIFICATION.md",
+    "steps_confirmed": [
+      "Recorded native Studio checkpoint created shotgun equipment, applied loadout and retained assignment after save/reopen",
+      "Existing native EquipmentAssetTests passed hand admission, asset persistence and loadout undo/reopen"
+    ],
+    "publication_approved": false,
+    "limits": [
+      "No fresh mouse-driven Studio run this turn",
+      "Existing Release tests, not newly rebuilt binaries",
+      "Assembly creation/import and missing animation authoring are separate workflows"
+    ]
+  },
+  "facts": [
+    {
+      "id": "controls",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerEquipmentEditor.cpp",
+          "needle": "button(equipmentCreate_,\"CREATE FROM ASSEMBLY\""
+        },
+        {
+          "path": "Studio/src/PlayerEquipmentEditor.cpp",
+          "needle": "button(equipmentApply_,\"APPLY LOADOUT\""
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "playerEquipment_.SetText(\"STARTING EQUIPMENT\")"
+        }
+      ]
+    },
+    {
+      "id": "create-not-equip",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerEquipmentEditor.cpp",
+          "needle": "\"Created \"+name+\". Choose it above, then APPLY LOADOUT.\""
+        }
+      ]
+    },
+    {
+      "id": "hand-admission",
+      "sources": [
+        {
+          "path": "EngineBridge/src/EquipmentAssetService.cpp",
+          "needle": "error=\"Two-handed/support equipment reserves both hands.\""
+        },
+        {
+          "path": "EngineBridge/src/EquipmentAssetService.cpp",
+          "needle": "error=\"Off-hand slot requires OffHandOnly or EitherHand.\""
+        }
+      ]
+    },
+    {
+      "id": "saved-assembly",
+      "sources": [
+        {
+          "path": "EngineBridge/src/EquipmentAssetService.cpp",
+          "needle": "FirstPersonAssemblyService().ReadSettings(root,project,presentation,settings,error)"
+        }
+      ]
+    },
+    {
+      "id": "historical-native-check",
+      "sources": [
+        {
+          "path": "docs/P2_EQUIPMENT_ACTION_IMPLEMENTATION.md",
+          "needle": "Native Studio created a definition from the full shotgun assembly"
+        },
+        {
+          "path": "Tests/EquipmentAssetTests.cpp",
+          "needle": "\"loadout undo\""
+        },
+        {
+          "path": "Tests/EquipmentAssetTests.cpp",
+          "needle": "\"scene cold reopen\""
+        }
+      ]
+    }
+  ]
+}

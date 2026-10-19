@@ -5,7 +5,7 @@ namespace renegade::runtime {
 inline bool ResolveMuzzleAim(const bridge::ProjectileSource& source,float aimRangeMetres,
  const XMFLOAT3 eye,const XMFLOAT3 aim,const XMFLOAT3& muzzle,const XMFLOAT3& socketForward,
  const bridge::ProjectileSegmentQuery& query,XMFLOAT3& origin,XMFLOAT3& direction,
- std::string& error) {
+ std::string& error,bool enforceSocketForward=true) {
  if(!query||!std::isfinite(aimRangeMetres)||aimRangeMetres<=0||
     !bridge::FiniteProjectileVector(ProjectileBridgeVector(eye))||
     !bridge::FiniteProjectileVector(ProjectileBridgeVector(muzzle))) {
@@ -37,17 +37,22 @@ inline bool ResolveMuzzleAim(const bridge::ProjectileSource& source,float aimRan
  const float distance=XMVectorGetX(XMVector3Length(delta));
  if(!std::isfinite(distance)||distance<0.000001f){error="Aim target coincides with muzzle.";return false;}
  const auto launch=delta/distance;
- if(XMVectorGetX(XMVector3Dot(launch,XMLoadFloat3(&socketForward)))<=0) {
+ if(enforceSocketForward &&
+    XMVectorGetX(XMVector3Dot(launch,XMLoadFloat3(&socketForward)))<=0) {
   error="Launch socket points away from the aim target. Adjust its direction.";return false;
  }
  XMStoreFloat3(&direction,launch);error.clear();return true;
 }
-inline bool ResolveProjectileMuzzleAim(const bridge::ProjectileAssetDocument&,
+inline bool ResolveProjectileMuzzleAim(const bridge::ProjectileAssetDocument& definition,
  const bridge::ProjectileSource& source,const XMFLOAT3 eye,const XMFLOAT3 aim,
  const XMFLOAT3& muzzle,const XMFLOAT3& socketForward,
  const bridge::ProjectileSegmentQuery& query,XMFLOAT3& origin,XMFLOAT3& direction,
  std::string& error) {
- return ResolveMuzzleAim(source,1000.0f,eye,aim,muzzle,socketForward,query,origin,direction,error);
+ // A hand-thrown grenade socket follows the palm's rotation. Its local
+ // forward is not a gun barrel; use the crosshair target while still
+ // respecting camera-to-hand and world cover obstruction queries.
+ return ResolveMuzzleAim(source,1000.0f,eye,aim,muzzle,socketForward,query,
+                         origin,direction,error,!definition.grenade.enabled);
 }
 inline bool QueryHitscan(const bridge::ProjectileSource& source,const XMFLOAT3 origin,
  const XMFLOAT3 direction,float rangeMetres,const bridge::ProjectileSegmentQuery& query,

@@ -343,6 +343,39 @@ int main()
         missingReloadedJson != missingJson)
         return Fail("recovery tombstone did not round-trip byte-identically");
 
+    // A new UI image import retains older provenance, including tombstoned
+    // or changed products. Neither historical case may crash/block the import.
+    const auto verifyAdditionalImport = [&](AssetRegistry prior)
+    {
+        auto source = *std::find_if(provenanceReloaded.records.begin(),
+            provenanceReloaded.records.end(), [&](const AssetRecord& record)
+            { return record.assetId == imported.sourceAssetId; });
+        auto product = *std::find_if(provenanceReloaded.records.begin(),
+            provenanceReloaded.records.end(), [&](const AssetRecord& record)
+            { return record.assetId == imported.productAssetId; });
+        source.assetId = GenerateStableId(); source.dependencyNodeId = "qa-image-source";
+        source.projectRelativePath = "SourceAssets/Textures/qa-image.png";
+        product.assetId = GenerateStableId(); product.dependencyNodeId = "qa-image-product";
+        product.projectRelativePath = "Content/Textures/qa-image.rasset";
+        source.dependencyAssetIds.clear(); product.dependencyAssetIds = {source.assetId};
+        prior.records.push_back(source); prior.records.push_back(product);
+        auto next = imported; next.sourceAssetId = source.assetId;
+        next.productAssetId = product.assetId;
+        auto provenance = prior.importedProducts; provenance.push_back(next);
+        return SetImportedProductRecords(prior, provenance, error) &&
+            prior.importedProducts.size() == provenance.size() &&
+            ValidateAssetRegistry(prior, error);
+    };
+    if (!verifyAdditionalImport(missingReloaded) ||
+        !verifyAdditionalImport(sourceChangedRegistry))
+        return Fail("new import failed with retained historical provenance");
+    AssetRegistry rejectedMissing = missingReloaded;
+    auto changedMissingProvenance = imported;
+    changedMissingProvenance.importerVersion += 1;
+    if (SetImportedProductRecords(rejectedMissing, {changedMissingProvenance}, error) ||
+        error.empty() || rejectedMissing.importedProducts != missingReloaded.importedProducts)
+        return Fail("new provenance for tombstoned product was accepted");
+
     DependencyGraph reappearedGraph = missingGraph;
     reappearedGraph.nodes.push_back(Node("returned-scene",
         "Content/Scenes/Returned/Startup.wiscene", DependencyClass::Scene,

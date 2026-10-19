@@ -1,0 +1,99 @@
+{
+  "schema": 1,
+  "id": "character-animation-workflows",
+  "title": "Character import and animation workflows",
+  "status": "source_checked_native_service_tests_passed_ui_pending",
+  "manual_path": "docs/MODEL_IMPORTER_REBUILD.md",
+  "facts": [
+    {
+      "id": "character-import-v1",
+      "sources": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "params.extensions = {\"glb\", \"fbx\"};"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "\"Animated import currently requires a skinned mesh and skeleton.\""
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "modelImportClip_.AddItem(\"REFERENCE POSE\");"
+        },
+        {
+          "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
+          "needle": "Prepared Character Assets automatically become governed Character"
+        }
+      ]
+    },
+    {
+      "id": "animation-add-v1",
+      "sources": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "modelImportAddAnimation_.SetText(\"ADD ANIMATION FBX\");"
+        },
+        {
+          "path": "EngineBridge/src/ModelImportCandidateService.cpp",
+          "needle": "External animation import currently accepts FBX only."
+        },
+        {
+          "path": "EngineBridge/src/ModelImportCandidateService.cpp",
+          "needle": "External animation import requires exactly one humanoid rig."
+        },
+        {
+          "path": "docs/MODEL_IMPORTER_REBUILD.md",
+          "needle": "This is bounded new-import authoring."
+        }
+      ]
+    },
+    {
+      "id": "animation-action-v1",
+      "sources": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "modelImportAction_.Create(\"Gameplay action\");"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "{\"Unassigned\", \"Idle\", \"Walk\", \"Run\", \"Attack\", \"Reload\", \"Hit\", \"Death\"}"
+        },
+        {
+          "path": "docs/MODEL_IMPORTER_REBUILD.md",
+          "needle": "Several clips may share an action; missing actions remain valid."
+        }
+      ]
+    },
+    {
+      "id": "character-prefab-v1",
+      "sources": [
+        {
+          "path": "Studio/src/CharacterPrefabInspectorExtension.cpp",
+          "needle": "save_.SetText(\"SAVE CHARACTER PREFAB\");"
+        },
+        {
+          "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
+          "needle": "Patrol Route and Weapon stable IDs are treated as scene-local"
+        },
+        {
+          "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
+          "needle": "A prefab containing Actions/Scripts fails closed in an unsaved Level"
+        }
+      ]
+    }
+  ],
+  "end_to_end_acceptance": {
+    "status": "source_checked_native_service_tests_passed_ui_pending",
+    "date": "2026-10-14",
+    "steps_confirmed": [
+      "Native generated full humanoid import/external-animation proof",
+      "Character placement and prefab service tests exit 0"
+    ],
+    "publication_approved": false,
+    "receipt": "Tools/assistant_knowledge/CHARACTER_WORKFLOWS_VERIFICATION.md",
+    "limits": [
+      "Current source inspected; existing native binaries, not rebuilt",
+      "Fresh beginner mouse-driven editor walkthrough pending; not a release-gate claim"
+    ]
+  }
+}

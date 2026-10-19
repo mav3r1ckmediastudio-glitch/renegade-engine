@@ -1,6 +1,7 @@
 #pragma once
 
 #include "renegade/bridge/ScreenService.h"
+#include "renegade/bridge/ScreenAccessibility.h"
 
 #include <functional>
 #include <memory>
@@ -37,6 +38,11 @@ namespace renegade::screen
         float borderWidth = 0.0f;
         float cornerRadius = 0.0f;
         float opacity = 1.0f;
+        float fill = 0.5f;
+        bridge::ScreenFillDirection fillDirection = bridge::ScreenFillDirection::LeftToRight;
+        bridge::ScreenRect fillRect;
+        bridge::GameplayAttributeValue controlValue=0.0;
+        float controlFraction=0;
         float fontSize = 0.0f;
         float characterSpacing = 0.0f;
         float lineSpacing = 0.0f;
@@ -55,7 +61,7 @@ namespace renegade::screen
         const std::unordered_map<bridge::StableId, ScreenInteractionState>&
             interactions,
         std::vector<ScreenRenderItem>& items,
-        std::string& error);
+        std::string& error,float layoutWidth=0);
 
     // Produces the same frame inside an editor-owned logical viewport. This is
     // a translation of the Runtime contract, not a second preview renderer.
@@ -65,7 +71,25 @@ namespace renegade::screen
         const std::unordered_map<bridge::StableId, ScreenInteractionState>&
             interactions,
         std::vector<ScreenRenderItem>& items,
-        std::string& error);
+        std::string& error,float layoutWidth=0);
+
+    // Shared deterministic tracks, evaluated after layout and before drawing/hit geometry.
+    [[nodiscard]] bool BuildAnimatedScreenRenderItems(const bridge::ScreenDocument& document,
+        const bridge::ScreenRect& viewport,double seconds,bool reducedMotion,
+        const std::unordered_map<bridge::StableId,ScreenInteractionState>& interactions,
+        std::vector<ScreenRenderItem>& items,std::string& error,float layoutWidth=0);
+
+    [[nodiscard]] bool ApplyScreenTransitionFrame(const bridge::ScreenDocument& document,
+        const bridge::ScreenRect& viewport,const bridge::ScreenTransitionFrame& frame,
+        std::vector<ScreenRenderItem>& items,std::string& error);
+
+    // Accessibility shares the exact animated drawing/hit frame. UI scale
+    // changes logical design space so anchors/containers/breakpoints reflow.
+    [[nodiscard]] bool BuildAccessibleScreenRenderItems(const bridge::ScreenDocument& document,
+        const bridge::ScreenRect& viewport,const bridge::ScreenAccessibilitySettings& settings,
+        const bridge::ScreenAnimationPreview& animation,const bridge::ScreenTransitionFrame& transition,
+        const std::unordered_map<bridge::StableId,ScreenInteractionState>& interactions,
+        std::vector<ScreenRenderItem>& items,std::string& error,float layoutWidth=0);
 
     // Renegade's sole Wicked-backed Screen presentation implementation.
     // Runtime and Gate 8C Screen Editor preview instantiate this same class
@@ -74,6 +98,7 @@ namespace renegade::screen
     {
     public:
         using ActivateSink = std::function<void(const bridge::StableId&)>;
+        using ControlSink = std::function<bool(const bridge::StableId&,const bridge::GameplayAttributeValue&)>;
 
         ScreenRenderer();
         ~ScreenRenderer();
@@ -87,23 +112,40 @@ namespace renegade::screen
             const std::string& projectRoot,
             wi::RenderPath2D& renderPath,
             ActivateSink activateSink,
-            std::string& error);
+            std::string& error, ControlSink controlSink = {});
         // Studio preview can confine the exact Runtime presentation to its
         // central canvas. Runtime leaves this unset and continues to use the
         // full RenderPath logical extent.
         void SetViewport(const bridge::ScreenRect& viewport) noexcept;
         void ClearViewport() noexcept;
+        // Optional editor clip is independent of the projected document viewport.
+        // Runtime leaves this unset; authored geometry is never modified.
+        void SetClipViewport(const bridge::ScreenRect& clip) noexcept;
+        void ClearClipViewport() noexcept;
         void ApplyLayout(wi::RenderPath2D& renderPath);
+        bool SetWidgetControlValue(const bridge::StableId& id,const bridge::GameplayAttributeValue& value);
+        bool ActivateControl(const bridge::StableId& id);
+        bool AdjustControl(const bridge::StableId& id,int direction);
+        [[nodiscard]] bool ConsumesTextInput() const noexcept;
+        void SetAnimationPreview(bridge::ScreenAnimationPreview preview) noexcept;
+        void SetTransitionFrame(bridge::ScreenTransitionFrame frame) noexcept;
+        void SetAccessibilitySettings(bridge::ScreenAccessibilitySettings settings) noexcept;
+        [[nodiscard]] bool IsWidgetInteractive(const bridge::StableId& id) const noexcept;
         // Runtime keeps renderer surfaces interactive. Screen Editor disables
         // only GUI input ownership so the authoring workspace exclusively owns
         // selection, drag and resize while drawing the same authored surfaces.
         void SetInputEnabled(bool enabled) noexcept;
+        void SetPresentationVisible(bool visible) noexcept;
+        void AttachPresentation(wi::RenderPath2D& renderPath);
+        void DetachPresentation(wi::RenderPath2D& renderPath) noexcept;
         [[nodiscard]] bool IsInputEnabled() const noexcept;
         void SetFocusedWidget(const bridge::StableId& widgetId);
         void SetWidgetState(
             const bridge::StableId& widgetId,
             bool visible,
             bool enabled);
+        void SetWidgetFill(const bridge::StableId& widgetId, float fill);
+        void SetWidgetText(const bridge::StableId& widgetId, const std::string& text);
         void Reset(wi::RenderPath2D& renderPath) noexcept;
 
         [[nodiscard]] const bridge::ScreenRect* LogicalRect(

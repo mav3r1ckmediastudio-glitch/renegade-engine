@@ -14,11 +14,23 @@ void Check(bool ok,const std::string& message) {
     if(!ok){std::cerr<<"EQUIPMENT ASSET FAIL // "<<message<<"\n";std::exit(1);}
 }
 #include "EquipmentMeleeChainTests.h"
+#include "EquipmentReloadStageTests.h"
+#include "SpellPresentationTests.h"
+#include "FireballEffectTests.h"
+#include "SpellChargeDamageTests.h"
+#include "BurningStatusTests.h"
+#include "ChannelSpellTests.h"
 int main() {
     const auto root=fs::temp_directory_path()/("renegade-equipment-"+GenerateStableId());
     fs::create_directories(root);const auto project=GenerateStableId();
     AssetRegistry registry;registry.projectId=project;
     Check(WriteAssetRegistry(root.generic_u8string(),registry).success,"registry");
+    CheckReloadStages(root,project);
+    CheckSpellPresentation();
+    CheckFireballEffects();
+    CheckSpellChargeDamage();
+    CheckBurningStatus();
+    CheckChannelSpell();
     EquipmentDefinition sword{GenerateStableId(),"Sword","",EquipmentHandUse::PrimaryOnly,
         {{EquipmentAction::PrimaryUse,"Attack",0.1f,0.2f,0.3f,0.4f,false,true}}};
     std::string text,error;EquipmentAssetDocument parsed;
@@ -47,6 +59,32 @@ int main() {
     Check(!SerializeEquipmentAsset({project,invalidHitscan},text,error),"hitscan accepted projectile asset");
     invalidHitscan=hitscan;invalidHitscan.projectiles[0].hitscanRangeMetres=0;
     Check(!SerializeEquipmentAsset({project,invalidHitscan},text,error),"zero hitscan range accepted");
+    // The new ground-area ability is a first-class equipment binding, not a
+    // fake physical projectile. Its four authorable gameplay values round-trip.
+    EquipmentDefinition storm{GenerateStableId(),"Storm schema proof","",EquipmentHandUse::PrimaryOnly,
+        {{EquipmentAction::Cast,"Cast",0,0,0,.4f,false,true,true}}};
+    EquipmentProjectileBinding area;
+    area.action=EquipmentAction::Cast;area.fireMode=EquipmentFireMode::Storm;
+    area.hitscanRangeMetres=35;area.stormRadiusMetres=2.5f;
+    area.stormDurationSeconds=2.6f;area.stormStrikeDamage=21;area.stormStrikeCount=8;
+    storm.projectiles={area};
+    Check(SerializeEquipmentAsset({project,storm},text,error),"storm schema serialize "+error);
+    const auto encodedStorm=nlohmann::json::parse(text);
+    Check(encodedStorm.at("schema_version")==6 && encodedStorm.at("projectiles")[0].at("fire_mode")=="Storm",
+        "storm schema 6 marker");
+    Check(DeserializeEquipmentAsset(text,parsed,error) &&
+        parsed.equipment.projectiles[0].stormRadiusMetres==2.5f &&
+        parsed.equipment.projectiles[0].stormDurationSeconds==2.6f &&
+        parsed.equipment.projectiles[0].stormStrikeDamage==21 &&
+        parsed.equipment.projectiles[0].stormStrikeCount==8,
+        "storm schema roundtrip "+error);
+    storm.projectiles[0].stormStrikeCount=0;
+    Check(!SerializeEquipmentAsset({project,storm},text,error),"zero storm strikes accepted");
+    storm.projectiles[0].stormStrikeCount=65;
+    Check(!SerializeEquipmentAsset({project,storm},text,error),"unbounded storm strikes accepted");
+    storm.projectiles[0].stormStrikeCount=8;
+    storm.projectiles[0].stormRadiusMetres=-1;
+    Check(!SerializeEquipmentAsset({project,storm},text,error),"negative storm radius accepted");
     auto savedHitscan=SaveEquipmentAsset(root.generic_u8string(),project,hitscan);
     Check(savedHitscan.succeeded&&LoadEquipmentAsset(root.generic_u8string(),project,
         savedHitscan.document.equipment.assetId,parsed,error)&&

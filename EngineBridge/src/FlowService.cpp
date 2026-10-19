@@ -1,10 +1,14 @@
 #include "renegade/bridge/FlowService.h"
+#include "HudSelectionPersistence.h"
 #include "renegade/bridge/DependencyService.h"
+#include "renegade/bridge/ScreenLibraryService.h"
 
 #include <algorithm>
 #include <exception>
 #include <filesystem>
 #include <limits>
+#include <locale>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -352,6 +356,15 @@ namespace renegade::bridge
                 return false;
             }
 
+            // Derive the project root from the validated authored relative path;
+            // Flow documents may live in nested project Content folders.
+            auto projectRoot = std::filesystem::absolute(
+                std::filesystem::u8path(path)).lexically_normal();
+            for (const auto& part : std::filesystem::u8path(flow.envelope.pathHint))
+            {
+                (void)part;
+                projectRoot = projectRoot.parent_path();
+            }
             document.projectId = flow.envelope.projectId;
             document.scenePathHints.clear();
             document.screenPathHints.clear();
@@ -364,6 +377,27 @@ namespace renegade::bridge
                 else if (node.kind == FlowNodeKind::Screen)
                 {
                     document.screenPathHints.push_back(node.screenPathHint);
+                }
+                if(node.kind==FlowNodeKind::Level)
+                {
+                    std::vector<HudReference> references;
+                    if(node.levelHud.mode==LevelHudMode::Override && node.levelHud.hud)
+                        references.push_back(*node.levelHud.hud);
+                    for(const auto& rule:node.hudContextRules)
+                        references.push_back(rule.hud);
+                    for(const auto& reference:references)
+                    {
+                        ScreenDocument hud;
+                        std::string resolvedPath,repairedHint;
+                        if(!ResolveProjectScreenLibraryDocument(projectRoot.generic_u8string(),
+                                projectId,reference.documentId,reference.pathHint,
+                                hud,resolvedPath,repairedHint,error))return false;
+                        if(hud.usage!=ScreenUsage::Hud || !hud.enabledInGame)
+                        {error="Context or Level HUD dependency is not an enabled HUD Screen.";return false;}
+                        if(std::find(document.screenPathHints.begin(),document.screenPathHints.end(),
+                            repairedHint)==document.screenPathHints.end())
+                            document.screenPathHints.push_back(std::move(repairedHint));
+                    }
                 }
             }
             error.clear();
@@ -466,6 +500,12 @@ namespace renegade::bridge
                 ++gameStartCount;
             }
 
+            if(!detail::ValidateLevelHudSelection(node.levelHud,error)||
+               !ValidateHudContextEventRules(node.hudContextRules,error))return false;
+            if(node.kind!=FlowNodeKind::Level &&
+               (node.levelHud.mode!=LevelHudMode::InheritProject ||
+                node.levelHud.hud||!node.hudContextRules.empty()))
+            {error="Only Level nodes may configure HUD overrides or contextual events.";return false;}
             switch (node.kind)
             {
             case FlowNodeKind::Level:
@@ -675,6 +715,23 @@ namespace renegade::bridge
                     section.Set("scene_path_hint", node.scenePathHint);
                     section.Set("screen_document_id", node.screenDocumentId);
                     section.Set("screen_path_hint", node.screenPathHint);
+                    if(node.kind==FlowNodeKind::Level)
+                    {
+                        detail::WriteLevelHudSelection(section,node.levelHud);
+                        if(!node.hudContextRules.empty())
+                        {
+                            section.Set("hud_context_count",static_cast<int>(node.hudContextRules.size()));
+                            for(std::size_t index=0;index<node.hudContextRules.size();++index)
+                            {
+                                const auto key="hud_context_"+std::to_string(index)+"_";
+                                const auto& rule=node.hudContextRules[index];
+                                section.Set((key+"enter").c_str(),rule.enterEvent);
+                                section.Set((key+"exit").c_str(),rule.exitEvent);
+                                section.Set((key+"document_id").c_str(),rule.hud.documentId);
+                                section.Set((key+"path_hint").c_str(),rule.hud.pathHint);
+                            }
+                        }
+                    }
                 }
 
                 for (std::size_t index = 0;
@@ -808,6 +865,31 @@ namespace renegade::bridge
                 node.scenePathHint = section.GetText("scene_path_hint");
                 node.screenDocumentId = section.GetText("screen_document_id");
                 node.screenPathHint = section.GetText("screen_path_hint");
+                if(!detail::ReadLevelHudSelection(section,node.levelHud,error))return false;
+                if(section.Has("hud_context_count"))
+                {
+                    int count=0;
+                    std::istringstream amount(section.GetText("hud_context_count"));
+                    amount.imbue(std::locale::classic());amount>>std::noskipws>>count;
+                    if(amount.fail()||amount.peek()!=std::char_traits<char>::eof()||count<0||count>16)
+                    {error="Level HUD context event count is malformed or exceeds 16.";return false;}
+                    for(int index=0;index<count;++index)
+                    {
+                        const auto key="hud_context_"+std::to_string(index)+"_";
+                        if(!section.Has((key+"enter").c_str())||
+                           !section.Has((key+"exit").c_str())||
+                           !section.Has((key+"document_id").c_str())||
+                           !section.Has((key+"path_hint").c_str()))
+                        {error="Level HUD context event rule is incomplete.";return false;}
+                        HudContextEventRule rule;
+                        rule.enterEvent=section.GetText((key+"enter").c_str());
+                        rule.exitEvent=section.GetText((key+"exit").c_str());
+                        rule.hud.documentId=section.GetText((key+"document_id").c_str());
+                        rule.hud.pathHint=section.GetText((key+"path_hint").c_str());
+                        node.hudContextRules.push_back(std::move(rule));
+                    }
+                    if(!ValidateHudContextEventRules(node.hudContextRules,error))return false;
+                }
                 parsed.nodes.push_back(std::move(node));
             }
 

@@ -4,6 +4,7 @@
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
 
 #include <unordered_set>
+#include <filesystem>
 #include <utility>
 
 namespace
@@ -202,13 +203,21 @@ namespace renegade::runtime
         {
             return false;
         }
-        if (!scenes.LoadScene(scenePath))
+        // Explicit resume entry retains the matching live Level and every
+        // entity/session owner. Retry/new-game entries still load a fresh Scene.
+        const bool resume=step.destinationEntry=="renegade.ui.resume";
+        std::error_code pathError;
+        if(resume&&(scenes.CurrentPath().empty()||
+            !std::filesystem::equivalent(std::filesystem::u8path(scenePath),
+                std::filesystem::u8path(scenes.CurrentPath()),pathError)||pathError))
+        {error="Cannot resume this Level: its live session is not retained.";return false;}
+        if (!resume&&!scenes.LoadScene(scenePath))
         {
             error = "Could not load Story Flow Level scene: " +
                 scenes.LastError();
             return false;
         }
-        if (!RefreshRuntimeReusableAssets(scenes, bootstrap, error))
+        if (!resume&&!RefreshRuntimeReusableAssets(scenes, bootstrap, error))
         {
             error =
                 "Could not refresh packaged reusable assets in Story Flow Level scene: " +

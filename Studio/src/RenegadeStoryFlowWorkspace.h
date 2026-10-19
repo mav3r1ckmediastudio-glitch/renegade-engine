@@ -13,6 +13,7 @@
 
 #include "renegade/bridge/StoryFlowAuthoringModel.h"
 #include "renegade/bridge/StoryFlowAuthoringSession.h"
+#include "renegade/bridge/ScreenLibraryService.h"
 #include "renegade/bridge/StoryFlowJourneyModel.h"
 #include "renegade/bridge/StoryFlowJourneyThumbnailService.h"
 #include "renegade/bridge/StoryFlowLayoutService.h"
@@ -45,6 +46,7 @@ namespace renegade::studio
 
         void FitToContent();
         void CenterOnGameStart();
+        void PlaceNewNodeAtViewportCentre(const bridge::StableId& nodeId);
         void SelectAndFocusNode(const bridge::StableId& nodeId);
         [[nodiscard]] bool FindAndFocusJourneyNode(const std::string& query);
         void AdjustJourneyZoom(float factor);
@@ -58,7 +60,10 @@ namespace renegade::studio
 
         [[nodiscard]] bool IsDirty() const noexcept
         {
-            return session_ && session_->IsDirty();
+            if (!session_) return false;
+            if (session_->IsDirty()) return true;
+            const auto* node = FindDocumentNode(selectedNodeId_);
+            return node && nodeNameInput_.HasPendingReplacement(node->name);
         }
 
         [[nodiscard]] bool CanUndo() const noexcept
@@ -97,6 +102,13 @@ namespace renegade::studio
         void OnScreenOutcomeQuery(ScreenOutcomeQuery callback);
         void OnSemanticChanged(std::function<void()> callback);
         void SetExternalStatus(std::string message);
+        void SetHudChoices(std::vector<bridge::ScreenLibraryEntry> screens);
+        // Rebuild existing Journey/Graph presentation after the same Flow
+        // authoring authority was changed from the Screen Inspector.
+        [[nodiscard]] bool RefreshAfterExternalRouteMutation()
+        {
+            return RefreshPresentationAfterSemanticChange();
+        }
 
         // Shared semantic deletion entry point. Gate 9D exposes this command
         // only while Graph View is active; Journey remains a navigation and
@@ -202,6 +214,11 @@ namespace renegade::studio
             wi::graphics::CommandList cmd) const;
         void RefreshInspectorControls();
         void RefreshJourneyExitControls();
+        void RefreshHudChoice();
+        void ApplyHudChoice(std::size_t choice);
+        void RefreshHudContextRule();
+        void ApplyHudContextRule();
+        void RemoveHudContextRule();
         void RefreshRuntimeValidation();
         void RewireJourneyExit(
             std::size_t exitIndex,
@@ -269,6 +286,11 @@ namespace renegade::studio
         RenegadeButton redoButton_;
         RenegadeButton connectButton_;
 
+        RenegadeComboBox levelHudCombo_,contextHudCombo_;
+        RenegadeButton contextCycle_,contextApply_,contextDelete_;
+        RenegadeTextInputField contextEnter_,contextExit_;
+        std::size_t contextRuleIndex_=0,contextHudChoice_=0;
+        std::vector<bridge::ScreenLibraryEntry> eligibleHuds_;
         RenegadeTextInputField nodeNameInput_;
         RenegadeButton applyNodeButton_;
         RenegadeButton deleteNodeButton_;

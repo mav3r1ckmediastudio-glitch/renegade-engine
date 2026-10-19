@@ -24,11 +24,17 @@ namespace renegade::studio
     {
     public:
         void SetPlaceholder(std::string placeholder);
+        // Opt-in for destination titles only; ordinary property fields are unchanged.
+        void SetClearOnEntry(bool enabled) noexcept { clearOnEntry_ = enabled; }
+        [[nodiscard]] bool HasPendingReplacement(const std::string& saved) const;
+        bool CommitReplacement(bool cancel = false);
+        void Update(const wi::Canvas& canvas, float dt) override;
         void SetRenderTextSize(int size) noexcept;
         void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const override;
         const char* GetWidgetTypeName() const override { return "RenegadeTextInputField"; }
 
     private:
+        bool clearOnEntry_ = false;
         std::string placeholder_;
         int renderTextSize_ = 10;
     };
@@ -38,12 +44,14 @@ namespace renegade::studio
     public:
         void SetRenderTextSize(int size) noexcept;
         void SetPrimaryStyle(bool primary) noexcept { primaryStyle_ = primary; }
+        void SetAccentOutlineStyle(bool accent) noexcept { accentOutlineStyle_ = accent; }
         void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const override;
         const char* GetWidgetTypeName() const override { return "RenegadeButton"; }
 
     private:
         int renderTextSize_ = 10;
         bool primaryStyle_ = false;
+        bool accentOutlineStyle_ = false;
     };
 
     class RenegadeCheckBox : public wi::gui::CheckBox
@@ -304,6 +312,7 @@ namespace renegade::studio
             TestLevelPlay,
             TestLevelStop,
             BuildWindowsGame,
+            ToggleAssistant,
         };
 
         struct HierarchyRow
@@ -335,6 +344,11 @@ namespace renegade::studio
 
         void Create();
         void SetLayout(float width, float height);
+        void SetAssistantDockWidth(float width) noexcept;
+        [[nodiscard]] float AssistantDockWidth() const noexcept
+        {
+            return assistantDockWidth_;
+        }
         void SetHierarchyRows(std::vector<HierarchyRow> rows);
         void SetAssetBrowserData(
             std::vector<AssetFolderRow> folders,
@@ -490,6 +504,7 @@ namespace renegade::studio
         float height_ = 1080.0f;
         float hierarchyWidth_ = 320.0f;
         float inspectorWidth_ = 360.0f;
+        float assistantDockWidth_ = 0.0f;
         float drawerHeight_ = 238.0f;
         bool layoutInitialized_ = false;
         int resizingPanel_ = 0;

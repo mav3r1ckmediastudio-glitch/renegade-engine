@@ -2,6 +2,8 @@
 
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ScreenService.h"
+#include "renegade/bridge/ScreenLibraryService.h"
+#include "renegade/bridge/ProjectUiScaffoldService.h"
 
 #include <algorithm>
 #include <cctype>
@@ -246,6 +248,14 @@ namespace
         const StoryFlowScreenTemplate screenTemplate)
     {
         ScreenDocument document;
+        if(static_cast<int>(screenTemplate)>=static_cast<int>(StoryFlowScreenTemplate::ProjectScaffold))
+        {
+            const auto index=static_cast<std::size_t>(static_cast<int>(screenTemplate)-static_cast<int>(StoryFlowScreenTemplate::ProjectScaffold));
+            const auto& names=ProjectUiScaffoldTemplateNames();std::string error;
+            if(index>=names.size()||!MakeProjectUiScaffoldTemplate(projectId,names[index],document,error))return {};
+            document.envelope.documentId=documentId;document.envelope.pathHint=pathHint;
+            return document;
+        }
         document.envelope = CreateDocumentEnvelope(
             projectId,
             RuntimeScreenDocumentType,
@@ -335,6 +345,9 @@ namespace renegade::bridge
     const char* StoryFlowScreenTemplateName(
         const StoryFlowScreenTemplate value) noexcept
     {
+        const auto index=static_cast<int>(value)-static_cast<int>(StoryFlowScreenTemplate::ProjectScaffold);
+        const auto& names=ProjectUiScaffoldTemplateNames();
+        if(index>=0&&static_cast<std::size_t>(index)<names.size())return names[index].c_str();
         switch (value)
         {
         case StoryFlowScreenTemplate::Custom: return "custom";
@@ -366,7 +379,13 @@ namespace renegade::bridge
     }
 
     StoryFlowNewScreenResult StoryFlowScreenLifecycleService::CreateNewScreen(
-        const StoryFlowNewScreenRequest& request) const
+        const StoryFlowNewScreenRequest& request) const { return Execute(request, false); }
+
+    StoryFlowNewScreenResult StoryFlowScreenLifecycleService::AdoptExistingScreen(
+        const StoryFlowNewScreenRequest& request) const { return Execute(request, true); }
+
+    StoryFlowNewScreenResult StoryFlowScreenLifecycleService::Execute(
+        const StoryFlowNewScreenRequest& request, const bool adoptExisting) const
     {
         try
         {
@@ -430,10 +449,17 @@ namespace renegade::bridge
             }
 
             std::string screenHint;
-            if (!NormalizeScreenHint(request.screenPathHint, screenHint, error))
+            if (adoptExisting)
             {
-                return Failure(StoryFlowScreenCreateCode::InvalidRequest, error);
+                const auto relative = fs::u8path(request.screenPathHint).lexically_normal();
+                if (!IsRelativeContainedPath(relative) || relative.begin()->generic_u8string() != "Content" ||
+                    LowerAscii(relative.extension().generic_u8string()) != ".renegade-screen")
+                    return Failure(StoryFlowScreenCreateCode::InvalidRequest,
+                        "Choose an existing Screen from the project Content catalogue.");
+                screenHint = relative.generic_u8string();
             }
+            else if (!NormalizeScreenHint(request.screenPathHint, screenHint, error))
+                return Failure(StoryFlowScreenCreateCode::InvalidRequest, error);
 
             const fs::path screenPath =
                 (projectRoot / fs::u8path(screenHint)).lexically_normal();
@@ -444,16 +470,20 @@ namespace renegade::bridge
             }
 
             pathError.clear();
-            const bool screenExists = fs::exists(screenPath, pathError);
+            bool screenExists = fs::exists(screenPath, pathError);
+            if (!screenExists && !adoptExisting && fs::is_directory(screenPath.parent_path()))
+                for (const auto& entry : fs::directory_iterator(screenPath.parent_path()))
+                    if (LowerAscii(entry.path().filename().generic_u8string()) ==
+                        LowerAscii(screenPath.filename().generic_u8string())) { screenExists = true; break; }
             if (pathError)
             {
                 return Failure(StoryFlowScreenCreateCode::Conflict,
                     "Could not inspect the new Screen destination: " + pathError.message());
             }
-            if (screenExists)
+            if (screenExists && !adoptExisting)
             {
                 return Failure(StoryFlowScreenCreateCode::Conflict,
-                    "Add Screen will not overwrite an existing Runtime Screen document.");
+                    "Screen already exists. Use UI LIBRARY to OPEN it or ADD TO JOURNEY; the existing Screen will be preserved.");
             }
 
             StoryFlowNewScreenResult result;
@@ -468,6 +498,30 @@ namespace renegade::bridge
                 screenHint,
                 screenName,
                 request.screenTemplate);
+            bool existingFlowNode = false;
+            if (adoptExisting)
+            {
+                if (!ReadScreenDocument(screenPath.generic_u8string(), request.projectId, screen, error))
+                    return Failure(StoryFlowScreenCreateCode::InvalidRequest, error);
+                const auto catalogue = EnumerateProjectScreenLibrary(request.projectRoot, request.projectId);
+                const auto existing = std::find_if(catalogue.screens.begin(), catalogue.screens.end(),
+                    [&](const auto& item) { return item.available && item.documentId == screen.envelope.documentId &&
+                        LowerAscii(item.pathHint) == LowerAscii(screenHint); });
+                if (!catalogue.succeeded || existing == catalogue.screens.end())
+                    return Failure(StoryFlowScreenCreateCode::Conflict,
+                        "Existing Screen is unavailable, outside project Content, or has duplicate identity. Refresh UI LIBRARY.");
+                if (screen.usage == ScreenUsage::Hud)
+                    return Failure(StoryFlowScreenCreateCode::InvalidRequest,
+                        "Passive HUDs use the Level/project HUD assignment, not Journey navigation.");
+                result.screenDocumentId = screen.envelope.documentId;
+                for (const auto& node : request.flow.nodes)
+                    if (node.kind == FlowNodeKind::Screen && node.screenDocumentId == result.screenDocumentId)
+                    {
+                        result.screenNodeId = node.id;
+                        existingFlowNode = true;
+                        break;
+                    }
+            }
             if (!ValidateScreenDocument(screen, request.projectId, error))
             {
                 return Failure(StoryFlowScreenCreateCode::InvalidRequest,
@@ -482,7 +536,9 @@ namespace renegade::bridge
             screenNode.name = screenName;
             screenNode.screenDocumentId = result.screenDocumentId;
             screenNode.screenPathHint = screenHint;
-            candidate.nodes.push_back(std::move(screenNode));
+            if (!existingFlowNode) candidate.nodes.push_back(std::move(screenNode));
+            else for (auto& node : candidate.nodes)
+                if (node.id == result.screenNodeId) node.screenPathHint = screenHint;
             if (!ValidateFlowDocument(candidate, request.projectId, error))
             {
                 return Failure(StoryFlowScreenCreateCode::InvalidRequest,
@@ -608,7 +664,7 @@ namespace renegade::bridge
                 validationError.clear();
                 return true;
             };
-            writes.push_back(std::move(screenWrite));
+            if (!adoptExisting) writes.push_back(std::move(screenWrite));
 
             ProjectDocumentTransactionOptions transactionOptions;
             transactionOptions.transactionId = request.transactionId.empty()
@@ -654,7 +710,7 @@ namespace renegade::bridge
             if (!ReadScreenDocument(screenPath.generic_u8string(), request.projectId,
                     committedScreenDocument, error) ||
                 committedScreenDocument.envelope.documentId != result.screenDocumentId ||
-                committedScreenDocument.envelope.pathHint != screenHint ||
+                (!adoptExisting && committedScreenDocument.envelope.pathHint != screenHint) ||
                 !SameActionIds(committedScreenDocument, result.actionIds))
             {
                 result.code = StoryFlowScreenCreateCode::VerificationFailed;
@@ -680,6 +736,7 @@ namespace renegade::bridge
             result.succeeded = true;
             result.code = StoryFlowScreenCreateCode::Success;
             result.message =
+                adoptExisting ? "Existing Screen added to Journey; no routes created." :
                 "Created governed Screen and committed its Story Flow relationship atomically.";
             return result;
         }

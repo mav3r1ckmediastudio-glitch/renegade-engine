@@ -1,0 +1,95 @@
+{
+  "schema": 1,
+  "id": "projectile-details-workflows",
+  "title": "Launch points, animation fire timing, hitscan and surfaces",
+  "status": "source_checked_native_service_tests_passed_ui_pending",
+  "manual_path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
+  "facts": [
+    {
+      "id": "spawn-point-v1",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileSocketEdit_,\"EDIT SPAWN POINTS...\""
+        },
+        {
+          "path": "Studio/src/LaunchSocketEditor.cpp",
+          "needle": "button(launchSocketApply_,\"APPLY TO ASSEMBLY\""
+        },
+        {
+          "path": "Studio/src/LaunchSocketEditor.cpp",
+          "needle": "Sockets applied to the draft. SAVE CHANGES to retain them;"
+        },
+        {
+          "path": "Studio/src/LaunchSocketEditor.cpp",
+          "needle": "combo(launchSocketParent_,\"Follow bone / marker\""
+        }
+      ]
+    },
+    {
+      "id": "fire-timing-v1",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileTimingOpen_,\"SET FIRE TIME IN ANIMATION...\""
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileTimingMark_,\"MARK CURRENT POSE\""
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileTimingUse_,\"USE FIRE TIME\""
+        },
+        {
+          "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
+          "needle": "Saved release marker runtime proof"
+        }
+      ]
+    },
+    {
+      "id": "hitscan-setup-v1",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileFireMode_.AddItem(\"Hitscan / instant ray\");"
+        },
+        {
+          "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
+          "needle": "not a projectile preset."
+        }
+      ]
+    },
+    {
+      "id": "surface-type-v1",
+      "sources": [
+        {
+          "path": "Studio/src/Phase5Gate4MaterialInspector.cpp",
+          "needle": "objectSurfaceLabel_.SetText(\"SURFACE TYPE\");"
+        },
+        {
+          "path": "Studio/src/Phase5Gate4MaterialInspector.cpp",
+          "needle": "std::make_unique<bridge::SetObjectImpactSurfaceCommand>"
+        },
+        {
+          "path": "docs/ARCHITECTURE.md",
+          "needle": "Creator steps: select an object; choose Surface Type directly in its Inspector."
+        }
+      ]
+    }
+  ],
+  "end_to_end_acceptance": {
+    "status": "source_checked_native_service_tests_passed_ui_pending",
+    "date": "2026-10-14",
+    "steps_confirmed": [
+      "LaunchSocket native service tests exit 0",
+      "Recorded native timing/multi-spawn acceptance inspected"
+    ],
+    "publication_approved": false,
+    "receipt": "Tools/assistant_knowledge/PROJECTILE_WORKFLOWS_VERIFICATION.md",
+    "limits": [
+      "Current source inspected; existing native binaries, not rebuilt",
+      "Fresh beginner mouse-driven editor walkthrough pending; not a release-gate claim"
+    ]
+  }
+}

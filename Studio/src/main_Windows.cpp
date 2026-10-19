@@ -4,6 +4,7 @@
 #include "StartupIdentityPrompt.h"
 #include "StartupMediaFoundationPlayer.h"
 #include "StudioUserPreferences.h"
+#include "RenegadeLivingPresenceLaunch.h"
 
 #include <Windows.h>
 
@@ -243,7 +244,7 @@ namespace
             {
                 wi::gui::TextInputField::DeleteFromInput();
             }
-            else if (wParam != VK_RETURN)
+            else if (wParam >= 0x20 && wParam != 0x7f)
             {
                 wi::gui::TextInputField::AddInput(static_cast<wchar_t>(wParam));
             }
@@ -473,6 +474,8 @@ int APIENTRY wWinMain(
             startupIdentityActive = true;
             windowReadyForWicked = false;
             LogGate2B("FIRST_RUN_PROMPT_ACTIVE");
+            renegade::studio::PublishLivingCoreStartup("name");
+            (void)renegade::studio::LaunchLivingCoreFromStudio(true);
 
             // The prompt is completely opaque before Gate 2A's final-black
             // overlay is removed, preserving the accepted no-Hub-flash behavior.
@@ -631,6 +634,8 @@ int APIENTRY wWinMain(
 
         if (handshakeUiStarted)
         {
+            renegade::studio::PublishLivingCoreStartup("handshake");
+            (void)renegade::studio::LaunchLivingCoreFromStudio(true);
             startupHandshakeActive = true;
             windowReadyForWicked = false;
             LogGate2C(
@@ -756,6 +761,7 @@ int APIENTRY wWinMain(
             handshakeVideo.ReleaseFadeOverlay();
         }
 
+        renegade::studio::PublishLivingCoreStartup(nullptr);
         startupIdentityHandshake = nullptr;
         startupHandshakeActive = false;
         startupIrisTransition = nullptr;

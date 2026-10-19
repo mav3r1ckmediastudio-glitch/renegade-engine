@@ -1,0 +1,17 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {instructionsFor}=require('../chat/personality');
+const h=[{role:'user',content:'I want shorter replies and less humour.'}];
+for(let i=0;i<16;i++)h.push({role:'user',content:'Thanks'},{role:'assistant',content:'No problem.'});
+h.push({role:'user',content:'How has your day been?'},{role:'assistant',content:'The imaginary workshop has been busy.'},{role:'user',content:'What happened then?'});
+let prompt=instructionsFor(h);
+assert.match(prompt,/normally one sentence/);
+assert.match(prompt,/Do not add jokes/);
+assert.match(prompt,/fictional day/);
+assert.match(prompt,/do not redirect them to games/);
+h.push({role:'user',content:'Longer replies and more humour please.'});
+prompt=instructionsFor(h);
+assert.doesNotMatch(prompt,/normally one sentence/);
+assert.doesNotMatch(prompt,/Do not add jokes/);
+assert.match(prompt,/Expand when/);assert.match(prompt,/Light dry humour/);
+console.log('PASS preferences survive model window, latest corrections win, day follow-up retains character subject');

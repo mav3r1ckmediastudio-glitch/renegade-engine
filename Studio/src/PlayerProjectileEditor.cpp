@@ -55,6 +55,8 @@ namespace renegade::studio
         combo(projectileFireMode_,"Fire mode",120);
         projectileFireMode_.AddItem("Projectile / travelling");
         projectileFireMode_.AddItem("Hitscan / instant ray");
+        projectileFireMode_.AddItem("Channel / sustained beam");
+        projectileFireMode_.AddItem("Storm / ground-targeted AoE");
         projectileFireMode_.SetTooltip("Projectile launches a travelling authored asset. Hitscan checks the aim line instantly.");
         projectileFireMode_.OnSelect([this](const wi::gui::EventArgs&){
             RefreshProjectileChoices();
@@ -72,15 +74,24 @@ namespace renegade::studio
         projectileHitscanRange_.SetTooltip("Maximum instant-ray distance. The first valid surface or Character blocks the shot.");
         weaponProjectilePanel_.AddWidget(&projectileHitscanRange_);
         projectileHitscanRange_.OnSlide([this](const wi::gui::EventArgs&){
-            if(projectileFireMode_.GetSelected()==1)RefreshProjectileChoices();
+            if(projectileFireMode_.GetSelected()!=0)RefreshProjectileChoices();
         });
         projectileHitscanDamage_.Create(0,100000,10,1000,"Damage");
         projectileHitscanDamage_.SetPos({220,200});projectileHitscanDamage_.SetSize({400,22});
         projectileHitscanDamage_.SetTooltip("Attributed damage payload for a governed Character hit. World impacts do not require health.");
         weaponProjectilePanel_.AddWidget(&projectileHitscanDamage_);
         projectileHitscanDamage_.OnSlide([this](const wi::gui::EventArgs&){
-            if(projectileFireMode_.GetSelected()==1)RefreshProjectileChoices();
+            if(projectileFireMode_.GetSelected()!=0)RefreshProjectileChoices();
         });
+        const auto stormSlider=[&](wi::gui::Slider& v,const char* label,float lo,float hi,float value,float y){
+            v.Create(lo,hi,value,1000,label);v.SetPos({220,y});v.SetSize({400,22});
+            v.SetTooltip("Storm ability property. Click the numeric value to type an exact setting.");
+            weaponProjectilePanel_.AddWidget(&v);
+        };
+        stormSlider(projectileStormRadius_,"Storm radius (metres)",.5f,30.f,2.5f,205);
+        stormSlider(projectileStormDuration_,"Storm duration (seconds)",.2f,30.f,2.6f,245);
+        stormSlider(projectileStormCount_,"Storm strike count",1,64,8,285);
+        stormSlider(projectileStormDamage_,"Storm damage per strike",0,1000,21,325);
         combo(projectileSocket_,"Spawn point",240);
         combo(projectileSecondSocket_,"Second spawn point",320);
         combo(projectileSocketPolicy_,"Firing",280);
@@ -365,23 +376,28 @@ namespace renegade::studio
                 });
         });
         projectileAssign_.OnClick([this](const wi::gui::EventArgs&){
-            const bool hitscan=projectileFireMode_.GetSelected()==1;
+            const auto mode=projectileFireMode_.GetSelected();
+            const bool hitscan=mode==1,ray=mode!=0;
             const auto row=projectileChoice_.GetSelectedUserdata();
             const auto actionRow=projectileAction_.GetSelected();
             if(actionRow<0||static_cast<std::size_t>(actionRow)>=projectileActions_.size()||
-               (!hitscan&&row>=projectileChoices_.size()))return;
-            const auto id=hitscan?bridge::StableId{}:projectileChoices_[row];
+               (!ray&&row>=projectileChoices_.size()))return;
+            const auto id=ray?bridge::StableId{}:projectileChoices_[row];
             const auto action=projectileActions_[actionRow];
-            const auto fireMode=hitscan?bridge::EquipmentFireMode::Hitscan:bridge::EquipmentFireMode::Projectile;
+            const auto fireMode=static_cast<bridge::EquipmentFireMode>(mode);
             const float hitscanRange=projectileHitscanRange_.GetValue();
             const float hitscanDamage=projectileHitscanDamage_.GetValue();
+            const float stormRadius=projectileStormRadius_.GetValue();
+            const float stormDuration=projectileStormDuration_.GetValue();
+            const unsigned stormCount=unsigned(std::lround(projectileStormCount_.GetValue()));
+            const float stormDamage=projectileStormDamage_.GetValue();
             const bool offHand=projectileWeapon_.GetSelected()==1;
             const auto projectId=equipmentProject_;const auto target=equipmentPlayer_;
             if(!session_||!session_->Projects().HasProject())return;
             const auto settings=bridge::CapturePlayerControllerSettings(session_->Scenes().GetScene(),target);
             const auto weaponId=offHand?settings.offHandEquipmentAssetId:settings.primaryEquipmentAssetId;
             wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                [this,id,action,fireMode,hitscanRange,hitscanDamage,offHand,projectId,target,weaponId](uint64_t){
+                [this,id,action,fireMode,hitscanRange,hitscanDamage,stormRadius,stormDuration,stormCount,stormDamage,offHand,projectId,target,weaponId](uint64_t){
                     if(!session_||!session_->Projects().HasProject()||
                        session_->Projects().CurrentProject().projectId!=projectId||equipmentPlayer_!=target||
                        !bridge::IsPlayerStart(session_->Scenes().GetScene(),target))return;
@@ -400,12 +416,14 @@ namespace renegade::studio
                         [action](const auto& binding){return binding.action==action;}),bindings.end());
                     const auto socketRow=projectileSocket_.GetSelectedUserdata();
                     const auto secondRow=projectileSecondSocket_.GetSelectedUserdata();
-                    if(fireMode==bridge::EquipmentFireMode::Hitscan||!id.empty())
+                    if(fireMode!=bridge::EquipmentFireMode::Projectile||!id.empty())
                         bindings.push_back({action,id,
                             socketRow<projectileSocketNames_.size()?projectileSocketNames_[socketRow]:std::string{},
                             projectileReleaseTime_.GetValue(),unsigned(std::max(0,projectileSocketPolicy_.GetSelected())),
                             secondRow<projectileSocketNames_.size()?projectileSocketNames_[secondRow]:std::string{},
-                            fireMode,hitscanRange,hitscanDamage});
+                            fireMode,hitscanRange,hitscanDamage,
+                            fireMode==bridge::EquipmentFireMode::Channel?hitscanDamage:20.f,
+                            stormRadius,stormDuration,stormDamage,stormCount});
                     const auto saved=bridge::SaveEquipmentAsset(project.rootPath,projectId,item.equipment);
                     if(!saved.succeeded){projectileSummary_.SetText(saved.error);return;}
                     if(offHand)settings.offHandEquipmentAssetId=saved.document.equipment.assetId;
@@ -514,22 +532,31 @@ namespace renegade::studio
 
     void StudioRenderPath::RefreshWeaponProjectileLayout()
     {
-        const bool hitscan=projectileFireMode_.GetSelected()==1;
-        projectileSearch_.SetVisible(!hitscan);projectileChoice_.SetVisible(!hitscan);
-        projectileHitscanRange_.SetVisible(hitscan);projectileHitscanDamage_.SetVisible(hitscan);
-        projectileNew_.SetVisible(!hitscan);projectileEditCopy_.SetVisible(!hitscan);
-        const bool multiple=projectileAvailableSocketCount_>1;
+        const int fire=projectileFireMode_.GetSelected();
+        const bool hitscan=fire==1,storm=fire==3,ray=fire!=0;
+        projectileSearch_.SetVisible(!ray);projectileChoice_.SetVisible(!ray);
+        projectileHitscanRange_.SetVisible(ray);
+        projectileHitscanDamage_.SetVisible(hitscan||fire==2);
+        projectileStormRadius_.SetVisible(storm);
+        projectileStormDuration_.SetVisible(storm);
+        projectileStormCount_.SetVisible(storm);
+        projectileStormDamage_.SetVisible(storm);
+        projectileNew_.SetVisible(!ray);projectileEditCopy_.SetVisible(!ray);
+        const bool multiple=projectileAvailableSocketCount_>1 && !storm;
         // Keep a saved invalid multi-point policy visible so it can be repaired, never silently downgrade it.
-        const bool policyVisible=multiple||projectileSocketPolicy_.GetSelected()>0;
+        const bool policyVisible=!storm && (multiple||projectileSocketPolicy_.GetSelected()>0);
         const bool second=policyVisible&&projectileSocketPolicy_.GetSelected()>0;
         projectileSocketPolicy_.SetVisible(policyVisible);
         projectileSecondSocket_.SetVisible(second);
-        const bool delayed=projectileReleaseMode_.GetSelected()==1;
+        const bool delayed=!storm && projectileReleaseMode_.GetSelected()==1;
         projectileReleaseTime_.SetVisible(delayed);
-        const int layout=int(hitscan)|(int(policyVisible)<<1)|(int(second)<<2)|(int(delayed)<<3);
+        const int layout=int(ray)|(int(policyVisible)<<1)|(int(second)<<2)|(int(delayed)<<3)|(int(storm)<<4);
         if(projectileWeaponLayout_==layout)return;
         projectileWeaponLayout_=layout;
-        float y=280;
+        projectileSocket_.SetPos({220,storm?365.f:240.f});
+        projectileReleaseMode_.SetVisible(!storm);
+        projectileTimingOpen_.SetVisible(!storm);
+        float y=storm?405.f:280.f;
         if(policyVisible){projectileSocketPolicy_.SetPos({220,y});y+=40;}
         if(second){projectileSecondSocket_.SetPos({220,y});y+=40;}
         projectileReleaseMode_.SetPos({220,y});y+=40;
@@ -540,7 +567,7 @@ namespace renegade::studio
         projectileSummary_.SetPos({20,y});
         projectileSummary_.SetSize({680,64});y+=78;
         projectileAssign_.SetPos({20,y});
-        if(hitscan) {
+        if(ray) {
             projectileClose_.SetPos({295,y});projectileClose_.SetSize({260,30});
         } else {
             projectileNew_.SetPos({295,y});projectileEditCopy_.SetPos({415,y});
@@ -747,6 +774,10 @@ namespace renegade::studio
                     projectileFireMode_.SetSelectedWithoutCallback(int(binding.fireMode));
                     projectileHitscanRange_.SetValue(binding.hitscanRangeMetres);
                     projectileHitscanDamage_.SetValue(binding.hitscanDamage);
+                    projectileStormRadius_.SetValue(binding.stormRadiusMetres);
+                    projectileStormDuration_.SetValue(binding.stormDurationSeconds);
+                    projectileStormCount_.SetValue(float(binding.stormStrikeCount));
+                    projectileStormDamage_.SetValue(binding.stormStrikeDamage);
                 }
         RefreshProjectileChoices();
     }
@@ -829,12 +860,13 @@ namespace renegade::studio
         projectileSecondSocket_.SetSelectedWithoutCallback(secondSelection);
         projectileReleaseMode_.SetSelectedWithoutCallback(preserveDraft?previousReleaseMode:(projectileReleaseTime_.GetValue()>0?1:0));
         RefreshWeaponProjectileLayout();
-        const bool hitscan=projectileFireMode_.GetSelected()==1;
+        const int mode=projectileFireMode_.GetSelected();
+        const bool hitscan=mode==1,storm=mode==3,ray=mode!=0;
         std::vector<bridge::ProjectileAssetDocument> items;
-        if(!hitscan)items=bridge::ListProjectileAssets(project.rootPath,project.projectId,error);
+        if(!ray)items=bridge::ListProjectileAssets(project.rootPath,project.projectId,error);
         const auto search=LowerProjectileSearch(projectileSearch_.GetText());int selected=0;
         std::map<std::string,unsigned> labels;
-        if(!hitscan)for(const auto& d:items) {
+        if(!ray)for(const auto& d:items) {
             if(!search.empty()&&LowerProjectileSearch(d.name).find(search)==std::string::npos)continue;
             const auto index=projectileChoices_.size();projectileChoices_.push_back(d.assetId);
             auto label=d.name+" / "+ProjectileFlightLabel(d.speedMetresPerSecond)+" m/s";
@@ -844,11 +876,21 @@ namespace renegade::studio
             if(d.assetId==projectilePreferred_)selected=projectileChoice_.GetItemCount()-1;
         }
         projectileChoice_.SetSelectedWithoutCallback(selected);
-        const bool hiddenSelection=!hitscan&&!projectilePreferred_.empty()&&selected==0;
+        const bool hiddenSelection=!ray&&!projectilePreferred_.empty()&&selected==0;
         projectileAssign_.SetEnabled(!projectileActions_.empty()&&error.empty()&&!hiddenSelection);
-        projectileNew_.SetEnabled(!hitscan);projectileEditCopy_.SetEnabled(!hitscan&&selected!=0);
+        projectileNew_.SetEnabled(!ray);projectileEditCopy_.SetEnabled(!ray&&selected!=0);
         std::string summary;
-        if(hitscan) {
+        if(storm) {
+            summary="Lightning Storm / ground targeted area / radius "+
+                ProjectileFlightLabel(projectileStormRadius_.GetValue())+
+                "m / duration "+ProjectileFlightLabel(projectileStormDuration_.GetValue())+
+                "s / strikes "+ProjectileFlightLabel(projectileStormCount_.GetValue())+
+                "\nCast must be an arms-only spell with a held action. LMB places a timed storm.";
+        } else if(mode==2) {
+            summary="Continuous channel / damage per second "+
+                ProjectileFlightLabel(projectileHitscanDamage_.GetValue())+
+                "\\nRequires a held Cast action and an authored palm spawn point.";
+        } else if(hitscan) {
             summary="Hitscan / "+ProjectileFlightLabel(projectileHitscanRange_.GetValue())+
                 " m range / damage "+ProjectileFlightLabel(projectileHitscanDamage_.GetValue())+
                 "\nInstant ray from the chosen spawn point; first valid contact wins."+

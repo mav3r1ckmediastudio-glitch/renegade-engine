@@ -1,4 +1,9 @@
 add_library(RenegadeEngineBridge STATIC
+    src/ScreenPortableLibrary.cpp
+    src/ProjectUiScaffoldService.cpp
+    src/ScreenPerformanceBudget.cpp
+    src/GameplayAttributeDocumentService.cpp
+    include/renegade/bridge/GameplayAttributeDocumentService.h
     src/ImpactDefaultsService.cpp
     include/renegade/bridge/ImpactDefaultsService.h
     src/ImpactAudioService.cpp
@@ -271,3 +276,7 @@ execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
 target_compile_definitions(RenegadeEngineBridge PRIVATE
     RENEGADE_DIAGNOSTIC_REVISION="${RENEGADE_DIAGNOSTIC_REVISION}"
     RENEGADE_DIAGNOSTIC_CONFIGURATION="$<CONFIG>")
+
+target_sources(RenegadeEngineBridge PRIVATE
+    src/ScreenLibraryService.cpp
+    include/renegade/bridge/ScreenLibraryService.h)

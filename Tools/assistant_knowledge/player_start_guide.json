@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "id": "player-start-placement",
+  "title": "Place a Player Start from Content/Player",
+  "status": "source_checked_prior_owner_checkpoint_native_service_pass",
+  "manual_path": "docs/PLAYER_AUTHORING_CONTINUATION.md",
+  "end_to_end_acceptance": {
+    "status": "source_checked_prior_owner_checkpoint_native_service_pass",
+    "date": "2026-10-14",
+    "receipt": "Tools/assistant_knowledge/PLAYER_START_VERIFICATION.md",
+    "steps_confirmed": [
+      "Content/Player placement and single-start contract recorded in owner-accepted checkpoint",
+      "Native PlayerPrefabTests passed placement, undo/redo, duplicate refusal and scene reopen",
+      "Native PlayerPrefabTests passed prefab save/load, local overrides and reset with Undo/Redo"
+    ],
+    "publication_approved": false,
+    "limits": [
+      "No new mouse-driven Studio walkthrough today",
+      "Existing Release test executable; not a fresh native build",
+      "Basic preset does not author a weapon, arms or world collision"
+    ]
+  },
+  "facts": [
+    {
+      "id": "browser",
+      "sources": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "bridge::EnsureBasicPlayerPrefab(playerProject.rootPath"
+        }
+      ]
+    },
+    {
+      "id": "placement",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerPrefabEditor.cpp",
+          "needle": "PlacePlayerPrefabAt(id,position);"
+        }
+      ]
+    },
+    {
+      "id": "single",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerPrefabEditor.cpp",
+          "needle": "PLAYER ALREADY PLACED // SELECT ITS INSPECTOR"
+        }
+      ]
+    },
+    {
+      "id": "preset",
+      "sources": [
+        {
+          "path": "EngineBridge/src/PlayerPrefabService.cpp",
+          "needle": "Basic Player Start"
+        }
+      ]
+    },
+    {
+      "id": "native-tests",
+      "sources": [
+        {
+          "path": "Tests/PlayerPrefabTests.cpp",
+          "needle": "\"browser placement\""
+        }
+      ]
+    },
+    {
+      "id": "prefab-controls",
+      "sources": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "playerPrefabSave_.SetText(\"SAVE AS PLAYER PREFAB\")"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "playerPrefabReset_.SetText(\"RESET TO PREFAB\")"
+        },
+        {
+          "path": "Studio/src/PlayerPrefabEditor.cpp",
+          "needle": "bridge::CapturePlayerPrefabBaseline(session_->Scenes().GetScene(),entity,d,error)"
+        }
+      ]
+    }
+  ]
+}

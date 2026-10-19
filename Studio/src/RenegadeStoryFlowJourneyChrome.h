@@ -62,7 +62,7 @@ namespace renegade::studio
             dirty_ = dirty;
             canUndo_ = canUndo;
             canRedo_ = canRedo;
-            zoom_ = std::clamp(zoom, 0.82f, 1.18f);
+            zoom_ = std::clamp(zoom, 0.05f, 1.18f);
             filterActive_ = filterActive;
         }
 
@@ -179,6 +179,8 @@ namespace renegade::studio
                 return;
 
             const XMFLOAT4 pointer = wi::input::GetPointer();
+            if (!graphViewActive_ && Contains(shell_.storyOverview, pointer) && wi::input::IsDoubleClicked())
+            { action_(Action::Fit); return; }
             static constexpr std::array<Action, 7> navActions = {
                 Action::Hub, Action::StoryFlow, Action::Levels,
                 Action::Screens, Action::Assets, Action::Variables,
@@ -227,7 +229,7 @@ namespace renegade::studio
                     (pointer.x - zoomTrackBounds_.x) /
                         std::max(1.0f, zoomTrackBounds_.width),
                     0.0f, 1.0f);
-                zoomRequested_(0.82f + fraction * (1.18f - 0.82f));
+                zoomRequested_(0.05f + fraction * (1.18f - 0.05f));
             }
             else if (!graphViewActive_ && Contains(zoomInBounds_, pointer))
                 action_(Action::ZoomIn);
@@ -655,7 +657,7 @@ namespace renegade::studio
             Text("-", zoomOutBounds_.x + 17.0f, zoomOutBounds_.y + 7.0f,
                 13, TextSecondary, cmd, wi::font::WIFALIGN_CENTER);
             const float fraction = std::clamp(
-                (zoom_ - 0.82f) / (1.18f - 0.82f), 0.0f, 1.0f);
+                (zoom_ - 0.05f) / (1.18f - 0.05f), 0.0f, 1.0f);
             Rounded({zoomTrackBounds_.x, bounds.y + 21.0f,
                 zoomTrackBounds_.width, 4.0f},
                 2.0f, Border, cmd);
@@ -686,7 +688,7 @@ namespace renegade::studio
             Rect(bounds.Right() - 1.0f, bounds.y, 1.0f, bounds.height, Border, cmd);
             Rect(bounds.x + 1.0f, bounds.y + 1.0f,
                 bounds.width - 2.0f, 23.0f, wi::Color(8, 15, 20, 244), cmd);
-            Text("STORY OVERVIEW", bounds.x + 10.0f,
+            Text("OVERVIEW // DOUBLE-CLICK FIT", bounds.x + 10.0f,
                 bounds.y + 7.0f, 8, TextSecondary, cmd);
         }
 

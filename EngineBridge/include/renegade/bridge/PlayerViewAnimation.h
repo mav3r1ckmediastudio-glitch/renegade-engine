@@ -25,6 +25,11 @@ namespace renegade::runtime
         std::string assemblyTrack;
     };
 
+    struct RuntimeReloadStageRequest {
+        bool dispatch = false, cancel = false, refillAmmo = false;
+        float seconds = 0;
+        PlayerViewAction action = PlayerViewAction::Reload;
+    };
     struct RuntimePlayerViewAnimationState
     {
         std::array<std::vector<RuntimePlayerViewAnimationClip>, 16> clips;
@@ -36,6 +41,11 @@ namespace renegade::runtime
         float blendDuration = 0.20f;
         bool initialized = false;
         bool pairedAssembly = false;
+        bool integratedAssembly = false;
+        bool spellPresentation = false, spellReleaseAccepted = false;
+        wi::ecs::Entity spellHoldClip = wi::ecs::INVALID_ENTITY;
+        unsigned spellPhase = 0; // Ready, Begin, Hold, Release/recovery.
+        float spellTime = 0;
         bool oneShotPlaying = false;
         bool aiming = false;
         bool equipped = true;
@@ -50,6 +60,9 @@ namespace renegade::runtime
         int loadedShells = 2;
         // Per-update acceptance pulse: only a successfully started, ammo-backed shot.
         bool shotAccepted = false;
+        bool reloadStagePlaying = false, reloadStageRefill = false;
+        bool reloadStageAccepted = false, reloadStageCompleted = false;
+        float reloadStageSeconds = 0;
         wi::ecs::Entity activeWeaponClip = wi::ecs::INVALID_ENTITY;
         float pairedTime = 0.0f;
         std::vector<wi::ecs::Entity> ownedAssemblyClips;
@@ -326,6 +339,15 @@ namespace renegade::runtime
                 if (!bridge::CaptureFirearmSettings(metadata, state.firearm, error)) return false;
                 state.loadedShells = state.firearm.capacity;
                 state.pairedAssembly = true;
+                state.integratedAssembly = metadata.bool_values.has("renegade.first_person.assembly.integrated_weapon") && metadata.bool_values.get("renegade.first_person.assembly.integrated_weapon");
+            }
+        }
+        for(size_t i=0;i<scene.metadatas.GetCount();++i) {
+            const auto entity=scene.metadatas.GetEntity(i);const auto& m=scene.metadatas[i];
+            if((entity==rig.viewModelRoot || scene.Entity_IsDescendant(entity,rig.viewModelRoot)) &&
+               m.bool_values.has("renegade.first_person.spell") && m.bool_values.get("renegade.first_person.spell")) {
+                if(state.spellPresentation || state.pairedAssembly){error="Conflicting spell presentation roots.";return false;}
+                state.spellPresentation=true;state.loadedShells=0;
             }
         }
         const auto available =
@@ -346,6 +368,16 @@ namespace renegade::runtime
             if (clip.entity == wi::ecs::INVALID_ENTITY)
                 continue;
 
+            if(state.spellPresentation) {
+                auto* native=scene.animations.GetComponent(clip.entity);
+                if(!native || !std::isfinite(native->start) || !std::isfinite(native->end) || native->end<=native->start){error="Invalid spell clip timeline.";return false;}
+                state.ownedAssemblyClips.push_back(clip.entity);native->Pause();native->amount=0;
+                const auto* m=scene.metadatas.GetComponent(clip.entity);
+                if(m && m->bool_values.has("renegade.first_person.spell.hold") && m->bool_values.get("renegade.first_person.spell.hold")) {
+                    if(state.spellHoldClip!=wi::ecs::INVALID_ENTITY){error="Multiple spell hold tracks.";return false;}
+                    state.spellHoldClip=clip.entity;continue;
+                }
+            }
             std::string assemblyTrack;
             if (state.pairedAssembly)
             {
@@ -430,7 +462,7 @@ namespace renegade::runtime
                     [](const auto& clip) { return clip.assemblyTrack == "arms"; });
                 const auto weapon = std::count_if(variants.begin(), variants.end(),
                     [](const auto& clip) { return clip.assemblyTrack == "weapon"; });
-                if (variants.size() != 2 || arms != 1 || weapon != 1)
+                if ((state.integratedAssembly && (variants.size() != 1 || arms != 1)) || (!state.integratedAssembly && (variants.size() != 2 || arms != 1 || weapon != 1)))
                 {
                     error = "Each assembly action requires one arms and one weapon track.";
                     ResetRuntimePlayerViewAnimations(scene, state); return false;
@@ -441,6 +473,11 @@ namespace renegade::runtime
                 error = "Runtime assembly requires an explicit Idle pair.";
                 ResetRuntimePlayerViewAnimations(scene, state); return false;
             }
+        }
+        if(state.spellPresentation) {
+            if(state.spellHoldClip==wi::ecs::INVALID_ENTITY){error="Missing spell hold track.";return false;}
+            for(auto action:{PlayerViewAction::Idle,PlayerViewAction::Charge,PlayerViewAction::Release})
+                if(state.clips[PlayerViewActionIndex(action)].size()!=1){error="Spell actions require one explicit arms clip.";return false;}
         }
         state.initialized = true;
         return true;
@@ -492,15 +529,16 @@ namespace renegade::runtime
 
         if (state.pairedAssembly)
         {
-            if (variants->size() != 2) return false;
+            if (variants->size() != 2 && !state.integratedAssembly) return false;
             const auto arms = std::find_if(variants->begin(), variants->end(),
                 [](const auto& clip) { return clip.assemblyTrack == "arms"; });
             const auto weapon = std::find_if(variants->begin(), variants->end(),
                 [](const auto& clip) { return clip.assemblyTrack == "weapon"; });
-            if (arms == variants->end() || weapon == variants->end() ||
-                !scene.animations.Contains(arms->entity) || !scene.animations.Contains(weapon->entity))
+            if (arms == variants->end() || (!state.integratedAssembly && weapon == variants->end()) ||
+                !scene.animations.Contains(arms->entity) || (!state.integratedAssembly && !scene.animations.Contains(weapon->entity)))
                 return false;
-            const bool changed = state.activeClip != arms->entity || state.activeWeaponClip != weapon->entity;
+            const auto weaponEntity=state.integratedAssembly?arms->entity:weapon->entity;
+            const bool changed = state.activeClip != arms->entity || state.activeWeaponClip != weaponEntity;
             if (changed)
             {
                 for (const auto entity : state.ownedAssemblyClips)
@@ -509,9 +547,9 @@ namespace renegade::runtime
                 state.pairedTime = 0;
             }
             state.activeClip = arms->entity;
-            state.activeWeaponClip = weapon->entity;
+            state.activeWeaponClip = weaponEntity;
             state.activeAction = requested;
-            state.resolvedClipName = arms->name + " + " + weapon->name;
+            state.resolvedClipName = state.integratedAssembly ? arms->name : arms->name + " + " + weapon->name;
             state.outgoingClip = wi::ecs::INVALID_ENTITY;
             state.blendDuration = 0;
             for (const auto entity : {state.activeClip, state.activeWeaponClip})
@@ -593,6 +631,64 @@ namespace renegade::runtime
         return true;
     }
 
+    // Spell gameplay ownership stays in EquipmentActionState; native Wicked evaluates
+    // these arms-only clips. No firearm/chamber state participates in casting.
+    inline void UpdateRuntimeSpellPresentation(wi::scene::Scene& scene,RuntimePlayerViewAnimationState& state,
+        PlayerViewAction requested,float dt,bool chargeHeld,bool releasePressed,bool cancel,bool toggle) noexcept {
+        state.spellReleaseAccepted=false;
+        if(!std::isfinite(dt)||dt<=0)return;
+        if(cancel){state.spellPhase=0;state.spellTime=0;state.oneShotPlaying=false;}
+        if(toggle && state.spellPhase==0) {
+            state.equipped=!state.equipped;state.spellTime=0;
+
+        }
+        if(state.equipped && !cancel && releasePressed && state.spellPhase!=3) {
+            state.spellPhase=3;state.spellTime=0;
+            state.spellReleaseAccepted=true;
+        } else if(state.equipped && chargeHeld && state.spellPhase==0 && !cancel) {
+            state.spellPhase=1;state.spellTime=0;
+        } else if(!chargeHeld && !releasePressed && (state.spellPhase==1 || state.spellPhase==2)) {
+            state.spellPhase=0;state.spellTime=0;
+        }
+        const auto action=!state.equipped?PlayerViewAction::Unequip:
+            state.spellPhase==1 || state.spellPhase==2?PlayerViewAction::Charge:
+            state.spellPhase==3?PlayerViewAction::Release:requested;
+        if(state.spellPhase==2) {
+            if(state.activeClip!=state.spellHoldClip) {
+                state.outgoingClip=state.activeClip;state.activeClip=state.spellHoldClip;
+                state.blendElapsed=0;state.blendDuration=.12f;state.spellTime=0;
+            }
+            state.activeAction=PlayerViewAction::Charge;state.resolvedClipName="Spell / Hold";
+        } else {
+            const auto previous=state.activeClip;
+            if(!RequestRuntimePlayerViewAnimation(scene,state,action)) {
+                state.spellReleaseAccepted=false;state.oneShotPlaying=false;state.spellPhase=0;return;
+            }
+            if(previous!=state.activeClip)state.spellTime=0;
+        }
+        auto* active=scene.animations.GetComponent(state.activeClip);if(!active)return;
+        const float duration=active->end-active->start;
+        if(!std::isfinite(duration)||duration<=0){state.spellReleaseAccepted=false;state.spellPhase=0;state.oneShotPlaying=false;return;}
+        state.spellTime+=dt;
+        const bool once=state.spellPhase==1 || state.spellPhase==3 || !state.equipped;
+        state.pairedTime=once?std::min(state.spellTime,duration):std::fmod(state.spellTime,duration);
+        active->Pause();active->RootMotionOff();active->timer=active->start+state.pairedTime;
+        active->last_update_time=-std::numeric_limits<float>::max();
+        if(auto* outgoing=scene.animations.GetComponent(state.outgoingClip)) {
+            outgoing->Pause();outgoing->RootMotionOff();
+            outgoing->timer=std::min(outgoing->timer+dt,outgoing->end);outgoing->last_update_time=-std::numeric_limits<float>::max();
+        }
+        state.blendElapsed+=dt;
+        const float weight=state.blendDuration>0?std::min(state.blendElapsed/state.blendDuration,1.f):1.f;
+        ApplyPlayerViewAnimationBlend(scene,state,weight,1-weight);
+        if(weight>=1)state.outgoingClip=wi::ecs::INVALID_ENTITY;
+        state.oneShotPlaying=state.spellPhase==3;
+        if(state.spellTime>=duration) {
+            if(state.spellPhase==1){state.spellPhase=2;state.spellTime=0;}
+            else if(state.spellPhase==3){state.spellPhase=0;state.oneShotPlaying=false;state.spellTime=0;}
+        }
+    }
+
     inline void UpdateRuntimePlayerViewAnimations(
         wi::scene::Scene& scene,
         RuntimePlayerViewAnimationState& state,
@@ -605,12 +701,17 @@ namespace renegade::runtime
         const bool grounded = true,
         const bool chargeHeld = false,
         const bool releasePressed = false,
-        const bool offHandBlockHeld = false, const float meleeLookYaw = 0, const float meleeLookPitch = 0, const bool cancelMelee = false) noexcept
+        const bool offHandBlockHeld = false, const float meleeLookYaw = 0, const float meleeLookPitch = 0, const bool cancelMelee = false, const RuntimeReloadStageRequest* reloadStage = nullptr) noexcept
     {
         state.shotAccepted = false;
+        state.reloadStageAccepted = state.reloadStageCompleted = false;
         if (!state.initialized)
             return;
 
+        if(state.spellPresentation) {
+            UpdateRuntimeSpellPresentation(scene,state,requested,dt,chargeHeld,releasePressed,cancelMelee,toggleEquipmentPressed);
+            return;
+        }
         if(state.handLayers.enabled) {
             UpdateRuntimePlayerHandAnimations(scene,state.handLayers,requested,dt,firePressed,offHandBlockHeld,chargeHeld,releasePressed,meleeLookYaw,meleeLookPitch,cancelMelee);
             state.activeClip=state.handLayers.right;state.activeAction=state.handLayers.action;
@@ -635,6 +736,10 @@ namespace renegade::runtime
                 state.wasGrounded = grounded;
                 state.groundKnown = true;
             }
+            if(advancing && reloadStage && reloadStage->cancel && state.reloadStagePlaying) {
+                state.oneShotPlaying=false;state.reloadStagePlaying=false;state.reloadStageRefill=false;
+                state.activeClip=wi::ecs::INVALID_ENTITY;
+            }
             PlayerViewAction next = !state.equipped ? PlayerViewAction::Unequip :
                 state.aiming ? PlayerViewAction::AimIn : requested;
             const auto startAction = [&](const PlayerViewAction action) {
@@ -644,11 +749,32 @@ namespace renegade::runtime
                 state.oneShotPlaying = true;
                 return true;
             };
+            const auto validStagePair=[&](PlayerViewAction action) {
+                const auto& pair=state.clips[PlayerViewActionIndex(action)];
+                bool arms=false,weapon=false,positive=false;
+                if(pair.size()!=2 && !state.integratedAssembly)return false;
+                for(const auto& part:pair) {
+                    const auto* clip=scene.animations.GetComponent(part.entity);
+                    if(!clip || !std::isfinite(clip->start) || !std::isfinite(clip->end) || clip->end<clip->start)return false;
+                    arms|=part.assemblyTrack=="arms";weapon|=part.assemblyTrack=="weapon";positive|=clip->end>clip->start;
+                }
+                return arms && (state.integratedAssembly || weapon) && positive;
+            };
             if (state.oneShotPlaying)
                 next = state.activeAction;
             else if (advancing && state.equipped && releasePressed)
             {
                 if (startAction(PlayerViewAction::Release)) state.aiming = false;
+            }
+            else if (advancing && state.equipped && reloadStage && reloadStage->dispatch)
+            {
+                if((reloadStage->action==PlayerViewAction::Reload || reloadStage->action==PlayerViewAction::ReloadPartial) &&
+                   state.loadedShells<state.firearm.capacity && std::isfinite(reloadStage->seconds) &&
+                   reloadStage->seconds>0 && reloadStage->seconds<=60 && validStagePair(reloadStage->action) && startAction(reloadStage->action)) {
+                    state.reloadStagePlaying=true;state.reloadStageRefill=reloadStage->refillAmmo;
+                    state.reloadStageSeconds=reloadStage->seconds;
+                    state.reloadStageAccepted=true;state.aiming=false;
+                }
             }
             else if (advancing && toggleEquipmentPressed)
             {
@@ -723,7 +849,7 @@ namespace renegade::runtime
                 (next == PlayerViewAction::Attack || next == PlayerViewAction::AimAttack);
             if (!RequestRuntimePlayerViewAnimation(scene, state, next))
             {
-                state.oneShotPlaying = false;
+                state.oneShotPlaying = false;state.reloadStagePlaying=false;state.reloadStageAccepted=false;
                 return;
             }
             if (startingShot) {
@@ -734,7 +860,8 @@ namespace renegade::runtime
             auto* arms = scene.animations.GetComponent(state.activeClip);
             auto* weapon = scene.animations.GetComponent(state.activeWeaponClip);
             if (arms == nullptr || weapon == nullptr) return;
-            const float duration = std::max(arms->end - arms->start, weapon->end - weapon->start);
+            const float duration = state.reloadStagePlaying?state.reloadStageSeconds:
+                std::max(arms->end - arms->start, weapon->end - weapon->start);
             if (std::isfinite(dt) && dt > 0 && duration > 0)
             {
                 if (state.oneShotPlaying)
@@ -743,8 +870,11 @@ namespace renegade::runtime
                     if (state.pairedTime >= duration)
                     {
                         if (state.activeAction == PlayerViewAction::Reload ||
-                            state.activeAction == PlayerViewAction::ReloadPartial)
-                            state.loadedShells = state.firearm.capacity;
+                            state.activeAction == PlayerViewAction::ReloadPartial) {
+                            if(!state.reloadStagePlaying || state.reloadStageRefill)state.loadedShells=state.firearm.capacity;
+                            state.reloadStageCompleted=state.reloadStagePlaying;
+                            state.reloadStagePlaying=false;state.reloadStageRefill=false;
+                        }
                         if (state.activeAction == PlayerViewAction::JumpLand)
                             state.jumpCycleActive = false;
                         if (state.activeAction == PlayerViewAction::Equip)
@@ -774,8 +904,11 @@ namespace renegade::runtime
                 else
                     state.pairedTime = std::fmod(state.pairedTime + dt, duration);
             }
-            else if (duration <= 0)
+            else if (duration <= 0) {
                 state.oneShotPlaying = false;
+                // An invalid pair never grants stage completion or ammunition.
+                state.reloadStagePlaying=false;state.reloadStageAccepted=false;
+            }
             // Wicked evaluates native channels during the normal Scene update.
             // Paused tracks prevent a second timer advance. Short tracks hold.
             for (auto* clip : {arms, weapon})

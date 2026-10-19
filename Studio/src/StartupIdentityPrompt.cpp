@@ -113,6 +113,18 @@ namespace renegade::studio
             return;
 
         const auto now = std::chrono::steady_clock::now();
+        if (active_ && now - lastExternalIdentityCheck_ >= std::chrono::milliseconds(250))
+        {
+            lastExternalIdentityCheck_ = now;
+            if (const auto chosen = StudioUserPreferences::LoadDeveloperIdentity())
+            {
+                identity_ = *chosen;
+                cursorIndex_ = identity_.size();
+                lastError_.clear(); completed_ = true; active_ = false;
+                InvalidateRect(window_, nullptr, FALSE); UpdateWindow(window_);
+                return;
+            }
+        }
         const auto elapsed = now - startedAt_;
         const auto typed = static_cast<std::size_t>(
             std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() /

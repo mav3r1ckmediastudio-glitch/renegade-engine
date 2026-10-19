@@ -117,11 +117,29 @@ namespace renegade::bridge
             error = "Projectile requires a name, valid identity and bounded flight values.";
             return false;
         }
+        if(!std::isfinite(d.fullChargeSeconds) || d.fullChargeSeconds<0 || d.fullChargeSeconds>60 ||
+           !std::isfinite(d.minimumChargeDamage) || d.minimumChargeDamage<0 ||
+           d.minimumChargeDamage>d.damage || (d.fullChargeSeconds==0 && d.minimumChargeDamage!=0)) {
+            error="Projectile charge policy requires bounded duration and minimum damage.";return false;
+        }
+        if(!ValidBurningPayload(d.burning) || !ValidBurningPayload(d.minimumChargeBurning) ||
+           d.minimumChargeBurning.damagePerSecond>d.burning.damagePerSecond ||
+           d.minimumChargeBurning.durationSeconds>d.burning.durationSeconds) {
+            error="Invalid projectile burning range.";return false;
+        }
         if(d.flightEffects.size()>2 || unsigned(d.impactEffect)>4 ||
            !std::isfinite(d.stuckLifetimeSeconds)||d.stuckLifetimeSeconds<.1f||d.stuckLifetimeSeconds>120 ||
            !std::isfinite(d.embedDepthMetres)||d.embedDepthMetres<0||d.embedDepthMetres>2 ||
            (d.stickOnImpact && d.meshAssetId.empty())) {
             error="Stick needs a visible model; retained lifetime/depth and effect values must be bounded.";return false;
+        }
+        if(d.grenade.enabled &&
+           (!ValidGrenadePhysics(d.grenade) ||
+            d.grenade.fuseSeconds>d.lifetimeSeconds ||
+            d.stickOnImpact || d.fireballPresentation ||
+            d.fullChargeSeconds>0 || d.burning.durationSeconds>0)) {
+            error="Grenade fuse, radius, bounce and explosion policy invalid or incompatible.";
+            return false;
         }
         for(const auto& effect:d.flightEffects) {
             if(unsigned(effect.kind)==0||unsigned(effect.kind)>4 ||
@@ -142,14 +160,42 @@ namespace renegade::bridge
         json effects=json::array();
         for(const auto& e:d.flightEffects)effects.push_back({{"kind",unsigned(e.kind)},{"offset",e.offset},
             {"size_metres",e.sizeMetres},{"rate",e.particlesPerSecond},{"life_seconds",e.particleLifeSeconds}});
-        text = json{{"format","renegade-projectile"},{"schema_version",3},
+        json document{{"format","renegade-projectile"},{"schema_version",3},
             {"project_id",d.projectId},{"asset_id",d.assetId},{"name",d.name},
             {"speed_metres_per_second",d.speedMetresPerSecond},{"gravity_scale",d.gravityScale},
             {"lifetime_seconds",d.lifetimeSeconds},{"damage",d.damage},
             {"mesh_asset_id",d.meshAssetId},{"visual_scale",d.visualScale},
             {"visual_rotation_degrees",d.visualRotationDegrees},{"flight_effects",effects},
             {"impact_effect",unsigned(d.impactEffect)},{"stick_on_impact",d.stickOnImpact},
-            {"stuck_lifetime_seconds",d.stuckLifetimeSeconds},{"embed_depth_metres",d.embedDepthMetres}}.dump(2);
+            {"stuck_lifetime_seconds",d.stuckLifetimeSeconds},{"embed_depth_metres",d.embedDepthMetres}};
+        if(d.fireballPresentation){document["schema_version"]=4;document["fireball_presentation"]=true;}
+        if(d.fullChargeSeconds>0 || d.scorchOnImpact || d.burning.durationSeconds>0) {
+            document["schema_version"]=5;
+            document["fireball_presentation"]=d.fireballPresentation;
+            document["full_charge_seconds"]=d.fullChargeSeconds;
+            document["minimum_charge_damage"]=d.minimumChargeDamage;
+            document["scorch_on_impact"]=d.scorchOnImpact;
+        }
+        if(d.burning.durationSeconds>0) {
+            document["schema_version"]=6;
+            document["burning"]={{"damage_per_second",d.burning.damagePerSecond},{"duration_seconds",d.burning.durationSeconds},
+                {"minimum_damage_per_second",d.minimumChargeBurning.damagePerSecond},{"minimum_duration_seconds",d.minimumChargeBurning.durationSeconds}};
+        }
+        if(d.grenade.enabled){
+            document["schema_version"]=7;
+            document["fireball_presentation"]=false;
+            document["full_charge_seconds"]=0.f;
+            document["minimum_charge_damage"]=0.f;
+            document["scorch_on_impact"]=d.scorchOnImpact;
+            document["burning"]={{"damage_per_second",0.f},{"duration_seconds",0.f},
+                {"minimum_damage_per_second",0.f},{"minimum_duration_seconds",0.f}};
+            const auto& g=d.grenade;
+            document["grenade"]={{"radius",g.radius},{"fuse_seconds",g.fuseSeconds},
+                {"restitution",g.restitution},{"friction",g.surfaceFriction},
+                {"settle_speed",g.settleSpeed},{"blast_radius",g.blastRadius},
+                {"blast_damage",g.blastDamage}};
+        }
+        text=document.dump(2);
         return true;
     }
 
@@ -162,7 +208,11 @@ namespace renegade::bridge
                 !j.at("schema_version").is_number_integer() ||
                 !((j.at("schema_version") == 1 && j.size() == 9) ||
                   (j.at("schema_version") == 2 && j.size() == 12) ||
-                  (j.at("schema_version") == 3 && j.size() == 17)))
+                  (j.at("schema_version") == 3 && j.size() == 17) ||
+                  (j.at("schema_version") == 4 && j.size() == 18) ||
+                  (j.at("schema_version") == 5 && j.size() == 21) ||
+                  (j.at("schema_version") == 6 && j.size() == 22) ||
+                  (j.at("schema_version") == 7 && j.size() == 23)))
                 throw std::runtime_error("Unsupported projectile schema.");
             for (const char* field : {"speed_metres_per_second","gravity_scale","lifetime_seconds","damage"})
                 if (!j.at(field).is_number()) throw std::runtime_error("Projectile flight values must be numeric.");
@@ -185,7 +235,7 @@ namespace renegade::bridge
                 d.visualScale = j.at("visual_scale").get<float>();
                 d.visualRotationDegrees = j.at("visual_rotation_degrees").get<std::array<float,3>>();
             }
-            if(j.at("schema_version")==3) {
+            if(j.at("schema_version")>=3) {
                 const auto& effects=j.at("flight_effects");
                 if(!effects.is_array()||effects.size()>2)throw std::runtime_error("Invalid flight effect list.");
                 for(const auto& e:effects) {
@@ -203,6 +253,42 @@ namespace renegade::bridge
                 d.stickOnImpact=j.at("stick_on_impact").get<bool>();
                 d.stuckLifetimeSeconds=j.at("stuck_lifetime_seconds").get<float>();
                 d.embedDepthMetres=j.at("embed_depth_metres").get<float>();
+            }
+            if(j.at("schema_version")>=4) {
+                if(!j.at("fireball_presentation").is_boolean())throw std::runtime_error("Fireball presentation must be boolean.");
+                d.fireballPresentation=j.at("fireball_presentation").get<bool>();
+            }
+            if(j.at("schema_version")>=5) {
+                if(!j.at("full_charge_seconds").is_number() || !j.at("minimum_charge_damage").is_number() ||
+                   !j.at("scorch_on_impact").is_boolean()) throw std::runtime_error("Invalid projectile charge/scorch policy.");
+                d.fullChargeSeconds=j.at("full_charge_seconds").get<float>();
+                d.minimumChargeDamage=j.at("minimum_charge_damage").get<float>();
+                d.scorchOnImpact=j.at("scorch_on_impact").get<bool>();
+            }
+            if(j.at("schema_version")>=6) {
+                const auto& b=j.at("burning");
+                if(!b.is_object() || b.size()!=4)throw std::runtime_error("Invalid burning policy.");
+                for(const char* key:{"damage_per_second","duration_seconds","minimum_damage_per_second","minimum_duration_seconds"})
+                    if(!b.at(key).is_number())throw std::runtime_error("Burning values must be numeric.");
+                d.burning={b.at("damage_per_second").get<float>(),b.at("duration_seconds").get<float>()};
+                d.minimumChargeBurning={b.at("minimum_damage_per_second").get<float>(),b.at("minimum_duration_seconds").get<float>()};
+            }
+            if(j.at("schema_version")==7) {
+                const auto& g=j.at("grenade");
+                if(!g.is_object() || g.size()!=7)
+                    throw std::runtime_error("Grenade policy must contain seven numeric settings.");
+                for(const char* key:{"radius","fuse_seconds","restitution","friction",
+                                    "settle_speed","blast_radius","blast_damage"})
+                    if(!g.at(key).is_number())
+                        throw std::runtime_error("Grenade policy values must be numeric.");
+                d.grenade.enabled=true;
+                d.grenade.radius=g.at("radius").get<float>();
+                d.grenade.fuseSeconds=g.at("fuse_seconds").get<float>();
+                d.grenade.restitution=g.at("restitution").get<float>();
+                d.grenade.surfaceFriction=g.at("friction").get<float>();
+                d.grenade.settleSpeed=g.at("settle_speed").get<float>();
+                d.grenade.blastRadius=g.at("blast_radius").get<float>();
+                d.grenade.blastDamage=g.at("blast_damage").get<float>();
             }
             if (!ValidateProjectileAsset(d, error)) return false;
             out=std::move(d); error.clear(); return true;
@@ -323,6 +409,8 @@ namespace renegade::bridge
         result.acceleration={0,-9.81f*d.gravityScale,0};
         result.lifetimeSeconds=d.lifetimeSeconds;
         result.damage=d.damage;
+        result.burning=d.burning;
+        result.grenade=d.grenade;
         return result;
     }
 }

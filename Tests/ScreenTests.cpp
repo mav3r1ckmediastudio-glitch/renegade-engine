@@ -237,6 +237,50 @@ int main()
     }
     fs::remove(secondScreen);
 
+    // Optional v3 safe area constrains only root anchors; fixed and nested
+    // geometry uses the same shared resolver as Runtime drawing/hit testing.
+    {
+        auto safeDocument=document;
+        safeDocument.envelope.documentId=GenerateStableId();
+        safeDocument.envelope.pathHint="Content/UI/Renamed/SafeArea.renegade-screen";
+        safeDocument.safeArea={24.0f,32.0f,48.0f,40.0f};
+        ScreenWidget nested;
+        nested.id=GenerateStableId();nested.kind=ScreenWidgetKind::Text;
+        nested.name="Nested Anchor";nested.text="NESTED";
+        nested.parentId=safeDocument.widgets[0].id;
+        nested.layoutMode=ScreenLayoutMode::Anchored;
+        nested.anchors={0,0,0,0,30,40,190,80};
+        nested.style=MakeScreenWidgetStyleTemplate(nested.kind,40.0f);
+        safeDocument.widgets.push_back(nested);
+        ScreenRect anchored{},absolute{},child{};
+        if(!ResolveScreenWidgetRect(safeDocument,safeDocument.widgets[3].id,anchored,error) ||
+           !ResolveScreenWidgetRect(safeDocument,safeDocument.widgets[0].id,absolute,error) ||
+           !ResolveScreenWidgetRect(safeDocument,nested.id,child,error) ||
+           anchored.x!=428||anchored.y!=472||anchored.width!=400||
+           absolute.x!=0||absolute.y!=0||absolute.width!=1280||
+           child.x!=30||child.y!=40||child.width!=160||child.height!=40)
+            return Fail(temporary.path,"Safe-area root anchoring changed absolute/nested layout or missed the inset");
+        const auto safePath=actualScreen.parent_path()/"SafeArea.renegade-screen";
+        if(!WriteScreenDocument(safePath.generic_u8string(),safeDocument,error))
+            return Fail(temporary.path,"Safe-area Screen failed to save");
+        ScreenDocument reopenedSafe;
+        if(!ReadScreenDocument(safePath.generic_u8string(),projectId,reopenedSafe,error) ||
+           reopenedSafe.safeArea.left!=24||reopenedSafe.safeArea.top!=32||
+           reopenedSafe.safeArea.right!=48||reopenedSafe.safeArea.bottom!=40||
+           !ResolveScreenWidgetRect(reopenedSafe,reopenedSafe.widgets[3].id,anchored,error)||
+           anchored.x!=428||anchored.y!=472)
+            return Fail(temporary.path,"Safe-area Screen failed save/reopen or changed shared geometry");
+        safeDocument.safeArea={-1,0,0,0};
+        if(ValidateScreenDocument(safeDocument,projectId,error))
+            return Fail(temporary.path,"Negative Screen safe area was accepted");
+        safeDocument.safeArea={640,0,640,0};
+        if(ValidateScreenDocument(safeDocument,projectId,error))
+            return Fail(temporary.path,"Safe area was allowed to eliminate the viewport");
+        safeDocument.safeArea={24,32,48,40};safeDocument.schemaVersion=2;
+        if(ValidateScreenDocument(safeDocument,projectId,error))
+            return Fail(temporary.path,"Legacy Screen accepted v3 safe-area margins");
+    }
+
     const fs::path legacyPath = root / "Content/UI/Legacy.renegade-screen";
     const StableId legacyDocumentId = GenerateStableId();
     const StableId legacyWidgetId = GenerateStableId();
@@ -260,7 +304,7 @@ int main()
     ScreenDocument migratedLegacy;
     if (!ReadScreenDocument(
             legacyPath.generic_u8string(), projectId, migratedLegacy, error) ||
-        migratedLegacy.schemaVersion != ScreenDocument::CurrentSchemaVersion ||
+        migratedLegacy.schemaVersion != 2 ||
         migratedLegacy.migratedFromVersion != 1 ||
         migratedLegacy.widgets[0].style.normal.background.red != 18 ||
         migratedLegacy.widgets[0].style.text.fontResource != BuiltinScreenFont)

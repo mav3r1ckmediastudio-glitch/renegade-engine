@@ -12,13 +12,11 @@ namespace renegade::runtime
         // Character discovery, native navigation and bounded AI cognition stay
         // here rather than introducing another Runtime or Scene owner.
         const std::uint64_t sceneRevision = scenes_.Revision();
-        const bool hasLevel = !scenes_.CurrentPath().empty() &&
-            !screenPresenter_.IsLoaded();
+        const bool hasLevel = !scenes_.CurrentPath().empty();
 
-        // A Screen destination is not an active gameplay Level. Explicitly
-        // deactivate any Character controllers retained by the current Scene,
-        // clear all transient AI state, and clear synchronization authority so
-        // returning to a Level performs fresh deterministic setup.
+        // A retained Level remains gameplay authority while UI is displayed.
+        // Composition controls input and pause independently. Clear gameplay
+        // state only when no Level is loaded, never merely because a menu opened.
         if (!hasLevel)
         {
             ResetRuntimeCombat(combatState_);
@@ -630,7 +628,46 @@ namespace renegade::runtime
             {"scene_attempt_revision", characterSceneAttemptRevision_}},
             "Runtime/src/RuntimeLiveDiagnostics.cpp");
 
+        XMFLOAT3 diagnosticCharacterPosition{};
+        if(!characterAiState_.characters.empty())
+            if(const auto* t=scenes_.GetScene().transforms.GetComponent(characterAiState_.characters.front().entity))
+                diagnosticCharacterPosition=t->GetPosition();
+        const auto* projectileTargetHealth=FindCharacterCombat(combatState_,projectiles_.lastContact.targetSubjectId);
+        XMFLOAT3 diagnosticPlayerPosition{};
+        if(const auto* t=scenes_.GetScene().transforms.GetComponent(player_.entity))diagnosticPlayerPosition=t->GetPosition();
+        std::string burnRegions;
+        if(!burning_.entries.empty()) {
+            const auto& body=burning_.entries.front();
+            for(unsigned i=0;i<RuntimeBurningStatus::FlameCount;++i) {
+                const auto* emitter=scenes_.GetScene().emitters.GetComponent(body.emitters[i]);
+                const auto* name=scenes_.GetScene().names.GetComponent(body.bones[i]);
+                if(emitter)burnRegions+=std::to_string(i)+":"+(name?name->name:"?")+":"+
+                    std::to_string(emitter->center.x)+","+std::to_string(emitter->center.y)+","+
+                    std::to_string(emitter->center.z)+";";
+            }
+        }
         diagnosticService_.Observe("projectiles", {
+            {"burn_region_positions",burnRegions},
+            {"player_x",std::to_string(diagnosticPlayerPosition.x)},
+            {"player_y",std::to_string(diagnosticPlayerPosition.y)},
+            {"player_z",std::to_string(diagnosticPlayerPosition.z)},
+            {"player_spawn_z",std::to_string(player_.spawnPosition.z)},
+            {"player_yaw",std::to_string(player_.yaw)},
+            {"first_character_x",std::to_string(diagnosticCharacterPosition.x)},
+            {"first_character_y",std::to_string(diagnosticCharacterPosition.y)},
+            {"first_character_z",std::to_string(diagnosticCharacterPosition.z)},
+            {"channel_active",channel_.active},
+            {"channel_ticks",static_cast<std::uint64_t>(channel_.ticks)},
+            {"channel_starts",static_cast<std::uint64_t>(channel_.starts)},
+            {"channel_target",channel_.lastImpact.contact.targetSubjectId},
+            {"channel_target_health",FindCharacterCombat(combatState_,channel_.lastImpact.contact.targetSubjectId)?
+                std::to_string(FindCharacterCombat(combatState_,channel_.lastImpact.contact.targetSubjectId)->health):std::string{}},
+            {"channel_visuals",channelVisual_.root==wi::ecs::INVALID_ENTITY?0ull:4ull},
+            {"active_burns",static_cast<std::uint64_t>(burning_.entries.size())},
+            {"burn_remaining",burning_.entries.empty()?std::string{}:std::to_string(burning_.entries.front().remaining)},
+            {"burn_damage_per_second",burning_.entries.empty()?std::string{}:std::to_string(burning_.entries.front().damagePerSecond)},
+            {"projectile_target_health",projectileTargetHealth?std::to_string(projectileTargetHealth->health):std::string{}},
+            {"impact_marks",static_cast<std::uint64_t>(projectileVisuals_.impactDecals.size())},
             {"projectile_generation", projectiles_.generation},
             {"projectile_launched", projectiles_.launched},
             {"projectile_impacted", projectiles_.impacted},
@@ -658,6 +695,29 @@ namespace renegade::runtime
             {"projectile_launch_z", std::to_string(projectiles_.lastLaunchPosition.z)},
             {"player_loaded_shells", static_cast<std::uint64_t>(std::max(0,playerViewAnimation_.loadedShells))}}, "Runtime/src/RuntimeApplication.cpp");
 
+        const auto* uiPlayerTransform=scenes_.GetScene().transforms.GetComponent(player_.entity);
+        const XMFLOAT3 uiPlayerPosition=uiPlayerTransform?uiPlayerTransform->GetPosition():XMFLOAT3(0,0,0);
+        // Opt-in Natural Lightning playground: live GPU/scene visibility audit.
+        // Does not affect gameplay events or project contents.
+        const auto& visualStorm=lightningStorm_.natural;
+        const auto& visualScene=scenes_.GetScene();
+        diagnosticService_.Observe("lightning", {
+            {"storm_active",lightningStorm_.active},
+            {"natural_enabled",lightningStorm_.naturalEnabled},
+            {"natural_driven",visualStorm.driven},
+            {"natural_root_valid",visualStorm.root!=wi::ecs::INVALID_ENTITY},
+            {"natural_live_lands",static_cast<std::uint64_t>(visualStorm.liveLands)},
+            {"natural_visible_ticks",static_cast<std::uint64_t>(visualStorm.visibleTicks)},
+            {"natural_live_clock",std::to_string(visualStorm.liveClock)},
+            {"natural_last_x",std::to_string(visualStorm.lastLand.x)},
+            {"natural_last_y",std::to_string(visualStorm.lastLand.y)},
+            {"natural_last_z",std::to_string(visualStorm.lastLand.z)},
+            {"natural_slot0_bolt",visualScene.materials.Contains(visualStorm.slots[0].bolt)},
+            {"natural_slot0_ground",visualScene.materials.Contains(visualStorm.slots[0].ground)},
+            {"natural_gpu_frame0",visualStorm.lightning[0][0].IsValid()},
+            {"natural_bolt_visible_scale",visualScene.transforms.GetComponent(visualStorm.slots[0].bolt)?
+                std::to_string(visualScene.transforms.GetComponent(visualStorm.slots[0].bolt)->scale_local.x):std::string("none")}},
+            "Runtime/src/RuntimeLiveDiagnostics.cpp");
         diagnosticService_.Observe("runtime", {
             {"project", startupResult_.projectDescriptorPath},
             {"scene", scenes_.CurrentPath()},
@@ -668,6 +728,10 @@ namespace renegade::runtime
             {"scene_revision", scenes_.Revision()}, {"paused", paused_},
             {"quit_requested", quitRequested_}, {"player_spawned", player_.IsSpawned()},
             {"player_view_rig_spawned", playerViewRig_.IsSpawned()},
+            {"player_position_x", std::to_string(uiPlayerPosition.x)},
+            {"player_position_y", std::to_string(uiPlayerPosition.y)},
+            {"player_position_z", std::to_string(uiPlayerPosition.z)},
+            {"player_yaw", std::to_string(player_.yaw)},
             {"player_primary_hand_socket",
                 playerViewRig_.primaryHandSocket != wi::ecs::INVALID_ENTITY},
             {"player_off_hand_socket",
@@ -732,9 +796,104 @@ namespace renegade::runtime
             {"last_event_target", creatorScripts_.LastEventTarget()},
             {"audio_scene_synced", audioSceneRevision_ != 0 && audioSceneRevision_ == scenes_.Revision()},
             {"audio_source_count", static_cast<std::uint64_t>(scenes_.GetScene().sounds.GetCount())},
-            {"screen_loaded", screenPresenter_.IsLoaded()},
+            {"screen_loaded", screenPresenter_->IsLoaded()},
+            {"gameplay_attribute_document_loaded",attributeDocument_.has_value()},
+            {"gameplay_attribute_project_instance",gameplayAttributes_.Project()!=nullptr},
+            {"gameplay_attribute_player_instance",gameplayAttributes_.Player()!=nullptr},
+            {"gameplay_attribute_character_instances",static_cast<std::uint64_t>(gameplayAttributes_.Characters().size())},
+            {"gameplay_attribute_diagnostic",attributeDiagnostic_},
+            {"hud_loaded", hudSession_.IsLoaded()},
+            {"hud_visible", uiComposition_.IsHudVisible()},
+            {"hud_document_id", hudSession_.Controller()?hudSession_.Controller()->AuthoredDocument().envelope.documentId:std::string{}},
+            {"hud_instance", uiComposition_.HudIdentity()},
+            {"hud_level_session", hudLevelSession_},
+            {"hud_bindings_ready", !hudSession_.Controller() || hudSession_.Controller()->BindingFrame().ready},
+            {"hud_binding_issues", static_cast<std::uint64_t>(hudSession_.Controller()?hudSession_.Controller()->BindingFrame().issues.size():0)},
+            {"ui_binding_session", uiSessionIdentity_},
+            {"ui_binding_revision", uiGameplayRevision_},
+            {"ui_gameplay_input_blocked", uiComposition_.Resolve().gameplayInputBlocked},
+            {"ui_pause_requested", uiPauseRequested_},
+            {"ui_keyboard_focus_instance", uiComposition_.Resolve().keyboardFocusOwner},
             {"last_action", startupResult_.lastActionId},
             {"last_action_code", startupResult_.lastActionCode},
             {"last_action_message", startupResult_.lastActionMessage}}, "Runtime/src/RuntimeApplication.cpp");
+
+        // The large general Runtime telemetry group is bounded to 64 entries. Give
+        // UI authoring its own stable group so recently added gameplay/HUD values
+        // are actually observable in native QA rather than silently truncated.
+        const std::string sampleAttributeId =
+            attributeDocument_ && !attributeDocument_->profiles.empty() &&
+            !attributeDocument_->profiles.front().attributes.empty()
+                ? attributeDocument_->profiles.front().attributes.front().id : std::string{};
+        const auto sampleNumber=[&](const bridge::GameplayAttributeInstance* instance)->std::string
+        {
+            if(instance && !sampleAttributeId.empty())
+                if(const auto* value=instance->Find(sampleAttributeId))
+                    if(const auto* numeric=std::get_if<double>(value))
+                        return std::to_string(*numeric);
+            return {};
+        };
+        std::uint64_t presentedWidgets=0,presentedTracks=0;
+        const auto countPresented=[&](const bridge::ScreenDocument& document)
+        {
+            presentedWidgets+=document.widgets.size();
+            for(const auto& widget:document.widgets)presentedTracks+=widget.animations.size();
+        };
+        if(screenPresenter_->IsLoaded())countPresented(screenController_->AuthoredDocument());
+        if(hudSession_.IsLoaded()&&uiComposition_.IsHudVisible())
+            countPresented(hudSession_.Controller()->AuthoredDocument());
+        diagnosticService_.Observe("ui", {
+            {"project_id",startupResult_.project.projectId},
+            {"primary_transition_phase",static_cast<std::uint64_t>(screenPresenter_->TransitionPhase())},
+            {"primary_exit_action_pending",pendingScreenExit_.has_value()},
+            {"hud_transition_phase",hudSession_.Presenter()?static_cast<std::uint64_t>(hudSession_.Presenter()->TransitionPhase()):0},
+            {"hud_exit_pending",hudExitRequested_},
+            {"hud_transition_error",hudTransitionError_},
+            {"reduced_motion",uiAccessibility_.reducedMotion},
+            {"text_scale",std::to_string(uiAccessibility_.presentation.textScale)},
+            {"ui_scale",std::to_string(uiAccessibility_.presentation.uiScale)},
+            {"minimum_target_size",std::to_string(uiAccessibility_.presentation.minimumTargetSize)},
+            {"contrast_palette",static_cast<std::uint64_t>(uiAccessibility_.presentation.contrast)},
+            {"focus_style",static_cast<std::uint64_t>(uiAccessibility_.presentation.focusStyle)},
+            {"focus_width",std::to_string(uiAccessibility_.presentation.focusWidth)},
+            {"reduced_motion_primary_applied",screenPresenter_->ReducedMotion()},
+            {"reduced_motion_hud_applied",hudSession_.IsLoaded()&&hudSession_.Presenter()->ReducedMotion()},
+            {"gameplay_attribute_document_loaded",attributeDocument_.has_value()},
+            {"gameplay_attribute_project_instance",gameplayAttributes_.Project()!=nullptr},
+            {"gameplay_attribute_player_instance",gameplayAttributes_.Player()!=nullptr},
+            {"gameplay_attribute_character_instances",static_cast<std::uint64_t>(gameplayAttributes_.Characters().size())},
+            {"gameplay_attribute_diagnostic",attributeDiagnostic_},
+            {"sample_attribute_id",sampleAttributeId},
+            {"sample_project_value",sampleNumber(gameplayAttributes_.Project())},
+            {"sample_player_value",sampleNumber(gameplayAttributes_.Player())},
+            {"hud_loaded",hudSession_.IsLoaded()},
+            {"hud_visible",uiComposition_.IsHudVisible()},
+            {"hud_document_id",hudSession_.Controller()?hudSession_.Controller()->AuthoredDocument().envelope.documentId:std::string{}},
+            {"hud_bindings_ready",!hudSession_.Controller()||hudSession_.Controller()->BindingFrame().ready},
+            {"hud_binding_issues",static_cast<std::uint64_t>(hudSession_.Controller()?hudSession_.Controller()->BindingFrame().issues.size():0)},
+            {"ui_binding_revision",uiGameplayRevision_},
+            {"binding_cpu_latest_us",uiBindingCpuTiming_.LatestUs()},
+            {"binding_cpu_avg_120_us",uiBindingCpuTiming_.WindowAverageUs()},
+            {"binding_cpu_peak_session_us",uiBindingCpuTiming_.PeakUs()},
+            {"binding_cpu_window_samples",uiBindingCpuTiming_.WindowCount()},
+            {"binding_cpu_over_advisory_2ms_samples",uiBindingCpuTiming_.OverThresholdInWindow(RuntimeUiTimingWindow::AdvisoryBudgetUs)},
+            {"binding_cpu_over_budget_samples",uiBindingCpuTiming_.OverBudgetInWindow()},
+            {"binding_cpu_budget_us",uiBindingCpuTiming_.BudgetUs()},
+            {"binding_cpu_p50_120_us",uiBindingCpuTiming_.PercentileUs(50)},
+            {"binding_cpu_p95_120_us",uiBindingCpuTiming_.PercentileUs(95)},
+            {"binding_cpu_p99_120_us",uiBindingCpuTiming_.PercentileUs(99)},
+            {"performance_budget_diagnostic",uiBudgetDiagnostic_},
+            {"presented_document_widgets",presentedWidgets},
+            {"presented_document_authored_tracks",presentedTracks},
+            {"widget_budget_warning",presentedWidgets>uiBudget_.widgetWarning},
+            {"animation_budget_warning",presentedTracks>uiBudget_.animationWarning},
+            {"widget_warning_budget",static_cast<std::uint64_t>(uiBudget_.widgetWarning)},
+            {"animation_warning_budget",static_cast<std::uint64_t>(uiBudget_.animationWarning)},
+            {"ui_gpu_time_measured",false},
+            {"ui_resident_memory_measured",false},
+            {"ui_input_latency_measured",false},
+            {"binding_cpu_budget_provisional_us",RuntimeUiTimingWindow::AdvisoryBudgetUs},
+            {"paused",paused_},
+            {"player_spawned",player_.IsSpawned()}}, "Runtime/src/RuntimeApplication.cpp");
     }
 }

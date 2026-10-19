@@ -72,8 +72,8 @@ namespace renegade::bridge
 
         // Gate 8E validates the relationship without changing it:
         // - every outgoing Screen route must use a declared Screen action;
-        // - every action actually referenced by a Button must have at least one
-        //   Story Flow route;
+        // - every action actually dispatched by a Button must have at least one
+        //   Story Flow route (explicit Local Only Buttons do not dispatch);
         // - multiple conditional/prioritized routes for one valid action stay
         //   legal and are left to FlowInterpreter's existing route semantics.
         [[nodiscard]] StoryFlowScreenOutcomeAudit AuditScreenOutcomes(

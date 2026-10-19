@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Renegade — Voice Laboratory</title>
+<style>
+:root{color-scheme:dark;font:14px/1.5 'Segoe UI',Arial,sans-serif;color:#dce7f7;background:#071020}
+*{box-sizing:border-box}body{margin:0;padding:26px;max-width:840px}
+small,.muted{color:#8ea6c7}.kicker{color:#76dcff;font-size:10px;letter-spacing:3px;font-weight:700}
+h1{font-size:23px;font-weight:500;margin:8px 0 5px;letter-spacing:.6px}
+p{margin:2px 0 18px;color:#9db2cc}label{font-weight:600;font-size:12px;color:#bdd7ec;display:block;margin-bottom:6px}
+textarea,select{width:100%;background:#0e1c31;color:#e4efff;border:1px solid #2a4b68;border-radius:9px;padding:10px 12px;font:inherit;outline:none}
+textarea:focus,select:focus,button:focus-visible{border-color:#4bcaff;outline:2px solid #4bcaff55}
+textarea{min-height:112px;resize:vertical}select{min-height:41px;margin-bottom:16px}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:13px 0}
+button{cursor:pointer;background:#0f2944;color:#d3eaff;border:1px solid #28557c;padding:9px 16px;border-radius:9px;font:inherit}
+button.primary{background:#124369;border-color:#32bff8;color:#fff}
+button:disabled{opacity:.4;cursor:not-allowed}
+.check{display:flex;align-items:center;gap:7px;margin:0 0 0 auto;font-weight:400;cursor:pointer}
+input[type=checkbox]{accent-color:#49c9f6;width:16px;height:16px}
+#status{border-top:1px solid #24405c;padding-top:14px;margin-top:10px;min-height:42px;color:#90d8ff}
+.disclaimer{font-size:12px;line-height:1.4;color:#829ab6;margin-top:16px}.presets{display:flex;flex-wrap:wrap;gap:7px;margin:7px 0 18px}.presets button{font-size:12px;padding:6px 11px;border-radius:7px}
+</style>
+</head>
+<body>
+<div class="kicker">RENEGADE / LIVE ENGINE VOICE</div>
+<h1>Give the engine a voice.</h1>
+<p>Offline text-to-speech. The orb's waveform follows the actual spoken audio.</p>
+<label for="voice">Voice</label>
+<select id="voice">
+<option value="daniel">Daniel — British male · full-quality Kokoro</option>
+<option value="hazel">Hazel — British female · Windows</option>
+<option value="david">David — American male · Windows</option>
+</select>
+<label>Conversation demos (illustrative text, not live editor findings)</label>
+<div class="presets"><button type="button" data-demo="short">Short reply</button><button type="button" data-demo="technical">Technical explanation</button><button type="button" data-demo="conversation">Long conversation</button></div>
+<label for="speech">What should Renegade say?</label>
+<textarea id="speech" maxlength="900" spellcheck="true">Good morning. Renegade is online. I have checked the scene hierarchy, and the shader compiler is behaving itself. For once.</textarea>
+<div class="controls">
+<button id="speak" class="primary" type="button">Speak</button>
+<button id="stop" type="button">Stop</button>
+<label class="check" for="mute"><input id="mute" type="checkbox">Mute</label>
+</div>
+<div id="status" role="status" aria-live="polite">Ready. Press Speak when you're ready.</div>
+<p class="disclaimer">This is an isolated speech trial. Daniel's full-quality neural model stays loaded; sentences are streamed while later parts are prepared. The demo scripts are illustrative, not live editor diagnostics. The Qwen conversation model is <strong>not connected yet</strong>. No microphone access or cloud TTS. Speech is generated locally only after you press Speak.</p>
+<script src="voice-examples.js"></script><script src="voice-panel.js"></script>
+</body>
+</html>

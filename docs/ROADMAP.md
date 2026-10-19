@@ -188,6 +188,127 @@ Before city-scale populations, profile first-rigged-character cost, multi-NPC
 animation/cognition/navigation load, projectile pressure and practical actor
 budgets. Preserve native Wicked streaming/scene ownership rather than solving
 scale with a parallel world.
+
+### Editor performance recovery — separate from post-Alpha scale (#169)
+
+**Active investigation; do not mark resolved from a static audit.** The independent
+2026-10-12 roadmap alignment review identifies earlier recorded owner frame-loop
+regression (~75 Hz to ~30 FPS) and a recovery candidate on
+`perf/editor-frame-loop-recovery`, dependent on unmerged vegetation work.
+Before merging, re-evaluate that branch against the present integration head,
+extract revision/dirty-gated fixes in small verified slices, and owner-test
+in Studio Debug/Release with relevant scenes. The observed **11–12 FPS** current
+session also has confirmed **Full Page Heap enabled for RenegadeStudio.exe**
+(separately investigated 2026-10-12); its provenance and removal remain
+**paused/pending approval**. Do not conflate these two possible causes.
+Standing architecture rule: avoid full scans, file I/O or repeated resource
+rehydration in every `Update()` unless gated by a validated revision/dirty
+condition. Profile suspected call sites instead of assuming they run per-frame.
+
+### Independent static code-audit follow-ups — 2026-10-12
+
+**Evidence boundary:** external read-only audit of `main` @ `380dcc0`,
+not a build, runtime reproduction or review of this branch's uncommitted changes.
+WickedEngine and ThirdParty were excluded. Reconfirm each item on its target
+branch before a fix or release-gate claim. No Critical/High findings were
+reported **within the sampled first-party static scope**.
+
+1. **Structural/build stability — prioritise incremental refactoring.**
+   Audit M1: `StudioApplication.cpp` (~11,403 LOC), plus other large Studio,
+   Runtime and bridge translation units, correlate with prior MSVC C1128 /
+   `/bigobj` churn. Plan small concern-oriented splits with equivalent
+   ownership/tests. Retire `/bigobj` only when builds prove it is unnecessary;
+   do not destabilise active Alpha/combat work via a wholesale rewrite.
+2. **Low-severity hardening:** validate `Attack#` suffix before `std::stoul`
+   in `ModelImportPreview.cpp`; consider staged-file `FlushFileBuffers`
+   in `ProjectDocumentTransaction.cpp` after examining the journal/recovery
+   and atomic replace contracts. Neither is a verified high-severity failure.
+3. **Verify outstanding acceptance:** independently recheck
+   `REN-PHY-001` physics and `REN-REN-002` owner-rejected midday sky against
+   the CURRENT feature matrix/build. The audit reports historical unverified/
+   rejected statuses; do not silently declare these finished or newly broken.
+4. **Housekeeping only after live-reference checks:** determine the active
+   V1/V2/V3 particle-emitter workspace before retiring older implementations.
+   Rename historical Phase/Gate/S# types on touch, investigate any unguarded
+   `Update()` candidates and large inline headers case-by-case. The importer
+   service layers are NOT confirmed duplicate systems.
+5. **Protect established design:** EngineBridge boundary, scene ownership,
+   governed Lua sandbox, Undo/Redo, loopback diagnostics, and transactional
+   project writes remain the authoritative seams. A future command/capability
+   registry serves only **bounded, approved developer assistance**; do not
+   reinterpret the engine avatar as autonomous prompt-to-game authoring.
+
+## Parallel product workstream — Renegade Engine Avatar
+
+**Status: Owner-approved living-energy-orb visual direction (2026-10-12).
+An uncommitted native Studio chat dock and procedural face placeholder have
+local Debug/source-test/startup-smoke passes; owner UI acceptance, production
+orb, independent multi-monitor windows, voice and release remain OPEN.**
+
+[Renegade Engine Avatar — product and delivery roadmap](RENEGADE_ASSISTANT_ROADMAP.md)
+and [RA-02/RA-03 prototype checkpoint](RENEGADE_ASSISTANT_RA02_PROTOTYPE.md)
+are the programme/design and current-local-prototype specifications.
+The internal "Renegade Assistant" workstream name refers to conversational/UI
+services, but **the public avatar embodies Renegade the engine itself**. This
+workstream does **not** replace Player Arms & Combat or Character/NPC AI.
+
+**Approved appearance:** a compact, quiet, default lower-right **animated
+luminous energy orb**; on activation it expands into flowing blue/cyan/violet
+plasma with layered translucent filaments. **While speaking, a smooth
+audio-reactive waveform lives at its centre**, with coordinated glow and
+subtle colour blending. JARVIS-like composed, useful, dry-witted conversation;
+no humanoid face, lip sync, SHODAN persona, Clippy-like behaviour or intrusive
+unsolicited commentary.
+
+**Approved workspace model:** avatar and persistent, resizable chat are
+**independently draggable**, dockable together or separately, and can occupy
+a **second or third physical monitor** as real detachable Windows windows.
+Docked chat reserves viewport space; detached chat restores it. Retain unified
+chat/guide state, position/layout persistence, per-monitor DPI handling and
+off-screen recovery. The existing in-Studio dock is a prototype only; these
+cross-monitor capabilities are **planned, not yet implemented or accepted**.
+
+**Orb look-lock resolution (2026-10-13):** The one authorised V3 standalone
+HTML attempt was completed and owner-reviewed side-by-side with V1. The owner
+rejected V3's appearance against the approved concept, so **V1 is the locked
+animated visual baseline**; V2/V3 are rejected looks. The
+[V3 contract/owner decision record](RENEGADE_AVATAR_V3_IMPLEMENTATION_CONTRACT.md)
+documents the choice. Preserve V1 before integration; do not initiate V4 or
+substitute concept imagery for running code. The original concept remains an
+aspirational reference for restrained future polish. Actual renderer performance
+acceptance, independent second/third-monitor windows, voice and Studio
+packaging remain OPEN. Avoid enlarging existing Studio god-files; measure
+editor FPS, CPU/GPU/VRAM cost and input/multi-monitor resilience before shipping.
+
+**Voice workstream status (2026-10-13):** Standalone offline TTS was demonstrated
+on DESIGN using Piper British male Alan and Windows voice fallbacks, with
+audio-driven waveform animation in the chosen V1 orb. Live speech/stop/mute
+tests passed in the separate Windows voice laboratory. This remains a local
+external prototype, **not** a voice-connected Renegade conversation or shipped
+Studio feature. Owner voice-quality acceptance, model/engine voice licence
+review, packaging and RA-07/RA-02 integration remain OPEN.
+
+**Hard product boundary:** the assistant is a support and learning companion,
+not a prompt-to-level/game creator. "Build me a sci-fi level" is declined;
+"guide me while I build a sci-fi level" is supported. Specific reviewed scripts,
+import/rigging help, troubleshooting and bounded approved editor operations
+are allowed. A verified capability/permission bridge — not the LLM's claims —
+must control all editor observations and actions.
+
+**Recommended gate order:** RA-00 policy/contract; RA-01 grounded
+conversational/feature accuracy; RA-02 native dock plus detachable multi-monitor
+chat/history; RA-03 approved real-time animated energy orb and separate desktop
+presence; RA-04 source-linked interactive guides; RA-05 read-only Editor
+Bridge/existing-level previews; RA-06 reviewed bounded actions; RA-07 optional
+voice/waveform integration; RA-08 reliability, accessibility and release acceptance.
+
+The V2/V3/V3.1 Qwen3-1.7B fine-tuning work is **external experimental research**,
+not an accepted engine capability. V3.1 trained successfully but the qualitative
+comparison still revealed false claims about identity and editor access. The
+support-only filter in the localhost test lab is **not** a production action
+safety mechanism. Promotion/integration requires further tests and separate
+owner approval. Do not trigger CI just to record this roadmap decision.
+
 ## Character & AI continuation backlog
 
 The earlier Character & AI programme established Character identity, profiles,

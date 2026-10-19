@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "id": "npc-authoring-workflows",
+  "title": "NPC configuration and patrol workflows",
+  "status": "source_checked_native_service_tests_passed_ui_pending",
+  "manual_path": "docs/AI_IMPLEMENTATION_HANDOFF.md",
+  "facts": [
+    {
+      "id": "npc-configure-v1",
+      "sources": [
+        {
+          "path": "Studio/src/AICharacterInspector.cpp",
+          "needle": "makeRemove_.SetText(isCharacter_ ? \"REMOVE CHARACTER\" : \"MAKE CHARACTER\");"
+        },
+        {
+          "path": "Studio/src/AICharacterInspector.cpp",
+          "needle": "role_.Create(\"Character Role\");"
+        },
+        {
+          "path": "Studio/src/AICharacterInspector.cpp",
+          "needle": "autonomous_.Create(\"Character Autonomous\");"
+        },
+        {
+          "path": "Runtime/src/RuntimeCharacterDecision.h",
+          "needle": "if (!character.authoring.autonomous)"
+        }
+      ]
+    },
+    {
+      "id": "npc-wander-v1",
+      "sources": [
+        {
+          "path": "Studio/src/AICharacterInspector.cpp",
+          "needle": "AddEnum(role_, \"WANDER\", bridge::CharacterRole::Wander);"
+        },
+        {
+          "path": "Runtime/src/RuntimeCharacterDecision.h",
+          "needle": "case bridge::CharacterRole::Wander:"
+        },
+        {
+          "path": "docs/AI_IMPLEMENTATION_HANDOFF.md",
+          "needle": "resuming Wander."
+        }
+      ]
+    },
+    {
+      "id": "npc-patrol-v1",
+      "sources": [
+        {
+          "path": "Studio/src/AIPatrolRouteInspector.cpp",
+          "needle": "create_.SetText(\"CREATE + ASSIGN ROUTE\");"
+        },
+        {
+          "path": "Studio/src/AIPatrolRouteInspector.cpp",
+          "needle": "addPoint_.SetText(\"ADD PATROL POINT\");"
+        },
+        {
+          "path": "Studio/src/AIPatrolRouteInspector.cpp",
+          "needle": "mode_.AddItem(\"PING PONG\""
+        },
+        {
+          "path": "Studio/src/AICharacterInspector.cpp",
+          "needle": "AddEnum(role_, \"PATROL GUARD\""
+        },
+        {
+          "path": "Runtime/src/RuntimeCharacterDecision.h",
+          "needle": "if (hasUsableRoute && RoleNormallyPatrols"
+        }
+      ]
+    }
+  ],
+  "end_to_end_acceptance": {
+    "status": "source_checked_native_service_tests_passed_ui_pending",
+    "date": "2026-10-14",
+    "steps_confirmed": [
+      "Character foundation, profiles, perception and decision service tests exit 0"
+    ],
+    "publication_approved": false,
+    "receipt": "Tools/assistant_knowledge/NPC_WORKFLOWS_VERIFICATION.md",
+    "limits": [
+      "Current source inspected; existing native binaries, not rebuilt",
+      "Fresh beginner mouse-driven editor walkthrough pending; not a release-gate claim"
+    ]
+  }
+}

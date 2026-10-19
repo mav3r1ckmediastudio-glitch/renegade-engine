@@ -23,6 +23,11 @@ struct FirstPersonAssemblyPair {
 };
 struct FirstPersonAssemblySettings {
     StableId armsAssetId, weaponAssetId;
+    bool spellPresentation = false;
+    // One governed animated product owns both hands and moving weapon parts.
+    // Normal ammo, reload and projectile actions still apply (not spell mode).
+    bool integratedWeaponPresentation = false;
+    unsigned spellHoldClip = 0;
     std::string parentBonePath;
     XMFLOAT3 weaponPosition = {};
     XMFLOAT4 weaponRotation = {0,0,0,1};

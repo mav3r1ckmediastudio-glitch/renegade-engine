@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -77,6 +78,11 @@ namespace renegade::runtime
         [[nodiscard]] bool EnqueueGameplayEvent(
             bridge::GameplayEvent event,
             std::string& error);
+        // Read-only observer at the governed, accepted event consumer. It is
+        // invoked once per event before creator on_event callbacks, never on
+        // a rejected producer event. No second gameplay event queue.
+        void SetGameplayEventObserver(
+            std::function<void(const bridge::GameplayEvent&)> observer);
 
         void Update(float dt) noexcept;
         void Pause() noexcept;

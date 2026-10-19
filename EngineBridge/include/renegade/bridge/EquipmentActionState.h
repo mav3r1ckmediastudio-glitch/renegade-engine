@@ -12,7 +12,15 @@ enum class EquipmentHandUse { PrimaryOnly, OffHandOnly, EitherHand, TwoHanded, P
 enum class EquipmentAction { Equip, Unequip, PrimaryUse, AlternateUse, Reload, Charge, Release, Block, Parry, Cast, Use, Inspect };
 enum class EquipmentActionPhase { Ready, Prepare, Windup, Hold, Active, Recovery };
 enum class EquipmentHand { Primary, OffHand };
-enum class EquipmentFireMode { Projectile, Hitscan };
+enum class EquipmentFireMode { Projectile, Hitscan, Channel, Storm };
+struct EquipmentActionStage {
+    std::string name, animationAction;
+    float activeSeconds = 0;
+    bool refillAmmo = false;
+    bool operator==(const EquipmentActionStage& b) const {
+        return name==b.name && animationAction==b.animationAction && activeSeconds==b.activeSeconds && refillAmmo==b.refillAmmo;
+    }
+};
 struct EquipmentActionDefinition {
     EquipmentAction action = EquipmentAction::PrimaryUse;
     std::string animationAction;
@@ -20,6 +28,8 @@ struct EquipmentActionDefinition {
     bool holdUntilRelease = false;
     bool cancellableBeforeActive = true;
     bool activeWhileHeld = false;
+    std::vector<EquipmentActionStage> stages;
+    bool resumeStages = false;
 };
 struct EquipmentProjectileBinding {
     EquipmentAction action = EquipmentAction::PrimaryUse;
@@ -34,6 +44,11 @@ struct EquipmentProjectileBinding {
     EquipmentFireMode fireMode = EquipmentFireMode::Projectile;
     float hitscanRangeMetres = 100.0f;
     float hitscanDamage = 10.0f;
+    float channelDamagePerSecond = 20.0f;
+    float stormRadiusMetres = 2.5f;
+    float stormDurationSeconds = 2.6f;
+    float stormStrikeDamage = 21.f;
+    unsigned stormStrikeCount = 8;
 };
 struct EquipmentDefinition {
     std::string assetId, name, presentationAssetId;
@@ -49,6 +64,23 @@ inline bool ValidateEquipmentDefinition(const EquipmentDefinition& item) {
         const auto index=unsigned(action.action);
         if(index>=seen.size()||seen[index]||action.animationAction.empty())return false;
         seen[index]=true;
+        if(action.resumeStages && action.stages.empty())return false;
+        if(!action.stages.empty()) {
+            // Current native adapter supports reusable multi-stage reloads.
+            if(action.action!=EquipmentAction::Reload || action.stages.size()>16 ||
+               action.holdUntilRelease || action.activeWhileHeld)return false;
+            std::vector<std::string> names;
+            for(size_t stageIndex=0;stageIndex<action.stages.size();++stageIndex) {
+                const auto& stage=action.stages[stageIndex];
+                if(stage.name.empty() || stage.name.size()>64 || stage.name.find_first_of("\r\n\t")!=std::string::npos ||
+                   std::find(names.begin(),names.end(),stage.name)!=names.end() ||
+                   (stage.animationAction!="Reload" && stage.animationAction!="ReloadPartial") ||
+                   !std::isfinite(stage.activeSeconds)||stage.activeSeconds<=0||stage.activeSeconds>60 ||
+                   (stage.refillAmmo && stageIndex+1!=action.stages.size()))return false;
+                names.push_back(stage.name);
+            }
+            if(!action.stages.back().refillAmmo)return false;
+        }
         if(action.activeWhileHeld && (action.holdUntilRelease || action.activeSeconds!=0))return false;
         for(float seconds:{action.prepareSeconds,action.windupSeconds,action.activeSeconds,action.recoverySeconds})
             if(!std::isfinite(seconds)||seconds<0||seconds>60)return false;
@@ -58,7 +90,7 @@ inline bool ValidateEquipmentDefinition(const EquipmentDefinition& item) {
         const auto index=unsigned(binding.action);
         const bool physical=binding.fireMode==EquipmentFireMode::Projectile;
         if(index>=seen.size()||!seen[index]||projectileSeen[index]||
-           unsigned(binding.fireMode)>unsigned(EquipmentFireMode::Hitscan)||
+           unsigned(binding.fireMode)>unsigned(EquipmentFireMode::Storm)||
            (physical?binding.projectileAssetId.empty():!binding.projectileAssetId.empty())||
            binding.launchSocketName.size()>64||
            binding.launchSocketName.find_first_of("\r\n\t")!=std::string::npos||
@@ -78,6 +110,22 @@ inline bool ValidateEquipmentDefinition(const EquipmentDefinition& item) {
             [&](const auto& a){return a.action==binding.action;});
         if(binding.releaseSeconds>0 && (definition==item.actions.end()||
             binding.releaseSeconds>=definition->activeSeconds))return false;
+        if(!std::isfinite(binding.channelDamagePerSecond) || binding.channelDamagePerSecond<0 ||
+           binding.channelDamagePerSecond>10000)return false;
+        if(binding.fireMode==EquipmentFireMode::Channel &&
+           (binding.action!=EquipmentAction::Cast || definition==item.actions.end() ||
+            !definition->activeWhileHeld || binding.releaseSeconds!=0 || binding.socketPolicy!=0 ||
+            binding.launchSocketName.empty() || item.projectiles.size()!=1 ||
+            seen[unsigned(EquipmentAction::PrimaryUse)] || seen[unsigned(EquipmentAction::Charge)] ||
+            seen[unsigned(EquipmentAction::Release)] || definition->animationAction!="Cast"))return false;
+        if(binding.fireMode==EquipmentFireMode::Storm &&
+           (binding.action!=EquipmentAction::Cast || definition==item.actions.end() ||
+            !definition->activeWhileHeld || binding.releaseSeconds!=0 || binding.socketPolicy!=0 ||
+            item.projectiles.size()!=1 || definition->animationAction!="Cast" ||
+            !std::isfinite(binding.stormRadiusMetres) || binding.stormRadiusMetres<.5f || binding.stormRadiusMetres>30.f ||
+            !std::isfinite(binding.stormDurationSeconds) || binding.stormDurationSeconds<.2f || binding.stormDurationSeconds>30.f ||
+            !std::isfinite(binding.stormStrikeDamage) || binding.stormStrikeDamage<0 || binding.stormStrikeDamage>10000 ||
+            binding.stormStrikeCount<1 || binding.stormStrikeCount>64))return false;
         projectileSeen[index]=true;
     }
     return true;
@@ -94,6 +142,7 @@ public:
         uint8_t hands = 0;
         bool released = false;
         EquipmentHand ownerHand = EquipmentHand::Primary;
+        size_t stageIndex = 0;
     };
     struct Event {
         std::string itemId, animationAction;
@@ -101,6 +150,8 @@ public:
         EquipmentActionPhase phase;
         uint8_t hands;
         EquipmentHand ownerHand = EquipmentHand::Primary;
+        size_t stageIndex = 0;
+        bool stageCompleted = false;
     };
     bool Begin(const EquipmentDefinition& item, EquipmentAction action, EquipmentHand hand) {
         if(!ValidateEquipmentDefinition(item))return false;
@@ -112,10 +163,30 @@ public:
         for(const auto& c:channels_)if(c.phase!=EquipmentActionPhase::Ready&&(c.hands&hands))return false;
         for(auto& c:channels_)if(c.phase==EquipmentActionPhase::Ready) {
             c={item.assetId,*definition,EquipmentActionPhase::Prepare,0,hands,false,hand};
-            events_.push_back({c.itemId,c.definition.animationAction,action,c.phase,hands,c.ownerHand});
+            if(c.definition.resumeStages) {
+                for(const auto& saved:progress_)if(saved.itemId==c.itemId && saved.ownerHand==hand &&
+                    saved.stages==c.definition.stages)c.stageIndex=saved.nextStage;
+            }
+            Emit(c);
             return true;
         }
         return false;
+    }
+    size_t CompletedStages(const std::string& itemId,EquipmentHand hand) const {
+        for(const auto& saved:progress_)if(saved.itemId==itemId && saved.ownerHand==hand)return saved.nextStage;
+        return 0;
+    }
+    void ClearStageProgress(const std::string& itemId,EquipmentHand hand) {
+        progress_.erase(std::remove_if(progress_.begin(),progress_.end(),[&](const auto& p){
+            return p.itemId==itemId && p.ownerHand==hand;}),progress_.end());
+    }
+    // Rejecting a missing native pair aborts only this owner's presentation.
+    bool Abort(const std::string& itemId,EquipmentHand hand) {
+        bool changed=false;
+        for(auto& c:channels_)if(c.itemId==itemId && c.ownerHand==hand && c.phase!=EquipmentActionPhase::Ready) {
+            c.phase=EquipmentActionPhase::Ready;Emit(c);c={};changed=true;
+        }
+        return changed;
     }
     // Legacy item-wide operations remain available. Runtime uses the scoped
     // overloads: definition identity is not equipped-instance identity.
@@ -143,8 +214,10 @@ private:
     bool CancelMatching(const std::string& itemId,uint8_t owners) {
         bool changed=false;
         for(auto& c:channels_)if(c.phase!=EquipmentActionPhase::Ready&&c.itemId==itemId&&OwnedBy(c,owners)&&
-            c.definition.cancellableBeforeActive&&unsigned(c.phase)<unsigned(EquipmentActionPhase::Active)) {
-            events_.push_back({c.itemId,c.definition.animationAction,c.definition.action,EquipmentActionPhase::Ready,c.hands,c.ownerHand});
+            c.definition.cancellableBeforeActive &&
+            (unsigned(c.phase)<unsigned(EquipmentActionPhase::Active) ||
+             (c.phase==EquipmentActionPhase::Active && !c.definition.stages.empty()))) {
+            c.phase=EquipmentActionPhase::Ready;Emit(c);
             c={};changed=true;
         }
         return changed;
@@ -156,8 +229,8 @@ public:
         for(auto& c:channels_) {
             if(OwnedBy(c,pausedOwners))continue;
             float remaining=gameplaySeconds;
-            // At most five transitions; no unbounded loop for instant actions.
-            for(int step=0;step<6&&c.phase!=EquipmentActionPhase::Ready;++step) {
+            // Bounded phases plus at most sixteen authored stages.
+            for(int step=0;step<21&&c.phase!=EquipmentActionPhase::Ready;++step) {
                 if(c.phase==EquipmentActionPhase::Active) {
                     if(c.definition.activeWhileHeld && !c.released)break;
                     if(nativeOwnsActive && !c.definition.activeWhileHeld)break;
@@ -167,8 +240,8 @@ public:
                 const float needed=duration-c.elapsed;
                 if(remaining<needed){c.elapsed+=remaining;break;}
                 remaining-=needed;c.elapsed=0;
-                c.phase=Next(c);
-                events_.push_back({c.itemId,c.definition.animationAction,c.definition.action,c.phase,c.hands,c.ownerHand});
+                if(c.phase==EquipmentActionPhase::Active && !c.definition.stages.empty())AdvanceStage(c);
+                else {c.phase=Next(c);Emit(c);}
                 if(c.phase==EquipmentActionPhase::Ready){c={};break;}
             }
         }
@@ -192,7 +265,7 @@ private:
         if(!definition || definition->prepareSeconds!=0 || definition->windupSeconds!=0 ||
            definition->holdUntilRelease||definition->activeWhileHeld)return false;
         for(auto& c:channels_)if(c.itemId==item.assetId&&OwnedBy(c,owners)&&c.phase==EquipmentActionPhase::Active) {
-            c.definition=*definition;c.elapsed=0;
+            c.definition=*definition;c.elapsed=0;c.stageIndex=0;
             events_.push_back({c.itemId,c.definition.animationAction,action,c.phase,c.hands,c.ownerHand});
             return true;
         }
@@ -202,8 +275,9 @@ private:
     bool CompleteActiveMatching(const std::string& itemId,uint8_t owners) {
         for(auto& c:channels_)if(c.itemId==itemId&&OwnedBy(c,owners)&&
             c.phase==EquipmentActionPhase::Active&&!c.definition.activeWhileHeld) {
-            c.phase=EquipmentActionPhase::Recovery;c.elapsed=0;
-            events_.push_back({c.itemId,c.definition.animationAction,c.definition.action,c.phase,c.hands,c.ownerHand});
+            c.elapsed=0;
+            if(!c.definition.stages.empty())AdvanceStage(c);
+            else {c.phase=EquipmentActionPhase::Recovery;Emit(c);}
             return true;
         }
         return false;
@@ -214,8 +288,23 @@ public:
     }
     const std::array<Channel,2>& Channels() const {return channels_;}
     std::vector<Event> TakeEvents(){auto events=std::move(events_);events_.clear();return events;}
-    void Reset(){channels_={};events_.clear();}
+    void Reset(){channels_={};events_.clear();progress_.clear();}
 private:
+    struct Progress {std::string itemId;EquipmentHand ownerHand;std::vector<EquipmentActionStage> stages;size_t nextStage;};
+    std::vector<Progress> progress_;
+    void Emit(const Channel& c,bool completed=false) {
+        const auto& semantic=c.definition.stages.empty()?c.definition.animationAction:c.definition.stages[c.stageIndex].animationAction;
+        events_.push_back({c.itemId,semantic,c.definition.action,c.phase,c.hands,c.ownerHand,c.stageIndex,completed});
+    }
+    void AdvanceStage(Channel& c) {
+        Emit(c,true);
+        const size_t next=c.stageIndex+1;
+        ClearStageProgress(c.itemId,c.ownerHand);
+        if(next<c.definition.stages.size()) {
+            if(c.definition.resumeStages)progress_.push_back({c.itemId,c.ownerHand,c.definition.stages,next});
+            c.stageIndex=next;Emit(c);
+        } else {c.phase=EquipmentActionPhase::Recovery;Emit(c);}
+    }
     static uint8_t ReservedHands(EquipmentHandUse use,EquipmentHand hand) {
         if(unsigned(hand)>unsigned(EquipmentHand::OffHand))return 0;
         switch(use) {
@@ -231,7 +320,7 @@ private:
         switch(c.phase){
         case EquipmentActionPhase::Prepare:return c.definition.prepareSeconds;
         case EquipmentActionPhase::Windup:return c.definition.windupSeconds;
-        case EquipmentActionPhase::Active:return c.definition.activeSeconds;
+        case EquipmentActionPhase::Active:return c.definition.stages.empty()?c.definition.activeSeconds:c.definition.stages[c.stageIndex].activeSeconds;
         case EquipmentActionPhase::Recovery:return c.definition.recoverySeconds;
         default:return 0;
         }

@@ -122,8 +122,40 @@ namespace renegade::bridge
 
             ScreenCreatorResourceChoice choice;
             choice.assetId = product->assetId;
-            choice.projectRelativePath = std::filesystem::u8path(
-                source->projectRelativePath).lexically_normal().generic_u8string();
+            if (kind == ScreenCreatorResourceKind::Image)
+            {
+                // ScreenRenderer needs a raw image from project Content;
+                // governed LP08 retains its editable source in SourceAssets.
+                const std::filesystem::path contentImage =
+                    std::filesystem::path("Content") / "UI" / "Images" /
+                    std::filesystem::u8path(
+                        product->assetId +
+                        std::filesystem::u8path(source->projectRelativePath)
+                            .extension().generic_u8string());
+                std::error_code mirrorError;
+                if (!std::filesystem::is_regular_file(
+                        std::filesystem::u8path(projectRoot) / contentImage,
+                        mirrorError) || mirrorError)
+                    continue;
+                choice.projectRelativePath =
+                    contentImage.lexically_normal().generic_u8string();
+            }
+            else
+            {
+                // LP08 retains font sources in SourceAssets; ScreenRenderer
+                // requires the raw TrueType file under runtime Content.
+                // Never advertise a font which cannot render in a Screen.
+                const std::filesystem::path runtimeFont =
+                    std::filesystem::path("Content") / "UI" / "Fonts" /
+                    std::filesystem::u8path(product->assetId + ".ttf");
+                std::error_code fontError;
+                if (!std::filesystem::is_regular_file(
+                        std::filesystem::u8path(projectRoot) / runtimeFont,
+                        fontError) || fontError)
+                    continue;
+                choice.projectRelativePath =
+                    runtimeFont.lexically_normal().generic_u8string();
+            }
             choice.productProjectRelativePath = std::filesystem::u8path(
                 product->projectRelativePath).lexically_normal().generic_u8string();
             choice.assetType = requestedType;

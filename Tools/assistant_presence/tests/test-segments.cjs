@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {splitSpeech}=require('../voice/segments');
+assert.deepEqual(splitSpeech('Hello. Welcome back.'),['Hello. Welcome back.']);
+assert.deepEqual(splitSpeech('First statement. Second statement follows with information. Third statement includes a technical explanation.'),['First statement. Second statement follows with information. Third statement includes a technical explanation.']);
+const long='First, I would inspect the terrain chunk boundaries and identify the areas where meshes overlap. Next, I would profile GPU frame time and draw calls, because visual symptoms and performance causes are not necessarily the same. Finally, I would test one adjustment at a time before committing it to the engine.';
+const parts=splitSpeech(long);
+assert(parts.length>=2,'long response should stream in multiple parts');
+assert(parts.every(s=>s.length<=200),'every generated chunk fits the target');
+assert.equal(parts.join(' ').replace(/\s+/g,' ').trim(),long,'all original words are kept');
+assert.throws(()=>splitSpeech(''),/900/);
+assert.throws(()=>splitSpeech('A'.repeat(901)),/900/);
+console.log('PASS: sentence-aware splitting, bounded pieces, original message preservation, invalid input rejection',parts.map(p=>p.length));

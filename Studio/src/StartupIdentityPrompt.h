@@ -49,5 +49,6 @@ namespace renegade::studio
         std::wstring lastError_;
         std::chrono::steady_clock::time_point startedAt_{};
         std::chrono::steady_clock::time_point lastCursorToggle_{};
+        std::chrono::steady_clock::time_point lastExternalIdentityCheck_{};
     };
 }

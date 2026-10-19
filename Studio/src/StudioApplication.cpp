@@ -2,6 +2,7 @@
 #include "shaders/ShaderInterop_Renderer.h"
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
+#include "RenegadeLivingPresenceLaunch.h"
 #include "renegade/bridge/PlayerPrefabService.h"
 #include <cctype>
 #include "StudioUserPreferences.h"
@@ -406,6 +407,8 @@ namespace renegade::studio
             }
         }
 
+        if (session_ != nullptr)
+            assistantDock_.SetOpen(false); // V1 Living Core replaces legacy face dock.
         RefreshHierarchy();
         RefreshInspector();
         RefreshStatus();
@@ -2869,6 +2872,9 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::BuildWindowsGame:
                 RequestDiagnosticAction(EditorAction::BuildWindowsGame);
                 break;
+            case RenegadeStudioChrome::Action::ToggleAssistant:
+                LaunchLivingCoreFromStudio();
+                break;
             }
         });
         studioChrome_.OnDrawerChanged([this](const int tab)
@@ -3129,6 +3135,18 @@ namespace renegade::studio
         CreateAssemblyEditor();
         CreateEquipmentEditor();
         GetGUI().AddWidget(&modelImportPanel_);
+
+        assistantDock_.Create();
+        assistantDock_.OnOpenChanged([this](const bool open)
+        {
+            if (session_ != nullptr)
+                session_->Projects().SetEditorPreference("assistant_open", open);
+            workspaceLayoutDirty_ = true;
+        });
+        // wiGUI's top-level widgets render in reverse registration order:
+        // Studio chrome paints first, then the assistant above its reserved
+        // dock region; neither overlays the viewport.
+        GetGUI().AddWidget(&assistantDock_.Panel());
         GetGUI().AddWidget(&studioChrome_);
     }
 
@@ -3533,6 +3551,7 @@ namespace renegade::studio
         DiagnosticInputFrame diagnosticInput(diagnosticService_,
             wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
         PollTestLevel();
+        assistantDock_.Tick();
         if (testLevelRuntime_.IsActive())
         {
             diagnosticInput.StopAt("test_level");
@@ -4068,7 +4087,17 @@ namespace renegade::studio
         handGripPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
             std::max(60.0f, (height - 550.0f) * 0.5f)));
+        const bool showAssistantDock = assistantDock_.IsOpen() &&
+            !projectHubVisible_ && width >= 1300.0f;
+        const float assistantDockWidth = showAssistantDock
+            ? std::clamp(width * 0.20f, 290.0f, 328.0f) : 0.0f;
+        studioChrome_.SetAssistantDockWidth(assistantDockWidth);
         studioChrome_.SetLayout(width, height);
+        assistantDock_.SetLayout(
+            width - assistantDockWidth, 64.0f,
+            assistantDockWidth > 0.0f ? assistantDockWidth : 290.0f,
+            height - 64.0f - 28.0f);
+        assistantDock_.Panel().SetVisible(showAssistantDock);
         projectHubChrome_.SetLayout(width, height);
 
         projectLoadingOverlay_.SetLayout(width, height);
@@ -4133,7 +4162,8 @@ namespace renegade::studio
         hierarchySearch_.SetSize(XMFLOAT2(leftWidth - 24.0f, 31.0f));
 
         inspectorPanel_.SetPos(XMFLOAT2(
-            projectHubVisible_ ? width - rightWidth - 8.0f : width - rightWidth,
+            projectHubVisible_ ? width - rightWidth - 8.0f :
+                width - rightWidth - assistantDockWidth,
             projectHubVisible_ ? toolbarHeight + 16.0f : 64.0f));
         inspectorPanel_.SetSize(XMFLOAT2(
             rightWidth,
@@ -9954,6 +9984,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         }
 
         TestLevelLaunchOptions options;
+        options.yieldAssistantGpu = true;
         options.executablePath = runtimePath;
         options.workingDirectory =
             fs::u8path(runtimePath).parent_path().generic_u8string();
@@ -10009,6 +10040,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
         const auto& project = session_->Projects().CurrentProject();
         TestLevelLaunchOptions options;
+        options.yieldAssistantGpu = true;
         options.executablePath = runtimePath;
         options.workingDirectory =
             fs::u8path(runtimePath).parent_path().generic_u8string();
@@ -10922,6 +10954,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         }
 
         projectHubVisible_ = visible;
+        workspaceLayoutDirty_ = true;
         if (visible)
         {
             modelImportPanel_.SetVisible(false);
@@ -11223,6 +11256,26 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         renderer_.BindDiagnostics(infoDisplay);
         renderer_.init(canvas);
         renderer_.Load();
+        // The Screen Designer observes Runtime's existing read-only loopback
+        // diagnostic cache; it never writes gameplay or invents sample values.
+        screenEditorRenderer_.SetLiveRuntimeProbe([this]()
+        {return renderer_.RuntimePeerSnapshot();});
+
+        screenEditorRenderer_.OnSetGameplayAttributes([this](const std::string& id,const std::string& path,std::string& error)
+        {
+            if(session_.Projects().HasPendingProject()){error="Finish the project switch before attaching gameplay profiles.";return false;}
+            auto& projects=static_cast<bridge::ProjectService&>(session_.Projects());
+            if(!projects.SetGameplayAttributes(id,path)){error=projects.LastError();return false;}
+            error.clear();return true;
+        });
+        screenEditorRenderer_.OnSetProjectHud([this](const bridge::StableId& id,const std::string& path,std::string& error)
+        {
+            if(session_.Projects().HasPendingProject())
+            {error="Finish the project switch before changing HUD settings.";return false;}
+            auto& projects=static_cast<bridge::ProjectService&>(session_.Projects());
+            if(!projects.SetDefaultHud(id,path)){error=projects.LastError();return false;}
+            error.clear();return true;
+        });
 
         storyFlowIntegration_.OnScreenEditorOpen(
             [this](const StoryFlowScreenEditorHandoff& handoff)
@@ -11238,6 +11291,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                         wi::backlog::LogLevel::Error);
                     return;
                 }
+                screenEditorRenderer_.SetGameplayAttributeDocumentReference(project.attributeDocumentId,project.attributeDocument);
+                screenEditorRenderer_.SetBindingActorCatalogue(
+                    bridge::CollectScreenBindingActors(session_.Scenes().GetScene()));
                 storyFlowIntegration_.RequestScreenEditor();
             });
         screenEditorRenderer_.OnReturnRequested([this]()

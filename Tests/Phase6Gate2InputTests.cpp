@@ -202,7 +202,7 @@ int main()
     fs::create_directories(parent, ec);
     StudioProjectService studio;
     studio.Initialize((root / "editor-state.ini").generic_u8string());
-    Check(studio.CreateStoryFlowProject(parent.generic_u8string(), "InputProject"),
+    Check(studio.CreateStoryFlowProject(parent.generic_u8string(), "InputProject", false),
         "Studio project creation did not stage with Gate 2 input migration: " +
             studio.LastError());
     if (studio.HasPendingProject())

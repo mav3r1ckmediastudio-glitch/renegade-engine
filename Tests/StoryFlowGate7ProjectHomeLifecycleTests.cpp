@@ -60,7 +60,7 @@ int main()
 
     bridge::ProjectService factory;
     if (!factory.CreateStoryFlowProject(
-            temporary.path.generic_u8string(), "NativeA"))
+            temporary.path.generic_u8string(), "NativeA", false))
     {
         return Fail(factory.LastError().c_str());
     }
@@ -181,7 +181,7 @@ int main()
     }
 
     if (!factory.CreateStoryFlowProject(
-            temporary.path.generic_u8string(), "NativeB"))
+            temporary.path.generic_u8string(), "NativeB", false))
     {
         return Fail("second native fixture could not be created");
     }

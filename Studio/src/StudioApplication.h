@@ -38,6 +38,7 @@
 #include "renegade/bridge/TerrainService.h"
 #include "InspectorSectionFramework.h"
 #include "RenegadeStudioChrome.h"
+#include "RenegadeAssistantDock.h"
 #include "RenegadePhysicsLabStudioChrome.h"
 #include "RenegadeProjectHub.h"
 #include "RenegadeProjectLoadingOverlay.h"
@@ -55,6 +56,8 @@ namespace renegade::studio
         void SetExitRequestHandler(std::function<void()> handler);
         void RequestExit();
         void UpdateLiveDiagnostics(const char* outerWorkspace);
+        [[nodiscard]] std::string RuntimePeerSnapshot() const
+        {return diagnosticService_.ReadPeerSnapshot();}
         void BindDiagnostics(
             wi::Application::InfoDisplayer& diagnostics) noexcept;
         void DeleteGPUResources() override;
@@ -1169,6 +1172,7 @@ namespace renegade::studio
         RenegadeButton hubNewProjectCancelButton_;
         wi::gui::Button gridToggleButton_;
         RenegadePhysicsLabStudioChrome studioChrome_;
+        RenegadeAssistantDock assistantDock_;
         std::vector<std::string> playerPrefabChoices_;
         wi::gui::ComboBox playerPrefab_;
         wi::gui::Button playerPrefabSave_, playerPrefabReset_;
@@ -1205,6 +1209,7 @@ namespace renegade::studio
         wi::gui::Button projectileImportMesh_, projectileSocketEdit_;
         wi::gui::ComboBox projectileSocket_, projectileSecondSocket_, projectileSocketPolicy_;
         wi::gui::Slider projectileReleaseTime_, projectileHitscanRange_, projectileHitscanDamage_;
+        wi::gui::Slider projectileStormRadius_,projectileStormDuration_,projectileStormCount_,projectileStormDamage_;
         wi::gui::ComboBox projectileReleaseMode_;
         wi::gui::Button projectileAdvanced_;
         wi::gui::Window projectileTimingPanel_;

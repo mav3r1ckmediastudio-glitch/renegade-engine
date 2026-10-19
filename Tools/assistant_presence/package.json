@@ -1,0 +1,16 @@
+{
+  "name": "renegade-studio-living-presence",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Renegade Studio integrated V1 Living Core orb and local Daniel voice - developer preview",
+  "main": "main.js",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "test:voice": "node tests/test-voice.cjs",
+    "check": "node --check main.js && node --check preload.js && node --check assets/v1-renderer.js"
+  },
+  "devDependencies": {
+    "electron": "38.4.0"
+  }
+}

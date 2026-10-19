@@ -129,7 +129,7 @@ int main()
     if(!release.ReleaseProjectiles(101,.3f,true).empty())return fail("cancelled release");
     const auto clearFlight=[](const auto&,const auto&,const auto&){return bridge::ProjectileQueryResult{};};
     if(!session.Update(.5f,clearFlight,impacts))return fail("visual movement");
-    if(session.meshProjectiles.count(id)!=1 || session.traces.empty() ||
+    if(session.presentedProjectiles.count(id)!=1 || session.traces.empty() ||
         std::any_of(session.traces.begin(),session.traces.end(),[](const auto& t){return t.meshless;}))
         return fail("mesh projectile draws fallback flight feedback");
     visuals.Sync(*scene,session.simulation);

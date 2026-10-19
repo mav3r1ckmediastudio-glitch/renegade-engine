@@ -1,0 +1,142 @@
+{
+  "schema": 1,
+  "id": "projectiles-first-weapon",
+  "status": "native_qa_passed_creator_review_pending",
+  "audience": "beginner",
+  "manual_path": "docs/manual/PROJECTILES_FIRST_WEAPON.md",
+  "scope": "Native Studio first-person projectile weapon authoring; no autonomous editor access or auto-actions",
+  "end_to_end_acceptance": {
+    "status": "native_workflow_passed_existing_bow_fixture",
+    "receipt": "Tools/assistant_knowledge/MANUAL_E2E_STATUS.md",
+    "date": "2026-10-13",
+    "build": "Local Release RenegadeStudio.exe dated 2026-10-09",
+    "disposable_project": "BUILD/manual-projectile-e2e-20261013/Bow-Playground.renegade",
+    "project_label": "MANUAL QA COPY - Projectile Playground",
+    "projectile_asset_id": "c030b651-00c0-4af7-9827-3a29ed42e46e",
+    "equipment_asset_id": "87a28639-a59f-4bd4-b428-bb75ee82591a",
+    "steps_confirmed": [
+      "New Arrow asset saved with imported Arrow mesh, speed 45 m/s, gravity 1 and stick-on-impact",
+      "Applied to Primary hand / Primary fire-use via Bow_Nock with 0.133333 s delay",
+      "Ctrl+S saved changed cloned scene while original scene SHA-256 was unchanged",
+      "File Reopen Scene retained newly authored equipment and projectile binding",
+      "Test Level standalone runtime fired and showed impact feedback and retained target mark",
+      "Runtime completed and Project Hub project reopen retained the new equipment ID"
+    ],
+    "screenshots": [
+      "docs/manual/images/06-projectile-saved.png",
+      "docs/manual/images/07-reopened-weapon-firing.png",
+      "docs/manual/images/08-reopened-project-equipment.png",
+      "docs/manual/images/09-testlevel-release.png",
+      "docs/manual/images/10-testlevel-impact.png",
+      "docs/manual/images/11-testlevel-retained.png"
+    ],
+    "publication_approved": false,
+    "outstanding": [
+      "Independent creator walkthrough and final release-version verification",
+      "Optional Surface Type comparison and audio/decal presentation",
+      "Fresh player/weapon setup from a blank project",
+      "Precise 3D embedding orientation proof"
+    ]
+  },
+  "native_inspection": {
+    "date": "2026-10-13",
+    "build": "Local Release RenegadeStudio.exe dated 2026-10-09",
+    "project": "Disposable BUILD/bow-projectile-playground/Bow-Playground.renegade",
+    "confirmed": [
+      "Player Start selected through Characters hierarchy",
+      "Starting Equipment contains saved primary bow",
+      "Weapon firing shows Primary fire / use, Bow_Nock, Projectile / travelling, 0.133333 s delay",
+      "NEW starts with Bullet; selectable Arrow preset has 45 m/s and gravity scale 1",
+      "Arrow initially has no visible model; Advanced settings exposed",
+      "Firing timing previews saved bow pose and marker; 0.833333 s clip",
+      "Draft and timing were cancelled without applying or saving"
+    ],
+    "screenshots": [
+      "docs/manual/images/01-player-start.png",
+      "docs/manual/images/02-weapon-firing.png",
+      "docs/manual/images/03-arrow-preset.png",
+      "docs/manual/images/04-advanced-projectile.png",
+      "docs/manual/images/05-animation-timing.png"
+    ],
+    "not_verified_in_initial_read_only_inspection": [
+      "Fresh asset creation, player apply, save/reopen and Test Level were not performed during the FIRST inspection; they were subsequently exercised and passed in the separate QA copy",
+      "Surface Type impact effects were not compared in this run"
+    ]
+  },
+  "facts": [
+    {
+      "id": "entry",
+      "claim": "Player Equipment exposes WEAPON FIRING to open the projectile editor",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerEquipmentEditor.cpp",
+          "needle": "equipmentProjectile_.SetText(\"WEAPON FIRING\")"
+        }
+      ]
+    },
+    {
+      "id": "assets",
+      "claim": "Projectile NEW and EDIT COPY are separate authoring actions; projectile save does not apply a weapon binding",
+      "sources": [
+        {
+          "path": "docs/P3_PROJECTILE_AUTHORING_UX.md",
+          "needle": "SAVE AS NEW registers a reusable projectile in the project."
+        },
+        {
+          "path": "docs/P3_PROJECTILE_AUTHORING_UX.md",
+          "needle": "Saving the projectile alone"
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "claim": "Basic and advanced modes cover projectile appearance, speed, gravity, impact and finer detail",
+      "sources": [
+        {
+          "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
+          "needle": "New/Edit Copy opens in Basic mode"
+        }
+      ]
+    },
+    {
+      "id": "launch",
+      "claim": "Single or dual launch points are selected under Spawn point and Firing",
+      "sources": [
+        {
+          "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
+          "needle": "Weapon setup uses Spawn point, Firing and Launch projectile labels."
+        }
+      ]
+    },
+    {
+      "id": "timing",
+      "claim": "Timing supports animation start, delayed launch and a visual marker candidate with native verification",
+      "sources": [
+        {
+          "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
+          "needle": "## Saved release marker runtime proof"
+        }
+      ]
+    },
+    {
+      "id": "surface",
+      "claim": "Surface Type controls impact classification on objects, not destruction",
+      "sources": [
+        {
+          "path": "docs/ARCHITECTURE.md",
+          "needle": "Creator steps: select an object; choose Surface Type directly in its Inspector."
+        },
+        {
+          "path": "docs/P3_PROJECTILE_AUTHORING_UX.md",
+          "needle": "Glass does not destroy its pane;"
+        }
+      ]
+    }
+  ],
+  "next_checks": [
+    "Check current native build label/controls against this manual",
+    "Test first-time bow authoring and save/reopen",
+    "Add real screenshots and alt text",
+    "Verify each claim with source and native test receipt before promotion to source_verified"
+  ]
+}

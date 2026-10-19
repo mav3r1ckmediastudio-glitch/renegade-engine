@@ -22,6 +22,10 @@ namespace renegade::bridge
         [[nodiscard]] bool Save(std::string& error);
         void Clear() noexcept;
 
+        [[nodiscard]] bool SetLevelHud(const StableId& nodeId,
+            LevelHudSelection selection, std::string& error);
+        [[nodiscard]] bool SetLevelHudContextRules(const StableId& nodeId,
+            std::vector<HudContextEventRule> rules,std::string& error);
         [[nodiscard]] bool RenameNode(
             const StableId& nodeId,
             std::string name,
@@ -60,6 +64,7 @@ namespace renegade::bridge
         [[nodiscard]] const StableId& ProjectId() const noexcept;
 
     private:
+        friend class ScreenFlowAtomicSaveService;
         static constexpr std::size_t InvalidHistoryIndex =
             static_cast<std::size_t>(-1);
         static constexpr std::size_t MaximumHistoryEntries = 256;
@@ -74,6 +79,9 @@ namespace renegade::bridge
             std::string& error);
 
         FlowDocument emptyDocument_;
+        // The persisted baseline survives Undo branching and history trimming.
+        FlowDocument persistedSnapshot_;
+        std::vector<std::uint8_t> persistedBytes_;
         std::vector<FlowDocument> history_;
         std::size_t historyIndex_ = 0;
         std::size_t savedHistoryIndex_ = InvalidHistoryIndex;

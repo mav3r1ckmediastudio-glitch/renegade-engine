@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include "RuntimePlayerViewAnimation.h"
 #include "renegade/bridge/EquipmentAssetService.h"
 #include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/PlayerService.h"
@@ -8,6 +9,16 @@
 
 namespace renegade::runtime
 {
+    struct RuntimeStormAnimationInput {bool chargeHeld=false, releasePressed=false;};
+    // A placed Lightning AoE is fire-and-forget. Its arms recover automatically
+    // while LMB remains held, without changing continuous beam/fireball casting.
+    inline RuntimeStormAnimationInput ResolveStormOneShotAnimation(
+        bool isNaturalStorm,bool alreadyCast,unsigned spellPhase,
+        bool chargeHeld,bool releasePressed) noexcept {
+        if(!isNaturalStorm || !alreadyCast)return {chargeHeld,releasePressed};
+        return {false,spellPhase==1 || spellPhase==2};
+    }
+
     // Runtime-owned resolved assets. Scene settings remain immutable authoring data.
     struct RuntimeEquipmentLoadout
     {
@@ -24,6 +35,9 @@ namespace renegade::runtime
             bridge::EquipmentFireMode fireMode = bridge::EquipmentFireMode::Projectile;
             float hitscanRangeMetres = 100.0f;
             float hitscanDamage = 10.0f;
+            float channelDamagePerSecond = 20.0f;
+            float stormRadiusMetres=2.5f,stormDurationSeconds=2.6f,stormStrikeDamage=21.f;
+            unsigned stormStrikeCount=8;
         };
         struct ScheduledProjectile { ProjectileRequest request; wi::ecs::Entity animation; };
         std::vector<ScheduledProjectile> scheduledProjectiles;
@@ -58,8 +72,28 @@ namespace renegade::runtime
             result.swap(pendingProjectiles);
             return result;
         }
+        RuntimeReloadStageRequest reloadStageRequest;
+        bool stagedReloadDispatched = false;
+        void AfterNativePresentation(const RuntimePlayerViewAnimationState& native) {
+            if(reloadStageRequest.dispatch && !native.reloadStageAccepted) {
+                actions.Abort(primary.equipment.assetId,bridge::EquipmentHand::Primary);
+                stagedReloadDispatched=false;
+            }
+            if(native.reloadStageCompleted && stagedReloadDispatched) {
+                actions.CompleteActive(primary.equipment.assetId,bridge::EquipmentHand::Primary);
+                stagedReloadDispatched=false;
+            }
+            if(native.shotAccepted)actions.ClearStageProgress(primary.equipment.assetId,bridge::EquipmentHand::Primary);
+        }
         bool dispatched = false;
         bool chargePresentation = false, releasePresentation = false;
+        float projectileChargeSeconds = 0;
+        float ChargeLimit() const {
+            float limit=0;
+            for(const auto& r:resolvedProjectiles)
+                if(r.action==bridge::EquipmentAction::Release)limit=std::max(limit,r.projectile.fullChargeSeconds);
+            return limit;
+        }
         bool offHandBlockPresentation = false;
         struct QueuedStrike {
             bool pending=false, released=false;
@@ -99,7 +133,8 @@ namespace renegade::runtime
                     !bridge::LoadProjectileAsset(root, project, binding.projectileAssetId, projectile, error))
                     return false;
                 resolved.push_back({p.equipment.assetId, binding.action, std::move(projectile),binding.launchSocketName,binding.releaseSeconds,
-                    binding.socketPolicy,binding.secondSocketName,binding.fireMode,binding.hitscanRangeMetres,binding.hitscanDamage});
+                    binding.socketPolicy,binding.secondSocketName,binding.fireMode,binding.hitscanRangeMetres,binding.hitscanDamage,binding.channelDamagePerSecond,binding.stormRadiusMetres,binding.stormDurationSeconds,
+                    binding.stormStrikeDamage,binding.stormStrikeCount});
             }
             primary = std::move(p);
             offHand = std::move(o);
@@ -126,7 +161,7 @@ namespace renegade::runtime
                 // Staged/held actions require the subsequent action-state adapter.
                 return definition.animationAction == semantic &&
                     definition.prepareSeconds == 0 && definition.windupSeconds == 0 &&
-                    definition.recoverySeconds == 0 && !definition.holdUntilRelease && !definition.activeWhileHeld;
+                    definition.recoverySeconds == 0 && !definition.holdUntilRelease && !definition.activeWhileHeld && definition.stages.empty();
             }
             return false;
         }
@@ -144,6 +179,81 @@ namespace renegade::runtime
                 charge->holdUntilRelease && !charge->activeWhileHeld && !release->activeWhileHeld && release->animationAction == "Release" &&
                 release->prepareSeconds == 0 && release->windupSeconds == 0 &&
                 !release->holdUntilRelease;
+        }
+
+        bool channelActive=false;
+        const ProjectileRequest* StormBinding() const {
+            for(const auto& r:resolvedProjectiles)
+                if(r.fireMode==bridge::EquipmentFireMode::Storm && r.action==bridge::EquipmentAction::Cast)return &r;
+            return nullptr;
+        }
+        // Basic hand-thrown explosives fire once per physical click. The full
+        // throw clip owns the release marker; this reference is not a cookable
+        // fuse or hold-to-charge spell. Other magic and firearms are unaffected.
+        const ProjectileRequest* ClickThrowBinding() const {
+            if(primary.equipment.name!="Thrown Grenade P3 Playground")return nullptr;
+            for(const auto& p:resolvedProjectiles)
+                if(p.action==bridge::EquipmentAction::Release &&
+                   p.fireMode==bridge::EquipmentFireMode::Projectile &&
+                   p.projectile.grenade.enabled)
+                    return &p;
+            return nullptr;
+        }
+        bridge::GameplayInputFrame RouteClickThrow(bridge::GameplayInputFrame input,
+            bool equipped,bool nativeBusy,float dt) {
+            auto output=input;
+            output.firePressed=output.reloadPressed=output.toggleEquipmentPressed=false;
+            pendingProjectiles.clear();
+            chargePresentation=false;
+            releasePresentation=false;
+            if(!ready || !std::isfinite(dt) || dt<=0)return output;
+            if(input.cancelEquipmentPressed || !equipped)return output;
+            if(input.firePressed && !nativeBusy) {
+                if(const auto* grenade=ClickThrowBinding()) {
+                    pendingProjectiles.push_back(*grenade);
+                    releasePresentation=true;
+                }
+            }
+            return output;
+        }
+        const ProjectileRequest* ChannelBinding() const {
+            for(const auto& r:resolvedProjectiles)
+                if(r.fireMode==bridge::EquipmentFireMode::Channel && r.action==bridge::EquipmentAction::Cast)return &r;
+            return nullptr;
+        }
+        bridge::GameplayInputFrame RouteChannel(bridge::GameplayInputFrame input,bool equipped,bool nativeBusy,float dt) {
+            auto output=input;
+            output.firePressed=output.reloadPressed=output.toggleEquipmentPressed=false;
+            pendingProjectiles.clear();releasePresentation=false;
+            if(!ready || !std::isfinite(dt) || dt<=0)return output;
+            bool wasHeld=false;
+            for(const auto& c:actions.Channels())
+                if(c.itemId==primary.equipment.assetId && c.definition.action==bridge::EquipmentAction::Cast &&
+                    c.phase!=bridge::EquipmentActionPhase::Ready && c.phase!=bridge::EquipmentActionPhase::Recovery)
+                    wasHeld=true;
+            if(!equipped || input.cancelEquipmentPressed || input.toggleEquipmentPressed) {
+                actions.Abort(primary.equipment.assetId,bridge::EquipmentHand::Primary);
+                chargePresentation=channelActive=false;
+                output.toggleEquipmentPressed=input.toggleEquipmentPressed;
+                output.cancelEquipmentPressed=input.cancelEquipmentPressed || input.toggleEquipmentPressed;
+                actions.TakeEvents();return output;
+            }
+            if(input.firePressed && !nativeBusy && !(actions.ReservedHands()&1))
+                actions.Begin(primary.equipment,bridge::EquipmentAction::Cast,bridge::EquipmentHand::Primary);
+            if(!input.fireDown)actions.Release(primary.equipment.assetId,bridge::EquipmentHand::Primary);
+            actions.Update(dt);
+            chargePresentation=channelActive=false;
+            for(const auto& c:actions.Channels())
+                if(c.itemId==primary.equipment.assetId && c.definition.action==bridge::EquipmentAction::Cast) {
+                    chargePresentation=c.phase==bridge::EquipmentActionPhase::Prepare ||
+                        c.phase==bridge::EquipmentActionPhase::Windup || c.phase==bridge::EquipmentActionPhase::Active;
+                    channelActive=c.phase==bridge::EquipmentActionPhase::Active && !c.released && input.fireDown;
+                }
+            // Release ends gameplay immediately; the existing native Release pair is the cast end.
+            releasePresentation=wasHeld && !input.fireDown;
+            if(!input.fireDown){channelActive=chargePresentation=false;}
+            actions.TakeEvents();
+            return output;
         }
 
         void RefreshChargePresentation()
@@ -169,9 +279,12 @@ namespace renegade::runtime
         }
 
         bridge::GameplayInputFrame RouteStaged(bridge::GameplayInputFrame input,
-            bool equipped, bool nativeBusy, float dt, bool currentAim = false, bool chargePairsAvailable = false, bool offHandBlockAvailable = false, bool directionalMelee = false, bool chainWindow = false, unsigned direction = 0, float fullChargeSeconds = 1, float queuedReleaseSeconds = 0.75f)
+            bool equipped, bool nativeBusy, float dt, bool currentAim = false, bool chargePairsAvailable = false, bool offHandBlockAvailable = false, bool directionalMelee = false, bool chainWindow = false, unsigned direction = 0, float fullChargeSeconds = 1, float queuedReleaseSeconds = 0.75f, bool reloadAllowed = true)
         {
+            if(ChannelBinding() || StormBinding())return RouteChannel(input,equipped,nativeBusy,dt);
+            if(ClickThrowBinding())return RouteClickThrow(input,equipped,nativeBusy,dt);
             pendingProjectiles.clear();
+            reloadStageRequest={};
             releasePresentation = false;
             chainedChargeStarted = false;
             RefreshChargePresentation();
@@ -224,8 +337,12 @@ namespace renegade::runtime
             // Consume a press only when both gameplay and native presentation are free.
             // Existing native animation retains ammo, jump and paired completion rules.
             if (input.cancelEquipmentPressed) {
-                actions.Cancel(primary.equipment.assetId, bridge::EquipmentHand::Primary);
+                const bool cancelled=actions.Cancel(primary.equipment.assetId, bridge::EquipmentHand::Primary);
+                if(cancelled && stagedReloadDispatched) {
+                    reloadStageRequest.cancel=true;stagedReloadDispatched=false;
+                }
                 actions.Cancel(offHand.equipment.assetId, bridge::EquipmentHand::OffHand);
+                if(cancelled)projectileChargeSeconds=0;
             }
             // Enable held block only for a loaded, compatible independent-hand presentation.
             if(offHandBlockAvailable && !input.cancelEquipmentPressed && input.offHandUsePressed &&
@@ -248,11 +365,12 @@ namespace renegade::runtime
                 if (input.toggleEquipmentPressed)
                     begin(equipped ? bridge::EquipmentAction::Unequip : bridge::EquipmentAction::Equip,
                         equipped ? "Unequip" : "Equip");
-                else if (equipped && input.reloadPressed)
+                else if (equipped && input.reloadPressed && reloadAllowed)
                     begin(bridge::EquipmentAction::Reload, "Reload");
                 else if (equipped && (input.firePressed || queuedStrike.pending)) {
                     if (chargePairsAvailable && HasChargeRelease()) {
                         if(begin(bridge::EquipmentAction::Charge, "Charge")) {
+                            projectileChargeSeconds=0;
                             chainedReleasedCharge=queuedStrike.pending && queuedStrike.released;
                             if(queuedStrike.pending) {
                             chainedChargeStarted=true;chainedDirection=queuedStrike.direction;
@@ -278,11 +396,32 @@ namespace renegade::runtime
             events.insert(events.end(), releaseEvents.begin(), releaseEvents.end());
             for (const auto& event : events) {
                 if (event.ownerHand != bridge::EquipmentHand::Primary ||
-                    event.phase != bridge::EquipmentActionPhase::Active) continue;
+                    event.phase != bridge::EquipmentActionPhase::Active || event.stageCompleted) continue;
                 if (event.action == bridge::EquipmentAction::Charge) continue;
+                const auto definition=std::find_if(primary.equipment.actions.begin(),primary.equipment.actions.end(),
+                    [&](const auto& a){return a.action==event.action;});
+                if(definition!=primary.equipment.actions.end() && !definition->stages.empty()) {
+                    const bool stillActive=std::any_of(actions.Channels().begin(),actions.Channels().end(),[&](const auto& c){
+                        return c.itemId==event.itemId && c.ownerHand==event.ownerHand && c.phase==bridge::EquipmentActionPhase::Active && c.stageIndex==event.stageIndex;});
+                    if(!stillActive)continue;
+                    const auto& stage=definition->stages[event.stageIndex];
+                    reloadStageRequest.dispatch=true;reloadStageRequest.refillAmmo=stage.refillAmmo;reloadStageRequest.seconds=stage.activeSeconds;
+                    reloadStageRequest.action=stage.animationAction=="ReloadPartial"?PlayerViewAction::ReloadPartial:PlayerViewAction::Reload;
+                    stagedReloadDispatched=true;
+                    continue;
+                }
                 for (const auto& request : resolvedProjectiles)
                     if (request.action == event.action)
-                        pendingProjectiles.push_back(request);
+                    {
+                        auto snapshot=request;
+                        if(event.action==bridge::EquipmentAction::Release && snapshot.projectile.fullChargeSeconds>0) {
+                            snapshot.projectile.burning=bridge::ProjectileChargedBurning(snapshot.projectile,projectileChargeSeconds);
+                            snapshot.projectile.minimumChargeBurning={};
+                            snapshot.projectile.damage=bridge::ProjectileChargedDamage(snapshot.projectile,projectileChargeSeconds);
+                            snapshot.projectile.fullChargeSeconds=0;snapshot.projectile.minimumChargeDamage=0;
+                        }
+                        pendingProjectiles.push_back(std::move(snapshot));
+                    }
                 dispatched = true;
                 releasePresentation = event.action == bridge::EquipmentAction::Release;
                 output.firePressed = event.action == bridge::EquipmentAction::PrimaryUse;
@@ -291,6 +430,9 @@ namespace renegade::runtime
                     event.action == bridge::EquipmentAction::Unequip;
             }
             RefreshChargePresentation();
+            if(chargePresentation && input.fireDown && !input.cancelEquipmentPressed)
+                projectileChargeSeconds=std::min(ChargeLimit(),projectileChargeSeconds+dt);
+            else if(!chargePresentation)projectileChargeSeconds=0;
             RefreshOffHandBlockPresentation();
             return output;
         }

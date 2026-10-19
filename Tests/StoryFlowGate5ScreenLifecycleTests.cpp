@@ -3,6 +3,11 @@
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ScreenService.h"
+#include "renegade/bridge/StoryFlowAuthoringSession.h"
+#include "renegade/bridge/StoryFlowAuthoringModel.h"
+#include "renegade/bridge/StoryFlowJourneyModel.h"
+#include "renegade/bridge/StoryFlowLayoutService.h"
+#include "renegade/bridge/ScreenLibraryService.h"
 
 #include <chrono>
 #include <filesystem>
@@ -256,6 +261,84 @@ namespace
             "Add Screen attempted to overwrite existing content");
     }
 
+    void TestStrandedScreenRecovery(const fs::path& root)
+    {
+        const StableId projectId = GenerateStableId();
+        FlowDocument flow; fs::path flowPath; std::string error;
+        Check(WriteBaseFlow(root, projectId, flow, flowPath), "recovery base Flow");
+        StoryFlowNewScreenRequest request;
+        request.projectRoot = root.generic_u8string(); request.projectId = projectId;
+        request.flowPath = flowPath.generic_u8string(); request.flow = flow;
+        request.screenName = "Options"; request.screenPathHint = "Content/Screens/options.renegade-screen";
+        request.screenTemplate = StoryFlowScreenTemplate::Options;
+        StoryFlowScreenLifecycleService service;
+        const auto created = service.CreateNewScreen(request);
+        Check(created.succeeded, "create Options");
+        const auto bytes = ReadBytes(fs::u8path(created.screenPath));
+        // Recreate the owner's stranded asset: original Flow, same existing Screen.
+        Check(WriteFlowDocument(request.flowPath, flow, error), "restore unattached Flow fixture");
+        request.screenPathHint = "Content/Screens/OPTIONS.renegade-screen";
+        const auto duplicate = service.CreateNewScreen(request);
+        Check(!duplicate.succeeded && duplicate.code == StoryFlowScreenCreateCode::Conflict &&
+            duplicate.message.find("ADD TO JOURNEY") != std::string::npos,
+            "case-insensitive duplicate must offer recovery");
+        request.screenPathHint = created.screenPathHint;
+        // A live unsaved edit must be present in the lifecycle's authoritative snapshot.
+        request.flow.nodes.back().name = "Unsaved existing title";
+        const auto beforeAdopt = ReadBytes(flowPath);
+        request.transactionHook = [flowPath](ProjectDocumentTransactionStage stage, std::size_t,
+            const std::string& path, std::string& error)
+        {
+            if (stage == ProjectDocumentTransactionStage::Replace && path == flowPath.generic_u8string())
+            { error = "forced adoption failure"; return ProjectDocumentTransactionHookAction::Fail; }
+            return ProjectDocumentTransactionHookAction::Continue;
+        };
+        const auto failed = service.AdoptExistingScreen(request);
+        Check(!failed.succeeded && failed.transaction.rolledBack && ReadBytes(flowPath) == beforeAdopt &&
+            ReadBytes(fs::u8path(created.screenPath)) == bytes, "adoption rollback must preserve Flow and stranded asset");
+        request.transactionHook = {};
+        const auto adopted = service.AdoptExistingScreen(request);
+        Check(adopted.succeeded && adopted.transaction.committed, "adopt stranded Options");
+        Check(adopted.screenDocumentId == created.screenDocumentId &&
+            ReadBytes(fs::u8path(created.screenPath)) == bytes, "adoption must preserve identity and exact asset bytes");
+        Check(adopted.committedFlow.routes.size() == flow.routes.size(), "adoption must not invent routes");
+        Check(adopted.committedFlow.nodes[1].name == "Unsaved existing title", "adoption lost live Flow edits");
+        const auto catalogue = EnumerateProjectScreenLibrary(request.projectRoot, projectId);
+        Check(catalogue.succeeded && catalogue.screens.size() == 1, "recovery created duplicate assets");
+        StoryFlowAuthoringSession session;
+        Check(session.Open(request.flowPath, projectId, error), "close/reopen adopted Flow");
+        StoryFlowAuthoringModel model; StoryFlowJourneyModel journey;
+        Check(model.Load(session.Document(), projectId, error) && journey.Build(model, error), "adopted Journey projection");
+        Check(journey.FindCard(adopted.screenNodeId) != nullptr && journey.Cards().size() == model.Nodes().size(),
+            "unreachable adopted Screen must be discoverable in Journey");
+        auto layout = BuildDeterministicStoryFlowLayout(model, projectId, request.flow.envelope.documentId);
+        Check(layout.nodes.size() == model.Nodes().size(), "created card must have layout");
+        Check(session.RenameNode(adopted.screenNodeId, "Replacement", error) && session.Undo(error) && session.Save(error),
+            "rename/Undo/save after adoption");
+        Check(session.Reload(error) && FindNode(session.Document(), adopted.screenNodeId) != nullptr,
+            "Undo/save/reopen lost adopted node");
+        request.flow = session.Document();
+        const auto again = service.AdoptExistingScreen(request);
+        Check(again.succeeded && again.screenNodeId == adopted.screenNodeId &&
+            again.committedFlow.nodes.size() == session.Document().nodes.size(), "adopt existing node must reveal, not duplicate");
+        for (const auto usage : {ScreenUsage::Overlay, ScreenUsage::Modal})
+        {
+            const auto asset = CreateProjectScreenLibraryDocument(request.projectRoot, projectId, usage);
+            Check(asset.succeeded, "create navigation usage fixture");
+            const auto original = ReadBytes(root / fs::u8path(asset.pathHint));
+            request.screenPathHint = asset.pathHint;
+            const auto added = service.AdoptExistingScreen(request);
+            Check(added.succeeded && added.screenDocumentId == asset.documentId &&
+                ReadBytes(root / fs::u8path(asset.pathHint)) == original,
+                "overlay/modal explicit Journey adoption must retain asset identity and bytes");
+            request.flow = added.committedFlow;
+        }
+        const auto hud = CreateProjectScreenLibraryDocument(request.projectRoot, projectId, ScreenUsage::Hud);
+        Check(hud.succeeded, "create HUD rejection fixture");
+        request.screenPathHint = hud.pathHint;
+        Check(!service.AdoptExistingScreen(request).succeeded, "passive HUD must retain existing HUD authority");
+    }
+
     void TestTemplateNames()
     {
         Check(std::string(StoryFlowScreenTemplateName(StoryFlowScreenTemplate::Title)) == "title",
@@ -280,6 +363,7 @@ int main()
     TestRollback(temporary.path / "rollback project");
     TestUnsafeAndConflictingDestinations(temporary.path / "conflict project");
     TestTemplateNames();
+    TestStrandedScreenRecovery(temporary.path / "stranded recovery");
 
     if (failures != 0)
     {

@@ -46,11 +46,12 @@ namespace renegade::bridge
 
         bool CreateStoryFlowProject(
             const std::string& parentDirectory,
-            const std::string& projectName)
+            const std::string& projectName,
+            bool seedUiScaffold = true)
         {
             ProjectService candidate;
             if (!candidate.CreateStoryFlowProject(
-                    parentDirectory, projectName))
+                    parentDirectory, projectName, seedUiScaffold))
             {
                 FailPending(candidate.LastError(), candidate.LastWarning());
                 return false;

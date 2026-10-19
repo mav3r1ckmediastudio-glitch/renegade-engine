@@ -1,4 +1,5 @@
 #include "RenegadeStoryFlowWorkspace.h"
+#include "StoryFlowOverviewPolicy.h"
 
 #include <algorithm>
 #include <cctype>
@@ -31,7 +32,7 @@ namespace
     constexpr float JourneyBranchIndent = 244.0f;
     constexpr float JourneyBranchTrackTop = 310.0f;
     constexpr float JourneyBranchTrackSpacing = 92.0f;
-    constexpr float MinZoom = 0.82f;
+    constexpr float MinZoom = 0.05f;
     constexpr float MaxZoom = 1.18f;
 
     constexpr wi::Color Surface(7, 11, 14, 255);
@@ -235,7 +236,7 @@ namespace renegade::studio
 
         if (session_ && model_ && layout_ && session_->IsLoaded() && model_->IsLoaded())
         {
-            layout_->activeView = bridge::StoryFlowViewMode::Journey;
+            // Keep the persisted/current view when rebinding after creation.
             if (layout_->journeyCanvas.zoom < MinZoom ||
                 layout_->journeyCanvas.zoom > MaxZoom)
             {
@@ -288,6 +289,9 @@ namespace renegade::studio
         pendingJourneyDestinationIndex_ = 0;
         pendingAddJourneyAction_ = false;
         projectRoot_.clear();
+        eligibleHuds_.clear();
+        levelHudCombo_.ClearItems();contextHudCombo_.ClearItems();
+        contextRuleIndex_=contextHudChoice_=0;
         selectedNodeId_.clear();
         selectedRouteId_.clear();
         connectionSourceNodeId_.clear();
@@ -335,6 +339,151 @@ namespace renegade::studio
     void RenegadeStoryFlowWorkspace::SetExternalStatus(std::string message)
     {
         SetStatus(std::move(message));
+    }
+
+    void RenegadeStoryFlowWorkspace::SetHudChoices(std::vector<bridge::ScreenLibraryEntry> screens)
+    {
+        eligibleHuds_.clear();
+        for (auto& screen : screens)
+            if (screen.available && screen.enabledInGame && screen.usage == bridge::ScreenUsage::Hud)
+                eligibleHuds_.push_back(std::move(screen));
+        RefreshHudChoice();
+        RefreshHudContextRule();
+    }
+
+    void RenegadeStoryFlowWorkspace::RefreshHudChoice()
+    {
+        levelHudCombo_.ClearItems();
+        levelHudCombo_.AddItem("INHERIT PROJECT", 0);
+        levelHudCombo_.AddItem("NONE", 1);
+        const auto* node = FindDocumentNode(selectedNodeId_);
+        int selected = 0;
+        if (node && node->kind == bridge::FlowNodeKind::Level)
+        {
+            if (node->levelHud.mode == bridge::LevelHudMode::None) selected = 1;
+            if (node->levelHud.mode == bridge::LevelHudMode::Override)
+            {
+                selected = -1;
+            }
+        }
+        for (std::size_t i = 0; i < eligibleHuds_.size(); ++i)
+        {
+            const auto& hud = eligibleHuds_[i];
+            levelHudCombo_.AddItem("HUD: " + Shorten(hud.name, 22), static_cast<std::uint64_t>(i + 2));
+            if (node && node->kind == bridge::FlowNodeKind::Level && node->levelHud.hud &&
+                node->levelHud.hud->documentId == hud.documentId &&
+                node->levelHud.mode == bridge::LevelHudMode::Override)
+                selected = static_cast<int>(i + 2);
+        }
+        if (selected == -1)
+            levelHudCombo_.AddItem("MISSING HUD // REASSIGN", static_cast<std::uint64_t>(eligibleHuds_.size() + 2));
+        levelHudCombo_.SetSelectedWithoutCallback(selected == -1 ? static_cast<int>(eligibleHuds_.size() + 2) : selected);
+    }
+
+    void RenegadeStoryFlowWorkspace::RefreshHudContextRule()
+    {
+        contextHudCombo_.ClearItems();
+        contextHudCombo_.AddItem("SELECT CONTEXT HUD",0);
+        for(std::size_t i=0;i<eligibleHuds_.size();++i)
+            contextHudCombo_.AddItem("HUD: "+Shorten(eligibleHuds_[i].name,22),
+                static_cast<std::uint64_t>(i+1));
+        const auto* node=FindDocumentNode(selectedNodeId_);
+        if(!node||node->kind!=bridge::FlowNodeKind::Level)
+        {
+            contextEnter_.SetValue(std::string{});contextExit_.SetValue(std::string{});
+            contextHudChoice_=contextRuleIndex_=0;
+            contextHudCombo_.SetSelectedWithoutCallback(0);
+            contextCycle_.SetText("HUD EVENT RULE: NO LEVEL SELECTED");
+            return;
+        }
+        const auto count=node->hudContextRules.size();
+        contextRuleIndex_=std::min(contextRuleIndex_,count);
+        const bool editing=contextRuleIndex_<count;
+        contextCycle_.SetText(editing?
+            ("HUD EVENT RULE "+std::to_string(contextRuleIndex_+1)+"/"+
+                std::to_string(count)+" // NEXT"):
+            ("HUD EVENT RULE: NEW "+std::to_string(count+1)+"/17"));
+        int index=0;
+        if(editing)
+        {
+            const auto& rule=node->hudContextRules[contextRuleIndex_];
+            contextEnter_.SetValue(rule.enterEvent);
+            contextExit_.SetValue(rule.exitEvent);
+            for(std::size_t i=0;i<eligibleHuds_.size();++i)
+                if(eligibleHuds_[i].documentId==rule.hud.documentId)
+                {index=static_cast<int>(i+1);break;}
+            if(!index)
+            {
+                index=static_cast<int>(eligibleHuds_.size()+1);
+                contextHudCombo_.AddItem("MISSING HUD // REASSIGN",static_cast<std::uint64_t>(0));
+            }
+        }
+        else {contextEnter_.SetValue(std::string{});contextExit_.SetValue(std::string{});}
+        contextHudChoice_=index>=1&&static_cast<std::size_t>(index)<=eligibleHuds_.size()?
+            static_cast<std::size_t>(index):0;
+        contextHudCombo_.SetSelectedWithoutCallback(index);
+    }
+
+    void RenegadeStoryFlowWorkspace::ApplyHudContextRule()
+    {
+        if(!session_||!session_->IsLoaded())return;
+        const auto* node=FindDocumentNode(selectedNodeId_);
+        if(!node||node->kind!=bridge::FlowNodeKind::Level)return;
+        if(contextHudChoice_==0||contextHudChoice_>eligibleHuds_.size())
+        {SetStatus("HUD EVENT REJECTED // SELECT AN ENABLED PROJECT HUD");return;}
+        const auto& choice=eligibleHuds_[contextHudChoice_-1];
+        bridge::HudContextEventRule rule{contextEnter_.GetValue(),contextExit_.GetValue(),
+            {choice.documentId,choice.pathHint}};
+        auto rules=node->hudContextRules;
+        if(contextRuleIndex_<rules.size())rules[contextRuleIndex_]=std::move(rule);
+        else rules.push_back(std::move(rule));
+        std::string error;
+        if(!session_->SetLevelHudContextRules(node->id,std::move(rules),error))
+        {SetStatus("HUD EVENT REJECTED // "+error);return;}
+        if(!RefreshPresentationAfterSemanticChange())
+        {SetStatus("HUD EVENT UPDATED // PRESENTATION REFRESH FAILED");return;}
+        RefreshHudContextRule();
+        SetStatus("HUD EVENT RULE UPDATED // SAVE STORYFLOW");
+    }
+
+    void RenegadeStoryFlowWorkspace::RemoveHudContextRule()
+    {
+        if(!session_||!session_->IsLoaded())return;
+        const auto* node=FindDocumentNode(selectedNodeId_);
+        if(!node||node->kind!=bridge::FlowNodeKind::Level||
+            contextRuleIndex_>=node->hudContextRules.size())return;
+        auto rules=node->hudContextRules;
+        rules.erase(rules.begin()+static_cast<std::ptrdiff_t>(contextRuleIndex_));
+        std::string error;
+        if(!session_->SetLevelHudContextRules(node->id,std::move(rules),error))
+        {SetStatus("HUD EVENT REMOVE REJECTED // "+error);return;}
+        contextRuleIndex_=0;
+        if(!RefreshPresentationAfterSemanticChange())
+        {SetStatus("HUD EVENT REMOVED // PRESENTATION REFRESH FAILED");return;}
+        RefreshHudContextRule();
+        SetStatus("HUD EVENT RULE REMOVED // SAVE STORYFLOW");
+    }
+
+    void RenegadeStoryFlowWorkspace::ApplyHudChoice(std::size_t choice)
+    {
+        if (!session_ || !session_->IsLoaded()) return;
+        const auto* node = FindDocumentNode(selectedNodeId_);
+        if (!node || node->kind != bridge::FlowNodeKind::Level) return;
+        bridge::LevelHudSelection selection;
+        if (choice == 1) selection.mode = bridge::LevelHudMode::None;
+        else if (choice >= 2 && choice - 2 < eligibleHuds_.size())
+        {
+            const auto& hud = eligibleHuds_[choice - 2];
+            selection.mode = bridge::LevelHudMode::Override;
+            selection.hud = bridge::HudReference{hud.documentId, hud.pathHint};
+        }
+        else if (choice != 0) { RefreshHudChoice(); return; }
+        std::string error;
+        if (!session_->SetLevelHud(node->id, std::move(selection), error))
+        { SetStatus("LEVEL HUD REJECTED // " + error); RefreshHudChoice(); return; }
+        if (!RefreshPresentationAfterSemanticChange())
+        { SetStatus("LEVEL HUD CHANGED // PRESENTATION REFRESH FAILED"); return; }
+        SetStatus("LEVEL HUD UPDATED // UNSAVED STORYFLOW");
     }
 
     const bridge::StoryFlowNodeLayout* RenegadeStoryFlowWorkspace::FindLayout(
@@ -894,7 +1043,7 @@ namespace renegade::studio
                 hasError,
                 hasWarning,
                 card.trackIndex == 0,
-                layout_->journeyCanvas.zoom >= MinZoom,
+                layout_->journeyCanvas.zoom >= 0.82f,
                 (node->kind == bridge::FlowNodeKind::Level ||
                     node->kind == bridge::FlowNodeKind::Screen) &&
                     !projectRoot_.empty(),
@@ -989,6 +1138,11 @@ namespace renegade::studio
 
     void RenegadeStoryFlowWorkspace::FitToContent()
     {
+        panning_ = false;
+        nodeDragging_ = false;
+        draggedNodeId_.clear();
+        hideDetached_ = false;
+        collapsedJourneyTracks_.clear();
         if (!model_ || !layout_) return;
         float minX = std::numeric_limits<float>::max();
         float minY = std::numeric_limits<float>::max();
@@ -1041,16 +1195,12 @@ namespace renegade::studio
             }
         }
         if (minX > maxX || minY > maxY) return;
-        const float cw = std::max(1.0f, maxX - minX);
-        const float ch = std::max(1.0f, maxY - minY);
-        const float graphWidth = GraphWidth();
+        const auto fitted = FitOverview(minX, minY, maxX, maxY,
+            GraphWidth(), height_ - HeaderHeight, 2 * Padding, MaxZoom);
         auto& activeCanvas = ActiveCanvas();
-        activeCanvas.zoom = std::clamp(std::min((graphWidth - 4 * Padding) / cw,
-            (height_ - HeaderHeight - 4 * Padding) / ch), MinZoom, MaxZoom);
-        activeCanvas.panX = (graphWidth - cw * activeCanvas.zoom) * 0.5f -
-            Padding - minX * activeCanvas.zoom;
-        activeCanvas.panY = (height_ - HeaderHeight - ch * activeCanvas.zoom) * 0.5f -
-            Padding - minY * activeCanvas.zoom;
+        activeCanvas.zoom = fitted.zoom;
+        activeCanvas.panX = fitted.panX - Padding;
+        activeCanvas.panY = fitted.panY - Padding;
         NotifyLayoutChanged();
     }
 
@@ -1171,10 +1321,36 @@ namespace renegade::studio
         NotifyLayoutChanged();
     }
 
+    void RenegadeStoryFlowWorkspace::PlaceNewNodeAtViewportCentre(
+        const bridge::StableId& nodeId)
+    {
+        if (!layout_ || !model_ || !model_->FindNode(nodeId)) return;
+        hideDetached_ = false;
+        if (const auto* card = journeyModel_.FindCard(nodeId))
+            collapsedJourneyTracks_.erase(card->trackIndex);
+        SelectNode(nodeId);
+        const auto bounds = NodeBounds(nodeId);
+        const float zoom = ActiveCanvas().zoom;
+        if (bounds.z <= 0 || bounds.w <= 0 || zoom <= 0) return;
+        const auto delta = CentreNewCard(
+            translation.x + GraphWidth() * 0.5f, translation.y + HeaderHeight + (height_ - HeaderHeight) * 0.5f,
+            bounds.x, bounds.y, zoom, bounds.z / zoom, bounds.w / zoom);
+        if (layout_->activeView == bridge::StoryFlowViewMode::Journey)
+        {
+            if (auto* offset = FindJourneyLayout(nodeId))
+            { offset->offsetX += delta.x; offset->offsetY += delta.y; }
+        }
+        NotifyLayoutChanged();
+    }
+
     void RenegadeStoryFlowWorkspace::SelectAndFocusNode(
         const bridge::StableId& nodeId)
     {
         if (!model_ || !layout_ || !model_->FindNode(nodeId)) return;
+        hideDetached_ = false;
+        if (const auto* card = journeyModel_.FindCard(nodeId))
+            collapsedJourneyTracks_.erase(card->trackIndex);
+        layout_->journeyCanvas.zoom = 1.0f;
         SelectNode(nodeId);
         const XMFLOAT4 bounds = NodeBounds(nodeId);
         if (bounds.z <= 0.0f || bounds.w <= 0.0f) return;
@@ -1234,11 +1410,43 @@ namespace renegade::studio
         connectButton_.SetText("CONNECT");
         connectButton_.SetVisible(false);
         connectButton_.SetEnabled(false);
+        levelHudCombo_.Create("Story Flow Level HUD Selection");
+        levelHudCombo_.SetRenderTextSize(11);
+        levelHudCombo_.SetTooltip("Level HUD: inherit the project default, hide HUD, or override with a project HUD.");
+        levelHudCombo_.OnSelect([this](const wi::gui::EventArgs& args)
+        { ApplyHudChoice(static_cast<std::size_t>(args.userdata)); });
+        contextCycle_.Create("Select existing or new contextual HUD rule");
+        contextCycle_.SetText("HUD EVENT RULE: NEW");
+        contextCycle_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            const auto* node=FindDocumentNode(selectedNodeId_);
+            const auto count=node&&node->kind==bridge::FlowNodeKind::Level?
+                node->hudContextRules.size():std::size_t{0};
+            contextRuleIndex_=(contextRuleIndex_+1)%(count+1);
+            RefreshHudContextRule();
+        });
+        contextEnter_.Create("Context HUD enter gameplay event");
+        contextEnter_.SetDescription("ENTER EVENT  ");
+        contextEnter_.SetCancelInputEnabled(false);
+        contextExit_.Create("Context HUD exit gameplay event");
+        contextExit_.SetDescription("EXIT EVENT  ");
+        contextExit_.SetCancelInputEnabled(false);
+        contextHudCombo_.Create("Context HUD project Screen");
+        contextHudCombo_.SetRenderTextSize(11);
+        contextHudCombo_.OnSelect([this](const wi::gui::EventArgs& args)
+        {contextHudChoice_=static_cast<std::size_t>(args.userdata);});
+        contextApply_.Create("Apply Level contextual HUD event rule");
+        contextApply_.SetText("APPLY HUD RULE");
+        contextApply_.OnClick([this](const wi::gui::EventArgs&){ApplyHudContextRule();});
+        contextDelete_.Create("Remove Level contextual HUD event rule");
+        contextDelete_.SetText("REMOVE RULE");
+        contextDelete_.OnClick([this](const wi::gui::EventArgs&){RemoveHudContextRule();});
         nodeNameInput_.Create("Story Flow Node Name");
         nodeNameInput_.SetDescription("DISPLAY NAME  ");
         nodeNameInput_.SetPlaceholder("Destination name...");
         nodeNameInput_.SetRenderTextSize(12);
         nodeNameInput_.SetCancelInputEnabled(false);
+        nodeNameInput_.SetClearOnEntry(true);
         nodeNameInput_.OnInputAccepted([this](const wi::gui::EventArgs&) { ApplySelectedNode(); });
         applyNodeButton_.Create("Story Flow Apply Node");
         applyNodeButton_.SetText("APPLY NAME");
@@ -1338,6 +1546,13 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&undoButton_),
             static_cast<wi::gui::Widget*>(&redoButton_),
             static_cast<wi::gui::Widget*>(&connectButton_),
+            static_cast<wi::gui::Widget*>(&levelHudCombo_),
+            static_cast<wi::gui::Widget*>(&contextCycle_),
+            static_cast<wi::gui::Widget*>(&contextEnter_),
+            static_cast<wi::gui::Widget*>(&contextExit_),
+            static_cast<wi::gui::Widget*>(&contextHudCombo_),
+            static_cast<wi::gui::Widget*>(&contextApply_),
+            static_cast<wi::gui::Widget*>(&contextDelete_),
             static_cast<wi::gui::Widget*>(&nodeNameInput_),
             static_cast<wi::gui::Widget*>(&applyNodeButton_),
             static_cast<wi::gui::Widget*>(&deleteNodeButton_),
@@ -1393,6 +1608,20 @@ namespace renegade::studio
         const float routeY0 = journeyView
             ? generalY + 22.0f
             : translation.y + 350.0f;
+        levelHudCombo_.SetPos(XMFLOAT2(inspectorX, nodeY0 + 77.0f));
+        levelHudCombo_.SetSize(XMFLOAT2(fieldWidth, 28.0f));
+        contextCycle_.SetPos(XMFLOAT2(inspectorX,nodeY0+112.0f));
+        contextCycle_.SetSize(XMFLOAT2(fieldWidth,27.0f));
+        contextEnter_.SetPos(XMFLOAT2(inspectorX,nodeY0+145.0f));
+        contextEnter_.SetSize(XMFLOAT2(fieldWidth,28.0f));
+        contextExit_.SetPos(XMFLOAT2(inspectorX,nodeY0+179.0f));
+        contextExit_.SetSize(XMFLOAT2(fieldWidth,28.0f));
+        contextHudCombo_.SetPos(XMFLOAT2(inspectorX,nodeY0+213.0f));
+        contextHudCombo_.SetSize(XMFLOAT2(fieldWidth,28.0f));
+        contextApply_.SetPos(XMFLOAT2(inspectorX,nodeY0+246.0f));
+        contextApply_.SetSize(XMFLOAT2(fieldWidth*0.52f-3,28.0f));
+        contextDelete_.SetPos(XMFLOAT2(inspectorX+fieldWidth*0.52f+3,nodeY0+246.0f));
+        contextDelete_.SetSize(XMFLOAT2(fieldWidth*0.48f-3,28.0f));
         nodeNameInput_.SetPos(XMFLOAT2(inspectorX, nodeY0));
         nodeNameInput_.SetSize(XMFLOAT2(fieldWidth, 28.0f));
         applyNodeButton_.SetPos(XMFLOAT2(inspectorX, nodeY0 + 38.0f));
@@ -1456,12 +1685,23 @@ namespace renegade::studio
         redoButton_.SetVisible(graphMode);
         connectButton_.SetVisible(false);
         connectButton_.SetEnabled(false);
-        saveButton_.SetEnabled(graphMode && session_->IsDirty());
+        saveButton_.SetEnabled(graphMode && IsDirty());
         undoButton_.SetEnabled(graphMode && session_->CanUndo());
         redoButton_.SetEnabled(graphMode && session_->CanRedo());
         const auto* selectedNode = FindDocumentNode(selectedNodeId_);
         const auto* selectedRoute = FindDocumentRoute(selectedRouteId_);
         const bool nodeSelected = loaded && selectedNode != nullptr;
+        levelHudCombo_.SetVisible(nodeSelected && selectedNode->kind == bridge::FlowNodeKind::Level && graphMode);
+        levelHudCombo_.SetEnabled(levelHudCombo_.IsVisible());
+        for(auto* control:{static_cast<wi::gui::Widget*>(&contextCycle_),
+            static_cast<wi::gui::Widget*>(&contextEnter_),
+            static_cast<wi::gui::Widget*>(&contextExit_),
+            static_cast<wi::gui::Widget*>(&contextHudCombo_),
+            static_cast<wi::gui::Widget*>(&contextApply_),
+            static_cast<wi::gui::Widget*>(&contextDelete_)})
+        {control->SetVisible(levelHudCombo_.IsVisible());control->SetEnabled(levelHudCombo_.IsVisible());}
+        contextDelete_.SetEnabled(levelHudCombo_.IsVisible() &&
+            contextRuleIndex_<selectedNode->hudContextRules.size());
         nodeNameInput_.SetVisible(nodeSelected);
         applyNodeButton_.SetVisible(nodeSelected && graphMode);
         deleteNodeButton_.SetVisible(nodeSelected && graphMode);
@@ -1509,14 +1749,26 @@ namespace renegade::studio
             routeEntryInput_.SetEnabled(
                 destination && destination->kind == bridge::FlowNodeKind::Level);
         }
-        addCompleteButton_.SetVisible(graphMode);
-        addReturnButton_.SetVisible(graphMode);
-        addQuitButton_.SetVisible(graphMode);
+        // The Level inspector dedicates its lower pane to contextual HUD
+        // event authoring. Terminal-destination creation remains available
+        // when another graph node (or an empty graph area) is selected.
+        const bool editingLevelHudEvents=graphMode&&selectedNode&&
+            selectedNode->kind==bridge::FlowNodeKind::Level;
+        addCompleteButton_.SetVisible(graphMode&&!editingLevelHudEvents);
+        addReturnButton_.SetVisible(graphMode&&!editingLevelHudEvents);
+        addQuitButton_.SetVisible(graphMode&&!editingLevelHudEvents);
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&saveButton_),
             static_cast<wi::gui::Widget*>(&undoButton_),
             static_cast<wi::gui::Widget*>(&redoButton_),
             static_cast<wi::gui::Widget*>(&connectButton_),
+            static_cast<wi::gui::Widget*>(&levelHudCombo_),
+            static_cast<wi::gui::Widget*>(&contextCycle_),
+            static_cast<wi::gui::Widget*>(&contextEnter_),
+            static_cast<wi::gui::Widget*>(&contextExit_),
+            static_cast<wi::gui::Widget*>(&contextHudCombo_),
+            static_cast<wi::gui::Widget*>(&contextApply_),
+            static_cast<wi::gui::Widget*>(&contextDelete_),
             static_cast<wi::gui::Widget*>(&nodeNameInput_),
             static_cast<wi::gui::Widget*>(&applyNodeButton_),
             static_cast<wi::gui::Widget*>(&deleteNodeButton_),
@@ -1561,6 +1813,13 @@ namespace renegade::studio
             static_cast<const wi::gui::Widget*>(&undoButton_),
             static_cast<const wi::gui::Widget*>(&redoButton_),
             static_cast<const wi::gui::Widget*>(&connectButton_),
+            static_cast<const wi::gui::Widget*>(&levelHudCombo_),
+            static_cast<const wi::gui::Widget*>(&contextCycle_),
+            static_cast<const wi::gui::Widget*>(&contextEnter_),
+            static_cast<const wi::gui::Widget*>(&contextExit_),
+            static_cast<const wi::gui::Widget*>(&contextHudCombo_),
+            static_cast<const wi::gui::Widget*>(&contextApply_),
+            static_cast<const wi::gui::Widget*>(&contextDelete_),
             static_cast<const wi::gui::Widget*>(&nodeNameInput_),
             static_cast<const wi::gui::Widget*>(&applyNodeButton_),
             static_cast<const wi::gui::Widget*>(&deleteNodeButton_),
@@ -1605,6 +1864,8 @@ namespace renegade::studio
             routePriorityInput_.SetValue(std::to_string(route->priority));
         }
         RefreshJourneyExitControls();
+        RefreshHudChoice();
+        RefreshHudContextRule();
     }
 
     void RenegadeStoryFlowWorkspace::RefreshJourneyExitControls()
@@ -1902,6 +2163,9 @@ namespace renegade::studio
     void RenegadeStoryFlowWorkspace::SaveFlow()
     {
         if (!session_) return;
+        // Save owns the live title draft as well as the committed Flow state.
+        // Native controls may process this click before the Inspector loses focus.
+        nodeNameInput_.CommitReplacement();
         std::string error;
         if (!session_->Save(error))
         {
@@ -1941,7 +2205,8 @@ namespace renegade::studio
     {
         if (!session_ || selectedNodeId_.empty()) return;
         std::string error;
-        const std::string name = Trim(nodeNameInput_.GetValue());
+        const std::string name = Trim(nodeNameInput_.GetCurrentInputValue());
+        if (name.empty()) { RefreshInspectorControls(); return; }
         if (!session_->RenameNode(selectedNodeId_, name, error))
         {
             SetStatus("NODE EDIT REJECTED // " + error);
@@ -2596,7 +2861,23 @@ namespace renegade::studio
             Label("SELECT A JOURNEY CARD", inspectorX,
                 translation.y + 112.0f, 11, InspectorSecondary, cmd);
         }
-        if (layout_->activeView == bridge::StoryFlowViewMode::Graph)
+        const auto* inspectedGraphNode=FindDocumentNode(selectedNodeId_);
+        const bool editingGraphHudEvents=
+            layout_->activeView==bridge::StoryFlowViewMode::Graph&&
+            inspectedGraphNode&&inspectedGraphNode->kind==bridge::FlowNodeKind::Level;
+        if(editingGraphHudEvents)
+        {
+            Label("HUD EVENT RULES // LEVEL CONTEXT", inspectorX,
+                translation.y+HeaderHeight+78.0f,11,Text,cmd);
+            const auto brief=WrapInspectorText(ReadableStatus(statusMessage_),
+                InspectorWrapCharacterLimit(
+                    std::max(1.0f,width_-GraphWidth()-28.0f),10));
+            for(std::size_t index=0;index<std::min<std::size_t>(brief.size(),3);++index)
+                Label(brief[index],inspectorX,
+                    translation.y+HeaderHeight+100.0f+index*16.0f,
+                    10,InspectorSecondary,cmd);
+        }
+        if (layout_->activeView == bridge::StoryFlowViewMode::Graph && !editingGraphHudEvents)
         {
             Label("ADD TERMINAL DESTINATION", inspectorX,
                 translation.y + HeaderHeight + 334.0f, 11, Text, cmd);
@@ -2607,6 +2888,11 @@ namespace renegade::studio
                 translation.y + HeaderHeight + 477.0f,
                 9, InspectorSecondary, cmd);
         }
+        // The lower graph inspector is mutually exclusive: either Level
+        // HUD rules or terminal/validation/status. Rendering both covered
+        // input widgets and made the newly authored rules unusable.
+        if(!editingGraphHudEvents)
+        {
         const float inspectorContentWidth = std::max(
             1.0f, width_ - GraphWidth() - 28.0f);
         const auto statusLines = WrapInspectorText(
@@ -2720,6 +3006,7 @@ namespace renegade::studio
             Label(statusLines[i], inspectorX,
                 statusY + 17.0f + static_cast<float>(i) * statusLineHeight,
                 10, statusColor, cmd);
+        }
         }
         RenderAuthoringControls(canvas, cmd);
     }

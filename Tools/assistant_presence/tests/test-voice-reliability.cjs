@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {conversationCheck}=require('../chat/conversation-check');
+for(const t of ['Testing. Testing. One, two, three.','Can you hear me?','Microphone check','testing 1 2 3'])assert(conversationCheck(t),t);
+for(const t of ['How do I test a level?','Testing NPC patrol','Can you hear my NPC in the editor?','How do I import a character?'])assert.equal(conversationCheck(t),null,t);
+const {VoiceConversation}=require('../voice/conversation');
+const c=new VoiceConversation();c.state.enabled=true;c.listening=true;c.epoch=7;
+c.receive({type:'capture',epoch:7,voiced:true});assert.equal(c.snapshot().phase,'hearing');
+c.receive({type:'capture',epoch:6,voiced:false});assert.equal(c.snapshot().phase,'hearing');
+c.receive({type:'transcribing',epoch:7});assert.equal(c.snapshot().phase,'transcribing');assert(c.listening);
+c.state.enabled=false;c.receive({type:'capture',epoch:7,voiced:true});assert.equal(c.snapshot().phase,'transcribing');
+console.log('PASS microphone checks, engine routing exclusions, hearing/transcribing and stale/disabled events');

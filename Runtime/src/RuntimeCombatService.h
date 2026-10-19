@@ -21,6 +21,11 @@ namespace renegade::runtime
     using CombatEventEmitter =
         std::function<bool(bridge::GameplayEvent event, std::string& error)>;
 
+    // Native health is an integer mirror. Preserve fractional authoritative damage,
+    // and keep a living sub-one-health actor alive until health actually reaches zero.
+    inline int NativeCombatHealth(float health) noexcept {
+        return health>0 ? std::max(1,static_cast<int>(std::lround(health))) : 0;
+    }
     struct CharacterCombatRecord
     {
         bridge::StableId characterId;
@@ -307,7 +312,7 @@ namespace renegade::runtime
             }
 
             const float nativeHealth = static_cast<float>(std::max(0, nativeCharacter->health));
-            if (std::abs(nativeHealth - combat->health) > 0.01f)
+            if (nativeCharacter->health != NativeCombatHealth(combat->health))
                 combat->health = std::clamp(nativeHealth, 0.0f, combat->maxHealth);
             combat->dead = combat->health <= 0.0f;
 
@@ -383,10 +388,11 @@ namespace renegade::runtime
         if (combat == nullptr || combat->dead)
             return false;
         combat->health = std::max(0.0f, combat->health - amount);
+        if(combat->health<.0001f)combat->health=0; // floating-point residue is not a surviving actor
         combat->dead = combat->health <= 0.0f;
         combat->damageTaken += static_cast<std::uint64_t>(std::ceil(amount));
         if (auto* nativeCharacter = scene.characters.GetComponent(combat->entity))
-            nativeCharacter->health = static_cast<int>(std::lround(combat->health));
+            nativeCharacter->health = NativeCombatHealth(combat->health);
         died = combat->dead;
         ++state.damageEvents;
         return true;

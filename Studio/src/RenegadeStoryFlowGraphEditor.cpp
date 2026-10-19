@@ -1,8 +1,10 @@
 #include "RenegadeStoryFlowGraphEditor.h"
+#include "StoryFlowOverviewPolicy.h"
 
 #include <algorithm>
 #include <cmath>
 #include <set>
+#include <limits>
 #include <utility>
 
 #include <imgui.h>
@@ -27,7 +29,7 @@ namespace renegade::studio
         constexpr ImU32 LinkHover = IM_COL32(211, 218, 221, 255);
         constexpr ImU32 Warning = IM_COL32(224, 165, 82, 255);
 
-        constexpr float MinGraphZoom = 0.50f;
+        constexpr float MinGraphZoom = 0.05f;
         constexpr float MaxGraphZoom = 2.00f;
         constexpr float GraphZoomStep = 1.12f;
 
@@ -113,6 +115,7 @@ namespace renegade::studio
         model_ = model;
         layout_ = layout;
         workspace_ = workspace;
+        pendingPlacementNode_.clear();
         pendingReconnectRouteId_.clear();
         linkStartedAtPin_ = 0;
         rejectNewLinkFromInput_ = false;
@@ -139,6 +142,7 @@ namespace renegade::studio
         linkIndexByEditorId_.clear();
         linkIdByRouteId_.clear();
         initializedNodePositions_.clear();
+        pendingPlacementNode_.clear();
         pendingReconnectRouteId_.clear();
         linkStartedAtPin_ = 0;
         rejectNewLinkFromInput_ = false;
@@ -559,6 +563,28 @@ namespace renegade::studio
         SynchronizeSelection();
         ActivateHoveredNodeOnDoubleClick();
         SynchronizeLayout();
+        if (!pendingPlacementNode_.empty())
+        {
+            for (const auto& binding : nodes_)
+            {
+                if (binding.stableId != pendingPlacementNode_) continue;
+                const auto size = ImNodes::GetNodeDimensions(binding.nodeId);
+                if (size.x <= 0 || size.y <= 0) break;
+                auto* position = workspace_->FindLayout(binding.stableId);
+                if (!position) break;
+                const float zoom = appliedGraphZoom_;
+                const auto placed = CentreNewCard(viewport_.z * 0.5f, viewport_.w * 0.5f,
+                    layout_->canvas.panX, layout_->canvas.panY, zoom, size.x / zoom, size.y / zoom);
+                position->x = placed.x; position->y = placed.y;
+                ImNodes::SetNodeGridSpacePos(binding.nodeId, ImVec2(placed.x * zoom, placed.y * zoom));
+                ImNodes::ClearNodeSelection();
+                ImNodes::SelectNode(binding.nodeId);
+                workspace_->SelectNode(binding.stableId);
+                workspace_->NotifyLayoutChanged();
+                pendingPlacementNode_.clear();
+                break;
+            }
+        }
 
         ImGui::End();
         ImGui::PopStyleColor();
@@ -974,7 +1000,7 @@ namespace renegade::studio
             appliedGraphZoom_ = requestedZoom;
             zoomGeometryReady_ = true;
         }
-        else if (!AlmostEqual(appliedGraphZoom_, requestedZoom))
+        else if (std::abs(appliedGraphZoom_ - requestedZoom) >= 0.0001f)
         {
             appliedGraphZoom_ = requestedZoom;
             initializedNodePositions_.clear();
@@ -993,7 +1019,7 @@ namespace renegade::studio
                 ImVec2(layout_->canvas.panX, layout_->canvas.panY));
         }
 
-        if (!AlmostEqual(layout_->canvas.zoom, appliedGraphZoom_))
+        if (std::abs(layout_->canvas.zoom - appliedGraphZoom_) >= 0.0001f)
         {
             layout_->canvas.zoom = appliedGraphZoom_;
             workspace_->NotifyLayoutChanged();
@@ -1004,7 +1030,40 @@ namespace renegade::studio
         workspace_->connectButton_.SetVisible(false);
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
-        const bool acceptMouse = ContainsPointer(pointer);
+        const float mapW = std::clamp(viewport_.z * 0.19f, 170.0f, 238.0f);
+        const float mapH = std::clamp(viewport_.w * 0.17f, 112.0f, 156.0f);
+        const float mapX = viewport_.x + viewport_.z - mapW - 14.0f;
+        const float mapY = viewport_.y + viewport_.w - mapH - 14.0f;
+        const bool onOverview = viewport_.z >= 260 && viewport_.w >= 220 &&
+            pointer.x >= mapX && pointer.x < mapX + mapW && pointer.y >= mapY && pointer.y < mapY + mapH;
+        const bool leftDown = wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
+        const auto overviewIntent = ResolveOverviewIntent(onOverview,
+            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT), leftDown,
+            wi::input::IsDoubleClicked(), overviewSuppressDrag_);
+        if (overviewIntent == OverviewIntent::Fit)
+        {
+            ResetTransientInteractionState();
+        }
+        if (overviewIntent == OverviewIntent::Navigate && !layout_->nodes.empty())
+        {
+            float minX = std::numeric_limits<float>::max(), minY = minX;
+            float maxX = std::numeric_limits<float>::lowest(), maxY = maxX;
+            for (const auto& node : layout_->nodes)
+            {
+                if (!model_->FindNode(node.nodeId)) continue;
+                minX = std::min(minX, node.x); minY = std::min(minY, node.y);
+                maxX = std::max(maxX, node.x + 210.0f); maxY = std::max(maxY, node.y + 112.0f);
+            }
+            const float worldW = std::max(1.0f, maxX - minX), worldH = std::max(1.0f, maxY - minY);
+            const float scale = std::min((mapW - 18) / worldW, (mapH - 32) / worldH);
+            const float ox = mapX + 9 + (mapW - 18 - worldW * scale) * 0.5f;
+            const float oy = mapY + 23 + (mapH - 32 - worldH * scale) * 0.5f;
+            layout_->canvas.panX = viewport_.z * 0.5f - (minX + (pointer.x - ox) / scale) * layout_->canvas.zoom;
+            layout_->canvas.panY = viewport_.w * 0.5f - (minY + (pointer.y - oy) / scale) * layout_->canvas.zoom;
+            ImNodes::EditorContextResetPanning(ImVec2(layout_->canvas.panX, layout_->canvas.panY));
+            workspace_->NotifyLayoutChanged();
+        }
+        const bool acceptMouse = ContainsPointer(pointer) && !onOverview && !overviewSuppressDrag_;
         if (acceptMouse && std::abs(pointer.z) > 0.001f)
         {
             const float oldZoom = ClampGraphZoom(appliedGraphZoom_);
@@ -1012,7 +1071,7 @@ namespace renegade::studio
                 ? GraphZoomStep
                 : 1.0f / GraphZoomStep;
             const float newZoom = ClampGraphZoom(oldZoom * zoomFactor);
-            if (!AlmostEqual(oldZoom, newZoom))
+            if (std::abs(oldZoom - newZoom) >= 0.0001f)
             {
                 const ImVec2 currentPan = ImNodes::EditorContextGetPanning();
                 const ImVec2 localPointer(
@@ -1059,6 +1118,8 @@ namespace renegade::studio
         DrawGraph();
         DeleteSelectedLinks();
         imgui_.EndFrame();
+        // Apply after SynchronizeLayout so old frame geometry cannot reinstate old zoom.
+        if (overviewIntent == OverviewIntent::Fit) FitToContent();
         frameActive_ = true;
     }
 

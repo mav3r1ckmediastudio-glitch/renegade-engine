@@ -300,6 +300,49 @@ namespace
 
 namespace renegade::studio
 {
+    bool RenegadeTextInputField::HasPendingReplacement(const std::string& saved) const
+    {
+        if (!clearOnEntry_ || state != wi::gui::ACTIVE) return false;
+        const std::string draft = font_input.GetTextA();
+        return draft.find_first_not_of(" \t\r\n") != std::string::npos && draft != saved;
+    }
+
+    bool RenegadeTextInputField::CommitReplacement(const bool cancel)
+    {
+        if (!clearOnEntry_ || state != wi::gui::ACTIVE) return false;
+        const std::string draft = cancel ? std::string{} : GetCurrentInputValue();
+        SetValue(draft);
+        font_input.SetText("");
+        Deactivate();
+        if (onInput) { wi::gui::EventArgs args; args.sValue = draft; onInput(args); }
+        if (!cancel && !draft.empty() && onInputAccepted)
+        { wi::gui::EventArgs args; args.sValue = draft; onInputAccepted(args); }
+        return true;
+    }
+
+    void RenegadeTextInputField::Update(const wi::Canvas& canvas, const float dt)
+    {
+        if (!clearOnEntry_) { wi::gui::TextInputField::Update(canvas, dt); return; }
+        const bool active = GetState() == wi::gui::ACTIVE;
+        const auto pointer = wi::input::GetPointer();
+        const bool pressed = wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
+        const bool inside = pointer.x >= translation.x && pointer.x < translation.x + scale.x &&
+            pointer.y >= translation.y && pointer.y < translation.y + scale.y;
+        // Capture the live draft before Wicked's outside-click/cancel path clears its shared buffer.
+        if (active && dt > 0 && (wi::input::Press(wi::input::KEYBOARD_BUTTON_ENTER) ||
+            wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) || (pressed && !inside)))
+        {
+            CommitReplacement(wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE));
+        }
+        wi::gui::TextInputField::Update(canvas, dt);
+        if (!active && GetState() == wi::gui::ACTIVE)
+        {
+            SetValue("");
+            SetAsActive(false); // resets native caret to zero against the empty buffer
+            if (onInput) { wi::gui::EventArgs args; args.sValue = ""; onInput(args); }
+        }
+    }
+
     void RenegadeTextInputField::SetPlaceholder(std::string placeholder)
     {
         placeholder_ = std::move(placeholder);
@@ -364,7 +407,14 @@ namespace renegade::studio
                 0.15f,
                 0.14f);
         }
-        else if (state != wi::gui::ACTIVE && !placeholder_.empty())
+        if (clearOnEntry_ && state == wi::gui::ACTIVE)
+        {
+            const float caretX = std::min(translation.x + scale.x - 4.0f,
+                valueX + wi::font::TextWidth(value, wi::font::Params(0, 0, renderTextSize_)));
+            DrawBorderedRect(caretX, translation.y + 5.0f, 1.0f, scale.y - 10.0f,
+                TextStrong, TextStrong, cmd);
+        }
+        else if (value.empty() && state != wi::gui::ACTIVE && !placeholder_.empty())
         {
             DrawText(
                 placeholder_,
@@ -394,7 +444,13 @@ namespace renegade::studio
         }
         const bool engaged =
             state == wi::gui::ACTIVE || state == wi::gui::FOCUS;
-        if (primaryStyle_ && IsEnabled())
+        if (accentOutlineStyle_ && IsEnabled())
+        {
+            DrawBorderedRect(translation.x, translation.y, scale.x, scale.y,
+                engaged ? wi::Color(222, 91, 29, 146) : wi::Color(222, 91, 29, 84),
+                engaged ? wi::Color(255, 172, 111, 255) : wi::Color(222, 91, 29, 255), cmd);
+        }
+        else if (primaryStyle_ && IsEnabled())
         {
             const auto rounded = [cmd](float x, float y, float w, float h, wi::Color color)
             {
@@ -433,7 +489,7 @@ namespace renegade::studio
             translation.y + std::max(4.0f,
                 (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
             renderTextSize_,
-            !IsEnabled() ? Muted : primaryStyle_ ? wi::Color(33, 22, 16, 255) : TextStrong,
+            !IsEnabled() ? Muted : accentOutlineStyle_ ? wi::Color(255, 255, 255, 255) : primaryStyle_ ? wi::Color(33, 22, 16, 255) : TextStrong,
             cmd,
             0.25f,
             0.16f);
@@ -1003,6 +1059,13 @@ namespace renegade::studio
         SetSize(XMFLOAT2(width_, height_));
     }
 
+    void RenegadeStudioChrome::SetAssistantDockWidth(
+        const float width) noexcept
+    {
+        assistantDockWidth_ = std::max(0.0f, width);
+        SetPanelSizes(hierarchyWidth_, inspectorWidth_, drawerHeight_);
+    }
+
     void RenegadeStudioChrome::SetHierarchyRows(
         std::vector<HierarchyRow> rows)
     {
@@ -1238,7 +1301,7 @@ namespace renegade::studio
         const float inspectorWidth,
         const float drawerHeight) noexcept
     {
-        const float availableWidth = std::max(760.0f, width_);
+        const float availableWidth = std::max(760.0f, width_ - assistantDockWidth_);
         const float maximumHierarchy = std::max(
             220.0f,
             std::min(480.0f, availableWidth - 760.0f));
@@ -1472,7 +1535,7 @@ namespace renegade::studio
         return XMFLOAT4(
             hierarchyWidth_,
             TopBarHeight + SceneTabsHeight,
-            width_ - inspectorWidth_,
+            width_ - inspectorWidth_ - assistantDockWidth_,
             height_ - BottomTabsHeight - StatusBarHeight -
                 (activeBottomTab_ >= 0 ? drawerHeight_ : 0.0f));
     }
@@ -1516,7 +1579,7 @@ namespace renegade::studio
         }
         pointerConsumed_ = false;
         const XMFLOAT4 layoutPointer = wi::input::GetPointer();
-        const float inspectorEdge = width_ - inspectorWidth_;
+        const float inspectorEdge = width_ - inspectorWidth_ - assistantDockWidth_;
         const float bottomTabsEdge =
             height_ - BottomTabsHeight - StatusBarHeight;
         const float drawerEdge = bottomTabsEdge - drawerHeight_;
@@ -1557,7 +1620,7 @@ namespace renegade::studio
                 {
                     SetPanelSizes(
                         hierarchyWidth_,
-                        width_ - layoutPointer.x,
+                        width_ - assistantDockWidth_ - layoutPointer.x,
                         drawerHeight_);
                 }
                 else
@@ -1839,7 +1902,7 @@ namespace renegade::studio
             const float x = pointer.x;
             const float y = pointer.y;
             const float viewportTop = TopBarHeight + SceneTabsHeight;
-            const float inspectorX = width_ - inspectorWidth_;
+            const float inspectorX = width_ - inspectorWidth_ - assistantDockWidth_;
             const float bottomTabsTop =
                 height_ - BottomTabsHeight - StatusBarHeight;
             const float drawerTop = bottomTabsTop - drawerHeight_;
@@ -1873,7 +1936,7 @@ namespace renegade::studio
                 constexpr float itemHeight = 30.0f;
                 const float popupX = menuPositions[activeMenu_] - 8.0f;
                 constexpr std::array<int, 6> popupItemCounts = {
-                    5, 4, 9, 4, 1, 3};
+                    5, 4, 9, 4, 1, 4};
                 const int item = static_cast<int>(
                     (y - TopBarHeight) / itemHeight);
                 const bool inPopup = x >= popupX &&
@@ -1935,13 +1998,17 @@ namespace renegade::studio
                     {
                         invoke(Action::BuildWindowsGame);
                     }
-                    else if (activeMenu_ == 5 && item >= 0 && item < 3)
+                    else if (activeMenu_ == 5 && item >= 0 && item < 4)
                     {
                         if (item == 2)
                         {
                             SetActiveBottomTab(
                                 activeBottomTab_ >= 0 ? -1 : 0,
                                 true);
+                        }
+                        else if (item == 3)
+                        {
+                            invoke(Action::ToggleAssistant);
                         }
                     }
                     activeMenu_ = -1;
@@ -2612,7 +2679,7 @@ namespace renegade::studio
         }
 
         const float viewportTop = TopBarHeight + SceneTabsHeight;
-        const float inspectorX = width_ - inspectorWidth_;
+        const float inspectorX = width_ - inspectorWidth_ - assistantDockWidth_;
         const float bottomTabsTop =
             height_ - BottomTabsHeight - StatusBarHeight;
         const float viewportBottom = bottomTabsTop -
@@ -3452,7 +3519,8 @@ namespace renegade::studio
                 items = {{"HIERARCHY // FIXED", false},
                     {"INSPECTOR // FIXED", false},
                     {activeBottomTab_ >= 0 ? "CLOSE BOTTOM DRAWER" :
-                        "OPEN BOTTOM DRAWER", true}};
+                        "OPEN BOTTOM DRAWER", true},
+                    {"OPEN LIVING CORE ORB", true}};
             }
             drawPopup(popupX, TopBarHeight, items);
         }
