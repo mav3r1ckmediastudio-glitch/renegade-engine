@@ -221,6 +221,14 @@ namespace renegade::bridge
     std::size_t RetainChangedTerrainSculpt(
         TerrainSculptState& before,
         TerrainSculptState& after) noexcept;
+    // Terrain material VT pages cache the chunk's height-dependent surface.
+    // Invalidate changed chunks only when a stroke finishes, not per sample.
+    void InvalidateTerrainSculptVirtualTextures(
+        wi::terrain::Terrain& terrain,
+        const TerrainSculptState& changedState);
+    // Called once on returning from Test Game; no terrain generation restart.
+    void InvalidateTerrainVirtualTexturesAfterTestGame(
+        wi::scene::Scene& scene);
     void RefreshTerrainSculptPhysics(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,

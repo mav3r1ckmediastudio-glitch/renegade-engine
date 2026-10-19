@@ -10095,6 +10095,14 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             return;
         }
 
+        // Test Game temporarily suspends the editor's 3D render path.
+        // Reinitialise virtual terrain texture pages when that path resumes.
+        // Avoid a terrain Generation_Restart(), which would discard sculpted
+        // chunks and manually painted grass.
+        if (session_ != nullptr)
+            bridge::InvalidateTerrainVirtualTexturesAfterTestGame(
+                session_->Scenes().GetScene());
+
         studioChrome_.SetTestLevelState(
             RenegadeStudioChrome::TestLevelState::Idle);
         if (result.succeeded)
@@ -10135,6 +10143,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
         const bool wasProjectPreview = projectPreviewActive_;
         const TestLevelProcessResult result = testLevelRuntime_.Stop();
+        if (session_ != nullptr)
+            bridge::InvalidateTerrainVirtualTexturesAfterTestGame(
+                session_->Scenes().GetScene());
         projectPreviewActive_ = false;
         studioChrome_.SetTestLevelState(
             RenegadeStudioChrome::TestLevelState::Idle);
