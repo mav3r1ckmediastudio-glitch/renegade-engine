@@ -200,10 +200,6 @@ namespace renegade::bridge
         int afterRadius_ = 0;
     };
 
-    // Refit an existing terrain mesh picking BVH after height-only edits.
-    // Returns false for missing/incompatible trees; caller may BuildBVH().
-    [[nodiscard]] bool RefitTerrainPickingBVH(wi::scene::MeshComponent& mesh);
-
     enum class TerrainSculptMode { Raise, Lower, Smooth, Flatten };
 
     struct TerrainChunkHeights

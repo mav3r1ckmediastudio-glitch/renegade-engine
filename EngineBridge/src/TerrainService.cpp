@@ -221,76 +221,6 @@ namespace
         wi::terrain::ChunkData& chunk,
         wi::scene::MeshComponent& mesh);
 
-    // Terrain sculpting changes vertex heights, never topology. Refit the
-    // existing picking tree instead of sorting/building it again per brush
-    // sample. Full BuildBVH remains the fallback for nonconforming meshes.
-    bool RefitTerrainPickingTree(wi::scene::MeshComponent& mesh)
-    {
-        auto& tree=mesh.bvh;
-        auto& leaves=mesh.bvh_leaf_aabbs;
-        if(!tree.IsValid() || leaves.empty() ||
-            tree.leaf_indices.size()!=leaves.size() ||
-            tree.nodes.size()<tree.node_count) return false;
-        for(const auto index:tree.leaf_indices)
-            if(index>=leaves.size()) return false;
-        const auto& rootNode=tree.nodes[0];
-        if(rootNode.isLeaf())
-        {
-            if(rootNode.count==0 || rootNode.offset>tree.leaf_indices.size() ||
-                rootNode.count>tree.leaf_indices.size()-rootNode.offset) return false;
-        }
-        else if(rootNode.left+1>=tree.node_count) return false;
-
-        // Validate first; never leave a partially updated tree on failure.
-        for(const auto& leaf:leaves)
-        {
-            const std::size_t subsetIndex=leaf.userdata;
-            if(subsetIndex>=mesh.subsets.size()) return false;
-            const auto& subset=mesh.subsets[subsetIndex];
-            const std::size_t triangle=leaf.layerMask;
-            if(triangle>=subset.indexCount/3) return false;
-            const std::size_t offset=static_cast<std::size_t>(subset.indexOffset)+triangle*3;
-            if(offset>mesh.indices.size() || mesh.indices.size()-offset<3 ||
-                mesh.indices[offset]>=mesh.vertex_positions.size() ||
-                mesh.indices[offset+1]>=mesh.vertex_positions.size() ||
-                mesh.indices[offset+2]>=mesh.vertex_positions.size()) return false;
-        }
-        for(auto& leaf:leaves)
-        {
-            const auto& subset=mesh.subsets[leaf.userdata];
-            const std::size_t offset=static_cast<std::size_t>(subset.indexOffset)+
-                static_cast<std::size_t>(leaf.layerMask)*3;
-            const auto& a=mesh.vertex_positions[mesh.indices[offset]];
-            const auto& b=mesh.vertex_positions[mesh.indices[offset+1]];
-            const auto& c=mesh.vertex_positions[mesh.indices[offset+2]];
-            wi::primitive::AABB bounds(
-                wi::math::Min(a,wi::math::Min(b,c)),
-                wi::math::Max(a,wi::math::Max(b,c)));
-            bounds.layerMask=leaf.layerMask;
-            bounds.userdata=leaf.userdata;
-            leaf=bounds;
-        }
-        tree.Update(leaves.data(),static_cast<uint32_t>(leaves.size()));
-        // Wicked's fast Update refits descendants but skips the root node.
-        // A raised peak outside the previous root bounds must still be picked.
-        auto& root=tree.nodes[0];
-        if(root.isLeaf())
-        {
-            root.aabb=leaves[tree.leaf_indices[root.offset]];
-            for(std::size_t i=1;i<root.count;++i)
-            {
-                const std::size_t leafIndex=tree.leaf_indices[root.offset+i];
-                root.aabb=wi::primitive::AABB::Merge(root.aabb,leaves[leafIndex]);
-            }
-        }
-        else
-        {
-            root.aabb=wi::primitive::AABB::Merge(
-                tree.nodes[root.left].aabb,tree.nodes[root.left+1].aabb);
-        }
-        return true;
-    }
-
     void UpdateTerrainChunkHeightData(
         wi::terrain::Terrain& terrain,
         wi::terrain::ChunkData& chunk,
@@ -396,7 +326,7 @@ namespace
             }
 
             mesh->CreateRenderData();
-            if (mesh->bvh.IsValid() && !renegade::bridge::RefitTerrainPickingBVH(*mesh))
+            if (mesh->bvh.IsValid())
             {
                 mesh->BuildBVH();
             }
@@ -589,11 +519,6 @@ namespace
 
 namespace renegade::bridge
 {
-    bool RefitTerrainPickingBVH(wi::scene::MeshComponent& mesh)
-    {
-        return RefitTerrainPickingTree(mesh);
-    }
-
     int TerrainChunkCountPerSide(const int chunkRadius) noexcept
     {
         return std::max(0, chunkRadius) * 2 + 1;
