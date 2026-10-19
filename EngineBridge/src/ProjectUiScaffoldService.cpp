@@ -155,9 +155,12 @@ bool SeedProjectUiScaffold(ProjectService& projects,std::string& error)
     for(auto d:BuildScaffoldPages(project))
     {
         const auto name=fs::u8path(d.envelope.pathHint).stem().generic_u8string();
-        if(d.enabledInGame&&d.usage!=ScreenUsage::Hud)
+        if(d.enabledInGame)
         {
-            FlowNode n;n.id=GenerateStableId();n.kind=FlowNodeKind::Screen;n.name=name;
+            FlowNode n;n.id=GenerateStableId();n.kind=FlowNodeKind::Screen;
+            // A HUD is visible for authoring, but runs as the Level's passive
+            // project-default overlay; it must not have a navigation route.
+            n.name=d.usage==ScreenUsage::Hud?"Player HUD":name;
             n.screenDocumentId=d.envelope.documentId;n.screenPathHint=d.envelope.pathHint;
             nodes[name]=n.id;flow.nodes.push_back(std::move(n));
         }

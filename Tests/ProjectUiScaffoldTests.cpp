@@ -35,6 +35,21 @@ int main(int argc,char** argv)
     bridge::FlowDocument flow;
     if(!bridge::ReadFlowDocument((root/fs::u8path(metadata.startupFlow)).generic_u8string(),metadata.projectId,flow,error))
     {std::cerr<<error<<'\n';return 1;}
+    // The default Player HUD must be discoverable in the starter graph,
+    // while remaining a passive overlay rather than a navigation destination.
+    int playerHudNodes=0;
+    for(const auto& node:flow.nodes)if(node.name=="Player HUD")
+    {
+        ++playerHudNodes;
+        check(node.kind==bridge::FlowNodeKind::Screen &&
+            node.screenDocumentId==metadata.defaultHudId &&
+            node.screenPathHint==metadata.defaultHud,
+            "Player HUD node references the project default HUD");
+        for(const auto& route:flow.routes)
+            check(route.sourceNodeId!=node.id && route.destinationNodeId!=node.id,
+                "Passive Player HUD must not become a navigation route");
+    }
+    check(playerHudNodes==1,"Starter StoryFlow visibly includes one Player HUD node");
     bridge::StoryFlowScreenReferenceService references;
     for(const auto& node:flow.nodes)if(node.kind==bridge::FlowNodeKind::Screen)
     {
