@@ -186,39 +186,6 @@ int main()
     }
     terrain.SetCenterToCamEnabled(false);
 
-    // Editing heights must invalidate only the affected VT pages, once at
-    // stroke completion. A stale VT can sample the old height/blend surface
-    // even after the sculpt mesh has been rebuilt.
-    auto& changedChunk = terrain.chunks[innerChunk];
-    changedChunk.entity = wi::ecs::CreateEntity();
-    changedChunk.vt =
-        wi::allocator::make_shared<wi::terrain::VirtualTexture>();
-    changedChunk.vt->resolution = 256;
-    const wi::terrain::Chunk untouchedKey = {0, 1};
-    auto& untouchedChunk = terrain.chunks[untouchedKey];
-    untouchedChunk.entity = wi::ecs::CreateEntity();
-    untouchedChunk.vt =
-        wi::allocator::make_shared<wi::terrain::VirtualTexture>();
-    untouchedChunk.vt->resolution = 256;
-    renegade::bridge::TerrainSculptState completedStroke;
-    renegade::bridge::InvalidateTerrainSculptVirtualTextures(
-        terrain, completedStroke);
-    if (changedChunk.vt->resolution != 256 ||
-        untouchedChunk.vt->resolution != 256)
-        return Fail("no-op terrain stroke invalidated VT pages");
-    completedStroke.chunks.push_back(
-        {changedChunk.entity, {2.0f}});
-    renegade::bridge::InvalidateTerrainSculptVirtualTextures(
-        terrain, completedStroke);
-    if (changedChunk.vt->resolution != 0 ||
-        untouchedChunk.vt->resolution != 256)
-        return Fail("terrain sculpt did not selectively invalidate VT pages");
-    changedChunk.vt->resolution = 256;
-    renegade::bridge::InvalidateTerrainVirtualTexturesAfterTestGame(scene);
-    if (changedChunk.vt->resolution != 0 ||
-        untouchedChunk.vt->resolution != 0)
-        return Fail("return from Test Game did not invalidate editor VT pages");
-
     renegade::bridge::TerrainMaterialState material;
     renegade::bridge::SetTerrainTextureScale(material, 8.0f);
     if (!NearlyEqual(material.slots[0].texMulAdd.x, 0.25f) ||

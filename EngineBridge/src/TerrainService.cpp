@@ -1112,46 +1112,6 @@ namespace renegade::bridge
         return before.chunks.size();
     }
 
-    void InvalidateTerrainSculptVirtualTextures(
-        wi::terrain::Terrain& terrain,
-        const TerrainSculptState& changedState)
-    {
-        if (changedState.chunks.empty())
-            return;
-
-        std::unordered_set<wi::ecs::Entity> changedEntities;
-        changedEntities.reserve(changedState.chunks.size());
-        for (const auto& saved : changedState.chunks)
-            changedEntities.insert(saved.entity);
-
-        for (auto& entry : terrain.chunks)
-        {
-            auto& chunk = entry.second;
-            if (chunk.vt != nullptr &&
-                changedEntities.count(chunk.entity) != 0)
-            {
-                // The surface was authored after the existing VT tiles were
-                // rasterised. Wicked will rebuild the corresponding pages on
-                // the next terrain update, without restarting terrain/grass.
-                chunk.vt->invalidate();
-            }
-        }
-    }
-
-    void InvalidateTerrainVirtualTexturesAfterTestGame(
-        wi::scene::Scene& scene)
-    {
-        for (std::size_t index = 0;
-            index < scene.terrains.GetCount(); ++index)
-        {
-            for (auto& entry : scene.terrains[index].chunks)
-            {
-                if (entry.second.vt != nullptr)
-                    entry.second.vt->invalidate();
-            }
-        }
-    }
-
     void RefreshTerrainSculptPhysics(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,
@@ -1173,7 +1133,6 @@ namespace renegade::bridge
                 }
             }
         }
-        InvalidateTerrainSculptVirtualTextures(terrain, changedState);
     }
 
     bool ApplyTerrainSculpt(
@@ -1216,8 +1175,6 @@ namespace renegade::bridge
             changedChunks.insert(chunk);
         }
         RebuildTerrainChunks(terrain, grid, changedChunks, true);
-        if (!changedChunks.empty())
-            InvalidateTerrainSculptVirtualTextures(terrain, state);
         return !changedChunks.empty();
     }
 
