@@ -996,3 +996,23 @@ add_test(NAME RenegadeScreenPerformanceBudgetTests COMMAND RenegadeScreenPerform
 add_executable(RenegadeScreenAuthoringCompletionTests ScreenAuthoringCompletionTests.cpp)
 target_link_libraries(RenegadeScreenAuthoringCompletionTests PRIVATE Renegade::EngineBridge)
 add_test(NAME RenegadeScreenAuthoringCompletionTests COMMAND RenegadeScreenAuthoringCompletionTests)
+
+# Explicit native GPU diagnostic, run against a disposable scene copy only.
+# It is not a headless CI test and does not substitute for Studio owner checks.
+if(WIN32)
+    add_executable(RenegadeTerrainGraphicsProof TerrainGraphicsProof.cpp)
+    target_link_libraries(RenegadeTerrainGraphicsProof PRIVATE Renegade::EngineBridge)
+    target_compile_definitions(RenegadeTerrainGraphicsProof PRIVATE UNICODE _UNICODE)
+    target_compile_options(RenegadeTerrainGraphicsProof PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>")
+    set_target_properties(RenegadeTerrainGraphicsProof PROPERTIES
+        FOLDER "Renegade/Tests"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/TerrainGraphicsProof")
+    add_dependencies(RenegadeTerrainGraphicsProof RenegadeStudio)
+    add_custom_command(TARGET RenegadeTerrainGraphicsProof POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+            "$<TARGET_FILE_DIR:RenegadeTerrainGraphicsProof>"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain"
+            "$<TARGET_FILE_DIR:RenegadeTerrainGraphicsProof>/Content/terrain")
+endif()

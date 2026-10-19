@@ -1317,6 +1317,7 @@ namespace renegade::studio
         std::unique_ptr<bridge::ModelImportCandidate> modelImportCandidate_;
         bridge::StableId modelImportProjectId_;
         TestLevelRuntimeProcess testLevelRuntime_;
+        bool testLevelFrameSuspended_ = false;
         bool projectPreviewActive_ = false;
         Translator gizmo_;
         wi::graphics::Shader gridVertexShader_;

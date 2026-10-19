@@ -793,7 +793,7 @@ namespace renegade::studio
 
     void StudioRenderPath::PreRender()
     {
-        if (testLevelRuntime_.IsActive())
+        if (testLevelFrameSuspended_ || testLevelRuntime_.IsActive())
         {
             // Runtime owns the live 3D world during Test Level. Keep only the
             // lightweight 2D Studio surface alive so STOP/status remain usable.
@@ -815,7 +815,7 @@ namespace renegade::studio
 
     void StudioRenderPath::Render() const
     {
-        if (testLevelRuntime_.IsActive())
+        if (testLevelFrameSuspended_ || testLevelRuntime_.IsActive())
         {
             wi::RenderPath2D::Render();
             return;
@@ -3551,6 +3551,9 @@ namespace renegade::studio
         DiagnosticInputFrame diagnosticInput(diagnosticService_,
             wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
         PollTestLevel();
+        // STOP may run from the 2D GUI update below. Retain 2D ownership for
+        // the rest of that frame; 3D must first receive a fresh Scene::Update.
+        testLevelFrameSuspended_ = testLevelRuntime_.IsActive();
         assistantDock_.Tick();
         if (testLevelRuntime_.IsActive())
         {
@@ -3910,7 +3913,7 @@ namespace renegade::studio
 
     void StudioRenderPath::Compose(const wi::graphics::CommandList cmd) const
     {
-        if (testLevelRuntime_.IsActive())
+        if (testLevelFrameSuspended_ || testLevelRuntime_.IsActive())
         {
             wi::RenderPath2D::Compose(cmd);
             return;
@@ -5622,26 +5625,35 @@ namespace renegade::studio
         case EditorAction::Undo:
         case EditorAction::Redo:
         {
-            StopSunPreview(true);
-            ClearSelectionOutline();
-            const bool changed = action == EditorAction::Undo
-                ? session_->Commands().Undo()
-                : session_->Commands().Redo();
-            if (changed)
+            // A terrain undo can replace the same GPU buffers as a live stroke.
+            // Run history mutations before scene preparation, never after it.
+            const auto revision = session_->Scenes().Revision();
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this, action, revision](std::uint64_t)
             {
-                if (session_->Selection().HasSelection() &&
-                    !IsSelectedEntityValid())
+                if (session_ == nullptr || revision != session_->Scenes().Revision() ||
+                    testLevelRuntime_.IsActive()) return;
+                StopSunPreview(true);
+                ClearSelectionOutline();
+                const bool changed = action == EditorAction::Undo
+                    ? session_->Commands().Undo()
+                    : session_->Commands().Redo();
+                if (changed)
                 {
-                    session_->Selection().Clear();
+                    if (session_->Selection().HasSelection() &&
+                        !IsSelectedEntityValid())
+                    {
+                        session_->Selection().Clear();
+                    }
+                    RefreshHierarchy();
+                    RefreshInspector();
+                    RefreshStatus();
                 }
-                RefreshHierarchy();
-                RefreshInspector();
-                RefreshStatus();
-            }
-            else
-            {
-                SyncSelectionOutline();
-            }
+                else
+                {
+                    SyncSelectionOutline();
+                }
+            });
             break;
         }
         case EditorAction::FocusSelection:
@@ -7702,63 +7714,87 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             wi::renderer::DrawSphere(wi::primitive::Sphere(picked.position,
                 terrainBrushRadiusValue_), XMFLOAT4(0.20f, 0.92f, 1.0f, 0.22f), true);
         }
-        if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) &&
-            picked.entity != wi::ecs::INVALID_ENTITY)
+        const bool pressed = wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
+        const bool held = wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
+        const bool released = wi::input::Release(wi::input::MOUSE_BUTTON_LEFT);
+        const bool hasHit = picked.entity != wi::ecs::INVALID_ENTITY;
+        if (!terrainStrokeActive_ && !(pressed && hasHit)) return false;
+
+        // Scene::Update has already uploaded geometry/material descriptors for
+        // this frame. Replacing mesh buffers here would leave those descriptors
+        // referring to retired allocations. Apply input before the NEXT update,
+        // after previous render recording has finished. Never invalidate VT
+        // resolution between its CPU preparation and GPU writeback.
+        wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+            [this, terrainEntity, revision = session_->Scenes().Revision(),
+             hitPosition = picked.position,
+             hasHit, pressed, held, released](std::uint64_t)
         {
-            terrainStrokeActive_ = true;
-            terrainStrokeChanged_ = false;
-            terrainStrokeEntity_ = terrainEntity;
-            terrainStrokeBefore_ = bridge::CaptureTerrainSculpt(scene, *terrain);
-            terrainFlattenHeight_ = picked.position.y;
-        }
-        if (terrainStrokeActive_ && wi::input::Down(wi::input::MOUSE_BUTTON_LEFT) &&
-            picked.entity != wi::ecs::INVALID_ENTITY)
-        {
-            terrainStrokeChanged_ |= bridge::SculptTerrain(scene, *terrain,
-                picked.position, terrainBrushRadiusValue_,
-                terrainBrushStrengthValue_ * 0.12f, terrainBrushFalloffValue_,
-                terrainSculptModeValue_, terrainFlattenHeight_);
-            return true;
-        }
-        if (terrainStrokeActive_ && wi::input::Release(wi::input::MOUSE_BUTTON_LEFT))
-        {
-            terrainStrokeActive_ = false;
-            if (terrainStrokeChanged_)
+            if (session_ == nullptr || testLevelRuntime_.IsActive() ||
+                revision != session_->Scenes().Revision()) return;
+            auto& scene = session_->Scenes().GetScene();
+            auto* terrain = scene.terrains.GetComponent(terrainEntity);
+            if (terrain == nullptr) return;
+            // Generation owns chunk storage and cached mesh pointers until its
+            // job exits. Cancellation joins it without regenerating authored data.
+            terrain->Generation_Cancel();
+            if (pressed &&
+                hasHit)
             {
-                const auto finishStarted =
-                    std::chrono::steady_clock::now();
-                auto after = bridge::CaptureTerrainSculpt(scene, *terrain);
-                const std::size_t affectedChunks =
-                    bridge::RetainChangedTerrainSculpt(
-                        terrainStrokeBefore_,
-                        after);
-                if (affectedChunks > 0)
-                {
-                    bridge::RefreshTerrainSculptPhysics(
-                        scene,
-                        *terrain,
-                        after);
-                    session_->Commands().RecordExecuted(
-                        std::make_unique<bridge::SculptTerrainCommand>(
-                            scene,
-                            terrainStrokeEntity_,
-                            std::move(terrainStrokeBefore_),
-                            std::move(after)));
-                }
-                const auto elapsed = std::chrono::duration_cast<
-                    std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now() - finishStarted);
-                terrainStrokeDiagnostic_.SetText(
-                    "LAST STROKE // " +
-                    std::to_string(affectedChunks) +
-                    " TILES // " +
-                    std::to_string(elapsed.count()) +
-                    " MS");
-                RefreshStatus();
+                terrainStrokeActive_ = true;
+                terrainStrokeChanged_ = false;
+                terrainStrokeEntity_ = terrainEntity;
+                terrainStrokeBefore_ = bridge::CaptureTerrainSculpt(scene, *terrain);
+                terrainFlattenHeight_ = hitPosition.y;
             }
-            return true;
-        }
-        return false;
+            if (terrainStrokeActive_ && (held || pressed) &&
+                hasHit)
+            {
+                terrainStrokeChanged_ |= bridge::SculptTerrain(scene, *terrain,
+                    hitPosition, terrainBrushRadiusValue_,
+                    terrainBrushStrengthValue_ * 0.12f, terrainBrushFalloffValue_,
+                    terrainSculptModeValue_, terrainFlattenHeight_);
+            }
+            if (terrainStrokeActive_ && released)
+            {
+                terrainStrokeActive_ = false;
+                if (terrainStrokeChanged_)
+                {
+                    const auto finishStarted =
+                        std::chrono::steady_clock::now();
+                    auto after = bridge::CaptureTerrainSculpt(scene, *terrain);
+                    const std::size_t affectedChunks =
+                        bridge::RetainChangedTerrainSculpt(
+                            terrainStrokeBefore_,
+                            after);
+                    if (affectedChunks > 0)
+                    {
+                        bridge::RefreshTerrainSculptPhysics(
+                            scene,
+                            *terrain,
+                            after);
+                        session_->Commands().RecordExecuted(
+                            std::make_unique<bridge::SculptTerrainCommand>(
+                                scene,
+                                terrainStrokeEntity_,
+                                std::move(terrainStrokeBefore_),
+                                std::move(after)));
+                    }
+                    const auto elapsed = std::chrono::duration_cast<
+                        std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - finishStarted);
+                    terrainStrokeDiagnostic_.SetText(
+                        "LAST STROKE // " +
+                        std::to_string(affectedChunks) +
+                        " TILES // " +
+                        std::to_string(elapsed.count()) +
+                        " MS");
+                    RefreshStatus();
+                }
+                return;
+            }
+        });
+        return true;
     }
 
     bool StudioRenderPath::HandleViewportSelection(
