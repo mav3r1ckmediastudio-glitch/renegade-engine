@@ -96,7 +96,7 @@ foreach(token IN ITEMS
     "ENVIRONMENT PROBE"
     "Action::CreateDecal"
     "Action::CreateEnvironmentProbe"
-    "5, 4, 9, 4, 1, 3"
+    "5, 4, 9, 4, 1, 4"
     "activeMenu_ == 2 && item >= 0 && item < 9"
     "Action::CreateProjectile")
     string(FIND "${chrome_text}" "${token}" found)

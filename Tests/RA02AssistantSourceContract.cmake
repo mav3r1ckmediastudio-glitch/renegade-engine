@@ -59,7 +59,7 @@ endforeach()
 
 foreach(symbol IN ITEMS
     "width_ - inspectorWidth_ - assistantDockWidth_"
-    "SHOW ASSISTANT"
+    "OPEN LIVING CORE ORB"
     "Action::ToggleAssistant"
 )
     string(FIND "${chrome}" "${symbol}" found)

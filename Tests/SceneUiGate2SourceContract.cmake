@@ -147,7 +147,7 @@ require_text(studio_source
 # Scene shell bounds remain owned by the resizable Renegade chrome, with a
 # minimum central authoring area and enough drawer height for complete cards.
 require_text(studio_chrome_source
-    "const float availableWidth = std::max(760.0f, width_);"
+    "const float availableWidth = std::max(760.0f, width_ - assistantDockWidth_);"
     "minimum shell width clamp")
 require_text(studio_chrome_source
     "availableWidth - hierarchyWidth_ - 420.0f"
