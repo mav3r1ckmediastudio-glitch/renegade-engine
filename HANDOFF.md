@@ -3,16 +3,22 @@
 User reported Renegade Studio pauses unresponsive for approximately 10 seconds
 with Windows' spinning/buffering cursor during an attempted terrain sculpt,
 THEN crashes to desktop (not an instant click-to-crash), using
-Downloads/Renegade-Terrain-VT-Test-2026-10-19. Precise mouse-button phase
-(still held vs after release) is unknown. Windows Application Error 1000
-at 22:37:49 recorded exception code 0xC0000005 (read at null+0x10),
+Downloads/Renegade-Terrain-VT-Test-2026-10-19. The owner confirms the
+reproduction involved ONLY a brief left-mouse-button TAP, no held brush
+stroke. Both Press/Down and Release/end-of-stroke handling can therefore
+run. The release path CaptureTerrainSculpt / RetainChangedTerrainSculpt /
+RefreshTerrainSculptPhysics synchronously recomputes heightfield shapes for
+affected chunks, while Wicked terrain generation may run on its own job
+threads. Exact fault timing/function is still unproven. Windows Application
+Error 1000 at 22:37:49 recorded exception code 0xC0000005 (read at null+0x10),
 fault offset RenegadeStudio+0xA33E37 on a non-main worker thread. The matching
 50 MB dump is in %LOCALAPPDATA%/CrashDumps/RenegadeStudio.exe.29228.dmp.
 CDB verified the exception but Release Studio has no PDB symbols, so the
 specific function and cause are NOT established. Candidate log.txt has no
 useful final error; it includes warning about grassparticle.dds missing from
 a saved scene path. Do not assume texture invalidation alone caused crash:
-user has not yet clarified whether it happened at mouse-down or release.
+the user reports a single quick tap, but the stalled portion of the event
+(mouse-down update vs release/physics vs asynchronous work) is unresolved.
 The patch's sculpt cache invalidation normally runs after stroke completion;
 the real sculpt path runs concurrently with Wicked terrain generation tasks.
 
