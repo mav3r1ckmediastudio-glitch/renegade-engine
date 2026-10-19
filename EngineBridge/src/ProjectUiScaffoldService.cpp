@@ -106,12 +106,52 @@ namespace
     add("Death","Retry the Level or return to the main menu.",{{"retry","RETRY"},{"main_menu","MAIN MENU"}});
     add("Victory","Level complete.",{{"continue","FINISH"},{"main_menu","MAIN MENU"}});
     add("HUD","ESCAPE // PAUSE",{},true,ScreenUsage::Hud);
-    // HUD should be a passive, transparent overlay, never a full-screen menu.
-    auto& hud=*std::find_if(pages.begin(),pages.end(),[](const auto& d){return d.envelope.pathHint=="Content/Screens/HUD.renegade-screen";});hud.widgets.erase(hud.widgets.begin());
-    hud.widgets.erase(hud.widgets.begin());
-    hud.widgets[0].anchors={.03f,.84f,.97f,.98f,0,0,0,0};
+    // The starter HUD is a transparent, editable overlay. Values remain
+    // designer-friendly fallbacks until a possessed Player exposes attributes.
+    auto& hud=*std::find_if(pages.begin(),pages.end(),[](const auto& d){
+        return d.envelope.pathHint=="Content/Screens/HUD.renegade-screen";});
+    hud.widgets.erase(hud.widgets.begin(),hud.widgets.begin()+2);
+    hud.widgets[0].name="Pause Hint";
+    hud.widgets[0].anchors={.04f,.93f,.44f,.97f,0,0,0,0};
     hud.widgets[0].style.text.fontSize=14;
     hud.widgets[0].style.text.horizontalAlignment=ScreenHorizontalAlignment::Left;
+    const auto addMeter=[&](const char* name,const char* attribute,
+        const float top,const ScreenColor colour)
+    {
+        auto label=Label((std::string(name)+" Label").c_str(),name,
+            top,top+.032f,17.0f);
+        label.anchors={.04f,top,.28f,top+.032f,0,0,0,0};
+        label.style.text.horizontalAlignment=ScreenHorizontalAlignment::Left;
+        hud.widgets.push_back(std::move(label));
+
+        ScreenWidget meter;
+        meter.id=GenerateStableId();meter.kind=ScreenWidgetKind::Progress;
+        meter.name=std::string(name)+" Bar";meter.rect={0,0,360,22};
+        meter.layoutMode=ScreenLayoutMode::Anchored;
+        meter.anchors={.04f,top+.033f,.30f,top+.058f,0,0,0,0};
+        meter.style=MakeScreenWidgetStyleTemplate(meter.kind,22);
+        meter.style.normal.foreground=colour;
+        meter.style.hover=meter.style.normal;
+        meter.style.pressed=meter.style.normal;
+        meter.style.focused=meter.style.normal;
+        meter.style.disabled=meter.style.normal;
+        meter.fill=1.0f; // Editor preview; Runtime reads player attributes.
+        ScreenBinding binding;
+        binding.property=ScreenBindingProperty::Fill;
+        binding.operation=ScreenBindingOperation::Ratio;
+        binding.source.attributeId=std::string(attribute)+".current";
+        binding.denominator.attributeId=std::string(attribute)+".maximum";
+        binding.missingPolicy=ScreenBindingMissingPolicy::AuthoredFallback;
+        meter.bindings.push_back(std::move(binding));
+        hud.widgets.push_back(std::move(meter));
+    };
+    addMeter("HEALTH","health",.715f,{224,66,77,255});
+    addMeter("STAMINA","stamina",.785f,{62,202,135,255});
+    addMeter("MANA","mana",.855f,{76,147,238,255});
+    auto crosshair=Label("Crosshair","+",.475f,.525f,23.0f);
+    crosshair.anchors={.485f,.465f,.515f,.535f,0,0,0,0};
+    crosshair.style.text.horizontalAlignment=ScreenHorizontalAlignment::Center;
+    hud.widgets.push_back(std::move(crosshair));
     const char* optional[]={"Inventory","Trading","Crafting","Character","Skills","Journal","Map","Dialogue"};
     for(const auto* name:optional)add(name,
         std::string(name)+" is disabled until its gameplay module and data bindings are configured. Enable and wire this editable Screen in your project.",{},false,ScreenUsage::Overlay);

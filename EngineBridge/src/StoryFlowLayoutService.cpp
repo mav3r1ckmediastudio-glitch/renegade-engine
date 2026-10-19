@@ -133,6 +133,25 @@ namespace renegade::bridge
             });
             layout.journeyCards.push_back({node.id, 0.0f, 0.0f});
         }
+        // Keep the starter HUD visually grouped with its gameplay Level
+        // instead of placing this intentionally unconnected overlay among
+        // unreachable screens at the far edge of the Graph canvas.
+        const auto level=std::find_if(model.Nodes().begin(),model.Nodes().end(),
+            [](const auto& node){return node.kind==FlowNodeKind::Level;});
+        const auto hud=std::find_if(model.Nodes().begin(),model.Nodes().end(),
+            [](const auto& node){return IsStarterPlayerHud(node);});
+        if(level!=model.Nodes().end() && hud!=model.Nodes().end())
+        {
+            const auto levelPosition=std::find_if(layout.nodes.begin(),layout.nodes.end(),
+                [&](const auto& position){return position.nodeId==level->id;});
+            const auto hudPosition=std::find_if(layout.nodes.begin(),layout.nodes.end(),
+                [&](const auto& position){return position.nodeId==hud->id;});
+            if(levelPosition!=layout.nodes.end() && hudPosition!=layout.nodes.end())
+            {
+                hudPosition->x=levelPosition->x;
+                hudPosition->y=levelPosition->y+DefaultRowSpacing*2.0f;
+            }
+        }
         return layout;
     }
 

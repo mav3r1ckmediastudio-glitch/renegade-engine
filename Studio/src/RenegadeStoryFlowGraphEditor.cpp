@@ -287,7 +287,8 @@ namespace renegade::studio
             binding.nodeId = nextNodeId++;
             binding.staticAttributeId = nextAttributeId++;
             binding.stableId = node.id;
-            if (node.kind != bridge::FlowNodeKind::GameStart)
+            if (node.kind != bridge::FlowNodeKind::GameStart &&
+                !bridge::IsStarterPlayerHud(node))
             {
                 binding.inputPinId = nextAttributeId++;
                 inputsByPin_.emplace(
@@ -441,10 +442,12 @@ namespace renegade::studio
         }
 
         const bool start = node.kind == bridge::FlowNodeKind::GameStart;
-        if (start)
+        const bool playerHud = bridge::IsStarterPlayerHud(node);
+        if (start || playerHud)
         {
-            ImNodes::PushColorStyle(ImNodesCol_NodeOutline, Forge);
-            ImNodes::PushColorStyle(ImNodesCol_TitleBar, IM_COL32(37, 24, 18, 255));
+            ImNodes::PushColorStyle(ImNodesCol_NodeOutline, playerHud ? LinkHover : Forge);
+            ImNodes::PushColorStyle(ImNodesCol_TitleBar,
+                playerHud ? IM_COL32(20, 43, 50, 255) : IM_COL32(37, 24, 18, 255));
         }
 
         ImNodes::BeginNode(binding.nodeId);
@@ -471,6 +474,18 @@ namespace renegade::studio
         ImNodes::BeginStaticAttribute(binding.staticAttributeId);
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + contentWidth);
         ImGui::TextColored(ToVec4(TextStrong), "%s", node.name.c_str());
+        if (playerHud)
+        {
+            ImGui::TextColored(ToVec4(LinkHover), "GAMEPLAY OVERLAY");
+            ImGui::TextColored(ToVec4(Muted), "Auto-shown over the Level");
+            ImGui::TextColored(ToVec4(Muted), "Double-click to edit HUD");
+        }
+        else if (node.kind==bridge::FlowNodeKind::Level &&
+            std::any_of(model_->Nodes().begin(),model_->Nodes().end(),
+                [](const auto& other){return bridge::IsStarterPlayerHud(other);}))
+        {
+            ImGui::TextColored(ToVec4(LinkHover), "OVERLAY: PLAYER HUD");
+        }
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(contentWidth, std::max(0.5f, zoom)));
         ImNodes::EndStaticAttribute();
@@ -493,7 +508,7 @@ namespace renegade::studio
         }
 
         ImNodes::EndNode();
-        if (start)
+        if (start || playerHud)
         {
             ImNodes::PopColorStyle();
             ImNodes::PopColorStyle();

@@ -828,6 +828,8 @@ namespace renegade::studio
                     .stem().generic_u8string();
                 return stem.empty() ? "GOVERNED LEVEL" : stem;
             }
+            if (bridge::IsStarterPlayerHud(node))
+                return "GAMEPLAY OVERLAY // AUTO";
             if (node.kind == bridge::FlowNodeKind::Screen)
             {
                 const std::string stem = std::filesystem::u8path(node.screenPathHint)
@@ -1009,7 +1011,8 @@ namespace renegade::studio
             const auto objectIt = journeyCardObjects_.find(card.nodeId);
             if (!node || objectIt == journeyCardObjects_.end())
                 continue;
-            if ((hideDetached_ && !card.reachableFromStart) ||
+            if ((hideDetached_ && !card.reachableFromStart &&
+                    !bridge::IsStarterPlayerHud(*node)) ||
                 collapsedJourneyTracks_.find(card.trackIndex) !=
                     collapsedJourneyTracks_.end())
             {
@@ -1017,7 +1020,8 @@ namespace renegade::studio
                 continue;
             }
             bool hasError = false;
-            bool hasWarning = !card.reachableFromStart;
+            bool hasWarning = !card.reachableFromStart &&
+                !bridge::IsStarterPlayerHud(*node);
             for (const auto& diagnostic : model_->Diagnostics())
             {
                 if (diagnostic.nodeId != node->id)

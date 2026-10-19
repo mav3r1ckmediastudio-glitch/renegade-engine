@@ -6,6 +6,9 @@
 #include "renegade/bridge/ScreenService.h"
 #include "renegade/bridge/ScreenLibraryService.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
+#include "renegade/bridge/StoryFlowAuthoringModel.h"
+#include "renegade/bridge/StoryFlowLayoutService.h"
+#include "renegade/bridge/StoryFlowJourneyModel.h"
 #include "renegade/bridge/GameplayInputService.h"
 #include <wiScene.h>
 #include <filesystem>
@@ -14,6 +17,7 @@
 #include <fstream>
 #include <set>
 #include <algorithm>
+#include <cctype>
 
 int main(int argc,char** argv)
 {
@@ -50,6 +54,68 @@ int main(int argc,char** argv)
                 "Passive Player HUD must not become a navigation route");
     }
     check(playerHudNodes==1,"Starter StoryFlow visibly includes one Player HUD node");
+    bridge::StoryFlowAuthoringModel authored;
+    check(authored.Load(flow,metadata.projectId,error),
+        "Starter Flow authoring model loads: "+error);
+    for(const auto& diagnostic:authored.Diagnostics())
+        check(diagnostic.nodeId.empty() ||
+            std::none_of(authored.Nodes().begin(),authored.Nodes().end(),
+                [&](const auto& node){return node.id==diagnostic.nodeId &&
+                    bridge::IsStarterPlayerHud(node);}),
+            "Player HUD must not be flagged as an unreachable screen");
+    const auto graph=bridge::BuildDeterministicStoryFlowLayout(
+        authored,metadata.projectId,flow.envelope.documentId);
+    const auto hudNode=std::find_if(authored.Nodes().begin(),authored.Nodes().end(),
+        [](const auto& node){return bridge::IsStarterPlayerHud(node);});
+    const auto levelNode=std::find_if(authored.Nodes().begin(),authored.Nodes().end(),
+        [](const auto& node){return node.kind==bridge::FlowNodeKind::Level;});
+    if(hudNode!=authored.Nodes().end() && levelNode!=authored.Nodes().end())
+    {
+        const auto hudPosition=std::find_if(graph.nodes.begin(),graph.nodes.end(),
+            [&](const auto& n){return n.nodeId==hudNode->id;});
+        const auto levelPosition=std::find_if(graph.nodes.begin(),graph.nodes.end(),
+            [&](const auto& n){return n.nodeId==levelNode->id;});
+        check(hudPosition!=graph.nodes.end() &&
+            levelPosition!=graph.nodes.end() &&
+            hudPosition->x==levelPosition->x &&
+            hudPosition->y>levelPosition->y &&
+            hudPosition->y-levelPosition->y<=500.0f,
+            "Starter Graph positions Player HUD beside the gameplay Level");
+    }
+    bridge::StoryFlowJourneyModel journey;
+    check(journey.Build(authored,error),"Starter Journey view loads: "+error);
+    if(hudNode!=authored.Nodes().end())
+    {
+        const auto card=journey.FindCard(hudNode->id);
+        check(card!=nullptr && !journey.Tracks().at(card->trackIndex).detached,
+            "Starter Journey presents Player HUD as an overlay rather than detached content");
+    }
+    bridge::ScreenDocument starterHud;
+    check(bridge::ReadScreenDocument(
+        (root/fs::u8path(metadata.defaultHud)).generic_u8string(),
+        metadata.projectId,starterHud,error), "Read project Player HUD: "+error);
+    check(starterHud.usage==bridge::ScreenUsage::Hud,
+        "Player HUD renders as a passive gameplay overlay");
+    for(const auto& attribute: {"health","stamina","mana"})
+    {
+        std::string barName(attribute);
+        std::transform(barName.begin(),barName.end(),barName.begin(),
+            [](unsigned char c){return static_cast<char>(std::toupper(c));});
+        barName+=" Bar";
+        const auto bar=std::find_if(starterHud.widgets.begin(),starterHud.widgets.end(),
+            [&](const auto& widget){return widget.name==barName;});
+        check(bar!=starterHud.widgets.end() &&
+            bar->kind==bridge::ScreenWidgetKind::Progress &&
+            bar->bindings.size()==1 &&
+            bar->bindings.front().property==bridge::ScreenBindingProperty::Fill &&
+            bar->bindings.front().operation==bridge::ScreenBindingOperation::Ratio &&
+            bar->bindings.front().source.attributeId==std::string(attribute)+".current" &&
+            bar->bindings.front().denominator.attributeId==std::string(attribute)+".maximum",
+            std::string("Starter HUD meter has editable gameplay ratio binding: ")+attribute);
+    }
+    check(std::any_of(starterHud.widgets.begin(),starterHud.widgets.end(),
+        [](const auto& widget){return widget.name=="Crosshair";}),
+        "Starter HUD includes a removable crosshair");
     bridge::StoryFlowScreenReferenceService references;
     for(const auto& node:flow.nodes)if(node.kind==bridge::FlowNodeKind::Screen)
     {

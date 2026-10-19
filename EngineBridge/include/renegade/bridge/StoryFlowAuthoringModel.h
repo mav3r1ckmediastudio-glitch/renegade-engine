@@ -41,6 +41,14 @@ namespace renegade::bridge
         std::vector<StableId> outgoingRouteIds;
     };
 
+    // The project scaffold's HUD screen is authored in StoryFlow but is
+    // rendered over gameplay by the project default-HUD reference, not a route.
+    [[nodiscard]] inline bool IsStarterPlayerHud(const StoryFlowNodeView& node) noexcept
+    {
+        return node.kind==FlowNodeKind::Screen &&
+            node.screenPathHint=="Content/Screens/HUD.renegade-screen";
+    }
+
     struct StoryFlowRouteView
     {
         StableId id;
