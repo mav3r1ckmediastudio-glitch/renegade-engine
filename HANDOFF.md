@@ -1,3 +1,34 @@
+## 2026-10-19: Owner-rejected terrain sculpt performance experiment rolled back
+
+In the full HUD tester package, the owner reported approximately 75 FPS at
+rest and 20 FPS while using Raise/Lower terrain sculpting. A separate candidate
+built from bcfbd52 changed the per-brush BVH operation from full rebuild to
+height-only refit. The owner reported 8 FPS while sculpting in that candidate:
+the visual/behavioural regression overrides the passing unit tests.
+
+An isolated Release microbenchmark on a 66x66 grid (30 BVH operations each)
+measured refit at 4 ms total and rebuilding at 36 ms total. That result does
+NOT explain live sculpting FPS or validate the candidate; other per-brush work
+includes GPU mesh recreation and heightmap texture allocation. The benchmark
+was temporary, not retained in source. Reverted bcfbd52 with commit 4591cd9.
+No project data, original HUD tester package, or WickedEngine checkout was
+changed. The Refit candidate ZIP must NOT be distributed as an improvement.
+
+Validation of reverted EngineBridge/terrain test sources:
+`cmake --build BUILD/renegade --config Release --target RenegadeTerrainTests --parallel 4`
+and
+`ctest --test-dir BUILD/renegade -C Release -R RenegadeTerrainTests --output-on-failure`
+both passed on Windows DESIGN. The Studio/Runtime binaries in BUILD/renegade
+were compiled before the revert and should NOT be published as an approved
+rollback until rebuilt. Local source head is 4591cd9 at this handoff; later
+documentation-only commits may follow. Nothing was pushed or merged.
+
+Next step: profile a matched project, same brush radius and strength, during
+active sculpting. Capture timing for BuildTerrainGrid, RebuildTerrainChunks,
+CreateRenderData, picking BVH, heightmap region texture update, and per-stroke
+physics. Only then select a fix and repeat owner testing. Preserve dirty
+WickedEngine submodule and unrelated untracked files.
+
 ## 2026-10-17: Retain main aggregate CI build during sky integration
 
 Merged origin/main 380dcc0 into the isolated feature branch after the CI target
