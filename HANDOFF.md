@@ -1,3 +1,42 @@
+## 2026-10-19 22:41: Terrain VT test candidate CRASHED and withdrawn
+
+User reported Renegade Studio crashes to desktop when attempting to sculpt
+using Downloads/Renegade-Terrain-VT-Test-2026-10-19. Windows Application Error
+1000 at 22:37:49 recorded exception code 0xC0000005 (read at null+0x10),
+fault offset RenegadeStudio+0xA33E37 on a non-main worker thread. The matching
+50 MB dump is in %LOCALAPPDATA%/CrashDumps/RenegadeStudio.exe.29228.dmp.
+CDB verified the exception but Release Studio has no PDB symbols, so the
+specific function and cause are NOT established. Candidate log.txt has no
+useful final error; it includes warning about grassparticle.dds missing from
+a saved scene path. Do not assume texture invalidation alone caused crash:
+user has not yet clarified whether it happened at mouse-down or release.
+The patch's sculpt cache invalidation normally runs after stroke completion;
+the real sculpt path runs concurrently with Wicked terrain generation tasks.
+
+The entire candidate change 8da7d23 has been reverted from development source
+by local Git commit 5f9aa63. Original unrelated dirty WickedEngine submodule
+and untracked files untouched. DO NOT RUN/DISTRIBUTE the VT candidate; its
+readme now leads with CRASHED/REJECTED. No Studio/Runtime rebuild after revert;
+existing BUILD/renegade Release binaries still reflect the rejected candidate,
+so must not be packaged as safe. No push/merge.
+
+User's current scene identified from crash log:
+OneDrive/Desktop/renegade tests/New Renegade Pr555555/Content/Scenes/Starter.wiscene
+Last saved 22:12:31 (crash ~22:37); older Starter.bak.wiscene from 21:58:36.
+Safety copy of scene + sidecars created at
+Downloads/Renegade-Crash-Recovery-Pr555555-20261019.
+Owner also reports progressive holes/black patches after Test Game and
+continued sculpt, but Save/Reopen restores. This visual fault remains open.
+
+Next: investigate terrain generation vs sculpt concurrency (Generation_Update
+spawns generator->workload asynchronously while SculptTerrain walks and edits
+chunks/meshes; the brush path does not currently wait for IsGenerationBusy).
+Also inspect existing VT texture residency lifetime. Get precise crash phase,
+symbolised diagnostic Release-with-PDB build where possible and only then
+consider a new owner candidate. Older HUD tester is usable but has unresolved
+~20 FPS sculpt slowdown / visual corruption; TerrainPerf BVH refit candidate
+showed ~8 FPS and was also rejected. Qwen background GPU model remains stopped.
+
 ## 2026-10-19: Owner-rejected terrain sculpt performance experiment rolled back
 
 In the full HUD tester package, the owner reported approximately 75 FPS at
