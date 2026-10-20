@@ -1,6 +1,8 @@
 #pragma once
 
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/HudSelection.h"
+#include "renegade/bridge/HudContextEventRules.h"
 
 #include <cstdint>
 #include <string>
@@ -54,6 +56,9 @@ namespace renegade::bridge
         // never durable identity or executable routing state.
         StableId screenDocumentId;
         std::string screenPathHint;
+        LevelHudSelection levelHud;
+        // Optional governed event->HUD context pairs for this Level only.
+        std::vector<HudContextEventRule> hudContextRules;
     };
 
     struct FlowRoute

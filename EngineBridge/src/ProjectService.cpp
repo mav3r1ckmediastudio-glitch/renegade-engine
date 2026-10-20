@@ -1,4 +1,12 @@
+#include <map>
+#include <set>
+#include "renegade/bridge/GameplayAttributeDocumentService.h"
 #include "renegade/bridge/ProjectService.h"
+#include "renegade/bridge/ProjectUiScaffoldService.h"
+#include "renegade/bridge/ScreenPerformanceBudget.h"
+#include "renegade/bridge/HudSelection.h"
+#include "renegade/bridge/ScreenService.h"
+#include "renegade/bridge/ScreenLibraryService.h"
 #include "renegade/bridge/DependencyService.h"
 
 #include "renegade/bridge/AssetRegistryService.h"
@@ -285,6 +293,10 @@ namespace
         stream << "startup_flow = " << metadata.startupFlow << '\n';
         stream << "startup_screen_id = " << metadata.startupScreenId << '\n';
         stream << "startup_screen = " << metadata.startupScreen << '\n';
+        stream << "attribute_document_id = " << metadata.attributeDocumentId << '\n';
+        stream << "attribute_document = " << metadata.attributeDocument << '\n';
+        stream << "default_hud_id = " << metadata.defaultHudId << '\n';
+        stream << "default_hud = " << metadata.defaultHud << '\n';
         if (!metadata.alwaysInclude.empty())
         {
             stream << "\n[dependencies]\n";
@@ -323,7 +335,70 @@ namespace
             actual.startupFlow == expected.startupFlow &&
             actual.startupScreenId == expected.startupScreenId &&
             actual.startupScreen == expected.startupScreen &&
+            actual.defaultHudId == expected.defaultHudId && actual.defaultHud == expected.defaultHud &&
+            actual.attributeDocumentId == expected.attributeDocumentId && actual.attributeDocument == expected.attributeDocument &&
             actual.alwaysInclude == expected.alwaysInclude;
+    }
+
+    bool PatchProjectAttributeReference(const std::vector<std::uint8_t>& input,
+        const std::string& id,const std::string& hint,std::vector<std::uint8_t>& output,std::string& error)
+    {
+        const std::string original(input.begin(),input.end());
+        const std::string ending=original.find("\r\n")!=std::string::npos?"\r\n":"\n";
+        const std::map<std::string,std::string> values{{"attribute_document_id",id},{"attribute_document",hint}};
+        std::set<std::string> seen;std::string result;bool inside=false,found=false;
+        const auto trim=[](std::string text){
+            const auto a=text.find_first_not_of(" \t\r\n");if(a==std::string::npos)return std::string{};
+            return text.substr(a,text.find_last_not_of(" \t\r\n")-a+1);
+        };
+        const auto missing=[&](){
+            for(const auto& entry:values)if(!seen.count(entry.first))
+            {if(!result.empty()&&result.back()!='\n')result+=ending;result+=entry.first+" = "+entry.second+ending;seen.insert(entry.first);}
+        };
+        for(std::size_t pos=0;pos<original.size();)
+        {
+            const auto end=original.find('\n',pos);
+            const auto length=end==std::string::npos?original.size()-pos:end-pos+1;
+            const auto line=original.substr(pos,length);auto text=trim(line);
+            if(pos==0&&text.compare(0,3,"\xEF\xBB\xBF")==0)text.erase(0,3);
+            if(!text.empty()&&text.front()=='['&&text.find(']')!=std::string::npos)
+            {
+                if(inside)missing();
+                const auto section=text.substr(0,text.find(']')+1);inside=section=="[project]";
+                if(inside&&found){error="Duplicate project sections prevent a safe attribute-reference update.";return false;}
+                found=found||inside;
+            }
+            bool replaced=false;
+            if(inside)
+            {
+                const auto equal=text.find('=');
+                if(equal!=std::string::npos)
+                {
+                    const auto key=trim(text.substr(0,equal));const auto value=values.find(key);
+                    if(value!=values.end())
+                    {
+                        if(!seen.insert(key).second){error="Duplicate project attribute-reference keys require repair.";return false;}
+                        result+=key+" = "+value->second;
+                        if(!line.empty()&&line.back()=='\n')result+=line.size()>1&&line[line.size()-2]=='\r'?"\r\n":"\n";
+                        replaced=true;
+                    }
+                }
+            }
+            if(!replaced)result+=line;pos+=length;
+        }
+        if(inside)missing();
+        if(!found){error="Project section is missing; no descriptor bytes were changed.";return false;}
+        output.assign(result.begin(),result.end());error.clear();return true;
+    }
+
+    bool ValidateAttributeReference(const std::string& id,const std::string& hint,std::string& error)
+    {
+        const auto path=fs::u8path(hint);
+        if(!renegade::bridge::IsValidStableId(id)||!IsSafeRelativePath(path)||path.empty()||
+            *path.begin()!="Content"||path.extension()!=".renegade-attributes"||
+            hint.find_first_of("\r\n")!=std::string::npos||hint.find(char(0))!=std::string::npos)
+        {error="Gameplay attribute reference requires a stable identity and Content-relative .renegade-attributes path.";return false;}
+        return true;
     }
 
     fs::path ProjectTransactionDirectory(const fs::path& root)
@@ -446,6 +521,22 @@ namespace renegade::bridge
             document.startupScene = metadata.startupScene;
             document.startupFlow = metadata.startupFlow;
             document.startupScreen = metadata.startupScreen;
+            document.defaultHud = metadata.defaultHud;
+            if (!metadata.defaultHudId.empty())
+            {
+                ScreenDocument hud;
+                std::string resolvedPath, repairedHint;
+                if (!ResolveProjectScreenLibraryDocument(metadata.rootPath,
+                        metadata.projectId, metadata.defaultHudId, metadata.defaultHud,
+                        hud, resolvedPath, repairedHint, error))
+                    return false;
+                if (hud.usage != ScreenUsage::Hud || !hud.enabledInGame)
+                {
+                    error = "Project dependency default HUD is not an enabled HUD Screen.";
+                    return false;
+                }
+                document.defaultHud = std::move(repairedHint);
+            }
             document.alwaysInclude.clear();
             document.alwaysInclude.reserve(metadata.alwaysInclude.size());
             for (const auto& entry : metadata.alwaysInclude)
@@ -464,6 +555,29 @@ namespace renegade::bridge
                 candidate.dependencyClass = parsedClass;
                 candidate.requirement = DependencyRequirement::Required;
                 document.alwaysInclude.push_back(std::move(candidate));
+            }
+            // The versioned optional standard project budget document is an
+            // explicit Data dependency, loaded once by Runtime, never scanned per frame.
+            std::error_code budgetPathError;
+            const bool budgetExists=fs::exists(fs::u8path(metadata.rootPath)/fs::u8path(ScreenPerformanceBudgetPath),budgetPathError);
+            if(budgetPathError){error="Could not inspect project UI budget dependency.";return false;}
+            if(budgetExists)
+            {
+                ScreenPerformanceBudget budget;
+                if(!ReadScreenPerformanceBudget(metadata.rootPath,metadata.projectId,budget,error))return false;
+                DependencyCandidate candidate;candidate.declaredPath=ScreenPerformanceBudgetPath;
+                candidate.dependencyClass=DependencyClass::Data;candidate.requirement=DependencyRequirement::Required;
+                candidate.provenance="Project UI performance budgets";
+                document.alwaysInclude.push_back(std::move(candidate));
+            }
+            if(!metadata.attributeDocumentId.empty())
+            {
+                std::string resolved;GameplayAttributeDocument attributes;
+                if(!ResolveGameplayAttributeDocumentPath(metadata.rootPath,metadata.projectId,metadata.attributeDocumentId,
+                    metadata.attributeDocument,resolved,error)||!ReadGameplayAttributeDocument(resolved,metadata.projectId,attributes,error))return false;
+                DependencyCandidate candidate;candidate.declaredPath=fs::relative(fs::u8path(resolved),fs::u8path(metadata.rootPath)).generic_u8string();
+                candidate.dependencyClass=DependencyClass::Data;candidate.requirement=DependencyRequirement::Required;
+                candidate.provenance="Project gameplay attribute module";document.alwaysInclude.push_back(std::move(candidate));
             }
             error.clear();
             return true;
@@ -567,7 +681,8 @@ namespace renegade::bridge
 
     bool ProjectService::CreateStoryFlowProject(
         const std::string& parentDirectory,
-        const std::string& projectName)
+        const std::string& projectName,
+        bool seedUiScaffold)
     {
         lastError_.clear();
         lastWarning_.clear();
@@ -596,6 +711,40 @@ namespace renegade::bridge
                     "A non-empty project folder already exists: " +
                     root.generic_u8string();
                 return false;
+            }
+
+            if (seedUiScaffold)
+            {
+                // Stage on the destination volume, then publish with one rename.
+                // The existing active project and recents stay untouched on failure.
+                const auto container = root.parent_path() /
+                    fs::u8path(".rg-create-" + GenerateStableId().substr(0,8));
+                if(!fs::create_directory(container))
+                {lastError_="Could not reserve a private project staging folder.";return false;}
+                struct Cleanup {
+                    fs::path path;
+                    ~Cleanup(){std::error_code ignored;fs::remove_all(path,ignored);}
+                } cleanup{container};
+                ProjectService staged;
+                if (!staged.CreateStoryFlowProject(container.generic_u8string(),projectName,false))
+                {lastError_=staged.LastError();return false;}
+                std::string scaffoldError;
+                if (!SeedProjectUiScaffold(staged,scaffoldError) ||
+                    !staged.OpenProject(staged.CurrentProject().descriptorPath))
+                {lastError_=scaffoldError.empty()?staged.LastError():scaffoldError;return false;}
+                auto metadata=staged.CurrentProject();
+                const auto stagedRoot=fs::u8path(metadata.rootPath);
+                // Never overwrite a folder that acquired content while seeding.
+                if(fs::exists(root))
+                {
+                    if(!fs::is_directory(root)||!fs::is_empty(root)||!fs::remove(root))
+                    {lastError_="The new project destination changed during creation.";return false;}
+                }
+                fs::rename(stagedRoot,root);
+                metadata.rootPath=root.generic_u8string();
+                metadata.descriptorPath=(root/fs::u8path(projectName+".renegade")).generic_u8string();
+                currentProject_=std::move(metadata);hasProject_=true;
+                lastWarning_=staged.LastWarning();AddRecent(currentProject_);return true;
             }
 
             std::string directoryError;
@@ -825,6 +974,73 @@ namespace renegade::bridge
         return lastWarning_;
     }
 
+    bool ProjectService::SetDefaultHud(const std::string& documentId,const std::string& pathHint)
+    {
+        lastError_.clear();lastWarning_.clear();
+        if(!hasProject_){lastError_="Choose a project before setting its default HUD.";return false;}
+        ProjectMetadata disk;
+        if(!ReadProject(currentProject_.descriptorPath,disk,lastError_,false))return false;
+        if(!ProjectMetadataMatches(currentProject_,disk))
+        {lastError_="Project descriptor changed externally. Reopen it before editing the HUD default.";return false;}
+        if(documentId.empty()!=pathHint.empty())
+        {lastError_="Choose a complete HUD reference or clear both fields.";return false;}
+        std::string resolvedHint=pathHint;
+        if(!documentId.empty())
+        {
+            if(!ValidateHudReference({documentId,pathHint},lastError_))return false;
+            std::string path;ScreenDocument screen;
+            if(!ResolveProjectScreenLibraryDocument(currentProject_.rootPath,currentProject_.projectId,
+                    documentId,pathHint,screen,path,resolvedHint,lastError_))return false;
+            if(screen.usage!=ScreenUsage::Hud || !screen.enabledInGame)
+            {lastError_="The project default must be an enabled HUD Screen.";return false;}
+        }
+        auto updated=currentProject_;updated.defaultHudId=documentId;updated.defaultHud=resolvedHint;
+        if(!WriteProject(updated))return false;
+        currentProject_=std::move(updated);return true;
+    }
+
+    bool ProjectService::SetGameplayAttributes(const std::string& documentId,const std::string& pathHint)
+    {
+        lastError_.clear();lastWarning_.clear();
+        if(!hasProject_){lastError_="No project is active.";return false;}
+        if(documentId.empty()!=pathHint.empty()){lastError_="Gameplay attribute reference is incomplete.";return false;}
+        std::string repaired;
+        if(!documentId.empty())
+        {
+            if(!ValidateAttributeReference(documentId,pathHint,lastError_))return false;
+            std::string resolved;GameplayAttributeDocument document;
+            if(!ResolveGameplayAttributeDocumentPath(currentProject_.rootPath,currentProject_.projectId,
+                documentId,pathHint,resolved,lastError_)||
+                !ReadGameplayAttributeDocument(resolved,currentProject_.projectId,document,lastError_))return false;
+            repaired=fs::relative(fs::u8path(resolved),fs::u8path(currentProject_.rootPath)).generic_u8string();
+        }
+        ProjectMetadata candidate;
+        if(!ReadProject(currentProject_.descriptorPath,candidate,lastError_,false))return false;
+        if(candidate.projectId!=currentProject_.projectId||
+            candidate.attributeDocumentId!=currentProject_.attributeDocumentId)
+        {lastError_="Project attribute-module reference changed externally. Reload the project before attaching.";return false;}
+        candidate.attributeDocumentId=documentId;candidate.attributeDocument=repaired;
+        const auto descriptor=fs::u8path(currentProject_.descriptorPath),root=fs::u8path(currentProject_.rootPath);
+        std::vector<std::uint8_t> previous,requested;
+        if(!ReadFileBytes(descriptor,previous,lastError_)||
+            !PatchProjectAttributeReference(previous,documentId,repaired,requested,lastError_))return false;
+        if(previous==requested){currentProject_=std::move(candidate);return true;}
+        ProjectDocumentWrite backup;backup.destinationPath=ProjectDescriptorBackupPath(descriptor).generic_u8string();
+        backup.content=previous;backup.validator=[previous](const std::string& path,std::string& error){return FileMatchesBytes(path,previous,error);};
+        ProjectDocumentWrite write;write.destinationPath=descriptor.generic_u8string();write.content=std::move(requested);
+        write.validator=[this,candidate](const std::string& path,std::string& error){
+            ProjectMetadata check;
+            if(!ReadProject(path,check,error,false))return false;
+            if(!ProjectMetadataMatches(candidate,check)){error="Staged profile reference did not round-trip.";return false;}
+            return true;
+        };
+        ProjectDocumentTransactionOptions options;options.allowedRoot=root.generic_u8string();
+        options.journalDirectory=ProjectTransactionDirectory(root).generic_u8string();
+        const auto result=ProjectDocumentTransaction{}.Execute({std::move(backup),std::move(write)},options);
+        if(!result.success){lastError_="Gameplay module reference transaction failed: "+result.message;return false;}
+        currentProject_=std::move(candidate);return true;
+    }
+
     bool ProjectService::SetAlwaysInclude(
         const std::vector<std::string>& declarations)
     {
@@ -912,6 +1128,16 @@ namespace renegade::bridge
                 error = "The project descriptor contains a malformed project ID.";
                 return false;
             }
+            const auto attributeDocumentId=project.GetText("attribute_document_id");
+            const auto attributeDocument=project.GetText("attribute_document");
+            if(attributeDocumentId.empty()!=attributeDocument.empty()||
+                (!attributeDocumentId.empty()&&!ValidateAttributeReference(attributeDocumentId,attributeDocument,error)))
+            {if(error.empty())error="Gameplay attribute reference is incomplete.";return false;}
+            const auto defaultHudId=project.GetText("default_hud_id");
+            const auto defaultHud=project.GetText("default_hud");
+            if((defaultHudId.empty()!=defaultHud.empty()) ||
+                (!defaultHudId.empty() && !ValidateHudReference({defaultHudId,defaultHud},error)))
+            {if(error.empty())error="Project default HUD reference is incomplete.";return false;}
             const bool hasStartupFlowId = !startupFlowId.empty();
             const bool hasStartupFlowHint = !startupFlow.empty();
             const bool hasStartupScreenId = !startupScreenId.empty();
@@ -1031,6 +1257,9 @@ namespace renegade::bridge
             metadata.startupScene = startupScene.generic_u8string();
             metadata.startupFlowId = startupFlowId;
             metadata.startupFlow = startupFlow.generic_u8string();
+            metadata.attributeDocumentId=attributeDocumentId;metadata.attributeDocument=attributeDocument;
+            metadata.defaultHudId=defaultHudId;
+            metadata.defaultHud=defaultHud;
             metadata.startupScreenId = startupScreenId;
             metadata.startupScreen = startupScreen.generic_u8string();
             metadata.alwaysInclude = std::move(alwaysInclude);
@@ -1137,6 +1366,13 @@ namespace renegade::bridge
             return false;
         }
 
+        if(metadata.attributeDocumentId.empty()!=metadata.attributeDocument.empty()||
+            (!metadata.attributeDocumentId.empty()&&!ValidateAttributeReference(metadata.attributeDocumentId,metadata.attributeDocument,lastError_)))
+        {if(lastError_.empty())lastError_="Gameplay attribute reference is incomplete.";return false;}
+        std::string hudError;
+        if((metadata.defaultHudId.empty()!=metadata.defaultHud.empty()) ||
+            (!metadata.defaultHudId.empty() && !ValidateHudReference({metadata.defaultHudId,metadata.defaultHud},hudError)))
+        {lastError_=hudError.empty()?"Project default HUD reference is incomplete.":hudError;return false;}
         const bool hasStartupFlowId = !metadata.startupFlowId.empty();
         const bool hasStartupFlowHint = !metadata.startupFlow.empty();
         const bool hasStartupScreenId = !metadata.startupScreenId.empty();

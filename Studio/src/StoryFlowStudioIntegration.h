@@ -10,6 +10,8 @@
 #include "renegade/bridge/StoryFlowScreenLifecycleService.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
 #include "StoryFlowScreenEditorHandoff.h"
+#include "renegade/bridge/ScreenFlowDestinationPlan.h"
+#include "renegade/bridge/ScreenFlowAtomicSaveService.h"
 #include "RenegadeStudioChrome.h"
 #include "WindowsGameBuildController.h"
 
@@ -21,6 +23,8 @@
 #include <string>
 #include <system_error>
 #include <utility>
+#include <unordered_set>
+#include <vector>
 
 namespace renegade::studio
 {
@@ -206,6 +210,9 @@ namespace renegade::studio
                 activeLevelNodeId_.clear();
                 screenEditorHandoff_ = {};
                 screenEditor.Clear();
+                screenLibraryDirty_ = true;
+                screenLibraryActiveNode_.clear();
+                screenLibraryActiveDocument_.clear();pendingLibraryDocumentId_.clear();screenLibraryCatalogue_={};
             }
             else if (hubOwnedLastTick_)
             {
@@ -234,6 +241,259 @@ namespace renegade::studio
                 desiredWorkspace_ = Workspace::LevelEditor;
                 EnsureActive(application, levelEditor);
                 return;
+            }
+
+            // Reuse StoryFlow's one governed Screen handoff for project-wide
+            // Screen navigation. This is a read-only catalogue; no second
+            // Screen document index or per-frame Content scan is introduced.
+            if (!screenLibraryHooked_)
+            {
+                screenEditor.OnOpenProjectScreen(
+                    [this](const bridge::StableId& nodeId)
+                    {
+                        QueueOpenDestination(nodeId);
+                    });
+                screenEditor.OnOpenLibraryDocument([this](const bridge::StableId& documentId)
+                {
+                    pendingLibraryDocumentId_=documentId;
+                    pendingScreenAction_=PendingScreenAction::OpenLibrary;
+                });
+                screenEditor.OnExternalFlowDirty([this]()
+                {
+                    return !screenEditorHandoff_.screenNodeId.empty() &&
+                        authoringSession_.IsLoaded() && authoringSession_.IsDirty();
+                });
+                screenEditor.OnCoordinatedSave(
+                    [this, &storyFlow](
+                        bridge::ScreenAuthoringSession& screen,
+                        std::string& error)
+                    {
+                        if (!screenEditorHandoff_.ready ||
+                            activeProjectRoot_.empty() ||
+                            !authoringSession_.IsLoaded())
+                        {
+                            error = "No active StoryFlow project is available for coordinated Save.";
+                            return false;
+                        }
+                        if(screenEditorHandoff_.screenNodeId.empty())
+                        {
+                            if(!screen.Save(error))return false;
+                            storyFlow.SetExternalStatus("LIBRARY SCREEN SAVED");return true;
+                        }
+                        const auto saved = bridge::ScreenFlowAtomicSaveService::Save(
+                            screen, authoringSession_, activeProjectRoot_);
+                        if (!saved.succeeded)
+                        {
+                            error = saved.message;
+                            return false;
+                        }
+                        storyFlow.SetExternalStatus(
+                            "SCREEN + STORYFLOW SAVED // COORDINATED TRANSACTION");
+                        error.clear();
+                        return true;
+                    });
+                screenEditor.OnOpenScreenRoute(
+                    [this, &storyFlow](const bridge::ScreenDocument& screen,
+                        const bridge::StableId& buttonId,
+                        const bridge::StableId& destinationId,
+                        bool& routeChanged,
+                        std::string& error)
+                    {
+                        routeChanged = false;
+                        if (!authoringSession_.IsLoaded() ||
+                            !screenEditorHandoff_.ready ||
+                            (screenEditorHandoff_.screenNodeId.empty() || screen.envelope.documentId!=screenEditorHandoff_.screenDocumentId ||
+                             screen.envelope.projectId!=authoringSession_.Document().envelope.projectId))
+                        {
+                            error = "No authoritative StoryFlow Screen is open.";
+                            return false;
+                        }
+                        const auto plan = bridge::PlanButtonOpenScreen(
+                            screen, authoringSession_.Document(),
+                            screenEditorHandoff_.screenNodeId,
+                            buttonId, destinationId);
+                        if (!plan.succeeded)
+                        {
+                            error = plan.message;
+                            return false;
+                        }
+                        if (plan.noChanges)
+                        {
+                            error.clear();
+                            return true;
+                        }
+                        // Fail closed if the button's action is new/changed in
+                        // an unsaved Screen; Runtime uses persisted Screen IDs.
+                        bridge::ScreenDocument persisted;
+                        if (!bridge::ReadScreenDocument(
+                                screenEditorHandoff_.resolvedPath,
+                                screen.envelope.projectId, persisted, error))
+                            return false;
+                        const auto saved = std::find_if(
+                            persisted.widgets.begin(), persisted.widgets.end(),
+                            [&](const bridge::ScreenWidget& widget)
+                            {
+                                return widget.id == buttonId &&
+                                    widget.kind == bridge::ScreenWidgetKind::Button;
+                            });
+                        if (saved == persisted.widgets.end() ||
+                            saved->actionId != plan.actionId)
+                        {
+                            error = "Save the selected Button's Screen action before assigning its StoryFlow destination.";
+                            return false;
+                        }
+                        const auto plannedRoute = std::find_if(
+                            plan.candidateFlow.routes.begin(),
+                            plan.candidateFlow.routes.end(),
+                            [&](const bridge::FlowRoute& route)
+                            {
+                                return route.id == plan.routeId;
+                            });
+                        if (plannedRoute == plan.candidateFlow.routes.end())
+                        {
+                            error = "Validated destination plan lost its route.";
+                            return false;
+                        }
+                        const bool changed = plan.updatingExisting
+                            ? authoringSession_.UpdateRoute(
+                                plan.routeId, *plannedRoute, error)
+                            : [&]()
+                            {
+                                bridge::StableId createdId;
+                                return authoringSession_.AddRoute(
+                                    *plannedRoute, createdId, error);
+                            }();
+                        if (!changed) return false;
+                        if (!storyFlow.RefreshAfterExternalRouteMutation())
+                        {
+                            std::string rollbackError;
+                            if (!authoringSession_.Undo(rollbackError))
+                                error = "Flow changed but presentation refresh failed and Undo failed: " + rollbackError;
+                            else
+                                error = "Flow route rolled back after presentation refresh failure.";
+                            (void)storyFlow.RefreshAfterExternalRouteMutation();
+                            return false;
+                        }
+                        routeChanged = true;
+                        routeHistoryValid_ = true;
+                        routeHistoryScreenNodeId_ = screenEditorHandoff_.screenNodeId;
+                        routeHistoryExpectedUndo_ = authoringSession_.UndoCount();
+                        routeHistoryExpectedRedo_ = authoringSession_.RedoCount();
+                        storyFlow.SetExternalStatus(
+                            "SCREEN DESTINATION UPDATED // UNSAVED STORYFLOW CHANGE");
+                        error.clear();
+                        return true;
+                    });
+                screenEditor.OnRouteHistoryAction(
+                    [this, &storyFlow](const bool undo, std::string& error)
+                    {
+                        if (!routeHistoryValid_ ||
+                            !authoringSession_.IsLoaded() ||
+                            routeHistoryScreenNodeId_ !=
+                                screenEditorHandoff_.screenNodeId ||
+                            authoringSession_.UndoCount() !=
+                                routeHistoryExpectedUndo_ ||
+                            authoringSession_.RedoCount() !=
+                                routeHistoryExpectedRedo_)
+                        {
+                            error = "StoryFlow changed outside this Screen editing timeline; return to StoryFlow to manage history.";
+                            return false;
+                        }
+                        if (undo
+                                ? !authoringSession_.Undo(error)
+                                : !authoringSession_.Redo(error))
+                            return false;
+                        if (!storyFlow.RefreshAfterExternalRouteMutation())
+                        {
+                            std::string restoreError;
+                            const bool restored = undo
+                                ? authoringSession_.Redo(restoreError)
+                                : authoringSession_.Undo(restoreError);
+                            (void)storyFlow.RefreshAfterExternalRouteMutation();
+                            error = restored
+                                ? "StoryFlow presentation failed to refresh; route history was restored."
+                                : "StoryFlow presentation failed and history restoration also failed: " + restoreError;
+                            routeHistoryValid_ = restored;
+                            return false;
+                        }
+                        routeHistoryExpectedUndo_ = authoringSession_.UndoCount();
+                        routeHistoryExpectedRedo_ = authoringSession_.RedoCount();
+                        storyFlow.SetExternalStatus(
+                            undo ? "SCREEN DESTINATION UNDONE // UNSAVED FLOW"
+                                 : "SCREEN DESTINATION REDONE // UNSAVED FLOW");
+                        error.clear();
+                        return true;
+                    });
+                screenLibraryHooked_ = true;
+            }
+            screenEditor.SetProjectDefaultHud(project.defaultHudId);
+            const auto contextProject=project.projectId, contextDocument=screenEditorHandoff_.screenDocumentId;
+            screenEditor.SetRouteContext(screenEditorHandoff_.screenNodeId,
+                [this,contextProject,contextDocument](const bridge::StableId& id) {
+                    if(!authoringSession_.IsLoaded() || authoringSession_.Document().envelope.projectId!=contextProject ||
+                        screenEditorHandoff_.screenDocumentId!=contextDocument) return false;
+                    for(const auto& node:authoringSession_.Document().nodes)
+                        if(node.id==id && node.kind==bridge::FlowNodeKind::Screen && node.screenDocumentId==contextDocument)
+                        { screenEditorHandoff_.screenNodeId=id; screenLibraryDirty_=true; return true; }
+                    return false;
+                });
+            if (screenLibraryDirty_ || screenLibraryActiveNode_!=screenEditorHandoff_.screenNodeId ||
+                screenLibraryActiveDocument_!=screenEditorHandoff_.screenDocumentId)
+            {
+                screenLibraryCatalogue_=bridge::EnumerateProjectScreenLibrary(project.rootPath,project.projectId);
+                std::vector<ScreenEditorLibraryScreen> screens;
+                std::unordered_set<bridge::StableId> referenced;
+                const auto category=[](bridge::ScreenUsage usage)->std::string
+                {
+                    switch(usage){case bridge::ScreenUsage::Hud:return "HUDS";
+                        case bridge::ScreenUsage::Overlay:return "OVERLAYS";
+                        case bridge::ScreenUsage::Modal:return "MODALS";default:return "MENUS";}
+                };
+                for(const auto& node:authoringSession_.Document().nodes)
+                {
+                    if(node.kind!=bridge::FlowNodeKind::Screen)
+                    {
+                        if(node.kind!=bridge::FlowNodeKind::GameStart)
+                        { ScreenEditorLibraryScreen target;target.nodeId=node.id;target.name=node.name;
+                          target.category="FLOW DESTINATIONS";
+                          if(node.kind==bridge::FlowNodeKind::Level){
+                              const auto resolved=bridge::StoryFlowLevelReferenceService{}.ResolveLevel(project.rootPath,project.projectId,authoringSession_.Document(),node.id);
+                              target.available=resolved.succeeded;target.diagnostic=resolved.message;
+                          }
+                          screens.push_back(std::move(target)); }
+                        continue;
+                    }
+                    ScreenEditorLibraryScreen record;record.nodeId=node.id;record.name=node.name;
+                    record.documentId=node.screenDocumentId;record.pathHint=node.screenPathHint;
+                    record.current=node.id==screenEditorHandoff_.screenNodeId;
+                    record.available=false;record.category="UNAVAILABLE";record.diagnostic="Screen document is missing or unavailable.";
+                    const auto found=std::find_if(screenLibraryCatalogue_.screens.begin(),screenLibraryCatalogue_.screens.end(),
+                        [&](const auto& entry){return entry.documentId==node.screenDocumentId;});
+                    if(found!=screenLibraryCatalogue_.screens.end())
+                    {
+                        record.pathHint=found->pathHint;record.available=found->available;
+                        record.enabledInGame=found->enabledInGame;record.diagnostic=found->diagnostic;
+                        if(found->available)record.category=category(found->usage);
+                        if(!found->enabledInGame)record.name+=" // OFF";
+                    }
+                    referenced.insert(record.documentId);screens.push_back(std::move(record));
+                }
+                for(const auto& entry:screenLibraryCatalogue_.screens)
+                {
+                    if(referenced.count(entry.documentId))continue;
+                    ScreenEditorLibraryScreen record;record.name=entry.name;record.documentId=entry.documentId;
+                    record.pathHint=entry.pathHint;record.available=entry.available;record.enabledInGame=entry.enabledInGame;
+                    record.category=entry.available?category(entry.usage):"UNAVAILABLE";record.diagnostic=entry.diagnostic;
+                    record.current=entry.documentId==screenEditorHandoff_.screenDocumentId;
+                    if(!entry.enabledInGame)record.name+=" // OFF";
+                    screens.push_back(std::move(record));
+                }
+                storyFlow.SetHudChoices(screenLibraryCatalogue_.screens);
+                storyFlow.SetScreenLibrary(screenLibraryCatalogue_.screens);
+                screenEditor.SetProjectScreenLibrary(std::move(screens));
+                screenLibraryActiveNode_=screenEditorHandoff_.screenNodeId;
+                screenLibraryActiveDocument_=screenEditorHandoff_.screenDocumentId;
+                screenLibraryDirty_=false;
             }
 
             // Project-level actions belong to the project home, not the Level
@@ -319,6 +579,9 @@ namespace renegade::studio
             None,
             AddNew,
             Open,
+            OpenLibrary,
+            CreateStandalone,
+            AdoptExisting,
         };
 
         template <typename LevelEditor, typename StoryFlowPath>
@@ -336,6 +599,7 @@ namespace renegade::studio
             storyFlow.OnSemanticChanged([this]()
             {
                 screenOutcomeAuditPending_ = true;
+                screenLibraryDirty_ = true;
             });
             storyFlow.OnScreenOutcomeQuery([this](
                 const bridge::StableId& nodeId,
@@ -366,6 +630,27 @@ namespace renegade::studio
             storyFlow.OnNodeActivated([this](const bridge::StableId& nodeId)
             {
                 QueueOpenDestination(nodeId);
+            });
+            storyFlow.OnLibraryDocumentRequested([this](const bridge::StableId& documentId)
+            {
+                // A library document has standalone identity, regardless of
+                // whether a StoryFlow node also references it.
+                pendingLibraryDocumentId_ = documentId;
+                pendingScreenAction_ = PendingScreenAction::OpenLibrary;
+            });
+            storyFlow.OnLibraryAdoptRequested([this](const bridge::StableId& documentId)
+            {
+                pendingLibraryDocumentId_ = documentId;
+                pendingScreenAction_ = PendingScreenAction::AdoptExisting;
+            });
+            storyFlow.OnLibraryRefreshRequested([this]()
+            {
+                screenLibraryDirty_ = true;
+            });
+            storyFlow.OnLibraryCreateRequested([this](const bridge::ScreenUsage usage)
+            {
+                pendingStandaloneUsage_ = usage;
+                pendingScreenAction_ = PendingScreenAction::CreateStandalone;
             });
             storyFlow.OnJourneyShellAction(
                 [this, &levelEditor, &storyFlow](
@@ -806,6 +1091,28 @@ namespace renegade::studio
             if (action == PendingScreenAction::None) return;
             pendingScreenAction_ = PendingScreenAction::None;
 
+            if (action == PendingScreenAction::AdoptExisting)
+            {
+                const auto catalogue = bridge::EnumerateProjectScreenLibrary(project.rootPath, project.projectId);
+                const auto entry = std::find_if(catalogue.screens.begin(), catalogue.screens.end(),
+                    [this](const auto& item) { return item.documentId == pendingLibraryDocumentId_; });
+                if (entry == catalogue.screens.end() || !entry->available)
+                { storyFlow.SetExternalStatus("ADD EXISTING FAILED // REFRESH UI LIBRARY"); return; }
+                std::string error;
+                if (!authoringSession_.Save(error))
+                { storyFlow.SetExternalStatus("ADD EXISTING BLOCKED // " + error); return; }
+                bridge::StoryFlowNewScreenRequest request;
+                request.projectRoot = project.rootPath; request.projectId = project.projectId;
+                request.flowPath = authoringSession_.FilePath(); request.flow = authoringSession_.Document();
+                request.screenName = entry->name; request.screenPathHint = entry->pathHint;
+                const auto result = bridge::StoryFlowScreenLifecycleService{}.AdoptExistingScreen(request);
+                if (!result.succeeded)
+                { storyFlow.SetExternalStatus("ADD EXISTING FAILED // " + result.message); return; }
+                if (ReloadAfterContentMutation(project, storyFlow, result.screenNodeId, true))
+                    storyFlow.SetExternalStatus("SCREEN ADDED + REVEALED // " + entry->name + " // CONNECT ROUTES EXPLICITLY");
+                return;
+            }
+
             if (action == PendingScreenAction::AddNew)
             {
                 const std::string screenName = Trim(pendingScreenName_);
@@ -816,6 +1123,9 @@ namespace renegade::studio
                     return;
                 }
 
+                std::string saveError;
+                if (!authoringSession_.Save(saveError))
+                { storyFlow.SetExternalStatus("SCREEN CREATE BLOCKED // " + saveError); return; }
                 bridge::StoryFlowNewScreenRequest request;
                 request.projectRoot = project.rootPath;
                 request.projectId = project.projectId;
@@ -835,13 +1145,58 @@ namespace renegade::studio
                     ReportSemanticFailure("Add Screen failed: " + result.message);
                     return;
                 }
-                if (!ReloadAfterContentMutation(project, storyFlow, result.screenNodeId))
+                if (!ReloadAfterContentMutation(project, storyFlow, result.screenNodeId, true))
                     return;
+                storyFlow.SetExternalStatus("SCREEN CREATED + REVEALED // " + screenName +
+                    " // SAVED // CONNECT ROUTES EXPLICITLY");
                 wi::backlog::post(
                     "Renegade Story Flow: created governed " +
                     std::string(bridge::StoryFlowScreenTemplateName(pendingScreenTemplate_)) +
                     " Screen '" + screenName + "' -> " + result.screenPathHint,
                     wi::backlog::LogLevel::Default);
+                return;
+            }
+
+            if(action==PendingScreenAction::CreateStandalone)
+            {
+                const auto created=bridge::CreateProjectScreenLibraryDocument(
+                    project.rootPath,project.projectId,pendingStandaloneUsage_);
+                if(!created.succeeded)
+                {
+                    storyFlow.SetExternalStatus("CREATE UI DOCUMENT FAILED // "+created.error);
+                    return;
+                }
+                StoryFlowScreenEditorHandoff handoff;
+                std::string error;
+                if(!BuildStandaloneScreenEditorHandoff(project.rootPath,project.projectId,
+                    created.documentId,created.pathHint,handoff,error))
+                {
+                    storyFlow.SetExternalStatus("CREATED UI DOCUMENT CANNOT OPEN // "+error);
+                    screenLibraryDirty_=true;
+                    return;
+                }
+                screenEditorHandoff_=std::move(handoff);
+                screenLibraryDirty_=true;
+                storyFlow.SetExternalStatus("NEW PROJECT UI DOCUMENT CREATED // "+created.pathHint);
+                if(screenEditorOpen_)screenEditorOpen_(screenEditorHandoff_);
+                return;
+            }
+
+            if(action==PendingScreenAction::OpenLibrary)
+            {
+                screenLibraryCatalogue_=bridge::EnumerateProjectScreenLibrary(project.rootPath,project.projectId);
+                screenLibraryDirty_=true;
+                const auto found=std::find_if(screenLibraryCatalogue_.screens.begin(),screenLibraryCatalogue_.screens.end(),
+                    [&](const auto& entry){return entry.documentId==pendingLibraryDocumentId_ && entry.available;});
+                if(found==screenLibraryCatalogue_.screens.end())
+                {storyFlow.SetExternalStatus("SCREEN LIBRARY ENTRY IS UNAVAILABLE");pendingLibraryDocumentId_.clear();return;}
+                StoryFlowScreenEditorHandoff handoff;std::string error;
+                if(!BuildStandaloneScreenEditorHandoff(project.rootPath,project.projectId,found->documentId,found->pathHint,handoff,error))
+                {storyFlow.SetExternalStatus("OPEN LIBRARY SCREEN FAILED // "+error);pendingLibraryDocumentId_.clear();return;}
+                (void)BindLibraryFlowContext(authoringSession_.Document(),handoff);
+                if (!handoff.screenNodeId.empty()) storyFlow.SelectAndFocusNode(handoff.screenNodeId);
+                screenEditorHandoff_=std::move(handoff);screenLibraryDirty_=true;pendingLibraryDocumentId_.clear();
+                if(screenEditorOpen_)screenEditorOpen_(screenEditorHandoff_);
                 return;
             }
 
@@ -890,7 +1245,7 @@ namespace renegade::studio
         bool AuditScreenOutcomeParity(
             const Project& project,
             StoryFlowPath& storyFlow,
-            const bridge::StableId& preferredNodeId)
+            const bridge::StableId& preferredNodeId, bool revealFailures = true)
         {
             if (!authoringSession_.IsLoaded()) return false;
 
@@ -907,7 +1262,7 @@ namespace renegade::studio
                     node.id);
                 if (!audit.succeeded)
                 {
-                    storyFlow.SelectAndFocusNode(node.id);
+                    if (revealFailures) storyFlow.SelectAndFocusNode(node.id);
                     storyFlow.SetExternalStatus(
                         "SCREEN ROUTING INVALID // " + audit.message);
                     ReportSemanticFailure(
@@ -931,9 +1286,11 @@ namespace renegade::studio
         bool ReloadAfterContentMutation(
             const Project& project,
             StoryFlowPath& storyFlow,
-            const bridge::StableId& createdNodeId)
+            const bridge::StableId& createdNodeId, bool placeNewScreen = false)
         {
+            const bool newIdentity = model_.FindNode(createdNodeId) == nullptr;
             std::string error;
+            screenLibraryDirty_ = true;
             if (!authoringSession_.Open(
                     authoringSession_.FilePath(), project.projectId, error))
             {
@@ -970,8 +1327,11 @@ namespace renegade::studio
                     model_, project.projectId, project.startupFlowId);
             }
             storyFlow.Bind(&authoringSession_, &model_, &layout_);
-            storyFlow.SelectAndFocusNode(createdNodeId);
-            AuditScreenOutcomeParity(project, storyFlow, createdNodeId);
+            AuditScreenOutcomeParity(project, storyFlow, {}, false);
+            if (placeNewScreen && newIdentity)
+                storyFlow.PlaceNewNodeAtViewportCentre(createdNodeId);
+            else
+                storyFlow.SelectAndFocusNode(createdNodeId);
             layoutDirty_ = true;
             FlushLayout(true);
 
@@ -1083,7 +1443,7 @@ namespace renegade::studio
             }
 
             storyFlow.Bind(&authoringSession_, &model_, &layout_);
-            AuditScreenOutcomeParity(project, storyFlow, {});
+            AuditScreenOutcomeParity(project, storyFlow, {}, false);
             if (!restoredSavedLayout)
                 storyFlow.FitToContent();
             layoutDirty_ = !restoredSavedLayout;
@@ -1102,6 +1462,7 @@ namespace renegade::studio
             storyFlow.Clear();
             authoringSession_.Clear();
             model_.Clear();
+            storyFlow.SetScreenLibrary({});
             layout_ = {};
             layoutPath_.clear();
             trackedProjectId_.clear();
@@ -1109,6 +1470,11 @@ namespace renegade::studio
             activeLevelNodeId_.clear();
             pendingLevelNodeId_.clear();
             pendingScreenNodeId_.clear();
+            pendingLibraryDocumentId_.clear();
+            screenLibraryCatalogue_ = {};
+            screenLibraryDirty_ = true;
+            screenLibraryActiveNode_.clear();
+            screenLibraryActiveDocument_.clear();
             pendingExistingScenePath_.clear();
             pendingLevelAction_ = PendingLevelAction::None;
             pendingScreenAction_ = PendingScreenAction::None;
@@ -1117,6 +1483,8 @@ namespace renegade::studio
             buildGameDispatchArmed_ = false;
             buildGameBusy_ = false;
             screenEditorHandoff_ = {};
+            routeHistoryValid_ = false;
+            routeHistoryScreenNodeId_.clear();
             activeProjectRoot_.clear();
             screenOutcomeAuditPending_ = false;
             loadAttempted_ = false;
@@ -1170,6 +1538,14 @@ namespace renegade::studio
         bridge::StableId activeLevelNodeId_;
         bridge::StableId pendingLevelNodeId_;
         bridge::StableId pendingScreenNodeId_;
+        bridge::StableId screenLibraryActiveNode_;
+        bridge::StableId screenLibraryActiveDocument_;
+        bridge::StableId pendingLibraryDocumentId_;
+        bridge::ScreenLibraryCatalogue screenLibraryCatalogue_;
+        bridge::StableId routeHistoryScreenNodeId_;
+        std::size_t routeHistoryExpectedUndo_ = 0;
+        std::size_t routeHistoryExpectedRedo_ = 0;
+        bool routeHistoryValid_ = false;
         std::string layoutPath_;
         std::string pendingLevelName_;
         std::string pendingScreenName_;
@@ -1179,6 +1555,7 @@ namespace renegade::studio
         Workspace desiredWorkspace_ = Workspace::StoryFlow;
         PendingLevelAction pendingLevelAction_ = PendingLevelAction::None;
         PendingScreenAction pendingScreenAction_ = PendingScreenAction::None;
+        bridge::ScreenUsage pendingStandaloneUsage_ = bridge::ScreenUsage::Hud;
         bridge::StoryFlowScreenTemplate pendingScreenTemplate_ =
             bridge::StoryFlowScreenTemplate::Title;
         bool pendingProjectPlay_ = false;
@@ -1190,5 +1567,7 @@ namespace renegade::studio
         bool layoutDirty_ = false;
         bool hubOwnedLastTick_ = true;
         bool screenOutcomeAuditPending_ = false;
+        bool screenLibraryDirty_ = true;
+        bool screenLibraryHooked_ = false;
     };
 }

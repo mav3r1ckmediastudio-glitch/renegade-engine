@@ -9,9 +9,31 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <utility>
+#include <chrono>
+#include <cstdlib>
+#include <fstream>
 
 namespace
 {
+    // Opt-in stage evidence, kept out of normal editor frame logging.
+    struct TerrainStageTrace
+    {
+        const char* stage;
+        std::chrono::steady_clock::time_point started;
+        bool enabled;
+        explicit TerrainStageTrace(const char* name) : stage(name),
+            started(std::chrono::steady_clock::now()),
+            enabled(std::getenv("RENEGADE_TERRAIN_TRACE") != nullptr) {}
+        ~TerrainStageTrace()
+        {
+            if (!enabled) return;
+            const auto us = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - started).count();
+            std::ofstream out("terrain-stage-timings.csv", std::ios::app);
+            out << stage << ',' << us << '\n';
+        }
+    };
+
     namespace fs = std::filesystem;
     constexpr float Epsilon = 0.00001f;
 
@@ -143,7 +165,9 @@ namespace
         const XMFLOAT3* brushCenter = nullptr,
         const float brushRadius = 0.0f)
     {
+        TerrainStageTrace trace("grid");
         TerrainGrid grid;
+        std::size_t includedChunks = 0;
         const std::size_t reservedChunkCount = brushCenter == nullptr
             ? terrain.chunks.size()
             : std::min<std::size_t>(terrain.chunks.size(), 16);
@@ -171,6 +195,7 @@ namespace
                 continue;
             }
 
+            ++includedChunks;
             const XMMATRIX world = transform->GetWorldMatrix();
             for (std::size_t index = 0;
                 index < mesh->vertex_positions.size(); ++index)
@@ -203,6 +228,17 @@ namespace
                         {&chunk, mesh, index};
                 }
             }
+        }
+        if (trace.enabled)
+        {
+            std::size_t largestBucket = 0;
+            for (std::size_t bucket = 0; bucket < grid.bucket_count(); ++bucket)
+                largestBucket = std::max(largestBucket, grid.bucket_size(bucket));
+            std::ofstream out("terrain-stage-timings.csv", std::ios::app);
+            out << "grid_vertices," << grid.size() << '\n'
+                << "grid_chunks," << includedChunks << '\n'
+                << "grid_largest_bucket," << largestBucket << '\n';
+            if (brushCenter != nullptr) out << "brush_x," << brushCenter->x << '\n' << "brush_z," << brushCenter->z << '\n';
         }
         return grid;
     }
@@ -325,9 +361,10 @@ namespace
                 mesh->vertex_tangents[index].w = 1.0f;
             }
 
-            mesh->CreateRenderData();
+            { TerrainStageTrace trace("mesh_render_data"); mesh->CreateRenderData(); }
             if (mesh->bvh.IsValid())
             {
+                TerrainStageTrace trace("bvh_build");
                 mesh->BuildBVH();
             }
             chunk->sphere.center = mesh->aabb.getCenter();
@@ -335,7 +372,7 @@ namespace
             chunk->sphere.center.y += chunk->position.y;
             chunk->sphere.center.z += chunk->position.z;
             chunk->sphere.radius = mesh->aabb.getRadius();
-            UpdateTerrainChunkHeightData(terrain, *chunk, *mesh);
+            { TerrainStageTrace trace("height_texture"); UpdateTerrainChunkHeightData(terrain, *chunk, *mesh); }
 
             if (refreshPhysics && terrain.IsPhysicsEnabled())
             {
@@ -502,6 +539,7 @@ namespace
         {
             return;
         }
+        TerrainStageTrace trace("collision_shape");
         auto& shape = mesh.precomputed_rigidbody_physics_shape;
         shape.shape = wi::scene::RigidBodyPhysicsComponent::HEIGHTFIELD;
         shape.mass = 0.0f;
@@ -1117,6 +1155,7 @@ namespace renegade::bridge
         wi::terrain::Terrain& terrain,
         const TerrainSculptState& changedState)
     {
+        terrain.Generation_Cancel();
         for (const auto& saved : changedState.chunks)
         {
             auto* mesh = scene.meshes.GetComponent(saved.entity);
@@ -1140,6 +1179,7 @@ namespace renegade::bridge
         wi::terrain::Terrain& terrain,
         const TerrainSculptState& state)
     {
+        terrain.Generation_Cancel();
         TerrainGrid grid = BuildTerrainGrid(scene, terrain);
         std::unordered_set<wi::terrain::ChunkData*> changedChunks;
         for (const auto& saved : state.chunks)
@@ -1189,6 +1229,8 @@ namespace renegade::bridge
         const float flattenHeight)
     {
         if (radius <= 0.0f || strength <= 0.0f) return false;
+        TerrainStageTrace trace("sculpt_total");
+        terrain.Generation_Cancel();
         TerrainGrid grid = BuildTerrainGrid(
             scene,
             terrain,

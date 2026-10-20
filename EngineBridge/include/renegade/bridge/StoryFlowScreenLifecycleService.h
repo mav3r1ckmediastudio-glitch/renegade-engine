@@ -19,6 +19,8 @@ namespace renegade::bridge
         Victory,
         SaveLoad,
         Credits,
+        ProjectScaffold = 100, // plus the index in ProjectUiScaffoldTemplateNames
+
     };
 
     [[nodiscard]] const char* StoryFlowScreenTemplateName(
@@ -78,5 +80,11 @@ namespace renegade::bridge
     public:
         [[nodiscard]] StoryFlowNewScreenResult CreateNewScreen(
             const StoryFlowNewScreenRequest& request) const;
+        // Explicit reuse keeps the existing Screen identity and bytes; it adds no routes.
+        [[nodiscard]] StoryFlowNewScreenResult AdoptExistingScreen(
+            const StoryFlowNewScreenRequest& request) const;
+    private:
+        [[nodiscard]] StoryFlowNewScreenResult Execute(
+            const StoryFlowNewScreenRequest& request, bool adoptExisting) const;
     };
 }

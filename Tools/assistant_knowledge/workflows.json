@@ -1,0 +1,1994 @@
+{
+  "schema": 1,
+  "policy": "User-directed workflows grounded in native-tested steps. Never infer capabilities from repository search results or let reference-only documents imply feature availability.",
+  "workflows": [
+    {
+      "id": "surface-type-v1",
+      "label": "Set an object's impact Surface Type",
+      "guide_id": "projectile-details-workflows",
+      "receipt_path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "LaunchSocket native service tests exit 0",
+        "Recorded native timing/multi-spawn acceptance inspected"
+      ],
+      "match": [
+        "\\b(?:set|change|choose|assign)\\b.{0,55}\\b(?:surface type|impact surface)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole|automatically|destroy|destruction|shatter)\\b"
+      ],
+      "prerequisites": "An open level and a selectable scene object. A projectile/hitscan setup is needed to test impact feedback.",
+      "steps": [
+        "Select the target object in the scene or hierarchy.",
+        "Choose **SURFACE TYPE** directly in its **Inspector**: Default, Metal, Wood, Concrete, Stone, Dirt/Ground, Glass or Water.",
+        "Save with **Ctrl+S**, then use **PLAY** and a configured weapon to compare impacts."
+      ],
+      "follow_up": "Use Undo for an unintended classification. Compare configured feedback, not just the object's visual material.",
+      "expected_result": "This object's impact classification changes without changing every object sharing its material. Character impacts are handled automatically.",
+      "troubleshooting": [
+        "Glass classification does not make a pane destructible.",
+        "Check the selected object and configured effects/audio if feedback is absent.",
+        "Surface selection is not a texture-authoring workflow."
+      ],
+      "limit": "Current controls are source-checked; relevant native projectile tests passed. Fresh beginner visual/audio acceptance remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/Phase5Gate4MaterialInspector.cpp",
+          "needle": "objectSurfaceLabel_.SetText(\"SURFACE TYPE\");",
+          "sha256": "f49c0b58140a3b5d6191ae29635034ec6287e0ed38053fc7706acd277cde4eeb"
+        },
+        {
+          "path": "Studio/src/Phase5Gate4MaterialInspector.cpp",
+          "needle": "std::make_unique<bridge::SetObjectImpactSurfaceCommand>",
+          "sha256": "f49c0b58140a3b5d6191ae29635034ec6287e0ed38053fc7706acd277cde4eeb"
+        },
+        {
+          "path": "docs/ARCHITECTURE.md",
+          "needle": "Creator steps: select an object; choose Surface Type directly in its Inspector.",
+          "sha256": "bfb45dcb6ed53c8461b83d7dc65fe87c1201a67568652c6c83ce181b7ab1aad0"
+        },
+        {
+          "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "fbef01868e30382efe1d73221ecfbb08b969116f42b23905d5d0d80b39e4ad2a"
+        }
+      ],
+      "provenance": [
+        "Studio/src/Phase5Gate4MaterialInspector.cpp",
+        "docs/ARCHITECTURE.md"
+      ]
+    },
+    {
+      "id": "animation-add-v1",
+      "label": "Add external animation FBX during Character import",
+      "guide_id": "character-animation-workflows",
+      "receipt_path": "Tools/assistant_knowledge/character_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "Native generated full humanoid import/external-animation proof",
+        "Character placement and prefab service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:add|import|load|retarget)\\b.{0,65}\\b(?:external animation|animation fbx|animation clips?|animations?)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:arms|weapon|player|unity|bvh|gltf|existing saved|already imported)\\b",
+        "\\b(?:bow|crossbow|shotgun)\\b"
+      ],
+      "prerequisites": "A ready rigged Character in the open Import Model review window, plus an animation FBX. A matching rig or one usable complete destination humanoid mapping is required. This guide is new-import authoring, not editing a previously saved Character.",
+      "steps": [
+        "In the Character import review, click **ADD ANIMATION FBX**.",
+        "Select the animation FBX. The service tries matching-rig transport or supported humanoid retargeting; wait for its result.",
+        "Select the newly added clip in **Animation clip** and preview/scrub it. Confirm pose, scale and motion.",
+        "Choose its **Gameplay action** if appropriate. Repeat ADD ANIMATION FBX for other required files.",
+        "After the refreshed preview is ready, finish the name/folder review and click **IMPORT ASSET**."
+      ],
+      "follow_up": "Place the saved Character, save the scene and test its intended actions. Preview speed/time are not gameplay authoring.",
+      "expected_result": "The candidate retains added clips and explicit action assignments when imported. Incompatible source additions fail rather than silently inventing movement.",
+      "troubleshooting": [
+        "Incomplete mapping or multiple destination humanoids: correct the source/destination rig; arbitrary multi-rig retargeting is unsupported.",
+        "A two-bone test rig is not a complete humanoid; having bones alone does not satisfy mapping.",
+        "On addition failure, read the error; do not assume a clip was added.",
+        "This panel does not promise arbitrary FPS-arm rig conversion or a universal animation importer."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "modelImportAddAnimation_.SetText(\"ADD ANIMATION FBX\");",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "EngineBridge/src/ModelImportCandidateService.cpp",
+          "needle": "External animation import currently accepts FBX only.",
+          "sha256": "ddb1b2ce46c54fb5bb288fbc169b3eca334840e0512de8fb12c23385b6352b64"
+        },
+        {
+          "path": "EngineBridge/src/ModelImportCandidateService.cpp",
+          "needle": "External animation import requires exactly one humanoid rig.",
+          "sha256": "ddb1b2ce46c54fb5bb288fbc169b3eca334840e0512de8fb12c23385b6352b64"
+        },
+        {
+          "path": "docs/MODEL_IMPORTER_REBUILD.md",
+          "needle": "This is bounded new-import authoring.",
+          "sha256": "c6a26397305f1fec7eafe64ebea12687a651e2ea99df8c21b3fddc4551872c10"
+        },
+        {
+          "path": "Tools/assistant_knowledge/character_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "c76653d91d90a2e24ff7b01ef0bd5250eeaea4da1410d6165743220e9415f61f"
+        },
+        {
+          "path": "Tools/assistant_knowledge/CHARACTER_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "21a09ac3e2ff4f7cef5eef04e99e5bacc523bfb91c6cd7a3794d54d21ad56744"
+        }
+      ],
+      "provenance": [
+        "docs/MODEL_IMPORTER_REBUILD.md",
+        "Studio/src/StudioApplication.cpp",
+        "EngineBridge/src/ModelImportCandidateService.cpp",
+        "docs/MODEL_IMPORTER_REBUILD.md"
+      ]
+    },
+    {
+      "id": "animation-action-v1",
+      "label": "Assign gameplay actions to Character clips during import",
+      "guide_id": "character-animation-workflows",
+      "receipt_path": "Tools/assistant_knowledge/character_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "Native generated full humanoid import/external-animation proof",
+        "Character placement and prefab service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:assign|set|choose|map)\\b.{0,55}\\b(?:gameplay actions?|animation actions?|idle|walk|run|attack|death)\\b.{0,40}\\b(?:clips?|animations?|character|npc)\\b",
+        "\\b(?:assign|set|choose|map)\\b.{0,50}\\b(?:animations?|clips?)\\b.{0,35}\\b(?:actions?|idle|walk|attack|gameplay)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:player|arms|weapon|existing saved|already imported|custom slots|blend space)\\b"
+      ],
+      "prerequisites": "A Character candidate open in Import Model with the needed clips already present. These controls describe per-clip semantic actions during import.",
+      "steps": [
+        "Select the desired take from **Animation clip**, not **REFERENCE POSE**.",
+        "Preview it with **PLAY** or scrub **Preview time (seconds)** to confirm which motion it contains.",
+        "Set **Gameplay action** to **Idle**, **Walk**, **Run**, **Attack**, **Reload**, **Hit**, **Death** or **Unassigned**, according to the actual clip.",
+        "Repeat for the other clips. Several clips may share an action; missing actions do not create replacement clips.",
+        "Click **IMPORT ASSET** after the preview is ready, then place/test the saved Character and save the scene."
+      ],
+      "follow_up": "Test the appropriate behaviour in PLAY. If the motion is wrong, verify the clip/action pairing and rig.",
+      "expected_result": "Explicit semantic assignments persist with the imported Character. Reference pose, preview playback speed and scrubbing are not gameplay actions.",
+      "troubleshooting": [
+        "Gameplay action disabled: select a real clip rather than REFERENCE POSE.",
+        "Wrong motion: inspect the actual clip; do not assign labels based only on filenames.",
+        "Custom slots, frame-range authoring and arbitrary blend spaces are not exposed by this importer."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "modelImportAction_.Create(\"Gameplay action\");",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "{\"Unassigned\", \"Idle\", \"Walk\", \"Run\", \"Attack\", \"Reload\", \"Hit\", \"Death\"}",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "docs/MODEL_IMPORTER_REBUILD.md",
+          "needle": "Several clips may share an action; missing actions remain valid.",
+          "sha256": "c6a26397305f1fec7eafe64ebea12687a651e2ea99df8c21b3fddc4551872c10"
+        },
+        {
+          "path": "Tools/assistant_knowledge/character_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "c76653d91d90a2e24ff7b01ef0bd5250eeaea4da1410d6165743220e9415f61f"
+        },
+        {
+          "path": "Tools/assistant_knowledge/CHARACTER_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "21a09ac3e2ff4f7cef5eef04e99e5bacc523bfb91c6cd7a3794d54d21ad56744"
+        }
+      ],
+      "provenance": [
+        "docs/MODEL_IMPORTER_REBUILD.md",
+        "Studio/src/StudioApplication.cpp",
+        "docs/MODEL_IMPORTER_REBUILD.md"
+      ]
+    },
+    {
+      "id": "npc-wander-v1",
+      "label": "Make an existing NPC wander",
+      "guide_id": "npc-authoring-workflows",
+      "receipt_path": "Tools/assistant_knowledge/npc_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "Character foundation, profiles, perception and decision service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:make|set|configure|enable|get)\\b.{0,45}\\b(?:npc|character)\\b.{0,30}\\bwander\\b",
+        "\\b(?:set up|configure|enable)\\b.{0,30}\\bwander(?:ing)?\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:script|patrol|import|player)\\b"
+      ],
+      "prerequisites": "An existing governed Character, suitable navigation/collidable ground and imported Idle/Walk (optional Run) actions. Select the actor root.",
+      "steps": [
+        "Expand **CHARACTER** in the selected NPC's Inspector.",
+        "Set **Character Role** to **WANDER**.",
+        "Enable **Character Autonomous**.",
+        "Choose the faction/personality you want; save with **Ctrl+S**.",
+        "Use **PLAY** and observe normal movement and return-to-role after encounters."
+      ],
+      "follow_up": "If it stays still, check navigation and actual clip assignments before changing unrelated profile controls.",
+      "expected_result": "The NPC selects wander goals around its spawn using existing runtime navigation. This does not generate terrain or place objects.",
+      "troubleshooting": [
+        "Autonomous off yields idle intent.",
+        "Unreachable ground or missing locomotion can prevent a convincing result.",
+        "Do not assume a Wander extent slider is present; the inspected CHARACTER UI exposes the role, not every internal setting."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/AICharacterInspector.cpp",
+          "needle": "AddEnum(role_, \"WANDER\", bridge::CharacterRole::Wander);",
+          "sha256": "b2d4f4de658a6999576d7778eb48b0688f98f5d3ac266fd7ea80c2bfddad7dd8"
+        },
+        {
+          "path": "Runtime/src/RuntimeCharacterDecision.h",
+          "needle": "case bridge::CharacterRole::Wander:",
+          "sha256": "e95e14a95b72303a252d27b1aa440fe67ba04b2439806d4c526c65a0dfb9ff4e"
+        },
+        {
+          "path": "docs/AI_IMPLEMENTATION_HANDOFF.md",
+          "needle": "resuming Wander.",
+          "sha256": "5a27a6a06f1e6e626fb93a1225818e7d5043b9ccd6d86b97c04d4777ae7600a8"
+        },
+        {
+          "path": "Tools/assistant_knowledge/npc_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "df972ecbc017c80a32863af973d5d0978544602e9b0647bc79b42ccab06dc44e"
+        },
+        {
+          "path": "Tools/assistant_knowledge/NPC_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "564954fd3030691d6ff3565cc4223b4f6fafad43a90c570fa9570064395f8e9d"
+        }
+      ],
+      "provenance": [
+        "docs/AI_IMPLEMENTATION_HANDOFF.md",
+        "Studio/src/AICharacterInspector.cpp",
+        "Runtime/src/RuntimeCharacterDecision.h",
+        "docs/AI_IMPLEMENTATION_HANDOFF.md"
+      ]
+    },
+    {
+      "id": "npc-patrol-v1",
+      "label": "Author and assign a patrol route",
+      "guide_id": "npc-authoring-workflows",
+      "receipt_path": "Tools/assistant_knowledge/npc_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "Character foundation, profiles, perception and decision service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:create|make|set up|setup|add|configure|assign)\\b.{0,55}\\bpatrol(?: route)?\\b",
+        "\\b(?:npc|character)\\b.{0,30}\\bpatrol\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:script|player|projectile|animation)\\b"
+      ],
+      "prerequisites": "An existing governed Character, traversable navigation/collidable ground and appropriate locomotion clips. Route authoring is separate from the Character's role.",
+      "steps": [
+        "Select the Character and expand **PATROL** in its Inspector.",
+        "Choose an existing **PATROL ROUTE**, or click **CREATE + ASSIGN ROUTE**.",
+        "Select the route and use **ADD PATROL POINT** to add ordered points. Select each point in the hierarchy and move it with the transform gizmo.",
+        "Set **ROUTE MODE** to **LOOP**, **PING PONG** or **RANDOM**, and **WAIT AT POINT (S)** as needed.",
+        "On the Character, choose **PATROL GUARD** (or a supported patrolling role) and enable **Character Autonomous**.",
+        "Save with **Ctrl+S**, then test movement with **PLAY**."
+      ],
+      "follow_up": "Reopen the saved scene and check route assignment/points. Review blocked traversal rather than adding more points blindly.",
+      "expected_result": "An authored route is assigned through the existing command system; navigation remains runtime-owned.",
+      "troubleshooting": [
+        "ADD PATROL POINT requires a selected route.",
+        "Placed points at the same position need deliberate gizmo placement.",
+        "An unusable route/navigation or disabled Autonomous can prevent patrol.",
+        "Patrol route authoring does not imply automatic waypoint generation or tactical squad AI."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/AIPatrolRouteInspector.cpp",
+          "needle": "create_.SetText(\"CREATE + ASSIGN ROUTE\");",
+          "sha256": "3b8d84303ee91948decad27798a4eafb543bd784d0e19927a6c38d8cb7e7d10a"
+        },
+        {
+          "path": "Studio/src/AIPatrolRouteInspector.cpp",
+          "needle": "addPoint_.SetText(\"ADD PATROL POINT\");",
+          "sha256": "3b8d84303ee91948decad27798a4eafb543bd784d0e19927a6c38d8cb7e7d10a"
+        },
+        {
+          "path": "Studio/src/AIPatrolRouteInspector.cpp",
+          "needle": "mode_.AddItem(\"PING PONG\"",
+          "sha256": "3b8d84303ee91948decad27798a4eafb543bd784d0e19927a6c38d8cb7e7d10a"
+        },
+        {
+          "path": "Studio/src/AICharacterInspector.cpp",
+          "needle": "AddEnum(role_, \"PATROL GUARD\"",
+          "sha256": "b2d4f4de658a6999576d7778eb48b0688f98f5d3ac266fd7ea80c2bfddad7dd8"
+        },
+        {
+          "path": "Runtime/src/RuntimeCharacterDecision.h",
+          "needle": "if (hasUsableRoute && RoleNormallyPatrols",
+          "sha256": "e95e14a95b72303a252d27b1aa440fe67ba04b2439806d4c526c65a0dfb9ff4e"
+        },
+        {
+          "path": "Tools/assistant_knowledge/npc_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "df972ecbc017c80a32863af973d5d0978544602e9b0647bc79b42ccab06dc44e"
+        },
+        {
+          "path": "Tools/assistant_knowledge/NPC_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "564954fd3030691d6ff3565cc4223b4f6fafad43a90c570fa9570064395f8e9d"
+        }
+      ],
+      "provenance": [
+        "docs/AI_IMPLEMENTATION_HANDOFF.md",
+        "Studio/src/AIPatrolRouteInspector.cpp",
+        "Studio/src/AICharacterInspector.cpp",
+        "Runtime/src/RuntimeCharacterDecision.h"
+      ]
+    },
+    {
+      "id": "character-prefab-v1",
+      "label": "Save a configured Character Prefab",
+      "guide_id": "character-animation-workflows",
+      "receipt_path": "Tools/assistant_knowledge/character_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "Native generated full humanoid import/external-animation proof",
+        "Character placement and prefab service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:save|create|make)\\b.{0,45}\\b(?:character|npc)\\s+prefab\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:player|weapon|projectile|import)\\b"
+      ],
+      "prerequisites": "A configured governed Character linked to its base Character Asset. Save the active level first if you want governed Action/Script attachments included.",
+      "steps": [
+        "Select the configured Character in the scene hierarchy.",
+        "Expand **CHARACTER PREFAB** and click **SAVE CHARACTER PREFAB**.",
+        "Read any save warnings about scene-local references; the prefab uses the selected Character's name.",
+        "Find the saved prefab under **Content/Prefabs** in the Asset Browser.",
+        "Place it in another suitable saved level in the same project, configure level-specific references, then save the scene."
+      ],
+      "follow_up": "Check fresh actor identity, AI settings and any Action/Script properties after placement.",
+      "expected_result": "A prefab references the base Character asset and preserves portable settings. It does not duplicate every mesh/animation source.",
+      "troubleshooting": [
+        "Scene-local patrol/weapon and non-self entity references may be cleared with warnings; reassign deliberately.",
+        "A prefab with scripts needs a saved level on placement; it must not silently drop attachments.",
+        "Saving a Character Prefab is separate from a Player Prefab."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/CharacterPrefabInspectorExtension.cpp",
+          "needle": "save_.SetText(\"SAVE CHARACTER PREFAB\");",
+          "sha256": "ed584b564c8f8990ac2cac82b3adc6696924c82da86e26c80083b2b810600ef9"
+        },
+        {
+          "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
+          "needle": "Patrol Route and Weapon stable IDs are treated as scene-local",
+          "sha256": "2f74264325f2ca1bc72deb5b2a28a520e5b039bb0b767b1778f5deacd7e37253"
+        },
+        {
+          "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
+          "needle": "A prefab containing Actions/Scripts fails closed in an unsaved Level",
+          "sha256": "2f74264325f2ca1bc72deb5b2a28a520e5b039bb0b767b1778f5deacd7e37253"
+        },
+        {
+          "path": "Tools/assistant_knowledge/character_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "c76653d91d90a2e24ff7b01ef0bd5250eeaea4da1410d6165743220e9415f61f"
+        },
+        {
+          "path": "Tools/assistant_knowledge/CHARACTER_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "21a09ac3e2ff4f7cef5eef04e99e5bacc523bfb91c6cd7a3794d54d21ad56744"
+        }
+      ],
+      "provenance": [
+        "docs/MODEL_IMPORTER_REBUILD.md",
+        "Studio/src/CharacterPrefabInspectorExtension.cpp",
+        "docs/CHARACTER_WORKFLOW_PROGRESS.md"
+      ]
+    },
+    {
+      "id": "global-script-v1",
+      "label": "Attach a level-wide GLOBAL SCRIPT",
+      "guide_id": "script-authoring-workflows",
+      "receipt_path": "Tools/assistant_knowledge/script_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "S4B/S4C/S4D authoring and S7 stock Actions/library service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:attach|add|assign|set up)\\b.{0,55}\\b(?:global script|level.wide script)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:write|generate|game.scope|all games|convert|maxlua)\\b"
+      ],
+      "prerequisites": "A saved active level and a governed Content/Scripts Lua source declaring metadata role GLOBAL SCRIPT. It has level scope and no entity owner.",
+      "steps": [
+        "Save the active level, then expand **GLOBAL SCRIPT** in the Inspector.",
+        "Use **REFRESH** to rescan compatible GLOBAL SCRIPT sources.",
+        "Choose the intended source and click **ADD**.",
+        "Keep it **ON** and configure its exposed properties/reference pickers; use UP/DOWN only if ordering matters.",
+        "Save with **Ctrl+S**, run **PLAY**, then reopen to check the level attachment persists."
+      ],
+      "follow_up": "Use REMOVE to detach the level instance; use Undo for an unintended authoring change.",
+      "expected_result": "A level-wide governed attachment runs through the existing Lua runtime. It is not Game-scope scripting.",
+      "troubleshooting": [
+        "Section absent: open a project and save the active scene.",
+        "Empty list: source must declare GLOBAL SCRIPT, not ACTION/SCRIPT.",
+        "An unresolved reference remains visible so you can repair it.",
+        "No scene selection is required for the level owner."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/S4DGlobalScriptInspector.cpp",
+          "needle": "add_.Create(\"ADD\");",
+          "sha256": "765f9c6b4b6ce06433c9a6b8ac8219c757ab251d7d77e1d250fb3fe919700d56"
+        },
+        {
+          "path": "Studio/src/S4DGlobalScriptInspector.cpp",
+          "needle": "descriptor.title = \"GLOBAL SCRIPT\";",
+          "sha256": "765f9c6b4b6ce06433c9a6b8ac8219c757ab251d7d77e1d250fb3fe919700d56"
+        },
+        {
+          "path": "docs/S4D_REFERENCES_GLOBAL_SCRIPT_HARDENING.md",
+          "needle": "It has no entity owner",
+          "sha256": "16e7d180888f90423f5ca628abdb57b7076db71ac27e204a6bcbf0fc88e45b61"
+        },
+        {
+          "path": "Tools/assistant_knowledge/script_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+        },
+        {
+          "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+        }
+      ],
+      "provenance": [
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+        "Studio/src/S4DGlobalScriptInspector.cpp",
+        "docs/S4D_REFERENCES_GLOBAL_SCRIPT_HARDENING.md"
+      ]
+    },
+    {
+      "id": "sliding-door-v1",
+      "label": "Set up an interactive sliding door",
+      "guide_id": "script-authoring-workflows",
+      "receipt_path": "Tools/assistant_knowledge/script_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "S4B/S4C/S4D authoring and S7 stock Actions/library service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:make|create|set up|setup|attach|add)\\b.{0,50}\\b(?:sliding door|interactive door|door action)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:write|generate|convert|maxlua|networked|multiplayer)\\b"
+      ],
+      "prerequisites": "A transformed visible object, a saved level and Player Start close enough for Interact testing. A special door mesh is not required.",
+      "steps": [
+        "Select the object and expand **ACTION**.",
+        "Choose **Interaction / Sliding Door** and click **ADD**.",
+        "Enable **Direct Interaction**. Set **Open Offset** (for example 0, 2, 0) and **Interaction Distance** appropriate for your level.",
+        "Save with **Ctrl+S** and use **PLAY**.",
+        "Walk close, check the interaction prompt and press your configured Interact key (**E** by default) to open/close."
+      ],
+      "follow_up": "Save/reopen the level to check its attachment and properties; test with PLAY.",
+      "expected_result": "The object slides by its authored local offset. This is a stock Action, not a generated hinge/physics mechanism.",
+      "troubleshooting": [
+        "No prompt: check Direct Interaction, distance, ON and Player Start.",
+        "Wrong movement direction: Open Offset is local-space.",
+        "To use a separate switch, disable Direct Interaction and wire a toggle event instead."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Library/Scripts/RenegadeStockActions/Door.lua",
+          "needle": "role = \"ACTION\"",
+          "sha256": "23fe69a979da8c07513ab4a2f7beb6e49938585cca335655d1651a688895ce8b"
+        },
+        {
+          "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+          "needle": "Expand **ACTION**",
+          "sha256": "ca3ad84cd8f0b7e658e6869c2cf7685f14aeeeff5c46b3e1c8310918b2845f0e"
+        },
+        {
+          "path": "Tools/assistant_knowledge/script_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+        },
+        {
+          "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+        }
+      ],
+      "provenance": [
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+        "Library/Scripts/RenegadeStockActions/Door.lua",
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md"
+      ]
+    },
+    {
+      "id": "interaction-switch-v1",
+      "label": "Wire an interaction switch to a door",
+      "guide_id": "script-authoring-workflows",
+      "receipt_path": "Tools/assistant_knowledge/script_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "S4B/S4C/S4D authoring and S7 stock Actions/library service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:set up|setup|wire|connect|make|create|add)\\b.{0,50}\\b(?:interaction switch|switch)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:write|generate|convert|maxlua|networked|multiplayer)\\b"
+      ],
+      "prerequisites": "A saved level, Player Start, a switch object and a target door with Sliding Door Action. This example deliberately sends toggle to that door.",
+      "steps": [
+        "On the door's Sliding Door Action, disable **Direct Interaction** if the switch should be the control.",
+        "Select the switch object; in **ACTION**, choose **Interaction Switch** and click **ADD**.",
+        "Set **Target** to the named door and **Event** to **toggle**.",
+        "Set **Use Distance**, save with **Ctrl+S** and launch **PLAY**.",
+        "Approach the switch and use the configured Interact key (**E** by default)."
+      ],
+      "follow_up": "Save/reopen the level to check its attachment and properties; test with PLAY.",
+      "expected_result": "The switch sends an event to the chosen door; it does not invent behaviour on a target without a receiving Action.",
+      "troubleshooting": [
+        "Unset Target broadcasts; select the door for a targeted test.",
+        "Event spelling must match what the receiver accepts.",
+        "Test inside Use Distance and keep both attachments ON."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Library/Scripts/RenegadeStockActions/Switch.lua",
+          "needle": "role = \"ACTION\"",
+          "sha256": "b892bc7de7b4074da338f89bb38a3ecff7208143f96ed35b0f069225f007ddd7"
+        },
+        {
+          "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+          "needle": "Expand **ACTION**",
+          "sha256": "ca3ad84cd8f0b7e658e6869c2cf7685f14aeeeff5c46b3e1c8310918b2845f0e"
+        },
+        {
+          "path": "Tools/assistant_knowledge/script_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+        },
+        {
+          "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+        }
+      ],
+      "provenance": [
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+        "Library/Scripts/RenegadeStockActions/Switch.lua",
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md"
+      ]
+    },
+    {
+      "id": "trigger-zone-v1",
+      "label": "Set up a Player Trigger Zone",
+      "guide_id": "script-authoring-workflows",
+      "receipt_path": "Tools/assistant_knowledge/script_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "S4B/S4C/S4D authoring and S7 stock Actions/library service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:set up|setup|make|create|add|attach)\\b.{0,50}\\b(?:player trigger zone|trigger zone)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:write|generate|convert|maxlua|networked|multiplayer)\\b"
+      ],
+      "prerequisites": "A saved level, Player Start and a transformed object to serve as the spherical zone centre.",
+      "steps": [
+        "Select the zone object; in **ACTION**, choose **Player Trigger Zone** and click **ADD**.",
+        "Set **Radius** in metres, and set **Target** if you want events sent to a particular receiver.",
+        "Set **Enter Event** and **Exit Event** to names the receiver handles.",
+        "Save with **Ctrl+S**, then use **PLAY** and move the player across the radius boundary."
+      ],
+      "follow_up": "Save/reopen the level to check its attachment and properties; test with PLAY.",
+      "expected_result": "Enter/exit events are automatic; no E press is required. It is a spherical radius check, not an arbitrary authored collision volume.",
+      "troubleshooting": [
+        "No effect: check radius and a receiving script/Action for your event.",
+        "Unset Target broadcasts events.",
+        "One Shot changes repetition; choose it deliberately."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Library/Scripts/RenegadeStockActions/TriggerZone.lua",
+          "needle": "role = \"ACTION\"",
+          "sha256": "8d80df3f7bfb6ad0dbeb1e3d2afde550e5d157ef72017539065798aa8743564a"
+        },
+        {
+          "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+          "needle": "Expand **ACTION**",
+          "sha256": "ca3ad84cd8f0b7e658e6869c2cf7685f14aeeeff5c46b3e1c8310918b2845f0e"
+        },
+        {
+          "path": "Tools/assistant_knowledge/script_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+        },
+        {
+          "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+        }
+      ],
+      "provenance": [
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+        "Library/Scripts/RenegadeStockActions/TriggerZone.lua",
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md"
+      ]
+    },
+    {
+      "id": "pickup-v1",
+      "label": "Set up a proximity pickup",
+      "guide_id": "script-authoring-workflows",
+      "receipt_path": "Tools/assistant_knowledge/script_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "S4B/S4C/S4D authoring and S7 stock Actions/library service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:set up|setup|make|create|add|attach)\\b.{0,50}\\b(?:proximity pickup|pickup action|pickup)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:write|generate|convert|maxlua|networked|multiplayer)\\b"
+      ],
+      "prerequisites": "A saved level, Player Start and a transformed object to collect. This Action is not a full inventory system.",
+      "steps": [
+        "Select the object; in **ACTION**, choose **Proximity Pickup** and click **ADD**.",
+        "Set **Pickup Radius** and choose **Require Interact** for an E/prompt test, or leave it off for automatic collection.",
+        "Choose **Hide On Pickup** if you want the object hidden during that play session.",
+        "Save with **Ctrl+S**, then use **PLAY** and approach/interact as configured."
+      ],
+      "follow_up": "Save/reopen the level to check its attachment and properties; test with PLAY.",
+      "expected_result": "The Action sends its configured pickup event and can hide the object for the play session; it does not automatically grant a weapon or persistent inventory item.",
+      "troubleshooting": [
+        "Check Player Start, pickup radius and ON.",
+        "Require Interact changes collection from automatic to prompted.",
+        "Any gameplay reward must be handled by the receiving supported script/action."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Library/Scripts/RenegadeStockActions/Pickup.lua",
+          "needle": "role = \"ACTION\"",
+          "sha256": "bf5bff9df715aef7194b70f883da5e7528d4582203ed691986d6313c07578f04"
+        },
+        {
+          "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+          "needle": "Expand **ACTION**",
+          "sha256": "ca3ad84cd8f0b7e658e6869c2cf7685f14aeeeff5c46b3e1c8310918b2845f0e"
+        },
+        {
+          "path": "Tools/assistant_knowledge/script_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+        },
+        {
+          "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+        }
+      ],
+      "provenance": [
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+        "Library/Scripts/RenegadeStockActions/Pickup.lua",
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md"
+      ]
+    },
+    {
+      "id": "relay-v1",
+      "label": "Set up an activation relay",
+      "guide_id": "script-authoring-workflows",
+      "receipt_path": "Tools/assistant_knowledge/script_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "S4B/S4C/S4D authoring and S7 stock Actions/library service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:set up|setup|make|create|add|attach)\\b.{0,50}\\b(?:activation relay|relay)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:write|generate|convert|maxlua|networked|multiplayer)\\b"
+      ],
+      "prerequisites": "A saved level, a transformed relay object and an event source/receiver you deliberately configure.",
+      "steps": [
+        "Select the relay object; attach **Activation Relay** from **ACTION** using **ADD**.",
+        "Set **Input Event**, **Output Event**, optional **Target** and **Delay**.",
+        "Wire a source to send the Input Event and a receiver to handle the Output Event.",
+        "Save with **Ctrl+S** and exercise that event path in **PLAY**."
+      ],
+      "follow_up": "Save/reopen the level to check its attachment and properties; test with PLAY.",
+      "expected_result": "The relay forwards matching events, optionally after a delay. It does not respond directly to E without an interaction source.",
+      "troubleshooting": [
+        "Input and output spellings must match source/receiver.",
+        "Unset Target broadcasts.",
+        "No visible effect is expected without a receiver handling the output."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Library/Scripts/RenegadeStockActions/Relay.lua",
+          "needle": "role = \"ACTION\"",
+          "sha256": "ccf3a7531a6b5ce6e2bb9d624866bd8432b36a85b7fb0555a7dd6d4167493e0c"
+        },
+        {
+          "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+          "needle": "Expand **ACTION**",
+          "sha256": "ca3ad84cd8f0b7e658e6869c2cf7685f14aeeeff5c46b3e1c8310918b2845f0e"
+        },
+        {
+          "path": "Tools/assistant_knowledge/script_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+        },
+        {
+          "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+        }
+      ],
+      "provenance": [
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+        "Library/Scripts/RenegadeStockActions/Relay.lua",
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md"
+      ]
+    },
+    {
+      "id": "sound-action-v1",
+      "label": "Trigger a sound with the Play Sound Action",
+      "guide_id": "script-authoring-workflows",
+      "receipt_path": "Tools/assistant_knowledge/script_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "S4B/S4C/S4D authoring and S7 stock Actions/library service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:set up|setup|trigger|attach|add)\\b.{0,50}\\b(?:play sound action|sound action)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:write|generate|convert|maxlua|networked|multiplayer)\\b"
+      ],
+      "prerequisites": "A saved level and an existing Renegade 3D Sound Source with an assigned audio asset. This guide wires the Action, not audio-file importing.",
+      "steps": [
+        "Attach **Play Sound** to the intended owner through **ACTION** \u2192 **ADD**.",
+        "Choose the existing **Sound Source** reference.",
+        "For a quick test, enable **Play On Start**; otherwise configure **Play Event** and **Stop Event** and provide an event sender.",
+        "Save with **Ctrl+S** and use **PLAY** to hear the configured source."
+      ],
+      "follow_up": "Save/reopen the level to check its attachment and properties; test with PLAY.",
+      "expected_result": "The Action controls the selected sound source using events. It does not create an audio asset or choose one for you.",
+      "troubleshooting": [
+        "No sound: check the actual Sound Source, assigned asset, volume and reference.",
+        "Without Play On Start, send the configured Play Event.",
+        "An ordinary model is not a 3D Sound Source."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Library/Scripts/RenegadeStockActions/PlaySound.lua",
+          "needle": "role = \"ACTION\"",
+          "sha256": "fb53bbe26fa8d8f5a9166ec96e1a71e8dc7f3aa6aa565837da7b94344728423b"
+        },
+        {
+          "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+          "needle": "Expand **ACTION**",
+          "sha256": "ca3ad84cd8f0b7e658e6869c2cf7685f14aeeeff5c46b3e1c8310918b2845f0e"
+        },
+        {
+          "path": "Tools/assistant_knowledge/script_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+        },
+        {
+          "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+        }
+      ],
+      "provenance": [
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+        "Library/Scripts/RenegadeStockActions/PlaySound.lua",
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md"
+      ]
+    },
+    {
+      "id": "spawn-point-v1",
+      "label": "Edit a weapon projectile spawn point",
+      "guide_id": "projectile-details-workflows",
+      "receipt_path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "LaunchSocket native service tests exit 0",
+        "Recorded native timing/multi-spawn acceptance inspected"
+      ],
+      "match": [
+        "\\b(?:create|make|add|edit|set up|setup|position|move)\\b.{0,55}\\b(?:projectile spawn point|spawn point|launch point|launch socket|psp)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:player start|npc|character spawn|enemy spawn|script)\\b"
+      ],
+      "prerequisites": "A Player Start with saved equipment whose presentation is a saved first-person assembly. Spawn points are authored on that assembly and then selected in Weapon firing.",
+      "steps": [
+        "Select **Player Start**, open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING**, and choose **Weapon hand**.",
+        "Click **EDIT SPAWN POINTS...** to open the saved assembly's launch-socket editor.",
+        "Select a **Socket** or click **NEW**, give it a distinct **Name**, and choose **Attached model** (Primary weapon, Off-hand weapon or Arms / palm).",
+        "Choose **Follow bone / marker** if it must follow an animated part. Set **Position X/Y/Z (m)** and direction angles; check the orange launch arrow. **PLACE ON MODEL** is available for placement.",
+        "Click **APPLY TO ASSEMBLY**, then **SAVE CHANGES** in the assembly editor. Apply alone changes only the draft.",
+        "Reopen **WEAPON FIRING**, select the saved **Spawn point**, click **APPLY TO THIS PLAYER**, and save with **Ctrl+S**."
+      ],
+      "follow_up": "Use PLAY to check launch position/direction and animation timing.",
+      "expected_result": "A named point follows its selected model/bone; it is distinct from the player's level spawn.",
+      "troubleshooting": [
+        "USE FIRESPOT only works for an unambiguous actual FIRESPOT marker; it does not invent one.",
+        "Changing Attached model or parent resets offsets; recheck them.",
+        "SAVE CHANGES updates the shared assembly asset; review existing users before saving.",
+        "If the saved point is unavailable, reopen the firing panel after saving the assembly."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileSocketEdit_,\"EDIT SPAWN POINTS...\"",
+          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+        },
+        {
+          "path": "Studio/src/LaunchSocketEditor.cpp",
+          "needle": "button(launchSocketApply_,\"APPLY TO ASSEMBLY\"",
+          "sha256": "a31dc0769a3ab7e4d976010447f5044af96200e5da53828919cad54129bd11a2"
+        },
+        {
+          "path": "Studio/src/LaunchSocketEditor.cpp",
+          "needle": "Sockets applied to the draft. SAVE CHANGES to retain them;",
+          "sha256": "a31dc0769a3ab7e4d976010447f5044af96200e5da53828919cad54129bd11a2"
+        },
+        {
+          "path": "Studio/src/LaunchSocketEditor.cpp",
+          "needle": "combo(launchSocketParent_,\"Follow bone / marker\"",
+          "sha256": "a31dc0769a3ab7e4d976010447f5044af96200e5da53828919cad54129bd11a2"
+        },
+        {
+          "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "fbef01868e30382efe1d73221ecfbb08b969116f42b23905d5d0d80b39e4ad2a"
+        },
+        {
+          "path": "Tools/assistant_knowledge/PROJECTILE_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "5c6581961cf0dd20c4fc983dea039f775d2b3e109ec2e49237e2189a26a31432"
+        }
+      ],
+      "provenance": [
+        "docs/P3_PROJECTILE_UX_CLEANUP.md",
+        "Studio/src/PlayerProjectileEditor.cpp",
+        "Studio/src/LaunchSocketEditor.cpp"
+      ]
+    },
+    {
+      "id": "fire-timing-v1",
+      "label": "Set animation launch timing",
+      "guide_id": "projectile-details-workflows",
+      "receipt_path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "LaunchSocket native service tests exit 0",
+        "Recorded native timing/multi-spawn acceptance inspected"
+      ],
+      "match": [
+        "\\b(?:set|edit|change|adjust|fix|choose)\\b.{0,55}\\b(?:fire time|firing timing|launch timing|release timing|animation fire marker)\\b",
+        "\\b(?:arrow|projectile)\\b.{0,35}\\b(?:launches?|fires?)\\b.{0,15}\\b(?:early|late)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:npc|animation event timeline|multiple events|retarget|script)\\b"
+      ],
+      "prerequisites": "Saved equipment with a supported Launch on action and a valid first-person animation preview. A marker must be nonnegative, before clip end and at most five seconds.",
+      "steps": [
+        "Select Player Start and open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING**. Choose the intended **Weapon hand** and **Launch on** action.",
+        "Click **SET FIRE TIME IN ANIMATION...**.",
+        "Scrub **Preview time (s)** to the desired release pose and click **MARK CURRENT POSE**, or drag **Fire marker (s)**.",
+        "Click **USE FIRE TIME** when the marker is valid. This transfers seconds to the firing draft; it does not save the weapon assignment.",
+        "Click **APPLY TO THIS PLAYER**, save with **Ctrl+S**, then test using **PLAY**."
+      ],
+      "follow_up": "Choose Animation start for immediate launch or After a delay for a timed launch. Use your clip's pose, not a copied bow example time.",
+      "expected_result": "The shot is scheduled at the configured action-relative time; this is not a general persisted multi-event animation timeline.",
+      "troubleshooting": [
+        "USE FIRE TIME disabled: select a ready preview and a marker before the clip ends, within 0\u20135 seconds.",
+        "Missing valid action/assembly: read the preview error and check saved equipment.",
+        "CANCEL leaves the original timing unchanged; closing without Apply does not commit a new binding."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileTimingOpen_,\"SET FIRE TIME IN ANIMATION...\"",
+          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileTimingMark_,\"MARK CURRENT POSE\"",
+          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileTimingUse_,\"USE FIRE TIME\"",
+          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+        },
+        {
+          "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
+          "needle": "Saved release marker runtime proof",
+          "sha256": "7a27f12382241019d316813112c03e965036c73ca74c7c07fdd563f39177adf9"
+        },
+        {
+          "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "fbef01868e30382efe1d73221ecfbb08b969116f42b23905d5d0d80b39e4ad2a"
+        },
+        {
+          "path": "Tools/assistant_knowledge/PROJECTILE_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "5c6581961cf0dd20c4fc983dea039f775d2b3e109ec2e49237e2189a26a31432"
+        }
+      ],
+      "provenance": [
+        "docs/P3_PROJECTILE_UX_CLEANUP.md",
+        "Studio/src/PlayerProjectileEditor.cpp",
+        "docs/P3_PROJECTILE_UX_CLEANUP.md"
+      ]
+    },
+    {
+      "id": "hitscan-setup-v1",
+      "label": "Configure hitscan weapon firing",
+      "guide_id": "projectile-details-workflows",
+      "receipt_path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "LaunchSocket native service tests exit 0",
+        "Recorded native timing/multi-spawn acceptance inspected"
+      ],
+      "match": [
+        "\\b(?:set up|setup|configure|create|make|equip)\\b.{0,55}\\b(?:hitscan|instant.ray)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:beam|laser|tracer|pellet|spread|npc|script)\\b"
+      ],
+      "prerequisites": "A Player Start with saved equipment and a launch-capable action. Hitscan is a Fire mode, not a projectile preset.",
+      "steps": [
+        "Open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING** on Player Start and choose **Weapon hand** and **Launch on**.",
+        "Set **Fire mode** to **Hitscan / instant ray**.",
+        "Choose **Range** and **Damage** and a valid **Spawn point**. No travelling projectile asset is selected for hitscan.",
+        "Choose **Fire at** / animation timing as needed.",
+        "Click **APPLY TO THIS PLAYER**, save with **Ctrl+S** and test in **PLAY**."
+      ],
+      "follow_up": "Check world impacts and Character hit feedback. Impact appearance also depends on supported target Surface Type/effect setup.",
+      "expected_result": "An instantaneous ray uses the shared nearest-contact and cover/aim paths. It does not automatically implement a continuous beam or pellet spread.",
+      "troubleshooting": [
+        "Wrong mode: Projectile / travelling needs a projectile asset; Hitscan does not.",
+        "Check range, action, spawn point and applied assignment if a shot does not register.",
+        "Do not assume arbitrary ricochet, lasers or explosions from this mode."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileFireMode_.AddItem(\"Hitscan / instant ray\");",
+          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+        },
+        {
+          "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
+          "needle": "not a projectile preset.",
+          "sha256": "7a27f12382241019d316813112c03e965036c73ca74c7c07fdd563f39177adf9"
+        },
+        {
+          "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "fbef01868e30382efe1d73221ecfbb08b969116f42b23905d5d0d80b39e4ad2a"
+        },
+        {
+          "path": "Tools/assistant_knowledge/PROJECTILE_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "5c6581961cf0dd20c4fc983dea039f775d2b3e109ec2e49237e2189a26a31432"
+        }
+      ],
+      "provenance": [
+        "docs/P3_PROJECTILE_UX_CLEANUP.md",
+        "Studio/src/PlayerProjectileEditor.cpp",
+        "docs/P3_PROJECTILE_UX_CLEANUP.md"
+      ]
+    },
+    {
+      "id": "character-import-v1",
+      "label": "Import a rigged Character",
+      "guide_id": "character-animation-workflows",
+      "receipt_path": "Tools/assistant_knowledge/character_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "Native generated full humanoid import/external-animation proof",
+        "Character placement and prefab service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:import|bring in|load)\\b.{0,60}\\b(?:character|rigged model|npc model)s?\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:animation|animations|retarget|arms|prefab|obj|gltf|blend|zip)\\b"
+      ],
+      "prerequisites": "An open project and a GLB/FBX with a skinned mesh and skeleton. Inspect scale and textures; a static mesh is not a rigged Character.",
+      "steps": [
+        "Open **ADD** \u2192 **IMPORT MODEL...** and select the rigged GLB or FBX.",
+        "Check that the summary identifies **CHARACTER**, bones and clips. If it reports STATIC, review the source skin/skeleton.",
+        "Choose a clip from **Animation clip** and use **PLAY**, **RESTART** or **Preview time (seconds)** to inspect it; **REFERENCE POSE** is a preview mode.",
+        "Set **Asset name** and a valid **Import to** Content folder. For a general NPC, keep **Asset role** as **General model**.",
+        "Assign any available clip's **Gameplay action** as needed, then click **IMPORT ASSET** after the preview is ready.",
+        "Drag the imported Character card from the **Asset Browser** into the level, position it and save with **Ctrl+S**."
+      ],
+      "follow_up": "Select the placed Character and inspect CHARACTER settings. Test with PLAY after providing collision/navigation and appropriate actions.",
+      "expected_result": "A reusable Character asset and a governed placed Character are created; importing alone does not configure all AI or missing animations.",
+      "troubleshooting": [
+        "If no bones or skinned mesh are detected, check that the model was exported with its skeleton and skin weights.",
+        "Check unfamiliar FBX scale/poses in preview; arbitrary exporter combinations are not guaranteed.",
+        "Missing gameplay clips: use the separate ADD ANIMATION FBX workflow while the import candidate is open."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "params.extensions = {\"glb\", \"fbx\"};",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "\"Animated import currently requires a skinned mesh and skeleton.\"",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "modelImportClip_.AddItem(\"REFERENCE POSE\");",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
+          "needle": "Prepared Character Assets automatically become governed Character",
+          "sha256": "2f74264325f2ca1bc72deb5b2a28a520e5b039bb0b767b1778f5deacd7e37253"
+        },
+        {
+          "path": "Tools/assistant_knowledge/character_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "c76653d91d90a2e24ff7b01ef0bd5250eeaea4da1410d6165743220e9415f61f"
+        },
+        {
+          "path": "Tools/assistant_knowledge/CHARACTER_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "21a09ac3e2ff4f7cef5eef04e99e5bacc523bfb91c6cd7a3794d54d21ad56744"
+        }
+      ],
+      "provenance": [
+        "docs/MODEL_IMPORTER_REBUILD.md",
+        "Studio/src/StudioApplication.cpp",
+        "docs/CHARACTER_WORKFLOW_PROGRESS.md"
+      ]
+    },
+    {
+      "id": "npc-configure-v1",
+      "label": "Configure a placed NPC Character",
+      "guide_id": "npc-authoring-workflows",
+      "receipt_path": "Tools/assistant_knowledge/npc_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "Character foundation, profiles, perception and decision service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:configure|set up|setup|create|make|add)\\b.{0,45}\\b(?:npc|non.player character)\\b",
+        "\\b(?:configure|set up|setup)\\b.{0,40}\\bcharacter\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:import|animation|animations|script|equipment|projectile|prefab|patrol|wander)\\b",
+        "\\bspawn\\b"
+      ],
+      "prerequisites": "A placed imported Character/model that the CHARACTER section can promote, a saved level and a Player Start for player interaction testing. Movement also needs suitable floor collision/navigation and matching animation actions.",
+      "steps": [
+        "Select the actor in **Scene Hierarchy** and expand **CHARACTER** in the Inspector.",
+        "If it is not already a governed Character, review setup information and click **MAKE CHARACTER** when enabled.",
+        "Choose **Character Type**, **Character Role**, **Character Personality**, **Character Faction**, **Character Skill** and **Character Awareness** to suit your design.",
+        "Enable **Character Autonomous** if you want the NPC's normal AI decision behaviour to run. This is NPC behaviour, not permission for the assistant to create a world.",
+        "Save with **Ctrl+S** and use **PLAY** to check the result."
+      ],
+      "follow_up": "Use the separate Wander/Patrol guides for movement roles. Inspect ADVANCED AI only when you need deliberate overrides.",
+      "expected_result": "A governed NPC uses your chosen authored profile; role labels alone do not create absent animations or enable every future AI feature.",
+      "troubleshooting": [
+        "MAKE CHARACTER disabled: read the setup eligibility message and select the actor root.",
+        "NPC does not move: check Autonomous, role, navigation/collision and animation assignments.",
+        "Setting a faction does not give the NPC knowledge of an unseen player.",
+        "Do not assume squad, cover or universal companion behaviour exists merely because a profile label exists."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/AICharacterInspector.cpp",
+          "needle": "makeRemove_.SetText(isCharacter_ ? \"REMOVE CHARACTER\" : \"MAKE CHARACTER\");",
+          "sha256": "b2d4f4de658a6999576d7778eb48b0688f98f5d3ac266fd7ea80c2bfddad7dd8"
+        },
+        {
+          "path": "Studio/src/AICharacterInspector.cpp",
+          "needle": "role_.Create(\"Character Role\");",
+          "sha256": "b2d4f4de658a6999576d7778eb48b0688f98f5d3ac266fd7ea80c2bfddad7dd8"
+        },
+        {
+          "path": "Studio/src/AICharacterInspector.cpp",
+          "needle": "autonomous_.Create(\"Character Autonomous\");",
+          "sha256": "b2d4f4de658a6999576d7778eb48b0688f98f5d3ac266fd7ea80c2bfddad7dd8"
+        },
+        {
+          "path": "Runtime/src/RuntimeCharacterDecision.h",
+          "needle": "if (!character.authoring.autonomous)",
+          "sha256": "e95e14a95b72303a252d27b1aa440fe67ba04b2439806d4c526c65a0dfb9ff4e"
+        },
+        {
+          "path": "Tools/assistant_knowledge/npc_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "df972ecbc017c80a32863af973d5d0978544602e9b0647bc79b42ccab06dc44e"
+        },
+        {
+          "path": "Tools/assistant_knowledge/NPC_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "564954fd3030691d6ff3565cc4223b4f6fafad43a90c570fa9570064395f8e9d"
+        }
+      ],
+      "provenance": [
+        "docs/AI_IMPLEMENTATION_HANDOFF.md",
+        "Studio/src/AICharacterInspector.cpp",
+        "Runtime/src/RuntimeCharacterDecision.h"
+      ]
+    },
+    {
+      "id": "action-attach-v1",
+      "label": "Attach an Action to a scene object",
+      "guide_id": "script-authoring-workflows",
+      "receipt_path": "Tools/assistant_knowledge/script_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "S4B/S4C/S4D authoring and S7 stock Actions/library service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:attach|add|assign)\\b.{0,55}\\b(?:stock action|action)s?\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:global|level.wide|door|switch|trigger|pickup|relay|sound|write|generate|convert|maxlua|npc.*equipment)\\b"
+      ],
+      "prerequisites": "A saved active level, a selected scene object and a valid governed Lua source with metadata role ACTION. Project sources belong in Content/Scripts; installed stock Actions can be adopted on ADD.",
+      "steps": [
+        "Select the object that should own the behaviour and expand **ACTION** in the Inspector.",
+        "Use **REFRESH** to rescan available sources if necessary. Refresh does not attach anything.",
+        "Choose a source whose metadata role is **ACTION**, then click **ADD**.",
+        "Leave the attachment **ON** and set its exposed typed properties/reference pickers.",
+        "Save the level with **Ctrl+S** and use **PLAY** to test the behaviour."
+      ],
+      "follow_up": "Reopen the level to check persistence. UP/DOWN change order; REMOVE detaches the selected instance.",
+      "expected_result": "A governed attachment belongs to the selected object. Missing persistent identity is assigned on ADD through the existing command path.",
+      "troubleshooting": [
+        "Empty picker: check Content/Scripts, compatible metadata role and diagnostics, then REFRESH.",
+        "A raw Lua file without valid Renegade metadata is not automatically an attachable source.",
+        "Resolve missing reference pickers using named current entities/assets rather than inventing IDs.",
+        "Removing an attachment is not deleting its source file."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
+          "needle": "controls.add.Create(\"ADD\");",
+          "sha256": "094807b558487eeb0b6e7f2c2376c63e3c1e28fefb88dde8882262476d3bcf09"
+        },
+        {
+          "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
+          "needle": "controls.refresh.Create(\"REFRESH\");",
+          "sha256": "094807b558487eeb0b6e7f2c2376c63e3c1e28fefb88dde8882262476d3bcf09"
+        },
+        {
+          "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
+          "needle": "session->Scripts().EnsureEntityOwnerIdentity(",
+          "sha256": "094807b558487eeb0b6e7f2c2376c63e3c1e28fefb88dde8882262476d3bcf09"
+        },
+        {
+          "path": "docs/SCRIPTING_S4A_METADATA_CONTRACT.md",
+          "needle": "required and exactly one of",
+          "sha256": "424f281e48fc4b342bbf83ff2fb0647e05b211100e33708c8ea6be1ad688f1a5"
+        },
+        {
+          "path": "Tools/assistant_knowledge/script_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+        },
+        {
+          "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+        }
+      ],
+      "provenance": [
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+        "Studio/src/S4BScriptAttachmentInspector.cpp",
+        "docs/SCRIPTING_S4A_METADATA_CONTRACT.md"
+      ]
+    },
+    {
+      "id": "script-attach-v1",
+      "label": "Attach an entity Script to a scene object",
+      "guide_id": "script-authoring-workflows",
+      "receipt_path": "Tools/assistant_knowledge/script_workflows_guide.json",
+      "acceptance_status": "source_checked_native_service_tests_passed_ui_pending",
+      "native_checks": [
+        "S4B/S4C/S4D authoring and S7 stock Actions/library service tests exit 0"
+      ],
+      "match": [
+        "\\b(?:attach|add|assign)\\b.{0,55}\\b(?:entity script|lua script|script)s?\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous world|prompt.to.game)\\b",
+        "\\b(?:global|level.wide|door|switch|trigger|pickup|relay|sound|write|generate|convert|maxlua|npc.*equipment)\\b"
+      ],
+      "prerequisites": "A saved active level, a selected scene object and a valid governed Lua source with metadata role SCRIPT. Project sources belong in Content/Scripts; installed stock Actions can be adopted on ADD.",
+      "steps": [
+        "Select the object that should own the behaviour and expand **SCRIPT** in the Inspector.",
+        "Use **REFRESH** to rescan available sources if necessary. Refresh does not attach anything.",
+        "Choose a source whose metadata role is **SCRIPT**, then click **ADD**.",
+        "Leave the attachment **ON** and set its exposed typed properties/reference pickers.",
+        "Save the level with **Ctrl+S** and use **PLAY** to test the behaviour."
+      ],
+      "follow_up": "Reopen the level to check persistence. UP/DOWN change order; REMOVE detaches the selected instance.",
+      "expected_result": "A governed attachment belongs to the selected object. Missing persistent identity is assigned on ADD through the existing command path.",
+      "troubleshooting": [
+        "Empty picker: check Content/Scripts, compatible metadata role and diagnostics, then REFRESH.",
+        "A raw Lua file without valid Renegade metadata is not automatically an attachable source.",
+        "Resolve missing reference pickers using named current entities/assets rather than inventing IDs.",
+        "Removing an attachment is not deleting its source file."
+      ],
+      "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
+      "evidence": [
+        {
+          "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
+          "needle": "controls.add.Create(\"ADD\");",
+          "sha256": "094807b558487eeb0b6e7f2c2376c63e3c1e28fefb88dde8882262476d3bcf09"
+        },
+        {
+          "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
+          "needle": "controls.refresh.Create(\"REFRESH\");",
+          "sha256": "094807b558487eeb0b6e7f2c2376c63e3c1e28fefb88dde8882262476d3bcf09"
+        },
+        {
+          "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
+          "needle": "session->Scripts().EnsureEntityOwnerIdentity(",
+          "sha256": "094807b558487eeb0b6e7f2c2376c63e3c1e28fefb88dde8882262476d3bcf09"
+        },
+        {
+          "path": "docs/SCRIPTING_S4A_METADATA_CONTRACT.md",
+          "needle": "required and exactly one of",
+          "sha256": "424f281e48fc4b342bbf83ff2fb0647e05b211100e33708c8ea6be1ad688f1a5"
+        },
+        {
+          "path": "Tools/assistant_knowledge/script_workflows_guide.json",
+          "needle": "source_checked_native_service_tests_passed_ui_pending",
+          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+        },
+        {
+          "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
+          "needle": "Native checks:",
+          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+        }
+      ],
+      "provenance": [
+        "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+        "Studio/src/S4BScriptAttachmentInspector.cpp",
+        "docs/SCRIPTING_S4A_METADATA_CONTRACT.md"
+      ]
+    },
+    {
+      "id": "projectile-assign-v1",
+      "label": "Assign a saved projectile to your player's weapon",
+      "guide_id": "projectiles-first-weapon",
+      "match": [
+        "\\b(?:assign|apply|equip|connect|attach|bind|use|select)\\b.{0,65}\\b(?:projectile|arrow|bullet|bolt)s?\\b",
+        "\\b(?:projectile|arrow|bullet|bolt)s?\\b.{0,65}\\b(?:assign|apply|equip|connect|attach|bind|use|select)\\b",
+        "\\b(?:make|get)\\b.{0,35}\\b(?:weapon|bow)\\b.{0,25}\\b(?:fire|shoot|launch)\\b",
+        "\\b(?:fire|shoot|launch)\\b.{0,35}\\b(?:saved|existing)\\b.{0,20}\\b(?:projectile|arrow|bullet|bolt)s?\\b",
+        "\\b(?:add|put)\\b.{0,35}\\b(?:projectile|arrow|bullet|bolt)s?\\b.{0,30}\\b(?:to|on|in|into)\\b.{0,20}\\b(?:weapon|bow)\\b"
+      ],
+      "exclude": [
+        "\\b(?:npc|enemy|enemies|ai|hitscan|instant ray|retarget|script|code)\\b",
+        "\\b(?:impact|decal|trail|particle|effect|vfx|shader|texture)s?\\b",
+        "\\b(?:game|world|level|scene)\\b.{0,30}\\b(?:automatically|autonomous)\\b",
+        "\\b(?:automatically|autonomous)\\b.{0,30}\\b(?:game|world|level|scene)\\b",
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:player start|equipment|weapon|bow)\\s+(?:model|mesh|prefab)\\b"
+      ],
+      "prerequisites": "An open project with a Player Start, a saved weapon selected in STARTING EQUIPMENT, a launch-capable action and a saved projectile. If you only have a draft projectile, finish **SAVE AS NEW** first. This guide does not create the Player Start or weapon.",
+      "steps": [
+        "Select **Player Start** in **Scene Hierarchy**, then open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING**.",
+        "Choose **Weapon hand** (Primary hand or Off hand) and the appropriate **Launch on** action. Use the action configured for your weapon; do not assume every bow uses Release charged action.",
+        "Set **Fire mode** to **Projectile / travelling** and select your saved projectile in the projectile dropdown.",
+        "Choose your weapon's defined **Spawn point**. The tested bow uses Bow_Nock; your point may have a different name.",
+        "Check **Fire at**: **Animation start** fires immediately; **After a delay** waits for the configured time. Keep your existing verified timing when only replacing the projectile.",
+        "Click **APPLY TO THIS PLAYER**, then **Ctrl+S** to save the level."
+      ],
+      "follow_up": "Use **PLAY** to launch Test Level and fire using your configured weapon input. Reopen the saved scene and check that the projectile, spawn point and timing remain selected.",
+      "expected_result": "The selected Player Start's weapon uses the chosen projectile. Saving a projectile asset alone does not assign it to the weapon.",
+      "troubleshooting": [
+        "If APPLY is unavailable, check that the chosen hand has a saved weapon and a launch-capable action.",
+        "If the panel says Weapon changed, reopen Weapon firing before applying.",
+        "If nothing launches, confirm the saved projectile and Launch on action, apply again and save.",
+        "If the shot starts in the wrong place or at the wrong time, check Spawn point and Fire at."
+      ],
+      "limit": "Verified against the existing bow/player QA fixture, including save/reopen and Test Level; blank-project setup and other weapon families need separate native checks. I cannot inspect or change your scene.",
+      "native_checks": [
+        "Applied to Primary hand / Primary fire-use via Bow_Nock with 0.133333 s delay",
+        "File Reopen Scene retained newly authored equipment and projectile binding",
+        "Test Level standalone runtime fired and showed impact feedback and retained target mark"
+      ],
+      "evidence": [
+        {
+          "path": "Studio/src/PlayerEquipmentEditor.cpp",
+          "needle": "equipmentProjectile_.SetText(\"WEAPON FIRING\")",
+          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "combo(projectileWeapon_,\"Weapon hand\",40)",
+          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "combo(projectileAction_,\"Launch on\",80)",
+          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileFireMode_.AddItem(\"Projectile / travelling\")",
+          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileAssign_,\"APPLY TO THIS PLAYER\"",
+          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "bridge::SaveEquipmentAsset(project.rootPath,projectId,item.equipment)",
+          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+        },
+        {
+          "path": "Tools/assistant_knowledge/projectile_guide.json",
+          "needle": "native_workflow_passed_existing_bow_fixture",
+          "sha256": "b4c3a81fa858c2eef3555985f8a5b15e86a19428cb96b87a5349983ac095dc28"
+        },
+        {
+          "path": "Tools/assistant_knowledge/MANUAL_E2E_STATUS.md",
+          "needle": "APPLY TO THIS PLAYER",
+          "sha256": "3e2be9c537fa563978246555206d139cfa56f93065e723b5872b3e2c6851cbf8"
+        }
+      ],
+      "provenance": [
+        "docs/manual/PROJECTILES_FIRST_WEAPON.md",
+        "Studio/src/PlayerProjectileEditor.cpp",
+        "Tools/assistant_knowledge/MANUAL_E2E_STATUS.md"
+      ]
+    },
+    {
+      "id": "projectile-create-v1",
+      "label": "Create a new travelling projectile",
+      "guide_id": "projectiles-first-weapon",
+      "match": [
+        "\\b(?:create|make|add|start|set up|setup|build)\\b.{0,70}\\b(?:new\\s+)?(?:projectile|arrow|bullet|bolt|spell projectile|thrown projectile)s?\\b",
+        "\\b(?:projectile|arrow|bullet|bolt)s?\\b.{0,55}\\b(?:create|make|new|add|set up|setup)\\b"
+      ],
+      "exclude": [
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:projectile|arrow|bolt|bullet)\\s+(?:impact|decal|trail|particle|effect|vfx|shader|texture)\\b",
+        "\\b(?:impact|decal|trail|particle|effect|vfx|shader|texture)s?\\s+(?:for|on|of)\\s+(?:a\\s+|an\\s+|the\\s+|my\\s+)?(?:projectile|arrow|bolt|bullet)\\b"
+      ],
+      "prerequisites": "An open Renegade project with a Player Start and a weapon/equipment setup. If you have not created these yet, ask for the Player Start or starting-equipment walkthrough first.",
+      "steps": [
+        "Select **Player Start** in the **Scene Hierarchy** (usually under **Characters**).",
+        "Open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING**. Choose the appropriate weapon hand and launch action.",
+        "Set **Fire mode** to **Projectile / travelling**, then click **NEW**.",
+        "**NEW** starts with the **Bullet** preset. Keep Bullet or choose **Arrow**, **Bolt**, **Thrown projectile** or **Spell projectile**, then give it a name.",
+        "Configure speed, gravity, damage and any visible model. For example, the **Arrow** preset starts at **45 m/s** and **Gravity 1**; **Stick** needs a visible model.",
+        "Click **SAVE AS NEW** to create a reusable projectile asset."
+      ],
+      "follow_up": "To actually fire it, select the saved projectile in **Weapon firing**, choose its **Spawn point** and launch timing, click **APPLY TO THIS PLAYER**, save the level (**Ctrl+S**) and test with **PLAY**. Saving the projectile alone does not equip it.",
+      "limit": "These instructions are verified for an existing Player Start/weapon setup; I cannot inspect or change your current scene.",
+      "evidence": [
+        {
+          "path": "docs/manual/PROJECTILES_FIRST_WEAPON.md",
+          "needle": "## Step 1 \u2014 Open Weapon Firing"
+        },
+        {
+          "path": "docs/manual/PROJECTILES_FIRST_WEAPON.md",
+          "needle": "## Step 2 \u2014 Make an arrow"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileNew_,\"NEW\""
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileFireMode_.AddItem(\"Projectile / travelling\")"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileAssign_,\"APPLY TO THIS PLAYER\""
+        },
+        {
+          "path": "EngineBridge/src/ProjectileAssetService.cpp",
+          "needle": "result.speedMetresPerSecond = 45; result.gravityScale = 1;"
+        },
+        {
+          "path": "EngineBridge/src/ProjectileAssetService.cpp",
+          "needle": "(d.stickOnImpact && d.meshAssetId.empty())"
+        }
+      ],
+      "provenance": [
+        "docs/manual/PROJECTILES_FIRST_WEAPON.md",
+        "Studio/src/PlayerProjectileEditor.cpp"
+      ]
+    },
+    {
+      "id": "player-start-place-v1",
+      "label": "Place a Player Start",
+      "guide_id": "player-start-placement",
+      "receipt_path": "Tools/assistant_knowledge/player_start_guide.json",
+      "acceptance_status": "source_checked_prior_owner_checkpoint_native_service_pass",
+      "match": [
+        "\\b(?:add|place|create|make|set up|setup|insert|put)\\b.{0,55}\\b(?:a\\s+)?player\\s*(?:start|spawn)\\b",
+        "\\bplayer\\s*(?:start|spawn)\\b.{0,45}\\b(?:add|place|create|make|set up|setup)\\b"
+      ],
+      "exclude": [
+        "\\b(?:npc|enemy|enemies|multiplayer|multiple|second|two|script|code|projectile|arrow|weapon|equipment|animation)\\b",
+        "\\b(?:entire|whole)\\s+(?:game|world|level|scene)\\b",
+        "\\b(?:automatically|autonomous)\\b"
+      ],
+      "prerequisites": "An open project and level. For movement testing, provide a floor with working collision. New levels have no automatically placed Player Start.",
+      "steps": [
+        "Open the **Asset Browser** and browse to **Content/Player**.",
+        "Choose **Basic Player Start**, or an existing saved player prefab in this project.",
+        "Drag the preset into the scene viewport onto the intended spawn surface. The editor selects the placed player and shows its capsule.",
+        "Use the transform gizmo to position the capsule and set its facing. Keep the spawn clear of obstacles.",
+        "Check the selected Player Start's **Inspector** for its controller and camera settings.",
+        "Save the level with **Ctrl+S**."
+      ],
+      "follow_up": "Use **PLAY** to start Test Level and check spawn position, facing and movement. Reopen the saved scene to check persistence.",
+      "expected_result": "One Player Start is placed in the level. A Basic Player Start supplies controller defaults; it does not create a weapon or arms setup.",
+      "troubleshooting": [
+        "If placement says PLAYER ALREADY PLACED, select the existing Player Start. Change its prefab in the Inspector, or delete it before deliberately placing a replacement.",
+        "If the player falls or starts inside geometry, check floor collision and move the spawn clear of obstacles.",
+        "If Content/Player is missing, check that a project is open and refresh the Asset Browser; the current browser scan ensures the Basic preset.",
+        "Do not look for Player Start in the Add menu; the current placement workflow uses Content/Player."
+      ],
+      "limit": "Controls are checked against current source and the recorded owner-accepted placement checkpoint; existing native placement/save-reopen tests passed today. A fresh mouse-driven beginner walkthrough remains pending. I cannot see or change your scene.",
+      "native_checks": [
+        "Content/Player placement and single-start contract recorded in owner-accepted checkpoint",
+        "Native PlayerPrefabTests passed placement, undo/redo, duplicate refusal and scene reopen"
+      ],
+      "evidence": [
+        {
+          "path": "docs/PLAYER_AUTHORING_CONTINUATION.md",
+          "needle": "Add no longer exposes Player Start.",
+          "sha256": "3a1eacbe8c17aa99b0ccace1efd659d4c7ce42f61d7f51d774a929222c77ae7e"
+        },
+        {
+          "path": "Studio/src/PlayerPrefabEditor.cpp",
+          "needle": "PlacePlayerPrefabAt(id,position);",
+          "sha256": "423582a130f87e2449e6992d25cf4ea70480a0df1ba4f2912be4c7d3d25d61dc"
+        },
+        {
+          "path": "Studio/src/PlayerPrefabEditor.cpp",
+          "needle": "PLAYER ALREADY PLACED // SELECT ITS INSPECTOR",
+          "sha256": "423582a130f87e2449e6992d25cf4ea70480a0df1ba4f2912be4c7d3d25d61dc"
+        },
+        {
+          "path": "EngineBridge/src/PlayerPrefabService.cpp",
+          "needle": "Basic Player Start",
+          "sha256": "62b08e3c29d6dc414a8d2c8514256f5e595ffc03a203dad9b267cbb7609f433b"
+        },
+        {
+          "path": "Tools/assistant_knowledge/player_start_guide.json",
+          "needle": "source_checked_prior_owner_checkpoint_native_service_pass",
+          "sha256": "eba62a047fca81cada92654e2741c534c77dd1694d322dfeba957e86dd5a3e9c"
+        },
+        {
+          "path": "Tools/assistant_knowledge/PLAYER_START_VERIFICATION.md",
+          "needle": "Result: exit 0",
+          "sha256": "acd6591f9670bee4604d62ecb8a4f0b72ff3171ebeb5a1318f57d73b4d9ac1c0"
+        }
+      ],
+      "provenance": [
+        "docs/PLAYER_AUTHORING_CONTINUATION.md",
+        "Studio/src/PlayerPrefabEditor.cpp",
+        "Tools/assistant_knowledge/PLAYER_START_VERIFICATION.md"
+      ]
+    },
+    {
+      "guide_id": "player-start-placement",
+      "receipt_path": "Tools/assistant_knowledge/player_start_guide.json",
+      "acceptance_status": "source_checked_prior_owner_checkpoint_native_service_pass",
+      "limit": "Controls are checked against current source and the recorded owner-accepted placement checkpoint; existing native placement/save-reopen tests passed today. A fresh mouse-driven beginner walkthrough remains pending. I cannot see or change your scene.",
+      "provenance": [
+        "docs/PLAYER_AUTHORING_CONTINUATION.md",
+        "Studio/src/PlayerPrefabEditor.cpp",
+        "Tools/assistant_knowledge/PLAYER_START_VERIFICATION.md"
+      ],
+      "id": "player-prefab-save-v1",
+      "label": "Save a reusable Player Prefab",
+      "match": [
+        "\\b(?:save|create|make)\\b.{0,40}\\b(?:reusable\\s+)?player\\s+prefab\\b",
+        "\\bplayer\\s+prefab\\b.{0,40}\\b(?:save|create|make)\\b",
+        "\\bsave\\b.{0,30}\\bplayer\\b.{0,20}\\b(?:as a prefab|for reuse)\\b"
+      ],
+      "exclude": [
+        "\\b(?:npc|character|weapon|projectile|assembly|script|code)\\b",
+        "\\b(?:whole|entire|automatically|autonomous)\\b"
+      ],
+      "prerequisites": "An open project and an existing Player Start configured with the settings you want to reuse. This saves player defaults; it does not create missing arms or equipment assets.",
+      "steps": [
+        "Select the existing **Player Start** in **Scene Hierarchy**.",
+        "Check its controller, camera, arms and starting-equipment settings in the **Inspector**. The prefab captures the player's current settings.",
+        "Click **SAVE AS PLAYER PREFAB**. The saved prefab takes its display name from the Player Start's name and appears under **Content/Player**.",
+        "Save the level with **Ctrl+S** to retain this Player Start's prefab assignment."
+      ],
+      "follow_up": "In another level in the same project, drag the saved prefab from Content/Player into the viewport. If a Player Start already exists there, choose the prefab in its Inspector instead.",
+      "expected_result": "A new reusable Player Prefab is saved and assigned. Each save creates a separate prefab; it does not overwrite a shared prefab or update every placed player.",
+      "troubleshooting": [
+        "If the controls are missing, select the Player Start rather than a weapon or NPC.",
+        "If saving reports an error, use the displayed error to check referenced assets; do not assume the save succeeded.",
+        "If the prefab cannot be placed, check whether that level already has a Player Start.",
+        "Spawn position and facing remain specific to each level; they are not shared prefab defaults."
+      ],
+      "native_checks": [
+        "Native PlayerPrefabTests passed prefab save/load, local overrides and reset with Undo/Redo"
+      ],
+      "evidence": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "playerPrefabSave_.SetText(\"SAVE AS PLAYER PREFAB\")",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "Studio/src/PlayerPrefabEditor.cpp",
+          "needle": "const std::string title=name&&!name->name.empty()?name->name:\"Player\";",
+          "sha256": "423582a130f87e2449e6992d25cf4ea70480a0df1ba4f2912be4c7d3d25d61dc"
+        },
+        {
+          "path": "Studio/src/PlayerPrefabEditor.cpp",
+          "needle": "bridge::SavePlayerPrefab(project.rootPath,project.projectId,title,settings)",
+          "sha256": "423582a130f87e2449e6992d25cf4ea70480a0df1ba4f2912be4c7d3d25d61dc"
+        },
+        {
+          "path": "docs/PLAYER_AUTHORING_CONTINUATION.md",
+          "needle": "Each save creates a separate",
+          "sha256": "3a1eacbe8c17aa99b0ccace1efd659d4c7ce42f61d7f51d774a929222c77ae7e"
+        },
+        {
+          "path": "Tools/assistant_knowledge/player_start_guide.json",
+          "needle": "Native PlayerPrefabTests passed prefab save/load, local overrides and reset with Undo/Redo",
+          "sha256": "eba62a047fca81cada92654e2741c534c77dd1694d322dfeba957e86dd5a3e9c"
+        }
+      ]
+    },
+    {
+      "guide_id": "player-start-placement",
+      "receipt_path": "Tools/assistant_knowledge/player_start_guide.json",
+      "acceptance_status": "source_checked_prior_owner_checkpoint_native_service_pass",
+      "limit": "Controls are checked against current source and the recorded owner-accepted placement checkpoint; existing native placement/save-reopen tests passed today. A fresh mouse-driven beginner walkthrough remains pending. I cannot see or change your scene.",
+      "provenance": [
+        "docs/PLAYER_AUTHORING_CONTINUATION.md",
+        "Studio/src/PlayerPrefabEditor.cpp",
+        "Tools/assistant_knowledge/PLAYER_START_VERIFICATION.md"
+      ],
+      "id": "player-prefab-reset-v1",
+      "label": "Restore assigned Player Prefab defaults",
+      "match": [
+        "\\b(?:reset|restore|revert)\\b.{0,50}\\bplayer\\s+(?:prefab|defaults)\\b",
+        "\\bplayer\\s+prefab\\b.{0,50}\\b(?:reset|restore|revert)\\b",
+        "\\b(?:reset|restore|revert)\\b.{0,30}\\bplayer\\b.{0,25}\\b(?:to|from)\\b.{0,12}\\bprefab\\b"
+      ],
+      "exclude": [
+        "\\b(?:runtime|gameplay|restart|respawn|npc|weapon|projectile|script|code)\\b"
+      ],
+      "prerequisites": "Select a Player Start with an assigned prefab and local changes you intend to discard. RESET TO PREFAB restores its assigned defaults, so review those changes first.",
+      "steps": [
+        "Select **Player Start** and open its **Inspector**.",
+        "Check the prefab status. **PREFAB // LOCAL OVERRIDES** means the current settings differ from its assigned defaults.",
+        "Click **RESET TO PREFAB** to restore that assigned baseline.",
+        "Check the restored settings, then save the level with **Ctrl+S** if you want to retain them."
+      ],
+      "follow_up": "Use Undo if the reset was unintended. Test movement and any equipped setup with PLAY after saving.",
+      "expected_result": "Local setting overrides return to the assigned prefab defaults. The level's spawn position and facing remain unchanged.",
+      "troubleshooting": [
+        "If RESET TO PREFAB is unavailable, there may be no assigned baseline or no local overrides.",
+        "**CUSTOM PLAYER // NO PREFAB** means there is no assigned prefab to reset to. Choose an appropriate saved prefab in the Inspector first if that is your intention.",
+        "This restores the assigned baseline; it does not restart Test Level or respawn the player.",
+        "Saving a new prefab elsewhere does not automatically replace this level's assigned defaults."
+      ],
+      "native_checks": [
+        "Native PlayerPrefabTests passed prefab save/load, local overrides and reset with Undo/Redo"
+      ],
+      "evidence": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "playerPrefabReset_.SetText(\"RESET TO PREFAB\")",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "Studio/src/PlayerPrefabEditor.cpp",
+          "needle": "bridge::CapturePlayerPrefabBaseline(session_->Scenes().GetScene(),entity,d,error)",
+          "sha256": "423582a130f87e2449e6992d25cf4ea70480a0df1ba4f2912be4c7d3d25d61dc"
+        },
+        {
+          "path": "Studio/src/PlayerPrefabEditor.cpp",
+          "needle": "playerPrefabReset_.SetEnabled(overridden);",
+          "sha256": "423582a130f87e2449e6992d25cf4ea70480a0df1ba4f2912be4c7d3d25d61dc"
+        },
+        {
+          "path": "Tests/PlayerPrefabTests.cpp",
+          "needle": "\"reset undo\"",
+          "sha256": "5a117986d0e61b11ed39d9dc7f4ed4893d6a43bd1fb9149b6b929901f1d69b4b"
+        },
+        {
+          "path": "Tools/assistant_knowledge/player_start_guide.json",
+          "needle": "Native PlayerPrefabTests passed prefab save/load, local overrides and reset with Undo/Redo",
+          "sha256": "eba62a047fca81cada92654e2741c534c77dd1694d322dfeba957e86dd5a3e9c"
+        }
+      ]
+    },
+    {
+      "guide_id": "starting-equipment",
+      "receipt_path": "Tools/assistant_knowledge/equipment_guide.json",
+      "acceptance_status": "source_checked_prior_owner_checkpoint_native_service_pass",
+      "native_checks": [
+        "Recorded native Studio checkpoint created shotgun equipment, applied loadout and retained assignment after save/reopen",
+        "Existing native EquipmentAssetTests passed hand admission, asset persistence and loadout undo/reopen"
+      ],
+      "provenance": [
+        "docs/P2_EQUIPMENT_ACTION_IMPLEMENTATION.md",
+        "Studio/src/PlayerEquipmentEditor.cpp",
+        "Tools/assistant_knowledge/EQUIPMENT_VERIFICATION.md"
+      ],
+      "limit": "Controls are verified against current source and the recorded native shotgun-assembly checkpoint; existing equipment service tests passed today. A fresh beginner Studio walkthrough remains pending. I cannot see or change your scene.",
+      "id": "equipment-create-v1",
+      "label": "Create equipment from a saved arms assembly",
+      "match": [
+        "\\b(?:create|make|add|build)\\b.{0,50}\\b(?:equipment|weapon definition)\\b",
+        "\\b(?:create|make|build)\\b.{0,35}\\bweapon\\b.{0,25}\\bfrom\\b.{0,25}\\bassembly\\b",
+        "\\bcreate from assembly\\b"
+      ],
+      "exclude": [
+        "\\b(?:npc|enemy|character|projectile|arrow|bullet|bolt|script|code|inventory)\\b",
+        "\\b(?:entire|whole|automatically|autonomous)\\b"
+      ],
+      "prerequisites": "An open project with a Player Start whose arms reference is already a saved first-person assembly. Importing loose arms/weapon models is not enough. The saved assembly must contain the actions you want; this panel does not invent missing animations.",
+      "steps": [
+        "Select **Player Start** in **Scene Hierarchy** and open **STARTING EQUIPMENT** in its **Inspector**.",
+        "Enter a readable item name in **New item**.",
+        "Choose **Hand use** to match the item: **PrimaryOnly**, **OffHandOnly**, **EitherHand**, **TwoHanded** or **PrimaryWithSupport**. The panel initially selects TwoHanded; change it when your setup requires a different policy.",
+        "Click **CREATE FROM ASSEMBLY**. This uses the Player Start's assigned saved assembly.",
+        "After the Created confirmation, select the new item in **Primary hand** or **Off hand**, as permitted by its Hand use.",
+        "For **TwoHanded** or **PrimaryWithSupport** in Primary hand, leave **Off hand** as **NONE**. Then click **APPLY LOADOUT**.",
+        "Save the level with **Ctrl+S**."
+      ],
+      "follow_up": "Use **PLAY** to check your existing equipment actions. If you want it to launch a projectile, use **WEAPON FIRING** and configure a supported launch action separately.",
+      "expected_result": "A new equipment definition exists and the selected loadout is applied. CREATE FROM ASSEMBLY alone does not equip the item or configure projectile firing.",
+      "troubleshooting": [
+        "If creation fails, check that the assigned arms reference is a saved first-person assembly and read the displayed EQUIPMENT error.",
+        "If an action is missing, check the saved assembly's matching action tracks; this panel does not create or retarget clips.",
+        "If your new item is absent from a hand selector, check its Hand use policy.",
+        "If the loadout is rejected, remove an incompatible off-hand item or choose equipment with compatible hand policies."
+      ],
+      "evidence": [
+        {
+          "path": "Studio/src/PlayerEquipmentEditor.cpp",
+          "needle": "button(equipmentCreate_,\"CREATE FROM ASSEMBLY\"",
+          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+        },
+        {
+          "path": "Studio/src/PlayerEquipmentEditor.cpp",
+          "needle": "button(equipmentApply_,\"APPLY LOADOUT\"",
+          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "playerEquipment_.SetText(\"STARTING EQUIPMENT\")",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "Studio/src/PlayerEquipmentEditor.cpp",
+          "needle": "\"Created \"+name+\". Choose it above, then APPLY LOADOUT.\"",
+          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+        },
+        {
+          "path": "EngineBridge/src/EquipmentAssetService.cpp",
+          "needle": "FirstPersonAssemblyService().ReadSettings(root,project,presentation,settings,error)",
+          "sha256": "b40b718f0e133cb1c9712122f387927b9e952f97ab9d3260f88dfe0519795877"
+        },
+        {
+          "path": "Tools/assistant_knowledge/equipment_guide.json",
+          "needle": "source_checked_prior_owner_checkpoint_native_service_pass",
+          "sha256": "b7af8620f9708ff03cc0361825f354c4bfc71bc738b5c43c9c3b557674db5fce"
+        },
+        {
+          "path": "Tools/assistant_knowledge/EQUIPMENT_VERIFICATION.md",
+          "needle": "exit 0",
+          "sha256": "ee78a4559adcaa57e18af1863cb3ba53043b4a92c18417c7685b8caa54a79af1"
+        },
+        {
+          "path": "Tests/EquipmentAssetTests.cpp",
+          "needle": "\"scene cold reopen\"",
+          "sha256": "ebb024b24f15e45cdd4f4f9fa35ee61fa457d28dedc4ce4cb38e3859930e0d09"
+        }
+      ]
+    },
+    {
+      "guide_id": "starting-equipment",
+      "receipt_path": "Tools/assistant_knowledge/equipment_guide.json",
+      "acceptance_status": "source_checked_prior_owner_checkpoint_native_service_pass",
+      "native_checks": [
+        "Recorded native Studio checkpoint created shotgun equipment, applied loadout and retained assignment after save/reopen",
+        "Existing native EquipmentAssetTests passed hand admission, asset persistence and loadout undo/reopen"
+      ],
+      "provenance": [
+        "docs/P2_EQUIPMENT_ACTION_IMPLEMENTATION.md",
+        "Studio/src/PlayerEquipmentEditor.cpp",
+        "Tools/assistant_knowledge/EQUIPMENT_VERIFICATION.md"
+      ],
+      "limit": "Controls are verified against current source and the recorded native shotgun-assembly checkpoint; existing equipment service tests passed today. A fresh beginner Studio walkthrough remains pending. I cannot see or change your scene.",
+      "id": "equipment-assign-v1",
+      "label": "Assign the player's starting equipment",
+      "match": [
+        "\\b(?:assign|equip|choose|select|apply|change|set up|setup)\\b.{0,55}\\b(?:starting equipment|equipment|loadout)\\b",
+        "\\b(?:equip|assign)\\b.{0,40}\\b(?:saved\\s+)?weapon\\b",
+        "\\b(?:starting equipment|loadout)\\b.{0,45}\\b(?:assign|apply|change|set up|setup)\\b"
+      ],
+      "exclude": [
+        "\\b(?:npc|enemy|character|projectile|arrow|bullet|bolt|script|code|inventory)\\b",
+        "\\b(?:create|make|build|automatically|autonomous)\\b",
+        "\\b(?:hitscan|model|mesh|prefab|retarget)\\b"
+      ],
+      "prerequisites": "An open project, a Player Start and saved equipment definitions in this project. If you only have a saved first-person assembly, use CREATE FROM ASSEMBLY to create an equipment definition first.",
+      "steps": [
+        "Select **Player Start** in **Scene Hierarchy**, then open **STARTING EQUIPMENT** in the **Inspector**.",
+        "Choose a compatible saved item in **Primary hand**. Select **NONE** if you intend to leave that slot empty.",
+        "Choose a compatible item in **Off hand**, or **NONE**. **TwoHanded** and **PrimaryWithSupport** primary items reserve both hands, so leave Off hand empty for those.",
+        "Click **APPLY LOADOUT** and check that the panel confirms the loadout was applied.",
+        "Save the level with **Ctrl+S**."
+      ],
+      "follow_up": "Use **PLAY** to test the configured equipment. Reopen the saved scene and check both hand selections. To reuse these defaults later, save a Player Prefab.",
+      "expected_result": "The selected Player Start uses the chosen saved loadout. Editing dropdowns alone does not commit the assignment; APPLY LOADOUT and saving the level are separate actions.",
+      "troubleshooting": [
+        "If an item is missing, check it was saved as an equipment definition in this project; a loose model is not an equipment item.",
+        "If a slot says **MISSING / INCOMPATIBLE**, choose a valid saved item or NONE and read any LOADOUT error.",
+        "Off hand accepts **OffHandOnly** or **EitherHand** items. A two-handed primary item cannot be combined with an off-hand item.",
+        "Use Undo if you applied the wrong loadout. Projectile launch settings are a separate WEAPON FIRING task."
+      ],
+      "evidence": [
+        {
+          "path": "Studio/src/PlayerEquipmentEditor.cpp",
+          "needle": "button(equipmentCreate_,\"CREATE FROM ASSEMBLY\"",
+          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+        },
+        {
+          "path": "Studio/src/PlayerEquipmentEditor.cpp",
+          "needle": "button(equipmentApply_,\"APPLY LOADOUT\"",
+          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "playerEquipment_.SetText(\"STARTING EQUIPMENT\")",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "EngineBridge/src/EquipmentAssetService.cpp",
+          "needle": "error=\"Two-handed/support equipment reserves both hands.\"",
+          "sha256": "b40b718f0e133cb1c9712122f387927b9e952f97ab9d3260f88dfe0519795877"
+        },
+        {
+          "path": "EngineBridge/src/EquipmentAssetService.cpp",
+          "needle": "error=\"Off-hand slot requires OffHandOnly or EitherHand.\"",
+          "sha256": "b40b718f0e133cb1c9712122f387927b9e952f97ab9d3260f88dfe0519795877"
+        },
+        {
+          "path": "Studio/src/PlayerEquipmentEditor.cpp",
+          "needle": "Loadout applied. SAVE LEVEL to retain; Undo restores the previous loadout.",
+          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+        },
+        {
+          "path": "Tools/assistant_knowledge/equipment_guide.json",
+          "needle": "source_checked_prior_owner_checkpoint_native_service_pass",
+          "sha256": "b7af8620f9708ff03cc0361825f354c4bfc71bc738b5c43c9c3b557674db5fce"
+        },
+        {
+          "path": "Tools/assistant_knowledge/EQUIPMENT_VERIFICATION.md",
+          "needle": "exit 0",
+          "sha256": "ee78a4559adcaa57e18af1863cb3ba53043b4a92c18417c7685b8caa54a79af1"
+        },
+        {
+          "path": "Tests/EquipmentAssetTests.cpp",
+          "needle": "\"scene cold reopen\"",
+          "sha256": "ebb024b24f15e45cdd4f4f9fa35ee61fa457d28dedc4ce4cb38e3859930e0d09"
+        }
+      ]
+    },
+    {
+      "id": "static-model-import-v1",
+      "label": "Import and place a static model",
+      "guide_id": "static-model-import",
+      "receipt_path": "Tools/assistant_knowledge/static_model_guide.json",
+      "acceptance_status": "source_checked_prior_owner_checkpoint_native_service_pass",
+      "native_checks": [
+        "Generated static GLB native proof passed preview, commit, placement, Undo/Redo and scene save/reopen",
+        "Generated textured static FBX native proof passed texture rejection, retained reimport and placement/save/reopen"
+      ],
+      "match": [
+        "\\b(?:import|bring in|load)\\b.{0,55}\\b(?:static\\s+)?(?:model|mesh|3d object|glb|fbx)s?\\b",
+        "\\b(?:model|mesh|glb|fbx)\\b.{0,40}\\b(?:import|bring in)\\b"
+      ],
+      "exclude": [
+        "\\b(?:character|characters|npc|enemy|rig|rigged|skeleton|animation|animations|retarget|arms|script|code|prefab)\\b",
+        "\\b(?:obj|blend|blender file|stl|gltf|zip|unitypackage|entire|whole|automatically|autonomous)\\b",
+        "\\b(?:reimport|replace|overwrite|move|texture only|textures only)\\b",
+        "\\b(?:import|load)\\s+(?:(?:a|an|the|my|some)\\s+)?(?:texture|image|material)s?\\b",
+        "\\b(?:runtime|lua)\\b"
+      ],
+      "prerequisites": "An open Renegade project and a static **GLB or FBX** model with its required textures available. This guide covers static objects; rigged characters and external animations use separate workflows. The current native picker offers GLB/FBX.",
+      "steps": [
+        "Open **ADD** \u2192 **IMPORT MODEL...**, then select your GLB or FBX file.",
+        "Wait for the rendered preview. Check the model and textures; use **ROTATE LEFT** or **ROTATE RIGHT** to inspect it. Preview rotation does not change the imported asset.",
+        "Enter a readable **Asset name**.",
+        "Choose **Folder**, or type a project-relative folder in **Import to**, such as **Content/Models/Props**. A valid new Content folder is created during import. Do not enter a Windows absolute path.",
+        "For an ordinary prop, leave **Asset role** as **General model**. Optional comma-separated **Tags** help searching; they do not choose the folder or turn a model into equipment.",
+        "Click **IMPORT ASSET** when the preview is ready. Check the registered-asset confirmation and the revealed **Asset Browser** card.",
+        "Drag that imported card into the scene viewport, position it with the gizmo, then save the level with **Ctrl+S**."
+      ],
+      "follow_up": "Reopen the saved scene and check the placed model. Importing creates a reusable asset; placing it and saving the scene are separate steps.",
+      "expected_result": "The model is registered in your chosen Content folder and its placed instance is retained in the saved level. This does not automatically add collision, NPC behaviour or weapon gameplay.",
+      "troubleshooting": [
+        "If IMPORT ASSET is disabled, wait for the preview; if conversion fails, read the reported error rather than assuming an asset was saved.",
+        "For a textured FBX, keep required images in the exported source folder tree with valid relative references; missing or changed textures can block import.",
+        "A GLB filename does not guarantee embedded textures. External image references are not supported by this import path; export a self-contained GLB.",
+        "If the status says COMMITTED; REVEAL FAILED, browse the chosen Content folder. Do not import again merely because the card was not revealed.",
+        "An existing name/destination can be rejected to protect an asset. Check the error and choose a distinct name instead of overwriting files manually.",
+        "If the importer detects a rigged character, stop and use the Character workflow instead; this static guide does not cover animation assignment."
+      ],
+      "limit": "Current controls are source-checked; generated static GLB and textured-FBX native proofs passed today. Historical native UI checks exist, but a fresh beginner mouse-driven walkthrough remains pending. I cannot inspect or change your project.",
+      "evidence": [
+        {
+          "path": "Studio/src/RenegadeStudioChrome.cpp",
+          "needle": "{\"IMPORT MODEL...\", true}",
+          "sha256": "24d8ecf97f72807dcf294364e9558e8bf3223954c83c3d5cfb9ba93382f58101"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "params.extensions = {\"glb\", \"fbx\"};",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "modelImportName_.SetDescription(\"Asset name: \");",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "modelImportFolder_.SetDescription(\"Import to: \");",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "modelImportCommit_.SetText(\"IMPORT ASSET\");",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "docs/MODEL_IMPORT_DESTINATIONS.md",
+          "needle": "Optional comma-separated Tags are searchable labels; they never route files.",
+          "sha256": "84f047fd2a3964678bef46aa6051918efa42faa4a536b2db6db32a2592010598"
+        },
+        {
+          "path": "docs/MODEL_IMPORT_DESTINATIONS.md",
+          "needle": "A Weapon role does not convert",
+          "sha256": "84f047fd2a3964678bef46aa6051918efa42faa4a536b2db6db32a2592010598"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "could not be revealed. Do not import it again.",
+          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+        },
+        {
+          "path": "Tests/ModelImporterRebuildGraphicsProof.cpp",
+          "needle": "MODEL REBUILD PROOF PASS: placement/Undo/Redo/save/reopen",
+          "sha256": "b0c7f0a345849b4deab46a72e69350202962ea11b4fc229f3ee157143f682d45"
+        },
+        {
+          "path": "docs/MODEL_IMPORTER_REBUILD.md",
+          "needle": "native cancel, rotation, naming, thumbnail commit/card, drag placement, Undo/Redo",
+          "sha256": "c6a26397305f1fec7eafe64ebea12687a651e2ea99df8c21b3fddc4551872c10"
+        },
+        {
+          "path": "Tools/assistant_knowledge/static_model_guide.json",
+          "needle": "source_checked_prior_owner_checkpoint_native_service_pass",
+          "sha256": "accb04aeea7c7c2347556e99edc1ca48903dbdcf4600dfc909fd716693288d92"
+        },
+        {
+          "path": "Tools/assistant_knowledge/STATIC_IMPORT_VERIFICATION.md",
+          "needle": "Result exit 0",
+          "sha256": "a19901f4a0925adeda726b1920a742dfcf328ffdc8cfd1b72ea6388c87ba7560"
+        }
+      ],
+      "provenance": [
+        "docs/MODEL_IMPORTER_REBUILD.md",
+        "docs/MODEL_IMPORT_DESTINATIONS.md",
+        "Studio/src/StudioApplication.cpp",
+        "Tools/assistant_knowledge/STATIC_IMPORT_VERIFICATION.md"
+      ]
+    }
+  ]
+}

@@ -132,12 +132,19 @@ require_text(workspace_source "JourneyCanvasScissorRect" "hard Journey-to-Inspec
 require_text(workspace_source "object.scissorRect = journeyClip;" "card viewport clipping")
 require_text(workspace_source "ApplyScissor(canvas, scissorRect, cmd);" "fixed overlay scissor restoration")
 
-# Semantic zoom remains readable and obsolete tiny persisted layouts migrate.
-require_text(workspace_source "constexpr float MinZoom = 0.82f;" "readable semantic minimum zoom")
-require_text(workspace_source "layout_->journeyCanvas.zoom = 1.0f;" "legacy tiny-zoom migration")
-require_text(workspace_source "layout_->activeView = bridge::StoryFlowViewMode::Journey;" "Journey-default recovery surface")
-require_text(chrome_source "zoomRequested_(0.82f + fraction * (1.18f - 0.82f))" "functional fixed zoom slider")
-forbid_text(workspace_source "constexpr float MinZoom = 0.20f;" "legacy unreadable zoom range")
+# Owner recovery needs whole-Journey overview zoom; selecting a card returns to readable detail.
+require_text(workspace_source "constexpr float MinZoom = 0.05f;" "persistable whole-Journey overview zoom")
+require_text(workspace_source "layout_->journeyCanvas.zoom = 1.0f;" "readable selection/recovery zoom")
+require_text(workspace_source "Keep the persisted/current view when rebinding after creation." "preserved view after content reload")
+require_text(integration_source "const bool newIdentity = model_.FindNode(createdNodeId) == nullptr;" "existing identity recovery guard")
+require_text(integration_source "storyFlow.PlaceNewNodeAtViewportCentre(createdNodeId);" "new Screen placement")
+require_text(workspace_source "offset->offsetX += delta.x; offset->offsetY += delta.y;" "persisted Journey placement")
+require_text(render_path_source "graphEditor_.PlaceNewNodeAtViewportCentre(nodeId);" "measured native Graph placement")
+require_text(chrome_source "zoomRequested_(0.05f + fraction * (1.18f - 0.05f))" "functional fixed zoom slider")
+require_text(workspace_source "layout_->journeyCanvas.zoom >= 0.82f," "readable detail cutoff independent of overview zoom")
+require_text(workspace_source "FitOverview(minX, minY, maxX, maxY," "shared whole-content fit policy")
+require_text(chrome_source "wi::input::IsDoubleClicked()" "overview double-click recovery")
+require_text(render_path_source "fitButton_.SetVisible(active);" "persistent native Fit/Home recovery")
 
 # Journey authors and rewires exits in the Inspector without switching to the
 # frozen Graph surface or changing stable route identity.

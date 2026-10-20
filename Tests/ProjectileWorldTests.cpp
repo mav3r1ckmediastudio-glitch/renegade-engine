@@ -1,4 +1,5 @@
 #include "RuntimeProjectileWorld.h"
+#include "RuntimeGrenadeExplosion.h"
 
 #include <iostream>
 #include <memory>
@@ -311,6 +312,67 @@ int main()
     if (!runtime::ProjectileContactSurface(*scene, surfaceHit).empty())
         return fail("invalid subset fallback");
 
+    // Real native scene query + combat health integration for grenade radius.
+    // Occluding world geometry must prevent radial damage.
+    {
+        auto blastScene=std::make_unique<wi::scene::Scene>();
+        const auto thrower=blastScene->Entity_CreateTransform("Grenade owner");
+        const auto dummy=blastScene->Entity_CreateTransform("Grenade dummy");
+        const auto obstruction=blastScene->Entity_CreateTransform("Blast cover");
+        const auto dummyId=bridge::GenerateStableId();
+        if(!bridge::AssignPersistentEntityId(*blastScene,dummy,dummyId,error))
+            return fail("blast target id");
+        auto* transform=blastScene->transforms.GetComponent(dummy);
+        transform->Translate(XMFLOAT3{2,0,0});transform->UpdateTransform();
+        auto& nativeDummy=blastScene->characters.Create(dummy);
+        nativeDummy.health=100;nativeDummy.SetActive(true);
+        runtime::RuntimeCharacterSystemState blastCharacters;
+        runtime::RuntimeCharacterRecord rec;
+        rec.entity=dummy;rec.stableEntityId=dummyId;
+        rec.authoring.factionId="Enemy";
+        rec.authoring.combatStyle=bridge::CombatStyle::Melee;
+        rec.tuning=bridge::ResolveCharacterTuning(rec.authoring);
+        blastCharacters.characters.push_back(rec);
+        runtime::RuntimeCombatState blastCombat;
+        if(!runtime::InitializeRuntimeCombat(*blastScene,blastCharacters,blastCombat,error))
+            return fail("blast initialize health");
+        runtime::RuntimeCharacterPerceptionState blastPerception;
+        runtime::CharacterCognitionRecord cognition2;cognition2.characterId=dummyId;
+        blastPerception.characters.push_back(cognition2);
+        auto& collider=blastScene->colliders.Create(obstruction);
+        collider.shape=wi::scene::ColliderComponent::Shape::Sphere;
+        collider.radius=.28f;
+        collider.sphere=wi::primitive::Sphere({1,.85f,0},.28f);
+        std::vector<wi::scene::ColliderComponent> blastCache{collider};
+        std::vector<wi::primitive::AABB> blastBounds{
+            {XMFLOAT3{.72f,.57f,-.28f},XMFLOAT3{1.28f,1.13f,.28f}}};
+        blastScene->colliders_cpu=blastCache.data();
+        blastScene->collider_bvh.Build(blastBounds.data(),1);
+        runtime::ProjectileOwnerBinding blastOwner{runtime::RuntimePlayerKnowledgeId,thrower};
+        bridge::ProjectileExplosion explosion;
+        explosion.projectileId=99;
+        explosion.source={runtime::RuntimePlayerKnowledgeId,bridge::GenerateStableId(),
+                          "Player",{0,0,0},{0,0,0}};
+        explosion.position={0,.85f,0};explosion.radius=5.f;explosion.damage=60.f;
+        bridge::GameplayEventService blastEvents;
+        const runtime::CombatEventEmitter emitBlast=[&](bridge::GameplayEvent event,
+                                                        std::string& e){
+            return blastEvents.Enqueue(std::move(event),e);
+        };
+        if(runtime::ApplyGrenadeBlastToCharacters(*blastScene,blastCharacters,
+           blastPerception,blastCombat,blastOwner,explosion,emitBlast)!=0 ||
+           nativeDummy.health!=100 || blastEvents.Size()!=0)
+            return fail("grenade blast penetrated native collider");
+        blastCache.front().layerMask=0;
+        if(runtime::ApplyGrenadeBlastToCharacters(*blastScene,blastCharacters,
+           blastPerception,blastCombat,blastOwner,explosion,emitBlast)!=1 ||
+           nativeDummy.health>=100 ||
+           runtime::FindCharacterCombat(blastCombat,dummyId)->health>=100 ||
+           blastPerception.damageStimuli!=1 || blastEvents.Size()!=1)
+            return fail("grenade blast did not damage visible Character");
+        blastScene->colliders_cpu=nullptr;
+        blastScene.reset();
+    }
     scene->colliders_cpu = nullptr; // Cache belongs to this fixture.
     // The native Scene was created before the temporary collider cache/bounds.
     // Destroy it while those fixture buffers are still alive, rather than

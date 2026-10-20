@@ -1,4 +1,7 @@
 #include "renegade/bridge/StoryFlowAuthoringModel.h"
+#include "../Studio/src/StoryFlowOverviewPolicy.h"
+#include "../Studio/src/StoryFlowTitleDraft.h"
+#include <cmath>
 #include "renegade/bridge/StoryFlowInteractionPolicy.h"
 #include "renegade/bridge/StoryFlowJourneyModel.h"
 #include "renegade/bridge/StoryFlowLayoutService.h"
@@ -146,6 +149,35 @@ namespace
 
 int main()
 {
+    using namespace renegade::studio;
+    bool cameraFailed = false;
+    const auto Check = [&cameraFailed](bool ok, const char* message) { if (!ok) { cameraFailed = true; std::cerr << message << "\n"; } };
+    StoryFlowTitleDraft title;
+    Check(title.UseTemplate("Main Menu") && title.UseTemplate("Options") && title.text == "Options",
+        "Options template replaces untouched default instead of appending");
+    title.Input(""); // real control emits the empty draft immediately on entry
+    Check(title.text.empty() && !title.UseTemplate("Pause"), "title click clears immediately and stops template ownership");
+    title.Input("Options");
+    Check(title.text == "Options" && !title.UseTemplate("Credits") && title.text == "Options",
+        "custom unfocused draft survives template changes and is ready for Create without Enter");
+    bool suppressed = false;
+    Check(ResolveOverviewIntent(true, true, true, false, suppressed) == OverviewIntent::Navigate,
+        "overview single click navigates");
+    Check(ResolveOverviewIntent(true, true, true, true, suppressed) == OverviewIntent::Fit,
+        "overview double click fits");
+    Check(ResolveOverviewIntent(true, false, true, false, suppressed) == OverviewIntent::None,
+        "double click suppresses held drag");
+    ResolveOverviewIntent(false, false, false, false, suppressed);
+    Check(ResolveOverviewIntent(true, true, true, false, suppressed) == OverviewIntent::Navigate,
+        "release restores overview navigation");
+    const auto camera = FitOverview(-100000, -200000, 100000, 200000, 1200, 800, 30, 2);
+    Check(std::isfinite(camera.zoom) && std::isfinite(camera.panX) && std::isfinite(camera.panY) &&
+        camera.zoom >= 0.05f && camera.panX == 600 && camera.panY == 400,
+        "extreme bounds recover finite centered camera at persisted zoom limit");
+    const auto whole = FitOverview(-1000, -200, 3000, 1000, 1200, 800, 30, 2);
+    Check(-1000 * whole.zoom + whole.panX >= 29 && 3000 * whole.zoom + whole.panX <= 1171,
+        "fit frames whole graph instead of retaining old pan/zoom");
+    if (cameraFailed) return 1;
     using namespace renegade::bridge;
 
     const auto unique = std::chrono::high_resolution_clock::now()
@@ -420,6 +452,51 @@ int main()
     {
         return Fail(temporary.path,
             "node activation did not dispatch to the accepted Level/Screen boundary");
+    }
+
+    // Far/nondefault cameras: measured Graph dimensions and Journey base+offset
+    // must centre the new bounds without changing either camera or other cards.
+    for (const float zoom : {0.17f, 0.63f, 1.71f})
+    {
+        auto placement = BuildDeterministicStoryFlowLayout(journeyAuthoringModel, ProjectId, FlowDocumentId);
+        placement.canvas = {-18432.0f, 27123.0f, zoom};
+        placement.journeyCanvas = {22341.0f, -14782.0f, zoom};
+        const auto oldGraph = placement.canvas;
+        const auto oldJourney = placement.journeyCanvas;
+        const auto untouched = placement.nodes.front();
+        for (bool journeyView : {false, true})
+        {
+            auto& camera = journeyView ? placement.journeyCanvas : placement.canvas;
+            const float width = journeyView ? 284.0f : 231.5f;
+            const float height = journeyView ? 148.0f : 197.25f;
+            const float baseX = journeyView ? 948.0f : 0;
+            const float baseY = journeyView ? 392.0f : 0;
+            const auto point = CentreNewCard(613, 347, camera.panX, camera.panY,
+                camera.zoom, width, height, baseX, baseY);
+            const auto centred = [&](float x, float y) {
+                return std::abs(camera.panX + (baseX + x + width * 0.5f) * camera.zoom - 613) < 0.01f &&
+                    std::abs(camera.panY + (baseY + y + height * 0.5f) * camera.zoom - 347) < 0.01f;
+            };
+            if (!centred(point.x, point.y)) return Fail(temporary.path, "new bounds not centred at far camera");
+            auto card = std::find_if(placement.journeyCards.begin(), placement.journeyCards.end(), [](const auto& item) { return item.nodeId == ScreenNodeId; });
+            auto node = std::find_if(placement.nodes.begin(), placement.nodes.end(), [](const auto& item) { return item.nodeId == ScreenNodeId; });
+            if (journeyView) { card->offsetX = point.x; card->offsetY = point.y; }
+            else { node->x = point.x; node->y = point.y; }
+            placement.activeView = journeyView ? StoryFlowViewMode::Journey : StoryFlowViewMode::Graph;
+            StoryFlowLayoutDocument reopened;
+            if (!WriteStoryFlowLayout(layoutPath, placement, error) ||
+                !ReadStoryFlowLayout(layoutPath, ProjectId, FlowDocumentId, reopened, error))
+                return Fail(temporary.path, "placement save/reopen failed");
+            const auto savedCard = std::find_if(reopened.journeyCards.begin(), reopened.journeyCards.end(), [](const auto& item) { return item.nodeId == ScreenNodeId; });
+            const auto savedNode = std::find_if(reopened.nodes.begin(), reopened.nodes.end(), [](const auto& item) { return item.nodeId == ScreenNodeId; });
+            const float x = journeyView ? savedCard->offsetX : savedNode->x;
+            const float y = journeyView ? savedCard->offsetY : savedNode->y;
+            if (!centred(x,y) || reopened.activeView != placement.activeView ||
+                reopened.canvas.panX != oldGraph.panX || reopened.canvas.panY != oldGraph.panY || reopened.canvas.zoom != oldGraph.zoom ||
+                reopened.journeyCanvas.panX != oldJourney.panX || reopened.journeyCanvas.panY != oldJourney.panY || reopened.journeyCanvas.zoom != oldJourney.zoom ||
+                reopened.nodes.front().x != untouched.x || reopened.nodes.front().y != untouched.y)
+                return Fail(temporary.path, "placement reopen changed camera or existing card");
+        }
     }
 
     std::cout << "RenegadeStoryFlowPresentationTests: PASS\n";

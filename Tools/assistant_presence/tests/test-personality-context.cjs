@@ -1,0 +1,13 @@
+'use strict';
+process.env.RENEGADE_PROFILE_PATH=require('node:path').join(require('node:os').tmpdir(),'renegade-test-no-profile-'+process.pid+'.cfg');
+const assert=require('node:assert/strict');
+const {instructionsFor}=require('../chat/personality');
+const {askQwenStream}=require('../chat/stream-client');
+const {isEngineQuestion}=require('../chat/verified-knowledge');
+const h=[{role:'user',content:'Call me Maverick.'}];
+for(let i=0;i<8;i++)h.push({role:'assistant',content:'No problem.'},{role:'user',content:'Thanks'});
+assert.match(instructionsFor(h),/user chosen name is "Maverick"/);
+assert.equal(isEngineQuestion("Renegade, I've had a long day."),false);
+assert.equal(isEngineQuestion('Renegade, how do I import a character?'),true);
+h.push({role:'assistant',content:'No problem.'},{role:'user',content:'What did I ask you to call me?'});
+askQwenStream(h).then(r=>{assert.match(r.answer,/You asked me to call you Maverick/);console.log('PASS name retained beyond model window and conversational address does not bypass engine routing')}).catch(e=>{console.error(e);process.exitCode=1});

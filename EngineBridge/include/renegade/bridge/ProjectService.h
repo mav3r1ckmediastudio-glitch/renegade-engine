@@ -38,6 +38,10 @@ namespace renegade::bridge
         // unchanged. See DependencyClassName/TryParseDependencyClassName in
         // DependencyService.h for the recognized class names.
         std::vector<std::string> alwaysInclude;
+        std::string defaultHudId;
+        std::string defaultHud;
+        std::string attributeDocumentId;
+        std::string attributeDocument;
     };
 
     struct RecentProject
@@ -59,7 +63,8 @@ namespace renegade::bridge
             const std::string& templateScenePath);
         bool CreateStoryFlowProject(
             const std::string& parentDirectory,
-            const std::string& projectName);
+            const std::string& projectName,
+            bool seedUiScaffold = true);
         bool OpenProject(const std::string& descriptorPath);
 
         // Read-only descriptor validation for Runtime/bootstrap tooling.
@@ -88,6 +93,8 @@ namespace renegade::bridge
         // commit the descriptor through the normal project transaction path.
         // On failure the active in-memory metadata remains unchanged.
         bool SetAlwaysInclude(const std::vector<std::string>& declarations);
+        bool SetGameplayAttributes(const std::string& documentId,const std::string& pathHint);
+        bool SetDefaultHud(const std::string& documentId,const std::string& pathHint);
 
         // Editor preferences persist beside the recent-project registry rather
         // than in a scene. They describe how the creator likes Studio to

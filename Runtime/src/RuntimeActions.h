@@ -13,6 +13,7 @@ namespace renegade::runtime
         Keyboard,
         Gamepad,
         Test,
+        Gameplay,
     };
 
     enum class RuntimeActionCode

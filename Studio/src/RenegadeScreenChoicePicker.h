@@ -32,6 +32,7 @@ namespace renegade::studio
             selected_ = std::move(selected);
             scroll_ = 0;
             open_ = true;
+            openingPointerDown_ = wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
         }
 
         void Close() noexcept
@@ -63,8 +64,18 @@ namespace renegade::studio
         void Update()
         {
             if (!open_) return;
+            if(openingPointerDown_)
+            {
+                if(wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))return;
+                openingPointerDown_=false;
+            }
+            if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE)) { Close(); return; }
             const XMFLOAT4 pointer = wi::input::GetPointer();
-            if (!Contains(pointer.x, pointer.y)) return;
+            if (!Contains(pointer.x, pointer.y))
+            {
+                if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) Close();
+                return;
+            }
 
             const std::size_t visible = VisibleRows();
             if (pointer.z != 0.0f && choices_.size() > visible)
@@ -126,7 +137,7 @@ namespace renegade::studio
 
             if (choices_.empty())
             {
-                DrawLabel("NO GOVERNED CHOICES AVAILABLE",
+                DrawLabel("NO CHOICES AVAILABLE",
                     x_ + 12.0f, rowsTop + 10.0f, 10,
                     wi::Color(222, 91, 29, 255), cmd);
             }
@@ -195,6 +206,7 @@ namespace renegade::studio
         std::function<void(const std::string&)> selected_;
         std::size_t scroll_ = 0;
         bool open_ = false;
+        bool openingPointerDown_ = false;
         float x_ = 0.0f;
         float y_ = 0.0f;
         float width_ = 320.0f;

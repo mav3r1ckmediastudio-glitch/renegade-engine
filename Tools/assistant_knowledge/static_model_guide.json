@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "id": "static-model-import",
+  "title": "Import and place a static GLB or FBX model",
+  "status": "source_checked_prior_owner_checkpoint_native_service_pass",
+  "manual_path": "docs/MODEL_IMPORTER_REBUILD.md",
+  "end_to_end_acceptance": {
+    "status": "source_checked_prior_owner_checkpoint_native_service_pass",
+    "date": "2026-10-14",
+    "receipt": "Tools/assistant_knowledge/STATIC_IMPORT_VERIFICATION.md",
+    "steps_confirmed": [
+      "Generated static GLB native proof passed preview, commit, placement, Undo/Redo and scene save/reopen",
+      "Generated textured static FBX native proof passed texture rejection, retained reimport and placement/save/reopen"
+    ],
+    "publication_approved": false,
+    "limits": [
+      "Current source inspected; existing Release proof executable, not rebuilt this turn",
+      "Generated fixtures plus historical native UI evidence; no fresh mouse-driven beginner walkthrough",
+      "Character/animation importing and universal FBX compatibility are separate"
+    ]
+  },
+  "facts": [
+    {
+      "id": "native-picker",
+      "sources": [
+        {
+          "path": "Studio/src/RenegadeStudioChrome.cpp",
+          "needle": "{\"IMPORT MODEL...\", true}"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "params.extensions = {\"glb\", \"fbx\"};"
+        }
+      ]
+    },
+    {
+      "id": "review",
+      "sources": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "modelImportName_.SetDescription(\"Asset name: \");"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "modelImportFolder_.SetDescription(\"Import to: \");"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "modelImportCommit_.SetText(\"IMPORT ASSET\");"
+        }
+      ]
+    },
+    {
+      "id": "organisation",
+      "sources": [
+        {
+          "path": "docs/MODEL_IMPORT_DESTINATIONS.md",
+          "needle": "Optional comma-separated Tags are searchable labels; they never route files."
+        },
+        {
+          "path": "docs/MODEL_IMPORT_DESTINATIONS.md",
+          "needle": "A Weapon role does not convert"
+        }
+      ]
+    },
+    {
+      "id": "reveal",
+      "sources": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "could not be revealed. Do not import it again."
+        }
+      ]
+    },
+    {
+      "id": "native-proof",
+      "sources": [
+        {
+          "path": "Tests/ModelImporterRebuildGraphicsProof.cpp",
+          "needle": "MODEL REBUILD PROOF PASS: placement/Undo/Redo/save/reopen"
+        },
+        {
+          "path": "docs/MODEL_IMPORTER_REBUILD.md",
+          "needle": "native cancel, rotation, naming, thumbnail commit/card, drag placement, Undo/Redo"
+        }
+      ]
+    }
+  ]
+}

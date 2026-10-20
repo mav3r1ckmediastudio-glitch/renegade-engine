@@ -33,11 +33,16 @@ namespace fs = std::filesystem;
 using namespace renegade::bridge;
 static LRESULT CALLBACK WindowProc(HWND w, UINT m, WPARAM a, LPARAM b)
 { return DefWindowProcW(w,m,a,b); }
-static bool Capture(wi::scene::Scene& scene, const fs::path& file, bool firstPerson=false, bool normalized=false, bool allowEmpty=false)
+static bool Capture(wi::scene::Scene& scene, const fs::path& file, bool firstPerson=false, bool normalized=false, bool allowEmpty=false, float diagnosticZoom=1.0f)
 {
+    const bool traceStage3=file.generic_u8string().find("stage3")!=std::string::npos;
+    if(traceStage3)std::cerr<<"S3 CAPTURE ENTER"<<std::endl;
     renegade::studio::ModelImportPreview preview;
+    if(traceStage3)std::cerr<<"S3 CAPTURE PREVIEW CONSTRUCTED"<<std::endl;
     std::string error;
     if (!preview.Prepare(scene,error)) { std::cerr << error << '\n'; return false; }
+    if(traceStage3)std::cerr<<"S3 CAPTURE PREPARE COMPLETE"<<std::endl;
+    if(diagnosticZoom!=1.0f)preview.Zoom(diagnosticZoom);
     if(firstPerson) {
         preview.camera->CreatePerspective(512,320,0.005f,10.0f,XMConvertToRadians(80.0f));
         preview.camera->TransformCamera(XMMatrixInverse(nullptr,XMMatrixLookAtLH(
@@ -56,8 +61,16 @@ static bool Capture(wi::scene::Scene& scene, const fs::path& file, bool firstPer
     bool visible=false;
     for (int frame=0; frame<3000; ++frame)
     {
+        if(traceStage3 && frame<2)std::cerr<<"S3 CAPTURE LOOP "<<frame<<std::endl;
         wi::eventhandler::FireEvent(wi::eventhandler::EVENT_THREAD_SAFE_POINT,0);
-        preview.PreUpdate(); preview.Update(1.0f/60); preview.PreRender(); preview.Render();
+        preview.PreUpdate();
+        if(traceStage3 && frame<2)std::cerr<<"S3 PREUPDATE"<<std::endl;
+        preview.Update(1.0f/60);
+        if(traceStage3 && frame<2)std::cerr<<"S3 UPDATE"<<std::endl;
+        preview.PreRender();
+        if(traceStage3 && frame<2)std::cerr<<"S3 PRERENDER"<<std::endl;
+        preview.Render();
+        if(traceStage3 && frame<2)std::cerr<<"S3 RENDER"<<std::endl;
         wi::graphics::GetDevice()->SubmitCommandLists();
         wi::renderer::UpdateGPUSuballocator(); Sleep(10);
         if(!preview.IsReady())continue;
@@ -1255,6 +1268,24 @@ static bool BowMountSweepProof(const fs::path& input,const fs::path& output)
     return idx>0;
 }
 
+#include "CrossbowAssetGraphicsProof.h"
+#include "NewCrossbowFullPackProof.h"
+#include "NewCrossbowRuntimeProof.h"
+#include "NewCrossbowSplitPackProof.h"
+#include "NewCrossbowMountSweep.h"
+#include "MagicAssetGraphicsProof.h"
+
+#include "LightningStormGraphicsProof.h"
+#include "LightningBoltPrototype.h"
+#include "LightningStrikeStage2.h"
+#include "LightningColumnGraphicsProof.h"
+#include "LightningNaturalReferenceProof.h"
+#include "LightningR3VisualProof.h"
+#include "LightningScorchGraphicsProof.h"
+#include "ThrownGrenadeAssetProof.h"
+#include "ThrownGrenadePlayableProof.h"
+#include "ThrownGrenadeExplosionGraphicsProof.h"
+
 int main(int argc,char** argv)
 {
     if(argc<3 || argc>4) { std::cerr<<"Usage: proof pack-folder output-folder\n"; return 2; }
@@ -1270,6 +1301,44 @@ int main(int argc,char** argv)
     wi::initializer::InitializeComponentsImmediate();
     struct Drain { ~Drain(){ while(wi::renderer::IsPipelineCreationActive()) Sleep(10);
         wi::graphics::GetDevice()->WaitForGPU(); } } drain;
+    if(argc==4 && std::string(argv[3])=="--lightning-bolt-research") return StandaloneLightningBoltProof(output)?0:43;
+    if(argc==4 && std::string(argv[3])=="--lightning-stage2") return StandaloneLightningStage2Proof(output)?0:44;
+    if(argc==4 && std::string(argv[3])=="--lightning-natural-reference") return StandaloneNaturalLightningProof(output)?0:47;
+    if(argc==4 && std::string(argv[3])=="--lightning-r3-visual") return StandaloneLightningR3VisualProof(output)?0:49;
+    if(argc==4 && std::string(argv[3])=="--lightning-scorch-proof") return StandaloneLightningScorchGraphicsProof(output)?0:50;
+    if(argc==4 && std::string(argv[3])=="--thrown-grenade-flight-texture") {
+        nlohmann::json proof;
+        {std::ifstream f(input/"thrown-grenade-reference.json");
+            if(!f || !(f>>proof))return 55;}
+        const auto id=proof.at("grenadeId").get<std::string>();
+        const auto projectId=proof.at("projectId").get<std::string>();
+        auto placed=CreatorAssetWorkflowService().PrepareModelPlacement(
+            input.generic_u8string(),projectId,id);
+        if(!placed.IsReady()){
+            std::cerr<<"GRENADE FLIGHT TEXTURE IMPORT "<<placed.Result().error<<"\n";
+            return 56;
+        }
+        return Capture(*placed.PeekMutableScene(),output/"grenade-flight-textured.png")?0:57;
+    }
+    if(argc==4 && std::string(argv[3])=="--thrown-grenade-explosion-preview") return ThrownGrenadeExplosionGraphicsProof(output)?0:54;
+    if(argc==4 && std::string(argv[3])=="--thrown-grenade-assets") return ThrownGrenadeAssetProof(input,output)?0:51;
+    if(argc==4 && std::string(argv[3])=="--thrown-grenade-playable") return ThrownGrenadePlayableProof(input,output)?0:52;
+    if(argc==4 && std::string(argv[3])=="--thrown-grenade-camera") return ThrownGrenadeCameraDiagnostic(input,output)?0:53;
+    if(argc==4 && std::string(argv[3])=="--lightning-column") return LightningColumnProof(input,output)?0:46;
+    if(argc==4 && std::string(argv[3])=="--magic-storm-stage3") return MagicStormPlayableProof(input,output,true)?0:45;
+    if(argc==4 && std::string(argv[3])=="--magic-storm-natural") return MagicStormPlayableProof(input,output,false,true)?0:48;
+    if(argc==4 && std::string(argv[3])=="--magic-storm") return MagicStormPlayableProof(input,output)?0:42;
+    if(argc==4 && std::string(argv[3])=="--magic-channel") return MagicChannelPlayableProof(input,output)?0:41;
+    if(argc==4 && std::string(argv[3])=="--magic-playable") return MagicPlayableProof(input,output)?0:40;
+    if(argc==4 && std::string(argv[3])=="--magic-assets") return MagicAssetProof(input,output)?0:38;
+    if(argc==4 && std::string(argv[3])=="--magic-reopen") return MagicAssetReopenProof(input,output)?0:39;
+    if(argc==4 && std::string(argv[3])=="--crossbow-new-sweep") return NewCrossbowMountSweep(input,output)?0:60;
+    if(argc==4 && std::string(argv[3])=="--crossbow-new-split") return NewCrossbowSplitPackProof(input,output)?0:59;
+    if(argc==4 && std::string(argv[3])=="--crossbow-new-runtime") return NewCrossbowRuntimeProof(input,output)?0:61;
+    if(argc==4 && std::string(argv[3])=="--crossbow-new-full-pack") return NewCrossbowFullPackProof(input,output)?0:58;
+    if(argc==4 && std::string(argv[3])=="--crossbow-stages") return CrossbowStagedRuntimeProof(input,output)?0:37;
+    if(argc==4 && std::string(argv[3])=="--crossbow-reopen") return CrossbowReopenProof(input,output)?0:36;
+    if(argc==4 && std::string(argv[3])=="--crossbow-assets") return CrossbowAssetProof(input,output)?0:35;
     if(argc==4 && std::string(argv[3])=="--bow-mount-sweep") return BowMountSweepProof(input,output)?0:34;
     if(argc==4 && std::string(argv[3])=="--sword-playable") return SwordShieldPlayableProof(input,output)?0:24;
     if(argc==4 && std::string(argv[3])=="--sword-layers") return SwordShieldLayerProof(input,output)?0:23;

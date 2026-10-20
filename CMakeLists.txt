@@ -289,6 +289,24 @@ if(WIN32)
         RenegadeNightSkyTests
         RenegadeDependencyProcessFixture
         RenegadeAssetRegistryProcessFixture
+        # UI and HUD tests are registered in CTest and must also be built by CI.
+        RenegadeScreenEditorCanvasCameraTests
+        RenegadeScreenUsageTests
+        RenegadeGameplayAttributeProfileTests
+        RenegadeScreenBindingTests
+        RenegadeScreenProgressTests
+        RenegadeScreenBindingFrameTests
+        RenegadeRuntimeUiGameplaySnapshotTests
+        RenegadeRuntimeScreenBindingTests
+        RenegadeScreenCompositionTests
+        RenegadeRuntimeUiCompositionTests
+        RenegadeScreenCompositionPersistenceTests
+        RenegadeHudSelectionTests
+        RenegadeScreenBindingTargetTests
+        RenegadeHudReferencePersistenceTests
+        RenegadeScreenLibraryTests
+        RenegadeGameplayAttributeDocumentTests
+        RenegadeScreenAuthoringCompletionTests
     )
     set_target_properties(RenegadeStudioCI PROPERTIES FOLDER "Renegade/CI")
 endif()

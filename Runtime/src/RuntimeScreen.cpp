@@ -1,4 +1,5 @@
 #include "RuntimeScreen.h"
+#include <cmath>
 
 #include <algorithm>
 #include <cmath>
@@ -16,6 +17,11 @@ namespace renegade::runtime
         bridge::ScreenDocument document,
         std::string& error)
     {
+        if (!document.enabledInGame)
+        {
+            error = "The requested Screen is disabled in game.";
+            return false;
+        }
         if (!bridge::ValidateScreenDocument(
                 document,
                 document.envelope.projectId,
@@ -24,7 +30,13 @@ namespace renegade::runtime
             return false;
         }
 
+        authoredDocument_ = document;
         document_ = std::move(document);
+        stateOverrides_.clear();
+        bindingSnapshot_ = {};
+        bindingContext_ = {};
+        bindingFrame_ = {};
+        hasBindingSnapshot_ = false;
         widgetIndex_.clear();
         for (std::size_t index = 0; index < document_.widgets.size(); ++index)
         {
@@ -32,7 +44,10 @@ namespace renegade::runtime
         }
         focusIndex_ = NoFocus;
         initialized_ = true;
-        RepairFocus();
+        bridge::ScreenBindingFrame initialFrame;
+        if (!bridge::BuildScreenBindingFrame(authoredDocument_, {}, {}, initialFrame, error))
+            return false;
+        ApplyResolvedFrame(std::move(initialFrame));
         error.clear();
         return true;
     }
@@ -50,12 +65,105 @@ namespace renegade::runtime
             return false;
         }
 
-        auto& widget = document_.widgets[found->second];
-        widget.visible = visible;
-        widget.enabled = enabled;
-        RepairFocus();
+        const auto& current = document_.widgets[found->second];
+        for (const auto& binding : authoredDocument_.widgets[found->second].bindings)
+        {
+            if ((binding.property == bridge::ScreenBindingProperty::Visible && visible != current.visible) ||
+                (binding.property == bridge::ScreenBindingProperty::Enabled && enabled != current.enabled))
+            { error = "Runtime state is controlled by an explicit binding."; return false; }
+        }
+        auto nextOverrides = stateOverrides_;
+        nextOverrides[widgetId] = {visible, enabled};
+        bridge::ScreenBindingFrame frame;
+        if (!bridge::BuildScreenBindingFrame(authoredDocument_,bindingSnapshot_,bindingContext_,
+                frame,error,&nextOverrides)) return false;
+        stateOverrides_ = std::move(nextOverrides);
+        ApplyResolvedFrame(std::move(frame));
         error.clear();
         return true;
+    }
+
+    void RuntimeScreenController::ApplyResolvedFrame(bridge::ScreenBindingFrame frame)
+    {
+        for (const auto& value : frame.widgets)
+        {
+            const auto found = widgetIndex_.find(value.id);
+            if (found == widgetIndex_.end()) continue;
+            auto& widget = document_.widgets[found->second];
+            widget.text = value.text;
+            widget.fill = value.fill;
+            widget.visible = value.visible;
+            widget.enabled = value.enabled;
+        }
+        bindingFrame_ = std::move(frame);
+        RepairFocus();
+    }
+
+    bool RuntimeScreenController::ApplyBindings(
+        const bridge::ScreenBindingSnapshot& snapshot,
+        const bridge::ScreenBindingContext& context, std::string& error)
+    {
+        if (!initialized_ || context.session == 0 || snapshot.session != context.session ||
+            (hasBindingSnapshot_ && (context.session < bindingContext_.session ||
+                (context.session == bindingContext_.session && snapshot.revision <= bindingSnapshot_.revision))))
+        { error = "Runtime UI rejected a missing, stale or repeated binding snapshot."; return false; }
+        bridge::ScreenBindingFrame frame;
+        if (!bridge::BuildScreenBindingFrame(authoredDocument_,snapshot,context,frame,error,&stateOverrides_))
+            return false;
+        bindingSnapshot_ = snapshot;
+        bindingContext_ = context;
+        hasBindingSnapshot_ = true;
+        ApplyResolvedFrame(std::move(frame));
+        error.clear();
+        return true;
+    }
+
+    bool RuntimeScreenController::SetControlValue(const std::string& id,
+        bridge::GameplayAttributeValue value,std::string& error)
+    {
+        const auto it=widgetIndex_.find(id);
+        if(!initialized_||it==widgetIndex_.end()){error="Local UI value target is absent.";return false;}
+        auto& widget=document_.widgets[it->second];
+        if(!bridge::IsScreenValueControl(widget.kind)||!widget.visible||!widget.enabled)
+        {error="Local UI value target is not an available control.";return false;}
+        auto candidate=widget.control;candidate.value=std::move(value);
+        if(!bridge::ValidateScreenControl(bridge::ScreenControlKindFor(widget.kind),candidate,error))return false;
+        if(widget.control.value==candidate.value){error.clear();return true;}
+        auto next=document_;next.widgets[it->second].control=std::move(candidate);
+        bridge::ScreenInteractionPlan plan;
+        if(!bridge::BuildScreenInteractionPlan(next,id,bridge::ScreenInteractionEvent::ValueChanged,plan,error))return false;
+        return CommitInteractionPlan(std::move(plan),error);
+    }
+
+    bool RuntimeScreenController::CommitInteractionPlan(bridge::ScreenInteractionPlan plan,std::string& error)
+    {
+        auto nextOverrides=stateOverrides_;
+        for(std::size_t i=0;i<document_.widgets.size();++i)
+        {
+            const auto& before=document_.widgets[i];const auto& after=plan.document.widgets[i];
+            if(before.visible!=after.visible||before.enabled!=after.enabled)
+                nextOverrides[after.id]={after.visible,after.enabled};
+        }
+        bridge::ScreenBindingFrame frame;
+        if(!bridge::BuildScreenBindingFrame(authoredDocument_,bindingSnapshot_,bindingContext_,frame,error,&nextOverrides))return false;
+        // Validate final focus against the production hierarchy/binding result.
+        if(!plan.focusWidgetId.empty())
+        {
+            const auto found=std::find_if(frame.widgets.begin(),frame.widgets.end(),[&](const auto& w){return w.id==plan.focusWidgetId;});
+            if(found==frame.widgets.end()||!found->visible||!found->enabled)
+            {error="UI action focus target is unavailable after binding evaluation.";return false;}
+        }
+        document_=std::move(plan.document);stateOverrides_=std::move(nextOverrides);
+        ApplyResolvedFrame(std::move(frame));
+        if(!plan.focusWidgetId.empty())(void)FocusWidget(plan.focusWidgetId);
+        error.clear();return true;
+    }
+    bool RuntimeScreenController::ExecuteInteractions(const std::string& id,bridge::ScreenInteractionEvent event,std::string& error)
+    {
+        if(!initialized_){error="UI interaction has no active Screen instance.";return false;}
+        bridge::ScreenInteractionPlan plan;
+        if(!bridge::BuildScreenInteractionPlan(document_,id,event,plan,error))return false;
+        return CommitInteractionPlan(std::move(plan),error);
     }
 
     bool RuntimeScreenController::FocusNext() noexcept
@@ -208,23 +316,40 @@ namespace renegade::runtime
     bool RuntimeScreenController::IsFocusable(
         const bridge::ScreenWidget& widget) const noexcept
     {
-        return widget.kind == bridge::ScreenWidgetKind::Button &&
-            widget.visible && widget.enabled;
+        if(!bridge::IsScreenInteractive(widget.kind)||!widget.visible||!widget.enabled)
+            return false;
+        // The renderer hides descendants of a hidden Group. Navigation must
+        // use the same effective hierarchy visibility, not just the child's
+        // local flag; a hidden control must never retain keyboard activation.
+        auto parent=widget.parentId;
+        auto remaining=document_.widgets.size();
+        while(!parent.empty()&&remaining--)
+        {
+            const auto* ancestor=FindWidget(parent);
+            if(!ancestor||!ancestor->visible)return false;
+            parent=ancestor->parentId;
+        }
+        return parent.empty();
     }
 
     void RuntimeScreenController::RepairFocus() noexcept
     {
-        if (focusIndex_ != NoFocus &&
-            focusIndex_ < document_.focusOrder.size())
+        if(focusIndex_!=NoFocus&&focusIndex_<document_.focusOrder.size())
         {
-            const auto* current = FindWidget(document_.focusOrder[focusIndex_]);
-            if (current != nullptr && IsFocusable(*current))
+            const auto* current=FindWidget(document_.focusOrder[focusIndex_]);
+            if(current&&IsFocusable(*current))return;
+            // Prefer the next *available* control after the one hidden or
+            // disabled, preserving user orientation across dynamic UI edits.
+            const auto old=focusIndex_,count=document_.focusOrder.size();
+            for(std::size_t offset=1;offset<count;++offset)
             {
-                return;
+                const auto candidate=(old+offset)%count;
+                const auto* widget=FindWidget(document_.focusOrder[candidate]);
+                if(widget&&IsFocusable(*widget))
+                {focusIndex_=candidate;return;}
             }
         }
-
-        focusIndex_ = NoFocus;
+        focusIndex_=NoFocus;
         (void)FocusNext();
     }
 
@@ -237,6 +362,11 @@ namespace renegade::runtime
         std::string& error)
     {
         Reset(renderPath);
+        if (!document.enabledInGame)
+        {
+            error.clear();
+            return true;
+        }
         if (!requestSink)
         {
             error = "Runtime screen presenter requires an action request sink.";
@@ -255,27 +385,74 @@ namespace renegade::runtime
                         (void)controller_->FocusWidget(widgetId);
                     QueueWidget(widgetId, RuntimeInputSource::Mouse);
                 },
-                error))
+                error,
+                [this](const bridge::StableId& id,const bridge::GameplayAttributeValue& value)
+                {
+                    std::string error;
+                    if(!controller_||!controller_->SetControlValue(id,value,error))return false;
+                    RefreshVisualFocus(*controller_);
+                    return true;
+                }))
         {
             controller_ = nullptr;
             requestSink_ = {};
             return false;
         }
+        animationTime_=0;presentationVisible_=true;
+        transitionPolicy_=document.transitions;
+        if(!transition_.Start(transitionPolicy_,reducedMotion_,error))
+        {Reset(renderPath);return false;}
+        renderer_.SetTransitionFrame(transition_.Frame());
+        renderer_.SetInputEnabled(requestedInput_&&transition_.AcceptsInput());
         RefreshVisualFocus(controller);
+        renderer_.ApplyLayout(renderPath);
         error.clear();
         return true;
     }
 
     void RuntimeScreenPresenter::UpdateInput(
         wi::RenderPath2D& renderPath,
-        RuntimeScreenController& controller)
+        RuntimeScreenController& controller, const bool navigationEnabled, const float uiDeltaTime)
     {
         if (!renderer_.IsLoaded())
         {
             return;
         }
 
+        if(presentationVisible_&&std::isfinite(uiDeltaTime)&&uiDeltaTime>0)
+        {animationTime_+=uiDeltaTime;transition_.Tick(uiDeltaTime,reducedMotion_);}
+        renderer_.SetTransitionFrame(transition_.Frame());
+        renderer_.SetInputEnabled(requestedInput_&&transition_.AcceptsInput());
+        renderer_.SetAnimationPreview({true,false,reducedMotion_,animationTime_});
         renderer_.ApplyLayout(renderPath);
+        if (!renderer_.IsInputEnabled()) return;
+        if(!navigationEnabled)
+        {ApplyPointerFocus(controller);RefreshVisualFocus(controller);return;}
+
+        if(renderer_.ConsumesTextInput()){RefreshVisualFocus(controller);return;}
+        // Back is an explicitly authored, eligible Button action. Flow still
+        // owns its destination; no guessed history or second navigation stack.
+        const bool keyboardBack=wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE);
+        const bool gamepadBack=wi::input::Press(wi::input::GAMEPAD_BUTTON_XBOX_B);
+        if(keyboardBack||gamepadBack)
+        {
+            for(const auto& widget:controller.Document().widgets)
+                if(widget.kind==bridge::ScreenWidgetKind::Button&&widget.actionId=="ui.back"&&
+                    renderer_.IsWidgetInteractive(widget.id))
+                {QueueWidget(widget.id,gamepadBack?RuntimeInputSource::Gamepad:RuntimeInputSource::Keyboard);break;}
+            RefreshVisualFocus(controller);return;
+        }
+        const auto* valueControl=controller.FocusedWidget();
+        const bool adjustable=valueControl&&(valueControl->kind==bridge::ScreenWidgetKind::Slider||
+            valueControl->kind==bridge::ScreenWidgetKind::Selector);
+        const bool left=wi::input::Press(wi::input::KEYBOARD_BUTTON_LEFT)||
+            wi::input::Press(wi::input::GAMEPAD_BUTTON_LEFT)||
+            wi::input::Press(wi::input::GAMEPAD_ANALOG_THUMBSTICK_L_AS_BUTTON_LEFT);
+        const bool right=wi::input::Press(wi::input::KEYBOARD_BUTTON_RIGHT)||
+            wi::input::Press(wi::input::GAMEPAD_BUTTON_RIGHT)||
+            wi::input::Press(wi::input::GAMEPAD_ANALOG_THUMBSTICK_L_AS_BUTTON_RIGHT);
+        if(adjustable&&(left||right))
+        {(void)renderer_.AdjustControl(valueControl->id,right?1:-1);RefreshVisualFocus(controller);return;}
 
         const bool gamepadPrevious =
             wi::input::Press(wi::input::GAMEPAD_BUTTON_UP) ||
@@ -308,13 +485,15 @@ namespace renegade::runtime
         }
         else
         {
+            const bool reverseTab=wi::input::Press(wi::input::KEYBOARD_BUTTON_TAB)&&
+                (wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT)||wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT));
             const bool keyboardPrevious =
-                wi::input::Press(wi::input::KEYBOARD_BUTTON_UP) ||
+                reverseTab || wi::input::Press(wi::input::KEYBOARD_BUTTON_UP) ||
                 wi::input::Press(wi::input::KEYBOARD_BUTTON_LEFT);
             const bool keyboardNext =
                 wi::input::Press(wi::input::KEYBOARD_BUTTON_DOWN) ||
                 wi::input::Press(wi::input::KEYBOARD_BUTTON_RIGHT) ||
-                wi::input::Press(wi::input::KEYBOARD_BUTTON_TAB);
+                (wi::input::Press(wi::input::KEYBOARD_BUTTON_TAB)&&!reverseTab);
             const bool keyboardConfirm =
                 wi::input::Press(wi::input::KEYBOARD_BUTTON_ENTER) ||
                 wi::input::Press(wi::input::KEYBOARD_BUTTON_SPACE);
@@ -340,6 +519,41 @@ namespace renegade::runtime
         RefreshVisualFocus(controller);
     }
 
+    bool RuntimeScreenPresenter::BeginExit(
+        const std::vector<bridge::ScreenAnimationTrack>* overrideTracks,std::string& error)
+    {
+        if(!transition_.BeginExit(overrideTracks,reducedMotion_,error))return false;
+        renderer_.SetInputEnabled(false);
+        renderer_.SetTransitionFrame(transition_.Frame());
+        return true;
+    }
+    bool RuntimeScreenPresenter::OverrideEnterTransition(
+        const std::vector<bridge::ScreenAnimationTrack>& tracks,wi::RenderPath2D& renderPath,std::string& error)
+    {
+        auto policy=transitionPolicy_;policy.enter=tracks;
+        if(!transition_.Start(std::move(policy),reducedMotion_,error))return false;
+        renderer_.SetTransitionFrame(transition_.Frame());
+        renderer_.SetInputEnabled(requestedInput_&&transition_.AcceptsInput());
+        renderer_.ApplyLayout(renderPath);return true;
+    }
+    void RuntimeScreenPresenter::CancelExit() noexcept
+    {
+        transition_.CancelExit();renderer_.SetTransitionFrame({});
+        renderer_.SetInputEnabled(requestedInput_);
+    }
+
+    void RuntimeScreenPresenter::SetPresentationVisible(const bool visible) noexcept
+    {presentationVisible_=visible;renderer_.SetPresentationVisible(visible);}
+    void RuntimeScreenPresenter::AttachPresentation(wi::RenderPath2D& renderPath)
+    {renderer_.AttachPresentation(renderPath);}
+    void RuntimeScreenPresenter::DetachPresentation(wi::RenderPath2D& renderPath) noexcept
+    {renderer_.DetachPresentation(renderPath);}
+
+    void RuntimeScreenPresenter::SetInputEnabled(const bool enabled) noexcept
+    {
+        requestedInput_=enabled;renderer_.SetInputEnabled(enabled&&transition_.AcceptsInput());
+    }
+
     void RuntimeScreenPresenter::RefreshVisualFocus(
         const RuntimeScreenController& controller)
     {
@@ -347,7 +561,13 @@ namespace renegade::runtime
         renderer_.SetFocusedWidget(
             focused == nullptr ? bridge::StableId{} : focused->id);
         for (const auto& widget : controller.Document().widgets)
+        {
             renderer_.SetWidgetState(widget.id, widget.visible, widget.enabled);
+            renderer_.SetWidgetFill(widget.id,widget.fill);
+            renderer_.SetWidgetText(widget.id,widget.text);
+            if(bridge::IsScreenValueControl(widget.kind))
+                (void)renderer_.SetWidgetControlValue(widget.id,widget.control.value);
+        }
     }
 
     void RuntimeScreenPresenter::Reset(wi::RenderPath2D& renderPath) noexcept
@@ -356,6 +576,8 @@ namespace renegade::runtime
         requestSink_ = {};
         controller_ = nullptr;
         nextSequence_ = 1;
+        animationTime_=0;presentationVisible_=true;requestedInput_=true;
+        transition_.Reset();transitionPolicy_={};
     }
 
     bool RuntimeScreenPresenter::IsLoaded() const noexcept
@@ -365,11 +587,15 @@ namespace renegade::runtime
 
     void RuntimeScreenPresenter::QueueFocused(const RuntimeInputSource source)
     {
-        if (controller_ == nullptr || !requestSink_)
+        if (controller_ == nullptr || !requestSink_ || !renderer_.IsInputEnabled())
         {
             return;
         }
 
+        const auto* focused=controller_->FocusedWidget();
+        if(!focused||!renderer_.IsWidgetInteractive(focused->id))return;
+        if(bridge::IsScreenValueControl(focused->kind))
+        {(void)renderer_.ActivateControl(focused->id);return;}
         RuntimeActionRequest request;
         std::string error;
         if (controller_->MakeFocusedActionRequest(
@@ -378,6 +604,11 @@ namespace renegade::runtime
                 request,
                 error))
         {
+            if(!controller_->ExecuteInteractions(request.widgetId,bridge::ScreenInteractionEvent::Activate,error))
+            {wi::backlog::post("UI interaction rejected: "+error,wi::backlog::LogLevel::Warning);return;}
+            RefreshVisualFocus(*controller_);
+            if(const auto* widget=controller_->FindWidget(request.widgetId);widget&&widget->localOnly)
+                return; // Atomic local UI actions succeeded; do not dispatch Flow.
             requestSink_(std::move(request));
         }
     }
@@ -386,13 +617,14 @@ namespace renegade::runtime
         const std::string& widgetId,
         const RuntimeInputSource source)
     {
-        if (controller_ == nullptr || !requestSink_)
+        if (controller_ == nullptr || !requestSink_ || !renderer_.IsInputEnabled())
         {
             return;
         }
 
         RuntimeActionRequest request;
         std::string error;
+        if(!renderer_.IsWidgetInteractive(widgetId))return;
         if (controller_->MakeActionRequest(
                 widgetId,
                 source,
@@ -400,6 +632,11 @@ namespace renegade::runtime
                 request,
                 error))
         {
+            if(!controller_->ExecuteInteractions(request.widgetId,bridge::ScreenInteractionEvent::Activate,error))
+            {wi::backlog::post("UI interaction rejected: "+error,wi::backlog::LogLevel::Warning);return;}
+            RefreshVisualFocus(*controller_);
+            if(const auto* widget=controller_->FindWidget(request.widgetId);widget&&widget->localOnly)
+                return; // Atomic local UI actions succeeded; do not dispatch Flow.
             requestSink_(std::move(request));
         }
     }

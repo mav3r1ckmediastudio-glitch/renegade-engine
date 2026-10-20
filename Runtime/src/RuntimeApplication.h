@@ -1,3 +1,4 @@
+#include "RuntimeGameplayAttributeWorld.h"
 #pragma once
 
 #include <WickedEngine.h>
@@ -16,8 +17,22 @@
 #include "RuntimeEquipmentLoadout.h"
 #include "RuntimeProjectileSession.h"
 #include "RuntimeProjectileVisuals.h"
+#include "RuntimeBurningStatus.h"
+#include "RuntimeChannelSession.h"
+#include "RuntimeChannelVisual.h"
+#include "RuntimeChannelScorchTrail.h"
+#include "RuntimeLightningStorm.h"
+#include "RuntimeLightningColumn.h"
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"
+#include "RuntimeUiGameplaySnapshot.h"
+#include "RuntimeUiComposition.h"
+#include "RuntimeUiTimingWindow.h"
+#include "renegade/bridge/ScreenPerformanceBudget.h"
+#include "RuntimeUiAccessibilityPreferences.h"
+#include "renegade/bridge/HudContextEventRules.h"
+#include "RuntimeHudSession.h"
+#include "renegade/bridge/HudSelection.h"
 #include "RuntimeScriptRuntime.h"
 #include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/ImpactAudioService.h"
@@ -34,6 +49,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <utility>
 
 namespace renegade::runtime
 {
@@ -44,12 +60,16 @@ namespace renegade::runtime
             bridge::SceneService& scenes,
             std::string projectRoot) noexcept;
         void SetPaused(bool paused) noexcept;
+        void SetPauseOverlayVisible(bool visible) noexcept { pauseOverlayVisible_=visible; }
+        void SetInterfaceDeltaTime(float dt) noexcept;
         void SetInteractionPrompt(std::string prompt) noexcept;
         void SetMeleePrompt(std::string prompt) { meleePrompt_=std::move(prompt); }
         void SetProjectileAim(bool enabled) { projectileAim_=enabled; }
         void SetProjectileContacts(std::vector<XMFLOAT2> contacts) { projectileContacts_=std::move(contacts); }
         void ConfirmTargetHit() { hitConfirmSeconds_=0.12f; }
         void ClearHitConfirmation() { hitConfirmSeconds_=0; }
+        void SetHeldFireballParticles(const std::array<wi::ecs::Entity,4>& entities) { heldFireballParticles_=entities; }
+        void RenderTransparents(wi::graphics::CommandList cmd) const override;
         void Load() override;
         void Update(float dt) override;
         void Compose(wi::graphics::CommandList cmd) const override;
@@ -57,11 +77,14 @@ namespace renegade::runtime
     private:
         void SyncRenderSettings(bool resizeBuffersForMSAA);
 
+        std::array<wi::ecs::Entity,4> heldFireballParticles_{};
         bridge::SceneService* scenes_ = nullptr;
         std::string projectRoot_;
         bridge::RenderSettingsState renderSettings_;
         bool renderSettingsInitialized_ = false;
         bool paused_ = false;
+        bool pauseOverlayVisible_ = false;
+        float interfaceDeltaTime_ = 0;
         std::string interactionPrompt_;
         std::string meleePrompt_;
         bool projectileAim_ = false;
@@ -75,6 +98,10 @@ namespace renegade::runtime
     public:
         void SetBootstrapResult(RuntimeBootstrapResult result);
         void SetSmokeOptions(bool autoPlay, bool exitOnComplete) noexcept;
+        [[nodiscard]] bool ConfigureUiAccessibilityPreferences(std::string path,std::string& error);
+        [[nodiscard]] bool ChangeReducedMotion(bool enabled,std::string& error);
+        [[nodiscard]] bool ChangeUiAccessibility(const RuntimeUiAccessibilityPreferences& settings,std::string& error);
+        [[nodiscard]] bool ReducedMotion() const noexcept {return uiAccessibility_.reducedMotion;}
         void SetGraphicsRuntimeEvidence(
             std::string actualBackend,
             std::string capability);
@@ -93,10 +120,19 @@ namespace renegade::runtime
         [[nodiscard]] bool LoadStartupScreen(std::string& error);
         [[nodiscard]] bool LoadCurrentFlowScreen(std::string& error);
         [[nodiscard]] bool LoadGameplayInput(std::string& error);
+        [[nodiscard]] bool LoadGameplayAttributes(std::string& error);
+        void UpdateGameplayAttributes(float dt);
         [[nodiscard]] bool ResetPlaySession(std::string& error);
         void SetPaused(bool paused) noexcept;
+        void RefreshEffectivePause() noexcept;
+        void RefreshUiComposition();
+        void SyncLevelHud();
+        void OnGovernedHudGameplayEvent(const bridge::GameplayEvent& event);
+        void ProcessHudActions();
         void QueueAction(RuntimeActionRequest request);
         void ProcessPendingActions();
+        void CancelScreenExit();
+        bool LoadPrimaryScreenDocument(const bridge::ScreenDocument& document,std::string& error);
         void RecordAction(const RuntimeActionResult& result);
         void SyncPlayerForScene();
         void UpdatePlayerProjectiles(float dt);
@@ -106,15 +142,56 @@ namespace renegade::runtime
         void ReportCreatorScriptDiagnostics();
 
         bridge::SceneService scenes_;
+        void RefreshUiBindingSources();
+        void UpdateUiBindings();
         void UpdateLiveDiagnostics();
         std::uint64_t lastDiagnosticSampleMs_ = 0;
         std::uint64_t lastDiagnosticProjectileLaunched_ = 0;
         size_t lastDiagnosticProjectilePending_ = 0;
         bridge::DiagnosticService diagnosticService_;
+        RuntimeUiTimingWindow uiBindingCpuTiming_;
+        bridge::ScreenPerformanceBudget uiBudget_;
+        std::string uiBudgetDiagnostic_;
         RuntimeFlowController flow_;
         RuntimeRenderPath renderer_;
-        RuntimeScreenController screenController_;
-        RuntimeScreenPresenter screenPresenter_;
+        // Heap-stable instances allow transactional prepare/commit without
+        // moving native callback targets or releasing the working source early.
+        std::unique_ptr<RuntimeScreenController> screenController_=std::make_unique<RuntimeScreenController>();
+        std::unique_ptr<RuntimeScreenPresenter> screenPresenter_=std::make_unique<RuntimeScreenPresenter>();
+        std::optional<RuntimeActionRequest> pendingScreenExit_;
+        std::optional<std::vector<bridge::ScreenAnimationTrack>> pendingEnterOverride_;
+        RuntimeUiComposition uiComposition_;
+        RuntimeUiAccessibilityPreferences uiAccessibility_;
+        std::string uiAccessibilityPath_;
+        RuntimeHudSession hudSession_;
+        struct PendingHudSwitch
+        {
+            std::uint64_t revision=0;
+            std::optional<bridge::ScreenDocument> destination;
+        };
+        std::optional<PendingHudSwitch> pendingHudSwitch_;
+        std::optional<std::uint64_t> hudFailedRevision_;
+        bool hudExitRequested_=false;
+        std::string hudTransitionError_;
+        bridge::HudSelectionController hudSelection_;
+        bridge::HudContextEventRouter hudContextEvents_;
+        std::string hudLevelKey_;
+        std::uint64_t hudLevelSession_ = 0;
+        std::uint64_t hudAppliedSelectionRevision_ = 0;
+        std::vector<std::uint64_t> uiDrawOrder_;
+        std::vector<std::pair<std::uint64_t,RuntimeActionRequest>> pendingHudActions_;
+        bool manualPauseRequested_ = false;
+        bool uiPauseRequested_ = false;
+        RuntimeGameplayAttributeWorld gameplayAttributes_;
+        std::optional<bridge::GameplayAttributeDocument> attributeDocument_;
+        std::string attributeDiagnostic_;
+        RuntimeUiSnapshotPublisher uiSnapshotPublisher_;
+        std::vector<bridge::ScreenBindingSource> uiBindingSources_;
+        std::uint64_t uiSessionIdentity_ = 0;
+        std::uint64_t uiGameplayRevision_ = 0;
+        bool uiPublisherStarted_ = false;
+        std::uint64_t uiLivePublishedMs_ = 0;
+        std::string uiBindingDiagnostic_;
         RuntimeActionDispatcher actions_;
         RuntimeScriptRuntime creatorScripts_;
         bridge::RuntimePlayerState player_;
@@ -123,6 +200,14 @@ namespace renegade::runtime
         RuntimeEquipmentLoadout playerEquipment_;
         RuntimeProjectileSession projectiles_;
         RuntimeProjectileVisuals projectileVisuals_;
+        RuntimeFireballEffect heldFireball_;
+        RuntimeBurningStatus burning_;
+        RuntimeChannelSession channel_;
+        RuntimeChannelVisual channelVisual_;
+        RuntimeChannelScorchTrail channelScorchTrail_;
+        RuntimeLightningStorm lightningStorm_;
+        RuntimeLightningColumn lightningColumnReview_;
+        bool lightningStormCastLatch_=false;
         bridge::ImpactAudioPlayer impactAudio_;
         std::vector<RuntimeEquipmentLoadout::ProjectileRequest> pendingProjectileShots_;
         bridge::PlayerControllerSettings playerSettings_;

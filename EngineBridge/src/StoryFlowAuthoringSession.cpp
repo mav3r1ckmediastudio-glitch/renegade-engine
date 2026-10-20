@@ -1,4 +1,5 @@
 #include "renegade/bridge/StoryFlowAuthoringSession.h"
+#include "renegade/bridge/AuthoringDocumentSnapshot.h"
 
 #include <algorithm>
 #include <utility>
@@ -10,36 +11,26 @@ namespace renegade::bridge
         const StableId& expectedProjectId,
         std::string& error)
     {
+        std::vector<std::uint8_t> original;
+        if (!ReadAuthoringDocumentSnapshot(filePath, original, error)) return false;
         FlowDocument document;
-        if (!ReadFlowDocument(filePath, expectedProjectId, document, error))
-        {
+        if (!ReadFlowDocument(filePath, expectedProjectId, document, error) ||
+            !MatchesAuthoringDocumentSnapshot(filePath, original, error))
             return false;
-        }
-        return Adopt(
-            std::move(document),
-            expectedProjectId,
-            filePath,
-            error);
+        if (!Adopt(std::move(document), expectedProjectId, filePath, error))
+            return false;
+        persistedBytes_ = std::move(original);
+        return true;
     }
 
     bool StoryFlowAuthoringSession::Reload(std::string& error)
     {
         if (!loaded_ || filePath_.empty())
         {
-            error = "Story Flow authoring session is not open.";
+            error = "Authoring session is not open.";
             return false;
         }
-
-        FlowDocument document;
-        if (!ReadFlowDocument(filePath_, projectId_, document, error))
-        {
-            return false;
-        }
-        return Adopt(
-            std::move(document),
-            projectId_,
-            filePath_,
-            error);
+        return Open(filePath_, projectId_, error);
     }
 
     bool StoryFlowAuthoringSession::Save(std::string& error)
@@ -49,11 +40,17 @@ namespace renegade::bridge
             error = "Story Flow authoring session is not open.";
             return false;
         }
+        if (!MatchesAuthoringDocumentSnapshot(filePath_, persistedBytes_, error))
+            return false;
         if (!WriteFlowDocument(filePath_, Document(), error))
         {
             return false;
         }
+        std::vector<std::uint8_t> committed;
+        if (!ReadAuthoringDocumentSnapshot(filePath_, committed, error)) return false;
+        persistedBytes_ = std::move(committed);
         savedHistoryIndex_ = historyIndex_;
+        persistedSnapshot_ = Document();
         error.clear();
         return true;
     }
@@ -61,11 +58,61 @@ namespace renegade::bridge
     void StoryFlowAuthoringSession::Clear() noexcept
     {
         history_.clear();
+        persistedSnapshot_ = {};
+        persistedBytes_.clear();
         historyIndex_ = 0;
         savedHistoryIndex_ = InvalidHistoryIndex;
         projectId_.clear();
         filePath_.clear();
         loaded_ = false;
+    }
+
+    bool StoryFlowAuthoringSession::SetLevelHud(const StableId& nodeId,
+        LevelHudSelection selection, std::string& error)
+    {
+        if (!loaded_)
+        {
+            error = "Story Flow authoring session is not open.";
+            return false;
+        }
+        FlowDocument candidate = Document();
+        const auto found = std::find_if(candidate.nodes.begin(), candidate.nodes.end(),
+            [&nodeId](const FlowNode& node) { return node.id == nodeId; });
+        if (found == candidate.nodes.end() || found->kind != FlowNodeKind::Level)
+        {
+            error = "HUD selection requires an existing Level node.";
+            return false;
+        }
+        if (found->levelHud.mode == selection.mode &&
+            found->levelHud.hud.has_value() == selection.hud.has_value() &&
+            (!selection.hud || (found->levelHud.hud->documentId == selection.hud->documentId &&
+                found->levelHud.hud->pathHint == selection.hud->pathHint)))
+        {
+            error.clear();
+            return true;
+        }
+        found->levelHud = std::move(selection);
+        return CommitMutation(std::move(candidate), error);
+    }
+
+    bool StoryFlowAuthoringSession::SetLevelHudContextRules(
+        const StableId& nodeId,std::vector<HudContextEventRule> rules,std::string& error)
+    {
+        if(!loaded_){error="Story Flow authoring session is not open.";return false;}
+        if(!ValidateHudContextEventRules(rules,error))return false;
+        FlowDocument candidate=Document();
+        const auto found=std::find_if(candidate.nodes.begin(),candidate.nodes.end(),
+            [&](const FlowNode& node){return node.id==nodeId;});
+        if(found==candidate.nodes.end()||found->kind!=FlowNodeKind::Level)
+        {error="Contextual HUD events require an existing Level node.";return false;}
+        if(found->hudContextRules.size()==rules.size()&&
+            std::equal(found->hudContextRules.begin(),found->hudContextRules.end(),rules.begin(),
+                [](const auto& a,const auto& b){return a.enterEvent==b.enterEvent&&
+                    a.exitEvent==b.exitEvent&&a.hud.documentId==b.hud.documentId&&
+                    a.hud.pathHint==b.hud.pathHint;}))
+        {error.clear();return true;}
+        found->hudContextRules=std::move(rules);
+        return CommitMutation(std::move(candidate),error);
     }
 
     bool StoryFlowAuthoringSession::RenameNode(
@@ -356,6 +403,7 @@ namespace renegade::bridge
 
         history_.clear();
         history_.push_back(std::move(document));
+        persistedSnapshot_ = history_.front();
         historyIndex_ = 0;
         savedHistoryIndex_ = 0;
         projectId_ = expectedProjectId;

@@ -1,4 +1,5 @@
 #pragma once
+#include "renegade/bridge/ProjectUiScaffoldService.h"
 
 #include <algorithm>
 #include <functional>
@@ -8,6 +9,7 @@
 #include <WickedEngine.h>
 
 #include "RenegadeStudioChrome.h"
+#include "StoryFlowTitleDraft.h"
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/StoryFlowScreenLifecycleService.h"
 
@@ -36,13 +38,14 @@ namespace renegade::studio
             destinationName_.SetPlaceholder("Destination name...");
             destinationName_.SetValue("");
             destinationName_.SetCancelInputEnabled(false);
+            destinationName_.SetClearOnEntry(true);
             destinationName_.OnInput([this](const wi::gui::EventArgs& args)
             {
-                nameDraft_ = args.sValue;
+                titleDraft_.Input(args.sValue);
             });
             destinationName_.OnInputAccepted([this](const wi::gui::EventArgs& args)
             {
-                nameDraft_ = args.sValue;
+                titleDraft_.Input(args.sValue);
             });
 
             screenTemplate_.Create("Story Flow Screen Template");
@@ -64,11 +67,17 @@ namespace renegade::studio
                 static_cast<int>(bridge::StoryFlowScreenTemplate::SaveLoad));
             screenTemplate_.AddItem("CREDITS",
                 static_cast<int>(bridge::StoryFlowScreenTemplate::Credits));
+            const auto& starterTemplates=bridge::ProjectUiScaffoldTemplateNames();
+            for(std::size_t index=0;index<starterTemplates.size();++index)
+                screenTemplate_.AddItem("STARTER // "+starterTemplates[index],
+                    static_cast<int>(bridge::StoryFlowScreenTemplate::ProjectScaffold)+static_cast<int>(index));
             screenTemplate_.SetSelectedWithoutCallback(1);
             screenTemplate_.OnSelect([this](const wi::gui::EventArgs& args)
             {
                 selectedTemplate_ =
                     static_cast<bridge::StoryFlowScreenTemplate>(args.userdata);
+                if (titleDraft_.UseTemplate(DefaultTitle(selectedTemplate_)))
+                    destinationName_.SetValue(titleDraft_.text);
             });
 
             create_.Create("Story Flow Create Destination");
@@ -87,11 +96,12 @@ namespace renegade::studio
             adopt_.Create("Story Flow Adopt Existing Level");
             adopt_.SetText("ADD EXISTING...");
             adopt_.SetTooltip(
-                "Choose an existing WISCENE and adopt it through the governed Level lifecycle.");
+                "Levels: choose an existing WISCENE. Screens: open the whole-project catalogue; choose OPEN or ADD TO JOURNEY.");
             adopt_.OnClick([this](const wi::gui::EventArgs&)
             {
                 if (mode_ == Mode::Level && adoptLevel_)
                     adoptLevel_(LiveName());
+                else if (mode_ == Mode::Screen && adoptScreen_) adoptScreen_();
             });
 
             openSelected_.Create("Story Flow Open Selected Destination");
@@ -186,6 +196,9 @@ namespace renegade::studio
 
         void SetMode(const Mode mode)
         {
+            if (mode == Mode::Screen && titleDraft_.text.empty() &&
+                titleDraft_.UseTemplate(DefaultTitle(selectedTemplate_)))
+                destinationName_.SetValue(titleDraft_.text);
             mode_ = mode;
             const bool active = workspaceActive_ && mode_ != Mode::Closed;
             SetVisible(active);
@@ -197,8 +210,8 @@ namespace renegade::studio
             create_.SetVisible(active);
             create_.SetEnabled(active);
             create_.SetText(mode_ == Mode::Screen ? "CREATE SCREEN" : "CREATE LEVEL");
-            adopt_.SetVisible(active && mode_ == Mode::Level);
-            adopt_.SetEnabled(active && mode_ == Mode::Level);
+            adopt_.SetVisible(active);
+            adopt_.SetEnabled(active);
             openSelected_.SetVisible(active);
             openSelected_.SetEnabled(active && CanOpenSelection());
             close_.SetVisible(active);
@@ -229,7 +242,7 @@ namespace renegade::studio
             selectedNodeId_.clear();
             selectedNodeMode_ = Mode::Closed;
             destinationName_.SetValue("");
-            nameDraft_.clear();
+            titleDraft_ = {};
             SetMode(Mode::Closed);
         }
 
@@ -247,6 +260,8 @@ namespace renegade::studio
         {
             adoptLevel_ = std::move(callback);
         }
+
+        void OnAdoptScreen(std::function<void()> callback) { adoptScreen_ = std::move(callback); }
 
         void OnCreateScreen(std::function<void(
             const std::string&, bridge::StoryFlowScreenTemplate)> callback)
@@ -297,6 +312,22 @@ namespace renegade::studio
         }
 
     private:
+        static std::string DefaultTitle(const bridge::StoryFlowScreenTemplate value)
+        {
+            switch (value)
+            {
+            case bridge::StoryFlowScreenTemplate::Title: return "Main Menu";
+            case bridge::StoryFlowScreenTemplate::Options: return "Options";
+            case bridge::StoryFlowScreenTemplate::Loading: return "Loading";
+            case bridge::StoryFlowScreenTemplate::Pause: return "Pause";
+            case bridge::StoryFlowScreenTemplate::Failure: return "Failure";
+            case bridge::StoryFlowScreenTemplate::Victory: return "Victory";
+            case bridge::StoryFlowScreenTemplate::SaveLoad: return "Save Load";
+            case bridge::StoryFlowScreenTemplate::Credits: return "Credits";
+            default: return "Screen";
+            }
+        }
+
         [[nodiscard]] bool CanOpenSelection() const noexcept
         {
             return !selectedNodeId_.empty() && selectedNodeMode_ == mode_;
@@ -305,7 +336,7 @@ namespace renegade::studio
         [[nodiscard]] std::string LiveName()
         {
             const std::string live = destinationName_.GetCurrentInputValue();
-            return live == destinationName_.GetValue() ? nameDraft_ : live;
+            return live;
         }
 
         static void DrawLabel(
@@ -337,9 +368,10 @@ namespace renegade::studio
         bridge::StoryFlowScreenTemplate selectedTemplate_ =
             bridge::StoryFlowScreenTemplate::Title;
         bridge::StableId selectedNodeId_;
-        std::string nameDraft_;
+        StoryFlowTitleDraft titleDraft_;
         std::function<void(const std::string&)> createLevel_;
         std::function<void(const std::string&)> adoptLevel_;
+        std::function<void()> adoptScreen_;
         std::function<void(
             const std::string&, bridge::StoryFlowScreenTemplate)> createScreen_;
         std::function<void(const bridge::StableId&)> openSelectedCallback_;

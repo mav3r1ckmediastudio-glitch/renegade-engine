@@ -84,7 +84,7 @@ bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
     !std::isfinite(s.queuedReleaseSeconds)||s.queuedReleaseSeconds<0.05f||s.queuedReleaseSeconds>5) {
   e="Melee timing is outside the supported range.";return false;
  }
- if(!IsValidStableId(s.armsAssetId)||!IsValidStableId(s.weaponAssetId)||s.parentBonePath.empty()||
+ if(!IsValidStableId(s.armsAssetId)||(!s.spellPresentation && !s.integratedWeaponPresentation && !IsValidStableId(s.weaponAssetId))||s.parentBonePath.empty()||
  s.armsAssetId==s.weaponAssetId||s.pairs.empty()||s.pairs.size()>32) {
  e="Select distinct arms and weapon products, an explicit parent bone and at least one clip pair.";return false;}
  for(auto p:{s.weaponPosition,s.cameraPosition,s.offHandWeaponPosition})
@@ -139,6 +139,24 @@ bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
     std::none_of(s.pairs.begin(),s.pairs.end(),[](const auto& p){return p.action=="Attack";}))) {
   e="Independent hands require Idle and at least one Attack fallback.";return false;
  }
+ if(s.integratedWeaponPresentation && (s.spellPresentation || !s.weaponAssetId.empty() || s.IndependentHands())) {
+  e="Integrated assembly needs a single animated product.";return false;
+ }
+ if(s.integratedWeaponPresentation) {
+  for(const auto& p:s.pairs)if(p.weaponClip!=0){e="Single-product actions cannot bind a second clip.";return false;}
+  for(const auto& socket:s.launchSockets)if(socket.part!=LaunchSocketPart::Arms){e="Single-product launch sockets attach to the animated arms root.";return false;}
+ }
+ if(s.spellPresentation) {
+  if(!s.weaponAssetId.empty() || s.IndependentHands() || s.avoidOffHand ||
+     std::any_of(s.launchSockets.begin(),s.launchSockets.end(),[](const auto& socket){return socket.part!=LaunchSocketPart::Arms;})) {
+   e="Spell presentation requires arms-only parts and hand launch sockets.";return false;
+  }
+  for(const char* required:{"Idle","Charge","Release"})
+   if(std::none_of(s.pairs.begin(),s.pairs.end(),[&](const auto& p){return p.action==required;})){
+    e="Spell presentation requires Idle, Charge and Release.";return false;
+   }
+  for(const auto& p:s.pairs)if(p.weaponClip!=0 || p.armsClip==s.spellHoldClip){e="Spell hold must be a separate arms clip.";return false;}
+ }
  std::set<std::string> actions;
  for(const auto& p:s.pairs) {
  if(std::none_of(FirstPersonAssemblyActions.begin(),FirstPersonAssemblyActions.end(),
@@ -170,6 +188,8 @@ bool SerializeFirstPersonAssemblySettings(const FirstPersonAssemblySettings& s,s
  for(const auto& p:s.pairs)j["pairs"].push_back({{"action",p.action},{"arms_clip",p.armsClip},{"weapon_clip",p.weaponClip}});
  j["firearm"]={{"schema_version",1},{"capacity",s.firearm.capacity},
  {"minimum_shot_interval",s.firearm.minimumShotInterval},{"allow_partial_reload",s.firearm.allowPartialReload}};
+ if(s.spellPresentation){j["schema_version"]=3;j["spell"]={{"hold_clip",s.spellHoldClip}};j.erase("firearm");}
+ if(s.integratedWeaponPresentation){j["schema_version"]=4; j["integrated_weapon"]=true;}
  if(s.IndependentHands()) {
   j["schema_version"]=2;
   j["hand_layers"]={{"off_hand_asset_id",s.offHandWeaponAssetId},{"off_hand_parent",s.offHandParentBonePath},
@@ -209,6 +229,17 @@ bool ParseFirstPersonAssemblySettings(const std::string& text,FirstPersonAssembl
   s.fullChargeSeconds=a.at("full_charge_seconds").get<float>();
   s.chainWindowSeconds=a.at("chain_window_seconds").get<float>();
   s.queuedReleaseSeconds=a.at("queued_release_seconds").get<float>();j.erase("authoring");
+ }
+ const bool spell=j.is_object() && j.value("schema_version",0)==3;
+ if(spell) {
+  if(!j.contains("spell") || !j.at("spell").is_object() || j.at("spell").size()!=1 ||
+     !j.at("spell").at("hold_clip").is_number_unsigned() || j.contains("firearm"))throw std::runtime_error("spell");
+  s.spellPresentation=true;s.spellHoldClip=j.at("spell").at("hold_clip").get<unsigned>();
+  j.erase("spell");j["schema_version"]=1;
+ }
+ if(j.is_object() && j.value("schema_version",0)==4) {
+  if(!j.contains("integrated_weapon") || j.at("integrated_weapon")!=true || !j.contains("firearm"))throw std::runtime_error("integrated");
+  s.integratedWeaponPresentation=true;j.erase("integrated_weapon");j["schema_version"]=1;
  }
  const bool independent=j.is_object() && j.value("schema_version",0)==2;
  if(!j.is_object() || (independent ? (j.size()!=11 || !j.contains("hand_layers") || !j.contains("firearm")) :
@@ -260,13 +291,14 @@ bool FirstPersonAssemblyService::Prepare(const std::string& root,const StableId&
  const FirstPersonAssemblySettings& s,wi::scene::Scene& result,std::string& e) const {
  if(!Valid(s,e))return false;
  auto arms=ReusableAssetService().PrepareModelAssetPlacement({root,project,s.armsAssetId});
- auto weapon=ReusableAssetService().PrepareModelAssetPlacement({root,project,s.weaponAssetId});
- if(!arms.IsReady()||!weapon.IsReady()){e=!arms.IsReady()?arms.Result().error:weapon.Result().error;return false;}
- auto& a=*arms.PeekMutableScene();auto& w=*weapon.PeekMutableScene();
+ PreparedReusableModelPlacement weapon;
+ if(!s.spellPresentation && !s.integratedWeaponPresentation)weapon=ReusableAssetService().PrepareModelAssetPlacement({root,project,s.weaponAssetId});
+ if(!arms.IsReady()||(!s.spellPresentation && !s.integratedWeaponPresentation && !weapon.IsReady())){e=!arms.IsReady()?arms.Result().error:weapon.Result().error;return false;}
+ auto& a=*arms.PeekMutableScene();wi::scene::Scene emptyWeapon;auto& w=(s.spellPresentation||s.integratedWeaponPresentation)?emptyWeapon:*weapon.PeekMutableScene();
  std::vector<PlayerViewBoneChoice> bones;if(!CollectPlayerViewBones(a,bones,e))return false;
  auto b=std::find_if(bones.begin(),bones.end(),[&](const auto& b){return b.path==s.parentBonePath;});
  if(b==bones.end()){e="Selected parent bone does not exist in the retained arms.";return false;}
- auto roots=Roots(w);if(roots.size()!=1){e="Weapon product must have one native transform root.";return false;}
+ auto roots=Roots(w);if(!s.spellPresentation && !s.integratedWeaponPresentation && roots.size()!=1){e="Weapon product must have one native transform root.";return false;}
  if(s.IndependentHands())return PrepareIndependentHandAssembly(root,project,s,a,w,result,e);
  // Copy selected pairs before merging; each track retains its own skeleton targets.
  auto tracks=[&](wi::scene::Scene& native,bool isArms,wi::scene::Scene& selected)->bool {
@@ -292,6 +324,12 @@ bool FirstPersonAssemblyService::Prepare(const std::string& root,const StableId&
  if(index>=selected.animations.GetCount()){e="Paired clip index no longer exists in its product.";return false;}
  clips.push_back(selected.animations[index]);
  }
+ wi::scene::AnimationComponent hold;
+ if(s.spellPresentation && isArms) {
+  if(s.spellHoldClip>=selected.animations.GetCount()){e="Spell hold clip is missing.";return false;}
+  hold=selected.animations[s.spellHoldClip];
+  if(!std::isfinite(hold.end-hold.start)||hold.end<=hold.start){e="Spell hold timeline is invalid.";return false;}
+ }
  selected.animations.Clear();
  for(size_t i=0;i<s.pairs.size();++i){
  auto entity=wi::ecs::CreateEntity();selected.animations.Create(entity)=clips[i];
@@ -300,10 +338,37 @@ bool FirstPersonAssemblyService::Prepare(const std::string& root,const StableId&
  m.string_values.set(CreatorCharacterAnimationActionMetadataKey,s.pairs[i].action);
  m.string_values.set("renegade.first_person.assembly.track",isArms?"arms":"weapon");
  }
+ if(s.spellPresentation && isArms) {
+  auto entity=wi::ecs::CreateEntity();selected.animations.Create(entity)=hold;
+  selected.names.Create(entity).name="Arms / CastHold";
+  auto& m=selected.metadatas.Create(entity);m.bool_values.set("renegade.first_person.spell.hold",true);
+  m.string_values.set(CreatorCharacterAnimationActionMetadataKey,"Unassigned");
+ }
  return true;
  };
  wi::scene::Scene ac,wc;
- if(!tracks(a,true,ac)||!tracks(w,false,wc))return false;
+ if(!tracks(a,true,ac)||(!s.spellPresentation && !s.integratedWeaponPresentation && !tracks(w,false,wc)))return false;
+ if(s.integratedWeaponPresentation) {
+  if(!AttachLaunchSockets(ac,s.launchSockets,LaunchSocketPart::Arms,e))return false;
+  const auto armRoots=Roots(ac);const auto viewRoot=ac.Entity_CreateTransform(CreatorAuthoredTransformRootName);
+  Set(*ac.transforms.GetComponent(viewRoot),s.cameraPosition,s.cameraRotation);
+  for(auto r:armRoots)ac.Component_Attach(r,viewRoot,true);
+  auto& m=ac.metadatas.Create(viewRoot);
+  m.bool_values.set("renegade.first_person.assembly",true);
+  m.bool_values.set("renegade.first_person.assembly.integrated_weapon",true);
+  ApplyFirearmSettings(m,s.firearm);
+  if(!Pose(ac,"Idle",0,e))return false;
+  result.Clear();result.Merge(ac);e.clear();return true;
+ }
+ if(s.spellPresentation) {
+  if(!AttachLaunchSockets(ac,s.launchSockets,LaunchSocketPart::Arms,e))return false;
+  auto armRoots=Roots(ac);const auto viewRoot=ac.Entity_CreateTransform(CreatorAuthoredTransformRootName);
+  Set(*ac.transforms.GetComponent(viewRoot),s.cameraPosition,s.cameraRotation);
+  for(auto r:armRoots)ac.Component_Attach(r,viewRoot,true);
+  ac.metadatas.Create(viewRoot).bool_values.set("renegade.first_person.spell",true);
+  if(!Pose(ac,"Idle",0,e))return false;
+  result.Clear();result.Merge(ac);e.clear();return true;
+ }
  if(!AttachLaunchSockets(ac,s.launchSockets,LaunchSocketPart::Arms,e)||
     !AttachLaunchSockets(wc,s.launchSockets,LaunchSocketPart::PrimaryWeapon,e))return false;
  // Clone archives remap entity IDs: resolve the explicit hierarchy path again.
@@ -348,7 +413,10 @@ bool FirstPersonAssemblyService::Pose(wi::scene::Scene& s,const std::string& act
  for(size_t i=0;i<s.metadatas.GetCount();++i)
   independent=independent || (s.metadatas[i].bool_values.has("renegade.first_person.independent_hands") &&
     s.metadatas[i].bool_values.get("renegade.first_person.independent_hands"));
- if(selected!=(independent?1u:2u)){e="Action has invalid native track coverage.";return false;}
+ bool spell=false;
+ for(size_t i=0;i<s.metadatas.GetCount();++i)spell=spell || (s.metadatas[i].bool_values.has("renegade.first_person.spell") && s.metadatas[i].bool_values.get("renegade.first_person.spell"));
+ const bool integrated=std::any_of(s.metadatas.GetComponentArray().begin(),s.metadatas.GetComponentArray().end(),[](const auto& m){return m.bool_values.has("renegade.first_person.assembly.integrated_weapon") && m.bool_values.get("renegade.first_person.assembly.integrated_weapon");});
+ if(selected!=((independent||spell||integrated)?1u:2u)){e="Action has invalid native track coverage.";return false;}
  s.Update(1.0f/60);e.clear();return true;
 }
 SetFirstPersonAssemblySettingsCommand::SetFirstPersonAssemblySettingsCommand(

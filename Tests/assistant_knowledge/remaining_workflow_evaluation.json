@@ -1,0 +1,216 @@
+{
+  "schema": 1,
+  "version": "2026-10-14-v1",
+  "cases": [
+    {
+      "question": "How do I import a character?",
+      "expected_workflow": "character-import-v1",
+      "required": "Open **ADD** \u2192 **IMPORT MODEL...** and select the rigged GLB or FBX."
+    },
+    {
+      "question": "How do I import a rigged model?",
+      "expected_workflow": "character-import-v1",
+      "required": "Open **ADD** \u2192 **IMPORT MODEL...** and select the rigged GLB or FBX."
+    },
+    {
+      "question": "How do I load an NPC model?",
+      "expected_workflow": "character-import-v1",
+      "required": "Open **ADD** \u2192 **IMPORT MODEL...** and select the rigged GLB or FBX."
+    },
+    {
+      "question": "How do I add animation FBX?",
+      "expected_workflow": "animation-add-v1",
+      "required": "In the Character import review, click **ADD ANIMATION FBX**."
+    },
+    {
+      "question": "How do I import external animations?",
+      "expected_workflow": "animation-add-v1",
+      "required": "In the Character import review, click **ADD ANIMATION FBX**."
+    },
+    {
+      "question": "How do I retarget an animation during character import?",
+      "expected_workflow": "animation-add-v1",
+      "required": "In the Character import review, click **ADD ANIMATION FBX**."
+    },
+    {
+      "question": "How do I assign gameplay actions to character clips?",
+      "expected_workflow": "animation-action-v1",
+      "required": "Select the desired take from **Animation clip**, not **REFERENCE POSE**."
+    },
+    {
+      "question": "How do I map animation clips to Idle and Walk?",
+      "expected_workflow": "animation-action-v1",
+      "required": "Select the desired take from **Animation clip**, not **REFERENCE POSE**."
+    },
+    {
+      "question": "How do I configure an NPC?",
+      "expected_workflow": "npc-configure-v1",
+      "required": "Select the actor in **Scene Hierarchy** and expand **CHARACTER** in the Inspector."
+    },
+    {
+      "question": "How do I set up an NPC?",
+      "expected_workflow": "npc-configure-v1",
+      "required": "Select the actor in **Scene Hierarchy** and expand **CHARACTER** in the Inspector."
+    },
+    {
+      "question": "How do I make my NPC wander?",
+      "expected_workflow": "npc-wander-v1",
+      "required": "Expand **CHARACTER** in the selected NPC's Inspector."
+    },
+    {
+      "question": "How do I enable wandering?",
+      "expected_workflow": "npc-wander-v1",
+      "required": "Expand **CHARACTER** in the selected NPC's Inspector."
+    },
+    {
+      "question": "How do I create a patrol route?",
+      "expected_workflow": "npc-patrol-v1",
+      "required": "Select the Character and expand **PATROL** in its Inspector."
+    },
+    {
+      "question": "How do I make an NPC patrol?",
+      "expected_workflow": "npc-patrol-v1",
+      "required": "Select the Character and expand **PATROL** in its Inspector."
+    },
+    {
+      "question": "How do I save a character prefab?",
+      "expected_workflow": "character-prefab-v1",
+      "required": "Select the configured Character in the scene hierarchy."
+    },
+    {
+      "question": "How do I create an NPC prefab?",
+      "expected_workflow": "character-prefab-v1",
+      "required": "Select the configured Character in the scene hierarchy."
+    },
+    {
+      "question": "How do I attach an Action?",
+      "expected_workflow": "action-attach-v1",
+      "required": "Select the object that should own the behaviour and expand **ACTION** in the Inspector."
+    },
+    {
+      "question": "How do I add a stock action to an object?",
+      "expected_workflow": "action-attach-v1",
+      "required": "Select the object that should own the behaviour and expand **ACTION** in the Inspector."
+    },
+    {
+      "question": "How do I attach an entity script?",
+      "expected_workflow": "script-attach-v1",
+      "required": "Select the object that should own the behaviour and expand **SCRIPT** in the Inspector."
+    },
+    {
+      "question": "How do I add a Lua script to an object?",
+      "expected_workflow": "script-attach-v1",
+      "required": "Select the object that should own the behaviour and expand **SCRIPT** in the Inspector."
+    },
+    {
+      "question": "How do I add a global script?",
+      "expected_workflow": "global-script-v1",
+      "required": "Save the active level, then expand **GLOBAL SCRIPT** in the Inspector."
+    },
+    {
+      "question": "How do I attach a level-wide script?",
+      "expected_workflow": "global-script-v1",
+      "required": "Save the active level, then expand **GLOBAL SCRIPT** in the Inspector."
+    },
+    {
+      "question": "How do I set up a sliding door?",
+      "expected_workflow": "sliding-door-v1",
+      "required": "Select the object and expand **ACTION**."
+    },
+    {
+      "question": "How do I make an interactive door?",
+      "expected_workflow": "sliding-door-v1",
+      "required": "Select the object and expand **ACTION**."
+    },
+    {
+      "question": "How do I wire a switch to a door?",
+      "expected_workflow": "interaction-switch-v1",
+      "required": "On the door's Sliding Door Action, disable **Direct Interaction** if the switch should be the control."
+    },
+    {
+      "question": "How do I create an interaction switch?",
+      "expected_workflow": "interaction-switch-v1",
+      "required": "On the door's Sliding Door Action, disable **Direct Interaction** if the switch should be the control."
+    },
+    {
+      "question": "How do I create a trigger zone?",
+      "expected_workflow": "trigger-zone-v1",
+      "required": "Select the zone object; in **ACTION**, choose **Player Trigger Zone** and click **ADD**."
+    },
+    {
+      "question": "How do I add a player trigger zone?",
+      "expected_workflow": "trigger-zone-v1",
+      "required": "Select the zone object; in **ACTION**, choose **Player Trigger Zone** and click **ADD**."
+    },
+    {
+      "question": "How do I set up a proximity pickup?",
+      "expected_workflow": "pickup-v1",
+      "required": "Select the object; in **ACTION**, choose **Proximity Pickup** and click **ADD**."
+    },
+    {
+      "question": "How do I create a pickup?",
+      "expected_workflow": "pickup-v1",
+      "required": "Select the object; in **ACTION**, choose **Proximity Pickup** and click **ADD**."
+    },
+    {
+      "question": "How do I set up an activation relay?",
+      "expected_workflow": "relay-v1",
+      "required": "Select the relay object; attach **Activation Relay** from **ACTION** using **ADD**."
+    },
+    {
+      "question": "How do I add a relay?",
+      "expected_workflow": "relay-v1",
+      "required": "Select the relay object; attach **Activation Relay** from **ACTION** using **ADD**."
+    },
+    {
+      "question": "How do I set up a Play Sound Action?",
+      "expected_workflow": "sound-action-v1",
+      "required": "Attach **Play Sound** to the intended owner through **ACTION** \u2192 **ADD**."
+    },
+    {
+      "question": "How do I trigger a sound action?",
+      "expected_workflow": "sound-action-v1",
+      "required": "Attach **Play Sound** to the intended owner through **ACTION** \u2192 **ADD**."
+    },
+    {
+      "question": "How do I edit a projectile spawn point?",
+      "expected_workflow": "spawn-point-v1",
+      "required": "Select **Player Start**, open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING**, and choose **Weapon hand**."
+    },
+    {
+      "question": "How do I create a launch socket?",
+      "expected_workflow": "spawn-point-v1",
+      "required": "Select **Player Start**, open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING**, and choose **Weapon hand**."
+    },
+    {
+      "question": "How do I set fire time in animation?",
+      "expected_workflow": "fire-timing-v1",
+      "required": "Select Player Start and open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING**. Choose the intended **Weapon hand** and **Launch on** action."
+    },
+    {
+      "question": "My arrow launches too early",
+      "expected_workflow": "fire-timing-v1",
+      "required": "Select Player Start and open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING**. Choose the intended **Weapon hand** and **Launch on** action."
+    },
+    {
+      "question": "How do I configure hitscan?",
+      "expected_workflow": "hitscan-setup-v1",
+      "required": "Open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING** on Player Start and choose **Weapon hand** and **Launch on**."
+    },
+    {
+      "question": "How do I set up an instant ray weapon?",
+      "expected_workflow": "hitscan-setup-v1",
+      "required": "Open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING** on Player Start and choose **Weapon hand** and **Launch on**."
+    },
+    {
+      "question": "How do I set Surface Type?",
+      "expected_workflow": "surface-type-v1",
+      "required": "**SURFACE TYPE**"
+    },
+    {
+      "question": "How do I change an impact surface?",
+      "expected_workflow": "surface-type-v1",
+      "required": "**SURFACE TYPE**"
+    }
+  ]
+}

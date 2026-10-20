@@ -1,0 +1,24 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {validateHistory,cannotObserveEditor,isUnsupportedClaim,speakableExcerpt,askQwen}=require('../chat/model-client');
+assert.throws(()=>validateHistory([]),/empty/);
+assert.throws(()=>validateHistory([{role:'user',content:'A'.repeat(901)}]),/900/);
+assert(cannotObserveEditor('Can you see my selected NPC in the editor?'));
+assert(cannotObserveEditor('Look at my selected character'));
+assert(!cannotObserveEditor('How do I retarget an animation?'));
+assert(!cannotObserveEditor('Alright?'));
+assert(isUnsupportedClaim('I can see your currently selected NPC in the editor.'));
+assert(!isUnsupportedClaim('I cannot see your selected NPC.'));
+const spoken=speakableExcerpt('Sentence A. '+'Hello! '.repeat(180));
+assert(spoken.wasTruncated&&spoken.text.length<=900);
+(async()=>{
+ const noBridge=await askQwen([{role:'user',content:'Can you see my selected NPC in the editor?'}]);
+ assert.equal(noBridge.policy,'no-editor-bridge');
+ assert(noBridge.answer.includes("can't inspect"));
+ const started=Date.now();
+ const answer=await askQwen([{role:'user',content:'What is Renegade?'}],{maxTokens:100});
+ console.log('LIVE_QWEN_REPLY',JSON.stringify(answer));
+ assert(answer.answer&&answer.adapter,'real local Qwen response');
+ assert(Date.now()-started<65000,'under timeout');
+ console.log('PASS: local model transport, non-editor scope, no access fabrication, readable reply');
+})().catch(e=>{console.error('MODEL_TEST_FAILED',e);process.exit(1)});

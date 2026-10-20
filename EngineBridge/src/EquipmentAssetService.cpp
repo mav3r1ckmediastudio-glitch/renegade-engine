@@ -17,7 +17,7 @@ using json=nlohmann::json;
 namespace fs=std::filesystem;
 constexpr const char* HandNames[]={"PrimaryOnly","OffHandOnly","EitherHand","TwoHanded","PrimaryWithSupport"};
 constexpr const char* ActionNames[]={"Equip","Unequip","PrimaryUse","AlternateUse","Reload","Charge","Release","Block","Parry","Cast","Use","Inspect"};
-constexpr const char* FireModeNames[]={"Projectile","Hitscan"};
+constexpr const char* FireModeNames[]={"Projectile","Hitscan","Channel","Storm"};
 template<size_t N> unsigned Index(const std::string& value,const char* const (&names)[N]) {
     for(unsigned i=0;i<N;++i)if(value==names[i])return i;
     throw std::runtime_error("Unknown equipment semantic.");
@@ -55,7 +55,15 @@ bool ProjectilesAvailable(const std::string& root,const StableId& project,
     const EquipmentDefinition& item,std::string& error) {
     FirstPersonAssemblySettings presentation;
     const bool needsSocket=std::any_of(item.projectiles.begin(),item.projectiles.end(),[](const auto& b){return !b.launchSocketName.empty() || !b.secondSocketName.empty();});
-    if(needsSocket&&!FirstPersonAssemblyService().ReadSettings(root,project,item.presentationAssetId,presentation,error))return false;
+    const bool needsStages=!item.presentationAssetId.empty() && std::any_of(item.actions.begin(),item.actions.end(),[](const auto& a){return !a.stages.empty();});
+    if((needsSocket||needsStages)&&!FirstPersonAssemblyService().ReadSettings(root,project,item.presentationAssetId,presentation,error))return false;
+    if(needsStages) {
+        if(presentation.IndependentHands()){error="Staged reload requires a paired weapon presentation.";return false;}
+        for(const auto& action:item.actions)for(const auto& stage:action.stages)
+            if(std::none_of(presentation.pairs.begin(),presentation.pairs.end(),[&](const auto& pair){return pair.action==stage.animationAction;})) {
+                error="Reload stage has no authored paired animation.";return false;
+            }
+    }
     for(const auto& binding:item.projectiles) {
         if(!binding.launchSocketName.empty()&&std::none_of(presentation.launchSockets.begin(),presentation.launchSockets.end(),
            [&](const auto& socket){return socket.name==binding.launchSocketName;})) {
@@ -64,6 +72,11 @@ bool ProjectilesAvailable(const std::string& root,const StableId& project,
         if(!binding.secondSocketName.empty()&&std::none_of(presentation.launchSockets.begin(),presentation.launchSockets.end(),
            [&](const auto& socket){return socket.name==binding.secondSocketName;})) {
             error="Second PSP does not exist in the weapon assembly.";return false;
+        }
+        if((binding.fireMode==EquipmentFireMode::Channel || binding.fireMode==EquipmentFireMode::Storm) &&
+           (!presentation.spellPresentation || std::none_of(presentation.pairs.begin(),presentation.pairs.end(),[](const auto& p){return p.action=="Charge";}) ||
+            std::none_of(presentation.pairs.begin(),presentation.pairs.end(),[](const auto& p){return p.action=="Release";}))) {
+            error="Channel ability requires arms-only start/hold/end presentation.";return false;
         }
         if(binding.fireMode==EquipmentFireMode::Projectile) {
             ProjectileAssetDocument projectile;
@@ -100,9 +113,20 @@ bool SerializeEquipmentAsset(const EquipmentAssetDocument& d,std::string& text,s
         {"hold_until_release",a.holdUntilRelease},{"cancellable_before_active",a.cancellableBeforeActive}});
     for(size_t i=0;i<d.equipment.actions.size();++i)
         if(d.equipment.actions[i].activeWhileHeld)actions[i]["active_while_held"]=true;
-    const bool extended=std::any_of(d.equipment.projectiles.begin(),d.equipment.projectiles.end(),
+    const bool staged=std::any_of(d.equipment.actions.begin(),d.equipment.actions.end(),[](const auto& a){return !a.stages.empty();});
+    for(size_t i=0;i<d.equipment.actions.size();++i)if(!d.equipment.actions[i].stages.empty()) {
+        actions[i]["resume_stages"]=d.equipment.actions[i].resumeStages;
+        actions[i]["stages"]=json::array();
+        for(const auto& stage:d.equipment.actions[i].stages)actions[i]["stages"].push_back({
+            {"name",stage.name},{"animation_action",stage.animationAction},{"active_seconds",stage.activeSeconds},{"refill_ammo",stage.refillAmmo}});
+    }
+    const bool extended=staged || std::any_of(d.equipment.projectiles.begin(),d.equipment.projectiles.end(),
         [](const auto& binding){return binding.fireMode!=EquipmentFireMode::Projectile;});
-    auto document=json{{"format","renegade-equipment"},{"schema_version",d.equipment.projectiles.empty()?1:(extended?3:2)},{"project_id",d.projectId},
+    const bool storm=std::any_of(d.equipment.projectiles.begin(),d.equipment.projectiles.end(),
+        [](const auto& b){return b.fireMode==EquipmentFireMode::Storm;});
+    const bool channel=std::any_of(d.equipment.projectiles.begin(),d.equipment.projectiles.end(),
+        [](const auto& b){return b.fireMode==EquipmentFireMode::Channel;});
+    auto document=json{{"format","renegade-equipment"},{"schema_version",storm?6:channel?5:staged?4:(d.equipment.projectiles.empty()?1:(extended?3:2))},{"project_id",d.projectId},
         {"asset_id",d.equipment.assetId},{"name",d.equipment.name},
         {"presentation_asset_id",d.equipment.presentationAssetId},
         {"hand_use",HandNames[unsigned(d.equipment.handUse)]},{"actions",actions}};
@@ -118,6 +142,11 @@ bool SerializeEquipmentAsset(const EquipmentAssetDocument& d,std::string& text,s
                 row["hitscan_range_metres"]=binding.hitscanRangeMetres;
                 row["hitscan_damage"]=binding.hitscanDamage;
             }
+            if(channel)row["channel_damage_per_second"]=binding.channelDamagePerSecond;
+            if(storm) {row["storm_radius_metres"]=binding.stormRadiusMetres;
+                row["storm_duration_seconds"]=binding.stormDurationSeconds;
+                row["storm_strike_damage"]=binding.stormStrikeDamage;
+                row["storm_strike_count"]=binding.stormStrikeCount;}
             document["projectiles"].push_back(std::move(row));
         }
     }
@@ -132,7 +161,8 @@ bool DeserializeEquipmentAsset(const std::string& text,EquipmentAssetDocument& o
             throw std::runtime_error("Unsupported equipment schema.");
         const auto schema=j.at("schema_version").get<int>();
         if(!((schema==1&&j.size()==8&&!j.contains("projectiles"))||
-             ((schema==2||schema==3)&&j.size()==9&&j.contains("projectiles"))))
+             ((schema==2||schema==3)&&j.size()==9&&j.contains("projectiles")) ||
+             ((schema==4 || schema==5 || schema==6) && j.size()==(j.contains("projectiles")?9:8))))
             throw std::runtime_error("Unsupported equipment schema.");
         EquipmentAssetDocument d;
         d.projectId=j.at("project_id").get<std::string>();
@@ -143,7 +173,8 @@ bool DeserializeEquipmentAsset(const std::string& text,EquipmentAssetDocument& o
         const auto& actions=j.at("actions");
         if(!actions.is_array()||actions.empty()||actions.size()>32)throw std::runtime_error("Invalid equipment action list.");
         for(const auto& v:actions) {
-            if(!v.is_object()||v.size()!=(v.contains("active_while_held")?9:8))throw std::runtime_error("Incomplete equipment action.");
+            if(!v.is_object() || (v.contains("stages") && schema<4) ||
+               v.size()!=8+(v.contains("active_while_held")?1:0)+(v.contains("stages")?2:0))throw std::runtime_error("Incomplete equipment action.");
             EquipmentActionDefinition a;
             a.action=static_cast<EquipmentAction>(Index(v.at("action").get<std::string>(),ActionNames));
             a.animationAction=v.at("animation_action").get<std::string>();
@@ -154,9 +185,19 @@ bool DeserializeEquipmentAsset(const std::string& text,EquipmentAssetDocument& o
             a.holdUntilRelease=v.at("hold_until_release").get<bool>();
             a.cancellableBeforeActive=v.at("cancellable_before_active").get<bool>();
             if(v.contains("active_while_held"))a.activeWhileHeld=v.at("active_while_held").get<bool>();
+            if(v.contains("stages")) {
+                a.resumeStages=v.at("resume_stages").get<bool>();
+                const auto& stages=v.at("stages");
+                if(!stages.is_array() || stages.empty() || stages.size()>16)throw std::runtime_error("Invalid reload stage list.");
+                for(const auto& stage:stages) {
+                    if(!stage.is_object()||stage.size()!=4||!stage.at("active_seconds").is_number())throw std::runtime_error("Invalid reload stage.");
+                    a.stages.push_back({stage.at("name").get<std::string>(),stage.at("animation_action").get<std::string>(),
+                        stage.at("active_seconds").get<float>(),stage.at("refill_ammo").get<bool>()});
+                }
+            }
             item.actions.push_back(a);
         }
-        if(schema==2||schema==3) {
+        if(j.contains("projectiles")) {
             const auto& bindings=j.at("projectiles");
             if(!bindings.is_array()||bindings.empty()||bindings.size()>5)
                 throw std::runtime_error("Invalid equipment projectile list.");
@@ -165,12 +206,12 @@ bool DeserializeEquipmentAsset(const std::string& text,EquipmentAssetDocument& o
                     (binding.size()==3&&binding.contains("launch_socket")) ||
                     (binding.size()==6&&binding.contains("launch_socket")&&binding.contains("release_seconds")&&
                      binding.contains("socket_policy")&&binding.contains("second_socket")));
-                const bool modern=binding.is_object()&&binding.size()==9&&
+                const bool modern=binding.is_object()&&binding.size()==(schema==6?13:schema==5?10:9)&&
                     binding.contains("launch_socket")&&binding.contains("release_seconds")&&
                     binding.contains("socket_policy")&&binding.contains("second_socket")&&
                     binding.contains("fire_mode")&&binding.contains("hitscan_range_metres")&&
                     binding.contains("hitscan_damage");
-                if((schema==2&&!legacy)||(schema==3&&!modern))
+                if((schema==2&&!legacy)||(schema>=3&&!modern))
                     throw std::runtime_error("Invalid equipment projectile binding.");
                 EquipmentProjectileBinding parsedBinding;
                 parsedBinding.action=static_cast<EquipmentAction>(
@@ -180,12 +221,21 @@ bool DeserializeEquipmentAsset(const std::string& text,EquipmentAssetDocument& o
                 parsedBinding.releaseSeconds=binding.value("release_seconds",0.0f);
                 parsedBinding.socketPolicy=binding.value("socket_policy",0u);
                 parsedBinding.secondSocketName=binding.value("second_socket",std::string{});
-                if(schema==3) {
+                if(schema>=3) {
                     parsedBinding.fireMode=static_cast<EquipmentFireMode>(
                         Index(binding.at("fire_mode").get<std::string>(),FireModeNames));
                     parsedBinding.hitscanRangeMetres=binding.at("hitscan_range_metres").get<float>();
                     parsedBinding.hitscanDamage=binding.at("hitscan_damage").get<float>();
                 }
+                if(schema==5)parsedBinding.channelDamagePerSecond=binding.at("channel_damage_per_second").get<float>();
+                if(schema==6){parsedBinding.stormRadiusMetres=binding.at("storm_radius_metres").get<float>();
+                    parsedBinding.stormDurationSeconds=binding.at("storm_duration_seconds").get<float>();
+                    parsedBinding.stormStrikeDamage=binding.at("storm_strike_damage").get<float>();
+                    parsedBinding.stormStrikeCount=binding.at("storm_strike_count").get<unsigned>();}
+                if(schema<6 && parsedBinding.fireMode==EquipmentFireMode::Storm)
+                    throw std::runtime_error("Storm requires equipment schema 6.");
+                if(schema<5 && parsedBinding.fireMode==EquipmentFireMode::Channel)
+                    throw std::runtime_error("Channel requires equipment schema 5.");
                 item.projectiles.push_back(std::move(parsedBinding));
             }
         }
@@ -298,7 +348,7 @@ bool PrepareEquipmentFromAssembly(const std::string& root,const StableId& projec
             }
             duration=std::max(duration,clipDuration);++count;
         }
-        if(count==2)item.actions.push_back({binding.action,binding.semantic,0,0,duration,0,
+        if(count==((settings.spellPresentation||settings.integratedWeaponPresentation)?1u:2u))item.actions.push_back({binding.action,binding.semantic,0,0,duration,0,
             binding.action==EquipmentAction::Charge,true});
         else if(count!=0){error="Assembly action does not have exactly two presentation tracks.";return false;}
     }

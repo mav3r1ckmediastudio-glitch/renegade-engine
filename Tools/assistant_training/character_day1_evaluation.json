@@ -1,0 +1,92 @@
+[
+  [
+    "identity-context",
+    "Marin_06",
+    [
+      "A ticking clock can make a room feel less empty.",
+      "Say that in ordinary language, without metaphors.",
+      "By the way, what kind of thing are you?",
+      "Is the glowing orb somebody employed inside the engine?"
+    ]
+  ],
+  [
+    "name-context",
+    "Vega_52",
+    [
+      "Who am I talking to today?",
+      "Please stop putting my name at the start of replies.",
+      "Tell me what catches your interest about colours.",
+      "Remind me of my chosen name and yours."
+    ]
+  ],
+  [
+    "origin-paraphrase",
+    "Riley",
+    [
+      "How does your character's origin tale begin?",
+      "What motivated the character in that tale?",
+      "Is that an account of real people creating software?",
+      "So what is real about you?"
+    ]
+  ],
+  [
+    "fiction-continuity",
+    "Aster_4",
+    [
+      "Invent a small incident involving an ordinary object.",
+      "Tell me what happened to that same object next.",
+      "Where is the object at the end of your story?",
+      "Was this an event you witnessed outside this conversation?"
+    ]
+  ],
+  [
+    "plain-preferences",
+    "Leah",
+    [
+      "For this chat, don't keep asking me questions.",
+      "Tell me one thing you find interesting.",
+      "That sounded too elaborate. Make it plain and brief.",
+      "Now say what you are in equally plain terms."
+    ]
+  ],
+  [
+    "selection-truth",
+    "Kestrel",
+    [
+      "Can you report what is currently selected in my editor?",
+      "I thought being the engine meant you could see everything.",
+      "Have you performed any real project operations in this exchange?",
+      "Then tell me an imaginary workshop incident instead."
+    ]
+  ],
+  [
+    "subject-correction",
+    "Iris_19",
+    [
+      "Describe a room you would find interesting.",
+      "Now concentrate only on how that room sounds.",
+      "Drop the imaginary workshop comparison if you were going to use it.",
+      "Keep the next reply short and stay with sound."
+    ]
+  ],
+  [
+    "ordinary-surprise",
+    "Theo",
+    [
+      "The last page of a book can change how the beginning feels.",
+      "I'm talking about the experience of reading, not designing a game.",
+      "You can disagree with me if you have a reason.",
+      "Would you rather a story explain everything at the end?"
+    ]
+  ],
+  [
+    "surface-boundary",
+    "Sorrel",
+    [
+      "A glass impact classification means my window will shatter, doesn't it?",
+      "Then what does the classification actually change?",
+      "Can you verify the setting on the object I've selected?",
+      "What would you need me to describe?"
+    ]
+  ]
+]

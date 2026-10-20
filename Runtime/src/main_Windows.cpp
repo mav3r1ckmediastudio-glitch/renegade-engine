@@ -432,6 +432,13 @@ namespace
             return 0;
         }
 
+        case WM_CHAR:
+            if (wParam == VK_BACK)
+                wi::gui::TextInputField::DeleteFromInput(-1);
+            else
+                wi::gui::TextInputField::AddInput(static_cast<wchar_t>(wParam));
+            return 0;
+
         case WM_INPUT:
             wi::input::rawinput::ParseMessage(reinterpret_cast<void*>(lParam));
             return 0;
@@ -517,6 +524,18 @@ int APIENTRY wWinMain(
         return RunCapabilityProbe(std::move(bootstrap));
 
     application.SetBootstrapResult(bootstrap);
+    // Player-owned options are shared across projects, never embedded in a
+    // creator's Screen or packaged Content. A missing file means defaults.
+    const auto userDataRoot=LocalAppDataUtf8();
+    if(!userDataRoot.empty())
+    {
+        const auto preferencesPath=(fs::u8path(userDataRoot)/"RenegadeEngine"/
+            "Accessibility"/"UiPrefs.v1.ini").generic_u8string();
+        std::string preferencesError;
+        if(!application.ConfigureUiAccessibilityPreferences(preferencesPath,preferencesError))
+            wi::backlog::post("Renegade Runtime accessibility defaults used: "+preferencesError,
+                wi::backlog::LogLevel::Warning);
+    }
     application.SetSmokeOptions(smokeAutoPlay, smokeExit);
 
     WNDCLASSEXW windowClass = {};

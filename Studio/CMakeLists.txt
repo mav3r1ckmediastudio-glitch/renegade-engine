@@ -85,6 +85,8 @@ add_executable(RenegadeStudio WIN32
     src/RenegadeImGuiBridge.cpp
     src/RenegadeImGuiBridge.h
     src/RenegadeStudioChrome.cpp
+    src/RenegadeAssistantDock.cpp
+    src/RenegadeAssistantDock.h
     src/RenegadeStudioChromeAssets.cpp
     src/RenegadeStudioAssetBrowserReadability.cpp
     src/RenegadeStudioChrome.h
@@ -152,6 +154,7 @@ target_link_libraries(RenegadeStudio
         Renegade::ScreenRenderer
         Renegade::TestLevelRuntimeProcess
         mfplat
+        winhttp
         mf
         mfuuid
         evr
@@ -177,6 +180,15 @@ target_compile_options(RenegadeStudio
 set_target_properties(RenegadeStudio PROPERTIES
     FOLDER "Renegade"
     VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeStudio>"
+)
+
+# RA-02 native assistant shell: fast non-rendering source contract.
+# Actual rendered layout and interactive UX still require owner acceptance.
+add_test(
+    NAME RenegadeRA02AssistantSourceContract
+    COMMAND ${CMAKE_COMMAND}
+        -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_SOURCE_DIR}/Tests/RA02AssistantSourceContract.cmake
 )
 
 # JP01 Physics Lab source contract. This is intentionally cheap and runs as

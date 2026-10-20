@@ -1,0 +1,159 @@
+{
+  "schema": 1,
+  "id": "script-authoring-workflows",
+  "title": "Entity Actions/Scripts and level GLOBAL SCRIPT workflows",
+  "status": "source_checked_native_service_tests_passed_ui_pending",
+  "manual_path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+  "facts": [
+    {
+      "id": "action-attach-v1",
+      "sources": [
+        {
+          "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
+          "needle": "controls.add.Create(\"ADD\");"
+        },
+        {
+          "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
+          "needle": "controls.refresh.Create(\"REFRESH\");"
+        },
+        {
+          "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
+          "needle": "session->Scripts().EnsureEntityOwnerIdentity("
+        },
+        {
+          "path": "docs/SCRIPTING_S4A_METADATA_CONTRACT.md",
+          "needle": "required and exactly one of"
+        }
+      ]
+    },
+    {
+      "id": "script-attach-v1",
+      "sources": [
+        {
+          "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
+          "needle": "controls.add.Create(\"ADD\");"
+        },
+        {
+          "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
+          "needle": "controls.refresh.Create(\"REFRESH\");"
+        },
+        {
+          "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
+          "needle": "session->Scripts().EnsureEntityOwnerIdentity("
+        },
+        {
+          "path": "docs/SCRIPTING_S4A_METADATA_CONTRACT.md",
+          "needle": "required and exactly one of"
+        }
+      ]
+    },
+    {
+      "id": "global-script-v1",
+      "sources": [
+        {
+          "path": "Studio/src/S4DGlobalScriptInspector.cpp",
+          "needle": "add_.Create(\"ADD\");"
+        },
+        {
+          "path": "Studio/src/S4DGlobalScriptInspector.cpp",
+          "needle": "descriptor.title = \"GLOBAL SCRIPT\";"
+        },
+        {
+          "path": "docs/S4D_REFERENCES_GLOBAL_SCRIPT_HARDENING.md",
+          "needle": "It has no entity owner"
+        }
+      ]
+    },
+    {
+      "id": "sliding-door-v1",
+      "sources": [
+        {
+          "path": "Library/Scripts/RenegadeStockActions/Door.lua",
+          "needle": "role = \"ACTION\""
+        },
+        {
+          "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+          "needle": "Expand **ACTION**"
+        }
+      ]
+    },
+    {
+      "id": "interaction-switch-v1",
+      "sources": [
+        {
+          "path": "Library/Scripts/RenegadeStockActions/Switch.lua",
+          "needle": "role = \"ACTION\""
+        },
+        {
+          "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+          "needle": "Expand **ACTION**"
+        }
+      ]
+    },
+    {
+      "id": "trigger-zone-v1",
+      "sources": [
+        {
+          "path": "Library/Scripts/RenegadeStockActions/TriggerZone.lua",
+          "needle": "role = \"ACTION\""
+        },
+        {
+          "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+          "needle": "Expand **ACTION**"
+        }
+      ]
+    },
+    {
+      "id": "pickup-v1",
+      "sources": [
+        {
+          "path": "Library/Scripts/RenegadeStockActions/Pickup.lua",
+          "needle": "role = \"ACTION\""
+        },
+        {
+          "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+          "needle": "Expand **ACTION**"
+        }
+      ]
+    },
+    {
+      "id": "relay-v1",
+      "sources": [
+        {
+          "path": "Library/Scripts/RenegadeStockActions/Relay.lua",
+          "needle": "role = \"ACTION\""
+        },
+        {
+          "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+          "needle": "Expand **ACTION**"
+        }
+      ]
+    },
+    {
+      "id": "sound-action-v1",
+      "sources": [
+        {
+          "path": "Library/Scripts/RenegadeStockActions/PlaySound.lua",
+          "needle": "role = \"ACTION\""
+        },
+        {
+          "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
+          "needle": "Expand **ACTION**"
+        }
+      ]
+    }
+  ],
+  "end_to_end_acceptance": {
+    "status": "source_checked_native_service_tests_passed_ui_pending",
+    "date": "2026-10-14",
+    "steps_confirmed": [
+      "S4B/S4C/S4D authoring and S7 stock Actions/library service tests exit 0"
+    ],
+    "publication_approved": false,
+    "receipt": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
+    "limits": [
+      "Current source inspected; existing native binaries, not rebuilt",
+      "Fresh beginner mouse-driven editor walkthrough pending; not a release-gate claim"
+    ]
+  }
+}

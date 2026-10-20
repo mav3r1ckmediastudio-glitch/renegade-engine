@@ -80,9 +80,26 @@ require_text(story_flow_integration
 require_text(story_flow_integration
     "void RequestScreenEditor() noexcept"
     "Screen Editor activation boundary")
+# Navigation now performs the owner-requested coordinated autosave. Lock the
+# actual refusal path and its ordering, rather than the obsolete manual-save text.
 require_text(screen_workspace
-    "RETURN BLOCKED // SAVE OR UNDO SCREEN CHANGES FIRST"
-    "dirty Screen return guard")
+    "if (!SavePendingBeforeNavigation()) return;"
+    "autosave failure return guard")
+require_text(screen_workspace
+    "return SavePendingChanges(true);"
+    "navigation coordinated save boundary")
+require_text(screen_workspace
+    "// CHANGES RETAINED; NAVIGATION BLOCKED"
+    "failed save retains authored state")
+string(REGEX MATCH
+    "void RenegadeScreenEditorWorkspace::ReturnToStoryFlow[^}]*}"
+    screen_return_body "${screen_workspace}")
+string(FIND "${screen_return_body}" "if (!SavePendingBeforeNavigation()) return;" guard_position)
+string(FIND "${screen_return_body}" "if (returnRequested_) returnRequested_();" callback_position)
+if(guard_position EQUAL -1 OR callback_position EQUAL -1 OR
+    NOT guard_position LESS callback_position)
+    message(FATAL_ERROR "Screen return callback may bypass coordinated autosave refusal")
+endif()
 
 # Scene persistence and governed asset placement remain command/lifecycle owned.
 require_text(studio_source

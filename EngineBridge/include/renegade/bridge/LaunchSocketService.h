@@ -20,6 +20,8 @@ std::vector<PlayerViewBoneChoice> CollectLaunchSocketParents(const wi::scene::Sc
 wi::ecs::Entity ResolveLaunchSocketParent(const wi::scene::Scene&,const std::string&);
 bool AttachLaunchSockets(wi::scene::Scene&,const std::vector<LaunchSocketDefinition>&,
     LaunchSocketPart,std::string&);
+wi::ecs::Entity FindLaunchSocketEntity(const wi::scene::Scene&,wi::ecs::Entity root,
+    const std::string& name,std::string&);
 bool ReadLaunchSocketPose(const wi::scene::Scene&,wi::ecs::Entity root,
     const std::string& name,XMFLOAT3& position,XMFLOAT3& direction,std::string&);
 bool LaunchSocketSurfacePoint(const wi::scene::Scene&,const wi::primitive::Ray&,

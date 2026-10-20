@@ -14,10 +14,26 @@
 
 #include "RenegadeScreenChoicePicker.h"
 #include "RenegadeScreenColorPicker.h"
+#include "RenegadeScreenDataBindingInspector.h"
+#include "RenegadeScreenCompositionInspector.h"
+#include "RenegadeScreenLayoutInspector.h"
+#include "RenegadeScreenAnimationInspector.h"
+#include "RenegadeScreenSimulationInspector.h"
+#include "RenegadeScreenThemeInspector.h"
+#include "RenegadeScreenControlInspector.h"
+#include "RenegadeScreenComponentInspector.h"
+#include "RenegadeScreenInteractionInspector.h"
+#include "RenegadeGameplayAttributeInspector.h"
 #include "RenegadeScreenEditorWorkspace.h"
 #include "RenegadeStudioChrome.h"
 #include "renegade/bridge/ScreenAuthoringSession.h"
 #include "renegade/bridge/ScreenCreatorResourceService.h"
+#include "renegade/bridge/CreatorTextureWorkflowService.h"
+#include "renegade/bridge/CreatorScreenFontImportService.h"
+#include "renegade/bridge/ProjectDocumentTransaction.h"
+#include "renegade/bridge/ScreenPerformanceBudget.h"
+#include <fstream>
+#include <iterator>
 
 namespace renegade::studio
 {
@@ -31,6 +47,19 @@ namespace renegade::studio
         void Create()
         {
             SetName("Renegade Screen Advanced Inspector");
+            gameplayAttributeInspector_.Create();
+            interactionInspector_.Create();interactionInspector_.SetActive(false);
+            componentInspector_.Create();componentInspector_.SetActive(false);
+            controlInspector_.Create();controlInspector_.SetActive(false);
+            themeInspector_.Create();themeInspector_.SetActive(false);
+            simulationInspector_.Create();simulationInspector_.SetActive(false);
+            animationInspector_.Create();animationInspector_.SetActive(false);
+            layoutInspector_.Create();layoutInspector_.SetActive(false);
+            compositionInspector_.Create();
+            compositionInspector_.SetActive(false);
+            layoutInspector_.SetActive(false);
+            dataInspector_.Create();
+            dataInspector_.SetActive(false);
             SetShadowRadius(0.0f);
 
             toggleButton_.Create("Screen Advanced Inspector Toggle");
@@ -63,13 +92,71 @@ namespace renegade::studio
                 RefreshFromSelection(true);
             });
             bindingPageButton_.Create("Screen Inspector Binding Page");
-            bindingPageButton_.SetText("BIND / LAYOUT");
+            bindingPageButton_.SetText("FLOW");
             bindingPageButton_.OnClick([this](const wi::gui::EventArgs&)
             {
                 page_ = Page::Binding;
                 choicePicker_.Close();
                 colorPicker_.Close();
                 RefreshFromSelection(true);
+            });
+
+            dataPageButton_.Create("Screen Inspector Gameplay Data Page");
+            dataPageButton_.SetText("DATA");
+            dataPageButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                page_ = Page::Data;
+                choicePicker_.Close();colorPicker_.Close();
+                RefreshFromSelection(true);
+            });
+
+            compositionPageButton_.Create("Screen Inspector Composition Page");
+            compositionPageButton_.SetText("SCREEN");
+            compositionPageButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                page_=Page::Composition;choicePicker_.Close();colorPicker_.Close();
+                dataInspector_.ClosePopup();compositionInspector_.Bind(session_,documentChanged_);
+            });
+
+            layoutPageButton_.Create("Screen Inspector Layout Page");
+            layoutPageButton_.SetText("LAYOUT");
+            layoutPageButton_.OnClick([this](const wi::gui::EventArgs&){
+                page_=Page::Layout;choicePicker_.Close();colorPicker_.Close();
+                dataInspector_.ClosePopup();RefreshFromSelection(true);
+            });
+
+            interactionPageButton_.Create("Ordered UI interactions page");interactionPageButton_.SetText("INTERACTIONS");
+            interactionPageButton_.OnClick([this](const wi::gui::EventArgs&){
+                page_=Page::Interaction;choicePicker_.Close();colorPicker_.Close();dataInspector_.ClosePopup();
+                RefreshFromSelection(true);
+            });
+            componentPageButton_.Create("Linked component page");componentPageButton_.SetText("COMPONENT");
+            componentPageButton_.OnClick([this](const wi::gui::EventArgs&){
+                page_=Page::Component;choicePicker_.Close();colorPicker_.Close();dataInspector_.ClosePopup();
+                RefreshFromSelection(true);
+            });
+            controlPageButton_.Create("Screen control value page");controlPageButton_.SetText("CONTROL / INITIAL VALUE");
+            controlPageButton_.OnClick([this](const wi::gui::EventArgs&){
+                page_=Page::Control;choicePicker_.Close();colorPicker_.Close();dataInspector_.ClosePopup();
+                RefreshFromSelection(true);
+            });
+            themePageButton_.Create("Screen theme page");themePageButton_.SetText("THEME");
+            themePageButton_.OnClick([this](const wi::gui::EventArgs&){
+                page_=Page::Theme;choicePicker_.Close();colorPicker_.Close();dataInspector_.ClosePopup();
+                controlInspector_.Bind(session_,selectedId_,documentChanged_);
+            themeInspector_.Bind(session_,selectedId_,projectRoot_,documentChanged_);
+            });
+            simulationPageButton_.Create("Screen isolated simulation page");
+            simulationPageButton_.SetText("SIMULATE");
+            simulationPageButton_.OnClick([this](const wi::gui::EventArgs&){
+                page_=Page::Simulation;choicePicker_.Close();colorPicker_.Close();
+                dataInspector_.ClosePopup();RefreshFromSelection(true);
+            });
+            animationPageButton_.Create("Screen animation page");
+            animationPageButton_.SetText("ANIMATION");
+            animationPageButton_.OnClick([this](const wi::gui::EventArgs&){
+                page_=Page::Animation;choicePicker_.Close();colorPicker_.Close();
+                dataInspector_.ClosePopup();RefreshFromSelection(true);
             });
 
             stateButton_.Create("Screen Visual State");
@@ -249,6 +336,80 @@ namespace renegade::studio
             created_ = true;
         }
 
+        void SetBindingActorCatalogue(bridge::ScreenBindingActorCatalogue catalogue)
+        { dataInspector_.SetActorCatalogue(catalogue);gameplayAttributeInspector_.SetActorCatalogue(std::move(catalogue)); }
+
+        void OnSetGameplayAttributes(RenegadeGameplayAttributeInspector::AttachCallback callback)
+        {setGameplayAttributes_=std::move(callback);}
+        void SetGameplayAttributeDocumentReference(std::string id,std::string hint)
+        {
+            gameplayAttributeDocumentId_=std::move(id);gameplayAttributeDocumentHint_=std::move(hint);
+            RefreshGameplayAttributeCatalogue();
+        }
+        bool HasGameplayAttributeEditor() const noexcept{return gameplayAttributeInspector_.IsOpen();}
+        void SetLiveRuntimeProbe(std::function<std::string()> probe)
+        {simulationInspector_.SetLiveRuntimeProbe(std::move(probe));}
+        void OpenUiBudgets()
+        {
+            if(!session_||!session_->IsLoaded()||projectRoot_.empty())return;
+            choicePicker_.Close();colorPicker_.Close();dataInspector_.ClosePopup();
+            expanded_=true;toggleButton_.SetText("< BASIC");
+            bridge::ScreenPerformanceBudget budget;std::string error;
+            const auto root=projectRoot_,projectId=session_->ProjectId();
+            if(!bridge::ReadScreenPerformanceBudget(root,projectId,budget,error))
+            {status_="UI BUDGET SETTINGS UNAVAILABLE // "+error;return;}
+            std::vector<RenegadeScreenChoicePicker::Choice> choices;
+            for(const auto us:{500,1000,2000,5000,10000})
+                choices.push_back({"BINDING CPU WARNING: "+std::to_string(us)+" us","cpu:"+std::to_string(us)});
+            for(const auto count:{64,128,256})
+                choices.push_back({"PRESENTED WIDGET WARNING: "+std::to_string(count),"widgets:"+std::to_string(count)});
+            for(const auto count:{32,64,128,512})
+                choices.push_back({"AUTHORED TRACK WARNING: "+std::to_string(count),"tracks:"+std::to_string(count)});
+            choicePicker_.Open("PROJECT UI WARNING BUDGETS",std::move(choices),"cpu:"+std::to_string(budget.bindingCpuUs),
+                [this,root,projectId](const std::string& value)
+            {
+                if(!session_||!session_->IsLoaded()||projectRoot_!=root||session_->ProjectId()!=projectId)return;
+                bridge::ScreenPerformanceBudget current;std::string error;
+                if(!bridge::ReadScreenPerformanceBudget(root,projectId,current,error))
+                {status_="UI BUDGET SETTINGS UNAVAILABLE // "+error;return;}
+                const auto colon=value.find(':');if(colon==std::string::npos)return;
+                unsigned amount=0;std::istringstream parser(value.substr(colon+1));parser>>amount;
+                if(parser.fail()||parser.peek()!=std::char_traits<char>::eof())return;
+                if(value.rfind("cpu:",0)==0)current.bindingCpuUs=amount;
+                else if(value.rfind("widgets:",0)==0)current.widgetWarning=amount;
+                else if(value.rfind("tracks:",0)==0)current.animationWarning=amount;
+                else return;
+                if(!bridge::WriteScreenPerformanceBudget(root,projectId,current,error))
+                {status_="UI BUDGET NOT SAVED // "+error;return;}
+                status_="UI WARNING BUDGET SAVED // NEXT TEST GAME START // NOT A GAMEPLAY CAP";
+                wi::backlog::post(status_);
+            });
+        }
+        void OpenGameplayAttributes()
+        {
+            if(!session_||!session_->IsLoaded())return;
+            choicePicker_.Close();colorPicker_.Close();dataInspector_.ClosePopup();themeInspector_.ClosePopup();
+            componentInspector_.ClosePopup();interactionInspector_.ClosePopup();
+            expanded_=true;toggleButton_.SetText("< BASIC");
+            gameplayAttributeInspector_.SetLayout(width_,height_);
+            gameplayAttributeInspector_.Open(projectRoot_,session_->ProjectId(),gameplayAttributeDocumentId_,gameplayAttributeDocumentHint_,
+                [this](const std::string& id,const std::string& hint,std::string& error){
+                    if(!setGameplayAttributes_){error="Project module attachment is unavailable.";return false;}
+                    if(!setGameplayAttributes_(id,hint,error))return false;
+                    gameplayAttributeDocumentId_=id;gameplayAttributeDocumentHint_=hint;return true;
+                },[this](const bridge::GameplayAttributeDocument& doc){dataInspector_.SetGameplayAttributeDocument(doc);});
+        }
+        void RefreshGameplayAttributeCatalogue()
+        {
+            dataInspector_.SetGameplayAttributeDocument(std::nullopt);
+            if(!session_||!session_->IsLoaded()||gameplayAttributeDocumentId_.empty())return;
+            std::string path,error;bridge::GameplayAttributeDocument doc;
+            if(bridge::ResolveGameplayAttributeDocumentPath(projectRoot_,session_->ProjectId(),gameplayAttributeDocumentId_,
+                gameplayAttributeDocumentHint_,path,error)&&bridge::ReadGameplayAttributeDocument(path,session_->ProjectId(),doc,error))
+                dataInspector_.SetGameplayAttributeDocument(std::move(doc));
+            else status_="Gameplay attribute catalogue: "+error;
+        }
+
         void Bind(
             bridge::ScreenAuthoringSession* session,
             RenegadeScreenEditorWorkspace* workspace,
@@ -259,6 +420,9 @@ namespace renegade::studio
             workspace_ = workspace;
             projectRoot_ = std::move(projectRoot);
             documentChanged_ = std::move(documentChanged);
+            compositionInspector_.Bind(session_,documentChanged_);
+            simulationInspector_.Bind(session_,projectRoot_);
+            RefreshGameplayAttributeCatalogue();
             selectedId_.clear();
             status_ = "ADVANCED INSPECTOR READY";
             RefreshResources();
@@ -267,6 +431,9 @@ namespace renegade::studio
 
         void Clear() noexcept
         {
+            gameplayAttributeInspector_.Clear();
+            animationInspector_.ResetPreview();
+            simulationInspector_.Clear();
             choicePicker_.Close();
             colorPicker_.Close();
             session_ = nullptr;
@@ -281,16 +448,83 @@ namespace renegade::studio
             HideAll();
         }
 
+        [[nodiscard]] bool IsExpanded() const noexcept { return expanded_; }
+        [[nodiscard]] bool HasOpenPopup() const noexcept
+        {
+            return gameplayAttributeInspector_.IsOpen() || choicePicker_.IsOpen() || colorPicker_.IsOpen() || dataInspector_.HasOpenPopup() || themeInspector_.HasOpenPopup() || componentInspector_.HasOpenPopup() || interactionInspector_.HasOpenPopup();
+        }
+
+
+        void OpenAppearanceForSelection()
+        {
+            if (!session_ || !workspace_) return;
+            selectedId_ = workspace_->SelectedWidgetId();
+            expanded_ = true;
+            // Text/Heading/Button selections should open typography first;
+            // other elements open the visual style page.
+            const auto* widget = Selected();
+            page_ = widget &&
+                (widget->kind == bridge::ScreenWidgetKind::Text || bridge::IsScreenInteractive(widget->kind))
+                ? Page::Text : Page::Style;
+            toggleButton_.SetText("< BASIC");
+            RefreshFromSelection(true);
+        }
+
+        void OpenProgressArtworkForSelection(bool frame)
+        {
+            if (!session_ || !workspace_) return;
+            selectedId_ = workspace_->SelectedWidgetId();
+            const auto* widget = Selected();
+            if (!widget || widget->kind != bridge::ScreenWidgetKind::Progress) return;
+            const auto targetId = selectedId_;
+            const auto screenId = session_->Document().envelope.documentId;
+            const std::string current = frame ? widget->progressFrameResourcePath : widget->progressFillResourcePath;
+            choicePicker_.Open(frame ? "CHOOSE FRAME IMAGE" : "CHOOSE FILL IMAGE",
+                ImageChoices(true), current,
+                [this, targetId, screenId, frame](const std::string& value)
+                {
+                    if (!session_ || !session_->IsLoaded() || selectedId_ != targetId ||
+                        session_->Document().envelope.documentId != screenId) return;
+                    const auto* selected = Selected();
+                    if (!selected || selected->kind != bridge::ScreenWidgetKind::Progress) return;
+                    if (value == "::import-image::")
+                    { OpenComputerImage(false, frame ? 1 : 2); return; }
+                    std::string error;
+                    if (!session_->UpdateProgressArtwork(targetId,
+                        frame ? value : selected->progressFrameResourcePath,
+                        frame ? selected->progressFillResourcePath : value, error))
+                    { status_ = "PROGRESS ARTWORK REJECTED // " + error; return; }
+                    status_ = "PROGRESS ARTWORK UPDATED // AUTOSAVE PENDING";
+                    if (documentChanged_) documentChanged_();
+                    RefreshFromSelection(true);
+                });
+        }
+
+        void OpenImageForSelection()
+        {
+            if (!session_ || !workspace_) return;
+            selectedId_ = workspace_->SelectedWidgetId();
+            RefreshFromSelection(true);
+            OpenPrimaryImagePicker();
+        }
+
+        void SetPreferredPanelWidth(const float width)
+        {
+            preferredPanelWidth_ = std::clamp(width, 340.0f, 640.0f);
+        }
+
         void SetLayout(const float width, const float height)
         {
             width_ = std::max(1.0f, width);
             height_ = std::max(1.0f, height);
-            panelWidth_ = std::min(360.0f, width_);
+            panelWidth_ = std::min(preferredPanelWidth_, width_);
             panelX_ = width_ - panelWidth_;
             panelY_ = 64.0f;
             panelHeight_ = std::max(1.0f, height_ - 108.0f);
-            SetPos(XMFLOAT2(panelX_, panelY_));
-            SetSize(XMFLOAT2(panelWidth_, panelHeight_));
+            // Controls use absolute canvas coordinates, including the header
+            // toggle above the right panel. The root clip must contain both.
+            SetPos(XMFLOAT2(0.0f, 0.0f));
+            SetSize(XMFLOAT2(width_, height_));
             choicePicker_.SetLayout(
                 panelX_ + 8.0f, panelY_ + 74.0f,
                 std::max(220.0f, panelWidth_ - 16.0f),
@@ -299,6 +533,7 @@ namespace renegade::studio
                 panelX_ + 12.0f, panelY_ + 82.0f,
                 std::max(280.0f, panelWidth_ - 24.0f),
                 std::min(340.0f, std::max(280.0f, panelHeight_ - 110.0f)));
+            gameplayAttributeInspector_.SetLayout(width_,height_);
             LayoutControls();
         }
 
@@ -313,9 +548,11 @@ namespace renegade::studio
                 return;
             }
 
+            if(gameplayAttributeInspector_.IsOpen()){gameplayAttributeInspector_.Update(canvas,dt);return;}
+
             const bridge::StableId selection = workspace_
                 ? workspace_->SelectedWidgetId() : bridge::StableId{};
-            if (selection != selectedId_)
+            if (selection != selectedId_ || observedRevision_ != session_->Revision())
             {
                 selectedId_ = selection;
                 choicePicker_.Close();
@@ -325,6 +562,13 @@ namespace renegade::studio
 
             LayoutControls();
             SyncVisibility();
+            if(themeInspector_.HasOpenPopup())
+            {themeInspector_.Update(canvas,dt);return;}
+            if (dataInspector_.HasOpenPopup())
+            {
+                dataInspector_.Update(canvas,dt);
+                return;
+            }
             if (choicePicker_.IsOpen())
             {
                 choicePicker_.Update();
@@ -339,6 +583,15 @@ namespace renegade::studio
             {
                 if (widget->IsVisible()) widget->Update(canvas, dt);
             }
+            dataInspector_.Update(canvas,dt);
+            compositionInspector_.Update(canvas,dt);
+            interactionInspector_.Update(canvas,dt);
+            componentInspector_.Update(canvas,dt);
+            controlInspector_.Update(canvas,dt);
+            themeInspector_.Update(canvas,dt);
+            simulationInspector_.Update(canvas,dt);
+            animationInspector_.Update(canvas,dt);
+            layoutInspector_.Update(canvas,dt);
         }
 
         void Render(
@@ -348,6 +601,7 @@ namespace renegade::studio
             if (!created_ || !IsVisible() || !session_ || !session_->IsLoaded())
                 return;
 
+            ApplyScissor(canvas, scissorRect, cmd);
             if (expanded_)
             {
                 DrawRect(panelX_, panelY_, panelWidth_, panelHeight_,
@@ -363,11 +617,65 @@ namespace renegade::studio
             }
             for (const auto* widget : AllControlsConst())
             {
-                if (widget->IsVisible()) widget->Render(canvas, cmd);
+                if (widget->IsVisible())
+                {
+                    ApplyScissor(canvas, scissorRect, cmd);
+                    widget->Render(canvas, cmd);
+                }
             }
+            ApplyScissor(canvas, scissorRect, cmd);
+            compositionInspector_.Render(canvas,cmd);
+            ApplyScissor(canvas,scissorRect,cmd);
+            interactionInspector_.Render(canvas,cmd);
+            ApplyScissor(canvas,scissorRect,cmd);
+            componentInspector_.Render(canvas,cmd);
+            ApplyScissor(canvas,scissorRect,cmd);
+            controlInspector_.Render(canvas,cmd);
+            ApplyScissor(canvas,scissorRect,cmd);
+            themeInspector_.Render(canvas,cmd);
+            ApplyScissor(canvas,scissorRect,cmd);
+            simulationInspector_.Render(canvas,cmd);
+            ApplyScissor(canvas,scissorRect,cmd);
+            animationInspector_.Render(canvas,cmd);
+            ApplyScissor(canvas,scissorRect,cmd);
+            layoutInspector_.Render(canvas,cmd);
+            ApplyScissor(canvas,scissorRect,cmd);
+            dataInspector_.Render(canvas,cmd);
+            ApplyScissor(canvas,scissorRect,cmd);
             choicePicker_.Render(cmd);
             colorPicker_.Render(cmd);
+            ApplyScissor(canvas,scissorRect,cmd);gameplayAttributeInspector_.Render(canvas,cmd);
         }
+
+        bool IsSimulationActive() const noexcept{return simulationInspector_.Active();}
+        const char* PreviewModeLabel() const noexcept{return simulationInspector_.Live()?
+            "LIVE TEST // RUNTIME VALUES OR EXPLICIT UNAVAILABLE // READ ONLY":
+            "SIMULATE // ISOLATED SAMPLES // NO GAMEPLAY ACTIONS";}
+        void ResetSimulationPresentation() noexcept {simulationRevisionSeen_=~std::uint64_t(0);}
+        void ApplySimulationPreview(screen::ScreenRenderer& renderer)
+        {
+            if(!session_||!session_->IsLoaded())return;
+            const auto revision=simulationInspector_.Revision();
+            if(simulationDocumentSeen_==session_->Revision()&&simulationRevisionSeen_==revision)return;
+            simulationDocumentSeen_=session_->Revision();simulationRevisionSeen_=revision;
+            bridge::ScreenBindingFrame frame;std::string error;
+            bridge::ScreenDocument effective;
+            if(!bridge::ResolveScreenTheme(projectRoot_,session_->Document(),effective,error))return;
+            if(simulationInspector_.Active()&&
+                simulationInspector_.Evaluate(effective,frame,error))
+            {
+                simulationInspector_.SetFrameStatus(frame);
+                for(const auto& w:frame.widgets)
+                {renderer.SetWidgetState(w.id,w.visible,w.enabled);renderer.SetWidgetFill(w.id,w.fill);renderer.SetWidgetText(w.id,w.text);}
+            }
+            else for(const auto& w:effective.widgets)
+            {renderer.SetWidgetState(w.id,w.visible,w.enabled);renderer.SetWidgetFill(w.id,w.fill);renderer.SetWidgetText(w.id,w.text);}
+        }
+
+        bridge::ScreenAnimationPreview AnimationPreview() const noexcept {return animationInspector_.Preview();}
+        bridge::ScreenTransitionFrame TransitionPreview() const {return animationInspector_.TransitionPreview();}
+        void TickAnimationPreview(float dt){animationInspector_.Tick(dt);simulationInspector_.TickLive(dt);}
+        void ResetAnimationPreview(){animationInspector_.ResetPreview();}
 
         const char* GetWidgetTypeName() const override
         {
@@ -375,7 +683,7 @@ namespace renegade::studio
         }
 
     private:
-        enum class Page { Style, Text, Binding };
+        enum class Page { Style, Text, Binding, Data, Composition, Layout, Animation, Simulation, Theme, Control, Component, Interaction };
         enum class VisualState { Normal, Hover, Pressed, Focused, Disabled };
         enum class ColorTarget { Background, Foreground, Tint, Border, Shadow };
 
@@ -581,6 +889,19 @@ namespace renegade::studio
         {
             const auto* widget = Selected();
             if (!widget) return;
+            observedRevision_ = session_->Revision();
+            const bool textCapable = widget->kind == bridge::ScreenWidgetKind::Text || bridge::IsScreenInteractive(widget->kind);
+            if (!textCapable && page_ == Page::Text) page_ = Page::Style;
+            if(page_==Page::Control&&!bridge::IsScreenValueControl(widget->kind))page_=Page::Style;
+            componentInspector_.Bind(session_,selectedId_,projectRoot_,documentChanged_);
+            if(page_==Page::Interaction&&!bridge::IsScreenInteractive(widget->kind))page_=Page::Style;
+            interactionInspector_.Bind(session_,selectedId_,documentChanged_);
+
+            dataInspector_.Bind(session_,selectedId_,documentChanged_);
+            themeInspector_.Bind(session_,selectedId_,projectRoot_,documentChanged_);
+            controlInspector_.Bind(session_,selectedId_,documentChanged_);
+            animationInspector_.Bind(session_,selectedId_,documentChanged_);
+            layoutInspector_.Bind(session_,selectedId_,documentChanged_);
             if (overwriteDraft || !draftStyleValid_)
             {
                 draftStyle_ = widget->style;
@@ -668,6 +989,7 @@ namespace renegade::studio
                     choice.projectRelativePath + "  [" + ShortId(choice.assetId) + "]",
                     choice.projectRelativePath});
             }
+            choices.push_back({" + IMPORT IMAGE FROM THIS COMPUTER", "::import-image::"});
             return choices;
         }
 
@@ -682,6 +1004,9 @@ namespace renegade::studio
                     choice.projectRelativePath + "  [" + ShortId(choice.assetId) + "]",
                     choice.projectRelativePath});
             }
+            choices.push_back({
+                " + IMPORT TRUETYPE FONT FROM THIS COMPUTER",
+                "::import-ttf-font::"});
             return choices;
         }
 
@@ -695,22 +1020,92 @@ namespace renegade::studio
                 [this](const std::string& value)
                 {
                     if (!Selected()) return;
+                    if (value == "::import-image::")
+                    {
+                        OpenComputerImage(true);
+                        return;
+                    }
                     DraftVisual()->imageResourcePath = value;
                     stateImageButton_.SetText("STATE IMAGE: " + Short(value));
+                    CommitCreatorEdit(CurrentCreatorEdit(),
+                        "STATE IMAGE UPDATED // AUTOSAVE PENDING");
                 });
         }
 
         void OpenFontPicker()
         {
             const auto* widget = Selected();
-            if (!widget || widget->kind == bridge::ScreenWidgetKind::Image) return;
+            if (!widget || (widget->kind != bridge::ScreenWidgetKind::Text && !bridge::IsScreenInteractive(widget->kind))) return;
             EnsureDraftStyle(*widget);
             choicePicker_.Open("SELECT FONT", FontChoices(),
                 draftStyle_.text.fontResource,
                 [this](const std::string& value)
                 {
+                    if (!Selected()) return;
+                    if (value == "::import-ttf-font::")
+                    {
+                        OpenComputerFont();
+                        return;
+                    }
                     draftStyle_.text.fontResource = value;
                     fontButton_.SetText("FONT: " + Short(value));
+                    CommitCreatorEdit(CurrentCreatorEdit(),
+                        "FONT ASSIGNED // AUTOSAVE PENDING");
+                });
+        }
+
+        void OpenComputerFont()
+        {
+            if (!session_ || !session_->IsLoaded() ||
+                !Selected() || projectRoot_.empty()) return;
+            const auto projectId = session_->ProjectId();
+            const auto screenId = session_->Document().envelope.documentId;
+            const auto widgetId = selectedId_;
+            const std::string root = projectRoot_;
+            wi::helper::FileDialogParams dialog;
+            dialog.type = wi::helper::FileDialogParams::OPEN;
+            dialog.description = "Import TrueType font to Renegade project";
+            dialog.extensions = {"ttf"};
+            wi::helper::FileDialog(dialog,
+                [this, projectId, screenId, widgetId, root](
+                    const std::string& external)
+                {
+                    if (external.empty()) return;
+                    wi::eventhandler::Subscribe_Once(
+                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                        [this, projectId, screenId, widgetId,
+                         root, external](std::uint64_t)
+                        {
+                            if (!session_ || !session_->IsLoaded() ||
+                                session_->ProjectId() != projectId ||
+                                session_->Document().envelope.documentId != screenId ||
+                                projectRoot_ != root ||
+                                selectedId_ != widgetId ||
+                                !session_->FindWidget(widgetId))
+                            {
+                                status_ = "FONT IMPORT CANCELLED // SCREEN CHANGED";
+                                return;
+                            }
+                            const auto imported =
+                                bridge::CreatorScreenFontImportService::Import(
+                                    root, projectId, external);
+                            if (!imported.succeeded)
+                            {
+                                status_ = "FONT IMPORT FAILED // " + imported.error;
+                                return;
+                            }
+                            const auto* widget = Selected();
+                            if (!widget ||
+                                (widget->kind != bridge::ScreenWidgetKind::Text && !bridge::IsScreenInteractive(widget->kind)))
+                                return;
+                            EnsureDraftStyle(*widget);
+                            draftStyle_.text.fontResource = imported.runtimePath;
+                            fontButton_.SetText(
+                                "FONT: " + Short(imported.runtimePath));
+                            CommitCreatorEdit(CurrentCreatorEdit(),
+                                "CUSTOM FONT IMPORTED + ASSIGNED // AUTOSAVE");
+                            RefreshResources();
+                        });
                 });
         }
 
@@ -721,8 +1116,170 @@ namespace renegade::studio
             choicePicker_.Open("SELECT IMAGE", ImageChoices(true), draftPrimaryResource_,
                 [this](const std::string& value)
                 {
+                    if (value == "::import-image::")
+                    {
+                        OpenComputerImage(false);
+                        return;
+                    }
                     draftPrimaryResource_ = value;
                     primaryResourceButton_.SetText("IMAGE: " + Short(value));
+                    CommitCreatorEdit(CurrentCreatorEdit(),
+                        "IMAGE UPDATED // AUTOSAVE PENDING");
+                });
+        }
+
+        // Import through Renegade's actual governed texture pipeline, not a
+        // stale absolute file path. The result becomes a project source asset
+        // and a registered LP08 product that Build Game can resolve.
+        void OpenComputerImage(const bool stateImage, const int progressSlot = 0)
+        {
+            if (!session_ || !session_->IsLoaded() ||
+                !Selected() || projectRoot_.empty()) return;
+            const auto projectId = session_->ProjectId();
+            const auto screenId = session_->Document().envelope.documentId;
+            const auto widgetId = selectedId_;
+            const auto requestedVisualState = state_;
+            const std::string root = projectRoot_;
+            wi::helper::FileDialogParams dialog;
+            dialog.type = wi::helper::FileDialogParams::OPEN;
+            dialog.description = "Import UI image to Renegade project";
+            dialog.extensions = {"png", "jpg", "jpeg", "tga",
+                                 "bmp", "dds", "hdr"};
+            wi::helper::FileDialog(dialog,
+                [this, projectId, screenId, widgetId, root, stateImage,
+                 requestedVisualState, progressSlot](const std::string& path)
+                {
+                    if (path.empty()) return;
+                    wi::eventhandler::Subscribe_Once(
+                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                        [this, projectId, screenId, widgetId, root,
+                         stateImage, requestedVisualState, progressSlot, path](std::uint64_t)
+                        {
+                            if (!session_ || !session_->IsLoaded() ||
+                                session_->ProjectId() != projectId ||
+                                session_->Document().envelope.documentId != screenId ||
+                                projectRoot_ != root ||
+                                selectedId_ != widgetId ||
+                                (stateImage && state_ != requestedVisualState) ||
+                                !session_->FindWidget(widgetId))
+                            {
+                                status_ = "IMAGE IMPORT CANCELLED // SCREEN CHANGED";
+                                return;
+                            }
+                            const auto imported =
+                                bridge::CreatorTextureWorkflowService()
+                                    .ImportTexture(root, projectId, path);
+                            if (!imported.succeeded)
+                            {
+                                status_ = "IMAGE IMPORT FAILED // " + imported.error;
+                                return;
+                            }
+                            // Mirror governed LP08's retained source to a
+                            // Screen-readable Content dependency. The project
+                            // owns both the governed product and the packaged
+                            // raw image that the ScreenRenderer actually loads.
+                            namespace fs = std::filesystem;
+                            const fs::path relativeMirror =
+                                fs::path("Content") / "UI" / "Images" /
+                                fs::u8path(imported.assetId +
+                                    fs::u8path(imported.sourceProjectRelativePath)
+                                        .extension().generic_u8string());
+                            const fs::path physicalMirror =
+                                fs::u8path(root) / relativeMirror;
+                            const fs::path physicalSource =
+                                fs::u8path(root) /
+                                    fs::u8path(imported.sourceProjectRelativePath);
+                            std::ifstream stream(physicalSource, std::ios::binary);
+                            if (!stream)
+                            {
+                                status_ = "IMAGE IMPORTED BUT RETAINED SOURCE CANNOT BE READ";
+                                return;
+                            }
+                            std::vector<std::uint8_t> bytes(
+                                std::istreambuf_iterator<char>(stream), {});
+                            std::error_code ec;
+                            fs::create_directories(
+                                physicalMirror.parent_path(), ec);
+                            if (ec || fs::exists(physicalMirror))
+                            {
+                                status_ = "IMAGE IMPORTED BUT UI DESTINATION IS UNAVAILABLE";
+                                return;
+                            }
+                            bridge::ProjectDocumentWrite mirrorWrite;
+                            mirrorWrite.destinationPath =
+                                physicalMirror.generic_u8string();
+                            mirrorWrite.content = bytes;
+                            mirrorWrite.validator = [bytes](
+                                const std::string& staged, std::string& error)
+                            {
+                                std::ifstream verify(
+                                    fs::u8path(staged), std::ios::binary);
+                                if (!verify)
+                                {
+                                    error = "Cannot verify imported Screen image.";
+                                    return false;
+                                }
+                                const std::vector<std::uint8_t> actual(
+                                    std::istreambuf_iterator<char>(verify), {});
+                                if (actual != bytes)
+                                {
+                                    error = "Staged Screen image bytes differ.";
+                                    return false;
+                                }
+                                error.clear();
+                                return true;
+                            };
+                            bridge::ProjectDocumentTransactionOptions options;
+                            options.allowedRoot = root;
+                            options.journalDirectory = (
+                                fs::u8path(root) / "Intermediate" /
+                                "Transactions").generic_u8string();
+                            const auto committed =
+                                bridge::ProjectDocumentTransaction().Execute(
+                                    {std::move(mirrorWrite)}, std::move(options));
+                            if (!committed.success)
+                            {
+                                status_ = "UI IMAGE RESOURCE COPY FAILED // " +
+                                    committed.message;
+                                return;
+                            }
+                            const std::string runtimeImage =
+                                relativeMirror.generic_u8string();
+                            std::string resolved, validationError;
+                            if (!bridge::ResolveScreenResourcePath(
+                                    root, runtimeImage, resolved, validationError))
+                            {
+                                status_ = "UI IMAGE IMPORT VALIDATION FAILED // " +
+                                    validationError;
+                                return;
+                            }
+                            const auto* widget = Selected();
+                            if (!widget) return;
+                            if (progressSlot != 0)
+                            {
+                                std::string artError;
+                                if (!session_->UpdateProgressArtwork(widgetId,
+                                    progressSlot == 1 ? runtimeImage : widget->progressFrameResourcePath,
+                                    progressSlot == 2 ? runtimeImage : widget->progressFillResourcePath, artError))
+                                { status_ = "PROGRESS IMAGE REJECTED // " + artError; return; }
+                                status_ = "PROGRESS IMAGE IMPORTED // AUTOSAVE PENDING";
+                                if (documentChanged_) documentChanged_();
+                            }
+                            else if (stateImage)
+                            {
+                                EnsureDraftStyle(*widget);
+                                DraftVisual()->imageResourcePath = runtimeImage;
+                                CommitCreatorEdit(CurrentCreatorEdit(),
+                                    "IMAGE IMPORTED + STATE ASSIGNED // AUTOSAVE");
+                            }
+                            else
+                            {
+                                draftPrimaryResource_ = runtimeImage;
+                                CommitCreatorEdit(CurrentCreatorEdit(),
+                                    "IMAGE IMPORTED + ELEMENT ASSIGNED // AUTOSAVE");
+                            }
+                            RefreshResources();
+                        });
                 });
         }
 
@@ -731,15 +1288,52 @@ namespace renegade::studio
             const auto* widget = Selected();
             if (!widget || widget->kind != bridge::ScreenWidgetKind::Button || !session_)
                 return;
-            std::vector<RenegadeScreenChoicePicker::Choice> choices;
+            std::vector<RenegadeScreenChoicePicker::Choice> choices{
+                {"< NONE > // UNBIND BUTTON", ""}};
             for (const auto& action : session_->Document().actions)
-                choices.push_back({action.id, action.id});
+                if(!bridge::IsRuntimeUiAccessibilityAction(action.id))
+                    choices.push_back({action.id, action.id});
+            choices.push_back({"PLAYER ACCESSIBILITY // REDUCED MOTION TOGGLE",
+                bridge::RuntimeUiReducedMotionToggleAction});
+            choices.push_back({"PLAYER ACCESSIBILITY // REDUCED MOTION ON",
+                bridge::RuntimeUiReducedMotionOnAction});
+            choices.push_back({"PLAYER ACCESSIBILITY // REDUCED MOTION OFF",
+                bridge::RuntimeUiReducedMotionOffAction});
+            choices.push_back({"PLAYER ACCESSIBILITY // INCREASE TEXT SIZE",bridge::RuntimeUiTextScaleIncreaseAction});
+            choices.push_back({"PLAYER ACCESSIBILITY // DECREASE TEXT SIZE",bridge::RuntimeUiTextScaleDecreaseAction});
+            choices.push_back({"PLAYER ACCESSIBILITY // RESET TEXT SIZE",bridge::RuntimeUiTextScaleResetAction});
+            choices.push_back({"PLAYER ACCESSIBILITY // CYCLE CONTRAST PALETTE",bridge::RuntimeUiContrastCycleAction});
+            choices.push_back({"PLAYER ACCESSIBILITY // CYCLE FOCUS COLOUR",bridge::RuntimeUiFocusColorCycleAction});
+            choices.push_back({"PLAYER ACCESSIBILITY // CYCLE FOCUS WIDTH",bridge::RuntimeUiFocusWidthCycleAction});
+            choices.push_back({"PLAYER ACCESSIBILITY // INCREASE UI SCALE",bridge::RuntimeUiScaleIncreaseAction});
+            choices.push_back({"PLAYER ACCESSIBILITY // DECREASE UI SCALE",bridge::RuntimeUiScaleDecreaseAction});
+            choices.push_back({"PLAYER ACCESSIBILITY // RESET UI SCALE",bridge::RuntimeUiScaleResetAction});
+            choices.push_back({"PLAYER ACCESSIBILITY // CYCLE TARGET SIZE",bridge::RuntimeUiTargetSizeCycleAction});
+            const auto widgetId = selectedId_;
+            const auto screenId = session_->Document().envelope.documentId;
             choicePicker_.Open("SELECT BUTTON ACTION", std::move(choices), draftAction_,
-                [this](const std::string& value)
+                [this, widgetId, screenId](const std::string& value)
                 {
+                    if (!session_ || !session_->IsLoaded() || selectedId_ != widgetId ||
+                        session_->Document().envelope.documentId != screenId ||
+                        !session_->FindWidget(widgetId)) return;
+                    if(bridge::IsRuntimeUiAccessibilityAction(value))
+                    {
+                        std::string bindError;
+                        if(!session_->BindRuntimeUiAccessibilityAction(widgetId,value,bindError))
+                        {status_="ACCESSIBILITY ACTION REJECTED // "+bindError;return;}
+                        draftAction_=value;
+                        status_="PLAYER ACCESSIBILITY ACTION BOUND // ONE UNDOABLE CHANGE";
+                        if(documentChanged_)documentChanged_();
+                        RefreshFromSelection(true);
+                        return;
+                    }
+                    // Picker selection is an explicit binding action, not a
+                    // draft-only visual change. Go through Undo/autosave authority.
                     draftAction_ = value;
-                    actionIdInput_.SetValue(value);
-                    actionButton_.SetText("ACTION: " + value);
+                    CommitCreatorEdit(CurrentCreatorEdit(),
+                        value.empty() ? "BUTTON ACTION CLEARED // AUTOSAVE PENDING" :
+                            "BUTTON ACTION BOUND // AUTOSAVE PENDING");
                 });
         }
 
@@ -756,11 +1350,21 @@ namespace renegade::studio
                 choices.push_back({candidate.name + "  [" + ShortId(candidate.id) + "]",
                     candidate.id});
             }
+            const auto widgetId = selectedId_;
+            const auto screenId = session_->Document().envelope.documentId;
             choicePicker_.Open("SELECT PARENT", std::move(choices), draftParent_,
-                [this](const std::string& value)
+                [this, widgetId, screenId](const std::string& value)
                 {
+                    if (!session_ || !session_->IsLoaded() || selectedId_ != widgetId ||
+                        session_->Document().envelope.documentId != screenId ||
+                        !session_->FindWidget(widgetId)) return;
+                    // Parent selection changes screen hierarchy; persist it
+                    // through the authoring transaction rather than only
+                    // updating the visible draft label.
                     draftParent_ = value;
-                    parentButton_.SetText("PARENT: " + ParentLabel(value));
+                    CommitCreatorEdit(CurrentCreatorEdit(),
+                        value.empty() ? "WIDGET MOVED TO CANVAS // AUTOSAVE PENDING" :
+                            "WIDGET PARENT UPDATED // AUTOSAVE PENDING");
                 });
         }
 
@@ -796,10 +1400,15 @@ namespace renegade::studio
                 value = draftStyle_.text.shadowColor;
                 title = "SHADOW RGBA";
             }
+            const auto widgetId = selectedId_;
+            const auto screenId = session_->Document().envelope.documentId;
+            const auto visualState = state_;
             colorPicker_.Open(title, value,
-                [this, target](const bridge::ScreenColor& color)
+                [this, target, widgetId, screenId, visualState](const bridge::ScreenColor& color)
                 {
-                    if (!Selected()) return;
+                    if (!session_ || !session_->IsLoaded() || selectedId_ != widgetId ||
+                        session_->Document().envelope.documentId != screenId ||
+                        state_ != visualState || !session_->FindWidget(widgetId)) return;
                     if (target == ColorTarget::Background)
                     {
                         DraftVisual()->background = color;
@@ -972,7 +1581,7 @@ namespace renegade::studio
         void ApplyText()
         {
             const auto* widget = Selected();
-            if (!widget || widget->kind == bridge::ScreenWidgetKind::Image) return;
+            if (!widget || (widget->kind != bridge::ScreenWidgetKind::Text && !bridge::IsScreenInteractive(widget->kind))) return;
             EnsureDraftStyle(*widget);
             if (!ReadTextFields(draftStyle_)) return;
             CommitCreatorEdit(CurrentCreatorEdit(),
@@ -1005,9 +1614,9 @@ namespace renegade::studio
                 status_ = "ADD ACTION REJECTED // " + error;
                 return;
             }
-            draftAction_ = value;
-            actionButton_.SetText("ACTION: " + value);
-            status_ = "ACTION ADDED // APPLY BINDING TO USE IT";
+            // Creating an action does not silently rebind the selected button
+            // or change the action that Rename/Delete currently targets.
+            status_ = "ACTION ADDED // CHOOSE IT IN ACTION PICKER TO BIND";
             if (documentChanged_) documentChanged_();
         }
 
@@ -1058,7 +1667,7 @@ namespace renegade::studio
         void MoveFocus(const bool earlier)
         {
             const auto* widget = Selected();
-            if (!session_ || !widget || widget->kind != bridge::ScreenWidgetKind::Button)
+            if (!session_ || !widget || !bridge::IsScreenInteractive(widget->kind))
                 return;
             std::string error;
             const bool moved = earlier
@@ -1173,7 +1782,36 @@ namespace renegade::studio
             textPageButton_.SetSize(XMFLOAT2(third, 28.0f));
             bindingPageButton_.SetPos(XMFLOAT2(x + (third + 4.0f) * 2.0f, y));
             bindingPageButton_.SetSize(XMFLOAT2(third, 28.0f));
-            y += 38.0f;
+            dataPageButton_.SetPos(XMFLOAT2(x,y+32.0f));
+            dataPageButton_.SetSize(XMFLOAT2(third,28.0f));
+            layoutPageButton_.SetPos(XMFLOAT2(x+third+4.0f,y+32.0f));
+            layoutPageButton_.SetSize(XMFLOAT2(third,28.0f));
+            compositionPageButton_.SetPos(XMFLOAT2(x+(third+4.0f)*2.0f,y+32.0f));
+            compositionPageButton_.SetSize(XMFLOAT2(third,28.0f));
+            animationPageButton_.SetPos(XMFLOAT2(x,y+64.0f));
+            animationPageButton_.SetSize(XMFLOAT2(third,28.0f));
+            themePageButton_.SetPos(XMFLOAT2(x+third+4,y+64.0f));themePageButton_.SetSize(XMFLOAT2(third,28.0f));
+            simulationPageButton_.SetPos(XMFLOAT2(x+2*(third+4),y+64.0f));
+            simulationPageButton_.SetSize(XMFLOAT2(third,28.0f));
+            const bool hasControl=Selected()&&bridge::IsScreenValueControl(Selected()->kind);
+            const bool hasInteractions=Selected()&&bridge::IsScreenInteractive(Selected()->kind);
+            const float fourthWidth=hasControl?(w-12.0f)/3.0f:hasInteractions?(w-6.0f)*.5f:w;
+            controlPageButton_.SetText("CONTROL");
+            controlPageButton_.SetPos(XMFLOAT2(x,y+96.0f));controlPageButton_.SetSize(XMFLOAT2(fourthWidth,28.0f));
+            componentPageButton_.SetPos(XMFLOAT2(x+(hasControl?fourthWidth+6.0f:0),y+96.0f));
+            componentPageButton_.SetSize(XMFLOAT2(fourthWidth,28.0f));
+            interactionPageButton_.SetPos(XMFLOAT2(x+(hasControl?2:1)*(fourthWidth+6.0f),y+96.0f));
+            interactionPageButton_.SetSize(XMFLOAT2(fourthWidth,28.0f));
+            y += 134.0f;
+            interactionInspector_.SetLayout(x,y,w,std::max(1.0f,panelY_+panelHeight_-y-36.0f));
+            componentInspector_.SetLayout(x,y,w,std::max(1.0f,panelY_+panelHeight_-y-36.0f));
+            controlInspector_.SetLayout(x,y,w,std::max(1.0f,panelY_+panelHeight_-y-36.0f));
+            themeInspector_.SetLayout(x,y,w,std::max(1.0f,panelY_+panelHeight_-y-36.0f));
+            simulationInspector_.SetLayout(x,y,w,std::max(1.0f,panelY_+panelHeight_-y-36.0f));
+            animationInspector_.SetLayout(x,y,w,std::max(1.0f,panelY_+panelHeight_-y-36.0f));
+            compositionInspector_.SetLayout(x,y,w,std::max(1.0f,panelY_+panelHeight_-y-36.0f));
+            layoutInspector_.SetLayout(x,y,w,std::max(1.0f,panelY_+panelHeight_-y-36.0f));
+            dataInspector_.SetLayout(x,y,w,std::max(1.0f,panelY_+panelHeight_-y-36.0f));
 
             const auto place = [&](wi::gui::Widget& widget, const float h = 28.0f)
             {
@@ -1223,7 +1861,7 @@ namespace renegade::studio
                 place(wrapButton_);
                 place(applyTextButton_, 32.0f);
             }
-            else
+            else if (page_ == Page::Binding)
             {
                 place(primaryResourceButton_);
                 place(actionButton_);
@@ -1244,32 +1882,58 @@ namespace renegade::studio
 
         void SyncVisibility()
         {
-            HideAll();
-            toggleButton_.SetVisible(true);
-            if (!expanded_ || !Selected()) return;
-            stylePageButton_.SetVisible(true);
-            textPageButton_.SetVisible(true);
-            bindingPageButton_.SetVisible(true);
-
-            if (page_ == Page::Style)
+            // Set each final visibility once. Hiding active text fields and then
+            // showing them every frame deactivates native typing/caret state.
+            std::vector<wi::gui::Widget*> visible{&toggleButton_};
+            const auto append = [&visible](const std::vector<wi::gui::Widget*>& controls)
             {
-                for (auto* widget : StyleControls()) widget->SetVisible(true);
-            }
-            else if (page_ == Page::Text)
+                visible.insert(visible.end(), controls.begin(), controls.end());
+            };
+            if (expanded_)
             {
-                const bool textCapable = Selected()->kind != bridge::ScreenWidgetKind::Image;
-                for (auto* widget : TextControls()) widget->SetVisible(textCapable);
+                append({&compositionPageButton_, &simulationPageButton_, &themePageButton_, &layoutPageButton_});
             }
-            else
+            if (expanded_ && Selected())
             {
-                for (auto* widget : BindingControls()) widget->SetVisible(true);
-                const bool image = Selected()->kind == bridge::ScreenWidgetKind::Image;
-                const bool button = Selected()->kind == bridge::ScreenWidgetKind::Button;
-                primaryResourceButton_.SetEnabled(image);
-                actionButton_.SetEnabled(button);
-                focusEarlierButton_.SetEnabled(button);
-                focusLaterButton_.SetEnabled(button);
+                append({&componentPageButton_});
+                if(bridge::IsScreenInteractive(Selected()->kind))append({&interactionPageButton_});
+                if(bridge::IsScreenValueControl(Selected()->kind))append({&controlPageButton_});
+                append({&stylePageButton_, &textPageButton_, &bindingPageButton_, &dataPageButton_, &layoutPageButton_, &animationPageButton_});
+                textPageButton_.SetEnabled(Selected()->kind == bridge::ScreenWidgetKind::Text ||
+                    bridge::IsScreenInteractive(Selected()->kind));
+                if (page_ == Page::Style) append(StyleControls());
+                else if (page_ == Page::Text)
+                {
+                    if (Selected()->kind == bridge::ScreenWidgetKind::Text ||
+                        bridge::IsScreenInteractive(Selected()->kind))
+                        append(TextControls());
+                }
+                else if (page_ == Page::Binding)
+                {
+                    append(BindingControls());
+                    const bool image = Selected()->kind == bridge::ScreenWidgetKind::Image;
+                    const bool button = Selected()->kind == bridge::ScreenWidgetKind::Button;
+                    primaryResourceButton_.SetEnabled(image);
+                    actionButton_.SetEnabled(button);
+                    actionIdInput_.SetEnabled(button);
+                    addActionButton_.SetEnabled(button);
+                    renameActionButton_.SetEnabled(button);
+                    deleteActionButton_.SetEnabled(button);
+                    focusEarlierButton_.SetEnabled(bridge::IsScreenInteractive(Selected()->kind));
+                    focusLaterButton_.SetEnabled(bridge::IsScreenInteractive(Selected()->kind));
+                }
             }
+            for (auto* control : AllControls())
+                control->SetVisible(std::find(visible.begin(), visible.end(), control) != visible.end());
+            dataInspector_.SetActive(expanded_ && Selected() && page_ == Page::Data);
+            compositionInspector_.SetActive(expanded_ && page_ == Page::Composition);
+            layoutInspector_.SetActive(expanded_ && page_ == Page::Layout);
+            animationInspector_.SetActive(expanded_ && Selected() && page_==Page::Animation);
+            simulationInspector_.SetActive(expanded_ && page_==Page::Simulation);
+            themeInspector_.SetActive(expanded_ && page_==Page::Theme);
+            interactionInspector_.SetActive(expanded_ && Selected() && bridge::IsScreenInteractive(Selected()->kind) && page_==Page::Interaction);
+            componentInspector_.SetActive(expanded_ && Selected() && page_==Page::Component);
+            controlInspector_.SetActive(expanded_ && Selected() && bridge::IsScreenValueControl(Selected()->kind) && page_==Page::Control);
         }
 
         std::vector<wi::gui::Widget*> StyleControls()
@@ -1307,7 +1971,7 @@ namespace renegade::studio
         {
             auto result = std::vector<wi::gui::Widget*>{
                 &toggleButton_, &stylePageButton_, &textPageButton_,
-                &bindingPageButton_};
+                &bindingPageButton_, &dataPageButton_, &compositionPageButton_, &layoutPageButton_, &animationPageButton_, &simulationPageButton_, &themePageButton_, &controlPageButton_, &componentPageButton_, &interactionPageButton_};
             const auto append = [&result](const std::vector<wi::gui::Widget*>& values)
             {
                 result.insert(result.end(), values.begin(), values.end());
@@ -1329,6 +1993,15 @@ namespace renegade::studio
         void HideAll()
         {
             for (auto* widget : AllControls()) widget->SetVisible(false);
+            dataInspector_.SetActive(false);
+            compositionInspector_.SetActive(false);
+            layoutInspector_.SetActive(false);
+            animationInspector_.SetActive(false);
+            simulationInspector_.SetActive(false);
+            themeInspector_.SetActive(false);
+            interactionInspector_.SetActive(false);
+            componentInspector_.SetActive(false);
+            controlInspector_.SetActive(false);
         }
 
         static void DrawRect(
@@ -1366,6 +2039,7 @@ namespace renegade::studio
         RenegadeScreenEditorWorkspace* workspace_ = nullptr;
         std::function<void()> documentChanged_;
         std::string projectRoot_;
+        std::uint64_t observedRevision_ = 0;
         bridge::StableId selectedId_;
         bool created_ = false;
         bool expanded_ = false;
@@ -1376,6 +2050,7 @@ namespace renegade::studio
         float panelX_ = 0.0f;
         float panelY_ = 64.0f;
         float panelWidth_ = 360.0f;
+        float preferredPanelWidth_ = 360.0f;
         float panelHeight_ = 1.0f;
         std::string status_;
 
@@ -1395,6 +2070,28 @@ namespace renegade::studio
         RenegadeButton stylePageButton_;
         RenegadeButton textPageButton_;
         RenegadeButton bindingPageButton_;
+        RenegadeButton dataPageButton_;
+        RenegadeScreenDataBindingInspector dataInspector_;
+        RenegadeButton compositionPageButton_;
+        RenegadeScreenCompositionInspector compositionInspector_;
+        RenegadeGameplayAttributeInspector gameplayAttributeInspector_;
+        RenegadeGameplayAttributeInspector::AttachCallback setGameplayAttributes_;
+        std::string gameplayAttributeDocumentId_,gameplayAttributeDocumentHint_;
+        RenegadeButton interactionPageButton_;
+        RenegadeScreenInteractionInspector interactionInspector_;
+        RenegadeButton componentPageButton_;
+        RenegadeScreenComponentInspector componentInspector_;
+        RenegadeButton controlPageButton_;
+        RenegadeScreenControlInspector controlInspector_;
+        RenegadeButton themePageButton_;
+        RenegadeScreenThemeInspector themeInspector_;
+        RenegadeButton simulationPageButton_;
+        RenegadeScreenSimulationInspector simulationInspector_;
+        std::uint64_t simulationDocumentSeen_=~std::uint64_t(0),simulationRevisionSeen_=~std::uint64_t(0);
+        RenegadeButton animationPageButton_;
+        RenegadeScreenAnimationInspector animationInspector_;
+        RenegadeButton layoutPageButton_;
+        RenegadeScreenLayoutInspector layoutInspector_;
         RenegadeButton stateButton_;
         RenegadeButton stateImageButton_;
         RenegadeTextInputField backgroundInput_;

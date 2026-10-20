@@ -174,6 +174,7 @@ namespace renegade::bridge
         // the same way startupScene/startupFlow/startupScreen already do;
         // there is no separate provider type for this.
         std::vector<DependencyCandidate> alwaysInclude;
+        std::string defaultHud;
     };
 
     struct StoryFlowDependencyDocument
@@ -188,6 +189,7 @@ namespace renegade::bridge
         std::string projectId;
         std::vector<std::string> imagePaths;
         std::vector<std::string> fontPaths;
+        std::vector<std::string> screenPaths;
     };
 
     struct WisceneDependencyDocument

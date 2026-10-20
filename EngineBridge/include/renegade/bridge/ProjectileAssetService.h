@@ -22,6 +22,12 @@ namespace renegade::bridge
         float lifetimeSeconds = 5;
         // Payload hook; no complete Player/NPC health feature implied.
         float damage = 10;
+        // Opt-in gameplay charge policy. damage is the full-charge impact amount.
+        // Zero duration preserves fixed legacy damage.
+        float fullChargeSeconds = 0, minimumChargeDamage = 0;
+        bool scorchOnImpact = false;
+        BurningPayload burning, minimumChargeBurning;
+        GrenadePhysicsPolicy grenade; // Explicit opt-in; thrown objects need not explode.
         // Optional registered model appearance, independent of collision.
         StableId meshAssetId;
         float visualScale = 1;
@@ -29,8 +35,22 @@ namespace renegade::bridge
         std::vector<ProjectileEffectLayer> flightEffects;
         ProjectileEffectKind impactEffect = ProjectileEffectKind::None;
         bool stickOnImpact = false;
+        // Explicit built-in fireball appearance, shared by palm charge and flight.
+        bool fireballPresentation = false;
         float stuckLifetimeSeconds = 30, embedDepthMetres = .05f;
     };
+    inline float ProjectileChargedDamage(const ProjectileAssetDocument& d, float seconds) noexcept
+    {
+        if (d.fullChargeSeconds <= 0) return d.damage;
+        const float q = std::isfinite(seconds) ? std::clamp(seconds / d.fullChargeSeconds, 0.f, 1.f) : 0.f;
+        return d.minimumChargeDamage + (d.damage - d.minimumChargeDamage) * q;
+    }
+    inline BurningPayload ProjectileChargedBurning(const ProjectileAssetDocument& d, float seconds) noexcept
+    {
+        const float q=d.fullChargeSeconds<=0 ? 1.f : (std::isfinite(seconds)?std::clamp(seconds/d.fullChargeSeconds,0.f,1.f):0.f);
+        return {d.minimumChargeBurning.damagePerSecond+(d.burning.damagePerSecond-d.minimumChargeBurning.damagePerSecond)*q,
+            d.minimumChargeBurning.durationSeconds+(d.burning.durationSeconds-d.minimumChargeBurning.durationSeconds)*q};
+    }
     struct ProjectileAssetSaveResult
     {
         bool succeeded = false;

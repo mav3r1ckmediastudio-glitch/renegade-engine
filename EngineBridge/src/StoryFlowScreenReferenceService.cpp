@@ -213,7 +213,11 @@ namespace renegade::bridge
 
         for (const auto& widget : screen.widgets)
         {
-            if (widget.kind == ScreenWidgetKind::Button)
+            // A Button explicitly marked Local Only executes its bounded UI
+            // interaction list but never emits the symbolic Flow action.
+            // Only Flow-dispatching Buttons require a StoryFlow destination.
+            if (widget.kind == ScreenWidgetKind::Button && !widget.localOnly &&
+                !IsRuntimeUiAccessibilityAction(widget.actionId))
                 AddUnique(audit.buttonActionIds, widget.actionId);
         }
 

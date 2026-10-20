@@ -59,11 +59,66 @@ int main()
     const auto simulation=ProjectileSimulationDefinition(reopened);
     if(simulation.acceleration.y!=-9.81f||simulation.lifetimeSeconds!=5)
         return fail("simulation mapping");
+    // Grenade payload has a new schema and must not alter old preset semantics.
+    auto grenade=MakeProjectilePreset(ProjectilePreset::Thrown);
+    grenade.projectId=project;grenade.assetId=GenerateStableId();
+    grenade.name="Grenade Fuse/Bounce Reference";
+    grenade.grenade.enabled=true;
+    grenade.lifetimeSeconds=5.f;
+    grenade.grenade.fuseSeconds=3.f;
+    grenade.grenade.blastRadius=3.6f;
+    grenade.grenade.blastDamage=55.f;
+    if(!SerializeProjectileAsset(grenade,text,error))return fail("grenade serialize");
+    if(nlohmann::json::parse(text).at("schema_version")!=7)
+        return fail("grenade version");
+    ProjectileAssetDocument roundtrip;
+    if(!DeserializeProjectileAsset(text,roundtrip,error) ||
+       !roundtrip.grenade.enabled || roundtrip.grenade.blastDamage!=55.f ||
+       ProjectileSimulationDefinition(roundtrip).grenade.fuseSeconds!=3.f)
+        return fail("grenade roundtrip");
+    auto malformed=nlohmann::json::parse(text);
+    malformed["grenade"]["fuse_seconds"]=true;
+    if(DeserializeProjectileAsset(malformed.dump(),roundtrip,error))
+        return fail("bool fuse admitted");
+    malformed=nlohmann::json::parse(text);malformed["grenade"]["radius"]=-.2;
+    if(DeserializeProjectileAsset(malformed.dump(),roundtrip,error))
+        return fail("negative grenade radius admitted");
+    grenade.grenade.fuseSeconds=6.f;
+    if(SerializeProjectileAsset(grenade,text,error))
+        return fail("fuse beyond lifetime admitted");
     if(!SerializeProjectileAsset(reopened,text,error))return fail("serialize");
     auto corrupt=nlohmann::json::parse(text); corrupt["speed_metres_per_second"]=true;
     if(DeserializeProjectileAsset(corrupt.dump(),reopened,error))return fail("boolean speed");
-    corrupt=nlohmann::json::parse(text); corrupt["schema_version"]=4;
+    corrupt=nlohmann::json::parse(text); corrupt["schema_version"]=7;
     if(DeserializeProjectileAsset(corrupt.dump(),reopened,error))return fail("future projectile schema");
+    auto charged=saved.document;charged.fireballPresentation=true;charged.fullChargeSeconds=2.5f;
+    charged.minimumChargeDamage=10;charged.damage=30;charged.scorchOnImpact=true;
+    charged.burning={5,4};charged.minimumChargeBurning={2,2};
+    auto chargedSaved=SaveProjectileAsset(root.generic_u8string(),project,charged);
+    if(!chargedSaved.succeeded || !LoadProjectileAsset(root.generic_u8string(),project,chargedSaved.document.assetId,reopened,error) ||
+       reopened.fullChargeSeconds!=2.5f || reopened.minimumChargeDamage!=10 || !reopened.scorchOnImpact ||
+       ProjectileChargedDamage(reopened,0)!=10 || ProjectileChargedDamage(reopened,1.25f)!=20 ||
+       ProjectileChargedDamage(reopened,20)!=30 ||
+       reopened.burning.damagePerSecond!=5 || ProjectileChargedBurning(reopened,1.25f).durationSeconds!=3) return fail("charged projectile save/reopen and cap");
+    SerializeProjectileAsset(reopened,text,error);
+    auto invalidCharge=nlohmann::json::parse(text);invalidCharge["full_charge_seconds"]=true;
+    if(DeserializeProjectileAsset(invalidCharge.dump(),reopened,error))return fail("boolean charge duration");
+    invalidCharge=nlohmann::json::parse(text);invalidCharge["minimum_charge_damage"]=31;
+    if(DeserializeProjectileAsset(invalidCharge.dump(),reopened,error))return fail("charge minimum above maximum");
+    ProjectileSimulation burnFlight;ProjectileLaunch burnLaunch;
+    burnLaunch.definition=ProjectileSimulationDefinition(charged);
+    burnLaunch.source={"Player",charged.assetId,"Player",{},{}};
+    burnLaunch.velocity={0,0,18};
+    std::uint64_t burnId;std::vector<ProjectileImpact> burnHits;
+    if(!burnFlight.Launch(burnLaunch,burnId,error) ||
+       !burnFlight.Update(.1f,[](const auto&,const auto&,const auto& to) {
+            ProjectileQueryResult hit;hit.status=ProjectileQueryStatus::Hit;
+            hit.contact={.5f,to,{0,0,-1},"Target","",ImpactSurfaceType::Character};return hit;
+       },burnHits,error) || burnHits.size()!=1 || burnHits[0].burning.damagePerSecond!=5 ||
+       burnHits[0].burning.durationSeconds!=4)return fail("burning payload lost during flight/contact");
+    // Restore the legacy fixture for later registry/rollback assertions.
+    if(!LoadProjectileAsset(root.generic_u8string(),project,saved.document.assetId,reopened,error))return fail("restore legacy projectile");
+    SerializeProjectileAsset(reopened,text,error);
     auto bad=arrow; bad.name="   ";
     if(SaveProjectileAsset(root.generic_u8string(),project,bad).succeeded)return fail("blank name");
     if(LoadProjectileAsset(root.generic_u8string(),GenerateStableId(),saved.document.assetId,reopened,error))
@@ -76,7 +131,7 @@ int main()
             return ProjectDocumentTransactionHookAction::Continue;
         });
     if(failed.succeeded||!failed.transaction.rolledBack||fs::exists(root/failed.projectRelativePath)||
-        ListProjectileAssets(root.generic_u8string(),project,error).size()!=1)
+        ListProjectileAssets(root.generic_u8string(),project,error).size()!=2)
         return fail("projectile rollback");
 
     EquipmentDefinition weapon{GenerateStableId(),"Bow","",EquipmentHandUse::TwoHanded,
@@ -241,6 +296,18 @@ int main()
     fs::remove(root/saved.projectRelativePath);
     if(LoadEquipmentAsset(root.generic_u8string(),project,equipped.document.equipment.assetId,item,error))
         return fail("missing bound projectile silently loaded");
+    auto fireball=MakeProjectilePreset(ProjectilePreset::Spell);fireball.fireballPresentation=true;
+    const auto fireSaved=SaveProjectileAsset(root.generic_u8string(),project,fireball);
+    ProjectileAssetDocument fireLoaded;
+    if(!fireSaved.succeeded || !LoadProjectileAsset(root.generic_u8string(),project,fireSaved.document.assetId,fireLoaded,error) ||
+       !fireLoaded.fireballPresentation || !SerializeProjectileAsset(fireLoaded,text,error) || nlohmann::json::parse(text)["schema_version"]!=4)
+        return fail("fireball profile governed save and cold load");
+    auto badProfile=nlohmann::json::parse(text);badProfile["fireball_presentation"]=1;
+    if(DeserializeProjectileAsset(badProfile.dump(),fireLoaded,error))return fail("numeric fireball flag");
+    badProfile=nlohmann::json::parse(text);badProfile["unexpected"]=true;
+    if(DeserializeProjectileAsset(badProfile.dump(),fireLoaded,error))return fail("unknown fireball key");
+    if(!SerializeProjectileAsset(saved.document,text,error) || !DeserializeProjectileAsset(text,fireLoaded,error) || fireLoaded.fireballPresentation)
+        return fail("legacy projectile has no fireball appearance");
     fs::remove_all(root);
     std::cout<<"ProjectileAssetTests passed\n";
     return 0;

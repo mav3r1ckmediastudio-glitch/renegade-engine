@@ -12,8 +12,11 @@ namespace renegade::runtime
         struct Trace { bridge::ProjectileVector from, to; float seconds; bool meshless = true; };
         struct Marker { bridge::ProjectileContact contact; float seconds; };
         std::vector<Trace> traces;
-        std::unordered_set<std::uint64_t> meshProjectiles;
+        // Mesh or governed procedural appearance replaces diagnostic line/sphere feedback.
+        std::unordered_set<std::uint64_t> presentedProjectiles;
         std::vector<Marker> markers;
+        std::vector<bridge::ProjectileBounce> grenadeBounces;
+        std::vector<bridge::ProjectileExplosion> grenadeExplosions;
         std::uint64_t launched = 0, impacted = 0, generation = 0;
         bridge::ProjectileContact lastContact;
         XMFLOAT3 lastLaunchPosition = {};
@@ -22,7 +25,8 @@ namespace renegade::runtime
 
         void Reset()
         {
-            simulation.Reset(); traces.clear(); markers.clear(); meshProjectiles.clear();
+            simulation.Reset(); traces.clear(); markers.clear(); presentedProjectiles.clear();
+            grenadeBounces.clear();grenadeExplosions.clear();
             launched = impacted = 0; lastContact = {}; lastError.clear();
             lastLaunchPosition={};lastLaunchSocket.clear();
             ++generation;
@@ -44,10 +48,15 @@ namespace renegade::runtime
             launch.definition = bridge::ProjectileSimulationDefinition(asset);
             launch.source = source;
             launch.position = ProjectileBridgeVector(eye);
-            const float speed = asset.speedMetresPerSecond / length;
-            launch.velocity = {forward.x*speed, forward.y*speed, forward.z*speed};
+            // Thrown grenades follow the player's aim but receive a modest
+            // upward lob. Ordinary arrows/bullets retain the exact aim vector.
+            XMFLOAT3 aim=forward;
+            if(asset.grenade.enabled)aim.y+=.21f*length;
+            const float aimedLength=std::sqrt(aim.x*aim.x+aim.y*aim.y+aim.z*aim.z);
+            const float speed=asset.speedMetresPerSecond/aimedLength;
+            launch.velocity={aim.x*speed,aim.y*speed,aim.z*speed};
             if (!simulation.Launch(launch, id, lastError)) return false;
-            if (!asset.meshAssetId.empty()) meshProjectiles.insert(id);
+            if (!asset.meshAssetId.empty() || asset.fireballPresentation) presentedProjectiles.insert(id);
             ++launched;lastLaunchPosition=eye;
             return true;
         }
@@ -55,7 +64,7 @@ namespace renegade::runtime
         bool Update(float dt, const bridge::ProjectileSegmentQuery& worldQuery,
                     std::vector<bridge::ProjectileImpact>& allImpacts)
         {
-            allImpacts.clear();
+            allImpacts.clear();grenadeBounces.clear();grenadeExplosions.clear();
             if (!std::isfinite(dt) || dt < 0 || dt > 10 || (dt > 0 && !worldQuery)) {
                 lastError = "Projectile frame time/query is invalid."; return false;
             }
@@ -76,7 +85,7 @@ namespace renegade::runtime
                     if (traces.size() >= 2048) traces.erase(traces.begin());
                     traces.push_back({from,
                         result.status == bridge::ProjectileQueryStatus::Hit ? result.contact.position : to,
-                        0.10f, meshProjectiles.count(record.id) == 0});
+                        0.10f, presentedProjectiles.count(record.id) == 0});
                 }
                 return result;
             };
@@ -84,7 +93,11 @@ namespace renegade::runtime
             while (remaining > 0) {
                 const float step = std::min(remaining, bridge::ProjectileSimulation::MaxUpdateSeconds);
                 std::vector<bridge::ProjectileImpact> impacts;
-                if (!simulation.Update(step, query, impacts, lastError)) return false;
+                std::vector<bridge::ProjectileBounce> bounces;
+                std::vector<bridge::ProjectileExplosion> explosions;
+                if (!simulation.Update(step, query, impacts,bounces,explosions,lastError)) return false;
+                grenadeBounces.insert(grenadeBounces.end(),bounces.begin(),bounces.end());
+                grenadeExplosions.insert(grenadeExplosions.end(),explosions.begin(),explosions.end());
                 for (const auto& impact : impacts) {
                     ++impacted; lastContact = impact.contact;
                     if (markers.size() >= 64) markers.erase(markers.begin());
@@ -93,10 +106,10 @@ namespace renegade::runtime
                 }
                 remaining -= step;
             }
-            for (auto it = meshProjectiles.begin(); it != meshProjectiles.end();) {
+            for (auto it = presentedProjectiles.begin(); it != presentedProjectiles.end();) {
                 const auto& records = simulation.Records();
                 if (std::none_of(records.begin(), records.end(), [&](const auto& r){ return r.id == *it; }))
-                    it = meshProjectiles.erase(it);
+                    it = presentedProjectiles.erase(it);
                 else ++it;
             }
             return true;
@@ -114,7 +127,7 @@ namespace renegade::runtime
                 wi::renderer::DrawLine(line, true);
             }
             for (const auto& record : simulation.Records())
-                if (meshProjectiles.count(record.id) == 0)
+                if (presentedProjectiles.count(record.id) == 0)
                 wi::renderer::DrawSphere(wi::primitive::Sphere(
                     ProjectileNativeVector(record.launch.position), 0.025f),
                     {1, 0.75f, 0.2f, 1}, true);

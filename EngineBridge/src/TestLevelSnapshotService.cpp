@@ -13,6 +13,9 @@
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/ProjectService.h"
+#include "renegade/bridge/ScreenService.h"
+#include "renegade/bridge/DependencyService.h"
+#include "renegade/bridge/HudSelection.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/ScriptAuthoringService.h"
 #include "renegade/bridge/ScriptDocumentService.h"
@@ -98,6 +101,8 @@ namespace
         stream << "startup_flow = \n";
         stream << "startup_screen_id = \n";
         stream << "startup_screen = \n";
+        stream << "default_hud_id = " << sourceProject.defaultHudId << '\n';
+        stream << "default_hud = " << sourceProject.defaultHud << '\n';
         stream.flush();
         if (!stream)
         {
@@ -287,6 +292,103 @@ namespace
             if (*part == "." || *part == "..")
                 return false;
         }
+        return true;
+    }
+
+    bool SnapshotProjectDefaultHud(
+        const renegade::bridge::ProjectMetadata& project,
+        const renegade::bridge::TestLevelSnapshot& snapshot,
+        std::string& repairedHint,
+        std::string& error)
+    {
+        using namespace renegade::bridge;
+        repairedHint.clear();
+        if (project.defaultHudId.empty() && project.defaultHud.empty())
+        {
+            error.clear();
+            return true;
+        }
+        if (project.defaultHudId.empty() || project.defaultHud.empty() ||
+            !ValidateHudReference({project.defaultHudId, project.defaultHud}, error))
+        {
+            if (error.empty()) error = "Test Level project default HUD reference is incomplete.";
+            return false;
+        }
+
+        std::string sourcePath;
+        if (!ResolveRuntimeScreenDocumentPath(project.rootPath, project.projectId,
+                project.defaultHudId, project.defaultHud, sourcePath, error))
+            return false;
+        ScreenDocument hud;
+        if (!ReadScreenDocument(sourcePath, project.projectId, hud, error))
+            return false;
+        if (hud.usage != ScreenUsage::Hud || !hud.enabledInGame)
+        {
+            error = "Test Level project default must be an enabled HUD Screen.";
+            return false;
+        }
+
+        std::error_code ec;
+        const fs::path relative = fs::relative(fs::u8path(sourcePath),
+            fs::u8path(project.rootPath), ec);
+        if (ec || !IsSafeSnapshotContentPath(relative))
+        {
+            error = "Test Level HUD path resolves outside governed project Content.";
+            return false;
+        }
+        repairedHint = relative.generic_u8string();
+        if (!ValidateHudReference({project.defaultHudId, repairedHint}, error))
+            return false;
+
+        const auto copyDependency = [&](const std::string& path) -> bool
+        {
+            if (!IsSafeSnapshotContentPath(fs::u8path(path)))
+            {
+                error = "HUD resource has an unsafe project Content path: " + path;
+                return false;
+            }
+            const auto source = ResolveDependencyPath(project.rootPath, path);
+            if (!source.accepted || !source.exists)
+            {
+                error = "HUD resource is missing or outside the project: " + path;
+                return false;
+            }
+            const fs::path destination = fs::u8path(snapshot.sessionDirectory) /
+                fs::u8path(path);
+            std::error_code copyError;
+            fs::create_directories(destination.parent_path(), copyError);
+            if (!copyError)
+                fs::copy_file(fs::u8path(source.absolutePath), destination,
+                    fs::copy_options::overwrite_existing, copyError);
+            if (copyError)
+            {
+                error = "Could not snapshot HUD resource '" + path + "': " +
+                    copyError.message();
+                return false;
+            }
+            return true;
+        };
+
+        RuntimeScreenDependencyDocument resources;
+        if (!MakeRuntimeScreenDependencyReader(project.projectId)(
+                sourcePath, resources, error))
+            return false;
+        for (const auto& image : resources.imagePaths)
+            if (!copyDependency(image)) return false;
+        for (const auto& font : resources.fontPaths)
+            if (!copyDependency(font)) return false;
+        if (!copyDependency(repairedHint)) return false;
+
+        ScreenDocument verified;
+        if (!ReadScreenDocument((fs::u8path(snapshot.sessionDirectory) / relative)
+                .generic_u8string(), project.projectId, verified, error) ||
+            verified.envelope.documentId != project.defaultHudId ||
+            verified.usage != ScreenUsage::Hud)
+        {
+            if (error.empty()) error = "Test Level HUD identity verification failed.";
+            return false;
+        }
+        error.clear();
         return true;
     }
 
@@ -1097,9 +1199,14 @@ namespace renegade::bridge
                     "Could not snapshot first-person arms state: " + error);
             }
 
+            std::string repairedHudHint;
+            if (!SnapshotProjectDefaultHud(project, created, repairedHudHint, error))
+                return failAndCleanup("Could not snapshot project default HUD: " + error);
+            ProjectMetadata snapshotProject = project;
+            snapshotProject.defaultHud = std::move(repairedHudHint);
             const fs::path descriptorPath =
                 fs::u8path(created.sessionDirectory) / "TestLevel.renegade";
-            if (!WriteSnapshotDescriptor(project, descriptorPath, error))
+            if (!WriteSnapshotDescriptor(snapshotProject, descriptorPath, error))
             {
                 return failAndCleanup(error);
             }
@@ -1130,6 +1237,8 @@ namespace renegade::bridge
             if (inspected.formatVersion != ProjectService::CurrentFormatVersion ||
                 inspected.projectId != project.projectId ||
                 inspected.name != project.name ||
+                inspected.defaultHudId != snapshotProject.defaultHudId ||
+                inspected.defaultHud != snapshotProject.defaultHud ||
                 fs::u8path(inspected.rootPath).lexically_normal() !=
                     expectedRoot ||
                 inspected.startupScene != TestLevelStartupScene ||

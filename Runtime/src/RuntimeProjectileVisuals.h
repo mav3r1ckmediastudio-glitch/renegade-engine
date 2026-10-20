@@ -1,8 +1,11 @@
 #pragma once
 #include "RuntimeProjectileSession.h"
+#include "RuntimeFireballEffect.h"
+#include "RuntimeGrenadeExplosionFX.h"
 #include "RuntimeImpactTextures.h"
 #include "RuntimeImpactGeometry.h"
 #include "RuntimeImpactMarks.h"
+#include "RuntimeChannelScorchCanvas.h"
 #include "RuntimeBloodEffects.h"
 #include "renegade/bridge/ProjectileEffectRuntime.h"
 #include "renegade/bridge/ReusableAssetService.h"
@@ -51,26 +54,40 @@ namespace renegade::runtime
             t->ClearTransform();t->MatrixTransform(pose);t->UpdateTransform();return true;
         }
         struct Effect { wi::ecs::Entity entity; float seconds; };
+        struct GrenadeFlash { wi::ecs::Entity light; float seconds; float radius; };
+        std::vector<GrenadeFlash> grenadeFlashes;
         struct ImpactDecal { wi::ecs::Entity entity; float seconds; RuntimeImpactMarks::Anchor anchor; float bleedAge=-1; };
         std::vector<Retained> retained;
         std::vector<Effect> dyingEffects;
         std::vector<ImpactDecal> impactDecals;
+        RuntimeChannelScorchCanvas channelScorchCanvas;
         unsigned markSerial=0;
+        unsigned lightningScorchPrewarmVariant=0;
         std::map<std::uint64_t,std::vector<wi::ecs::Entity>> flightEffects;
+        std::map<std::uint64_t,RuntimeFireballEffect> fireballs;
+        struct DyingFireball {RuntimeFireballEffect effect;float seconds;};
+        std::vector<DyingFireball> dyingFireballs;
         RuntimeImpactGeometry impactGeometry;
         RuntimeBloodEffects blood;
         std::string error;
 
         void Reset(wi::scene::Scene& scene)
         {
+            for(auto& [id,effect]:fireballs)effect.Reset(scene);
+            for(auto& dying:dyingFireballs)dying.effect.Reset(scene);
+            fireballs.clear();dyingFireballs.clear();
             for (const auto& [id, root] : instances) scene.Entity_Remove(root);
             for(const auto& r:retained)scene.Entity_Remove(r.root);
             for(const auto& e:dyingEffects)scene.Entity_Remove(e.entity);
+            for(const auto& f:grenadeFlashes)scene.Entity_Remove(f.light);
             for(const auto& d:impactDecals)scene.Entity_Remove(d.entity);
+            channelScorchCanvas.Reset(scene);
             impactGeometry.Reset(scene);blood.Reset(scene);
             blood.directionalPrototype=std::getenv("RENEGADE_DIRECTIONAL_BLOOD")!=nullptr;
             retained.clear();dyingEffects.clear();impactDecals.clear();flightEffects.clear();
+            grenadeFlashes.clear();
             instances.clear(); instanceAssets.clear(); roots.clear(); templates.clear(); error.clear();
+            lightningScorchPrewarmVariant=0;
         }
 
         bool Prepare(const std::string& root, const std::string& packageRoot,
@@ -112,7 +129,7 @@ namespace renegade::runtime
         }
 
         bool Spawn(wi::scene::Scene& scene, const bridge::StableId& asset,
-                   std::uint64_t projectile, bool requiresMesh = false)
+                   std::uint64_t projectile, bool requiresMesh = false, RuntimeFireballEffect* held = nullptr)
         {
             const auto found=templates.find(asset);
             if (found==templates.end()) {
@@ -127,6 +144,14 @@ namespace renegade::runtime
                 : scene.Instantiate(*found->second.scene,true);
             if (root==wi::ecs::INVALID_ENTITY) { error="Could not create projectile appearance."; return false; }
             instances.emplace(projectile,root);instanceAssets.emplace(projectile,asset); roots.push_back(root);
+            if(found->second.definition.fireballPresentation) {
+                if(EffectCount()+4>128){error="Fireball effect budget reached.";return false;}
+                RuntimeFireballEffect effect;
+                if(held && held->Ready()){effect=std::move(*held);*held={};effect.Attach(scene,root);}
+                else if(!effect.Create(scene,root)){error="Could not create fireball appearance.";return false;}
+                fireballs.emplace(projectile,std::move(effect));return true;
+            }
+
             for(const auto& layer:found->second.definition.flightEffects) {
                 if(EffectCount()>=128) {error="Projectile effect budget reached.";break;}
                 const auto e=bridge::CreateProjectileEffectEmitter(scene,layer,{0,0,0});
@@ -139,7 +164,21 @@ namespace renegade::runtime
         }
 
         static XMMATRIX Pose(const bridge::ProjectileAssetDocument& d,
-            const bridge::ProjectileVector& velocity, const bridge::ProjectileVector& position) {
+            const bridge::ProjectileVector& velocity, const bridge::ProjectileVector& position,
+            float grenadeSpinAngle=0.f) {
+            if(d.grenade.enabled) {
+                // Grenades tumble continuously. Aligning the mesh with velocity
+                // on every bounce made it snap/flip as soon as gravity reversed.
+                const auto spin=XMMatrixRotationAxis(
+                    XMVector3Normalize(XMVectorSet(.73f,.11f,.67f,0)),
+                    grenadeSpinAngle);
+                return XMMatrixScaling(d.visualScale,d.visualScale,d.visualScale) *
+                    XMMatrixRotationRollPitchYaw(
+                        XMConvertToRadians(d.visualRotationDegrees[0]),
+                        XMConvertToRadians(d.visualRotationDegrees[1]),
+                        XMConvertToRadians(d.visualRotationDegrees[2])) *
+                    spin * XMMatrixTranslation(position.x,position.y,position.z);
+            }
             auto direction=XMVectorSet(velocity.x,velocity.y,velocity.z,0);
             direction=XMVectorGetX(XMVector3LengthSq(direction))>.00000001f?
                 XMVector3Normalize(direction):XMVectorSet(0,0,1,0);
@@ -151,9 +190,11 @@ namespace renegade::runtime
                 facing * XMMatrixTranslation(position.x,position.y,position.z);
         }
         size_t EffectCount() const {
-            size_t count=dyingEffects.size();for(const auto& [id,list]:flightEffects)count+=list.size();return count;
+            size_t count=dyingEffects.size()+4*(fireballs.size()+dyingFireballs.size());for(const auto& [id,list]:flightEffects)count+=list.size();return count;
         }
         void StopEffects(wi::scene::Scene& scene,std::uint64_t id) {
+            const auto ball=fireballs.find(id);
+            if(ball!=fireballs.end()){ball->second.Retire(scene);dyingFireballs.push_back({std::move(ball->second),.9f});fireballs.erase(ball);}
             const auto effects=flightEffects.find(id);if(effects==flightEffects.end())return;
             for(const auto e:effects->second) {
                 auto* emitter=scene.emitters.GetComponent(e);if(!emitter)continue;
@@ -179,6 +220,59 @@ namespace renegade::runtime
             }
         }
 
+        void PresentScorch(wi::scene::Scene& scene,const bridge::ProjectileImpact& impact,wi::ecs::Entity parent,
+                           const char* markName="Fireball scorch",float radiusMultiplier=1.f)
+        {
+            using Surface=bridge::ImpactSurfaceType;
+            // Flesh needs the separately governed burning response, not a projected bullet wound.
+            if(impact.contact.surfaceType==Surface::Water || impact.contact.surfaceType==Surface::Character)return;
+            const auto normal=ProjectileNativeVector(impact.contact.normal);
+            if(!bridge::FiniteProjectileVector(impact.contact.normal))return;
+            auto n=XMLoadFloat3(&normal);
+            if(XMVectorGetX(XMVector3LengthSq(n))<.000001f)return;
+            n=XMVector3Normalize(n);XMFLOAT3 outward;XMStoreFloat3(&outward,n);
+            const auto point=ProjectileNativeVector(impact.contact.position);
+            const auto seed=static_cast<unsigned>(impact.projectileId)+ ++markSerial*101u;
+            RuntimeImpactMarks::Anchor anchor;
+            if(!RuntimeImpactMarks::Capture(scene,point,outward,parent,anchor))return;
+            if(impactDecals.size()>=64){scene.Entity_Remove(impactDecals.front().entity);impactDecals.erase(impactDecals.begin());}
+            const auto entity=scene.Entity_CreateDecal(markName,"","");
+            auto* material=scene.materials.GetComponent(entity);
+            if(!material){scene.Entity_Remove(entity);return;}
+            material->textures[wi::scene::MaterialComponent::BASECOLORMAP].resource.SetTexture(RuntimeImpactMarks::Scorch(seed%4));
+            material->baseColor={1,1,1,.94f};material->userBlendMode=wi::enums::BLENDMODE_ALPHA;
+            material->SetRoughness(1);material->SetReflectance(.01f);material->emissiveColor={0,0,0,0};material->SetDirty();
+            anchor.size=(.20f+.14f*std::clamp(impact.damage/30.f,0.f,1.f))*(.9f+float(seed%21)*.01f)*radiusMultiplier;
+            anchor.roll=float(seed%628)*.01f;
+            if(!RuntimeImpactMarks::Follow(scene,entity,anchor)){scene.Entity_Remove(entity);return;}
+            impactDecals.push_back({entity,120.f,anchor});
+        }
+
+        // One-shot lightning needs a round, organic impact mark. The channel
+        // painter below is intentionally for continuous dragged beams and uses
+        // rectangular area tiles: never use those for storm strikes.
+        void PrewarmLightningScorch() {
+            // Generate one of the four procedural soot masks per idle frame.
+            // Do not stall the first LMB cast with texture generation/upload.
+            if(lightningScorchPrewarmVariant<4 &&
+               RuntimeImpactMarks::Scorch(lightningScorchPrewarmVariant).IsValid())
+                ++lightningScorchPrewarmVariant;
+        }
+        void PresentLightningScorch(wi::scene::Scene& scene,const bridge::ProjectileImpact& impact,
+                                    wi::ecs::Entity receiver) {
+            // Existing circular soot masks have irregular edges and four variants.
+            // Follow() constructs an isotropic decal on the receiver's surface normal;
+            // seeded roll and scale are deliberately independent of strike direction.
+            PresentScorch(scene,impact,receiver,"Lightning round scorch",2.6f);
+        }
+
+        // A continuous beam paints this same anchored soot on world receivers.
+        // Marks live in the shared bounded collection beyond the casting session.
+        void PresentChannelScorch(wi::scene::Scene& scene,const bridge::ProjectileImpact& impact,wi::ecs::Entity parent)
+        {
+            (void)channelScorchCanvas.Paint(scene,impact,parent);
+        }
+
         void PresentSurfaceImpact(
             wi::scene::Scene& scene,
             const bridge::ProjectileImpact& impact,
@@ -186,6 +280,12 @@ namespace renegade::runtime
         {
             using Surface = bridge::ImpactSurfaceType;
             const auto surface = impact.contact.surfaceType;
+            const auto fireAssociation=instanceAssets.find(impact.projectileId);
+            if(fireAssociation!=instanceAssets.end())
+                if(const auto cached=templates.find(fireAssociation->second);cached!=templates.end() &&
+                   cached->second.definition.scorchOnImpact) {
+                    PresentScorch(scene,impact,parent);return;
+                }
             for(size_t i=0;i<scene.metadatas.GetCount();++i)
                 if(scene.metadatas[i].bool_values.has("renegade.impact.defaults.directional_blood") &&
                     scene.metadatas[i].bool_values.get("renegade.impact.defaults.directional_blood"))
@@ -571,8 +671,26 @@ namespace renegade::runtime
             StopEffects(scene,impact.projectileId);
             if(d.impactEffect!=bridge::ProjectileEffectKind::None && EffectCount()<128) {
                 bridge::ProjectileEffectLayer layer;layer.kind=d.impactEffect;
-                layer.sizeMetres=.12f;layer.particleLifeSeconds=.65f;
-                const auto e=bridge::CreateProjectileEffectEmitter(scene,layer,ProjectileNativeVector(impact.contact.position),true);
+                layer.sizeMetres=d.fireballPresentation?.18f:.12f;layer.particleLifeSeconds=d.fireballPresentation?.48f:.65f;
+                auto origin=ProjectileNativeVector(impact.contact.position);
+                auto normal=ProjectileNativeVector(impact.contact.normal);
+                if(d.fireballPresentation) {
+                    const auto n=XMLoadFloat3(&normal);
+                    if(XMVectorGetX(XMVector3LengthSq(n))>.00001f)XMStoreFloat3(&normal,XMVector3Normalize(n));
+                    else normal={0,1,0};
+                    origin.x+=normal.x*.12f;origin.y+=normal.y*.12f;origin.z+=normal.z*.12f;
+                }
+                const auto e=bridge::CreateProjectileEffectEmitter(scene,layer,origin,true);
+                if(d.fireballPresentation) {
+                    auto* p=scene.emitters.GetComponent(e);
+                    p->burst_on_create=72;p->velocity={normal.x*1.1f,normal.y*1.1f+.4f,normal.z*1.1f};
+                    p->random_factor=1.1f;p->random_life=.25f;p->gravity={0,.25f,0};
+                    p->scaleX=p->scaleY=1.f;p->rotation=.15f;
+                    p->framesX=p->framesY=4;p->frameCount=16;p->frameRate=32;p->SetFrameBlendingEnabled(true);
+                    auto* m=scene.materials.GetComponent(e);
+                    m->textures[wi::scene::MaterialComponent::BASECOLORMAP].resource.SetTexture(RuntimeFireballEffect::Texture(false));
+                    m->baseColor={1,.5f,.12f,.45f};m->emissiveColor={1,.3f,.04f,.35f};m->SetDirty();
+                }
                 dyingEffects.push_back({e,1.1f});
             }
             if(!d.stickOnImpact || impact.contact.surfaceType==bridge::ImpactSurfaceType::Water)return;
@@ -665,6 +783,8 @@ namespace renegade::runtime
         // Entity creation, expiry and removal stay in the pre-upload Sync phase.
         void RefreshImpactMarkPose(wi::scene::Scene& scene)
         {
+            for(auto& [id,effect]:fireballs)effect.RefreshEmissionFrame(scene);
+            for(auto& dying:dyingFireballs)dying.effect.RefreshEmissionFrame(scene);
             for(const auto& arrow:retained)if(arrow.skinAnchor.receiver!=wi::ecs::INVALID_ENTITY) {
                 const auto* oldTransform=scene.transforms.GetComponent(arrow.root);if(!oldTransform)continue;
                 const auto oldWorld=oldTransform->GetWorldMatrix();
@@ -682,7 +802,7 @@ namespace renegade::runtime
                     if(entity==arrow.root || scene.Entity_IsDescendant(entity,arrow.root))RefreshArrowObject(scene,entity);
                 }
             }
-            bool changed=false;
+            bool changed=channelScorchCanvas.Refresh(scene);
             for(auto& mark:impactDecals)
                 if(mark.anchor.receiver!=wi::ecs::INVALID_ENTITY &&
                     RuntimeImpactMarks::Follow(scene,mark.entity,mark.anchor))changed=true;
@@ -692,8 +812,37 @@ namespace renegade::runtime
                 wi::jobsystem::Wait(ctx);
             }
         }
+        void PresentGrenadeExplosion(wi::scene::Scene& scene,
+                                     const bridge::ProjectileExplosion& explosion) {
+            if(!bridge::FiniteProjectileVector(explosion.position) ||
+               explosion.radius<=0 ||
+               EffectCount()+RuntimeGrenadeExplosionFX::Count>128)return;
+            const auto point=ProjectileNativeVector(explosion.position);
+            for(const auto& layer:RuntimeGrenadeExplosionFX::Create(scene,point))
+                dyingEffects.push_back({layer.entity,layer.duration});
+            if(grenadeFlashes.size()>=12){
+                scene.Entity_Remove(grenadeFlashes.front().light);
+                grenadeFlashes.erase(grenadeFlashes.begin());
+            }
+            const auto light=scene.Entity_CreateLight("Grenade transient blast light",point,
+                XMFLOAT3{1.f,.64f,.31f},12.f,explosion.radius*1.5f,
+                wi::scene::LightComponent::POINT);
+            grenadeFlashes.push_back({light,.16f,explosion.radius});
+        }
         void Sync(wi::scene::Scene& scene, const bridge::ProjectileSimulation& simulation,float dt=0)
         {
+            for(auto it=grenadeFlashes.begin();it!=grenadeFlashes.end();) {
+                it->seconds-=std::max(0.f,dt);
+                if(it->seconds<=0){
+                    scene.Entity_Remove(it->light);
+                    it=grenadeFlashes.erase(it);
+                } else {
+                    if(auto* light=scene.lights.GetComponent(it->light))
+                        light->intensity=12.f*std::pow(it->seconds/.16f,2.f);
+                    ++it;
+                }
+            }
+            channelScorchCanvas.Sync(scene,dt);
             blood.Update(scene,dt,roots);
             impactGeometry.Update(scene,dt);
             for (auto it=instances.begin();it!=instances.end();) {
@@ -710,12 +859,19 @@ namespace renegade::runtime
                     templates.find(association->second);
                 const Template* visual=cached==templates.end()?nullptr:&cached->second;
                 if (visual) {
-                    const auto matrix=Pose(visual->definition,record.launch.velocity,record.launch.position);
+                    const auto matrix=Pose(visual->definition,record.launch.velocity,
+                        record.launch.position,record.grenadeAngle);
                     if(auto* transform=scene.transforms.GetComponent(it->second)) {
                         transform->ClearTransform();transform->MatrixTransform(matrix);transform->UpdateTransform();
                     }
                 }
+                const auto ball=fireballs.find(it->first);
+                if(ball!=fireballs.end())ball->second.Flight(scene,dt,ProjectileNativeVector(record.launch.velocity));
                 ++it;
+            }
+            for(auto it=dyingFireballs.begin();it!=dyingFireballs.end();) {
+                it->effect.Pause(scene,dt<=0);it->seconds-=std::max(0.f,dt);
+                if(it->seconds<=0){it->effect.Reset(scene);it=dyingFireballs.erase(it);}else ++it;
             }
             for(auto it=retained.begin();it!=retained.end();) {
                 it->seconds-=dt;

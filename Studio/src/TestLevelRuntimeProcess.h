@@ -53,6 +53,8 @@ namespace renegade::studio
         // Story Flow project Preview launches the governed project descriptor
         // directly and therefore owns no temporary LP04 snapshot to clean.
         bool ownsSnapshot = true;
+        // Studio opts in; low-level fixture tests do not touch local AI workers.
+        bool yieldAssistantGpu = false;
         TestLevelProcessFailureInjection failureInjection =
             TestLevelProcessFailureInjection::None;
     };

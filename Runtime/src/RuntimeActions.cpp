@@ -37,6 +37,8 @@ namespace renegade::runtime
             return "gamepad";
         case RuntimeInputSource::Test:
             return "test";
+        case RuntimeInputSource::Gameplay:
+            return "gameplay";
         default:
             return "unknown";
         }

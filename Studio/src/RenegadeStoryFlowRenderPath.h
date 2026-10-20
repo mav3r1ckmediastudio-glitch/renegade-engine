@@ -5,6 +5,7 @@
 #include <functional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <WickedEngine.h>
 
@@ -144,7 +145,9 @@ namespace renegade::studio
                 GetGUI().RemoveWidget(&addQuitTerminalButton_);
                 GetGUI().RemoveWidget(&addReturnTerminalButton_);
                 GetGUI().RemoveWidget(&addCompleteTerminalButton_);
-                GetGUI().RemoveWidget(&saveFlowButton_);
+                GetGUI().RemoveWidget(&libraryRefreshButton_);
+            GetGUI().RemoveWidget(&screenLibraryCombo_);
+            GetGUI().RemoveWidget(&saveFlowButton_);
                 GetGUI().RemoveWidget(&deleteSelectionButton_);
                 GetGUI().RemoveWidget(&findButton_);
                 GetGUI().RemoveWidget(&findInput_);
@@ -259,6 +262,11 @@ namespace renegade::studio
             });
 
             destinationComposer_.Create();
+            destinationComposer_.OnAdoptScreen([this]()
+            {
+                destinationComposer_.SetMode(RenegadeStoryFlowDestinationComposer::Mode::Closed);
+                screenLibraryCombo_.Activate();
+            });
             destinationComposer_.Attach(GetGUI());
 
             conditionEditor_.Create();
@@ -323,8 +331,47 @@ namespace renegade::studio
                 pendingNativeCommand_ = NativeCommand::AddQuitTerminal;
             });
 
+            screenLibraryCombo_.Create("Story Flow Project UI Library");
+            screenLibraryCombo_.SetRenderTextSize(11);
+            screenLibraryCombo_.SetTooltip("Whole-project Screen catalogue: type a name in Filter or scroll to find any Screen. OPEN edits it; ADD TO JOURNEY reuses its identity without creating routes. Passive HUDs use HUD assignment.");
+            screenLibraryCombo_.SetMaxVisibleItemCount(16);
+            screenLibraryCombo_.SetFixedDropWidth(460.0f);
+            screenLibraryCombo_.OnSelect([this](const wi::gui::EventArgs& args)
+            {
+                const auto index = static_cast<std::size_t>(args.userdata);
+                if (index >= 100000 && index - 100000 < libraryScreens_.size())
+                {
+                    const auto& item = libraryScreens_[index - 100000];
+                    if (libraryAdoptRequested_) libraryAdoptRequested_(item.documentId);
+                }
+                else if (index >= 1 && index <= 4)
+                {
+                    const auto usage = index == 1 ? bridge::ScreenUsage::Hud :
+                        index == 2 ? bridge::ScreenUsage::Menu :
+                        index == 3 ? bridge::ScreenUsage::Overlay : bridge::ScreenUsage::Modal;
+                    if (libraryCreateRequested_) libraryCreateRequested_(usage);
+                }
+                else if (index >= 5 && index - 5 < libraryScreens_.size())
+                {
+                    const auto& item = libraryScreens_[index - 5];
+                    if (item.available && !item.documentId.empty())
+                    {
+                        if (libraryDocumentRequested_) libraryDocumentRequested_(item.documentId);
+                    }
+                    else workspace_.SetExternalStatus("UI LIBRARY // SELECTED SCREEN UNAVAILABLE");
+                }
+                screenLibraryCombo_.SetSelectedWithoutCallback(0);
+            });
+            libraryRefreshButton_.Create("Story Flow Refresh UI Library");
+            libraryRefreshButton_.SetText("REFRESH UI");
+            libraryRefreshButton_.SetRenderTextSize(10);
+            libraryRefreshButton_.SetTooltip("Refresh Screen and HUD documents after external changes.");
+            libraryRefreshButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                if (libraryRefreshRequested_) libraryRefreshRequested_();
+            });
             fitButton_.Create("Story Flow Fit");
-            fitButton_.SetText("FIT");
+            fitButton_.SetText("FIT / HOME");
             fitButton_.SetTooltip("Frame all content in the active Story Flow view.");
             fitButton_.SetShadowRadius(0.0f);
             fitButton_.OnClick([this](const wi::gui::EventArgs&)
@@ -383,6 +430,8 @@ namespace renegade::studio
             GetGUI().AddWidget(&addReturnTerminalButton_);
             GetGUI().AddWidget(&addCompleteTerminalButton_);
             GetGUI().AddWidget(&saveFlowButton_);
+            GetGUI().AddWidget(&libraryRefreshButton_);
+            GetGUI().AddWidget(&screenLibraryCombo_);
             GetGUI().AddWidget(&deleteSelectionButton_);
             GetGUI().AddWidget(&conditionEditor_);
             GetGUI().AddWidget(&findButton_);
@@ -498,9 +547,18 @@ namespace renegade::studio
                 wi::input::Down(wi::input::KEYBOARD_BUTTON_LCONTROL) ||
                 wi::input::Down(wi::input::KEYBOARD_BUTTON_RCONTROL);
             if (workspaceActive_ && !GetGUI().IsTyping() && controlDown &&
-                wi::input::Press(static_cast<wi::input::BUTTON>('S')))
+                !destinationComposer_.IsOpen())
             {
-                pendingNativeCommand_ = NativeCommand::Save;
+                const bool shiftDown =
+                    wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) ||
+                    wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT);
+                if (wi::input::Press(static_cast<wi::input::BUTTON>('S')))
+                    pendingNativeCommand_ = NativeCommand::Save;
+                else if (wi::input::Press(static_cast<wi::input::BUTTON>('Z')))
+                    pendingNativeCommand_ = shiftDown
+                        ? NativeCommand::Redo : NativeCommand::Undo;
+                else if (wi::input::Press(static_cast<wi::input::BUTTON>('Y')))
+                    pendingNativeCommand_ = NativeCommand::Redo;
             }
 
             ProcessPendingNativeCommand();
@@ -603,6 +661,13 @@ namespace renegade::studio
                 workspace_.FitToContent();
         }
 
+        [[nodiscard]] bool RefreshAfterExternalRouteMutation()
+        {
+            EnsureLoaded();
+            // Existing Journey and ImNodes Graph share this one model/session.
+            return workspace_.RefreshAfterExternalRouteMutation();
+        }
+
         void CenterOnGameStart()
         {
             EnsureLoaded();
@@ -682,6 +747,59 @@ namespace renegade::studio
             workspace_.SetExternalStatus(std::move(message));
         }
 
+        void SetHudChoices(std::vector<bridge::ScreenLibraryEntry> choices)
+        {
+            EnsureLoaded();
+            workspace_.SetHudChoices(std::move(choices));
+        }
+
+        void OnLibraryDocumentRequested(std::function<void(const bridge::StableId&)> callback)
+        {
+            libraryDocumentRequested_ = std::move(callback);
+        }
+
+        void OnLibraryAdoptRequested(std::function<void(const bridge::StableId&)> callback)
+        { libraryAdoptRequested_ = std::move(callback); }
+
+        void OnLibraryRefreshRequested(std::function<void()> callback)
+        {
+            libraryRefreshRequested_ = std::move(callback);
+        }
+
+        void OnLibraryCreateRequested(std::function<void(bridge::ScreenUsage)> callback)
+        {
+            libraryCreateRequested_ = std::move(callback);
+        }
+
+        void SetScreenLibrary(std::vector<bridge::ScreenLibraryEntry> screens)
+        {
+            EnsureLoaded();
+            libraryScreens_.clear();
+            screenLibraryCombo_.ClearItems();
+            screenLibraryCombo_.AddItem("UI LIBRARY // FILTER / SCROLL", 0);
+            screenLibraryCombo_.AddItem("+ NEW HUD", 1);
+            screenLibraryCombo_.AddItem("+ NEW MENU", 2);
+            screenLibraryCombo_.AddItem("+ NEW OVERLAY", 3);
+            screenLibraryCombo_.AddItem("+ NEW MODAL", 4);
+            for (auto& screen : screens)
+            {
+                if (screen.documentId.empty()) continue;
+                libraryScreens_.push_back(std::move(screen));
+                const auto& entry = libraryScreens_.back();
+                const char* category = entry.usage == bridge::ScreenUsage::Hud ? "HUD" :
+                    entry.usage == bridge::ScreenUsage::Overlay ? "OVERLAY" :
+                    entry.usage == bridge::ScreenUsage::Modal ? "MODAL" : "MENU";
+                const std::string label = std::string(entry.available ? "" : "MISSING ") +
+                    category + " // " + entry.name + (entry.enabledInGame ? "" : " [OFF]");
+                screenLibraryCombo_.AddItem("OPEN // " + label, static_cast<std::uint64_t>(libraryScreens_.size() + 4));
+                if (entry.available && entry.usage != bridge::ScreenUsage::Hud)
+                    screenLibraryCombo_.AddItem("ADD TO JOURNEY // " + label,
+                        static_cast<std::uint64_t>(100000 + libraryScreens_.size() - 1));
+            }
+            if (libraryScreens_.empty()) screenLibraryCombo_.AddItem("NO PROJECT SCREENS", 0);
+            screenLibraryCombo_.SetSelectedWithoutCallback(0);
+        }
+
         void SetProjectName(std::string name)
         {
             projectName_ = std::move(name);
@@ -736,10 +854,25 @@ namespace renegade::studio
             destinationComposer_.OnOpenSelected(std::move(callback));
         }
 
+        void PlaceNewNodeAtViewportCentre(const bridge::StableId& nodeId)
+        {
+            EnsureLoaded();
+            destinationComposer_.SetMode(RenegadeStoryFlowDestinationComposer::Mode::Closed);
+            workspace_.PlaceNewNodeAtViewportCentre(nodeId);
+            if (workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph)
+                graphEditor_.PlaceNewNodeAtViewportCentre(nodeId);
+        }
+
         void SelectAndFocusNode(const bridge::StableId& nodeId)
         {
             EnsureLoaded();
+            destinationComposer_.SetMode(RenegadeStoryFlowDestinationComposer::Mode::Closed);
             workspace_.SelectAndFocusNode(nodeId);
+            if (workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph)
+            {
+                // Apply the workspace camera to the native graph without fitting all nodes.
+                graphEditor_.ResetTransientInteractionState();
+            }
         }
 
         [[nodiscard]] const bridge::StableId& SelectedNodeId() const noexcept
@@ -865,6 +998,10 @@ namespace renegade::studio
             graphViewButton_.SetVisible(active);
             graphViewButton_.SetEnabled(active);
             saveFlowButton_.SetVisible(active);
+            screenLibraryCombo_.SetVisible(active);
+            screenLibraryCombo_.SetEnabled(active);
+            libraryRefreshButton_.SetVisible(active);
+            libraryRefreshButton_.SetEnabled(active);
             saveFlowButton_.SetEnabled(active && workspace_.IsDirty());
 
             const bool journeyActive = active &&
@@ -876,8 +1013,8 @@ namespace renegade::studio
             addQuitTerminalButton_.SetVisible(journeyActive);
             addQuitTerminalButton_.SetEnabled(journeyActive);
 
-            fitButton_.SetVisible(false);
-            fitButton_.SetEnabled(false);
+            fitButton_.SetVisible(active);
+            fitButton_.SetEnabled(active);
             startButton_.SetVisible(false);
             startButton_.SetEnabled(false);
             findInput_.SetVisible(active && searchOpen_);
@@ -971,6 +1108,10 @@ namespace renegade::studio
             graphViewButton_.SetPos(XMFLOAT2(
                 shell.workspaceTitle.x + 108.0f, viewSwitchY));
             graphViewButton_.SetSize(XMFLOAT2(62.0f, 26.0f));
+            screenLibraryCombo_.SetPos(XMFLOAT2(shell.workspaceTitle.x + 498.0f, viewSwitchY));
+            screenLibraryCombo_.SetSize(XMFLOAT2(180.0f, 27.0f));
+            libraryRefreshButton_.SetPos(XMFLOAT2(shell.workspaceTitle.x + 684.0f, viewSwitchY));
+            libraryRefreshButton_.SetSize(XMFLOAT2(86.0f, 26.0f));
             saveFlowButton_.SetPos(XMFLOAT2(
                 shell.workspaceTitle.x + 178.0f, viewSwitchY));
             saveFlowButton_.SetSize(XMFLOAT2(64.0f, 26.0f));
@@ -990,8 +1131,8 @@ namespace renegade::studio
             const float canvasNavY = std::max(
                 RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight + 18.0f,
                 height - 52.0f);
-            fitButton_.SetPos(XMFLOAT2(workspaceLeft + 18.0f, canvasNavY));
-            fitButton_.SetSize(XMFLOAT2(52.0f, 28.0f));
+            fitButton_.SetPos(XMFLOAT2(shell.workspaceTitle.x + 140.0f, shell.workspaceTitle.y + 43.0f));
+            fitButton_.SetSize(XMFLOAT2(90.0f, 28.0f));
             startButton_.SetPos(XMFLOAT2(workspaceLeft + 76.0f, canvasNavY));
             startButton_.SetSize(XMFLOAT2(64.0f, 28.0f));
             canvasNavigationBounds_ = XMFLOAT4(
@@ -1031,6 +1172,13 @@ namespace renegade::studio
         RenegadeButton journeyViewButton_;
         RenegadeButton graphViewButton_;
         RenegadeButton saveFlowButton_;
+        RenegadeComboBox screenLibraryCombo_;
+        RenegadeButton libraryRefreshButton_;
+        std::vector<bridge::ScreenLibraryEntry> libraryScreens_;
+        std::function<void(const bridge::StableId&)> libraryDocumentRequested_;
+        std::function<void()> libraryRefreshRequested_;
+        std::function<void(const bridge::StableId&)> libraryAdoptRequested_;
+        std::function<void(bridge::ScreenUsage)> libraryCreateRequested_;
         RenegadeButton addCompleteTerminalButton_;
         RenegadeButton addReturnTerminalButton_;
         RenegadeButton addQuitTerminalButton_;

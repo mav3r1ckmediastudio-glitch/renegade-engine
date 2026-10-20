@@ -19,6 +19,7 @@
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/TestLevelSnapshotService.h"
+#include "renegade/bridge/ScreenService.h"
 
 namespace
 {
@@ -205,6 +206,32 @@ int main()
         return Fail("LP04 material parity fixture could not import a governed texture");
     }
 
+    // Test Level must retain an enabled project default HUD and its resource closure.
+    renegade::bridge::ScreenDocument defaultHud;
+    defaultHud.envelope = renegade::bridge::CreateDocumentEnvelope(
+        project.projectId, renegade::bridge::RuntimeScreenDocumentType,
+        "Content/UI/DefaultHud.renegade-screen", "Snapshot default HUD");
+    defaultHud.usage = renegade::bridge::ScreenUsage::Hud;
+    renegade::bridge::ScreenWidget hudImage;
+    hudImage.id = renegade::bridge::GenerateStableId();
+    hudImage.kind = renegade::bridge::ScreenWidgetKind::Image;
+    hudImage.name = "HUD Image";
+    hudImage.rect = {20.0f,20.0f,120.0f,80.0f};
+    hudImage.resourcePath = importedTexture.assetProjectRelativePath;
+    hudImage.style = renegade::bridge::MakeScreenWidgetStyleTemplate(
+        hudImage.kind, hudImage.rect.height);
+    defaultHud.widgets.push_back(std::move(hudImage));
+    project.defaultHudId = defaultHud.envelope.documentId;
+    project.defaultHud = defaultHud.envelope.pathHint;
+    fs::create_directories(projectRoot / "Content/UI");
+    std::string hudError;
+    if (!renegade::bridge::WriteScreenDocument(
+            (projectRoot / project.defaultHud).generic_u8string(), defaultHud, hudError))
+    {
+        std::cerr << hudError << '\n';
+        return Fail("LP04 default HUD fixture write failed");
+    }
+
     renegade::bridge::PreparedMaterialTextureAsset preparedTexture;
     std::string materialError;
     if (!renegade::bridge::PrepareMaterialTextureAsset(
@@ -323,6 +350,12 @@ int main()
         return Fail("LP04 Test Level snapshot omitted governed material Runtime inputs");
     }
 
+    if (ReadBytes(snapshotRoot / project.defaultHud) !=
+            ReadBytes(projectRoot / project.defaultHud) ||
+        ReadBytes(snapshotRoot / importedTexture.assetProjectRelativePath) !=
+            ReadBytes(projectRoot / importedTexture.assetProjectRelativePath))
+        return Fail("Test Level snapshot omitted default HUD or its linked image resource");
+
     for (const auto& item : {savedSword, savedShield, savedBow})
     {
         EquipmentAssetDocument loaded;
@@ -383,6 +416,8 @@ int main()
     }
     if (inspected.projectId != project.projectId ||
         inspected.name != project.name ||
+        inspected.defaultHudId != project.defaultHudId ||
+        inspected.defaultHud != project.defaultHud ||
         fs::u8path(inspected.rootPath).lexically_normal() !=
             fs::u8path(snapshot.sessionDirectory).lexically_normal() ||
         inspected.startupScene != "Content/Scenes/TestLevel.wiscene" ||

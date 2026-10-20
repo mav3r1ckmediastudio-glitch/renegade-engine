@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; object-src 'none'">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Renegade — Living Core Chat</title>
+<style>
+:root{color-scheme:dark;--bg:#090f14;--panel:#111c24;--raised:#192a35;--border:#29424e;--ink:#f0f6f8;--muted:#9eb8c4;--cyan:#7adbec;--orange:#dca37c;font-family:"Segoe UI",Arial,sans-serif}
+*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg)}
+main{display:flex;flex-direction:column;height:100%;background:linear-gradient(155deg,#0d1920,#0a1219 60%,#080e13)}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 19px;background:#101b23;border-bottom:1px solid var(--border);flex-shrink:0}
+.identity{display:flex;align-items:center;gap:13px}.emblem{width:39px;height:39px;border:1px solid #62c9db;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 45% 40%,#255a70,#132633 65%,#09131b);box-shadow:0 0 16px #39a9bd30}
+.emblem::before{content:"";width:29px;height:14px;border:1px solid #99edfa;border-radius:50%;transform:rotate(-43deg);box-shadow:0 0 8px #74d0e466}.brand{font-size:15px;font-weight:750;letter-spacing:.19em;color:var(--ink)}.subline{font-size:10px;letter-spacing:.11em;color:var(--muted);margin-top:5px}
+.actions{display:flex;gap:5px;align-items:center}.small{border:1px solid #32505c;background:#192831;border-radius:7px;color:#d4e6ee;font-size:10px;font-weight:650;padding:7px 9px}.small:hover{border-color:var(--cyan)}
+.scope{padding:8px 19px;border-bottom:1px solid #253943;display:flex;justify-content:space-between;align-items:center;color:#9fc4ce;font-size:10px;letter-spacing:.08em;flex-shrink:0}.live{display:flex;align-items:center;gap:9px;color:#c7e5eb;font-weight:650}.led{width:7px;height:7px;background:#5bc1c8;box-shadow:0 0 7px #55bed6;border-radius:50%}
+#history{flex:1;min-height:0;overflow:auto;padding:24px 20px 20px;display:flex;flex-direction:column;gap:18px;scrollbar-width:thin;scrollbar-color:#3a5a65 transparent}
+.message{display:flex;flex-direction:column;gap:7px;max-width:93%;overflow-wrap:anywhere}.message.user{align-self:flex-end;align-items:flex-end}.message.assistant{align-self:flex-start;align-items:flex-start}
+.role{color:#89cddd;font-size:10px;font-weight:800;letter-spacing:.12em;display:flex;align-items:center;gap:12px}.role button{border:0;background:transparent;color:#b7dae5;font-size:11px;padding:0}
+.message-body{white-space:pre-wrap;line-height:1.65;font-size:13px;padding:13px 16px;border-radius:4px 13px 13px 13px;color:#e7f0f3;background:#182934;border:1px solid #2c4a56;user-select:text}.user .message-body{background:#153c4b;border-color:#307180;border-radius:13px 4px 13px 13px}
+.message-body p{margin:0 0 10px}.message-body p:last-child{margin:0}.message-body ul,.message-body ol{padding-left:22px;margin:6px 0 10px}.message-body li{margin-bottom:4px}.message-body code{color:#97e4ec;font-family:Consolas,monospace}
+.answer-sources{border:1px solid #345667;border-radius:8px;background:#101f28;color:#c6dce7;font:11px Consolas,monospace;padding:9px 12px;max-width:100%;overflow-wrap:anywhere}.answer-sources[hidden]{display:none}.message.assistant>button{align-self:flex-start;padding:4px 9px;font-size:10px;color:#8ad2e5;background:transparent;border:1px solid #294651}.message-body strong{color:white}.message-body h3{font-size:14px;margin:8px 0 4px}
+.empty{max-width:480px;margin:auto;text-align:left;padding:18px 2px;font-size:26px;font-weight:670;line-height:1.23;letter-spacing:-.03em;color:#eff7fa}.empty::before{display:block;content:"RENEGADE / VERIFIED SUPPORT";color:var(--cyan);font-size:10px;letter-spacing:.22em;font-weight:800;margin-bottom:18px}.empty::after{display:block;content:"Get source-checked help with Renegade Studio, or simply start a conversation. Your project remains in your hands.";font-size:13px;color:var(--muted);line-height:1.7;font-weight:400;letter-spacing:normal;margin-top:20px}.help{font-size:10px;color:var(--muted)}
+footer{padding:15px 19px 13px;border-top:1px solid var(--border);background:#101a22;flex-shrink:0}footer label.caption{font-size:10px;letter-spacing:.15em;color:#bed8e0;font-weight:750}textarea{display:block;margin-top:10px;resize:vertical;min-height:74px;max-height:180px;width:100%;padding:12px 13px;border-radius:11px;background:#10242e;border:1px solid #365766;color:#f1f8fa;font-family:inherit;font-size:13px;line-height:1.55}
+textarea:focus{outline:2px solid #438ea947;border-color:#6ecbdc}textarea::placeholder{color:#819eab}
+.controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px}
+button{cursor:pointer;border:1px solid #335765;color:#d5e8ee;padding:8px 11px;background:#182d38;border-radius:8px;font-family:inherit;font-size:12px}button:hover{border-color:#67c7d7}button:disabled{opacity:.5;cursor:not-allowed}
+button.primary{background:#2f97b1;border-color:#65d4e7;color:white;font-weight:750;padding:9px 17px}
+.check{display:flex;align-items:center;gap:5px;font-size:11px;color:#d1e2e7;cursor:pointer}input[type="checkbox"]{accent-color:#50bcd3;width:15px;height:15px}
+.status{margin-top:11px;font-size:11px;color:#9ccdd9;min-height:15px;overflow-wrap:anywhere}.disclaimer{margin-top:9px;font-size:10px;line-height:1.4;color:#839eaa}
+@media(max-width:485px){header,footer{padding-left:12px;padding-right:12px}#history{padding:17px 12px}.actions .small{padding:6px}.subline{font-size:9px}}
+
+html,body{background:transparent!important}
+body{padding:12px 0}
+main{position:relative;border:1px solid #335765;border-radius:22px;overflow:visible;height:100%;transform-origin:var(--tail-x,90%) var(--origin-y,100%);transition:transform .18s ease,opacity .18s ease;box-shadow:0 5px 20px #0005}
+body.retracted main{transform:scale(.08);opacity:0;pointer-events:none}
+main::after{content:"";position:absolute;left:calc(var(--tail-x,90%) - 10px);bottom:-10px;width:18px;height:18px;background:#101a22;border-right:1px solid #335765;border-bottom:1px solid #335765;transform:rotate(45deg)}
+body.tail-top main::after{bottom:auto;top:-10px;background:#101b23;border:0;border-left:1px solid #335765;border-top:1px solid #335765}
+header{border-radius:22px 22px 0 0;padding:10px 12px}
+footer{border-radius:0 0 22px 22px;padding:10px 12px}footer label.caption,.disclaimer{display:none}
+.emblem{display:none}.brand{font-size:13px}.scope{padding:5px 12px}
+textarea{height:52px;min-height:44px;margin-top:0;max-height:110px}.controls{gap:5px}
+.controls button{padding:6px 8px;font-size:10px}.status{margin-top:6px}
+#history{padding:14px 12px;gap:12px}.message-body{padding:10px 12px;line-height:1.5;font-size:12px}
+@media(prefers-reduced-motion:reduce){main{transition:none}}
+.audioOptions{position:relative;font-size:10px}.audioOptions summary{cursor:pointer;border:1px solid #32505c;border-radius:7px;padding:6px}.audioOptions>div{position:absolute;right:0;top:28px;z-index:10;width:150px;padding:12px;background:#10242e;border:1px solid #365766;border-radius:9px}.audioOptions .check{margin:5px 0}
+</style>
+</head>
+<body class="retracted"><main>
+<header><div class="identity"><div class="emblem" aria-hidden="true"></div><div><div class="brand">RENEGADE</div><div class="subline">LIVING CORE · RENEGADE</div></div></div><div class="actions"><details class="audioOptions"><summary title="Audio options">Audio</summary><div><label class="check"><input id="autoSpeak" type="checkbox">Daniel voice</label><label class="check"><input id="mute" type="checkbox">Mute</label></div></details><button id="new" class="small" type="button" title="Start a new conversation">NEW</button><button id="minimise" class="small" type="button" title="Minimise chat; speech continues" aria-label="Minimise chat">−</button></div></header>
+<div class="scope"><div class="live"><span class="led"></span> RENEGADE IS HERE</div><span>READ-ONLY</span></div>
+<section id="history" role="log" aria-label="Conversation" aria-live="polite"></section>
+<footer>
+<label for="prompt" class="caption">YOUR MESSAGE</label>
+<textarea id="prompt" maxlength="900" placeholder="Ask Renegade anything…"></textarea>
+<div class="controls">
+<button id="send" class="primary" type="button">SEND</button><button id="cancel" type="button" hidden>CANCEL</button><button id="stop" type="button">STOP VOICE</button><button id="voiceConversation" type="button" aria-pressed="false">VOICE CONVERSATION</button>
+</div>
+<div id="conversationStatus" class="status" role="status">Microphone off</div><div class="status" id="status" role="status">Connecting to Renegade…</div>
+<div class="disclaimer">Enter to send · Shift+Enter for a new line. Voice conversation starts only when you enable it. No scene edits or autonomous game creation.</div>
+</footer>
+</main><script src="chat/format-text.js"></script><script src="chat.js"></script>
+</body></html>

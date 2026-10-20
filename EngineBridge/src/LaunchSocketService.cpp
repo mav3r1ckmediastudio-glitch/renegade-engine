@@ -140,17 +140,22 @@ bool AttachLaunchSockets(wi::scene::Scene& scene,const std::vector<LaunchSocketD
  }
  error.clear();return true;
 }
-bool ReadLaunchSocketPose(const wi::scene::Scene& scene,wi::ecs::Entity root,
- const std::string& name,XMFLOAT3& p,XMFLOAT3& d,std::string& error) {
+wi::ecs::Entity FindLaunchSocketEntity(const wi::scene::Scene& scene,wi::ecs::Entity root,
+ const std::string& name,std::string& error) {
  wi::ecs::Entity match=wi::ecs::INVALID_ENTITY;
  for(size_t i=0;i<scene.metadatas.GetCount();++i) {
   const auto& m=scene.metadatas[i];const auto e=scene.metadatas.GetEntity(i);
   if(!m.string_values.has(LaunchSocketNameKey)||m.string_values.get(LaunchSocketNameKey)!=name||
      !Descendant(scene,e,root))continue;
-  if(match!=wi::ecs::INVALID_ENTITY){error="Launch socket name is ambiguous.";return false;}match=e;
+  if(match!=wi::ecs::INVALID_ENTITY){error="Launch socket name is ambiguous.";return wi::ecs::INVALID_ENTITY;}match=e;
  }
- const auto* t=scene.transforms.GetComponent(match);
- if(!t){error="Assigned launch socket is unavailable.";return false;}
+ if(!scene.transforms.Contains(match)){error="Assigned launch socket is unavailable.";return wi::ecs::INVALID_ENTITY;}
+ error.clear();return match;
+}
+bool ReadLaunchSocketPose(const wi::scene::Scene& scene,wi::ecs::Entity root,
+ const std::string& name,XMFLOAT3& p,XMFLOAT3& d,std::string& error) {
+ const auto match=FindLaunchSocketEntity(scene,root,name,error);
+ const auto* t=scene.transforms.GetComponent(match);if(!t)return false;
  return Pose(XMLoadFloat4x4(&t->world),p,d,error);
 }
 bool LaunchSocketInspectionPose(const wi::scene::Scene& scene,const LaunchSocketDefinition& s,

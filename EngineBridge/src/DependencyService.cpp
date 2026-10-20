@@ -850,6 +850,7 @@ namespace renegade::bridge
             "project.startup_flow");
         EmitPath(emit, document.startupScreen, DependencyClass::RuntimeScreenDocument,
             "project.startup_screen");
+        EmitPath(emit, document.defaultHud, DependencyClass::RuntimeScreenDocument, "project.default_hud");
         for (std::size_t index = 0; index < document.alwaysInclude.size(); ++index)
         {
             DependencyCandidate candidate = document.alwaysInclude[index];
@@ -918,6 +919,9 @@ namespace renegade::bridge
         for (std::size_t index = 0; index < document.fontPaths.size(); ++index)
             EmitPath(emit, document.fontPaths[index], DependencyClass::Font,
                 "runtime_screen.font[" + std::to_string(index) + "].resource");
+        for(std::size_t i=0;i<document.screenPaths.size();++i)
+            EmitPath(emit,document.screenPaths[i],DependencyClass::RuntimeScreenDocument,
+                "runtime_screen.theme["+std::to_string(i)+"]");
         error.clear();
         return true;
     }

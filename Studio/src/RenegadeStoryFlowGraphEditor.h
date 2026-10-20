@@ -68,6 +68,7 @@ namespace renegade::studio
         // ownership or a completed gesture remains latched. Node positions,
         // pan, selection authority and all Flow routes survive through the
         // Renegade layout/session model.
+        void PlaceNewNodeAtViewportCentre(const bridge::StableId& id) { pendingPlacementNode_ = id; }
         void ResetTransientInteractionState() noexcept;
         void RecoverTransientInteractionIfIdle();
 
@@ -164,7 +165,9 @@ namespace renegade::studio
         bridge::StableId pendingReconnectRouteId_;
         int linkStartedAtPin_ = 0;
         bool rejectNewLinkFromInput_ = false;
+        bridge::StableId pendingPlacementNode_;
         bool bindingsDirty_ = true;
+        bool overviewSuppressDrag_ = false;
         bool frameActive_ = false;
         bool initialized_ = false;
 

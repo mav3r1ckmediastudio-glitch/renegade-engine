@@ -122,7 +122,9 @@ namespace renegade::bridge
         for (const auto& node : model.Nodes())
         {
             if (assigned.find(node.id) != assigned.end()) continue;
-            buildPendingTrack({node.id, {}, false, true, 0});
+            // Passive Player HUD has no navigation routes by design: give it
+            // an overlay lane, not an unreachable/detached error lane.
+            buildPendingTrack({node.id, {}, false, !IsStarterPlayerHud(node), 0});
             while (!pending.empty())
             {
                 PendingTrack next = std::move(pending.front());

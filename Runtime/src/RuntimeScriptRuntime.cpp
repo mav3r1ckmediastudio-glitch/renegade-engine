@@ -202,6 +202,7 @@ namespace renegade::runtime
         std::unordered_map<bridge::StableId, wi::ecs::Entity> entitiesById;
         std::vector<RuntimeScriptDiagnostic> diagnostics;
         bridge::GameplayEventService gameplayEvents;
+        std::function<void(const bridge::GameplayEvent&)> eventObserver;
         std::uint64_t dispatchedEventCount = 0;
         std::uint64_t eventDeliveryAttemptCount = 0;
         std::uint64_t lastEventSequence = 0;
@@ -1807,6 +1808,12 @@ namespace renegade::runtime
                 lastEventSequence = event.sequence;
                 lastEventName = event.name;
                 lastEventTarget = event.targetEntityId;
+                // Contextual HUDs can observe accepted gameplay events from
+                // either native producers or creator Lua through this ONE
+                // governed FIFO. A failing observer cannot abort the gameplay
+                // event delivery, which remains independently authoritative.
+                if(eventObserver)
+                    try{eventObserver(event);}catch(...){/* Fail closed for presentation only. */}
 
                 for (auto& instance : instances)
                 {
@@ -2270,6 +2277,12 @@ namespace renegade::runtime
             return false;
         }
         return impl_->gameplayEvents.Enqueue(std::move(event), error);
+    }
+
+    void RuntimeScriptRuntime::SetGameplayEventObserver(
+        std::function<void(const bridge::GameplayEvent&)> observer)
+    {
+        if(impl_)impl_->eventObserver=std::move(observer);
     }
 
     void RuntimeScriptRuntime::Update(const float dt) noexcept

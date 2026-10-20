@@ -1,4 +1,5 @@
 #include "RenegadeStoryFlowGraphEditor.h"
+#include "StoryFlowOverviewPolicy.h"
 
 #include <algorithm>
 #include <cctype>
@@ -14,7 +15,7 @@ namespace renegade::studio
     {
         constexpr float OverviewNodeWidth = 210.0f;
         constexpr float OverviewNodeHeight = 112.0f;
-        constexpr float GraphNavigationMinZoom = 0.50f;
+        constexpr float GraphNavigationMinZoom = 0.05f;
         constexpr float GraphNavigationMaxZoom = 2.00f;
         constexpr float GraphFitMargin = 64.0f;
         constexpr float GraphExtraOutputHeight = 24.0f;
@@ -181,20 +182,11 @@ namespace renegade::studio
         if (!haveBounds)
             return;
 
-        const float contentWidth = std::max(1.0f, maxX - minX);
-        const float contentHeight = std::max(1.0f, maxY - minY);
-        const float availableWidth = std::max(1.0f, viewport_.z - GraphFitMargin * 2.0f);
-        const float availableHeight = std::max(1.0f, viewport_.w - GraphFitMargin * 2.0f);
-        const float zoom = std::clamp(
-            std::min(availableWidth / contentWidth, availableHeight / contentHeight),
-            GraphNavigationMinZoom,
-            GraphNavigationMaxZoom);
-
-        const float centerX = (minX + maxX) * 0.5f;
-        const float centerY = (minY + maxY) * 0.5f;
-        layout_->canvas.zoom = zoom;
-        layout_->canvas.panX = viewport_.z * 0.5f - centerX * zoom;
-        layout_->canvas.panY = viewport_.w * 0.5f - centerY * zoom;
+        const auto fitted = FitOverview(minX, minY, maxX, maxY,
+            viewport_.z, viewport_.w, GraphFitMargin, GraphNavigationMaxZoom);
+        layout_->canvas.zoom = fitted.zoom;
+        layout_->canvas.panX = fitted.panX;
+        layout_->canvas.panY = fitted.panY;
         initializedNodePositions_.clear();
         workspace_->NotifyLayoutChanged();
 
@@ -373,7 +365,7 @@ namespace renegade::studio
             OverviewText,
             wi::Color::Transparent());
         label.bolden = 0.14f;
-        wi::font::Draw("GRAPH OVERVIEW", label, cmd);
+        wi::font::Draw("OVERVIEW // DOUBLE-CLICK FIT", label, cmd);
 
         const float contentX = panelX + 9.0f;
         const float contentY = panelY + 23.0f;

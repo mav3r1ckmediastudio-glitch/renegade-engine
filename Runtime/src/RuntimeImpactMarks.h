@@ -72,6 +72,43 @@ namespace renegade::runtime
             wi::graphics::SubresourceData data;data.data_ptr=pixels.data();data.row_pitch=width*4;data.slice_pitch=pixels.size();
             device->CreateTexture(&desc,&data,&texture);return texture;
         }
+        static float SootNoise(float x,float y) {
+            const int ix=int(std::floor(x)),iy=int(std::floor(y));
+            float fx=x-ix,fy=y-iy;fx=fx*fx*(3-2*fx);fy=fy*fy*(3-2*fy);
+            const auto h=[](int a,int b){unsigned v=unsigned(a)*73856093u ^ unsigned(b)*19349663u;
+                v^=v>>13;v*=1274126177u;v^=v>>16;return float(v&65535u)/65535.f;};
+            return (h(ix,iy)*(1-fx)+h(ix+1,iy)*fx)*(1-fy)+(h(ix,iy+1)*(1-fx)+h(ix+1,iy+1)*fx)*fy;
+        }
+        // Original soot mask: dense charred centre, broken ash rim and soft smoke halo.
+        static const wi::graphics::Texture& Scorch(unsigned variant)
+        {
+            static std::array<wi::graphics::Texture,4> textures;auto& texture=textures[variant%4];
+            auto* device=wi::graphics::GetDevice();if(texture.IsValid() || !device)return texture;
+            constexpr unsigned width=256;std::vector<unsigned char> pixels(width*width*4);
+            const float seed=float(variant%4)*1.73f;
+            for(unsigned y=0;y<width;++y)for(unsigned x=0;x<width;++x) {
+                const float u=(float(x)+.5f)/128-1,v=(float(y)+.5f)/128-1;
+                const float a=std::atan2(v,u),radius=std::sqrt(u*u+v*v);
+                const float cloud=SootNoise(u*4+seed,v*4-seed);
+                const float rough=.50f*SootNoise(u*17+seed,v*17)+.30f*SootNoise(u*53,v*53+seed)+
+                    .20f*SootNoise(u*119+seed,v*119);
+                const float edge=.63f+.18f*cloud+.04f*std::sin(a*5+seed)+.03f*SootNoise(u*13,v*13);
+                const float rr=radius/edge;
+                const float charred=std::clamp((1-rr)*4,0.f,1.f);
+                const float halo=std::clamp((1.30f-rr)*2.5f,0.f,1.f)*.24f;
+                const float alpha=std::clamp(charred*(.55f+.36f*rough)+halo,0.f,1.f);
+                const float ash=std::clamp((rr-.45f)*2,0.f,1.f)*rough;
+                const auto i=(y*width+x)*4;
+                pixels[i]=static_cast<unsigned char>((.045f+.11f*ash)*255);
+                pixels[i+1]=static_cast<unsigned char>((.038f+.09f*ash)*255);
+                pixels[i+2]=static_cast<unsigned char>((.03f+.07f*ash)*255);
+                pixels[i+3]=static_cast<unsigned char>(alpha*255);
+            }
+            wi::graphics::TextureDesc desc;desc.width=desc.height=width;
+            desc.format=wi::graphics::Format::R8G8B8A8_UNORM;desc.bind_flags=wi::graphics::BindFlag::SHADER_RESOURCE;
+            wi::graphics::SubresourceData data;data.data_ptr=pixels.data();data.row_pitch=width*4;data.slice_pitch=pixels.size();
+            device->CreateTexture(&desc,&data,&texture);return texture;
+        }
         struct Anchor
         {
             wi::ecs::Entity receiver=wi::ecs::INVALID_ENTITY,mesh=wi::ecs::INVALID_ENTITY;

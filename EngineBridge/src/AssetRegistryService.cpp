@@ -850,13 +850,21 @@ namespace renegade::bridge
             return false;
         for (const auto& imported : candidate.importedProducts)
         {
+            // Retained provenance is a historical snapshot. Missing/revised
+            // assets must not prevent importing an unrelated new resource.
+            if (std::find(registry.importedProducts.begin(),
+                    registry.importedProducts.end(), imported) !=
+                registry.importedProducts.end())
+                continue;
             const auto source = std::find_if(candidate.records.begin(),
                 candidate.records.end(), [&imported](const AssetRecord& record)
                 { return record.assetId == imported.sourceAssetId; });
             const auto product = std::find_if(candidate.records.begin(),
                 candidate.records.end(), [&imported](const AssetRecord& record)
                 { return record.assetId == imported.productAssetId; });
-            if (!source->sourceAvailable || !product->sourceAvailable ||
+            if (source == candidate.records.end() ||
+                product == candidate.records.end() ||
+                !source->sourceAvailable || !product->sourceAvailable ||
                 source->contentHash != imported.sourceContentHashAtImport ||
                 product->contentHash != imported.productContentHashAtImport)
             {

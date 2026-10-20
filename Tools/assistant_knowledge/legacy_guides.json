@@ -1,0 +1,202 @@
+{
+  "revision": "380dcc057db2f2470e0f4e946ed50834ffc67ca2",
+  "proof": "Verified against source and documented native tests, not live inspection of the user's editor",
+  "guides": [
+    {
+      "id": "bow-psp",
+      "title": "Setting up a bow Projectile Spawn Point",
+      "tags": [
+        "bow",
+        "arrow",
+        "projectile spawn point",
+        "psp",
+        "nock",
+        "launch socket",
+        "spawn point"
+      ],
+      "answer": "For a bow, configure the spawn point in the player's **Weapon firing** setup—not in a generic project asset tree.\n\n1. Set **Fire mode** to **Projectile / travelling** and select your saved arrow **Projectile**.\n2. Use **EDIT SPAWN POINTS...** to place a launch point at the bow's arrow rest/nocking position, then select it under **Spawn point**. The existing Bow Playground example calls its point `Bow_Nock`.\n3. Set **Firing** to **Selected spawn point** and **Fire at** to **Animation start** or **After a delay**. You can also use **SET FIRE TIME IN ANIMATION...**.\n4. Choose **APPLY TO THIS PLAYER**, save the level, and test firing.\n\nI can explain any of those controls. I haven't inspected your project or confirmed which bow is selected.",
+      "sources": [
+        {
+          "title": "Actual Weapon firing control labels",
+          "source": "Verified against source snapshot",
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/Studio/src/PlayerProjectileEditor.cpp#L45-L115",
+          "excerpt": "Fire mode, Projectile, Spawn point, Firing, Fire at, Edit Spawn Points, Set Fire Time in Animation and Apply controls defined in code."
+        },
+        {
+          "title": "Projectile UX native validation",
+          "source": "Verified against source snapshot",
+          "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/docs/P3_PROJECTILE_UX_CLEANUP.md#L7-L23",
+          "excerpt": "The saved Bow_Nock binding and single spawn point workflow were exercised in a rebuilt native editor."
+        },
+        {
+          "title": "Bow proof workflow",
+          "source": "Verified against source snapshot",
+          "path": "docs/CODEX_BOW_PROJECTILE_HANDOFF.md",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/docs/CODEX_BOW_PROJECTILE_HANDOFF.md#L319-L328",
+          "excerpt": "Bind authored arrow, add a PSP near arrow rest, bind release, Test Game."
+        }
+      ]
+    },
+    {
+      "id": "spawn-policy",
+      "title": "Using two projectile spawn points",
+      "tags": [
+        "two spawn",
+        "both spawn",
+        "alternate",
+        "dual",
+        "second spawn",
+        "both together",
+        "two psps",
+        "two barrels",
+        "shotgun spawn"
+      ],
+      "answer": "Renegade's **Weapon firing** panel supports either one or two authored spawn points.\n\n1. Choose the primary **Spawn point**.\n2. Under **Firing**, select **Selected spawn point**, **Alternate between two**, or **Both together**.\n3. With Alternate or Both, select **Second spawn point**. That control is normally hidden for single-point firing.\n4. Select **APPLY TO THIS PLAYER** to persist the equipment change.\n\nThis is an existing capability verified in source and native UX documentation, but I can't see your current equipment settings.",
+      "sources": [
+        {
+          "title": "Firing policies in source",
+          "source": "Verified against source snapshot",
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/Studio/src/PlayerProjectileEditor.cpp#L84-L114",
+          "excerpt": "Policy options are Selected spawn point, Alternate between two and Both together."
+        },
+        {
+          "title": "Two-point UX verification",
+          "source": "Verified against source snapshot",
+          "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/docs/P3_PROJECTILE_UX_CLEANUP.md#L44-L47",
+          "excerpt": "Native checks used shotgun PSP_Left, PSP_Right and Both together, and confirmed conditional controls."
+        }
+      ]
+    },
+    {
+      "id": "fire-timing",
+      "title": "Setting projectile release timing",
+      "tags": [
+        "release timing",
+        "fire time",
+        "firing time",
+        "release time",
+        "animation marker",
+        "animation start",
+        "delay",
+        "when arrow fires",
+        "timing",
+        "launch timing"
+      ],
+      "answer": "The **Weapon firing** panel has two ways to control *when* the projectile launches:\n\n1. Under **Fire at**, choose **Animation start** to launch immediately, or **After a delay** to enter **Delay (seconds)**.\n2. For a visual match to the animation, select **SET FIRE TIME IN ANIMATION...**. Scrub the preview, use **MARK CURRENT POSE**, then **USE FIRE TIME**.\n3. Finish with **APPLY TO THIS PLAYER**, and save the level when satisfied.\n\nThe animation marker must occur before the clip ends. The documented Bow Playground proof used a `Bow_Nock` release delay, but your animation may differ.",
+      "sources": [
+        {
+          "title": "Animation timing controls",
+          "source": "Verified against source snapshot",
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/Studio/src/PlayerProjectileEditor.cpp#L90-L150",
+          "excerpt": "Labels and callback show animation start, delay, timing preview, mark current pose, use fire time."
+        },
+        {
+          "title": "Native timing proof",
+          "source": "Verified against source snapshot",
+          "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/docs/P3_PROJECTILE_UX_CLEANUP.md#L31-L42",
+          "excerpt": "Release marker authoring and runtime proof were validated for a disposable bow case."
+        }
+      ]
+    },
+    {
+      "id": "projectile-new",
+      "title": "Creating or editing a projectile",
+      "tags": [
+        "new projectile",
+        "create projectile",
+        "projectile preset",
+        "arrow preset",
+        "bolt preset",
+        "edit copy",
+        "projectile asset",
+        "projectile properties"
+      ],
+      "answer": "Renegade separates the **projectile asset** from the weapon's **firing setup**.\n\n1. In **Weapon firing**, select **NEW** for a projectile asset or **EDIT COPY** to modify a saved one without overwriting it.\n2. In Basic mode choose a starting preset (such as **Arrow** or **Bolt**) and set the model, speed, gravity, impact behaviour and effects.\n3. Use **SHOW ADVANCED** for lifetime, rotation, damage and detailed particle settings. Save the projectile, then select it in **Weapon firing** and **APPLY TO THIS PLAYER**.\n\nNot every advanced projectile behaviour is implemented; the documentation specifically warns against assuming homing or rocket explosions.",
+      "sources": [
+        {
+          "title": "Basic and Advanced projectile authoring",
+          "source": "Verified against source snapshot",
+          "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/docs/P3_PROJECTILE_UX_CLEANUP.md#L5-L11",
+          "excerpt": "Basic and Advanced fields and preset families, plus implementation exclusions."
+        },
+        {
+          "title": "Create/Edit Copy/Apply controls",
+          "source": "Verified against source snapshot",
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/Studio/src/PlayerProjectileEditor.cpp#L109-L114",
+          "excerpt": "The Weapon firing panel includes Apply to This Player, New and Edit Copy."
+        }
+      ]
+    },
+    {
+      "id": "hitscan",
+      "title": "Hitscan versus travelling projectiles",
+      "tags": [
+        "hitscan",
+        "instant ray",
+        "raycast",
+        "ray casting",
+        "fire mode"
+      ],
+      "answer": "Renegade supports **two firing modes** in the Weapon firing panel:\n\n- **Projectile / travelling:** launches a saved physical projectile that travels through the scene.\n- **Hitscan / instant ray:** checks the aim line instantly, using **Range (metres)** and **Damage** controls, without requiring a projectile asset.\n\nChoose **Fire mode** to switch between them, then **APPLY TO THIS PLAYER** to save the equipment configuration. This describes the implemented editor controls; I haven't checked the selected weapon in your project.",
+      "sources": [
+        {
+          "title": "Firing modes in Studio source",
+          "source": "Verified against source snapshot",
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/Studio/src/PlayerProjectileEditor.cpp#L55-L83",
+          "excerpt": "Explicit fire mode and Hitscan range/damage controls."
+        },
+        {
+          "title": "Hitscan and projectile behavior",
+          "source": "Verified against source snapshot",
+          "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/docs/P3_PROJECTILE_UX_CLEANUP.md#L49-L57",
+          "excerpt": "Hitscan authored ranges and damage without projectile asset; shared spawn points and timing."
+        }
+      ]
+    },
+    {
+      "id": "fps-assembly",
+      "title": "Mapping first-person arms and shotgun reload animations",
+      "tags": [
+        "fps arms",
+        "reload",
+        "shotgun",
+        "assembly",
+        "weapon rig"
+      ],
+      "answer": "Renegade pairs **arms** and **weapon** animations inside **First Person Assembly**. The reload setup is separate from projectile firing.\n\n1. Select **Arms product** and **Weapon product**, then **LOAD PARTS**.\n2. In **Action slots**, assign the imported Reload clip under the corresponding **arms** and **weapon** action selectors. Use **Preview action** to check the pairing.\n3. Open **WEAPON SETTINGS** to adjust **Loaded capacity**, **Minimum shot interval**, and **Allow partial reload**. Use **SAVE CHANGES** or **SAVE AS NEW** when satisfied.\n\nThis assumes the clips are already compatible with their rigs. It doesn't retarget animations between different skeletons, and I haven't inspected your asset.",
+      "sources": [
+        {
+          "title": "Assembly editor control definitions",
+          "source": "Verified against source snapshot",
+          "path": "Studio/src/FirstPersonAssemblyEditor.cpp",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/Studio/src/FirstPersonAssemblyEditor.cpp#L20-L166",
+          "excerpt": "Source defines Arms product, Weapon product, Load Parts, Action slots, paired arms/weapon clip selectors, Preview action, Weapon settings, Save Changes and Save As New."
+        },
+        {
+          "title": "Firearm settings documented behavior",
+          "source": "Verified against source snapshot",
+          "path": "docs/PLAYER_AUTHORING_CONTINUATION.md",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/docs/PLAYER_AUTHORING_CONTINUATION.md#L69-L88",
+          "excerpt": "Weapon Settings owns capacity, interval and partial-reload option. Reload only completes after paired tracks finish."
+        },
+        {
+          "title": "Player authoring UX limitations",
+          "source": "Verified against source snapshot",
+          "path": "docs/PLAYER_AUTHORING_UX_FOLLOWUP.md",
+          "url": "https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/blob/380dcc057db2f2470e0f4e946ed50834ffc67ca2/docs/PLAYER_AUTHORING_UX_FOLLOWUP.md#L10-L38",
+          "excerpt": "Accepted player functionality doesn't mean all authoring UX and cross-project transfers are finished."
+        }
+      ]
+    }
+  ]
+}

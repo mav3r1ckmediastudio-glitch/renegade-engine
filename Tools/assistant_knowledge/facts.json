@@ -1,0 +1,361 @@
+{
+  "schema": 1,
+  "policy": "Only records whose source needles all match the current local checkout may be advertised as source-verified; does not imply runtime acceptance or live editor access.",
+  "facts": [
+    {
+      "id": "renegade-identity",
+      "title": "What Renegade is",
+      "tags": [
+        "renegade",
+        "game engine",
+        "game editor",
+        "studio",
+        "identity"
+      ],
+      "answer": "Renegade is a Windows-first game engine and creator environment built on Wicked Engine. Renegade Studio is the editor; your own game project is separate. This assistant does not control the editor unless an explicit, verified bridge is connected.",
+      "sources": [
+        {
+          "path": "README.md",
+          "needle": "Renegade is a Windows-first game engine and creator environment"
+        }
+      ]
+    },
+    {
+      "id": "surface-type",
+      "title": "Surface Type and glass impact routing",
+      "tags": [
+        "surface type",
+        "glass",
+        "metal",
+        "wood",
+        "concrete",
+        "stone",
+        "dirt",
+        "water",
+        "impact",
+        "inspector"
+      ],
+      "answer": "For a selected scene object, the documented creator workflow is to choose Surface Type in its Inspector. The source-defined types include Default, Metal, Wood, Concrete, Stone, Dirt / Ground, Glass, Water and Character. Glass uses the 'Glass' classification. I have not inspected your selected object or confirmed an effect is playing; first verify the object's Surface Type and then test the impact.",
+      "sources": [
+        {
+          "path": "EngineBridge/include/renegade/bridge/ImpactSurface.h",
+          "needle": "enum class ImpactSurfaceType"
+        },
+        {
+          "path": "EngineBridge/include/renegade/bridge/ImpactSurface.h",
+          "needle": "case ImpactSurfaceType::Glass: return \"Glass\";"
+        },
+        {
+          "path": "docs/ARCHITECTURE.md",
+          "needle": "Creator steps: select an object; choose Surface Type directly in its Inspector."
+        }
+      ]
+    },
+    {
+      "id": "selected-entity-access",
+      "title": "Current selection and assistant access",
+      "tags": [
+        "selected",
+        "object",
+        "entity",
+        "inspect",
+        "see",
+        "context",
+        "selection",
+        "scene"
+      ],
+      "answer": "Renegade has a SelectionService with HasSelection() and SelectedEntity(). This is an engine facility, not proof that the assistant can see what you selected: a read-only Editor Context Broker must be connected before the assistant may claim to inspect an object.",
+      "sources": [
+        {
+          "path": "EngineBridge/include/renegade/bridge/SelectionService.h",
+          "needle": "bool HasSelection() const noexcept;"
+        },
+        {
+          "path": "EngineBridge/include/renegade/bridge/SelectionService.h",
+          "needle": "SelectedEntity() const noexcept;"
+        }
+      ]
+    },
+    {
+      "id": "command-undo",
+      "title": "Undo and safe assistant edits",
+      "tags": [
+        "undo",
+        "redo",
+        "command",
+        "edit",
+        "apply",
+        "change",
+        "approval",
+        "safety"
+      ],
+      "answer": "Renegade's existing CommandService exposes Execute, Undo and Redo. That is the intended authority for future approved assistant edits, but a command's existence does not mean the assistant can execute it. No change may be reported as applied without a verified editor execution receipt.",
+      "sources": [
+        {
+          "path": "EngineBridge/include/renegade/bridge/CommandService.h",
+          "needle": "bool Execute(std::unique_ptr<ICommand> command);"
+        },
+        {
+          "path": "EngineBridge/include/renegade/bridge/CommandService.h",
+          "needle": "bool Undo();"
+        },
+        {
+          "path": "EngineBridge/include/renegade/bridge/CommandService.h",
+          "needle": "bool Redo();"
+        }
+      ]
+    },
+    {
+      "id": "projectile-spawn",
+      "title": "Projectile Spawn Point firing choices",
+      "tags": [
+        "projectile",
+        "spawn point",
+        "psp",
+        "fire mode",
+        "bow",
+        "arrow",
+        "firing",
+        "weapon"
+      ],
+      "answer": "The native Player Projectile Editor defines Spawn point and Firing controls. Its firing policies include Selected spawn point. This is evidence of editor control definitions, not evidence that your current weapon is configured correctly. The assistant cannot inspect that weapon until a read-only Studio bridge is connected.",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "\"Spawn point\""
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "\"Selected spawn point\""
+        }
+      ]
+    },
+    {
+      "id": "projectile-fire-modes",
+      "title": "Physical projectiles and instant hitscan",
+      "tags": [
+        "projectile",
+        "weapon",
+        "fire mode",
+        "travelling",
+        "hitscan",
+        "instant",
+        "ray"
+      ],
+      "answer": "In Weapon firing, Fire mode has two native choices: Projectile / travelling and Hitscan / instant ray. The former fires an authored travelling projectile asset; the latter uses a ray, range and damage controls without selecting a travelling projectile. This describes editor controls, not your current weapon configuration.",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileFireMode_.AddItem(\"Projectile / travelling\")"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileFireMode_.AddItem(\"Hitscan / instant ray\")"
+        }
+      ]
+    },
+    {
+      "id": "projectile-create-copy",
+      "title": "NEW projectile versus EDIT COPY",
+      "tags": [
+        "projectile",
+        "new",
+        "edit copy",
+        "duplicate",
+        "create",
+        "bullet",
+        "preset",
+        "asset"
+      ],
+      "answer": "In Weapon firing, NEW starts a fresh Bullet-based projectile draft. EDIT COPY loads the currently selected projectile into a separate copy draft, leaving the source asset unchanged. Both must be saved with SAVE AS NEW to create a reusable projectile; saving a projectile alone does not assign it to the player's weapon.",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileNew_.OnClick([this]("
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "bridge::MakeProjectilePreset(bridge::ProjectilePreset::Bullet)"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileEditCopy_.OnClick([this]("
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileName_.SetText(d.name+\" copy\")"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileSave_,\"SAVE AS NEW\""
+        }
+      ]
+    },
+    {
+      "id": "arrow-preset-values",
+      "title": "Arrow preset starting speed and gravity",
+      "tags": [
+        "arrow",
+        "bow",
+        "preset",
+        "gravity",
+        "speed",
+        "projectile",
+        "flight"
+      ],
+      "answer": "The Arrow preset starts at speed 45 metres per second and gravity scale 1; these values are editable starting points, not enforced defaults for all arrows. Select a visible model if you need an actual arrow mesh. A NEW weapon projectile draft initially selects Bullet until you choose Arrow.",
+      "sources": [
+        {
+          "path": "EngineBridge/src/ProjectileAssetService.cpp",
+          "needle": "case ProjectilePreset::Arrow:"
+        },
+        {
+          "path": "EngineBridge/src/ProjectileAssetService.cpp",
+          "needle": "result.speedMetresPerSecond = 45; result.gravityScale = 1; break;"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectilePreset_.AddItem(bridge::ProjectilePresetName"
+        }
+      ]
+    },
+    {
+      "id": "single-launch-point-ui",
+      "title": "Single or multiple weapon launch points",
+      "tags": [
+        "spawn",
+        "point",
+        "socket",
+        "bow",
+        "firing",
+        "alternate",
+        "both",
+        "single",
+        "multiple"
+      ],
+      "answer": "A newly authored weapon binding with one launch point automatically selects that point. The Firing policy dropdown is normally hidden when only one point is available; when there are multiple authored points it exposes Selected spawn point, Alternate between two and Both together. If a saved multi-point policy needs repair, the dropdown may remain visible.",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "const bool multiple=projectileAvailableSocketCount_>1;"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileSocketPolicy_.SetVisible(policyVisible);"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "if(!preserveDraft&&!existingBinding&&projectileAvailableSocketCount_==1)"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileSocketPolicy_.AddItem(\"Both together\")"
+        }
+      ]
+    },
+    {
+      "id": "projectile-animation-fire-time",
+      "title": "Weapon animation fire/release timing",
+      "tags": [
+        "timing",
+        "fire",
+        "animation",
+        "delay",
+        "release",
+        "marker",
+        "preview",
+        "weapon"
+      ],
+      "answer": "Weapon firing provides Fire at: Animation start or After a delay. SET FIRE TIME IN ANIMATION opens the selected weapon action's preview when available. MARK CURRENT POSE captures a candidate timing and USE FIRE TIME transfers it; the marker must be nonnegative, before clip end and at most five seconds. If preview data are unavailable, use the numeric delay. Applying to the player is still a separate step.",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileReleaseMode_.AddItem(\"Animation start\")"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileReleaseMode_.AddItem(\"After a delay\")"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileTimingOpen_,\"SET FIRE TIME IN ANIMATION...\""
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "button(projectileTimingMark_,\"MARK CURRENT POSE\""
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "t>=projectileTimingDuration_||t>5)return;"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "This action has no animation to preview. Use the numeric delay."
+        }
+      ]
+    },
+    {
+      "id": "projectile-apply-player",
+      "title": "Save projectile versus apply weapon binding to player",
+      "tags": [
+        "apply",
+        "weapon",
+        "projectile",
+        "player",
+        "equipment",
+        "save",
+        "level",
+        "undo",
+        "binding"
+      ],
+      "answer": "SAVE AS NEW creates a reusable projectile asset. To equip it, return to Weapon firing, select the projectile and relevant action, then use APPLY TO THIS PLAYER. Renegade saves a new equipment definition and uses the command service to update this Player Start's equipment assignment. Save the level to retain the assignment. No assistant edit has been executed.",
+      "sources": [
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "bridge::SaveProjectileAsset(project.rootPath,projectId,d)"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "bridge::SaveEquipmentAsset(project.rootPath,projectId,item.equipment)"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "bridge::SetPlayerControllerSettingsCommand"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "SAVE LEVEL to retain."
+        }
+      ]
+    },
+    {
+      "id": "projectile-stick-requires-mesh",
+      "title": "Sticking projectile needs a visible model",
+      "tags": [
+        "stick",
+        "arrow",
+        "model",
+        "visible",
+        "impact",
+        "projectile",
+        "embed",
+        "mesh"
+      ],
+      "answer": "A projectile configured to Stick into the object must reference a valid visible imported model; Renegade's asset validation rejects stick-on-impact when meshAssetId is empty. Set the Visible model first, then select Stick into the object; available lifetime and embed-depth controls are in Advanced.",
+      "sources": [
+        {
+          "path": "EngineBridge/src/ProjectileAssetService.cpp",
+          "needle": "(d.stickOnImpact && d.meshAssetId.empty())"
+        },
+        {
+          "path": "EngineBridge/src/ProjectileAssetService.cpp",
+          "needle": "Stick needs a visible model;"
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "needle": "projectileImpactMode_.AddItem(\"Stick into the object\")"
+        }
+      ]
+    }
+  ]
+}

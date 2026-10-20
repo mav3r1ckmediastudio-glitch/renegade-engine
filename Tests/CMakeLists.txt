@@ -892,3 +892,127 @@ target_link_libraries(RenegadeNightSkyTests PRIVATE Renegade::EngineBridge)
 set_target_properties(RenegadeNightSkyTests PROPERTIES FOLDER "Renegade/Tests")
 add_test(NAME RenegadeNightSkyTests COMMAND RenegadeNightSkyTests)
 add_test(NAME RenegadeNightSkySourceContract COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/NightSkySourceContract.cmake")
+
+# Editor camera proof is GPU-independent and remains active in Release.
+add_executable(RenegadeScreenEditorCanvasCameraTests ScreenEditorCanvasCameraTests.cpp)
+target_compile_features(RenegadeScreenEditorCanvasCameraTests PRIVATE cxx_std_17)
+add_test(NAME RenegadeScreenEditorCanvasCameraTests COMMAND RenegadeScreenEditorCanvasCameraTests)
+set_target_properties(RenegadeScreenEditorCanvasCameraTests PROPERTIES FOLDER "Renegade/Tests")
+
+add_executable(RenegadeScreenUsageTests ScreenUsageTests.cpp)
+target_link_libraries(RenegadeScreenUsageTests PRIVATE Renegade::RuntimeBootstrap)
+add_test(NAME RenegadeScreenUsageTests COMMAND RenegadeScreenUsageTests)
+set_tests_properties(RenegadeScreenUsageTests PROPERTIES TIMEOUT 30)
+add_executable(RenegadeGameplayAttributeProfileTests GameplayAttributeProfileTests.cpp)
+target_link_libraries(RenegadeGameplayAttributeProfileTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeGameplayAttributeProfileTests COMMAND RenegadeGameplayAttributeProfileTests)
+set_tests_properties(RenegadeGameplayAttributeProfileTests PROPERTIES TIMEOUT 30)
+
+add_executable(RenegadeScreenBindingTests ScreenBindingTests.cpp)
+target_link_libraries(RenegadeScreenBindingTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeScreenBindingTests COMMAND RenegadeScreenBindingTests)
+set_tests_properties(RenegadeScreenBindingTests PROPERTIES TIMEOUT 30)
+
+add_executable(RenegadeScreenProgressTests ScreenProgressTests.cpp)
+target_link_libraries(RenegadeScreenProgressTests PRIVATE Renegade::RuntimeBootstrap)
+add_test(NAME RenegadeScreenProgressTests COMMAND RenegadeScreenProgressTests)
+set_tests_properties(RenegadeScreenProgressTests PROPERTIES TIMEOUT 30)
+
+add_executable(RenegadeScreenBindingFrameTests ScreenBindingFrameTests.cpp)
+target_link_libraries(RenegadeScreenBindingFrameTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeScreenBindingFrameTests COMMAND RenegadeScreenBindingFrameTests)
+set_tests_properties(RenegadeScreenBindingFrameTests PROPERTIES TIMEOUT 30)
+add_executable(RenegadeRuntimeUiGameplaySnapshotTests RuntimeUiGameplaySnapshotTests.cpp)
+target_link_libraries(RenegadeRuntimeUiGameplaySnapshotTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeRuntimeUiGameplaySnapshotTests COMMAND RenegadeRuntimeUiGameplaySnapshotTests)
+set_tests_properties(RenegadeRuntimeUiGameplaySnapshotTests PROPERTIES TIMEOUT 30)
+
+add_executable(RenegadeRuntimeScreenBindingTests RuntimeScreenBindingTests.cpp)
+target_link_libraries(RenegadeRuntimeScreenBindingTests PRIVATE Renegade::RuntimeBootstrap)
+add_test(NAME RenegadeRuntimeScreenBindingTests COMMAND RenegadeRuntimeScreenBindingTests)
+set_tests_properties(RenegadeRuntimeScreenBindingTests PROPERTIES TIMEOUT 30)
+
+
+add_executable(RenegadeScreenCompositionTests ScreenCompositionTests.cpp)
+target_include_directories(RenegadeScreenCompositionTests PRIVATE ${CMAKE_SOURCE_DIR}/EngineBridge/include)
+target_compile_features(RenegadeScreenCompositionTests PRIVATE cxx_std_17)
+add_test(NAME RenegadeScreenCompositionTests COMMAND RenegadeScreenCompositionTests)
+set_tests_properties(RenegadeScreenCompositionTests PROPERTIES TIMEOUT 30)
+
+add_executable(RenegadeRuntimeUiCompositionTests RuntimeUiCompositionTests.cpp)
+target_link_libraries(RenegadeRuntimeUiCompositionTests PRIVATE Renegade::EngineBridge)
+target_compile_features(RenegadeRuntimeUiCompositionTests PRIVATE cxx_std_17)
+add_test(NAME RenegadeRuntimeUiCompositionTests COMMAND RenegadeRuntimeUiCompositionTests)
+set_tests_properties(RenegadeRuntimeUiCompositionTests PROPERTIES TIMEOUT 30)
+
+add_executable(RenegadeScreenCompositionPersistenceTests ScreenCompositionPersistenceTests.cpp)
+target_link_libraries(RenegadeScreenCompositionPersistenceTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeScreenCompositionPersistenceTests COMMAND RenegadeScreenCompositionPersistenceTests)
+set_tests_properties(RenegadeScreenCompositionPersistenceTests PROPERTIES TIMEOUT 30)
+
+add_executable(RenegadeHudSelectionTests HudSelectionTests.cpp)
+target_link_libraries(RenegadeHudSelectionTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeHudSelectionTests COMMAND RenegadeHudSelectionTests)
+set_tests_properties(RenegadeHudSelectionTests PROPERTIES TIMEOUT 30)
+
+add_executable(RenegadeScreenBindingTargetTests ScreenBindingTargetTests.cpp)
+target_link_libraries(RenegadeScreenBindingTargetTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeScreenBindingTargetTests COMMAND RenegadeScreenBindingTargetTests)
+set_tests_properties(RenegadeScreenBindingTargetTests PROPERTIES TIMEOUT 30)
+
+add_executable(RenegadeHudReferencePersistenceTests HudReferencePersistenceTests.cpp)
+target_link_libraries(RenegadeHudReferencePersistenceTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeHudReferencePersistenceTests COMMAND RenegadeHudReferencePersistenceTests)
+set_tests_properties(RenegadeHudReferencePersistenceTests PROPERTIES TIMEOUT 30)
+
+add_executable(RenegadeUiRuntimeHudNativeFixture UiRuntimeHudNativeFixture.cpp)
+target_link_libraries(RenegadeUiRuntimeHudNativeFixture PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeUiRuntimeHudNativeFixture PROPERTIES FOLDER "Renegade/Tests")
+
+add_executable(RenegadeScreenLibraryTests ScreenLibraryTests.cpp)
+target_link_libraries(RenegadeScreenLibraryTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeScreenLibraryTests COMMAND RenegadeScreenLibraryTests)
+set_tests_properties(RenegadeScreenLibraryTests PROPERTIES TIMEOUT 30)
+
+add_executable(RenegadeGameplayAttributeDocumentTests GameplayAttributeDocumentTests.cpp)
+target_include_directories(RenegadeGameplayAttributeDocumentTests PRIVATE "${CMAKE_SOURCE_DIR}/Runtime/src")
+target_link_libraries(RenegadeGameplayAttributeDocumentTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeGameplayAttributeDocumentTests COMMAND RenegadeGameplayAttributeDocumentTests)
+set_tests_properties(RenegadeGameplayAttributeDocumentTests PROPERTIES TIMEOUT 30)
+target_include_directories(RenegadeScreenLibraryTests PRIVATE ${PROJECT_SOURCE_DIR}/WickedEngine/Editor)
+
+# Default creator scaffold: real Flow/Level, assets, optional capabilities and retained resume.
+add_executable(RenegadeProjectUiScaffoldTests ProjectUiScaffoldTests.cpp)
+target_link_libraries(RenegadeProjectUiScaffoldTests PRIVATE Renegade::EngineBridge Renegade::RuntimeBootstrap)
+target_compile_options(RenegadeProjectUiScaffoldTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+add_dependencies(RenegadeBridgeTests RenegadeProjectUiScaffoldTests)
+add_test(NAME RenegadeProjectUiScaffoldTests COMMAND RenegadeProjectUiScaffoldTests)
+
+add_executable(RenegadeScreenPerformanceBudgetTests ScreenPerformanceBudgetTests.cpp)
+target_link_libraries(RenegadeScreenPerformanceBudgetTests PRIVATE Renegade::EngineBridge)
+target_compile_options(RenegadeScreenPerformanceBudgetTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+add_dependencies(RenegadeBridgeTests RenegadeScreenPerformanceBudgetTests)
+add_test(NAME RenegadeScreenPerformanceBudgetTests COMMAND RenegadeScreenPerformanceBudgetTests)
+add_executable(RenegadeScreenAuthoringCompletionTests ScreenAuthoringCompletionTests.cpp)
+target_link_libraries(RenegadeScreenAuthoringCompletionTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeScreenAuthoringCompletionTests COMMAND RenegadeScreenAuthoringCompletionTests)
+
+# Explicit native GPU diagnostic, run against a disposable scene copy only.
+# It is not a headless CI test and does not substitute for Studio owner checks.
+if(WIN32)
+    add_executable(RenegadeTerrainGraphicsProof TerrainGraphicsProof.cpp)
+    target_link_libraries(RenegadeTerrainGraphicsProof PRIVATE Renegade::EngineBridge)
+    target_compile_definitions(RenegadeTerrainGraphicsProof PRIVATE UNICODE _UNICODE)
+    target_compile_options(RenegadeTerrainGraphicsProof PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>")
+    set_target_properties(RenegadeTerrainGraphicsProof PROPERTIES
+        FOLDER "Renegade/Tests"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/TerrainGraphicsProof")
+    add_dependencies(RenegadeTerrainGraphicsProof RenegadeStudio)
+    add_custom_command(TARGET RenegadeTerrainGraphicsProof POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+            "$<TARGET_FILE_DIR:RenegadeTerrainGraphicsProof>"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain"
+            "$<TARGET_FILE_DIR:RenegadeTerrainGraphicsProof>/Content/terrain")
+endif()

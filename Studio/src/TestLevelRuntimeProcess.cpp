@@ -309,6 +309,54 @@ namespace
                << readyEventSequence.fetch_add(1);
         return stream.str();
     }
+
+    fs::path AssistantGpuScript()
+    {
+        wchar_t executable[32768] = {};
+        const auto size = GetModuleFileNameW(nullptr, executable, 32768);
+        if (!size || size >= 32768) return {};
+        auto folder = fs::path(executable).parent_path();
+        for (int depth = 0; depth < 10; ++depth)
+        {
+            const auto script = folder / L"Tools" / L"assistant_presence" / L"TEST_GAME_GPU.ps1";
+            std::error_code error;
+            if (fs::is_regular_file(script, error)) return script;
+            const auto parent = folder.parent_path();
+            if (parent == folder) break;
+            folder = parent;
+        }
+        return {}; // Companion is not installed in this layout.
+    }
+
+    bool RunAssistantGpuCommand(const fs::path& script, const std::wstring& arguments, bool wait)
+    {
+        wchar_t system[32768] = {};
+        if (!GetSystemDirectoryW(system, 32768)) return false;
+        const auto powershell = fs::path(system) / L"WindowsPowerShell" / L"v1.0" / L"powershell.exe";
+        auto command = QuoteArgument(powershell.wstring()) +
+            L" -NoProfile -ExecutionPolicy Bypass -File " + QuoteArgument(script.wstring()) + arguments;
+        std::vector<wchar_t> mutableCommand(command.begin(), command.end());
+        mutableCommand.push_back(L'\0');
+        STARTUPINFOW startup = {}; startup.cb = sizeof(startup);
+        PROCESS_INFORMATION child = {};
+        if (!CreateProcessW(powershell.c_str(), mutableCommand.data(), nullptr, nullptr,
+                FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &child)) return false;
+        CloseHandle(child.hThread);
+        bool ok = true;
+        if (wait)
+        {
+            if (WaitForSingleObject(child.hProcess, 30000) != WAIT_OBJECT_0)
+            {
+                TerminateProcess(child.hProcess, 1);
+                WaitForSingleObject(child.hProcess, 5000);
+                ok = false;
+            }
+            DWORD code = 1;
+            if (!GetExitCodeProcess(child.hProcess, &code) || code != 0) ok = false;
+        }
+        CloseHandle(child.hProcess);
+        return ok;
+    }
 }
 
 namespace renegade::studio
@@ -327,6 +375,9 @@ namespace renegade::studio
         bool cleanupDone = false;
         bool watcherFailureInjected = false;
         bool ownsSnapshot = true;
+        fs::path assistantGpuScript;
+        std::wstring assistantGpuLease;
+        bool assistantGpuWatcher = false;
 
         void CloseHandles() noexcept
         {
@@ -438,6 +489,15 @@ namespace renegade::studio
             result.exitCode = exitCode;
             result.message = std::move(message);
             CleanupSnapshot();
+            if (!assistantGpuScript.empty() && !assistantGpuWatcher)
+            {
+                // Launch failed before the Runtime watcher took ownership.
+                RunAssistantGpuCommand(assistantGpuScript,
+                    L" -Action Release -Lease " + assistantGpuLease, false);
+            }
+            assistantGpuScript.clear();
+            assistantGpuLease.clear();
+            assistantGpuWatcher = false;
             CloseHandles();
             snapshot = {};
             return result;
@@ -546,6 +606,21 @@ namespace renegade::studio
             return failLaunch(
                 "RenegadeRuntime.exe was not found at: " +
                 options.executablePath);
+        }
+
+        if (options.yieldAssistantGpu)
+        {
+            implementation_->assistantGpuScript = AssistantGpuScript();
+            if (!implementation_->assistantGpuScript.empty())
+            {
+                implementation_->assistantGpuLease = std::to_wstring(GetCurrentProcessId()) +
+                    L"-" + std::to_wstring(GetTickCount64()) +
+                    L"-" + std::to_wstring(readyEventSequence.fetch_add(1));
+                if (!RunAssistantGpuCommand(implementation_->assistantGpuScript,
+                        L" -Action Suspend -Lease " + implementation_->assistantGpuLease, true))
+                    return failLaunch("Could not release the assistant GPU model before Test Game. "
+                        "The game was not started; inspect the assistant lifecycle service.");
+            }
         }
 
         const std::wstring readyEventName = MakeReadyEventName();
@@ -677,6 +752,22 @@ namespace renegade::studio
             implementation_->result.warning =
                 "Injected Job Object assignment failure; continuing with "
                 "explicit process cleanup.";
+        }
+
+        if (!implementation_->assistantGpuScript.empty())
+        {
+            FILETIME created = {}, exited = {}, kernel = {}, user = {};
+            if (!GetProcessTimes(processInfo.hProcess, &created, &exited, &kernel, &user) ||
+                !RunAssistantGpuCommand(implementation_->assistantGpuScript,
+                    L" -Action Watch -Lease " + implementation_->assistantGpuLease +
+                    L" -RuntimePid " + std::to_wstring(processInfo.dwProcessId) +
+                    L" -RuntimeCreated " + std::to_wstring(FileTimeValue(created)), false))
+            {
+                CloseHandle(thread);
+                implementation_->ForceTerminate(ForcedStopExitCode, error);
+                return failLaunch("Could not start assistant restoration watcher.");
+            }
+            implementation_->assistantGpuWatcher = true;
         }
 
         if (ResumeThread(thread) == static_cast<DWORD>(-1))
