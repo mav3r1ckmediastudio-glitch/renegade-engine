@@ -1,3 +1,7 @@
+## 2026-10-23 Environment probe repair, owner visually accepted
+
+Dedicated probe-only branch from main 11bbb90. See docs/ENVIRONMENT_PROBE_VISIBILITY_2026-10-23.md for crash diagnosis, native live capture, evidence and limits. Owner authorised main integration after checks. Unrelated importer/terrain and other local work excluded. No release gate closed.
+
 ## 2026-10-19 22:41: Terrain VT test candidate CRASHED and withdrawn
 
 User reported Renegade Studio pauses unresponsive for approximately 10 seconds

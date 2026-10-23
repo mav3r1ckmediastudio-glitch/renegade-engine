@@ -1683,3 +1683,8 @@ Stars and shares the versioned NightSkyService command/metadata path. Its scalar
 uses reserved night_zenith.w without changing the shared GPU ABI. Old schema-v1
 scenes without the optional key remain off. Both DX12 and Vulkan were rendered;
 see [Milky Way validation and remaining limits](MILKY_WAY_VISUAL_CHECK.md).
+
+
+### Environment probe authoring frame boundary
+
+Queue new probe components at EVENT_THREAD_SAFE_POINT before native Scene::Update prepares the parallel probe-bounds array. RefreshEnvProbes requires matching component and bounds counts. Studio diagnostics owns captured-sphere authoring visibility; the GUI overlay supplies selectable markers. New editor probes use native live capture, while saved static/live choices remain authoritative.

@@ -24,6 +24,7 @@ $wickedRoot = Join-Path $repositoryRoot "WickedEngine"
 $solutionPath = Join-Path $wickedRoot "WickedEngine.sln"
 $testsProjectPath = Join-Path $wickedRoot "Samples\Tests\Tests.vcxproj"
 $wickedCommit = Assert-RenegadeWickedBaseline -RepositoryRoot $repositoryRoot
+Set-RenegadePinnedDirectXMath -RepositoryRoot $repositoryRoot
 $msbuildPath = Get-RenegadeMSBuildPath
 
 if ([string]::IsNullOrWhiteSpace($ArtifactRoot)) {

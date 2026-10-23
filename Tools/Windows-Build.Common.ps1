@@ -167,3 +167,25 @@ function Get-RenegadeFileRecord {
         sha256 = $hash.Hash.ToLowerInvariant()
     }
 }
+
+# Recent Windows SDKs no longer expose the DirectX::Internal collision helper
+# referenced by the pinned Wicked baseline. Use its matching bundled headers
+# consistently for all compiler invocations (native solution and CMake).
+function Set-RenegadePinnedDirectXMath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryRoot
+    )
+    $headers = Join-Path $RepositoryRoot "WickedEngine\WickedEngine\Utility\DirectXMath"
+    $collision = Join-Path $headers "DirectXCollision.inl"
+    if (-not (Test-Path $collision -PathType Leaf)) {
+        throw "Pinned DirectXMath headers are missing: $collision"
+    }
+    $include = '/I"' + $headers + '"'
+    if ([string]::IsNullOrWhiteSpace($env:CL)) {
+        $env:CL = $include
+    } elseif (-not $env:CL.Contains($include)) {
+        $env:CL = $include + ' ' + $env:CL
+    }
+    Write-Host "Pinned DirectXMath headers: $headers"
+}

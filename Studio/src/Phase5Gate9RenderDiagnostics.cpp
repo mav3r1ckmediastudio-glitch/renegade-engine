@@ -540,6 +540,8 @@ namespace renegade::studio
     void StudioRenderPath::ResetGate9Diagnostics()
     {
         ResetNativeDiagnostics();
+        // Captured probe spheres are an authoring aid, as in Wicked Editor.
+        wi::renderer::SetToDrawDebugEnvProbes(true);
         if (gate9)
             gate9->profilerOverlay.SetVisible(false);
     }
