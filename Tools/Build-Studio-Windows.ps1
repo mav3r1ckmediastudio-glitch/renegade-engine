@@ -17,6 +17,7 @@ $ErrorActionPreference = "Stop"
 
 $repositoryRoot = Get-RenegadeRepositoryRoot
 $wickedCommit = Assert-RenegadeWickedBaseline -RepositoryRoot $repositoryRoot
+Set-RenegadePinnedDirectXMath -RepositoryRoot $repositoryRoot
 $cmakeCommand = Get-Command cmake -ErrorAction SilentlyContinue
 if (-not $cmakeCommand) {
     throw "CMake 3.19 or newer is required to build Renegade Studio."

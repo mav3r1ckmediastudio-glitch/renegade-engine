@@ -25,3 +25,7 @@ Owner visual acceptance covers the observed behaviour, not full release certific
 ## Integration
 
 Owner authorised merging this bounded probe repair into main on 23 October 2026. Merge through a dedicated PR after repository checks pass. Preserve unrelated dirty work and owner projects.
+
+## Clean-checkout CI compatibility
+
+The first PR run failed all Windows configurations before compiling the probe change: the runner SDK DirectXCollision header did not expose DirectX::Internal::PointOnLineSegmentNearestPoint required by the unchanged pinned Wicked baseline. Both supported Windows build scripts now put Wicked's bundled DirectXMath headers first via CL /I, consistently for native solution and CMake builds. Existing compiler options are retained and repeated setup is idempotent. No Wicked source, submodule pin, SDK installation or check suppression is changed.
