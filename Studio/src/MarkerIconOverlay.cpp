@@ -35,6 +35,7 @@ namespace renegade::studio
             PickupSpawn,
             ScriptEntity,
             PhysicsVolume,
+            EnvironmentProbe,
             Count,
         };
 
@@ -56,6 +57,7 @@ namespace renegade::studio
             "pickup_spawn.png",
             "script_entity.png",
             "physics_volume.png",
+            "environment_probe.png",
         };
 
         constexpr float MarkerSize = 96.0f;
@@ -146,6 +148,9 @@ namespace renegade::studio
 
                 for (std::size_t index = 0; index < MarkerFiles.size(); ++index)
                 {
+                    // Probe markers are procedural and need no packaged PNG.
+                    if (index == static_cast<std::size_t>(MarkerIconKind::EnvironmentProbe))
+                        continue;
                     const fs::path fileName = MarkerFiles[index];
                     fs::path resolved;
 
@@ -291,6 +296,58 @@ namespace renegade::studio
                         const float size = MarkerSize +
                             (isSelected ? SelectedExtraSize : hovered ? HoverExtraSize : 0.0f);
                         const std::size_t index = static_cast<std::size_t>(kind);
+                        // Probes must remain visible even in existing packages without
+                        // a probe PNG. Draw in the editor GUI pass, never the global
+                        // debug queue consumed by offscreen preview render paths.
+                        if (kind == MarkerIconKind::EnvironmentProbe)
+                        {
+                            const wi::Color color = isSelected
+                                ? wi::Color(255, 122, 31, 255)
+                                : wi::Color(51, 235, 255, 245);
+                            const auto line = [&](XMFLOAT2 a, XMFLOAT2 b)
+                            {
+                                const float lx = b.x - a.x, ly = b.y - a.y;
+                                wi::image::Params stroke;
+                                stroke.pos = XMFLOAT3((a.x+b.x)*0.5f, (a.y+b.y)*0.5f, 0);
+                                stroke.siz = XMFLOAT2(std::sqrt(lx*lx+ly*ly), 2.0f);
+                                stroke.pivot = XMFLOAT2(0.5f, 0.5f);
+                                stroke.rotation = std::atan2(ly, lx);
+                                stroke.color = color;
+                                stroke.blendFlag = wi::enums::BLENDMODE_ALPHA;
+                                wi::image::Draw(nullptr, stroke, cmd);
+                            };
+                            const float radius = hovered || isSelected ? 18.0f : 15.0f;
+                            for (int i = 0; i < 32; ++i)
+                            {
+                                const float a = XM_2PI*i/32.0f, b = XM_2PI*(i+1)/32.0f;
+                                line(XMFLOAT2(center.x+std::cos(a)*radius, center.y+std::sin(a)*radius),
+                                    XMFLOAT2(center.x+std::cos(b)*radius, center.y+std::sin(b)*radius));
+                            }
+                            line(XMFLOAT2(center.x-radius,center.y), XMFLOAT2(center.x+radius,center.y));
+                            line(XMFLOAT2(center.x,center.y-radius), XMFLOAT2(center.x,center.y+radius));
+                            if (isSelected)
+                            {
+                                const auto* transform = scene.transforms.GetComponent(entity);
+                                if (transform)
+                                {
+                                    XMFLOAT2 corners[8] = {};
+                                    bool visible[8] = {};
+                                    for (int i=0; i<8; ++i)
+                                    {
+                                        XMFLOAT3 point;
+                                        XMStoreFloat3(&point, XMVector3TransformCoord(
+                                            XMVectorSet((i&1)?1.0f:-1.0f,(i&2)?1.0f:-1.0f,
+                                                (i&4)?1.0f:-1.0f,1), transform->GetWorldMatrix()));
+                                        visible[i]=ProjectPoint(point,camera,canvas,viewport,corners[i]);
+                                    }
+                                    for (int i=0; i<8; ++i)
+                                        for (int bit=1; bit<=4; bit*=2)
+                                            if (!(i&bit) && visible[i] && visible[i|bit])
+                                                line(corners[i],corners[i|bit]);
+                                }
+                            }
+                            return;
+                        }
                         if (index >= resources_.size() || !resources_[index].IsValid())
                             return;
 
@@ -359,6 +416,14 @@ namespace renegade::studio
                     const auto* transform = scene.transforms.GetComponent(entity);
                     if (transform != nullptr)
                         emit(MarkerIconKind::DecalProjector, entity, transform->GetPosition());
+                }
+
+                for (std::size_t index = 0; index < scene.probes.GetCount(); ++index)
+                {
+                    const auto entity = scene.probes.GetEntity(index);
+                    const auto* transform = scene.transforms.GetComponent(entity);
+                    if (transform != nullptr)
+                        emit(MarkerIconKind::EnvironmentProbe, entity, transform->GetPosition());
                 }
 
                 for (std::size_t index = 0; index < scene.sounds.GetCount(); ++index)

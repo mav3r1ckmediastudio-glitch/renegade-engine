@@ -5678,8 +5678,20 @@ namespace renegade::studio
             CreateDecalFromView();
             break;
         case EditorAction::CreateEnvironmentProbe:
-            CreateEnvironmentProbeFromView();
+        {
+            // Scene::Update has already prepared aabb_probes for this frame.
+            // Appending a component here leaves RefreshEnvProbes indexing past
+            // that array. Author before the next Scene::Update instead.
+            const auto revision = session_->Scenes().Revision();
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this, revision](std::uint64_t)
+            {
+                if (session_ == nullptr || revision != session_->Scenes().Revision() ||
+                    testLevelRuntime_.IsActive() || sceneOpenInProgress_) return;
+                CreateEnvironmentProbeFromView();
+            });
             break;
+        }
         case EditorAction::OpenScene:
             OpenScene();
             break;
@@ -6514,9 +6526,12 @@ namespace renegade::studio
         transform.rotation = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
         transform.scale = XMFLOAT3(5.0f, 5.0f, 5.0f);
 
+        // New editor probes should immediately follow changes around them.
+        // Existing saved probes retain their authored static/live policy.
+        bridge::EnvironmentProbeState probeState;
+        probeState.realTime = true;
         auto command = std::make_unique<bridge::CreateEnvironmentProbeCommand>(
-            session_->Scenes().GetScene(),
-            bridge::EnvironmentProbeState{}, transform);
+            session_->Scenes().GetScene(), probeState, transform);
         auto* created = command.get();
         if (session_->Commands().Execute(std::move(command)))
         {
