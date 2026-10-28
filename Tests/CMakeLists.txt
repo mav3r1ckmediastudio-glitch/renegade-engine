@@ -1,3 +1,147 @@
+# INV-G1 core tests deliberately avoid Wicked and all Runtime/UI dependencies.
+add_executable(RenegadeInventoryCoreTests
+    InventoryCoreTests.cpp
+    ../EngineBridge/src/InventoryService.cpp
+)
+target_include_directories(RenegadeInventoryCoreTests PRIVATE ../EngineBridge/include)
+set_target_properties(RenegadeInventoryCoreTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryCoreTests COMMAND RenegadeInventoryCoreTests)
+# G5A: native project-owned item authoring document and transaction roundtrip.
+add_executable(RenegadeInventoryItemCatalogueTests InventoryItemCatalogueTests.cpp)
+target_link_libraries(RenegadeInventoryItemCatalogueTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryItemCatalogueTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryItemCatalogueTests COMMAND RenegadeInventoryItemCatalogueTests)
+# G5B: collectible scene metadata, prefab root and native command history.
+add_executable(RenegadeInventoryPickupAuthoringTests InventoryPickupAuthoringTests.cpp)
+target_link_libraries(RenegadeInventoryPickupAuthoringTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryPickupAuthoringTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryPickupAuthoringTests COMMAND RenegadeInventoryPickupAuthoringTests)
+add_executable(RenegadeWorldPickupControllerTests WorldPickupControllerTests.cpp)
+target_link_libraries(RenegadeWorldPickupControllerTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeWorldPickupControllerTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeWorldPickupControllerTests COMMAND RenegadeWorldPickupControllerTests)
+add_executable(RenegadeRuntimeInventoryItemUseTests RuntimeInventoryItemUseTests.cpp)
+target_link_libraries(RenegadeRuntimeInventoryItemUseTests PRIVATE Renegade::RuntimeBootstrap)
+set_target_properties(RenegadeRuntimeInventoryItemUseTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeRuntimeInventoryItemUseTests COMMAND RenegadeRuntimeInventoryItemUseTests)
+# Owner-review G5 gameplay fixture utility. Only accepts a disposable BUILD clone.
+add_executable(RenegadeInventoryG5SavedSceneProof InventoryG5SavedSceneProof.cpp)
+target_link_libraries(RenegadeInventoryG5SavedSceneProof PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryG5SavedSceneProof PROPERTIES FOLDER "Renegade/Tests")
+add_executable(RenegadeInventoryG5ItemSetup InventoryG5ItemSetup.cpp)
+target_link_libraries(RenegadeInventoryG5ItemSetup PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryG5ItemSetup PROPERTIES FOLDER "Renegade/Tests")
+add_executable(RenegadeInventoryG5GameplayProofAuthor InventoryG5GameplayProofAuthor.cpp)
+target_link_libraries(RenegadeInventoryG5GameplayProofAuthor PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryG5GameplayProofAuthor PROPERTIES FOLDER "Renegade/Tests")
+add_executable(RenegadeInventoryOverlayViewTests
+    InventoryOverlayViewTests.cpp
+    ../EngineBridge/src/InventoryOverlayView.cpp
+    ../EngineBridge/src/InventoryService.cpp
+)
+target_include_directories(RenegadeInventoryOverlayViewTests PRIVATE ../EngineBridge/include)
+set_target_properties(RenegadeInventoryOverlayViewTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryOverlayViewTests COMMAND RenegadeInventoryOverlayViewTests)
+add_executable(RenegadeInventorySelectionControllerTests
+    InventorySelectionControllerTests.cpp
+    ../EngineBridge/src/InventorySelectionController.cpp
+    ../EngineBridge/src/InventoryOverlayView.cpp
+    ../EngineBridge/src/InventoryService.cpp
+)
+target_include_directories(RenegadeInventorySelectionControllerTests PRIVATE ../EngineBridge/include)
+set_target_properties(RenegadeInventorySelectionControllerTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventorySelectionControllerTests
+    COMMAND RenegadeInventorySelectionControllerTests)
+add_executable(RenegadeInventoryUiInputPolicyTests
+    InventoryUiInputPolicyTests.cpp)
+target_include_directories(RenegadeInventoryUiInputPolicyTests PRIVATE ../Runtime/src)
+set_target_properties(RenegadeInventoryUiInputPolicyTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryUiInputPolicyTests
+    COMMAND RenegadeInventoryUiInputPolicyTests)
+add_executable(RenegadeInventoryPointerGestureTests InventoryPointerGestureTests.cpp)
+target_include_directories(RenegadeInventoryPointerGestureTests PRIVATE ../Runtime/src)
+set_target_properties(RenegadeInventoryPointerGestureTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryPointerGestureTests COMMAND RenegadeInventoryPointerGestureTests)
+# Uses production ScreenService document validation, serializer and normal
+# authorable Screen schema through the linked EngineBridge.
+add_executable(RenegadeInventoryScreenAdapterTests InventoryScreenAdapterTests.cpp)
+target_link_libraries(RenegadeInventoryScreenAdapterTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryScreenAdapterTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryScreenAdapterTests COMMAND RenegadeInventoryScreenAdapterTests)
+add_executable(RenegadeInventoryDragTransferTests InventoryDragTransferTests.cpp)
+target_link_libraries(RenegadeInventoryDragTransferTests PRIVATE Renegade::EngineBridge)
+target_include_directories(RenegadeInventoryDragTransferTests PRIVATE ../Runtime/src)
+set_target_properties(RenegadeInventoryDragTransferTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryDragTransferTests COMMAND RenegadeInventoryDragTransferTests)
+# Pure UI-independent creator grid configuration / viewport projection.
+add_executable(RenegadeInventoryGridViewportTests InventoryGridViewportTests.cpp)
+target_link_libraries(RenegadeInventoryGridViewportTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryGridViewportTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryGridViewportTests COMMAND RenegadeInventoryGridViewportTests)
+add_executable(RenegadeInventoryGridPageTests InventoryGridPageTests.cpp)
+target_link_libraries(RenegadeInventoryGridPageTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryGridPageTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryGridPageTests COMMAND RenegadeInventoryGridPageTests)
+add_executable(RenegadeInventoryPagedScreenAdapterTests InventoryPagedScreenAdapterTests.cpp)
+target_link_libraries(RenegadeInventoryPagedScreenAdapterTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryPagedScreenAdapterTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryPagedScreenAdapterTests COMMAND RenegadeInventoryPagedScreenAdapterTests)
+add_executable(RenegadeInventoryPagedPreviewAuthor InventoryPagedPreviewAuthor.cpp)
+target_link_libraries(RenegadeInventoryPagedPreviewAuthor PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryPagedPreviewAuthor PROPERTIES FOLDER "Renegade/Tests")
+add_executable(RenegadeInventoryScreenTemplateAuthor InventoryScreenTemplateAuthor.cpp)
+target_link_libraries(RenegadeInventoryScreenTemplateAuthor PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryScreenTemplateAuthor PROPERTIES FOLDER "Renegade/Tests")
+add_executable(RenegadeInventoryAccessPolicyTests
+    InventoryAccessPolicyTests.cpp
+    ../EngineBridge/src/InventoryAccessPolicy.cpp
+    ../EngineBridge/src/InventoryService.cpp
+)
+target_include_directories(RenegadeInventoryAccessPolicyTests PRIVATE ../EngineBridge/include)
+set_target_properties(RenegadeInventoryAccessPolicyTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryAccessPolicyTests COMMAND RenegadeInventoryAccessPolicyTests)
+add_executable(RenegadeInventoryTestLevelProjectionTests
+    InventoryTestLevelSnapshotTests.cpp
+    ../EngineBridge/src/InventoryTestLevelSnapshot.cpp
+    ../EngineBridge/src/InventoryService.cpp
+    ../EngineBridge/src/InventoryAccessPolicy.cpp
+)
+target_include_directories(RenegadeInventoryTestLevelProjectionTests PRIVATE ../EngineBridge/include)
+set_target_properties(RenegadeInventoryTestLevelProjectionTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryTestLevelProjectionTests
+    COMMAND RenegadeInventoryTestLevelProjectionTests)
+
+add_executable(RenegadeInventoryDependencyProviderTests InventoryDependencyProviderTests.cpp)
+target_link_libraries(RenegadeInventoryDependencyProviderTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryDependencyProviderTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryDependencyProviderTests
+    COMMAND RenegadeInventoryDependencyProviderTests)
+add_executable(RenegadeInventoryGatewayTests
+    InventoryGatewayTests.cpp
+    ../EngineBridge/src/InventoryService.cpp
+)
+target_include_directories(RenegadeInventoryGatewayTests PRIVATE ../EngineBridge/include)
+set_target_properties(RenegadeInventoryGatewayTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeInventoryGatewayTests COMMAND RenegadeInventoryGatewayTests)
+add_executable(RenegadeRuntimeInventorySessionTests
+    RuntimeInventorySessionTests.cpp
+    ../Runtime/src/RuntimeInventorySession.cpp
+    ../EngineBridge/src/InventoryService.cpp
+    ../EngineBridge/src/InventoryAccessPolicy.cpp
+)
+target_include_directories(RenegadeRuntimeInventorySessionTests PRIVATE
+    ../EngineBridge/include ../Runtime/src)
+set_target_properties(RenegadeRuntimeInventorySessionTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeRuntimeInventorySessionTests COMMAND RenegadeRuntimeInventorySessionTests)
+
+# Disposable authoring utility for the real Lua inventory Runtime smoke fixture.
+# Runs only when explicitly invoked with a guarded BUILD/Inventory-Proof path.
+add_executable(RenegadeInventoryRuntimeProofAuthor
+    InventoryRuntimeProofAuthor.cpp
+)
+target_link_libraries(RenegadeInventoryRuntimeProofAuthor PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryRuntimeProofAuthor PROPERTIES FOLDER "Renegade/Tests")
+
 add_executable(RenegadeBridgeTests
     BridgeCommandTests.cpp
 )
@@ -566,6 +710,10 @@ add_test(
     COMMAND RenegadeScreenRendererTests
 )
 
+add_executable(RenegadeInventoryGridAuthoringTests InventoryGridAuthoringTests.cpp)
+target_link_libraries(RenegadeInventoryGridAuthoringTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeInventoryGridAuthoringTests COMMAND RenegadeInventoryGridAuthoringTests)
+
 add_executable(RenegadeScreenAuthoringSessionTests
     ScreenAuthoringSessionTests.cpp
 )
@@ -1058,6 +1206,39 @@ add_test(NAME RenegadeScreenPerformanceBudgetTests COMMAND RenegadeScreenPerform
 add_executable(RenegadeScreenAuthoringCompletionTests ScreenAuthoringCompletionTests.cpp)
 target_link_libraries(RenegadeScreenAuthoringCompletionTests PRIVATE Renegade::EngineBridge)
 add_test(NAME RenegadeScreenAuthoringCompletionTests COMMAND RenegadeScreenAuthoringCompletionTests)
+
+# G5H: bounded inventory context action policy (no world mutation until spawn is supported).
+add_executable(RenegadeInventoryItemContextActionsTests InventoryItemContextActionsTests.cpp)
+target_link_libraries(RenegadeInventoryItemContextActionsTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeInventoryItemContextActionsTests COMMAND RenegadeInventoryItemContextActionsTests)
+set_tests_properties(RenegadeInventoryItemContextActionsTests PROPERTIES TIMEOUT 30)
+
+# G5E explicit, project-owned Inventory Screen assignment regression.
+add_executable(RenegadeInventoryScreenAssignmentTests InventoryScreenAssignmentTests.cpp)
+target_link_libraries(RenegadeInventoryScreenAssignmentTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeInventoryScreenAssignmentTests COMMAND RenegadeInventoryScreenAssignmentTests)
+set_tests_properties(RenegadeInventoryScreenAssignmentTests PROPERTIES TIMEOUT 30)
+
+# G5H isolated project-owned player health HUD fixture (disposable G5 sandbox).
+add_executable(RenegadeInventoryG5HealthHudAuthor InventoryG5HealthHudAuthor.cpp)
+target_link_libraries(RenegadeInventoryG5HealthHudAuthor PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryG5HealthHudAuthor PROPERTIES FOLDER "Renegade/Tests")
+
+# G5E isolated actual production-stage export proof; no owner build promotion.
+add_executable(RenegadeInventoryG5PackageProof InventoryG5PackageProof.cpp)
+target_link_libraries(RenegadeInventoryG5PackageProof PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryG5PackageProof PROPERTIES FOLDER "Renegade/Tests")
+
+# G5D disposable proof preparation: accepts only BUILD/G5SavePlay.
+add_executable(RenegadeInventoryG5SavePlayPrepare InventoryG5SavePlayPrepare.cpp)
+target_link_libraries(RenegadeInventoryG5SavePlayPrepare PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryG5SavePlayPrepare PROPERTIES FOLDER "Renegade/Tests")
+
+# G5D governed, isolated on-disk Save Game slot (no GPU or project edits).
+add_executable(RenegadeRuntimeGameSaveSlotTests RuntimeGameSaveSlotTests.cpp)
+target_link_libraries(RenegadeRuntimeGameSaveSlotTests PRIVATE Renegade::RuntimeBootstrap)
+add_test(NAME RenegadeRuntimeGameSaveSlotTests COMMAND RenegadeRuntimeGameSaveSlotTests)
+set_tests_properties(RenegadeRuntimeGameSaveSlotTests PROPERTIES TIMEOUT 30)
 
 # Explicit native GPU diagnostic, run against a disposable scene copy only.
 # It is not a headless CI test and does not substitute for Studio owner checks.
@@ -1568,3 +1749,13 @@ target_compile_definitions(RenegadeWaterfallRuntimeLifecycleProof PRIVATE
 add_executable(RenegadeWaterfallMultiSceneProof WaterfallMultiSceneProof.cpp)
 target_link_libraries(RenegadeWaterfallMultiSceneProof PRIVATE Renegade::EngineBridge)
 target_compile_options(RenegadeWaterfallMultiSceneProof PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+
+# Resolve package provenance from this integration tree, never historic fixture SHAs.
+target_compile_definitions(RenegadeInventoryG5PackageProof PRIVATE
+    RENEGADE_SOURCE_REVISION="${G13E3_SOURCE_REVISION}"
+    RENEGADE_WICKED_REVISION="${G13E3_WICKED_REVISION}")
+
+# Explicit disposable combined-system native save/snapshot proof (not an automatic authoring test).
+add_executable(RenegadeInventoryRiverCombinedProof InventoryRiverCombinedProof.cpp)
+target_link_libraries(RenegadeInventoryRiverCombinedProof PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeInventoryRiverCombinedProof PROPERTIES FOLDER "Renegade/Tests")

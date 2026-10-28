@@ -36,6 +36,17 @@
 #include "RuntimeHudSession.h"
 #include "renegade/bridge/HudSelection.h"
 #include "RuntimeScriptRuntime.h"
+#include "RuntimeInventorySession.h"
+#include "RuntimeGameSaveSlot.h"
+#include "renegade/bridge/WorldPickupController.h"
+#include "renegade/bridge/InventoryItemContextActions.h"
+#include "renegade/bridge/InventoryItemCatalogueService.h"
+#include "renegade/bridge/InventoryOverlayView.h"
+#include "renegade/bridge/InventorySelectionController.h"
+#include "renegade/bridge/InventoryScreenAdapter.h"
+#include "renegade/bridge/InventoryDragTransfer.h"
+#include "renegade/bridge/InventoryPagedScreenAdapter.h"
+#include "InventoryPointerGesture.h"
 #include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/ImpactAudioService.h"
 #include "renegade/bridge/CharacterService.h"
@@ -66,6 +77,16 @@ namespace renegade::runtime
         void SetPauseOverlayVisible(bool visible) noexcept { pauseOverlayVisible_=visible; }
         void SetInterfaceDeltaTime(float dt) noexcept;
         void SetInteractionPrompt(std::string prompt) noexcept;
+        void SetInventoryOverlay(bridge::InventoryOverlayView view, bool visible,
+                                int selectedPanel=-1, int selectedRow=-1,
+                                std::string status={}) noexcept
+        {
+            inventoryView_=std::move(view);
+            inventoryVisible_=visible;
+            inventorySelectedPanel_=selectedPanel;
+            inventorySelectedRow_=selectedRow;
+            inventoryStatus_=std::move(status);
+        }
         void SetMeleePrompt(std::string prompt) { meleePrompt_=std::move(prompt); }
         void SetProjectileAim(bool enabled) { projectileAim_=enabled; }
         void SetProjectileContacts(std::vector<XMFLOAT2> contacts) { projectileContacts_=std::move(contacts); }
@@ -97,6 +118,11 @@ namespace renegade::runtime
         bool pauseOverlayVisible_ = false;
         float interfaceDeltaTime_ = 0;
         std::string interactionPrompt_;
+        bridge::InventoryOverlayView inventoryView_;
+        bool inventoryVisible_=false;
+        int inventorySelectedPanel_=-1;
+        int inventorySelectedRow_=-1;
+        std::string inventoryStatus_;
         std::string meleePrompt_;
         bool projectileAim_ = false;
         std::vector<XMFLOAT2> projectileContacts_;
@@ -109,6 +135,11 @@ namespace renegade::runtime
     public:
         void SetBootstrapResult(RuntimeBootstrapResult result);
         void SetSmokeOptions(bool autoPlay, bool exitOnComplete) noexcept;
+        // Explicit QA-only launch switch; never enabled for ordinary games.
+        void SetInventoryHealthTestMode(bool enabled) noexcept {inventoryHealthTestMode_=enabled;}
+        void ConfigureGameSaveDirectory(std::string localAppData) {
+            gameSaveLocalAppData_=std::move(localAppData);
+        }
         [[nodiscard]] bool ConfigureUiAccessibilityPreferences(std::string path,std::string& error);
         [[nodiscard]] bool ChangeReducedMotion(bool enabled,std::string& error);
         [[nodiscard]] bool ChangeUiAccessibility(const RuntimeUiAccessibilityPreferences& settings,std::string& error);
@@ -134,6 +165,9 @@ namespace renegade::runtime
         [[nodiscard]] bool LoadGameplayAttributes(std::string& error);
         void UpdateGameplayAttributes(float dt);
         [[nodiscard]] bool ResetPlaySession(std::string& error);
+        [[nodiscard]] bool SaveQuickGame(std::string& error);
+        [[nodiscard]] bool LoadQuickGame(std::string& error);
+        [[nodiscard]] bool ResolveQuickSaveSceneId(std::string& sceneId,std::string& error) const;
         void SetPaused(bool paused) noexcept;
         void RefreshEffectivePause() noexcept;
         void RefreshUiComposition();
@@ -150,6 +184,20 @@ namespace renegade::runtime
         void SyncAudioForScene();
         void SyncCreatorScriptsForScene();
         void StopCreatorScripts() noexcept;
+        void RefreshInventoryOverlay(bool gameplayFrame, bool acceptsKeyboard);
+        void LoadInventoryAuthoredScreen();
+        void ResetInventoryAuthoredScreen() noexcept;
+        void OnInventoryScreenAction(RuntimeActionRequest request);
+        bool TryUseInventoryStack(const std::string& instanceId);
+        void OpenInventoryContextMenu(const std::string& action);
+        void CloseInventoryContextMenu();
+        void RunInventoryContextAction(const std::string& action);
+        void SetInventoryContextStatus(const std::string& message);
+        void OnInventoryScreenPointerDrag(const bridge::StableId& widgetId,
+            bool begin,float x,float y,bool fullStack=false);
+        void PollInventoryKeyboardInput();
+        void PollInventoryPointerInput();
+        void RefreshPagedInventoryScreen();
         void ReportCreatorScriptDiagnostics();
 
         bridge::SceneService scenes_;
@@ -204,6 +252,43 @@ namespace renegade::runtime
         std::uint64_t uiLivePublishedMs_ = 0;
         std::string uiBindingDiagnostic_;
         RuntimeActionDispatcher actions_;
+        // Inventory outlives creator script callbacks during shutdown.
+        std::string gameSaveLocalAppData_;
+        RuntimeInventorySession inventorySession_;
+        bridge::WorldPickupController worldPickups_;
+        bridge::InventoryItemCatalogue runtimeItemCatalogue_;
+        bool runtimeItemCatalogueLoaded_=false;
+        std::string worldPickupFeedback_;
+        float worldPickupFeedbackSeconds_=0.0f;
+        bool inventoryOverlayOpen_=false;
+        std::uint64_t inventoryOverlayRevision_=0;
+        bridge::InventoryOverlayView inventoryOverlayCache_;
+        bridge::InventorySelectionController inventorySelection_;
+        std::unique_ptr<bridge::InventoryGameplayGateway> inventoryUiGateway_;
+        std::string inventoryUiStatus_;
+        std::string inventoryHoverDetails_;
+        bridge::InventoryItemContextMenu inventoryContext_;
+        std::vector<std::string> inventoryContextWidgetIds_;
+        bridge::InventoryDragTransfer inventoryDrag_;
+        bool inventoryPagedPreview_=false;
+        bool inventoryPagedDirty_=false;
+        bridge::InventoryGridLayout inventoryPagedLayout_;
+        bridge::InventoryGridPage inventoryPagedPages_[2];
+        std::uint32_t inventoryPagedTopRows_[2]={0,0};
+        bool inventoryScrollbarCapture_=false;
+        bool inventoryScrollbarWasDown_=false;
+        bool inventoryScrollbarThumbDrag_=false;
+        std::size_t inventoryScrollbarPanel_=0;
+        float inventoryScrollbarGrabY_=0.0f;
+        bridge::InventoryPagedTransfer inventoryPagedDrag_;
+        InventoryPointerGesture inventoryPointerGesture_;
+        float inventoryDragStartX_=0;
+        float inventoryDragStartY_=0;
+        bridge::ScreenDocument inventoryAuthoredScreen_;
+        std::unique_ptr<RuntimeScreenController> inventoryScreenController_=
+            std::make_unique<RuntimeScreenController>();
+        std::unique_ptr<RuntimeScreenPresenter> inventoryScreenPresenter_=
+            std::make_unique<RuntimeScreenPresenter>();
         RuntimeScriptRuntime creatorScripts_;
         bridge::RuntimePlayerState player_;
         RuntimePlayerViewRigState playerViewRig_;
@@ -238,6 +323,7 @@ namespace renegade::runtime
         bool startupFinished_ = false;
         bool flowStarted_ = false;
         bool quitRequested_ = false;
+        bool inventoryHealthTestMode_ = false;
         bool smokeAutoPlay_ = false;
         bool smokeExitOnComplete_ = false;
         bool paused_ = false;

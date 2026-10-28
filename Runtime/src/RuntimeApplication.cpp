@@ -4,8 +4,12 @@
 #include <cmath>
 #include <filesystem>
 #include "RuntimeApplication.h"
+#include "renegade/bridge/StoryFlowScreenReferenceService.h"
+#include "InventoryUiInputPolicy.h"
+#include "RuntimeInventoryItemUse.h"
 #include "renegade/bridge/ScreenLiveBinding.h"
 #include "renegade/bridge/ScreenThemeResolver.h"
+#include "renegade/bridge/InventoryScreenAssignmentService.h"
 #include "RuntimeProjectileAim.h"
 #include "RuntimeGrenadeExplosion.h"
 #include "RuntimeThrownHeldVisual.h"
@@ -17,7 +21,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
+#include <fstream>
+#include <filesystem>
+#include <iomanip>
 #include <map>
+#include <sstream>
 #include <utility>
 
 namespace renegade::runtime
@@ -287,7 +296,107 @@ namespace renegade::runtime
         }
         if (!paused_)
         {
-            if (!interactionPrompt_.empty())
+            // G4-A temporary retained inventory presentation over the normal
+            // game scene. Gameplay stays in InventoryService and can also
+            // be driven by creator-authored Screen/UI Designer assets.
+            if (!inventoryView_.panels.empty())
+            {
+                if (!inventoryVisible_)
+                {
+                    wi::font::Params hint(width-22.0f,42.0f,14,
+                        wi::font::WIFALIGN_RIGHT,wi::font::WIFALIGN_CENTER,
+                        wi::Color(202,214,225,220),wi::Color(0,0,0,175));
+                    wi::font::Draw("I  INVENTORY",hint,cmd);
+                }
+                else
+                {
+                    const float outerWidth=std::min(952.0f,std::max(320.0f,width-36.0f));
+                    const float originX=(width-outerWidth)*0.5f;
+                    const float top=std::max(32.0f,(height-534.0f)*0.5f);
+                    const float panelHeight=std::min(526.0f,height-76.0f);
+                    auto rectangle=[&](float x,float y,float w,float h,wi::Color fill)
+                    {
+                        wi::image::Params p(x,y,w,h,fill);
+                        p.blendFlag=wi::enums::BLENDMODE_ALPHA;
+                        wi::image::Draw(nullptr,p,cmd);
+                    };
+                    auto type=[&](const std::string& content,float x,float y,
+                                 int size,wi::Color color)
+                    {
+                        wi::font::Params p(x,y,size,
+                            wi::font::WIFALIGN_LEFT,wi::font::WIFALIGN_CENTER,
+                            color,wi::Color(0,0,0,165));
+                        wi::font::Draw(content,p,cmd);
+                    };
+                    rectangle(originX,top,outerWidth,panelHeight,wi::Color(9,14,22,236));
+                    rectangle(originX,top,outerWidth,3,wi::Color(84,149,186,255));
+                    type("INVENTORY",originX+22,top+34,24,wi::Color(238,246,255,255));
+                    type("I  CLOSE",originX+outerWidth-112,top+34,13,
+                        wi::Color(189,202,212,255));
+                    const float gap=14.0f;
+                    const float colW=(outerWidth-48.0f-gap)*0.5f;
+                    for (std::size_t j=0;j<inventoryView_.panels.size()&&j<2;++j)
+                    {
+                        const auto& c=inventoryView_.panels[j];
+                        const float x=originX+24.0f+static_cast<float>(j)*(colW+gap);
+                        const float panelTop=top+68.0f;
+                        rectangle(x,panelTop,colW,panelHeight-126.0f,
+                            wi::Color(18,27,38,250));
+                        rectangle(x,panelTop,colW,44,wi::Color(33,48,62,255));
+                        type(c.title,x+14,panelTop+22,19,
+                            wi::Color(237,245,252,255));
+                        std::string slots=std::to_string(c.usedSlots);
+                        if(c.maxSlots>0) slots+="/"+std::to_string(c.maxSlots);
+                        slots+=" SLOTS";
+                        type(slots,x+12,panelTop+66,13,
+                            wi::Color(182,201,217,255));
+                        const int count=static_cast<int>(std::min<std::size_t>(c.rows.size(),8));
+                        for(int k=0;k<count;++k)
+                        {
+                            const auto& item=c.rows[static_cast<std::size_t>(k)];
+                            const float rowY=panelTop+96.0f+static_cast<float>(k)*31.0f;
+                            const bool selected=
+                                inventorySelectedPanel_==static_cast<int>(j) &&
+                                inventorySelectedRow_==k;
+                            rectangle(x+8,rowY-12,colW-16,28,
+                                selected?wi::Color(57,88,111,255):
+                                (k%2)==0?wi::Color(33,46,60,255):
+                                           wi::Color(26,38,51,255));
+                            if (selected)
+                                rectangle(x+8,rowY-12,3,28,
+                                    wi::Color(126,204,240,255));
+                            const auto name=item.itemName.size()>27?
+                                item.itemName.substr(0,26)+"...":item.itemName;
+                            type(name,x+20,rowY,14,wi::Color(238,241,246,255));
+                            type("x"+std::to_string(item.quantity),
+                                 x+colW-61,rowY,14,wi::Color(140,211,242,255));
+                        }
+                        if(c.rows.empty())
+                            type("No items",x+20,panelTop+108,15,
+                                wi::Color(156,177,190,255));
+                        else if(c.truncated)
+                            type("More items not shown",x+20,panelTop+366,12,
+                                wi::Color(173,195,207,255));
+                        std::ostringstream weightText;
+                        weightText<<std::fixed<<std::setprecision(1)
+                            <<"Weight: "<<c.usedWeight;
+                        if(c.maxWeight>0) weightText<<" / "<<c.maxWeight;
+                        const auto weight=weightText.str();
+                        type(weight,x+14,panelTop+panelHeight-153,13,
+                            wi::Color(188,205,218,255));
+                    }
+                    type(inventoryStatus_.empty()?
+                             "UP/DOWN SELECT  TAB SWITCH  ENTER MOVE  E SCRIPT  I CLOSE":
+                             inventoryStatus_,
+                        originX+24,top+panelHeight-30,14,
+                        wi::Color(188,207,224,255));
+                }
+            }
+            // The inventory overview has its own keyboard-help footer.
+            // Avoid drawing a second creator-script prompt over that footer.
+            // Keep its text intact: closing the overview restores the original
+            // in-world prompt on the next normal frame.
+            if (!inventoryVisible_ && !interactionPrompt_.empty())
             {
                 const float panelWidth = std::max(
                     1.0f,
@@ -648,8 +757,9 @@ namespace renegade::runtime
         SyncAudioForScene();
         bridge::RefreshPrecipitationVisual(scenes_.GetScene());
 
-        const bool gameplayInputAllowed = !uiComposition_.Resolve().gameplayInputBlocked &&
-            !renderer_.GetGUI().IsTyping();
+        const bool typingInOtherUi=renderer_.GetGUI().IsTyping();
+        const bool gameplayInputAllowed =
+            !uiComposition_.Resolve().gameplayInputBlocked && !typingInOtherUi;
         const bool gameplayFrame = !scenes_.CurrentPath().empty();
         // G13E14 one-level verification uses the exact regular controller and
         // Jolt/scene movement path; synthetic input is gated to the developer
@@ -657,14 +767,53 @@ namespace renegade::runtime
         const char* g13e14Trace=std::getenv("RENEGADE_G13E14_PLAYER_TRACE");
         static std::uint64_t g13e14Frame=0;
         if(g13e14Trace && gameplayFrame) ++g13e14Frame;
+        bridge::WorldPickupFrame pickupFrame;
+        // The inventory Screen owns input while open, even if ordinary
+        // gameplay input is suppressed by UI composition. Its E/Interact
+        // signal belongs exclusively to inventory slot activation; world
+        // pickup and creator script interaction are gated below.
+        const bool inventoryInteractionAllowed = InventoryInteractHasFocus(
+            gameplayFrame,inventoryOverlayOpen_,
+            inventoryScreenPresenter_->IsLoaded(),paused_,typingInOtherUi);
         if (gameplayFrame)
         {
             // Feed current input into the one authoritative Player before
             // Wicked advances physics. The View Rig is parented to that Player,
             // so the normal physics -> hierarchy -> object update carries the
             // first-person presentation to the same post-physics position.
-            gameplayInput_ = gameplayInputAllowed
+            gameplayInput_ = (gameplayInputAllowed || inventoryInteractionAllowed)
                 ? bridge::CaptureGameplayInput(inputMap_, dt) : bridge::GameplayInputFrame{};
+            if (inventoryOverlayOpen_) {
+                // G5G modal focus: inventory navigation and E must not
+                // also move/aim/fire/interact with the world Player.
+                // Esc/Pause remains available.
+                gameplayInput_ = GateWorldInputForInventory(
+                    gameplayInput_,inventoryOverlayOpen_);
+                // Esc closes only the transient item menu first. A second
+                // Esc can still open the normal pause menu.
+                if(gameplayInput_.pausePressed &&
+                   !inventoryContext_.sourceInstanceId.empty()) {
+                    CloseInventoryContextMenu();
+                    gameplayInput_.pausePressed=false;
+                }
+            }
+            // Dedicated disposable health-potion QA: H applies native combat
+            // damage, never synthetic UI-only health. Prevent lethal damage
+            // so the player can always test subsequent potion healing.
+            // Opt-in through --renegade-inventory-health-proof ONLY.
+            if(inventoryHealthTestMode_ && gameplayInputAllowed && !paused_ &&
+               !inventoryOverlayOpen_ && player_.IsSpawned() &&
+               !combatState_.playerDead &&
+               wi::input::Press(static_cast<wi::input::BUTTON>('H'))) {
+                const float damage=std::min(25.0f,
+                    std::max(0.0f,combatState_.playerHealth-1.0f));
+                bool died=false;
+                if(damage>0.0f && ApplyCombatDamage(scenes_.GetScene(),
+                        combatState_,RuntimePlayerKnowledgeId,damage,died))
+                    wi::backlog::post("G5 HEALTH TEST: damage="+
+                        std::to_string(damage)+" HP="+
+                        std::to_string(combatState_.playerHealth));
+            }
             const auto& gameplayInput = gameplayInput_;
             creatorScripts_.SetGameplayState(&player_, &gameplayInput_);
             if (gameplayInput.pausePressed)
@@ -827,6 +976,19 @@ namespace renegade::runtime
         // input. A button disabled/hidden by this snapshot cannot activate using
         // the previous frame's presentation state.
         UpdateGameplayAttributes(dt);
+        // G5 collection must remove scene meshes before Wicked's physics/GPU
+        // upload. The player pose used here is the last completed frame.
+        if (gameplayFrame && !paused_ && gameplayInputAllowed &&
+            !inventoryOverlayOpen_ && player_.IsSpawned() &&
+            inventoryUiGateway_ && inventorySession_.Enabled()) {
+            if (const auto* transform=scenes_.GetScene().transforms.GetComponent(player_.entity)) {
+                pickupFrame=worldPickups_.Update(scenes_.GetScene(),
+                    transform->GetPosition(),gameplayInput_.interactPressed,
+                    true,*inventoryUiGateway_);
+                if (pickupFrame.consumedInteract)
+                    gameplayInput_.interactPressed=false;
+            }
+        }
         const auto bindingStart=std::chrono::steady_clock::now();
         UpdateUiBindings();
         if(screenPresenter_->IsLoaded()||hudSession_.IsLoaded())
@@ -888,16 +1050,33 @@ namespace renegade::runtime
                         *renderer_.camera,
                         playerSettings_);
                 }
-                wi::input::HidePointer(!paused_);
+                wi::input::HidePointer(!paused_ &&
+                    !(inventoryOverlayOpen_ && inventoryScreenPresenter_->IsLoaded()));
             }
             else
             {
                 wi::input::HidePointer(false);
             }
 
+            // Collection already ran before Wicked's scene upload. Publish
+            // its result after gameplay scripts have seen gated input.
+            if (pickupFrame.collected ||
+                pickupFrame.result!=bridge::InventoryResult::Success) {
+                worldPickupFeedback_=pickupFrame.prompt;
+                worldPickupFeedbackSeconds_=2.0f;
+            }
+            if (worldPickupFeedbackSeconds_>0.0f) {
+                worldPickupFeedbackSeconds_=std::max(0.0f,worldPickupFeedbackSeconds_-dt);
+                if (worldPickupFeedbackSeconds_==0.0f)
+                    worldPickupFeedback_.clear();
+            }
             if (!paused_)
                 creatorScripts_.Update(dt);
-            renderer_.SetInteractionPrompt(creatorScripts_.CurrentPrompt());
+            renderer_.SetInteractionPrompt(!worldPickupFeedback_.empty()
+                ? worldPickupFeedback_ : !pickupFrame.prompt.empty()
+                    ? pickupFrame.prompt : creatorScripts_.CurrentPrompt());
+            RefreshInventoryOverlay(true,
+                gameplayInputAllowed || inventoryInteractionAllowed);
             ReportCreatorScriptDiagnostics();
         }
         else
@@ -919,6 +1098,7 @@ namespace renegade::runtime
             renderer_.SetProjectileContacts({});
             renderer_.ClearHitConfirmation();
             renderer_.SetInteractionPrompt({});
+            RefreshInventoryOverlay(false,false);
             StopCreatorScripts();
             wi::input::HidePointer(false);
 
@@ -936,10 +1116,38 @@ namespace renegade::runtime
             hudSession_.Presenter()->UpdateInput(renderer_,*hudSession_.Controller(),
                 inputComposition.keyboardFocusOwner==uiComposition_.HudIdentity(),dt);
         }
+        if (gameplayFrame && inventoryOverlayOpen_ &&
+            inventoryScreenPresenter_->IsLoaded())
+            // The inventory uses its own explicit, single-owner keyboard and
+            // pointer dispatch, avoiding duplicate Enter/E and Button Clicks.
+            // The presenter still performs layout and pointer focus.
+            inventoryScreenPresenter_->UpdateInput(
+                renderer_,*inventoryScreenController_,false,dt);
         ProcessHudActions();
         ProcessPendingActions();
         SyncLevelHud();
         RefreshUiComposition();
+        // G5D native quick-save: only when gameplay owns the keyboard, never
+        // while editing a Screen, dragging inventory or using a text field.
+        if (!scenes_.CurrentPath().empty() && !paused_ &&
+            !inventoryOverlayOpen_ && !renderer_.GetGUI().IsTyping() &&
+            !uiComposition_.Resolve().gameplayInputBlocked) {
+            const bool save=wi::input::Press(wi::input::KEYBOARD_BUTTON_F5);
+            const bool load=wi::input::Press(wi::input::KEYBOARD_BUTTON_F9);
+            if (save || load) {
+                std::string saveError;
+                const bool successful=save
+                    ? SaveQuickGame(saveError):LoadQuickGame(saveError);
+                const std::string status=successful
+                    ? (save?"QUICK SAVE COMPLETE":"QUICK LOAD COMPLETE")
+                    : (save?"QUICK SAVE FAILED: ":"QUICK LOAD FAILED: ")+saveError;
+                wi::backlog::post("Renegade Runtime: "+status,successful
+                    ? wi::backlog::LogLevel::Default
+                    : wi::backlog::LogLevel::Warning);
+                worldPickupFeedback_=status;
+                worldPickupFeedbackSeconds_=successful?2.5f:4.0f;
+            }
+        }
         if (scenes_.CurrentPath().empty())
             StopCreatorScripts();
     }
@@ -1730,6 +1938,21 @@ namespace renegade::runtime
                 wi::backlog::LogLevel::Error);
             return;
         }
+        // G5 demonstration only: begin below full health so the player can
+        // test one 50HP potion immediately. Use real combat damage to change
+        // the same authoritative player health observed by UI and saves.
+        // No adjustment is made in normal packaged or Studio gameplay.
+        if(inventoryHealthTestMode_ && !combatState_.playerDead &&
+           combatState_.playerHealth>=combatState_.playerMaxHealth &&
+           combatState_.playerMaxHealth>=60.0f) {
+            bool died=false;
+            const float damage=combatState_.playerMaxHealth*0.5f;
+            if(ApplyCombatDamage(scenes_.GetScene(),combatState_,
+                    RuntimePlayerKnowledgeId,damage,died))
+                wi::backlog::post("G5 HEALTH TEST: spawned at "+
+                    std::to_string(combatState_.playerHealth)+"/"+
+                    std::to_string(combatState_.playerMaxHealth));
+        }
         if (!SpawnRuntimePlayerViewRig(
                 scenes_.GetScene(),
                 playerViewRig_,
@@ -1864,6 +2087,1204 @@ namespace renegade::runtime
             wi::backlog::LogLevel::Default);
     }
 
+    void RuntimeApplication::ResetInventoryAuthoredScreen() noexcept
+    {
+        inventoryScreenPresenter_->Reset(renderer_);
+        inventoryAuthoredScreen_={};
+        inventoryHoverDetails_.clear();
+        inventoryDrag_.Cancel();
+        inventoryPagedDrag_={};
+        inventoryScrollbarCapture_=false;
+        inventoryScrollbarWasDown_=false;
+        inventoryScrollbarThumbDrag_=false;
+        inventoryPagedPreview_=false;
+        inventoryPagedDirty_=false;
+        inventoryPagedTopRows_[0]=inventoryPagedTopRows_[1]=0;
+        inventoryPagedPages_[0]={};
+        inventoryPagedPages_[1]={};
+        inventoryPointerGesture_.Reset();
+        inventoryContext_={};
+        inventoryContextWidgetIds_.clear();
+    }
+
+    bool RuntimeApplication::TryUseInventoryStack(const std::string& instanceId)
+    {
+        if (!inventoryOverlayOpen_ || paused_ || !player_.IsSpawned() ||
+            !inventoryUiGateway_ || !inventorySession_.Enabled() ||
+            !inventorySession_.Inventory())
+            return false;
+        const auto result=runtimeItemCatalogueLoaded_
+            ? UseHealthPotion(*inventorySession_.Inventory(),*inventoryUiGateway_,
+                              runtimeItemCatalogue_,instanceId,combatState_)
+            : InventoryItemUseResult::NotConsumable;
+        inventoryUiStatus_=runtimeItemCatalogueLoaded_
+            ? InventoryUseStatus(result)
+            : "ITEM EFFECT NOT CONFIGURED";
+        if(result==InventoryItemUseResult::Used) {
+            inventoryOverlayRevision_=0;
+            inventoryPagedDirty_=true;
+        }
+        std::string error;
+        for (const auto& widget:inventoryScreenController_->Document().widgets) {
+            if (widget.name!="Inventory Transfer Status") continue;
+            if (inventoryScreenController_->SetWidgetDisplayText(
+                    widget.id,inventoryUiStatus_,error))
+                inventoryScreenPresenter_->RefreshVisualFocus(
+                    *inventoryScreenController_);
+            break;
+        }
+        return result==InventoryItemUseResult::Used;
+    }
+
+    void RuntimeApplication::SetInventoryContextStatus(const std::string& status)
+    {
+        inventoryUiStatus_=status;
+        if(!inventoryScreenPresenter_->IsLoaded())return;
+        std::string error;
+        for(const auto& widget:inventoryScreenController_->Document().widgets) {
+            if(widget.name!="Inventory Transfer Status")continue;
+            (void)inventoryScreenController_->SetWidgetDisplayText(
+                widget.id,status,error);
+            inventoryScreenPresenter_->RefreshVisualFocus(*inventoryScreenController_);
+            break;
+        }
+    }
+    void RuntimeApplication::CloseInventoryContextMenu()
+    {
+        inventoryContext_={};
+        if(inventoryContextWidgetIds_.empty())return;
+        std::string error;
+        for(const auto& id:inventoryContextWidgetIds_)
+            (void)inventoryScreenController_->SetWidgetState(id,false,false,error);
+        if(inventoryScreenPresenter_->IsLoaded())
+            inventoryScreenPresenter_->RefreshVisualFocus(*inventoryScreenController_);
+    }
+    void RuntimeApplication::OpenInventoryContextMenu(const std::string& hit)
+    {
+        CloseInventoryContextMenu();
+        if(!inventoryOverlayOpen_ || paused_ || !player_.IsSpawned() ||
+           !inventorySession_.Inventory() || !runtimeItemCatalogueLoaded_ ||
+           !inventoryUiGateway_)return;
+        std::size_t panel=0,row=0;
+        std::uint32_t cell=0;
+        std::string stackId,containerId;
+        if(inventoryPagedPreview_ &&
+           bridge::ParseInventoryPagedGridSlotAction(hit,panel,cell) &&
+           panel<2 && cell<inventoryPagedPages_[panel].cells.size()) {
+            stackId=inventoryPagedPages_[panel].cells[cell].instanceId;
+            containerId=panel==0?"player":"chest";
+        } else if(!inventoryPagedPreview_ &&
+                  bridge::ParseInventoryScreenSlotAction(hit,panel,row) &&
+                  panel<inventoryOverlayCache_.panels.size() &&
+                  row<inventoryOverlayCache_.panels[panel].rows.size()) {
+            stackId=inventoryOverlayCache_.panels[panel].rows[row].instanceId;
+            containerId=inventoryOverlayCache_.panels[panel].containerId;
+        }
+        if(stackId.empty())return;
+        inventoryContext_=bridge::DescribeInventoryItemActions(
+            *inventorySession_.Inventory(),runtimeItemCatalogue_,containerId,
+            stackId,true);
+        if(inventoryContext_.options.empty())return;
+        std::string error;
+        for(std::size_t i=0;i<inventoryContextWidgetIds_.size();++i) {
+            const auto action=static_cast<bridge::InventoryItemContextAction>(i);
+            const auto option=std::find_if(inventoryContext_.options.begin(),
+                inventoryContext_.options.end(),[&](const auto& o){return o.action==action;});
+            if(option==inventoryContext_.options.end())continue;
+            (void)inventoryScreenController_->SetWidgetState(
+                inventoryContextWidgetIds_[i],true,option->enabled,error);
+            (void)inventoryScreenController_->SetWidgetDisplayText(
+                inventoryContextWidgetIds_[i],option->title,error);
+        }
+        for(std::size_t i=0;i<inventoryContextWidgetIds_.size();++i)
+            if(inventoryScreenController_->FocusWidget(inventoryContextWidgetIds_[i]))
+                break;
+        inventoryScreenPresenter_->RefreshVisualFocus(*inventoryScreenController_);
+        SetInventoryContextStatus("ITEM OPTIONS: "+inventoryContext_.displayName+
+            "  -  SELECT USE / DROP / TAKE");
+    }
+    void RuntimeApplication::RunInventoryContextAction(const std::string& action)
+    {
+        static const char* ids[]={"inventory.context.use","inventory.context.drop_one",
+            "inventory.context.drop_stack","inventory.context.take_one",
+            "inventory.context.take_stack"};
+        if(inventoryContext_.sourceInstanceId.empty() ||
+           !inventoryOverlayOpen_ || paused_ || !player_.IsSpawned() ||
+           !inventorySession_.Inventory() || !inventoryUiGateway_ ||
+           !runtimeItemCatalogueLoaded_)return;
+        const auto it=std::find_if(std::begin(ids),std::end(ids),
+            [&](const char* id){return action==id;});
+        if(it==std::end(ids))return;
+        const auto index=static_cast<std::size_t>(it-std::begin(ids));
+        const auto type=static_cast<bridge::InventoryItemContextAction>(index);
+        const auto valid=bridge::DescribeInventoryItemActions(
+            *inventorySession_.Inventory(),runtimeItemCatalogue_,
+            inventoryContext_.sourceContainerId,
+            inventoryContext_.sourceInstanceId,true);
+        const auto option=std::find_if(valid.options.begin(),valid.options.end(),
+            [&](const auto& o){return o.action==type && o.enabled;});
+        if(option==valid.options.end()) {
+            CloseInventoryContextMenu();
+            SetInventoryContextStatus("ITEM OPTION UNAVAILABLE");
+            return;
+        }
+        const auto stackId=inventoryContext_.sourceInstanceId;
+        CloseInventoryContextMenu();
+        if(type==bridge::InventoryItemContextAction::Use) {
+            (void)TryUseInventoryStack(stackId);
+            return;
+        }
+        if(type==bridge::InventoryItemContextAction::TakeOne ||
+           type==bridge::InventoryItemContextAction::TakeStack) {
+            const auto count=type==bridge::InventoryItemContextAction::TakeOne
+                ? 1u:valid.quantity;
+            const auto result=inventoryUiGateway_->Transfer(
+                "chest","player",stackId,count);
+            if(result==bridge::InventoryResult::Success) {
+                inventoryOverlayRevision_=0;
+                inventoryPagedDirty_=true;
+            }
+            SetInventoryContextStatus(result==bridge::InventoryResult::Success
+                ? (count==1?"TOOK ONE ITEM":"TOOK STACK")
+                : "CANNOT TAKE ITEM - CHECK CAPACITY");
+            return;
+        }
+        const auto* transform=scenes_.GetScene().transforms.GetComponent(player_.entity);
+        if(!transform) {
+            SetInventoryContextStatus("CANNOT DROP: PLAYER POSITION UNAVAILABLE");
+            return;
+        }
+        const auto p=transform->GetPosition();
+        const XMFLOAT3 groundProbe{p.x+std::sin(player_.yaw)*1.35f,
+                                   p.y+2.0f,p.z+std::cos(player_.yaw)*1.35f};
+        const auto ground=scenes_.GetScene().Intersects(
+            wi::primitive::Ray(groundProbe,{0,-1,0},0,4.0f),
+            wi::enums::FILTER_OPAQUE|wi::enums::FILTER_TERRAIN);
+        if(ground.entity==wi::ecs::INVALID_ENTITY || ground.normal.y<0.65f ||
+           std::fabs(ground.position.y-p.y)>1.5f) {
+            SetInventoryContextStatus("CANNOT DROP: NO SAFE GROUND AHEAD");
+            return;
+        }
+        const auto pos=XMFLOAT3{ground.position.x,ground.position.y+0.24f,
+                                 ground.position.z};
+        std::string error;
+        const auto result=worldPickups_.DropFromPlayer(
+            scenes_.GetScene(),*inventorySession_.Inventory(),*inventoryUiGateway_,
+            stackId,type==bridge::InventoryItemContextAction::DropOne
+                ? 1u:valid.quantity,pos,error);
+        if(result==bridge::InventoryResult::Success) {
+            inventoryOverlayRevision_=0;
+            inventoryPagedDirty_=true;
+        }
+        SetInventoryContextStatus(result==bridge::InventoryResult::Success
+            ? (type==bridge::InventoryItemContextAction::DropOne
+                ? "DROPPED ONE ITEM - PRESS E TO COLLECT"
+                : "DROPPED STACK - PRESS E TO COLLECT")
+            : "DROP CANCELLED: "+error);
+    }
+
+    void RuntimeApplication::OnInventoryScreenAction(RuntimeActionRequest request)
+    {
+        if(request.actionId.rfind("inventory.context.",0)==0) {
+            RunInventoryContextAction(request.actionId);
+            return;
+        }
+        // Wicked can emit a release Click after a completed native Button
+        // drag. Pointer gestures already routed one authorised Drop, so
+        // discard that secondary mouse Click, never keyboard/controller.
+        if(request.inputSource==RuntimeInputSource::Mouse &&
+           inventoryPointerGesture_.ConsumeNativeMouseClick(request.actionId))
+            return;
+        // Never trust a Screen action string as authorisation. Verify the
+        // active overlay and dispatch a scoped command against live state.
+        if (!inventoryOverlayOpen_ || !inventoryScreenPresenter_->IsLoaded() ||
+            !inventoryUiGateway_ || paused_) {
+            wi::backlog::post(
+                "Inventory action ignored: overlay inactive or gateway absent",
+                wi::backlog::LogLevel::Warning);
+            return;
+        }
+        bridge::InventoryResult result=bridge::InventoryResult::InvalidArgument;
+        if(inventoryPagedPreview_) {
+            std::size_t panel=0;
+            int direction=0;
+            std::uint32_t index=0;
+            if(bridge::ParseInventoryPagedGridScrollAction(
+                    request.actionId,panel,direction)) {
+                const auto& current=inventoryPagedPages_[panel].viewport;
+                const auto desired=bridge::InventoryGridRowAfterWheel(
+                    current,direction);
+                if(desired!=inventoryPagedTopRows_[panel]) {
+                    inventoryPagedTopRows_[panel]=desired;
+                    inventoryPagedDirty_=true;
+                    inventoryPagedDrag_={};
+                    inventoryPointerGesture_.Reset();
+                    inventoryUiStatus_="SCROLLED INVENTORY";
+                }
+                return;
+            }
+            if(bridge::ParseInventoryPagedGridSlotAction(
+                    request.actionId,panel,index)) {
+                const auto other=1-panel;
+                result=bridge::ExecuteInventoryGridCellAction(
+                    bridge::InventoryGridCellActionId(index),
+                    inventoryPagedPages_[panel],inventoryPagedPages_[other],
+                    0,false,*inventoryUiGateway_);
+            }
+        } else
+            result=bridge::ExecuteInventoryScreenSlotAction(
+                request.actionId,inventoryOverlayCache_,
+                inventorySelection_,*inventoryUiGateway_);
+        if(result==bridge::InventoryResult::Success)
+        {
+            inventoryUiStatus_="MOVED ONE ITEM";
+            inventoryOverlayRevision_=0;
+        }
+        else if(result==bridge::InventoryResult::CapacityExceeded)
+            inventoryUiStatus_="DESTINATION IS FULL";
+        else if(result==bridge::InventoryResult::PermissionDenied)
+            inventoryUiStatus_="CONTAINER ACCESS DENIED";
+        else if(result==bridge::InventoryResult::NotFound ||
+                result==bridge::InventoryResult::InsufficientQuantity)
+            inventoryUiStatus_="SELECT A CURRENT ITEM";
+        else
+            inventoryUiStatus_="ITEM TRANSFER UNAVAILABLE";
+        wi::backlog::post(
+            "Inventory Screen action "+request.actionId+": "+inventoryUiStatus_,
+            result==bridge::InventoryResult::Success?
+                wi::backlog::LogLevel::Default:
+                wi::backlog::LogLevel::Warning);
+        std::string error;
+        for(const auto& widget:inventoryScreenController_->Document().widgets) {
+            if(widget.name!="Inventory Transfer Status")continue;
+            if(!inventoryScreenController_->SetWidgetDisplayText(
+                    widget.id,inventoryUiStatus_,error))
+                wi::backlog::post("Inventory status UI: "+error,
+                                 wi::backlog::LogLevel::Warning);
+            else
+                inventoryScreenPresenter_->RefreshVisualFocus(
+                    *inventoryScreenController_);
+            break;
+        }
+    }
+
+    void RuntimeApplication::OnInventoryScreenPointerDrag(
+        const bridge::StableId& widgetId,bool begin,float x,float y,
+        bool fullStack)
+    {
+        if(!inventoryOverlayOpen_ || paused_ ||
+           !inventoryUiGateway_ || !inventoryScreenPresenter_->IsLoaded()) {
+            inventoryDrag_.Cancel();return;
+        }
+        const auto* widget=inventoryScreenController_->FindWidget(widgetId);
+        if(inventoryPagedPreview_) {
+            if(begin) {
+                inventoryPagedDrag_={};
+                std::size_t panel=0;
+                std::uint32_t cell=0;
+                if(widget && bridge::ParseInventoryPagedGridSlotAction(
+                       widget->actionId,panel,cell))
+                    (void)bridge::BeginInventoryPagedTransfer(
+                        inventoryPagedPages_[panel],cell,fullStack,
+                        inventoryPagedDrag_);
+                return;
+            }
+            if(!inventoryPagedDrag_.valid)return;
+            const auto action=inventoryScreenPresenter_->InventorySlotAt(x,y);
+            std::size_t panel=0;std::uint32_t cell=0;
+            const auto pending=inventoryPagedDrag_;
+            inventoryPagedDrag_={};
+            if(!bridge::ParseInventoryPagedGridSlotAction(action,panel,cell))
+                return;
+            bridge::InventoryGridPage player,chest;
+            std::string error;
+            const auto one=bridge::ReadInventoryGridPage(*inventoryUiGateway_,
+                "player",inventoryPagedLayout_,inventoryPagedTopRows_[0],
+                player,error);
+            const auto two=bridge::ReadInventoryGridPage(*inventoryUiGateway_,
+                "chest",inventoryPagedLayout_,inventoryPagedTopRows_[1],
+                chest,error);
+            if(one!=bridge::InventoryResult::Success ||
+               two!=bridge::InventoryResult::Success)return;
+            const auto& source=pending.sourceContainerId=="player"?player:chest;
+            const auto& destination=panel==0?player:chest;
+            const auto result=bridge::CommitInventoryPagedTransfer(
+                pending,source,destination,cell,*inventoryUiGateway_);
+            inventoryUiStatus_=result==bridge::InventoryResult::Success?
+                (pending.quantity>1?"MOVED STACK":"MOVED ONE ITEM"):
+                "DRAG DENIED OR ITEMS CHANGED";
+            if(result==bridge::InventoryResult::Success) {
+                inventoryOverlayRevision_=0;
+                inventoryPagedDirty_=true;
+            }
+            std::string messageError;
+            for(const auto& label:inventoryScreenController_->Document().widgets)
+                if(label.name=="Inventory Transfer Status") {
+                    (void)inventoryScreenController_->SetWidgetDisplayText(
+                        label.id,inventoryUiStatus_,messageError);
+                    inventoryScreenPresenter_->RefreshVisualFocus(
+                        *inventoryScreenController_);
+                    break;
+                }
+            return;
+        }
+        if(begin) {
+            inventoryDrag_.Cancel();
+            // Shift is captured at the initial physical pointer press,
+            // not inferred from a delayed native Button callback.
+            if(widget && inventoryDrag_.Begin(
+                    inventoryOverlayCache_,widget->actionId,fullStack)) {
+                inventoryDragStartX_=x;inventoryDragStartY_=y;
+            }
+            return;
+        }
+        if(!inventoryDrag_.Active())return;
+        const float deltaX=x-inventoryDragStartX_;
+        const float deltaY=y-inventoryDragStartY_;
+        if(deltaX*deltaX+deltaY*deltaY<144.0f) {
+            inventoryDrag_.Cancel();return; // ordinary click still moves one.
+        }
+        const std::string dropAction=inventoryScreenPresenter_->InventorySlotAt(x,y);
+        if(dropAction.empty()) {
+            inventoryDrag_.Cancel();return; // dropping outside cancels.
+        }
+        // Lua can mutate the container between pointer down and release.
+        // Read live authority and let the gesture fail closed on revision drift.
+        auto* inventory=inventorySession_.Inventory();
+        if(!inventory) {inventoryDrag_.Cancel();return;}
+        const auto latest=bridge::BuildInventoryOverlayView(*inventory,
+            {{"player","PLAYER BACKPACK"},{"chest","STORAGE CHEST"}},8);
+        const auto requestedQuantity=inventoryDrag_.Quantity();
+        const auto result=inventoryDrag_.Drop(
+            latest,dropAction,*inventoryUiGateway_);
+        if(result==bridge::InventoryResult::Success) {
+            inventoryUiStatus_=requestedQuantity>1?
+                "MOVED STACK":"MOVED ONE ITEM";
+            inventoryOverlayRevision_=0;
+        }
+        else if(result==bridge::InventoryResult::CapacityExceeded)
+            inventoryUiStatus_="DESTINATION IS FULL";
+        else if(result==bridge::InventoryResult::PermissionDenied)
+            inventoryUiStatus_="CONTAINER ACCESS DENIED";
+        else
+            inventoryUiStatus_="DRAG CANCELLED - ITEMS CHANGED";
+        std::string error;
+        for(const auto& target:inventoryScreenController_->Document().widgets)
+            if(target.name=="Inventory Transfer Status") {
+                if(inventoryScreenController_->SetWidgetDisplayText(
+                    target.id,inventoryUiStatus_,error))
+                    inventoryScreenPresenter_->RefreshVisualFocus(
+                        *inventoryScreenController_);
+                break;
+            }
+    }
+
+    void RuntimeApplication::PollInventoryKeyboardInput()
+    {
+        // The inventory owns keyboard navigation while visible. The generic
+        // Screen presenter's navigation remains disabled for this instance so
+        // one key cannot move focus or transfer twice.
+        if(!inventoryOverlayOpen_ || paused_ ||
+           !inventoryScreenPresenter_->IsLoaded() || !inventoryUiGateway_)
+            return;
+        const bool previous=wi::input::Press(wi::input::KEYBOARD_BUTTON_UP) ||
+            wi::input::Press(wi::input::KEYBOARD_BUTTON_LEFT) ||
+            (wi::input::Press(wi::input::KEYBOARD_BUTTON_TAB) &&
+             (wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) ||
+              wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT))) ||
+            wi::input::Press(wi::input::GAMEPAD_BUTTON_UP) ||
+            wi::input::Press(wi::input::GAMEPAD_BUTTON_LEFT);
+        const bool next=wi::input::Press(wi::input::KEYBOARD_BUTTON_DOWN) ||
+            wi::input::Press(wi::input::KEYBOARD_BUTTON_RIGHT) ||
+            (wi::input::Press(wi::input::KEYBOARD_BUTTON_TAB) &&
+             !wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) &&
+             !wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT)) ||
+            wi::input::Press(wi::input::GAMEPAD_BUTTON_DOWN) ||
+            wi::input::Press(wi::input::GAMEPAD_BUTTON_RIGHT);
+        if(previous || next) {
+            const bool moved=previous
+                ? inventoryScreenController_->FocusPrevious()
+                : inventoryScreenController_->FocusNext();
+            if(moved)inventoryScreenPresenter_->RefreshVisualFocus(
+                *inventoryScreenController_);
+            return;
+        }
+        const bool use=wi::input::Press(static_cast<wi::input::BUTTON>('E')) ||
+            wi::input::Press(wi::input::KEYBOARD_BUTTON_ENTER) ||
+            wi::input::Press(wi::input::KEYBOARD_BUTTON_SPACE) ||
+            wi::input::Press(wi::input::GAMEPAD_BUTTON_2);
+        if(!use)return;
+        const auto* focused=inventoryScreenController_->FocusedWidget();
+        if(!focused || focused->kind!=bridge::ScreenWidgetKind::Button ||
+           !focused->visible || !focused->enabled)return;
+        std::size_t panel=0,row=0;
+        std::uint32_t cell=0;
+        const bool slot=bridge::ParseInventoryScreenSlotAction(
+                focused->actionId,panel,row) ||
+            bridge::ParseInventoryPagedGridSlotAction(focused->actionId,panel,cell);
+        if(!slot && (inventoryContext_.sourceInstanceId.empty() ||
+            focused->actionId.rfind("inventory.context.",0)!=0))
+            return; // No arbitrary Screen actions from inventory keys.
+        OnInventoryScreenAction({focused->actionId,focused->id,
+            RuntimeInputSource::Keyboard,0});
+    }
+
+    void RuntimeApplication::PollInventoryPointerInput()
+    {
+        if(!inventoryOverlayOpen_ || paused_ ||
+           !inventoryScreenPresenter_->IsLoaded() || !inventoryUiGateway_) {
+            inventoryPointerGesture_.Reset();
+            inventoryDrag_.Cancel();
+            inventoryScrollbarCapture_=false;
+            inventoryScrollbarWasDown_=false;
+            return;
+        }
+        const auto pointer=wi::input::GetPointer();
+        const bool down=wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
+        const bool pressedNow=down && !inventoryScrollbarWasDown_;
+        inventoryScrollbarWasDown_=down;
+        if(inventoryPagedPreview_) {
+            auto inside=[](const bridge::ScreenRect& r,float x,float y){
+                return x>=r.x && x<=r.x+r.width &&
+                    y>=r.y && y<=r.y+r.height;
+            };
+            if(pressedNow && !inventoryScrollbarCapture_) {
+                for(std::size_t panel=0;panel<2;++panel) {
+                    bridge::ScreenRect track,thumb;
+                    if(!inventoryScreenPresenter_->PagedScrollbarGeometry(
+                            panel,track,thumb) ||
+                       !inside(track,pointer.x,pointer.y))continue;
+                    inventoryScrollbarCapture_=true;
+                    inventoryScrollbarPanel_=panel;
+                    inventoryScrollbarThumbDrag_=inside(thumb,pointer.x,pointer.y);
+                    inventoryScrollbarGrabY_=inventoryScrollbarThumbDrag_?
+                        std::clamp(pointer.y-thumb.y,0.0f,thumb.height):
+                        thumb.height*.5f;
+                    inventoryPointerGesture_.Reset();
+                    inventoryPagedDrag_={};
+                    inventoryDrag_.Cancel();
+                    // Clicking the unoccupied track pages toward the click.
+                    if(!inventoryScrollbarThumbDrag_) {
+                        const auto& vp=inventoryPagedPages_[panel].viewport;
+                        const int step=static_cast<int>(inventoryPagedLayout_.visibleRows);
+                        const int target=static_cast<int>(inventoryPagedTopRows_[panel])+
+                            (pointer.y<thumb.y?-step:step);
+                        inventoryPagedTopRows_[panel]=static_cast<std::uint32_t>(
+                            std::clamp(target,0,static_cast<int>(vp.maximumTopRow)));
+                        inventoryPagedDirty_=true;
+                    }
+                    break;
+                }
+            }
+            if(inventoryScrollbarCapture_) {
+                if(down && inventoryScrollbarThumbDrag_) {
+                    bridge::ScreenRect track,thumb;
+                    const auto panel=inventoryScrollbarPanel_;
+                    if(inventoryScreenPresenter_->PagedScrollbarGeometry(
+                            panel,track,thumb)) {
+                        const float travel=track.height-thumb.height;
+                        const double fraction=travel>0?
+                            std::clamp(double((pointer.y-inventoryScrollbarGrabY_-
+                                              track.y)/travel),0.0,1.0):0.0;
+                        const auto target=bridge::InventoryGridRowAtScrollbar(
+                            inventoryPagedPages_[panel].viewport,fraction);
+                        if(target!=inventoryPagedTopRows_[panel]) {
+                            inventoryPagedTopRows_[panel]=target;
+                            inventoryPagedDirty_=true;
+                        }
+                    }
+                }
+                if(!down) {
+                    inventoryScrollbarCapture_=false;
+                    inventoryScrollbarThumbDrag_=false;
+                }
+                inventoryPointerGesture_.Reset();
+                return; // Never treat scrollbar gestures as item transfers.
+            }
+        }
+        if(inventoryPagedPreview_ && !down && !inventoryPagedDrag_.valid &&
+           std::isfinite(pointer.z) && std::fabs(pointer.z)>0.001f) {
+            const auto action=inventoryScreenPresenter_->InventorySlotAt(
+                pointer.x,pointer.y);
+            std::size_t hoveredPanel=0;
+            std::uint32_t hoveredCell=0;
+            bool overGrid=bridge::ParseInventoryPagedGridSlotAction(
+                action,hoveredPanel,hoveredCell);
+            if(!overGrid) {
+                for(std::size_t panel=0;panel<2;++panel) {
+                    bridge::ScreenRect track,thumb;
+                    if(inventoryScreenPresenter_->PagedScrollbarGeometry(
+                            panel,track,thumb) &&
+                       pointer.x>=track.x && pointer.x<=track.x+track.width &&
+                       pointer.y>=track.y && pointer.y<=track.y+track.height) {
+                        hoveredPanel=panel;overGrid=true;break;
+                    }
+                }
+            }
+            if(overGrid) {
+                const int direction=pointer.z>0?-1:1;
+                const auto desired=bridge::InventoryGridRowAfterWheel(
+                    inventoryPagedPages_[hoveredPanel].viewport,direction);
+                if(desired!=inventoryPagedTopRows_[hoveredPanel]) {
+                    inventoryPagedTopRows_[hoveredPanel]=desired;
+                    inventoryPagedDirty_=true;
+                    inventoryPointerGesture_.Reset();
+                }
+            }
+        }
+        const bool shift=wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) ||
+                         wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT);
+        // This hit-test resolves the authored slot bounds even if visual
+        // Image/Text decoration overlaps the native Button surface.
+        const std::string hit=inventoryScreenPresenter_->InventorySlotAt(
+            pointer.x,pointer.y);
+        // Context actions belong to the currently selected live stack.
+        // Right-click never consumes an item directly.
+        if(!down && !inventoryScrollbarCapture_ &&
+           wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT)) {
+            OpenInventoryContextMenu(hit);
+            return;
+        }
+        if(pressedNow && !inventoryContext_.sourceInstanceId.empty() &&
+           inventoryScreenPresenter_->InventoryContextAt(
+               pointer.x,pointer.y).empty())
+            CloseInventoryContextMenu();
+        const auto event=inventoryPointerGesture_.Step(
+            down,shift,pointer.x,pointer.y,hit);
+        if(event.kind==InventoryPointerGesture::Kind::None)return;
+        if(event.kind==InventoryPointerGesture::Kind::ClickReleased) {
+            inventoryDrag_.Cancel();
+            // A native Button release is not reliable under authored icon and
+            // quantity artwork. Resolve the same actual slot hit-test that
+            // drives drag/drop, and dispatch exactly once on release.
+            if(!InventoryPointerGesture::ConfirmedSlotClick(event,hit))
+                return; // Released outside the source.
+            for(const auto& widget:inventoryScreenController_->Document().widgets) {
+                if(widget.kind!=bridge::ScreenWidgetKind::Button ||
+                   widget.actionId!=event.sourceAction ||
+                   !widget.visible || !widget.enabled)continue;
+                (void)inventoryScreenController_->FocusWidget(widget.id);
+                inventoryScreenPresenter_->RefreshVisualFocus(*inventoryScreenController_);
+                OnInventoryScreenAction({widget.actionId,widget.id,RuntimeInputSource::Mouse,0});
+                break;
+            }
+            return;
+        }
+        for(const auto& widget:inventoryScreenController_->Document().widgets) {
+            if(widget.kind!=bridge::ScreenWidgetKind::Button ||
+               widget.actionId!=event.sourceAction)continue;
+            if(event.kind==InventoryPointerGesture::Kind::Began)
+                OnInventoryScreenPointerDrag(widget.id,true,
+                    pointer.x,pointer.y,event.fullStack);
+            else if(event.kind==InventoryPointerGesture::Kind::DragReleased)
+                OnInventoryScreenPointerDrag(widget.id,false,
+                    pointer.x,pointer.y,event.fullStack);
+            break;
+        }
+    }
+
+    void RuntimeApplication::LoadInventoryAuthoredScreen()
+    {
+        ResetInventoryAuthoredScreen();
+        if (!inventorySession_.Enabled() ||
+            startupResult_.project.rootPath.empty()) return;
+        namespace fs=std::filesystem;
+        std::error_code ec;
+        const auto root=fs::weakly_canonical(
+            fs::u8path(startupResult_.project.rootPath),ec);
+        if(ec)return;
+        // An explicit project assignment is the only route for shipping an
+        // editable inventory Screen. Legacy .rinvui preview markers continue
+        // to work in Test Game only; they never silently enter a package.
+        const auto bindingPath=root/fs::u8path(
+            bridge::InventoryScreenAssignmentPath);
+        const bool explicitBinding=fs::is_regular_file(bindingPath,ec) && !ec;
+        bool paged=false;
+        fs::path file;
+        if(explicitBinding) {
+            bridge::InventoryScreenAssignment binding;
+            std::string bindingError;
+            if(!bridge::ReadInventoryScreenAssignment(root.generic_u8string(),
+                    startupResult_.project.projectId,binding,bindingError)) {
+                wi::backlog::post("Inventory Screen assignment rejected: "+
+                    bindingError,wi::backlog::LogLevel::Warning);
+                return;
+            }
+            paged=binding.paged;
+            file=fs::weakly_canonical(root/fs::u8path(binding.screenPath),ec);
+            if(ec)return;
+        } else {
+            if(startupResult_.packageRelativeLaunch)return;
+            paged=fs::is_regular_file(root/fs::u8path(
+                    "Content/UI/InventoryG4B3C1BGrid.rinvui")) &&
+                fs::is_regular_file(root/fs::u8path(
+                    "Content/UI/InventoryG4B3C1BGrid.renegade-screen"));
+            file=fs::weakly_canonical(root/fs::u8path(paged?
+                "Content/UI/InventoryG4B3C1BGrid.renegade-screen":
+                "Content/UI/InventoryG4B3B2Grid.renegade-screen"),ec);
+            if(ec || !fs::is_regular_file(file))return;
+            const auto marker=root/fs::u8path(paged?
+                "Content/UI/InventoryG4B3C1BGrid.rinvui":
+                "Content/UI/InventoryG4B3B2Grid.rinvui");
+            if(!fs::is_regular_file(marker))return;
+            std::ifstream markerFile(marker,std::ios::binary);
+            std::string markerHeader;
+            if(!std::getline(markerFile,markerHeader)||
+               markerHeader!="RENEGADE_INVENTORY_UI_PREVIEW 1")return;
+        }
+        // Prefer the real Story Flow Screen, resolved by stable identity, over the old
+        // preview template. Never copy it to a second authoring asset.
+        if(paged && !explicitBinding) {
+            bridge::StoryFlowScreenReferenceService references;
+            std::string selected;
+            for(const auto& node:flow_.Document().nodes) {
+                if(node.kind!=bridge::FlowNodeKind::Screen)continue;
+                const auto resolved=references.ResolveScreen(root.generic_u8string(),
+                    startupResult_.project.projectId,flow_.Document(),node.id);
+                if(!resolved.succeeded)continue;
+                bridge::ScreenDocument candidate;std::string why;
+                if(!bridge::ReadScreenDocument(resolved.resolvedPath,
+                    startupResult_.project.projectId,candidate,why))continue;
+                const bool inventory=std::any_of(candidate.widgets.begin(),candidate.widgets.end(),
+                    [](const auto& w){return bridge::IsInventoryPagedLocalAction(w.actionId);});
+                if(!inventory)continue;
+                if(!selected.empty()) {
+                    wi::backlog::post("Inventory has multiple Story Flow Screens; no implicit choice was made.",
+                        wi::backlog::LogLevel::Warning);return;
+                }
+                selected=resolved.resolvedPath;
+            }
+            if(!selected.empty())file=fs::u8path(selected);
+        }
+        // Do not let a project-side symlink redirect screen loading outside
+        // the approved project root; match the inventory companion boundary.
+        const auto relative=fs::relative(file,root,ec);
+        if(ec||relative.empty()||relative.is_absolute())return;
+        for(const auto& part:relative)if(part=="..")return;
+
+        bridge::ScreenDocument doc;
+        std::string error;
+        if(!bridge::ReadScreenDocument(file.generic_u8string(),
+                startupResult_.project.projectId,doc,error)||
+            doc.usage!=bridge::ScreenUsage::Overlay)
+        {
+            wi::backlog::post("Inventory Screen ignored: "+
+                (error.empty()?"not an Overlay Screen":error),
+                wi::backlog::LogLevel::Warning);
+            return;
+        }
+        if(doc.enabledInGame) {
+            wi::backlog::post(
+                "Inventory preview Screen must stay disabled in StoryFlow; "
+                "use the explicit module preview marker.",
+                wi::backlog::LogLevel::Warning);
+            return;
+        }
+        // The authored library Screen remains disabled; a separate gameplay
+        // opt-in activates only the transient Runtime presentation copy.
+        doc.enabledInGame=true;
+        bridge::InventoryOverlayView source=bridge::BuildInventoryOverlayView(
+            *inventorySession_.Inventory(),
+            {{"player","PLAYER BACKPACK"},{"chest","STORAGE CHEST"}},8);
+        bridge::ScreenDocument projected;
+        bridge::InventoryGridPage pendingPages[2];
+        if(paged) {
+            // The saved Screen is the authority for visible grid dimensions.
+            // Each panel uses consecutive row-major slot actions.
+            bridge::ScreenRect cells[2][100]{};
+            bool present[2][100]{};
+            std::uint32_t counts[2]{};
+            for(const auto& w:doc.widgets) {
+                if(w.kind!=bridge::ScreenWidgetKind::Button)continue;
+                std::size_t panel=0;std::uint32_t index=0;
+                if(!bridge::ParseInventoryPagedGridSlotAction(
+                        w.actionId,panel,index))continue;
+                if(index>=100 || present[panel][index]) {
+                    error="Duplicate or excessive inventory grid slot.";
+                    break;
+                }
+                present[panel][index]=true;
+                cells[panel][index]=w.rect;
+                ++counts[panel];
+            }
+            if(error.empty() &&
+               (counts[0]==0 || counts[0]!=counts[1]))
+                error="Inventory panels require matching slot counts.";
+            std::uint32_t cols=0;
+            if(error.empty()) {
+                const float top=cells[0][0].y;
+                while(cols<counts[0] && present[0][cols] &&
+                      std::fabs(cells[0][cols].y-top)<0.5f)++cols;
+                if(cols==0 || counts[0]%cols!=0)
+                    error="Inventory slot layout has incomplete rows.";
+                if(cols>0 && error.empty())
+                    for(int panel=0;panel<2 && error.empty();++panel)
+                        for(std::uint32_t i=0;i<counts[panel];++i) {
+                            const auto& cell=cells[panel][i];
+                            const auto& first=cells[panel][0];
+                            const float stepX=cols>1?
+                                cells[panel][1].x-first.x:0;
+                            const float stepY=counts[panel]>cols?
+                                cells[panel][cols].y-first.y:0;
+                            if(!present[panel][i] ||
+                               std::fabs(cell.x-(first.x+(i%cols)*stepX))>0.5f ||
+                               std::fabs(cell.y-(first.y+(i/cols)*stepY))>0.5f ||
+                               std::fabs(cell.width-first.width)>0.5f ||
+                               std::fabs(cell.height-first.height)>0.5f) {
+                                error="Inventory grid slots must form a regular grid.";
+                                break;
+                            }
+                        }
+                for(int panel=0;panel<2 && error.empty();++panel)
+                    for(std::uint32_t i=0;i<counts[panel];++i)
+                        if(!present[panel][i] ||
+                           std::fabs(cells[panel][i].y-
+                             cells[panel][(i/cols)*cols].y)>0.5f)
+                            error="Inventory grid actions are not row-major.";
+            }
+            if(!error.empty()) {
+                wi::backlog::post("Inventory layout rejected: "+error,
+                    wi::backlog::LogLevel::Warning);
+                return;
+            }
+            if(!bridge::ReadInventoryPagedGridLayout(doc,inventoryPagedLayout_,error)) {
+                wi::backlog::post("Inventory layout invalid: "+error,wi::backlog::LogLevel::Warning);
+                return;
+            }
+            const auto a=bridge::ReadInventoryGridPage(
+                *inventoryUiGateway_,"player",inventoryPagedLayout_,0,
+                pendingPages[0],error);
+            const auto b=bridge::ReadInventoryGridPage(
+                *inventoryUiGateway_,"chest",inventoryPagedLayout_,0,
+                pendingPages[1],error);
+            if(a!=bridge::InventoryResult::Success ||
+               b!=bridge::InventoryResult::Success ||
+               !bridge::ProjectPagedInventoryIntoScreen(
+                    doc,pendingPages[0],pendingPages[1],projected,error)) {
+                wi::backlog::post("Paged Inventory Screen rejected: "+error,
+                    wi::backlog::LogLevel::Warning);
+                return;
+            }
+        } else if(!bridge::ProjectInventoryIntoScreen(
+                     doc,source,projected,error)) {
+            wi::backlog::post("Inventory Screen projection rejected: "+error,
+                             wi::backlog::LogLevel::Warning);
+            return;
+        }
+        // G5H: native inventory-only action palette, not an authored Screen edit.
+        std::vector<std::string> contextIds;
+        const char* names[]={"use","drop_one","drop_stack","take_one","take_stack"};
+        const char* labels[]={"USE","DROP ONE","DROP STACK","TAKE ONE","TAKE STACK"};
+        for(std::size_t i=0;i<5;++i) {
+            bridge::ScreenWidget button;
+            button.id=bridge::GenerateStableId();
+            button.kind=bridge::ScreenWidgetKind::Button;
+            button.name=std::string("Inventory Context ")+labels[i];
+            button.text=labels[i];
+            button.actionId=std::string("inventory.context.")+names[i];
+            // Chest Take options reuse the first two menu rows. The two
+            // container menus are mutually exclusive, so no overlap occurs.
+            button.rect={973.f,172.f+42.f*(i>=3?i-3:i),232.f,38.f};
+            button.style=bridge::MakeScreenWidgetStyleTemplate(
+                bridge::ScreenWidgetKind::Button,38.f);
+            button.style.text.fontSize=16;
+            button.style.normal.background={28,39,52,245};
+            button.style.hover.background={53,72,88,255};
+            button.style.focused.background={62,91,111,255};
+            button.visible=false;button.enabled=false;
+            projected.actions.push_back({button.actionId});
+            projected.focusOrder.push_back(button.id);
+            contextIds.push_back(button.id);
+            projected.widgets.push_back(std::move(button));
+        }
+        auto controller=std::make_unique<RuntimeScreenController>();
+        auto presenter=std::make_unique<RuntimeScreenPresenter>();
+        if(!controller->Initialize(projected,error) ||
+           !presenter->Load(projected,startupResult_.project.rootPath,renderer_,
+               *controller,[this](RuntimeActionRequest request) {
+                   OnInventoryScreenAction(std::move(request));
+               },error,{},true)) {
+            presenter->Reset(renderer_);
+            wi::backlog::post("Inventory authored Screen unavailable: "+error,
+                             wi::backlog::LogLevel::Warning);
+            return;
+        }
+        presenter->SetPresentationVisible(false);
+        presenter->SetInputEnabled(false);
+        inventoryAuthoredScreen_=std::move(doc);
+        inventoryPagedPreview_=paged;
+        inventoryPagedDirty_=false;
+        inventoryPagedTopRows_[0]=inventoryPagedTopRows_[1]=0;
+        if(paged) {
+            inventoryPagedPages_[0]=std::move(pendingPages[0]);
+            inventoryPagedPages_[1]=std::move(pendingPages[1]);
+        }
+        inventoryScreenController_=std::move(controller);
+        inventoryScreenPresenter_=std::move(presenter);
+        inventoryContextWidgetIds_=std::move(contextIds);
+        inventoryContext_={};
+        if(paged)for(std::size_t panel=0;panel<2;++panel) {
+            const auto& v=inventoryPagedPages_[panel].viewport;
+            inventoryScreenPresenter_->SetPagedScrollbar(panel,
+                static_cast<float>(v.scrollbarFraction),
+                static_cast<float>(v.scrollbarThumbFraction));
+        }
+        inventoryOverlayCache_=std::move(source);
+        inventoryOverlayRevision_=inventorySession_.Inventory()->Revision();
+        wi::backlog::post(
+            "Renegade Runtime: enabled editable InventoryStarter Screen overlay.",
+            wi::backlog::LogLevel::Default);
+    }
+
+    void RuntimeApplication::RefreshPagedInventoryScreen()
+    {
+        if(!inventoryPagedPreview_ || !inventoryUiGateway_ ||
+           !inventoryScreenPresenter_->IsLoaded())return;
+        bridge::InventoryGridPage next[2];
+        std::string error;
+        if(bridge::ReadInventoryGridPage(*inventoryUiGateway_,
+               "player",inventoryPagedLayout_,inventoryPagedTopRows_[0],
+               next[0],error)!=bridge::InventoryResult::Success ||
+           bridge::ReadInventoryGridPage(*inventoryUiGateway_,
+               "chest",inventoryPagedLayout_,inventoryPagedTopRows_[1],
+               next[1],error)!=bridge::InventoryResult::Success) {
+            wi::backlog::post("Paged inventory read denied: "+error,
+                wi::backlog::LogLevel::Warning);
+            return;
+        }
+        bridge::ScreenDocument projected;
+        if(!bridge::ProjectPagedInventoryIntoScreen(
+                inventoryAuthoredScreen_,next[0],next[1],projected,error)) {
+            wi::backlog::post("Paged Screen binding rejected: "+error,
+                wi::backlog::LogLevel::Warning);
+            return;
+        }
+        for(const auto& widget:projected.widgets) {
+            const bool pagedButton=widget.kind==bridge::ScreenWidgetKind::Button &&
+                widget.actionId.rfind("inventory.paged.",0)==0;
+            const bool pagedIcon=widget.kind==bridge::ScreenWidgetKind::Image &&
+                widget.name.rfind("Paged Icon ",0)==0;
+            const bool pagedBar=widget.kind==bridge::ScreenWidgetKind::Image &&
+                (widget.name.rfind("Paged Scroll Track ",0)==0 ||
+                 widget.name.rfind("Paged Scroll Thumb ",0)==0);
+            const bool pagedText=widget.kind==bridge::ScreenWidgetKind::Text &&
+                (widget.name.rfind("Paged Count ",0)==0 ||
+                 widget.name.rfind("Paged Range ",0)==0 ||
+                 widget.name=="Inventory Transfer Status");
+            if(!pagedButton && !pagedIcon && !pagedText && !pagedBar)continue;
+            const bool visible=widget.visible;
+            const bool enabled=pagedButton?widget.enabled:false;
+            if(!inventoryScreenController_->SetWidgetState(
+                    widget.id,visible,enabled,error)) {
+                wi::backlog::post("Paged widget update: "+error,
+                    wi::backlog::LogLevel::Warning);
+                return;
+            }
+            if(pagedIcon) {
+                std::string iconResource=widget.resourcePath;
+                unsigned panel=0,cell=0;
+                if(runtimeItemCatalogueLoaded_ &&
+                   std::sscanf(widget.name.c_str(),"Paged Icon %u:%u",
+                               &panel,&cell)==2 &&
+                   panel<2 && cell<next[panel].cells.size()) {
+                    const auto& slot=next[panel].cells[cell];
+                    if(slot.Occupied()) {
+                        if(const auto* authored=bridge::FindInventoryAuthoringItem(
+                               runtimeItemCatalogue_,slot.definitionId);
+                           authored && !authored->iconProjectRelativePath.empty())
+                            iconResource=authored->iconProjectRelativePath;
+                    }
+                }
+                if(!inventoryScreenPresenter_->SetVisualImageResource(
+                        widget.id,iconResource,error)) {
+                    wi::backlog::post("Paged icon update: "+error,
+                        wi::backlog::LogLevel::Warning);
+                    return;
+                }
+            } else if(!pagedBar) {
+                const auto text=widget.name=="Inventory Transfer Status" &&
+                    !inventoryUiStatus_.empty()?inventoryUiStatus_:widget.text;
+                if(!inventoryScreenController_->SetWidgetDisplayText(
+                        widget.id,text,error)) {
+                    wi::backlog::post("Paged caption update: "+error,
+                        wi::backlog::LogLevel::Warning);
+                    return;
+                }
+            }
+        }
+        inventoryPagedPages_[0]=std::move(next[0]);
+        inventoryPagedPages_[1]=std::move(next[1]);
+        inventoryPagedTopRows_[0]=inventoryPagedPages_[0].viewport.topRow;
+        inventoryPagedTopRows_[1]=inventoryPagedPages_[1].viewport.topRow;
+        inventoryPagedDirty_=false;
+        for(std::size_t panel=0;panel<2;++panel) {
+            const auto& v=inventoryPagedPages_[panel].viewport;
+            inventoryScreenPresenter_->SetPagedScrollbar(panel,
+                static_cast<float>(v.scrollbarFraction),
+                static_cast<float>(v.scrollbarThumbFraction));
+        }
+        inventoryScreenPresenter_->RefreshVisualFocus(
+            *inventoryScreenController_);
+    }
+
+    void RuntimeApplication::RefreshInventoryOverlay(
+        bool gameplayFrame, bool acceptsKeyboard)
+    {
+        if (!gameplayFrame || !inventorySession_.Enabled()) {
+            CloseInventoryContextMenu();
+            inventoryScreenPresenter_->SetPresentationVisible(false);
+            inventoryScreenPresenter_->SetInputEnabled(false);
+            inventoryOverlayOpen_=false;
+            inventoryOverlayRevision_=0;
+            inventoryOverlayCache_={};
+            inventorySelection_.Reset();
+            inventoryUiStatus_.clear();
+            renderer_.SetInventoryOverlay({},false);
+            return;
+        }
+        const bool interactive=acceptsKeyboard && !paused_;
+        if (interactive &&
+            wi::input::Press(static_cast<wi::input::BUTTON>('I'))) {
+            inventoryOverlayOpen_=!inventoryOverlayOpen_;
+            CloseInventoryContextMenu();
+            inventoryDrag_.Cancel();
+            inventoryPagedDrag_={};
+            inventoryPointerGesture_.Reset();
+            inventoryUiStatus_.clear();
+            // A status update is stored as a transient Screen text override.
+            // Reopening the same inventory does not rebuild its item view,
+            // so explicitly restore the developer's authored instructions;
+            // otherwise a previous "HEALTH FULL" / transfer error lingers.
+            if(inventoryOverlayOpen_ && inventoryScreenPresenter_->IsLoaded()) {
+                for(const auto& widget:inventoryAuthoredScreen_.widgets) {
+                    if(widget.kind!=bridge::ScreenWidgetKind::Text ||
+                       widget.name!="Inventory Transfer Status")continue;
+                    std::string statusError;
+                    if(inventoryScreenController_->SetWidgetDisplayText(
+                           widget.id,widget.text,statusError))
+                        inventoryScreenPresenter_->RefreshVisualFocus(
+                            *inventoryScreenController_);
+                    else
+                        wi::backlog::post("Inventory status restore: "+statusError,
+                            wi::backlog::LogLevel::Warning);
+                    break;
+                }
+            }
+        }
+        const auto* inventory=inventorySession_.Inventory();
+        const bool changed=inventory &&
+            (inventoryOverlayCache_.panels.empty() ||
+             inventoryOverlayRevision_!=inventory->Revision());
+        if (changed) {
+            inventoryOverlayCache_=bridge::BuildInventoryOverlayView(*inventory,
+                {{"player","PLAYER BACKPACK"},{"chest","STORAGE CHEST"}},8);
+            inventoryOverlayRevision_=inventory->Revision();
+            inventorySelection_.Reconcile(inventoryOverlayCache_);
+        }
+        if (inventoryScreenPresenter_->IsLoaded()) {
+            if(inventoryPagedPreview_ && (changed || inventoryPagedDirty_))
+                RefreshPagedInventoryScreen();
+            if (changed && !inventoryPagedPreview_) {
+                bridge::ScreenDocument projected;
+                std::string error;
+                if (bridge::ProjectInventoryIntoScreen(
+                        inventoryAuthoredScreen_,inventoryOverlayCache_,projected,error)) {
+                    for(const auto& widget:projected.widgets) {
+                        if(widget.kind==bridge::ScreenWidgetKind::Text &&
+                           widget.name=="Inventory Transfer Status") {
+                            const auto status=inventoryUiStatus_.empty()?
+                                widget.text:inventoryUiStatus_;
+                            if(!inventoryScreenController_->SetWidgetDisplayText(
+                                    widget.id,status,error)) {
+                                wi::backlog::post("Inventory status UI: "+error,
+                                                 wi::backlog::LogLevel::Warning);
+                                break;
+                            }
+                            continue;
+                        }
+                        if(widget.kind==bridge::ScreenWidgetKind::Text &&
+                           widget.name.rfind("Inventory Slot Count ",0)==0) {
+                            if(!inventoryScreenController_->SetWidgetState(
+                                   widget.id,widget.visible,false,error) ||
+                               !inventoryScreenController_->SetWidgetDisplayText(
+                                   widget.id,widget.text,error)) {
+                                wi::backlog::post("Inventory count update: "+error,
+                                                 wi::backlog::LogLevel::Warning);
+                                break;
+                            }
+                            continue;
+                        }
+                        if(widget.kind==bridge::ScreenWidgetKind::Image &&
+                           widget.name.rfind("Inventory Slot Icon ",0)==0) {
+                            std::string iconResource=widget.resourcePath;
+                            unsigned panel=0,row=0;
+                            if(runtimeItemCatalogueLoaded_ &&
+                               std::sscanf(widget.name.c_str(),
+                                   "Inventory Slot Icon %u:%u",&panel,&row)==2 &&
+                               panel<inventoryOverlayCache_.panels.size() &&
+                               row<inventoryOverlayCache_.panels[panel].rows.size()) {
+                                const auto& item=inventoryOverlayCache_.panels[panel].rows[row];
+                                if(const auto* authored=bridge::FindInventoryAuthoringItem(
+                                       runtimeItemCatalogue_,item.definitionId);
+                                   authored && !authored->iconProjectRelativePath.empty())
+                                    iconResource=authored->iconProjectRelativePath;
+                            }
+                            if(!inventoryScreenController_->SetWidgetState(
+                                   widget.id,widget.visible,false,error) ||
+                               !inventoryScreenPresenter_->SetVisualImageResource(
+                                   widget.id,iconResource,error)) {
+                                wi::backlog::post("Inventory icon update: "+error,
+                                                 wi::backlog::LogLevel::Warning);
+                                break;
+                            }
+                            continue;
+                        }
+                        if(widget.kind!=bridge::ScreenWidgetKind::Button ||
+                           widget.actionId.find("inventory.slot.")!=0)
+                            continue;
+                        if(!inventoryScreenController_->SetWidgetState(
+                               widget.id,widget.visible,widget.enabled,error) ||
+                           !inventoryScreenController_->SetWidgetDisplayText(
+                               widget.id,widget.text,error)) {
+                            wi::backlog::post("Inventory Screen update: "+error,
+                                             wi::backlog::LogLevel::Warning);
+                            break;
+                        }
+                    }
+                    inventoryScreenPresenter_->RefreshVisualFocus(
+                        *inventoryScreenController_);
+                } else
+                    wi::backlog::post("Inventory Screen projection: "+error,
+                                     wi::backlog::LogLevel::Warning);
+            }
+            inventoryScreenPresenter_->SetPresentationVisible(inventoryOverlayOpen_);
+            inventoryScreenPresenter_->SetInputEnabled(
+                inventoryOverlayOpen_ && interactive);
+            if(inventoryOverlayOpen_ && interactive) {
+                PollInventoryKeyboardInput();
+                PollInventoryPointerInput();
+            } else {
+                inventoryPointerGesture_.Reset();
+                inventoryDrag_.Cancel();
+            }
+            // Only refresh hovered item details when the resolved pointer
+            // target or underlying item count changes. Tooltip text is
+            // presentation-only; do not capture or modify item authority.
+            std::string details="HOVER OVER AN ITEM FOR DETAILS";
+            if(inventoryOverlayOpen_ && interactive) {
+                const auto pointer=wi::input::GetPointer();
+                const auto action=inventoryScreenPresenter_->InventorySlotAt(
+                    pointer.x,pointer.y);
+                std::size_t panel=0,row=0;
+                std::uint32_t pagedIndex=0;
+                if(inventoryPagedPreview_ &&
+                   bridge::ParseInventoryPagedGridSlotAction(
+                       action,panel,pagedIndex) && panel<2) {
+                    const auto& page=inventoryPagedPages_[panel];
+                    if(pagedIndex<page.cells.size() &&
+                       page.cells[pagedIndex].Occupied()) {
+                        const auto& cell=page.cells[pagedIndex];
+                        const auto* definition=runtimeItemCatalogueLoaded_
+                            ? bridge::FindInventoryAuthoringItem(runtimeItemCatalogue_,cell.definitionId)
+                            : nullptr;
+                        details=(definition?definition->name:cell.definitionId)+
+                            "  |  Qty: "+std::to_string(cell.quantity)+
+                            "  |  Position: "+std::to_string(cell.absoluteSlot+1);
+                        if(panel==0 && definition &&
+                           definition->effect==bridge::InventoryItemEffect::RestoreHealth)
+                            details+="  |  RIGHT-CLICK FOR OPTIONS";
+                    } else details="EMPTY SLOT  |  Drop an item here";
+                } else if(!inventoryPagedPreview_ &&
+                   bridge::ParseInventoryScreenSlotAction(action,panel,row) &&
+                   panel<inventoryOverlayCache_.panels.size()) {
+                    const auto& rows=inventoryOverlayCache_.panels[panel].rows;
+                    if(row<rows.size()) {
+                        const auto& item=rows[row];
+                        details=item.itemName+"  |  Qty: "+
+                            std::to_string(item.quantity)+"  |  Stack max: "+
+                            std::to_string(item.maxStack);
+                        if(panel<inventoryOverlayCache_.panels.size() &&
+                           inventoryOverlayCache_.panels[panel].containerId=="player" &&
+                           runtimeItemCatalogueLoaded_) {
+                            const auto* definition=bridge::FindInventoryAuthoringItem(
+                                runtimeItemCatalogue_,item.definitionId);
+                            if(definition && definition->effect==
+                               bridge::InventoryItemEffect::RestoreHealth)
+                                details+="  |  RIGHT-CLICK FOR OPTIONS";
+                        }
+                    } else
+                        details="EMPTY SLOT  |  Drop an item here to transfer";
+                }
+            }
+            if(details!=inventoryHoverDetails_) {
+                inventoryHoverDetails_=details;
+                std::string error;
+                for(const auto& widget:
+                    inventoryScreenController_->Document().widgets) {
+                    if(widget.name!="Inventory Hover Details")continue;
+                    if(inventoryScreenController_->SetWidgetDisplayText(
+                            widget.id,details,error))
+                        inventoryScreenPresenter_->RefreshVisualFocus(
+                            *inventoryScreenController_);
+                    else
+                        wi::backlog::post("Inventory tooltip: "+error,
+                            wi::backlog::LogLevel::Warning);
+                    break;
+                }
+            }
+            // The editable standard Screen replaces the hard-coded prototype.
+            renderer_.SetInventoryOverlay({},false);
+            return;
+        }
+        if (inventoryOverlayOpen_ && interactive) {
+            const auto& view=inventoryOverlayCache_;
+            bool navigated=false;
+            if (wi::input::Press(wi::input::KEYBOARD_BUTTON_UP))
+                navigated=inventorySelection_.Move(view,-1);
+            else if (wi::input::Press(wi::input::KEYBOARD_BUTTON_DOWN))
+                navigated=inventorySelection_.Move(view,1);
+            else if (wi::input::Press(wi::input::KEYBOARD_BUTTON_TAB))
+                navigated=inventorySelection_.SwitchContainer(view);
+            if (navigated) inventoryUiStatus_.clear();
+
+            if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ENTER) &&
+                inventoryUiGateway_) {
+                const auto result=inventorySelection_.TransferSelected(
+                    view,*inventoryUiGateway_,1);
+                switch (result) {
+                case bridge::InventoryResult::Success:
+                    inventoryUiStatus_="MOVED ONE ITEM";
+                    break;
+                case bridge::InventoryResult::CapacityExceeded:
+                    inventoryUiStatus_="DESTINATION IS FULL";
+                    break;
+                case bridge::InventoryResult::PermissionDenied:
+                    inventoryUiStatus_="CONTAINER ACCESS DENIED";
+                    break;
+                case bridge::InventoryResult::InsufficientQuantity:
+                case bridge::InventoryResult::NotFound:
+                    inventoryUiStatus_="SELECT AN AVAILABLE ITEM";
+                    break;
+                default:
+                    inventoryUiStatus_="ITEM TRANSFER UNAVAILABLE";
+                    break;
+                }
+                // Rebuild from the authoritative service immediately so the
+                // highlighted row and quantities cannot lag a frame.
+                if (result==bridge::InventoryResult::Success && inventory) {
+                    inventoryOverlayCache_=bridge::BuildInventoryOverlayView(
+                        *inventory,{{"player","PLAYER BACKPACK"},
+                                    {"chest","STORAGE CHEST"}},8);
+                    inventoryOverlayRevision_=inventory->Revision();
+                    inventorySelection_.Reconcile(inventoryOverlayCache_);
+                }
+            }
+        }
+        renderer_.SetInventoryOverlay(inventoryOverlayCache_,inventoryOverlayOpen_,
+            inventorySelection_.SelectedPanel(),
+            inventorySelection_.SelectedRow(),inventoryUiStatus_);
+    }
+
     void RuntimeApplication::SyncCreatorScriptsForScene()
     {
         if (scriptSceneRevision_ == scenes_.Revision())
@@ -1873,11 +3294,109 @@ namespace renegade::runtime
             creatorScripts_.StopScene();
         ReportCreatorScriptDiagnostics();
 
+        // Stop Lua callbacks before disposing gateways they might reference.
+        ResetInventoryAuthoredScreen();
+        inventoryUiGateway_.reset();
+        inventorySelection_.Reset();
+        inventoryUiStatus_.clear();
+        inventorySession_.Reset();
+        worldPickups_.Reset();
+        runtimeItemCatalogue_={};
+        runtimeItemCatalogueLoaded_=false;
+        worldPickupFeedback_.clear();
+        worldPickupFeedbackSeconds_=0.0f;
+        inventoryOverlayOpen_=false;
+        inventoryOverlayRevision_=0;
+        inventoryOverlayCache_={};
+        renderer_.SetInventoryOverlay({},false);
+        creatorScripts_.SetInventoryGatewayProvider({});
+
         scriptSceneRevision_ = scenes_.Revision();
         if (startupResult_.startupScenePath.empty())
             return;
 
         std::string error;
+        if (!inventorySession_.OpenForScene(
+                startupResult_.project.rootPath,
+                startupResult_.startupScenePath, error))
+        {
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Error,
+                "RuntimeApplication.cpp:SyncCreatorScriptsForScene",
+                "inventory.scene.invalid", error);
+            wi::backlog::post(
+                "Renegade Runtime: inventory companion rejected: " + error,
+                wi::backlog::LogLevel::Error);
+            return;
+        }
+        if (inventorySession_.Enabled())
+        {
+            // G5: resolve shared creator item definitions before binding any
+            // world pickup, Screen or creator-Lua gateway. Validate an isolated
+            // inventory copy first: invalid catalogue data must not leave a
+            // partially mutated inventory.
+            bool catalogueReady = true;
+            const auto cataloguePath = std::filesystem::u8path(
+                startupResult_.project.rootPath) / "Content" / "Gameplay" /
+                "Inventory.renegade-items";
+            std::error_code catalogueEc;
+            if (std::filesystem::exists(cataloguePath,catalogueEc) && !catalogueEc) {
+                catalogueReady = bridge::ReadInventoryItemCatalogue(
+                    cataloguePath.generic_u8string(),startupResult_.project.projectId,
+                    runtimeItemCatalogue_,error);
+                if (catalogueReady) {
+                    bridge::InventoryService verified;
+                    const auto snapshot=inventorySession_.Inventory()->SerializeSnapshot();
+                    catalogueReady=verified.RestoreSnapshot(snapshot)==bridge::InventoryResult::Success;
+                    if (!catalogueReady) error="Inventory snapshot failed item-catalogue validation.";
+                    for (const auto& authored:runtimeItemCatalogue_.items) {
+                        if (!catalogueReady) break;
+                        const auto definition=bridge::MakeRuntimeInventoryDefinition(authored);
+                        const auto result=verified.FindDefinition(definition.id)
+                            ? verified.UpdateItemDefinition(definition)
+                            : verified.RegisterItem(definition);
+                        if (result!=bridge::InventoryResult::Success) {
+                            error="Item definition would conflict with saved inventory: "+definition.name;
+                            catalogueReady=false;
+                        }
+                    }
+                    if (catalogueReady)
+                        catalogueReady=inventorySession_.RestoreRuntimeState(
+                            verified.SerializeSnapshot(),error);
+                    runtimeItemCatalogueLoaded_=catalogueReady;
+                }
+                if (!catalogueReady)
+                    wi::backlog::post("Renegade Runtime: item catalogue rejected: "+error,
+                        wi::backlog::LogLevel::Error);
+            } else if (catalogueEc) {
+                catalogueReady=false;
+                wi::backlog::post("Renegade Runtime: item catalogue path unavailable.",
+                    wi::backlog::LogLevel::Error);
+            }
+            if (catalogueReady) {
+                std::vector<std::string> pickupDiagnostics;
+                worldPickups_.OpenForScene(scenes_.GetScene(),
+                    *inventorySession_.Inventory(),pickupDiagnostics);
+                for (const auto& detail:pickupDiagnostics)
+                    wi::backlog::post("Renegade Runtime: "+detail,
+                        wi::backlog::LogLevel::Warning);
+            }
+            // Trusted native UI gets only the two authored presentation
+            // containers. It cannot grant access to arbitrary world storage.
+            inventoryUiGateway_ =
+                std::make_unique<bridge::InventoryGameplayGateway>(
+                    *inventorySession_.Inventory());
+            for (const auto* container:{"player","chest"})
+                if (inventorySession_.Inventory()->FindContainer(container))
+                    inventoryUiGateway_->Grant(container,{true,true,true});
+            creatorScripts_.SetInventoryGatewayProvider(
+                [this](const bridge::StableId& scriptInstanceId,
+                       const bridge::StableId& ownerEntityId)
+                {
+                    return inventorySession_.GatewayForScript(
+                        scriptInstanceId, ownerEntityId);
+                });
+        }
+        LoadInventoryAuthoredScreen();
         if (!creatorScripts_.StartSceneFromCompanion(
                 startupResult_.startupScenePath,
                 startupResult_.project.projectId,
@@ -1918,6 +3437,13 @@ namespace renegade::runtime
     {
         if (creatorScripts_.IsRunning())
             creatorScripts_.StopScene();
+        // Release all live script bindings before destroying inventory authority.
+        ResetInventoryAuthoredScreen();
+        inventoryUiGateway_.reset();
+        inventorySelection_.Reset();
+        inventoryUiStatus_.clear();
+        inventorySession_.Reset();
+        creatorScripts_.SetInventoryGatewayProvider({});
         renderer_.SetInteractionPrompt({});
         ReportCreatorScriptDiagnostics();
         scriptSceneRevision_ = 0;
@@ -2025,10 +3551,14 @@ namespace renegade::runtime
             wi::backlog::post("Renegade Runtime HUD composition: "+error,wi::backlog::LogLevel::Error);
         const auto state = uiComposition_.Resolve();
         uiPauseRequested_ = state.gameplayPauseRequested;
-        screenPresenter_->SetInputEnabled(uiComposition_.PrimaryAcceptsInput());
+        const bool inventoryOwnsInput=inventoryOverlayOpen_ &&
+            inventoryScreenPresenter_->IsLoaded();
+        screenPresenter_->SetInputEnabled(
+            !inventoryOwnsInput && uiComposition_.PrimaryAcceptsInput());
         if(hudSession_.IsLoaded())
         {
-            hudSession_.Presenter()->SetInputEnabled(uiComposition_.HudAcceptsInput());
+            hudSession_.Presenter()->SetInputEnabled(
+                !inventoryOwnsInput && uiComposition_.HudAcceptsInput());
             hudSession_.Presenter()->SetPresentationVisible(uiComposition_.IsHudVisible());
         }
         if(wasHudVisible!=uiComposition_.IsHudVisible())RefreshUiBindingSources();
@@ -2046,7 +3576,8 @@ namespace renegade::runtime
             RefreshUiBindingSources();
         }
         RefreshEffectivePause();
-        if (state.cursor == bridge::ScreenCursorPolicy::Show) wi::input::HidePointer(false);
+        if (inventoryOwnsInput) wi::input::HidePointer(false);
+        else if (state.cursor == bridge::ScreenCursorPolicy::Show) wi::input::HidePointer(false);
         else if (state.cursor == bridge::ScreenCursorPolicy::Hide) wi::input::HidePointer(true);
     }
 
@@ -2082,6 +3613,124 @@ namespace renegade::runtime
                 : "Renegade Runtime: play session resumed.",
             wi::backlog::LogLevel::Default);
         ++evidenceRevision_;
+    }
+
+
+    bool RuntimeApplication::ResolveQuickSaveSceneId(
+        std::string& sceneId,std::string& error) const
+    {
+        sceneId.clear();
+        // G5D only supports authored direct-Scene Runtime sessions. A Story
+        // Flow multi-level game requires a separate flow-node resume journal,
+        // and may not silently reset the player into the wrong level.
+        if (gameSaveLocalAppData_.empty() || !inventorySession_.Enabled() ||
+            !player_.IsSpawned() ||
+            !startupResult_.startupFlowPath.empty() ||
+            startupResult_.startupScenePath.empty() ||
+            scenes_.CurrentPath().empty()) {
+            error="Quick save requires an active direct-scene game with inventory and a Player Start.";
+            return false;
+        }
+        std::error_code ec;
+        if (!std::filesystem::equivalent(
+                std::filesystem::u8path(startupResult_.startupScenePath),
+                std::filesystem::u8path(scenes_.CurrentPath()),ec) || ec) {
+            error="Quick save cannot cross scene changes.";
+            return false;
+        }
+        const auto metadataPath=startupResult_.startupScenePath+".rmeta";
+        bridge::DocumentEnvelope metadata;
+        if (!bridge::ReadDocumentEnvelope(metadataPath,metadata,error) ||
+            metadata.documentType!="scene" ||
+            metadata.projectId!=startupResult_.project.projectId ||
+            !bridge::IsValidStableId(metadata.documentId)) {
+            if (error.empty())error="The active scene has no valid scene identity.";
+            return false;
+        }
+        sceneId=metadata.documentId;
+        error.clear();
+        return true;
+    }
+    bool RuntimeApplication::SaveQuickGame(std::string& error)
+    {
+        std::string sceneId;
+        if (!ResolveQuickSaveSceneId(sceneId,error))return false;
+        const auto* transform=scenes_.GetScene().transforms.GetComponent(player_.entity);
+        if (!transform) {error="Player transform is unavailable.";return false;}
+        RuntimeGameSaveState state;
+        state.projectId=startupResult_.project.projectId;
+        state.sceneId=sceneId;
+        if (!inventorySession_.CaptureRuntimeState(state.inventoryBytes,error) ||
+            !worldPickups_.CaptureRuntimeState(state.projectId,sceneId,
+                                              state.retiredWorldBytes,error))
+            return false;
+        state.playerHealth=combatState_.playerHealth;
+        state.playerMaxHealth=combatState_.playerMaxHealth;
+        state.playerDead=combatState_.playerDead;
+        const auto position=transform->GetPosition();
+        state.playerX=position.x;state.playerY=position.y;state.playerZ=position.z;
+        state.playerYaw=player_.yaw;state.playerPitch=player_.pitch;
+        const auto saveId=startupResult_.saveDataId.empty()
+            ? state.projectId:startupResult_.saveDataId;
+        return RuntimeGameSaveSlot::WriteQuick(gameSaveLocalAppData_,
+            saveId,state,error);
+    }
+    bool RuntimeApplication::LoadQuickGame(std::string& error)
+    {
+        std::string sceneId;
+        if (!ResolveQuickSaveSceneId(sceneId,error))return false;
+        const auto projectId=startupResult_.project.projectId;
+        const auto saveId=startupResult_.saveDataId.empty()
+            ? projectId:startupResult_.saveDataId;
+        RuntimeGameSaveState state;
+        if (!RuntimeGameSaveSlot::ReadQuick(gameSaveLocalAppData_,saveId,
+                projectId,sceneId,state,error))
+            return false;
+        // Verify all inventory bytes without touching the gameplay inventory
+        // or invalidating any script-gateway pointers.
+        bridge::InventoryService validation;
+        if(validation.RestoreSnapshot(state.inventoryBytes)!=
+                bridge::InventoryResult::Success) {
+            error="Quick save inventory snapshot cannot be restored.";
+            return false;
+        }
+        // Reload the authored scene first: an earlier quick save can legitimately
+        // include pickups that were collected after the save was written.
+        if (!ResetPlaySession(error))return false;
+        if(!inventorySession_.Enabled() || !player_.IsSpawned()) {
+            error="Quick load could not reopen the saved inventory/Player.";
+            return false;
+        }
+        if(!worldPickups_.RestoreRuntimeState(scenes_.GetScene(),
+                projectId,sceneId,state.retiredWorldBytes,error,true,
+                inventorySession_.Inventory()))
+            return false; // no world changes if saved object IDs conflict
+        // World recreation may require GPU allocation; perform that part
+        // first after a dry-run, while inventory is still untouched. Only
+        // commit inventory after the complete saved world has been restored.
+        if(!worldPickups_.RestoreRuntimeState(scenes_.GetScene(),
+                projectId,sceneId,state.retiredWorldBytes,error,false,
+                &validation))
+            return false;
+        if(!inventorySession_.RestoreRuntimeState(state.inventoryBytes,error))
+            return false;
+        auto* transform=scenes_.GetScene().transforms.GetComponent(player_.entity);
+        if(!transform) {error="Restored Player transform is unavailable.";return false;}
+        const XMFLOAT3 position(state.playerX,state.playerY,state.playerZ);
+        transform->ClearTransform();
+        transform->Translate(position);
+        transform->UpdateTransform();
+        if(auto* body=scenes_.GetScene().rigidbodies.GetComponent(player_.entity);
+           body && body->physicsobject)
+            wi::physics::SetPosition(*body,position);
+        player_.yaw=state.playerYaw;player_.pitch=state.playerPitch;
+        combatState_.playerHealth=state.playerHealth;
+        combatState_.playerMaxHealth=state.playerMaxHealth;
+        combatState_.playerDead=state.playerDead;
+        inventoryOverlayRevision_=0;
+        inventoryPagedDirty_=true;
+        error.clear();
+        return true;
     }
 
     bool RuntimeApplication::ResetPlaySession(std::string& error)

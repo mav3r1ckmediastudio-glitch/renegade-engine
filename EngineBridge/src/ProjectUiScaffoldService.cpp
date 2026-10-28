@@ -1,3 +1,4 @@
+#include "renegade/bridge/InventoryPagedScreenAdapter.h"
 #include "renegade/bridge/ProjectUiScaffoldService.h"
 #include "renegade/bridge/ScreenService.h"
 #include "renegade/bridge/StoryFlowLevelLifecycleService.h"
@@ -173,6 +174,13 @@ bool MakeProjectUiScaffoldTemplate(const std::string& projectId,const std::strin
     const auto& names=ProjectUiScaffoldTemplateNames();
     if(!IsValidStableId(projectId)||std::find(names.begin(),names.end(),templateName)==names.end())
     {error="Choose an available UI scaffold template and a valid project.";return false;}
+    if(templateName=="Inventory") {
+        InventoryGridLayout layout;layout.visibleRows=4;
+        document=MakeInventoryPagedGridScreen(projectId,"Content/Screens/Inventory.renegade-screen",layout);
+        // Item art is project-owned. An unconfigured template has no missing proof-only assets.
+        for(auto& w:document.widgets)if(w.name.rfind("Paged Icon ",0)==0)w.resourcePath.clear();
+        error.clear();return true;
+    }
     ProjectMetadata project;project.projectId=projectId;project.name="YOUR GAME";
     for(auto& page:BuildScaffoldPages(project))
         if(std::filesystem::u8path(page.envelope.pathHint).stem().generic_u8string()==templateName)

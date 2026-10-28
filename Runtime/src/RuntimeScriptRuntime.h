@@ -3,6 +3,7 @@
 #include "renegade/bridge/ScriptDocumentService.h"
 #include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/GameplayEventService.h"
+#include "renegade/bridge/InventoryGameplayGateway.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -71,6 +72,14 @@ namespace renegade::runtime
         void SetGameplayState(
             const bridge::RuntimePlayerState* player,
             const bridge::GameplayInputFrame* input) noexcept;
+
+        // Optional, host-authorised inventory access per script instance.
+        // Must be configured before StartScene; no provider means no Lua
+        // inventory namespace and no inventory subsystem construction.
+        void SetInventoryGatewayProvider(std::function<
+            bridge::InventoryGameplayGateway*(
+                const bridge::StableId& scriptInstanceId,
+                const bridge::StableId& ownerEntityId)> provider);
 
         // Engine/runtime producers publish through the same bounded FIFO that
         // governed creator scripts consume in Update(). This is the single

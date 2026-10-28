@@ -1,5 +1,6 @@
 #pragma once
 #include "RenegadeScreenLiteralTextInput.h"
+#include "RenegadeScreenInventoryInspector.h"
 
 #include <cstdint>
 #include <functional>
@@ -98,6 +99,10 @@ namespace renegade::studio
         void OnOpenLibraryDocument(std::function<void(const bridge::StableId&)> callback);
         using SetProjectHudCallback=std::function<bool(const bridge::StableId&,const std::string&,std::string&)>;
         void OnSetProjectHud(SetProjectHudCallback callback);
+        using SetProjectInventoryCallback=std::function<bool(const bridge::StableId&,const std::string&,std::string&)>;
+        void OnSetProjectInventory(SetProjectInventoryCallback callback);
+        void OnReadProjectInventory(std::function<bridge::StableId()> callback);
+        void OpenProjectInventoryPicker();
         void OnGameplayAttributesRequested(std::function<void()> callback){gameplayAttributesRequested_=std::move(callback);}
         void SetProjectDefaultHud(bridge::StableId id) { projectDefaultHud_=std::move(id); }
         void SetProjectScreenLibrary(std::vector<ScreenEditorLibraryScreen> screens);
@@ -115,6 +120,10 @@ namespace renegade::studio
             bridge::ScreenAuthoringSession&, std::string&)>;
         void OnCoordinatedSave(CoordinatedSaveCallback callback);
         void OnImageAssetRequested(std::function<void()> callback);
+        void OnGraphicRequested(std::function<void(bool)> callback){graphicRequested_=std::move(callback);}
+        void ReportGraphicStatus(std::string message,bool error) {
+            SetStatus(message);inventoryInspector_.ReportGraphicStatus(std::move(message),error);
+        }
         void OnProgressArtworkRequested(std::function<void(bool)> callback)
         { progressArtworkRequested_ = std::move(callback); }
         void OnAppearanceRequested(std::function<void()> callback);
@@ -179,6 +188,12 @@ namespace renegade::studio
     private:
         std::function<void()> uiBudgetsRequested_;
         std::function<void(bool)> portableLibraryRequested_;
+        bool InventoryAvailable() const;
+        bool InventoryInspectorActive() const;
+        bool inventoryElementMode_=false;
+        RenegadeButton inventoryButton_;
+        RenegadeScreenInventoryInspector inventoryInspector_;
+        std::function<void(bool)> graphicRequested_;
         void CreateControls();
         void LayoutControls();
         void UpdateControls(const wi::Canvas& canvas, float dt);
@@ -265,6 +280,8 @@ namespace renegade::studio
         std::function<void(const bridge::StableId&)> openProjectScreen_;
         std::function<void(const bridge::StableId&)> openLibraryDocument_;
         SetProjectHudCallback setProjectHud_;
+        SetProjectInventoryCallback setProjectInventory_;
+        std::function<bridge::StableId()> readProjectInventory_;
         std::function<void()> gameplayAttributesRequested_;
         bridge::StableId projectDefaultHud_;
         OpenScreenRouteCallback openScreenRoute_;

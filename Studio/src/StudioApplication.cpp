@@ -18,6 +18,7 @@
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
 #include "renegade/bridge/AssetRegistryService.h"
+#include "renegade/bridge/InventoryScreenAssignmentService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/ModelImportCommitService.h"
 #include "renegade/bridge/CreatorTextureWorkflowService.h"
@@ -1238,6 +1239,11 @@ namespace renegade::studio
                 static_cast<wi::scene::MetadataComponent::Preset>(args.userdata));
         });
         inspectorPanel_.AddWidget(&sceneMetadataPreset_);
+        scenePickupButton_.Create("Configure Inventory Pickup");
+        scenePickupButton_.SetText("PICKUP / ITEM");
+        scenePickupButton_.SetTooltip("Choose what this world object gives the player and how it is collected.");
+        scenePickupButton_.OnClick([this](const wi::gui::EventArgs&) { OpenPickupEditor(); });
+        inspectorPanel_.AddWidget(&scenePickupButton_);
 
         createSectionLabel(
             sceneObjectLabel_,
@@ -3404,6 +3410,7 @@ namespace renegade::studio
         modelImportPanel_.AddWidget(&modelImportCancel_);
         modelImportPanel_.SetVisible(false);
         CreateHandGripEditor();
+        CreatePickupEditor();
         CreateAssemblyEditor();
         CreateEquipmentEditor();
         GetGUI().AddWidget(&modelImportPanel_);
@@ -4490,6 +4497,9 @@ namespace renegade::studio
         modelImportPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
             std::max(0.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));
+        pickupPanel_.SetPos(XMFLOAT2(
+            std::max(0.0f, (width - 560.0f) * 0.5f),
+            std::max(30.0f, (height - 740.0f) * 0.5f)));
         handGripPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
             std::max(60.0f, (height - 550.0f) * 0.5f)));
@@ -4640,7 +4650,13 @@ namespace renegade::studio
             sceneLayerBits_[bit].SetSize(XMFLOAT2(layerBitWidth, 22.0f));
         }
         positionEnvironmentWidget(sceneMetadataLabel_, 446.0f, 20.0f);
-        positionEnvironmentWidget(sceneMetadataPreset_, 466.0f);
+        // Both actions belong to Metadata; keep the pickup shortcut in the
+        // same row, not in the overlapping Character/Make Character block.
+        const float metadataChoiceWidth = (environmentFieldWidth - 8.0f) * 0.5f;
+        sceneMetadataPreset_.SetPos(XMFLOAT2(12.0f, 466.0f));
+        sceneMetadataPreset_.SetSize(XMFLOAT2(metadataChoiceWidth, 28.0f));
+        scenePickupButton_.SetPos(XMFLOAT2(20.0f + metadataChoiceWidth, 466.0f));
+        scenePickupButton_.SetSize(XMFLOAT2(metadataChoiceWidth, 28.0f));
         positionEnvironmentWidget(sceneObjectLabel_, 506.0f, 20.0f);
         const float objectToggleWidth = (environmentFieldWidth - 8.0f) * 0.5f;
         const auto layoutObjectToggle = [objectToggleWidth](
@@ -5206,6 +5222,7 @@ namespace renegade::studio
             bit.SetVisible(sceneComponentsVisible);
         sceneMetadataLabel_.SetVisible(sceneComponentsVisible);
         sceneMetadataPreset_.SetVisible(sceneComponentsVisible);
+        scenePickupButton_.SetVisible(sceneComponentsVisible && hasObjectTargets);
         sceneObjectLabel_.SetVisible(sceneComponentsVisible && hasObjectTargets);
         sceneObjectRenderable_.SetVisible(sceneComponentsVisible && hasObjectTargets);
         sceneObjectCastShadow_.SetVisible(sceneComponentsVisible && hasObjectTargets);
@@ -5447,7 +5464,7 @@ namespace renegade::studio
                 objectWetmapState.mixed;
             sceneObjectLabel_.SetText(objectMixed
                 ? "OBJECT // MIXED // WHOLE-ASSET EDIT"
-                : "OBJECT // RENDER PARTICIPATION");
+                : "OBJECT // RENDERING");
             sceneObjectRenderable_.SetCheck(objectRenderableState.value);
             sceneObjectCastShadow_.SetCheck(objectCastShadowState.value);
             sceneObjectForeground_.SetCheck(objectForegroundState.value);
@@ -12429,6 +12446,25 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             auto& projects=static_cast<bridge::ProjectService&>(session_.Projects());
             if(!projects.SetDefaultHud(id,path)){error=projects.LastError();return false;}
             error.clear();return true;
+        });
+        screenEditorRenderer_.OnSetProjectInventory([this](const bridge::StableId& id,const std::string& path,std::string& error)
+        {
+            if(session_.Projects().HasPendingProject() || !session_.Projects().HasProject()) {
+                error="Finish the project switch before changing Inventory Screen settings.";
+                return false;
+            }
+            const auto& project=session_.Projects().CurrentProject();
+            return bridge::SetInventoryScreenAssignment(project.rootPath,project.projectId,id,path,error);
+        });
+        screenEditorRenderer_.OnReadProjectInventory([this]() -> bridge::StableId
+        {
+            if(session_.Projects().HasPendingProject() || !session_.Projects().HasProject())return {};
+            const auto& project=session_.Projects().CurrentProject();
+            bridge::InventoryScreenAssignment selected;
+            std::string error;
+            if(bridge::ReadInventoryScreenAssignment(project.rootPath,project.projectId,selected,error))
+                return selected.screenId;
+            return {};
         });
 
         storyFlowIntegration_.OnScreenEditorOpen(

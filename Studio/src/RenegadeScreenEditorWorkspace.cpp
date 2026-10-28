@@ -131,6 +131,7 @@ namespace renegade::studio
         renderer_ = renderer;
         selectedWidgetId_.clear();
         selectedWidgetIds_.clear();
+        inventoryElementMode_=false;
         camera_.Reset();
         cameraPanning_ = false;
         EnsureSelection();
@@ -167,6 +168,7 @@ namespace renegade::studio
     {
         if (!session_ || !session_->FindWidget(widgetId)) return;
         if (!additive) selectedWidgetIds_.clear();
+        inventoryElementMode_=false;
         if (additive && selectedWidgetIds_.count(widgetId))
         {
             selectedWidgetIds_.erase(widgetId);
@@ -281,6 +283,47 @@ namespace renegade::studio
     {openLibraryDocument_=std::move(callback);}
     void RenegadeScreenEditorWorkspace::OnSetProjectHud(SetProjectHudCallback callback)
     {setProjectHud_=std::move(callback);}
+    void RenegadeScreenEditorWorkspace::OnSetProjectInventory(SetProjectInventoryCallback callback)
+    {setProjectInventory_=std::move(callback);}
+    void RenegadeScreenEditorWorkspace::OnReadProjectInventory(std::function<bridge::StableId()> callback)
+    {readProjectInventory_=std::move(callback);}
+    void RenegadeScreenEditorWorkspace::OpenProjectInventoryPicker()
+    {
+        if(!setProjectInventory_){SetStatus("INVENTORY SCREEN SETTINGS UNAVAILABLE");return;}
+        const bridge::StableId current=readProjectInventory_?readProjectInventory_():bridge::StableId{};
+        std::vector<RenegadeScreenChoicePicker::Choice> choices={{"Use basic inventory (no custom Screen)",""}};
+        std::unordered_set<std::string> seen;
+        for(const auto& screen:projectScreens_)
+        {
+            if(!screen.available || screen.enabledInGame || screen.category!="OVERLAYS" ||
+               screen.documentId.empty() || !seen.insert(screen.documentId).second) continue;
+            // Screen-level eligibility is checked again by the project-owning
+            // service. The picker only lists disabled authored Overlays.
+            choices.push_back({screen.name,screen.documentId});
+        }
+        screenSettingsPicker_.Open("PROJECT INVENTORY SCREEN",std::move(choices),current,
+            [this](const std::string& id)
+            {
+                std::string path;
+                if(!id.empty())
+                {
+                    const auto found=std::find_if(projectScreens_.begin(),projectScreens_.end(),
+                        [&](const auto& screen) {
+                            return screen.documentId==id && screen.available &&
+                                !screen.enabledInGame && screen.category=="OVERLAYS";
+                        });
+                    if(found==projectScreens_.end())
+                    {SetStatus("INVENTORY SCREEN UNAVAILABLE // REFRESH SCREEN LIBRARY");return;}
+                    path=found->pathHint;
+                }
+                std::string error;
+                if(!setProjectInventory_(id,path,error))
+                {SetStatus("INVENTORY SCREEN NOT CHANGED // "+error);return;}
+                SetStatus(id.empty()?"BASIC INVENTORY SCREEN RESTORED":
+                    "PROJECT INVENTORY SCREEN SAVED // INCLUDED IN GAME BUILDS");
+            });
+    }
+
     void RenegadeScreenEditorWorkspace::OpenProjectHudPicker()
     {
         if(!setProjectHud_){SetStatus("PROJECT HUD SETTINGS UNAVAILABLE");return;}
@@ -630,6 +673,11 @@ namespace renegade::studio
             MoveSelectedWidgetToFront();
         });
 
+        inventoryInspector_.Create();
+        inventoryButton_.Create("Inventory layout Inspector");
+        inventoryButton_.OnClick([this](const wi::gui::EventArgs&){
+            inventoryElementMode_=false;basicActionPicker_.Close();destinationPicker_.Close();
+        });
         appearanceButton_.Create("Screen Editor Appearance Inspector");
         appearanceButton_.SetText("STYLE / FONT");
         appearanceButton_.SetTooltip(
@@ -639,14 +687,14 @@ namespace renegade::studio
             if (appearanceRequested_) appearanceRequested_();
         });
         imageAssetButton_.Create("Screen Image Asset Browser");
-        imageAssetButton_.SetText("ADD / CHANGE IMAGE");
+        imageAssetButton_.SetText("CHANGE GRAPHIC");
         imageAssetButton_.SetAccentOutlineStyle(true);
         imageAssetButton_.SetRenderTextSize(12);
         imageAssetButton_.SetTooltip(
             "Choose an imported project image or browse this computer.");
         imageAssetButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            if (imageAssetRequested_) imageAssetRequested_();
+            if (graphicRequested_) graphicRequested_(false);
         });
         progressFrameButton_.Create("Progress Frame Image");
         progressFrameButton_.SetAccentOutlineStyle(true);
@@ -882,7 +930,10 @@ namespace renegade::studio
         pair(visibleButton_, enabledButton_, HeaderHeight + 305.0f);
         full(applyButton_, HeaderHeight + 348.0f, 32.0f);
         full(basicActionButton_, HeaderHeight + 423.0f, 32.0f);
-        full(imageAssetButton_, HeaderHeight + 69.0f, 43.0f);
+        const auto* graphicTarget=session_?session_->FindWidget(selectedWidgetId_):nullptr;
+        full(imageAssetButton_,HeaderHeight+
+            (graphicTarget&&graphicTarget->kind==bridge::ScreenWidgetKind::Image?69.0f:385.0f),
+            graphicTarget&&graphicTarget->kind==bridge::ScreenWidgetKind::Image?43.0f:30.0f);
         full(progressFrameButton_, HeaderHeight + 467.0f, 37.0f);
         full(progressFillButton_, HeaderHeight + 514.0f, 37.0f);
         appearanceButton_.SetPos(XMFLOAT2(
@@ -902,6 +953,15 @@ namespace renegade::studio
             std::min(HeaderHeight + 462.0f, pickerLastY), fieldWidth, pickerHeight);
     }
 
+    bool RenegadeScreenEditorWorkspace::InventoryAvailable() const {
+        if(!session_||!session_->IsLoaded())return false;
+        return std::any_of(session_->Document().widgets.begin(),session_->Document().widgets.end(),
+            [](const auto& w){std::size_t p;std::uint32_t i;
+                return bridge::ParseInventoryPagedGridSlotAction(w.actionId,p,i);});
+    }
+    bool RenegadeScreenEditorWorkspace::InventoryInspectorActive() const {
+        return InventoryAvailable()&&!inventoryElementMode_&&!inspectorSuppressed_&&!focusCanvas_&&!rightCollapsed_;
+    }
     void RenegadeScreenEditorWorkspace::UpdateControls(
         const wi::Canvas& canvas,
         const float dt)
@@ -948,8 +1008,7 @@ namespace renegade::studio
             !inspectorSuppressed_;
         basicActionButton_.SetVisible(actionReady && !focusCanvas_ && !rightCollapsed_);
         imageAssetButton_.SetVisible(selectedReady && !focusCanvas_ && !rightCollapsed_ &&
-            !inspectorSuppressed_ &&
-            selected->kind == bridge::ScreenWidgetKind::Image);
+            !inspectorSuppressed_);
         const bool progressArtworkReady = selectedReady &&
             selected->kind == bridge::ScreenWidgetKind::Progress &&
             !focusCanvas_ && !rightCollapsed_ && !inspectorSuppressed_;
@@ -1074,7 +1133,46 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&visibleButton_),
                 static_cast<wi::gui::Widget*>(&enabledButton_)})
         {
+            if(InventoryInspectorActive() &&
+                (widget==&appearanceButton_ || widget==&imageAssetButton_ ||
+                 widget==&progressFrameButton_ || widget==&progressFillButton_ ||
+                 widget==&basicActionButton_ || widget==&destinationButton_ ||
+                 widget==&duplicateButton_ || widget==&deleteButton_ ||
+                 widget==&nameInput_ || widget==&textInput_ || widget==&fillInput_ ||
+                 widget==&fillDirectionButton_ || widget==&positionXInput_ || widget==&positionYInput_ ||
+                 widget==&sizeWidthInput_ || widget==&sizeHeightInput_ || widget==&applyButton_ ||
+                 widget==&visibleButton_ || widget==&enabledButton_))
+                widget->SetVisible(false);
             if (widget->IsVisible()) widget->Update(canvas, dt);
+        }
+        const bool inventoryVisible=InventoryAvailable()&&!inspectorSuppressed_&&!focusCanvas_&&!rightCollapsed_;
+        inventoryButton_.SetVisible(inventoryVisible);
+        inventoryButton_.SetPos(XMFLOAT2(width_-panels_.right+14,HeaderHeight+37));
+        inventoryButton_.SetSize(XMFLOAT2(panels_.right-28-(inventoryElementMode_?118:0),25));
+        inventoryButton_.SetText(inventoryElementMode_?"INVENTORY LAYOUT":"INVENTORY");
+        if(inventoryVisible)inventoryButton_.Update(canvas,dt);
+        if(InventoryInspectorActive()) {
+            inventoryInspector_.Bind(session_,selectedWidgetId_,[this]{
+                RefreshAfterMutation("INVENTORY UPDATED");
+            },[this](std::string name){
+                if(!name.empty()) {
+                    for(const auto& w:session_->Document().widgets)if(w.name==name){SelectWidget(w.id);break;}
+                }
+                inventoryElementMode_=true;
+            },[this](bool allSlots){
+                if(allSlots) {
+                    for(const auto& w:session_->Document().widgets) {
+                        std::size_t p;std::uint32_t i;
+                        if(w.kind==bridge::ScreenWidgetKind::Button&&
+                           bridge::ParseInventoryPagedGridSlotAction(w.actionId,p,i)) {
+                            SelectWidget(w.id);break;
+                        }
+                    }
+                }
+                if(graphicRequested_)graphicRequested_(allSlots);
+            });
+            inventoryInspector_.Update(canvas,dt,width_-panels_.right+14,HeaderHeight+77,
+                panels_.right-28,height_-HeaderHeight-FooterHeight-88);
         }
     }
 
@@ -2023,10 +2121,10 @@ namespace renegade::studio
         {
             if (!focusCanvas_ && !leftCollapsed_) DrawToolbox(cmd);
 
-            if (!focusCanvas_ && !rightCollapsed_) if (const auto* widget = session_->FindWidget(selectedWidgetId_))
+            if (!focusCanvas_ && !rightCollapsed_ && !InventoryInspectorActive() && !inspectorSuppressed_) if (const auto* widget = session_->FindWidget(selectedWidgetId_))
             {
                 const float inspectorX = width_ - panels_.right + 14.0f;
-                Label(bridge::ScreenWidgetKindName(widget->kind), inspectorX,
+                if(!InventoryAvailable()) Label(bridge::ScreenWidgetKindName(widget->kind), inspectorX,
                     HeaderHeight + 42.0f, 10, Orange, cmd);
                 Label("NAME", inspectorX, HeaderHeight + (widget->kind == bridge::ScreenWidgetKind::Image ? 121.0f : 57.0f), 9, Muted, cmd);
                 if (widget->kind == bridge::ScreenWidgetKind::Progress || widget->kind == bridge::ScreenWidgetKind::Text || bridge::IsScreenInteractive(widget->kind))
@@ -2207,6 +2305,9 @@ namespace renegade::studio
             preview.x + 392.0f, height_ - FooterHeight + 14.0f,
             11, HasPendingSave() ? Orange : Muted, cmd);
         RenderControls(canvas, cmd);
+        if(inventoryButton_.IsVisible()){ApplyScissor(canvas,scissorRect,cmd);inventoryButton_.Render(canvas,cmd);}
+        if(InventoryInspectorActive())inventoryInspector_.Render(canvas,cmd);
+        ApplyScissor(canvas,scissorRect,cmd);
         // Explicit overlay order inside the same GUI render pass. GUI input
         // priority sorting must never put a full-canvas workspace above its Inspector.
         if (inspectorOverlay_) inspectorOverlay_(canvas, cmd);
@@ -2404,6 +2505,7 @@ namespace renegade::studio
             case ScreenToolboxAction::AdoptUiPackage: if(portableLibraryRequested_)portableLibraryRequested_(false);break;
             case ScreenToolboxAction::StoryFlow: ReturnToStoryFlow(); break;
             case ScreenToolboxAction::GlobalHud: OpenProjectHudPicker(); break;
+            case ScreenToolboxAction::ProjectInventory: OpenProjectInventoryPicker(); break;
             case ScreenToolboxAction::GameplayAttributes: if(gameplayAttributesRequested_)gameplayAttributesRequested_();break;
             case ScreenToolboxAction::Progress:
                 CreateElement(bridge::ScreenWidgetKind::Progress, false); break;

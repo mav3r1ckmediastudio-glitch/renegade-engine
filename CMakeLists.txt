@@ -339,3 +339,32 @@ if(TARGET RenegadeStudioCI)
         RenegadeRiverWaterfallFlightTests
     )
 endif()
+
+# Inventory tests accompany the retained river and UI CI dependency graph.
+if(TARGET RenegadeStudioCI)
+    add_dependencies(RenegadeStudioCI
+        RenegadeInventoryAccessPolicyTests
+        RenegadeInventoryCoreTests
+        RenegadeInventoryDependencyProviderTests
+        RenegadeInventoryDragTransferTests
+        RenegadeInventoryGatewayTests
+        RenegadeInventoryGridAuthoringTests
+        RenegadeInventoryGridPageTests
+        RenegadeInventoryGridViewportTests
+        RenegadeInventoryItemCatalogueTests
+        RenegadeInventoryItemContextActionsTests
+        RenegadeInventoryOverlayViewTests
+        RenegadeInventoryPagedScreenAdapterTests
+        RenegadeInventoryPickupAuthoringTests
+        RenegadeInventoryPointerGestureTests
+        RenegadeInventoryScreenAdapterTests
+        RenegadeInventoryScreenAssignmentTests
+        RenegadeInventorySelectionControllerTests
+        RenegadeInventoryTestLevelProjectionTests
+        RenegadeInventoryUiInputPolicyTests
+        RenegadeRuntimeGameSaveSlotTests
+        RenegadeRuntimeInventoryItemUseTests
+        RenegadeRuntimeInventorySessionTests
+        RenegadeWorldPickupControllerTests
+    )
+endif()

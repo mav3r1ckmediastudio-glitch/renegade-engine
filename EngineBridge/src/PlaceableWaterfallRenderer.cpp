@@ -381,7 +381,12 @@ void PlaceableWaterfallRenderer::Prepare(wi::scene::Scene& scene,uint64_t revisi
   auto paths=TraceCollisionPaths(d,[&](XMFLOAT3 a,XMFLOAT3 b){XMVECTOR delta=XMLoadFloat3(&b)-XMLoadFloat3(&a);float len=XMVectorGetX(XMVector3Length(delta));if(len<.00001f)return PathHit{};auto hit=scene.Intersects(wi::primitive::Ray(XMLoadFloat3(&a),delta/len,0,len));
    if(hit.entity!=wi::ecs::INVALID_ENTITY&&hit.vertexID0>=0){auto* object=scene.objects.GetComponent(hit.entity);if(object){auto* mesh=scene.meshes.GetComponent(object->meshID);auto matrix=scene.ComputeEntityMatrixRecursive(hit.entity);auto x=XMVector3Transform(XMLoadFloat3(&mesh->vertex_positions[hit.vertexID0]),matrix),y=XMVector3Transform(XMLoadFloat3(&mesh->vertex_positions[hit.vertexID1]),matrix),z=XMVector3Transform(XMLoadFloat3(&mesh->vertex_positions[hit.vertexID2]),matrix);XMStoreFloat3(&hit.normal,XMVector3Normalize(XMVector3Cross(y-x,z-x)));}}return PathHit{hit.entity!=wi::ecs::INVALID_ENTITY,hit.position,hit.normal};});
   wi::scene::Scene visuals;Entry entry;entry.authored=record;entry.geometry=key;entry.collision=paths.contacts>0;
-  if(entry.collision){for(const auto& p:paths.paths)if(p.points.back().position.y>d.landing.y+.02f)throw std::runtime_error("Obstacle paths could not reach landing; move landing or crest");ApplyRockPaths(visuals,d,assets,paths);}else BuildEffect(visuals,d,assets);
+  if(entry.collision){
+   BankTerminationSummary termination;std::string why;
+   if(!ResolveWaterfallBankTerminations(paths,d.landing.y,termination,why))
+    throw std::runtime_error("Waterfall landing/contact invalid: "+why);
+   ApplyRockPaths(visuals,d,assets,paths);
+  }else BuildEffect(visuals,d,assets);
   entry.body=visuals.Entity_FindByName("Placed Waterfall Body 0");
   for(size_t i=0;i<visuals.emitters.GetCount();++i){auto id=visuals.emitters.GetEntity(i);auto name=visuals.names.GetComponent(id)->name;int kind=name.find("wide front drifting")!=std::string::npos?3:name.find("landing")!=std::string::npos||name.find("front impact")!=std::string::npos||name.find("front drifting")!=std::string::npos?2:name.find("water - impact")!=std::string::npos?1:0;entry.rates.push_back({id,visuals.emitters[i].count,kind});}
   for(size_t i=0;i<visuals.names.GetCount();++i){auto id=visuals.names.GetEntity(i);entry.entities.push_back(id);visuals.names[i].name="__renegade_internal_waterfall_"+record.id;visuals.metadatas.Create(id).string_values.set(GeneratedKey,record.id);}

@@ -100,8 +100,7 @@ namespace renegade::studio
         else if (layout.validationY + validationBlockHeight >
             layout.statusY - blockGap)
         {
-            layout.validationY = layout.statusY -
-                blockGap - validationBlockHeight;
+            layout.statusY = layout.validationY + validationBlockHeight + blockGap;
         }
 
         layout.validationBottom =

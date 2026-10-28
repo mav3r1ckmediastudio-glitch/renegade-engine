@@ -8,6 +8,7 @@
 #include "renegade/bridge/ScreenInteraction.h"
 #include "renegade/bridge/ScreenComposition.h"
 #include <optional>
+#include <algorithm>
 
 #include <cstdint>
 #include <string>
@@ -250,6 +251,8 @@ namespace renegade::bridge
         StableId treeRootId;
     };
 
+    enum class ScreenImageFit { Stretch, Contain, Cover };
+
     struct ScreenWidget
     {
         StableId id;
@@ -290,8 +293,18 @@ namespace renegade::bridge
         bool localOnly = false;
         // Navigation policy stays local even on linked component instances.
         std::optional<ScreenTransitionPair> transitionOverride;
+        // Optional v3 native image presentation; absent legacy field stretches artwork.
+        ScreenImageFit imageFit=ScreenImageFit::Stretch;
 
     };
+
+    inline ScreenRect FitScreenImage(ScreenRect bounds,float width,float height,ScreenImageFit fit) {
+        if(width<=0||height<=0||fit==ScreenImageFit::Stretch)return bounds;
+        const float sx=bounds.width/width,sy=bounds.height/height;
+        const float factor=fit==ScreenImageFit::Contain?std::min(sx,sy):std::max(sx,sy);
+        const float w=width*factor,h=height*factor;
+        return {bounds.x+(bounds.width-w)*0.5f,bounds.y+(bounds.height-h)*0.5f,w,h};
+    }
 
     enum class ScreenUsage { Menu, Hud, Overlay, Modal };
     [[nodiscard]] inline const char* ScreenUsageName(ScreenUsage usage) noexcept
@@ -314,6 +327,7 @@ namespace renegade::bridge
     struct ScreenDocument
     {
         static constexpr std::uint32_t CurrentSchemaVersion = 3;
+        static constexpr std::uint32_t MaximumActions = 128;
 
         DocumentEnvelope envelope;
         std::uint32_t schemaVersion = CurrentSchemaVersion;

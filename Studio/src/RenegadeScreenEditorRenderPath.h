@@ -58,6 +58,10 @@ namespace renegade::studio
                 advancedExpanded_ = true;
                 workspace_.SetInspectorSuppressed(true);
             });
+            workspace_.OnGraphicRequested([this](bool allSlots)
+            {
+                advancedInspector_.ChangeGraphicForSelection(allSlots);
+            });
             workspace_.OnImageAssetRequested([this]()
             {
                 advancedInspector_.OpenImageForSelection();
@@ -331,6 +335,10 @@ namespace renegade::studio
         {advancedInspector_.SetGameplayAttributeDocumentReference(std::move(id),std::move(hint));}
         void OnSetProjectHud(RenegadeScreenEditorWorkspace::SetProjectHudCallback callback)
         {workspace_.OnSetProjectHud(std::move(callback));}
+        void OnSetProjectInventory(RenegadeScreenEditorWorkspace::SetProjectInventoryCallback callback)
+        {workspace_.OnSetProjectInventory(std::move(callback));}
+        void OnReadProjectInventory(std::function<bridge::StableId()> callback)
+        {workspace_.OnReadProjectInventory(std::move(callback));}
         void SetRouteContext(bridge::StableId context, std::function<bool(const bridge::StableId&)> choose)
         { workspace_.SetRouteContext(std::move(context),std::move(choose)); }
         void SetProjectDefaultHud(bridge::StableId id)

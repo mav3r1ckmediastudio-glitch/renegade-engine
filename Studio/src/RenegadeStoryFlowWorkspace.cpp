@@ -2022,6 +2022,7 @@ namespace renegade::studio
                     "Screen '" + node.name + "': " + audit.message;
                 return;
             }
+            if(audit.localInventoryActionCount)runtimeValidationMessage_=audit.message;
         }
     }
 
@@ -2563,7 +2564,8 @@ namespace renegade::studio
         Label("STORY FLOW", translation.x + 18, translation.y + 13, 14, Text, cmd);
         if (!model_ || !layout_ || !session_)
         {
-            RenderAuthoringControls(canvas, cmd);
+            ApplyScissor(canvas,scissorRect,cmd);
+        RenderAuthoringControls(canvas, cmd);
             return;
         }
         const int zoomPercent = static_cast<int>(std::round(ActiveCanvas().zoom * 100.0f));
@@ -2899,7 +2901,7 @@ namespace renegade::studio
         {
         const float inspectorContentWidth = std::max(
             1.0f, width_ - GraphWidth() - 28.0f);
-        const auto statusLines = WrapInspectorText(
+        auto statusLines = WrapInspectorText(
             ReadableStatus(statusMessage_),
             InspectorWrapCharacterLimit(inspectorContentWidth, 10));
         const wi::Color statusColor =
@@ -2957,11 +2959,20 @@ namespace renegade::studio
                     validationLines.emplace_back(std::move(line), color);
             }
         }
-        const auto validDetailLines = WrapInspectorText(
+        auto validDetailLines = WrapInspectorText(
             runtimeValidationMessage_.empty()
                 ? "Runtime readiness and governed references resolve correctly."
                 : runtimeValidationMessage_,
             InspectorWrapCharacterLimit(inspectorContentWidth, 10));
+        const std::size_t messageLimit=height_>=850?4:3;
+        if(validationLines.size()>messageLimit) {
+            validationLines.resize(messageLimit);
+            validationLines.back()={"More issues: use Validate / Output for details.",Warning};
+        }
+        if(validDetailLines.size()>3)validDetailLines.resize(3);
+        if(statusLines.size()>2) {
+            statusLines.resize(2);statusLines.back()="More details in Output.";
+        }
         const float validationBlockHeight = diagnosticCount == 0
             ? 36.0f + static_cast<float>(validDetailLines.size()) * 17.0f
             : 20.0f + static_cast<float>(validationLines.size()) * 17.0f;
@@ -2974,6 +2985,9 @@ namespace renegade::studio
             statusLines.size());
         validationY = messageLayout.validationY;
         const float statusY = messageLayout.statusY;
+        const wi::graphics::Rect messageClip{
+            int(inspectorX),int(validationY),int(translation.x+scale.x),int(translation.y+scale.y)};
+        ApplyScissor(canvas,messageClip,cmd);
         Label(diagnosticCount == 0
                 ? "VALIDATION"
                 : "VALIDATION (" + std::to_string(diagnosticCount) +
@@ -3012,6 +3026,7 @@ namespace renegade::studio
                 10, statusColor, cmd);
         }
         }
+        ApplyScissor(canvas,scissorRect,cmd);
         RenderAuthoringControls(canvas, cmd);
     }
 }

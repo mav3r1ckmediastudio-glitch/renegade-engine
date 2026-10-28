@@ -2,6 +2,1321 @@
 
 Dedicated probe-only branch from main 11bbb90. See docs/ENVIRONMENT_PROBE_VISIBILITY_2026-10-23.md for crash diagnosis, native live capture, evidence and limits. Owner authorised main integration after checks. Unrelated importer/terrain and other local work excluded. No release gate closed.
 
+# G4-B3C4b follow-up — 2026-10-27
+
+Red readable inline errors and explicit Fit Slots & Apply are implemented and live-tested. 6 x 6 now supported at 51 px default fit; native Screen actions raised safely from 64 to 128, visible cells limited to 40/panel by existing widget budget. Studio/Runtime Release built with embedded shaders; 11/11 tests pass. Saved real proof Screen is 6 x 6. Current candidates use G4B3C4b aliases and matching launchers; previous builds retained. See docs/INVENTORY_G4B3C4_CREATOR_WORKFLOW.md follow-up for screenshots and limits. Owner acceptance pending: do not merge.
+
+## 2026-10-27: G4-B3C4 Inventory creator workflow — owner-test candidate
+Work is exclusively in the isolated inventory worktree on feature/inventory-core-g1-20261026.
+Base HEAD b2da8466c0726ca94becb30445afd0149afce792; source changes remain uncommitted.
+No stage/reset/clean/push/merge. Pre-existing three-file edits integrated; separately dirty WickedEngine is not staged or edited by this implementation.
+
+Normal Screen Designer now opens a recognisable Inventory card. Primary Columns / Visible rows / Slot size / Apply; collapsible Appearance & Spacing; native artwork controls and explicit one-Undo matching-style copy. Existing paired Screen widgets remain the only UI truth. An explicitly chosen Inventory starter now creates the real grid. Existing InventoryService, scoped gateway, item stacks/capacity, gesture lifecycle and persistence are retained.
+
+Strict legacy/new inventory slot/scroll actions no longer require Story Flow navigation edges. Genuine navigation still validates. Full diagnostic lists are available to Output; Inspector messages have bounded clipped lanes. Only the dedicated inventory host dispatches local inventory gameplay requests. Native optional image_fit supports Contain/Cover/Stretch; old files preserve their previous default.
+
+Runtime preview resolves the real Story Flow Screen by stable identity rather than a separate old template. Actual UI inspection exposed initially-disabled UP buttons being re-disabled by each layout. The renderer's transient layout state now tracks visible/enabled updates; final native Runtime DN/UP verification passes.
+
+Evidence: Studio and Runtime Release LINK PASS; RENEGADE_EMBED_SHADERS=ON and WICKED_EMBED_SHADERS=ON; 800 shaders and Wicked initialization observed. Ten focused Release tests PASS, 2.37s. Actual normal Inspector, 5x4/4x3/5x5 at62px, invalid72px rejection, Undo/Redo, Save/reopen and retained stable ID checked. Runtime scaled geometry, repeat single drag, Shift stack, click/E, independent scrolling, track, thumb, wheel and corrected UP/DN checked. Owner visual/usability acceptance remains OPEN.
+
+Owner candidates: BUILD/inventory-full/Studio/Release/RenegadeStudio-G4B3C4.exe and its Run-Inventory-G4B3C4-Studio.cmd; Runtime counterpart and launcher under BUILD/inventory-full/Runtime/Release. Accepted prior named binaries preserved. Final Studio opened to the actual proof Screen, restored/saved 5x4 at72px. Source/binary hash manifest: BUILD/g4b3c4-candidate-manifest.json.
+
+Exact commands, initial failures and final logs/screenshots, limitations and rollback notes:
+docs/INVENTORY_G4B3C4_CREATOR_WORKFLOW.md.
+Production module selection / package / Save Game gates are not claimed closed.
+No merge before owner tests and approval.
+
+Changed files:
+- EngineBridge/include/renegade/bridge/InventoryPagedScreenAdapter.h
+- EngineBridge/include/renegade/bridge/ScreenAuthoringSession.h
+- EngineBridge/include/renegade/bridge/ScreenService.h
+- EngineBridge/include/renegade/bridge/StoryFlowScreenReferenceService.h
+- EngineBridge/src/InventoryPagedScreenAdapter.cpp
+- EngineBridge/src/ProjectUiScaffoldService.cpp
+- EngineBridge/src/ScreenInventoryGridAuthoring.cpp
+- EngineBridge/src/ScreenService.cpp
+- EngineBridge/src/StoryFlowScreenReferenceService.cpp
+- Runtime/src/RuntimeApplication.cpp
+- Runtime/src/RuntimeScreen.cpp
+- Runtime/src/RuntimeScreen.h
+- ScreenRenderer/src/ScreenRenderer.cpp
+- Studio/src/RenegadeScreenEditorWorkspace.cpp
+- Studio/src/RenegadeScreenEditorWorkspace.h
+- Studio/src/RenegadeScreenInventoryInspector.h
+- Studio/src/RenegadeScreenLayoutInspector.h
+- Studio/src/RenegadeStoryFlowInspectorText.h
+- Studio/src/RenegadeStoryFlowWorkspace.cpp
+- Studio/src/StoryFlowStudioIntegration.h
+- Tests/InventoryGridAuthoringTests.cpp
+- Tests/InventoryPagedScreenAdapterTests.cpp
+- Tests/RuntimeScreenTests.cpp
+- Tests/ScreenRendererTests.cpp
+- Tests/StoryFlowGate8EOutcomeParityTests.cpp
+- Tests/StoryFlowJourneyUiLayoutTests.cpp
+- docs/ARCHITECTURE.md
+- docs/FEATURE_MATRIX.csv
+- docs/INVENTORY_G4B3C4_CREATOR_WORKFLOW.md
+
+---
+
+## 2026-10-27: Inventory G4-B3C2 — visible draggable scrollbar candidate
+
+**Isolated DESIGN worktree:** `renegade-inventory-core-20261026`,
+branch `feature/inventory-core-g1-20261026`. No merge/push to main.
+G4-B3B3 and G4-B3C1B original executables/projects remain in place.
+
+The owner requested a visible scrollbar after reporting mouse-wheel
+scrolling in G4-B3C1B worked well. G4-B3C2 adds two styled ordinary
+Screen v3 Image widgets per panel (track and thumb), bringing the
+editable paged Screen to 136 widgets / 44 actions. The thumb's
+proportional height and position are projected transiently into the
+actual responsive ScreenRenderer layout; this never rewrites the
+creator's saved widget rectangles or creates another inventory store.
+The thumb tracks the current viewport and is drag-positioned using
+the renderer's true window-scaled hit geometry; a track click pages
+by 4 rows; wheel on track or slots and UP/DN keep the same governed
+row scrolling. Scroll gesture suppresses item transfer.
+
+**Build / automated evidence:** Release EngineBridge, ScreenRenderer,
+RuntimeBootstrap, full linked `RenegadeRuntime.exe`, and paged proof
+author all compiled. Dedicated `RenegadeRuntime-G4B3C2.exe` and
+`Run-Inventory-G4B3C2-Scrollbar.cmd` created under
+`BUILD/inventory-full/Runtime/Release`. The new
+`Content/Inventory-Scrollbar-Proof` fixture was cloned separately and
+re-authored with 55 Player stacks, 6 Chest stacks, each 100 slots.
+`ctest` inventory/RuntimeScreen/ScreenRenderer group **18/18 PASS**.
+Initially unbuilt ten wider regression test executables were built,
+then all eighteen passed; no test failures.
+
+**Visual/physical pointer evidence via the live 1264x681 DX12 game
+window:** both track/thumb controls present. Physical drag Player
+from first to last positions reaches `SLOTS 81-100 / 100` while Chest
+remains `1-20 / 100`; subsequently thumb drag reaches first row.
+Wheel on Player slots advances one row and moves its thumb.
+Two repeated normal Player-to-Chest drags updated totals
+165/18 -> 163/20; Shift + Chest-to-Player dragged a 3 stack, totals
+166/17. Frame screenshots under `BUILD/G4B3C2_*.png`.
+Track click/track-wheel did not get a completed live check because
+the Runtime window had closed before the attempted click;
+there was no corresponding Renegade Application Error entry.
+
+**DX12 smoke caveat:** DX12 capability STARTED, bootstraps to Level
+One. Automated Story Flow smoke exits code 27
+`flow_not_complete` in this build; A/B original G4-B3C1B binary
+with original Inventory-Paged-Proof ALSO exits 27 in the current
+environment. Thus not attributable to scrollbar code, but exact
+automated smoke PASS is not claimed. Manual DX12 Play > I works,
+75 FPS in test session.
+
+**Owner visual acceptance still pending.** New launcher above,
+Play then I to open. User should test scrollbar tracks/thumbs,
+independent panel scrolling, wheel, UP/DN, repeat drag, Shift-drag.
+Creator Inspector layout controls, custom icons, grid component,
+packaging/save game acceptance remain follow-up work.
+Full specification/evidence: `docs/INVENTORY_G4B3C2_SCROLLBAR_IMPLEMENTATION.md`.
+
+---
+
+## 2026-10-27: Inventory G4-B3C3 — creator layout Inspector candidate
+
+**Isolated worktree:** `renegade-inventory-core-20261026`, not merged/pushed. Owner-accepted G4B3B3 repeat drag/Shift transfer and G4B3C2 scrollbar preserved.
+
+Added `ScreenAuthoringSession::ResizePagedInventoryGrid` as an atomic governed Screen mutation in `EngineBridge/src/ScreenInventoryGridAuthoring.cpp`. New `RenegadeScreenLayoutInspector` Inventory Grid page on existing Advanced → Layout: columns, visible rows, slot dimensions, independent gaps, icon padding, scrollbar toggle. Saved authored Screen widgets are the Runtime grid geometry source; no alternate inventory data store. Tracks retain authored visibility when scrollbar disabled. Matching slot IDs/styles preserved; one Undo/Redo entry for entire paired grid. Scope remains editable paired starter proof, not arbitrary named container binding.
+
+Evidence: `RenegadeInventoryGridAuthoringTests` PASS for 5×4→4×3→5×5 (62-pixel slots), Undo/Redo, stable widget ID, Save/reopen and invalid-too-large rejection. Five focused inventory suites **5/5 PASS**. Windows x64 Release EngineBridge, Studio and Runtime **build PASS**. Isolated Studio executable: `BUILD/inventory-full/Studio/Release/RenegadeStudio.exe`. G4B3C3 Runtime copy/launcher: `BUILD/inventory-full/Runtime/Release/Run-Inventory-G4B3C3-Layout.cmd` uses the prior disposable `Inventory-Paged-Proof` fixture. Owner physical visual acceptance PENDING; do not claim tested in-editor or packaged standalone. Other worktrees and main remain untouched. Full details: `docs/INVENTORY_G4B3C3_LAYOUT_CUSTOMISATION.md`.
+
+---
+
+## 2026-10-27: Inventory G4-B3C1B — editable paged Screen and Runtime candidate
+
+**Worktree:** `renegade-inventory-core-20261026` /
+`feature/inventory-core-g1-20261026` (isolated). The owner-accepted
+G4-B3B3 inventory preview, its project and all its gameplay controls
+remain unchanged. No merge/push.
+
+**New normal editable Screen v3:** `InventoryPagedScreenAdapter` authors
+two independent **5x4 square graphical slot panels** (132 standard
+widgets, 44 interactive actions) with original project-owned potion
+images, transient quantities, UP/DN paging controls and current
+absolute-slot range labels. The authored Screen is disabled until a
+separate opt-in preview marker, retains all creator-editable widget
+rects, colors, fonts and action identities, and can be saved/reopened.
+Per-row mapping uses G4-B3C1A `InventoryGridPage`, not the old
+24-item-truncated OverlayView. The screen is **not yet a native
+drag-scrollbar/thumb or creator Inspector Grid component**.
+
+**Runtime:** Separate executable `RenegadeRuntime-G4B3C1B.exe` loads
+the new page UI only if `InventoryG4B3C1BGrid.rinvui` and its
+`.renegade-screen` exist in the active developer BUILD fixture;
+otherwise it continues using the B3B3 accepted Screen. On each page
+change or real inventory revision, visible Button/Icon/Count and
+range labels rebind from live, permission-scoped pages. Up/down
+Buttons or the mouse wheel over an actual slot scroll each panel
+by one row. Existing pointer lifecycle, repeat drag, Shift-to-drag
+stack, click and E remain in the same authoritative gateway.
+Scroll/drop gestures are invalidated on revision or page changes;
+the C1A compact stack model still transfers to a destination
+CONTAINER, not a guaranteed physical destination slot.
+
+**Disposable owner preview:** A separate cloned
+`BUILD/inventory-full/Runtime/Release/Content/Inventory-Paged-Proof`
+contains a new ordinary Screen plus 55 full Health Potion stacks in
+Player and 6 in Chest, each container with 100 slots. The previous
+`Inventory-Proof` project was never edited. Use
+`BUILD/inventory-full/Runtime/Release/
+Run-Inventory-G4B3C1B-Paged-Grid.cmd` and Play > I.
+Scroll Player 1-20/100 to 6-25/100 using wheel or DN, then test
+multiple individual drags and Shift full stack into Chest.
+**Owner physical pointer/visual acceptance PENDING.**
+
+**Verified on DESIGN, Windows x64:** Full linked new Release Runtime,
+ScreenRenderer and EngineBridge PASS. Native authorable Screen schema
+save/reopen plus page-80 item-icon/button projection test PASS.
+Standalone inventory suite **15/15 PASS**; production-linked
+UI/drag/Screen/page regressions **8/8 PASS**. Exact new paged
+DX12 StoryFlow smoke **two consecutive PASS, exit 0, Complete Game**.
+One earlier first-time paged startup smoke timed out at 40 sec;
+A/B (new Runtime with old project, B3B3 Runtime with paged project,
+new Runtime with paged marker disabled) all PASS. A further later
+paged diagnostic exited 0. The intermittent first timeout is
+recorded, not silently discarded; user interaction is not proved by
+smoke tests.
+
+**Next:** Owner inspects actual grid/scroll arrows/mouse wheel and
+click/drag/Shift/E, then G4-B3C2 proper draggable slider thumb,
+layout Inspector controls and project-chosen icons, while preserving
+the code-based creator Lua/C++ policy extension plan. No packaged
+game/save/standalone distribution gate accepted. The isolated Wicked
+shader overlay remains dirty from generated CMake files and is
+intentionally not staged.
+
+Full implementation and evidence:
+`docs/INVENTORY_G4B3C1B_SCREEN_PAGING.md`.
+
+---
+
+## 2026-10-27: Inventory G4-B3C1A — paged data binding, no UI regression
+
+**Worktree:** `renegade-inventory-core-20261026` on
+`feature/inventory-core-g1-20261026` (isolated). Owner-accepted
+G4-B3B3 graphical/runtime interactions are untouched.
+
+`InventoryGridPage` is a **separate**, scope-checked,
+read-only grid page over the one authoritative `InventoryService`.
+Unlike the old two-panel InventoryOverlayView's 24-row WIP cap,
+it presents actual absolute packed-stack positions from a
+creator-controlled `InventoryGridViewport` for a 100+ slot
+container. Reads require the current `InventoryGameplayGateway`
+ReadContainer permission, and denied requests clear their prior view.
+
+Visible Button action `inventory.grid.cell.N` maps only to
+a local visible index, never a privileged item instance. The page
+ties index to the actual absolute slot, stable instance ID, stack
+quantity and exact inventory revision. `BeginInventoryPagedTransfer`
+captures the identity/quantity and `CommitInventoryPagedTransfer`
+validates unchanged revisions, currently visible source and target
+cells, a new authorised source read and then invokes the **existing
+gateway Transfer** atomically. A scrolling view can't cause a
+different instance to be dragged because it reuses a widget index;
+permission failures don't mutate gameplay. Dropping onto a destination
+cell currently means transfer into its *container*, NOT exact item
+placement (packed stacks don't have fixed positions).
+
+`Tests/InventoryGridPageTests.cpp` verifies a 100-slot 5x5
+view at rows 0/4/15 (including slots 75..99), scoped read
+denial, valid/invalid Screen action keys, changed viewport binding,
+real one-item and full-stack transactions, permission denial, stale
+revision/double-drop rejection, source list compaction after transfer,
+full backpack capacity rejection, unlimited container display and
+invalid author layout. **Standalone Windows Release: 15/15 CTests PASS.**
+Normal production Windows x64 EngineBridge Release link **PASS** and
+production-linked grid/Screen/drag/input regression **7/7 CTests PASS** (including `RenegadeInventoryGridPageTests`). This work
+did NOT create a scrollable Runtime
+or change the accepted G4-B3B3 Screen.
+
+**Next G4-B3C1B:** normal Screen v3 button/icon/badge projection
+onto a paged view with a saved configurable Grid, then scroll
+input/slider and visual tests. Inspector theming and Lua/C++ policy
+overrides, package and save/load remain future. Never label
+C1A a finished inventory scrollbar. No merge/push, active river,
+UI Designer and parent main worktrees untouched. Generated Wicked
+shader overlay in isolated checkout remains unstaged.
+
+Details: `docs/INVENTORY_G4B3C1A_PAGED_BINDING.md`.
+
+---
+
+## 2026-10-27: Inventory G4-B3B3 — repeat-drag/Shift input OWNER ACCEPTED
+
+**Owner acceptance (27 October 2026):** after testing the new G4-B3B3 DX12 preview on DESIGN, the owner confirmed **"everything works now"**. Repeated mouse drag and Shift+LMB stack movement are accepted in the Inventory-Proof level, alongside previously verified click/E, icon, badge and hover behaviour.
+
+**Previous regression (resolved):** G4-B3B2 graphical inventory looks correct, but
+user reports **only one mouse drag can be performed total**, not one
+item per repeated drag, and Shift + LMB no longer transports a full
+stack. This invalidates B3B2 drag-input acceptance (its visual
+artwork/labels remain accepted). Old mouse path relied on native
+Wicked Button per-widget OnDragStart/OnDragEnd events; those alone
+do not guarantee a fresh capture across graphical widget overlays.
+
+**New candidate:** `Runtime/src/InventoryPointerGesture.h`
+is a small graphics-independent pointer lifecycle tracker.
+`RuntimeApplication::PollInventoryPointerInput` uses physical
+left-button state and the **existing resolved authored slot rects**
+to begin each new gesture, records Shift at mouse-down, and
+dispatches one drop at release via unchanged `InventoryDragTransfer`
+and the authorised `InventoryGameplayGateway`. The native
+inventory per-button drag callback is no longer registered; native
+Click still transfers one. A drag suppresses the secondary native
+Click for that source, preventing double transfers. Closing
+inventory resets the tracker. The prior B3B2 Screen, original
+artwork, and G4-B3C0 grid-viewport work remain untouched.
+
+**Evidence:** Standalone Release inventory tests **14/14 PASS**;
+production-linked drag/PointerGesture/RuntimeScreen/Adapter/InputPolicy
+Release tests **5/5 PASS** (including 3 consecutive real service
+transfers plus Shift/full stack reverse). RuntimeApplication source
+syntax and full linked new `RenegadeRuntime-G4B3B3.exe` Release
+**PASS**; DX12 StoryFlow smoke **PASS/exit 0/DX12 STARTED/Complete
+Game**. Smoke does not drive mouse gestures; **owner visual/physical confirmation PASSED** (27 October 2026).
+
+**Owner test on DESIGN:** `BUILD/inventory-full/Runtime/Release/
+Run-Inventory-G4B3B3-Repeat-Drag-Fix.cmd` or the separate
+opened `RenegadeRuntime-G4B3B3.exe` window. Play then I.
+Drag Player→Chest **three times**: 3/2→2/3→1/4→0/5.
+Then hold Shift **before** LMB on Chest potion, drag to Player:
+0/5→5/0. Click and E must still move one, with correct icons,
+badges and hover. If only the first mouse drag works, do not
+accept B3B3; capture visible transfer feedback and troubleshoot
+real pointer input/lifecycle. No merges/pushes; isolated Wicked
+generated shader overlay unstaged.
+
+See `docs/INVENTORY_G4B3B3_REPEAT_DRAG_FIX.md`.
+
+---
+
+## 2026-10-27: Inventory G4-B3C0 — full creator control contract and tested grid viewport
+
+**Owner decision:** A functional inventory starter is welcome **only if the
+developer has full control of its appearance and can change or replace
+the default behaviour through Lua/C++ as necessary**. A single fixed
+4x2 RPG-style UI must never become a requirement for using InventoryService.
+
+**Implementation scope:** Added a *pure UI-independent* `InventoryGridLayout`
+and `InventoryGridViewport` in
+`EngineBridge/include/renegade/bridge/InventoryGridViewport.h` and
+`EngineBridge/src/InventoryGridViewport.cpp`. Creator configuration
+covers columns, visible rows, square or rectangular cell dimensions,
+padding/gaps, icon padding/fit and optional scrollbar. Row calculations
+and slider/wheel offset utilities project a finite visible index window
+into a separately authoritative container capacity. They never modify
+inventory data, import Wicked, invent a scrollable renderer or bypass
+the existing scoped InventoryGameplayGateway.
+
+The exact creator control / custom Lua+C++ hook boundaries and delivery
+gates are recorded in `docs/INVENTORY_G4B3C_CREATOR_CONTROL_SPEC.md`.
+Existing Screen v3 theme/component/style overrides are intended to
+supply complete presentation authoring. Standalone scripts may author
+their own gameplay UI without StoryFlow or designer Screen assets.
+Default commands remain governed; creators may supply replacement
+policies and actions over the same single InventoryService.
+
+**Evidence:** `Tests/InventoryGridViewportTests.cpp`, registered with both
+normal and isolated CMake builds, verifies a 100-slot container and
+5x5 viewport, row-index/clamp/scroll math, 27-slot partial row,
+smaller/zero-capacity containers, malformed geometry, optional square
+cells, icon aspect modes and extreme numeric inputs. Release standalone suite **13/13 PASS** (including new viewport test). Normal production `RenegadeEngineBridge` Windows x64 Release build and linked `RenegadeInventoryGridViewportTests` CTest **PASS**. No DX12 Runtime/gameplay UI build or visual approval is claimed for this new component.
+
+**NOT implemented:** a real scrollable Screen renderer, Inspector
+controls for Grid, editable persisted component, drag/focus rebinding
+when scrolled, creator icon assignment, replaceable Lua/C++ action
+providers, packaged standalone. The existing owner-accepted G4-B3B2
+test preview remains unchanged. No DX12 screenshot or owner gameplay
+acceptance is claimed for B3C. Build and full CTest results, if obtained
+later, are supplemental; do not mark G4-B3C completed.
+
+**Next:** G4-B3C1 read-only paginated inventory view + stable absolute-slot
+binding + creator-authored Grid component. Do NOT reuse the two-panel
+24-row-truncated `InventoryOverlayView` for a scrolling inventory.
+No merge/push; main/river/equipment/UI Designer worktrees untouched;
+isolated Wicked shader overlay is not staged.
+
+---
+
+## 2026-10-27: G4-B3B2 accepted; next design: creator-configurable grid + scrollbar
+
+**Owner live result:** after testing G4-B3B2 on DESIGN, owner
+confirmed **"It works"**. Accept the Potion icon/quantity badge
+presentation gate in the disposable Inventory-Proof Runtime. This
+does not approve final authoring/packaging or all inventory UI.
+
+**New request:** A creator may want a more traditional **square-cell
+inventory grid with a vertical slider/scrollbar** instead of the
+prototype's fixed 4 columns x 2 rows per container. Treat this as a
+capability requirement, NOT a request to change every game’s inventory.
+The currently authored Screen v3 supports `ScreenChildLayout::Grid`
+and standard `ScreenWidgetKind::Slider`, but there is **no implemented
+scroll-viewport/list binding to inventory data** yet. A Slider is a
+numeric control, not automatically a scrollbar.
+
+**Recommended next G4-B3C design / acceptance contract:**
+- One creator-selectable inventory-grid component/layout, with cell
+  aspect ratio 1:1, adjustable column count, visible row count,
+  padding/gap/size and optional standard vertical scrollbar. Do not
+  create a new Inventory Designer.
+- Scrolling via wheel, scrollbar dragging, keyboard/controller focus,
+  with proper clipping, stable item instance keys, and rendered slots
+  re-bound to the matching visible window `scrollOffset..N`.
+- Do not confuse `InventoryContainer.maximumSlots` (owned capacity)
+  with visible slot count; current Screen proof hardcodes 8 slots per
+  panel and `InventoryOverlayView` currently truncates at configured
+  rows / maximum 24. Fix that limit in a separate scoped pagination
+  model rather than pretending the current Screen scrolls.
+- Preserve existing click: move 1, ordinary drag: move 1, Shift-drag:
+  move stack, E: scripted move 1, scoped gateway permissions and
+  revision-stable pointer/drop identity even when scrolled. Drop to
+  valid empty slots must still work; scrollbar input must not trigger
+  item transfer.
+- No duplicate inventory storage, no auto-created StoryFlow screens,
+  no renaming/bypassing project assets and no changes to owner-accepted
+  Screen in-place. Distinct BUILD preview and owner mouse/controller
+  acceptance before marking functional.
+
+No implementation of the scroll/pagination feature or owner visual
+acceptance exists yet. No changes to active main/river/equipment/UI
+Designer worktrees. No push/merge.
+
+---
+
+## 2026-10-27: Inventory G4-B3B2 — potion icon alias and unclipped quantity badges
+
+**Owner screenshot from G4-B3B1:** Runtime inventory showed Player
+`Health Potion x5`/Chest empty and a matching Lua debug counter,
+but the artwork was the fallback question mark and every slot's
+caption was clipped at the bottom. This is **not owner-accepted visual UI**.
+
+**Root cause:** Lua proof item definition is precisely
+`health-potion`; the starter art whitelist recognized only
+`potion`. The native button label had been bottom-aligned inside a
+tall but narrow tile and visibly clipped.
+
+**G4-B3B2 implementation:** Add explicit allowlist alias
+`health-potion → potion.png` without using input strings as filesystem
+paths; item gameplay authority and icon assets are unchanged. New
+editable Screen (54 standard widgets, 16 action slots) retains
+nonempty Button text for normal validated interactions/accessibility
+but makes the glyphs transparent. Adds one noninteractive standard
+Text widget per slot to show `xN` in the bottom-right, hidden in empty
+slots, with a valid hidden authored `x0` placeholder. Runtime binds
+badge text and visibility from the single InventoryService revision,
+alongside the existing Image art; no extra inventory database or input
+path. An independent `InventoryG4B3B2Grid.renegade-screen` and BUILD
+preview marker were generated without overwriting G4-B3B1 or creator
+icon PNGs. New linked preview executable is
+`RenegadeRuntime-G4B3B2.exe` and launcher
+`Run-Inventory-G4B3B2-Icon-Layout-Fix.cmd`.
+
+**Evidence:** Normal `ScreenService` validation explicitly rejected
+the initial attempt to author blank Buttons and blank Text, and the
+standard nonempty semantic-label + hidden placeholder approach then
+passed the round-trip and binding regression. Full linked VS2022
+Release PASS; DX12 StoryFlow Inventory-Proof smoke PASS (Complete
+Game, exit 0); 12/12 isolated inventory Release tests PASS;
+4/4 linked UI/drag tests PASS. **Physical pointer/visual tests
+are not covered by DX12 smoke.** Owner must inspect Potion sprite,
+proper x5 badge, clean empty slots, hover details and unchanged
+click/E/drag/Shift+drag before gate acceptance.
+
+See `docs/INVENTORY_G4B3B2_ICON_LABEL_FIX.md`. Unmerged, unpushed,
+no changes to parent main/river/equipment/UI Designer worktrees.
+Isolated Wicked generated shader overlay intentionally unstaged.
+
+---
+
+## 2026-10-26: Inventory G4-B3B1 - original icon grid and hover details
+
+**Branch:** `feature/inventory-core-g1-20261026` in isolated
+`renegade-inventory-core-20261026` on DESIGN. No merge or push.
+
+Owner previously accepted G4-B3A2: click, E and ordinary drag each
+transfer one potion, Shift+drag transfers all, with correct live
+slot refresh. G4-B3B1 retains all underlying gameplay and input APIs.
+
+- `MakeInventoryIconGridScreen` authors a new **ordinary Screen v3**
+  4x2 item grid per container, with 16 original 103x122 graphical slot
+  Buttons, 16 non-interactive icon Image widgets and an item hover-details
+  Text strip. Old text-list Screen and accepted G4-B3A2 runtime remain
+  available. All slots are still regular editable UI Designer widgets.
+- `Tools/generate_inventory_icons.py` generates **original** transparent
+  128x128 Potion/Key/Coin/Fallback icons in
+  `assets/InventoryStarter/Icons/`. Source assets are committed with
+  their Python generator; NO previously released GameGuru MAX art used.
+  Guarded BUILD-only authoring utility copies them to the disposable
+  project `Content/UI/InventoryIcons` and writes a distinct disabled
+  `InventoryG4B3BGrid.renegade-screen` and opt-in developer marker.
+- `InventorySlotView` now exposes the existing definition ID as
+  read-only visual metadata. A whitelist chooses starter icons; unknown
+  IDs cannot escape project Content or generate arbitrary file paths.
+  `ProjectInventoryIntoScreen` toggles Image widget visibility and
+  relative icon resource without changing authoritative InventoryService
+  or serialized inventory formats. `ScreenRenderer::SetWidgetImageResource`
+  loads dynamic icon textures through the existing guarded project path
+  resolver / Wicked resource manager; all other UI widgets unchanged.
+- `RuntimeApplication` updates images and labels on inventory revision
+  changes, and uses the shared ScreenPresenter hit-testing to display
+  full item name/quantity/max-stack in a hover-details strip only when
+  the target changes. Normal click/drag/Shift/E behaviour is unchanged.
+- `Tests/InventoryScreenAdapterTests.cpp` proves the authored 38-widget
+  Screen round trips, retains 16 normal actions, projects populated and
+  empty icons, uses whitelist fallback and preserves the old text
+  Screen contract.
+
+**DESIGN verification:** Full x64 Release
+`RenegadeRuntime-G4B3B.exe` linked successfully; guarded fixture
+screen (38 widgets/16 buttons) and 4 original PNG assets authored.
+Real linked DX12 StoryFlow smoke for inventory-enabled project **PASS
+exit 0 / DX12 STARTED / Complete Game**. Isolated 12/12 inventory
+Release tests PASS; linked Screen/drag/input/adapter 4/4 PASS.
+**Owner visual approval PENDING:** the smoke does NOT inspect
+PNG rendering, hover or pointer interactions in the grid.
+
+Owner preview: `BUILD/inventory-full/Runtime/Release/
+Run-Inventory-G4B3B1-Icon-Grid.cmd`. Play > I; check two compact
+4x2 slot panels, Potion icon in occupied slots, full name/count when
+hovered and counts/icons refreshed on E, click, drag and Shift-drag.
+Do not mark visual gate accepted if icons obscure button actions.
+A proper Inspector Screen-ID picker, final cross-genre art provider,
+dragged icon ghost, Save Game and packaged standalone remain OPEN.
+
+See `docs/INVENTORY_G4B3B1_ICON_GRID.md`. Main, rivers, equipment and
+UI Designer worktrees untouched. Pinned isolated Wicked shader overlay
+remains dirty from CMake and is intentionally **not staged**.
+
+---
+
+## 2026-10-26: Inventory G4-B3A2 — owner-requested drag quantity control
+
+Owner confirmed G4-B3A pointer dragging works, but requested
+individual items rather than moving the entire stack by default.
+The G4-B3A whole-stack behavior was intentional, not a broken
+transaction. **New candidate:** ordinary drag transfers exactly one
+item; Shift held at mouse-down transfers the whole stack. Click
+and Lua E continue transferring one. Modifier is captured at
+drag start and cannot change in flight. Scope, revision and
+stable item-ID validation are unchanged. Footer distinguishes
+`MOVED ONE ITEM` from `MOVED STACK`.
+
+The change is limited to EngineBridge's `InventoryDragTransfer`,
+Runtime's pointer drag handler, the editor-authored Screen footer
+and drag regression tests. Uses separate G4-B3A2 BUILD fixture
+`InventoryG4B3SingleDrag.renegade-screen` and the linked preview
+`RenegadeRuntime-G4B3Single.exe` without overwriting the accepted
+previous G4-B3A Runtime.
+
+**Owner test:** `BUILD/inventory-full/Runtime/Release/
+Run-Inventory-G4B3A2-Single-Drag.cmd`. From Player 3 /
+Chest 2, ordinary Player-to-Chest drag must give 2/3.
+Hold Shift **before pressing the mouse**, then drag the
+remaining Player stack to Chest: expect 0/5. Drag Chest to
+Player normally: expect 1/4. Click and E must still transfer
+one item; no double transfer. **Owner accepted G4-B3A2 on DESIGN, 26 October 2026:** after testing the updated candidate, owner confirmed "that all works". Single-item drag, Shift/full-stack drag, standard single-item click and E remain accepted in this Inventory-Proof fixture. Mark the drag interaction gate accepted; this does not accept icon artwork, tooltips, grid redesign, authoring integration, Save Game or packaged standalone.
+
+See `docs/INVENTORY_G4B3A2_SINGLE_DRAG_MODIFIER.md`.
+Active river, equipment, Studio and main worktrees unchanged;
+isolated Wicked overlay remains unstaged. No merge or push.
+
+---
+
+## 2026-10-26: Inventory G4-B3A — whole-stack drag candidate (visual approval pending)
+
+**Branch/worktree:** `feature/inventory-core-g1-20261026` /
+`renegade-inventory-core-20261026` (isolated); no merge/push.
+
+Owner accepted G4-B2C (`5ce48a5`) after live E and click transfers and
+authoritative Screen label refresh. G4-B3A extends the same standard Screen:
+- `InventoryDragTransfer` is an EngineBridge/Wicked-independent gesture
+  controller. Mouse down captures container and stable stack identity,
+  quantity and inventory revision; mouse up accepts only another panel,
+  unchanged revision, currently valid item and existing scoped gateway
+  permission; executes one atomic transfer of the **full stack**.
+- Generic ScreenRenderer/RuntimeScreen adds optional drag event callbacks,
+  exposing resolved slot rectangle hit-testing. No new inventory renderer,
+  new authority, disabled game enablement or global UI coupling. Click
+  still moves **one**; drag across moves **all**; Lua E still moves one.
+- The 12-pixel drag threshold avoids double-click transfers; the
+  disabled/empty destination slot is an allowed drop location. Cancels
+  outside target, on stale revision and after failed permission; all
+  gestures clear on Screen reset/close.
+- New BUILD-only preview Screen `InventoryG4B3Drag.renegade-screen`
+  and its guarded `.rinvui` marker. Does not overwrite accepted G4-B2C
+  authored Screen. 21 native widgets / 16 authored button slots.
+- `Tests/InventoryDragTransferTests.cpp` exercises scoped denial, whole
+  stack transfer, revision/stale Lua rejection, reverse transfer,
+  same-panel/empty source, cancel and duplicate events.
+
+**Verification DESIGN Windows x64:** full pinned Wicked, ScreenRenderer,
+EngineBridge and Release Runtime `RenegadeRuntime-G4B3.exe` **PASS**;
+linked drag/Screen/adapter/input CTests **4/4 PASS**; isolated core tests
+**12/12 PASS**; real inventory-enabled DX12 StoryFlow smoke **status
+PASS / exit 0 / Complete Game**. This smoke does not move the cursor
+or visually inspect the drag. **Owner visual interaction acceptance
+PENDING**. Use `BUILD/inventory-full/Runtime/Release/
+Run-Inventory-G4B3-Drag.cmd`: Play > I, click Player once (3/2→2/3),
+then drag remaining Player stack onto a Chest slot (2/3→0/5).
+Drag outside to cancel, Chest-to-Player drag should work; E retains
+prior accepted behaviour. If drag doesn't move, don't accept this gate.
+
+**Next:** After live drag works, G4-B3B original item icons (NOT the
+community-published GameGuru MAX art), responsive slot grid, tooltip and
+quantity controls. No packaged game, persistent Save Game or production
+Inspector Screen-ID selection accepted yet. The isolated Wicked checkout's
+CMake-generated shader edits remain unstaged. See
+`docs/INVENTORY_G4B3A_DRAG_TRANSFER.md`.
+
+---
+
+## 2026-10-26: Inventory G4-B2C — live authored Screen labels no longer stale
+
+**Owner screenshot:** G4-B2B showed `Health Potion x3` in Player and
+`x2` in Chest after its bottom Lua proof accurately showed **Player 0,
+Chest 5**; `MOVED ONE ITEM` proved button activation/command was working
+while the displayed slots remained outdated. This was **NOT accepted**.
+
+**Root cause:** `RuntimeScreenController::SetWidgetState` applies a
+resolved binding frame **for every Screen widget**, restoring *all*
+authored initial labels (3/2) immediately after the preceding slot's
+`SetWidgetDisplayText`. Every later slot resets the earlier ones.
+`RuntimeScreenController` now keeps **instance-scoped transient text
+overrides** only for valid, unbound Text/Button labels and reapplies
+them after any state/binding-frame refresh. Clear on Screen
+`Initialize` to prevent Scene/session leakage. InventoryService and
+creator Lua are unchanged, as are authored Screen files and styles.
+
+**Real regression:** Extended linked `Tests/RuntimeScreenTests.cpp`
+to execute the actual Runtime sequence for every slot (SetWidgetState
+then SetWidgetDisplayText) after transfer, verify Player 2/Chest 1,
+Player Empty/Chest 3, Player 1/Chest 2, and check that later state
+updates keep both quantities and the `MOVED ONE ITEM` status. Reset
+restores authored values without carrying overrides. The old code
+would fail this test. Linked test **PASS**.
+
+**Verification DESIGN x64 VS2022:** Full linked Release
+`RenegadeRuntime-G4B2Live.exe` **PASS**; linked Screen/adapter/input
+tests **3/3 PASS**, isolated inventory tests **12/12 PASS**. Actual
+Inventory-Proof DX12 StoryFlow smoke **PASS** (exit 0, graphics
+started, Complete Game). Smoke doesn't click or press E; the live
+Screen display still needs **owner visual acceptance**.
+
+**Owner acceptance, 26 October 2026:** User tested G4-B2C on DESIGN and confirmed **"its all working now"**. The previously reported stale Player/chest slot display is resolved in the live Runtime; E/Lua and click transfers now show updated slot data. Record G4-B2C as visually/functionally accepted for this proof fixture only. This is **not** acceptance of drag-and-drop, final item artwork, general Inspector authoring, Save Game or packaged standalone.
+
+**Owner launch:** `BUILD/inventory-full/Runtime/Release/
+Run-Inventory-G4B2C-Live-Refresh.cmd` runs the new alternate
+`RenegadeRuntime-G4B2Live.exe` against existing disposable project.
+The old `RenegadeRuntime-G4B2Fix.exe` was still running and was not
+terminated or overwritten. Open inventory with I, transfer with E
+and click, verify slot labels change immediately from Player 3/Chest 2
+to 2/3, 1/4, 0/5 etc; an empty Player slot must turn disabled.
+Check status line remains correct. See
+`docs/INVENTORY_G4B2C_LIVE_SCREEN_REFRESH.md`.
+No push/merge, no editor, main, river or equipment changes. Isolated
+pinned Wicked checkout still dirty from CMake generated overlays; do
+not commit it.
+
+---
+
+## 2026-10-26: Inventory G4-B2B E/click transfer regression candidate
+
+**Branch:** `feature/inventory-core-g1-20261026`
+**Worktree:** `renegade-inventory-core-20261026` on DESIGN.
+**User report:** G4-B2A Screen visually flashed when slots were clicked,
+but no item transferred; E/Interact also stopped transferring. User has
+**not approved** that gate. Do not confuse release smoke with acceptance.
+
+Fix:
+- `Runtime/src/InventoryUiInputPolicy.h`: keeps authorised action-map
+  Interact and Pause even when the inventory Screen is modal and normal
+  movement/fire input is gated; never delivers world movement/aim/fire
+  while inventory is open. Text-field, pause and gameplay/overlay focus
+  gates remain. Production `RuntimeApplication.cpp` uses the policy
+  to capture E for creator Lua and enable the inventory Screen input.
+- `ScreenRenderer/src/ScreenRenderer.cpp`: retains existing mouse-down
+  guard for every non-inventory button; removes it **only for explicit
+  inventory.slot.* buttons** because pinned Wicked Button::Update issues
+  OnClick on release and the additional guard can discard that release
+  event.
+- `Runtime/src/RuntimeScreen.cpp` provides bounded diagnostics at each
+  Screen controller action rejection stage. `RuntimeApplication.cpp`
+  shows success/failure in the native Screen status Text widget and logs
+  the scoped command result. InventoryService remains sole item
+  authority; per-Scene UI gateway still restricts access to Player/Chest.
+- New template author writes an entirely separate editable native
+  `InventoryG4B2ActionFix.renegade-screen` with **21 widgets / 16 slots**
+  and `InventoryG4B2ActionFix.rinvui` developer preview marker in
+  disposable BUILD/Content/Inventory-Proof. No previous screen is
+  overwritten, no editor UI or Wicked submodule source changes.
+- Added `Tests/InventoryUiInputPolicyTests.cpp` and extended
+  `Tests/RuntimeScreenTests.cpp` to verify real Screen action-request
+  execution and InventoryGameplayGateway transfer. This explicitly
+  tests focused, scope-checked action routing rather than only data
+  model transfers.
+
+**Verified DESIGN Windows MSVC x64 Release:**
+- standalone inventory suite **12/12 PASS**.
+- linked RuntimeScreen, InventoryScreenAdapter and InputPolicy tests
+  **3/3 PASS**.
+- complete EngineBridge/ScreenRenderer/RuntimeBootstrap and separate
+  `RenegadeRuntime-G4B2Fix.exe` **Release link PASS**.
+- Initial DX12 StoryFlow smoke with new ActionFix marker timed out once
+  while previous Runtime windows were present. Control A/B tests with
+  the same executable (LP03 and Inventory-Proof without marker) passed,
+  all diagnostic files restored. With prior windows no longer running,
+  the exact ActionFix project passed **three sequential DX12 smokes**
+  (status PASS, exit code 0, Complete Game). The first timeout's
+  underlying cause is not confirmed, so retain this qualification.
+- **Still pending:** owner pressing E and clicking occupied slots and
+  visually confirming actual quantities change. DX12 smoke does not
+  simulate these gestures. No packed standalone, drag/drop, item icons,
+  governed authoring UI, persistent slots or cross-system acceptance.
+
+**Owner test:** Run
+`BUILD/inventory-full/Runtime/Release/Run-Inventory-G4B2-Transfer-Fix.cmd`.
+Project title `Renegade Inventory Transfer Fix (G4-B2B)`; Play then I.
+Check initial Player 3 / Chest 2; press E to transfer one; click
+a populated slot to move one. New footer shows `MOVED ONE ITEM` or
+specific rejection message. I closes. Leave old builds available for
+comparison, no merge/push until acceptance.
+
+See `docs/INVENTORY_G4B2B_INPUT_TRANSFER_FIX.md`. The pinned isolated
+Wicked shader overlay is dirty from CMake and is intentionally unstaged;
+main, water, UI Designer and equipment worktrees remain untouched.
+
+---
+
+## 2026-10-26: Inventory G4-B2A — editable Screen adapter + preview
+
+**Worktree/branch:** `renegade-inventory-core-20261026` /
+`feature/inventory-core-g1-20261026`. No merge, no push.
+
+G4-B1 native two-column overlay already renders at 75 FPS and highlights
+stacks. G4-B2A begins replacing that temporary native presentation with
+**standard editable Screen v3 widgets** and their shared Runtime presenter.
+New `InventoryScreenAdapter` produces an Overlay Screen with 16 standard
+Button slot widgets and a background/title; `ProjectInventoryIntoScreen`
+updates a transient copy's item labels and enabled states without mutating
+authored Screen files, styling, focus, or item ownership. Slot actions
+`inventory.slot.P.R` must NOT be localOnly (the normal Screen presenter
+otherwise discards their callback); they request a scoped one-item transfer
+through the existing G4-B1 controller and G2 gateway.
+
+Runtime gains `RuntimeScreenController::SetWidgetDisplayText`, and the
+inventory subsystem can instantiate a separate instance of
+`RuntimeScreenPresenter` using the **same ScreenRenderer implementation as
+UI Designer**. It routes mouse and keyboard button actions through its own
+inventory action sink, never Flow navigation. It hides/gates regular
+movement/combat when open and restores pointer/focus when closed. The
+old native inventory overview is kept for projects without an authored
+inventory screen.
+
+A first enabled Overlay asset in the BUILD Inventory-Proof fixture caused
+startup smoke to **TIME OUT**. The same executable passed ordinary LP03,
+and removing that enabled asset made the Inventory-Proof project pass;
+the failure was isolated to globally enabling the additional Screen.
+Do NOT ship that enabled-asset experiment or bypass StoryFlow.
+The disposable preview instead retains `enabledInGame=false` on the
+authored Screen and opts its transient enabled Runtime copy in with a
+separate developer-only `.rinvui` marker after gameplay starts.
+The normal project/Scene Screen binding via stable document ID is still
+an **OPEN production gate**; the preview marker and fixed file name are not
+a shipping authoring/packaging contract.
+
+Fully linked VS2022 Release `RenegadeRuntime-G4B2.exe` built successfully.
+Owner's previous `RenegadeRuntime.exe` process was still open (PID 26196)
+and the first attempt to replace it failed with LNK1104; **it was not
+terminated**. Using the same compiled sources, alternate TargetName
+produced `RenegadeRuntime-G4B2.exe`. The fixture-specific
+`RenegadeInventoryScreenTemplateAuthor` saved a native editable
+`Content/UI/InventoryG4B2Preview.renegade-screen` (20 widgets /
+16 slot Buttons) and explicit test marker in the *disposable BUILD project*.
+Original first enabled Screen was preserved in BUILD as
+`.initial-enabled-backup`; don't delete it until the owner accepts.
+Run via `BUILD/inventory-full/Runtime/Release/
+Run-Inventory-G4B2-Editable-Screen.cmd`.
+The fixture was renamed to `Renegade Inventory UI Designer Preview (G4-B2)`.
+
+Verification: 11/11 standalone inventory Release CTests PASS; linked
+`RenegadeInventoryScreenAdapterTests` PASS (real ScreenService read/
+write/validate and permission-scoped transfer). Real DX12 smoke on
+the disabled, explicitly opted-in Screen reached StoryFlow Complete Game
+**status PASS, exit 0**; ordinary LP03 DX12 smoke also PASS.
+The smoke does **not** simulate opening the Screen, mouse clicks, live
+slot refresh or pointer focus. **Owner G4-B2 visual and click acceptance
+remains PENDING**. Drag/drop, item icon metadata/artwork, general Studio
+authoring integration, packaged game and save-slot persistence are NOT
+delivered. See `docs/INVENTORY_G4B2_EDITABLE_SCREEN_PREVIEW.md`.
+The isolated pinned Wicked checkout retains CMake-generated shader changes;
+do not stage or merge them. Active river, UI Designer, equipment worktrees
+are unchanged.
+
+---
+
+## 2026-10-26: Inventory G4-B1 — keyboard selection and scoped transfer
+
+**Branch/worktree:** `feature/inventory-core-g1-20261026` in
+`renegade-inventory-core-20261026`. No push or merge.
+
+G4-B1 introduces `InventorySelectionController` in EngineBridge, a
+presentation-only selection and transfer controller independent of Wicked
+and UI Designer. It tracks selected container and stable stack instance IDs,
+reconciles changes from Lua, navigates rows and containers, validates stale
+selection, and dispatches one-item transfers through an explicitly scoped
+`InventoryGameplayGateway` with access **only to existing Player/Chest**.
+No new item authority, editor or equipment system.
+
+Runtime's temporary native G4-A overlay now highlights selected rows:
+**I** open/close, **Up/Down** select row, **Tab** switch non-empty container,
+**Enter** transfer one item. The existing **E/Interact** Lua script remains
+active. While open, world Player movement/fire/aim/equipment inputs are
+suppressed but E and Esc/Pause are preserved. Scene changes clear selection
+and release UI gateway before the authoritative InventoryService dies.
+
+Verification DESIGN Windows VS2022: **11/11 Release** inventory CTest PASS,
+**1/1 focused Debug** controller PASS, **full linked DX12 Release Runtime**
+build PASS, real inventory-enabled StoryFlow **smoke status PASS, exit 0**.
+The smoke doesn't drive Up/Down/Tab/Enter, so **owner visual acceptance is
+pending**. Use `BUILD/inventory-full/Runtime/Release/
+Run-Inventory-G4B1-Selection.cmd` (run correct project, not bare EXE).
+Existing G4-A overlay remains deliberately temporary: icons, clickable slots,
+UI Designer screen authoring and drag/drop are subsequent G4-B2 work.
+No game-save authority or packaged standalone acceptance yet.
+
+Changed files: `EngineBridge/include/renegade/bridge/InventorySelectionController.h`,
+`EngineBridge/src/InventorySelectionController.cpp`, `EngineBridge/CMakeLists.txt`,
+`Runtime/src/RuntimeApplication.h/.cpp`, `Tests/InventorySelectionControllerTests.cpp`,
+`Tests/CMakeLists.txt`, `Tests/InventoryCoreStandalone/CMakeLists.txt`,
+`docs/INVENTORY_G4B1_SELECTION_TRANSFER.md`, `docs/ARCHITECTURE.md`,
+`docs/FEATURE_MATRIX.csv`. See detailed G4-B1 document. Parent active
+river, UI Designer and main Wicked checkouts are untouched. This isolated
+Wicked checkout still has generated night sky shader edits; do not stage.
+
+---
+
+## 2026-10-26: Inventory G4-A owner screenshot / duplicate prompt overlap fix
+
+Owner supplied a screenshot of the actual DX12 G4-A two-column inventory
+overview at **1264x681 / 75 FPS**, showing Player **0/12 slots, 0.0/5.0
+weight**, Chest **1/12 slots, Health Potion x5, 1.0/5.0 weight**. This
+establishes that the I-open overview renders and reflects live G3-F E-key
+item transfers. It also revealed that the old Lua interaction prompt
+was rendered on top of the inventory footer. The new code in
+`Runtime/src/RuntimeApplication.cpp` suppresses native interaction
+prompt drawing **only while the inventory overview is visible**;
+it doesn't modify the prompt value, Lua transfers or item ownership.
+Closing the overview brings the prompt back.
+
+The owner had `RenegadeRuntime.exe` open, locking it against replacement.
+The normal Release link reported LNK1104, so **the canonical developer
+exe is still the previous build**. To avoid interrupting the owner's game,
+linked the changed Runtime as `RenegadeRuntime-G4A.exe` using the same
+Release assets/libraries with MSBuild `BuildProjectReferences=false` and
+`TargetName=RenegadeRuntime-G4A`. Link **PASS**, real DX12
+Inventory-Proof StoryFlow smoke **status PASS, exit 0**.
+Dedicated `Run-Inventory-G4A-Fixed-Preview.cmd` in Runtime/Release
+launches this updated preview with the correct --project argument.
+
+**Owner should test the new G4A preview**, not the original launcher,
+and confirm that the duplicate overlay prompt is gone and the
+panel footer is readable. This updated visual fix has **not yet had
+owner visual acceptance**. The source changes remain branch-only;
+the separate preview binary and launcher are BUILD outputs.
+When owner closes old exe, relink the ordinary RenegadeRuntime target.
+No modification of live gameplay or other worktrees.
+See `docs/INVENTORY_G4A_LIVE_VIEW.md`.
+
+---
+
+## 2026-10-26: Inventory G4-A — live two-column overview (visual review pending)
+
+**Branch/worktree:** `feature/inventory-core-g1-20261026`,
+`renegade-inventory-core-20261026` (isolated). Initial G3-F owner-accepted
+live Lua Player/chest transaction retained. Nothing pushed or merged.
+
+Implemented `InventoryOverlayView`: UI-agnostic EngineBridge view projection
+of the existing InventoryService's two explicitly requested containers. The
+view includes title, occupancy/max slots, exact item definition display
+names, stack counts and current/max weight; it is limited to eight visible
+rows and caches against InventoryService revision. No item creation,
+duplication, new authority or mandatory inventory.
+
+Runtime's existing 3D Compose draws a dark, two-column Player Backpack /
+Storage Chest overlay using Wicked native image and font presentation,
+**only when an inventory-enabled scene exists**. A compact hint says
+`I INVENTORY`; press `I` to open/close while gameplay accepts keyboard
+input. E transfers remain handled by existing governed Lua script; overlay
+reads the result rather than issuing its own mutation. Scene changes reset
+overlay and cache. This is a provisional **read-only** native overview, not
+a finished user-editable Screen/UI Designer template, UI input ownership,
+icons, full grid, drag/drop or equipment integration.
+
+Files: `EngineBridge/include/renegade/bridge/InventoryOverlayView.h`,
+`EngineBridge/src/InventoryOverlayView.cpp`, `EngineBridge/CMakeLists.txt`,
+`Runtime/src/RuntimeApplication.h`, `Runtime/src/RuntimeApplication.cpp`,
+`Tests/InventoryOverlayViewTests.cpp`,
+`Tests/CMakeLists.txt`, `Tests/InventoryCoreStandalone/CMakeLists.txt`,
+`docs/INVENTORY_G4A_LIVE_VIEW.md`, `docs/ARCHITECTURE.md`,
+`docs/FEATURE_MATRIX.csv`.
+
+**Verified on DESIGN:** MSVC VS2022 x64 isolated Release Core suite
+**10/10 PASS**, new focused Debug view-model test **1/1 PASS**.
+Full pinned Wicked/EngineBridge/Runtime Release build **PASS**,
+`BUILD/inventory-full/Runtime/Release/RenegadeRuntime.exe`.
+The same linked Runtime with inventory-enabled Script/Scene companions
+and DX12 StoryFlow smoke flags returned **status=PASS, exit_code=0,
+graphics_backend=DX12** after the final font-formatting rebuild.
+Smoke harness does **not** press `I` or visually inspect the overlay:
+**owner I-key visual review is pending**. Existing accepted Lua E-key
+transaction is a separate proof, not acceptance of this new panel.
+
+Manual test: run existing `BUILD/inventory-full/Runtime/Release/
+Run-Inventory-Live-Proof.cmd` with `--project` already set. Press Play,
+then **I**. Expect Player 3 potions / Chest 2 potions and item rows,
+then E to transfer and watch 2/3, then I to close. Do not open the
+bare developer .exe (it expects a packaged manifest). User screenshots
+and frame-time feedback should drive G4-B visual/input refinements.
+
+**Next G4-B:** connect genuine item grid, original icons, selected-item
+transfer and optional chest overlay through existing shared UI Designer /
+RuntimeScreen semantics, governed input focus and event-driven bindings.
+Never ship a second standalone inventory UI framework or claim packaged
+game / save-slot acceptance. Active river, UI and parent Wicked physics
+edits untouched. The isolated Wicked checkout remains dirty from
+CMake's generated night-sky overlay and is intentionally not staged.
+
+---
+
+## 2026-10-26: Inventory G3-F — governed Script/Interact fixture ready for owner check
+
+**Branch:** `feature/inventory-core-g1-20261026`
+**Scope:** Source fixture authoring utility + disposable build demonstration; NOT finished inventory UI.
+
+Owner screenshot of a black scene and grey cube at 75 FPS was the
+`LP03 Runtime Screen Fixture`: it is intentionally basic diagnostic geometry,
+not an inventory level. Continued by producing a **separate**
+`BUILD/inventory-full/Runtime/Release/Content/Inventory-Proof` project.
+Added `Tests/InventoryRuntimeProofAuthor.cpp` and
+`RenegadeInventoryRuntimeProofAuthor` target in `Tests/CMakeLists.txt`.
+The generator refuses paths outside the exact isolated BUILD Inventory-Proof
+fixture, reads the real Scene `.rmeta` identities, creates validated
+`.rscripts` documents for Level One/Two with level-scoped **Global Script**
+attachments and grants exact script-instance permission to Player/chest
+containers via `.rinventory-access`. Initial ordinary Script presentation
+was rejected by Renegade's authoring validator and corrected to
+`GlobalScript`.
+
+`inventory_live_proof.lua` lives in the **disposable fixture only**,
+queries authorised Player/chest potion quantities, displays them through
+`renegade.ui.show_prompt`, and handles E/Interact through
+`renegade.inventory.transfer`, one potion per press.
+Expected owner state progression: Player/Chest 3/2 -> 2/3 -> 1/4 ->
+0/5 -> 1/4. Correct default Interact input is E. Existing grey cube
+geometry is unchanged; no separate inventory designer and no grid yet.
+
+A separate `Run-Inventory-Live-Proof.cmd` launcher was written **inside
+the Runtime Release BUILD folder** using the required --project argument.
+The developer project was renamed in this fixture to
+`Renegade Inventory Live Proof (G3-F)`; leave the old LP03 project alone.
+Owner should close old LP03 window, double-click this new launcher,
+press Play, and check the bottom prompt and E-key quantity changes.
+
+**Verified:** fully linked fixture-author utility MSVC Release PASS;
+production governed WriteScriptDocument for both levels PASS;
+`.rscripts` companions and matching per-script access policy created;
+real linked DX12 Smoke with the script-enabled Inventory-Proof copy exits
+0, status PASS, reaches Complete Game. Existing nine isolated inventory
+tests remain green as of preceding gate.
+**Owner verification:** User tested the dedicated G3-F launcher and confirmed "yeaH that works". Treat the live Player/chest scripted interaction proof as owner-accepted. This does not accept a full inventory UI, actual world chest model, packaged-game staging, save slots, or player pickup polish. Automated DX12 smoke itself does not prove live E-key transfer.
+
+Detailed handoff: `docs/INVENTORY_G3F_INTERACTIVE_PROOF.md`.
+No source edits outside isolated branch, and no merge/push. Note the
+isolated pinned Wicked checkout remains dirty because the CMake
+night-sky overlay rewrites its shader files; do not commit it.
+
+---
+
+## 2026-10-26: Inventory G3-E — linked Runtime, Build Game plan, DX12 smoke
+
+**Isolated branch:** `feature/inventory-core-g1-20261026`
+**Implementation commit:** `454234e68f88dde5afafa214a335eb9c540d7e61`
+**Previous G3-D handoff:** `55954c3`.
+
+The full Windows Release Runtime **now links and launches** from the isolated
+inventory worktree against a fresh, exact pinned Wicked/imnodes checkout.
+An initial production build failed because `InventoryLuaBridge.cpp` uses
+`lua.h` directly; fixed `Runtime/S3GovernedLuaRuntime.cmake` with a
+private pinned Wicked Lua include directory. Full
+`cmake -S . -B BUILD/inventory-full -G "Visual Studio 17 2022" -A x64 -DRENEGADE_EMBED_SHADERS=OFF`
+and `$env:CL='/MP8'; cmake --build BUILD/inventory-full --config Release --target RenegadeRuntime --parallel 4`
+PASS. Shader embedding was deliberately disabled for this development proof:
+this is NOT yet a distribution-ready shader/package gate.
+
+Extended production `Tests/WindowsGameBuildProjectTests.cpp` to exercise a
+real StoryFlow Project and Build Game *collector+plan* with reachable
+inventory snapshot and access-policy companions, inventory-free project,
+and malformed permissions. Target and Gate4 fixture built/linked;
+`ctest -C Release -R "^RenegadeWindowsGameBuildProjectTests$"`
+**2/2 PASS**. Existing standalone core suite **9/9 PASS**.
+
+Ran newly linked DX12 `RenegadeRuntime.exe` via explicit `--project` on
+the built-in LP03 StoryFlow proof project, with two level completion outcomes
+and smoke auto-exit: exit 0, `graphics_backend=DX12`,
+`smoke_status=PASS`, reached Complete Game. Created a **disposable**
+copy in `BUILD/inventory-full/Runtime/Release/Content/Inventory-Proof`,
+with valid optional LevelOne/LevelTwo inventory and access companions;
+same linked Runtime DX12 smoke also exit 0. This proves startup
+compatibility, **NOT** visible pickup/chest or inventory state mutation.
+
+An owner screenshot displayed
+`PACKAGE_INTEGRITY_FAILED: missing package-manifest.json`. Inspected
+the exact `unknown-package/Logs/RuntimeBootstrap.log`, which stated
+`package_relative_launch=true` and the *raw development Runtime Release*
+folder as package root. This is an **expected direct .exe double-click**
+without `--project`; the valid development project launch passed.
+Use the preexisting `BUILD/inventory-full/Runtime/Release/Run-LP03-Screen-Proof.cmd`
+for manual development launching or pass
+`--project "<path-to-project.renegade>"`; do not plant a dummy
+manifest or disable genuine standalone integrity checking.
+
+IMPORTANT isolated dependency note: Fresh linked worktree checkouts were
+created *inside the inventory branch* at Wicked pin `3a800b71` and
+imnodes pin `eb36902`. The existing CMake night-sky overlay writes
+tracked and untracked shader/header changes into **the isolated Wicked
+checkout**, so `git status` still reports `m WickedEngine` after
+implementation commit. These are local generated overlay modifications,
+NOT staged, NOT a changed submodule pointer and NOT changes in the active
+Renegade parent Wicked checkout (which contains unrelated local physics
+edits). Preserve the isolated checkout for ongoing build/shader work;
+do not accidentally commit its overlay modifications, and do not claim
+the submodule working directory is clean.
+
+**Remaining gates:** actual staging, hash/manifest, detached packaged
+Runtime launch with & without inventory; governed Script/Inspector item
+authoring; in-game Player pickup/chest and UI Designer screen; Save Game
+disk slot authority and recovery; full Studio link; owner visual/weapon
+regression. No merge or push; these milestones require independent
+verification. Details in `docs/INVENTORY_G3E_FULL_BUILD_PROOF.md`.
+
+---
+
+## 2026-10-26: Inventory G3-D — shared Runtime/Build Game/Test Level access policy
+
+**Isolated worktree:** `C:\Users\paulw\source\repos\renegade-inventory-core-20261026`
+**Branch:** `feature/inventory-core-g1-20261026`
+**Implementation commit:** `fc461aff9cf253dc8a4ebb5bf4c9ecbdb09d596a`
+**Base:** G3-C `c5603a5`, original `main` `11bbb90`.
+No push, merge, Wicked/imnodes updates, active river, UI Designer or other worktree changes.
+
+The earlier G3-A Runtime, G3-C Build Game and G3-B Test Level each
+had separate `.rinventory-access` validation, risking conflicting
+interpretations. `InventoryAccessPolicy` is now a single versioned,
+bounded validator returning atomic grant records. All three paths use it.
+Runtime still maps accepted records to the same per-script capability
+gateways; no new inventory authority, editor, UI or save slots.
+
+Changed: `EngineBridge/include/renegade/bridge/InventoryAccessPolicy.h`,
+`EngineBridge/src/InventoryAccessPolicy.cpp`,
+`EngineBridge/src/InventoryDependencyProvider.cpp`,
+`EngineBridge/src/InventoryTestLevelSnapshot.cpp`,
+`EngineBridge/CMakeLists.txt`,
+`Runtime/src/RuntimeInventorySession.cpp`,
+`Tests/InventoryAccessPolicyTests.cpp`,
+`Tests/InventoryDependencyProviderTests.cpp`,
+`Tests/InventoryTestLevelSnapshotTests.cpp`,
+`Tests/RuntimeInventorySessionTests.cpp`,
+`Tests/CMakeLists.txt`,
+`Tests/InventoryCoreStandalone/CMakeLists.txt`,
+`docs/ARCHITECTURE.md`, `docs/FEATURE_MATRIX.csv`,
+`docs/INVENTORY_G3D_ACCESS_POLICY.md`.
+
+Windows DESIGN validation: MSVC VS2022 x64 standalone Release build,
+**9/9 CTest PASS**; Debug AccessPolicy/RuntimeSession/BuildDependency/
+TestLevel **4/4 PASS**. Runtime Lua host and prior core/interaction
+tests still pass. A test-only invalid vector access was discovered
+in the initial Debug validation and fixed; both configurations were
+rerun. `git diff --cached --check` PASS before commit.
+
+**Still not verified:** fully linked standalone/Studio/Runtime binaries,
+an actual Test Game run with inventory, full Build Game manifest/staging
+and packaged launch, governed save slots and cross-process persistence,
+world pickup arbitration/exhaustion rendering, editable inventory screen
+and owner visual acceptance. Fresh isolated worktree submodules remain
+uninitialised; do not copy/rebuild gigabytes without checking disk space
+and planning dependency setup. No normal gameplay projects were altered.
+
+**Next:** prepare an isolated, resource-aware full-build proof using
+existing pinned dependencies, then run inventory-enabled AND
+inventory-free package manifest and Runtime launch checks. If those pass,
+begin an actual Player/chest world test and the first UI Designer-bound
+inventory screen. All implementation remains on this branch pending
+independent review. See `docs/INVENTORY_G3D_ACCESS_POLICY.md`.
+
+---
+
+## 2026-10-26: Inventory G3-C local checkpoint — typed Build Game closure and save payload
+
+**Isolated worktree:** `C:\Users\paulw\source\repos\renegade-inventory-core-20261026`
+**Branch:** `feature/inventory-core-g1-20261026`
+**Implementation commit:** `9df63164d33554253090d6e3ba241f0b7e28c6d1`
+**Base:** G3-B `63ac9de`, ultimately local main `11bbb90`. No push/merge, Wicked changes, or edits to active river/UI/equipment worktrees.
+
+G3-C added `InventoryDependencyProvider` to the existing typed
+`WindowsGameBuildProjectService` dependency-provider chain for reachable Scene
+nodes. It emits required Data edges for `<scene>.rinventory` and optionally
+`<scene>.rinventory-access` only when those sidecars are present; ordinary
+projects remain inventory-free. It rejects corrupt/missing inventory, invalid
+G3-A permissions, oversized/outside-project files, and does not scan
+unreachable levels. Existing `DependencyCollector` and Asset Registry remain
+the source hashing/staging authority. Exact files:
+`EngineBridge/include/renegade/bridge/InventoryDependencyProvider.h`,
+`EngineBridge/src/InventoryDependencyProvider.cpp`,
+`EngineBridge/src/WindowsGameBuildProjectService.cpp`,
+`EngineBridge/CMakeLists.txt`.
+
+Runtime now exposes payload-only `CaptureRuntimeState` and
+`RestoreRuntimeState` on `RuntimeInventorySession`. No disk writes,
+save-slot manager, new save authority, project identity inference or changes
+to authored `.rinventory` snapshots. Tests exercise transfer, state capture,
+new Runtime session restore and invalid-restore rollback with unchanged Scene
+authored data.
+
+Windows DESIGN MSVC VS2022 x64:
+- Standalone Release build PASS; `ctest -C Release` **8/8 PASS**,
+  including new `RenegadeInventoryDependencyProviderTests`.
+- Focused Debug `RenegadeInventoryDependencyProviderTests` and
+  `RenegadeRuntimeInventorySessionTests`: **2/2 PASS**.
+- `WindowsGameBuildProjectService.cpp`, `RuntimeApplication.cpp`,
+  `RuntimeScriptRuntime.cpp`, and `TestLevelSnapshotService.cpp`
+  production translation-unit object-only compiles: PASS.
+- Staged whitespace check PASS; G3-C clean branch checkpoint recorded.
+
+**Open:** complete EngineBridge/Studio/Runtime linking, real Build Game
+package dependency manifest/staging, packaged Runtime launch and
+Test Level visual owner acceptance, scripted pickup arbitration, governed
+authoring/UI, and a real game-save slot service with project/saveDataId/
+scene identity plus journal/recovery. The access-policy parsing is currently
+duplicated between Build Game and G3-A Runtime; replace with shared validated
+contract before final integration. Never call this a complete packaged or
+persisted gameplay inventory.
+
+Next work: verify linked Build Game, both inventory-enabled and inventory-free
+distribution manifests and Runtime launch. Then implement/expose a governed
+Save Game service that consumes the payload and keeps authoring companions
+immutable. See `docs/INVENTORY_G3C_PACKAGING_PERSISTENCE.md`.
+No push/merge until independent exact-commit review.
+
+---
+
+## 2026-10-26: Inventory G3-B partial — Test Level companions and world Action
+
+**Branch/worktree:** `feature/inventory-core-g1-20261026` in `renegade-inventory-core-20261026`
+**Implementation commit:** `7058e03098dd0371fd700bacb40efbac607c0d04`
+**Base:** G3-A `d4b4a51`; original main `11bbb90`.
+No push, merge, Wicked submodule pin change or other worktree edits.
+
+Implemented opt-in Test Level companion projection:
+`EngineBridge/include/renegade/bridge/InventoryTestLevelSnapshot.h`,
+`EngineBridge/src/InventoryTestLevelSnapshot.cpp` validate and copy a Scene's
+`.rinventory` and optional `.rinventory-access` into the disposable Test
+Level startup Scene. Wired into `TestLevelSnapshotService::Create` after
+creator scripts and before scene snapshot completion. Absent companion is a
+no-op. Invalid/symlink-outside-root/oversized/missing data aborts; source
+level assets are never overwritten by the projection.
+
+Added `Examples/Inventory/InteractTransfer.lua`, a configurable Action
+for world pickups/chests. It reads existing governed Player/Entity position
+and Interact input and asks the G3-A authoritative Lua inventory gateway to
+transfer selected quantities; it has no independent item authority, UI
+screen or equipment system. It requires manually authored script properties,
+containers and permissions and does not yet hide empty world objects or
+resolve multiple simultaneously actionable targets.
+
+Validation on Windows DESIGN, Visual Studio 2022 MSVC x64:
+- Standalone Release build PASS, CTest **7/7 PASS**, including new
+  `RenegadeInventoryTestLevelProjectionTests` and
+  `RenegadeInventoryInteractionLuaTests`, which loads actual example Lua.
+- Isolated `TestLevelSnapshotService.cpp` compile PASS against the existing
+  Wicked headers. Previous `RuntimeApplication.cpp` and
+  `RuntimeScriptRuntime.cpp` object compiles remain PASS.
+- Debug `RenegadeInventoryTestLevelProjectionTests` and
+  `RenegadeRuntimeInventorySessionTests`: **2/2 PASS**.
+- `git diff --cached --check` PASS at commit.
+
+**Very important limits:** no full EngineBridge/Studio/Runtime link, no
+actual player Test Level or packaged build, no automatic Build Game
+dependency inclusion, no project item authoring UI, no persistent save-game
+authority, no UI Designer inventory screen, and no visual owner acceptance.
+A package can only be attempted once the typed Scene inventory companions
+are registered in the dependency closure, then their package paths and
+runtime interaction must be verified. The existing default Save/Load screen
+itself says a save-game module is required; do not create a competing save
+authority or overwrite the author's Scene snapshot with player progress.
+
+Read `docs/INVENTORY_CORE_G3B_CHECKPOINT.md` for setup, verification and
+next gates. Preserve the current isolated branch; all follow-on changes
+should be reviewed before merge. G3-B is **PARTIAL**, not closed.
+
+---
+
+## 2026-10-26: Inventory G3-A optional Runtime scene integration
+
+**Isolated worktree:** `renegade-inventory-core-20261026`
+**Branch:** `feature/inventory-core-g1-20261026`
+**Implementation commit:** `8f1a1bb7ac003021f8a06b7f01ddc90f16b55fa0`
+**Base:** G2 handoff `c1875f5` (originated from main `11bbb90`).
+**No push, merge, Wicked pin change, or edits to active river/UI worktrees.**
+
+G3-A adds an opt-in, level-scoped `RuntimeInventorySession`, loaded at
+`RuntimeApplication::SyncCreatorScriptsForScene` before starting governed
+creator Lua. Ordinary levels without companion data remain inventory-free.
+Configured levels load one authoritative `InventoryService` from the
+`<scene>.rinventory` snapshot, with exact ScriptInstanceId/owner-scoped
+access grants in the optional `<scene>.rinventory-access` manifest.
+Grant types: CONTAINER (read/deposit/withdraw), DEFINE and CREATE
+(restricted container ID prefix). Companion files are bounded and checked
+against project-root containment. Invalid configured companions are rejected
+and logged rather than partially adopted. Script callbacks stop before
+the Runtime owner releases their gateways.
+
+Changed: `Runtime/src/RuntimeInventorySession.{h,cpp}`,
+`Runtime/src/RuntimeApplication.{h,cpp}`, `Runtime/CMakeLists.txt`,
+`Tests/RuntimeInventorySessionTests.cpp`,
+`Tests/RuntimeInventoryLuaHostTests.cpp`,
+`Tests/InventoryCoreStandalone/CMakeLists.txt`, `Tests/CMakeLists.txt`,
+`docs/INVENTORY_CORE_G3A.md`, `docs/ARCHITECTURE.md`,
+`docs/FEATURE_MATRIX.csv`.
+
+Windows VS2022 x64 MSVC results:
+- `cmake -S Tests/InventoryCoreStandalone -B BUILD/inventory-g1 -G "Visual Studio 17 2022" -A x64`: PASS (Lua/Wicked settings retained from G2 local cache).
+- `cmake --build BUILD/inventory-g1 --config Release --parallel 4`: PASS.
+- `ctest --test-dir BUILD/inventory-g1 -C Release --output-on-failure`: **5/5 PASS** (Core/Gateway/Lua/RuntimeSession/RuntimeLuaHost).
+- Real `RuntimeApplication.cpp` and `RuntimeScriptRuntime.cpp` source object compilations against existing Wicked headers: **PASS**.
+- Debug `RenegadeInventoryCoreTests`, `RenegadeInventoryGatewayTests` and `RenegadeRuntimeInventorySessionTests`: **3/3 PASS**.
+- Staged Git whitespace check: PASS.
+
+**Not verified:** complete EngineBridge/Runtime/Studio linking; Runtime/Test Game
+actual launch, existing weapon parity, generic pickup object interaction,
+project save/reload via governed game-save API, Build Game dependency
+packaging and owner visual acceptance. The companion is a temporary
+developer-authored fixture format, not an editor workflow or shipped
+save-system authority. In-memory transfers do not write game saves or
+overwrite level-authored snapshot files. Wicked/imnodes submodules remain
+uninitialised in this separate worktree; no large recheckout was triggered.
+
+**Next G3-B:** build a governed item/project authoring document and
+persistent game-save owner, then integrate Player/World container relations,
+pickup/chest actions, package dependencies and full Test Game acceptance.
+Do not create a competing equipment system. No merge without independent
+exact-commit verification. See `docs/INVENTORY_CORE_G3A.md`.
+
+---
+
+## 2026-10-26: Optional Inventory G2 — scoped C++/Lua interface checkpoint
+
+**Branch/worktree:** `feature/inventory-core-g1-20261026` in `renegade-inventory-core-20261026`
+**Implementation commit:** `9d89e18f008a0bad04c02875c51183d94814f66e`
+**Base:** G1 `ba9582f`; initial main `11bbb90`.
+No push/merge and no modifications to other worktrees.
+
+G2 adds an event journal in `InventoryService`, a trusted per-context
+`InventoryGameplayGateway`, and `InventoryLuaBridge` installed optionally
+inside a governed Lua 5.4 script environment. Scripts lacking a trusted
+gateway resolver see no inventory namespace. Scoped read/deposit/withdraw,
+creation-prefix and definition permissions are host-owned; Lua cannot grant
+permissions. Read results are paginated and all mutations go through one
+authoritative core. The existing Script Runtime now has the
+`SetInventoryGatewayProvider` opt-in injection boundary, compiled successfully
+against the Wicked headers; host has not yet supplied real gameplay inventory
+instances or grants. Existing equipment and UI code are unchanged.
+
+Changed: `EngineBridge/include/renegade/bridge/InventoryService.h`,
+`EngineBridge/src/InventoryService.cpp`,
+`EngineBridge/include/renegade/bridge/InventoryGameplayGateway.h`,
+`EngineBridge/CMakeLists.txt`,
+`Runtime/src/InventoryLuaBridge.{h,cpp}`,
+`Runtime/src/RuntimeScriptRuntime.{h,cpp}`,
+`Runtime/S3GovernedLuaRuntime.cmake`,
+`Tests/InventoryGatewayTests.cpp`,
+`Tests/InventoryLuaBridgeTests.cpp`,
+`Tests/InventoryCoreStandalone/CMakeLists.txt`,
+`Tests/CMakeLists.txt`, `docs/INVENTORY_CORE_G2.md`,
+`docs/FEATURE_MATRIX.csv`, `docs/ARCHITECTURE.md`.
+
+Verification on Windows DESIGN, VS2022 MSVC 19.44:
+- Isolated standalone Release build: PASS.
+- `ctest --test-dir BUILD/inventory-g1 -C Release --output-on-failure`: 3/3 PASS (Core, Gateway, real LUA.lib test).
+- `cmake --build BUILD/inventory-g1 --config Release --target RenegadeInventoryRuntimeSyntax --parallel 4`: PASS (real governed `RuntimeScriptRuntime.cpp` object build against existing Wicked headers).
+- Debug Core/Gateway build and CTest: 2/2 PASS.
+- `git diff --cached --check`: PASS prior to implementation commit.
+
+Verification limitations: full Renegade Runtime and Studio linking, real
+script-start provider injection, game-save integration, Test Game, standalone
+package, owner visual and independent review were NOT run. Do not claim
+G2 gameplay/runtime acceptance. Fresh inventory worktree submodules remain
+uninitialised. Refer to `docs/INVENTORY_CORE_G2.md` for exact interfaces and
+the next G3 dependency/validation plan.
+
+**Next:** make an opt-in Runtime owner for inventories with stable Player/entity
+ownership and governed asset/save lifecycle, configure per-script access
+before `StartScene`, and test a Player + chest transfer in packaged Runtime.
+Only then connect screens, hotbars or pickups. Never replace existing
+equipment actions. No push or merge before independent verification.
+
+---
+
+## 2026-10-26: Optional Inventory Core G0/G1 initial local checkpoint
+
+**Isolated worktree:** `renegade-inventory-core-20261026`
+**Branch:** `feature/inventory-core-g1-20261026`
+**Baseline:** `main` `11bbb90e4214776d5e51c8bc4cba2e7f1ccde296`
+**Implementation commit:** `6fc68f781bcb5cae17ee50f61dd9d43785be771e`.
+No push, merge, Wicked submodule change, or edits to existing river/UI/owner worktrees.
+
+Implemented `InventoryService` as an opt-in, renderer-agnostic C++ EngineBridge
+service; item definitions (including optional equipment asset ID), stable item
+instances/stacks, explicit containers, slot/weight restrictions, and all-or-nothing
+add/remove/transfer operations. Snapshot schema v1 validates fully before state
+replacement; explicit file save/load uses a temp candidate and backup. Added
+CMake registration, standalone tests, G0/G1 design, architecture and feature
+matrix entry (REN-INV-001). Changed: `EngineBridge/CMakeLists.txt`,
+`EngineBridge/include/renegade/bridge/InventoryService.h`,
+`EngineBridge/src/InventoryService.cpp`, `Tests/CMakeLists.txt`,
+`Tests/InventoryCoreTests.cpp`,
+`Tests/InventoryCoreStandalone/CMakeLists.txt`,
+`docs/INVENTORY_CORE_G0_G1.md`, `docs/ARCHITECTURE.md`,
+`docs/FEATURE_MATRIX.csv`.
+
+Validation on Windows DESIGN:
+- `cmake -S Tests/InventoryCoreStandalone -B BUILD/inventory-g1 -G "Visual Studio 17 2022" -A x64`: PASS.
+- `cmake --build BUILD/inventory-g1 --config Release --target RenegadeInventoryCoreTests --parallel 4`: PASS.
+- `ctest --test-dir BUILD/inventory-g1 -C Release --output-on-failure`: 1/1 PASS.
+- `cmake --build BUILD/inventory-g1 --config Debug --target RenegadeInventoryCoreTests --parallel 4`: PASS.
+- `ctest --test-dir BUILD/inventory-g1 -C Debug --output-on-failure`: 1/1 PASS.
+- `git diff --cached --check`: PASS prior to committing implementation.
+
+Limitations: This is **not** integrated into Runtime player, Lua,
+StoryFlow/UI Designer, item assets, Build Game dependency packaging or
+existing save-game lifecycle. No Test Game or standalone game acceptance is
+claimed. Full engine configuration/build not attempted: new worktree contains
+uninitialised `WickedEngine` and `ThirdParty/imnodes` submodules; avoid
+unplanned gigabyte downloads. The save helper is provisional and must be
+adapted to the governed project/Runtime save transaction authority before
+shipping. No creator artwork or MAX community pack assets were adopted.
+
+**Next:** G2 inspect Runtime save authority and equipment/ScriptRuntime seams;
+design capability-checked Lua/C++ gameplay API; add events and test Runtime
+Player/chest inventories with existing weapons untouched. Preserve isolation;
+require full native Build/Test Game/package verification and independent review
+before a main-branch merge. See `docs/INVENTORY_CORE_G0_G1.md`.
+
+---
+
 ## 2026-10-19 22:41: Terrain VT test candidate CRASHED and withdrawn
 
 User reported Renegade Studio pauses unresponsive for approximately 10 seconds
@@ -5628,3 +6943,171 @@ Final service check: first verified smoke found knowledge bridge18384 absent (co
 ## 2026-10-16 — Native GPU lifecycle helper terminator compile fix
 
 Corrected owner-reported malformed wide character literal in Studio/src/TestLevelRuntimeProcess.cpp: mutableCommand.push_back(L'\0'); now contains the literal backslash-zero escape, with no embedded NUL byte. Earlier GPU lifecycle build had failed C2137 at line339; this was an implementation error. Rebuilt Release RenegadeTestLevelRuntimeProcessTests via configured VS18 CMake path: exit0, log BUILD/assistant-gpu-native-build-fix.log. Ran Tests/Release/RenegadeTestLevelRuntimeProcessTests.exe with TestLevelProcessFixture.exe: 'LP04 Gate3A process lifecycle proof passed', exit0. Scoped git diff --check passed. These low-level tests do not opt into yieldAssistantGpu, so this does not verify complete assistant unload/reload integration or restored75FPS. Previous native lifecycle/source changes remain unfinished pending opt-in integration tests and Studio build. No model start/stop, user app closure, staging/commit/push/merge in this correction.
+
+## 2026-10-28 G5 continuation closeout (owner acceptance and V3 candidate)
+
+Current branch/worktree: feature/inventory-core-g1-20261026 at C:\Users\paulw\source\repos\renegade-inventory-core-20261026; baseline commit b2da846 (uncommitted inventory G4/G5 changes preserved). Do not merge/push without owner approval.
+
+Owner confirmed the newly authored G5Play Test Game pickup worked after V2 Studio launched DX12 Runtime and displayed "Press E to collect Health Potion". Separate owner acceptance for touch, use/healing and icon presentation is not established.
+
+New isolated G5 source: InventoryPickupAuthoringService assigns/reuses native persistent entity IDs, including legacy re-apply of unchanged pickup properties, with Undo/Redo and WISCENE persistence. WorldPickupController captures/restores bounded versioned retired-object states with strict project/scene identity and corruption/no-resurrection checks; this is a payload seam, NOT a persistent Save Game implementation. Real Save Game must coordinate this payload with InventorySession inventory snapshot and player-health state under a governed atomic save slot. Legacy existing G5Play pickups predating ID assignment need their Pickup settings re-applied before participating in saving.
+
+Production WindowsGameBuildProjectTests now verifies G5 item catalogue/PNG inclusion through the actual Windows package dependency graph and plan, and missing-icon refusal. Initial false failure used outer test fixture root; fixed to projectRoot. Real production provider did not require correction.
+
+G5 V3 Release Studio linked successfully: BUILD/inventory-full/Studio/Release/RenegadeStudioG5PickupCandidateV3.exe (30,647,808 bytes). G5 Release Runtime linked: BUILD/inventory-full/Runtime/Release/RenegadeRuntime.exe (61,702,144 bytes). Full build exit 0 using original WinGet CMake 4.4.4 after initial mismatch with VS CMake 4.2 during regenerate. The V2 binary is retained. V3 was launched on DESIGN, passed startup/Hub, opened G5Play LevelOne and displayed 75 FPS without modification/saving. V3 is currently running in LevelOne and available for owner review.
+
+Final Release targeted/focused CTest: 24/24 PASS (Inventory*, WorldPickupController, RuntimeInventorySession, RuntimeScreen, ScreenRenderer, StoryFlowGate8EOutcomeParity and WindowsGameBuildProject with its Gate4 scene setup), 3.49 seconds. git diff --check exit0; line-ending conversion warnings only. Prior exact saved G5 WISCENE pickup proof passed. No staging, commit, push or merge, nor mutation of main or owner Inventory Designer project.
+
+OPEN: full governed disk save/load pairing item/container/player/world retirement; full standalone packaged DX12 game launch with G5 items/icons/collect; owner potion healing after actual damage; visual Inspector icon/picker/scrollbar and packaged Runtime item icon acceptance; creator-friendly default inventory creation/new-project setup. Do not claim completed Save Game or shipped G5 release.
+
+## 2026-10-28 G5D native Quick Save / Load continuation — live verification
+
+Branch: feature/inventory-core-g1-20261026. No staging, commit, push or merge. The accepted G5Play project and main checkout remain untouched; current V3 Studio remains open.
+
+Added Runtime/src/RuntimeGameSaveSlot.h/.cpp to RenegadeRuntimeBootstrap. Single versioned quick.rsave under LOCALAPPDATA/RenegadeEngine/<save_data_id>/Saves, with project and WISCENE rmeta scene IDs, bounded payloads, checksum, native player health/max/death, position/yaw/pitch, InventoryService snapshot and collected-world persistent IDs. Uses flushed temporary file and Windows write-through atomic replace with root containment / symlink checks. Fixed first-save missing-file check. Neither authored WISCENE/inventory companion nor packaged GameData is overwritten.
+
+RuntimeApplication integrates F5 save / F9 load only for direct-scene gameplay with Player Start, inventory and gameplay keyboard focus; refuses multi-level Story Flow for now. Load validates the slot and scratch inventory first; resets the authored scene, dry-run validates retired pickup IDs, restores inventory and world retirement, then player pose/health and UI. Main Windows supplies LOCALAPPDATA. WorldPickupController adds non-mutating validateOnly restore preflight. No general multi-level Resume or autosave yet.
+
+Automated: G5D slot test checks roundtrip health + pose, project/scene mismatch, damage rejection, invalid writes preserving previous slot and atomic rewrite. G5 world test checks non-mutating preflight. Release Runtime and G5D test targets built successfully with configured WinGet CMake 4.4.4. Final focused Release CTest 25/25 PASS (3.50 s), including existing UI, inventory and WindowsGameBuildProject suites.
+
+Live sandbox: copied G5Play into BUILD/G5SavePlay (direct-scene startup) and created BUILD/G5SavePlay/LocalAppDataSandbox for all save data. New standalone test utility RenegadeInventoryG5SavePlayPrepare accepts ONLY this copied root; after repairing its initial missing graphics context it assigned native stable IDs to both pickups and verified .wiscene reopen, retaining .before-G5D backup. Original accepted G5Play unchanged.
+
+Live DX12 sandbox Runtime: E collected +3 potions, F5 wrote 462-byte quick.rsave containing player x3, chest x2 and one retired world pickup ID; screenshot showed QUICK SAVE COMPLETE. F9 restored and UI showed player x3/chest x2. Native E then transferred one chest potion to backpack (x4/x1); F9 rolled back exactly to x3/x2. Closed ONLY assistant-created sandbox Runtime PID 14248, restarted the same saved project under PID 29824 with the same isolated LOCALAPPDATA, pressed F9, then I: screenshot confirmed player x3/chest x2 with both potion icon images at 75 FPS. Sandbox Runtime currently open; pre-existing separate waterfall Runtime untouched.
+
+Still open: Story Flow and multiple-level/save-slot UI support, other gameplay systems' state, actual potion healing after real player damage, and exported standalone G5 game end-to-end acceptance. Do not call this general Save Game completion, do not merge into main before owner acceptance.
+
+## 2026-10-28 G5E finish after DESIGN reconnect (09:20 UK) — export graphics accepted, 27/27 tests
+
+Branch/worktree feature/inventory-core-g1-20261026 at C:\Users\paulw\source\repos\renegade-inventory-core-20261026. Remain uncommitted. No stage, push, merge, or edits to main. Existing approved G5Play and inventory designer untouched.
+
+G5E fixed a REAL production packaging defect: RuntimeApplication::LoadInventoryAuthoredScreen previously required a preview .rinvui marker and rejected packageRelativeLaunch explicitly, causing exported Windows game to fall back to the basic text-list inventory even though item definitions/icons were packaged. Added explicit project-owned Content/Gameplay/Inventory.renegade-ui assignment reader in EngineBridge/include/renegade/bridge/InventoryScreenAssignmentService.h, validating versioned four-line format, stable screen ID, project/Screen identity, root containment, safe UI-relative path, Overlay usage, disabled authored game state, and inventory actions. Runtime now prefers this explicit binding in both Test Game and packaged launches; legacy preview markers remain authoring-only. InventoryDependencyProvider adds required graph edges for assignment + assigned RuntimeScreen, allowing existing Screen dependency provider to ship its assets. This assignment is currently file-based; a simple Studio Inspector picker / creator-facing authoring UI remains outstanding. DO NOT claim that authors can already select this entirely through Studio UI.
+
+Created disposable G5PackagePlay at BUILD/G5PackagePlay, copied from isolated G5SavePlay, restored Story Flow and Main Screen for actual Build Windows Game staging (original owner project remains untouched); authored ONLY sandbox Content/Gameplay/Inventory.renegade-ui pointing at existing disabled graphical InventoryG4B3B2Grid.renegade-screen. Tests/InventoryG5PackageProof.cpp uses real production Build Game project discovery, plan, stage, executable identity and stage integrity validation with actual Release Runtime support; no promotion into owner-visible Builds directory. V1 staged 34 files with basic list fallback; V2 staged 37 files, but an overnight/interrupted remote session left staged metadata and source-copy files zero-filled when read the next morning, so its Runtime correctly refused package integrity. DO NOT suggest the root cause is proven. Fresh isolated V3 regenerated 37 files with full integrity checks, and explicitly checked nonzero JSON/report/project/Screen content; all passed. V3 staged path:
+BUILD/G5PackagePlay/Builds/Windows/.renegade-staging/Renegade G5 Packaged Inventory Proof Windows Build.g5e-inventory-proof-20261028-v3
+Standalone named executable: G5InventoryProof.exe. Launched from unrelated TEMP working directory with isolated LOCALAPPDATA; DX12 Windows Game started and maintained 75 FPS. Using nonintrusive PrintWindow (without changing user Discord keyboard focus) captured actual packaged graphical inventory Screen with 4x2 square slots, chest/player panels, potion artwork/quantities and status: BUILD/G5PackagePlay/g5e-v3-window-capture.png and g5e-postmessage-test.png. Owner is currently active in Discord so do NOT steal foreground by sending global keyboard or cursor input; target-only messages can be attempted but may not reach Wicked polling. Assistant-created V3 standalone PID 13612 may still be running in background.
+
+G5E native potion test in Tests/RuntimeInventoryItemUseTests.cpp was extended to invoke actual RuntimeCombatService::ApplyCombatDamage(player,73) (100 -> 27) followed by UseHealthPotion through the production scoped InventoryGameplayGateway (27 -> 77 -> 100, potion count 2 -> 1 -> 0), and passed. This is real production-code integration damage/heal, NOT a manual live Runtime attack/consume test.
+
+New Tests/InventoryScreenAssignmentTests.cpp registered CTest, verifies safe assignment + correct IDs/mode, rejection of missing/wrong project, wrong Screen ID, path traversal, bogus mode, absent Screen, and enabled StoryFlow Screen. Green.
+
+Final ctest Release focused G5E suites 27/27 PASS, total 3.98s; log BUILD/g5e-combined-regression-final.log. git diff --check exit0. V3 package production staging + identity + exact stage integrity success, v3 byte checks PASS. Build outputs: BUILD/inventory-full/Runtime/Release/RenegadeRuntime.exe and BUILD/inventory-full/Tests/Release/RenegadeInventoryG5PackageProof.exe.
+
+Remaining G5 acceptance: owner-facing Studio selector for assigning an editable project Inventory Screen (currently deliberate tiny file metadata), manual live in-game potion use following a damaging gameplay event, standalone owner/QA acceptance for inventory drag, scroll, pickup and UI actions, quick-save Story Flow multi-level resume (out of current direct-scene G5D scope), full 4-config CI and branch commit/merge after owner approval. No merge into main without approval.
+
+## 2026-10-28 G5F — creator-facing Inventory Screen selector implemented
+
+Branch feature/inventory-core-g1-20261026. Added native project-facing Inventory Screen selection in Screen Editor > Globals > Project > Inventory Screen. Reuses compact ScreenChoicePicker, lists available disabled Overlay Screens from the whole project Screen library, including non-StoryFlow Screens. Choose another Overlay or Use basic inventory to clear assignment; status messages explain success/errors. Screen Editor Workspace, Screen Editor Render Path, StudioApplication wired with project-switch guards. Existing Screen geometry/artwork, Story Flow routes and WISCENE untouched.
+
+Added journaled SetInventoryScreenAssignment in EngineBridge/include/renegade/bridge/InventoryScreenAssignmentService.h. Validates project and Screen stable IDs, safe Content/UI path within project root, disabled Overlay usage, native inventory actions; detects grid or paged mode. Writes/deletes Content/Gameplay/Inventory.renegade-ui via ProjectDocumentTransaction and staged byte validation, not a direct file overwrite. Extended Tests/InventoryScreenAssignmentTests.cpp for create, update, invalid-input preservation, clear and repeated clear. G5F Release focused CTest: 27/27 PASS (4.09s), log BUILD/g5f-final-regressions.log. git diff --check exit0.
+
+Separate Studio V4 Release compiled and linked successfully EXIT=0, output BUILD/inventory-full/Studio/Release/RenegadeStudioG5InventoryCandidateV4.exe. Previously accepted V3 executable preserved; V4 started on DESIGN PID 28244 and responds. PrintWindow startup capture succeeded; later DX12 background capture black while user's foreground Discord had recent active input. DO NOT claim the new picker has been clicked or visually owner-approved; avoid stealing user's keyboard/mouse focus. V4 available for user to activate/test.
+
+User previously approved the standalone G5E graphical inventory Runtime. Production combat-damage-to-potion native regression passed; live manual in-game right-click potion after damaging event remains open. Multi-level Story Flow quick-save/resume outside direct-scene G5D scope. No stage/commit/push/merge into main. Dirty Wicked overlay remains untouched. Developer workflow in docs/INVENTORY_G5F_CREATOR_SCREEN_PICKER_2026-10-28.md.
+
+## 2026-10-28 G5G inventory overlay input regression fix
+
+Owner report: G5 Test Level One opens on I, but E, arrows and mouse cannot interact with backpack/chest. Isolated feature/inventory-core-g1-20261026; no changes to approved G5Play, main, or owner saves. No commit/stage/merge/push.
+
+Fix: RuntimeApplication owns single native inventory keyboard dispatch when overlay open (arrows/Tab/Shift+Tab focus, E/Enter/Space/gamepad Button2 for focused occupied slot) and authoritative responsive-hit-test mouse click dispatch on physical slot release, independent of icon/text overlaid artwork. RuntimeScreenPresenter still updates layout and pointer focus, but generic navigation is disabled for inventory only, and native Wicked mouse Button callback for inventory slot actions is suppressed to avoid double event after drag. InventoryUiInputPolicy no longer feeds E/Interact to world scripts and pickups while the inventory owns it. Existing Pause supported, world movement gated. Added InventoryPointerGesture::ConfirmedSlotClick and regression coverage for icon-click, outside release and drag avoidance. Modified associated source/test files only.
+
+Release Runtime built successfully at BUILD/inventory-full/Runtime/Release/RenegadeRuntime.exe; targeted 27/27 Release CTest PASS, 3.70 sec, log BUILD/g5g-input-final-ctest.log, build log BUILD/g5g-input-final-build.log.
+
+Live DX12 disposable project BUILD/G5SavePlay: started assistant-created test Runtime PID 17388 with isolated LOCALAPPDATA. E collected three potions then I opened graphical inventory backpack 3, chest 2 (g5g-inventory-opened.png). E with chest slot focus transferred one, backpack 4/chest 1 and MOVED ONE ITEM (g5g-after-e.png). Up arrow moved focus outline from chest to backpack (g5g-after-arrow.png). Mouse click on chest potion graphic transferred one, backpack 5/chest empty, MOVED ONE ITEM (g5g-after-mouse.png); 75 FPS. Direct-scene sandbox tests E/arrow/mouse confirmed.
+
+Important: G5SavePlay is a DIRECT-SCENE clone; original owner's G5Play project uses Story Flow. Owner's exact Story Flow launch still requires manual retest. Synthetic mouse drag during further testing unexpectedly produced a PAUSED overlay, later on a retry moved 3 potions instead of just one; unclear whether the scripted global OS input sequence or user interaction caused it. DO NOT claim drag and Shift+drag final acceptance. Native drag/gesture suites green, but owner must verify drag, Shift+drag, close/reopen, both panels in their exact G5 Level One launch. Further automated physical input was stopped when user became active on DESIGN.
+
+The prior V4 Studio candidate PID 28244 remains untouched; isolated Runtime PID 17388 was running at end of tests. Current change is source+Release Runtime only, no new packaged standalone build. No merges until owner approval.
+
+## 2026-10-28 G5G final packaging gate after owner accepted the input fix
+
+Owner stated "that works nowcontinue" in response to G5G E/arrow/mouse regression fix. Continued in isolated feature/inventory-core-g1-20261026; no commits, pushes or merges. Updated Tests/InventoryG5PackageProof.cpp to permit only explicit separate staging IDs g5g-input-proof-20261028-v1/v2 (old v3 retained), and assert that production build plan includes both Content/Gameplay/Inventory.renegade-ui and assigned InventoryG4B3B2Grid.renegade-screen, as well as the catalogue, icon and scene inventory.
+
+G5G V1 new isolated production Windows export: 18 dependency nodes, 37 governed files, identity and exact stage integrity green. Launched EXE from unrelated TEMP working directory with isolated LOCALAPPDATA. Story Flow Play -> Level One -> collected 3 potions -> I graphical inventory shows backpack 3/chest 2; pressing E on selected chest transferred exactly one (backpack 4/chest 1), 75 FPS. Right-click backpack health potion at full health: HEALTH FULL - POTION KEPT, unchanged quantity. I closed and reopened overlay, revealing stale previous status message. Fixed RuntimeApplication::RefreshInventoryOverlay to reset the transient authored Inventory Transfer Status text upon opening without mutating item data or authored Screen.
+
+Rebuilt Release Runtime and proof, G5G V2 production stage 37 files integrity PASS: BUILD/G5PackagePlay/Builds/Windows/.renegade-staging/Renegade G5 Packaged Inventory Proof Windows Build.g5g-input-proof-20261028-v2. Targeted Release CTest 27/27 green in 3.99 sec, log BUILD/g5g-v2-final-regressions.log. V2 standalone live DX12 launched from unrelated TEMP path (PID 34056) at 75 FPS. I-close/I-reopen restores the author's normal instructions: CLICK/DRAG: 1 SHIFT+DRAG: STACK E: TRANSFER I: CLOSE. Backpack/chest potion stacks remain unchanged. Proof screenshot BUILD/G5PackagePlay/g5g-v2-reopened.png. V1 right-click guard screenshot BUILD/G5PackagePlay/g5g-packaged-fullhealth-potion.png, V1 E transfer screenshot g5g-packaged-after-e.png. V1 older stage kept. See docs/INVENTORY_G5G_PACKAGED_ACCEPTANCE_2026-10-28.md for acceptance and exact remaining checklist.
+
+STILL REMAINING: owner visual approval of Studio V4 Globals > Project > Inventory Screen picker (automated writer tests pass, release Studio built); live gameplay potion use after taking real damage (native combat damage -> health potion integration green, right-click full-health non-consumption live checked); explicit owner confirmation of drag/Shift-drag if not covered by "that works"; 4 CI config runs after authorized commit/push; final branch merge owner approval. Separate multi-level Story Flow save/resume not included in this direct-scene G5 feature. Do not stage/commit/push/merge without permission. Existing WickedEngine dirty overlay stays untouched.
+
+## 2026-10-28 G5H — User requested Use or Drop for carried inventory items
+
+Owner identified that transferring items and single-purpose right-click health potions are insufficient for alpha. G5H is REQUIRED before inventory promotion. DESIGN connected; branch feature/inventory-core-g1-20261026; no commits/pushes/merges or edits to main. G5G owner-approved input untouched.
+
+Research: RuntimeApplication::TryUseInventoryStack only supports UseHealthPotion; right-click player stacks immediately invokes it, right-click chest does nothing. WorldPickupController::OpenForScene scans authored Pickup metadata only and has no Runtime registration path for dynamically dropped objects. G5D save serializes retired authored pickup IDs only; dynamic world drops will be lost without state format changes. InventoryGameplayGateway exposes scoped Remove/Add/Transfer but Remove alone is NOT a real drop. Item catalogue currently has inventory icon and equipmentAssetId, but no dedicated world pickup prefab.
+
+Design is documented at docs/INVENTORY_G5H_USE_DROP_DESIGN_2026-10-28.md. Preferred UX: preserve left-click/E transfer and drag/Shift-drag; right-click backpack item opens Use / Drop One / Drop Stack; chest shows Take One / Take Stack (withdraw to backpack before use/world drop). Unsupported item effect disabled; KeyItems cannot drop by default. Physical world drop must spawn a collectible object with item definition and exact quantity, then commit inventory withdrawal; failures roll back the world object and never consume items. Must survive save/restart/load and be included in Windows Build Game dependency closure, with compatible v1->v2 world state parsing. Do not enable Drop buttons until world spawn and save is working.
+
+Completed G5H-A groundwork only: EngineBridge/include/renegade/bridge/InventoryItemContextActions.h provides pure, non-mutating DescribeInventoryItemActions with player/chest context, capability, quest protection and worldDropReady gating. Tests/InventoryItemContextActionsTests.cpp registered as RenegadeInventoryItemContextActionsTests with success/denial/stale stack cases; dedicated 1/1 PASS. Final focused Release CTest 28/28 PASS (4.18 s), log BUILD/g5h-actions-final-tests.log. git diff --check exit0. This is not yet a gameplay context menu or actual world drop.
+
+Remaining G5H-B: compact context menu and route authorised Use/Take/Drop operations. G5H-C: collision-safe world spawn, registration, pickup, atomic rollback and developer world prefab choice. G5H-D: persist dynamic drops with governed quick-save and standalone export. G5H-E: live direct/StoryFlow gameplay tests and owner acceptance. Preserve G5G and G5E accepted behavior. No main merge without owner approval.
+
+## 2026-10-28 G5H — Implemented Use/Drop/Take, final package, pending owner visual acceptance
+
+User instructed to add and test the player Use and Drop items and potentially sign off inventory today, before full UI Designer audit. All implementation on feature/inventory-core-g1-20261026; no changes to main, no commit/push/merge.
+
+Code completed:
+- EngineBridge/include/renegade/bridge/InventoryItemContextActions.h: scoped, nonmutating eligibility for backpack Use/Drop One/Drop Stack, chest Take One/Take Stack, disabled unsupported item effects and KeyItem drops.
+- EngineBridge WorldPickupController.h/.cpp: dynamic dropped mesh registry with stable id, item id, exact count and world pose. Create a real neutral green 3D sphere ahead of Player after safe-ground ray, then perform scoped Remove only after registration; denied Remove rolls back registry and visual. Standard E pickup uses the existing controller and only removes the dynamic object after successful inventory Add, retaining it when backpack is full.
+- World-pickup state RENEGADE_WORLD_PICKUPS 2 adds dynamic drops, backwards-compatible v1 read; strict identity/quantity/position/definition validation. RuntimeGameSaveSlot outer checksummed single-file format unchanged; quick-load preflights world and inventory and restores drop visuals before inventory snapshot. Direct-scene F5/F9 only; StoryFlow multi-level save remains separate.
+- RuntimeApplication context menu: 5 native transient Screen Buttons, no authored Screen mutation; right-click an occupied backpack or chest slot opens permitted options, disabled unsupported use, no direct right-click consumption, E/Enter/Space activates focused menu option, mouse click via native button sink, click outside dismiss, I dismisses, Esc dismisses menu before normal pause. Use=existing potion handler; Take=existing gateway.Transfer; Drop calls safe ground ray + WorldPickupController.DropFromPlayer. Existing accepted LMB/E transfers and drag remain unchanged. RuntimeScreen::InventoryContextAt uses responsive LogicalRect (no fixed resolution assumptions). Chest options at top menu rows.
+- Tests/RuntimeScreenTests.cpp checks transient buttons hidden/focus/dispatch/close, WorldPickupControllerTests now boots minimal Wicked graphic context and covers drop, denied withdrawal, once-only collect, v1-v2 save, malformed data, restore and full backpack collecting refusal, RuntimeGameSaveSlotTests includes a v2 saved dynamic drop record.
+
+BUILD: latest Runtime Release compiled linked successfully; final focused Release CTest 28/28 PASS (4.12s) in BUILD/g5h-post-fullbackpack-regressions.log. git diff --check exit 0. Actual production Build Windows Game stage V3 PASS 37 governed files, 18 dependencies, full manifest/integrity/identity checks. Standalone path BUILD/G5PackagePlay/Builds/Windows/.renegade-staging/Renegade G5 Packaged Inventory Proof Windows Build.g5h-use-drop-20261028-v3/G5InventoryProof.exe. Earlier v1/v2 stages untouched.
+
+FRESH V3 DX12 standalone launched from unrelated TEMP with isolated LOCALAPPDATA at BUILD/G5PackagePlay/G5Hv3FreshAppData, PID 28304 when last checked. Non-invasive PrintWindow screenshot BUILD/G5PackagePlay/g5h-v3-fresh-start.png verified 75FPS and real G5 world/pickup prompt. Targeted background PostMessage input did not trigger Wicked, so no false live acceptance: user was actively on Discord/Edge; do NOT disrupt user's keyboard/foreground. Owner's in-game right-click menu/Drop One/Drop Stack world visual/collect/save/reload still needs live testing and approval. docs/INVENTORY_G5H_USE_DROP_DESIGN_2026-10-28.md updated with test procedure and limitations.
+
+Limits: default neutral stationary sphere is a true visible collectible world entity but has no physics rigidbody/impulse or creator-selected world prefab assignment yet; only RestoreHealth Use effect is supported, no arbitrary item equipment/scripted actions. Direct-scene quicksave persists drops; StoryFlow multi-level resume unavailable. 4-config CI and owner approval to merge not done. Do not call signed off. User wants to proceed to full UI Designer audit once G5H is accepted.
+
+## 2026-10-28 G5I: health-potion QA fixture FIXED, LIVE PROVEN
+
+Owner correctly identified that testing a health potion at 100/100 HP cannot demonstrate healing. Corrected without modifying main or normal gameplay. Branch feature/inventory-core-g1-20261026. RuntimeApplication::SyncPlayerForScene applies authentic 50 native combat damage on test player spawn only if --renegade-inventory-health-proof is explicitly supplied. Player starts 50/100 and H can apply another controlled 25 damage; ordinary games retain 100/100. Tests/InventoryG5HealthHudAuthor.cpp authored editable Content/UI/G5HealthTestHud.renegade-screen in disposable BUILD/G5PackagePlay using actual PlayerHealthText/PlayerHealthBar presets and possessed Player binding to health.current / health.maximum, assigned as disposable project's default HUD. Relayout moved HUD top right away from FPS overlays. Windows package test asserts health HUD dependency.
+
+Latest QA package BUILD/G5PackagePlay/Builds/Windows/.renegade-staging/Renegade G5 Packaged Inventory Proof Windows Build.g5h-health-hud-20261028-v2/G5InventoryProof.exe; launched with dx12 --renegade-inventory-health-proof, PID 14828 when checked; isolated app data BUILD/G5PackagePlay/G5HealthStart50LocalAppData. Production package 19 dependencies, 38 governed files, integrity PASS; Release targeted tests 28/28 PASS, git diff --check EXIT 0. Screenshot BUILD/G5PackagePlay/g5i-live-start-50hp.png live displays HEALTH:50 and half green bar at 75 FPS. Collected 3 Health Potions using E, opened I and right-clicked backpack item, selected USE. Screenshot BUILD/G5PackagePlay/g5i-health-after-potion.png proves actual health 50->100, bar full, backpack quantity x3->x2, chest x2 unchanged, status HEALTH RESTORED - USED ONE POTION. Real DX12 integration test, not theoretical.
+
+Minor cosmetic issue visible in hover: two RuntimeApplication.cpp inventory details strings still say RIGHT-CLICK TO USE, whereas new menu is right-click options. Can fix in UI audit or pre-merge. No main merge/commit/push; owner will decide whether to sign off inventory then start full UI Designer audit.
+
+## 2026-10-28 INVENTORY SIGN-OFF PREP: local 4-target builds GREEN, pending PR approval
+
+User agreed to finish inventory acceptance and prepare for UI Designer audit. G5 gameplay was owner-accepted (E/arrow/mouse interactions, drag/Shift-drag, Drop works); production live DX12 potion test 50->100 HP and backpack 3->2 confirmed with HUD screen capture. Final hover text corrected to RIGHT-CLICK FOR OPTIONS in both graphical inventory grid variants. Release Studio output name restored from temporary review V4 alias to canonical RenegadeStudio.exe, preserving V4 as a separate existing file; older canonical executable was copied to RenegadeStudioBeforeG5Final20261028.exe before local rebuild (BUILD only).
+
+LOCAL BUILDS: Release Studio + Runtime EXIT=0, log BUILD/inventory-final-canonical-release-build.log. Debug Studio + Runtime EXIT=0, log BUILD/inventory-final-debug-verify.log (initial cold compile in BUILD/inventory-final-debug-build.log); DEBUG/RELEASE Studio startup-smoke both EXIT=0. Focused Release CTest 28/28 PASS, log BUILD/inventory-signoff-final-release-ctest.log. git diff --check 0. Production Build Game fresh sign-off stage 19 dependencies, 38 governed files, identity/integrity validation PASS; log BUILD/inventory-signoff-stage-final.log. Path BUILD/G5PackagePlay/Builds/Windows/.renegade-staging/Renegade G5 Packaged Inventory Proof Windows Build.g5h-inventory-signoff-20261028-v3. Staged G5InventoryProof.exe has a different SHA and length from raw Runtime because production ApplyWindowsGameExecutableIdentity rewrites icon/version resources; this is expected, stage integrity validation succeeded.
+
+GIT INTEGRATION: Current inventory feature HEAD b2da8466 with G5 edits still uncommitted and unstaged. Fetched current origin/main 9b8ff46b (three newer commits vs local main); dry-run merge-tree of committed G1-G4 reported documentation conflicts in HANDOFF.md, docs/ARCHITECTURE.md, docs/FEATURE_MATRIX.csv. StudioApplication.cpp has overlaps in file paths but separate diff hunks from the new environment-probe changes. Keep both. WickedEngine at correct pinned gitlink 3a800b7 but its working files have unrelated night-sky/aurora changes: NEVER stage or reset them. Root log.txt untracked: exclude. Docs/INVENTORY_G5_MERGE_READINESS_2026-10-28.md records the exact safe integration plan. No git stage/commit/push/merge performed. Hosted GitHub Studio/Runtime Debug+Release checks NOT run because branch not pushed.
+
+Explicitly deferred: creator-selected 3D world-drop prefab and rigidbody impulse (currently accepted collectible green sphere), non-potion generic scripted/equipment Use, Story Flow multi-level quicksave (direct-scene F5/F9 supported). Owner Studio Inventory Screen picker visual click-through not directly accepted, writer/inventory package tests green; include in first full UI Designer audit. NEXT: seek owner approval before committing & opening PR, reconcile main, run 4 hosted CI checks, merge only after explicit approval. UI Designer audit in a fresh scope after inventory integration.
+
+## 2026-10-28 15:07+ — Upstream river/waterfall PR #186 merged: inventory integration baseline changed
+
+Owner reports river merged to main. Verified through remote fetch WITHOUT checkout/rebase/merge/stage/commit: `origin/main=150eca4b761d3f62f122df3ab5e8536ec084f926`, merge PR #186; previous `origin/main=9b8ff46`. Remote main is now **9 commits ahead** of inventory common ancestor `11bbb90e`, inventory feature branch is **36 commits ahead** of common ancestor, HEAD still `b2da8466` plus UNCOMMITTED G5 files. All inventory source and Wicked working tree left unchanged.
+
+CRITICAL: main's WickedEngine submodule **gitlink changed** from `3a800b7134aafe58461093c8abb2e274d4e64033` to `ceb816b844b4ab2fa56a159ac60a4f65c931bdfc` (river-enabled fork branch `renegade-rocky-riverbed-v1`). This inventory worktree's Wicked submodule remains at the OLD gitlink and contains independent dirty aurora/Milky Way/shader edits; DO NOT CHECKOUT, RESET, OR OVERWRITE IT. Old inventory Debug/Release 4-target builds and 28/28 tests and 38-file packaged game were run **against OLD pinned Wicked**, NOT against combined river+inventory integration. Must validate both together on clean new pinned fork after isolated integration.
+
+`git merge-tree --write-tree origin/main HEAD` for *committed* inventory G1-G4 produced **5 confirmed conflicts**: EngineBridge/CMakeLists.txt; Runtime/src/RuntimeApplication.cpp; HANDOFF.md; docs/ARCHITECTURE.md; docs/FEATURE_MATRIX.csv. This is NOT a dry run of G5 UNCOMMITTED changes; further conflicts/behaviour risks exist. Path-overlap analysis found 14 overlapping files across old/new feature work: EngineBridge/CMakeLists.txt, EngineBridge/src/TestLevelSnapshotService.cpp, HANDOFF.md, Runtime/CMakeLists.txt, Runtime/src/RuntimeApplication.cpp, Runtime/src/RuntimeApplication.h, Runtime/src/main_Windows.cpp, Studio/CMakeLists.txt, Studio/src/StudioApplication.cpp, Studio/src/StudioApplication.h, Tests/CMakeLists.txt, WickedEngine, docs/ARCHITECTURE.md, docs/FEATURE_MATRIX.csv. Studio sources auto-merged on G1-G4 but G5 changes overlap and require manual review. Root CMake CI configuration and river shaders/assets changed heavily. Confirm both existing inv and new river CI test registrations in final combined CMake; preserve river shader runtime staging and new fork pin.
+
+MERGE PLAN after EXPLICIT OWNER APPROVAL only: (1) preserve current inventory tree and separate dirty night-sky Wicked tree; (2) isolate inventory changes on branch without accidentally including unrelated Wicked or log.txt; (3) create fresh **separate** integration worktree from newest origin/main at new fork gitlink, apply reviewed G1-G5 inventory changes, resolve conflicts by retaining BOTH river and inventory runtime/studio/CMake logic, plus updated docs, never choose whole-file ours/theirs; (4) compile Studio and Runtime Debug+Release and run inventory, river/waterfall and packaging regressions, live DX12 proof; (5) push PR and verify all 4 hosted CI gates; (6) only merge with owner's specific approval. Current inventory is feature-complete for old fork but **not yet river-integrated or merge-ready**.
+
+Existing readiness doc docs/INVENTORY_G5_MERGE_READINESS_2026-10-28.md must reflect this new river merge; prior statement 'three newer main commits/document-only conflicts' is superseded. No local modifications to branch beyond this handoff note.
+
+## 2026-10-28 — CMake workarounds recovered from earlier development chats, verified on DESIGN
+
+User reminded us two working local build routes already exist; DO NOT waste time reinstalling VS/CMake or assuming only one route. On 2026-10-21, the river work successfully bypassed problematic CMake regeneration by directly invoking **MSBuild 18.6.3** on already-generated `BUILD\renegade` Visual Studio project files, with Release Studio and river/terrain tests passing. On 2026-10-22, the team discovered the VS2022 Community-bundled CMake executable is **0 bytes**, then installed official Kitware **CMake 4.4.4** via WinGet and explicitly ran it to configure the Visual Studio 2022 generator; Release builds passed. Both tools remain present and verified on DESIGN 2026-10-28:
+- CMake: `C:\Users\paulw\AppData\Local\Microsoft\WinGet\Packages\Kitware.CMake_Microsoft.Winget.Source_8wekyb3d8bbwe\cmake-4.4.4-windows-x86_64\bin\cmake.exe` (13,465,160 bytes; reports version 4.4.4).
+- MSBuild: `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\MSBuild.exe` (reports 18.6.3.22110).
+- Broken bundled CMake: `C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe` (still **0 bytes**).
+- Existing inventory build cache already points `CMAKE_COMMAND` to the correct Kitware 4.4.4 and `CMAKE_GENERATOR` to `Visual Studio 17 2022`.
+
+**Recommended when integrating inventory into freshly merged river main:** configure a **new isolated build directory** against new main and Wicked pin `ceb816b`, invoking Kitware 4.4.4 by its full path. Once generated, invoke MSBuild 18 directly if CMake regeneration begins failing, instead of driving the zero-byte bundled executable. Do not reuse old inventory/river `BUILD\renegade` build trees against a different source root or changed fork pin. Keep `CMAKE_SUPPRESS_REGENERATION=ON` if the regenerated ZERO_CHECK/VerifyGlobs route is defective, and avoid mixed versions inside one CMakeCache. No code/tree/submodule/branch merges were performed while checking these.
+
+## 2026-10-28 — AUTHORITATIVE CODEX HANDOVER FOR RIVER + INVENTORY
+
+Before any inventory integration, read `docs/CODEX_INVENTORY_RIVER_INTEGRATION_HANDOVER_2026-10-28.md` in full. It supersedes older main SHA/readiness guidance and documents the verified PR #186 river fork pin, five committed conflicts, 14 overlapping paths, uncommitted G5 inventory source, dirty unrelated night-sky Wicked files, two proven CMake/MSBuild workarounds, separate worktree plan, all acceptance tests and the final owner approval boundary. No staging, commit, push, merge or alteration of current worktrees has been authorised by writing this handover.
+
+---
+## 2026-10-28: Inventory G1-G5 + river PR #186 - LOCAL INTEGRATION VALIDATED
+
+Isolated worktree: `C:\Users\paulw\source\repos\renegade-inventory-river-integration-20261028`, branch `integration/inventory-river-20261028`, base main `150eca4b`, pinned Wicked fork `ceb816b8`. Source still intentionally uncommitted and unstaged: **no merge/push/PR permission given**. Do not reset, stash, clean or overwrite the original inventory or unrelated dirty Wicked night-sky/aurora worktrees.
+
+Owner approved repaired recessed G11 river bank and G13 waterfall appearance in live combined DX12 Test Game, after correcting 81-chunk fixture surface/crest landing alignment and G13 dry-bank outer-stream collision fallback. Inventory pickup/drop/heal/full-health refusal verified in same Test Game; native waterfall Runtime proof authored=1, active=1, 19 emitters.
+
+Current-source four builds PASS: Release Studio, Release Runtime, Debug Runtime, Debug Studio (all MSBuild 18 after waterfall changes). Full Release CTest **280/280 PASS**, exit 0, using real E: build cwd with short `TEMP=TMP=E:\RenegadeTestTmp`; previous 12 long-path packaging fixtures and stale projectile test resolved without weakening tests. Debug waterfall targeted geometry/mixed-bank tests also PASS; corrected combined fixture authoring proof compiles Release.
+
+See `docs/INVENTORY_RIVER_INTEGRATION_VALIDATION_2026-10-28.md` and `BUILD/integration-evidence` for exact logs, scene backups, test commands and DX12 captures. Runtime screen previously left open on DESIGN. Next action requires owner direction: no GitHub CI can validate these uncommitted changes until a commit/PR is explicitly approved; **do not merge**. The full UI Designer audit is a separate follow-up.

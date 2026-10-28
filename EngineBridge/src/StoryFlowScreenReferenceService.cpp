@@ -1,4 +1,5 @@
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
+#include "renegade/bridge/InventoryPagedScreenAdapter.h"
 
 #include "renegade/bridge/ScreenService.h"
 
@@ -213,11 +214,14 @@ namespace renegade::bridge
 
         for (const auto& widget : screen.widgets)
         {
+            if(widget.kind==ScreenWidgetKind::Button&&IsInventoryPagedLocalAction(widget.actionId))
+                ++audit.localInventoryActionCount;
             // A Button explicitly marked Local Only executes its bounded UI
             // interaction list but never emits the symbolic Flow action.
             // Only Flow-dispatching Buttons require a StoryFlow destination.
             if (widget.kind == ScreenWidgetKind::Button && !widget.localOnly &&
-                !IsRuntimeUiAccessibilityAction(widget.actionId))
+                !IsRuntimeUiAccessibilityAction(widget.actionId) &&
+                !IsInventoryPagedLocalAction(widget.actionId))
                 AddUnique(audit.buttonActionIds, widget.actionId);
         }
 
@@ -252,23 +256,30 @@ namespace renegade::bridge
             if (!audit.invalidRouteOutcomes.empty())
             {
                 message << "Story Flow routes use Screen outcomes that are no longer authored: "
-                        << Join(audit.invalidRouteOutcomes) << '.';
+                        << audit.invalidRouteOutcomes.size() << " (first: " << audit.invalidRouteOutcomes.front() << ")" << '.';
                 hasMessage = true;
             }
             if (!audit.unroutedButtonActionIds.empty())
             {
                 if (hasMessage) message << ' ';
                 message << "Button actions have no Story Flow destination: "
-                        << Join(audit.unroutedButtonActionIds) << '.';
+                        << audit.unroutedButtonActionIds.size() << " (first: " << audit.unroutedButtonActionIds.front() << ")" << '.';
             }
             audit.message = message.str();
+            audit.details=audit.message;
+            if(!audit.unroutedButtonActionIds.empty())
+                audit.details+=" All missing destinations: "+Join(audit.unroutedButtonActionIds)+".";
+            if(!audit.invalidRouteOutcomes.empty())
+                audit.details+=" All invalid route outcomes: "+Join(audit.invalidRouteOutcomes)+".";
             return audit;
         }
 
         audit.succeeded = true;
         audit.resolutionCode = StoryFlowScreenReferenceCode::Success;
-        audit.message =
+        audit.message = audit.localInventoryActionCount?
+            std::to_string(audit.localInventoryActionCount)+" inventory actions stay local; navigation is synchronized.":
             "Screen Button actions and Story Flow outcomes are synchronized.";
+        audit.details=audit.message;
         return audit;
     }
 }

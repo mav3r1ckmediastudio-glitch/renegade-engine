@@ -31,6 +31,8 @@
 #include "renegade/bridge/ImpactSurface.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/SceneComponentService.h"
+#include "renegade/bridge/InventoryItemCatalogueService.h"
+#include "renegade/bridge/InventoryPickupAuthoringService.h"
 #include "renegade/bridge/RenderSettingsService.h"
 #include "renegade/bridge/RenderLutService.h"
 #include "renegade/bridge/LightmapBakeService.h"
@@ -623,6 +625,12 @@ namespace renegade::studio
         bool CommitSelectedDecal(const bridge::DecalState& state);
         void ChooseSelectedDecalTexture();
         void CreateMaterialInspector();
+        void CreatePickupEditor();
+        void OpenPickupEditor();
+        void RefreshPickupEditor();
+        void SavePickupItem();
+        void ApplyPickupToScene();
+        void ChoosePickupItemIcon();
         void CreateS1BInspectorSections();
         void ResetS1BInspectorDisclosure();
         void LayoutS1BInspectorSections();
@@ -877,6 +885,21 @@ namespace renegade::studio
         std::array<SceneInspectorCheckBox, 32> sceneLayerBits_;
         wi::gui::Label sceneMetadataLabel_;
         SceneInspectorComboBox sceneMetadataPreset_;
+        SceneInspectorButton scenePickupButton_;
+        wi::gui::Window pickupPanel_;
+        wi::gui::Label pickupTitle_, pickupWorldLabel_, pickupStatus_, pickupIconStatus_;
+        SceneInspectorCheckBox pickupEnabled_, pickupRemove_;
+        SceneInspectorComboBox pickupItemSelect_, pickupMethod_, pickupKind_, pickupEffect_;
+        SceneInspectorTextInputField pickupItemName_, pickupQty_, pickupHeal_;
+        SceneInspectorTextInputField pickupStack_, pickupWeight_, pickupDistance_;
+        SceneInspectorButton pickupNewItem_, pickupSaveItem_, pickupChooseIcon_;
+        SceneInspectorButton pickupApply_, pickupClose_;
+        bridge::InventoryItemCatalogue pickupCatalogue_;
+        bridge::InventoryAuthoringItem pickupDraft_;
+        bridge::InventoryPickupConfig pickupConfig_;
+        bridge::StableId pickupProjectId_;
+        wi::ecs::Entity pickupTarget_ = wi::ecs::INVALID_ENTITY;
+        bool pickupRefreshing_ = false;
         wi::gui::Label sceneObjectLabel_;
         SceneInspectorCheckBox sceneObjectRenderable_;
         SceneInspectorCheckBox sceneObjectCastShadow_;

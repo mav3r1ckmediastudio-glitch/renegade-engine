@@ -47,6 +47,8 @@ namespace renegade::bridge
             StoryFlowScreenReferenceCode::InvalidRequest;
         std::string message;
 
+        std::string details;
+        std::size_t localInventoryActionCount=0;
         StableId screenNodeId;
         StableId screenDocumentId;
         std::vector<std::string> actionIds;
