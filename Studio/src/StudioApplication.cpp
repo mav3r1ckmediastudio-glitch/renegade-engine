@@ -3267,35 +3267,6 @@ namespace renegade::studio
         modelImportSummary_.SetSize(XMFLOAT2(480.0f, 85.0f));
         modelImportSummary_.SetFitTextEnabled(true);
         modelImportPanel_.AddWidget(&modelImportSummary_);
-        modelImportMaterial_.Create("Model material");
-        modelImportMaterial_.SetText("Material: ");
-        modelImportMaterial_.SetPos({650,45}); modelImportMaterial_.SetSize({355,30});
-        modelImportMaterial_.OnSelect([this](const wi::gui::EventArgs&) { RefreshModelImportTextureInfo(); });
-        modelImportPanel_.AddWidget(&modelImportMaterial_);
-        modelImportMapSlot_.Create("Material map slot");
-        modelImportMapSlot_.SetText("Map: ");
-        modelImportMapSlot_.SetPos({650,95}); modelImportMapSlot_.SetSize({355,30});
-        for (const auto* name : {"Base colour / Albedo", "Normal", "Surface (packed AO / Roughness / Metalness)",
-            "Emissive", "Displacement / Height", "Ambient occlusion", "Transmission",
-            "Sheen colour", "Sheen roughness", "Clearcoat", "Clearcoat roughness",
-            "Clearcoat normal", "Specular", "Anisotropy", "Transparency"})
-            modelImportMapSlot_.AddItem(name);
-        modelImportMapSlot_.OnSelect([this](const wi::gui::EventArgs&) { RefreshModelImportTextureInfo(); });
-        modelImportPanel_.AddWidget(&modelImportMapSlot_);
-        modelImportAssignMap_.Create("Assign material texture map");
-        modelImportAssignMap_.SetText("CHOOSE / REPLACE MAP");
-        modelImportAssignMap_.SetPos({575,145}); modelImportAssignMap_.SetSize({430,32});
-        modelImportAssignMap_.OnClick([this](const wi::gui::EventArgs&) { AssignModelImportTexture(); });
-        modelImportPanel_.AddWidget(&modelImportAssignMap_);
-        modelImportMapInfo_.Create("Selected material map");
-        modelImportMapInfo_.SetPos({575,195}); modelImportMapInfo_.SetSize({430,110});
-        modelImportMapInfo_.SetFitTextEnabled(true);
-        modelImportPanel_.AddWidget(&modelImportMapInfo_);
-        modelImportWarnings_.Create("Source texture warnings");
-        modelImportWarnings_.SetPos({575,330}); modelImportWarnings_.SetSize({430,300});
-        modelImportWarnings_.SetFitTextEnabled(true);
-        modelImportPanel_.AddWidget(&modelImportWarnings_);
-
         modelImportClip_.Create("Animation clip");
         modelImportClip_.SetPos(XMFLOAT2(110.0f, 470.0f));
         modelImportClip_.SetSize(XMFLOAT2(390.0f, 30.0f));
@@ -4517,7 +4488,7 @@ namespace renegade::studio
         assemblyPanel_.SetPos(XMFLOAT2(sideBySide?20.0f:std::max(0.0f,(width-1080)*0.5f),std::max(0.0f,(height-810)*0.5f)));
         assemblyHandPanel_.SetPos(XMFLOAT2(sideBySide?1120.0f:std::max(0.0f,(width-730)*0.5f),std::max(0.0f,(height-780)*0.5f)));
         modelImportPanel_.SetPos(XMFLOAT2(
-            std::max(0.0f, (width - modelImportPanel_.GetSize().x) * 0.5f),
+            std::max(0.0f, (width - 560.0f) * 0.5f),
             std::max(0.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));
         handGripPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
@@ -6539,7 +6510,6 @@ namespace renegade::studio
 
     void StudioRenderPath::OpenStaticModelImporter(bool fromProjectile)
     {
-        ++modelImportGeneration_;
         if (session_ == nullptr || !session_->Projects().HasProject())
             return;
         assemblyPanel_.SetVisible(false); assemblyImage_.SetImage({}); assemblyPreview_.reset();
@@ -6551,8 +6521,8 @@ namespace renegade::studio
             session_->Projects().CurrentProject().projectId;
         wi::helper::FileDialogParams params;
         params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "Select GLB, FBX or OBJ model (FBX/GLB for rigged characters)";
-        params.extensions = {"glb", "fbx", "obj"};
+        params.description = "Select GLB or FBX model or rigged character";
+        params.extensions = {"glb", "fbx"};
         wi::helper::FileDialog(params,
             [this, projectId, fromProjectile](const std::string& path)
             {
@@ -6590,7 +6560,7 @@ namespace renegade::studio
                             return;
                         }
                         modelImportPreview_ = std::move(preview);
-                        modelImportPanel_.SetSize(XMFLOAT2(1040.0f, character ? 990.0f : 750.0f));
+                        modelImportPanel_.SetSize(XMFLOAT2(560.0f, character ? 990.0f : 750.0f));
                         modelImportSummary_.SetSize(XMFLOAT2(480.0f, character ? 55.0f : 85.0f));
                         modelImportName_.SetPos(XMFLOAT2(110.0f, character ? 740.0f : 500.0f));
                         const float destinationY = character ? 775.0f : 535.0f;
@@ -6639,24 +6609,13 @@ namespace renegade::studio
                         const auto& summary = candidate->Summary();
                         modelImportSummary_.SetText(
                             "SOURCE // " + fs::u8path(path).filename().generic_u8string() +
-                            "\n" + std::string(character ? "CHARACTER " : "STATIC ") + std::string(bridge::ImportService::ModelSourceFormatName(candidate->SourceFormat())) + " // " + std::to_string(summary.meshes) +
+                            "\n" + std::string(character ? "CHARACTER " : "STATIC ") + std::string(candidate->SourceFormat() == bridge::ModelSourceFormat::Fbx ? "FBX" : "GLB") + " // " + std::to_string(summary.meshes) +
                             " meshes / " + std::to_string(summary.materials) +
                             " materials / " + std::to_string(summary.objects) + " objects" +
                             (character ? " / " + std::to_string(candidate->Evidence().armatureBones) + " bones / " +
                                 std::to_string(summary.animations) + " clips" : "") +
                             (character ? "\nSelect a clip to assign its gameplay action." : "\nPreview controls do not change the imported asset."));
-                        modelImportMaterial_.ClearItems();
-                        for (size_t i = 0; i < candidate->PeekScene()->materials.GetCount(); ++i)
-                        {
-                            const auto entity = candidate->PeekScene()->materials.GetEntity(i);
-                            const auto* materialName = candidate->PeekScene()->names.GetComponent(entity);
-                            modelImportMaterial_.AddItem(std::to_string(i + 1) + " // " +
-                                (materialName ? materialName->name : "Material"));
-                        }
-                        modelImportMaterial_.SetSelected(0);
-                        modelImportMapSlot_.SetSelected(0);
                         modelImportCandidate_ = std::move(candidate);
-                        RefreshModelImportTextureInfo();
                         modelImportFromProjectile_ = fromProjectile;
                         if (fromProjectile) {
                             modelImportFolder_.SetValue("Content/Projectiles/Models");
@@ -6672,66 +6631,6 @@ namespace renegade::studio
                         studioChrome_.SetStatusText("MODEL IMPORT // REVIEW AND IMPORT ASSET");
                     });
             });
-    }
-
-    void StudioRenderPath::RefreshModelImportTextureInfo()
-    {
-        if (!modelImportCandidate_ || !modelImportCandidate_->IsReady()) return;
-        const auto* scene = modelImportCandidate_->PeekScene();
-        const int material = modelImportMaterial_.GetSelected(), slot = modelImportMapSlot_.GetSelected();
-        const bool valid = material >= 0 && size_t(material) < scene->materials.GetCount() &&
-            slot >= 0 && slot < wi::scene::MaterialComponent::TEXTURESLOT_COUNT;
-        modelImportAssignMap_.SetEnabled(valid);
-        if (valid)
-        {
-            const auto& texture = scene->materials[material].textures[slot];
-            modelImportMapInfo_.SetText(texture.name.empty()
-                ? "No map assigned. The model can still be imported.\nChoose a map to preview it on this material."
-                : "Assigned: " + fs::u8path(texture.name).filename().generic_u8string() +
-                    "\nChanges appear in the preview and are saved with the asset.");
-        }
-        std::string warnings = "Missing maps do not block model import.\nSelect a material and map above to assign replacements.";
-        if (!modelImportCandidate_->Warnings().empty())
-        {
-            warnings = "SOURCE WARNINGS // " + std::to_string(modelImportCandidate_->Warnings().size()) +
-                "\nGeometry loaded; unavailable maps use material defaults.\n";
-            for (size_t i = 0; i < modelImportCandidate_->Warnings().size() && i < 5; ++i)
-                warnings += "\n" + modelImportCandidate_->Warnings()[i];
-            if (modelImportCandidate_->Warnings().size() > 5)
-                warnings += "\nAdditional source maps are unavailable; inspect each material slot.";
-        }
-        modelImportWarnings_.SetText(warnings);
-    }
-
-    void StudioRenderPath::AssignModelImportTexture()
-    {
-        if (!modelImportCandidate_ || !modelImportPanel_.IsVisible()) return;
-        const auto projectId = modelImportProjectId_;
-        const auto generation = modelImportGeneration_;
-        const auto source = modelImportCandidate_->SourcePath();
-        const int material = modelImportMaterial_.GetSelected(), slot = modelImportMapSlot_.GetSelected();
-        if (material < 0 || slot < 0) return;
-        wi::helper::FileDialogParams params;
-        params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "Select texture map";
-        params.extensions = {"png", "jpg", "jpeg", "tga", "dds", "bmp", "webp"};
-        wi::helper::FileDialog(params, [this, projectId, generation, source, material, slot](const std::string& path) {
-            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                [this, projectId, generation, source, material, slot, path](std::uint64_t) {
-                    if (path.empty() || !modelImportCandidate_ || !modelImportPanel_.IsVisible() ||
-                        modelImportGeneration_ != generation || modelImportProjectId_ != projectId || modelImportCandidate_->SourcePath() != source ||
-                        session_ == nullptr || !session_->Projects().HasProject() ||
-                        session_->Projects().CurrentProject().projectId != projectId) return;
-                    std::string error;
-                    if (!bridge::ModelImportCandidateService().AssignTexture(*modelImportCandidate_,
-                        {std::uint32_t(material), std::uint32_t(slot), path}, error))
-                    { ShowStudioMessageBox(error, "Assign Texture Map"); return; }
-                    modelImportPreview_->RefreshMaterials(*modelImportCandidate_->PeekScene());
-                    modelImportCommit_.SetEnabled(false);
-                    RefreshModelImportTextureInfo();
-                    studioChrome_.SetStatusText("MODEL IMPORT // MAP ASSIGNED; REVIEW PREVIEW");
-                });
-        });
     }
 
     void StudioRenderPath::AppendModelImportAnimations()
