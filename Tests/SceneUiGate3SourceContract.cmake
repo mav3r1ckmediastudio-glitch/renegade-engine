@@ -141,9 +141,13 @@ file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/S1BInspectorSectionMigration.cpp" i
 require_text(inspector_layout_source
     "LayoutEnvironmentSections();"
     "Environment disclosure remains owned by Inspector layout")
-require_text(studio_source
-    "positionEnvironmentWidget(terrainLabel_, 44.0f, 20.0f);"
-    "Terrain content remains owned by Inspector layout")
+file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/TerrainInspectorSections.cpp" terrain_inspector_source)
+require_text(inspector_layout_source
+    "LayoutTerrainSections();"
+    "Terrain layout remains invoked by Inspector section scheduler")
+require_text(terrain_inspector_source
+    "terrainLabel_.SetVisible(false);"
+    "Terrain content remains owned by the native Inspector layout")
 
 # Scene-owned chrome has a named readability floor. Asset Browser card/detail
 # typography is intentionally outside Gate 3 and remains for Gate 4.

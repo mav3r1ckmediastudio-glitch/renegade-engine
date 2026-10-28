@@ -32,7 +32,10 @@ int main()
         auto& mesh=scene.meshes.Create(river);mesh.vertex_positions={{0,2,0},{4,2,0},{0,2,4}};mesh.indices={0,1,2};
         scene.objects.Create(river).meshID=river;
         auto terrain=scene.Entity_CreateTransform("Linked terrain");scene.terrains.Create(terrain);
-        auto setDepth=[&](const char* depth){scene.metadatas.Create(terrain).string_values.set(RiverTerrainLayersMetadataKey,
+        // Create metadata exactly once: ComponentManager::Create asserts if
+        // called again for the same entity in Debug builds.
+        scene.metadatas.Create(terrain);
+        auto setDepth=[&](const char* depth){scene.metadatas.GetComponent(terrain)->string_values.set(RiverTerrainLayersMetadataKey,
             std::string("{\"chunks\":[],\"layers\":[{\"bank\":2,\"depth\":")+depth+",\"river\":\""+id+"\"}],\"version\":1}");};
         Require(CaptureRiverWaterPrisms(scene).empty(),"unlinked water has no invented depth");
         setDepth("0.499");Require(CaptureRiverWaterPrisms(scene).empty(),"shallow stream cutoff");

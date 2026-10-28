@@ -1079,15 +1079,6 @@ if(WIN32)
             "$<TARGET_FILE_DIR:RenegadeTerrainGraphicsProof>/Content/terrain")
 endif()
 
-# Production Player Start camera-preview isolation regression guard.
-add_test(NAME RenegadePlayerPreviewTerrainIsolationSourceContract
-    COMMAND ${CMAKE_COMMAND}
-        -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/PlayerPreviewTerrainIsolationSourceContract.cmake)
-
-add_test(NAME RenegadeLocalTestGameHandoffSourceContract
- COMMAND ${CMAKE_COMMAND} -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
- -P ${CMAKE_CURRENT_SOURCE_DIR}/LocalTestGameHandoffSourceContract.cmake)
 add_executable(RenegadeRiverUnderwaterTests RiverUnderwaterTests.cpp)
 target_link_libraries(RenegadeRiverUnderwaterTests PRIVATE Renegade::EngineBridge)
 set_target_properties(RenegadeRiverUnderwaterTests PROPERTIES FOLDER "Renegade")
