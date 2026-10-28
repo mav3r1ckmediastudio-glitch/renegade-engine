@@ -1,4 +1,5 @@
 #include "renegade/bridge/TerrainCreatorGapService.h"
+#include "renegade/bridge/RiverTerrainLayerService.h"
 
 #include <algorithm>
 #include <cmath>
@@ -472,6 +473,11 @@ namespace renegade::bridge
         if (terrain == nullptr)
         {
             error_ = "selected entity has no native terrain";
+            return false;
+        }
+        if (HasRiverTerrainLayers(*scene_,terrainEntity_))
+        {
+            error_ = "Remove linked riverbeds before replacing the terrain heightmap";
             return false;
         }
         if (captured_) return Apply(after_);

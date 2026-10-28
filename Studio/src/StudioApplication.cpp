@@ -1,9 +1,16 @@
+#include "../../EngineBridge/src/PlaceableWaterfallAuthoring.h"
 #include <sstream>
 #include "shaders/ShaderInterop_Renderer.h"
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
+#include "RiverNodeWidthGizmoAxis.h"
+#include "renegade/bridge/RiverWaterwayService.h"
 #include "RenegadeLivingPresenceLaunch.h"
 #include "renegade/bridge/PlayerPrefabService.h"
+#include "renegade/bridge/RiverSplineService.h"
+#include "renegade/bridge/RiverTerrainLayerService.h"
+#include "renegade/bridge/RiverbedMaterialService.h"
+#include "renegade/bridge/SpecialistComponentService.h"
 #include <cctype>
 #include "StudioUserPreferences.h"
 
@@ -268,8 +275,9 @@ namespace renegade::studio
 
     void StudioRenderPath::RequestExit()
     {
-        if (projectLoadingOverlay_.IsBlocking() &&
-            projectLoadingOverlay_.CurrentPhase() != RenegadeProjectLoadingOverlay::Phase::Failed)
+        if (exitRequestPending_ ||
+            (projectLoadingOverlay_.IsBlocking() &&
+             projectLoadingOverlay_.CurrentPhase() != RenegadeProjectLoadingOverlay::Phase::Failed))
         {
             return;
         }
@@ -280,12 +288,17 @@ namespace renegade::studio
             return;
         }
 
+        // A save can defer for transient preview cleanup or the Save As dialog.
+        // Repeated X clicks must not create overlapping confirmation loops.
+        exitRequestPending_ = true;
         RequestSceneReplacement(
             [this]()
             {
+                exitRequestPending_ = false;
                 if (exitRequestHandler_)
                     exitRequestHandler_();
-            });
+            },
+            [this]() { exitRequestPending_ = false; });
     }
 
 
@@ -532,7 +545,7 @@ namespace renegade::studio
     void StudioRenderPath::RenderTransparents(
         const wi::graphics::CommandList cmd) const
     {
-        RenderPath3D::RenderTransparents(cmd);
+        RenderWaterfallTransparents(cmd);
         if (projectHubVisible_ || camera == nullptr ||
             (!gridPipeline_.IsValid() && !playerMarkerPipeline_.IsValid())) return;
 
@@ -810,6 +823,8 @@ namespace renegade::studio
         if (playerCameraPreviewVisible_ && !playerCameraPreviewCollapsed_ && playerCameraPreview_ && playerCameraPreview_->NeedsRender()) playerCameraPreview_->PreRender();
         if(launchSocketPanel_.IsVisible()&&launchSocketPreview_&&launchSocketPreview_->NeedsRender())
             launchSocketPreview_->PreRender();
+        riverUnderwater_.Update(*this);
+        auto riverBindings=riverFlow_.Bind();
         wi::RenderPath3D::PreRender();
     }
 
@@ -820,6 +835,8 @@ namespace renegade::studio
             wi::RenderPath2D::Render();
             return;
         }
+        auto riverBindings=riverFlow_.Bind();
+        riverFlow_.Dispatch();
         if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_ &&
             modelImportPreview_->NeedsRender())
         {
@@ -2604,6 +2621,13 @@ namespace renegade::studio
         terrainSculptMode_.OnSelect([this](const wi::gui::EventArgs& args)
         {
             terrainSculptModeValue_ = static_cast<bridge::TerrainSculptMode>(args.userdata);
+            terrainRiverBrushActive_ = false;
+            DisableWd01VegetationBrush();
+            if (session_ && session_->Scenes().GetScene().terrains.GetCount()==1)
+            {
+                session_->Selection().Select(session_->Scenes().GetScene().terrains.GetEntity(0));
+                SyncGizmoSelection();RefreshInspector();RefreshStatus();
+            }
         });
         inspectorPanel_.AddWidget(&terrainSculptMode_);
         const auto createBrushSlider = [this](RenegadeSlider& slider, const char* name,
@@ -2639,6 +2663,254 @@ namespace renegade::studio
         terrainStrokeDiagnostic_.Create("Terrain Stroke Diagnostic");
         terrainStrokeDiagnostic_.SetText("LAST STROKE // READY");
         inspectorPanel_.AddWidget(&terrainStrokeDiagnostic_);
+
+        CreateWaterfallControls();
+        createSectionLabel(terrainRiverLabel_, "Terrain River Section",
+            "WATER // DRAG TO DRAW RIVER");
+        terrainRiverBrushButton_.Create("Draw River Water");
+        terrainRiverBrushButton_.SetText("DRAW RIVER");
+        terrainRiverBrushButton_.SetTooltip(
+            "Arm river drawing, then left-drag across terrain to create a "
+            "water-material spline. Release to finish one Undo/Redo step. "
+            "Then select CARVE SELECTED BED to excavate the channel. "
+            "On new flat terrain, first use ALLOW DEEPER BEDS +10M.");
+        terrainRiverBrushButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            riverDrawingReceiver_.clear();riverDrawingControl_.clear();
+            terrainRiverBrushActive_ = !terrainRiverBrushActive_;
+            if (terrainRiverBrushActive_)
+                DisableWd01VegetationBrush();
+            terrainRiverStrokeActive_ = false;
+            terrainRiverStrokePoints_.clear();
+            terrainRiverBrushButton_.SetText(
+                terrainRiverBrushActive_ ? "STOP RIVER" : "DRAW RIVER");
+            terrainRiverStatus_.SetText(
+                terrainRiverBrushActive_
+                    ? "RIVER // DRAG ON TERRAIN TO DRAW"
+                    : "RIVER // READY");
+        });
+        inspectorPanel_.AddWidget(&terrainRiverBrushButton_);
+        terrainRiverWidth_.Create(1.0f, 50.0f, 8.0f, 490.0f,
+            "River Width", "RIVER WIDTH");
+        terrainRiverWidth_.SetTooltip(
+            "Total generated river ribbon width in world metres.");
+        terrainRiverWidth_.OnValuePreview([this](float value)
+        {
+            terrainRiverWidthValue_ = value;
+        });
+        terrainRiverWidth_.OnValueCommitted([this](float value)
+        {
+            terrainRiverWidthValue_ = value;
+        });
+        inspectorPanel_.AddWidget(&terrainRiverWidth_);
+        terrainRiverCarveDepth_.Create(0.1f, 3.0f, bridge::DefaultRiverBedDepthMeters, 490.0f,
+            "Riverbed Depth", "BED DEPTH");
+        terrainRiverCarveDepth_.SetTooltip(
+            "Depth in metres below the river surface. This cannot extend "
+            "below the authored terrain's heightmap minimum.");
+        terrainRiverCarveDepth_.OnValuePreview([this](float value)
+        {
+            terrainRiverCarveDepthValue_ = value;
+        });
+        terrainRiverCarveDepth_.OnValueCommitted([this](float value)
+        {
+            terrainRiverCarveDepthValue_ = value;
+            QueueSelectedRiverLayer(true);
+        });
+        inspectorPanel_.AddWidget(&terrainRiverCarveDepth_);
+        terrainRiverCarveBank_.Create(0.5f, 15.0f, bridge::DefaultRiverBankWidthMeters, 490.0f,
+            "Riverbank Width", "BANK WIDTH");
+        terrainRiverCarveBank_.SetTooltip(
+            "Extra metres beyond the water's edge to blend the riverbed "
+            "back into the existing sculpted terrain.");
+        terrainRiverCarveBank_.OnValuePreview([this](float value)
+        {
+            terrainRiverCarveBankValue_ = value;
+        });
+        terrainRiverCarveBank_.OnValueCommitted([this](float value)
+        {
+            terrainRiverCarveBankValue_ = value;
+            QueueSelectedRiverLayer(true);
+        });
+        inspectorPanel_.AddWidget(&terrainRiverCarveBank_);
+        terrainRiverFitButton_.Create("Fit Mountain Stream");
+        terrainRiverFitButton_.SetText("FIT MOUNTAIN STREAM + BED");
+        terrainRiverFitButton_.SetTooltip(
+            "Explicitly fit a downhill water surface below both banks and link the channel. "
+            "Adds editable points; Undo restores the previous river and sculpt. "
+            "No automatic fitting on load or drawing. Refit after moving points. "
+            "Cliffs, excessive cuts, unsupported scale and terrain boundaries are refused.");
+        terrainRiverFitButton_.OnClick([this](const wi::gui::EventArgs&)
+        { QueueSelectedRiverLayer(true, true); });
+        inspectorPanel_.AddWidget(&terrainRiverFitButton_);
+        terrainRiverReflectionAlignButton_.Create("Align Native Water Reflection");
+        terrainRiverReflectionAlignButton_.SetText("ALIGN WATER REFLECTION (TEST)");
+        terrainRiverReflectionAlignButton_.SetTooltip(
+            "Optional native-Wicked WATER correction for a near-planar downhill river. "
+            "Aligns the root reflection orientation while preserving its existing "
+            "world-space spline points and linked bed. Undoable. No automatic "
+            "changes on opening, drawing or fitting rivers. Flat streams, "
+            "waterfalls, sharp grade changes and already rotated rivers are refused. "
+            "BACK UP YOUR SCENE BEFORE TESTING; inspect visually before saving.");
+        terrainRiverReflectionAlignButton_.OnClick([this](const wi::gui::EventArgs&)
+        { QueueSelectedRiverReflectionAlignment(); });
+        inspectorPanel_.AddWidget(&terrainRiverReflectionAlignButton_);
+        terrainRiverRockyBedButton_.Create("Paint Rocky Riverbed");
+        terrainRiverRockyBedButton_.SetText("PAINT ROCKY BED (TEST)");
+        terrainRiverRockyBedButton_.SetTooltip(
+            "Apply your supplied 2K Rocky Rugged Terrain PBR as a new FIFTH "
+            "material layer on the actual carved terrain. This does not "
+            "replace existing grass or sculpt, does not change WATER shader, "
+            "and is Undoable. Requires a linked riverbed and a single finite "
+            "terrain with four original slots and an optional shared rocky "
+            "layer. Multiple rivers can share it. Not automatically repainted after "
+            "spline edits; inspect in a COPIED project before saving.");
+        terrainRiverRockyBedButton_.OnClick([this](const wi::gui::EventArgs&)
+        { QueueSelectedRiverRockyBed(); });
+        inspectorPanel_.AddWidget(&terrainRiverRockyBedButton_);
+        terrainRiverCarveButton_.Create("Link Riverbed");
+        terrainRiverCarveButton_.SetText("LINK / UPDATE BED");
+        terrainRiverCarveButton_.SetTooltip(
+            "Cut a channel while retaining the sculpted landscape beneath it. "
+            "Moving spline points updates the channel; Remove Bed restores the base. "
+            "Use Allow Deeper Beds first if the channel exceeds the height range.");
+        terrainRiverCarveButton_.OnClick([this](const wi::gui::EventArgs&)
+        { QueueSelectedRiverLayer(true); });
+        inspectorPanel_.AddWidget(&terrainRiverCarveButton_);
+        terrainRiverUnlinkButton_.Create("Remove Riverbed");
+        terrainRiverUnlinkButton_.SetText("REMOVE BED");
+        terrainRiverUnlinkButton_.SetTooltip(
+            "Remove this river's channel and restore the sculpted base beneath it. "
+            "The water and other linked channels remain. Undo restores the channel.");
+        terrainRiverUnlinkButton_.OnClick([this](const wi::gui::EventArgs&)
+        { QueueSelectedRiverLayer(false); });
+        inspectorPanel_.AddWidget(&terrainRiverUnlinkButton_);
+        terrainRiverFlowSlowerButton_.Create("Slower River Flow");
+        terrainRiverFlowSlowerButton_.SetText("FLOW // SLOWER");
+        terrainRiverFlowSlowerButton_.SetTooltip("Reduce this river's animated surface-flow speed. Undoable.");
+        terrainRiverFlowSlowerButton_.OnClick([this](const wi::gui::EventArgs&)
+        { QueueSelectedRiverFlow(-1); });
+        inspectorPanel_.AddWidget(&terrainRiverFlowSlowerButton_);
+        terrainRiverFlowFasterButton_.Create("Faster River Flow");
+        terrainRiverFlowFasterButton_.SetText("FLOW // FASTER");
+        terrainRiverFlowFasterButton_.SetTooltip("Increase this river's animated surface-flow speed. Undoable.");
+        terrainRiverFlowFasterButton_.OnClick([this](const wi::gui::EventArgs&)
+        { QueueSelectedRiverFlow(1); });
+        inspectorPanel_.AddWidget(&terrainRiverFlowFasterButton_);
+        terrainRiverFlowReverseButton_.Create("Reverse River Flow");
+        terrainRiverFlowReverseButton_.SetText("FLOW // REVERSE");
+        terrainRiverFlowReverseButton_.SetTooltip("Reverse the river's longitudinal animated normal-map flow. Undoable.");
+        terrainRiverFlowReverseButton_.OnClick([this](const wi::gui::EventArgs&)
+        { QueueSelectedRiverFlow(0); });
+        inspectorPanel_.AddWidget(&terrainRiverFlowReverseButton_);
+        terrainRiverFlowSpeed_.Create(0.00025f, 0.01f, 0.001f, 975.0f,
+            "River Surface Flow Speed", "FLOW SPEED");
+        terrainRiverFlowSpeed_.SetTooltip("Longitudinal normal-map animation speed for this river. Set its angle with SCROLL DIRECTION or use FLOW // REVERSE. Undoable; not a physical current.");
+        terrainRiverFlowSpeed_.OnValueCommitted([this](float speed)
+        { QueueSelectedRiverFlow(2, speed); });
+        inspectorPanel_.AddWidget(&terrainRiverFlowSpeed_);
+        terrainRiverFlowDirection_.Create(0,360,0,360,"River Scroll Direction","SCROLL DIRECTION (DEG)");
+        terrainRiverFlowDirection_.SetTooltip("Scroll angle relative to the drawn stream: 0 source-to-outlet; 180 reverse; 90/270 across. Native water waves retain their built-in cross-ripples. Surface animation, not a physical current.");
+        terrainRiverFlowDirection_.OnValueCommitted([this](float degrees){QueueSelectedRiverFlow(3,degrees);});
+        inspectorPanel_.AddWidget(&terrainRiverFlowDirection_);
+        InitializeRiverFlowV2();
+        // Wicked WATER alpha is a depth-fog coefficient, not ordinary alpha
+        // blending (objectHF.hlsli computes exp(-depth * color.a)). Present
+        // its inverse as intuitive CLARITY: 0 murky, 1 clear.
+        const bridge::RiverWaterMaterialState stockRiverWater;
+        const float riverChannelDefaults[5] = {
+            stockRiverWater.tintOpacity.x,
+            stockRiverWater.tintOpacity.y,
+            stockRiverWater.tintOpacity.z,
+            1.0f - stockRiverWater.tintOpacity.w, stockRiverWater.normalStrength};
+        constexpr const char* riverChannelLabels[5] = {"WATER RED", "WATER GREEN", "WATER BLUE", "WATER CLARITY", "SURFACE RIPPLE STRENGTH"};
+        for (std::size_t i = 0; i < terrainRiverAppearance_.size(); ++i)
+        {
+            auto& slider = terrainRiverAppearance_[i];
+            slider.Create(0.0f, i==4?3.0f:1.0f, riverChannelDefaults[i], 1000.0f,
+                std::string("River ") + riverChannelLabels[i], riverChannelLabels[i]);
+            slider.SetTooltip(i == 3 ? "Clarity in the original 0-1 range. Shallow rivers can remain clear even at zero. For much stronger muddy or peaty water use ADVANCED MURKINESS directly below; both controls change the SAME native WATER fog density and synchronize. Undoable."
+                : i == 4 ? "Normal-map ripple strength: 0 = flat; 3 = strong. Saved per river and undoable."
+                : "Native water-material surface tint channel. Changes are saved with the river and undoable.");
+            slider.OnValueCommitted([this, i](float value)
+            { QueueSelectedRiverAppearance(static_cast<int>(i), value); });
+            inspectorPanel_.AddWidget(&slider);
+        }
+        terrainRiverFogDensity_.Create(0.f,16.f,
+            stockRiverWater.tintOpacity.w,1000.f,
+            "River Native Water Optical Density",
+            "ADVANCED MURKINESS");
+        terrainRiverFogDensity_.SetTooltip(
+            "Wicked's existing WATER depth-fog coefficient (0-16 / metre). "
+            "Same underlying setting as Water Clarity, but extends beyond its "
+            "0-1 range. 0 = clear, 3 = murky, 8 = very murky even in shallow "
+            "water. It does not change ripples, surface geometry or reflection "
+            "orientation. Higher values can look much darker in deep water. "
+            "Undoable and saved per river. Moving Clarity resets to the basic range.");
+        terrainRiverFogDensity_.OnValueCommitted([this](float density)
+        { QueueSelectedRiverAppearance(5,density); });
+        inspectorPanel_.AddWidget(&terrainRiverFogDensity_);
+        terrainRiverExtendFloorButton_.Create("Allow Deeper Riverbeds");
+        terrainRiverExtendFloorButton_.SetText("ALLOW DEEPER BEDS +10M");
+        terrainRiverExtendFloorButton_.SetTooltip(
+            "Explicitly extend this finite terrain's R16 elevation range "
+            "10 metres downward, without moving its surface or repainting "
+            "its masks. Needed to carve through default world-zero ground. "
+            "Undoable; slightly reduces height encoding precision.");
+        terrainRiverExtendFloorButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            if (session_ == nullptr || testLevelRuntime_.IsActive() ||
+                !terrainWorkspaceActive_) return;
+            auto& scene = session_->Scenes().GetScene();
+            if (scene.terrains.GetCount() != 1)
+            {
+                terrainRiverStatus_.SetText("RANGE // REQUIRE ONE TERRAIN");
+                return;
+            }
+            const auto terrainEntity = scene.terrains.GetEntity(0);
+            const auto* terrain = scene.terrains.GetComponent(terrainEntity);
+            if (terrain == nullptr) return;
+            const float requestedMinimum = terrain->bottomLevel - 10.0f;
+            const auto sceneRevision = session_->Scenes().Revision();
+            terrainRiverStatus_.SetText("RANGE // QUEUED");
+            studioChrome_.SetStatusText(
+                "RIVERBED // Preparing +10m height-range extension (not a carve)");
+            wi::eventhandler::Subscribe_Once(
+                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this, sceneRevision, terrainEntity, requestedMinimum]
+                (std::uint64_t)
+            {
+                if (session_ == nullptr || testLevelRuntime_.IsActive() ||
+                    !terrainWorkspaceActive_ ||
+                    sceneRevision != session_->Scenes().Revision())
+                    return;
+                auto& scene = session_->Scenes().GetScene();
+                auto* terrain = scene.terrains.GetComponent(terrainEntity);
+                if (terrain == nullptr ||
+                    std::abs(terrain->bottomLevel -
+                        (requestedMinimum + 10.0f)) > 0.0001f)
+                    return;
+                if (!session_->Commands().Execute(
+                        std::make_unique<bridge::SetTerrainHeightFloorCommand>(
+                            scene, terrainEntity, requestedMinimum)))
+                {
+                    terrainRiverStatus_.SetText(
+                        "RANGE // UNSAFE OR INCOMPLETE TERRAIN");
+                    studioChrome_.SetStatusText(
+                        "RIVERBED RANGE NOT CHANGED // Terrain must be finite and fully generated");
+                    return;
+                }
+                terrainRiverStatus_.SetText(
+                    "RANGE // 10M LOWER // UNDO READY");
+                RefreshStatus();
+                studioChrome_.SetStatusText(
+                    "RIVERBED RANGE READY // Now select River Water and press LINK / UPDATE BED");
+            });
+        });
+        inspectorPanel_.AddWidget(&terrainRiverExtendFloorButton_);
+        terrainRiverStatus_.Create("River Brush Status");
+        terrainRiverStatus_.SetText("RIVER // READY");
+        inspectorPanel_.AddWidget(&terrainRiverStatus_);
 
         CreateWd01VegetationControls();
 
@@ -2995,6 +3267,35 @@ namespace renegade::studio
         modelImportSummary_.SetSize(XMFLOAT2(480.0f, 85.0f));
         modelImportSummary_.SetFitTextEnabled(true);
         modelImportPanel_.AddWidget(&modelImportSummary_);
+        modelImportMaterial_.Create("Model material");
+        modelImportMaterial_.SetText("Material: ");
+        modelImportMaterial_.SetPos({650,45}); modelImportMaterial_.SetSize({355,30});
+        modelImportMaterial_.OnSelect([this](const wi::gui::EventArgs&) { RefreshModelImportTextureInfo(); });
+        modelImportPanel_.AddWidget(&modelImportMaterial_);
+        modelImportMapSlot_.Create("Material map slot");
+        modelImportMapSlot_.SetText("Map: ");
+        modelImportMapSlot_.SetPos({650,95}); modelImportMapSlot_.SetSize({355,30});
+        for (const auto* name : {"Base colour / Albedo", "Normal", "Surface (packed AO / Roughness / Metalness)",
+            "Emissive", "Displacement / Height", "Ambient occlusion", "Transmission",
+            "Sheen colour", "Sheen roughness", "Clearcoat", "Clearcoat roughness",
+            "Clearcoat normal", "Specular", "Anisotropy", "Transparency"})
+            modelImportMapSlot_.AddItem(name);
+        modelImportMapSlot_.OnSelect([this](const wi::gui::EventArgs&) { RefreshModelImportTextureInfo(); });
+        modelImportPanel_.AddWidget(&modelImportMapSlot_);
+        modelImportAssignMap_.Create("Assign material texture map");
+        modelImportAssignMap_.SetText("CHOOSE / REPLACE MAP");
+        modelImportAssignMap_.SetPos({575,145}); modelImportAssignMap_.SetSize({430,32});
+        modelImportAssignMap_.OnClick([this](const wi::gui::EventArgs&) { AssignModelImportTexture(); });
+        modelImportPanel_.AddWidget(&modelImportAssignMap_);
+        modelImportMapInfo_.Create("Selected material map");
+        modelImportMapInfo_.SetPos({575,195}); modelImportMapInfo_.SetSize({430,110});
+        modelImportMapInfo_.SetFitTextEnabled(true);
+        modelImportPanel_.AddWidget(&modelImportMapInfo_);
+        modelImportWarnings_.Create("Source texture warnings");
+        modelImportWarnings_.SetPos({575,330}); modelImportWarnings_.SetSize({430,300});
+        modelImportWarnings_.SetFitTextEnabled(true);
+        modelImportPanel_.AddWidget(&modelImportWarnings_);
+
         modelImportClip_.Create("Animation clip");
         modelImportClip_.SetPos(XMFLOAT2(110.0f, 470.0f));
         modelImportClip_.SetSize(XMFLOAT2(390.0f, 30.0f));
@@ -3622,9 +3923,34 @@ namespace renegade::studio
         }
         else
         {
-            RenderPath3D::Update(dt);
+            // Finish an existing gesture even when release occurs over chrome,
+            // an Inspector, or outside the viewport. Commit its normal Undo
+            // transaction before deciding whether river preparation is suspended.
+            if (gizmoDragActive_ && !wi::input::Down(wi::input::MOUSE_BUTTON_LEFT) &&
+                !wi::input::IsTouchPanning() && session_ && camera)
+            {
+                gizmo_.Update(*camera, wi::input::GetPointer(), *this);
+                FinishGizmoDrag();
+            }
+            if(session_)waterfallRenderer_.Prepare(session_->Scenes().GetScene(),session_->Scenes().Revision(),dt,gizmoDragActive_ || detail::CreatorAssetDragPreviewBlocksSave());
+            if(waterfallInspector_.IsVisible())waterfallStatus_.SetText(waterfallUiError_.empty()?waterfallRenderer_.Status():waterfallUiError_);
+            DrawWaterfallHandles();
+            riverFlow_.SetSuspended(gizmoDragActive_ || detail::CreatorAssetDragPreviewBlocksSave() || IsWd01VegetationBrushActive());
+            if(session_)riverFlow_.Prepare(session_->Scenes().GetScene(),
+                session_->Scenes().Revision(),dt,session_->Commands().Revision());
+            // Renderer readiness can change after the command's Inspector
+            // refresh (terrain/native resources settle on later frames).
+            // Refresh this cached label only; never rebuild Inspector widgets.
+            if(riverDrawingReceiver_.empty()&&riverConnectionSource_.empty()&&terrainRiverInspectorEntity_!=wi::ecs::INVALID_ENTITY){
+                auto status=riverFlow_.Status(terrainRiverInspectorEntity_);
+                const auto prior=riverFlowStatus_.GetText();
+                if(prior.rfind("Shared foam: ",0)==0){const auto split=prior.find(" | ");if(split!=std::string::npos)status=prior.substr(0,split+3)+status;}
+                if(prior!=status)riverFlowStatus_.SetText(status);
+            }
+            {auto riverBindings=riverFlow_.Bind();RenderPath3D::Update(dt);}
         }
 
+        TickWaterfallStudioProof();
         UpdatePlayerCameraPreview(dt);
 
         if (inspectorRefreshPending_)
@@ -3751,11 +4077,15 @@ namespace renegade::studio
 
         viewportBounds_ = studioChrome_.ViewportBounds();
         const XMFLOAT4 pointer = wi::input::GetPointer();
-        const bool playerStartCapsuleConsumed = HandlePlayerStartCapsule(pointer);
-        const bool cameraIconConsumed = HandleCameraSceneIcons(pointer);
-        const bool audioIconConsumed = HandleAudioSceneIcons(pointer);
-        const bool decalProbeIconConsumed = HandleDecalProbeSceneIcons(pointer);
-        const bool lightIconConsumed = HandleLightSceneIcons(pointer);
+        // An anchored drawing gesture owns viewport input before icon picking
+        // or the selected node's gizmo can capture the same press.
+        const bool drawingTributary = !riverDrawingReceiver_.empty();
+        const bool playerStartCapsuleConsumed = !drawingTributary && HandlePlayerStartCapsule(pointer);
+        const bool cameraIconConsumed = !drawingTributary && HandleCameraSceneIcons(pointer);
+        const bool audioIconConsumed = !drawingTributary && HandleAudioSceneIcons(pointer);
+        const bool riverPointConsumed = !drawingTributary && HandleRiverSplineControlPoints(pointer);
+        const bool decalProbeIconConsumed = !drawingTributary && HandleDecalProbeSceneIcons(pointer);
+        const bool lightIconConsumed = !drawingTributary && HandleLightSceneIcons(pointer);
 
         // A vegetation stroke can be released after the pointer has crossed
         // from the viewport onto native GUI or Renegade chrome. Finalize that
@@ -3765,6 +4095,8 @@ namespace renegade::studio
         // not let a brush begin through the UI.
         const bool vegetationConsumed =
             HandleWd01Vegetation(pointer);
+        const bool riverConsumed =
+            HandleTerrainRiver(pointer);
 
         if (sunPreviewPlaying_)
         {
@@ -3806,7 +4138,7 @@ namespace renegade::studio
         }
 
         if (playerStartCapsuleConsumed || cameraIconConsumed || audioIconConsumed ||
-            decalProbeIconConsumed || lightIconConsumed)
+            riverPointConsumed || decalProbeIconConsumed || lightIconConsumed)
         {
             diagnosticInput.StopAt("scene_icon");
             return;
@@ -3815,6 +4147,11 @@ namespace renegade::studio
         if (vegetationConsumed)
         {
             diagnosticInput.StopAt("vegetation");
+            return;
+        }
+        if (riverConsumed)
+        {
+            diagnosticInput.StopAt("river_brush");
             return;
         }
 
@@ -3846,9 +4183,62 @@ namespace renegade::studio
         }
 
         if (gizmoEntity_ != wi::ecs::INVALID_ENTITY &&
-            !flyCameraActive_)
+            !flyCameraActive_ && !drawingTributary)
         {
             gizmo_.Update(*camera, pointer, *this);
+            // Native spline width is persisted in node scale X, but X is
+            // often the ALONG-river world axis. Remap the lateral world gizmo
+            // handle (Z for X-running reaches, X for Z-running reaches) onto
+            // stored scale X. The ordinary gizmo and project format stay intact.
+            if(gizmo_.isScalator && gizmo_.IsInteracting() &&
+                bridge::IsRiverSplineControlNode(session_->Scenes().GetScene(),gizmoEntity_))
+            {
+                auto& scene=session_->Scenes().GetScene();
+                if(auto* node=scene.transforms.GetComponent(gizmoEntity_)){
+                    const bool lateralZ=detail::RiverNodeWidthUsesZHandle(scene,gizmoEntity_);
+                    const auto active=gizmo_.state;
+                    const bool chosen=(lateralZ?active==Translator::TRANSLATOR_Z:
+                        active==Translator::TRANSLATOR_X) ||
+                        active==Translator::TRANSLATOR_XYZ;
+                    const float originalAxis=lateralZ?gizmoTransformBefore_.scale.z:
+                        gizmoTransformBefore_.scale.x;
+                    const float draggedAxis=lateralZ?node->scale_local.z:
+                        node->scale_local.x;
+                    const float factor=chosen && originalAxis>.0001f?
+                        draggedAxis/originalAxis:1.f;
+                    node->scale_local.x=std::clamp(
+                        gizmoTransformBefore_.scale.x*factor,.125f,4.f);
+                    node->scale_local.y=gizmoTransformBefore_.scale.y;
+                    node->scale_local.z=gizmoTransformBefore_.scale.z;
+                    node->translation_local=gizmoTransformBefore_.translation;
+                    node->rotation_local=gizmoTransformBefore_.rotation;
+                    node->SetDirty();
+                    node->UpdateTransform();
+                }
+            }
+            if (gizmo_.IsDragStarted()) gizmoDragActive_ = true;
+            if(gizmo_.IsDragStarted() && !gizmo_.isScalator &&
+                bridge::IsRiverSplineControlNode(session_->Scenes().GetScene(),gizmoEntity_))
+            {
+                riverGizmoPreview_=std::make_unique<bridge::RiverNodeMovePreview>(
+                    session_->Scenes().GetScene(),gizmoEntity_,gizmoTransformBefore_);
+                riverGizmoPreviewRevision_=session_->Scenes().Revision();
+            }
+            if(riverGizmoPreview_ && gizmo_.IsInteracting() && !gizmo_.IsDragEnded())
+                if(const auto* point=session_->Scenes().GetScene().transforms.GetComponent(gizmoEntity_)){
+                    auto proposed=bridge::CaptureTransform(*point);
+                    if(gizmo_.isScalator){
+                        // Only X is meaningful for native WATER node width.
+                        // Never let an accidental uniform scale distort Y/Z.
+                        proposed.scale.y=gizmoTransformBefore_.scale.y;
+                        proposed.scale.z=gizmoTransformBefore_.scale.z;
+                        proposed.scale.x=std::clamp(proposed.scale.x,.125f,4.f);
+                    }
+                    (void)riverGizmoPreview_->Apply(proposed);
+                }
+
+            FinishGizmoDrag();
+
             if (gizmo_.IsInteracting())
             {
                 // The controller overwrites gizmo edits, even if inactive.
@@ -3874,12 +4264,13 @@ namespace renegade::studio
             return;
         }
 
-        if (gizmo_.IsDragStarted())
-        {
-            gizmoDragActive_ = true;
-        }
+        FinishGizmoDrag();
 
-        if (gizmo_.IsDragEnded())
+    }
+
+    void StudioRenderPath::FinishGizmoDrag()
+    {
+        if (gizmoDragActive_ && gizmo_.IsDragEnded())
         {
             gizmoDragActive_ = false;
             auto* transform =
@@ -3889,7 +4280,24 @@ namespace renegade::studio
                 return;
             }
 
-            const auto transformAfter = bridge::CaptureTransform(*transform);
+            auto transformAfter = bridge::CaptureTransform(*transform);
+            const bool riverNode = bridge::IsRiverSplineControlNode(
+                session_->Scenes().GetScene(),gizmoEntity_);
+            if(riverNode && gizmo_.isScalator){
+                // The lateral gizmo handle was already mapped into stored X
+                // during Update. Other axes are never committed as width.
+                transformAfter.translation=gizmoTransformBefore_.translation;
+                transformAfter.rotation=gizmoTransformBefore_.rotation;
+                transformAfter.scale.y=gizmoTransformBefore_.scale.y;
+                transformAfter.scale.z=gizmoTransformBefore_.scale.z;
+                transformAfter.scale.x=std::clamp(transformAfter.scale.x,.125f,4.f);
+            }
+            if(riverGizmoPreview_)
+            {
+                riverGizmoPreview_->Restore();
+                riverGizmoPreview_.reset();
+            }
+
             transform->translation_local =
                 gizmoTransformBefore_.translation;
             transform->rotation_local =
@@ -3899,12 +4307,36 @@ namespace renegade::studio
             transform->SetDirty();
             transform->UpdateTransform();
 
-            session_->Commands().Execute(
-                std::make_unique<bridge::SetTransformCommand>(
-                    session_->Scenes().GetScene(),
-                    gizmoEntity_,
-                    gizmoTransformBefore_,
-                    transformAfter));
+            if(riverNode && gizmo_.isScalator &&
+                std::abs(transformAfter.scale.x-gizmoTransformBefore_.scale.x)<.0001f){
+                // The user dragged an along-river or vertical axis, or did not
+                // change width: do not record a no-op terrain transaction.
+                SyncGizmoSelection();RefreshInspector();RefreshStatus();return;
+            }
+            if(CommitWaterfallGizmo(gizmoEntity_,transformAfter)){SyncGizmoSelection();RefreshInspector();RefreshStatus();return;}
+            if (riverNode || bridge::RiverTransformNeedsTerrainTransaction(
+                session_->Scenes().GetScene(),gizmoEntity_))
+            {
+                const auto entity=gizmoEntity_;
+                const auto before=gizmoTransformBefore_;
+                const auto revision=session_->Scenes().Revision();
+                wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this,entity,before,transformAfter,revision,riverNode](std::uint64_t)
+                {
+                    if (!session_ || testLevelRuntime_.IsActive() ||
+                        revision!=session_->Scenes().Revision()) return;
+                    if (!session_->Commands().Execute(std::make_unique<bridge::SetWatercourseTransformCommand>(
+                        session_->Scenes().GetScene(),entity,before,transformAfter)))
+                        studioChrome_.SetStatusText(riverNode?
+                            "RIVER EDIT REFUSED // Width must preserve valid banks and connections":
+                            "MOVE NOT APPLIED // Linked channel exceeds terrain limits or has conflicting edits");
+                    SyncGizmoSelection();RefreshInspector();RefreshStatus();
+                });
+            }
+            else
+                session_->Commands().Execute(
+                    std::make_unique<bridge::SetTransformCommand>(
+                        session_->Scenes().GetScene(),gizmoEntity_,gizmoTransformBefore_,transformAfter));
             gizmoTransformBefore_ = transformAfter;
             RefreshInspector();
             RefreshStatus();
@@ -4085,7 +4517,7 @@ namespace renegade::studio
         assemblyPanel_.SetPos(XMFLOAT2(sideBySide?20.0f:std::max(0.0f,(width-1080)*0.5f),std::max(0.0f,(height-810)*0.5f)));
         assemblyHandPanel_.SetPos(XMFLOAT2(sideBySide?1120.0f:std::max(0.0f,(width-730)*0.5f),std::max(0.0f,(height-780)*0.5f)));
         modelImportPanel_.SetPos(XMFLOAT2(
-            std::max(0.0f, (width - 560.0f) * 0.5f),
+            std::max(0.0f, (width - modelImportPanel_.GetSize().x) * 0.5f),
             std::max(0.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));
         handGripPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
@@ -4329,38 +4761,7 @@ namespace renegade::studio
         positionEnvironmentWidget(lightVolumetricBoost_, 1088.0f);
         // Environment children are positioned by LayoutEnvironmentSections().
 
-        positionEnvironmentWidget(terrainLabel_, 44.0f, 20.0f);
-        positionEnvironmentWidget(createTerrainButton_, 64.0f);
-        positionEnvironmentWidget(terrainSizeReadout_, 64.0f, 20.0f);
-        positionEnvironmentWidget(expandTerrainButton_, 88.0f);
-        positionEnvironmentWidget(terrainChunkScale_, 122.0f);
-        positionEnvironmentWidget(terrainMinimumHeight_, 156.0f);
-        positionEnvironmentWidget(terrainMaximumHeight_, 190.0f);
-        positionEnvironmentWidget(terrainLowAltitudeBlend_, 224.0f);
-        positionEnvironmentWidget(terrainBaseBlend_, 258.0f);
-        positionEnvironmentWidget(terrainSlopeBlend_, 292.0f);
-        positionEnvironmentWidget(terrainLodBias_, 326.0f);
-        positionEnvironmentWidget(terrainMaterialLabel_, 370.0f, 20.0f);
-        positionEnvironmentWidget(terrainMaterialPreset_, 390.0f);
-        positionEnvironmentWidget(terrainTextureScale_, 424.0f);
-        terrainApplyDefaultGrassButton_.SetPos(XMFLOAT2(12.0f, 458.0f));
-        terrainReloadMaterialButton_.SetPos(XMFLOAT2(
-            20.0f + (environmentFieldWidth - 8.0f) * 0.5f,
-            458.0f));
-        terrainApplyDefaultGrassButton_.SetSize(XMFLOAT2(
-            (environmentFieldWidth - 8.0f) * 0.5f,
-            28.0f));
-        terrainReloadMaterialButton_.SetSize(XMFLOAT2(
-            (environmentFieldWidth - 8.0f) * 0.5f,
-            28.0f));
-        positionEnvironmentWidget(terrainSculptLabel_, 500.0f, 20.0f);
-        positionEnvironmentWidget(terrainSculptMode_, 520.0f);
-        positionEnvironmentWidget(terrainBrushRadius_, 554.0f);
-        positionEnvironmentWidget(terrainBrushStrength_, 588.0f);
-        positionEnvironmentWidget(terrainBrushFalloff_, 622.0f);
-        positionEnvironmentWidget(terrainBrushReadout_, 656.0f, 20.0f);
-        positionEnvironmentWidget(terrainStrokeDiagnostic_, 676.0f, 20.0f);
-        LayoutWd01VegetationControls(environmentFieldWidth);
+        // Terrain rows and nested disclosures are positioned by LayoutTerrainSections().
 
         const bool environmentSelected =
             environmentWorkspaceActive_;
@@ -4594,6 +4995,7 @@ namespace renegade::studio
         const auto& scene = session_->Scenes().GetScene();
         for (const auto& entity : session_->Scenes().ListEntities())
         {
+            if(waterfallRenderer_.Owns(entity.entity))continue;
             // A broken Gate 5 build could serialize Wicked's fallback Weather
             // onto the Terrain entity. Hide only the dedicated Environment
             // carrier; legacy dual-role terrain must remain discoverable.
@@ -4687,6 +5089,9 @@ namespace renegade::studio
 
     void StudioRenderPath::RefreshInspector()
     {
+        // Standalone waterfall selection owns a dedicated panel, not the generic component inspector.
+        if(LayoutWaterfallInspector())return;
+        if(!projectHubVisible_&&!renderWorkspaceActive_)inspectorPanel_.SetVisible(true);
         diagnosticService_.SetState("inspector_refresh", {{"elapsed_ms", diagnosticService_.ElapsedMs()},
             {"stage", std::string("refresh_entered")}});
         const bool hasSession = session_ != nullptr;
@@ -4739,6 +5144,20 @@ namespace renegade::studio
             : nullptr;
         SyncSelectionOutline();
 
+        bool hasSelectedRiver = false;
+        if (hasSession && !terrainWorkspaceActive_ && !environmentWorkspaceActive_)
+        {
+            const auto& scene = session_->Scenes().GetScene();
+            for (std::size_t i = 0; i < scene.splines.GetCount(); ++i)
+            {
+                const auto root = scene.splines.GetEntity(i);
+                const auto* material = scene.materials.GetComponent(root);
+                if (material && material->shaderType ==
+                        wi::scene::MaterialComponent::SHADERTYPE_WATER &&
+                    (selectedEntity == root || scene.Entity_IsDescendant(selectedEntity, root)))
+                { hasSelectedRiver = true; break; }
+            }
+        }
         const bool hasTransform = transform != nullptr;
         const bool hasWeather = weather != nullptr;
         const bool hasTerrain = terrain != nullptr;
@@ -4753,7 +5172,7 @@ namespace renegade::studio
         const bool sceneComponentsVisible =
             hasSession && selectedEntity != wi::ecs::INVALID_ENTITY &&
             !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
-            !hasWeather && !hasTerrain && !hasPlayerStart;
+            !hasWeather && !hasTerrain && !hasPlayerStart && !hasSelectedRiver;
         wi::ecs::Entity sceneAuthoringRoot = wi::ecs::INVALID_ENTITY;
         bridge::SceneLayerMaskState sceneLayerState;
         bridge::ObjectParticipationState objectRenderableState;
@@ -5066,9 +5485,9 @@ namespace renegade::studio
             sceneObjectWetmap_.SetCheck(objectWetmapState.value);
         }
 
-        const auto setTransformVisible = [this, hasWeather, hasTerrain](wi::gui::Widget& widget)
+        const auto setTransformVisible = [this, hasWeather, hasTerrain, hasSelectedRiver](wi::gui::Widget& widget)
         {
-            widget.SetVisible(!environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !hasWeather && !hasTerrain);
+            widget.SetVisible(!environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !hasWeather && !hasTerrain && !hasSelectedRiver);
         };
         setTransformVisible(positionLabel_);
         setTransformVisible(rotationLabel_);
@@ -5212,6 +5631,16 @@ namespace renegade::studio
         setTerrainVisible(terrainBrushFalloff_);
         setTerrainVisible(terrainBrushReadout_);
         setTerrainVisible(terrainStrokeDiagnostic_);
+        setTerrainVisible(terrainRiverLabel_);
+        setTerrainVisible(terrainRiverBrushButton_);
+        setTerrainVisible(terrainRiverWidth_);
+        setTerrainVisible(terrainRiverCarveDepth_);
+        setTerrainVisible(terrainRiverCarveBank_);
+        setTerrainVisible(terrainRiverCarveButton_);
+        setTerrainVisible(terrainRiverRockyBedButton_);
+        setTerrainVisible(terrainRiverUnlinkButton_);
+        setTerrainVisible(terrainRiverExtendFloorButton_);
+        setTerrainVisible(terrainRiverStatus_);
         RefreshWd01VegetationControls(hasTerrain);
 
         translationX_.SetEnabled(hasTransform);
@@ -5501,7 +5930,7 @@ namespace renegade::studio
         else if (!hasLight)
         {
             inspectorLabel_.SetText(
-                "TRANSFORM // " +
+                std::string(hasSelectedRiver ? "RIVER // " : "TRANSFORM // ") +
                 (name != nullptr && !name->name.empty()
                     ? name->name
                     : "ENTITY " + std::to_string(entity)));
@@ -5904,14 +6333,36 @@ namespace renegade::studio
         else
         {
             DisableWd01VegetationBrush();
+            terrainRiverBrushActive_ = false;
+            terrainRiverStrokeActive_ = false;
+            terrainRiverStrokePoints_.clear();
+            terrainRiverBrushButton_.SetText("DRAW RIVER");
         }
         studioChrome_.SetEnvironmentWorkspaceActive(environmentWorkspaceActive_);
         studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_);
+        // Preserve a selected river (or one of its spline control points).
+        // The Terrain workspace already edits its own terrain carrier; forcing
+        // selection to that carrier made every river material control inert.
         if (terrainWorkspaceActive_ &&
             session_->Scenes().GetScene().terrains.GetCount() > 0)
         {
-            session_->Selection().Select(
-                session_->Scenes().GetScene().terrains.GetEntity(0));
+            const auto& scene = session_->Scenes().GetScene();
+            const auto selected = session_->Selection().SelectedEntity();
+            bool riverSelected = false;
+            for (std::size_t i = 0; i < scene.splines.GetCount(); ++i)
+            {
+                const auto root = scene.splines.GetEntity(i);
+                const auto* material = scene.materials.GetComponent(root);
+                if (material && material->shaderType ==
+                        wi::scene::MaterialComponent::SHADERTYPE_WATER &&
+                    (selected == root || scene.Entity_IsDescendant(selected, root)))
+                {
+                    riverSelected = true;
+                    break;
+                }
+            }
+            if (!riverSelected)
+                session_->Selection().Select(scene.terrains.GetEntity(0));
         }
         ClearSelectionOutline();
         RefreshHierarchy();
@@ -5928,7 +6379,9 @@ namespace renegade::studio
 
         const auto entity = session_->Selection().SelectedEntity();
         auto& scene = session_->Scenes().GetScene();
-        scene.Update(0.0f);
+        // Focus is a camera operation. Native Scene::Update already ran for
+        // this frame; a second late update can invalidate terrain/renderer
+        // preparation and must not be used to refresh selection bounds.
         const auto* transform = scene.transforms.GetComponent(entity);
         if (transform == nullptr)
         {
@@ -6020,6 +6473,25 @@ namespace renegade::studio
         }
 
         const auto entity = session_->Selection().SelectedEntity();
+        const auto waterfallRoot=bridge::placeable_waterfall::WaterfallOwner(session_->Scenes().GetScene(),entity);
+        if(waterfallRoot!=wi::ecs::INVALID_ENTITY){bridge::placeable_waterfall::AuthoredWaterfall record;std::string error;if(bridge::placeable_waterfall::ReadWaterfall(session_->Scenes().GetScene(),waterfallRoot,record,error)){session_->Commands().Execute(bridge::placeable_waterfall::MakeRemoveWaterfallCommand(session_->Scenes().GetScene(),record.id));session_->Selection().Clear();RefreshHierarchy();RefreshInspector();RefreshStatus();}return;}
+        if (bridge::RiverTransformNeedsTerrainTransaction(session_->Scenes().GetScene(),entity))
+        {
+            const auto revision=session_->Scenes().Revision();
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this,entity,revision](std::uint64_t)
+            {
+                if (!session_ || testLevelRuntime_.IsActive() || revision!=session_->Scenes().Revision()) return;
+                auto& scene=session_->Scenes().GetScene();
+                ClearSelectionOutline();
+                if (session_->Commands().Execute(std::make_unique<bridge::WatercourseSceneCommand>(
+                    scene,std::make_unique<bridge::DeleteEntityCommand>(scene,entity))))
+                    session_->Selection().Clear();
+                else studioChrome_.SetStatusText("DELETE NOT APPLIED // Remove linked beds before deleting terrain or required spline points");
+                SyncSelectionOutline();RefreshHierarchy();RefreshInspector();RefreshStatus();
+            });
+            return;
+        }
         ClearSelectionOutline();
         if (!session_->Commands().Execute(
                 std::make_unique<bridge::DeleteEntityCommand>(
@@ -6067,6 +6539,7 @@ namespace renegade::studio
 
     void StudioRenderPath::OpenStaticModelImporter(bool fromProjectile)
     {
+        ++modelImportGeneration_;
         if (session_ == nullptr || !session_->Projects().HasProject())
             return;
         assemblyPanel_.SetVisible(false); assemblyImage_.SetImage({}); assemblyPreview_.reset();
@@ -6078,8 +6551,8 @@ namespace renegade::studio
             session_->Projects().CurrentProject().projectId;
         wi::helper::FileDialogParams params;
         params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "Select GLB or FBX model or rigged character";
-        params.extensions = {"glb", "fbx"};
+        params.description = "Select GLB, FBX or OBJ model (FBX/GLB for rigged characters)";
+        params.extensions = {"glb", "fbx", "obj"};
         wi::helper::FileDialog(params,
             [this, projectId, fromProjectile](const std::string& path)
             {
@@ -6117,7 +6590,7 @@ namespace renegade::studio
                             return;
                         }
                         modelImportPreview_ = std::move(preview);
-                        modelImportPanel_.SetSize(XMFLOAT2(560.0f, character ? 990.0f : 750.0f));
+                        modelImportPanel_.SetSize(XMFLOAT2(1040.0f, character ? 990.0f : 750.0f));
                         modelImportSummary_.SetSize(XMFLOAT2(480.0f, character ? 55.0f : 85.0f));
                         modelImportName_.SetPos(XMFLOAT2(110.0f, character ? 740.0f : 500.0f));
                         const float destinationY = character ? 775.0f : 535.0f;
@@ -6166,13 +6639,24 @@ namespace renegade::studio
                         const auto& summary = candidate->Summary();
                         modelImportSummary_.SetText(
                             "SOURCE // " + fs::u8path(path).filename().generic_u8string() +
-                            "\n" + std::string(character ? "CHARACTER " : "STATIC ") + std::string(candidate->SourceFormat() == bridge::ModelSourceFormat::Fbx ? "FBX" : "GLB") + " // " + std::to_string(summary.meshes) +
+                            "\n" + std::string(character ? "CHARACTER " : "STATIC ") + std::string(bridge::ImportService::ModelSourceFormatName(candidate->SourceFormat())) + " // " + std::to_string(summary.meshes) +
                             " meshes / " + std::to_string(summary.materials) +
                             " materials / " + std::to_string(summary.objects) + " objects" +
                             (character ? " / " + std::to_string(candidate->Evidence().armatureBones) + " bones / " +
                                 std::to_string(summary.animations) + " clips" : "") +
                             (character ? "\nSelect a clip to assign its gameplay action." : "\nPreview controls do not change the imported asset."));
+                        modelImportMaterial_.ClearItems();
+                        for (size_t i = 0; i < candidate->PeekScene()->materials.GetCount(); ++i)
+                        {
+                            const auto entity = candidate->PeekScene()->materials.GetEntity(i);
+                            const auto* materialName = candidate->PeekScene()->names.GetComponent(entity);
+                            modelImportMaterial_.AddItem(std::to_string(i + 1) + " // " +
+                                (materialName ? materialName->name : "Material"));
+                        }
+                        modelImportMaterial_.SetSelected(0);
+                        modelImportMapSlot_.SetSelected(0);
                         modelImportCandidate_ = std::move(candidate);
+                        RefreshModelImportTextureInfo();
                         modelImportFromProjectile_ = fromProjectile;
                         if (fromProjectile) {
                             modelImportFolder_.SetValue("Content/Projectiles/Models");
@@ -6188,6 +6672,66 @@ namespace renegade::studio
                         studioChrome_.SetStatusText("MODEL IMPORT // REVIEW AND IMPORT ASSET");
                     });
             });
+    }
+
+    void StudioRenderPath::RefreshModelImportTextureInfo()
+    {
+        if (!modelImportCandidate_ || !modelImportCandidate_->IsReady()) return;
+        const auto* scene = modelImportCandidate_->PeekScene();
+        const int material = modelImportMaterial_.GetSelected(), slot = modelImportMapSlot_.GetSelected();
+        const bool valid = material >= 0 && size_t(material) < scene->materials.GetCount() &&
+            slot >= 0 && slot < wi::scene::MaterialComponent::TEXTURESLOT_COUNT;
+        modelImportAssignMap_.SetEnabled(valid);
+        if (valid)
+        {
+            const auto& texture = scene->materials[material].textures[slot];
+            modelImportMapInfo_.SetText(texture.name.empty()
+                ? "No map assigned. The model can still be imported.\nChoose a map to preview it on this material."
+                : "Assigned: " + fs::u8path(texture.name).filename().generic_u8string() +
+                    "\nChanges appear in the preview and are saved with the asset.");
+        }
+        std::string warnings = "Missing maps do not block model import.\nSelect a material and map above to assign replacements.";
+        if (!modelImportCandidate_->Warnings().empty())
+        {
+            warnings = "SOURCE WARNINGS // " + std::to_string(modelImportCandidate_->Warnings().size()) +
+                "\nGeometry loaded; unavailable maps use material defaults.\n";
+            for (size_t i = 0; i < modelImportCandidate_->Warnings().size() && i < 5; ++i)
+                warnings += "\n" + modelImportCandidate_->Warnings()[i];
+            if (modelImportCandidate_->Warnings().size() > 5)
+                warnings += "\nAdditional source maps are unavailable; inspect each material slot.";
+        }
+        modelImportWarnings_.SetText(warnings);
+    }
+
+    void StudioRenderPath::AssignModelImportTexture()
+    {
+        if (!modelImportCandidate_ || !modelImportPanel_.IsVisible()) return;
+        const auto projectId = modelImportProjectId_;
+        const auto generation = modelImportGeneration_;
+        const auto source = modelImportCandidate_->SourcePath();
+        const int material = modelImportMaterial_.GetSelected(), slot = modelImportMapSlot_.GetSelected();
+        if (material < 0 || slot < 0) return;
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "Select texture map";
+        params.extensions = {"png", "jpg", "jpeg", "tga", "dds", "bmp", "webp"};
+        wi::helper::FileDialog(params, [this, projectId, generation, source, material, slot](const std::string& path) {
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this, projectId, generation, source, material, slot, path](std::uint64_t) {
+                    if (path.empty() || !modelImportCandidate_ || !modelImportPanel_.IsVisible() ||
+                        modelImportGeneration_ != generation || modelImportProjectId_ != projectId || modelImportCandidate_->SourcePath() != source ||
+                        session_ == nullptr || !session_->Projects().HasProject() ||
+                        session_->Projects().CurrentProject().projectId != projectId) return;
+                    std::string error;
+                    if (!bridge::ModelImportCandidateService().AssignTexture(*modelImportCandidate_,
+                        {std::uint32_t(material), std::uint32_t(slot), path}, error))
+                    { ShowStudioMessageBox(error, "Assign Texture Map"); return; }
+                    modelImportPreview_->RefreshMaterials(*modelImportCandidate_->PeekScene());
+                    modelImportCommit_.SetEnabled(false);
+                    RefreshModelImportTextureInfo();
+                    studioChrome_.SetStatusText("MODEL IMPORT // MAP ASSIGNED; REVIEW PREVIEW");
+                });
+        });
     }
 
     void StudioRenderPath::AppendModelImportAnimations()
@@ -7077,6 +7621,390 @@ bool StudioRenderPath::HandleAudioSceneIcons(
     return false;
 }
 
+void StudioRenderPath::QueueSelectedRiverRockyBed()
+{
+    if(!session_ || testLevelRuntime_.IsActive() || projectHubVisible_ ||
+        environmentWorkspaceActive_ || renderWorkspaceActive_)return;
+    auto& scene=session_->Scenes().GetScene();
+    auto river=session_->Selection().SelectedEntity();
+    if(!scene.splines.Contains(river))
+        for(size_t i=0;i<scene.splines.GetCount();++i)
+            if(scene.Entity_IsDescendant(river,scene.splines.GetEntity(i)))
+            {river=scene.splines.GetEntity(i);break;}
+    if(!scene.splines.Contains(river) ||
+       scene.terrains.GetCount()!=1)
+    {
+        studioChrome_.SetStatusText(
+            "ROCKY BED // Select a linked River Water or its point; requires one terrain");
+        return;
+    }
+    const auto terrainID=scene.terrains.GetEntity(0);
+    const auto revision=session_->Scenes().Revision();
+    const auto assetRoot=(fs::u8path(wi::helper::GetExecutablePath())
+        .parent_path()/"Content"/"terrain"/"riverbed"/"rocky_rugged")
+        .generic_u8string();
+    wi::eventhandler::Subscribe_Once(
+        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+        [this,river,terrainID,revision,assetRoot](std::uint64_t)
+    {
+        if(!session_ || testLevelRuntime_.IsActive() ||
+            session_->Scenes().Revision()!=revision)return;
+        auto& current=session_->Scenes().GetScene();
+        if(!current.terrains.Contains(terrainID) ||
+           !current.splines.Contains(river))return;
+        // The bridge verifies native WATER + LINKED terrain + four original
+        // material slots, loads ALL assets before mutation, then pushes one
+        // rollback-safe Undo transaction. Nothing happens on scene load.
+        if(!session_->Commands().Execute(
+            std::make_unique<bridge::PaintRockyRiverbedCommand>(
+                current,terrainID,river,assetRoot)))
+        {
+            terrainRiverStatus_.SetText("ROCKY BED // NOT PAINTED // NO CHANGE");
+            studioChrome_.SetStatusText(
+                "ROCKY BED // Refused: link bed first, then use one finite terrain, "
+                "4 original paint slots plus optional shared rocky layer and installed PBR textures");
+            return;
+        }
+        terrainRiverStatus_.SetText("ROCKY BED // PAINTED // UNDO READY");
+        QueueInspectorRefresh();
+        RefreshStatus();
+        studioChrome_.SetStatusText(
+            "ROCKY BED // Native terrain material painted // Undo ready // "
+            "Inspect in copied project before saving");
+    });
+}
+
+void StudioRenderPath::QueueSelectedRiverReflectionAlignment()
+{
+    if (!session_ || testLevelRuntime_.IsActive() || projectHubVisible_ ||
+        environmentWorkspaceActive_ || renderWorkspaceActive_) return;
+    auto& scene = session_->Scenes().GetScene();
+    auto river = session_->Selection().SelectedEntity();
+    if (!scene.splines.Contains(river))
+        for (std::size_t i=0; i<scene.splines.GetCount(); ++i)
+            if (scene.Entity_IsDescendant(river, scene.splines.GetEntity(i)))
+            { river=scene.splines.GetEntity(i); break; }
+    const auto* water = scene.materials.GetComponent(river);
+    if (!scene.splines.Contains(river) || !water ||
+        water->shaderType != wi::scene::MaterialComponent::SHADERTYPE_WATER)
+    {
+        studioChrome_.SetStatusText("REFLECTION // Select a river or a spline point");
+        return;
+    }
+    const auto revision=session_->Scenes().Revision();
+    wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+        [this, river, revision](std::uint64_t)
+    {
+        if (!session_ || testLevelRuntime_.IsActive() ||
+            revision!=session_->Scenes().Revision()) return;
+        auto& current=session_->Scenes().GetScene();
+        if (!current.splines.Contains(river)) return;
+        // The command validates near-planar grade, native WATER, parent graph,
+        // transform and control-point constraints BEFORE any mutation.
+        // This is always opt-in; scene load and water brush never call it.
+        if (!session_->Commands().Execute(
+                std::make_unique<bridge::OrientNearPlanarRiverWaterPlaneCommand>(
+                    current,river)))
+        {
+            terrainRiverStatus_.SetText("REFLECTION // UNSUITABLE REACH // NO CHANGE");
+            studioChrome_.SetStatusText(
+                "REFLECTION // Refused: flat, steeply varying, already aligned or non-planar river");
+            return;
+        }
+        terrainRiverStatus_.SetText("REFLECTION // ALIGNMENT APPLIED // UNDO READY");
+        QueueInspectorRefresh();
+        RefreshStatus();
+        studioChrome_.SetStatusText(
+            "REFLECTION // Native water plane aligned // Inspect water before saving // Undo ready");
+    });
+}
+
+void StudioRenderPath::QueueSelectedRiverAppearance(const int channel, const float value)
+{
+    if (!session_ || testLevelRuntime_.IsActive() || projectHubVisible_ ||
+        environmentWorkspaceActive_ || renderWorkspaceActive_ ||
+        channel < 0 || channel > 4 || !std::isfinite(value)) return;
+    auto& scene = session_->Scenes().GetScene();
+    auto river = session_->Selection().SelectedEntity();
+    if (!scene.splines.Contains(river))
+        for (std::size_t i = 0; i < scene.splines.GetCount(); ++i)
+            if (scene.Entity_IsDescendant(river, scene.splines.GetEntity(i)))
+            { river = scene.splines.GetEntity(i); break; }
+    const auto* water = scene.materials.GetComponent(river);
+    if (!scene.splines.Contains(river) || !water ||
+        water->shaderType != wi::scene::MaterialComponent::SHADERTYPE_WATER)
+    {
+        studioChrome_.SetStatusText("WATER // Select a river or one of its spline points");
+        return;
+    }
+    const auto revision = session_->Scenes().Revision();
+    wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+        [this, river, revision, channel, value](std::uint64_t)
+    {
+        if (!session_ || testLevelRuntime_.IsActive() ||
+            revision != session_->Scenes().Revision()) return;
+        auto& current = session_->Scenes().GetScene();
+        auto* material = current.materials.GetComponent(river);
+        if (!material || !current.splines.Contains(river) ||
+            material->shaderType != wi::scene::MaterialComponent::SHADERTYPE_WATER) return;
+        bridge::RiverWaterMaterialState after;
+        if (!bridge::CaptureRiverWaterMaterialState(current, river, after)) return;
+        switch (channel)
+        {
+        case 0: after.tintOpacity.x = std::clamp(value, 0.0f, 1.0f); break;
+        case 1: after.tintOpacity.y = std::clamp(value, 0.0f, 1.0f); break;
+        case 2: after.tintOpacity.z = std::clamp(value, 0.0f, 1.0f); break;
+        case 3: after.tintOpacity.w = 1.0f - std::clamp(value, 0.0f, 1.0f); break;
+        case 4: after.normalStrength=std::clamp(value,0.f,3.f); break;
+        case 5: after.tintOpacity.w=std::clamp(value,0.f,16.f); break;
+        default: return;
+        }
+        if (!session_->Commands().Execute(
+                std::make_unique<bridge::SetRiverWaterMaterialCommand>(current, river, after)))
+        {
+            studioChrome_.SetStatusText("WATER // No material change recorded");
+            return;
+        }
+        QueueInspectorRefresh();
+        RefreshStatus();
+        studioChrome_.SetStatusText("WATER // River appearance updated // Undo ready");
+    });
+}
+
+void StudioRenderPath::QueueSelectedRiverFlow(const int operation, const float requestedSpeed)
+{
+    if (!session_ || testLevelRuntime_.IsActive() || projectHubVisible_ ||
+        environmentWorkspaceActive_ || renderWorkspaceActive_ ||
+        ((operation == 2 || operation == 3) && !std::isfinite(requestedSpeed))) return;
+    auto& scene = session_->Scenes().GetScene();
+    auto river = session_->Selection().SelectedEntity();
+    if (!scene.splines.Contains(river))
+        for (std::size_t i = 0; i < scene.splines.GetCount(); ++i)
+            if (scene.Entity_IsDescendant(river, scene.splines.GetEntity(i)))
+            { river = scene.splines.GetEntity(i); break; }
+    const auto* water = scene.materials.GetComponent(river);
+    if (!scene.splines.Contains(river) || !water ||
+        water->shaderType != wi::scene::MaterialComponent::SHADERTYPE_WATER)
+    {
+        studioChrome_.SetStatusText("FLOW // Select a river or one of its spline points");
+        return;
+    }
+    const auto revision = session_->Scenes().Revision();
+    wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+        [this, river, revision, operation, requestedSpeed](std::uint64_t)
+    {
+        if (!session_ || testLevelRuntime_.IsActive() ||
+            revision != session_->Scenes().Revision()) return;
+        auto& current = session_->Scenes().GetScene();
+        auto* material = current.materials.GetComponent(river);
+        if (!material || !current.splines.Contains(river) ||
+            material->shaderType != wi::scene::MaterialComponent::SHADERTYPE_WATER) return;
+        bridge::RiverWaterMaterialState afterState;
+        if (!bridge::CaptureRiverWaterMaterialState(current, river, afterState)) return;
+        const float magnitude=std::hypot(afterState.flowUvU,afterState.flowUvV);
+        float angle=std::atan2(-afterState.flowUvU,-afterState.flowUvV);
+        float speed=std::clamp(magnitude,0.00025f,0.01f);
+        if(operation==0) angle+=DirectX::XM_PI;
+        else if(operation==3)angle=DirectX::XMConvertToRadians(std::clamp(requestedSpeed,0.f,360.f));
+        else if(operation==2)speed=std::clamp(requestedSpeed,.00025f,.01f);
+        else if(operation>0)speed=std::min(.01f,speed+.00025f);
+        else speed=std::max(.00025f,speed-.00025f);
+        afterState.flowUvU=-speed*std::sin(angle);
+        afterState.flowUvV=-speed*std::cos(angle);
+        if (!session_->Commands().Execute(
+                std::make_unique<bridge::SetRiverWaterMaterialCommand>(current, river, afterState)))
+            return;
+        QueueInspectorRefresh();
+        RefreshStatus();
+        studioChrome_.SetStatusText(operation == 0
+            ? "FLOW // Direction reversed // Undo ready"
+            : "FLOW // Surface scroll updated // Undo ready");
+    });
+}
+
+void StudioRenderPath::QueueSelectedRiverLayer(const bool enabled, const bool mountainFit)
+{
+    if (!session_ || testLevelRuntime_.IsActive() || projectHubVisible_ ||
+        environmentWorkspaceActive_ || renderWorkspaceActive_) return;
+    auto& scene=session_->Scenes().GetScene();
+    auto river=session_->Selection().SelectedEntity();
+    if (!scene.splines.Contains(river))
+        for (std::size_t i=0;i<scene.splines.GetCount();++i)
+            if (scene.Entity_IsDescendant(river,scene.splines.GetEntity(i)))
+            { river=scene.splines.GetEntity(i);break; }
+    const auto* water=scene.materials.GetComponent(river);
+    if (!scene.splines.Contains(river) || !water || water->shaderType !=
+        wi::scene::MaterialComponent::SHADERTYPE_WATER || scene.terrains.GetCount()!=1)
+    {
+        studioChrome_.SetStatusText("CHANNEL // Select a river or one of its points; one terrain is required");
+        return;
+    }
+    const auto terrainID=scene.terrains.GetEntity(0);
+    const auto revision=session_->Scenes().Revision();
+    const float depth=terrainRiverCarveDepthValue_,bank=terrainRiverCarveBankValue_;
+    wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+        [this,river,terrainID,revision,depth,bank,enabled,mountainFit](std::uint64_t)
+    {
+        if (!session_ || testLevelRuntime_.IsActive() || revision!=session_->Scenes().Revision()) return;
+        auto& current=session_->Scenes().GetScene();
+        auto* terrain=current.terrains.GetComponent(terrainID);
+        if (!terrain || !current.splines.Contains(river)) return;
+        if (mountainFit)
+        {
+            auto command=std::make_unique<bridge::FitMountainStreamCommand>(
+                current,terrainID,river,depth,bank);
+            auto* fit=command.get();
+            if (!fit->Execute())
+            {
+                studioChrome_.SetStatusText("STREAM FIT // " + fit->Error());
+                return;
+            }
+            // RecordExecuted cannot fail in ordinary editor history; retain
+            // the command locally until history accepts it.
+            if (!session_->Commands().RecordExecuted(std::move(command)))
+            {
+                studioChrome_.SetStatusText("STREAM FIT // History unavailable");
+                return;
+            }
+            session_->Selection().Select(river);
+            RefreshHierarchy(); RefreshInspector(); RefreshStatus();
+            studioChrome_.SetStatusText("STREAM FIT // Downhill surface and linked channel // Undo ready");
+            return;
+        }
+        const auto rollback=bridge::CaptureTerrainSculpt(current,*terrain);
+        auto command=std::make_unique<bridge::SetRiverTerrainLayerCommand>(
+            current,terrainID,river,depth,bank,enabled);
+        if (!command->Execute())
+        {
+            terrainRiverStatus_.SetText("CHANNEL // NOT CHANGED");
+            studioChrome_.SetStatusText("CHANNEL // " + command->Error());
+            return;
+        }
+        if (!session_->Commands().RecordExecuted(std::move(command)))
+        {
+            bridge::ApplyTerrainSculpt(current,*terrain,rollback);
+            studioChrome_.SetStatusText("CHANNEL // History unavailable; terrain restored");
+            return;
+        }
+        terrainRiverStatus_.SetText(enabled ? "CHANNEL // LINKED // UNDO READY" : "CHANNEL // REMOVED // UNDO READY");
+        RefreshStatus();
+        studioChrome_.SetStatusText(enabled
+            ? "CHANNEL LINKED // Move spline points to reshape it; manual sculpting preserves the base"
+            : "CHANNEL REMOVED // Sculpted base restored; water kept");
+    });
+}
+
+bool StudioRenderPath::HandleRiverSplineControlPoints(const XMFLOAT4& pointer)
+{
+    if (session_ == nullptr || camera == nullptr || projectHubVisible_)
+        return false;
+
+    auto& scene = session_->Scenes().GetScene();
+    const auto selected = session_->Selection().SelectedEntity();
+    const bool canPick = !terrainRiverBrushActive_ && !IsWd01VegetationBrushActive() && !flyCameraActive_ &&
+        !lightPlacementActive_ && !GetGUI().HasFocus() &&
+        !gizmo_.IsInteracting() && !studioChrome_.ConsumedPointerThisFrame() &&
+        IsPointerOverViewport(pointer) &&
+        wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
+    wi::ecs::Entity nearest = wi::ecs::INVALID_ENTITY;
+    float nearestDistance = 14.0f * 14.0f;
+
+    for (size_t i = 0; i < scene.splines.GetCount(); ++i)
+    {
+        const auto root = scene.splines.GetEntity(i);
+        const auto* material = scene.materials.GetComponent(root);
+        if (material == nullptr || material->shaderType !=
+                wi::scene::MaterialComponent::SHADERTYPE_WATER ||
+            !session_->Scenes().IsHierarchyVisible(root))
+            continue;
+
+        // Editor overlays must be enqueued every frame, independently of
+        // Inspector layout/refresh. A selected member shows its shared domain.
+        if (riverFlowArrowsVisible_ &&
+            (selected == root || scene.Entity_IsDescendant(selected,root)))
+            riverFlow_.DrawArrows(root);
+        const auto& spline = scene.splines[i];
+        const auto samples = bridge::SampleSplineWorldPoints(scene, root,
+            std::max<std::size_t>(2, (spline.spline_node_entities.size() > 1
+                ? spline.spline_node_entities.size() - 1 : 1) *
+                std::size_t(std::clamp(spline.mesh_generation_subdivision, 1, 24))));
+        XMFLOAT2 previous = {};
+        bool previousVisible = false;
+        for (const auto& point : samples)
+        {
+            XMFLOAT2 screen = {};
+            const bool visible = ProjectEditorPoint(point, screen);
+            if (previousVisible && visible)
+                DrawEditorLine(previous, screen, XMFLOAT4(0.12f, 0.83f, 1.0f, 0.94f));
+            previous = screen;
+            previousVisible = visible;
+        }
+        for (const auto node : spline.spline_node_entities)
+        {
+            const auto* transform = scene.transforms.GetComponent(node);
+            if (transform == nullptr)
+            {
+                previousVisible = false;
+                continue;
+            }
+            XMFLOAT2 screen = {};
+            XMFLOAT3 worldPosition; XMStoreFloat3(&worldPosition,scene.ComputeEntityMatrixRecursive(node).r[3]);
+            const bool visible = ProjectEditorPoint(worldPosition, screen);
+            if (!visible)
+                continue;
+
+            const bool active = selected == node;
+            const bool hovered = IsPointerOverViewport(pointer) &&
+                std::hypot(screen.x-pointer.x,screen.y-pointer.y)<14.f;
+            const XMFLOAT4 color = active ? XMFLOAT4(1.f,.57f,.08f,1.f)
+                : hovered ? XMFLOAT4(1.f,.9f,.4f,1.f) : XMFLOAT4(.08f,.78f,1.f,1.f);
+            // Shaded spherical editor handles: constant readable pixel size,
+            // no authored mesh/material/entity and no effect in Runtime/export.
+            const auto inverseView=XMMatrixInverse(nullptr,camera->GetView());
+            const auto right=inverseView.r[0],up=inverseView.r[1],front=-inverseView.r[2];
+            const float viewDepth=XMVectorGetZ(XMVector3TransformCoord(XMLoadFloat3(&worldPosition),camera->GetView()));
+            const float radius=(active?12.f:hovered?11.f:9.f)*2.f*viewDepth/
+                (std::max(1.f,float(GetLogicalHeight()))*std::max(.001f,XMVectorGetY(camera->GetProjection().r[1])));
+            auto vertex=[&](int ring,int segment,XMFLOAT3& position,XMFLOAT4& tint){
+                const float theta=XM_PIDIV2*ring/4.f,phi=XM_2PI*segment/16.f;
+                const float nx=std::sin(theta)*std::cos(phi),ny=std::sin(theta)*std::sin(phi),nz=std::cos(theta);
+                XMStoreFloat3(&position,XMLoadFloat3(&worldPosition)+radius*(right*nx+up*ny+front*nz));
+                const float light=std::clamp(nx*-.35f+ny*.55f+nz*.76f,0.f,1.f);
+                const float spec=std::pow(light,24.f)*.5f;
+                const float shade=.2f+.8f*light;
+                tint={std::min(1.f,color.x*shade+spec),std::min(1.f,color.y*shade+spec),std::min(1.f,color.z*shade+spec),1.f};
+            };
+            for(int ring=0;ring<4;++ring)for(int segment=0;segment<16;++segment){
+                wi::renderer::RenderableTriangle t;
+                vertex(ring,segment,t.positionA,t.colorA);vertex(ring+1,segment,t.positionB,t.colorB);
+                vertex(ring+1,segment+1,t.positionC,t.colorC);wi::renderer::DrawTriangle(t,false,false);
+                if(ring){vertex(ring,segment+1,t.positionB,t.colorB);wi::renderer::DrawTriangle(t,false,false);}
+            }
+            if (canPick)
+            {
+                const float dx = screen.x-pointer.x;
+                const float dy = screen.y-pointer.y;
+                const float distance = dx*dx + dy*dy;
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearest = node;
+                }
+            }
+        }
+    }
+    // Let an already-selected point's gizmo own its centre handle click.
+    if (nearest == wi::ecs::INVALID_ENTITY || nearest == selected)
+        return false;
+    session_->Selection().Select(nearest);
+    RefreshHierarchy();
+    RefreshInspector();
+    RefreshStatus();
+    SyncGizmoSelection();
+    SyncSelectionOutline();
+    return true;
+}
+
 bool StudioRenderPath::HandleDecalProbeSceneIcons(
     const XMFLOAT4& pointer)
 {
@@ -7709,8 +8637,240 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         wi::input::HidePointer(true);
     }
 
+
+    bool StudioRenderPath::HandleTerrainRiver(const XMFLOAT4& pointer)
+    {
+        if ((!terrainWorkspaceActive_ && riverDrawingReceiver_.empty()) || !terrainRiverBrushActive_ ||
+            session_ == nullptr || camera == nullptr)
+            return false;
+
+        const bool tributary=!riverDrawingReceiver_.empty();
+        if(tributary&&riverDrawingSceneRevision_!=session_->Scenes().Revision()){
+            riverDrawingReceiver_.clear();riverDrawingControl_.clear();terrainRiverBrushActive_=false;terrainRiverStrokeActive_=false;terrainRiverStrokePoints_.clear();return false;
+        }
+        auto project=[&](const wi::primitive::Ray& ray,XMFLOAT3& point){
+            if(!tributary)return true;
+            if(std::abs(ray.direction.y)<1e-7f)return false;
+            const float distance=(riverDrawingAnchor_.y-ray.origin.y)/ray.direction.y;
+            if(!std::isfinite(distance)||distance<=0||distance>10000)return false;
+            point={ray.origin.x+ray.direction.x*distance,riverDrawingAnchor_.y,ray.origin.z+ray.direction.z*distance};return true;
+        };
+        if(tributary)wi::renderer::DrawSphere(wi::primitive::Sphere(riverDrawingAnchor_,.4f),XMFLOAT4(1,.45f,.05f,1),true);
+        const bool pressed = wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
+        const bool held = wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
+        const bool released = wi::input::Release(wi::input::MOUSE_BUTTON_LEFT);
+
+        // Right-click cancels only an in-progress stroke without creating
+        // an Undo entry; it does not steal normal RMB camera navigation
+        // while the brush is merely armed.
+        if (terrainRiverStrokeActive_ &&
+            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
+        {
+            terrainRiverStrokeActive_ = false;
+            terrainRiverStrokePoints_.clear();
+            terrainRiverStatus_.SetText("RIVER // STROKE CANCELLED");
+            if(tributary){riverDrawingReceiver_.clear();riverDrawingControl_.clear();terrainRiverBrushActive_=false;terrainRiverBrushButton_.SetText("DRAW RIVER");QueueInspectorRefresh();}
+            return true;
+        }
+
+        // Finish a stroke even if release happens over the Inspector or
+        // another panel, matching the native foliage brush's input policy.
+        if (terrainRiverStrokeActive_ && released)
+        {
+            // Also sample the release position: a fast drag can deliver only
+            // press and release events without an intermediate held frame.
+            // Releasing over GUI/another panel still finishes the last
+            // valid stroke rather than accidentally sampling that surface.
+            if (!flyCameraActive_ && !GetGUI().HasFocus() &&
+                IsPointerOverViewport(pointer) &&
+                terrainRiverStrokePoints_.size() < 512)
+            {
+                auto& releaseScene = session_->Scenes().GetScene();
+                const auto ray = wi::renderer::GetPickRay(
+                    static_cast<long>(pointer.x),
+                    static_cast<long>(pointer.y), *this, *camera);
+                auto hit = wi::scene::Pick(
+                    ray, wi::enums::FILTER_TERRAIN, ~0u, releaseScene);
+                if (hit.entity != wi::ecs::INVALID_ENTITY && project(ray,hit.position) &&
+                    !terrainRiverStrokePoints_.empty())
+                {
+                    const auto& previous = terrainRiverStrokePoints_.back();
+                    const float dx = hit.position.x - previous.x;
+                    const float dz = hit.position.z - previous.z;
+                    if (dx * dx + dz * dz >= 0.25f)
+                        terrainRiverStrokePoints_.push_back(hit.position);
+                }
+            }
+            terrainRiverStrokeActive_ = false;
+            auto points = std::move(terrainRiverStrokePoints_);
+            terrainRiverStrokePoints_.clear();
+            if (!bridge::IsRiverSplineStrokeValid(points))
+            {
+                terrainRiverStatus_.SetText(
+                    "RIVER // STROKE TOO SHORT (DRAG FURTHER)");
+                return true;
+            }
+            if(tributary){
+                const auto receiver=riverDrawingReceiver_,control=riverDrawingControl_;
+                const auto width=terrainRiverWidthValue_;const auto revision=session_->Scenes().Revision();
+                const auto anchor=riverDrawingAnchor_;
+                for(auto& point:points)point.y=anchor.y;
+                std::reverse(points.begin(),points.end());points.back()=anchor;
+                riverDrawingReceiver_.clear();riverDrawingControl_.clear();terrainRiverBrushActive_=false;terrainRiverBrushButton_.SetText("DRAW RIVER");
+                wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this,receiver,control,width,revision,points=std::move(points)](uint64_t){
+                    if(!session_||testLevelRuntime_.IsActive()||revision!=session_->Scenes().Revision())return;
+                    auto& scene=session_->Scenes().GetScene();bridge::EntityIdentityIndex index;std::string error;
+                    if(scene.terrains.GetCount()!=1||!index.Build(scene,error)){studioChrome_.SetStatusText("TRIBUTARY // Scene changed; draw again");return;}
+                    auto created=std::make_shared<bridge::CreateRiverTributaryCommand>(scene,points,index.Resolve(receiver),index.Resolve(control),width,scene.terrains.GetEntity(0));
+                    // Retain the bridge result through a refused history Execute
+                    // so the creator receives a meaningful failure explanation.
+                    struct Retained final:bridge::ICommand {
+                        std::shared_ptr<bridge::CreateRiverTributaryCommand> inner;
+                        explicit Retained(std::shared_ptr<bridge::CreateRiverTributaryCommand> p):inner(std::move(p)){}
+                        bool Execute()override{return inner->Execute();}void Undo()override{inner->Undo();}
+                    };
+                    if(session_->Commands().Execute(std::make_unique<Retained>(created))){
+                        session_->Selection().Select(created->CreatedEntity());RefreshHierarchy();RefreshInspector();RefreshStatus();
+                        studioChrome_.SetStatusText("TRIBUTARY CREATED // Flow enters the selected river; one Undo restores the original riverbed");
+                    }else {
+                        const auto error=created->Error();wi::backlog::post("Tributary creation refused: "+error);
+                        RefreshHierarchy();RefreshInspector();RefreshStatus();
+                        studioChrome_.SetStatusText(error.find("incoming flow")!=std::string::npos
+                            ?"TRIBUTARY // Curve into the receiving flow; draw a gentler upstream approach"
+                            :"TRIBUTARY // Could not create this join and bed here; try a broader curve or another node. Existing river kept");
+                    }
+                });return true;
+            }
+            const float width = terrainRiverWidthValue_;
+            const auto revision = session_->Scenes().Revision();
+            wi::eventhandler::Subscribe_Once(
+                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this, revision, width, points = std::move(points)](std::uint64_t)
+            {
+                if (session_ == nullptr || testLevelRuntime_.IsActive() ||
+                    revision != session_->Scenes().Revision())
+                    return;
+                auto& scene = session_->Scenes().GetScene();
+                bridge::RiverSplineOptions options;
+                options.widthMeters = width;
+                auto river = std::make_unique<bridge::CreateRiverSplineCommand>(
+                    scene, points, options);
+                auto* riverCommand = river.get();
+                if (session_->Commands().Execute(std::move(river)))
+                {
+                    const auto entity = riverCommand->CreatedEntity();
+                    terrainRiverStatus_.SetText(
+                        "WATER ONLY // FIT MOUNTAIN STREAM + BED FOR SLOPES");
+                    session_->Selection().Select(entity);
+                    // Each freshly drawn river starts from the same approved
+                    // riverbed defaults, even after editing an older river.
+                    // The bed is still linked only on explicit user request.
+                    terrainRiverCarveDepthValue_ = bridge::DefaultRiverBedDepthMeters;
+                    terrainRiverCarveBankValue_ = bridge::DefaultRiverBankWidthMeters;
+                    terrainRiverInspectorEntity_ = wi::ecs::INVALID_ENTITY;
+                    terrainRiverCarveDepth_.SetValue(terrainRiverCarveDepthValue_);
+                    terrainRiverCarveBank_.SetValue(terrainRiverCarveBankValue_);
+                    RefreshHierarchy();
+                    RefreshInspector(); // New river must immediately enable its material controls.
+                    RefreshStatus();
+                    studioChrome_.SetStatusText(
+                        "RIVER WATER DRAWN // Use LINK / UPDATE BED to add an editable channel");
+                }
+                else
+                {
+                    terrainRiverStatus_.SetText("RIVER // CREATION FAILED");
+                }
+            });
+            return true;
+        }
+
+        if (flyCameraActive_ || GetGUI().HasFocus() ||
+            !IsPointerOverViewport(pointer) ||
+            session_->Scenes().GetScene().terrains.GetCount() == 0)
+            return false;
+
+        auto& scene = session_->Scenes().GetScene();
+        const auto ray = wi::renderer::GetPickRay(
+            static_cast<long>(pointer.x),
+            static_cast<long>(pointer.y), *this, *camera);
+        auto picked = wi::scene::Pick(
+            ray, wi::enums::FILTER_TERRAIN, ~0u, scene);
+        const bool hasHit = picked.entity != wi::ecs::INVALID_ENTITY && project(ray,picked.position);
+        if (hasHit)
+        {
+            wi::renderer::DrawSphere(
+                wi::primitive::Sphere(picked.position,
+                    terrainRiverWidthValue_ * 0.5f),
+                XMFLOAT4(0.08f, 0.55f, 0.95f, 0.2f), true);
+        }
+        // Keep the provisional river centreline visible while dragging.
+        // Only debug geometry is emitted here; native scene mutation remains
+        // deferred until the safe point after mouse release.
+        if (terrainRiverStrokeActive_ && !terrainRiverStrokePoints_.empty())
+        {
+            const XMFLOAT4 colour(0.08f, 0.82f, 1.0f, 1.0f);
+            const auto preview = [&](XMFLOAT3 from, XMFLOAT3 to)
+            {
+                from.y += 0.2f;
+                to.y += 0.2f;
+                wi::renderer::RenderableLine line;
+                line.start = from;
+                line.end = to;
+                line.color_start = colour;
+                line.color_end = colour;
+                wi::renderer::DrawLine(line);
+            };
+            for (std::size_t index = 1;
+                 index < terrainRiverStrokePoints_.size(); ++index)
+            {
+                preview(terrainRiverStrokePoints_[index - 1],
+                    terrainRiverStrokePoints_[index]);
+            }
+            if (hasHit)
+                preview(terrainRiverStrokePoints_.back(), picked.position);
+        }
+        if (pressed && hasHit)
+        {
+            if(tributary&&std::hypot(picked.position.x-riverDrawingAnchor_.x,picked.position.z-riverDrawingAnchor_.z)>1.f){
+                studioChrome_.SetStatusText("DRAW TRIBUTARY // Start the drag on the highlighted receiving node");return true;
+            }
+            terrainRiverStrokeActive_ = true;
+            terrainRiverStrokePoints_.clear();
+            terrainRiverStrokePoints_.push_back(tributary?riverDrawingAnchor_:picked.position);
+            terrainRiverStatus_.SetText("RIVER // DRAWING");
+            return true;
+        }
+        if (terrainRiverStrokeActive_ && held && hasHit &&
+            terrainRiverStrokePoints_.size() < 512)
+        {
+            const XMFLOAT3& previous = terrainRiverStrokePoints_.back();
+            const float dx = picked.position.x - previous.x;
+            const float dz = picked.position.z - previous.z;
+            if (dx * dx + dz * dz >= 4.0f)
+                terrainRiverStrokePoints_.push_back(picked.position);
+            return true;
+        }
+        return pressed || (terrainRiverStrokeActive_ && held);
+    }
+
     bool StudioRenderPath::HandleTerrainSculpt(const XMFLOAT4& pointer)
     {
+        // Never consume a gizmo's press/drag/release as a sculpt stroke.
+        if (gizmo_.IsInteracting() || gizmoDragActive_) return false;
+        if (session_ && session_->Selection().HasSelection())
+        {
+            const auto& scene=session_->Scenes().GetScene();
+            const auto selected=session_->Selection().SelectedEntity();
+            for (std::size_t i=0;i<scene.splines.GetCount();++i)
+            {
+                const auto root=scene.splines.GetEntity(i);
+                const auto* material=scene.materials.GetComponent(root);
+                if (material && material->shaderType==wi::scene::MaterialComponent::SHADERTYPE_WATER &&
+                    (selected==root || scene.Entity_IsDescendant(selected,root)))
+                    return false; // Select terrain again to resume manual sculpting.
+            }
+        }
         if (!terrainWorkspaceActive_ || session_ == nullptr || flyCameraActive_ ||
             GetGUI().HasFocus() || !IsPointerOverViewport(pointer) ||
             session_->Scenes().GetScene().terrains.GetCount() == 0)
@@ -7825,6 +8985,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             return false;
         }
 
+        if(PickWaterfallHandles(pointer))return true;
         const auto pickRay = wi::renderer::GetPickRay(
             static_cast<long>(pointer.x),
             static_cast<long>(pointer.y),
@@ -7837,6 +8998,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             ~0u,
             scene);
         wi::ecs::Entity selection = picked.entity;
+        if(waterfallRenderer_.Owns(selection))selection=waterfallRenderer_.Owner(selection);
         if (selection != wi::ecs::INVALID_ENTITY)
         {
             const wi::ecs::Entity reusableRoot =
@@ -7986,11 +9148,23 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             }
         }
 
-        session_->Commands().Execute(
-            std::make_unique<bridge::SetTransformCommand>(
-                session_->Scenes().GetScene(),
-                entity,
-                next));
+        if (bridge::RiverTransformNeedsTerrainTransaction(session_->Scenes().GetScene(),entity))
+        {
+            const auto before=bridge::CaptureTransform(*transform);
+            const auto revision=session_->Scenes().Revision();
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this,entity,before,next,revision](std::uint64_t)
+            {
+                if (!session_ || testLevelRuntime_.IsActive() || revision!=session_->Scenes().Revision()) return;
+                if (!session_->Commands().Execute(std::make_unique<bridge::SetWatercourseTransformCommand>(
+                    session_->Scenes().GetScene(),entity,before,next)))
+                    studioChrome_.SetStatusText("TRANSFORM NOT APPLIED // Linked terrain limits or conflicting edits");
+                SyncGizmoSelection();RefreshInspector();RefreshStatus();
+            });
+        }
+        else
+            session_->Commands().Execute(std::make_unique<bridge::SetTransformCommand>(
+                session_->Scenes().GetScene(),entity,next));
         SetTransformTool(tool);
         RefreshInspector();
         RefreshStatus();
@@ -10035,7 +11209,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         }
 
         TestLevelLaunchOptions options;
-        options.yieldAssistantGpu = true;
+        // Isolated river development runs its local Runtime without coupling
+        // Test Game to any separately installed assistant GPU service.
+        options.yieldAssistantGpu = false;
         options.executablePath = runtimePath;
         options.workingDirectory =
             fs::u8path(runtimePath).parent_path().generic_u8string();
@@ -10091,7 +11267,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
         const auto& project = session_->Projects().CurrentProject();
         TestLevelLaunchOptions options;
-        options.yieldAssistantGpu = true;
+        // Isolated river development runs its local Runtime without coupling
+        // Test Game to any separately installed assistant GPU service.
+        options.yieldAssistantGpu = false;
         options.executablePath = runtimePath;
         options.workingDirectory =
             fs::u8path(runtimePath).parent_path().generic_u8string();
@@ -10499,16 +11677,17 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     }
 
     void StudioRenderPath::RequestSceneReplacement(
-        std::function<void()> continuation)
+        std::function<void()> continuation,
+        std::function<void()> onCancelled)
     {
         if (session_ == nullptr || !continuation)
         {
+            if (onCancelled) onCancelled();
             return;
         }
 
-        // A running preview is a real pending scene edit. Commit it first so
-        // the dirty-state question includes what the creator can currently
-        // see in the viewport.
+        // An in-progress preview must enter the scene's real dirty history
+        // before deciding whether closing can proceed without a prompt.
         StopSunPreview(true);
         if (!session_->Commands().IsDirty())
         {
@@ -10532,30 +11711,42 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         }
         if (result != wi::helper::MessageBoxResult::Yes)
         {
-            return;
-        }
-        if (currentPath.empty())
-        {
-            SaveSceneAs(
-                [continuation = std::move(continuation)](const bool saved)
-                {
-                    if (saved)
-                    {
-                        continuation();
-                    }
-                });
+            if (onCancelled) onCancelled();
             return;
         }
 
-        SaveSceneAfterTransientCleanup(
-            currentPath,
-            [continuation = std::move(continuation)](const bool saved)
+        // A successful scene archive write does NOT necessarily mean the
+        // scripting companion and Build Game closure were persisted. Studio
+        // Session reports combined save success/failure. Never silently
+        // swallow failures and make creators repeat the exit prompt.
+        auto afterSave = [this, continuation = std::move(continuation),
+                          onCancelled = std::move(onCancelled)](bool saved)
+        {
+            if (saved && session_ && !session_->Commands().IsDirty())
             {
-                if (saved)
-                {
-                    continuation();
-                }
-            });
+                continuation();
+                return;
+            }
+            const std::string detail = !session_
+                ? "The editor session is no longer available."
+                : !session_->Scenes().LastError().empty()
+                    ? session_->Scenes().LastError()
+                    : "The save was not confirmed complete; the scene still has unsaved changes.";
+            studioChrome_.SetStatusText("SAVE FAILED // " + detail);
+            (void)wi::helper::messageBoxCustom(
+                "The save did not finish successfully, so Renegade will stay open.\n\n"
+                + detail +
+                "\n\nThe scene archive may already have been written, but "
+                "its companion data has not been confirmed saved. "
+                "Your open scene is preserved. Fix the error and retry, "
+                "or choose No at the close prompt to exit without another save.",
+                "Save could not complete", "OK");
+            if (onCancelled) onCancelled();
+        };
+        if (currentPath.empty())
+            SaveSceneAs(std::move(afterSave));
+        else
+            SaveSceneAfterTransientCleanup(currentPath, std::move(afterSave));
     }
 
     void StudioRenderPath::OpenScene()
@@ -10647,6 +11838,12 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             return;
         }
 
+        // Reaffirm native/test river shader binding on the editor render
+        // thread AFTER asynchronous scene adoption and engine initialization.
+        // SceneService also restores it for Runtime and headless consumers.
+        // This extra editor pass prevents a preload/init ordering failure
+        // from silently making both comparison launchers look identical.
+        bridge::RestoreRiverCaustics(session_->Scenes().GetScene());
         AdoptOpenedSceneCamera();
         RestoreGovernedMaterialTextures();
         SetEnvironmentWorkspaceActive(false);
@@ -11051,6 +12248,12 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
     void StudioRenderPath::SyncGizmoSelection()
     {
+        if(riverGizmoPreview_)
+        {
+            if(session_ && riverGizmoPreviewRevision_==session_->Scenes().Revision())
+                riverGizmoPreview_->Restore();
+            riverGizmoPreview_.reset();
+        }
         gizmoSuppressedForCameraView_ = false;
         gizmo_.selected.clear();
         gizmo_.selectedEntitiesNonRecursive.clear();
@@ -11301,6 +12504,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         infoDisplay.size = 14;
 
         session_.Projects().Initialize("Saved/RenegadeStudio.ini");
+        if(const char* review=std::getenv("RENEGADE_WATERFALL_REVIEW_SCENE"))SetStartupScene(review);
         PrepareProvingGround();
 
         renderer_.BindSession(session_);
@@ -11433,7 +12637,13 @@ namespace renegade::studio
             auto prepared=std::make_unique<bridge::PlayerCameraPreviewService>();
             if(prepared->Prepare(source,start,project.rootPath,project.projectId,playerCameraPreviewError_))
                 playerCameraPreview_=std::move(prepared);
-            else playerCameraPreview_.reset();
+            else {
+                playerCameraPreview_.reset();
+                if (playerCameraPreviewError_ == "Preview deferred until terrain generation settles") {
+                    playerCameraPreviewKey_.clear();
+                    playerCameraPreviewRefreshDelay_ = 0.25f;
+                }
+            }
         }
         if(playerCameraPreview_ && playerCameraPreview_->NeedsRender()) {
             playerCameraPreview_->PreUpdate();

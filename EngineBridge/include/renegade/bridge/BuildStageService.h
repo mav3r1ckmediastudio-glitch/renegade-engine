@@ -3,6 +3,7 @@
 #include "renegade/bridge/BuildService.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,11 @@ namespace renegade::bridge
         std::string assetRegistryJson; // canonical reachable Runtime registry
         std::vector<WindowsRuntimeSupportSource> runtimeSupportSources;
         std::vector<WindowsPackageDocumentInput> packageDocuments;
+        // Optional cooking of the verified COPY only, before manifests/hashes.
+        // The owner source is immutable. Failure aborts staging/promotion.
+        std::function<bool(const WindowsGameBuildFile&, const std::string&,
+            const std::string&, std::string&)> cookProjectCopy;
+
     };
 
     struct WindowsGameStagedFile

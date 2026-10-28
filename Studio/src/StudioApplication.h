@@ -1,5 +1,8 @@
 #pragma once
+#include "renegade/bridge/PlaceableWaterfallRenderer.h"
+#include "renegade/bridge/RiverFlowRenderer.h"
 #include "renegade/bridge/EquipmentActionState.h"
+#include "renegade/bridge/RiverTerrainLayerService.h"
 #include "renegade/bridge/ProjectileAssetService.h"
 
 #include <array>
@@ -36,6 +39,8 @@
 #include "renegade/bridge/SunService.h"
 #include "renegade/bridge/NightSkyService.h"
 #include "renegade/bridge/TerrainService.h"
+#include "renegade/bridge/RiverSplineService.h"
+#include "renegade/bridge/RiverUnderwaterService.h"
 #include "InspectorSectionFramework.h"
 #include "RenegadeStudioChrome.h"
 #include "RenegadeAssistantDock.h"
@@ -109,6 +114,8 @@ namespace renegade::studio
         void RefreshAssemblyDraft();
         void OpenStaticModelImporter(bool fromProjectile = false);
         void AppendModelImportAnimations();
+        void AssignModelImportTexture();
+        void RefreshModelImportTextureInfo();
         void CommitStaticModelImporter();
         void RestoreGovernedMaterialTextures();
 
@@ -195,7 +202,7 @@ namespace renegade::studio
             }
 
             if (!projectHubVisible_ && !renderWorkspaceActive_)
-                inspectorPanel_.wi::gui::Widget::SetVisible(true);
+                inspectorPanel_.wi::gui::Widget::SetVisible(!waterfallInspector_.IsVisible());
         }
 
         [[nodiscard]] XMFLOAT4 StoryFlowWorkspaceBounds() const noexcept
@@ -673,11 +680,22 @@ namespace renegade::studio
             const XMFLOAT3& world,
             XMFLOAT2& screen) const noexcept;
         bool HandleTerrainSculpt(const XMFLOAT4& pointer);
+        bool HandleTerrainRiver(const XMFLOAT4& pointer);
+        void QueueSelectedRiverLayer(bool enabled, bool mountainFit = false);
+        void QueueSelectedRiverFlow(int operation, float requestedSpeed = 0.0f);
+        void InitializeRiverFlowV2();
+        void SyncRiverFlowV2(wi::ecs::Entity);
+        void QueueRiverFlowV2(int operation,float value=0);
+        std::vector<wi::gui::Widget*> RiverFlowV2Widgets();
+        void QueueSelectedRiverReflectionAlignment();
+        void QueueSelectedRiverRockyBed();
+        bool HandleRiverSplineControlPoints(const XMFLOAT4& pointer);
         void CreateWd01VegetationControls();
         void LayoutWd01VegetationControls(float fieldWidth);
         void RefreshWd01VegetationControls(bool hasTerrain);
         void TickWd01Vegetation();
         void DisableWd01VegetationBrush();
+        [[nodiscard]] bool IsWd01VegetationBrushActive() const;
         bool HandleWd01Vegetation(const XMFLOAT4& pointer);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
@@ -776,6 +794,7 @@ namespace renegade::studio
         void SetTransformTool(TransformTool tool);
         void SetProjectHubVisible(bool visible);
         void SyncGizmoSelection();
+        void FinishGizmoDrag();
         void SyncSelectionOutline();
         void SaveSceneAfterTransientCleanup(
             const std::string& scenePath,
@@ -785,8 +804,30 @@ namespace renegade::studio
             std::function<void(bool)> completion = {});
         void ReopenScene();
         void RequestSceneReplacement(
-            std::function<void()> continuation);
+            std::function<void()> continuation,
+            std::function<void()> onCancelled = {});
 
+        bridge::RiverUnderwaterRenderer riverUnderwater_;
+        bridge::RiverFlowRenderer riverFlow_;
+        bridge::PlaceableWaterfallRenderer waterfallRenderer_;
+        SceneInspectorButton addWaterfallButton_,waterfallCrestButton_,waterfallLandingButton_,waterfallDeleteButton_;
+        wi::gui::Window waterfallInspector_;
+        wi::gui::Label waterfallStatus_,waterfallPlacement_,waterfallWater_,waterfallSpray_;
+        std::array<SceneInspectorSlider,6> waterfallSliders_;
+        bool waterfallControlsCreated_=false;std::string waterfallUiError_;
+        void CreateWaterfallControls();
+        void TickWaterfallStudioProof();
+        bool waterfallReviewConfigured_=false;int waterfallProofFrame_=0;
+        void AddWaterfallFromView();
+        bool LayoutWaterfallInspector();
+        void CommitWaterfallSetting(size_t,float);
+        bool CommitWaterfallGizmo(wi::ecs::Entity,const bridge::TransformState&);
+        bool PickWaterfallHandles(const XMFLOAT4&);
+        void DrawWaterfallHandles();
+        void RenderWaterfallTransparents(wi::graphics::CommandList) const;
+        void SelectWaterfallHandle(bool);
+
+        bool exitRequestPending_ = false;
         bridge::StudioSession* session_ = nullptr;
         void InitializeLiveDiagnostics();
         void RequestDiagnosticAction(EditorAction action);
@@ -965,6 +1006,21 @@ namespace renegade::studio
         SceneInspectorCheckBox lightVolumetrics_;
         SceneInspectorSlider lightVolumetricBoost_;
         void LayoutEnvironmentSections();
+        void LayoutTerrainSections();
+        void QueueSelectedRiverAppearance(int channel, float value);
+        float LayoutOceanSubsections(float top, float width, bool visible);
+        std::vector<wi::gui::Widget*> TerrainVegetationWidgets(int group);
+        std::array<SceneInspectorButton, 15> terrainSectionHeaders_;
+        std::array<bool, 15> terrainSectionExpanded_ = {};
+        bool terrainSectionsCreated_ = false;
+        // The selected-river Inspector has its own disclosure state; the Terrain
+        // workspace's persisted tool layout must not silently collapse it.
+        bool selectedRiverInspectorActive_ = false;
+        bool selectedRiverInspectorExpanded_ = true;
+        std::array<bool, 3> selectedRiverSubsectionExpanded_ = {true, true, true};
+        std::array<SceneInspectorButton, 4> oceanSubsectionHeaders_;
+        std::array<bool, 4> oceanSubsectionExpanded_ = {};
+        bool oceanSubsectionsCreated_ = false;
         void OpenNightColour(bool horizon);
         void FinishNightColour(bool apply);
         void CreateNightColourEditor();
@@ -1052,6 +1108,37 @@ namespace renegade::studio
         SceneInspectorSlider terrainBrushFalloff_;
         wi::gui::Label terrainBrushReadout_;
         wi::gui::Label terrainStrokeDiagnostic_;
+        wi::gui::Label terrainRiverLabel_;
+        SceneInspectorButton terrainRiverBrushButton_;
+        SceneInspectorSlider terrainRiverWidth_;
+        SceneInspectorSlider terrainRiverCarveDepth_;
+        SceneInspectorSlider terrainRiverCarveBank_;
+        SceneInspectorButton terrainRiverFitButton_;
+        SceneInspectorButton terrainRiverReflectionAlignButton_;
+        SceneInspectorButton terrainRiverRockyBedButton_;
+        SceneInspectorButton terrainRiverCarveButton_;
+        SceneInspectorButton terrainRiverUnlinkButton_;
+        SceneInspectorButton terrainRiverFlowSlowerButton_;
+        SceneInspectorButton terrainRiverFlowFasterButton_;
+        SceneInspectorButton terrainRiverFlowReverseButton_;
+        SceneInspectorSlider terrainRiverFlowSpeed_;
+        SceneInspectorSlider terrainRiverFlowDirection_;
+        SceneInspectorButton riverFlowEnable_,riverFlowFoam_,riverFlowReverse_,riverFlowReset_,riverFlowArrows_,riverFlowRapids_,riverFlowStartFoam_;
+        SceneInspectorButton riverConnect_,riverDisconnect_,riverConnectCancel_,riverDrawTributary_;
+        SceneInspectorButton riverNodeWidthReset_,riverFlowStartHere_;
+        SceneInspectorSlider riverNodeWidth_;
+        std::string riverDrawingReceiver_,riverDrawingControl_;
+        uint64_t riverDrawingSceneRevision_=0;
+        DirectX::XMFLOAT3 riverDrawingAnchor_{};
+        std::string riverConnectionSource_;
+        uint64_t riverConnectionSceneRevision_=0;
+        std::array<SceneInspectorSlider,9> riverFlowSliders_;
+        wi::gui::Label riverFlowStatus_;
+        bool riverFlowArrowsVisible_=false;
+        std::array<SceneInspectorSlider, 5> terrainRiverAppearance_;
+        SceneInspectorSlider terrainRiverFogDensity_;
+        SceneInspectorButton terrainRiverExtendFloorButton_;
+        wi::gui::Label terrainRiverStatus_;
         wi::gui::Window renderWorkspacePanel_;
         wi::gui::Label renderWorkspaceTitle_;
         wi::gui::Label renderImageLabel_;
@@ -1296,6 +1383,9 @@ namespace renegade::studio
         bool assemblyPreviewRefreshPending_ = false, assemblyDraftPreviewDirty_ = true;
         float assemblyPreviewRefreshDelay_ = 0;
         wi::gui::Window modelImportPanel_;
+        wi::gui::ComboBox modelImportMaterial_, modelImportMapSlot_;
+        wi::gui::Button modelImportAssignMap_;
+        wi::gui::Label modelImportMapInfo_, modelImportWarnings_;
         wi::gui::Label modelImportSummary_;
         wi::gui::Label modelImportPreviewImage_;
         wi::gui::Button modelImportRotateLeft_;
@@ -1316,6 +1406,7 @@ namespace renegade::studio
         wi::gui::Button modelImportCancel_;
         std::unique_ptr<bridge::ModelImportCandidate> modelImportCandidate_;
         bridge::StableId modelImportProjectId_;
+        std::uint64_t modelImportGeneration_ = 0;
         TestLevelRuntimeProcess testLevelRuntime_;
         bool testLevelFrameSuspended_ = false;
         bool projectPreviewActive_ = false;
@@ -1334,6 +1425,8 @@ namespace renegade::studio
         std::vector<wi::ecs::Entity> outlinedEntities_;
         std::vector<std::uint8_t> outlinedEntityPreviousStencils_;
         bridge::TransformState gizmoTransformBefore_;
+        std::unique_ptr<bridge::RiverNodeMovePreview> riverGizmoPreview_;
+        std::uint64_t riverGizmoPreviewRevision_=0;
         XMFLOAT4 viewportBounds_ = {};
         XMFLOAT4 cameraPointerAnchor_ = {};
         float cameraMoveSpeed_ = 5.0f;
@@ -1415,6 +1508,18 @@ namespace renegade::studio
         bool terrainStrokeChanged_ = false;
         wi::ecs::Entity terrainStrokeEntity_ = wi::ecs::INVALID_ENTITY;
         bridge::TerrainSculptState terrainStrokeBefore_;
+        bool terrainRiverBrushActive_ = false;
+        bool terrainRiverStrokeActive_ = false;
+        float terrainRiverWidthValue_ = 8.0f;
+        float terrainRiverCarveDepthValue_ = bridge::DefaultRiverBedDepthMeters;
+        float terrainRiverCarveBankValue_ = bridge::DefaultRiverBankWidthMeters;
+        wi::ecs::Entity terrainRiverInspectorEntity_ = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity terrainRiverInspectorTerrain_ = wi::ecs::INVALID_ENTITY;
+        std::size_t terrainRiverInspectorUndoCount_ = std::size_t(-1);
+        std::size_t terrainRiverInspectorRedoCount_ = std::size_t(-1);
+        bool terrainRiverInspectorLinked_ = false;
+        bool terrainRiverInspectorMetadataValid_ = false;
+        std::vector<XMFLOAT3> terrainRiverStrokePoints_;
         bool lightSliderActive_ = false;
         LightField lightSliderField_ = LightField::Intensity;
         wi::ecs::Entity lightSliderEntity_ = wi::ecs::INVALID_ENTITY;

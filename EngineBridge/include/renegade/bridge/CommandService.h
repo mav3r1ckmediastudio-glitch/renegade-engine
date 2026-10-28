@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -116,12 +117,16 @@ namespace renegade::bridge
         [[nodiscard]] bool CanUndo() const noexcept;
         [[nodiscard]] bool CanRedo() const noexcept;
         [[nodiscard]] bool IsDirty() const noexcept;
+        // Monotonic successful history mutation epoch; stack depths can repeat
+        // after Undo followed by a different edit in the same frame.
+        [[nodiscard]] std::uint64_t Revision() const noexcept { return revision_; }
         [[nodiscard]] std::size_t UndoCount() const noexcept;
         [[nodiscard]] std::size_t RedoCount() const noexcept;
 
     private:
         std::vector<std::unique_ptr<ICommand>> undoStack_;
         std::vector<std::unique_ptr<ICommand>> redoStack_;
+        std::uint64_t revision_ = 0;
         std::size_t savedDepth_ = 0;
         bool savedStateReachable_ = true;
     };

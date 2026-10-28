@@ -1,4 +1,34 @@
 add_library(RenegadeEngineBridge STATIC
+    src/PlaceableWaterfallRenderer.cpp
+    src/RiverCourseRenderer.cpp
+    src/RiverCourseSurfaceBinding.cpp
+    src/RiverCourseService.cpp
+    include/renegade/bridge/RiverCourseService.h
+    src/RiverFlowSpanService.cpp
+    include/renegade/bridge/RiverFlowSpanService.h
+    src/RiverWaterwayRenderer.cpp
+    src/RiverWaterwayRenderer.h
+    src/RiverWaterwaySurfaceBinding.cpp
+    src/RiverWaterwaySurfaceBinding.h
+    src/RiverWaterwayTransport.h
+    src/RiverWaterwayEdit.cpp
+    src/RiverWaterwayService.cpp
+    include/renegade/bridge/RiverWaterwayService.h
+    src/RiverJunctionSurfaceService.cpp
+    include/renegade/bridge/RiverJunctionSurfaceService.h
+    src/RiverFlowNetworkService.cpp
+    include/renegade/bridge/RiverFlowNetworkService.h
+    src/RiverFlowProfileService.cpp
+    src/RiverFlowRenderer.cpp
+    include/renegade/bridge/RiverFlowRenderer.h
+    src/RiverFlowFieldService.cpp
+    include/renegade/bridge/RiverFlowFieldService.h
+    src/RiverFoamService.cpp
+    include/renegade/bridge/RiverFoamService.h
+    src/PlayerSwimmingService.cpp
+    include/renegade/bridge/PlayerSwimmingService.h
+    src/RiverUnderwaterService.cpp
+    include/renegade/bridge/RiverUnderwaterService.h
     src/ScreenPortableLibrary.cpp
     src/ProjectUiScaffoldService.cpp
     src/ScreenPerformanceBudget.cpp
@@ -52,6 +82,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/ScreenAuthoringSession.h
     include/renegade/bridge/IdentityService.h
     include/renegade/bridge/LightService.h
+    include/renegade/bridge/RiverSplineService.h
     include/renegade/bridge/ImportService.h
     include/renegade/bridge/MatchingRigAnimationService.h
     src/MatchingRigAnimationService.cpp
@@ -128,6 +159,11 @@ add_library(RenegadeEngineBridge STATIC
     src/ScreenAuthoringSession.cpp
     src/IdentityService.cpp
     src/LightService.cpp
+    src/RiverSplineService.cpp
+    src/RiverTerrainLayerService.cpp
+    include/renegade/bridge/RiverTerrainLayerService.h
+    src/RiverbedMaterialService.cpp
+    include/renegade/bridge/RiverbedMaterialService.h
     src/ImportService.cpp
     src/ImportServiceModel.cpp
     src/ModelImportCandidateService.cpp
@@ -280,3 +316,193 @@ target_compile_definitions(RenegadeEngineBridge PRIVATE
 target_sources(RenegadeEngineBridge PRIVATE
     src/ScreenLibraryService.cpp
     include/renegade/bridge/ScreenLibraryService.h)
+
+if(WIN32)
+    add_executable(RenegadeRiverShaderCompiler "${CMAKE_SOURCE_DIR}/Tools/RiverShaderCompiler.cpp")
+    target_link_libraries(RenegadeRiverShaderCompiler PRIVATE WickedEngine)
+    set_target_properties(RenegadeRiverShaderCompiler PROPERTIES FOLDER "Renegade/Tools")
+    add_custom_command(TARGET RenegadeRiverShaderCompiler POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+            "$<TARGET_FILE_DIR:RenegadeRiverShaderCompiler>" VERBATIM)
+    file(GLOB_RECURSE RENEGADE_RIVER_SHADER_INCLUDES CONFIGURE_DEPENDS
+        "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders/*.h"
+        "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders/*.hlsli")
+    set(RENEGADE_RIVER_UNDERWATER_CSO "${CMAKE_BINARY_DIR}/river-shaders/RenegadeRiverUnderwaterCS.cso" CACHE INTERNAL "Owned river shader")
+    add_custom_command(OUTPUT "${RENEGADE_RIVER_UNDERWATER_CSO}"
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler>
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RenegadeRiverUnderwaterCS.hlsl"
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders"
+            "${RENEGADE_RIVER_UNDERWATER_CSO}"
+        DEPENDS RenegadeRiverShaderCompiler
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RenegadeRiverUnderwaterCS.hlsl"
+            ${RENEGADE_RIVER_SHADER_INCLUDES}
+        VERBATIM)
+    add_custom_target(RenegadeRiverUnderwaterShader DEPENDS "${RENEGADE_RIVER_UNDERWATER_CSO}")
+endif()
+
+# Shader edits must deploy even when no C++ object needs relinking.
+function(renegade_deploy_river_underwater_shader consumer)
+    add_custom_target(${consumer}RiverShaderContent
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${consumer}>/Content/river"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${RENEGADE_RIVER_UNDERWATER_CSO}"
+            "$<TARGET_FILE_DIR:${consumer}>/Content/river/RenegadeRiverUnderwaterCS.cso"
+        DEPENDS RenegadeRiverUnderwaterShader VERBATIM)
+    add_dependencies(${consumer} ${consumer}RiverShaderContent)
+    set_target_properties(${consumer}RiverShaderContent PROPERTIES FOLDER "Renegade/Tools")
+endfunction()
+
+# Opt-in River V2 shaders remain in owned/staged files; native objectHF is hashed.
+if(WIN32)
+    find_program(RENEGADE_RIVER_PYTHON NAMES python REQUIRED)
+    set(_flow_stage "${CMAKE_BINARY_DIR}/river-flow-stage")
+    set(_flow_ps "${_flow_stage}/RiverContactFoamPS.cso")
+    set(_flow_cs "${_flow_stage}/RiverFoamTransportCS.cso")
+    add_custom_command(OUTPUT "${_flow_ps}" "${_flow_cs}"
+        COMMAND "${RENEGADE_RIVER_PYTHON}"
+            "${CMAKE_SOURCE_DIR}/Tools/prepare_river_contact_foam_proof.py" "${_flow_stage}"
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler>
+            "${_flow_stage}/RiverContactFoamPS.hlsl"
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders" "${_flow_ps}" ps
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler>
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RiverFoamTransportCS.hlsl"
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders" "${_flow_cs}"
+        DEPENDS RenegadeRiverShaderCompiler
+            "${CMAKE_SOURCE_DIR}/Tools/prepare_river_contact_foam_proof.py"
+            "${CMAKE_SOURCE_DIR}/Tools/prepare_river_flow_normal_proof.py"
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RiverFlowNormalBlock.hlsli"
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RiverContactFoamBlock.hlsli"
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RiverFoamTransportCS.hlsl"
+            ${RENEGADE_RIVER_SHADER_INCLUDES}
+        VERBATIM)
+    add_custom_target(RenegadeRiverFlowShaders DEPENDS "${_flow_ps}" "${_flow_cs}")
+endif()
+if(WIN32)
+    set(_waterway_stage "${CMAKE_BINARY_DIR}/river-waterway-stage")
+    set(_waterway_ps "${_waterway_stage}/RiverWaterwayFoamPS.cso")
+    set(_waterway_cs "${_waterway_stage}/RiverWaterwayFoamCS.cso")
+    add_custom_command(OUTPUT "${_waterway_ps}" "${_waterway_cs}"
+        COMMAND "${RENEGADE_RIVER_PYTHON}" "${CMAKE_SOURCE_DIR}/Tools/prepare_river_junction_foam_shading.py" "${_waterway_stage}"
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler>
+            "${_waterway_stage}/RiverContactFoamPS.hlsl" "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders" "${_waterway_ps}" ps
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler>
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RiverJunctionFoamTransportCS.hlsl" "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders" "${_waterway_cs}"
+        DEPENDS RenegadeRiverShaderCompiler
+            "${CMAKE_SOURCE_DIR}/Tools/prepare_river_junction_foam_shading.py"
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RiverFlowNormalBlock.hlsli"
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RiverJunctionFoamShadingBlock.hlsli"
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RiverJunctionFoamTransportCS.hlsl"
+            ${RENEGADE_RIVER_SHADER_INCLUDES}
+        VERBATIM)
+    add_custom_target(RenegadeRiverWaterwayShaders DEPENDS "${_waterway_ps}" "${_waterway_cs}")
+endif()
+if(WIN32)
+    set(_rapids_stage "${CMAKE_BINARY_DIR}/river-rapids-stage")
+    set(_rapids_ps "${_rapids_stage}/RiverRapidsPS.cso")
+    set(_rapids_cs "${_rapids_stage}/RiverRapidsCS.cso")
+    add_custom_command(OUTPUT "${_rapids_ps}" "${_rapids_cs}"
+        COMMAND "${RENEGADE_RIVER_PYTHON}" "${CMAKE_SOURCE_DIR}/Tools/prepare_river_rapids_shading.py" "${_rapids_stage}"
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler>
+            "${_rapids_stage}/RiverContactFoamPS.hlsl" "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders" "${_rapids_ps}" ps
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler>
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RiverRapidsTransportCS.hlsl" "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders" "${_rapids_cs}"
+        DEPENDS RenegadeRiverShaderCompiler
+            "${CMAKE_SOURCE_DIR}/Tools/prepare_river_rapids_shading.py"
+            "${CMAKE_SOURCE_DIR}/Tools/prepare_river_junction_foam_shading.py"
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RiverFlowNormalBlock.hlsli"
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RiverJunctionFoamShadingBlock.hlsli"
+            "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/RiverRapidsTransportCS.hlsl"
+            ${RENEGADE_RIVER_SHADER_INCLUDES}
+        VERBATIM)
+    add_custom_target(RenegadeRiverRapidsShaders DEPENDS "${_rapids_ps}" "${_rapids_cs}")
+endif()
+if(WIN32)
+    set(_appearance_stage "${CMAKE_BINARY_DIR}/river-appearance-stage")
+    file(GLOB _appearance_python CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/Tools/prepare_river_*.py")
+    file(GLOB _appearance_hlsl CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/EngineBridge/shaders/River*.hlsl*")
+    add_custom_command(OUTPUT
+        "${_appearance_stage}/RiverRefinedFoamPS.cso"
+        "${_appearance_stage}/RiverFoamDetailCS.cso"
+        "${_appearance_stage}/RiverSurfaceVS.cso"
+        "${_appearance_stage}/RiverSurfaceShadowVS.cso"
+        "${_appearance_stage}/OriginalFoamCoverage.png"
+        COMMAND "${RENEGADE_RIVER_PYTHON}" "${CMAKE_SOURCE_DIR}/Tools/prepare_river_appearance.py" "${_appearance_stage}"
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler> "${_appearance_stage}/RiverContactFoamPS.hlsl" "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders" "${_appearance_stage}/RiverRefinedFoamPS.cso" ps
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler> "${_appearance_stage}/RiverFoamArtworkCS.hlsl" "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders" "${_appearance_stage}/RiverFoamDetailCS.cso"
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler> "${_appearance_stage}/RiverSurfaceVS.hlsl" "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders" "${_appearance_stage}/RiverSurfaceVS.cso" vs
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler> "${_appearance_stage}/RiverSurfaceShadowVS.hlsl" "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders" "${_appearance_stage}/RiverSurfaceShadowVS.cso" vs
+        DEPENDS RenegadeRiverShaderCompiler ${_appearance_python} ${_appearance_hlsl}
+            "${CMAKE_SOURCE_DIR}/EngineBridge/assets/river-v2-original-foam/foam_coverage_v1.png"
+            ${RENEGADE_RIVER_SHADER_INCLUDES}
+        VERBATIM)
+    add_custom_target(RenegadeRiverAppearanceShaders DEPENDS
+        "${_appearance_stage}/RiverRefinedFoamPS.cso" "${_appearance_stage}/RiverFoamDetailCS.cso"
+        "${_appearance_stage}/RiverSurfaceVS.cso" "${_appearance_stage}/RiverSurfaceShadowVS.cso"
+        "${_appearance_stage}/OriginalFoamCoverage.png")
+endif()
+function(renegade_deploy_river_flow_shaders consumer)
+    add_custom_target(${consumer}RiverAppearanceContent
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${consumer}>/Content/river"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_BINARY_DIR}/river-appearance-stage/RiverRefinedFoamPS.cso"
+            "${CMAKE_BINARY_DIR}/river-appearance-stage/RiverFoamDetailCS.cso"
+            "${CMAKE_BINARY_DIR}/river-appearance-stage/RiverSurfaceVS.cso"
+            "${CMAKE_BINARY_DIR}/river-appearance-stage/RiverSurfaceShadowVS.cso"
+            "${CMAKE_BINARY_DIR}/river-appearance-stage/OriginalFoamCoverage.png"
+            "$<TARGET_FILE_DIR:${consumer}>/Content/river"
+        DEPENDS RenegadeRiverAppearanceShaders VERBATIM)
+    add_dependencies(${consumer} ${consumer}RiverAppearanceContent)
+
+    add_custom_target(${consumer}RiverFlowContent
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${consumer}>/Content/river"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_BINARY_DIR}/river-flow-stage/RiverContactFoamPS.cso"
+            "${CMAKE_BINARY_DIR}/river-flow-stage/RiverFoamTransportCS.cso"
+            "$<TARGET_FILE_DIR:${consumer}>/Content/river"
+        DEPENDS RenegadeRiverFlowShaders VERBATIM)
+    add_custom_target(${consumer}RiverWaterwayContent
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${consumer}>/Content/river"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_BINARY_DIR}/river-waterway-stage/RiverWaterwayFoamPS.cso"
+            "${CMAKE_BINARY_DIR}/river-waterway-stage/RiverWaterwayFoamCS.cso"
+            "${CMAKE_BINARY_DIR}/river-rapids-stage/RiverRapidsPS.cso"
+            "${CMAKE_BINARY_DIR}/river-rapids-stage/RiverRapidsCS.cso"
+            "$<TARGET_FILE_DIR:${consumer}>/Content/river"
+        DEPENDS RenegadeRiverWaterwayShaders RenegadeRiverRapidsShaders VERBATIM)
+    add_dependencies(${consumer} ${consumer}RiverWaterwayContent)
+    add_dependencies(${consumer} ${consumer}RiverFlowContent)
+endfunction()
+
+if(WIN32)
+    set(_course_stage "${CMAKE_BINARY_DIR}/river-course-stage")
+    add_custom_command(OUTPUT
+        "${_course_stage}/RiverCoursePS.cso"
+        "${_course_stage}/RiverCourseVS.cso"
+        "${_course_stage}/RiverCourseShadowVS.cso"
+        COMMAND "${RENEGADE_RIVER_PYTHON}" "${CMAKE_SOURCE_DIR}/Tools/prepare_river_course_shading.py" "${_course_stage}"
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler> "${_course_stage}/RiverContactFoamPS.hlsl" "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders" "${_course_stage}/RiverCoursePS.cso" ps
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler> "${_course_stage}/RiverSurfaceVS.hlsl" "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders" "${_course_stage}/RiverCourseVS.cso" vs
+        COMMAND $<TARGET_FILE:RenegadeRiverShaderCompiler> "${_course_stage}/RiverSurfaceShadowVS.hlsl" "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/shaders" "${_course_stage}/RiverCourseShadowVS.cso" vs
+        DEPENDS RenegadeRiverShaderCompiler ${_appearance_python} ${_appearance_hlsl}
+            "${CMAKE_SOURCE_DIR}/EngineBridge/assets/river-v2-original-foam/foam_coverage_v1.png"
+            ${RENEGADE_RIVER_SHADER_INCLUDES}
+        VERBATIM)
+    add_custom_target(RenegadeRiverCourseShaders DEPENDS
+        "${_course_stage}/RiverCoursePS.cso" "${_course_stage}/RiverCourseVS.cso" "${_course_stage}/RiverCourseShadowVS.cso")
+endif()
+function(renegade_deploy_river_course_shaders consumer)
+    add_custom_target(${consumer}RiverCourseContent
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${consumer}>/Content/river"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_BINARY_DIR}/river-course-stage/RiverCoursePS.cso"
+            "${CMAKE_BINARY_DIR}/river-course-stage/RiverCourseVS.cso"
+            "${CMAKE_BINARY_DIR}/river-course-stage/RiverCourseShadowVS.cso"
+            "$<TARGET_FILE_DIR:${consumer}>/Content/river"
+        DEPENDS RenegadeRiverCourseShaders VERBATIM)
+    add_dependencies(${consumer} ${consumer}RiverCourseContent)
+endfunction()
+
+if(WIN32)
+ include("${CMAKE_SOURCE_DIR}/cmake/RenegadeWaterfallResources.cmake")
+endif()

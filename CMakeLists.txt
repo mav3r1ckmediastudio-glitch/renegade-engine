@@ -310,3 +310,7 @@ if(WIN32)
     )
     set_target_properties(RenegadeStudioCI PROPERTIES FOLDER "Renegade/CI")
 endif()
+
+if(TARGET RenegadeStudioCI AND TARGET RenegadeRiverUnderwaterTests)
+    add_dependencies(RenegadeStudioCI RenegadeRiverUnderwaterTests)
+endif()

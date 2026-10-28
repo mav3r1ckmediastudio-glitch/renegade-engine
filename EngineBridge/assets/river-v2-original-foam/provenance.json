@@ -1,0 +1,14 @@
+{
+  "method": "Built-in image_gen via imagegen skill",
+  "date": "2026-10-25",
+  "inputImages": [],
+  "prompt": "Use case: photorealistic-natural. Asset type: original game-engine grayscale foam coverage/height texture, square 2048x2048, seamlessly tileable on all four edges. Create a NEW original texture from a natural whitewater foam description, no supplied reference assets. Strict orthographic overhead texture-data image; black is clear water and white is opaque froth, intermediate grey is thinner foam. A richly irregular interconnected web of SHORT curved foam filaments, many three-way and four-way junctions, merging into small dense frothy patches around irregular black clear-water pockets. Varied pocket sizes and filament thicknesses, organic winding connections, frayed feathery edges composed of many tiny bubbles, a hierarchy from larger frothy junctions down to delicate branching tendrils and microbubbles. About 65 percent black clear-water space and 35 percent foam, distributed across the WHOLE square with no central focal point. Fine photorealistic bubble microstructure and natural turbulent whitewater appearance. Do not depict an actual river scene: NO blue water, NO landscape, NO rocks, NO sky, NO camera perspective, NO lighting gradient, NO cast shadows, NO text, NO watermark, NO borders. Avoid long isolated stripes, smooth painted ribbons, regular polygon cells, honeycomb, camouflage islands, uniform white blanket, dominant repeating direction, and blurry low-resolution foam. Even texel density, high fidelity usable opacity data, matching opposite borders for seamless tiling.",
+  "sha256": "5cb379f6ee568b3e526f81c955a8ac7cbd6765af04ef9f41089c83cbfd044ed3",
+  "actualResolution": [
+    1254,
+    1254
+  ],
+  "interpretation": "R channel used as original foam coverage/approximate fine relief; not physical fluid height",
+  "scope": "Original experimental Renegade asset; no Unreal texture pixels or shader code copied",
+  "tiling": "Opposite-edge match imperfect; use mirrored sampling and bounded phase blending; verify repetition visually"
+}

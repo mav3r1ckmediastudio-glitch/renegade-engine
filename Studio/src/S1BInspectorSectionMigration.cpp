@@ -525,7 +525,9 @@ namespace renegade::studio
 
     void StudioRenderPath::LayoutS1BInspectorSections()
     {
+        LayoutWaterfallInspector();
         LayoutEnvironmentSections();
+        LayoutTerrainSections();
         objectSurfaceLabel_.SetVisible(false);
         materialImpactSurface_.SetVisible(false);
         PreparePhase7Gate7AAnimationInspector(*this);
@@ -576,8 +578,24 @@ namespace renegade::studio
             scene.weathers.Contains(selected);
         const bool selectedTerrain = hasSession && selected != wi::ecs::INVALID_ENTITY &&
             scene.terrains.Contains(selected);
+        bool selectedRiver = false;
+        if (hasSession && !terrainWorkspaceActive_)
+        {
+            for (std::size_t i = 0; i < scene.splines.GetCount(); ++i)
+            {
+                const auto root = scene.splines.GetEntity(i);
+                const auto* material = scene.materials.GetComponent(root);
+                if (material && material->shaderType ==
+                        wi::scene::MaterialComponent::SHADERTYPE_WATER &&
+                    (selected == root || scene.Entity_IsDescendant(selected, root)))
+                {
+                    selectedRiver = true;
+                    break;
+                }
+            }
+        }
         if (environmentWorkspaceActive_ || terrainWorkspaceActive_ ||
-            selectedWeather || selectedTerrain)
+            selectedWeather || selectedTerrain || selectedRiver)
         {
             return;
         }

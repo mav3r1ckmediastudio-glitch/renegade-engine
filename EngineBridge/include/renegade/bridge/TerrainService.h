@@ -211,6 +211,9 @@ namespace renegade::bridge
     struct TerrainSculptState
     {
         std::vector<TerrainChunkHeights> chunks;
+        // Empty means no persistent river baseline. Undo must restore the
+        // authored baseline even when a channel masks a manual sculpt edit.
+        std::string riverLayerDocument;
     };
 
     [[nodiscard]] TerrainSculptState CaptureTerrainSculpt(
@@ -228,7 +231,52 @@ namespace renegade::bridge
     bool ApplyTerrainSculpt(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,
-        const TerrainSculptState& state);
+        const TerrainSculptState& state,
+        bool refreshPhysics = true);
+    // Explicit, non-destructive-to-generator riverbed operation. Uses the
+    // selected native water spline as a geometric guide and edits the authored
+    // chunk height grid once, within the same deferred safe phase as SculptTerrain.
+    // The caller must capture before/after TerrainSculptState and record one
+    // SculptTerrainCommand to support Undo/Redo. Never turn on Wicked's native
+    // spline terrain modifier: its procedural regeneration can erase sculpting.
+    // Returns false without mutation if the requested channel falls below the
+    // terrain's quantized minimum elevation.
+    // Explicitly lower only the *encoding* floor of a fully resident,
+    // authored finite terrain. Does not move the root, sculpted mesh,
+    // vegetation or paint data; re-encodes existing R16 height textures
+    // to make room for future below-zero riverbeds. Must be called at
+    // the same safe scene-update point as terrain sculpting. No restart.
+    // Can also restore a previous floor, but refuses to truncate heights.
+    [[nodiscard]] bool SetAuthoredTerrainHeightFloor(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        float requestedMinimumHeight);
+
+    // Each successful floor change is one independently undoable edit.
+    class SetTerrainHeightFloorCommand final : public ICommand
+    {
+    public:
+        SetTerrainHeightFloorCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity terrainEntity,
+            float targetMinimumHeight);
+        bool Execute() override;
+        void Undo() override;
+    private:
+        wi::scene::Scene* scene_ = nullptr;
+        wi::ecs::Entity terrainEntity_ = wi::ecs::INVALID_ENTITY;
+        float previousMinimumHeight_ = 0.0f;
+        float targetMinimumHeight_ = 0.0f;
+        bool capturedPrevious_ = false;
+    };
+
+    [[nodiscard]] bool CarveTerrainRiverbed(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        wi::ecs::Entity riverEntity,
+        float depthMeters,
+        float bankWidthMeters);
+
     bool SculptTerrain(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,

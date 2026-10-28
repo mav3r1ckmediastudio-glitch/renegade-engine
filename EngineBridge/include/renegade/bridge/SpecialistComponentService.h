@@ -214,6 +214,12 @@ namespace renegade::bridge
             wi::scene::MeshComponent::COMPUTE_NORMALS_SMOOTH;
     };
 
+    // Read current entity transforms rather than the frame-delayed spline cache.
+    // Shared world-space centreline for water, road and path editor tools.
+    [[nodiscard]] std::vector<XMFLOAT3> SampleSplineWorldPoints(
+        const wi::scene::Scene& scene, wi::ecs::Entity entity,
+        std::size_t sampleCount);
+
     [[nodiscard]] SplineState CaptureSpline(
         const wi::scene::SplineComponent& spline) noexcept;
     void ApplySpline(

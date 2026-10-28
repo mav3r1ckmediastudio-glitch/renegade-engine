@@ -6,6 +6,8 @@
 #include "renegade/bridge/TerrainService.h"
 #include "renegade/bridge/VegetationService.h"
 #include "renegade/bridge/PlayerService.h"
+#include "renegade/bridge/RiverSplineService.h"
+#include "renegade/bridge/RiverbedMaterialService.h"
 
 #include <algorithm>
 #include <cmath>
@@ -723,10 +725,18 @@ namespace renegade::bridge
             terrain.scene = &scene_;
         }
         RebindDefaultTerrainMaterials(scene_);
+        // Runtime and Studio have separate GPU resource managers/processes.
+        // The fifth Rocky Riverbed terrain slot was not governed by the
+        // imported-material registry; explicitly hydrate only that bundled
+        // terrain material before the first native terrain virtual-texture bake.
+        std::string rockyError;
+        if(!RebindBundledRockyRiverbedMaterials(scene_,rockyError))
+            wi::backlog::post("ROCKY RIVERBED RESOURCE WARNING: "+rockyError);
         RebindWickedVegetationResources(scene_);
         // Night-sky shader parameters are transient on native WeatherComponent;
         // restore their namespaced serialized values after each scene adoption.
         RestoreNightSky(scene_);
+        RestoreRiverCaustics(scene_);
         currentPath_ = std::move(prepared.path_);
         lastError_.clear();
         ++revision_;

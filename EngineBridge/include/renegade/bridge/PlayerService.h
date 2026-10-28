@@ -137,6 +137,8 @@ namespace renegade::bridge
         XMFLOAT3 spawnPosition = XMFLOAT3(0.0f, 0.0f, 0.0f);
         float yaw = 0.0f;
         float pitch = 0.0f;
+        bool swimming = false;
+        float buoyancyBeforeSwimming = 1.2f;
 
         [[nodiscard]] constexpr bool IsSpawned() const noexcept
         {

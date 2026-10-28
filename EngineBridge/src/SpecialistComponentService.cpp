@@ -561,6 +561,48 @@ namespace renegade::bridge
         return true;
     }
 
+    std::vector<XMFLOAT3> SampleSplineWorldPoints(
+        const wi::scene::Scene& scene, wi::ecs::Entity entity,
+        std::size_t sampleCount)
+    {
+        const auto* source = scene.splines.GetComponent(entity);
+        if (!source || source->spline_node_entities.size() < 2 ||
+            source->spline_node_entities.size() > 512 ||
+            sampleCount < 2 || sampleCount > 8192)
+            return {};
+        wi::scene::SplineComponent curve;
+        curve.SetLooped(source->IsLooped());
+        for (const auto node : source->spline_node_entities)
+        {
+            if (!scene.transforms.Contains(node)) return {};
+            // Native mesh generation evaluates node LOCAL transforms and
+            // applies the spline object's world matrix afterwards. Evaluating
+            // Catmull-Rom in world space differs under nonuniform root scale.
+            auto transform = *scene.transforms.GetComponent(node);
+            transform.SetDirty();
+            transform.UpdateTransform();
+            const auto p = transform.GetPosition();
+            if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z))
+                return {};
+            curve.spline_node_transforms.push_back(transform);
+        }
+        curve.PrecomputeSplineNodeDistances();
+        const auto rootWorld = scene.ComputeEntityMatrixRecursive(entity);
+        std::vector<XMFLOAT3> points;
+        points.reserve(sampleCount);
+        for (std::size_t i = 0; i < sampleCount; ++i)
+        {
+            XMFLOAT3 p;
+            DirectX::XMStoreFloat3(&p, DirectX::XMVector3TransformCoord(
+                curve.EvaluateSplineAt(float(i) / float(sampleCount - 1)).r[3],
+                rootWorld));
+            if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z))
+                return {};
+            points.push_back(p);
+        }
+        return points;
+    }
+
     SplineState CaptureSpline(const wi::scene::SplineComponent& spline) noexcept
     {
         SplineState state;

@@ -36,6 +36,7 @@ enable_language(RC)
 configure_file(RuntimeImpactTextures.rc.in "${CMAKE_CURRENT_BINARY_DIR}/RuntimeImpactTextures.rc" @ONLY)
 
 add_executable(RenegadeRuntime WIN32
+    src/WaterfallTransparentRuntime.cpp
     src/RuntimeApplication.cpp
     src/RuntimeLiveDiagnostics.cpp
     src/RuntimeApplication.h
@@ -83,6 +84,11 @@ add_custom_command(
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/default_grass"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/weather"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/river"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/waterNormalMap.jpg"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/river/waterNormalMap.jpg"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Valid Project/Content/Scenes"
     COMMAND ${CMAKE_COMMAND} -E make_directory
@@ -200,3 +206,10 @@ add_custom_command(
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/weather/snowflake.dds"
     VERBATIM
 )
+
+renegade_deploy_river_underwater_shader(RenegadeRuntime)
+
+renegade_deploy_river_flow_shaders(RenegadeRuntime)
+renegade_deploy_river_course_shaders(RenegadeRuntime)
+
+renegade_deploy_waterfall_resources(RenegadeRuntime)

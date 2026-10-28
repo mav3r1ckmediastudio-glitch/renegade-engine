@@ -1,3 +1,4 @@
+#include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/TestLevelSnapshotService.h"
 #include "renegade/bridge/ImpactAudioService.h"
 
@@ -1346,6 +1347,17 @@ namespace renegade::bridge
                         "Level snapshot.");
                 }
                 archive.SetCompressionEnabled(true);
+                // Imported model maps can be native retained resources rather
+                // than governed texture bindings. The shadow scene must carry
+                // their bytes; long relative paths back to the authoring project
+                // are not a portable Runtime dependency contract.
+                struct RestoreResourceMode
+                {
+                    wi::resourcemanager::Mode previous = wi::resourcemanager::GetMode();
+                    ~RestoreResourceMode() { wi::resourcemanager::SetMode(previous); }
+                } resourceMode;
+                wi::resourcemanager::SetMode(wi::resourcemanager::Mode::EMBED_FILE_DATA);
+                RemoveGeneratedWaterfallVisuals(scenes_.GetScene());
                 scenes_.GetScene().Serialize(archive);
                 archiveWritten = archive.SaveFile(scenePath.generic_u8string());
                 archive = wi::Archive();

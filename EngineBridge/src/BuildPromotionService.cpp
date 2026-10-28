@@ -1,6 +1,7 @@
 #include "renegade/bridge/BuildPromotionService.h"
 
 #include "BuildPromotionServiceInternal.h"
+#include "WindowsFileIoPath.h"
 #include "renegade/bridge/PackageIntegrityService.h"
 
 #include <filesystem>
@@ -47,7 +48,7 @@ namespace renegade::bridge
             std::string& error)
         {
             std::error_code ec;
-            exists = fs::exists(path, ec);
+            exists = fs::exists(detail::FileIoPath(path), ec);
             if (ec)
             {
                 error = "Gate 5 could not inspect path state: " +
@@ -64,7 +65,8 @@ namespace renegade::bridge
             std::string& error)
         {
             std::error_code ec;
-            const fs::file_status status = fs::symlink_status(path, ec);
+            const fs::file_status status = fs::symlink_status(
+                detail::FileIoPath(path), ec);
             if (ec)
             {
                 error = "Gate 5 could not inspect declared directory: " +
@@ -98,14 +100,16 @@ namespace renegade::bridge
         bool IsDirectoryNonSymlink(const fs::path& path)
         {
             std::error_code ec;
-            const fs::file_status status = fs::symlink_status(path, ec);
+            const fs::file_status status = fs::symlink_status(
+                detail::FileIoPath(path), ec);
             return !ec && !fs::is_symlink(status) && fs::is_directory(status);
         }
 
         bool IsRegularNonSymlink(const fs::path& path)
         {
             std::error_code ec;
-            const fs::file_status status = fs::symlink_status(path, ec);
+            const fs::file_status status = fs::symlink_status(
+                detail::FileIoPath(path), ec);
             return !ec && !fs::is_symlink(status) && fs::is_regular_file(status);
         }
 
@@ -123,7 +127,7 @@ namespace renegade::bridge
 
             try
             {
-                std::ifstream input(path, std::ios::binary);
+                std::ifstream input(detail::FileIoPath(path), std::ios::binary);
                 if (!input)
                     throw std::runtime_error("could not open file");
                 input >> value;
@@ -156,7 +160,8 @@ namespace renegade::bridge
                 return false;
             }
 
-            std::ofstream output(path, std::ios::binary | std::ios::trunc);
+            std::ofstream output(
+                detail::FileIoPath(path), std::ios::binary | std::ios::trunc);
             if (!output)
             {
                 error = "Gate 5 could not rewrite metadata: " +
@@ -444,9 +449,11 @@ namespace renegade::bridge
             DWORD code = ERROR_SUCCESS;
             for (unsigned int attempt = 1; attempt <= MaximumAttempts; ++attempt)
             {
+                const fs::path ioFrom = detail::FileIoPath(from);
+                const fs::path ioTo = detail::FileIoPath(to);
                 if (MoveFileExW(
-                        from.c_str(),
-                        to.c_str(),
+                        ioFrom.c_str(),
+                        ioTo.c_str(),
                         MOVEFILE_WRITE_THROUGH))
                 {
                     error.clear();
@@ -475,7 +482,7 @@ namespace renegade::bridge
         bool RemoveTree(const fs::path& path, std::string& error)
         {
             std::error_code ec;
-            fs::remove_all(path, ec);
+            fs::remove_all(detail::FileIoPath(path), ec);
             if (ec)
             {
                 error = "Gate 5 could not retire rollback backup: " +

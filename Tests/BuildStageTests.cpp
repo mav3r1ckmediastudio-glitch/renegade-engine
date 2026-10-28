@@ -289,6 +289,42 @@ int main(int argc, char** argv)
         fs::remove_all(cleanupRoot);
         return Fail(error);
     }
+    // Cooking changes only verified staged copies; manifests bind cooked bytes.
+    auto cookedRequest = request;
+    cookedRequest.stagingId = "stage-cooked-copy";
+    int cookedScenes = 0;
+    cookedRequest.cookProjectCopy = [&](const WindowsGameBuildFile& file,
+        const std::string&, const std::string& output, std::string& cookError)
+    {
+        if (file.dependencyClass != DependencyClass::Scene) return true;
+        ++cookedScenes;
+        return WriteFile(fs::u8path(output), "portable-scene", cookError);
+    };
+    WindowsGameBuildStageResult cooked;
+    if (!StageWindowsGameBuild(plan, cookedRequest, cooked, error) ||
+        cookedScenes != 2 || !ValidateWindowsGameBuildStage(cooked, error))
+        return Fail("cooked-copy staging failed: " + error);
+    const auto* cookedFile = Find(cooked, "GameData/Content/Scenes/LevelOne.wiscene");
+    const auto* originalFile = Find(first, "GameData/Content/Scenes/LevelOne.wiscene");
+    if (!cookedFile || !originalFile || cookedFile->sha256 == originalFile->sha256 ||
+        cookedFile->byteCount != std::string("portable-scene").size())
+        return Fail("cooked bytes were not hashed independently of source");
+    std::ifstream unchangedSource(projectRoot / "Content/Scenes/LevelOne.wiscene", std::ios::binary);
+    const std::string sourceAfter((std::istreambuf_iterator<char>(unchangedSource)), {});
+    unchangedSource.close();
+    if (sourceAfter != levelOneText)
+        return Fail("cooking modified owner scene bytes");
+    if (!WriteFile(fs::u8path(cooked.stagingPath) / cookedFile->destinationPath, "tampered", error) ||
+        ValidateWindowsGameBuildStage(cooked, error))
+        return Fail("cooked-copy tampering escaped validation");
+    cookedRequest.stagingId = "stage-cook-refused";
+    cookedRequest.cookProjectCopy = [](const WindowsGameBuildFile&, const std::string&,
+        const std::string&, std::string& e) { e = "cook-refused"; return false; };
+    WindowsGameBuildStageResult refused;
+    if (StageWindowsGameBuild(plan, cookedRequest, refused, error) || error != "cook-refused" ||
+        fs::exists(fs::u8path(first.finalOutputPath)))
+        return Fail("failed cooking did not abort before promotion");
+
     // The generated Runtime registry is governed by the package manifest,
     // and its staged bytes must load under the packaged project root.
     auto registryRequest = request;

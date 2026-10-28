@@ -1,5 +1,6 @@
 #include "RuntimeApplication.h"
 #include "RuntimePackageBootstrap.h"
+#include "RuntimeG13E13Perf.h"
 
 #include "renegade/bridge/BuildVerificationService.h"
 #include "wiBacklog.h"
@@ -8,8 +9,11 @@
 #include <shellapi.h>
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <chrono>
 #include <string>
 #include <utility>
 #include <vector>
@@ -537,6 +541,9 @@ int APIENTRY wWinMain(
                 wi::backlog::LogLevel::Warning);
     }
     application.SetSmokeOptions(smokeAutoPlay, smokeExit);
+    // Opt-in G13E13 engineering probe: disabled in ordinary player launches.
+    renegade::runtime::detail::G13E13PerfProbe perf(
+        std::getenv("RENEGADE_G13E13_PERF_CSV"));
 
     WNDCLASSEXW windowClass = {};
     windowClass.cbSize = sizeof(windowClass);
@@ -589,7 +596,44 @@ int APIENTRY wWinMain(
         }
         else
         {
+            // Automated Test Game has no user foreground window: Wicked
+            // intentionally stops rendering when unfocused. Force active only
+            // for this opt-in local test so the real controller/scene still
+            // advances without stealing the owner's editor focus.
+            if(std::getenv("RENEGADE_G13E14_STAGE_TRACE") ||
+               std::getenv("RENEGADE_G13E14_PLAYER_TRACE"))
+                application.is_window_active=true;
+            const auto g13e14LoopStart=std::chrono::steady_clock::now();
             application.Run();
+            if(const char* trace=std::getenv("RENEGADE_G13E14_STAGE_TRACE")){
+                static std::uint64_t iteration=0;
+                const double elapsed=std::chrono::duration<double,std::milli>(
+                    std::chrono::steady_clock::now()-g13e14LoopStart).count();
+                if(++iteration<=20 || iteration%10==0){
+                    std::ofstream out(trace,std::ios::app);
+                    out<<"APP_RUN frame="<<iteration<<" ms="<<elapsed
+                       <<" graphics_frame="<<(wi::graphics::GetDevice()?
+                            wi::graphics::GetDevice()->GetFrameCount():0)
+                       <<" startup="<<application.StartupFinished()<<"\n";
+                }
+            }
+
+            if (perf.Enabled() && application.StartupFinished() &&
+                application.StartupResult().succeeded)
+            {
+                const auto* graphics = wi::graphics::GetDevice();
+                if(graphics)
+                    perf.Frame(true,graphics->GetFrameCount());
+                if(perf.Complete())
+                {
+                    // The disposable benchmark ends gracefully, like closing
+                    // the window. No unattended running game is left behind.
+                    WriteBootstrapEvidence(
+                        application.StartupResult(),evidencePath);
+                    DestroyWindow(window);
+                    continue;
+                }
+            }
 
             if (application.EvidenceRevision() != writtenEvidenceRevision)
             {

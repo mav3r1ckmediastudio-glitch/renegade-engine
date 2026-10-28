@@ -71,6 +71,9 @@ if(NOT RENEGADE_IMNODES_REVISION_RESULT EQUAL 0 OR
 endif()
 
 add_executable(RenegadeStudio WIN32
+    src/WaterfallStudioIntegration.cpp
+    src/WaterfallTransparentStudio.cpp
+    src/RiverFlowStudioIntegration.cpp
     "${CMAKE_SOURCE_DIR}/WickedEngine/Editor/DummyVisualizer.cpp"
     "${CMAKE_SOURCE_DIR}/WickedEngine/Editor/Translator.cpp"
     "${CMAKE_SOURCE_DIR}/WickedEngine/Samples/Example_ImGui/ImGui/imgui.cpp"
@@ -119,6 +122,7 @@ add_executable(RenegadeStudio WIN32
     src/Phase7Gate7AAnimationInspector.h
     src/WD01Vegetation.cpp
     src/NightSkyStudioIntegration.cpp
+    src/TerrainInspectorSections.cpp
     src/StudioApplication.cpp
     src/FirstPersonAssemblyEditor.cpp
     src/PlayerPrefabEditor.cpp
@@ -218,6 +222,11 @@ add_custom_command(
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/default_grass"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/weather"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/river"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/waterNormalMap.jpg"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/river/waterNormalMap.jpg"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -371,3 +380,10 @@ if(RENEGADE_IMPACT_DEFAULTS_DIRECTORY)
             "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ImpactDefaults"
         VERBATIM)
 endif()
+
+renegade_deploy_river_underwater_shader(RenegadeStudio)
+
+renegade_deploy_river_flow_shaders(RenegadeStudio)
+renegade_deploy_river_course_shaders(RenegadeStudio)
+
+renegade_deploy_waterfall_resources(RenegadeStudio)

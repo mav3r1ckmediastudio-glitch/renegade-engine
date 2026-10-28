@@ -461,14 +461,18 @@ namespace renegade::bridge
         {
             const fs::path output = stagingRoot / fs::u8path(destination);
             std::error_code ec;
-            fs::create_directories(output.parent_path(), ec);
-            if (ec || fs::exists(output, ec))
+            // Preserve Win32 long-path support consistently at every local I/O
+            // boundary; the staging root itself may fit MAX_PATH while its
+            // nested Content/terrain/... directories do not.
+            const fs::path ioOutput = FileIoPath(output);
+            fs::create_directories(FileIoPath(output.parent_path()), ec);
+            if (ec || fs::exists(ioOutput, ec))
             {
                 error = "Gate 2 generated destination already exists or cannot be created: " +
                     destination;
                 return false;
             }
-            std::ofstream stream(output, std::ios::binary | std::ios::trunc);
+            std::ofstream stream(ioOutput, std::ios::binary | std::ios::trunc);
             if (!stream)
             {
                 error = "Gate 2 could not create generated file: " + destination;
@@ -522,14 +526,17 @@ namespace renegade::bridge
 
             const fs::path output = stagingRoot / fs::u8path(destination);
             std::error_code ec;
-            fs::create_directories(output.parent_path(), ec);
-            if (ec || fs::exists(output, ec))
+            // The approved bytes remain hash-checked, but nested Windows
+            // staging destinations also need the same long-path I/O prefix.
+            const fs::path ioOutput = FileIoPath(output);
+            fs::create_directories(FileIoPath(output.parent_path()), ec);
+            if (ec || fs::exists(ioOutput, ec))
             {
                 error = "Gate 2 copy destination already exists or cannot be created: " +
-                    destination;
+                    destination + " (" + ec.message() + ")";
                 return false;
             }
-            if (!fs::copy_file(FileIoPath(source), FileIoPath(output),
+            if (!fs::copy_file(FileIoPath(source), ioOutput,
                     fs::copy_options::none, ec) || ec)
             {
                 error = "Gate 2 failed copying approved file: " + destination +
@@ -817,6 +824,27 @@ namespace renegade::bridge
                         staged,
                         error))
                     return false;
+                if (request.cookProjectCopy)
+                {
+                    const fs::path output = stagingRoot / fs::u8path(file.destinationPath);
+                    if (!request.cookProjectCopy(file, source.generic_u8string(),
+                            output.generic_u8string(), error))
+                        return false;
+                    // Bind the cooked bytes to every downstream integrity check.
+                    std::error_code cookedError;
+                    const auto cookedStatus = fs::symlink_status(FileIoPath(output), cookedError);
+                    if (cookedError || !fs::is_regular_file(cookedStatus))
+                    {
+                        error = "Gate 2 cooked output is not a regular file: " + file.destinationPath;
+                        return false;
+                    }
+                    FileDigest cooked;
+                    if (!DigestFile(output, cooked, error))
+                        return false;
+                    staged.byteCount = cooked.byteCount;
+                    staged.sha256 = cooked.sha256;
+                    staged.provenance.push_back("cook:project-copy-v1");
+                }
             }
             else
             {
@@ -1163,7 +1191,10 @@ namespace renegade::bridge
                 return false;
         }
 
-        for (fs::recursive_directory_iterator iterator(stagingRoot, ec), end;
+        // Validate the actual staged tree through extended Win32 paths, too.
+        // Only the manifest's relative names (below) are portable.
+        const fs::path ioStagingRoot = FileIoPath(stagingRoot);
+        for (fs::recursive_directory_iterator iterator(ioStagingRoot, ec), end;
              iterator != end && !ec; iterator.increment(ec))
         {
             const fs::directory_entry& entry = *iterator;
@@ -1180,7 +1211,7 @@ namespace renegade::bridge
                 return false;
             }
             const std::string relative =
-                fs::relative(entry.path(), stagingRoot, ec).generic_u8string();
+                fs::relative(entry.path(), ioStagingRoot, ec).generic_u8string();
             if (ec || !EnsureUniqueDestination(
                     actualDestinations, relative, error))
                 return false;

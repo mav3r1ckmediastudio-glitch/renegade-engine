@@ -1,7 +1,12 @@
+#include "renegade/bridge/PlaceableWaterfallRenderer.h"
+#include "../../EngineBridge/src/PlaceableWaterfallAuthoring.h"
+#include "../../EngineBridge/src/WindowsFileIoPath.h"
 #include "WindowsGameBuildController.h"
 
 #include "renegade/bridge/PackageIntegrityService.h"
 #include "renegade/bridge/StudioSession.h"
+#include "renegade/bridge/SceneDocumentService.h"
+#include "renegade/bridge/RiverSplineService.h"
 #include "renegade/bridge/WindowsGameBuildProjectService.h"
 #include "renegade/bridge/WindowsGameBuildWorkflow.h"
 
@@ -42,6 +47,82 @@ namespace renegade::studio
 
         constexpr const char* DeveloperPublisher = "Maverick Media Studio";
         constexpr DWORD SmokeTimeoutMilliseconds = 120000;
+
+        // Rebase only an explicitly governed built-in WATER normal reference.
+        // Read the owner scene, serialize a detached copy, and keep all other
+        // scene-relative resources relative to the original scene directory.
+        bool CookRiverNormalReference(
+            const fs::path& governedNormal,
+            const bridge::WindowsGameBuildFile& file,
+            const std::string& source,
+            const std::string& output,
+            std::string& error)
+        {
+            if (file.dependencyClass != bridge::DependencyClass::Scene)
+                return true;
+            auto prepared = bridge::PrepareWickedSceneOpen(source);
+            if (!prepared.IsReady())
+            {
+                error = "River package scene preparation failed: " + prepared.Error();
+                return false;
+            }
+            auto& scene = *prepared.MutablePreparedScene();
+            const fs::path outputPath = fs::u8path(output);
+            fs::path packageRoot = outputPath;
+            for (const auto& part : fs::u8path(file.destinationPath))
+            {
+                (void)part;
+                packageRoot = packageRoot.parent_path();
+            }
+            const fs::path packagedNormal = packageRoot / "Content/river/waterNormalMap.jpg";
+            const fs::path relativeNormal = packagedNormal.lexically_relative(outputPath.parent_path());
+            bool changed = false;
+            for(size_t i=0;i<scene.metadatas.GetCount();++i)if(bridge::placeable_waterfall::IsWaterfall(scene,scene.metadatas.GetEntity(i)))changed=true;
+            bridge::RemoveGeneratedWaterfallVisuals(scene);
+            for (size_t index = 0; index < scene.materials.GetCount(); ++index)
+            {
+                auto& material = scene.materials[index];
+                if (material.shaderType != wi::scene::MaterialComponent::SHADERTYPE_WATER)
+                    continue;
+                auto& normal = material.textures[wi::scene::MaterialComponent::NORMALMAP];
+                std::error_code ec;
+                if (normal.name.empty() || !fs::equivalent(fs::u8path(normal.name), governedNormal, ec) || ec)
+                    continue; // Custom maps are never replaced by basename.
+                // Wicked preserves names that are already relative. All other
+                // resources retain their original scene-relative serialization.
+                normal.name = relativeNormal.generic_u8string();
+                changed = true;
+            }
+            if (!changed)
+                return true;
+            wi::Archive archive(source, false, false);
+            struct DiscardArchiveOnExit
+            {
+                wi::Archive& archive;
+                ~DiscardArchiveOnExit() { archive = wi::Archive(); }
+            } discard{archive}; // Also prevents owner writes if serialization throws.
+            archive.SetCompressionEnabled(true);
+            {
+                bridge::ScopedRiverLocalDepthArchiveMask nativeWater(scene);
+                const auto previousMode=wi::resourcemanager::GetMode();
+                struct RestoreMode { wi::resourcemanager::Mode mode; ~RestoreMode(){wi::resourcemanager::SetMode(mode);} } restoreMode{previousMode};
+                wi::resourcemanager::SetMode(wi::resourcemanager::Mode::EMBED_FILE_DATA);
+                scene.Serialize(archive);
+            }
+            // Use the same extended Windows path as the staging copier:
+            // native .wiscene destinations can exceed MAX_PATH even though
+            // the project/staging root itself is shorter.
+            const bool saved = archive.SaveFile(
+                bridge::detail::FileIoPath(outputPath).string());
+            archive = wi::Archive(); // Never let destruction overwrite owner source.
+            if (!saved)
+            {
+                error = "Could not write package-local river normal reference.";
+                return false;
+            }
+            return true;
+        }
+
 
         fs::path StudioDirectory()
         {
@@ -616,10 +697,47 @@ namespace renegade::studio
             runtimeEvidencePath.clear();
             const fs::path executable = fs::u8path(stage.stagingPath) /
                 fs::u8path(plan.executableFileName);
-            if (!IsRegularFile(executable))
+            const fs::path ioExecutable = bridge::detail::FileIoPath(executable);
+            if (!IsRegularFile(ioExecutable))
             {
                 error = "Build Windows Game smoke cannot find the staged named executable.";
                 return false;
+            }
+            // CreateProcessW can terminate before Runtime bootstrap when the
+            // staged executable's Win32 path exceeds MAX_PATH, even when the
+            // call accepts an extended path. Launch the *same exact file* via
+            // its system-resolved 8.3 alias when one is available. Do not
+            // substitute a copy or weaken the pre-smoke package integrity.
+            std::wstring launchExecutable = executable.wstring();
+            if (launchExecutable.size() >= MAX_PATH - 20u)
+            {
+                const DWORD required = GetShortPathNameW(
+                    ioExecutable.c_str(), nullptr, 0);
+                if (required == 0 || required >= 32767u)
+                {
+                    error = "Build Windows Game smoke cannot resolve a short executable path. "
+                        "Move the project closer to the drive root or shorten its game name.";
+                    return false;
+                }
+                std::wstring shortPath(required, L'\0');
+                const DWORD written = GetShortPathNameW(
+                    ioExecutable.c_str(), shortPath.data(), required);
+                if (written == 0 || written >= required)
+                {
+                    error = "Build Windows Game smoke could not read the Win32 short executable path.";
+                    return false;
+                }
+                shortPath.resize(written);
+                if (shortPath.rfind(L"\\\\?\\", 0) == 0)
+                    shortPath.erase(0, 4);
+                if (shortPath.size() >= MAX_PATH - 20u ||
+                    !IsRegularFile(fs::path(shortPath)))
+                {
+                    error = "Build Windows Game smoke cannot safely launch this long staged path. "
+                        "Move the project closer to the drive root or shorten its game name.";
+                    return false;
+                }
+                launchExecutable = std::move(shortPath);
             }
 
             const fs::path evidence = RuntimeEvidencePath(plan.saveDataId);
@@ -660,7 +778,7 @@ namespace renegade::studio
                 return false;
             }
 
-            std::wstring command = QuoteArgument(executable.wstring());
+            std::wstring command = QuoteArgument(launchExecutable);
             command += L" dx12";
             for (const std::string& outcome : smokeOutcomes)
             {
@@ -696,7 +814,7 @@ namespace renegade::studio
             PROCESS_INFORMATION process{};
             const std::wstring cwd = workingDirectory.wstring();
             if (!CreateProcessW(
-                    executable.wstring().c_str(),
+                    launchExecutable.c_str(),
                     commandBuffer.data(),
                     nullptr,
                     nullptr,
@@ -806,6 +924,12 @@ namespace renegade::studio
         fs::path runtimeExecutable;
         if (!FindFirstRegularFile(
                 {
+                    // In a CMake candidate output the freshly linked Runtime
+                    // sits beside Studio. Prefer it to any leftover bundled
+                    // Runtime/ copy, which may be from a previous build.
+                    studioDirectory / "RenegadeRuntime.exe",
+                    // Packaged Studio distributions stage the governed
+                    // Runtime beneath Runtime/ instead.
                     studioDirectory / "Runtime" / "RenegadeRuntime.exe",
                     studioDirectory.parent_path().parent_path() /
                         "Runtime" / "Release" / "RenegadeRuntime.exe",
@@ -847,6 +971,94 @@ namespace renegade::studio
                     (studioDirectory / "Content/terrain/default_grass/default_grass_surface.tga")
                         .generic_u8string(),
                     "Content/terrain/default_grass/default_grass_surface.tga",
+                },
+
+                {"renegade-waterfall-PlaceableWaterfallPS.cso", (studioDirectory / "Content/waterfall/PlaceableWaterfallPS.cso").generic_u8string(), "Content/waterfall/PlaceableWaterfallPS.cso"},
+                {"renegade-waterfall-PlaceableWaterfallVS.cso", (studioDirectory / "Content/waterfall/PlaceableWaterfallVS.cso").generic_u8string(), "Content/waterfall/PlaceableWaterfallVS.cso"},
+                {"renegade-waterfall-AeratedWater.png", (studioDirectory / "Content/waterfall/AeratedWater.png").generic_u8string(), "Content/waterfall/AeratedWater.png"},
+                {"renegade-waterfall-SteamMist.png", (studioDirectory / "Content/waterfall/SteamMist.png").generic_u8string(), "Content/waterfall/SteamMist.png"},
+                {"renegade-waterfall-WaterWisp.png", (studioDirectory / "Content/waterfall/WaterWisp.png").generic_u8string(), "Content/waterfall/WaterWisp.png"},
+                {
+                    "renegade-river-normal-map",
+                    (studioDirectory / "Content/river/waterNormalMap.jpg")
+                        .generic_u8string(),
+                    "Content/river/waterNormalMap.jpg",
+                },
+                {
+                    "renegade-river-underwater-shader",
+                    (studioDirectory / "Content/river/RenegadeRiverUnderwaterCS.cso")
+                        .generic_u8string(),
+                    "Content/river/RenegadeRiverUnderwaterCS.cso",
+                },
+                {
+                    "renegade-river-flow-pixel",
+                    (studioDirectory / "Content/river/RiverContactFoamPS.cso").generic_u8string(),
+                    "Content/river/RiverContactFoamPS.cso",
+                },
+                {
+                    "renegade-river-flow-transport",
+                    (studioDirectory / "Content/river/RiverFoamTransportCS.cso").generic_u8string(),
+                    "Content/river/RiverFoamTransportCS.cso",
+                },
+                {
+                    "renegade-river-waterway-pixel",
+                    (studioDirectory / "Content/river/RiverWaterwayFoamPS.cso").generic_u8string(),
+                    "Content/river/RiverWaterwayFoamPS.cso",
+                },
+                {
+                    "renegade-river-waterway-transport",
+                    (studioDirectory / "Content/river/RiverWaterwayFoamCS.cso").generic_u8string(),
+                    "Content/river/RiverWaterwayFoamCS.cso",
+                },
+                {
+                    "renegade-river-rapids-pixel",
+                    (studioDirectory / "Content/river/RiverRapidsPS.cso").generic_u8string(),
+                    "Content/river/RiverRapidsPS.cso",
+                },
+                {
+                    "renegade-river-rapids-transport",
+                    (studioDirectory / "Content/river/RiverRapidsCS.cso").generic_u8string(),
+                    "Content/river/RiverRapidsCS.cso",
+                },
+                {
+                    "renegade-river-appearance-RiverRefinedFoamPS.cso",
+                    (studioDirectory / "Content/river/RiverRefinedFoamPS.cso").generic_u8string(),
+                    "Content/river/RiverRefinedFoamPS.cso",
+                },
+                {
+                    "renegade-river-appearance-RiverFoamDetailCS.cso",
+                    (studioDirectory / "Content/river/RiverFoamDetailCS.cso").generic_u8string(),
+                    "Content/river/RiverFoamDetailCS.cso",
+                },
+                {
+                    "renegade-river-appearance-RiverSurfaceVS.cso",
+                    (studioDirectory / "Content/river/RiverSurfaceVS.cso").generic_u8string(),
+                    "Content/river/RiverSurfaceVS.cso",
+                },
+                {
+                    "renegade-river-appearance-RiverSurfaceShadowVS.cso",
+                    (studioDirectory / "Content/river/RiverSurfaceShadowVS.cso").generic_u8string(),
+                    "Content/river/RiverSurfaceShadowVS.cso",
+                },
+                {
+                    "renegade-river-course-RiverCoursePS.cso",
+                    (studioDirectory / "Content/river/RiverCoursePS.cso").generic_u8string(),
+                    "Content/river/RiverCoursePS.cso",
+                },
+                {
+                    "renegade-river-course-RiverCourseVS.cso",
+                    (studioDirectory / "Content/river/RiverCourseVS.cso").generic_u8string(),
+                    "Content/river/RiverCourseVS.cso",
+                },
+                {
+                    "renegade-river-course-RiverCourseShadowVS.cso",
+                    (studioDirectory / "Content/river/RiverCourseShadowVS.cso").generic_u8string(),
+                    "Content/river/RiverCourseShadowVS.cso",
+                },
+                {
+                    "renegade-river-appearance-OriginalFoamCoverage.png",
+                    (studioDirectory / "Content/river/OriginalFoamCoverage.png").generic_u8string(),
+                    "Content/river/OriginalFoamCoverage.png",
                 },
                 {
                     "renegade-weather-snowflake",
@@ -930,7 +1142,22 @@ namespace renegade::studio
 
         progress.Stage(50, "STAGING PACKAGE INPUTS",
             "Collecting Runtime support, licences and governed package documents.");
-        request.staging.projectRootPath = project.rootPath;
+        request.staging.cookProjectCopy =
+        [normal = studioDirectory / "Content/river/waterNormalMap.jpg"](
+            const bridge::WindowsGameBuildFile& file, const std::string& source,
+            const std::string& output, std::string& cookError)
+        {
+            try
+            {
+                return CookRiverNormalReference(normal, file, source, output, cookError);
+            }
+            catch (const std::exception& exception)
+            {
+                cookError = "River normal package preparation failed: " + std::string(exception.what());
+                return false;
+            }
+        };
+    request.staging.projectRootPath = project.rootPath;
         request.staging.outputParentPath =
             (fs::u8path(project.rootPath) / "Builds" / "Windows")
                 .generic_u8string();

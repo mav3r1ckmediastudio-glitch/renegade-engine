@@ -100,6 +100,33 @@ namespace renegade::studio
         std::string selectedName;
         if (selectedValid)
             if (const auto* name = session_->Scenes().GetScene().names.GetComponent(selected)) selectedName = name->name;
+
+        wi::ecs::Entity river=wi::ecs::INVALID_ENTITY;
+        bridge::RiverWaterMaterialState water;
+        if(selectedValid)
+        {
+            const auto& scene=session_->Scenes().GetScene();
+            if(bridge::CaptureRiverWaterMaterialState(scene,selected,water))river=selected;
+            else for(std::size_t i=0;i<scene.splines.GetCount();++i)
+            {
+                const auto root=scene.splines.GetEntity(i);
+                if(scene.Entity_IsDescendant(selected,root) &&
+                    bridge::CaptureRiverWaterMaterialState(scene,root,water))
+                {river=root;break;}
+            }
+        }
+        if(river!=wi::ecs::INVALID_ENTITY)
+            diagnosticService_.SetState("selected_river",{{"available",true},
+                {"entity",static_cast<std::uint64_t>(river)},
+                {"flow_status",riverFlow_.Status(river)},
+                {"updates_suspended",gizmoDragActive_ || detail::CreatorAssetDragPreviewBlocksSave() || IsWd01VegetationBrushActive()},
+                {"red",std::to_string(water.tintOpacity.x)},{"green",std::to_string(water.tintOpacity.y)},
+                {"blue",std::to_string(water.tintOpacity.z)},{"clarity",std::to_string(1.f-water.tintOpacity.w)},
+                {"normal_strength",std::to_string(water.normalStrength)},{"flow_u",std::to_string(water.flowUvU)},
+                {"flow_v",std::to_string(water.flowUvV)},
+                {"undo_count",static_cast<std::uint64_t>(session_->Commands().UndoCount())},
+                {"redo_count",static_cast<std::uint64_t>(session_->Commands().RedoCount())}});
+        else diagnosticService_.SetState("selected_river",{{"available",false}});
         diagnosticService_.Observe("editor", {{"workspace", workspace}, {"project_open", projectOpen},
             {"project", projectOpen ? session_->Projects().CurrentProject().descriptorPath : std::string()},
             {"scene", session_ ? session_->Scenes().CurrentPath() : std::string()},
