@@ -1,4 +1,5 @@
 #include "renegade/bridge/BuildIdentityService.h"
+#include "WindowsFileIoPath.h"
 
 #include <algorithm>
 #include <array>
@@ -107,7 +108,7 @@ namespace renegade::bridge
                 return false;
             }
 
-            std::ifstream input(path, std::ios::binary);
+            std::ifstream input(detail::FileIoPath(path), std::ios::binary);
             if (!input)
             {
                 BCryptDestroyHash(hash);
@@ -234,7 +235,7 @@ namespace renegade::bridge
         {
             const fs::path path =
                 fs::u8path(stage.stagingPath) / fs::u8path(destinationPath);
-            std::ofstream output(path, std::ios::binary | std::ios::trunc);
+            std::ofstream output(detail::FileIoPath(path), std::ios::binary | std::ios::trunc);
             if (!output)
             {
                 error =
@@ -866,6 +867,67 @@ namespace renegade::bridge
             const std::array<std::uint16_t, 4>& version,
             std::string& error)
         {
+            // Some versions of Windows' resource updater accept an extended
+            // path in BeginUpdateResourceW, then fail in EndUpdateResourceW
+            // (ERROR_INSUFFICIENT_BUFFER / 122). Stamp an isolated, OS-unique
+            // short-path copy instead and copy the verified result back into
+            // the governed staging tree. Manifest paths remain unchanged.
+            if (executablePath.native().size() >= MAX_PATH - 20u)
+            {
+                std::error_code ioError;
+                const fs::path source = detail::FileIoPath(executablePath);
+                const fs::path tempRoot = fs::temp_directory_path(ioError);
+                if (ioError || tempRoot.native().size() >= MAX_PATH - 48u)
+                {
+                    error = "Gate 3 cannot create a short-path resource-stamp scratch file.";
+                    return false;
+                }
+                wchar_t temporaryName[MAX_PATH]{};
+                if (!GetTempFileNameW(
+                        tempRoot.c_str(), L"RG3", 0, temporaryName))
+                {
+                    error = "Gate 3 cannot reserve a unique stamp scratch file; Win32 " +
+                        std::to_string(GetLastError()) + ".";
+                    return false;
+                }
+                const fs::path scratch = temporaryName;
+                struct RemoveScratch {
+                    fs::path file;
+                    ~RemoveScratch()
+                    {
+                        std::error_code ec;
+                        fs::remove(file, ec);
+                    }
+                } cleanup{scratch};
+                if (!fs::copy_file(
+                        source, scratch, fs::copy_options::overwrite_existing, ioError) ||
+                    ioError)
+                {
+                    error = "Gate 3 could not copy staged Runtime into the short-path scratch file: " +
+                        ioError.message();
+                    return false;
+                }
+                if (!StampExecutableResources(scratch, plan, request, version, error))
+                    return false;
+                ioError.clear();
+                if (fs::is_symlink(fs::symlink_status(source, ioError)) ||
+                    ioError || !fs::is_regular_file(source, ioError) || ioError)
+                {
+                    error = "Gate 3 staged Runtime changed during scratch resource stamping.";
+                    return false;
+                }
+                ioError.clear();
+                if (!fs::copy_file(
+                        scratch, source, fs::copy_options::overwrite_existing, ioError) ||
+                    ioError)
+                {
+                    error = "Gate 3 could not return stamped Runtime to staged package: " +
+                        ioError.message();
+                    return false;
+                }
+                return true;
+            }
+
             std::vector<std::uint8_t> versionBytes;
             if (!BuildVersionResource(
                     plan,
@@ -894,8 +956,9 @@ namespace renegade::bridge
                 return false;
             }
 
+            const auto ioExecutable = detail::FileIoPath(executablePath);
             HANDLE updater = BeginUpdateResourceW(
-                executablePath.c_str(),
+                ioExecutable.c_str(),
                 FALSE);
             if (updater == nullptr)
             {
@@ -1162,7 +1225,7 @@ namespace renegade::bridge
                 "build-report.json";
             {
                 std::ifstream input(
-                    buildReportPath,
+                    detail::FileIoPath(buildReportPath),
                     std::ios::binary);
                 if (!input)
                 {
@@ -1350,10 +1413,11 @@ namespace renegade::bridge
             fs::u8path(stage.stagingPath) /
             fs::u8path(plan.executableFileName);
         std::error_code ec;
+        const fs::path ioExecutablePath = detail::FileIoPath(executablePath);
         if (fs::is_symlink(
-                fs::symlink_status(executablePath, ec)) ||
+                fs::symlink_status(ioExecutablePath, ec)) ||
             ec ||
-            !fs::is_regular_file(executablePath, ec) ||
+            !fs::is_regular_file(ioExecutablePath, ec) ||
             ec)
         {
             error =

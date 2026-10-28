@@ -90,6 +90,8 @@ namespace renegade::studio
         void OnDragStarted(std::function<void(float)> callback);
         void OnValuePreview(std::function<void(float)> callback);
         void OnValueCommitted(std::function<void(float)> callback);
+        // Keep interactive river/waterfall inspector values stable during drags.
+        bool IsDragging() const noexcept { return dragging_; }
         void Update(const wi::Canvas& canvas, float dt) override;
         void Render(
             const wi::Canvas& canvas,

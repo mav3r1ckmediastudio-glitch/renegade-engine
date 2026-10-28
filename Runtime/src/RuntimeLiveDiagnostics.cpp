@@ -718,7 +718,8 @@ namespace renegade::runtime
             {"natural_bolt_visible_scale",visualScene.transforms.GetComponent(visualStorm.slots[0].bolt)?
                 std::to_string(visualScene.transforms.GetComponent(visualStorm.slots[0].bolt)->scale_local.x):std::string("none")}},
             "Runtime/src/RuntimeLiveDiagnostics.cpp");
-        diagnosticService_.Observe("runtime", {
+        renderer_.WriteRiverFlowDiagnostics(diagnosticService_);
+ diagnosticService_.Observe("runtime", {
             {"project", startupResult_.projectDescriptorPath},
             {"scene", scenes_.CurrentPath()},
             {"startup_finished", startupFinished_}, {"startup_succeeded", startupResult_.succeeded},
@@ -729,6 +730,8 @@ namespace renegade::runtime
             {"quit_requested", quitRequested_}, {"player_spawned", player_.IsSpawned()},
             {"player_view_rig_spawned", playerViewRig_.IsSpawned()},
             {"player_position_x", std::to_string(uiPlayerPosition.x)},
+            {"player_swimming", player_.swimming},
+            {"player_pitch", std::to_string(player_.pitch)},
             {"player_position_y", std::to_string(uiPlayerPosition.y)},
             {"player_position_z", std::to_string(uiPlayerPosition.z)},
             {"player_yaw", std::to_string(player_.yaw)},

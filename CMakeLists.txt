@@ -310,3 +310,32 @@ if(WIN32)
     )
     set_target_properties(RenegadeStudioCI PROPERTIES FOLDER "Renegade/CI")
 endif()
+
+# Registered native tests must be compiled before unfiltered CTest.
+# Preserve coverage, never hide failing/missing tests with exclusions.
+if(TARGET RenegadeStudioCI)
+    add_dependencies(RenegadeStudioCI
+        RenegadeRiverUnderwaterTests
+        RenegadeRiverSplineTests
+        RenegadeRiverFoamTests
+        RenegadeRiverFlowFieldTests
+        RenegadeRiverWaterlineTests
+        RenegadeRiverFoamTransportTests
+        RenegadeRiverFlowProfileTests
+        RenegadeRiverFlowSourceSelectionTests
+        RenegadeRiverFlowNetworkTests
+        RenegadeRiverJunctionSurfaceTests
+        RenegadeRiverJunctionFoamTransportTests
+        RenegadeRiverWaterwayTests
+        RenegadeRiverWaterwayTransportTests
+        RenegadeRiverRapidsTests
+        RenegadeRiverSurfaceMotionTests
+        RenegadeRiverGradedTests
+        RenegadeRiverCascadeTests
+        RenegadeRiverSmoothDropTests
+        RenegadeRiverCourseTests
+        RenegadePlaceableWaterfallAuthoringTests
+        RenegadePlaceableWaterfallTests
+        RenegadeRiverWaterfallFlightTests
+    )
+endif()

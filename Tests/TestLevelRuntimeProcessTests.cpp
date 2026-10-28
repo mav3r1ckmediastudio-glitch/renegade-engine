@@ -137,6 +137,26 @@ int main(int argc, char** argv)
         return 2;
     }
     const std::string fixturePath = argv[1];
+    if (argc >= 3 && std::string(argv[2]) == "--gpu-lease-proof")
+    {
+        const fs::path root = MakeRoot("gpu-lease-proof");
+        const auto snapshot = MakeSnapshot(root, "session");
+        TestLevelRuntimeProcess process;
+        std::string error;
+        auto options = Options(fixturePath, "ready-exit0", 30000);
+        options.yieldAssistantGpu = true;
+        const bool launched = process.Launch(options, snapshot, error);
+        std::cout << "GPU_LEASE_NATIVE_LAUNCHED=" << launched
+                  << " ERROR=" << error << '\\n';
+        if (launched)
+        {
+            const auto result = PollUntilFinished(process, 30000);
+            std::cout << "GPU_LEASE_NATIVE_DONE=" << result.finished
+                      << " SUCCESS=" << result.succeeded << '\\n';
+        }
+        fs::remove_all(root);
+        return launched ? 0 : 1;
+    }
 
     {
         const fs::path root = MakeRoot("missing-exe");

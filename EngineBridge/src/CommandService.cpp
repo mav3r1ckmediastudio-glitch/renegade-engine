@@ -483,6 +483,7 @@ namespace renegade::bridge
         }
         undoStack_.push_back(std::move(command));
         redoStack_.clear();
+        ++revision_;
         return true;
     }
 
@@ -498,6 +499,7 @@ namespace renegade::bridge
         }
         undoStack_.push_back(std::move(command));
         redoStack_.clear();
+        ++revision_;
         return true;
     }
 
@@ -512,6 +514,7 @@ namespace renegade::bridge
         undoStack_.pop_back();
         command->Undo();
         redoStack_.push_back(std::move(command));
+        ++revision_;
         return true;
     }
 
@@ -531,11 +534,13 @@ namespace renegade::bridge
         }
 
         undoStack_.push_back(std::move(command));
+        ++revision_;
         return true;
     }
 
     void CommandService::Clear() noexcept
     {
+        ++revision_;
         undoStack_.clear();
         redoStack_.clear();
         savedDepth_ = 0;
@@ -681,6 +686,29 @@ namespace renegade::bridge
         transform->scale_local = transformState.scale;
         transform->SetDirty();
         transform->UpdateTransform();
+        // UpdateTransform publishes local space and clears the dirty bit. The
+        // translator consumes world space immediately, before the next scene
+        // hierarchy pass; reconstruct it without a second Scene::Update.
+        XMMATRIX world = transform->GetLocalMatrix();
+        const auto* hierarchy = scene_->hierarchy.GetComponent(entity_);
+        std::size_t remaining = scene_->hierarchy.GetCount();
+        while (hierarchy != nullptr && remaining-- > 0)
+        {
+            if (const auto* parent = scene_->transforms.GetComponent(hierarchy->parentID))
+                world *= parent->GetLocalMatrix();
+            hierarchy = scene_->hierarchy.GetComponent(hierarchy->parentID);
+        }
+        XMStoreFloat4x4(&transform->world, world);
+        // Native spline mesh invalidation normally observes node dirty bits.
+        // Commands publish immediately, so explicitly invalidate the native
+        // mesh cache for affected points on Execute, Undo and Redo.
+        for (std::size_t i = 0; i < scene_->splines.GetCount(); ++i)
+        {
+            auto& spline = scene_->splines[i];
+            if (std::find(spline.spline_node_entities.begin(),
+                    spline.spline_node_entities.end(), entity_) != spline.spline_node_entities.end())
+                spline.prev_mesh_generation_nodes = -1;
+        }
         renegade::bridge::SyncNativeCharacterPoseFromTransform(*scene_, entity_);
 
         // Primitive dimensions on a reusable asset are authored in root-local

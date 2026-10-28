@@ -10,7 +10,7 @@
 
 namespace
 {
-    constexpr float VegetationTop = 710.0f;
+    constexpr float VegetationTop = 980.0f; // Riverbed tools sit above vegetation.
 
     enum class SettingField
     {
@@ -195,6 +195,11 @@ namespace renegade::studio
         state.paint.OnClick([this](const wi::gui::EventArgs&)
         {
             auto& value = Controls();
+            terrainRiverBrushActive_ = false;
+            terrainRiverStrokeActive_ = false;
+            terrainRiverStrokePoints_.clear();
+            terrainRiverBrushButton_.SetText("DRAW RIVER");
+            terrainRiverStatus_.SetText("RIVER // READY");
             value.brushActive = true;
             value.mode = bridge::VegetationBrushMode::Paint;
             value.paint.SetText("PAINT [ACTIVE]");
@@ -211,6 +216,11 @@ namespace renegade::studio
         state.erase.OnClick([this](const wi::gui::EventArgs&)
         {
             auto& value = Controls();
+            terrainRiverBrushActive_ = false;
+            terrainRiverStrokeActive_ = false;
+            terrainRiverStrokePoints_.clear();
+            terrainRiverBrushButton_.SetText("DRAW RIVER");
+            terrainRiverStatus_.SetText("RIVER // READY");
             value.brushActive = true;
             value.mode = bridge::VegetationBrushMode::Delete;
             value.paint.SetText("PAINT");
@@ -462,6 +472,16 @@ namespace renegade::studio
             place(*row, y);
             y += 34.0f;
         }
+    }
+
+    std::vector<wi::gui::Widget*> StudioRenderPath::TerrainVegetationWidgets(int group)
+    {
+        auto& s=Controls();
+        if(!s.created)return {};
+        if(group==0){s.header.SetVisible(false);s.source.SetVisible(false);return {&s.brushSize,&s.paint,&s.erase};}
+        if(group==3)return {&s.status};
+        if(group==1)return {&s.density,&s.length,&s.width,&s.randomness,&s.randomSeed,&s.uniformity};
+        return {&s.stiffness,&s.drag,&s.gravity,&s.segments,&s.billboards,&s.viewDistance,&s.cameraBend};
     }
 
     void StudioRenderPath::RefreshWd01VegetationControls(
@@ -735,5 +755,13 @@ namespace renegade::studio
         return {{"brush_active", controls && controls->brushActive},
             {"stroke_active", controls && controls->strokeActive},
             {"mode", controls && controls->mode == bridge::VegetationBrushMode::Paint ? std::string("paint") : std::string("erase")}};
+    }
+}
+
+namespace renegade::studio
+{
+    bool StudioRenderPath::IsWd01VegetationBrushActive() const
+    {
+        return controls && controls->brushActive;
     }
 }

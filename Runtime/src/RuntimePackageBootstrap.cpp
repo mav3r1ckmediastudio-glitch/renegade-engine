@@ -1,4 +1,5 @@
 #include "RuntimePackageBootstrap.h"
+#include "../../EngineBridge/src/WindowsFileIoPath.h"
 
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/PackageIntegrityService.h"
@@ -307,9 +308,35 @@ namespace renegade::runtime
                     "Gate 3 identity.");
             }
 
-            if (!ExecutableNameEqual(
-                    executableName,
-                    executable.filename().generic_u8string()))
+            bool executableIdentityMatches = ExecutableNameEqual(
+                executableName, executable.filename().generic_u8string());
+#if defined(_WIN32)
+            // Windows can launch the same exact staged .exe through its
+            // 8.3 alias for deep project paths. Accept that alias ONLY if it
+            // refers to the identical non-symlink file named in the
+            // integrity-validated manifest under the canonical package root.
+            // Equivalent() compares native file identity, not just hashes.
+            if (!executableIdentityMatches &&
+                IsSafePackagePath(executableName) &&
+                !fs::u8path(executableName).has_parent_path())
+            {
+                const fs::path expected =
+                    packageRoot / fs::u8path(executableName);
+                const fs::path ioExpected =
+                    bridge::detail::FileIoPath(expected);
+                const fs::path ioActual =
+                    bridge::detail::FileIoPath(executable);
+                std::error_code aliasError;
+                if (IsRegularNonSymlink(ioExpected) &&
+                    IsRegularNonSymlink(ioActual) &&
+                    fs::equivalent(ioActual, ioExpected, aliasError) &&
+                    !aliasError)
+                {
+                    executableIdentityMatches = true;
+                }
+            }
+#endif
+            if (!executableIdentityMatches)
             {
                 return RejectPackage(
                     std::move(result),

@@ -227,7 +227,7 @@ and the focused subsystem documents rather than in fast-aging branch notes here.
 
 - Wicked upstream: https://github.com/turanszkij/WickedEngine.git
 - Pinned branch: master
-- Pinned Wicked commit: 3a800b7134aafe58461093c8abb2e274d4e64033
+- Pinned Wicked commit: ceb816b844b4ab2fa56a159ac60a4f65c931bdfc
 - Primary target: Windows x64 / DirectX 12
 - Development cross-check: Vulkan on Windows
 

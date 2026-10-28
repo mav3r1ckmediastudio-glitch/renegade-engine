@@ -1,5 +1,7 @@
 #include "RuntimeGameplayAttributeWorld.h"
 #pragma once
+#include "renegade/bridge/RiverFlowRenderer.h"
+#include "renegade/bridge/PlaceableWaterfallRenderer.h"
 
 #include <WickedEngine.h>
 
@@ -43,6 +45,7 @@
 #include "renegade/bridge/RenderSettingsService.h"
 #include "renegade/bridge/RenderLutService.h"
 #include "renegade/bridge/SceneService.h"
+#include "renegade/bridge/RiverUnderwaterService.h"
 #include "renegade/bridge/PlayerService.h"
 
 #include <cstddef>
@@ -69,12 +72,20 @@ namespace renegade::runtime
         void ConfirmTargetHit() { hitConfirmSeconds_=0.12f; }
         void ClearHitConfirmation() { hitConfirmSeconds_=0; }
         void SetHeldFireballParticles(const std::array<wi::ecs::Entity,4>& entities) { heldFireballParticles_=entities; }
+        void PreRender() override;
+        void Render() const override;
+        void WriteRiverFlowDiagnostics(bridge::DiagnosticService& diagnostics) const;
         void RenderTransparents(wi::graphics::CommandList cmd) const override;
         void Load() override;
         void Update(float dt) override;
         void Compose(wi::graphics::CommandList cmd) const override;
 
     private:
+        bridge::RiverUnderwaterRenderer riverUnderwater_;
+        bridge::RiverFlowRenderer riverFlow_;
+        bridge::PlaceableWaterfallRenderer waterfallRenderer_;
+        void RenderWaterfallTransparents(wi::graphics::CommandList cmd) const;
+        double riverFlowPrepareMilliseconds_ = 0;
         void SyncRenderSettings(bool resizeBuffersForMSAA);
 
         std::array<wi::ecs::Entity,4> heldFireballParticles_{};

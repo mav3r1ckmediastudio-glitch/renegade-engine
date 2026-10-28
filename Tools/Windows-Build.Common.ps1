@@ -2,7 +2,7 @@
 
 Set-StrictMode -Version Latest
 
-$script:RenegadePinnedWickedCommit = "3a800b7134aafe58461093c8abb2e274d4e64033"
+$script:RenegadePinnedWickedCommit = "ceb816b844b4ab2fa56a159ac60a4f65c931bdfc"
 
 function Get-RenegadeRepositoryRoot {
     return (Resolve-Path (Join-Path $PSScriptRoot "..")).Path

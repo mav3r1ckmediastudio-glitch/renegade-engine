@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/CharacterPhysicsService.h"
 #include "renegade/bridge/PhysicsService.h"
+#include "renegade/bridge/PlayerSwimmingService.h"
 
 #include <algorithm>
 #include <cmath>
@@ -481,6 +482,8 @@ namespace renegade::bridge
             settings);
         state.yaw = motion.yaw;
         state.pitch = motion.pitch;
+        if (TryMovePlayerInRiver(scene, state, input, settings))
+            return true;
         return MovePhysicsCharacter(
             scene,
             state.entity,

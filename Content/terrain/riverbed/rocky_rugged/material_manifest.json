@@ -1,0 +1,29 @@
+{
+  "name": "Rocky Rugged Terrain (user-supplied)",
+  "status": "trial native Wicked terrain material; no automatic changes to saved terrain",
+  "maps": {
+    "base_color": "rocky_basecolor.png",
+    "normal_directx": "rocky_normal_dx.png",
+    "surface_occlusion_roughness_metal_reflectance": "rocky_surface.png",
+    "height_reference_unused": "rocky_height_reference.png"
+  },
+  "surface_channels": {
+    "R": "ambient occlusion",
+    "G": "roughness",
+    "B": "metallic",
+    "A": "reflectance multiplier 1"
+  },
+  "authoring_note": "Rugged mossy rocky ground; inspect underwater before accepting. Height reference is NOT tessellated.",
+  "texture_resolution": [
+    2048,
+    2048
+  ],
+  "source_zip": "rocky-rugged-terrain-bl.zip",
+  "files_sha256": {
+    "rocky_basecolor.png": "0ac6e7f417e15c6d5ae084f3de5f9f280eb8668051ef783699b024d4992a035f",
+    "rocky_normal_dx.png": "d97fbd44040d956e37e2440312348aef5c492fc565d0e987c9f6cbc9b672fbe9",
+    "rocky_surface.png": "1b1cd63162ec2637a83ee3517382ad4f9c15025f0e78c52be0fcaf996323ac67",
+    "rocky_height_reference.png": "cd90411b2284e3af4d39b47d2b9ba3e6176f241b361196da065f145bde05f886",
+    "rocky_preview.jpg": "256b79469caafc0329b22c7210364cd3dfdeb860ac7e81d26fdd27d51cd49fd5"
+  }
+}

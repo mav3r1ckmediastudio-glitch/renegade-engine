@@ -1,3 +1,4 @@
+#include "../EngineBridge/src/PlaceableWaterfallAuthoring.h"
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -320,6 +321,12 @@ int main()
         session.Scenes().GetScene(), createPlayer.CreatedEntity(), local);
     if (!applyLocal.Execute()) return Fail("snapshot equipment override failed");
 
+    namespace waterfall=renegade::bridge::placeable_waterfall;
+    waterfall::Definition waterfallSettings;waterfallSettings.crest={2,12,3};waterfallSettings.landing={5,0,4};waterfallSettings.width=4.25f;waterfallSettings.impactSpray=2.f;
+    auto createWaterfall=waterfall::MakeCreateWaterfallCommand(session.Scenes().GetScene(),waterfallSettings);auto waterfallId=createWaterfall->Id();
+    if(!session.Commands().Execute(std::move(createWaterfall)))return Fail("Waterfall snapshot fixture failed");
+    auto generated=session.Scenes().GetScene().Entity_CreateTransform("__renegade_internal_waterfall_snapshot_test");
+    session.Scenes().GetScene().metadatas.Create(generated).string_values.set("renegade.waterfall.generated.v1",waterfallId);
     const std::size_t undoBeforeSnapshot = session.Commands().UndoCount();
     const std::size_t redoBeforeSnapshot = session.Commands().RedoCount();
     const std::string pathBeforeSnapshot = session.Scenes().CurrentPath();
@@ -480,6 +487,10 @@ int main()
         return Fail("Runtime did not rehydrate the Test Level governed material resource");
     }
 
+    std::vector<waterfall::AuthoredWaterfall> runtimeFalls;std::string waterfallError;
+    if(!waterfall::EnumerateWaterfalls(runtimeScenes.GetScene(),runtimeFalls,waterfallError)||runtimeFalls.size()!=1||runtimeFalls[0].id!=waterfallId||runtimeFalls[0].settings.width!=4.25f||runtimeFalls[0].settings.impactSpray!=2.f||waterfall::LandingHandle(runtimeScenes.GetScene(),runtimeFalls[0].entity)==wi::ecs::INVALID_ENTITY)return Fail("Runtime snapshot lost waterfall settings or stable handles");
+    for(size_t i=0;i<runtimeScenes.GetScene().metadatas.GetCount();++i)if(runtimeScenes.GetScene().metadatas[i].string_values.has("renegade.waterfall.generated.v1"))return Fail("Runtime snapshot serialized derived waterfall visuals");
+    if(session.Scenes().GetScene().transforms.Contains(generated))return Fail("Live snapshot did not clear transient waterfall cache");
     float runtimeX = 0.0f;
     if (!FindTranslationX(runtimeScenes, "Runtime Landmark", runtimeX) ||
         !NearlyEqual(runtimeX, 9.0f))

@@ -1,3 +1,8 @@
+#include "../../EngineBridge/src/PlaceableWaterfallAuthoring.h"
+#include <cstdlib>
+#include <fstream>
+#include <cmath>
+#include <filesystem>
 #include "RuntimeApplication.h"
 #include "renegade/bridge/ScreenLiveBinding.h"
 #include "renegade/bridge/ScreenThemeResolver.h"
@@ -22,7 +27,7 @@ namespace renegade::runtime
     // Airborne effects remain on their ordinary native world path.
     void RuntimeRenderPath::RenderTransparents(wi::graphics::CommandList cmd) const
     {
-        wi::RenderPath3D::RenderTransparents(cmd);
+        RenderWaterfallTransparents(cmd);
         if(!scene->emitters.Contains(heldFireballParticles_[0]))return;
         auto* device=wi::graphics::GetDevice();
         using namespace wi::graphics;
@@ -136,11 +141,118 @@ namespace renegade::runtime
         }
         if (!paused_ && std::isfinite(dt) && dt > 0)
             hitConfirmSeconds_ = std::max(0.0f, hitConfirmSeconds_ - dt);
-        RenderPath3D::Update(dt);
+        const auto flowStart=std::chrono::steady_clock::now();
+        if(scenes_)waterfallRenderer_.Prepare(*scene,scenes_->Revision(),paused_?0.f:dt,false);
+        const auto afterWaterfall=std::chrono::steady_clock::now();
+        if(scenes_)riverFlow_.Prepare(*scene,scenes_->Revision(),paused_?0.f:dt);
+        const auto afterRiver=std::chrono::steady_clock::now();
+        if(const char* screenshot=std::getenv("RENEGADE_G13E14_PLAYER_CAPTURE")){
+            static int frame=0;
+            if(++frame==60){
+                const bool saved=wi::helper::saveTextureToFile(
+                    GetRenderResult3D(),screenshot);
+                std::ofstream result(std::string(screenshot)+".status.txt");
+                result<<"G13E14_ACTUAL_PLAYER_CAMERA_CAPTURE success="<<saved
+                      <<" waterfall_active="<<waterfallRenderer_.ActiveCount()
+                      <<" river_active="<<riverFlow_.ActiveCount()
+                      <<" emitters="<<scene->emitters.GetCount()<<"\n";
+            }
+        }
+        riverFlowPrepareMilliseconds_=std::chrono::duration<double,std::milli>(
+            std::chrono::steady_clock::now()-flowStart).count();
+        // Explicit diagnostic mode only; ordinary player/camera ownership is unchanged.
+        if(const char* proof=std::getenv("RENEGADE_WATERFALL_RUNTIME_PROOF")){
+            static uint64_t frame=0;++frame;
+            std::vector<bridge::placeable_waterfall::AuthoredWaterfall> records;std::string error;
+            if(bridge::placeable_waterfall::EnumerateWaterfalls(*scene,records,error)&&!records.empty()){
+                auto a=records.front().settings.crest,b=records.front().settings.landing;
+                auto target=XMVectorSet((a.x+b.x)*.5f,(a.y+b.y)*.5f,(a.z+b.z)*.5f,1);
+                // Explicit opt-in only for the isolated G13E13 moving-camera
+                // benchmark. The previously approved G13C camera and actual
+                // gameplay camera path are unchanged.
+                float cameraX=20.f,cameraY=2.f,cameraZ=-13.f;
+                if(std::getenv("RENEGADE_G13E13_CAMERA_MOTION")){
+                    const float phase=float(frame)*.014f;
+                    cameraX+=3.5f*std::sin(phase);
+                    cameraY+=1.0f*std::sin(phase*.6f);
+                    cameraZ+=2.5f*(std::cos(phase)-1.f);
+                }
+                wi::scene::TransformComponent pose;pose.MatrixTransform(XMMatrixInverse(nullptr,XMMatrixLookAtLH(target+XMVectorSet(cameraX,cameraY,cameraZ,0),target,XMVectorSet(0,1,0,0))));pose.UpdateTransform();camera->TransformCamera(pose);camera->UpdateCamera();
+                if(frame==240 && !std::getenv("RENEGADE_G13E13_NO_SCREENSHOT")){
+                    auto capture=std::filesystem::path(proof);capture.replace_extension(".png");bool saved=wi::helper::saveTextureToFile(GetRenderResult3D(),capture.generic_string());
+                    std::ofstream log(proof);log<<"RUNTIME_WATERFALL_PROOF authored="<<records.size()<<" active="<<waterfallRenderer_.ActiveCount()<<" emitters="<<scene->emitters.GetCount()<<" capture="<<saved<<" status="<<waterfallRenderer_.Status()<<std::endl;
+                    for(const auto& record:records)log<<"id="<<record.id<<" width="<<record.settings.width<<" impact="<<record.settings.impactSpray<<std::endl;
+                    for(size_t i=0;i<scene->materials.GetCount();++i){auto& m=scene->materials[i];auto* md=scene->metadatas.GetComponent(scene->materials.GetEntity(i));if(md&&md->string_values.has("renegade.waterfall.generated.v1"))continue;for(int slot=0;slot<wi::scene::MaterialComponent::TEXTURESLOT_COUNT;++slot)if(!m.textures[slot].name.empty())log<<"texture="<<m.textures[slot].name<<" valid="<<m.textures[slot].resource.IsValid()<<std::endl;}
+                }
+            }
+        }
+        const auto nativeBegin=std::chrono::steady_clock::now();
+        {auto riverBindings=riverFlow_.Bind();RenderPath3D::Update(dt);}
+        if(const char* trace=std::getenv("RENEGADE_G13E14_STAGE_TRACE")){
+            static std::uint64_t frame=0;
+            if(++frame<=20 || frame%10==0){
+                const auto end=std::chrono::steady_clock::now();
+                auto ms=[](auto a,auto b){
+                    return std::chrono::duration<double,std::milli>(b-a).count();};
+                std::ofstream out(trace,std::ios::app);
+                out<<"RENDER_UPDATE frame="<<frame
+                   <<" waterfall_ms="<<ms(flowStart,afterWaterfall)
+                   <<" river_ms="<<ms(afterWaterfall,afterRiver)
+                   <<" native_update_ms="<<ms(nativeBegin,end)
+                   <<" terrain_chunks="<<(scene->terrains.GetCount()?
+                        scene->terrains[0].chunks.size():0);
+                if(scene->splines.GetCount()){
+                    bridge::RiverFlowDiagnostics diag;
+                    std::string why;
+                    const auto river=scene->splines.GetEntity(0);
+                    if(riverFlow_.Diagnostics(river,diag,why))
+                        out<<" river_rebuilds="<<diag.rebuilds
+                           <<" last_rebuild_ms="<<diag.lastBuildMilliseconds;
+                    else
+                        out<<" river_error="<<why;
+                }
+                out<<"\n";
+            }
+        }
         // Wicked disables native button input at dt=0. World pause must not
         // disable the menu that owns that pause. The base zero-time GUI pass
         // performs no input; advance the native GUI once with real UI time.
         if(paused_ && interfaceDeltaTime_>0) GetGUI().Update(*this,interfaceDeltaTime_);
+    }
+
+    void RuntimeRenderPath::Render() const
+    {
+        auto riverBindings=riverFlow_.Bind();
+        riverFlow_.Dispatch();
+        wi::RenderPath3D::Render();
+    }
+
+    void RuntimeRenderPath::WriteRiverFlowDiagnostics(bridge::DiagnosticService& diagnostics) const
+    {
+        std::uint64_t rebuilds=0;double lastBuild=0;
+        if(scene)for(size_t n=0;n<scene->splines.GetCount();++n)
+        {
+            bridge::RiverFlowDiagnostics state;std::string error;
+            if(riverFlow_.Diagnostics(scene->splines.GetEntity(n),state,error))
+            {
+                rebuilds+=state.rebuilds;
+                lastBuild=std::max(lastBuild,state.lastBuildMilliseconds);
+            }
+        }
+        diagnostics.SetState("waterfall",{{"active",static_cast<std::uint64_t>(waterfallRenderer_.ActiveCount())},{"status",waterfallRenderer_.Status()}});
+        diagnostics.SetState("river_flow",{
+            {"active",static_cast<std::uint64_t>(riverFlow_.ActiveCount())},
+            {"submitted_frames",static_cast<std::uint64_t>(wi::graphics::GetDevice()->GetFrameCount())},
+            {"rebuilds",rebuilds},
+            {"prepare_cpu_ms",std::to_string(riverFlowPrepareMilliseconds_)},
+            {"last_build_ms",std::to_string(lastBuild)}});
+    }
+
+    void RuntimeRenderPath::PreRender()
+    {
+        riverUnderwater_.Update(*this);
+        auto riverBindings=riverFlow_.Bind();
+        wi::RenderPath3D::PreRender();
     }
 
     void RuntimeRenderPath::Compose(
@@ -539,6 +651,12 @@ namespace renegade::runtime
         const bool gameplayInputAllowed = !uiComposition_.Resolve().gameplayInputBlocked &&
             !renderer_.GetGUI().IsTyping();
         const bool gameplayFrame = !scenes_.CurrentPath().empty();
+        // G13E14 one-level verification uses the exact regular controller and
+        // Jolt/scene movement path; synthetic input is gated to the developer
+        // benchmark environment, never active for real players.
+        const char* g13e14Trace=std::getenv("RENEGADE_G13E14_PLAYER_TRACE");
+        static std::uint64_t g13e14Frame=0;
+        if(g13e14Trace && gameplayFrame) ++g13e14Frame;
         if (gameplayFrame)
         {
             // Feed current input into the one authoritative Player before
@@ -580,6 +698,14 @@ namespace renegade::runtime
                     if (!paused_)
                     {
                         auto playerInput=gameplayInput.player;
+                        if(g13e14Trace){
+                            const auto phase=g13e14Frame%960;
+                            playerInput.moveForward=phase<320?0.75f:(phase<640?-0.65f:0.25f);
+                            playerInput.moveRight=phase<320?0.20f:(phase<640?0.35f:-0.40f);
+                            playerInput.lookYaw=0.0f;
+                            playerInput.lookPitch=0.0f;
+                            playerInput.sprintDown=false;
+                        }
                         if(playerViewAnimation_.handLayers.directional && gameplayInput.fireDown)
                             playerInput.lookYaw=playerInput.lookPitch=0;
                         (void)bridge::UpdateRuntimePlayer(
@@ -714,6 +840,31 @@ namespace renegade::runtime
         wi::Application::Update(paused_ ? 0.0f : dt);
         // Current-pose marks must reach decal visibility/render upload after
         // native skinning, while transient entity mutation remains before it.
+        if (gameplayFrame && g13e14Trace && player_.IsSpawned()) {
+            // Post-native-physics, not a fabricated camera path: record actual
+            // player transform/trajectory from the ordinary runtime controller.
+            auto* transform=scenes_.GetScene().transforms.GetComponent(player_.entity);
+            if(transform){
+                const XMFLOAT3 pos=transform->GetPosition();
+                static bool tracking=false;
+                static XMFLOAT3 original{},previous{};
+                static double distance=0;
+                if(!tracking){
+                    original=previous=pos;tracking=true;
+                    std::ofstream out(g13e14Trace,std::ios::trunc);
+                    out<<"frame,x,y,z,horizontal_distance_from_start_m,travelled_m\n";
+                }
+                const double dx=pos.x-previous.x,dz=pos.z-previous.z;
+                distance+=std::sqrt(dx*dx+dz*dz);
+                previous=pos;
+                if(g13e14Frame%120==0){
+                    const double fx=pos.x-original.x,fz=pos.z-original.z;
+                    std::ofstream out(g13e14Trace,std::ios::app);
+                    out<<g13e14Frame<<","<<pos.x<<","<<pos.y<<","<<pos.z<<","
+                       <<std::sqrt(fx*fx+fz*fz)<<","<<distance<<"\n";
+                }
+            }
+        }
         if (gameplayFrame) {
             heldFireball_.RefreshEmissionFrame(scenes_.GetScene(),renderer_.camera?&renderer_.camera->Eye:nullptr);
             renderer_.SetHeldFireballParticles(heldFireball_.particles);

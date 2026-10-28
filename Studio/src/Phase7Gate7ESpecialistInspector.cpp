@@ -13,6 +13,7 @@
 
 #include "renegade/bridge/CreatorVideoWorkflowService.h"
 #include "renegade/bridge/SpecialistComponentService.h"
+#include "renegade/bridge/RiverTerrainLayerService.h"
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/TerrainCreatorGapService.h"
 #include "renegade/bridge/VideoAssetService.h"
@@ -854,6 +855,26 @@ namespace renegade::studio
                 RefreshVideo(); RequestRefresh();
             }
 
+            template<typename Factory>
+            void QueueLinkedSplineMutation(Factory factory)
+            {
+                const auto guard=CapturePhase7AsyncSceneGuard();
+                const auto entity=SelectedEntity();
+                wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this,guard,entity,factory](std::uint64_t)
+                {
+                    if (!MatchesPhase7AsyncSceneGuard(guard)) return;
+                    auto* current=Session();if(!current) return;
+                    auto& scene=current->Scenes().GetScene();
+                    if (!scene.splines.Contains(entity)) return;
+                    if (current->Commands().Execute(std::make_unique<bridge::WatercourseSceneCommand>(
+                        scene,factory(scene,entity))))
+                        SetStatus("SPLINE // Curve and linked channel updated // Undo available");
+                    else SetStatus("SPLINE NOT CHANGED // Linked terrain limits or conflicting edits");
+                    RefreshSpline();RequestRefresh();
+                });
+            }
+
             template<typename Mutator>
             void CommitSpline(Mutator&& mutator)
             {
@@ -861,6 +882,12 @@ namespace renegade::studio
                 auto& scene = session->Scenes().GetScene(); const auto entity = SelectedEntity();
                 auto* spline = scene.splines.GetComponent(entity); if (!spline) return;
                 auto state = bridge::CaptureSpline(*spline); mutator(state);
+                if (bridge::SceneHasRiverTerrainLayers(scene))
+                {
+                    QueueLinkedSplineMutation([state](wi::scene::Scene& target,wi::ecs::Entity id)
+                    {return std::make_unique<bridge::SetSplineStateCommand>(target,id,state);});
+                    return;
+                }
                 if (session->Commands().Execute(std::make_unique<bridge::SetSplineStateCommand>(scene, entity, state)))
                     SetStatus("PHASE 7E // native spline state committed");
                 RefreshSpline(); RequestRefresh();
@@ -869,6 +896,12 @@ namespace renegade::studio
             void AddSplineNode()
             {
                 auto* session = Session(); if (!session) return;
+                if (bridge::SceneHasRiverTerrainLayers(session->Scenes().GetScene()))
+                {
+                    QueueLinkedSplineMutation([](wi::scene::Scene& target,wi::ecs::Entity id)
+                    {return std::make_unique<bridge::AddSplineNodeCommand>(target,id);});
+                    return;
+                }
                 if (session->Commands().Execute(std::make_unique<bridge::AddSplineNodeCommand>(
                         session->Scenes().GetScene(), SelectedEntity())))
                     SetStatus("PHASE 7E // native spline node added");
@@ -878,6 +911,12 @@ namespace renegade::studio
             void RemoveSplineNode()
             {
                 auto* session = Session(); if (!session) return;
+                if (bridge::SceneHasRiverTerrainLayers(session->Scenes().GetScene()))
+                {
+                    QueueLinkedSplineMutation([](wi::scene::Scene& target,wi::ecs::Entity id)
+                    {return std::make_unique<bridge::RemoveLastSplineNodeCommand>(target,id);});
+                    return;
+                }
                 if (session->Commands().Execute(std::make_unique<bridge::RemoveLastSplineNodeCommand>(
                         session->Scenes().GetScene(), SelectedEntity())))
                     SetStatus("PHASE 7E // last native spline node removed");

@@ -1,3 +1,4 @@
+#include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/SceneDocumentService.h"
 
 #include "renegade/bridge/CollisionService.h"
@@ -6,6 +7,8 @@
 #include "renegade/bridge/LightmapBakeService.h"
 #include "renegade/bridge/NightSkyService.h"
 #include "renegade/bridge/ProjectService.h"
+#include "renegade/bridge/RiverSplineService.h"
+#include "renegade/bridge/RiverbedMaterialService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
 #include "renegade/bridge/TerrainService.h"
@@ -224,6 +227,9 @@ namespace renegade::bridge
             terrain.scene = &scenes_.scene_;
         }
         RebindDefaultTerrainMaterials(scenes_.scene_);
+        std::string rockyError;
+        if(!RebindBundledRockyRiverbedMaterials(scenes_.scene_,rockyError))
+            wi::backlog::post("ROCKY RIVERBED RESOURCE WARNING: "+rockyError);
         RebindWickedVegetationResources(scenes_.scene_);
         RestoreNightSky(scenes_.scene_);
         scenes_.currentPath_ = std::move(prepared.path_);
@@ -368,7 +374,13 @@ namespace renegade::bridge
                 return false;
             }
             archive.SetCompressionEnabled(true);
-            scenes_.scene_.Serialize(archive);
+            {
+                // An opt-in diagnostic surface shader is a process-specific
+                // renderer ID, never part of a portable WISCENE document.
+                RemoveGeneratedWaterfallVisuals(scenes_.scene_);
+                ScopedRiverLocalDepthArchiveMask nativeWater(scenes_.scene_);
+                scenes_.scene_.Serialize(archive);
+            }
             archiveWritten = archive.SaveFile(temporary.generic_u8string());
             archive = wi::Archive();
         }

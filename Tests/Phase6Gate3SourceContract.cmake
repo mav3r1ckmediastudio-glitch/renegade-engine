@@ -156,7 +156,7 @@ foreach(token IN ITEMS
     "studioChrome_.IsAudioWorkspaceActive()"
     "inspectorPanel_.wi::gui::Widget::SetVisible(false)"
     "renderWorkspacePanel_.wi::gui::Widget::SetVisible(false)"
-    "inspectorPanel_.wi::gui::Widget::SetVisible(true)"
+    "inspectorPanel_.wi::gui::Widget::SetVisible(!waterfallInspector_.IsVisible())"
     "StudioRenderPath::Update(dt);"
     "SyncAudioInspectorPresentation();")
     string(FIND "${studio_application_header_text}" "${token}" found)

@@ -1,4 +1,5 @@
 #include "renegade/bridge/TerrainService.h"
+#include "renegade/bridge/RiverTerrainLayerService.h"
 #include "renegade/bridge/ImpactSurface.h"
 
 #include <algorithm>
@@ -36,6 +37,8 @@ namespace
 
     namespace fs = std::filesystem;
     constexpr float Epsilon = 0.00001f;
+    constexpr const char* TerrainHeightFloorOriginalKey =
+        "renegade.terrain.authored-floor-original";
 
     bool NearlyEqual(float left, float right) noexcept
     {
@@ -431,6 +434,10 @@ namespace
             root + "default_grass_normal.tga";
         material.textures[wi::scene::MaterialComponent::SURFACEMAP].name =
             root + "default_grass_surface.tga";
+        // CPU authoring/physics tools retain texture names without a graphics
+        // device. Once real bundled textures exist, Load would upload them and
+        // dereference a null device in these headless callers.
+        if (wi::graphics::GetDevice() == nullptr) return;
         material.textures[wi::scene::MaterialComponent::BASECOLORMAP].resource =
             wi::resourcemanager::Load(material.textures[
                 wi::scene::MaterialComponent::BASECOLORMAP].name);
@@ -993,6 +1000,9 @@ namespace renegade::bridge
         {
             return false;
         }
+        // Linked baselines bind to resident topology/transforms. Procedural
+        // settings must not regenerate or move that authored landscape.
+        if (HasRiverTerrainLayers(*scene_, entity_)) return false;
         ApplyTerrain(*terrain, state);
         return true;
     }
@@ -1072,6 +1082,15 @@ namespace renegade::bridge
         {
             return false;
         }
+        // A lowered R16 encoding floor preserves existing chunk world
+        // positions, but Wicked would generate NEW chunks at that lower
+        // baseline. Block ring expansion instead of silently introducing
+        // a 10m cliff at the old boundary. The marker is serialized, so
+        // a save/reopen cannot bypass this compatibility guard.
+        const auto* meta = scene_->metadatas.GetComponent(terrainEntity_);
+        if (HasRiverTerrainLayers(*scene_, terrainEntity_) || (meta != nullptr &&
+            meta->string_values.has(TerrainHeightFloorOriginalKey)))
+            return false;
         terrain->Generation_Cancel();
         terrain->generation = afterRadius_;
         if (terrain->IsPhysicsEnabled())
@@ -1087,6 +1106,9 @@ namespace renegade::bridge
         const wi::terrain::Terrain& terrain)
     {
         TerrainSculptState state;
+        const auto* metadata = scene.metadatas.GetComponent(terrain.terrainEntity);
+        if (metadata && metadata->string_values.has(RiverTerrainLayersMetadataKey))
+            state.riverLayerDocument = metadata->string_values.get(RiverTerrainLayersMetadataKey);
         state.chunks.reserve(terrain.chunks.size());
         for (const auto& entry : terrain.chunks)
         {
@@ -1116,6 +1138,10 @@ namespace renegade::bridge
 
         TerrainSculptState changedBefore;
         TerrainSculptState changedAfter;
+        changedBefore.riverLayerDocument = before.riverLayerDocument;
+        changedAfter.riverLayerDocument = after.riverLayerDocument;
+        const bool baselineChanged = before.riverLayerDocument != after.riverLayerDocument;
+        const bool exactLayerHeights = !before.riverLayerDocument.empty() || !after.riverLayerDocument.empty();
         changedBefore.chunks.reserve(before.chunks.size());
         changedAfter.chunks.reserve(before.chunks.size());
         for (auto& beforeChunk : before.chunks)
@@ -1130,9 +1156,9 @@ namespace renegade::bridge
             for (std::size_t index = 0;
                 index < beforeChunk.heights.size(); ++index)
             {
-                if (!NearlyEqual(
-                        beforeChunk.heights[index],
-                        found->second->heights[index]))
+                if (exactLayerHeights
+                    ? beforeChunk.heights[index] != found->second->heights[index]
+                    : !NearlyEqual(beforeChunk.heights[index], found->second->heights[index]))
                 {
                     changed = true;
                     break;
@@ -1147,7 +1173,9 @@ namespace renegade::bridge
         }
         before = std::move(changedBefore);
         after = std::move(changedAfter);
-        return before.chunks.size();
+        // A base sculpt hidden by an existing channel still needs history,
+        // but no unchanged chunk should be rebuilt merely for metadata.
+        return before.chunks.empty() && baselineChanged ? 1 : before.chunks.size();
     }
 
     void RefreshTerrainSculptPhysics(
@@ -1177,10 +1205,29 @@ namespace renegade::bridge
     bool ApplyTerrainSculpt(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,
-        const TerrainSculptState& state)
+        const TerrainSculptState& state,
+        const bool refreshPhysics)
     {
         terrain.Generation_Cancel();
         TerrainGrid grid = BuildTerrainGrid(scene, terrain);
+        if (!state.riverLayerDocument.empty() || HasRiverTerrainLayers(scene, terrain.terrainEntity))
+        {
+            // Layer transactions cannot partially restore a stale topology.
+            // Validate every target before changing the first mesh vertex.
+            std::unordered_set<wi::ecs::Entity> checked;
+            for (const auto& saved : state.chunks)
+            {
+                const auto* mesh = scene.meshes.GetComponent(saved.entity);
+                bool resident = false;
+                for (const auto& item : terrain.chunks)
+                    if (item.second.entity == saved.entity) { resident = true; break; }
+                if (!resident || !mesh || !checked.insert(saved.entity).second ||
+                    mesh->vertex_positions.size() != saved.heights.size()) return false;
+                for (const float y : saved.heights)
+                    if (!std::isfinite(y) || y < terrain.bottomLevel || y > terrain.topLevel)
+                        return false;
+            }
+        }
         std::unordered_set<wi::terrain::ChunkData*> changedChunks;
         for (const auto& saved : state.chunks)
         {
@@ -1214,8 +1261,346 @@ namespace renegade::bridge
             }
             changedChunks.insert(chunk);
         }
-        RebuildTerrainChunks(terrain, grid, changedChunks, true);
-        return !changedChunks.empty();
+        RebuildTerrainChunks(terrain, grid, changedChunks, refreshPhysics);
+        auto* metadata = scene.metadatas.GetComponent(terrain.terrainEntity);
+        const bool hadLayers = metadata && metadata->string_values.has(RiverTerrainLayersMetadataKey);
+        if (state.riverLayerDocument.empty())
+        {
+            if (metadata) metadata->string_values.erase(RiverTerrainLayersMetadataKey);
+        }
+        else
+        {
+            if (!metadata) metadata = &scene.metadatas.Create(terrain.terrainEntity);
+            metadata->string_values.set(RiverTerrainLayersMetadataKey, state.riverLayerDocument);
+        }
+        return !changedChunks.empty() || hadLayers || !state.riverLayerDocument.empty();
+    }
+
+    bool SetAuthoredTerrainHeightFloor(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        const float requestedMinimumHeight)
+    {
+        // Only re-encode already-authored, fully resident finite terrain.
+        // Wicked Generation_Restart would destroy the sculpted meshes/masks.
+        // The caller runs at EVENT_THREAD_SAFE_POINT, outside the render
+        // descriptor consumption phase (same ownership as SculptTerrain).
+        if (terrain.scene != &scene ||
+            !scene.terrains.Contains(terrain.terrainEntity) ||
+            terrain.IsCenterToCamEnabled() || terrain.IsRemovalEnabled() ||
+            terrain.generation < 1 ||
+            terrain.generation > MaximumTerrainChunkRadius ||
+            !std::isfinite(requestedMinimumHeight) ||
+            !std::isfinite(terrain.bottomLevel) ||
+            !std::isfinite(terrain.topLevel) ||
+            requestedMinimumHeight < -2000.0f ||
+            requestedMinimumHeight >= terrain.topLevel - 1.0f ||
+            terrain.topLevel - requestedMinimumHeight > 512.0f ||
+            std::abs(terrain.bottomLevel - requestedMinimumHeight) < 0.0001f)
+            return false;
+
+        terrain.Generation_Cancel();
+        const std::size_t side = static_cast<std::size_t>(
+            TerrainChunkCountPerSide(terrain.generation));
+        if (terrain.chunks.size() != side * side)
+            return false; // Incomplete terrain must not be partially migrated.
+
+        // Validate EVERY resident chunk and vertex before changing the
+        // terrain minimum or releasing any R16 texture resources.
+        for (const auto& [coordinate, chunk] : terrain.chunks)
+        {
+            if (chunk.invalidated ||
+                chunk.heightmap_data.size() != wi::terrain::vertexCount)
+                return false;
+            const auto* mesh = scene.meshes.GetComponent(chunk.entity);
+            if (mesh == nullptr ||
+                mesh->vertex_positions.size() != wi::terrain::vertexCount)
+                return false;
+            for (const auto& vertex : mesh->vertex_positions)
+            {
+                if (!std::isfinite(vertex.y) ||
+                    vertex.y < requestedMinimumHeight - 0.0001f ||
+                    vertex.y > terrain.topLevel + 0.0001f)
+                    return false;
+            }
+        }
+
+        // A persistent marker distinguishes an intentionally expanded
+        // floor from other terrain edits. It also protects future ring
+        // expansion after a save/reopen from generating cliffs where new
+        // procedural chunks meet previously authored world-zero chunks.
+        auto* metadata = scene.metadatas.GetComponent(terrain.terrainEntity);
+        float originalMinimum = terrain.bottomLevel;
+        if (metadata != nullptr &&
+            metadata->string_values.has(TerrainHeightFloorOriginalKey))
+        {
+            const auto savedOriginal =
+                metadata->string_values.get(TerrainHeightFloorOriginalKey);
+            try { originalMinimum = std::stof(savedOriginal); }
+            catch (...) { return false; }
+            if (!std::isfinite(originalMinimum) ||
+                requestedMinimumHeight > originalMinimum + 0.0001f)
+                return false;
+        }
+
+        // Mesh, root position, BVHs, physics, grass and painted material
+        // masks stay exactly as they are. Rebuild only the R16 textures
+        // against the expanded vertical interval. Never restart the
+        // background terrain generator or invalidate terrain chunks.
+        const float priorMinimum = terrain.bottomLevel;
+        terrain.bottomLevel = requestedMinimumHeight;
+        for (auto& [coordinate, chunk] : terrain.chunks)
+        {
+            auto* mesh = scene.meshes.GetComponent(chunk.entity);
+            UpdateTerrainChunkHeightData(terrain, chunk, *mesh);
+        }
+        if (metadata == nullptr)
+            metadata = &scene.metadatas.Create(terrain.terrainEntity);
+        if (std::abs(requestedMinimumHeight - originalMinimum) < 0.0001f)
+            metadata->string_values.erase(TerrainHeightFloorOriginalKey);
+        else if (!metadata->string_values.has(TerrainHeightFloorOriginalKey))
+            metadata->string_values.set(TerrainHeightFloorOriginalKey,
+                std::to_string(priorMinimum));
+        return true;
+    }
+
+    SetTerrainHeightFloorCommand::SetTerrainHeightFloorCommand(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity terrainEntity,
+        const float targetMinimumHeight)
+        : scene_(&scene), terrainEntity_(terrainEntity),
+          targetMinimumHeight_(targetMinimumHeight) {}
+
+    bool SetTerrainHeightFloorCommand::Execute()
+    {
+        if (scene_ == nullptr) return false;
+        auto* terrain = scene_->terrains.GetComponent(terrainEntity_);
+        if (terrain == nullptr) return false;
+        if (!capturedPrevious_)
+        {
+            previousMinimumHeight_ = terrain->bottomLevel;
+            if (!SetAuthoredTerrainHeightFloor(
+                    *scene_, *terrain, targetMinimumHeight_))
+                return false;
+            capturedPrevious_ = true;
+            return true;
+        }
+        // Redo must not overwrite a terrain range changed outside history.
+        if (std::abs(terrain->bottomLevel - previousMinimumHeight_) > 0.0001f)
+            return false;
+        return SetAuthoredTerrainHeightFloor(
+            *scene_, *terrain, targetMinimumHeight_);
+    }
+
+    void SetTerrainHeightFloorCommand::Undo()
+    {
+        if (!capturedPrevious_ || scene_ == nullptr) return;
+        auto* terrain = scene_->terrains.GetComponent(terrainEntity_);
+        if (terrain != nullptr &&
+            std::abs(terrain->bottomLevel - targetMinimumHeight_) < 0.0001f)
+        {
+            // Undo after carving is correct only once the following carve
+            // operation has itself been undone by the command history.
+            (void)SetAuthoredTerrainHeightFloor(
+                *scene_, *terrain, previousMinimumHeight_);
+        }
+    }
+
+    bool CarveTerrainRiverbed(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        const wi::ecs::Entity riverEntity,
+        const float depthMeters,
+        const float bankWidthMeters)
+    {
+        // Do not enable terrain_modifier_amount: Wicked would regenerate
+        // authored chunks from procedural source, discarding sculpted data.
+        if (HasRiverTerrainLayers(scene, terrain.terrainEntity)) return false;
+        if (!std::isfinite(depthMeters) || !std::isfinite(bankWidthMeters) ||
+            depthMeters < 0.05f || depthMeters > 5.0f ||
+            bankWidthMeters < 0.5f || bankWidthMeters > 20.0f ||
+            terrain.scene != &scene || terrain.chunks.empty())
+        {
+            return false;
+        }
+        const auto* spline = scene.splines.GetComponent(riverEntity);
+        const auto* material = scene.materials.GetComponent(riverEntity);
+        if (spline == nullptr || material == nullptr ||
+            material->shaderType != wi::scene::MaterialComponent::SHADERTYPE_WATER ||
+            spline->terrain_modifier_amount != 0 ||
+            spline->spline_node_entities.size() < 2 ||
+            spline->spline_node_entities.size() > 512 ||
+            !std::isfinite(spline->width) || spline->width <= 0)
+        {
+            return false;
+        }
+        const float halfWidth = spline->width;
+        const float totalRadius = halfWidth + bankWidthMeters;
+        std::vector<XMFLOAT3> nodes;
+        nodes.reserve(spline->spline_node_entities.size());
+        float minX = FLT_MAX, minZ = FLT_MAX;
+        float maxX = -FLT_MAX, maxZ = -FLT_MAX;
+        const auto* terrainRoot = scene.transforms.GetComponent(terrain.terrainEntity);
+        if (terrainRoot == nullptr) return false;
+        // Heightmap edits operate in chunk-local Y and require one world
+        // metre to equal one local vertical metre. Rotated/non-unit-height
+        // terrain needs a separate, transform-aware authoring contract.
+        XMFLOAT3 verticalAxis;
+        XMStoreFloat3(&verticalAxis, XMVector3TransformNormal(
+            XMVectorSet(0, 1, 0, 0), terrainRoot->GetWorldMatrix()));
+        if (!std::isfinite(verticalAxis.y) ||
+            std::abs(verticalAxis.x) > 0.001f ||
+            std::abs(verticalAxis.y - 1.0f) > 0.001f ||
+            std::abs(verticalAxis.z) > 0.001f)
+            return false;
+        XMFLOAT3 rootWorld;
+        XMStoreFloat3(&rootWorld, XMVector3TransformCoord(
+            XMVectorZero(), terrainRoot->GetWorldMatrix()));
+        const float worldFloor = rootWorld.y + terrain.bottomLevel;
+        for (const auto nodeID : spline->spline_node_entities)
+        {
+            if (!scene.transforms.Contains(nodeID)) return false;
+            XMFLOAT3 position;
+            XMStoreFloat3(&position, XMVector3TransformCoord(XMVectorZero(),
+                scene.ComputeEntityMatrixRecursive(nodeID)));
+            if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+                !std::isfinite(position.z) ||
+                position.y - depthMeters < worldFloor + 0.001f)
+            {
+                // A newly created world-zero terrain is at its heightmap
+                // encoding floor; silently clamping would make a fake trench.
+                return false;
+            }
+            nodes.push_back(position);
+            minX = std::min(minX, position.x);
+            maxX = std::max(maxX, position.x);
+            minZ = std::min(minZ, position.z);
+            maxZ = std::max(maxZ, position.z);
+        }
+        for (std::size_t i = 1; i < nodes.size(); ++i)
+        {
+            const float dx = nodes[i].x - nodes[i - 1].x;
+            const float dz = nodes[i].z - nodes[i - 1].z;
+            if (dx * dx + dz * dz < 0.01f) return false;
+        }
+        // Sample the same native curve as the visible ribbon, rather than
+        // carving straight chords between authored handles. Build a private
+        // world-space evaluator so recently edited transforms do not depend
+        // on the next asynchronous scene spline update.
+        wi::scene::SplineComponent curve;
+        curve.SetLooped(spline->IsLooped());
+        for (const auto nodeID : spline->spline_node_entities)
+        {
+            wi::scene::TransformComponent transform;
+            transform.MatrixTransform(scene.ComputeEntityMatrixRecursive(nodeID));
+            transform.UpdateTransform();
+            curve.spline_node_transforms.push_back(transform);
+        }
+        curve.PrecomputeSplineNodeDistances();
+        const std::size_t sampleCount = std::max<std::size_t>(2,
+            (nodes.size() - 1) * static_cast<std::size_t>(
+                std::clamp(spline->mesh_generation_subdivision, 1, 24)));
+        nodes.clear();
+        minX = minZ = FLT_MAX;
+        maxX = maxZ = -FLT_MAX;
+        for (std::size_t i = 0; i < sampleCount; ++i)
+        {
+            XMFLOAT3 position;
+            XMStoreFloat3(&position, curve.EvaluateSplineAt(
+                static_cast<float>(i) / static_cast<float>(sampleCount - 1)).r[3]);
+            if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+                !std::isfinite(position.z) ||
+                position.y - depthMeters < worldFloor + 0.001f)
+                return false;
+            nodes.push_back(position);
+            minX = std::min(minX, position.x);
+            maxX = std::max(maxX, position.x);
+            minZ = std::min(minZ, position.z);
+            maxZ = std::max(maxZ, position.z);
+        }
+        // Reduce the terrain-grid snapshot to potentially affected chunks.
+        const XMFLOAT3 boundsCentre(
+            (minX + maxX) * 0.5f, 0, (minZ + maxZ) * 0.5f);
+        const float dx = (maxX - minX) * 0.5f;
+        const float dz = (maxZ - minZ) * 0.5f;
+        const float boundsRadius =
+            std::sqrt(dx * dx + dz * dz) + totalRadius + 2.0f;
+        if (!std::isfinite(boundsRadius)) return false;
+
+        // Must run before the NEXT scene update (EVENT_THREAD_SAFE_POINT),
+        // never after viewport descriptors have been prepared.
+        terrain.Generation_Cancel();
+        TerrainGrid grid = BuildTerrainGrid(
+            scene, terrain, &boundsCentre, boundsRadius);
+        if (grid.empty()) return false;
+        std::unordered_map<TerrainGridKey, float, TerrainGridKeyHash> changes;
+        for (const auto& entry : grid)
+        {
+            const auto& vertex = entry.second;
+            const XMFLOAT3& point = vertex.worldPosition;
+            float nearestDistanceSquared = FLT_MAX;
+            float waterY = 0;
+            for (std::size_t i = 1; i < nodes.size(); ++i)
+            {
+                const XMFLOAT3& start = nodes[i - 1];
+                const XMFLOAT3& end = nodes[i];
+                const float vx = end.x - start.x, vz = end.z - start.z;
+                const float lengthSquared = vx * vx + vz * vz;
+                if (lengthSquared < 0.000001f) continue;
+                const float t = std::clamp(((point.x - start.x) * vx +
+                    (point.z - start.z) * vz) / lengthSquared, 0.0f, 1.0f);
+                const float ex = point.x - (start.x + vx * t);
+                const float ez = point.z - (start.z + vz * t);
+                const float dist2 = ex * ex + ez * ez;
+                if (dist2 < nearestDistanceSquared)
+                {
+                    nearestDistanceSquared = dist2;
+                    waterY = start.y + (end.y - start.y) * t;
+                }
+            }
+            if (nearestDistanceSquared >= totalRadius * totalRadius)
+                continue;
+            const float dist = std::sqrt(nearestDistanceSquared);
+            const float edge = std::clamp(
+                (totalRadius - dist) / bankWidthMeters, 0.0f, 1.0f);
+            const float weight = edge * edge * (3.0f - 2.0f * edge);
+            const float desiredWorldY = waterY - depthMeters;
+            const float newWorldY = std::min(point.y,
+                point.y + weight * (desiredWorldY - point.y));
+            const float newLocalY =
+                vertex.height + (newWorldY - point.y);
+            if (newLocalY < terrain.bottomLevel - 0.0001f)
+                return false; // Fail closed; no vertices changed yet.
+            if (vertex.height - newLocalY > 0.0001f)
+                changes.emplace(entry.first, newLocalY);
+        }
+        if (changes.empty()) return false;
+        std::unordered_set<wi::terrain::ChunkData*> modified;
+        for (const auto& change : changes)
+        {
+            auto& vertex = grid.at(change.first);
+            vertex.height = change.second;
+            for (std::size_t i = 0; i < vertex.referenceCount; ++i)
+            {
+                const auto& reference = vertex.references[i];
+                reference.mesh->vertex_positions[reference.index].y =
+                    change.second;
+                modified.insert(reference.chunk);
+            }
+            for (std::int64_t z = -1; z <= 1; ++z)
+            {
+                for (std::int64_t x = -1; x <= 1; ++x)
+                {
+                    const auto neighbor = grid.find(
+                        {change.first.x + x, change.first.z + z});
+                    if (neighbor == grid.end()) continue;
+                    for (std::size_t i = 0; i < neighbor->second.referenceCount; ++i)
+                        modified.insert(neighbor->second.references[i].chunk);
+                }
+            }
+        }
+        RebuildTerrainChunks(terrain, grid, modified, false);
+        return true;
     }
 
     bool SculptTerrain(
@@ -1237,6 +1622,27 @@ namespace renegade::bridge
             &center,
             radius);
         if (grid.empty()) return false;
+
+        const bool layered = HasRiverTerrainLayers(scene, terrain.terrainEntity);
+        TerrainSculptState baseline;
+        std::unordered_map<wi::ecs::Entity, TerrainChunkHeights*> baselineByEntity;
+        if (layered)
+        {
+            std::string error;
+            if (!ReadRiverTerrainBaseline(scene, terrain.terrainEntity, baseline, error))
+                return false;
+            for (auto& chunk : baseline.chunks) baselineByEntity.emplace(chunk.entity, &chunk);
+            for (auto& [key, vertex] : grid)
+            {
+                const auto& reference = vertex.references[0];
+                const auto found = baselineByEntity.find(reference.chunk->entity);
+                if (found == baselineByEntity.end() || reference.index >= found->second->heights.size())
+                    return false;
+                const float base = found->second->heights[reference.index];
+                vertex.worldPosition.y += base - vertex.height;
+                vertex.height = base;
+            }
+        }
 
         std::unordered_map<TerrainGridKey, float, TerrainGridKeyHash>
             nextHeights;
@@ -1297,6 +1703,23 @@ namespace renegade::bridge
             }
         }
         if (nextHeights.empty()) return false;
+
+        if (layered)
+        {
+            for (const auto& [key, height] : nextHeights)
+            {
+                const auto& vertex = grid.at(key);
+                for (std::size_t i=0; i<vertex.referenceCount; ++i)
+                {
+                    const auto& reference = vertex.references[i];
+                    auto found = baselineByEntity.find(reference.chunk->entity);
+                    if (found == baselineByEntity.end()) return false;
+                    found->second->heights[reference.index] = height;
+                }
+            }
+            std::string error;
+            return SetRiverTerrainBaseline(scene, terrain.terrainEntity, baseline, error, false);
+        }
 
         std::unordered_set<wi::terrain::ChunkData*> changedChunks;
         for (const auto& change : nextHeights)
