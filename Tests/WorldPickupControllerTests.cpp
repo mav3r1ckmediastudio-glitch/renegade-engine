@@ -19,7 +19,11 @@ int main() {
     CHECK(window!=nullptr);
     app.allow_hdr=false;
     app.SetWindow(window);
-    wi::initializer::InitializeComponentsImmediate();
+    // Real dropped-pickup sphere meshes require a graphics device. SetWindow
+    // provides that device. Full Wicked component initialization is NOT needed
+    // for this test and also opens XAudio2, which can assert or hang on a
+    // headless CI runner without an audio endpoint.
+    CHECK(wi::graphics::GetDevice()!=nullptr);
     wi::scene::Scene scene;
     InventoryService inventory;
     CHECK(inventory.RegisterItem({"potion","Health Potion",3,0.2,{}})
