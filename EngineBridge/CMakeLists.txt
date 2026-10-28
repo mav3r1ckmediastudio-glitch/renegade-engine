@@ -29,6 +29,36 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/PlayerSwimmingService.h
     src/RiverUnderwaterService.cpp
     include/renegade/bridge/RiverUnderwaterService.h
+    src/InventoryAccessPolicy.cpp
+    include/renegade/bridge/InventoryAccessPolicy.h
+    src/InventoryService.cpp
+    src/InventoryItemCatalogueService.cpp
+    include/renegade/bridge/InventoryItemCatalogueService.h
+    src/InventoryPickupAuthoringService.cpp
+    include/renegade/bridge/InventoryPickupAuthoringService.h
+    src/WorldPickupController.cpp
+    include/renegade/bridge/WorldPickupController.h
+    src/InventoryOverlayView.cpp
+    src/InventorySelectionController.cpp
+    src/InventoryScreenAdapter.cpp
+    src/InventoryDragTransfer.cpp
+    src/InventoryGridViewport.cpp
+    src/InventoryGridPage.cpp
+    src/InventoryPagedScreenAdapter.cpp
+    src/ScreenInventoryGridAuthoring.cpp
+    include/renegade/bridge/InventoryPagedScreenAdapter.h
+    include/renegade/bridge/InventoryGridPage.h
+    include/renegade/bridge/InventoryGridViewport.h
+    include/renegade/bridge/InventoryDragTransfer.h
+    include/renegade/bridge/InventoryScreenAdapter.h
+    include/renegade/bridge/InventorySelectionController.h
+    include/renegade/bridge/InventoryOverlayView.h
+    src/InventoryTestLevelSnapshot.cpp
+    src/InventoryDependencyProvider.cpp
+    include/renegade/bridge/InventoryDependencyProvider.h
+    include/renegade/bridge/InventoryTestLevelSnapshot.h
+    include/renegade/bridge/InventoryService.h
+    include/renegade/bridge/InventoryGameplayGateway.h
     src/ScreenPortableLibrary.cpp
     src/ProjectUiScaffoldService.cpp
     src/ScreenPerformanceBudget.cpp
@@ -157,6 +187,7 @@ add_library(RenegadeEngineBridge STATIC
     src/StoryFlowLayoutService.cpp
     src/ScreenService.cpp
     src/ScreenAuthoringSession.cpp
+    src/ScreenInventoryGridAuthoring.cpp
     src/IdentityService.cpp
     src/LightService.cpp
     src/RiverSplineService.cpp

@@ -8,7 +8,7 @@ renderer, ECS, Jolt physics integration and other low-level engine systems;
 Renegade owns its Studio editor, project and asset workflows, Runtime/player,
 build lifecycle, creator UX, diagnostics and higher-level gameplay framework.
 
-> **Status: active development — Phase 6 / Playable Core, entering Alpha
+> **Status: active development â€” Phase 6 / Playable Core, entering Alpha
 > Playability.** Renegade has moved beyond scene-authoring foundations into an
 > integrated gameplay stack with player control, physics, audio, governed Lua
 > scripting, a rebuilt native asset and Character importer, Character Prefabs,
@@ -111,7 +111,7 @@ and [AI_IMPLEMENTATION_HANDOFF](docs/AI_IMPLEMENTATION_HANDOFF.md).
   ZoneService should serve audio, objectives, weather and other gameplay systems
   rather than creating separate incompatible zone implementations.
 
-### Player Arms & Combat — active programme
+### Player Arms & Combat â€” active programme
 
 The next Alpha Playability programme extends the existing Player rather than
 replacing it. A camera-mounted first-person View Rig provides first-class
@@ -161,24 +161,24 @@ See [P2 implementation](docs/P2_EQUIPMENT_ACTION_IMPLEMENTATION.md),
 Renegade has a creator-facing scripting stack rather than relying on ad-hoc raw
 Lua execution:
 
-- **S1A/S1B — Inspector foundation:** extensible Inspector sections/providers and
+- **S1A/S1B â€” Inspector foundation:** extensible Inspector sections/providers and
   migration of existing Inspector ownership.
-- **S2 — Script document/source model:** durable project .rscripts companions,
+- **S2 â€” Script document/source model:** durable project .rscripts companions,
   transactional edits, source identity and validation.
-- **S3 — Governed Lua Runtime:** Runtime-owned Lua lifecycle, live EntityRef
+- **S3 â€” Governed Lua Runtime:** Runtime-owned Lua lifecycle, live EntityRef
   validation and a deliberately restricted standard-library surface.
-- **S4A-D — Creator authoring:** restricted metadata evaluation, ACTION/SCRIPT
+- **S4A-D â€” Creator authoring:** restricted metadata evaluation, ACTION/SCRIPT
   attachments, typed generated properties, governed entity references and
   GLOBAL SCRIPT authoring through normal Undo/Redo and dirty-state ownership.
-- **S5A-C — Gameplay APIs and events:** generation-safe entity/transform access,
+- **S5A-C â€” Gameplay APIs and events:** generation-safe entity/transform access,
   governed gameplay lifecycle and bounded cross-script event dispatch.
-- **S5D — Structured diagnostics/IPC:** Studio-to-Test-Level handshake and
+- **S5D â€” Structured diagnostics/IPC:** Studio-to-Test-Level handshake and
   structured diagnostics across the creator/runtime boundary.
-- **S6 — Creator Library packages:** immutable installed package manifests,
+- **S6 â€” Creator Library packages:** immutable installed package manifests,
   deterministic transitive dependency closure, transactional first-use adoption
   into project-owned Content/Scripts/Library/..., clean update handling,
   creator-edit conflict protection and structured package diagnostics.
-- **S7 — Stock Actions:** installed Lua Actions for doors, switches, trigger
+- **S7 â€” Stock Actions:** installed Lua Actions for doors, switches, trigger
   zones, pickups, relays and sound playback, with generic Runtime Interact
   prompts and creator-facing Action selection.
 
@@ -207,15 +207,15 @@ small interactive game using the same creator-facing workflows that built it.
 
 The current bounded work is centred on:
 
-1. **First-person Arms Rig** — primary/off-hand/two-hand presentation on top of
+1. **First-person Arms Rig** â€” primary/off-hand/two-hand presentation on top of
    the existing authoritative Player controller.
-2. **Generic equipment/actions and projectiles** — shared foundations for
+2. **Generic equipment/actions and projectiles** â€” shared foundations for
    firearms, melee, bows, crossbows, throwables and magic.
-3. **Reference combat families** — pistol, directional sword + shield, bow,
+3. **Reference combat families** â€” pistol, directional sword + shield, bow,
    crossbow and spellcasting must all work without Player special cases.
-4. **Combat feel and HUD loop** — health/ammo/resource state, death/restart,
+4. **Combat feel and HUD loop** â€” health/ammo/resource state, death/restart,
    recoil, animation, SFX, particles, impacts and owner-led feel tuning.
-5. **Packaged parity and performance** — preserve clean CI, Test Level/Build Game
+5. **Packaged parity and performance** â€” preserve clean CI, Test Level/Build Game
    equivalence and investigate the open rigged-character FPS issue before
    scaling to large populations.
 
@@ -225,8 +225,9 @@ and the focused subsystem documents rather than in fast-aging branch notes here.
 
 ## Build baseline
 
-- Wicked upstream: https://github.com/turanszkij/WickedEngine.git
-- Pinned branch: master
+- Wicked fork: https://github.com/mav3r1ckmediastudio-glitch/WickedEngine.git
+- Pinned branch: renegade-rocky-riverbed-v1
+- Official upstream: https://github.com/turanszkij/WickedEngine.git
 - Pinned Wicked commit: ceb816b844b4ab2fa56a159ac60a4f65c931bdfc
 - Primary target: Windows x64 / DirectX 12
 - Development cross-check: Vulkan on Windows

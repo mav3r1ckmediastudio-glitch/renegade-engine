@@ -837,9 +837,9 @@ namespace renegade::bridge
             error = "The Screen has an invalid usage.";
             return false;
         }
-        if ((needsControl && document.actions.empty()) || document.actions.size() > 64)
+        if ((needsControl && document.actions.empty()) || document.actions.size() > ScreenDocument::MaximumActions)
         {
-            error = "The Runtime screen must declare between 1 and 64 actions.";
+            error = "The Runtime screen must declare between 1 and 128 actions.";
             return false;
         }
         if ((needsControl && document.widgets.empty()) || document.widgets.size() > 256)
@@ -1029,6 +1029,8 @@ namespace renegade::bridge
                 { error = "Fill binding requires a Progress element."; return false; }
             }
 
+            if(static_cast<int>(widget.imageFit)<0||static_cast<int>(widget.imageFit)>2)
+            {error="Screen image fitting is invalid.";return false;}
             if(widget.localOnly&&(document.schemaVersion<3||widget.kind!=ScreenWidgetKind::Button))
             {error="Local-only Flow suppression is only available for v3 Buttons.";return false;}
             switch (widget.kind)
@@ -1364,6 +1366,7 @@ namespace renegade::bridge
                     if(document.schemaVersion>=3)
                     {
                         section.Set("local_only",widget.localOnly);
+                        section.Set("image_fit",static_cast<int>(widget.imageFit));
                         if(widget.transitionOverride)section.Set("transition_override",true);
                     }
                     if(IsScreenValueControl(widget.kind))detail::WriteScreenControl(section,widget);
@@ -1607,7 +1610,7 @@ namespace renegade::bridge
             const int focusCount = screen.GetInt("focus_count");
             const bool needsControl = parsed.usage == ScreenUsage::Menu ||
                 parsed.usage == ScreenUsage::Modal;
-            if ((needsControl && actionCount == 0) || actionCount < 0 || actionCount > 64 ||
+            if ((needsControl && actionCount == 0) || actionCount < 0 || actionCount > static_cast<int>(ScreenDocument::MaximumActions) ||
                 (needsControl && widgetCount == 0) || widgetCount < 0 || widgetCount > 256 ||
                 focusCount < 0 || focusCount > 256)
             {
@@ -1705,6 +1708,11 @@ namespace renegade::bridge
                 widget.text = section.GetText("text");
                 widget.resourcePath = section.GetText("resource");
                 widget.actionId = section.GetText("action");
+                if(sourceSchema>=3&&section.Has("image_fit")) {
+                    const int fit=section.GetInt("image_fit");
+                    if(fit<0||fit>2){error="Screen image fitting is invalid.";return false;}
+                    widget.imageFit=static_cast<ScreenImageFit>(fit);
+                }
                 if(sourceSchema>=3&&section.Has("local_only"))
                     widget.localOnly=section.GetBool("local_only");
                 if(IsScreenValueControl(widget.kind)&&!detail::ReadScreenControl(section,widget,error))return false;

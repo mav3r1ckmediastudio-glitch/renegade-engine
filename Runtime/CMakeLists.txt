@@ -8,6 +8,10 @@ add_library(RenegadeRuntimeBootstrap STATIC
     src/RuntimeReusableAssets.cpp
     src/RuntimeScreen.cpp
     src/RuntimeScreen.h
+    src/RuntimeInventorySession.h
+    src/RuntimeInventorySession.cpp
+    src/RuntimeGameSaveSlot.h
+    src/RuntimeGameSaveSlot.cpp
 )
 
 add_library(Renegade::RuntimeBootstrap ALIAS RenegadeRuntimeBootstrap)

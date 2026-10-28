@@ -26,6 +26,7 @@ namespace
     constexpr const char* ReadyEventArgument = "--renegade-ready-event=";
     constexpr const char* SmokeAutoPlayArgument = "--renegade-smoke-autoplay";
     constexpr const char* SmokeExitArgument = "--renegade-smoke-exit";
+    constexpr const char* InventoryHealthProofArgument = "--renegade-inventory-health-proof";
     constexpr const char* CapabilityProbeArgument =
         "--renegade-capability-probe";
     renegade::runtime::RuntimeApplication application;
@@ -533,6 +534,7 @@ int APIENTRY wWinMain(
     const auto userDataRoot=LocalAppDataUtf8();
     if(!userDataRoot.empty())
     {
+        application.ConfigureGameSaveDirectory(userDataRoot);
         const auto preferencesPath=(fs::u8path(userDataRoot)/"RenegadeEngine"/
             "Accessibility"/"UiPrefs.v1.ini").generic_u8string();
         std::string preferencesError;
@@ -544,6 +546,8 @@ int APIENTRY wWinMain(
     // Opt-in G13E13 engineering probe: disabled in ordinary player launches.
     renegade::runtime::detail::G13E13PerfProbe perf(
         std::getenv("RENEGADE_G13E13_PERF_CSV"));
+    application.SetInventoryHealthTestMode(
+        HasArgument(processArguments,InventoryHealthProofArgument));
 
     WNDCLASSEXW windowClass = {};
     windowClass.cbSize = sizeof(windowClass);

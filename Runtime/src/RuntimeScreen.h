@@ -1,4 +1,5 @@
 #pragma once
+#include "renegade/bridge/InventoryPagedScreenAdapter.h"
 
 #include "RuntimeActions.h"
 #include "renegade/bridge/ScreenService.h"
@@ -34,6 +35,10 @@ namespace renegade::runtime
             bool visible,
             bool enabled,
             std::string& error);
+        // A transient gameplay binding can update presentation text without
+        // rewriting the editor's authored Screen document.
+        [[nodiscard]] bool SetWidgetDisplayText(
+            const std::string& widgetId,std::string text,std::string& error);
 
         // Local UI state only. Gameplay changes require a separate governed command.
         [[nodiscard]] bool SetControlValue(const std::string& id,bridge::GameplayAttributeValue value,std::string& error);
@@ -72,6 +77,10 @@ namespace renegade::runtime
         void ApplyResolvedFrame(bridge::ScreenBindingFrame frame);
         bridge::ScreenDocument authoredDocument_;
         bridge::ScreenWidgetStateOverrides stateOverrides_;
+        // Runtime-only, per-screen presentation text. Restored after any
+        // resolved state/binding frame so changing one slot cannot reset text
+        // already refreshed on another slot. Cleared on Initialize.
+        std::unordered_map<std::string,std::string> displayTextOverrides_;
         bridge::ScreenBindingSnapshot bindingSnapshot_;
         bridge::ScreenBindingContext bindingContext_;
         bridge::ScreenBindingFrame bindingFrame_;
@@ -82,10 +91,17 @@ namespace renegade::runtime
         bool initialized_ = false;
     };
 
+    // Inventory-local requests are only admitted by the separate scoped inventory host.
+    inline bool ShouldDispatchScreenAction(const bridge::ScreenWidget& widget,bool inventoryHost) {
+        if(bridge::IsInventoryPagedLocalAction(widget.actionId))return inventoryHost;
+        return !widget.localOnly;
+    }
     class RuntimeScreenPresenter
     {
     public:
         using RequestSink = std::function<void(RuntimeActionRequest)>;
+        using PointerDragSink = std::function<void(
+            const bridge::StableId&,bool begin,float x,float y)>;
 
         [[nodiscard]] bool Load(
             const bridge::ScreenDocument& document,
@@ -93,7 +109,7 @@ namespace renegade::runtime
             wi::RenderPath2D& renderPath,
             RuntimeScreenController& controller,
             RequestSink requestSink,
-            std::string& error);
+            std::string& error,PointerDragSink dragSink={},bool inventoryHost=false);
         void UpdateInput(
             wi::RenderPath2D& renderPath,
             RuntimeScreenController& controller, bool navigationEnabled = true, float uiDeltaTime = 0);
@@ -114,6 +130,14 @@ namespace renegade::runtime
         void Reset(wi::RenderPath2D& renderPath) noexcept;
 
         [[nodiscard]] bool IsLoaded() const noexcept;
+        // Hit-test actual shared Screen layout, including disabled empty slots.
+        [[nodiscard]] std::string InventorySlotAt(float x,float y) const;
+        [[nodiscard]] std::string InventoryContextAt(float x,float y) const;
+        [[nodiscard]] bool PagedScrollbarGeometry(std::size_t panel,
+            bridge::ScreenRect& track,bridge::ScreenRect& thumb) const;
+        void SetPagedScrollbar(std::size_t panel,float position,float fraction);
+        bool SetVisualImageResource(const bridge::StableId& widgetId,
+            const std::string& resourcePath,std::string& error);
 
     private:
         void QueueFocused(RuntimeInputSource source);
@@ -124,6 +148,7 @@ namespace renegade::runtime
 
         RuntimeScreenController* controller_ = nullptr;
         RequestSink requestSink_;
+        bool inventoryHost_=false;
         screen::ScreenRenderer renderer_;
         std::uint64_t nextSequence_ = 1;
         double animationTime_=0;

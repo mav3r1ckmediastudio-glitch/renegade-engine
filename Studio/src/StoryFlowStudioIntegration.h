@@ -1267,7 +1267,7 @@ namespace renegade::studio
                         "SCREEN ROUTING INVALID // " + audit.message);
                     ReportSemanticFailure(
                         "Screen outcome parity failed for '" + node.name +
-                        "': " + audit.message);
+                        "': " + (audit.details.empty()?audit.message:audit.details));
                     return false;
                 }
             }

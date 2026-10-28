@@ -1,5 +1,7 @@
 #include "renegade/bridge/BuildService.h"
 #include "renegade/bridge/FlowService.h"
+#include "renegade/bridge/InventoryService.h"
+#include "renegade/bridge/InventoryItemCatalogueService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/WindowsGameBuildProjectService.h"
 
@@ -632,6 +634,147 @@ int main(int argc, char** argv)
         return Fail(root,
             "Gate 6 build recovery omitted governed Terrain Runtime support");
     }
+
+    // Inventory G3-E: exercise the actual StoryFlow reachability collector and
+    // package-plan authority, not just InventoryDependencyProvider in isolation.
+    const auto initialInventoryPath = levelOnePath + ".rinventory";
+    const auto initialAccessPath = levelOnePath + ".rinventory-access";
+    if (FindPlanFile(plan, "GameData/" + initialInventoryPath) != nullptr ||
+        FindPlanFile(plan, "GameData/" + initialAccessPath) != nullptr)
+        return Fail(root, "inventory-free Build Game unexpectedly emitted inventory files");
+
+    InventoryService inventory;
+    if (inventory.RegisterItem({"health-potion", "Health potion", 10, 0.2, {}}) !=
+            InventoryResult::Success ||
+        inventory.CreateContainer("player", 12, 5.0) != InventoryResult::Success ||
+        inventory.CreateContainer("chest", 12, 5.0) != InventoryResult::Success ||
+        inventory.Add("player", "health-potion", 5) != InventoryResult::Success)
+        return Fail(root, "could not create G3-E inventory Build Game fixture");
+
+    const fs::path inventoryFile =
+        fs::u8path(levelOne.generic_u8string() + ".rinventory");
+    const fs::path accessFile =
+        fs::u8path(levelOne.generic_u8string() + ".rinventory-access");
+    {
+        std::ofstream inventoryOut(inventoryFile, std::ios::binary | std::ios::trunc);
+        const std::string snapshot = inventory.SerializeSnapshot();
+        inventoryOut.write(snapshot.data(), static_cast<std::streamsize>(snapshot.size()));
+        inventoryOut.close();
+        std::ofstream accessOut(accessFile, std::ios::binary | std::ios::trunc);
+        accessOut <<
+            "RENEGADE_INVENTORY_ACCESS 1 2\n"
+            "CONTAINER \"pickup-script\" \"-\" \"player\" 1 1 1\n"
+            "CONTAINER \"pickup-script\" \"-\" \"chest\" 1 1 1\n";
+        accessOut.close();
+        if (!inventoryOut || !accessOut)
+            return Fail(root, "could not write G3-E inventory fixture");
+    }
+
+    WindowsGameBuildProjectState inventoryState;
+    if (!PrepareWindowsGameBuildProjectState(
+            gate10Project, bundledResources, inventoryState, error))
+        return Fail(root, "G3-E inventory project dependency collection failed: " + error);
+    const auto* stateInventoryNode = FindNode(
+        inventoryState.dependencyGraph, initialInventoryPath);
+    const auto* stateAccessNode = FindNode(
+        inventoryState.dependencyGraph, initialAccessPath);
+    if (!stateInventoryNode || !stateAccessNode ||
+        stateInventoryNode->requirement != DependencyRequirement::Required ||
+        stateAccessNode->requirement != DependencyRequirement::Required ||
+        FindNode(inventoryState.dependencyGraph,
+                 "Content/Scenes/LevelTwo.wiscene.rinventory") != nullptr)
+        return Fail(root, "G3-E collector omitted or misclassified reachable inventory");
+
+    WindowsGameBuildPlan inventoryPlan;
+    if (!CreateWindowsGameBuildPlan(
+            gate10Project, inventoryState.dependencyGraph,
+            inventoryState.assetRegistry, request, runtimeSupport,
+            inventoryPlan, error))
+        return Fail(root, "G3-E inventory package plan rejected: " + error);
+    const auto* packagedInventory =
+        FindPlanFile(inventoryPlan, "GameData/" + initialInventoryPath);
+    const auto* packagedAccess =
+        FindPlanFile(inventoryPlan, "GameData/" + initialAccessPath);
+    if (!packagedInventory || !packagedAccess)
+        return Fail(root, "G3-E Build Game plan omitted inventory companion files");
+
+    // G5: the *real* Windows Build Game collector and package planner must
+    // include a reachable level's shared catalogue and referenced PNG icons,
+    // without requiring the same item/icon in unrelated levels.
+    const std::string authoredCataloguePath =
+        "Content/Gameplay/Inventory.renegade-items";
+    const std::string authoredIconPath =
+        "Content/UI/InventoryIcons/potion.png";
+    const fs::path catalogueFile=projectRoot/fs::u8path(authoredCataloguePath);
+    const fs::path iconFile=projectRoot/fs::u8path(authoredIconPath);
+    fs::create_directories(catalogueFile.parent_path(),ignored);
+    fs::create_directories(iconFile.parent_path(),ignored);
+    if (ignored) return Fail(root,"could not create G5 catalogue directories");
+    InventoryItemCatalogue catalogue;
+    catalogue.envelope=CreateDocumentEnvelope(gate10Project.projectId,
+        InventoryItemCatalogueDocumentType,authoredCataloguePath,"G5 Test");
+    InventoryAuthoringItem potion;
+    potion.id="health-potion";
+    potion.name="Health potion";
+    potion.kind=InventoryItemKind::Consumable;
+    potion.effect=InventoryItemEffect::RestoreHealth;
+    potion.healthRestored=50;
+    potion.maximumStack=10;
+    potion.weightPerUnit=0.2;
+    potion.iconProjectRelativePath=authoredIconPath;
+    if (!UpsertInventoryAuthoringItem(catalogue,potion,error) ||
+        !WriteInventoryItemCatalogue(catalogueFile.generic_u8string(),
+            catalogue,error))
+        return Fail(root,"could not author G5 catalogue: "+error);
+    {
+        // A real PNG signature, not an absolute developer-only source path.
+        const unsigned char pngSignature[]={
+            137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,
+            0,0,0,1,0,0,0,1,8,6,0,0,0,31,21,196,137,
+            0,0,0,11,73,68,65,84,120,156,99,0,1,0,0,
+            5,0,1,166,245,156,238,0,0,0,0,73,69,78,68,
+            174,66,96,130
+        };
+        std::ofstream png(iconFile,std::ios::binary|std::ios::trunc);
+        png.write(reinterpret_cast<const char*>(pngSignature),sizeof(pngSignature));
+        if (!png) return Fail(root,"could not create G5 icon fixture");
+    }
+    WindowsGameBuildProjectState g5State;
+    if (!PrepareWindowsGameBuildProjectState(
+            gate10Project,bundledResources,g5State,error))
+        return Fail(root,"G5 catalogue/icon Build Game collection failed: "+error);
+    const auto* graphCatalogue=FindNode(g5State.dependencyGraph,
+        authoredCataloguePath);
+    const auto* graphIcon=FindNode(g5State.dependencyGraph,
+        authoredIconPath);
+    if (!graphCatalogue || !graphIcon ||
+        graphCatalogue->requirement!=DependencyRequirement::Required ||
+        graphIcon->requirement!=DependencyRequirement::Required)
+        return Fail(root,"G5 catalogue/icon missing from reachable dependency graph");
+    WindowsGameBuildPlan g5Plan;
+    if (!CreateWindowsGameBuildPlan(gate10Project,g5State.dependencyGraph,
+            g5State.assetRegistry,request,runtimeSupport,g5Plan,error))
+        return Fail(root,"G5 authored item package plan failed: "+error);
+    if (!FindPlanFile(g5Plan,"GameData/"+authoredCataloguePath) ||
+        !FindPlanFile(g5Plan,"GameData/"+authoredIconPath))
+        return Fail(root,"G5 Windows package plan omitted item definition or icon");
+    fs::remove(iconFile,ignored);
+    WindowsGameBuildProjectState missingIconState;
+    if (PrepareWindowsGameBuildProjectState(
+            gate10Project,bundledResources,missingIconState,error))
+        return Fail(root,"G5 Build Game accepted a missing required item icon");
+
+    // Invalid creator grants must prevent production package plans.
+    {
+        std::ofstream broken(accessFile, std::ios::binary | std::ios::trunc);
+        broken <<
+            "RENEGADE_INVENTORY_ACCESS 1 1\n"
+            "CONTAINER \"pickup-script\" \"-\" \"missing-container\" 1 1 1\n";
+    }
+    WindowsGameBuildProjectState invalidInventoryState;
+    if (PrepareWindowsGameBuildProjectState(
+            gate10Project, bundledResources, invalidInventoryState, error))
+        return Fail(root, "G3-E invalid inventory policy was accepted for packaging");
 
     fs::remove_all(root, ignored);
     std::cout
