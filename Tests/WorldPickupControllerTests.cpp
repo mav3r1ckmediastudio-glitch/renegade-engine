@@ -10,20 +10,23 @@
 #define CHECK(v) do { if (!(v)) { std::cerr << "WorldPickupControllerTests line " \
     << __LINE__ << ": " << #v << std::endl; return 1; } } while (false)
 using namespace renegade::bridge;
-int main() {
-    // Native primitive generation needs a real graphics/device context.
-    wi::Application app;
-    HWND window=CreateWindowExW(0,L"STATIC",L"G5H world drop tests",
-        WS_OVERLAPPEDWINDOW,0,0,64,64,nullptr,nullptr,
-        GetModuleHandleW(nullptr),nullptr);
-    CHECK(window!=nullptr);
-    app.allow_hdr=false;
-    app.SetWindow(window);
-    // Real dropped-pickup sphere meshes require a graphics device. SetWindow
-    // provides that device. Full Wicked component initialization is NOT needed
-    // for this test and also opens XAudio2, which can assert or hang on a
-    // headless CI runner without an audio endpoint.
-    CHECK(wi::graphics::GetDevice()!=nullptr);
+int main(int argc,char** argv) {
+    // Normal CTest is CPU-only and must run on a hosted runner with no GPU
+    // or audio endpoint. The optional graphics proof exercises THE SAME
+    // assertions, but explicitly creates a DX12 device on owner hardware.
+    std::unique_ptr<wi::Application> graphicsProof;
+    if(argc==2 && std::string(argv[1])=="--graphics-proof") {
+        graphicsProof=std::make_unique<wi::Application>();
+        HWND window=CreateWindowExW(0,L"STATIC",L"G5H GPU world drop proof",
+            WS_OVERLAPPEDWINDOW,0,0,64,64,nullptr,nullptr,
+            GetModuleHandleW(nullptr),nullptr);
+        CHECK(window!=nullptr);
+        graphicsProof->allow_hdr=false;
+        graphicsProof->SetWindow(window);
+        CHECK(wi::graphics::GetDevice()!=nullptr);
+    } else {
+        CHECK(argc==1 && wi::graphics::GetDevice()==nullptr);
+    }
     wi::scene::Scene scene;
     InventoryService inventory;
     CHECK(inventory.RegisterItem({"potion","Health Potion",3,0.2,{}})
@@ -160,6 +163,20 @@ int main() {
         held,3,{1.0f,0.25f,1.0f},dropError)==InventoryResult::Success);
     CHECK(dropInventory.FindContainer("player")->stacks.front().quantity==2);
     CHECK(drops.DroppedCount()==1 && drops.CandidateCount()==1);
+    // The CPU-only native path must still create a fully shaped visible
+    // sphere entity, with exactly Wicked's 12x12 mesh topology/material.
+    CHECK(dropScene.objects.GetCount()==1);
+    const auto worldSphere=dropScene.objects.GetEntity(0);
+    const auto* worldObject=dropScene.objects.GetComponent(worldSphere);
+    CHECK(worldObject && worldObject->meshID==worldSphere);
+    const auto* worldMesh=dropScene.meshes.GetComponent(worldSphere);
+    CHECK(worldMesh && worldMesh->vertex_positions.size()==169);
+    CHECK(worldMesh->vertex_normals.size()==169 &&
+          worldMesh->vertex_uvset_0.size()==169);
+    CHECK(worldMesh->indices.size()==864 && worldMesh->subsets.size()==1);
+    CHECK(worldMesh->subsets[0].indexCount==864 &&
+          worldMesh->subsets[0].materialID==worldSphere);
+    CHECK(dropScene.materials.Contains(worldSphere));
     const auto forbidden=dropInventory.Revision();
     InventoryGameplayGateway denied(dropInventory); // no withdraw permission
     CHECK(drops.DropFromPlayer(dropScene,dropInventory,denied,
@@ -182,6 +199,12 @@ int main() {
     CHECK(loadedDrops.RestoreRuntimeState(loadScene,projectId,sceneId,
         worldBytes,dropError,false,&dropInventory));
     CHECK(loadedDrops.DroppedCount()==1 && loadedDrops.CandidateCount()==1);
+    CHECK(loadScene.objects.GetCount()==1);
+    const auto* restoredMesh=loadScene.meshes.GetComponent(
+        loadScene.objects.GetEntity(0));
+    CHECK(restoredMesh && restoredMesh->vertex_positions.size()==169 &&
+          restoredMesh->indices.size()==864 &&
+          restoredMesh->subsets.size()==1);
     CHECK(loadedDrops.Update(loadScene,{1.0f,0.25f,0.0f},
         true,true,dropGateway).collected);
     CHECK(loadedDrops.DroppedCount()==0 && loadedDrops.CandidateCount()==0);
@@ -221,7 +244,9 @@ int main() {
     WorldPickupController unbound;
     unbound.OpenForScene(scene,empty,diagnostics);
     CHECK(unbound.CandidateCount()==0 && !diagnostics.empty());
-    std::cout<<"PASS: authored pickups, physical drop/collect, atomic rollback, v1/v2 save validation"<<std::endl;
+    std::cout<<"PASS: authored pickups, native sphere mesh, physical drop/collect, "
+             <<"atomic rollback, v1/v2 save validation; device="
+             <<(graphicsProof ? "DX12" : "CPU-only")<<std::endl;
     std::cout.flush();
     std::_Exit(0);
 }

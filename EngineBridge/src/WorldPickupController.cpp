@@ -8,6 +8,53 @@
 
 namespace renegade::bridge {
 namespace {
+    // World pickup save/drop logic is CPU scene state. The same sphere
+    // geometry must also be constructible on a headless server/test runner:
+    // Wicked's Entity_CreateSphere unconditionally uploads GPU buffers.
+    // Keep that exact Wicked implementation whenever a graphics device
+    // exists; create its identical CPU mesh when there is no device.
+    // In the no-device case no GPU buffers are uploaded or claimed.
+    wi::ecs::Entity CreateDroppedOrb(wi::scene::Scene& scene,
+                                      const std::string& name) {
+        constexpr float radius=.22f;
+        constexpr std::uint32_t latitudeBands=12,longitudeBands=12;
+        if (wi::graphics::GetDevice())
+            return scene.Entity_CreateSphere(name,radius,latitudeBands,longitudeBands);
+
+        const auto entity=wi::ecs::CreateEntity();
+        scene.names.Create(entity)=name;
+        scene.layers.Create(entity);
+        scene.transforms.Create(entity);
+        auto& object=scene.objects.Create(entity);
+        auto& mesh=scene.meshes.Create(entity);
+        object.meshID=entity;
+        for(std::uint32_t lat=0;lat<=latitudeBands;++lat) {
+            const float theta=float(lat)*DirectX::XM_PI/float(latitudeBands);
+            const float sinTheta=std::sin(theta),cosTheta=std::cos(theta);
+            for(std::uint32_t lon=0;lon<=longitudeBands;++lon) {
+                const float phi=float(lon)*2.f*DirectX::XM_PI/float(longitudeBands);
+                const float sinPhi=std::sin(phi),cosPhi=std::cos(phi);
+                const DirectX::XMFLOAT3 normal{cosPhi*sinTheta,cosTheta,sinPhi*sinTheta};
+                mesh.vertex_normals.push_back(normal);
+                mesh.vertex_positions.push_back({radius*normal.x,radius*normal.y,
+                                                 radius*normal.z});
+                mesh.vertex_uvset_0.push_back({float(lon)/float(longitudeBands),
+                                                float(lat)/float(latitudeBands)});
+            }
+        }
+        for(std::uint32_t lat=0;lat<latitudeBands;++lat)
+            for(std::uint32_t lon=0;lon<longitudeBands;++lon) {
+                const std::uint32_t first=lat*(longitudeBands+1)+lon;
+                const std::uint32_t second=first+longitudeBands+1;
+                mesh.indices.insert(mesh.indices.end(),{
+                    first,second,first+1,second,second+1,first+1});
+            }
+        auto& subset=mesh.subsets.emplace_back();
+        subset.indexCount=static_cast<std::uint32_t>(mesh.indices.size());
+        scene.materials.Create(entity);
+        subset.materialID=entity;
+        return entity;
+    }
     float DistanceSquared(const DirectX::XMFLOAT3& a, const DirectX::XMFLOAT3& b) {
         const float x=a.x-b.x, y=a.y-b.y, z=a.z-b.z;
         return x*x+y*y+z*z;
@@ -151,7 +198,7 @@ InventoryResult WorldPickupController::DropFromPlayer(
     if(!IsValidStableId(id)) {error="Could not allocate drop identity.";return InventoryResult::InvalidArgument;}
     // A visible, collectible mesh, never a silent inventory-only deletion.
     // The neutral orb is used until the creator supplies a world pickup prefab.
-    const auto entity=scene.Entity_CreateSphere("Dropped "+definition->name,0.22f,12,12);
+    const auto entity=CreateDroppedOrb(scene,"Dropped "+definition->name);
     auto* transform=scene.transforms.GetComponent(entity);
     if(entity==wi::ecs::INVALID_ENTITY || !transform) {
         if(entity!=wi::ecs::INVALID_ENTITY)scene.Entity_Remove(entity,true);
@@ -318,8 +365,8 @@ bool WorldPickupController::RestoreRuntimeState(
         return false;
     }
     for(auto& [id,drop]:desiredDrops) {
-        const auto entity=scene.Entity_CreateSphere("Dropped "+
-            inventory->FindDefinition(drop.itemId)->name,0.22f,12,12);
+        const auto entity=CreateDroppedOrb(scene,"Dropped "+
+            inventory->FindDefinition(drop.itemId)->name);
         auto* transform=scene.transforms.GetComponent(entity);
         if(entity==wi::ecs::INVALID_ENTITY || !transform) {
             if(entity!=wi::ecs::INVALID_ENTITY)scene.Entity_Remove(entity,true);
