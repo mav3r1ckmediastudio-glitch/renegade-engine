@@ -35,7 +35,7 @@ git submodule update --init --recursive
 ```
 
 Every build script refuses to continue unless `/WickedEngine` is exactly at
-`3a800b7134aafe58461093c8abb2e274d4e64033` with no tracked source changes.
+`ceb816b844b4ab2fa56a159ac60a4f65c931bdfc` with no tracked source changes.
 
 ## Build Debug and Release
 
