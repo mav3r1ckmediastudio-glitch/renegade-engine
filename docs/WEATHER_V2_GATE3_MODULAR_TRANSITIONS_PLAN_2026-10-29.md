@@ -21,7 +21,7 @@ Existing references:
 5. **Presets**: use the four existing presets as foundation; settings reflect current scene and are editable. Preserve developer-authored cloud-type, Moon and Sun schedules unless explicitly overridden by the preset; custom profile support should not require reworking weather shaders.
 6. **Scope**: G3 controls transitions between existing weather states. Do not expand to thunderstorms, lightning, rain/wind physics, terrain snow deposition, seasons or Snow V2 (G4 and later). Existing rain controls may be referenced, not redesigned.
 7. **Validation**: source/target stable hashes; all four presets & Custom, intermediate progress, rapid switching, transition cancel, Test Game runtime, scene reopen, restart, Lua/C++ contract tests, Undo/Redo, plus actual user project open. Test different cloud formations and noon/twilight/moonlit night. Preserve accepted G1 75 FPS in isolated DX12 comparison and G2 visual baseline.
-8. **Release boundaries**: separate isolated G3 worktree after final G2 source snapshot/manifest, no automatic push/PR/merge. Owner visually checks at each gate; one clear ready-to-open Studio project and exact file path, pre-verified *Main Level opens* (including registry/sidecar project IDs).
+8. **Release boundaries**: continue in the SINGLE `feature/weather-v2-all-gates` root and matching Wicked branch from locally committed G1+G2 checkpoints, with milestone commits but no automatic push/PR/merge. Owner visually checks at each gate; one clear ready-to-open Studio project and exact file path, pre-verified *Main Level opens* (including registry/sidecar project IDs).
 
 ## First engineering checkpoint
 - Audit the already-wired preset UI and bridge calls and identify controls/fields not yet exposed.

@@ -14,7 +14,7 @@ The weather system must be developed in **one continuing feature branch** until 
 - **G1** volumetric cloud formations and movement: owner visually approved; isolated 75 FPS baseline protected.
 - **G2** moon/sun/atmospheric cloud lighting: final V4 visually approved by owner.
 - **G3 next** modular weather presets and transitions: follow `docs/WEATHER_V2_GATE3_MODULAR_TRANSITIONS_PLAN_2026-10-29.md`.
-- Remaining gates: use the **owner's final gate register**, rather than inventing gate definitions. The existing written Weather V2 roadmap enumerated five main gates; the owner has now referred to a seven-gate programme. Reconcile the expanded gate count explicitly when updating the roadmap, but **do not let that uncertainty lead to another branch split**. Keep Gate 4 environmental effects, Snow V2, and other out-of-scope work untouched until their respective gate begins.
+- Remaining gates: the owner explicitly confirmed **FIVE Weather V2 gates**; seven was a typo. Gate 3 covers presets/transitions, Gate 4 environmental weather effects, Gate 5 integration and polish. Keep Gate 4, Gate 5 and Snow V2 out of scope until their turn. No further branch split.
 
 Gate-level visual acceptance is a checkpoint, **not final sign-off or integration of the whole Weather V2 system**. The final release sign-off follows complete agreed gate work and full CI/packaging and owner testing.
 

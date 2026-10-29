@@ -135,6 +135,8 @@ add_library(RenegadeEngineBridge STATIC
     src/AudioService.cpp
     src/DecalProbeService.cpp
     src/CommandService.cpp
+    src/WeatherTransitionService.cpp
+    include/renegade/bridge/WeatherTransitionService.h
     src/CharacterDuplicateCommand.cpp
     src/HumanoidRetargetService.cpp
     src/DiagnosticService.cpp

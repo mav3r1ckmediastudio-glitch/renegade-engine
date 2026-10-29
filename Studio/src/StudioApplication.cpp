@@ -439,9 +439,12 @@ namespace renegade::studio
              wi::arguments::HasArgument("g2-lunar-locality-review") ||
              wi::arguments::HasArgument("g2-upper-moonlight-review") ||
              wi::arguments::HasArgument("g2-final-moonlight-review") ||
+             wi::arguments::HasArgument("g3-weather-preview") ||
              wi::arguments::HasArgument("cloud-body-studio-test")) && session_)
         {
             const auto preview=std::filesystem::absolute(
+                wi::arguments::HasArgument("g3-weather-preview") ?
+                "../../../g3-weather-preview/Gate3WeatherPreview.renegade" :
                 wi::arguments::HasArgument("g2-final-moonlight-review") ?
                 "../../../g2-final-moonlight-review/Gate2FinalMoonlightReview.renegade" :
                 wi::arguments::HasArgument("g2-upper-moonlight-review") ?
@@ -1893,17 +1896,56 @@ namespace renegade::studio
         environmentPreset_.AddItem("OVERCAST", 3);
         environmentPreset_.AddItem("STORM", 4);
         environmentPreset_.SetTooltip(
-            "Apply a curated starting point. Every preset is a single "
-            "Undo/Redo command.");
-        environmentPreset_.OnSelect(
-            [this](const wi::gui::EventArgs& args)
+            "Choose a starting point. Apply it immediately or blend smoothly.");
+        environmentPreset_.OnSelect([this](const wi::gui::EventArgs& args)
         {
-            if (args.userdata != 0)
-            {
-                ApplyWeatherPreset(static_cast<int>(args.userdata));
-            }
+            selectedWeatherPreset_ = static_cast<int>(args.userdata);
+            weatherApplyNowButton_.SetEnabled(selectedWeatherPreset_ != 0);
+            weatherStartTransitionButton_.SetEnabled(selectedWeatherPreset_ != 0);
         });
         inspectorPanel_.AddWidget(&environmentPreset_);
+
+        weatherTransitionDuration_.Create(
+            0.0f, 300.0f, 8.0f, 300.0f,
+            "Transition Duration", "SECONDS");
+        weatherTransitionDuration_.SetTooltip(
+            "Duration in game seconds. 0 applies the selected preset instantly.");
+        weatherTransitionDuration_.OnValuePreview([this](const float value)
+        {
+            weatherTransitionDurationSeconds_ = std::clamp(value, 0.0f, 300.0f);
+        });
+        weatherTransitionDuration_.OnValueCommitted([this](const float value)
+        {
+            weatherTransitionDurationSeconds_ = std::clamp(value, 0.0f, 300.0f);
+        });
+        inspectorPanel_.AddWidget(&weatherTransitionDuration_);
+
+        weatherApplyNowButton_.Create("APPLY NOW");
+        weatherApplyNowButton_.SetTooltip(
+            "Apply the selected preset immediately as one Undo/Redo operation.");
+        weatherApplyNowButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            ApplyWeatherPreset(selectedWeatherPreset_);
+        });
+        inspectorPanel_.AddWidget(&weatherApplyNowButton_);
+
+        weatherStartTransitionButton_.Create("BLEND TO PRESET");
+        weatherStartTransitionButton_.SetTooltip(
+            "Gradually blend to the selected weather preset; one Undo step at completion.");
+        weatherStartTransitionButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            StartWeatherPresetTransition();
+        });
+        inspectorPanel_.AddWidget(&weatherStartTransitionButton_);
+
+        weatherCancelTransitionButton_.Create("CANCEL BLEND");
+        weatherCancelTransitionButton_.SetTooltip(
+            "Cancel the active preview and restore the previous weather.");
+        weatherCancelTransitionButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            CancelWeatherPresetTransition();
+        });
+        inspectorPanel_.AddWidget(&weatherCancelTransitionButton_);
 
         skyMode_.Create("Sky Mode");
         skyMode_.AddItem(
@@ -3985,6 +4027,7 @@ namespace renegade::studio
 
         if (session_ != nullptr)
         {
+            TickWeatherPresetTransition(dt);
             bridge::RefreshPrecipitationVisual(session_->Scenes().GetScene());
         }
         if (pathTracePreviewActive_)
@@ -5613,6 +5656,13 @@ namespace renegade::studio
             widget.SetVisible(hasWeather);
         };
         setEnvironmentVisible(environmentPreset_);
+        setEnvironmentVisible(weatherTransitionDuration_);
+        setEnvironmentVisible(weatherApplyNowButton_);
+        setEnvironmentVisible(weatherStartTransitionButton_);
+        setEnvironmentVisible(weatherCancelTransitionButton_);
+        weatherApplyNowButton_.SetEnabled(hasWeather && selectedWeatherPreset_ != 0);
+        weatherStartTransitionButton_.SetEnabled(hasWeather && selectedWeatherPreset_ != 0);
+        weatherCancelTransitionButton_.SetEnabled(hasWeather && weatherTransition_.IsActive());
         setEnvironmentVisible(skyMode_);
         setEnvironmentVisible(aerialPerspective_);
         setEnvironmentVisible(skyExposure_);
@@ -5754,7 +5804,8 @@ namespace renegade::studio
                             : "ENTITY " + std::to_string(entity)));
 
             const auto state = bridge::CaptureWeather(*weather);
-            environmentPreset_.SetSelectedWithoutCallback(0);
+            environmentPreset_.SetSelectedWithoutCallback(selectedWeatherPreset_);
+            weatherTransitionDuration_.SetValue(weatherTransitionDurationSeconds_);
             skyMode_.SetSelectedByUserdataWithoutCallback(
                 static_cast<std::uint64_t>(state.skyMode));
             aerialPerspective_.SetCheck(state.aerialPerspective);
@@ -6122,6 +6173,17 @@ namespace renegade::studio
 
         const EditorAction action = pendingAction_;
         pendingAction_ = EditorAction::None;
+        // A running blend is only a preview until it reaches the target.
+        // Never save its transient weather or let Undo/scene replacement
+        // act on a half-authored Environment component.
+        if (weatherTransition_.IsActive() &&
+            (action == EditorAction::Undo || action == EditorAction::Redo ||
+             action == EditorAction::SaveScene ||
+             action == EditorAction::SaveSceneAs ||
+             action == EditorAction::OpenScene ||
+             action == EditorAction::ReopenScene ||
+             action == EditorAction::ProjectHub))
+            CancelWeatherPresetTransition();
         if (lightPlacementActive_ && action != EditorAction::CreateLight)
         {
             CancelLightPlacement();
@@ -9178,6 +9240,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     bool StudioRenderPath::CommitSelectedWeather(
         const bridge::WeatherState& weather)
     {
+        if (weatherTransition_.IsActive()) CancelWeatherPresetTransition();
         if (session_ == nullptr)
         {
             return false;
@@ -9382,8 +9445,116 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         CommitSelectedWeather(next);
     }
 
+    void StudioRenderPath::StartWeatherPresetTransition()
+    {
+        if (session_ == nullptr || selectedWeatherPreset_ < 1 ||
+            selectedWeatherPreset_ > 4 || projectHubVisible_ ||
+            sceneOpenInProgress_ || testLevelRuntime_.IsActive())
+            return;
+        if (weatherTransitionDurationSeconds_ <= 0.0f)
+        {
+            ApplyWeatherPreset(selectedWeatherPreset_);
+            return;
+        }
+        const auto entity = EditableWeatherEntity();
+        auto& scene = session_->Scenes().GetScene();
+        auto* component = scene.weathers.GetComponent(entity);
+        if (component == nullptr) return;
+        const auto current = bridge::CaptureWeather(*component);
+        if (!weatherTransition_.IsActive() ||
+            entity != weatherTransitionEntity_ ||
+            weatherTransitionSceneRevision_ != session_->Scenes().Revision())
+            weatherTransitionBefore_ = current;
+
+        // Retarget a running blend from the CURRENT interpolated weather,
+        // retaining the original scene state as the single Undo baseline.
+        const auto target = bridge::MakeWeatherPreset(
+            current, static_cast<bridge::WeatherPreset>(selectedWeatherPreset_ - 1));
+        if (!weatherTransition_.Start(current, target, weatherTransitionDurationSeconds_))
+            return;
+        weatherTransitionEntity_ = entity;
+        weatherTransitionSceneRevision_ = session_->Scenes().Revision();
+        weatherCancelTransitionButton_.SetEnabled(true);
+        weatherStartTransitionButton_.SetText("BLENDING // 0%");
+    }
+
+    void StudioRenderPath::TickWeatherPresetTransition(const float deltaSeconds)
+    {
+        if (!weatherTransition_.IsActive() || session_ == nullptr ||
+            projectHubVisible_ || sceneOpenInProgress_ || testLevelRuntime_.IsActive())
+            return;
+        if (weatherTransitionSceneRevision_ != session_->Scenes().Revision())
+        {
+            // A loaded different level must never receive the old transition.
+            weatherTransition_.Cancel();
+            weatherTransitionEntity_ = wi::ecs::INVALID_ENTITY;
+            weatherStartTransitionButton_.SetText("BLEND TO PRESET");
+            weatherCancelTransitionButton_.SetEnabled(false);
+            return;
+        }
+        auto& scene = session_->Scenes().GetScene();
+        auto* component = scene.weathers.GetComponent(weatherTransitionEntity_);
+        if (component == nullptr)
+        {
+            weatherTransition_.Cancel();
+            weatherTransitionEntity_ = wi::ecs::INVALID_ENTITY;
+            return;
+        }
+        weatherTransition_.Advance(deltaSeconds);
+        const auto frameState = weatherTransition_.Current();
+        bridge::ApplyWeather(*component, frameState);
+        if (scene.weathers.GetCount() > 0 &&
+            scene.weathers.GetEntity(0) == weatherTransitionEntity_)
+            scene.weather = *component;
+        const auto progress = static_cast<int>(std::round(
+            weatherTransition_.Progress() * 100.0f));
+        if (weatherTransition_.IsActive())
+        {
+            weatherStartTransitionButton_.SetText(
+                "BLENDING // " + std::to_string(progress) + "%");
+            return;
+        }
+        // One Undo/Redo command at completion; no commands while previewing.
+        bridge::ApplyWeather(*component, weatherTransitionBefore_);
+        if (scene.weathers.GetCount() > 0 &&
+            scene.weathers.GetEntity(0) == weatherTransitionEntity_)
+            scene.weather = *component;
+        session_->Commands().Execute(std::make_unique<bridge::SetWeatherCommand>(
+            scene, weatherTransitionEntity_,
+            weatherTransitionBefore_, weatherTransition_.Target()));
+        weatherTransitionEntity_ = wi::ecs::INVALID_ENTITY;
+        weatherStartTransitionButton_.SetText("BLEND TO PRESET");
+        weatherCancelTransitionButton_.SetEnabled(false);
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::CancelWeatherPresetTransition()
+    {
+        if (!weatherTransition_.IsActive() || session_ == nullptr)
+            return;
+        auto& scene = session_->Scenes().GetScene();
+        if (weatherTransitionSceneRevision_ == session_->Scenes().Revision())
+        {
+            auto* component = scene.weathers.GetComponent(weatherTransitionEntity_);
+            if (component != nullptr)
+            {
+                bridge::ApplyWeather(*component, weatherTransitionBefore_);
+                if (scene.weathers.GetCount() > 0 &&
+                    scene.weathers.GetEntity(0) == weatherTransitionEntity_)
+                    scene.weather = *component;
+            }
+        }
+        weatherTransition_.Cancel();
+        weatherTransitionEntity_ = wi::ecs::INVALID_ENTITY;
+        weatherStartTransitionButton_.SetText("BLEND TO PRESET");
+        weatherCancelTransitionButton_.SetEnabled(false);
+        RefreshInspector();
+    }
+
     void StudioRenderPath::ApplyWeatherPreset(const int preset)
     {
+        if (weatherTransition_.IsActive()) CancelWeatherPresetTransition();
         if (session_ == nullptr)
         {
             return;
@@ -12144,6 +12315,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             std::filesystem::path(operation->descriptorPath).filename()=="CloudFormationPreview.renegade") ||
            (wi::arguments::HasArgument("cloud-formation-boundary-preview") &&
             std::filesystem::path(operation->descriptorPath).filename()=="CloudFormationBoundaryPreview.renegade") ||
+           (wi::arguments::HasArgument("g3-weather-preview") &&
+            session_->Projects().CurrentProject().projectId=="720d45ab-37bf-4b8d-a2ab-3b2ab91d97d0" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="Gate3WeatherPreview.renegade") ||
            (wi::arguments::HasArgument("g2-final-moonlight-review") &&
             session_->Projects().CurrentProject().projectId=="5af7c70c-5c88-4e8d-905c-d59a4b225b90" &&
             std::filesystem::path(operation->descriptorPath).filename()=="Gate2FinalMoonlightReview.renegade") ||

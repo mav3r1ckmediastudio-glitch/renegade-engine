@@ -36,6 +36,7 @@
 #include "renegade/bridge/LightmapBakeService.h"
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
+#include "renegade/bridge/WeatherTransitionService.h"
 #include "renegade/bridge/SunService.h"
 #include "renegade/bridge/NightSkyService.h"
 #include "renegade/bridge/MoonService.h"
@@ -529,6 +530,9 @@ namespace renegade::studio
         void ApplySelectedWeatherToggle(WeatherToggle toggle, bool value);
         void ApplySelectedSkyMode(bridge::WeatherState::SkyMode mode);
         void ApplyWeatherPreset(int preset);
+        void StartWeatherPresetTransition();
+        void TickWeatherPresetTransition(float deltaSeconds);
+        void CancelWeatherPresetTransition();
         void BeginNightSlider(NightField field);
         void PreviewNightSlider(NightField field, float value);
         void CommitNightSlider(NightField field, float value);
@@ -1034,9 +1038,19 @@ namespace renegade::studio
         XMFLOAT3 nightColourValue_;
 
         std::array<SceneInspectorButton, 10> environmentSectionHeaders_;
-        std::array<bool, 10> environmentSectionExpanded_ = {true, false, false, false, false, false, false, false, false, false};
+        std::array<bool, 10> environmentSectionExpanded_ = {true, false, false, false, false, false, true, false, false, false};
         bool environmentSectionsCreated_ = false;
         SceneInspectorComboBox environmentPreset_;
+        SceneInspectorSlider weatherTransitionDuration_;
+        SceneInspectorButton weatherApplyNowButton_;
+        SceneInspectorButton weatherStartTransitionButton_;
+        SceneInspectorButton weatherCancelTransitionButton_;
+        int selectedWeatherPreset_ = 0;
+        float weatherTransitionDurationSeconds_ = 8.0f;
+        bridge::WeatherTransitionController weatherTransition_;
+        wi::ecs::Entity weatherTransitionEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::WeatherState weatherTransitionBefore_{};
+        std::uint64_t weatherTransitionSceneRevision_ = 0;
         SceneInspectorComboBox skyMode_;
         SceneInspectorCheckBox aerialPerspective_;
         SceneInspectorSlider skyExposure_;
