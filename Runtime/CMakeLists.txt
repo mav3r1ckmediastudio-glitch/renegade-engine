@@ -213,3 +213,9 @@ renegade_deploy_river_flow_shaders(RenegadeRuntime)
 renegade_deploy_river_course_shaders(RenegadeRuntime)
 
 renegade_deploy_waterfall_resources(RenegadeRuntime)
+add_custom_command(TARGET RenegadeRuntime POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/Licenses"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/EngineBridge/assets/moon/README.md"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/Licenses/MoonTexture-Credit.txt"
+    VERBATIM)

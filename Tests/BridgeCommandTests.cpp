@@ -345,6 +345,7 @@ int main()
         after.fogHeightStart = -1.0f;
         after.fogHeightEnd = 5.0f;
         after.cloudCoverage = 0.62f;
+        after.cloudMovementSpeed = 7.0f;
         after.cloudStartHeight = 1800.0f;
         after.cloudThickness = 4200.0f;
         after.cloudsCastShadow = true;
@@ -368,7 +369,8 @@ int main()
             !NearlyEqual(weather.fogDensity, 0.031f) ||
             !NearlyEqual(
                 weather.volumetricCloudParameters.layerFirst.coverageAmount,
-                0.62f))
+                0.62f) ||
+            !NearlyEqual(weather.volumetricCloudParameters.animationMultiplier,7.0f))
         {
             return Fail("weather command did not apply the curated state");
         }
@@ -385,7 +387,9 @@ int main()
 
         if (!NearlyEqual(
                 weatherScenes.GetScene().weather.skyExposure,
-                weather.skyExposure))
+                weather.skyExposure) ||
+            !NearlyEqual(weatherScenes.GetScene().weather.volumetricCloudParameters.animationMultiplier,
+                7.0f))
         {
             return Fail("weather command did not refresh the runtime weather");
         }
@@ -397,7 +401,9 @@ int main()
             !NearlyEqual(weather.ambient.z, 0.08f) ||
             !NearlyEqual(
                 weather.volumetricCloudParameters.layerFirst.coverageAmount,
-                0.2f))
+                0.2f) ||
+            !NearlyEqual(weather.volumetricCloudParameters.animationMultiplier,
+                before.cloudMovementSpeed))
         {
             return Fail("weather undo did not restore the authored state");
         }
@@ -405,7 +411,8 @@ int main()
         if (!weatherCommands.Redo() ||
             !weather.IsVolumetricClouds() ||
             !NearlyEqual(weather.skyExposure, 1.25f) ||
-            !NearlyEqual(weather.stars, 0.7f))
+            !NearlyEqual(weather.stars, 0.7f) ||
+            !NearlyEqual(weather.volumetricCloudParameters.animationMultiplier,7.0f))
         {
             return Fail("weather redo did not restore the edited state");
         }
@@ -808,6 +815,7 @@ int main()
             0.57f;
         authoredWeather.volumetricCloudParameters.cloudStartHeight = 1650.0f;
         authoredWeather.volumetricCloudParameters.cloudThickness = 3600.0f;
+        authoredWeather.volumetricCloudParameters.animationMultiplier = 6.5f;
 
         // Use a small native terrain fixture, including authored height and
         // blend pixels, so the document round trip covers terrain state rather
@@ -906,7 +914,9 @@ int main()
                 1650.0f) ||
             !NearlyEqual(
                 reopenedWeather->volumetricCloudParameters.cloudThickness,
-                3600.0f))
+                3600.0f) ||
+            !NearlyEqual(reopenedWeather->volumetricCloudParameters.animationMultiplier,
+                6.5f))
         {
             return Fail("the reloaded scene lost its serialized weather");
         }

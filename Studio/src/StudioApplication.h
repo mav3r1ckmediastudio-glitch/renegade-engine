@@ -38,6 +38,8 @@
 #include "renegade/bridge/PrecipitationService.h"
 #include "renegade/bridge/SunService.h"
 #include "renegade/bridge/NightSkyService.h"
+#include "renegade/bridge/MoonService.h"
+#include "renegade/bridge/ShootingStarsService.h"
 #include "renegade/bridge/TerrainService.h"
 #include "renegade/bridge/RiverSplineService.h"
 #include "renegade/bridge/RiverUnderwaterService.h"
@@ -58,6 +60,7 @@ namespace renegade::studio
     {
     public:
         void BindSession(bridge::StudioSession& session) noexcept;
+        void PrepareCloudBodySelfTestView();
         void SetExitRequestHandler(std::function<void()> handler);
         void RequestExit();
         void UpdateLiveDiagnostics(const char* outerWorkspace);
@@ -301,6 +304,7 @@ namespace renegade::studio
             FogHeightStart,
             FogHeightEnd,
             CloudCoverage,
+            CloudMovementSpeed,
             CloudStartHeight,
             CloudThickness,
         };
@@ -1029,8 +1033,8 @@ namespace renegade::studio
         wi::ecs::Entity nightColourEntity_ = wi::ecs::INVALID_ENTITY;
         XMFLOAT3 nightColourValue_;
 
-        std::array<SceneInspectorButton, 9> environmentSectionHeaders_;
-        std::array<bool, 9> environmentSectionExpanded_ = {true, false, false, false, false, false, false, false, false};
+        std::array<SceneInspectorButton, 10> environmentSectionHeaders_;
+        std::array<bool, 10> environmentSectionExpanded_ = {true, false, false, false, false, false, false, false, false, false};
         bool environmentSectionsCreated_ = false;
         SceneInspectorComboBox environmentPreset_;
         SceneInspectorComboBox skyMode_;
@@ -1038,6 +1042,27 @@ namespace renegade::studio
         SceneInspectorSlider skyExposure_;
         SceneInspectorSlider stars_;
         SceneInspectorCheckBox nightAuroraEnabled_;
+        SceneInspectorCheckBox shootingStarsEnabled_;
+        std::array<SceneInspectorSlider,3> shootingStarsSliders_;
+        SceneInspectorButton shootingStarsPreview_;
+        bridge::ShootingStarsState meteorSliderBefore_,meteorSliderAfter_;
+        wi::ecs::Entity meteorSliderEntity_=wi::ecs::INVALID_ENTITY;
+        bool meteorSliderActive_=false;
+        void CreateShootingStarsControls();
+        void RefreshShootingStarsControls(bool visible,bool procedural);
+        void PreviewShootingStarsSlider(std::size_t index,float value);
+        void CommitShootingStarsSlider(std::size_t index,float value);
+        SceneInspectorCheckBox moonEnabled_;
+        SceneInspectorComboBox moonPhasePreset_;
+        SceneInspectorComboBox moonMovement_;
+        std::array<SceneInspectorSlider, 5> moonSliders_;
+        bridge::MoonState moonSliderBefore_, moonSliderAfter_;
+        wi::ecs::Entity moonSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        bool moonSliderActive_ = false;
+        void CreateMoonControls();
+        void RefreshMoonControls(bool visible, bool procedural);
+        void PreviewMoonSlider(std::size_t index, float value);
+        void CommitMoonSlider(std::size_t index, float value);
         std::array<SceneInspectorSlider, static_cast<std::size_t>(NightField::Count)> nightSkySliders_;
         SceneInspectorSlider ambientIntensity_;
         SceneInspectorSlider fogStart_;
@@ -1045,7 +1070,12 @@ namespace renegade::studio
         SceneInspectorCheckBox heightFog_;
         SceneInspectorSlider fogHeightStart_;
         SceneInspectorSlider fogHeightEnd_;
+        void CaptureCloudBodyReplay();
+        uint32_t cloudBodyReplayFrames_=0;
+        bool cloudBodyReplayCaptured_=false;
+        wi::gui::ComboBox cloudFormation_;
         SceneInspectorSlider cloudCoverage_;
+        SceneInspectorSlider cloudMovementSpeed_;
         SceneInspectorSlider cloudStartHeight_;
         SceneInspectorSlider cloudThickness_;
         SceneInspectorCheckBox cloudsCastShadow_;
@@ -1626,11 +1656,14 @@ namespace renegade::studio
                 storyFlowRenderer_,
                 screenEditorRenderer_,
                 session_);
+            UpdateCloudBodySelfTest();
             renderer_.UpdateLiveDiagnostics(GetActivePath() == &storyFlowRenderer_ ? "story_flow" :
                 GetActivePath() == &screenEditorRenderer_ ? "screen_editor" : "level_editor");
         }
 
     private:
+        void UpdateCloudBodySelfTest();
+        bool cloudBodySelfTestOpened_=false;
         void PrepareProvingGround();
 
         bridge::StudioSession session_;

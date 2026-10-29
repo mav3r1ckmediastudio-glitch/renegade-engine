@@ -3,6 +3,7 @@
 #include "shaders/ShaderInterop_Renderer.h"
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
+#include "../../Tools/night_sky/CloudStudioReplay.h"
 #include "RiverNodeWidthGizmoAxis.h"
 #include "renegade/bridge/RiverWaterwayService.h"
 #include "RenegadeLivingPresenceLaunch.h"
@@ -430,6 +431,35 @@ namespace renegade::studio
         SetProjectHubVisible(true);
 
         RenderPath3D::Load();
+        // Explicit local QA launch: only the separately generated preview project.
+        if ((wi::arguments::HasArgument("cloud-formation-preview") ||
+             wi::arguments::HasArgument("cloud-formation-boundary-preview") ||
+             wi::arguments::HasArgument("cloud-body-preview") ||
+             wi::arguments::HasArgument("cloud-motion-preview") ||
+             wi::arguments::HasArgument("g2-lunar-locality-review") ||
+             wi::arguments::HasArgument("g2-upper-moonlight-review") ||
+             wi::arguments::HasArgument("g2-final-moonlight-review") ||
+             wi::arguments::HasArgument("cloud-body-studio-test")) && session_)
+        {
+            const auto preview=std::filesystem::absolute(
+                wi::arguments::HasArgument("g2-final-moonlight-review") ?
+                "../../../g2-final-moonlight-review/Gate2FinalMoonlightReview.renegade" :
+                wi::arguments::HasArgument("g2-upper-moonlight-review") ?
+                "../../../g2-upper-moonlight-review/Gate2UpperMoonlightReview.renegade" :
+                wi::arguments::HasArgument("g2-lunar-locality-review") ?
+                "../../../g2-moonlit-locality-review/Gate2MoonlitLocalityReview.renegade" :
+                wi::arguments::HasArgument("cloud-body-studio-test") ?
+                "../../../cloud-body-studio-test/CloudBodyStudioTest.renegade" :
+                wi::arguments::HasArgument("cloud-motion-preview") ?
+                "../../../cloud-body-motion-preview/CloudBodyMotionPreview.renegade" :
+                wi::arguments::HasArgument("cloud-body-preview") ?
+                "../../../cloud-body-studio-preview/CloudBodyStudioPreview.renegade" :
+                wi::arguments::HasArgument("cloud-formation-boundary-preview") ?
+                "../../../cloud-formations-boundary-preview/CloudFormationBoundaryPreview.renegade" :
+                "../../../cloud-formations-preview/CloudFormationPreview.renegade");
+            if(std::filesystem::is_regular_file(preview))
+                OpenProjectDescriptor(preview.generic_string());
+        }
     }
 
     void StudioRenderPath::LoadGridResources()
@@ -2020,6 +2050,21 @@ namespace renegade::studio
             200.0f,
             600.0f);
 
+        cloudFormation_.Create("Cloud formation");
+        for (const char* label : {"LEGACY (SAVED SCENE)", "CUMULUS", "TOWERING CUMULUS",
+                                  "STRATOCUMULUS", "OVERCAST", "CIRRUS"})
+            cloudFormation_.AddItem(label);
+        cloudFormation_.SetTooltip("Independent 3D formation profile. Coverage, base and depth remain authored separately.");
+        cloudFormation_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            if (!session_) return;
+            const auto entity=EditableWeatherEntity();
+            if(entity==wi::ecs::INVALID_ENTITY) return;
+            session_->Commands().Execute(std::make_unique<bridge::SetCloudFormationCommand>(
+                session_->Scenes().GetScene(),entity,static_cast<bridge::CloudFormation>(args.iValue)));
+            RefreshInspector(); RefreshStatus();
+        });
+        inspectorPanel_.AddWidget(&cloudFormation_);
         createWeatherSlider(
             cloudCoverage_,
             "Cloud Coverage",
@@ -2029,6 +2074,15 @@ namespace renegade::studio
             0.0f,
             1.0f,
             100.0f);
+        createWeatherSlider(
+            cloudMovementSpeed_,
+            "Cloud Movement Speed",
+            "MOVEMENT SPEED",
+            "Animate clouds across the sky. 0 pauses motion; 2 is the native speed. Increase temporarily to verify motion.",
+            WeatherField::CloudMovementSpeed,
+            0.0f,
+            12.0f,
+            120.0f);
         createWeatherSlider(
             cloudStartHeight_,
             "Cloud Start Height",
@@ -3818,8 +3872,54 @@ namespace renegade::studio
             wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
     }
 
+    void StudioRenderPath::PrepareCloudBodySelfTestView()
+    {
+        if(!session_ || !wi::arguments::HasArgument("cloud-body-studio-test") ||
+            !wi::arguments::HasArgument("cloud-studio-replay-audit-exit") ||
+            !session_->Projects().HasProject() ||
+            session_->Projects().CurrentProject().projectId!="9dc8e035-52f9-4474-a319-7465698ae7cd") return;
+        AdoptOpenedSceneCamera();
+        SetEnvironmentWorkspaceActive(true);
+        RefreshHierarchy();RefreshInspector();RefreshStatus();
+    }
+
+    void StudioRenderPath::CaptureCloudBodyReplay()
+    {
+        if(cloudBodyReplayCaptured_ || !wi::arguments::HasArgument("cloud-studio-replay-audit") ||
+            !session_ || projectHubVisible_ || sceneOpenInProgress_ ||
+            !session_->Projects().HasProject()) return;
+        const bool selfTest=wi::arguments::HasArgument("cloud-studio-replay-audit-exit");
+        const auto& projectId=session_->Projects().CurrentProject().projectId;
+        const bool ownTest=selfTest && wi::arguments::HasArgument("cloud-body-studio-test") &&
+            projectId=="9dc8e035-52f9-4474-a319-7465698ae7cd";
+        const bool ownPreview=!selfTest && wi::arguments::HasArgument("cloud-body-preview") &&
+            projectId=="f39f4b51-1a9e-4ebd-820b-29d5f1409eb1";
+        if(!ownTest && !ownPreview) return;
+        auto& scene=session_->Scenes().GetScene();
+        if(scene.weather.volumetricCloudParameters.layerFirst.padding0!=1) return;
+        // Explicit QA audit freezes only this isolated scene; no project save.
+        for(size_t i=0;i<scene.weathers.GetCount();++i)
+            scene.weathers[i].volumetricCloudParameters.animationMultiplier=0;
+        scene.weather.volumetricCloudParameters.animationMultiplier=0;
+        if(++cloudBodyReplayFrames_<120) return;
+        cloudBodyReplayCaptured_=true;
+        const auto output=std::filesystem::absolute(selfTest ?
+            "../../../body-studio-replay-split" : "../../../body-studio-replay");
+        bool saved=false;
+        try { saved=renegade::cloudqa::SaveStudioReplay(*this,scene,output); }
+        catch(const std::exception& exception)
+        { wi::backlog::post(std::string("Cloud Studio replay audit: ")+exception.what()); }
+        wi::backlog::post(saved ? "Cloud Studio replay audit saved" : "Cloud Studio replay audit FAILED");
+#ifdef _WIN32
+        // Explicit disposable automation only; the exact private project GUID
+        // above is mandatory. Regular previews and owner sessions never exit here.
+        if(selfTest) PostQuitMessage(saved ? 0 : 1);
+#endif
+    }
+
     void StudioRenderPath::Update(const float dt)
     {
+        CaptureCloudBodyReplay();
         DiagnosticInputFrame diagnosticInput(diagnosticService_,
             wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
         PollTestLevel();
@@ -5534,7 +5634,9 @@ namespace renegade::studio
         setEnvironmentVisible(heightFog_);
         setEnvironmentVisible(fogHeightStart_);
         setEnvironmentVisible(fogHeightEnd_);
+        setEnvironmentVisible(cloudFormation_);
         setEnvironmentVisible(cloudCoverage_);
+        setEnvironmentVisible(cloudMovementSpeed_);
         setEnvironmentVisible(cloudStartHeight_);
         setEnvironmentVisible(cloudThickness_);
         setEnvironmentVisible(cloudsCastShadow_);
@@ -5673,7 +5775,9 @@ namespace renegade::studio
             heightFog_.SetCheck(state.heightFog);
             fogHeightStart_.SetValue(state.fogHeightStart);
             fogHeightEnd_.SetValue(state.fogHeightEnd);
+            cloudFormation_.SetSelectedWithoutCallback(static_cast<int>(bridge::CaptureCloudFormation(session_->Scenes().GetScene(),entity)));
             cloudCoverage_.SetValue(state.cloudCoverage);
+            cloudMovementSpeed_.SetValue(state.cloudMovementSpeed);
             cloudStartHeight_.SetValue(state.cloudStartHeight);
             cloudThickness_.SetValue(state.cloudThickness);
             cloudsCastShadow_.SetCheck(state.cloudsCastShadow);
@@ -5753,7 +5857,9 @@ namespace renegade::studio
                 state.skyMode ==
                 bridge::WeatherState::SkyMode::RealisticWithClouds;
             aerialPerspective_.SetEnabled(physicalSky);
+            cloudFormation_.SetEnabled(volumetricClouds);
             cloudCoverage_.SetEnabled(volumetricClouds);
+            cloudMovementSpeed_.SetEnabled(volumetricClouds);
             cloudStartHeight_.SetEnabled(volumetricClouds);
             cloudThickness_.SetEnabled(volumetricClouds);
             cloudsCastShadow_.SetEnabled(volumetricClouds);
@@ -9125,6 +9231,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         case WeatherField::CloudCoverage:
             weather.cloudCoverage = std::clamp(value, 0.0f, 1.0f);
             break;
+        case WeatherField::CloudMovementSpeed:
+            weather.cloudMovementSpeed = std::clamp(value, 0.0f, 12.0f);
+            break;
         case WeatherField::CloudStartHeight:
             weather.cloudStartHeight =
                 std::clamp(value, 0.0f, 50000.0f);
@@ -12031,6 +12140,29 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         SetProjectHubVisible(false);
         projectLoadingOverlay_.SetPhase(
             RenegadeProjectLoadingOverlay::Phase::Ready);
+        if((wi::arguments::HasArgument("cloud-formation-preview") &&
+            std::filesystem::path(operation->descriptorPath).filename()=="CloudFormationPreview.renegade") ||
+           (wi::arguments::HasArgument("cloud-formation-boundary-preview") &&
+            std::filesystem::path(operation->descriptorPath).filename()=="CloudFormationBoundaryPreview.renegade") ||
+           (wi::arguments::HasArgument("g2-final-moonlight-review") &&
+            session_->Projects().CurrentProject().projectId=="5af7c70c-5c88-4e8d-905c-d59a4b225b90" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="Gate2FinalMoonlightReview.renegade") ||
+           (wi::arguments::HasArgument("g2-upper-moonlight-review") &&
+            session_->Projects().CurrentProject().projectId=="3d8c144a-7897-48a2-a306-112e74d8fd54" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="Gate2UpperMoonlightReview.renegade") ||
+           (wi::arguments::HasArgument("g2-lunar-locality-review") &&
+            session_->Projects().CurrentProject().projectId=="bb7e3f74-8fa0-430d-8390-934e58421c2e" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="Gate2MoonlitLocalityReview.renegade") ||
+           (wi::arguments::HasArgument("cloud-motion-preview") &&
+            session_->Projects().CurrentProject().projectId=="e2d3e3f4-73a2-452a-b6c3-1d894f281302" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="CloudBodyMotionPreview.renegade") ||
+           (wi::arguments::HasArgument("cloud-body-preview") &&
+            session_->Projects().CurrentProject().projectId=="f39f4b51-1a9e-4ebd-820b-29d5f1409eb1" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="CloudBodyStudioPreview.renegade") ||
+           (wi::arguments::HasArgument("cloud-body-studio-test") &&
+            session_->Projects().CurrentProject().projectId=="9dc8e035-52f9-4474-a319-7465698ae7cd" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="CloudBodyStudioTest.renegade"))
+            SetEnvironmentWorkspaceActive(true);
     }
 
     void StudioRenderPath::OpenProjectDescriptor(
@@ -12387,6 +12519,32 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     void StudioApplication::RequestExit()
     {
         renderer_.RequestExit();
+    }
+
+    void StudioApplication::UpdateCloudBodySelfTest()
+    {
+        if(cloudBodySelfTestOpened_ || !wi::arguments::HasArgument("cloud-body-studio-test") ||
+            !wi::arguments::HasArgument("cloud-studio-replay-audit") ||
+            !wi::arguments::HasArgument("cloud-studio-replay-audit-exit") ||
+            GetActivePath()!=&storyFlowRenderer_ || !session_.Projects().HasProject()) return;
+        const auto& project=session_.Projects().CurrentProject();
+        if(project.projectId!="9dc8e035-52f9-4474-a319-7465698ae7cd" ||
+            std::filesystem::path(project.descriptorPath).filename()!="CloudBodyStudioTest.renegade") return;
+        cloudBodySelfTestOpened_=true;
+        // Same native document/session adoption as Story Flow's Open Level.
+        // Refuse dirty scene replacement, even inside the disposable fixture.
+        const auto path=std::filesystem::path(project.rootPath)/"Content/Scenes/Main.wiscene";
+        if(session_.Commands().IsDirty() || !session_.LoadScene(path.generic_string()))
+        {
+            wi::backlog::post("Cloud self-test: native Level open FAILED",wi::backlog::LogLevel::Error);
+#ifdef _WIN32
+            PostQuitMessage(112);
+#endif
+            return;
+        }
+        renderer_.PrepareCloudBodySelfTestView();
+        storyFlowIntegration_.RequestLevelEditor();
+        wi::backlog::post("Cloud self-test: startup Level opened through native session pipeline");
     }
 
     void StudioApplication::Initialize()

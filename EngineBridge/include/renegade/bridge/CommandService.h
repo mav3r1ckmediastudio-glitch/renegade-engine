@@ -41,6 +41,7 @@ namespace renegade::bridge
         float fogHeightStart = 1.0f;
         float fogHeightEnd = 3.0f;
         float cloudCoverage = 1.0f;
+        float cloudMovementSpeed = 2.0f; // Native cloud animation multiplier; 0 = stopped
         float cloudStartHeight = 1500.0f;
         float cloudThickness = 5000.0f;
         bool cloudsCastShadow = false;

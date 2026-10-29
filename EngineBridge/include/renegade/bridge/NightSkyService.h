@@ -2,6 +2,9 @@
 // Renegade-owned Night Sky authoring on an existing serialized Environment entity.
 // Engine shading is transient; versioned MetadataComponent is source-of-truth.
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/MoonService.h"
+#include "renegade/bridge/CloudFormationService.h"
+#include "renegade/bridge/ShootingStarsService.h"
 #include <WickedEngine.h>
 #include <algorithm>
 #include <cmath>
@@ -140,6 +143,9 @@ namespace renegade::bridge
     }
     inline void RestoreNightSky(wi::scene::Scene& scene) noexcept
     {
+        RestoreMoon(scene);
+        RestoreCloudFormations(scene);
+        RestoreShootingStars(scene);
         for (std::size_t i = 0; i < scene.weathers.GetCount(); ++i)
         {
             const auto entity = scene.weathers.GetEntity(i);

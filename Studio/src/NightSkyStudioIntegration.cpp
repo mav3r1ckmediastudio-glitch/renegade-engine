@@ -85,17 +85,18 @@ namespace renegade::studio
         const bool visible = session_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
             EditableWeatherEntity() != wi::ecs::INVALID_ENTITY;
         const float width = std::max(1.0f, inspectorPanel_.GetSize().x - 24.0f);
-        const std::array<const char*, 9> titles = {"TIME OF DAY / SUN", "REALISTIC SKY", "CLOUDS", "STARS", "FOG", "OCEAN", "WEATHER / PRECIPITATION", "NIGHT ATMOSPHERE", "AURORA"};
-        const std::array<std::vector<wi::gui::Widget*>, 9> children = {{
+        const std::array<const char*, 10> titles = {"TIME OF DAY / SUN", "REALISTIC SKY", "CLOUDS", "STARS", "FOG", "OCEAN", "WEATHER / PRECIPITATION", "NIGHT ATMOSPHERE", "AURORA", "MOON"};
+        std::array<std::vector<wi::gui::Widget*>, 10> children = {{
             {&sunPreset_, &sunTime_, &sunAzimuth_, &sunElevation_, &sunPreviewSpeed_, &sunPlayButton_, &sunPauseButton_},
             {&environmentPreset_, &skyMode_, &aerialPerspective_, &skyExposure_, &ambientIntensity_},
-            {&cloudCoverage_, &cloudStartHeight_, &cloudThickness_, &cloudsCastShadow_},
-            {&stars_, &nightSkySliders_[11]},
+            {&cloudFormation_, &cloudCoverage_, &cloudMovementSpeed_, &cloudStartHeight_, &cloudThickness_, &cloudsCastShadow_},
+            {&stars_, &nightSkySliders_[11], &shootingStarsEnabled_},
             {&fogStart_, &fogDensity_, &heightFog_, &fogHeightStart_, &fogHeightEnd_},
             {&oceanEnabled_, &oceanPreset_, &oceanResolution_, &oceanWaterHeight_, &oceanPatchLength_, &oceanWaveAmplitude_, &oceanChoppyScale_, &oceanTimeScale_, &oceanWindAzimuth_, &oceanWindSpeed_, &oceanWindDependency_, &oceanSurfaceDetail_, &oceanDisplacementTolerance_, &oceanWaterRed_, &oceanWaterGreen_, &oceanWaterBlue_, &oceanWaterOpacity_, &oceanExtinctionRed_, &oceanExtinctionGreen_, &oceanExtinctionBlue_},
             {&precipitationMode_, &precipitationIntensity_, &precipitationFallSpeed_, &precipitationParticleScale_, &precipitationWindAzimuth_, &precipitationWindSpeed_, &precipitationTurbulence_},
             {&nightSkySliders_[0], &nightZenithColour_, &nightHorizonColour_, &nightSkySliders_[7]},
-            {&nightAuroraEnabled_, &nightSkySliders_[8], &nightSkySliders_[9], &nightSkySliders_[10]}
+            {&nightAuroraEnabled_, &nightSkySliders_[8], &nightSkySliders_[9], &nightSkySliders_[10]},
+            {&moonEnabled_, &moonPhasePreset_, &moonSliders_[0], &moonMovement_, &moonSliders_[1], &moonSliders_[2], &moonSliders_[3], &moonSliders_[4]}
         }};
         if (!environmentSectionsCreated_)
         {
@@ -112,11 +113,20 @@ namespace renegade::studio
                 inspectorPanel_.AddWidget(&header);
             }
             CreateNightColourEditor();
+            CreateMoonControls();
+            CreateShootingStarsControls();
             environmentSectionsCreated_ = true;
         }
         // Colour channels are authored through the native hue/saturation picker.
         for (std::size_t i = 1; i <= 6; ++i) nightSkySliders_[i].SetVisible(false);
         const bool procedural = visible && session_->Scenes().GetScene().weathers.GetComponent(EditableWeatherEntity())->IsRealisticSky();
+        RefreshMoonControls(visible, procedural);
+        RefreshShootingStarsControls(visible, procedural);
+        if(visible && bridge::CaptureShootingStars(session_->Scenes().GetScene(),EditableWeatherEntity()).enabled)
+        {
+            for(auto& slider:shootingStarsSliders_)children[3].push_back(&slider);
+            children[3].push_back(&shootingStarsPreview_);
+        }
         nightZenithColour_.SetEnabled(procedural);
         nightHorizonColour_.SetEnabled(procedural);
         if (nightColourOpen_ && (!procedural || EditableWeatherEntity() != nightColourEntity_))

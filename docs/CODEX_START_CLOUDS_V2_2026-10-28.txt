@@ -1,0 +1,12 @@
+Continue Renegade on DESIGN — Weather V2, Gate 1 (Clouds V2).
+
+FIRST read the handover IN FULL:
+C:\Users\paulw\source\repos\renegade-moonlit-clouds-20261028\docs\CODEX_WEATHER_GATE1_CLOUDS_V2_HANDOVER_2026-10-28.md
+
+Follow all referenced docs, especially CLOUDS_V2_GATE1_2026-10-28.md and MOONLIT_CLOUDS_V1.md.
+
+Owner has REJECTED the current Clouds V2 appearances: excessive tiny fragments, then an almost continuous noisy ceiling at Coverage 0.8 (Base 1500, Depth 5000), and contradictory synthetic GPU captures. We need an architectural fix: coherent, distinct genuinely 3D volumetric cloud formations, independent controls for cloud type, distribution and erosion, natural daylight/moonlight, predictable 0..1 sky coverage (100% capable of full overcast). Do not keep randomly adjusting noise constants.
+
+Start with a code and scene-state audit and reproduce why the actual Studio editor view and fixed-position GPU test differ. Use a fresh isolated worktree after checking/fetching origin/main; preserve every uncommitted file in the old moon, clouds, original DESIGN, inventory and Wicked fork worktrees. Do not replace the river-enabled Wicked fork pinned on main or discard unmerged Moon features. Keep Weather G2-G5 and Snow V2 out of scope.
+
+Build and run real DX12/Vulkan tests; inspect actual captures and GPU cost; create an owner-test build without closing or replacing their running Studio. Provide precise evidence, a rollback path and your recommended next step. DO NOT push, merge or raise a PR without owner approval. Do not declare Gate 1 completed until owner accepts the result.

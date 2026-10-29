@@ -1568,3 +1568,21 @@ target_compile_definitions(RenegadeWaterfallRuntimeLifecycleProof PRIVATE
 add_executable(RenegadeWaterfallMultiSceneProof WaterfallMultiSceneProof.cpp)
 target_link_libraries(RenegadeWaterfallMultiSceneProof PRIVATE Renegade::EngineBridge)
 target_compile_options(RenegadeWaterfallMultiSceneProof PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+add_executable(RenegadeMoonTests MoonStateTests.cpp)
+target_link_libraries(RenegadeMoonTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeMoonTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeMoonTests COMMAND RenegadeMoonTests)
+
+add_executable(RenegadeShootingStarsTests ShootingStarsStateTests.cpp)
+target_link_libraries(RenegadeShootingStarsTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeShootingStarsTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeShootingStarsTests COMMAND RenegadeShootingStarsTests)
+
+# Moonlit cloud shading reuses the existing cloud raymarch and lunar state.
+add_test(NAME RenegadeMoonlitCloudSourceContract COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/MoonlitCloudSourceContract.cmake")
+
+add_test(NAME RenegadeCloudsV2VolumetricContract COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/CloudsV2VolumetricContract.cmake")
+
+add_executable(RenegadeCloudFormationTests CloudFormationTests.cpp)
+target_link_libraries(RenegadeCloudFormationTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeCloudFormationTests COMMAND RenegadeCloudFormationTests)

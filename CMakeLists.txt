@@ -287,6 +287,9 @@ if(WIN32)
         RenegadePlayerPrefabTests
         RenegadeDiagnosticServiceTests
         RenegadeNightSkyTests
+        RenegadeMoonTests
+        RenegadeShootingStarsTests
+        RenegadeCloudFormationTests
         RenegadeDependencyProcessFixture
         RenegadeAssetRegistryProcessFixture
         # UI and HUD tests are registered in CTest and must also be built by CI.

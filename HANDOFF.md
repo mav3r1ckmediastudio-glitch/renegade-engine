@@ -1,3 +1,197 @@
+## 2026-10-29: GATE 2 UPPER CLOUD MOONLIGHT VIEW-ANGLE FIX — OWNER REVIEW PENDING
+
+Owner permitted Desktop Commander GUI; inspected actual above-cloud view. Root issue in G2 locality V2: direct moonlight multiplied by camera-angle factor 0.58+0.42*vicinity. Fixed in G2 V3 so direct light independent of view while soft scatter remains Moon-local. Matched 2m/6200m height GPU cases across 4 formations and Moon on/off; 16 DX12 + 16 Vulkan tests, brightened cloud tops, negligible Moon-off change, max API mean delta 0.2782. Release Studio/Runtime built, 7/7 focused regressions green. **New uniquely cloned review project ACTUALLY OPENED Main Level in Studio** and 75 FPS displayed. Reviewer window GATE 2 UPPER MOONLIGHT V3 [DX12], relaunch BUILD/Run-Weather-G2-Upper-Moonlight.cmd; documentation docs/WEATHER_V2_GATE2_UPPER_CLOUD_MOONLIGHT_2026-10-29.md. G1 visually approved unchanged, user old G2 project not saved/closed, accepted river fork untouched. G2 remains open for visual approval/performance and further atmosphere integration. No push/merge/PR/G3-5/Snow V2.
+
+## 2026-10-29: GATE 2 TWILIGHT MOON-CLOUD LIGHTING — DX12/VULKAN CANDIDATE VALIDATED
+
+Read docs/WEATHER_V2_GATE2_TWILIGHT_SLICE_2026-10-29.md first. Gate 1 owner visually signed off and exact 75 FPS preview preserved. G2 separated into new SHA256-verified worktree, accepted river fork intact. Fixed real midnight/moonlight discontinuity by smooth solar fade above solarY -0.10 and Moon ease to full below -0.30, preserving full Moon/night, daylight and one shadow raymarch. 40×2 DX12/Vulkan controlled twilight GPU captures succeeded; visual images show graded Moon-lit cloud entry instead of abrupt jump. First candidate rejected as too dark; second candidate is current. G2 Release Studio AND Runtime builds passed; 7/7 focused CTest green; DX12/Vulkan Moon+twilight GPU probes passed; preserved 114-file G1 source audit clean. Separate uniquely named G2 twilight Studio preview is RUNNING, launcher BUILD/Run-Weather-G2-Twilight-Review.cmd. Owner visual and isolated performance signoff still pending; read docs/WEATHER_V2_GATE2_TWILIGHT_SLICE_2026-10-29.md. No push/PR/merge/G3–G5/Snow V2.
+
+## 2026-10-29: WEATHER V2 GATE 2 ATMOSPHERIC LIGHTING STARTED — GATE 1 VISUALLY APPROVED
+
+The owner gave formal visual sign-off for Gate 1 and explicitly authorised starting Gate 2. This NEW isolated worktree codex/weather-v2-g2-atmospheric-20261029 contains 114 SHA256-verified copies of the full dirty/unstaged/staged and untracked accepted Gate 1 source (root and Wicked), with accepted river-enabled fork pin ceb816b844b4ab2fa56a159ac60a4f65c931bdfc. Original Gate 1 worktree, owner Studio windows and 75 FPS approved build remain untouched. Read docs/WEATHER_V2_GATE2_ATMOSPHERIC_LIGHTING_PLAN_2026-10-29.md and docs/WEATHER_G2_G1_SNAPSHOT_MANIFEST_2026-10-29.json. New BUILD/g2 configured successfully. Initial Gate 1-source moonlight/twilight baseline Release NightSkyTests build under way. First slice is safe continuous solar/twilight/moonlit-cloud transition with no extra full shadow pass; independent CPU transition envelope check passed. No push, commit, PR, merge, Gates 3–5 or Snow V2.
+
+## 2026-10-29: OWNER VISUALLY SIGNED OFF WEATHER GATE 1, AUTHORIZED GATE 2
+
+Owner explicitly visually signed off Gate 1 cloud appearance after accepting 75 FPS moving-cloud benchmark. Read docs/CLOUD_FORMATION_GATE1_OWNER_VISUAL_SIGNOFF_2026-10-29.md; it supersedes historical statements that the owner rejected the clouds. Do not mistake visual signoff for formal 4-build/CI/merge approval. Preserve exact approved RenegadeStudioCloudPerfNear64G1Oct29.exe and SHA/evidence, current accepted sources and river fork. Owner authorizes Gate 2 atmospheric light work immediately, isolated from G1; Gates 3-5 and Snow V2 are not authorized; no push/PR/merge.
+
+## 2026-10-29: OWNER CONFIRMED 75 FPS WITH CLOUD MOVEMENT SPEED 8 - PERFORMANCE ACCEPTED, GATE 1 STILL OPEN
+
+The owner replied "confirmed" to a real Studio DX12 75-FPS isolated test on DESIGN (RTX 4070 Ti, 75-Hz monitor), with actual moving Cumulus and the Movement Speed slider set to 8. Do NOT infer signoff of morphology, moon/cloud lighting, moon visibility, full gameplay performance, or Weather Gate 1. The approved, preserved build is BUILD/gate1/Studio/Release/RenegadeStudioCloudPerfNear64G1Oct29.exe; restart using BUILD/Run-Gate1-Approved-75FPS-Clouds.cmd. Evidence: BUILD/perf-near64-speed8-solo.png, 7/7 focused tests, Bridge tests, 45 original protected files unchanged, accepted Wicked river fork untouched. This renderer adds rank-first cloud admission and near-field 64m / distance-adaptive volumetric march. Other preview processes were paused briefly for GPU isolation and all resumed, no owner work saved or discarded. See docs/CLOUD_FORMATION_GATE1_PERFORMANCE_OWNER_ACCEPTED_2026-10-29.md for full matrix, acceptance scope, and preservation conditions. No commit, push, PR, merge, Weather Gates 2-5 or Snow V2.
+
+## 2026-10-29: CURRENT CLOUD MOVEMENT SPEED SLIDER PREVIEW — GATE 1 OPEN
+
+Owner-requested Cloud Movement Speed is now a native 0–12 editor slider under Environment > Clouds, wired via WeatherState/SetWeatherCommand to scene.weather Runtime, Undo/Redo and serialized scene. Current Review executable BUILD/gate1/Studio/Release/RenegadeStudioCloudSpeedG1Oct29.exe is a separately named Release build, launched in isolated Cloud Body Motion Preview with live inspector showing slider. Studio and Bridge Release builds passed, BridgeCommandTests passed (including runtime value, Undo/Redo, scene save/reopen), 7/7 focused CTest passed, independent type1/type2 +60s GPU motion proved. The 15s desktop screenshot comparison is inconclusive because Edge was foreground, not evidence for live Studio time freezing. Owner still needs to visually confirm while Studio focused and speed set high. Full evidence and relaunch shortcut in docs/CLOUD_FORMATION_GATE1_MOVEMENT_SPEED_CONTROL_2026-10-29.md / BUILD/Run-Gate1-Cloud-Speed.cmd. Protected owner files and accepted river fork untouched. No push, PR, merge, later weather gates or Snow V2.
+
+## 2026-10-29: MOVING-CLOUD PREVIEW FIX VERIFIED — GATE 1 OPEN
+
+The previous owner's Cloud Body Studio Preview was accidentally static: serialized animationMultiplier=0 from the screenshot/replay test fixture. DO NOT MODIFY old original preview. A separate clone Cloud Body Motion Preview has animationMultiplier=2, windSpeed=15, coverageWindSpeed=30, verified via Wicked native scene archive save/reopen. Latest real Renegade Studio Release build launches separate RenegadeStudioMovingCloudsG1Oct29.exe --cloud-motion-preview --dx12, and a distinct running window titled 'Renegade Studio - Gate 1 MOVING CLOUDS [DX12]' is available on DESIGN. Auto-open clone uses isolated GUID, clone registry was corrected. Original review remains untouched. Focused 7/7 tests, preservation and river fork unchanged; no push/merge. Details and relaunch script in docs/CLOUD_FORMATION_GATE1_MOVING_PREVIEW_FIX_2026-10-29.md and BUILD/Run-Gate1-Moving-Clouds.cmd. Note that movement's live pixel displacement has not independently been numerically measured; owner visual verification pending.
+
+## 2026-10-29: CURRENT OWNER VISUAL REVIEW RUNNING — GATE 1 OPEN
+
+A new 1920x1080 DX12 RenegadeStudio Cloud review window is OPEN in this isolated worktree (separate binary RenegadeStudioCloudReviewG1Oct29.exe). The Cloud Body Studio Preview project and Main Level are already loaded with Environment inspector. Day/night cloud visuals confirmed within the actual editor, ~50–56 FPS observed (not benchmark). For full instructions, evidence and outstanding defects read docs/CLOUD_FORMATION_GATE1_OWNER_VISUAL_REVIEW_2026-10-29.md; relaunch script BUILD/Run-Cloud-Gate1-Visual-Review.cmd. New thermal morphology + 3D multiscale surface pass has been GPU-rendered and linked into Studio, focused CTest 7/7 and protected sources/river fork preserved. The owner is invited to visually assess before further changes. Do not claim complete, push, PR, merge or touch other projects/windows.
+
+## 2026-10-29: HYBRID CLOUD DISTRIBUTION / SAVED-STUDIO MOON — GATE 1 OPEN
+
+Read docs/CLOUD_FORMATION_GATE1_HYBRID_MOON_STUDIO_2026-10-29.md first for latest authored source and evidence, then the earlier morphology checkpoint and mandatory original handover. The CMake-generated Wicked cloud site ranks and ±0.45-cell jitter now synchronize correctly; balanced hybrid clustering improves thin owner-reference cloud gaps, though the deep layer and soft horizon-tier morphology remain unaccepted. An archived actual Studio scene confirms Moon enabled+automatic but its ~75° elevation was ~72° away from the saved 7.6° pitch camera; fixed Moon at the saved camera renders with and without 80% clouds. No actual live owner window was manipulated. Latest focused Release tests 7/7, preservation 45/45 and accepted river fork intact. No push/PR/merge or later weather gates.
+
+## 2026-10-29: MORPHOLOGY / PLACEMENT / MOONLIGHT — GATE 1 STILL OPEN
+
+Read `docs/CLOUD_FORMATION_GATE1_MORPHOLOGY_MOON_2026-10-29.md` for the latest exact source state and evidence. Four structurally distinct cached Cumulus subfamilies, independent x/z size, decorrelated 4x4 bounded sites and measured deep/thin admission transfer are built. The synthetic 80% view still looks like a broad soft ceiling and **is not owner-ready**. Lunar cloud lighting no longer scales Sun intensity; DX12/Vulkan Moon phase/visibility tests passed, but the owner's missing-Moon Studio case is NOT reproduced/resolved. 7/7 focused Release tests, 45 protected files and accepted river fork pin verified. No commits, pushes, PR, merge or further weather gates. Original unsaved owner Studios untouched.
+
+## 2026-10-29: BODY CACHE / ACTUAL STUDIO REPLAY — GATE 1 STILL OPEN
+
+Read docs/CLOUD_FORMATION_GATE1_LIVE_REPLAY_2026-10-29.md first.
+The earlier owner previews remain rejected. Cumulus now uses a real 128-cubed
+3D morphology cache and complete-body admission. Rejected 2D Cumulus masks
+were removed. Bounds/empty-space skipping passed 48 API comparisons with at
+most one opacity byte difference. 192 raw admission views and 176 fitted/
+held-out/default/reference views were captured. Some steep 80% views still
+overfill; broad undersides remain soft/repetitive. This is NOT an owner candidate.
+
+Actual isolated Studio scene/camera capture now works. Its 1920x1009 area,
+yaw about 45 and pitch about 7.6 differ from the usual synthetic proof.
+DX12/Vulkan replays closely match its cloud opacity (mean .50/.55 byte error;
+whole-image occupied fraction difference under .002). No complete RGB parity
+or retroactive explanation of every original screenshot is claimed.
+
+Only our new QA project's noncanonical registry/stale copied content hash was
+repaired, without weakening validation. Audit 2 crashed in NVIDIA's compiler.
+Audit 3 logged a compute-PSO E_OUTOFMEMORY but later loaded/captured. Shader
+creation now has filename diagnostics plus optional CS begin/end/hash traces.
+The expensive analytic oracle is in explicit packaged reference permutations,
+rather than the production ray kernel. Both APIs rendered production/reference.
+
+Pre-split four app builds and 63 focused/source checks per config passed;
+Debug first ran out of C: at its final link, owned .ilk cleanup + retry passed.
+Newest Release app/test build also passed. Newest Debug and final live startup,
+full matrix and density/movement checks remain to run after final shader fixes.
+No current-frame performance claim may use timings contended by live Studio.
+
+Latest regression investigation: whole-body height currently receives native
+vertical NOISE wind. That can move macro geometry outside the fixed Base/Depth
+march layer in a long-running scene. A 600-second GPU wind/time readback proof
+is being added/run BEFORE changing the renderer, to establish this defect.
+
+Isolation: same codex/cloud-formations-g1-20261028 worktree; root 150eca4,
+river fork checkout/gitlink ceb816b unchanged. BUILD/macro-preservation.json
+reverified all 45 protected original authored files and native fallback bodies.
+No commits, pushes, PRs or merges. Other four types remain an incremental plan,
+not a completed new implementation. No later weather gates or Snow V2.
+
+QA project GUID f39f4b51-1a9e-4ebd-820b-29d5f1409eb1. New capture hook requires
+cloud-body-preview AND cloud-studio-replay-audit AND that GUID. Optional
+cloud-studio-replay-audit-exit is a disposable self-test only, writes separate
+body-studio-replay-split evidence, then exits its own process. It is not an
+owner launch flag. Audit 3 PID 6828 may still be open after normal close was
+requested; preserve it and any confirmation/unsaved scene. Never input into
+the rejected older previews or any owner Studio. No new owner preview offered.
+
+## 2026-10-29: COMPLETE 3D BODY PLACEMENT - IMPLEMENTATION STUDY
+
+Read docs/CLOUD_FORMATION_GATE1_WHOLE_BODIES_2026-10-29.md first.
+Both owner previews remain rejected. The stratified 2D mask improved coverage
+variance but cut cylindrical sides into unrelated 3D density; rejected internally.
+The six-view single complete body runs on DX12/Vulkan. Its reusable analytic
+template is now placed as whole formations with locally balanced ranks and
+stable height/width/rotation. No independent weather footprint clips Cumulus.
+Admission is RAW and uncalibrated. Only Cumulus has the new body path.
+
+The uncached placement proof is too slow for release. Next implementation:
+cache immutable 3D morphology and static site attributes, preserving the same
+camera/shadow density, native Legacy data and the accepted fork pin. No cache
+or new renderer binding has been implemented at this checkpoint.
+
+IMPORTANT: the four application builds, focused tests and Runtime starts below
+precede the stratified/single/whole-body changes. They are historical evidence,
+not current-source release acceptance. Current latest build is Release
+RenegadeNightSkyTests only; new four-build/API/performance/Studio validation
+is required before another owner preview. No new Studio preview was offered.
+
+Current experiments: BUILD/single-body-dx12 and -vulkan,
+whole-body-single-replay-dx12, whole-body-placement-dx12.
+Source before placement: BUILD/single-body-template-reference.hlsli.
+Rejected fitted-column source: BUILD/rejected-stratified-column-reference.hlsli.
+No commit/push/PR/merge, no later Weather gates or Snow. Original projects,
+worktrees and owner previews remain untouched.
+
+## 2026-10-29: GATE 1 MACRO VOLUME EXPERIMENT - NOT OWNER APPROVED
+
+Read docs/CLOUD_FORMATION_GATE1_MACRO_VOLUME_2026-10-29.md first. The owner
+rejected both prior previews; their earlier numeric green results remain
+historical. Current Cumulus uses a separate 3D cellular macro field in unused
+detail alpha, with native RGB retained for erosion. The height-column model
+was rejected internally. Other four formations are still earlier prototypes.
+
+Current source: same isolated branch/base 150eca4 and accepted Wicked
+ceb816b844b4ab2fa56a159ac60a4f65c931bdfc. No commit/push/PR/merge.
+All 45 original authored files hash-identical. Both APIs' native detail RGB
+are byte-identical; matched Legacy day/night screenshots pixel-identical.
+See BUILD/macro-preservation.json. Owner preview PID 33404 was responding at
+last read-only inventory; do not close/save/reload/overwrite it.
+
+Current four application builds pass (Studio/Runtime Debug/Release), seven
+focused cloud/night-sky tests pass in each config, 58 source contracts pass,
+both Studio startup-smokes exit 0. Four actual Runtime starts pass on DX12/
+Vulkan in Debug/Release, with PID-matched diagnostics, actual backend and new
+validation-project GUID confirmed; each exited 0 normally. Logs:
+BUILD/macro-apps-*-build.log, macro-focused-*-ctest.log,
+macro-source-contracts.log, macro-runtime-startup-results.json.
+Startup smoke is not a rendered Studio visual check.
+
+Current GPU studies cover 18 representative views per API at 1080p and four
+matched thin-layer views per API at 1440p. Direct 128-cubed float density
+extraction works on both APIs. These are NOT the old 256-case acceptance matrix.
+Clear/full endpoint tests pass in the small current study, but the thin-layer
+80% view is only about 56.8% sky coverage: old admission calibration is invalid.
+No new Studio preview has been offered. Surface quality and distant bands also
+remain unresolved; reference-quality captures use an opt-in higher allocation.
+
+NEXT: finish the current raw-admission calibration captures (macro-current-*
+folders, macro-admission-study and macro-admission-owner-study), compare the
+canonical 1500/5000 and thin 2280/3190 geometry, derive a measured transfer,
+then validate held-out views. Do not call a fit independent validation.
+Do not broaden to the other formations or another owner preview until Cumulus
+is credible. Full exact-source rendering/performance/save/reload checks remain
+required for any later replacement preview.
+
+A new disposable Runtime validation project lives under
+BUILD/cloud-volume-runtime-validation (new GUID throughout its text sidecars).
+It is not an owner Studio project. Existing preview projects were only read
+to create the copy. Rejected source variants and the 76-file snapshot remain.
+Owned superseded study PNG pruning recovered about 1.63 GB; canonical 80/100
+images, contact sheets, logs, metrics and a SHA/size manifest are retained.
+No original worktree or accepted source was pruned.
+
+## 2026-10-29: OWNER REJECTED BOUNDARY CANDIDATE — GATE 1 FAILED VISUALLY
+
+Owner says the clouds look worse; actual screenshot shows solid sculpted blobs
+and excessive distant fragments. Do not promote this candidate or treat its
+numerical tests as visual success. Preserve the open owner preview and its files.
+Authored source before the next architectural change is preserved under
+BUILD/rejected-boundary-source with SHA256 manifest. The accepted river pin and
+all original worktrees remain protected. Next: study supplied weather pack,
+replace explicit ellipsoid bodies with continuous 3D density formation.
+No PR/push/merge, Weather G2–G5 or Snow work is authorized.
+
+## 2026-10-29: Weather Gate 1 boundary/density candidate — OWNER REVIEW OPEN
+
+Supersedes the first candidate's appearance claims. Read
+docs/CLOUD_FORMATION_GATE1_BOUNDARY_FOLLOWUP_2026-10-29.md and the architecture
+decision before changing anything. Same isolated branch/base and accepted river
+pin; no commit, push, PR or merge. Original 45 authored files still hash-identical.
+
+World-unit cloud boundaries, calibrated macro footprints, independent internal
+3D condensate, finer bounded ray integration and conservative empty-space skips
+are implemented. Native Legacy remains the fallback. Full-history quality is
+an explicit diagnostic option; native quarter/half allocation stays default.
+All four final GPU matrices and both Studio/Runtime configurations build/pass
+their scoped checks. Performance and visible grain remain owner-review concerns.
+
+Separate preview: Renegade Cloud Boundary G1 Preview desktop shortcut, backed by
+its own project and RenegadeStudioCloudBoundaryG1.exe. Do not overwrite/close
+either preview on the owner's behalf; new windows may contain unsaved edits.
+Gate 1 stays OPEN. No Weather G2–G5 or Snow work is authorized.
+
 ## 2026-10-23 Environment probe repair, owner visually accepted
 
 Dedicated probe-only branch from main 11bbb90. See docs/ENVIRONMENT_PROBE_VISIBILITY_2026-10-23.md for crash diagnosis, native live capture, evidence and limits. Owner authorised main integration after checks. Unrelated importer/terrain and other local work excluded. No release gate closed.
