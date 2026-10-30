@@ -38,3 +38,14 @@ Continue single local feature branch, milestone commits, no push/PR/merge withou
 - Final Release build `BUILD/g4-sheet-final-threshold-build.log`: PASS. `BUILD/g4-sheet-final-tests.log`: 4/4 PASS (SheetLightning, WeatherTransition, Moon, CloudFormation).
 - Warmed-up DX12 screenshot evidence `BUILD/g4-sheet-before-flash.png` and `BUILD/g4-sheet-flash-1.png`, `-2.png`, `-3.png`: visible cloud-localised glow with smooth fade, checkerboard no longer obvious; 75 FPS on RTX 4070 Ti at 1264x681. Earlier invisible opt-in prototype ran ~74 FPS per owner.
 - Visual still only a prototype: owner has NOT approved appearance, timing, cloud-region selection, or final creator UX. No integrated Studio control, persistence, Runtime Lua exposure or thunder yet. Snow V2 deferred. No push or merge.
+
+## 2026-10-30 G4-S1 sheet-lightning realism pass — VISUAL PREVIEW, NOT OWNER SIGNED OFF
+- Owner reviewed the first visible result and said **"it's a start"**; do not mislabel that as G4 acceptance.
+- Corrected visible checkerboard artefact in `volumetricCloud_reprojectCS.hlsl`: while lightning energy is present or within a short recovery interval, spatially filter the newly marched clouds from 4 quarter-res neighbours and mix only a small amount of recent history (24% during light / 12% during recovery). Outside this event, original volumetric temporal reconstruction remains unchanged.
+- Added `SheetLightningFrame::temporalRecovery` with an approximately 1.12s bounded lifetime after an event, passed in `sheet_light_power.w`; the flash itself remains short. Regression tests cover recovery after the light fades and returning to normal.
+- Revised the cloud raymarch light fields from spherical discs to overlapping shallow/oblique ellipsoids, retaining existing cloud scattering and transmittance.
+- Moved opt-in preview cells farther away (horizontal range about 7.8–10.6km) and near the lower part of the cloud layer; reduced preview pulse intensity to 0.15 and increased spread/radius to 720m/1800m respectively.
+- **Release build PASS**: `BUILD/g4-sheet-deeper-cloud-build.log`. **Focused CTest 4/4 PASS**: `BUILD/g4-sheet-deeper-cloud-tests.log`: SheetLightning, WeatherTransition, Moon, CloudFormation.
+- Automated DX12 screenshots `BUILD/g4-sheet-before-flash.png` and `BUILD/g4-sheet-flash-1.png` / `-2.png` show a localized cloud-mass flash with no obvious checkerboard. Full-size 1920x1009 overlay shows 74–75 FPS in sampled frames (RTX 4070 Ti). This is a sampled test, not a long-run controlled benchmark.
+- Runtime opt-in preview remains enabled only with `RENEGADE_G4_SHEET_LIGHTNING_PREVIEW=1` via `BUILD/Run-Weather-G4-Sheet-Lightning-TestGame.cmd`. Owner still to evaluate live visual and decide next iteration.
+- No new bolt geometry, no gameplay lightning, no thunder audio, no Studio authoring UI, no weather G4 owner signoff, no merge/push.

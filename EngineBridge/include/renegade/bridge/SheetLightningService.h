@@ -34,6 +34,9 @@ namespace renegade::bridge
         std::array<SheetLightningCell, 3> cells{};
         std::uint64_t eventId = 0;
         bool flashing = false;
+        // Reprojection stays responsive briefly after the light is gone,
+        // preventing old bright checkerboard history from lingering.
+        bool temporalRecovery = false;
     };
 
     class SheetLightningController
@@ -84,6 +87,8 @@ namespace renegade::bridge
             eventAge_ += dt;
             const float age = eventAge_;
             frame_.flashing = age >= 0.0f && age < 0.78f;
+            frame_.temporalRecovery = frame_.eventId > 0 &&
+                age >= 0.0f && age < 1.12f;
             // Two uneven return-pulses and a weak final internal shimmer;
             // spatial staggering makes a luminous region travel inside the
             // existing true volume, without bolt geometry or a screen overlay.
@@ -154,10 +159,10 @@ namespace renegade::bridge
             const float heading = std::hypot(viewDirection.x, viewDirection.z) > 0.01f
                 ? std::atan2(viewDirection.z, viewDirection.x) : 0.0f;
             const float theta = heading + (Random01() - 0.5f) * 1.25f;
-            const float distance = 4400.0f + Random01() * 2400.0f;
+            const float distance = 7800.0f + Random01() * 2800.0f;
             const XMFLOAT3 center{
                 observer.x + distance * std::cos(theta),
-                cloudStart + std::min(0.16f * cloudThickness, 750.0f),
+                cloudStart + std::min(0.095f * cloudThickness, 440.0f),
                 observer.z + distance * std::sin(theta)};
             const float side = theta + XM_PIDIV2;
             const float spread = settings_.clusterSpreadMetres;
@@ -167,7 +172,7 @@ namespace renegade::bridge
                 const float randomShift = (Random01() - 0.5f) * spread * 0.45f;
                 frame_.cells[i].position = {
                     center.x + std::cos(side) * (offset + randomShift),
-                    center.y + (Random01() - 0.5f) * 0.12f * cloudThickness,
+                    center.y + (Random01() - 0.5f) * 0.09f * cloudThickness,
                     center.z + std::sin(side) * (offset + randomShift)};
                 frame_.cells[i].power = 0.0f;
                 frame_.cells[i].rangeMetres =
@@ -175,6 +180,7 @@ namespace renegade::bridge
             }
             ++frame_.eventId;
             frame_.flashing = true;
+            frame_.temporalRecovery = true;
             eventAge_ = 0.0f;
         }
 

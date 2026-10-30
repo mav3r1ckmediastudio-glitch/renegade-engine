@@ -27,9 +27,9 @@ namespace renegade::runtime
                 bridge::SheetLightningSettings opts;
                 opts.enabled = true;
                 opts.eventsPerMinute = 10.0f;
-                opts.intensity = 0.22f;
-                opts.clusterSpreadMetres = 620.0f;
-                opts.cloudLightRangeMetres = 1450.0f;
+                opts.intensity = 0.15f;
+                opts.clusterSpreadMetres = 720.0f;
+                opts.cloudLightRangeMetres = 1800.0f;
                 schedule_.Configure(opts);
                 sceneRevision_ = sceneRevision;
                 initialized_ = true;
@@ -94,7 +94,8 @@ namespace renegade::runtime
             const XMFLOAT4 cell1 = toCell(flash.cells[1]);
             const XMFLOAT4 cell2 = toCell(flash.cells[2]);
             const XMFLOAT4 power(flash.cells[0].power, flash.cells[1].power,
-                                 flash.cells[2].power, 0.0f);
+                                 flash.cells[2].power,
+                                 flash.temporalRecovery ? 1.0f : 0.0f);
             auto apply = [&](wi::scene::WeatherComponent& w) noexcept
             {
                 w.sheet_light_cell0 = cell0;

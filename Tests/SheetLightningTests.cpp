@@ -94,6 +94,29 @@ int main()
     if (a.Frame().eventId != oldEvent)
         return Fail("invalid or paused game delta advanced scheduler");
 
+    // Flash-reconstruction history remains responsive for a fraction of a
+    // second after the emitted light ends, then returns to normal.
+    SheetLightningSettings recoverySettings;
+    recoverySettings.enabled = true;
+    recoverySettings.eventsPerMinute = 1.0f;
+    recoverySettings.seed = 7;
+    SheetLightningController recovery;
+    recovery.Configure(recoverySettings);
+    for (int frame = 0; frame < 100 && recovery.Frame().eventId == 0; ++frame)
+        recovery.Advance(0.05f, observer, 750.0f, 6500.0f);
+    if (recovery.Frame().eventId != 1 ||
+        !recovery.Frame().temporalRecovery)
+        return Fail("first flash did not enter temporal recovery");
+    for (int frame = 0; frame < 17; ++frame)
+        recovery.Advance(0.05f, observer, 750.0f, 6500.0f);
+    if (recovery.Frame().flashing || !recovery.Frame().temporalRecovery)
+        return Fail("reconstruction recovery ends before light fades");
+    for (int frame = 0; frame < 10; ++frame)
+        recovery.Advance(0.05f, observer, 750.0f, 6500.0f);
+    if (recovery.Frame().temporalRecovery ||
+        recovery.Frame().cells[0].power > 0.0001f)
+        return Fail("reconstruction recovery persists beyond safety window");
+
     settings.eventsPerMinute = std::numeric_limits<float>::quiet_NaN();
     settings.intensity = std::numeric_limits<float>::infinity();
     settings.clusterSpreadMetres = -5.0f;
