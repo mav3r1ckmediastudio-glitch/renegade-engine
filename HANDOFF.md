@@ -5894,3 +5894,17 @@ Corrected owner-reported malformed wide character literal in Studio/src/TestLeve
 - Owner replied **"acceptable"** after reviewing 30%-wider, edge-feathered sheet lightning on DESIGN. Record that as definitive sign-off for the **sheet-lightning visual slice only**; avoid unnecessary further tweaking.
 - Signoff document: `docs/WEATHER_V2_G4_SHEET_LIGHTNING_OWNER_SIGNOFF_2026-10-30.md`. Accepted source baseline is root `6920275`, pinned Wicked `c25c9828` with Release build PASS and focused regressions 4/4 PASS. Sample DX12 Runtime FPS 75 at 1920x1009 RTX 4070 Ti.
 - Gate 4 overall still OPEN: integrated authoring controls and persistence, thunder, rain/wind and environmental response remain. Snow V2 deferred. No push, PR or merge authorized. Untracked precipitation/wind foundation files must remain untouched.
+
+## 2026-10-30 — Owner requirement: full weather scriptability + optional lightning impacts
+- See `docs/WEATHER_V2_SCRIPTABILITY_AND_LIGHTNING_IMPACT_CONTRACT_2026-10-30.md` (new design contract, **not implementation**).
+- Owner wants every preset, cloud/weather subsystem and weather event controllable from **Lua and C++**, including lightning-impact callbacks for scripts such as striking a tree and starting a fire in a future gameplay system.
+- Reuse existing authored surface classification and collision/event plumbing; do NOT reuse bullet-hole visuals or automatic bullet damage. Atmospheric lightning need not have collision unless cloud-ground impact mode is enabled. Fire propagation itself is future scope.
+- Current G3 Lua weather API includes `renegade.weather.set_preset/get_state/cancel` and `on_weather_transition_complete` but does not expose complete cloud/weather/property/event parity; full scripted coverage needs an explicit audited gate.
+
+2026-10-30 lightning owner requirement: Lightning Appearance must allow creator-owned artwork; see new `Imported lightning artwork` section in `docs/WEATHER_V2_SCRIPTABILITY_AND_LIGHTNING_IMPACT_CONTRACT_2026-10-30.md`. This is a pending feature, not currently implemented. Custom bolt artwork, impact-gameplay and full weather API parity are DEFERRED FUTURE DEVELOPMENT and are NOT requirements for G4/five-gate signoff. Preserve existing strike timing and in-cloud illumination.
+
+## 2026-10-30 - Owner weather scope and visual signoff correction
+- Owner approved the CURRENT sheet and fork lightning visual appearance, including synced cloud glow. See docs/WEATHER_V2_G4_LIGHTNING_VISUAL_SIGNOFF_2026-10-30.md. G4 overall remains OPEN for controls, effects and integration.
+- Owner deferred custom lightning artwork, physical impact gameplay, tree burning and complete Lua/C++ weather API coverage to FUTURE development. These are no longer blockers for this weather iteration, overriding earlier contradictory planning language.
+- Owner requested continuing with WIND, RAIN and SNOW. Assess the native snow baseline after wind/rain; Snow V2 was previously deferred but this is now back on the visual-development agenda, with a bounded scope.
+- Preserve all approved G1/G2/G3/Sheet/Fork visuals and the weather feature branch. Do not push, PR or merge.

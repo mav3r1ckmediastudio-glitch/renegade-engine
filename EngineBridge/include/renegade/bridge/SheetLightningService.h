@@ -112,6 +112,67 @@ namespace renegade::bridge
             nextSeconds_ = base * (0.7f + 0.7f * Random01());
         }
 
+        // G4 fork lightning can use the *same approved* three-cell
+        // formation, pulse and fading, but anchored to its real strike
+        // origin. The ordinary autonomous sheet scheduler is unchanged.
+        void TriggerAtPosition(const XMFLOAT3& cloudOrigin,
+                               float cloudThicknessMetres) noexcept
+        {
+            if (!settings_.enabled ||
+                !std::isfinite(cloudOrigin.x) ||
+                !std::isfinite(cloudOrigin.y) ||
+                !std::isfinite(cloudOrigin.z))
+                return;
+            // StartEvent constructs the existing approved cells including
+            // per-event radius variation and softness. Translate the group
+            // rigidly instead of inventing new circular lighting logic.
+            StartEvent(cloudOrigin,
+                cloudOrigin.y, cloudThicknessMetres, XMFLOAT3(1, 0, 0));
+            XMFLOAT3 centroid{};
+            for (const auto& cell : frame_.cells)
+            {
+                centroid.x += cell.position.x / 3.0f;
+                centroid.y += cell.position.y / 3.0f;
+                centroid.z += cell.position.z / 3.0f;
+            }
+            for (auto& cell : frame_.cells)
+            {
+                cell.position.x += cloudOrigin.x - centroid.x;
+                cell.position.y += cloudOrigin.y - centroid.y;
+                cell.position.z += cloudOrigin.z - centroid.z;
+            }
+            // Fork events, not the independent sheet clock, schedule this
+            // particular controller. The fork-driven renderer uses
+            // FrameDrivenByStrike rather than advancing this pulse timer.
+            nextSeconds_ = 3600.0f;
+        }
+
+        // A visible fork supplies its own return-stroke envelope. Reuse
+        // the approved sheet formation and pulse intensity, but NEVER run
+        // the independent sheet controller's second/third pulse schedule.
+        // This additive API leaves normal sheet lightning unchanged.
+        [[nodiscard]] SheetLightningFrame FrameDrivenByStrike(
+            float forkBrightness, float strikeAgeSeconds) const noexcept
+        {
+            if (frame_.eventId == 0 || !std::isfinite(strikeAgeSeconds) ||
+                strikeAgeSeconds < 0.0f)
+                return {};
+            SheetLightningFrame driven = frame_;
+            const float amplitude = std::clamp(
+                std::isfinite(forkBrightness) ? forkBrightness : 0.0f,
+                0.0f, 1.0f) * settings_.intensity;
+            // Same approved 3-cell volume geometry and shader, with
+            // unequal cell energies for spatial diffusion, not a screen flash.
+            constexpr float cellWeights[3] = {0.95f, 0.50f, 0.30f};
+            for (unsigned i = 0; i < driven.cells.size(); ++i)
+                driven.cells[i].power = amplitude * cellWeights[i];
+            driven.flashing = amplitude > 0.001f;
+            // Temporal cleanup briefly outlives the *last* return stroke
+            // but carries no new radiance once the visible bolt is gone.
+            driven.temporalRecovery = strikeAgeSeconds < 0.62f;
+            return driven;
+        }
+
         [[nodiscard]] const SheetLightningFrame& Frame() const noexcept
         {
             return frame_;

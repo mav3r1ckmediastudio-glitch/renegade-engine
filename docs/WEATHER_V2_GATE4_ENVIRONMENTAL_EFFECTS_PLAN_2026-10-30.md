@@ -63,3 +63,30 @@ Continue single local feature branch, milestone commits, no push/PR/merge withou
 - Owner replied **"acceptable"** after reviewing 30%-wider, edge-feathered sheet lightning on DESIGN. Record that as definitive sign-off for the **sheet-lightning visual slice only**; avoid unnecessary further tweaking.
 - Signoff document: `docs/WEATHER_V2_G4_SHEET_LIGHTNING_OWNER_SIGNOFF_2026-10-30.md`. Accepted source baseline is root `6920275`, pinned Wicked `c25c9828` with Release build PASS and focused regressions 4/4 PASS. Sample DX12 Runtime FPS 75 at 1920x1009 RTX 4070 Ti.
 - Gate 4 overall still OPEN: integrated authoring controls and persistence, thunder, rain/wind and environmental response remain. Snow V2 deferred. No push, PR or merge authorized. Untracked precipitation/wind foundation files must remain untouched.
+
+## 2026-10-30 — Owner requirement: full weather scriptability + optional lightning impacts
+- See `docs/WEATHER_V2_SCRIPTABILITY_AND_LIGHTNING_IMPACT_CONTRACT_2026-10-30.md` (new design contract, **not implementation**).
+- Owner wants every preset, cloud/weather subsystem and weather event controllable from **Lua and C++**, including lightning-impact callbacks for scripts such as striking a tree and starting a fire in a future gameplay system.
+- Reuse existing authored surface classification and collision/event plumbing; do NOT reuse bullet-hole visuals or automatic bullet damage. Atmospheric lightning need not have collision unless cloud-ground impact mode is enabled. Fire propagation itself is future scope.
+- Current G3 Lua weather API includes `renegade.weather.set_preset/get_state/cancel` and `on_weather_transition_complete` but does not expose complete cloud/weather/property/event parity; full scripted coverage needs an explicit audited gate.
+
+## 2026-10-30 — Owner question: imported lightning artwork (FUTURE DEVELOPMENT, design only)
+
+Owner wants artists to be able to replace the stock fork-lightning artwork with their own assets; stock procedural visuals must NOT be a forced aesthetic.
+
+**Simple artist UI under Weather > Lightning > Appearance:**
+- Visual Source: **Renegade Procedural** (default) / **Custom Texture** / **Custom Lightning Effect** (advanced).
+- Custom Texture: "Choose Graphic / Replace Graphic" uses the existing creator asset/texture-import workflow and supports a transparent bolt texture or compatible animated/flipbook material. Continue to use Renegade's native 3D strike path, branch density, per-branch fade, frequency, cloud illumination and optional impacts; map the imported artwork along actual segment length with UVs and preserve its alpha/emission. Current fork mesh is generated with vertex positions/normals/vertex colours, **no generated UV coordinates yet**: textured bolt art is a NEW implementation task, not already working.
+- Custom Lightning Effect (advanced): permit a project-owned, packaged visual effect/prefab/mesh or animated sprite sequence to replace the whole visible bolt. A single flat full-bolt image must be labelled **camera-facing 2D** and cannot pretend to have real 3D branching or occlusion. This override can choose an orientation strategy; source strike origin/endpoint/timing still come from the weather engine. The built-in procedural branching slider may be irrelevant/disabled with a wholly custom full-strike asset.
+- Keep **Cloud Illumination** separately toggleable; default to the approved sheet-lightning cloud-scattering effect triggered at the visible strike origin, unless creators explicitly override it. Preserve independent thunder, impact queries, strike frequency and weather-script event delivery even for custom bolt art.
+- Art creators should be able to tune visible colour, emission, transparency/halo, thickness/scale and animation speed without writing shaders. Advanced controls can target trunk/secondary/tertiary appearances individually; do not require separately setting every branch.
+- Reuse existing `CreatorTextureWorkflowService`, `MaterialTextureAssetService`, `AssetBrowserService` and particle texture workflows as applicable. Save references via the project asset registry, copy/package dependencies correctly, and provide a harmless missing-asset fallback. Never use raw absolute local paths that break packaged games.
+- Allow the same replacement and control through typed C++ and governed Lua APIs as part of the full weather scriptability contract. New visuals should fire the same world-space strike/impact events as stock visuals.
+- Acceptance: import a creator-owned transparent texture and an animated strike effect, preview correct 3D/2D behaviour, save/reopen, Undo/Redo, restart Runtime, package/test standalone, vary branch density and frequency where relevant, confirm event parity and 75FPS budget. Baseline procedural fork and approved sheet lightning unchanged.
+- **Status:** DEFERRED, NOT IMPLEMENTED. This is future development, NOT a current G4/five-gate visual signoff blocker. No merge or push authorized.
+
+## 2026-10-30 - Owner weather scope and visual signoff correction
+- Owner approved the CURRENT sheet and fork lightning visual appearance, including synced cloud glow. See docs/WEATHER_V2_G4_LIGHTNING_VISUAL_SIGNOFF_2026-10-30.md. G4 overall remains OPEN for controls, effects and integration.
+- Owner deferred custom lightning artwork, physical impact gameplay, tree burning and complete Lua/C++ weather API coverage to FUTURE development. These are no longer blockers for this weather iteration, overriding earlier contradictory planning language.
+- Owner requested continuing with WIND, RAIN and SNOW. Assess the native snow baseline after wind/rain; Snow V2 was previously deferred but this is now back on the visual-development agenda, with a bounded scope.
+- Preserve all approved G1/G2/G3/Sheet/Fork visuals and the weather feature branch. Do not push, PR or merge.

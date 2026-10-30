@@ -153,6 +153,54 @@ int main()
             return Fail("expanded sheet lightning unexpectedly increased peak brightness");
     }
 
+    // Fork strike origin must use the approved sheet cluster and pulse.
+    // It must not drift or schedule unrelated autonomous flashes.
+    SheetLightningSettings linkedSettings;
+    linkedSettings.enabled = true;
+    linkedSettings.seed = 1243;
+    linkedSettings.intensity = 0.14f;
+    linkedSettings.clusterSpreadMetres = 720.0f;
+    linkedSettings.cloudLightRangeMetres = 2340.0f;
+    SheetLightningController linkedA, linkedB;
+    linkedA.Configure(linkedSettings);
+    linkedB.Configure(linkedSettings);
+    const XMFLOAT3 strikeOrigin{4200.0f, 2850.0f, -1500.0f};
+    linkedA.TriggerAtPosition(strikeOrigin, 3200.0f);
+    linkedB.TriggerAtPosition(strikeOrigin, 3200.0f);
+    if (linkedA.Frame().eventId != 1 ||
+        linkedB.Frame().eventId != 1)
+        return Fail("fork failed to trigger existing sheet cluster");
+    XMFLOAT3 center{};
+    for (unsigned i=0;i<3;++i)
+    {
+        const auto& c=linkedA.Frame().cells[i];
+        const auto& d=linkedB.Frame().cells[i];
+        center.x+=c.position.x / 3.0f;
+        center.y+=c.position.y / 3.0f;
+        center.z+=c.position.z / 3.0f;
+        if (!Near(c.position.x,d.position.x) ||
+            !Near(c.position.y,d.position.y) ||
+            !Near(c.position.z,d.position.z) ||
+            !Near(c.rangeMetres,d.rangeMetres))
+            return Fail("fork-triggered approved cluster is not deterministic");
+    }
+    if (std::abs(center.x-strikeOrigin.x)>0.02f ||
+        std::abs(center.y-strikeOrigin.y)>0.02f ||
+        std::abs(center.z-strikeOrigin.z)>0.02f)
+        return Fail("fork sheet cells not anchored to cloud origin");
+    bool linkedPulse=false;
+    for(int i=0;i<35;++i)
+    {
+        linkedA.Advance(0.05f,observer,750.0f,6500.0f);
+        linkedB.Advance(0.05f,observer,750.0f,6500.0f);
+        if(linkedA.Frame().eventId!=1 ||
+            linkedB.Frame().eventId!=1)
+            return Fail("fork sheet unexpectedly re-scheduled itself");
+        if(linkedA.Frame().cells[0].power>0.04f)linkedPulse=true;
+    }
+    if(!linkedPulse || linkedA.Frame().temporalRecovery)
+        return Fail("fork sheet did not reproduce normal bounded pulses");
+
     settings.eventsPerMinute = std::numeric_limits<float>::quiet_NaN();
     settings.intensity = std::numeric_limits<float>::infinity();
     settings.clusterSpreadMetres = -5.0f;

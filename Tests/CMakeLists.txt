@@ -24,6 +24,12 @@ target_link_libraries(RenegadeSheetLightningTests PRIVATE Renegade::EngineBridge
 set_target_properties(RenegadeSheetLightningTests PROPERTIES FOLDER "Renegade/Tests")
 add_test(NAME RenegadeSheetLightningTests COMMAND RenegadeSheetLightningTests)
 
+# G4-F1 fork lightning is separate from approved volumetric sheet flashes.
+add_executable(RenegadeForkLightningTests ForkLightningTests.cpp)
+target_link_libraries(RenegadeForkLightningTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeForkLightningTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeForkLightningTests COMMAND RenegadeForkLightningTests)
+
 # Gate 3 governed creator Lua weather gameplay contract. Same sandbox and
 # shared runtime state as production; no second Lua interpreter.
 add_executable(RenegadeWeatherLuaRuntimeTests WeatherLuaRuntimeTests.cpp)

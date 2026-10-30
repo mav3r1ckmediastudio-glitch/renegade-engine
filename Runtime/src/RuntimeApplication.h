@@ -26,6 +26,7 @@
 #include "RuntimeLightningStorm.h"
 #include "RuntimeLightningColumn.h"
 #include "RuntimeSheetLightning.h"
+#include "RuntimeForkLightning.h"
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"
 #include "RuntimeUiGameplaySnapshot.h"
@@ -86,6 +87,7 @@ namespace renegade::runtime
         bridge::RiverFlowRenderer riverFlow_;
         bridge::PlaceableWaterfallRenderer waterfallRenderer_;
         RuntimeSheetLightning sheetLightning_;
+        RuntimeForkLightning forkLightning_;
         void RenderWaterfallTransparents(wi::graphics::CommandList cmd) const;
         double riverFlowPrepareMilliseconds_ = 0;
         void SyncRenderSettings(bool resizeBuffersForMSAA);

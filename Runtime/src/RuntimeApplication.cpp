@@ -193,6 +193,9 @@ namespace renegade::runtime
         if (scenes_ != nullptr && camera != nullptr && scene != nullptr)
             sheetLightning_.Update(*scene, scenes_->Revision(),
                 camera->Eye, camera->At, paused_ ? 0.0f : dt);
+        if (scenes_ != nullptr && camera != nullptr && scene != nullptr)
+            forkLightning_.Update(*scene, scenes_->Revision(),
+                camera->Eye, camera->At, paused_ ? 0.0f : dt);
         const auto nativeBegin=std::chrono::steady_clock::now();
         {auto riverBindings=riverFlow_.Bind();RenderPath3D::Update(dt);}
         if(const char* trace=std::getenv("RENEGADE_G13E14_STAGE_TRACE")){

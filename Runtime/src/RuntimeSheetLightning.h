@@ -81,6 +81,13 @@ namespace renegade::runtime
             initialized_ = false;
         }
 
+        // Shared approved cloud-scattering payload for fork-strike origins.
+        static void ApplyFrame(wi::scene::Scene& scene,
+                               const bridge::SheetLightningFrame& flash) noexcept
+        {
+            SetCells(scene, flash);
+        }
+
     private:
         static void SetCells(wi::scene::Scene& scene,
                              const bridge::SheetLightningFrame& flash) noexcept
