@@ -2228,27 +2228,27 @@ namespace renegade::studio
             400.0f);
         createPrecipitationSlider(
             precipitationWindAzimuth_,
-            "Precipitation Wind Azimuth",
+            "Environment Wind Direction",
             "WIND DIRECTION",
-            "Horizontal wind direction in degrees.",
+            "Global horizontal wind direction in degrees; also affects foliage and rain, even when precipitation is Off.",
             PrecipitationField::WindAzimuth,
             -180.0f,
             180.0f,
             360.0f);
         createPrecipitationSlider(
             precipitationWindSpeed_,
-            "Precipitation Wind Speed",
+            "Environment Wind Speed",
             "WIND SPEED",
-            "Horizontal wind strength applied to precipitation.",
+            "Global wind strength affecting responsive foliage and precipitation; works with rain and snow Off.",
             PrecipitationField::WindSpeed,
             0.0f,
             20.0f,
             400.0f);
         createPrecipitationSlider(
             precipitationTurbulence_,
-            "Precipitation Turbulence",
+            "Environment Wind Turbulence",
             "TURBULENCE",
-            "Random particle drift; higher values create snow flurries.",
+            "Global wind gust variation; also drives natural snow flurries when snowfall is enabled.",
             PrecipitationField::Turbulence,
             0.0f,
             20.0f,
@@ -5924,9 +5924,12 @@ namespace renegade::studio
             precipitationIntensity_.SetEnabled(precipitationEnabled);
             precipitationFallSpeed_.SetEnabled(precipitationEnabled);
             precipitationParticleScale_.SetEnabled(precipitationEnabled);
-            precipitationWindAzimuth_.SetEnabled(precipitationEnabled);
-            precipitationWindSpeed_.SetEnabled(precipitationEnabled);
-            precipitationTurbulence_.SetEnabled(precipitationEnabled);
+            // Global wind is independent of precipitation: a windy day can
+            // have no rain or snow. These controls write WeatherComponent
+            // wind fields used by vegetation and the GPU wind field too.
+            precipitationWindAzimuth_.SetEnabled(true);
+            precipitationWindSpeed_.SetEnabled(true);
+            precipitationTurbulence_.SetEnabled(true);
             SyncGizmoSelection();
             LayoutS1BInspectorSections();
             return;

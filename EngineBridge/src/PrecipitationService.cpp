@@ -176,7 +176,9 @@ namespace renegade::bridge
                 : 0.45f;
             result.fallSpeed = 1.25f;
             result.particleScale = 0.008f;
-            result.turbulence = 3.0f;
+            // Turbulence is a GLOBAL wind parameter. Changing particle type
+            // must not overwrite authored wind or the foliage will suddenly
+            // change its motion when rain is enabled.
             result.streakLength = 0.04f;
             result.splashScale = 0.1f;
             result.color = XMFLOAT4(0.6f, 0.8f, 1.0f, 0.5f);
@@ -187,7 +189,8 @@ namespace renegade::bridge
                 : 0.38f;
             result.fallSpeed = 0.22f;
             result.particleScale = 0.035f;
-            result.turbulence = 8.0f;
+            // Snow uses the same global wind; drift can be specialised in a
+            // future dedicated precipitation effect, not by mutating wind.
             result.streakLength = 0.0f;
             result.splashScale = 0.0f;
             result.color = XMFLOAT4(1.0f, 0.98f, 0.95f, 0.88f);

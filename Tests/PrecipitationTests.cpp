@@ -115,6 +115,50 @@ int main()
         return Fail("precipitation wind controls did not apply");
     }
 
-    std::cout << "PASS: native rain, snow profile, wind and Undo/Redo\n";
+    // Wind is a world/environment setting, not conditional on precipitation.
+    // A dry, windy scene must remain editable, serializable and undoable.
+    auto dryAndWindy = renegade::bridge::CapturePrecipitation(weather);
+    dryAndWindy.mode = renegade::bridge::PrecipitationMode::None;
+    dryAndWindy.intensity = 0.0f;
+    dryAndWindy.windAzimuthDegrees = -45.0f;
+    dryAndWindy.windSpeed = 11.0f;
+    dryAndWindy.turbulence = 4.0f;
+    renegade::bridge::CommandService dryCommands;
+    if (!dryCommands.Execute(
+            std::make_unique<renegade::bridge::SetPrecipitationCommand>(
+                scene, environment, dryAndWindy)))
+        return Fail("dry wind command could not execute");
+    const auto dryActual = renegade::bridge::CapturePrecipitation(weather);
+    if (dryActual.mode != renegade::bridge::PrecipitationMode::None ||
+        !NearlyEqual(weather.rain_amount, 0.0f) ||
+        !NearlyEqual(dryActual.windSpeed, 11.0f) ||
+        !NearlyEqual(dryActual.turbulence, 4.0f) ||
+        !NearlyEqual(dryActual.windAzimuthDegrees, -45.0f) ||
+        !NearlyEqual(scene.weather.windSpeed, 11.0f))
+        return Fail("global wind failed with precipitation Off");
+    if (!dryCommands.Undo() ||
+        !NearlyEqual(weather.windSpeed, edited.windSpeed) ||
+        renegade::bridge::CapturePrecipitation(weather).mode !=
+            renegade::bridge::PrecipitationMode::Rain)
+        return Fail("dry wind Undo failed to restore rain and wind");
+    if (!dryCommands.Redo() ||
+        !NearlyEqual(weather.rain_amount, 0.0f) ||
+        !NearlyEqual(weather.windSpeed, 11.0f))
+        return Fail("dry wind Redo failed");
+
+    // Rain and Snow are precipitation modes, not wind presets. They must
+    // never silently reset the global wind when the mode changes.
+    for (auto mode : {renegade::bridge::PrecipitationMode::Rain,
+                      renegade::bridge::PrecipitationMode::Snow})
+    {
+        const auto next = renegade::bridge::MakePrecipitationProfile(
+            dryActual, mode);
+        if (!NearlyEqual(next.windAzimuthDegrees, -45.0f) ||
+            !NearlyEqual(next.windSpeed, 11.0f) ||
+            !NearlyEqual(next.turbulence, 4.0f))
+            return Fail("switching precipitation mode unexpectedly reset global wind");
+    }
+
+    std::cout << "PASS: native rain, snow profile, independent dry wind and Undo/Redo\n";
     return 0;
 }
