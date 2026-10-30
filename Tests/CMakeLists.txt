@@ -18,6 +18,12 @@ target_link_libraries(RenegadeWeatherTransitionTests PRIVATE Renegade::EngineBri
 set_target_properties(RenegadeWeatherTransitionTests PROPERTIES FOLDER "Renegade/Tests")
 add_test(NAME RenegadeWeatherTransitionTests COMMAND RenegadeWeatherTransitionTests)
 
+# G4 sheet-lightning first: deterministic internal cloud illumination pulses.
+add_executable(RenegadeSheetLightningTests SheetLightningTests.cpp)
+target_link_libraries(RenegadeSheetLightningTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeSheetLightningTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeSheetLightningTests COMMAND RenegadeSheetLightningTests)
+
 # Gate 3 governed creator Lua weather gameplay contract. Same sandbox and
 # shared runtime state as production; no second Lua interpreter.
 add_executable(RenegadeWeatherLuaRuntimeTests WeatherLuaRuntimeTests.cpp)
