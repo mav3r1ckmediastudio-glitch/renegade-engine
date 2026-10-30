@@ -137,6 +137,8 @@ add_library(RenegadeEngineBridge STATIC
     src/CommandService.cpp
     src/WeatherTransitionService.cpp
     include/renegade/bridge/WeatherTransitionService.h
+    src/WeatherEffectsTransitionService.cpp
+    include/renegade/bridge/WeatherEffectsTransitionService.h
     include/renegade/bridge/SheetLightningService.h
     src/CharacterDuplicateCommand.cpp
     src/HumanoidRetargetService.cpp

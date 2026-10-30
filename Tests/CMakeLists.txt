@@ -18,6 +18,12 @@ target_link_libraries(RenegadeWeatherTransitionTests PRIVATE Renegade::EngineBri
 set_target_properties(RenegadeWeatherTransitionTests PROPERTIES FOLDER "Renegade/Tests")
 add_test(NAME RenegadeWeatherTransitionTests COMMAND RenegadeWeatherTransitionTests)
 
+# G4 rain/wind and native-snow transitions; no visual/Inspector signoff implied.
+add_executable(RenegadeWeatherEffectsTransitionTests WeatherEffectsTransitionTests.cpp)
+target_link_libraries(RenegadeWeatherEffectsTransitionTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeWeatherEffectsTransitionTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeWeatherEffectsTransitionTests COMMAND RenegadeWeatherEffectsTransitionTests)
+
 # G4 sheet-lightning first: deterministic internal cloud illumination pulses.
 add_executable(RenegadeSheetLightningTests SheetLightningTests.cpp)
 target_link_libraries(RenegadeSheetLightningTests PRIVATE Renegade::EngineBridge)
