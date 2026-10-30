@@ -58,3 +58,8 @@ Continue single local feature branch, milestone commits, no push/PR/merge withou
 - Release Runtime + test target build: PASS in `BUILD/g4-sheet-wide-feather-build.log`. Focused regression CTest **4/4 PASS** in `BUILD/g4-sheet-wide-feather-ctest.log` (SheetLightning, WeatherTransition, Moon, CloudFormation).
 - Direct DX12 Runtime capture at 1920x1009, RTX 4070 Ti, shows **75 FPS** on sampled frames and visible internal cloud flashes with softer spread. Preserved prior reference captures as `BUILD/g4-baseline-g4-sheet-*.png`; new evidence `BUILD/g4-wide-pass2-flash-2.png`, `BUILD/g4-wide-pass3-flash-2.png`, other `BUILD/g4-wide-pass*-*.png`. 75 FPS is sampled, not a prolonged benchmark.
 - This remains an opt-in visual preview (`RENEGADE_G4_SHEET_LIGHTNING_PREVIEW=1`). G4 is **NOT** owner signed off. Keep the Runtime preview for owner judgement. No push/PR/merge to main. Separate untracked WeatherEffectsTransition files remain untouched.
+
+## 2026-10-30 — G4 sheet lightning OWNER ACCEPTED
+- Owner replied **"acceptable"** after reviewing 30%-wider, edge-feathered sheet lightning on DESIGN. Record that as definitive sign-off for the **sheet-lightning visual slice only**; avoid unnecessary further tweaking.
+- Signoff document: `docs/WEATHER_V2_G4_SHEET_LIGHTNING_OWNER_SIGNOFF_2026-10-30.md`. Accepted source baseline is root `6920275`, pinned Wicked `c25c9828` with Release build PASS and focused regressions 4/4 PASS. Sample DX12 Runtime FPS 75 at 1920x1009 RTX 4070 Ti.
+- Gate 4 overall still OPEN: integrated authoring controls and persistence, thunder, rain/wind and environmental response remain. Snow V2 deferred. No push, PR or merge authorized. Untracked precipitation/wind foundation files must remain untouched.
