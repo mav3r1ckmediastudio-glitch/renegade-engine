@@ -27,9 +27,9 @@ namespace renegade::runtime
                 bridge::SheetLightningSettings opts;
                 opts.enabled = true;
                 opts.eventsPerMinute = 10.0f;
-                opts.intensity = 0.15f;
+                opts.intensity = 0.14f; // Wider lobes overlap more; keep core from blooming.
                 opts.clusterSpreadMetres = 720.0f;
-                opts.cloudLightRangeMetres = 1800.0f;
+                opts.cloudLightRangeMetres = 2340.0f; // G4: ~30% wider per-cell reach.
                 schedule_.Configure(opts);
                 sceneRevision_ = sceneRevision;
                 initialized_ = true;

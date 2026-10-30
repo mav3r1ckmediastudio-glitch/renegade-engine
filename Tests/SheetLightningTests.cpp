@@ -117,6 +117,42 @@ int main()
         recovery.Frame().cells[0].power > 0.0001f)
         return Fail("reconstruction recovery persists beyond safety window");
 
+    // G4 owner refinement: a 30% larger cloud footprint must preserve
+    // deterministic event positions/timing while keeping the core energy
+    // equal or slightly lower; cells retain independent per-event radii.
+    SheetLightningSettings narrowSettings;
+    narrowSettings.enabled = true;
+    narrowSettings.eventsPerMinute = 24.0f;
+    narrowSettings.seed = 43012;
+    narrowSettings.intensity = 0.15f;
+    narrowSettings.cloudLightRangeMetres = 1800.0f;
+    SheetLightningSettings wideSettings = narrowSettings;
+    wideSettings.intensity = 0.14f;
+    wideSettings.cloudLightRangeMetres = 2340.0f;
+    SheetLightningController narrow, wider;
+    narrow.Configure(narrowSettings);
+    wider.Configure(wideSettings);
+    for (int frame = 0; frame < 120 && narrow.Frame().eventId == 0; ++frame)
+    {
+        narrow.Advance(0.05f, observer, 750.0f, 6500.0f);
+        wider.Advance(0.05f, observer, 750.0f, 6500.0f);
+    }
+    if (narrow.Frame().eventId == 0 ||
+        narrow.Frame().eventId != wider.Frame().eventId)
+        return Fail("30 percent width variant changed event scheduling");
+    for (unsigned i = 0; i < 3; ++i)
+    {
+        const auto& before = narrow.Frame().cells[i];
+        const auto& after = wider.Frame().cells[i];
+        if (!Near(after.rangeMetres / before.rangeMetres, 1.30f) ||
+            !Near(after.position.x, before.position.x) ||
+            !Near(after.position.y, before.position.y) ||
+            !Near(after.position.z, before.position.z))
+            return Fail("30 percent width variant changed geometry other than radius");
+        if (after.power > before.power + 0.0001f)
+            return Fail("expanded sheet lightning unexpectedly increased peak brightness");
+    }
+
     settings.eventsPerMinute = std::numeric_limits<float>::quiet_NaN();
     settings.intensity = std::numeric_limits<float>::infinity();
     settings.clusterSpreadMetres = -5.0f;
