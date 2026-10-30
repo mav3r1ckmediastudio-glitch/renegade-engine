@@ -13,10 +13,8 @@ namespace renegade::bridge
         Snow,
     };
 
-    // Renegade's authored view of Wicked's native precipitation emitter.
-    // Snow is a deliberate particle profile over that emitter: slower,
-    // larger, unstretched particles with no rain splash. Surface accumulation
-    // is not implied by this state.
+    // Authored weather with independent rain and dedicated snow pipelines.
+    // Snow does not imply ground accumulation.
     struct PrecipitationState
     {
         PrecipitationMode mode = PrecipitationMode::None;
@@ -36,10 +34,18 @@ namespace renegade::bridge
     void ApplyPrecipitation(
         wi::scene::WeatherComponent& weather,
         const PrecipitationState& state) noexcept;
-    // Keeps Wicked's native precipitation simulation and swaps only its
-    // transient billboard material. Call before the Scene update so a loaded
-    // Snow profile receives Renegade's static flake instead of Wicked's
-    // procedural circular rain mask.
+    struct SnowParticleSettings
+    {
+        float emissionPerSecond = 0.0f;
+        float lifetimeSeconds = 0.0f;
+        float sizeMetres = 0.0f;
+        XMFLOAT3 velocity = {};
+    };
+    [[nodiscard]] SnowParticleSettings MakeSnowParticleSettings(
+        const PrecipitationState& state) noexcept;
+
+    // Separate snow GPU emitter/material and source snowflake.dds.
+    // Call before scene update; native Wicked rain is not used for snow.
     void RefreshPrecipitationVisual(wi::scene::Scene& scene);
     [[nodiscard]] PrecipitationState MakePrecipitationProfile(
         const PrecipitationState& current,

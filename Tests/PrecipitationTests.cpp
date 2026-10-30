@@ -54,13 +54,58 @@ int main()
     {
         return Fail("snow profile did not reach native weather state");
     }
-    if (wi::helper::GetFileNameFromPath(
-            scene.rainMaterial.textures[
-                wi::scene::MaterialComponent::BASECOLORMAP].name) !=
-        "snowflake.dds")
+    // Snow is NOT a textured variant of Wicked's rain emitter anymore.
+    if (weather.HasNativeRain() || !weather.HasRenegadeSnow() ||
+        scene.rainMaterial.textures[
+            wi::scene::MaterialComponent::BASECOLORMAP].name.find(
+                "snowflake.dds") != std::string::npos)
     {
-        return Fail("snow profile did not bind the dedicated flake texture");
+        return Fail("snow still activates or modifies Wicked's rain renderer");
     }
+    if (scene.emitters.GetCount() != 0)
+        return Fail("headless snow created a GPU emitter prematurely");
+    const auto snowVisual = renegade::bridge::MakeSnowParticleSettings(snow);
+    if (snowVisual.emissionPerSecond <= 0.0f ||
+        snowVisual.lifetimeSeconds < 4.0f ||
+        snowVisual.sizeMetres >= 0.05f ||
+        snowVisual.velocity.y >= 0.0f)
+        return Fail("separate snow particle settings are missing");
+    // Snow must have genuinely smaller, independently bounded sprites.
+    const float expectedEmission = 1150.0f * snow.intensity +
+        8300.0f * snow.intensity * snow.intensity * snow.intensity;
+    if (!NearlyEqual(snowVisual.sizeMetres, 0.44f * snow.particleScale) ||
+        !NearlyEqual(snowVisual.emissionPerSecond, expectedEmission) ||
+        snowVisual.emissionPerSecond >= 9450.0f ||
+        snowVisual.lifetimeSeconds > 4.8f)
+        return Fail("snow particle size/density budget regressed");
+    auto strongSnow = snow;
+    strongSnow.intensity = 1.0f;
+    strongSnow.windAzimuthDegrees = 90.0f;
+    strongSnow.windSpeed = 12.0f;
+    const auto blizzard = renegade::bridge::MakeSnowParticleSettings(strongSnow);
+    if (blizzard.emissionPerSecond <= snowVisual.emissionPerSecond ||
+        !NearlyEqual(blizzard.sizeMetres, snowVisual.sizeMetres) ||
+        blizzard.velocity.z < 1.0f ||
+        !NearlyEqual(blizzard.velocity.x, 0.0f))
+        return Fail("snow intensity/wind drift does not independently scale");
+    if (blizzard.emissionPerSecond < 9000.0f ||
+        blizzard.emissionPerSecond * blizzard.lifetimeSeconds >= 56000.0f)
+        return Fail("maximum snow not storm-dense or exceeds particle budget");
+    strongSnow.windAzimuthDegrees = -90.0f;
+    const auto oppositeWind = renegade::bridge::MakeSnowParticleSettings(strongSnow);
+    if (oppositeWind.velocity.z > -1.0f)
+        return Fail("reversing wind did not reverse snow travel");
+    wi::EmittedParticleSystem snowEmitterFlag;
+    snowEmitterFlag.SetWeatherSnow(true);
+    if (!snowEmitterFlag.IsWeatherSnow())
+        return Fail("snow-only GPU live-wind flag failed to enable");
+    snowEmitterFlag.SetWeatherSnow(false);
+    if (snowEmitterFlag.IsWeatherSnow())
+        return Fail("snow-only GPU live-wind flag failed to disable");
+    strongSnow.particleScale = 1.0f; // extreme Inspector/input value
+    if (renegade::bridge::MakeSnowParticleSettings(strongSnow).sizeMetres >
+        0.022001f)
+        return Fail("extreme snow size reintroduced giant foreground flakes");
 
     if (!commands.Undo() || weather.rain_amount != 0.0f)
     {
@@ -93,13 +138,13 @@ int main()
     {
         return Fail("rain profile did not restore streak and splash behavior");
     }
+    if (!weather.HasNativeRain() || weather.HasRenegadeSnow())
+        return Fail("switching back to Rain did not restore native rain");
     if (wi::helper::GetFileNameFromPath(
             scene.rainMaterial.textures[
                 wi::scene::MaterialComponent::BASECOLORMAP].name) ==
         "snowflake.dds")
-    {
-        return Fail("rain profile retained the snowflake texture");
-    }
+        return Fail("rain retained the snowflake material");
 
     const auto preserved = renegade::bridge::CapturePrecipitation(weather);
     auto edited = preserved;
