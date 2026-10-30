@@ -18,6 +18,14 @@ target_link_libraries(RenegadeWeatherTransitionTests PRIVATE Renegade::EngineBri
 set_target_properties(RenegadeWeatherTransitionTests PROPERTIES FOLDER "Renegade/Tests")
 add_test(NAME RenegadeWeatherTransitionTests COMMAND RenegadeWeatherTransitionTests)
 
+# Gate 3 governed creator Lua weather gameplay contract. Same sandbox and
+# shared runtime state as production; no second Lua interpreter.
+add_executable(RenegadeWeatherLuaRuntimeTests WeatherLuaRuntimeTests.cpp)
+target_link_libraries(RenegadeWeatherLuaRuntimeTests PRIVATE Renegade::RuntimeBootstrap)
+set_target_properties(RenegadeWeatherLuaRuntimeTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeWeatherLuaRuntimeTests COMMAND RenegadeWeatherLuaRuntimeTests)
+
+
 add_executable(RenegadeDiagnosticServiceTests DiagnosticServiceTests.cpp)
 target_link_libraries(RenegadeDiagnosticServiceTests PRIVATE Renegade::EngineBridge)
 set_target_properties(RenegadeDiagnosticServiceTests PROPERTIES FOLDER "Renegade/Tests")

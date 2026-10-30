@@ -440,9 +440,12 @@ namespace renegade::studio
              wi::arguments::HasArgument("g2-upper-moonlight-review") ||
              wi::arguments::HasArgument("g2-final-moonlight-review") ||
              wi::arguments::HasArgument("g3-weather-preview") ||
+             wi::arguments::HasArgument("g3-weather-lua-review") ||
              wi::arguments::HasArgument("cloud-body-studio-test")) && session_)
         {
             const auto preview=std::filesystem::absolute(
+                wi::arguments::HasArgument("g3-weather-lua-review") ?
+                "../../../g3-weather-lua-review/Gate3WeatherLuaReview.renegade" :
                 wi::arguments::HasArgument("g3-weather-preview") ?
                 "../../../g3-weather-preview/Gate3WeatherPreview.renegade" :
                 wi::arguments::HasArgument("g2-final-moonlight-review") ?
@@ -6173,17 +6176,25 @@ namespace renegade::studio
 
         const EditorAction action = pendingAction_;
         pendingAction_ = EditorAction::None;
-        // A running blend is only a preview until it reaches the target.
-        // Never save its transient weather or let Undo/scene replacement
-        // act on a half-authored Environment component.
-        if (weatherTransition_.IsActive() &&
-            (action == EditorAction::Undo || action == EditorAction::Redo ||
-             action == EditorAction::SaveScene ||
-             action == EditorAction::SaveSceneAs ||
-             action == EditorAction::OpenScene ||
-             action == EditorAction::ReopenScene ||
-             action == EditorAction::ProjectHub))
-            CancelWeatherPresetTransition();
+        // Save an authored weather target, never an accidental in-between
+        // transient preview. Saving during a blend finalises it as ONE
+        // Undoable command first; Undo, Reopen and navigation cancel instead.
+        if (weatherTransition_.IsActive())
+        {
+            if (action == EditorAction::SaveScene ||
+                action == EditorAction::SaveSceneAs)
+            {
+                TickWeatherPresetTransition(weatherTransition_.Duration());
+            }
+            else if (action == EditorAction::Undo ||
+                     action == EditorAction::Redo ||
+                     action == EditorAction::OpenScene ||
+                     action == EditorAction::ReopenScene ||
+                     action == EditorAction::ProjectHub)
+            {
+                CancelWeatherPresetTransition();
+            }
+        }
         if (lightPlacementActive_ && action != EditorAction::CreateLight)
         {
             CancelLightPlacement();
@@ -12315,6 +12326,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             std::filesystem::path(operation->descriptorPath).filename()=="CloudFormationPreview.renegade") ||
            (wi::arguments::HasArgument("cloud-formation-boundary-preview") &&
             std::filesystem::path(operation->descriptorPath).filename()=="CloudFormationBoundaryPreview.renegade") ||
+           (wi::arguments::HasArgument("g3-weather-lua-review") &&
+            session_->Projects().CurrentProject().projectId=="82f02a47-5e37-422b-aeda-3fb7ad0a9713" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="Gate3WeatherLuaReview.renegade") ||
            (wi::arguments::HasArgument("g3-weather-preview") &&
             session_->Projects().CurrentProject().projectId=="720d45ab-37bf-4b8d-a2ab-3b2ab91d97d0" &&
             std::filesystem::path(operation->descriptorPath).filename()=="Gate3WeatherPreview.renegade") ||

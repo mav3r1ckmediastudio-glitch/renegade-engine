@@ -2,6 +2,8 @@
 #include "RuntimeScriptEntityApi.h"
 
 #include "renegade/bridge/AudioService.h"
+#include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/WeatherTransitionService.h"
 #include "renegade/bridge/GameplayEventService.h"
 #include "renegade/bridge/IdentityService.h"
 
@@ -189,11 +191,15 @@ namespace renegade::runtime
             bool hasOnStop = false;
             bool hasOnUpdate = false;
             bool hasOnEvent = false;
+            bool hasOnWeatherComplete = false;
         };
 
         lua_State* lua = nullptr;
         MemoryBudget memory;
         wi::scene::Scene* scene = nullptr;
+        bridge::WeatherTransitionController weatherTransition;
+        std::string weatherTargetPreset;
+        bool weatherCompletionPending = false;
         std::string projectRoot;
         std::uint64_t generation = 0;
         bool running = false;
@@ -888,6 +894,123 @@ namespace renegade::runtime
             return 1;
         }
 
+        wi::scene::WeatherComponent* RuntimeWeatherComponent() noexcept
+        {
+            if (scene == nullptr)
+                return nullptr;
+            return scene->weathers.GetCount() != 0
+                ? &scene->weathers[0] : &scene->weather;
+        }
+
+        void ApplyRuntimeWeather(const bridge::WeatherState& weather) noexcept
+        {
+            auto* component = RuntimeWeatherComponent();
+            if (component == nullptr)
+                return;
+            bridge::ApplyWeather(*component, weather);
+            // Wicked also exposes the active weather as scene.weather.
+            // Keep its renderer-visible copy synchronized with the component.
+            if (scene->weathers.GetCount() != 0)
+                scene->weather = *component;
+        }
+
+        static int WeatherSetPresetLua(lua_State* state)
+        {
+            Impl* owner = FromUpvalue(state);
+            if (owner == nullptr || !owner->running || owner->scene == nullptr)
+                return PushFalseError(state,
+                    "Weather commands require a running Level.");
+            if (lua_type(state, 1) != LUA_TSTRING)
+                return PushFalseError(state,
+                    "renegade.weather.set_preset(name,seconds) requires a preset name.");
+            const char* raw = lua_tostring(state, 1);
+            if (raw == nullptr)
+                return PushFalseError(state, "Missing weather preset name.");
+            const std::string name = LowerAscii(raw);
+            bridge::WeatherPreset preset;
+            if (name == "clear") preset = bridge::WeatherPreset::Clear;
+            else if (name == "scattered") preset = bridge::WeatherPreset::Scattered;
+            else if (name == "overcast") preset = bridge::WeatherPreset::Overcast;
+            else if (name == "storm") preset = bridge::WeatherPreset::Storm;
+            else return PushFalseError(state,
+                "Unknown weather preset. Use clear, scattered, overcast or storm.");
+
+            float seconds = 0.0f;
+            if (!lua_isnoneornil(state, 2))
+            {
+                if (!lua_isnumber(state, 2))
+                    return PushFalseError(state,
+                        "Weather duration must be a finite number from 0 to 300.");
+                seconds = static_cast<float>(lua_tonumber(state, 2));
+                if (!std::isfinite(seconds) || seconds < 0.0f || seconds > 300.0f)
+                    return PushFalseError(state,
+                        "Weather duration must be a finite number from 0 to 300.");
+            }
+            auto* component = owner->RuntimeWeatherComponent();
+            if (component == nullptr)
+                return PushFalseError(state, "No active weather component.");
+            const auto current = bridge::CaptureWeather(*component);
+            const auto target = bridge::MakeWeatherPreset(current, preset);
+            if (!owner->weatherTransition.Start(current, target, seconds))
+                return PushFalseError(state, "Weather transition could not start.");
+            owner->weatherTargetPreset = name;
+            owner->weatherCompletionPending = seconds == 0.0f;
+            if (seconds == 0.0f)
+                owner->ApplyRuntimeWeather(target);
+            lua_pushboolean(state, 1);
+            return 1;
+        }
+
+        static int WeatherCancelLua(lua_State* state)
+        {
+            Impl* owner = FromUpvalue(state);
+            if (owner == nullptr || !owner->running || owner->scene == nullptr)
+                return PushFalseError(state,
+                    "Weather commands require a running Level.");
+            if (owner->weatherTransition.IsActive())
+                owner->weatherTransition.Cancel(); // retain current runtime weather
+            owner->weatherCompletionPending = false;
+            owner->weatherTargetPreset.clear();
+            lua_pushboolean(state, 1);
+            return 1;
+        }
+
+        static int WeatherGetStateLua(lua_State* state)
+        {
+            Impl* owner = FromUpvalue(state);
+            if (owner == nullptr || !owner->running || owner->scene == nullptr)
+                return PushNilError(state,
+                    "Weather queries require a running Level.");
+            const auto* component = owner->RuntimeWeatherComponent();
+            if (component == nullptr)
+                return PushNilError(state, "No active weather component.");
+            const auto weather = bridge::CaptureWeather(*component);
+            lua_newtable(state);
+            lua_pushboolean(state, owner->weatherTransition.IsActive());
+            lua_setfield(state, -2, "transitioning");
+            lua_pushnumber(state, owner->weatherTransition.Progress());
+            lua_setfield(state, -2, "progress");
+            lua_pushnumber(state, owner->weatherTransition.Duration());
+            lua_setfield(state, -2, "duration");
+            if (!owner->weatherTargetPreset.empty())
+            {
+                lua_pushlstring(state, owner->weatherTargetPreset.data(),
+                    owner->weatherTargetPreset.size());
+                lua_setfield(state, -2, "target_preset");
+            }
+            lua_pushnumber(state, owner->weatherTransition.Target().cloudCoverage);
+            lua_setfield(state, -2, "target_cloud_coverage");
+            lua_pushnumber(state, weather.cloudCoverage);
+            lua_setfield(state, -2, "cloud_coverage");
+            lua_pushnumber(state, weather.cloudMovementSpeed);
+            lua_setfield(state, -2, "cloud_speed");
+            lua_pushnumber(state, weather.fogDensity);
+            lua_setfield(state, -2, "fog_density");
+            lua_pushnumber(state, weather.skyExposure);
+            lua_setfield(state, -2, "sky_exposure");
+            return 1;
+        }
+
         static int PlayerIsPresentLua(lua_State* state)
         {
             auto* owner = FromUpvalue(state);
@@ -1424,6 +1547,22 @@ namespace renegade::runtime
             lua_setfield(lua, -2, "stop");
             lua_setfield(lua, -2, "audio");
 
+            // Weather G3 uses the same bounded, scene-owned WeatherState
+            // as C++ and the Studio preset inspector, never Wicked's global Lua.
+            lua_newtable(lua);
+            lua_pushinteger(lua, 1);
+            lua_setfield(lua, -2, "contract_version");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, WeatherSetPresetLua, 1);
+            lua_setfield(lua, -2, "set_preset");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, WeatherGetStateLua, 1);
+            lua_setfield(lua, -2, "get_state");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, WeatherCancelLua, 1);
+            lua_setfield(lua, -2, "cancel");
+            lua_setfield(lua, -2, "weather");
+
             lua_newtable(lua);
             lua_pushinteger(lua, 1);
             lua_setfield(lua, -2, "contract_version");
@@ -1721,7 +1860,8 @@ namespace renegade::runtime
                 CheckCallback(instance, "on_reset", instance.hasOnReset) &&
                 CheckCallback(instance, "on_stop", instance.hasOnStop) &&
                 CheckCallback(instance, "on_update", instance.hasOnUpdate) &&
-                CheckCallback(instance, "on_event", instance.hasOnEvent);
+                CheckCallback(instance, "on_event", instance.hasOnEvent) &&
+                CheckCallback(instance, "on_weather_transition_complete", instance.hasOnWeatherComplete);
         }
 
         bool Invoke(
@@ -2101,6 +2241,9 @@ namespace renegade::runtime
 
         void StopScene() noexcept
         {
+            weatherTransition = bridge::WeatherTransitionController{};
+            weatherTargetPreset.clear();
+            weatherCompletionPending = false;
             if (lua == nullptr)
             {
                 instances.clear();
@@ -2124,6 +2267,7 @@ namespace renegade::runtime
                 }
             }
             ReleaseInstances();
+            weatherTransition = bridge::WeatherTransitionController{};
             entitiesById.clear();
             gameplayEvents.Clear();
             currentPrompt.clear();
@@ -2295,6 +2439,23 @@ namespace renegade::runtime
             std::isfinite(dt) ? dt : 0.0f,
             0.0f,
             0.25f);
+        if (impl_->weatherTransition.IsActive())
+        {
+            // Advance with the same clamped, pause-aware game delta as creator
+            // scripts; do not advance while menus have paused Runtime.
+            impl_->weatherTransition.Advance(safeDelta);
+            impl_->ApplyRuntimeWeather(impl_->weatherTransition.Current());
+            if (!impl_->weatherTransition.IsActive())
+                impl_->weatherCompletionPending = true;
+        }
+        if (impl_->weatherCompletionPending)
+        {
+            // Clear before dispatch so a completion callback may safely retarget.
+            impl_->weatherCompletionPending = false;
+            for (auto& instance : impl_->instances)
+                (void)impl_->Invoke(instance, "on_weather_transition_complete",
+                    instance.hasOnWeatherComplete);
+        }
         for (auto& instance : impl_->instances)
         {
             if (!instance.failed && instance.hasOnUpdate)
