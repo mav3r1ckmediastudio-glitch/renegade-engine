@@ -500,6 +500,12 @@ namespace renegade::studio
                 });
         }
 
+        void ChangeGraphicForSelection(bool allSlots) {
+            if(!session_||!workspace_)return;
+            selectedId_=workspace_->SelectedWidgetId();
+            RefreshFromSelection(true);
+            OpenComputerImage(false,0,true,allSlots);
+        }
         void OpenImageForSelection()
         {
             if (!session_ || !workspace_) return;
@@ -557,7 +563,11 @@ namespace renegade::studio
                 selectedId_ = selection;
                 choicePicker_.Close();
                 colorPicker_.Close();
-                RefreshFromSelection(true);
+                // BASIC inventory editing should not rebind every specialist
+                // inspector on every selection while Advanced is collapsed.
+                if(expanded_ || gameplayAttributeInspector_.IsOpen())
+                    RefreshFromSelection(true);
+                else observedRevision_ = session_->Revision();
             }
 
             LayoutControls();
@@ -1131,7 +1141,7 @@ namespace renegade::studio
         // Import through Renegade's actual governed texture pipeline, not a
         // stale absolute file path. The result becomes a project source asset
         // and a registered LP08 product that Build Game can resolve.
-        void OpenComputerImage(const bool stateImage, const int progressSlot = 0)
+        void OpenComputerImage(const bool stateImage, const int progressSlot = 0, const bool directGraphic = false, const bool allSlots = false)
         {
             if (!session_ || !session_->IsLoaded() ||
                 !Selected() || projectRoot_.empty()) return;
@@ -1147,23 +1157,28 @@ namespace renegade::studio
                                  "bmp", "dds", "hdr"};
             wi::helper::FileDialog(dialog,
                 [this, projectId, screenId, widgetId, root, stateImage,
-                 requestedVisualState, progressSlot](const std::string& path)
+                 requestedVisualState, progressSlot, directGraphic, allSlots](const std::string& path)
                 {
                     if (path.empty()) return;
                     wi::eventhandler::Subscribe_Once(
                         wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                         [this, projectId, screenId, widgetId, root,
-                         stateImage, requestedVisualState, progressSlot, path](std::uint64_t)
+                         stateImage, requestedVisualState, progressSlot, path, directGraphic, allSlots](std::uint64_t)
                         {
+                            const auto report=[this,directGraphic](const std::string& message) {
+                                status_=message;
+                                if(directGraphic&&workspace_)workspace_->ReportGraphicStatus(message,true);
+                            };
                             if (!session_ || !session_->IsLoaded() ||
                                 session_->ProjectId() != projectId ||
                                 session_->Document().envelope.documentId != screenId ||
                                 projectRoot_ != root ||
                                 selectedId_ != widgetId ||
                                 (stateImage && state_ != requestedVisualState) ||
+                                (directGraphic && workspace_ && workspace_->SelectedWidgetId()!=widgetId) ||
                                 !session_->FindWidget(widgetId))
                             {
-                                status_ = "IMAGE IMPORT CANCELLED // SCREEN CHANGED";
+                                report("IMAGE IMPORT CANCELLED // SCREEN CHANGED");
                                 return;
                             }
                             const auto imported =
@@ -1171,7 +1186,7 @@ namespace renegade::studio
                                     .ImportTexture(root, projectId, path);
                             if (!imported.succeeded)
                             {
-                                status_ = "IMAGE IMPORT FAILED // " + imported.error;
+                                report("IMAGE IMPORT FAILED // " + imported.error);
                                 return;
                             }
                             // Mirror governed LP08's retained source to a
@@ -1192,7 +1207,7 @@ namespace renegade::studio
                             std::ifstream stream(physicalSource, std::ios::binary);
                             if (!stream)
                             {
-                                status_ = "IMAGE IMPORTED BUT RETAINED SOURCE CANNOT BE READ";
+                                report("IMAGE IMPORTED BUT RETAINED SOURCE CANNOT BE READ");
                                 return;
                             }
                             std::vector<std::uint8_t> bytes(
@@ -1202,7 +1217,7 @@ namespace renegade::studio
                                 physicalMirror.parent_path(), ec);
                             if (ec || fs::exists(physicalMirror))
                             {
-                                status_ = "IMAGE IMPORTED BUT UI DESTINATION IS UNAVAILABLE";
+                                report("IMAGE IMPORTED BUT UI DESTINATION IS UNAVAILABLE");
                                 return;
                             }
                             bridge::ProjectDocumentWrite mirrorWrite;
@@ -1239,8 +1254,8 @@ namespace renegade::studio
                                     {std::move(mirrorWrite)}, std::move(options));
                             if (!committed.success)
                             {
-                                status_ = "UI IMAGE RESOURCE COPY FAILED // " +
-                                    committed.message;
+                                report("UI IMAGE RESOURCE COPY FAILED // " +
+                                    committed.message);
                                 return;
                             }
                             const std::string runtimeImage =
@@ -1249,19 +1264,30 @@ namespace renegade::studio
                             if (!bridge::ResolveScreenResourcePath(
                                     root, runtimeImage, resolved, validationError))
                             {
-                                status_ = "UI IMAGE IMPORT VALIDATION FAILED // " +
-                                    validationError;
+                                report("UI IMAGE IMPORT VALIDATION FAILED // " +
+                                    validationError);
                                 return;
                             }
                             const auto* widget = Selected();
                             if (!widget) return;
-                            if (progressSlot != 0)
+                            if(directGraphic) {
+                                std::string graphicError;
+                                if(!session_->ChangeWidgetGraphic(widgetId,runtimeImage,allSlots,graphicError)) {
+                                    report(graphicError);return;
+                                }
+                                if(documentChanged_)documentChanged_();
+                                if(workspace_)workspace_->ReportGraphicStatus(allSlots?
+                                    "All slot graphics updated. Undo restores them.":
+                                    "Graphic updated. Layout and actions preserved.",false);
+                                RefreshFromSelection(true);
+                            }
+                            else if (progressSlot != 0)
                             {
                                 std::string artError;
                                 if (!session_->UpdateProgressArtwork(widgetId,
                                     progressSlot == 1 ? runtimeImage : widget->progressFrameResourcePath,
                                     progressSlot == 2 ? runtimeImage : widget->progressFillResourcePath, artError))
-                                { status_ = "PROGRESS IMAGE REJECTED // " + artError; return; }
+                                { report("PROGRESS IMAGE REJECTED // " + artError); return; }
                                 status_ = "PROGRESS IMAGE IMPORTED // AUTOSAVE PENDING";
                                 if (documentChanged_) documentChanged_();
                             }

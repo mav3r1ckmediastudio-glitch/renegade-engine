@@ -1,4 +1,5 @@
 #include "renegade/bridge/ScreenAuthoringSession.h"
+#include "renegade/bridge/InventoryPagedScreenAdapter.h"
 #include "renegade/bridge/ScreenThemeResolver.h"
 #include "renegade/bridge/AuthoringDocumentSnapshot.h"
 
@@ -29,8 +30,8 @@ namespace
     std::string NextButtonActionId(
         const renegade::bridge::ScreenDocument& document)
     {
-        if (document.actions.size() >= 64) return {};
-        for (std::size_t suffix = 1; suffix <= 64; ++suffix)
+        if (document.actions.size() >= renegade::bridge::ScreenDocument::MaximumActions) return {};
+        for (std::size_t suffix = 1; suffix <= renegade::bridge::ScreenDocument::MaximumActions; ++suffix)
         {
             const std::string candidate =
                 "ui_button_" + std::to_string(suffix);
@@ -251,7 +252,7 @@ namespace renegade::bridge
         const std::string actionId = NextButtonActionId(candidate);
         if (actionId.empty())
         {
-            error = "This Screen already has the maximum of 64 actions.";
+            error = "This Screen already has the maximum of 128 actions.";
             return false;
         }
         if (widget.id.empty()) widget.id = GenerateStableId();

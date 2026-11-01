@@ -115,7 +115,8 @@ int main()
 
     const auto compactJourneyMessages = ComputeInspectorMessageLayout(
         false, 570.0f, 71.0f, 720.0f, 2);
-    if (compactJourneyMessages.validationBottom + 14.0f >
+    if (compactJourneyMessages.validationY < 570.0f ||
+        compactJourneyMessages.validationBottom + 14.0f >
             compactJourneyMessages.statusY ||
         compactJourneyMessages.statusBottom > 720.0f)
     {

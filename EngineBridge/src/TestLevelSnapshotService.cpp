@@ -1,6 +1,8 @@
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/TestLevelSnapshotService.h"
 #include "renegade/bridge/ImpactAudioService.h"
+#include "renegade/bridge/InventoryTestLevelSnapshot.h"
+#include "renegade/bridge/InventoryDependencyProvider.h"
 
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/AssetRegistryService.h"
@@ -388,6 +390,84 @@ namespace
         {
             if (error.empty()) error = "Test Level HUD identity verification failed.";
             return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    // Reuse the production Build Game inventory and Screen dependency closure.
+    // Stack companions alone cannot run G5 pickup effects or an assigned overlay.
+    bool SnapshotInventoryProjectInputs(
+        const renegade::bridge::ProjectMetadata& project,
+        const renegade::bridge::TestLevelSnapshot& snapshot,
+        const std::string& sourceScenePath,
+        std::string& error)
+    {
+        using namespace renegade::bridge;
+        std::error_code ec;
+        if (!fs::exists(fs::u8path(sourceScenePath + ".rinventory"), ec))
+        {
+            if (ec) { error = "Could not inspect inventory source: " + ec.message(); return false; }
+            return true;
+        }
+        const auto root = fs::u8path(project.rootPath);
+        const auto sceneRelative = fs::relative(fs::u8path(sourceScenePath), root, ec);
+        if (ec || !IsSafeSnapshotContentPath(sceneRelative))
+        {
+            error = "Inventory Scene is outside governed project Content.";
+            return false;
+        }
+        const auto catalogue = root / "Content/Gameplay/Inventory.renegade-items";
+        const bool hasCatalogue = fs::exists(catalogue, ec);
+        if (ec) { error = "Could not inspect inventory catalogue: " + ec.message(); return false; }
+        if (hasCatalogue)
+        {
+            DocumentEnvelope envelope;
+            if (!ReadDocumentEnvelope(catalogue.generic_u8string(), envelope, error)) return false;
+            if (envelope.projectId != project.projectId)
+            {
+                error = "Inventory catalogue belongs to another project.";
+                return false;
+            }
+        }
+        InventoryDependencyProvider inventory;
+        RuntimeScreenDependencyProvider screens(MakeRuntimeScreenDependencyReader(project.projectId));
+        DependencyCollector collector(project.rootPath);
+        if (!collector.RegisterProvider(inventory, error) ||
+            !collector.RegisterProvider(screens, error) ||
+            !collector.AddRoot({sceneRelative.generic_u8string(), DependencyClass::Scene,
+                DependencyRequirement::Required, "testlevel.inventory"}, error) ||
+            !collector.DiscoverTransitiveDependencies(error)) return false;
+        const auto& graph = collector.Graph();
+        if (!graph.diagnostics.empty())
+        {
+            error = "Inventory snapshot dependency rejected: " + graph.diagnostics.front().message;
+            return false;
+        }
+        const auto sceneHint = sceneRelative.generic_u8string();
+        for (const auto& node : graph.nodes)
+        {
+            // The live scene and renamed TestLevel companions were already
+            // projected by the existing native snapshot/companion service.
+            if (node.projectRelativePath == sceneHint ||
+                node.projectRelativePath == sceneHint + ".rinventory" ||
+                node.projectRelativePath == sceneHint + ".rinventory-access") continue;
+            const auto relative = fs::u8path(node.projectRelativePath);
+            const auto resolved = ResolveDependencyPath(project.rootPath, node.projectRelativePath);
+            if (!IsSafeSnapshotContentPath(relative) || !resolved.accepted || !resolved.exists)
+            {
+                error = "Inventory input is missing or outside project Content: " + node.projectRelativePath;
+                return false;
+            }
+            const auto destination = fs::u8path(snapshot.sessionDirectory) / relative;
+            fs::create_directories(destination.parent_path(), ec);
+            if (!ec) fs::copy_file(fs::u8path(resolved.absolutePath), destination,
+                fs::copy_options::overwrite_existing, ec);
+            if (ec)
+            {
+                error = "Could not snapshot inventory input '" + node.projectRelativePath + "': " + ec.message();
+                return false;
+            }
         }
         error.clear();
         return true;
@@ -1166,6 +1246,17 @@ namespace renegade::bridge
                 return failAndCleanup(
                     "Could not snapshot creator scripting state: " + error);
             }
+
+            // A new unsaved Level has no authored scene-adjacent inventory.
+            // Preserve Test Level for such inventory-free scenes.
+            if (!scenes_.CurrentPath().empty() && !SnapshotInventoryCompanions(
+                    project.rootPath, scenes_.CurrentPath(), created.scenePath, error))
+                return failAndCleanup(
+                    "Could not snapshot optional inventory: " + error);
+
+            if (!scenes_.CurrentPath().empty() &&
+                !SnapshotInventoryProjectInputs(project, created, scenes_.CurrentPath(), error))
+                return failAndCleanup("Could not snapshot inventory gameplay inputs: " + error);
 
             if (!SnapshotGovernedMaterialInputs(
                     project,

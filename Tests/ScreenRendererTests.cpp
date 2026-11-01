@@ -396,6 +396,34 @@ int main()
     if(screen::BuildAccessibleScreenRenderItems(accessDocument,{0,0,1280,720},access,{},{},{},items,error))
         return Fail("invalid UI scale accepted");
 
+    {
+        // UP starts disabled on the first page, then becomes enabled after scrolling.
+        // A subsequent layout must retain that transient state and its native input eligibility.
+        bridge::ScreenDocument dynamic;dynamic.envelope=accessDocument.envelope;
+        dynamic.usage=bridge::ScreenUsage::Overlay;
+        bridge::ScreenWidget paging;paging.id=small.id;paging.kind=bridge::ScreenWidgetKind::Button;
+        paging.name="UP";paging.text="UP";paging.rect={50,50,32,31};paging.actionId="inventory.paged.0.scroll.up";
+        paging.style=bridge::MakeScreenWidgetStyleTemplate(paging.kind,31);paging.enabled=false;
+        dynamic.widgets={paging};dynamic.actions={{paging.actionId}};dynamic.focusOrder={paging.id};
+        wi::RenderPath2D path;
+        screen::ScreenRenderer renderer;
+        if(!renderer.Load(dynamic,std::filesystem::temp_directory_path().generic_u8string(),
+            path,[](const bridge::StableId&){},error))
+        {std::cerr<<error<<"\n";return Fail("dynamic native renderer fixture failed to load");}
+        renderer.SetViewport({0,0,1280,720});
+        renderer.SetWidgetState(small.id,true,true);
+        renderer.ApplyLayout(path);
+        if(!renderer.IsWidgetInteractive(small.id))
+            return Fail("layout re-disabled a dynamically enabled inventory paging button");
+        renderer.ApplyLayout(path);
+        if(!renderer.IsWidgetInteractive(small.id)||dynamic.widgets.front().enabled)
+            return Fail("transient input state was lost or mutated the source Screen");
+        renderer.SetWidgetState(small.id,false,true);
+        renderer.ApplyLayout(path);
+        if(renderer.IsWidgetInteractive(small.id))return Fail("hidden dynamic button accepted input");
+        renderer.Reset(path);
+    }
+
     std::cout << "PASS: Gate 8B shared Screen render contract\n";
     return 0;
 }

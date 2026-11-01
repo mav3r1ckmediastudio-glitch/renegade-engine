@@ -99,6 +99,9 @@ namespace renegade::screen
     public:
         using ActivateSink = std::function<void(const bridge::StableId&)>;
         using ControlSink = std::function<bool(const bridge::StableId&,const bridge::GameplayAttributeValue&)>;
+        // Optional pointer gesture callback shared by Runtime and authoring
+        // clients. It owns no gameplay actions or item semantics.
+        using DragSink = std::function<void(const bridge::StableId&,bool begin,float x,float y)>;
 
         ScreenRenderer();
         ~ScreenRenderer();
@@ -112,7 +115,8 @@ namespace renegade::screen
             const std::string& projectRoot,
             wi::RenderPath2D& renderPath,
             ActivateSink activateSink,
-            std::string& error, ControlSink controlSink = {});
+            std::string& error, ControlSink controlSink = {},
+            DragSink dragSink = {});
         // Studio preview can confine the exact Runtime presentation to its
         // central canvas. Runtime leaves this unset and continues to use the
         // full RenderPath logical extent.
@@ -144,8 +148,16 @@ namespace renegade::screen
             const bridge::StableId& widgetId,
             bool visible,
             bool enabled);
+        // Runtime-only vertical scrollbar thumb geometry, scaled by the SAME
+        // accessible layout pass as all authored widgets. No persisted edits.
+        void SetScrollbarThumb(const bridge::StableId& thumbId,
+            const bridge::StableId& trackId,float position,float fraction);
         void SetWidgetFill(const bridge::StableId& widgetId, float fill);
         void SetWidgetText(const bridge::StableId& widgetId, const std::string& text);
+        // Transient image for UI-bound icon widgets. Only project-contained
+        // Image resources may be loaded, never an arbitrary filesystem path.
+        bool SetWidgetImageResource(const bridge::StableId& widgetId,
+            const std::string& resourcePath,std::string& error);
         void Reset(wi::RenderPath2D& renderPath) noexcept;
 
         [[nodiscard]] const bridge::ScreenRect* LogicalRect(

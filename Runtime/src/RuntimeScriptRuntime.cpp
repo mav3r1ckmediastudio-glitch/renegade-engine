@@ -1,5 +1,6 @@
 #include "RuntimeScriptRuntime.h"
 #include "RuntimeScriptEntityApi.h"
+#include "InventoryLuaBridge.h"
 
 #include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/CommandService.h"
@@ -192,6 +193,7 @@ namespace renegade::runtime
             bool hasOnUpdate = false;
             bool hasOnEvent = false;
             bool hasOnWeatherComplete = false;
+            std::unique_ptr<InventoryLuaContext> inventoryLua;
         };
 
         lua_State* lua = nullptr;
@@ -209,6 +211,8 @@ namespace renegade::runtime
         std::vector<RuntimeScriptDiagnostic> diagnostics;
         bridge::GameplayEventService gameplayEvents;
         std::function<void(const bridge::GameplayEvent&)> eventObserver;
+        std::function<bridge::InventoryGameplayGateway*(
+            const bridge::StableId&, const bridge::StableId&)> inventoryGatewayProvider;
         std::uint64_t dispatchedEventCount = 0;
         std::uint64_t eventDeliveryAttemptCount = 0;
         std::uint64_t lastEventSequence = 0;
@@ -1582,6 +1586,21 @@ namespace renegade::runtime
             lua_setfield(lua, -2, "send");
             lua_setfield(lua, -2, "events");
 
+            // Each script receives its own trusted capability. No enabled
+            // provider means no inventory table, gameplay store or update work.
+            if (inventoryGatewayProvider)
+            {
+                auto* gateway = inventoryGatewayProvider(
+                    instance.attachment.scriptInstanceId,
+                    instance.attachment.ownerEntityId);
+                if (gateway != nullptr)
+                {
+                    instance.inventoryLua = std::make_unique<InventoryLuaContext>();
+                    instance.inventoryLua->gateway = gateway;
+                    instance.inventoryLua->active = true;
+                    RegisterInventoryLua(lua, -1, instance.inventoryLua.get());
+                }
+            }
             lua_setfield(lua, environmentIndex, "renegade");
 
             lua_pushlightuserdata(lua, this);
@@ -2096,6 +2115,7 @@ namespace renegade::runtime
 
         void ReleaseInstance(Instance& instance)
         {
+            if (instance.inventoryLua) instance.inventoryLua->active = false;
             if (lua == nullptr)
                 return;
             for (const auto& module : instance.moduleReferences)
@@ -2409,6 +2429,16 @@ namespace renegade::runtime
     {
         impl_->playerState = player;
         impl_->gameplayInput = input;
+    }
+
+    void RuntimeScriptRuntime::SetInventoryGatewayProvider(
+        std::function<bridge::InventoryGameplayGateway*(
+            const bridge::StableId&, const bridge::StableId&)> provider)
+    {
+        // Never replace a capability resolver while live closures may hold
+        // instance-scoped gateways. StopScene must precede provider replacement.
+        if (impl_ && !impl_->running)
+            impl_->inventoryGatewayProvider = std::move(provider);
     }
 
     bool RuntimeScriptRuntime::EnqueueGameplayEvent(

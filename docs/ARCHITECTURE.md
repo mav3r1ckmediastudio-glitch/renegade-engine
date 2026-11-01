@@ -1688,3 +1688,346 @@ see [Milky Way validation and remaining limits](MILKY_WAY_VISUAL_CHECK.md).
 ### Environment probe authoring frame boundary
 
 Queue new probe components at EVENT_THREAD_SAFE_POINT before native Scene::Update prepares the parallel probe-bounds array. RefreshEnvProbes requires matching component and bounds counts. Studio diagnostics owns captured-sphere authoring visibility; the GUI overlay supplies selectable markers. New editor probes use native live capture, while saved static/live choices remain authoritative.
+
+## Optional gameplay inventory service (INV-G0/G1, October 2026)
+
+`InventoryService` is a UI-independent, opt-in EngineBridge component.
+`InventoryItemDefinition` is reusable item data; `InventoryItemStack` has
+durable instance identity and quantity; `InventoryContainer` has independent
+slot and weight policies. Add/remove/transfer operations validate prior to
+commit and are all-or-nothing. Versioned snapshots are portable but are **not**
+yet integrated with the governed game-save authority.
+
+Existing `.requipment` semantic actions and animation retain their ownership;
+inventory definitions may only reference that asset through its stable ID.
+StoryFlow owns optional Screen lifecycle; the shared UI Designer owns artwork
+and binding authoring; Lua/C++ overlays must also be possible without a Screen.
+The upcoming Runtime/Lua adapter must consume the same gameplay authority, not
+a second item store. No default Player inventory or hotbar is created.
+See `docs/INVENTORY_CORE_G0_G1.md` for scope, limitations and gates.
+
+### Scoped inventory gameplay and Lua provider (G2, October 2026)
+
+`InventoryService` has one authoritative item/container store and a bounded
+change journal with independent cursors and overflow detection. The
+`InventoryGameplayGateway` is a **capability view** over that store, never a
+replacement owner. Trusted Runtime may grant container read/deposit/withdraw,
+optionally permitting scoped container creation and item-definition authoring;
+ungranted scripts cannot observe or modify private container contents.
+
+`InventoryLuaBridge` exposes the optional `renegade.inventory` namespace
+inside the existing governed Lua 5.4 environment. The native Runtime script
+instance holds an invalidatable context token and only installs the namespace
+when a trusted per-script gateway resolver is provided before `StartScene`.
+The namespace is absent when inventory is disabled. Lua list results are
+paginated. This is an **API integration seam**, not an active-world Player
+inventory: no Runtime inventory owner, entity capability grants, project
+data adoption, game-save integration or packaged Test Game proof is yet in
+place. See `docs/INVENTORY_CORE_G2.md`.
+
+### Level opt-in inventory Runtime owner (G3-A, October 2026)
+
+`RuntimeInventorySession` is a level-scoped, opt-in Runtime owner. A normal
+level has no inventory authority, script bindings or performance work. A
+project may explicitly supply a scene-adjacent, versioned
+`.wiscene.rinventory` snapshot and an optional script access companion
+`.wiscene.rinventory-access`; the latter grants exact script-instance /
+owner-scoped read/deposit/withdraw, item-definition and container-creation
+capabilities. Companions are checked for project-root containment and parsed
+before any partial state is committed. Creator scripts stop before Runtime
+destroys bound gateways. The first functional Player-to-chest transaction is
+verified in the standalone Lua host fixture. The companion format is
+**provisional** and not yet governed project asset/save/packaging authoring.
+See `docs/INVENTORY_CORE_G3A.md`.
+
+### Optional inventory Test Level projection (G3-B partial, October 2026)
+
+`InventoryTestLevelSnapshot` projects validated authored
+`<scene>.rinventory` and access companions into disposable Test Level scenes.
+It is opt-in and does not register items for games without inventory. The
+reference `Examples/Inventory/InteractTransfer.lua` reads existing Player/
+Entity position, Interact input and the single authoritative inventory gateway
+to perform a validated transfer. Its script properties and container grants
+must be deliberately authored; no Inventory Designer exists. Test Level
+projection and Lua host interaction passed isolated tests but complete
+Test Game and packaging were not exercised. A production authoring/asset
+schema, Build Game typed dependency closure, game-save authority and world
+visual interaction polish remain open. See
+`docs/INVENTORY_CORE_G3B_CHECKPOINT.md`.
+
+### G3-C optional inventory Build Game closure and save payload (October 2026)
+
+`InventoryDependencyProvider` is now registered by the existing
+`WindowsGameBuildProjectService` for reachable Scene nodes. Inventory
+snapshots and optional access-policy sidecars are declared typed required
+`Data` dependencies only when present, subject to project containment,
+bounds and schema validation. The existing collector/registry/package plan
+remains the dependency authority; ordinary inventory-free games are unaffected.
+
+`RuntimeInventorySession::CaptureRuntimeState` and `RestoreRuntimeState`
+supply a bounded in-memory payload to a future save-game module; neither
+method writes authored Scene files, implements save slots or asserts player
+profile/saveDataId identity. See `docs/INVENTORY_G3C_PACKAGING_PERSISTENCE.md`.
+Full standalone Build Game and persistent slot acceptance are not yet proven.
+
+### G3-D shared inventory script-grant validation (October 2026)
+
+`InventoryAccessPolicy` is the single bounded and versioned authority for
+parsing inventory creator-script grants. Runtime, Build Game dependency
+discovery and Test Level snapshot projection all use the same parser.
+It validates actual referenced container identities, read/deposit/withdraw,
+DEFINE and CREATE capabilities, script/owner IDs and duplicate grants before
+a live gateway is configured or a companion is packaged. No default
+inventories, UI screens, equipment changes or save slots are introduced.
+See `docs/INVENTORY_G3D_ACCESS_POLICY.md`.
+
+### G3-E inventory production build / optional package-plan proof (26 October 2026)
+
+The production Windows Runtime now links against the pinned Wicked Lua 5.4
+headers via `Runtime/S3GovernedLuaRuntime.cmake`; EngineBridge,
+ScreenRenderer and Runtime link in the full VS2022 Release build.
+`Tests/WindowsGameBuildProjectTests.cpp` now exercises the actual StoryFlow
+collector and Build Game plan with/without optional Scene inventory
+companions; malformed access fails during build preparation. Existing DX12
+StoryFlow project and a disposable inventory-enabled copy both pass the
+linked Runtime smoke launch, but full packaged staging and visual
+pickup/chest gameplay remain pending. See
+`docs/INVENTORY_G3E_FULL_BUILD_PROOF.md`.
+
+### G3-F governed Lua interactive inventory proof (26 October 2026)
+
+A safe, explicitly invoked fixture-authoring utility
+`RenegadeInventoryRuntimeProofAuthor` uses the same
+`ScriptDocumentService`/Global Script validation as the editor to attach
+a level-scoped inventory observer to the disposable inventory project in
+`BUILD`. It binds exact per-instance container permissions, queries
+the one authoritative Player/chest state, shows existing UI prompt and
+routes an E/Interact transfer through the G2 Lua gateway. Real DX12
+Runtime boot passes, but human visual Interact acceptance is not yet
+verified. See `docs/INVENTORY_G3F_INTERACTIVE_PROOF.md`.
+
+### G4-A optional inventory overview (26 October 2026)
+
+`InventoryOverlayView` is an EngineBridge read-only, revisioned projection of
+the existing authoritative Player/chest containers. Runtime caches and
+renders a bounded two-column overview through its existing
+`RuntimeRenderPath` only for inventory-enabled levels. Press `I` to
+show/hide and use the owner-accepted Lua `E` transfer to update the live
+quantities. There is no second item authority, UI Designer replacement,
+equipping logic or mandatory inventory. The temporary native overview is
+**not** the final authorable inventory UI: G4-B will connect item slots and
+validated transfer commands to shared Screen/UI Designer capabilities.
+See `docs/INVENTORY_G4A_LIVE_VIEW.md`.
+
+### G4-B1 scoped selection and item transfer (26 October 2026)
+
+`InventorySelectionController` is an EngineBridge presentation/controller
+seam independent of Wicked and UI Designer. It retains stable selected
+container/stack identities, reconciles external Lua changes, and delegates
+one-item transfers only to a trusted `InventoryGameplayGateway`. Runtime
+creates its private, per-scene gateway for existing Player/Chest containers
+and renders a selected row within the opt-in G4-A preview. Keyboard
+navigation uses Up/Down, Tab and Enter; while open, movement/fire input is
+suppressed, but the accepted E/Interact Lua fixture and Esc/Pause remain.
+The first G4-B1 step is **not** a new Inventory Designer, finished icons,
+drag-and-drop, mouse focus, save slots, or an authorable gameplay screen;
+those remain G4-B2. See `docs/INVENTORY_G4B1_SELECTION_TRANSFER.md`.
+
+### G4-B2A inventory through an editable standard Screen (26 October 2026)
+
+`InventoryScreenAdapter` provides a normal schema-v3 Overlay Screen with
+regular editable Image/Text/Button widgets and explicit per-slot action IDs.
+A read-only view projection fills only transient widget text/enabled states;
+mouse and keyboard activations route into the existing
+`InventorySelectionController` and scoped `InventoryGameplayGateway`.
+The authored Screen stays immutable, optional and disabled by default.
+Runtime can load its enabled **transient copy** through the sole shared
+`RuntimeScreenPresenter` implementation when the inventory module
+explicitly opts in. G4-B2's BUILD-only prototype opt-in marker and fixed
+filename are provisional, not a shipping project authoring or package API.
+A globally enabled Screen caused a startup regression; the disabled Screen
+with explicit runtime-module opt-in passes the DX12 Smoke. See
+`docs/INVENTORY_G4B2_EDITABLE_SCREEN_PREVIEW.md`. Screen click/pointer
+behaviour, original artwork, general Inspector wiring and owner acceptance
+remain pending.
+
+### G4-B2B Screen click and Lua Interact input regression (26 October 2026)
+
+The creator-reported G4-B2A slot click and E-key paths failed live
+acceptance despite visual rendering and smoke. Runtime now treats an
+open enabled Inventory Screen as its own input owner: the gameplay
+action-map still captures authorised E/Pause while its pure input policy
+suppresses world movement/combat. Wicked's release-click extra guard is
+exempted for inventory.slot.* actions only; all Screen activations still
+use the regular RuntimeScreenController and permission-scoped gameplay
+gateway. The existing native Screen gains transient status messages
+and rejection diagnostics. A separate BUILD-only editable ActionFix
+Screen and launcher support owner verification. All 12 isolated inventory
+tests, 3 linked UI/input tests and three sequential DX12 StoryFlow smokes
+pass, but physical E/mouse actions still require owner acceptance.
+See `docs/INVENTORY_G4B2B_INPUT_TRANSFER_FIX.md`.
+
+### G4-B2C transient screen text and binding-frame stability (26 October 2026)
+
+Owner screenshot exposed a Screen cache bug: live InventoryService/Lua
+state changed while the UI Designer-authored Screen labels reverted to
+their initial 3/2 values. Runtime's `SetWidgetState` rebuilds a full
+binding frame, overwriting texts set for previous slot widgets.
+`RuntimeScreenController` now stores unbound runtime-projected
+Text/Button labels as per-instance transient overrides, reapplying
+them after full binding/state resolution and clearing them on Screen
+initialisation. Authored Screen assets, item authority and styling remain
+unchanged. A production-linked regression replays the exact repeated
+slot update order through live transfers and verifies 2/1, 0/3,
+1/2, transfer-status preservation and reset isolation. See
+`docs/INVENTORY_G4B2C_LIVE_SCREEN_REFRESH.md`.
+
+### G4-B3A stable scoped drag transfer (26 October 2026)
+
+`InventoryDragTransfer` is a UI-independent, revisioned pointer-gesture
+model that tracks the stable stack identity/quantity but never owns item
+state. Ordinary clickable Screen slot buttons still move one item; optional
+shared ScreenRenderer pointer callbacks allow native Runtime screens to
+recognise drag onto another resolved slot rectangle and request a full
+stack transfer through the existing permission-scoped gateway.
+Late Lua mutations invalidate in-flight drags, and outside/cancelled
+gestures never change inventory. No source edits in Wicked or new
+Inventory Designer. The BUILD-only authored drag preview is separate
+from the accepted G4-B2C Screen; owner pointer acceptance pending.
+See `docs/INVENTORY_G4B3A_DRAG_TRANSFER.md`.
+
+### G4-B3A2 quantity modifier and default one-item drag (26 October 2026)
+
+Live G4-B3A pointer dragging was confirmed working by the owner, but
+the previous default moved a full stack. The revised editable inventory
+Screen moves one item on an ordinary drag. Holding Shift at mouse-down
+captures the full stack quantity for that gesture. The quantity is
+validated with the same stable item instance/revision and scoped atomic
+`InventoryGameplayGateway`, so UI preference changes introduce no second
+item ownership or unchecked transfer path. Clicking and governed Lua E
+still move one item. See
+`docs/INVENTORY_G4B3A2_SINGLE_DRAG_MODIFIER.md`.
+
+### G4-B3B1 standard Screen graphical item icons and hover details (26 October 2026)
+
+Inventory starter art is a **project-owned UI presentation concern**, not
+a new gameplay item definition authority. The existing `InventoryService`
+definition ID is projected read-only, safely mapped through a whitelist
+to a project-contained PNG resource. The normal Screen v3 authoring system
+provides 4x2 Button tile grids per container and additional noninteractive
+icon Image widgets; the linked shared Wicked ScreenRenderer can switch
+icon resources at Runtime after path validation. A fixed hover details
+Text widget uses the existing resolved slot hit geometry, with no new
+input routing. Source original PNG assets and generator are shipped
+only in the isolated inventory branch; the BUILD fixture copies icons
+without overwriting them. This is a new optional Screen template and
+does not alter accepted G4-B3A2 click/drag transactions. General
+Inspector Screen-ID authoring and standalone packaging are open.
+See `docs/INVENTORY_G4B3B1_ICON_GRID.md`.
+
+### G4-B3B2 semantic buttons with separate graphical quantity labels (27 October 2026)
+
+The G4-B3B1 owner screenshot showed gameplay quantities and Lua proof
+synchronised but the wrong icon and clipped captions. Item definitions
+from Lua use `health-potion`, so the presentation-only whitelist
+explicitly maps it to the original `potion.png`; no untrusted asset
+paths are constructed. Standard ScreenService requires Buttons and
+Text to carry valid nonempty semantic/caption fields. G4-B3B2 retains
+interactive Button labels for validation/focus but hides their visual
+glyphs, while 16 noninteractive Text widgets in the ordinary editable
+Screen show the right-aligned `xN` badges. Empty badges are hidden.
+Runtime projects both text and visibility from the existing authoritative
+revision. This avoids altering the engine's general Text positioning
+rules or the already owner-accepted click/drag/E actions. See
+`docs/INVENTORY_G4B3B2_ICON_LABEL_FIX.md`.
+
+### G4-B3C0 creator-controlled inventory presentation contract (27 October 2026)
+
+Owner permits a ready-to-use inventory Grid **only with unrestricted
+creator control over appearance and editable/replacable action logic**.
+The default widget, all its theme/style properties, icon scaling,
+geometry, focus/hover/scroll decoration and asset references must be
+authorable in the existing Screen UI Designer. Full Lua/C++ custom UI
+remains independent; default use/transfer/drop rules are replaceable
+through explicit, validated gameplay policies and scripts. No shadow
+item storage and no untrusted mutation of permission grants.
+
+The pure `InventoryGridViewport` service computes visible absolute
+slot ranges from the authorised container's capacity, not from
+presently populated stacks or the existing G4-B two-panel preview
+rows (which are capped to 24). It validates square/free cell geometry,
+padding/gaps and icon fit plus scroll position/wheel mapping,
+without owning any presentation widget or gameplay state. This
+G4-B3C0 slice is **not a working scrollbar**. Later G4-B3C1+ binds
+the viewport to a governed paginated read-only item projection and
+the editable Screen renderer, followed by Inspector controls,
+governed creator actions, packaged Runtime and owner acceptance.
+See `docs/INVENTORY_G4B3C_CREATOR_CONTROL_SPEC.md`.
+
+### G4-B3B3 inventory pointer lifecycle independent of visual widget drag focus (27 October 2026)
+
+The owner rejected repeated drag and Shift/LMB behaviour in the G4-B3B2
+graphical inventory, though its artwork/quantity layout is accepted.
+Per-widget Wicked OnDragStart/OnDragEnd is no longer used for the
+inventory transaction path. Runtime now polls the existing governed
+pointer state while an authorised overlay is open, hit-tests the
+resolved regular Screen slot geometry, and uses a pure
+`InventoryPointerGesture` policy for repeated presses, Shift at
+mouse-down, movement threshold, release and native redundant-click
+suppression. It still invokes the pre-existing atomic
+`InventoryDragTransfer` via scoped InventoryGameplayGateway;
+keyboard/controller/Lua and other Screen controls are unchanged.
+Tests exercise repeated gestures and whole-stack reverse against
+a real InventoryService. This is a candidate pending live owner
+pointer approval. See `docs/INVENTORY_G4B3B3_REPEAT_DRAG_FIX.md`.
+
+### G4-B3C1A governed paged inventory projection (27 October 2026)
+
+Inventories are authoritative in one `InventoryService`; the
+UI-independent `InventoryGridPage` service reads a permission-scoped
+`InventoryGameplayGateway` snapshot and projects a bounded visible
+window of absolute positions and stable stack identity via the
+creator-configurable `InventoryGridViewport`. Unlike the old
+two-container WIP Screen's 24-row limit, pages can represent
+arbitrary positions beyond row 24 without inventing new item
+storage. `inventory.grid.cell.N` is a *visible index*, not item
+authority. Drag/click commands must resolve that index through
+the captured page and verify unchanged inventory revision,
+identical current absolute stack identity, source read grant and
+atomic scoped `InventoryGameplayGateway::Transfer`. A drop
+selects the destination CONTAINER, not a promised physical position
+inside a packed-stack list. Runtime render, persisted Screen grid
+widgets, scroll wheel and scrollbar Inspector binding remain open;
+G4-B3B3 owner-accepted overlay is unchanged. See
+`docs/INVENTORY_G4B3C1A_PAGED_BINDING.md`.
+
+### G4-B3C1B editable paged Screen and row-scroll Runtime (27 October 2026)
+
+The creator UI is an ordinary Screen v3 document with 132 normal
+widgets and 44 button actions over two independent 5x4 paged
+inventory views. It is a disposable opt-in template, not a separate
+inventory authority. `InventoryPagedScreenAdapter` binds each
+authored Button's `inventory.paged.<panel>.slot.<visibleIndex>` and
+decorative Image/Text widgets to a transient G4-B3C1A
+`InventoryGridPage`, including absolute slot range labels and
+up/down arrows. Runtime also uses Wicked's native pointer-wheel
+delta when a visible slot is hovered. The existing B3B3 owner
+accepted pointer lifecycle captures Shift at pointer-down; the
+page model rechecks captured stable item identity and revisions
+before a gateway transaction. Destination drops mean selection
+of the destination container, not precise positions in the
+compact-stack inventory service. A dedicated paged marker in a
+cloned BUILD-only project prevents change to the accepted legacy
+4x2 screen. A draggable Slider thumb, creator Inspector/asset
+mapping and custom Lua/C++ behaviour hooks are not yet wired.
+See `docs/INVENTORY_G4B3C1B_SCREEN_PAGING.md`.
+
+
+## Inventory Screen authoring facade and local dispatch — 27 October 2026
+G4-B3C4 uses the ordinary ScreenAuthoringSession as the sole persistent UI authority. A normal Inventory Inspector derives its draft from paired native widgets and applies atomic resize/style commands; there is no separate inventory layout asset or item store. Runtime item authority remains InventoryService behind its scoped gateway. Strict inventory action parsing distinguishes local gameplay controls from Story Flow navigation even in old Screens without local_only flags. Only the dedicated inventory presenter admits these local requests.
+
+Screen v3 has optional per-widget image_fit (0 Stretch, 1 Contain, 2 Cover), rendered identically by the shared ScreenRenderer. Missing legacy fields preserve Stretch. Runtime renderer instances synchronize transient visible/enabled state into their own layout document so a layout pass cannot restore stale initial control eligibility. This state is never written back to the creator's Screen.
+
+See docs/INVENTORY_G4B3C4_CREATOR_WORKFLOW.md for final verification and explicit remaining release/module boundaries.
+
+G4-B3C4b: shared ScreenDocument::MaximumActions=128 replaces the previous 64-action guard without schema changes. Paired inventory grids permit 40 visible cells/panel within 256 native widgets. FitInventoryPagedGridSlots computes constrained native geometry; Inspector explicitly offers fit-and-apply after a size rejection. Errors render in red, weighted wrapped 14 px text directly under Apply. See INVENTORY_G4B3C4_CREATOR_WORKFLOW.md for verification.

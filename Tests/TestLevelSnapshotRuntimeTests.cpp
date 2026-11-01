@@ -1,3 +1,7 @@
+#include "renegade/bridge/InventoryService.h"
+#include "renegade/bridge/InventoryItemCatalogueService.h"
+#include "renegade/bridge/InventoryScreenAssignmentService.h"
+#include "renegade/bridge/InventoryScreenAdapter.h"
 #include "../EngineBridge/src/PlaceableWaterfallAuthoring.h"
 #include <chrono>
 #include <cmath>
@@ -556,6 +560,76 @@ int main()
         session.Commands().RedoCount() != redoBeforeFailure)
     {
         return Fail("LP04 descriptor failure changed authoritative editor state");
+    }
+
+    // G5 must survive the real Studio Test Level shadow-project boundary.
+    // Exercise the production item/Screen dependency closure without a GPU.
+    {
+        using namespace renegade::bridge;
+        InventoryService inventory;
+        if (inventory.RegisterItem({"health-potion","Health Potion",10,0.2,{}}) != InventoryResult::Success ||
+            inventory.CreateContainer("player",12,0) != InventoryResult::Success ||
+            inventory.CreateContainer("chest",12,0) != InventoryResult::Success ||
+            inventory.Add("chest","health-potion",2) != InventoryResult::Success)
+            return Fail("G5 snapshot inventory fixture failed");
+        const auto companion=fs::u8path(scenePath.generic_u8string()+".rinventory");
+        {std::ofstream out(companion,std::ios::binary);out<<inventory.SerializeSnapshot();}
+        const std::string cataloguePath="Content/Gameplay/Inventory.renegade-items";
+        fs::create_directories((projectRoot/cataloguePath).parent_path());
+        InventoryItemCatalogue catalogue;
+        catalogue.envelope=CreateDocumentEnvelope(project.projectId,
+            InventoryItemCatalogueDocumentType,cataloguePath,"Snapshot G5 regression");
+        InventoryAuthoringItem potion;
+        potion.id="health-potion";potion.name="Health Potion";
+        potion.kind=InventoryItemKind::Consumable;potion.effect=InventoryItemEffect::RestoreHealth;
+        potion.healthRestored=50;potion.maximumStack=10;potion.weightPerUnit=0.2;
+        potion.iconProjectRelativePath="Content/UI/InventoryIcons/potion.png";
+        if(!UpsertInventoryAuthoringItem(catalogue,potion,snapshotError) ||
+           !WriteInventoryItemCatalogue((projectRoot/cataloguePath).generic_u8string(),catalogue,snapshotError))
+            return Fail("G5 snapshot catalogue fixture failed");
+        const std::string screenPath="Content/UI/SnapshotInventory.renegade-screen";
+        auto screen=MakeInventoryIconGridScreen(project.projectId,screenPath);
+        std::vector<std::string> required={cataloguePath,InventoryScreenAssignmentPath,screenPath,potion.iconProjectRelativePath};
+        for(const auto& widget:screen.widgets)if(!widget.resourcePath.empty())required.push_back(widget.resourcePath);
+        for(const auto& path:required)if(path.find(".png")!=std::string::npos) {
+            fs::create_directories((projectRoot/path).parent_path());
+            fs::copy_file(projectRoot/importedTexture.assetProjectRelativePath,projectRoot/path,fs::copy_options::overwrite_existing);
+        }
+        if(!WriteScreenDocument((projectRoot/screenPath).generic_u8string(),screen,snapshotError) ||
+           !SetInventoryScreenAssignment(project.rootPath,project.projectId,screen.envelope.documentId,screenPath,snapshotError))
+            return Fail("G5 snapshot Screen assignment fixture failed");
+        TestLevelSnapshot inventorySnapshot;
+        if(!snapshots.Create(project,inventorySnapshot,snapshotError)) {
+            std::cerr<<snapshotError<<'\n';return Fail("G5 Test Level snapshot failed");
+        }
+        const auto shadow=fs::u8path(inventorySnapshot.sessionDirectory);
+        for(const auto& path:required)if(ReadBytes(shadow/path).empty() || ReadBytes(shadow/path)!=ReadBytes(projectRoot/path)) {
+            std::cerr<<path<<'\n';return Fail("G5 Test Level omitted catalogue or assigned Screen resource");
+        }
+        InventoryScreenAssignment assigned;
+        if(!ReadInventoryScreenAssignment(shadow.generic_u8string(),project.projectId,assigned,snapshotError) ||
+           assigned.screenId!=screen.envelope.documentId ||
+           ReadBytes(fs::u8path(inventorySnapshot.scenePath+".rinventory"))!=ReadBytes(companion))
+            return Fail("G5 Test Level changed assigned identity or inventory bytes");
+        if(!snapshots.Cleanup(inventorySnapshot,snapshotError))return Fail("G5 snapshot cleanup failed");
+        const auto icon=projectRoot/potion.iconProjectRelativePath;
+        const auto hidden=fs::u8path(icon.generic_u8string()+".hidden");
+        fs::rename(icon,hidden);
+        TestLevelSnapshot rejected;
+        const bool missingAccepted=snapshots.Create(project,rejected,snapshotError);
+        fs::rename(hidden,icon);
+        if(missingAccepted || rejected.IsValid() || fs::exists(projectRoot/"Intermediate/TestLevelSnapshots"))
+            return Fail("G5 snapshot accepted missing icon or leaked rejected staging");
+        catalogue.envelope.projectId=GenerateStableId();
+        if(!WriteInventoryItemCatalogue((projectRoot/cataloguePath).generic_u8string(),catalogue,snapshotError))
+            return Fail("G5 foreign catalogue fixture write failed");
+        if(snapshots.Create(project,rejected,snapshotError) || rejected.IsValid() ||
+           fs::exists(projectRoot/"Intermediate/TestLevelSnapshots"))
+            return Fail("G5 snapshot accepted foreign catalogue or leaked staging");
+        if(ReadBytes(scenePath)!=authoritativeBytes || session.Scenes().CurrentPath()!=pathBeforeSnapshot ||
+           !session.Commands().IsDirty() || session.Commands().UndoCount()!=undoBeforeFailure ||
+           session.Commands().RedoCount()!=redoBeforeFailure)
+            return Fail("G5 snapshot changed author scene or history");
     }
 
     std::cout << "PASS: LP04 Runtime-ready unsaved Test Level snapshot project\n";

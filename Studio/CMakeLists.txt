@@ -126,6 +126,7 @@ add_executable(RenegadeStudio WIN32
     src/MoonStudioIntegration.cpp
     src/ShootingStarsStudioIntegration.cpp
     src/StudioApplication.cpp
+    src/RenegadePickupEditor.cpp
     src/FirstPersonAssemblyEditor.cpp
     src/PlayerPrefabEditor.cpp
     src/PlayerEquipmentEditor.cpp
@@ -146,6 +147,8 @@ set_target_properties(RenegadeTerrainSurfacePacker PROPERTIES
     FOLDER "Renegade/Tools"
 )
 add_dependencies(RenegadeStudio RenegadeTerrainSurfacePacker)
+# Use the canonical RenegadeStudio.exe output required by Studio/Runtime CI.
+# The separately built V4 inventory review candidate remains in BUILD for QA.
 
 target_include_directories(RenegadeStudio
     PRIVATE

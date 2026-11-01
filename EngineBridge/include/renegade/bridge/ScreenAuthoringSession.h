@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <optional>
+#include "renegade/bridge/InventoryGridViewport.h"
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -571,7 +572,7 @@ namespace renegade::bridge
                 return false;
             }
             ScreenDocument candidate = Document();
-            if (candidate.actions.size() >= 64)
+            if (candidate.actions.size() >= ScreenDocument::MaximumActions)
             {
                 error = "The Screen action limit has been reached.";
                 return false;
@@ -806,13 +807,13 @@ namespace renegade::bridge
                 }
                 if (duplicate.kind == ScreenWidgetKind::Button)
                 {
-                    if (candidate.actions.size() >= 64)
+                    if (candidate.actions.size() >= ScreenDocument::MaximumActions)
                     {
                         error = "Reusable component duplication exceeds the Screen action limit.";
                         return false;
                     }
                     std::string nextAction;
-                    for (unsigned suffix = 1; suffix <= 64; ++suffix)
+                    for (unsigned suffix = 1; suffix <= ScreenDocument::MaximumActions; ++suffix)
                     {
                         const auto proposed = "ui_button_" + std::to_string(suffix);
                         if (std::none_of(candidate.actions.begin(), candidate.actions.end(),
@@ -903,6 +904,15 @@ namespace renegade::bridge
             bool placeAfter,
             std::string& error);
 
+        // One Undo entry for regenerating a paired paged inventory grid.
+        // Replace only artwork; retain geometry, actions, text, bindings and identity.
+        // Bulk scope is restricted to recognised inventory slot buttons.
+        [[nodiscard]] bool ChangeWidgetGraphic(const StableId& source,
+            const std::string& resource,bool allInventorySlots,std::string& error);
+        [[nodiscard]] bool ApplyPagedInventoryAppearance(
+            const StableId& source,std::string& error);
+        [[nodiscard]] bool ResizePagedInventoryGrid(
+            const InventoryGridLayout& layout, std::string& error);
         [[nodiscard]] bool Undo(std::string& error);
         [[nodiscard]] bool Redo(std::string& error);
 

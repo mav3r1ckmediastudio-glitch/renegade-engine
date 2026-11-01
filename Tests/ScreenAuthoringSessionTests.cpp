@@ -784,9 +784,9 @@ int main()
             reopenedButtons.FindWidget(duplicate)->localOnly)
             return Fail("UI-10 owned outcomes did not persist: " + error);
 
-        // Guard the 64-action schema limit without partially creating a Button.
+        // Guard the shared Screen action limit without partially creating a Button.
         ScreenDocument full = source;
-        while (full.actions.size() < 64)
+        while (full.actions.size() < ScreenDocument::MaximumActions)
             full.actions.push_back(
                 {"extra_action_" + std::to_string(full.actions.size())});
         const fs::path fullPath =
@@ -800,7 +800,7 @@ int main()
             maxActions.CreateButtonWithUniqueAction(
                 button, refused, error) ||
             !refused.empty() || maxActions.IsDirty())
-            return Fail("UI-10 exceeded the 64-action Screen limit");
+            return Fail("UI-10 exceeded the Screen action limit");
     }
 
     // Gate 8D foundation creator transactions.

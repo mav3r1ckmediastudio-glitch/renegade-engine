@@ -473,6 +473,30 @@ int main()
     Check(!audit.succeeded && Contains(audit.unroutedButtonActionIds,"settings"),
         "Flow parity did not resume when the Button exited Local Only mode");
 
+    // Old inventory buttons (local_only=false) and new local buttons never need routes.
+    // A malformed lookalike is still ordinary navigation.
+    const auto savedScreen=screen;
+    for(const bool local:{false,true}) {
+        screen=savedScreen;
+        screen.actions.push_back({"inventory.paged.0.slot.0"});
+        screen.actions.push_back({"inventory.paged.1.scroll.down"});
+        screen.widgets[1].actionId="inventory.paged.0.slot.0";
+        screen.widgets[1].localOnly=local;
+        auto arrow=screen.widgets[1];arrow.id=GenerateStableId();
+        arrow.actionId="inventory.paged.1.scroll.down";screen.widgets.push_back(arrow);screen.focusOrder.push_back(arrow.id);
+        Check(WriteScreenDocument(screenPath.generic_u8string(),screen,error),"inventory audit fixture write failed");
+        auto inventoryAudit=references.AuditScreenOutcomes(root.generic_u8string(),projectId,flow,screenNodeId);
+        Check(inventoryAudit.succeeded,"legacy/new inventory local actions required navigation");
+        screen.actions.push_back({"inventory.paged.quit"});
+        screen.widgets.back().actionId="inventory.paged.quit";screen.widgets.back().localOnly=false;
+        Check(WriteScreenDocument(screenPath.generic_u8string(),screen,error),"lookalike audit fixture write failed");
+        inventoryAudit=references.AuditScreenOutcomes(root.generic_u8string(),projectId,flow,screenNodeId);
+        Check(!inventoryAudit.succeeded&&Contains(inventoryAudit.unroutedButtonActionIds,"inventory.paged.quit"),
+            "inventory prefix hid a genuine unconnected navigation button");
+    }
+    screen=savedScreen;
+    Check(WriteScreenDocument(screenPath.generic_u8string(),screen,error),"restore audit fixture failed");
+
     // Multiple routes for one valid Screen action remain legal. Conditions and
     // priority are still interpreted by the existing FlowInterpreter contract.
     FlowRoute settingsA = MakeRoute(

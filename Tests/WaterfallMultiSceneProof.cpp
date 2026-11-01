@@ -97,6 +97,27 @@ int main(int argc,char** argv){
   auto records=Records(scene);
   checkpoint("enumerated_waterfalls");
   Need(records.size()==((verify||soak||surveyJunction)?2:1),"Wrong authored instance count on scene open");
+  if(stressExport) {
+    // Combined 81-chunk inventory/river fixture: G11B receiving water is
+    // 0.30m below the -0.55m terrain shelf. Land the G13 curtain at THAT
+    // waterline, without moving its approved crest, horizontal controls,
+    // sheet material or whitewater source. Other review scenes are unchanged.
+    auto landing=records.front().settings;
+    Need(std::abs(landing.landing.y)<.01f,
+      "Combined fixture starting waterfall landing must be at original Y=0");
+    const auto originalCrest=landing.crest;
+    landing.landing.y=-.85f;
+    Need(session.Commands().Execute(
+      wf::MakeEditWaterfallCommand(scene,records.front().id,landing)),
+      "Combined G13 waterfall landing could not be aligned with G11B waterline");
+    records=Records(scene);
+    Need(records.size()==1 &&
+      std::abs(records.front().settings.landing.y+.85f)<.001f &&
+      std::abs(records.front().settings.crest.y-originalCrest.y)<.001f,
+      "Combined waterfall edit changed crest or lost landing alignment");
+    std::cout<<"G13E14_G11B_WATERFALL_LANDING_MATCH=PASS waterline=-0.85"
+      <<" crest_preserved=1"<<std::endl;
+  }
   if(verifyJunction)
     Need(scene.splines.GetCount()==1&&scene.terrains.GetCount()==1,
       "G13E9 reopened junction missing native river or terrain");
@@ -429,9 +450,12 @@ int main(int argc,char** argv){
       // a faked rectangle of water. Keep this entirely in the disposable scene.
       renegade::bridge::RiverSplineOptions opt;
       opt.widthMeters=4.2f;
-      // The placed fall's receiving water surface is at its authored
-      // landing Y=0. No hidden 'pool' plane or +0.20m floating river lip.
-      opt.surfaceOffsetMeters=junctionScene?.015f:.20f;
+      // The 81-chunk combined gameplay stress fixture has a native baseline
+      // terrain shelf at -0.55m. Preserve G11B's 0.30m bank burial there;
+      // +0.015m would leave water floating ABOVE the authored shelf.
+      // Other G13 review fixtures retain their previously accepted heights.
+      // No second pool plane or cap object is created.
+      opt.surfaceOffsetMeters=stressExport?-.85f:(junctionScene?.015f:.20f);
       // 81 chunks * five 20-subdivision spans exceeds the G11 linked-bed
       // bounded 32-million-interaction authoring budget. A 12-subdivision
       // sampling density keeps the identical spline path/width and solver

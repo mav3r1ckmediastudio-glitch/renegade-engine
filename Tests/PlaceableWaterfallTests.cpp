@@ -58,6 +58,48 @@ int main(){
   unsigned landed=0;float deviation=0;
   for(size_t i=0;i<shelf.paths.size();++i){const auto& path=shelf.paths[i];Require(path.points.size()>=2,"Empty traced ribbon");if(path.points.back().position.y<.1f)++landed;deviation+=std::abs(path.points.back().position.x-clear.paths[i].points.back().position.x);for(const auto& q:path.points)Require(std::isfinite(q.position.x)&&std::isfinite(q.position.y),"Nonfinite traced trajectory");}
   Require(landed==32&&deviation>1,"Water did not leave the finite shelf and reach landing");
+  BankTerminationSummary term;std::string termError;
+  auto unchanged=shelf;
+  Require(ResolveWaterfallBankTerminations(shelf,collision.landing.y,term,termError)
+          &&term.waterLandings==32&&term.bankTerminations==0 &&
+          shelf.paths[0].points.size()==unchanged.paths[0].points.size() &&
+          shelf.impacts.size()==unchanged.impacts.size(),
+          "Previously approved all-wet cascade must be unchanged");
+  CollisionPaths mixed;
+  WaterPath wet;wet.points={
+      {{0,10,0},{0,-1,0},0,false},
+      {{0,-.86f,0},{0,-1,0},1,false}
+  };
+  WaterPath blocked;blocked.points.resize(650);
+  for(size_t i=0;i<650;++i){
+      blocked.points[i].position={1,-.48f,0};
+      blocked.points[i].time=float(i)*.0125f;
+  }
+  blocked.points[290].contact=true;
+  mixed.paths={wet,blocked};
+  mixed.impacts={{999,1,999}};
+  Require(ResolveWaterfallBankTerminations(mixed,-.85f,term,termError)
+          &&term.waterLandings==1&&term.bankTerminations==1
+          &&mixed.paths[0].points.size()==2
+          &&mixed.paths[1].points.size()==291
+          &&mixed.paths[1].points.back().contact
+          &&mixed.impacts.size()<=2,
+          "Bank-blocked outer streams must end on bank without disabling wet waterfall");
+  auto noWater=mixed;noWater.paths.erase(noWater.paths.begin());
+  const auto oldSize=noWater.paths[0].points.size();
+  Require(!ResolveWaterfallBankTerminations(noWater,-.85f,term,termError)
+          &&noWater.paths[0].points.size()==oldSize,
+          "All-dry waterfall must refuse without mutating input");
+  auto noBank=mixed;
+  noBank.paths[1].points.resize(650);
+  for(size_t i=291;i<650;++i){
+      noBank.paths[1].points[i]=noBank.paths[1].points.back();
+      noBank.paths[1].points[i].contact=false;
+  }
+  noBank.paths[1].points[290].contact=false;
+  Require(!ResolveWaterfallBankTerminations(noBank,-.85f,term,termError),
+          "Uncontacted stream above water must not pretend to have a bank");
+  std::cout<<"WATERFALL_MIXED_RIVER_BANK_TERMINATION=PASS wet=1 bank=1"<<std::endl;
   wi::scene::MeshComponent collisionMesh;FillCollisionPathMesh(collision,shelf,collisionMesh,wi::ecs::INVALID_ENTITY);
   Require(!collisionMesh.indices.empty()&&collisionMesh.vertex_uvset_1.size()==collisionMesh.vertex_positions.size(),"Collision ribbon cache incomplete");
   CollisionPaths isolated;WaterPath freeStream;freeStream.u=.5f;freeStream.width=.4f;

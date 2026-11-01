@@ -4,18 +4,20 @@
 
 | Field | Value |
 |---|---|
-| Upstream | `https://github.com/turanszkij/WickedEngine.git` |
-| Branch | `master` |
-| Commit | `3a800b7134aafe58461093c8abb2e274d4e64033` |
-| Commit subject | `Fix UI flicker in env probe panel (#1687)` |
-| Upstream commit date | `2026-07-24` |
-| Renegade snapshot date | `2026-07-29` |
+| Fork | `https://github.com/mav3r1ckmediastudio-glitch/WickedEngine.git` |
+| Official upstream | `https://github.com/turanszkij/WickedEngine.git` |
+| Branch | `renegade-rocky-riverbed-v1` |
+| Commit | `ceb816b844b4ab2fa56a159ac60a4f65c931bdfc` |
+| Pin authority | PR #186, merged main `150eca4b761d3f62f122df3ab5e8536ec084f926` |
+| Prior official baseline | `3a800b7134aafe58461093c8abb2e274d4e64033` |
+| Renegade integration date | `2026-10-28` |
 | Integration | Pinned Git submodule at `/WickedEngine` |
 
-The submodule provides the complete Wicked source and history while keeping the
-Renegade layers separate. Before the first unavoidable Wicked core patch, create
-a dedicated Wicked fork and repoint the submodule to that fork. Keep the
-official repository configured as its upstream.
+The submodule now uses the river-enabled Renegade fork accepted through PR #186.
+Preserve this gitlink and fork URL during inventory integration. The previous
+official baseline below is historical, not the active checkout authority.
+See RIVER_G13E14_SINGLE_COMBINED_TEST_2026-10-28.md and the integration validation report.
+Existing configure-time overlays remain separate from the pinned commit.
 
 ## Phase-boundary sync procedure
 
@@ -42,11 +44,12 @@ record:
 - Expected future conflict area.
 - Whether the patch should be proposed upstream.
 
-## Pin currency
+## Historical official baseline currency (July 2026)
 
 Upstream `master` was fetched on 2026-07-30 during a grid investigation and
-resolved to `3a800b7134aafe58461093c8abb2e274d4e64033` — the exact commit
-pinned here. The pin is current, not stale, and there is nothing to sync.
+resolved to `3a800b7134aafe58461093c8abb2e274d4e64033` â€” the exact commit
+pinned here. That July observation describes the previous official baseline; the active
+river fork pin is recorded above.
 Recheck at the next phase boundary rather than assuming drift.
 
 ## Do not trust third-party indexes of Wicked

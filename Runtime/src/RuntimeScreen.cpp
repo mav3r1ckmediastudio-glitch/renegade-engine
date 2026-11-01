@@ -33,6 +33,7 @@ namespace renegade::runtime
         authoredDocument_ = document;
         document_ = std::move(document);
         stateOverrides_.clear();
+        displayTextOverrides_.clear();
         bindingSnapshot_ = {};
         bindingContext_ = {};
         bindingFrame_ = {};
@@ -83,6 +84,30 @@ namespace renegade::runtime
         return true;
     }
 
+    bool RuntimeScreenController::SetWidgetDisplayText(
+        const std::string& widgetId,std::string text,std::string& error)
+    {
+        const auto found=widgetIndex_.find(widgetId);
+        if(!initialized_||found==widgetIndex_.end()||text.size()>4096)
+        {error="Runtime Screen display text target or length is invalid.";return false;}
+        auto& widget=document_.widgets[found->second];
+        if(widget.kind!=bridge::ScreenWidgetKind::Text &&
+           widget.kind!=bridge::ScreenWidgetKind::Button)
+        {error="Runtime Screen display text requires a Text or Button widget.";return false;}
+        if(!authoredDocument_.widgets[found->second].bindings.empty())
+        {
+            for(const auto& binding:authoredDocument_.widgets[found->second].bindings)
+                if(binding.property==bridge::ScreenBindingProperty::Text)
+                {error="Runtime Screen text is owned by a declared binding.";return false;}
+        }
+        // Keep runtime-provided display text as an explicit transient
+        // override; SetWidgetState applies a full resolved binding frame and
+        // would otherwise silently restore every other slot's authored text.
+        displayTextOverrides_[widgetId]=std::move(text);
+        widget.text=displayTextOverrides_.at(widgetId);
+        error.clear();return true;
+    }
+
     void RuntimeScreenController::ApplyResolvedFrame(bridge::ScreenBindingFrame frame)
     {
         for (const auto& value : frame.widgets)
@@ -91,6 +116,9 @@ namespace renegade::runtime
             if (found == widgetIndex_.end()) continue;
             auto& widget = document_.widgets[found->second];
             widget.text = value.text;
+            if (const auto overrideText = displayTextOverrides_.find(value.id);
+                overrideText != displayTextOverrides_.end())
+                widget.text = overrideText->second;
             widget.fill = value.fill;
             widget.visible = value.visible;
             widget.enabled = value.enabled;
@@ -359,7 +387,7 @@ namespace renegade::runtime
         wi::RenderPath2D& renderPath,
         RuntimeScreenController& controller,
         RequestSink requestSink,
-        std::string& error)
+        std::string& error,PointerDragSink dragSink,bool inventoryHost)
     {
         Reset(renderPath);
         if (!document.enabledInGame)
@@ -374,6 +402,7 @@ namespace renegade::runtime
         }
 
         controller_ = &controller;
+        inventoryHost_ = inventoryHost;
         requestSink_ = std::move(requestSink);
         if (!renderer_.Load(
                 document,
@@ -392,7 +421,8 @@ namespace renegade::runtime
                     if(!controller_||!controller_->SetControlValue(id,value,error))return false;
                     RefreshVisualFocus(*controller_);
                     return true;
-                }))
+                },
+                std::move(dragSink)))
         {
             controller_ = nullptr;
             requestSink_ = {};
@@ -584,7 +614,76 @@ namespace renegade::runtime
     {
         return renderer_.IsLoaded();
     }
+    bool RuntimeScreenPresenter::SetVisualImageResource(
+        const bridge::StableId& widgetId,const std::string& path,
+        std::string& error) {
+        return renderer_.SetWidgetImageResource(widgetId,path,error);
+    }
+    bool RuntimeScreenPresenter::PagedScrollbarGeometry(
+        std::size_t panel,bridge::ScreenRect& track,bridge::ScreenRect& thumb) const {
+        if(panel>1 || !presentationVisible_ || !renderer_.IsLoaded() ||
+           !controller_)return false;
+        const bridge::ScreenWidget* trackWidget=nullptr;
+        const bridge::ScreenWidget* thumbWidget=nullptr;
+        const std::string trackName="Paged Scroll Track "+std::to_string(panel);
+        const std::string thumbName="Paged Scroll Thumb "+std::to_string(panel);
+        for(const auto& w:controller_->Document().widgets) {
+            if(w.name==trackName && w.visible)trackWidget=&w;
+            if(w.name==thumbName && w.visible)thumbWidget=&w;
+        }
+        if(!trackWidget || !thumbWidget)return false;
+        const auto* a=renderer_.LogicalRect(trackWidget->id);
+        const auto* b=renderer_.LogicalRect(thumbWidget->id);
+        if(!a || !b || a->height<=0 || b->height<=0)return false;
+        track=*a;thumb=*b;return true;
+    }
+    void RuntimeScreenPresenter::SetPagedScrollbar(
+        std::size_t panel,float position,float fraction) {
+        if(panel>1 || !controller_ || !renderer_.IsLoaded())return;
+        bridge::StableId track,thumb;
+        const std::string trackName="Paged Scroll Track "+std::to_string(panel);
+        const std::string thumbName="Paged Scroll Thumb "+std::to_string(panel);
+        for(const auto& w:controller_->Document().widgets) {
+            if(w.name==trackName)track=w.id;
+            if(w.name==thumbName)thumb=w.id;
+        }
+        if(!track.empty() && !thumb.empty())
+            renderer_.SetScrollbarThumb(thumb,track,position,fraction);
+    }
+    std::string RuntimeScreenPresenter::InventorySlotAt(float x,float y) const {
+        if(!presentationVisible_ || !renderer_.IsLoaded() || !controller_ ||
+           !std::isfinite(x) || !std::isfinite(y)) return {};
+        // Use the ScreenRenderer's actual responsive output geometry, not
+        // authored 1280x720 design coordinates. Empty slots are valid drops.
+        for(const auto& widget:controller_->Document().widgets) {
+            if(widget.kind!=bridge::ScreenWidgetKind::Button ||
+               (widget.actionId.rfind("inventory.slot.",0)!=0 &&
+                !(widget.actionId.rfind("inventory.paged.",0)==0 &&
+                  widget.actionId.find(".slot.")!=std::string::npos)) ||
+               !widget.visible)continue;
+            const auto* rect=renderer_.LogicalRect(widget.id);
+            if(!rect)continue;
+            if(x>=rect->x && y>=rect->y &&
+               x<=rect->x+rect->width && y<=rect->y+rect->height)
+                return widget.actionId;
+        }
+        return {};
+    }
 
+    std::string RuntimeScreenPresenter::InventoryContextAt(float x,float y) const {
+        if(!presentationVisible_ || !renderer_.IsLoaded() || !controller_ ||
+           !std::isfinite(x) || !std::isfinite(y))return {};
+        for(const auto& widget:controller_->Document().widgets) {
+            if(widget.kind!=bridge::ScreenWidgetKind::Button ||
+               widget.actionId.rfind("inventory.context.",0)!=0 ||
+               !widget.visible)continue;
+            const auto* rect=renderer_.LogicalRect(widget.id);
+            if(rect && x>=rect->x && x<=rect->x+rect->width &&
+               y>=rect->y && y<=rect->y+rect->height)
+                return widget.actionId;
+        }
+        return {};
+    }
     void RuntimeScreenPresenter::QueueFocused(const RuntimeInputSource source)
     {
         if (controller_ == nullptr || !requestSink_ || !renderer_.IsInputEnabled())
@@ -607,7 +706,7 @@ namespace renegade::runtime
             if(!controller_->ExecuteInteractions(request.widgetId,bridge::ScreenInteractionEvent::Activate,error))
             {wi::backlog::post("UI interaction rejected: "+error,wi::backlog::LogLevel::Warning);return;}
             RefreshVisualFocus(*controller_);
-            if(const auto* widget=controller_->FindWidget(request.widgetId);widget&&widget->localOnly)
+            if(const auto* widget=controller_->FindWidget(request.widgetId);widget&&!ShouldDispatchScreenAction(*widget,inventoryHost_))
                 return; // Atomic local UI actions succeeded; do not dispatch Flow.
             requestSink_(std::move(request));
         }
@@ -617,28 +716,56 @@ namespace renegade::runtime
         const std::string& widgetId,
         const RuntimeInputSource source)
     {
+        const auto* clicked = controller_ ? controller_->FindWidget(widgetId) : nullptr;
+        const bool inventorySlot = clicked &&
+            (clicked->actionId.rfind("inventory.slot.",0)==0 ||
+             (clicked->actionId.rfind("inventory.paged.",0)==0 &&
+              clicked->actionId.find(".slot.")!=std::string::npos));
+        // Inventory slot clicks are owned by RuntimeApplication's authoritative
+        // pointer gesture (same responsive hit-test as drags and potion use).
+        // A native Wicked Button can be covered by icon artwork and silently
+        // miss a click, or fire after a drag and transfer twice. Other authored
+        // Screen controls still use the standard native callback.
+        if (inventoryHost_ && source==RuntimeInputSource::Mouse && inventorySlot)
+            return;
         if (controller_ == nullptr || !requestSink_ || !renderer_.IsInputEnabled())
         {
+            if(inventorySlot)
+                wi::backlog::post("Inventory Screen click ignored: no input ownership",
+                    wi::backlog::LogLevel::Warning);
             return;
         }
 
         RuntimeActionRequest request;
         std::string error;
-        if(!renderer_.IsWidgetInteractive(widgetId))return;
-        if (controller_->MakeActionRequest(
-                widgetId,
-                source,
-                nextSequence_++,
-                request,
-                error))
-        {
-            if(!controller_->ExecuteInteractions(request.widgetId,bridge::ScreenInteractionEvent::Activate,error))
-            {wi::backlog::post("UI interaction rejected: "+error,wi::backlog::LogLevel::Warning);return;}
-            RefreshVisualFocus(*controller_);
-            if(const auto* widget=controller_->FindWidget(request.widgetId);widget&&widget->localOnly)
-                return; // Atomic local UI actions succeeded; do not dispatch Flow.
-            requestSink_(std::move(request));
+        if(!renderer_.IsWidgetInteractive(widgetId)) {
+            if(inventorySlot)
+                wi::backlog::post("Inventory Screen click ignored: widget not interactive",
+                    wi::backlog::LogLevel::Warning);
+            return;
         }
+        if (!controller_->MakeActionRequest(
+                widgetId,source,nextSequence_++,request,error)) {
+            if(inventorySlot)
+                wi::backlog::post("Inventory Screen click rejected: "+error,
+                    wi::backlog::LogLevel::Warning);
+            return;
+        }
+        if(!controller_->ExecuteInteractions(
+                request.widgetId,bridge::ScreenInteractionEvent::Activate,error)) {
+            wi::backlog::post("UI interaction rejected: "+error,
+                wi::backlog::LogLevel::Warning);
+            return;
+        }
+        RefreshVisualFocus(*controller_);
+        if(const auto* widget=controller_->FindWidget(request.widgetId);
+           widget && !ShouldDispatchScreenAction(*widget,inventoryHost_)) {
+            if(inventorySlot)
+                wi::backlog::post("Inventory Screen click stopped by localOnly",
+                    wi::backlog::LogLevel::Warning);
+            return;
+        }
+        requestSink_(std::move(request));
     }
 
     void RuntimeScreenPresenter::ApplyPointerFocus(

@@ -327,15 +327,14 @@ namespace
                 nullptr : &resource->second;
             const ScreenColor& surfaceColor = image != nullptr && image->IsValid() ?
                 visual.imageTint : visual.background;
-            DrawSurface(
-                image,
-                translation.x + border,
-                translation.y + border,
-                scale.x - border * 2.0f,
-                scale.y - border * 2.0f,
-                std::max(0.0f, radius - border),
-                ToWickedColor(surfaceColor, style.opacity),
-                cmd);
+            renegade::bridge::ScreenRect imageRect{
+                translation.x+border,translation.y+border,scale.x-border*2,scale.y-border*2};
+            if(image&&image->IsValid()&&authored.kind==renegade::bridge::ScreenWidgetKind::Image) {
+                const auto& desc=image->GetTexture().GetDesc();
+                imageRect=renegade::bridge::FitScreenImage(imageRect,float(desc.width),float(desc.height),authored.imageFit);
+            }
+            DrawSurface(image,imageRect.x,imageRect.y,imageRect.width,imageRect.height,
+                std::max(0.0f,radius-border),ToWickedColor(surfaceColor,style.opacity),cmd);
 
             if (authored.kind == renegade::bridge::ScreenWidgetKind::Progress)
             {
@@ -760,19 +759,27 @@ namespace renegade::screen
     struct ScreenRenderer::Impl
     {
         bridge::ScreenDocument document;
+        std::string projectRoot;
         ActivateSink activateSink;
         ControlSink controlSink;
+        DragSink dragSink;
         ScreenInstanceRoot root;
         bool attached=false;
         std::vector<std::unique_ptr<ScreenSurface>> surfaces;
         std::unordered_map<bridge::StableId, ScreenSurface*> byId;
         std::unordered_map<bridge::StableId, bridge::ScreenRect> logicalRects;
+        struct ScrollThumb {bridge::StableId trackId;float position=0;float fraction=1;};
+        std::unordered_map<bridge::StableId,ScrollThumb> scrollThumbs;
         bridge::ScreenRect viewport;
         bool hasViewport = false;
         bridge::ScreenRect clip;
         bool hasClip = false;
         bool inputEnabled = true;
         bool loaded = false;
+        // Static Screen geometry is stable between authored edits and viewport
+        // changes. Avoid rebuilding hundreds of slot rects every editor frame.
+        bool layoutDirty = true;
+        float lastLayoutWidth = -1, lastLayoutHeight = -1;
         bridge::ScreenAnimationPreview animation;
         bridge::ScreenTransitionFrame transition;
         bridge::ScreenAccessibilitySettings accessibility;
@@ -788,7 +795,7 @@ namespace renegade::screen
         const std::string& projectRoot,
         wi::RenderPath2D& renderPath,
         ActivateSink activateSink,
-        std::string& error, ControlSink controlSink)
+        std::string& error, ControlSink controlSink,DragSink dragSink)
     {
         bridge::ScreenDocument document;
         if(!bridge::ResolveScreenTheme(projectRoot,authoredDocument,document,error))return false;
@@ -800,13 +807,25 @@ namespace renegade::screen
         }
 
         impl_->document = document;
+        impl_->projectRoot = projectRoot;
         impl_->activateSink = std::move(activateSink);
         impl_->controlSink=std::move(controlSink);
+        impl_->dragSink=std::move(dragSink);
 
-        const auto loadResource = [&projectRoot, &error](
+        // A grid can reference identical artwork hundreds of times across
+        // normal/hover/pressed/focused/disabled states. Resolve/load once per
+        // preview reload, then share the retained Wicked resource handles.
+        std::unordered_map<std::string, wi::Resource> resourceCache;
+        resourceCache.reserve(32);
+        const auto loadResource = [&projectRoot, &error, &resourceCache](
             const std::string& resourcePath, wi::Resource& resource)
         {
             if (resourcePath.empty()) return true;
+            const auto cached = resourceCache.find(resourcePath);
+            if (cached != resourceCache.end()) {
+                resource = cached->second;
+                return true;
+            }
             std::string resolved;
             if (!bridge::ResolveScreenResourcePath(
                     projectRoot, resourcePath, resolved, error))
@@ -817,6 +836,7 @@ namespace renegade::screen
                 error = "Wicked could not load Screen resource: " + resolved;
                 return false;
             }
+            resourceCache.emplace(resourcePath, resource);
             return true;
         };
 
@@ -927,9 +947,33 @@ namespace renegade::screen
             if (widget.kind == bridge::ScreenWidgetKind::Button)
             {
                 const auto widgetId = widget.id;
-                surface->OnClick([this, widgetId](const wi::gui::EventArgs&)
+                const bool inventorySlot =
+                    widget.actionId.rfind("inventory.slot.",0)==0 ||
+                  widget.actionId.rfind("inventory.paged.",0)==0;
+                if (inventorySlot) {
+                    surface->OnDragStart([this,widgetId](
+                        const wi::gui::EventArgs& args) {
+                        if (impl_->dragSink)
+                            impl_->dragSink(widgetId,true,
+                                args.startPos.x,args.startPos.y);
+                    });
+                    surface->OnDragEnd([this,widgetId](
+                        const wi::gui::EventArgs& args) {
+                        if (impl_->dragSink)
+                            impl_->dragSink(widgetId,false,
+                                args.clickPos.x,args.clickPos.y);
+                    });
+                }
+                surface->OnClick([this, widgetId, inventorySlot](
+                    const wi::gui::EventArgs&)
                 {
-                    if(wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))return;
+                    // Wicked Button::Update invokes OnClick on release after
+                    // DEACTIVATING, so this is a single gesture. The legacy
+                    // held-button guard can discard that event on the same
+                    // input frame. Exempt only the opt-in inventory slot
+                    // callbacks; all existing UI actions retain their guard.
+                    if(!inventorySlot &&
+                       wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))return;
                     if (impl_->activateSink) impl_->activateSink(widgetId);
                 });
             }
@@ -954,6 +998,7 @@ namespace renegade::screen
     void ScreenRenderer::SetViewport(
         const bridge::ScreenRect& viewport) noexcept
     {
+        impl_->layoutDirty = true;
         impl_->viewport = viewport;
         impl_->hasViewport = std::isfinite(viewport.x) &&
             std::isfinite(viewport.y) && std::isfinite(viewport.width) &&
@@ -963,12 +1008,14 @@ namespace renegade::screen
 
     void ScreenRenderer::ClearViewport() noexcept
     {
+        impl_->layoutDirty = true;
         impl_->viewport = {};
         impl_->hasViewport = false;
     }
 
     void ScreenRenderer::SetClipViewport(const bridge::ScreenRect& clip) noexcept
     {
+        impl_->layoutDirty = true;
         impl_->clip = clip;
         impl_->hasClip = std::isfinite(clip.x) && std::isfinite(clip.y) &&
             std::isfinite(clip.width) && std::isfinite(clip.height) &&
@@ -977,6 +1024,7 @@ namespace renegade::screen
 
     void ScreenRenderer::ClearClipViewport() noexcept
     {
+        impl_->layoutDirty = true;
         impl_->clip = {};
         impl_->hasClip = false;
     }
@@ -984,6 +1032,9 @@ namespace renegade::screen
     void ScreenRenderer::ApplyLayout(wi::RenderPath2D& renderPath)
     {
         if (!impl_->loaded) return;
+        const float width=renderPath.GetLogicalWidth(), height=renderPath.GetLogicalHeight();
+        if (!impl_->layoutDirty && !impl_->animation.active &&
+            impl_->lastLayoutWidth==width && impl_->lastLayoutHeight==height) return;
         std::unordered_map<bridge::StableId, ScreenInteractionState> states;
         for (const auto& [id, surface] : impl_->byId)
             states.emplace(id, surface->Interaction());
@@ -995,6 +1046,24 @@ namespace renegade::screen
             impl_->animation,impl_->transition,states,items,error,
             impl_->hasViewport?impl_->document.designWidth:animationViewport.width))return;
 
+        // Thumb location follows the resolved track, including responsive
+        // design scaling and accessibility. Its saved Screen rect stays intact.
+        for(auto& item:items) {
+            const auto override=impl_->scrollThumbs.find(item.widgetId);
+            if(override==impl_->scrollThumbs.end())continue;
+            const auto track=std::find_if(items.begin(),items.end(),
+                [&](const auto& candidate){
+                    return candidate.widgetId==override->second.trackId;});
+            if(track==items.end()||track->logicalRect.height<=0)continue;
+            const float minThumb=std::min(track->logicalRect.height,
+                std::max(14.0f,track->logicalRect.width*1.5f));
+            const float thumbHeight=std::clamp(
+                track->logicalRect.height*override->second.fraction,
+                minThumb,track->logicalRect.height);
+            item.logicalRect.height=thumbHeight;
+            item.logicalRect.y=track->logicalRect.y+
+                (track->logicalRect.height-thumbHeight)*override->second.position;
+        }
         impl_->logicalRects.clear();
         for (const auto& item : items)
         {
@@ -1019,6 +1088,9 @@ namespace renegade::screen
                 bridge::IsScreenInteractive(item.kind));
             impl_->logicalRects.emplace(item.widgetId, item.logicalRect);
         }
+        impl_->layoutDirty = false;
+        impl_->lastLayoutWidth=width;
+        impl_->lastLayoutHeight=height;
     }
 
     bool ScreenRenderer::SetWidgetControlValue(const bridge::StableId& id,const bridge::GameplayAttributeValue& value)
@@ -1028,6 +1100,7 @@ namespace renegade::screen
         auto control=it->second->authored.control;control.value=value;std::string error;
         if(!bridge::ValidateScreenControl(bridge::ScreenControlKindFor(it->second->authored.kind),control,error))return false;
         const bool changed=it->second->authored.control.value!=value;it->second->authored.control=control;
+        if(changed)impl_->layoutDirty=true;
         if(changed&&it->second->authored.kind==bridge::ScreenWidgetKind::TextInput)
             it->second->input.SetValue(std::get<std::string>(value));
         for(auto& w:impl_->document.widgets)if(w.id==id){w.control=control;break;}
@@ -1053,19 +1126,29 @@ namespace renegade::screen
     {
         if(!bridge::ValidateScreenAccessibilitySettings(settings))return;
         impl_->accessibility=settings;
+        impl_->layoutDirty=true;
         for(auto& surface:impl_->surfaces)surface->accessibility=settings;
     }
 
     void ScreenRenderer::SetTransitionFrame(bridge::ScreenTransitionFrame frame) noexcept
-    {impl_->transition=frame;}
+    {
+        const auto& previous=impl_->transition;
+        if(previous.opacity!=frame.opacity || previous.scale!=frame.scale ||
+           previous.offsetX!=frame.offsetX || previous.offsetY!=frame.offsetY)
+            impl_->layoutDirty=true;
+        impl_->transition=frame;
+    }
 
     void ScreenRenderer::SetAnimationPreview(bridge::ScreenAnimationPreview preview) noexcept
-    {impl_->animation=preview;}
+    {
+        if(impl_->animation.active || preview.active)impl_->layoutDirty=true;
+        impl_->animation=preview;
+    }
     bool ScreenRenderer::IsWidgetInteractive(const bridge::StableId& id) const noexcept
     {
         const auto it=impl_->byId.find(id);
         return impl_->inputEnabled&&it!=impl_->byId.end()&&impl_->root.IsVisible()&&
-            it->second->IsVisible()&&it->second->authored.enabled&&it->second->authored.style.opacity>0.001f;
+            it->second->IsVisible()&&it->second->IsEnabled()&&it->second->authored.enabled&&it->second->authored.style.opacity>0.001f;
     }
 
     void ScreenRenderer::SetInputEnabled(const bool enabled) noexcept
@@ -1117,6 +1200,14 @@ namespace renegade::screen
     {
         const auto found = impl_->byId.find(widgetId);
         if (found == impl_->byId.end()) return;
+        if(found->second->authored.visible!=visible ||
+           found->second->authored.enabled!=enabled)impl_->layoutDirty=true;
+        // This document is the renderer instance's transient layout source.
+        // Keep it in sync, or ApplyLayout re-disables initially-disabled UP
+        // buttons every frame and destroys their release-click state.
+        for(auto& widget:impl_->document.widgets)if(widget.id==widgetId) {
+            widget.visible=visible;widget.enabled=enabled;break;
+        }
         found->second->authored.visible = visible;
         found->second->authored.enabled = enabled;
         found->second->SetVisible(visible);
@@ -1126,6 +1217,17 @@ namespace renegade::screen
             enabled);
     }
 
+    void ScreenRenderer::SetScrollbarThumb(const bridge::StableId& thumbId,
+        const bridge::StableId& trackId,float position,float fraction)
+    {
+        if(!impl_->loaded || !std::isfinite(position) || !std::isfinite(fraction) ||
+           impl_->byId.find(thumbId)==impl_->byId.end() ||
+           impl_->byId.find(trackId)==impl_->byId.end())return;
+        impl_->layoutDirty=true;
+        impl_->scrollThumbs[thumbId]={
+            trackId,std::clamp(position,0.0f,1.0f),std::clamp(fraction,0.0f,1.0f)};
+    }
+
     void ScreenRenderer::SetWidgetFill(const bridge::StableId& widgetId, const float fill)
     {
         if (!std::isfinite(fill)) return;
@@ -1133,6 +1235,7 @@ namespace renegade::screen
         if (found == impl_->byId.end() ||
             found->second->authored.kind != bridge::ScreenWidgetKind::Progress) return;
         const float value = std::clamp(fill, 0.0f, 1.0f);
+        if(found->second->authored.fill!=value)impl_->layoutDirty=true;
         if(!impl_->animation.active)found->second->authored.fill = value;
         for (auto& widget : impl_->document.widgets)
             if (widget.id == widgetId) { widget.fill = value; break; }
@@ -1151,6 +1254,50 @@ namespace renegade::screen
         found->second->SetText(text);
     }
 
+    bool ScreenRenderer::SetWidgetImageResource(
+        const bridge::StableId& widgetId,
+        const std::string& resourcePath,std::string& error)
+    {
+        const auto it=impl_->byId.find(widgetId);
+        if(!impl_->loaded||it==impl_->byId.end()||
+           it->second->authored.kind!=bridge::ScreenWidgetKind::Image) {
+            error="Runtime Screen icon target is not a loaded Image widget.";
+            return false;
+        }
+        if(it->second->authored.resourcePath==resourcePath) {
+            error.clear();return true;
+        }
+        std::string resolved;
+        if(!bridge::ResolveScreenResourcePath(
+                impl_->projectRoot,resourcePath,resolved,error))return false;
+        auto resource=wi::resourcemanager::Load(resolved);
+        if(!resource.IsValid()) {
+            error="Inventory icon resource unavailable: "+resourcePath;
+            return false;
+        }
+        // UI icons have no alternate interaction-image states; changing a
+        // transient icon never modifies a creator-authored layout or item.
+        const auto& style=it->second->authored.style;
+        if(!style.normal.imageResourcePath.empty()||
+           !style.hover.imageResourcePath.empty()||
+           !style.pressed.imageResourcePath.empty()||
+           !style.focused.imageResourcePath.empty()||
+           !style.disabled.imageResourcePath.empty()) {
+            error="State-owned Screen image must not be overridden.";
+            return false;
+        }
+        for(const auto state:{ScreenInteractionState::Normal,
+                ScreenInteractionState::Hover,ScreenInteractionState::Pressed,
+                ScreenInteractionState::Focused,ScreenInteractionState::Disabled})
+            it->second->resources[state]=resource;
+        it->second->authored.resourcePath=resourcePath;
+        for(auto& widget:impl_->document.widgets)
+            if(widget.id==widgetId) {
+                widget.resourcePath=resourcePath;break;
+            }
+        error.clear();return true;
+    }
+
     void ScreenRenderer::Reset(wi::RenderPath2D& renderPath) noexcept
     {
         DetachPresentation(renderPath);
@@ -1159,10 +1306,14 @@ namespace renegade::screen
         impl_->surfaces.clear();
         impl_->byId.clear();
         impl_->logicalRects.clear();
+        impl_->scrollThumbs.clear();
         impl_->activateSink = {};
         impl_->controlSink={};
+        impl_->dragSink={};
         impl_->document = {};
+        impl_->projectRoot.clear();
         impl_->loaded = false;
+        impl_->layoutDirty = true;
         impl_->animation={};impl_->transition={};
     }
 

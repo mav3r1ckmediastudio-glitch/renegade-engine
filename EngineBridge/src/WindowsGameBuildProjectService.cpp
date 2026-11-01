@@ -1,6 +1,7 @@
 #include "renegade/bridge/WindowsGameBuildProjectService.h"
 #include "renegade/bridge/ImpactAudioService.h"
 #include "renegade/bridge/SceneDocumentService.h"
+#include "renegade/bridge/InventoryDependencyProvider.h"
 
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/ResourceAssetDependencyService.h"
@@ -344,6 +345,7 @@ namespace renegade::bridge
             WisceneDependencyProvider sceneProvider(sceneReader);
             GltfDependencyProvider gltfProvider(MakeGltfDependencyReader());
             SceneIdentityCompanionProvider sceneIdentityProvider;
+            InventoryDependencyProvider inventoryProvider;
             ReusableAssetDependencyProvider reusableAssetProvider(project.projectId);
             ResourceAssetDependencyProvider resourceAssetProvider(project.projectId);
 
@@ -354,6 +356,7 @@ namespace renegade::bridge
                 !collector.RegisterProvider(sceneProvider, error) ||
                 !collector.RegisterProvider(gltfProvider, error) ||
                 !collector.RegisterProvider(sceneIdentityProvider, error) ||
+                !collector.RegisterProvider(inventoryProvider, error) ||
                 !collector.RegisterProvider(reusableAssetProvider, error) ||
                 !collector.RegisterProvider(resourceAssetProvider, error))
             {

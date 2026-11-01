@@ -1,7 +1,9 @@
 #pragma once
 #include "RenegadeStudioChrome.h"
 #include "renegade/bridge/ScreenAuthoringSession.h"
+#include "renegade/bridge/InventoryPagedScreenAdapter.h"
 #include <functional>
+#include <cmath>
 #include <sstream>
 namespace renegade::studio
 {
@@ -36,8 +38,23 @@ namespace renegade::studio
             maxWidth_.SetDescription("MAX WIDTH (0=ANY)  ");maxHeight_.SetDescription("MAX HEIGHT (0=ANY)  ");
             constraintsApply_.Create("Apply min/max widget geometry");
             constraintsApply_.SetText("APPLY SIZE CONSTRAINTS");
+            invColumns_.Create("Inventory grid columns");invColumns_.SetDescription("INVENTORY COLUMNS  ");
+            invRows_.Create("Inventory visible rows");invRows_.SetDescription("VISIBLE ROWS  ");
+            invSlotWidth_.Create("Inventory slot width");invSlotWidth_.SetDescription("SLOT WIDTH  ");
+            invSlotHeight_.Create("Inventory slot height");invSlotHeight_.SetDescription("SLOT HEIGHT  ");
+            invGapX_.Create("Inventory horizontal gap");invGapX_.SetDescription("HORIZONTAL GAP  ");
+            invGapY_.Create("Inventory vertical gap");invGapY_.SetDescription("VERTICAL GAP  ");
+            invIconPadding_.Create("Inventory icon padding");invIconPadding_.SetDescription("ICON PADDING  ");
+            invScrollbar_.Create("Inventory scrollbar visibility");
+            invScrollbar_.OnClick([this](const wi::gui::EventArgs&){
+                inventoryDraft_.showScrollbar=!inventoryDraft_.showScrollbar;Labels();});
+            invApply_.Create("Apply inventory grid layout");invApply_.SetText("APPLY INVENTORY GRID");
+            invApply_.OnClick([this](const wi::gui::EventArgs&){ApplyInventory();});
             for(auto* input:{&padding_,&gap_,&columns_,&safeLeft_,&safeTop_,&safeRight_,&safeBottom_,
                 &minWidth_,&minHeight_,&maxWidth_,&maxHeight_,&compactWidth_,&compactColumns_})
+                input->SetCancelInputEnabled(false);
+            for(auto* input:{&invColumns_,&invRows_,&invSlotWidth_,&invSlotHeight_,
+                              &invGapX_,&invGapY_,&invIconPadding_})
                 input->SetCancelInputEnabled(false);
             apply_.SetText("APPLY CHILD LAYOUT");free_.SetText("RESTORE MANUAL CHILD GEOMETRY");
             mode_.OnClick([this](const wi::gui::EventArgs&){
@@ -95,7 +112,8 @@ namespace renegade::studio
         void Labels()
         {
             mode_.SetText(std::string("CHILDREN: ")+bridge::ScreenChildLayoutName(draft_.mode));
-            page_.SetText(pageIndex_==0?"LAYOUT // SAFE AREA + SIZE":pageIndex_==1?"LAYOUT // COMPACT BREAKPOINT":"LAYOUT // BACK TO CONTAINERS");
+            page_.SetText(pageIndex_==0?"LAYOUT // CONTAINERS":pageIndex_==1?"LAYOUT // SAFE AREA":pageIndex_==2?"LAYOUT // COMPACT":"LAYOUT // INVENTORY GRID");
+            invScrollbar_.SetText(inventoryDraft_.showScrollbar?"SCROLLBAR: VISIBLE":"SCROLLBAR: HIDDEN");
             compactMode_.SetText(std::string("COMPACT CHILDREN: ")+bridge::ScreenChildLayoutName(draft_.compactMode));
         }
         void Load()
@@ -116,12 +134,75 @@ namespace renegade::studio
             padding_.SetValue(std::to_string(draft_.padding));gap_.SetValue(std::to_string(draft_.gap));
             columns_.SetValue(std::to_string(draft_.columns));
             compactWidth_.SetValue(std::to_string(draft_.compactBelowWidth));
-            compactColumns_.SetValue(std::to_string(draft_.compactColumns));Labels();
+            compactColumns_.SetValue(std::to_string(draft_.compactColumns));
+            LoadInventory();if(!inventoryAvailable_&&pageIndex_==3)pageIndex_=0;
+            Labels();
             status_="Safe-area margins inset root ANCHORED widgets; fixed ABSOLUTE art stays unchanged. Child layout requires an Image/Stack/Grid.";
+        }
+        void LoadInventory() {
+            inventoryAvailable_=false;
+            if(!session_||!session_->IsLoaded())return;
+            const auto& widgets=session_->Document().widgets;
+            const auto get=[&](const std::string& name)->const bridge::ScreenWidget* {
+                const auto it=std::find_if(widgets.begin(),widgets.end(),
+                    [&](const auto& w){return w.name==name;});
+                return it==widgets.end()?nullptr:&*it;
+            };
+            const auto* first=get("Paged Slot 0:0");
+            if(!first||!get("Paged Slot 1:0"))return;
+            inventoryAvailable_=true;
+            std::uint32_t count=0,cols=0;
+            for(;count<30;++count) {
+                const auto* w=get("Paged Slot 0:"+std::to_string(count));
+                if(!w)break;
+                if(std::fabs(w->rect.y-first->rect.y)<0.5f)++cols;
+            }
+            if(!cols||!count||count%cols)return;
+            inventoryDraft_.columns=cols;inventoryDraft_.visibleRows=count/cols;
+            inventoryDraft_.slotWidth=first->rect.width;
+            inventoryDraft_.slotHeight=first->rect.height;
+            inventoryDraft_.squareSlots=std::fabs(first->rect.width-first->rect.height)<0.5f;
+            const auto* second=get("Paged Slot 0:1");
+            const auto* nextRow=get("Paged Slot 0:"+std::to_string(cols));
+            inventoryDraft_.horizontalGap=cols>1&&second?
+                second->rect.x-first->rect.x-first->rect.width:0;
+            inventoryDraft_.verticalGap=count>cols&&nextRow?
+                nextRow->rect.y-first->rect.y-first->rect.height:0;
+            const auto* icon=get("Paged Icon 0:0");
+            if(icon)inventoryDraft_.iconPadding=icon->rect.x-first->rect.x;
+            const auto* scrollTrack=get("Paged Scroll Track 0");
+            inventoryDraft_.showScrollbar=scrollTrack?scrollTrack->visible:true;
+            invColumns_.SetValue(std::to_string(inventoryDraft_.columns));
+            invRows_.SetValue(std::to_string(inventoryDraft_.visibleRows));
+            invSlotWidth_.SetValue(std::to_string(inventoryDraft_.slotWidth));
+            invSlotHeight_.SetValue(std::to_string(inventoryDraft_.slotHeight));
+            invGapX_.SetValue(std::to_string(inventoryDraft_.horizontalGap));
+            invGapY_.SetValue(std::to_string(inventoryDraft_.verticalGap));
+            invIconPadding_.SetValue(std::to_string(inventoryDraft_.iconPadding));
         }
         template<class T> bool Parse(const std::string& text,T& value)
         {std::istringstream s(text);s.imbue(std::locale::classic());s>>std::noskipws>>value;
             return !s.fail()&&s.peek()==std::char_traits<char>::eof();}
+        void ApplyInventory() {
+            if(!session_||!inventoryAvailable_)return;
+            auto layout=inventoryDraft_;
+            if(!Parse(invColumns_.GetValue(),layout.columns) ||
+               !Parse(invRows_.GetValue(),layout.visibleRows) ||
+               !Parse(invSlotWidth_.GetValue(),layout.slotWidth) ||
+               !Parse(invSlotHeight_.GetValue(),layout.slotHeight) ||
+               !Parse(invGapX_.GetValue(),layout.horizontalGap) ||
+               !Parse(invGapY_.GetValue(),layout.verticalGap) ||
+               !Parse(invIconPadding_.GetValue(),layout.iconPadding)) {
+                status_="Inventory values must be valid numbers.";return;
+            }
+            layout.squareSlots=std::fabs(layout.slotWidth-layout.slotHeight)<0.5f;
+            std::string error;
+            if(!session_->ResizePagedInventoryGrid(layout,error)) {
+                status_=error;return;
+            }
+            Load();status_="Inventory grid updated. Undo restores the previous layout.";
+            if(changed_)changed_();
+        }
         void Apply(bool manual)
         {
             if(!session_)return;
@@ -173,6 +254,9 @@ namespace renegade::studio
         }
         std::vector<wi::gui::Widget*> Controls()
         {
+            if(pageIndex_==3 && inventoryAvailable_)
+                return {&page_,&invColumns_,&invRows_,&invSlotWidth_,&invSlotHeight_,
+                        &invGapX_,&invGapY_,&invIconPadding_,&invScrollbar_,&invApply_};
             if(pageIndex_==2)return {&page_,&compactWidth_,&compactMode_,&compactColumns_,&compactApply_};
             if(pageIndex_==1)return {&page_,&safeLeft_,&safeTop_,&safeRight_,&safeBottom_,&safeApply_,
                 &minWidth_,&minHeight_,&maxWidth_,&maxHeight_,&constraintsApply_};
@@ -181,7 +265,9 @@ namespace renegade::studio
         std::vector<wi::gui::Widget*> AllControls()
         {return {&page_,&mode_,&padding_,&gap_,&columns_,&apply_,&free_,&safeLeft_,
             &safeTop_,&safeRight_,&safeBottom_,&safeApply_,&minWidth_,&minHeight_,
-            &maxWidth_,&maxHeight_,&constraintsApply_,&compactWidth_,&compactMode_,&compactColumns_,&compactApply_};}
+            &maxWidth_,&maxHeight_,&constraintsApply_,&compactWidth_,&compactMode_,&compactColumns_,&compactApply_,
+            &invColumns_,&invRows_,&invSlotWidth_,&invSlotHeight_,&invGapX_,&invGapY_,&invIconPadding_,
+            &invScrollbar_,&invApply_};}
         bridge::ScreenAuthoringSession* session_=nullptr;
         bridge::StableId id_;std::function<void()> changed_;
         bridge::ScreenContainerLayout draft_;bridge::ScreenSafeArea safe_;
@@ -190,5 +276,8 @@ namespace renegade::studio
         RenegadeButton page_,mode_,apply_,free_,safeApply_,constraintsApply_,compactMode_,compactApply_;
         RenegadeTextInputField padding_,gap_,columns_,safeLeft_,safeTop_,safeRight_,safeBottom_;
         RenegadeTextInputField minWidth_,minHeight_,maxWidth_,maxHeight_,compactWidth_,compactColumns_;
+        bridge::InventoryGridLayout inventoryDraft_;bool inventoryAvailable_=false;
+        RenegadeTextInputField invColumns_,invRows_,invSlotWidth_,invSlotHeight_,invGapX_,invGapY_,invIconPadding_;
+        RenegadeButton invScrollbar_,invApply_;
     };
 }

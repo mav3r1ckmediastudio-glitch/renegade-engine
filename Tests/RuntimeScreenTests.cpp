@@ -5,6 +5,7 @@
 
 #include "renegade/bridge/ScreenService.h"
 #include "renegade/bridge/ScreenWidgetPresets.h"
+#include "renegade/bridge/InventoryScreenAdapter.h"
 
 #include <iostream>
 #include <string>
@@ -122,6 +123,47 @@ int main()
 
     bridge::ScreenDocument document = MakeScreen();
     std::string error;
+    // G5H: transient native context buttons (never persisted to the authored
+    // screen) can be safely hidden, shown, focused and dispatched.
+    {
+        auto context=MakeScreen();
+        context.usage=bridge::ScreenUsage::Overlay;
+        const char* actionIds[]={"inventory.context.use","inventory.context.drop_one",
+            "inventory.context.drop_stack","inventory.context.take_one",
+            "inventory.context.take_stack"};
+        std::vector<std::string> ids;
+        for(std::size_t i=0;i<5;++i) {
+            auto button=context.widgets[2];
+            button.id=bridge::GenerateStableId();
+            button.name="Inventory Context";
+            button.actionId=actionIds[i];
+            button.text="ITEM ACTION";
+            button.rect={973.f,172.f+42.f*i,232.f,38.f};
+            button.visible=false;button.enabled=false;
+            button.style=bridge::MakeScreenWidgetStyleTemplate(button.kind,38.f);
+            context.widgets.push_back(button);
+            context.actions.push_back({button.actionId});
+            context.focusOrder.push_back(button.id);
+            ids.push_back(button.id);
+        }
+        runtime::RuntimeScreenController controller;
+        if(!controller.Initialize(context,error))
+            return Fail(("G5H transient context Screen: "+error).c_str());
+        if(controller.FocusWidget(ids[1]))
+            return Fail("hidden context action accepted focus");
+        if(!controller.SetWidgetState(ids[1],true,true,error) ||
+           !controller.FocusWidget(ids[1]))
+            return Fail("G5H active context button not focusable");
+        runtime::RuntimeActionRequest request;
+        if(!controller.MakeFocusedActionRequest(runtime::RuntimeInputSource::Keyboard,
+            1,request,error) ||
+           request.actionId!=actionIds[1])
+            return Fail("G5H focused drop action dispatch mismatch");
+        if(!controller.SetWidgetState(ids[1],false,false,error) ||
+           controller.FocusWidget(ids[1]))
+            return Fail("G5H closed context menu left hidden action enabled");
+    }
+
     {
         bridge::ScreenAnimationTrack enter;enter.keys={{0,0},{.4,1}};
         bridge::ScreenAnimationTrack exit;exit.keys={{0,1},{.3,0}};
@@ -440,6 +482,122 @@ int main()
         bound.widgets[1].bindings={binding};
         if(ValidateScreenDocument(bound,bound.envelope.projectId,error))
             return Fail("local action overwrote gameplay-bound visibility");
+    }
+    {
+        // G4-B2: exercise the actual RuntimeScreenController activation path,
+        // not just a standalone InventoryScreenAdapter direct transfer.
+        bridge::InventoryService inventory;
+        if (inventory.RegisterItem({"potion","Potion",10,0.2,{}})!=bridge::InventoryResult::Success ||
+            inventory.CreateContainer("player",12,5)!=bridge::InventoryResult::Success ||
+            inventory.CreateContainer("chest",12,5)!=bridge::InventoryResult::Success ||
+            inventory.Add("player","potion",3)!=bridge::InventoryResult::Success)
+            return Fail("G4B2 inventory Screen input fixture rejected");
+        auto screen=bridge::MakeInventoryStarterScreen(
+            bridge::GenerateStableId(),"Content/UI/InventoryInputProof.renegade-screen",2);
+        screen.enabledInGame=true;
+        const auto view=bridge::BuildInventoryOverlayView(inventory,
+            {{"player","Player"},{"chest","Chest"}},2);
+        bridge::ScreenDocument projected;
+        if(!bridge::ProjectInventoryIntoScreen(screen,view,projected,error))
+            return Fail("G4B2 runtime projected Screen invalid");
+        runtime::RuntimeScreenController inventoryScreen;
+        if(!inventoryScreen.Initialize(projected,error))
+            return Fail("G4B2 controller rejected projected Screen");
+        const auto& slot=projected.widgets[3];
+        if(slot.localOnly||!slot.enabled||slot.actionId!="inventory.slot.0.0")
+            return Fail("G4B2 interactive slot is locally suppressed");
+        runtime::RuntimeActionRequest slotRequest;
+        if(!inventoryScreen.MakeActionRequest(slot.id,runtime::RuntimeInputSource::Mouse,
+               1,slotRequest,error) ||
+           slotRequest.actionId!=slot.actionId ||
+           !inventoryScreen.ExecuteInteractions(slot.id,
+               bridge::ScreenInteractionEvent::Activate,error))
+            return Fail("G4B2 Screen controller click command was blocked");
+        bridge::InventoryGameplayGateway grants(inventory);
+        grants.Grant("player",{true,true,true});
+        grants.Grant("chest",{true,true,true});
+        bridge::InventorySelectionController selection;
+        if(bridge::ExecuteInventoryScreenSlotAction(slotRequest.actionId,view,
+               selection,grants)!=bridge::InventoryResult::Success ||
+           inventory.FindContainer("player")->stacks[0].quantity!=2 ||
+           inventory.FindContainer("chest")->stacks[0].quantity!=1)
+            return Fail("G4B2 Screen controller click transfer did not mutate gameplay");
+
+        // G4-B2C: reproduce the owner's stale UI bug using the exact Runtime
+        // presentation-update sequence: SetWidgetState rebuilds the *whole*
+        // binding frame for every slot, then SetWidgetDisplayText updates
+        // one slot. Previously, the next slot reset all earlier labels.
+        const auto applyLiveInventory=[&]() -> bool {
+            const auto live=bridge::BuildInventoryOverlayView(inventory,
+                {{"player","Player"},{"chest","Chest"}},2);
+            bridge::ScreenDocument next;
+            if(!bridge::ProjectInventoryIntoScreen(screen,live,next,error))
+                return false;
+            for(const auto& item:next.widgets) {
+                if(item.kind!=bridge::ScreenWidgetKind::Button ||
+                   item.actionId.rfind("inventory.slot.",0)!=0)
+                    continue;
+                if(!inventoryScreen.SetWidgetState(
+                      item.id,item.visible,item.enabled,error) ||
+                   !inventoryScreen.SetWidgetDisplayText(
+                      item.id,item.text,error))
+                    return false;
+            }
+            return true;
+        };
+        const auto playerSlot=projected.widgets[3].id;
+        const auto chestSlot=projected.widgets[6].id; // two slots per panel
+        const auto statusSlot=projected.widgets.back().id;
+        if(!inventoryScreen.SetWidgetDisplayText(
+              statusSlot,"MOVED ONE ITEM",error))
+            return Fail("G4B2C could not set transient transfer status");
+        if(!applyLiveInventory() ||
+           inventoryScreen.FindWidget(playerSlot)->text!="Potion  x2" ||
+           inventoryScreen.FindWidget(chestSlot)->text!="Potion  x1")
+            return Fail("G4B2C transient labels reverted after adjacent widget state update");
+
+        const auto playerId=inventory.FindContainer("player")->stacks[0].instanceId;
+        if(inventory.Transfer("player","chest",playerId,2)!=bridge::InventoryResult::Success ||
+           !applyLiveInventory() ||
+           inventoryScreen.FindWidget(playerSlot)->enabled ||
+           inventoryScreen.FindWidget(playerSlot)->text!="Empty slot" ||
+           inventoryScreen.FindWidget(chestSlot)->text!="Potion  x3")
+            return Fail("G4B2C E/Lua depleted Player but Screen still showed original items");
+
+        const auto chestId=inventory.FindContainer("chest")->stacks[0].instanceId;
+        if(inventory.Transfer("chest","player",chestId,1)!=bridge::InventoryResult::Success ||
+           !applyLiveInventory() ||
+           !inventoryScreen.FindWidget(playerSlot)->enabled ||
+           inventoryScreen.FindWidget(playerSlot)->text!="Potion  x1" ||
+           inventoryScreen.FindWidget(chestSlot)->text!="Potion  x2")
+            return Fail("G4B2C chest-to-Player Screen refresh lost updated counts");
+        // A later binding/state refresh must not revert the live display.
+        if(!inventoryScreen.SetWidgetState(playerSlot,true,true,error) ||
+           inventoryScreen.FindWidget(playerSlot)->text!="Potion  x1" ||
+           inventoryScreen.FindWidget(chestSlot)->text!="Potion  x2" ||
+           inventoryScreen.FindWidget(statusSlot)->text!="MOVED ONE ITEM")
+            return Fail("G4B2C binding frame silently clobbered live text or status");
+        if(!inventoryScreen.Initialize(projected,error) ||
+           inventoryScreen.FindWidget(playerSlot)->text!="Potion  x3" ||
+           inventoryScreen.FindWidget(chestSlot)->text!="Empty slot" ||
+           inventoryScreen.FindWidget(statusSlot)->text=="MOVED ONE ITEM")
+            return Fail("G4B2C presentation overrides leaked across Screen reset");
+    }
+    {
+        bridge::ScreenWidget slot;slot.kind=bridge::ScreenWidgetKind::Button;
+        for(const bool legacy:{false,true}) {
+            slot.localOnly=legacy;
+            for(const char* action:{"inventory.paged.0.slot.0","inventory.paged.1.scroll.down"}) {
+                slot.actionId=action;
+                if(!runtime::ShouldDispatchScreenAction(slot,true) ||
+                   runtime::ShouldDispatchScreenAction(slot,false))
+                    return Fail("inventory local click/page dispatch lost or leaked into navigation");
+            }
+        }
+        slot.actionId="new_game";slot.localOnly=false;
+        if(!runtime::ShouldDispatchScreenAction(slot,false))return Fail("genuine navigation was suppressed");
+        slot.localOnly=true;
+        if(runtime::ShouldDispatchScreenAction(slot,true))return Fail("unrelated local action escaped its host");
     }
     return 0;
 }

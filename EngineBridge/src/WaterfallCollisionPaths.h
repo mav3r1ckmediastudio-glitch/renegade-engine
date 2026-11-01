@@ -48,6 +48,73 @@ template<class Query> CollisionPaths TraceCollisionPaths(const Definition& d,Que
  }
  return result;
 }
+// G13 bank-to-water junction: some outer streams finish against solid terrain
+// ABOVE a lower receiving waterline. Do not reject the entire waterfall
+// because these bounded lanes cannot flow through the bank. Keep all wet lanes
+// unchanged and terminate only exhausted, physically contacting bank lanes
+// at their first low-elevation collision. Refuse uncontacted/open-air gaps
+// and scenes where no stream reaches the actual water.
+// An invalid attempt never modifies the input paths.
+struct BankTerminationSummary {size_t waterLandings=0,bankTerminations=0;};
+inline bool ResolveWaterfallBankTerminations(CollisionPaths& paths,float waterY,
+    BankTerminationSummary& result,std::string& error) {
+    result={};error.clear();
+    if(!std::isfinite(waterY)||paths.paths.empty()){
+        error="Invalid receiving waterline or empty waterfall paths";return false;
+    }
+    std::vector<size_t> truncate(paths.paths.size(),0);
+    for(size_t i=0;i<paths.paths.size();++i) {
+        const auto& lane=paths.paths[i];
+        if(lane.points.empty()){error="Empty water lane";return false;}
+        if(lane.points.back().position.y<=waterY+.02f){
+            ++result.waterLandings;continue;
+        }
+        // TraceCollisionPaths has a fixed 650-step budget. Only completed
+        // trajectories stalled on a real nearby bank can terminate short.
+        if(lane.points.size()!=650){
+            error="Non-exhausted falling stream ends above water";return false;
+        }
+        size_t first=lane.points.size();
+        for(size_t j=1;j<lane.points.size();++j) {
+            const auto& point=lane.points[j];
+            if(point.contact &&
+                point.position.y>=waterY+.07f &&
+                point.position.y<=waterY+.60f){
+                first=j;break;
+            }
+        }
+        if(first>=lane.points.size()){
+            error="Falling stream could not reach either water or a physical bank";return false;
+        }
+        truncate[i]=first+1;
+        ++result.bankTerminations;
+    }
+    if(result.waterLandings==0){
+        error="No receiving-water contact from waterfall streams";return false;
+    }
+    if(result.bankTerminations==0)return true;
+    for(size_t i=0;i<paths.paths.size();++i)
+        if(truncate[i])paths.paths[i].points.resize(truncate[i]);
+    // The original impact cache includes the now discarded dry-bank runoff
+    // tail. Derive retained impact sites only from the retained trajectories;
+    // preserve initial airborne-to-rock impacts and genuine water landing.
+    paths.impacts.clear();
+    paths.contacts=0;
+    for(const auto& lane:paths.paths) {
+        size_t airborne=0;
+        bool previousContact=false;
+        for(const auto& point:lane.points) {
+            if(point.contact) {
+                ++paths.contacts;
+                if(!previousContact && airborne>8)
+                    paths.impacts.push_back(point.position);
+                airborne=0;
+            } else ++airborne;
+            previousContact=point.contact;
+        }
+    }
+    return true;
+}
 inline void FillCollisionPathMesh(const Definition& d,const CollisionPaths& paths,wi::scene::MeshComponent& mesh,wi::ecs::Entity material){
  mesh=wi::scene::MeshComponent();mesh.SetDoubleSided(true);auto g=BuildGeometry(d);
  constexpr uint32_t ring=8,stride=ring+1;
