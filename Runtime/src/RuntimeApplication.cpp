@@ -4,6 +4,7 @@
 #include <cmath>
 #include <filesystem>
 #include "RuntimeApplication.h"
+#include "RuntimeWeatherDiagnostic.h"
 #include "renegade/bridge/ScreenLiveBinding.h"
 #include "renegade/bridge/ScreenThemeResolver.h"
 #include "RuntimeProjectileAim.h"
@@ -186,16 +187,22 @@ namespace renegade::runtime
                 }
             }
         }
+        if(scene)ConfigureWeatherDiagnostic(*scene);
         // G4 opt-in in-cloud sheet-lightning visual review. Native volumetric
         // cloud scattering illuminates density; there is NO lightning geometry.
         // The scheduler receives paused game time and transient light entities
         // never belong to the authored WISCENE.
+        if (scenes_ != nullptr && camera != nullptr && scene != nullptr)
+            ThunderAudio().OnSceneRevision(scenes_->Revision());
         if (scenes_ != nullptr && camera != nullptr && scene != nullptr)
             sheetLightning_.Update(*scene, scenes_->Revision(),
                 camera->Eye, camera->At, paused_ ? 0.0f : dt);
         if (scenes_ != nullptr && camera != nullptr && scene != nullptr)
             forkLightning_.Update(*scene, scenes_->Revision(),
                 camera->Eye, camera->At, paused_ ? 0.0f : dt);
+        if (camera != nullptr)
+            ThunderAudio().Update(paused_ ? 0.0f : dt, camera->Eye, camera->At);
+        if(scene)RecordWeatherDiagnostic(*scene,dt);
         const auto nativeBegin=std::chrono::steady_clock::now();
         {auto riverBindings=riverFlow_.Bind();RenderPath3D::Update(dt);}
         if(const char* trace=std::getenv("RENEGADE_G13E14_STAGE_TRACE")){

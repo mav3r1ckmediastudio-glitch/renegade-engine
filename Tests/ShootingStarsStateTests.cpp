@@ -7,7 +7,14 @@
 static_assert(offsetof(ShaderWeather,sky_exposure)==136);
 static_assert(offsetof(ShaderWeather,night_alignment_padding)==76);
 static_assert(offsetof(ShaderWeather,night_padding)==116);
-static_assert(sizeof(ShaderWeather)==1040);
+// Moon and lightning fields append to the shared CPU/HLSL weather buffer.
+static_assert(offsetof(ShaderWeather,moon_parameters)==1008);
+static_assert(offsetof(ShaderWeather,moon_orbit)==1024);
+static_assert(offsetof(ShaderWeather,sheet_light_cell0)==1040);
+static_assert(offsetof(ShaderWeather,sheet_light_cell1)==1056);
+static_assert(offsetof(ShaderWeather,sheet_light_cell2)==1072);
+static_assert(offsetof(ShaderWeather,sheet_light_power)==1088);
+static_assert(sizeof(ShaderWeather)==1104);
 namespace
 {
     void Check(bool v,const char* msg){if(!v){std::fprintf(stderr,"Meteors: %s\n",msg);std::_Exit(1);}}

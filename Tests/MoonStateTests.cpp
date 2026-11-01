@@ -10,7 +10,11 @@
 static_assert(offsetof(ShaderWeather, sky_exposure)==136);
 static_assert(offsetof(ShaderWeather, moon_parameters)==1008);
 static_assert(offsetof(ShaderWeather, moon_orbit)==1024);
-static_assert(sizeof(ShaderWeather)==1040);
+static_assert(offsetof(ShaderWeather, sheet_light_cell0)==1040);
+static_assert(offsetof(ShaderWeather, sheet_light_cell1)==1056);
+static_assert(offsetof(ShaderWeather, sheet_light_cell2)==1072);
+static_assert(offsetof(ShaderWeather, sheet_light_power)==1088);
+static_assert(sizeof(ShaderWeather)==1104);
 namespace
 {
     void Check(bool v,const char* msg)

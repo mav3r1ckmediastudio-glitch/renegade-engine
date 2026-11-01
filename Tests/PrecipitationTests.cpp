@@ -1,8 +1,10 @@
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 
 #include "renegade/bridge/PrecipitationService.h"
+#include "renegade/bridge/LightningAuthoringService.h"
 
 namespace
 {
@@ -24,6 +26,57 @@ int main()
     const auto environment = wi::ecs::CreateEntity();
     auto& weather = scene.weathers.Create(environment);
     scene.weather = weather;
+
+    // Authoring is opt-in, persisted on the Weather entity, and undoable.
+    using namespace renegade::bridge;
+    if(CaptureLightning(scene,environment).mode!=LightningMode::Off ||
+       HasLightning(scene,environment))
+        return Fail("new scenes should not contain enabled lightning");
+    LightningAuthoringState authored;
+    authored.mode=LightningMode::Both;
+    authored.sheetPerMinute=15;
+    authored.forkPerMinute=6;
+    authored.sheetIntensity=.14f;
+    authored.forkBranchDensity=1.5f;
+    authored.thunder=true;
+    authored.thunderSoundSet=1;
+    authored.distanceDelay=true;
+    authored.thunderVolume=.7f;
+    CommandService lightningHistory;
+    if(!lightningHistory.Execute(std::make_unique<SetLightningCommand>(scene,environment,authored)))
+        return Fail("lightning command failed");
+    const auto saved=CaptureLightning(scene,environment);
+    if(!HasLightning(scene,environment) || !SameLightning(authored,saved))
+        return Fail("lightning metadata did not roundtrip");
+    if(!lightningHistory.Undo() || HasLightning(scene,environment) ||
+       CaptureLightning(scene,environment).mode!=LightningMode::Off)
+        return Fail("lightning Undo failed to restore absence of metadata");
+    if(!lightningHistory.Redo() || !SameLightning(CaptureLightning(scene,environment),authored))
+        return Fail("lightning Redo failed to restore authored controls");
+    // Persist the authored settings into a real .wiscene, reopen and verify.
+    const std::string lightningFixture="RenegadeLightningAuthoringRoundtrip.wiscene";
+    wi::Archive lightningArchive;
+    scene.Serialize(lightningArchive);
+    if(!lightningArchive.SaveFile(lightningFixture))
+        return Fail("lightning scene file could not be saved");
+    wi::scene::Scene reopenedLightning;
+    wi::Archive lightningInput(lightningFixture,true,false);
+    if(!lightningInput.IsOpen())
+        return Fail("lightning scene file could not be reopened");
+    reopenedLightning.Serialize(lightningInput);
+    if(reopenedLightning.weathers.GetCount()==0 ||
+       !SameLightning(CaptureLightning(reopenedLightning,reopenedLightning.weathers.GetEntity(0)),authored))
+        return Fail("lightning authored metadata lost after scene file reopening");
+    reopenedLightning.Clear();
+    std::filesystem::remove(lightningFixture);
+    auto malformed=authored;
+    malformed.sheetPerMinute=500;
+    malformed.thunderSoundSet=99;
+    malformed.forkBranchDensity=-3;
+    if(SanitizeLightning(malformed).sheetPerMinute!=30 ||
+       SanitizeLightning(malformed).thunderSoundSet!=10 ||
+       SanitizeLightning(malformed).forkBranchDensity!=0)
+        return Fail("lightning authoring bounds were not enforced");
 
     auto snow = renegade::bridge::MakePrecipitationProfile(
         renegade::bridge::CapturePrecipitation(weather),
@@ -140,6 +193,35 @@ int main()
     }
     if (!weather.HasNativeRain() || weather.HasRenegadeSnow())
         return Fail("switching back to Rain did not restore native rain");
+    // Real rain has a bounded, nonlinear particle budget (not 1 million
+    // raindrops/sec), and a fall speed independent of spawn-volume scale.
+    wi::scene::WeatherComponent heavyRain = weather;
+    heavyRain.rain_amount = 1.0f;
+    if (!NearlyEqual(heavyRain.GetNativeRainEmissionRate(), 96000.0f) ||
+        heavyRain.GetNativeRainEmissionRate() > 120000.0f ||
+        weather.GetNativeRainEmissionRate() <= 0.0f ||
+        weather.GetNativeRainEmissionRate() >= heavyRain.GetNativeRainEmissionRate() ||
+        !NearlyEqual(weather.GetNativeRainFallMetresPerSecond(), 16.25f))
+        return Fail("native rain emission density or world fall speed regressed");
+    heavyRain.windRandomness = 20.0f;
+    if (heavyRain.GetNativeRainDropSizeJitter() > 0.90001f ||
+        heavyRain.GetNativeRainDropSizeJitter() < 0.89999f)
+        return Fail("storm turbulence generated oversized raindrops");
+    heavyRain.windRandomness = 0.0f;
+    if (!NearlyEqual(heavyRain.GetNativeRainDropSizeJitter(), 0.10f))
+        return Fail("calm rain size variation lost its minimum");
+    heavyRain.rain_length = 0.0f;
+    heavyRain.rain_splash_scale = 0.0f; // Snow must not enter rain budget.
+    if (heavyRain.GetNativeRainEmissionRate() != 0.0f ||
+        heavyRain.GetNativeRainDropSizeJitter() != 0.0f)
+        return Fail("native rain budget leaked into snow");
+    wi::EmittedParticleSystem nativeRainFlag;
+    nativeRainFlag.SetWeatherRain(true);
+    if (!nativeRainFlag.IsWeatherRain() || nativeRainFlag.IsWeatherSnow())
+        return Fail("native rain world-velocity mode was not isolated");
+    nativeRainFlag.SetWeatherRain(false);
+    if (nativeRainFlag.IsWeatherRain())
+        return Fail("native rain world-velocity flag did not disable");
     if (wi::helper::GetFileNameFromPath(
             scene.rainMaterial.textures[
                 wi::scene::MaterialComponent::BASECOLORMAP].name) ==

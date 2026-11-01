@@ -1617,3 +1617,13 @@ add_test(NAME RenegadeCloudsV2VolumetricContract COMMAND "${CMAKE_COMMAND}" -P "
 add_executable(RenegadeCloudFormationTests CloudFormationTests.cpp)
 target_link_libraries(RenegadeCloudFormationTests PRIVATE Renegade::EngineBridge)
 add_test(NAME RenegadeCloudFormationTests COMMAND RenegadeCloudFormationTests)
+
+# G4 actual XAudio2 output/lifetime proof, manual hardware test (not silent CI).
+add_executable(RenegadeThunderAudioProof ThunderAudioTests.cpp)
+target_link_libraries(RenegadeThunderAudioProof PRIVATE Renegade::EngineBridge ole32)
+set_target_properties(RenegadeThunderAudioProof PROPERTIES FOLDER "Renegade/Tests")
+
+# UI-frame caching must preserve live poses and authoring invalidation.
+add_executable(RenegadeStudioPlayerStartCacheTests StudioPlayerStartCacheTests.cpp)
+target_link_libraries(RenegadeStudioPlayerStartCacheTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeStudioPlayerStartCacheTests COMMAND RenegadeStudioPlayerStartCacheTests)

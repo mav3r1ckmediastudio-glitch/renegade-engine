@@ -1,11 +1,13 @@
 #include "renegade/bridge/WindowsGameBuildProjectService.h"
 #include "renegade/bridge/ImpactAudioService.h"
+#include "renegade/bridge/SceneDocumentService.h"
 
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/ResourceAssetDependencyService.h"
 #include "renegade/bridge/ReusableAssetDependencyService.h"
 
 #include <algorithm>
+#include <array>
 #include <deque>
 #include <filesystem>
 #include <sstream>
@@ -279,7 +281,67 @@ namespace renegade::bridge
                 MakeStoryFlowDependencyReader(project.projectId));
             RuntimeScreenDependencyProvider screenProvider(
                 MakeRuntimeScreenDependencyReader(project.projectId));
-            WisceneDependencyProvider sceneProvider(MakeWisceneDependencyReader());
+            // Match the default-terrain rebinding performed by SceneService
+            // on the detached scene used for dependency discovery. Never rewrite
+            // the owner's archive or classify unrelated external files as bundled.
+            const auto sceneReader = [&bundledResources](
+                const std::string& path, WisceneDependencyDocument& document,
+                std::string& readerError)
+            {
+                auto prepared = PrepareWickedSceneOpen(path);
+                if (!prepared.IsReady() || prepared.MutablePreparedScene() == nullptr)
+                {
+                    readerError = prepared.Error().empty()
+                        ? "The WISCENE was not ready for dependency inspection."
+                        : prepared.Error();
+                    return false;
+                }
+                auto& scene = *prepared.MutablePreparedScene();
+                using Material = wi::scene::MaterialComponent;
+                const std::array<const char*, 3> names = {
+                    "default_grass_basecolor.tga", "default_grass_normal.tga",
+                    "default_grass_surface.tga"};
+                const std::array<int, 3> slots = {
+                    Material::BASECOLORMAP, Material::NORMALMAP, Material::SURFACEMAP};
+                const std::array<const char*, 3> logicalNames = {
+                    "renegade-terrain-default-grass-basecolor",
+                    "renegade-terrain-default-grass-normal",
+                    "renegade-terrain-default-grass-surface"};
+                std::array<std::string, 3> governed{};
+                for (std::size_t i = 0; i < names.size(); ++i)
+                {
+                    const std::string destination =
+                        std::string("Content/terrain/default_grass/") + names[i];
+                    const auto it = std::find_if(bundledResources.begin(), bundledResources.end(),
+                        [&](const WindowsGameBundledResource& resource)
+                        { return resource.logicalName == logicalNames[i] &&
+                                 resource.destinationPath == destination; });
+                    if (it != bundledResources.end())
+                        governed[i] = it->sourcePath;
+                }
+                if (std::all_of(governed.begin(), governed.end(),
+                        [](const std::string& value) { return !value.empty(); }))
+                {
+                    for (std::size_t ti = 0; ti < scene.terrains.GetCount(); ++ti)
+                    {
+                        for (const auto entity : scene.terrains[ti].materialEntities)
+                        {
+                            auto* material = scene.materials.GetComponent(entity);
+                            if (!material) continue;
+                            // This is the same default-material discriminator used
+                            // by RebindDefaultTerrainMaterials during scene load.
+                            const auto& base = material->textures[Material::BASECOLORMAP].name;
+                            if (wi::helper::GetFileNameFromPath(base) != names[0]) continue;
+                            for (std::size_t i = 0; i < names.size(); ++i)
+                                material->textures[slots[i]].name = governed[i];
+                        }
+                    }
+                }
+                InspectWisceneDependencies(scene, document);
+                readerError.clear();
+                return true;
+            };
+            WisceneDependencyProvider sceneProvider(sceneReader);
             GltfDependencyProvider gltfProvider(MakeGltfDependencyReader());
             SceneIdentityCompanionProvider sceneIdentityProvider;
             ReusableAssetDependencyProvider reusableAssetProvider(project.projectId);

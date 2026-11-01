@@ -3,6 +3,7 @@
 #include "shaders/ShaderInterop_Renderer.h"
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
+#include "PlayerStartFrameCache.h"
 #include "../../Tools/night_sky/CloudStudioReplay.h"
 #include "RiverNodeWidthGizmoAxis.h"
 #include "renegade/bridge/RiverWaterwayService.h"
@@ -44,6 +45,18 @@
 namespace
 {
     namespace fs = std::filesystem;
+    // Share read-only resolution within a rendered frame. Authoring commands
+    // and scene replacement invalidate immediately; live drag transforms are
+    // always refreshed rather than cached with the marker lookup.
+    renegade::bridge::PlayerStartResult ResolveStudioPlayerStart(
+        const wi::scene::Scene& scene,uint64_t sceneRevision,uint64_t commandRevision)
+    {
+        const auto* device=wi::graphics::GetDevice();
+        if(!device)return renegade::bridge::ResolvePlayerStart(scene);
+        static thread_local renegade::studio::PlayerStartFrameCache cache;
+        return cache.Resolve(scene,device->GetFrameCount(),sceneRevision,commandRevision);
+    }
+
     constexpr std::uint8_t SelectionStencilReference = 0x0F;
     constexpr wi::Color HologramIdle = wi::Color(12, 16, 19, 255);
     constexpr wi::Color HologramFocus = wi::Color(26, 31, 35, 255);
@@ -431,6 +444,10 @@ namespace renegade::studio
         SetProjectHubVisible(true);
 
         RenderPath3D::Load();
+        // Explicit isolated owner-test copy; never redirects ordinary launches.
+        if(const char* diagnosticProject=std::getenv("RENEGADE_G4_STUDIO_TEST_PROJECT"))
+            if(session_ && std::filesystem::is_regular_file(diagnosticProject))
+                OpenProjectDescriptor(diagnosticProject);
         // Explicit local QA launch: only the separately generated preview project.
         if ((wi::arguments::HasArgument("cloud-formation-preview") ||
              wi::arguments::HasArgument("cloud-formation-boundary-preview") ||
@@ -653,7 +670,7 @@ namespace renegade::studio
             assemblyPanel_.IsVisible() || handGripPanel_.IsVisible() ||
             modelImportPanel_.IsVisible() || projectileCreatePanel_.IsVisible() || launchSocketPanel_.IsVisible()) return;
         const auto& scene = session_->Scenes().GetScene();
-        const auto start = bridge::ResolvePlayerStart(scene);
+        const auto start = ResolveStudioPlayerStart(scene,session_->Scenes().Revision(),session_->Commands().Revision());
         if (start.resolution != bridge::PlayerStartResolution::Success ||
             !session_->Scenes().IsHierarchyVisible(start.start.entity)) return;
         const auto settings = bridge::SanitizePlayerControllerSettings(start.start.settings);
@@ -2253,6 +2270,8 @@ namespace renegade::studio
             0.0f,
             20.0f,
             400.0f);
+
+        CreateLightningControls();
 
         nightAuroraEnabled_.Create("Aurora Enabled: ");
         nightAuroraEnabled_.SetTooltip("Enable animated Northern Lights in procedural sky; unavailable with a skybox texture. Intensity 0 disables the effect.");
@@ -4064,6 +4083,14 @@ namespace renegade::studio
                 if(prior.rfind("Shared foam: ",0)==0){const auto split=prior.find(" | ");if(split!=std::string::npos)status=prior.substr(0,split+3)+status;}
                 if(prior!=status)riverFlowStatus_.SetText(status);
             }
+            if(session_ && camera && !projectHubVisible_) {
+                auto& lightningScene=session_->Scenes().GetScene();
+                const auto revision=session_->Scenes().Revision();
+                renegade::runtime::ThunderAudio().OnSceneRevision(revision);
+                studioSheetLightning_.Update(lightningScene,revision,camera->Eye,camera->At,dt);
+                studioForkLightning_.Update(lightningScene,revision,camera->Eye,camera->At,dt);
+                renegade::runtime::ThunderAudio().Update(dt,camera->Eye,camera->At);
+            }
             {auto riverBindings=riverFlow_.Bind();RenderPath3D::Update(dt);}
         }
 
@@ -4494,7 +4521,7 @@ namespace renegade::studio
             !projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible() && session_ && camera)
         {
             const auto& scene = session_->Scenes().GetScene();
-            const auto resolved = bridge::ResolvePlayerStart(scene);
+            const auto resolved = ResolveStudioPlayerStart(scene,session_->Scenes().Revision(),session_->Commands().Revision());
             const auto entity = resolved.start.entity;
             const auto* transform = scene.transforms.GetComponent(entity);
             if (resolved.resolution == bridge::PlayerStartResolution::Success &&
@@ -5700,6 +5727,15 @@ namespace renegade::studio
         setEnvironmentVisible(precipitationWindAzimuth_);
         setEnvironmentVisible(precipitationWindSpeed_);
         setEnvironmentVisible(precipitationTurbulence_);
+        setEnvironmentVisible(lightningMode_);
+        setEnvironmentVisible(sheetLightningFrequency_);
+        setEnvironmentVisible(forkLightningFrequency_);
+        setEnvironmentVisible(lightningGlow_);
+        setEnvironmentVisible(lightningBranches_);
+        setEnvironmentVisible(lightningThunder_);
+        setEnvironmentVisible(thunderVolume_);
+        setEnvironmentVisible(lightningDelay_);
+        setEnvironmentVisible(lightningSoundSet_);
         setEnvironmentVisible(sunPreset_);
         setEnvironmentVisible(sunTime_);
         setEnvironmentVisible(sunAzimuth_);
@@ -5848,6 +5884,7 @@ namespace renegade::studio
                 precipitation.windAzimuthDegrees);
             precipitationWindSpeed_.SetValue(precipitation.windSpeed);
             precipitationTurbulence_.SetValue(precipitation.turbulence);
+            RefreshLightningControls();
 
             const auto sun = bridge::CaptureSun(
                 session_->Scenes().GetScene(),
@@ -8228,8 +8265,12 @@ bool StudioRenderPath::HandlePlayerStartCapsule(
         return false;
     }
 
+    // This path only selects on a click; Compose owns capsule hover/drawing.
+    if(!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) || flyCameraActive_ ||
+        GetGUI().HasFocus() || gizmo_.IsInteracting() || !IsPointerOverViewport(pointer))
+        return false;
     auto& scene = session_->Scenes().GetScene();
-    const auto resolved = bridge::ResolvePlayerStart(scene);
+    const auto resolved = ResolveStudioPlayerStart(scene,session_->Scenes().Revision(),session_->Commands().Revision());
     if (resolved.resolution != bridge::PlayerStartResolution::Success ||
         !session_->Scenes().IsHierarchyVisible(resolved.start.entity))
     {
@@ -12354,6 +12395,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             session_->Projects().CurrentProject().projectId=="9dc8e035-52f9-4474-a319-7465698ae7cd" &&
             std::filesystem::path(operation->descriptorPath).filename()=="CloudBodyStudioTest.renegade"))
             SetEnvironmentWorkspaceActive(true);
+        if(std::getenv("RENEGADE_G4_STUDIO_TEST_PROJECT"))SetEnvironmentWorkspaceActive(true);
     }
 
     void StudioRenderPath::OpenProjectDescriptor(
@@ -12597,6 +12639,12 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             return;
         }
 
+        // Lightning bolts and cloud-flash radiance are transient preview-only effects.
+        // Never serialize their ephemeral mesh entities or GPU weather fields.
+        auto& savingScene=session_->Scenes().GetScene();
+        studioForkLightning_.Reset(savingScene);
+        studioSheetLightning_.Reset(savingScene);
+        renegade::runtime::ThunderAudio().Reset();
         ClearSelectionOutline();
         const bool saved = session_->SaveScene(scenePath);
         SyncSelectionOutline();
@@ -12828,7 +12876,12 @@ namespace renegade::studio
             assemblyPanel_.IsVisible() || handGripPanel_.IsVisible() || modelImportPanel_.IsVisible() ||
             !session_->Projects().HasProject()) return;
         auto& source=session_->Scenes().GetScene();
-        const auto resolved=bridge::ResolvePlayerStart(source);
+        // A camera preview can only be visible for the selected Player Start.
+        // Reject all other selections before scanning the scene's metadata.
+        const auto selectedPreviewEntity=session_->Selection().SelectedEntity();
+        if(selectedPreviewEntity==wi::ecs::INVALID_ENTITY ||
+            !bridge::IsPlayerStart(source,selectedPreviewEntity))return;
+        const auto resolved=ResolveStudioPlayerStart(source,session_->Scenes().Revision(),session_->Commands().Revision());
         if(resolved.resolution!=bridge::PlayerStartResolution::Success ||
             session_->Selection().SelectedEntity()!=resolved.start.entity ||
             !session_->Scenes().IsHierarchyVisible(resolved.start.entity)) return;

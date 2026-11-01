@@ -44,6 +44,7 @@ set(WICKED_EMBED_SHADERS ${RENEGADE_EMBED_SHADERS} CACHE BOOL "" FORCE)
 # Isolated Night Sky branch: apply Renegade shader overlay before Wicked config.
 include(cmake/RenegadeNightSkyOverlay.cmake)
 add_subdirectory(WickedEngine)
+include(cmake/RenegadeOfflineShaderCompiler.cmake)
 include(cmake/WickedBacklogShutdownFix.cmake)
 include(cmake/RenegadePhysicsTempAllocator.cmake)
 add_subdirectory(EngineBridge)

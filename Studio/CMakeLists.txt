@@ -395,3 +395,11 @@ add_custom_command(TARGET RenegadeStudio POST_BUILD
         "${CMAKE_SOURCE_DIR}/EngineBridge/assets/moon/README.md"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/Licenses/MoonTexture-Credit.txt"
     VERBATIM)
+
+
+# G4 nine owner-authored thunder WAV files and mono positional variants.
+add_custom_command(TARGET RenegadeStudio POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CMAKE_SOURCE_DIR}/Runtime/Content/weather/thunder"
+      "$<TARGET_FILE_DIR:RenegadeStudio>/Content/weather/thunder"
+    COMMENT "Install nine Renegade thunder SFX with 3D variants in Studio")

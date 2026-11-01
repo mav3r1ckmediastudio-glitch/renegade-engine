@@ -66,3 +66,6 @@ the only authority. Verify every claim about Wicked against
 The original planning analysis used a `WickedEngine-master(1).zip` attachment
 that is no longer present. That comparison is obsolete: the Git submodule at
 the pinned SHA is now the sole baseline of record and the ZIP has no standing.
+
+## Weather V2 local candidate (2026-11-01)
+The upstream baseline above remains unchanged. The Renegade fork checkpoint for the owner-approved Weather V2 candidate is c0cb547b6e5f2f8b3587ba4b30d0fe5fc704d3ee. Core-patch rationale and verification are recorded in WEATHER_V2_G4_CRITICAL_REPAIR_CORE_DECISION_2026-10-30.md and the associated performance decision. This checkpoint is local and requires approved publication before fresh remote CI can fetch it. No upstream sync is implied.

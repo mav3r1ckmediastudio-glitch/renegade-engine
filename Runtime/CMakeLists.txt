@@ -219,3 +219,11 @@ add_custom_command(TARGET RenegadeRuntime POST_BUILD
         "${CMAKE_SOURCE_DIR}/EngineBridge/assets/moon/README.md"
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/Licenses/MoonTexture-Credit.txt"
     VERBATIM)
+
+
+# G4 lightning authoring: package native thunder WAVs for standalone Runtime.
+add_custom_command(TARGET RenegadeRuntime POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CMAKE_CURRENT_SOURCE_DIR}/Content/weather/thunder"
+      "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/weather/thunder"
+    COMMENT "Install owner-created thunder audio in Runtime")

@@ -3,6 +3,8 @@
 // Separate from accepted sheet-lightning shader, weather save data and combat.
 #include "renegade/bridge/ForkLightningService.h"
 #include "RuntimeSheetLightning.h"
+#include "RuntimeThunderAudio.h"
+#include "renegade/bridge/LightningAuthoringService.h"
 #include <WickedEngine.h>
 #include <algorithm>
 #include <array>
@@ -20,16 +22,33 @@ namespace renegade::runtime
         void Update(wi::scene::Scene& scene,std::uint64_t sceneRevision,
                     const XMFLOAT3& observer,const XMFLOAT3& forward,float dt)
         {
-            if(!PreviewRequested())return;
-            if(!initialized_ || revision_!=sceneRevision)
+            bridge::LightningAuthoringState authored;
+            if(scene.weathers.GetCount())
+                authored=bridge::CaptureLightning(scene,scene.weathers.GetEntity(0));
+            const bool active=authored.mode==bridge::LightningMode::Fork ||
+                              authored.mode==bridge::LightningMode::Both;
+            const bool preview=PreviewRequested();
+            if(!active && !preview) {
+                if(initialized_) { if(revision_==sceneRevision) Remove(scene); scheduler_.Reset(); forkSheetGlow_.Reset();
+                    initialized_=false;revision_=0;lastEvent_=0; }
+                if(authored.mode==bridge::LightningMode::Off)
+                    RuntimeSheetLightning::ApplyFrame(scene,{});
+                return;
+            }
+            const float frequency=preview && !active?12.0f:authored.forkPerMinute;
+            const float density=preview && !active?1.0f:authored.forkBranchDensity;
+            if(!initialized_ || revision_!=sceneRevision || frequency_!=frequency || branchDensity_!=density || glowIntensity_!=authored.sheetIntensity)
             {
                 // Do not modify any saved weather or the G4 sheet-lightning
                 // fields. New-scene entities are independent ephemeral VFX.
-                if(initialized_) Remove(scene);
+                // Previous scene owns previous bolt IDs; never remove those IDs
+                // from a newly loaded scene where they might have been reused.
+                if(initialized_ && revision_==sceneRevision) Remove(scene);
                 objects_.fill(wi::ecs::INVALID_ENTITY);
                 bridge::ForkLightningSettings opts;
                 opts.enabled=true;
-                opts.eventsPerMinute=12.0f;
+                opts.eventsPerMinute=frequency;
+                opts.branchDensity=density;
                 opts.cloudBaseMetres=scene.weather.volumetricCloudParameters.cloudStartHeight+
                     std::min(0.10f*scene.weather.volumetricCloudParameters.cloudThickness,400.0f);
                 opts.seed=0xB017F0A1u;
@@ -37,11 +56,11 @@ namespace renegade::runtime
                 bridge::SheetLightningSettings sheetOpts;
                 sheetOpts.enabled = true;
                 sheetOpts.eventsPerMinute = 10.0f;
-                sheetOpts.intensity = 0.14f;
+                sheetOpts.intensity = active ? authored.sheetIntensity : 0.14f;
                 sheetOpts.clusterSpreadMetres = 720.0f;
                 sheetOpts.cloudLightRangeMetres = 2340.0f;
                 forkSheetGlow_.Configure(sheetOpts);
-                revision_=sceneRevision;initialized_=true;lastEvent_=0;
+                revision_=sceneRevision;frequency_=frequency;branchDensity_=density;glowIntensity_=authored.sheetIntensity;initialized_=true;lastEvent_=0;
             }
 
             if(!scene.weather.IsVolumetricClouds())
@@ -63,6 +82,7 @@ namespace renegade::runtime
                     scene.weather.volumetricCloudParameters.cloudThickness);
                 objects_[0]=Create(scene,strike,observer,false);
                 objects_[1]=Create(scene,strike,observer,true);
+                ThunderAudio().Queue(strike.contact,observer,authored.thunder && active || preview,authored.thunderVolume,authored.distanceDelay,authored.thunderSoundSet);
                 Trace("FORK_FLASH id="+std::to_string(strike.id)+
                       " segments="+std::to_string(strike.segments.size())+
                       " originY="+std::to_string(strike.origin.y)+
@@ -76,7 +96,9 @@ namespace renegade::runtime
             const auto linkedGlow = forkSheetGlow_.FrameDrivenByStrike(
                 strike.visible ? strike.brightness : 0.0f,
                 strike.ageSeconds);
-            RuntimeSheetLightning::ApplyFrame(scene, linkedGlow);
+            if(authored.mode!=bridge::LightningMode::Both || strike.visible ||
+               (strike.id && strike.ageSeconds<0.62f))
+                RuntimeSheetLightning::ApplyFrame(scene, linkedGlow);
             // Preserve geometry through the brief dark gap between return
             // strokes; otherwise the second stroke would disappear entirely.
             // Remove both meshes after the tail has completed.
@@ -132,6 +154,7 @@ namespace renegade::runtime
               const bridge::ForkLightningFrame& strike,
               const XMFLOAT3& observer,bool halo)
         {
+            wi::profiler::ScopedRangeCPU createTiming("Fork Mesh Create");
             const auto id=wi::ecs::CreateEntity();
             scene.names.Create(id).name=halo?
                 "G4 fork lightning faint diffused halo (preview)" :
@@ -235,6 +258,7 @@ namespace renegade::runtime
         std::array<wi::ecs::Entity,2> objects_{
             wi::ecs::INVALID_ENTITY,wi::ecs::INVALID_ENTITY};
         std::uint64_t revision_=0,lastEvent_=0;
+        float frequency_=-1.0f,branchDensity_=-1.0f,glowIntensity_=-1.0f;
         bool initialized_=false;
     };
 }

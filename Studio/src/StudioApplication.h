@@ -36,6 +36,8 @@
 #include "renegade/bridge/LightmapBakeService.h"
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
+#include "renegade/bridge/LightningAuthoringService.h"
+#include "../../Runtime/src/RuntimeForkLightning.h"
 #include "renegade/bridge/WeatherTransitionService.h"
 #include "renegade/bridge/SunService.h"
 #include "renegade/bridge/NightSkyService.h"
@@ -1037,8 +1039,8 @@ namespace renegade::studio
         wi::ecs::Entity nightColourEntity_ = wi::ecs::INVALID_ENTITY;
         XMFLOAT3 nightColourValue_;
 
-        std::array<SceneInspectorButton, 10> environmentSectionHeaders_;
-        std::array<bool, 10> environmentSectionExpanded_ = {true, false, false, false, false, false, true, false, false, false};
+        std::array<SceneInspectorButton, 11> environmentSectionHeaders_;
+        std::array<bool, 11> environmentSectionExpanded_ = {true, false, false, false, false, false, true, true, false, false, false};
         bool environmentSectionsCreated_ = false;
         SceneInspectorComboBox environmentPreset_;
         SceneInspectorSlider weatherTransitionDuration_;
@@ -1093,6 +1095,15 @@ namespace renegade::studio
         SceneInspectorSlider cloudStartHeight_;
         SceneInspectorSlider cloudThickness_;
         SceneInspectorCheckBox cloudsCastShadow_;
+        SceneInspectorComboBox lightningMode_;
+        SceneInspectorSlider sheetLightningFrequency_, forkLightningFrequency_, lightningGlow_, lightningBranches_, thunderVolume_;
+        SceneInspectorCheckBox lightningThunder_, lightningDelay_;
+        SceneInspectorComboBox lightningSoundSet_;
+        renegade::runtime::RuntimeSheetLightning studioSheetLightning_;
+        renegade::runtime::RuntimeForkLightning studioForkLightning_;
+        void CreateLightningControls();
+        void RefreshLightningControls();
+        void CommitLightning(const bridge::LightningAuthoringState& state);
         SceneInspectorComboBox precipitationMode_;
         SceneInspectorSlider precipitationIntensity_;
         SceneInspectorSlider precipitationFallSpeed_;

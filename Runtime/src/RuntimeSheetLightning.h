@@ -2,6 +2,8 @@
 // G4-S1: preview only. Inject sheet lightning radiance directly into the
 // existing cloud march. No mesh bolts, persistent lights or saved level data.
 #include "renegade/bridge/SheetLightningService.h"
+#include "RuntimeThunderAudio.h"
+#include "renegade/bridge/LightningAuthoringService.h"
 #include <WickedEngine.h>
 #include <algorithm>
 #include <cstdint>
@@ -20,17 +22,30 @@ namespace renegade::runtime
                     const XMFLOAT3& viewDirection,
                     float gameDelta)
         {
-            if (!PreviewRequested()) return;
+            bridge::LightningAuthoringState authored;
+            if(scene.weathers.GetCount())
+                authored=bridge::CaptureLightning(scene,scene.weathers.GetEntity(0));
+            const bool active=authored.mode==bridge::LightningMode::Sheet ||
+                              authored.mode==bridge::LightningMode::Both;
+            const bool preview=PreviewRequested();
+            if(!active && !preview) {
+                if(initialized_)Reset(scene);
+                return;
+            }
+            const float frequency=preview && !active?10.0f:authored.sheetPerMinute;
+            const float intensity=preview && !active?.14f:authored.sheetIntensity;
 
-            if (!initialized_ || sceneRevision_ != sceneRevision)
+            if (!initialized_ || sceneRevision_ != sceneRevision ||
+                frequency_!=frequency || intensity_!=intensity)
             {
                 bridge::SheetLightningSettings opts;
                 opts.enabled = true;
-                opts.eventsPerMinute = 10.0f;
-                opts.intensity = 0.14f; // Wider lobes overlap more; keep core from blooming.
+                opts.eventsPerMinute = frequency;
+                opts.intensity = intensity; // Wider lobes overlap more; keep core from blooming.
                 opts.clusterSpreadMetres = 720.0f;
                 opts.cloudLightRangeMetres = 2340.0f; // G4: ~30% wider per-cell reach.
                 schedule_.Configure(opts);
+                frequency_ = frequency; intensity_ = intensity;
                 sceneRevision_ = sceneRevision;
                 initialized_ = true;
                 lastEvent_ = 0;
@@ -55,6 +70,7 @@ namespace renegade::runtime
             {
                 lastEvent_ = flash.eventId;
                 tracedPeak_ = false;
+                ThunderAudio().Queue(flash.cells[0].position,observer,authored.thunder && active || preview,authored.thunderVolume,authored.distanceDelay,authored.thunderSoundSet);
                 Trace("FLASH_START id=" + std::to_string(lastEvent_) +
                     " cloudStart=" + std::to_string(
                         scene.weather.volumetricCloudParameters.cloudStartHeight) +
@@ -142,6 +158,7 @@ namespace renegade::runtime
         bridge::SheetLightningController schedule_;
         std::uint64_t sceneRevision_ = 0;
         std::uint64_t lastEvent_ = 0;
+        float frequency_=-1.0f, intensity_=-1.0f;
         bool initialized_ = false;
         bool tracedPeak_ = false;
     };

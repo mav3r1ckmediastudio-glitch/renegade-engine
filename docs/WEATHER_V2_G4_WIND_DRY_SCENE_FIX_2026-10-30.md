@@ -34,3 +34,8 @@ Wicked's shaders use sample_wind(...) only when a mesh material is configured to
 - A dedicated scene with grass and trees **configured for wind** must show calm/breezy/storm response, live direction reversal, and acceptable performance. Some imported mesh materials lack wind enablement / vertex weights; test setup must not mislabel those assets as a weather-engine failure.
 - Rain and snow visual appearance / environment interaction; Storm preset currently lacks automatic precipitation pairing. Gate 4 NOT visually signed off for wind/rain/snow.
 - Do not modify accepted G1-G3 cloud/lightning visuals. No push/PR/merge without authorization.
+
+
+## 2026-10-30 continuation: grass-only scope and new evidence
+
+Owner confirms only grass currently exists; trees belong to a future separate system and are not required for this weather gate. See WEATHER_V2_G4_GRASS_WIND_VALIDATION_2026-10-30.md for actual grass calm/wind/direction sequences, Undo/Redo, Save/Reopen, standalone Runtime and 3/3 checks. This supersedes the earlier mandatory grass-and-trees wording. Owner grass-motion signoff remains outstanding. Actual Test Game on the new Save As derivative exposed missing level identity metadata and is not marked passed; a separate registered-level fixture provides standalone Runtime evidence only. G4 overall remains open.

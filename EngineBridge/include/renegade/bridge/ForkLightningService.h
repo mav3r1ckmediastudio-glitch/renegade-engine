@@ -14,6 +14,7 @@ namespace renegade::bridge
         bool enabled = false;
         float eventsPerMinute = 9.0f;
         float cloudBaseMetres = 2280.0f;
+        float branchDensity=1.0f;
         float minDistanceMetres = 2800.0f;
         float maxDistanceMetres = 4800.0f;
         std::uint32_t seed = 0x5EEDB017u;
@@ -50,6 +51,7 @@ namespace renegade::bridge
             };
             config_.eventsPerMinute=clamp(requested.eventsPerMinute,9.0f,0.0f,30.0f);
             config_.cloudBaseMetres=clamp(requested.cloudBaseMetres,2280.0f,200.0f,5000.0f);
+            config_.branchDensity=clamp(requested.branchDensity,1,0,2);
             config_.minDistanceMetres=clamp(requested.minDistanceMetres,2800.0f,500.0f,9000.0f);
             config_.maxDistanceMetres=clamp(requested.maxDistanceMetres,4800.0f,
                                            config_.minDistanceMetres,12000.0f);
@@ -198,7 +200,7 @@ namespace renegade::bridge
                 }
             }
 
-            const unsigned forkCount=3u+(Next()%3u);
+            const unsigned forkCount=std::min(12u,static_cast<unsigned>(std::lround(float(3u+(Next()%3u))*config_.branchDensity)));
             for(unsigned f=0;f<forkCount;++f)
             {
                 const unsigned anchor=4u+(Next()%17u);

@@ -1,0 +1,83 @@
+{
+  "license": "Original user-created sounds; distribution authorized for Renegade Engine",
+  "default3d": [
+    "thunder_lightning_01.wav",
+    "thunder_lightning_02.wav",
+    "thunder_booming_01.wav",
+    "thunder_distant_02.wav"
+  ],
+  "assets": [
+    {
+      "file": "thunder_booming_01.wav",
+      "channels": 2,
+      "rate": 48000,
+      "seconds": 4.48,
+      "default": true,
+      "sha256": "45da7342c90897f18e63985e9735ef32ec018596aae1245fc1f1d4ca43c8d24d"
+    },
+    {
+      "file": "thunder_booming_02.wav",
+      "channels": 2,
+      "rate": 48000,
+      "seconds": 4.48,
+      "default": false,
+      "sha256": "d387280608566e7e0664ec0c97ef6817c2eb964d5a44cacc41a47ba915112c4f"
+    },
+    {
+      "file": "thunder_booming_03.wav",
+      "channels": 2,
+      "rate": 48000,
+      "seconds": 4.48,
+      "default": false,
+      "sha256": "054082ad35521b56208553389ee4cf9db9707e111a2867c65fcbaa5d8de503e6"
+    },
+    {
+      "file": "thunder_distant_02.wav",
+      "channels": 2,
+      "rate": 48000,
+      "seconds": 4.48,
+      "default": true,
+      "sha256": "613a528a4d53996a35fd030a0f9bdf97883a26b2273a1a867b1fdc67b9d37e41"
+    },
+    {
+      "file": "thunder_distant_03.wav",
+      "channels": 2,
+      "rate": 48000,
+      "seconds": 4.48,
+      "default": false,
+      "sha256": "747cb5d5f17204049030f1c1d13b8235465c27359d845bd3285dae3c8927a515"
+    },
+    {
+      "file": "thunder_distant_04.wav",
+      "channels": 2,
+      "rate": 48000,
+      "seconds": 4.48,
+      "default": false,
+      "sha256": "dddae7366932d223dd65852644bbd37388280f1dcb05e309e2bc2ba983d41728"
+    },
+    {
+      "file": "thunder_lightning_01.wav",
+      "channels": 2,
+      "rate": 48000,
+      "seconds": 4.48,
+      "default": true,
+      "sha256": "f74ade48f94ff7f314e31f255ffe34e2c2d1038d721e1b0750558324b55c56e4"
+    },
+    {
+      "file": "thunder_lightning_02.wav",
+      "channels": 2,
+      "rate": 48000,
+      "seconds": 4.48,
+      "default": true,
+      "sha256": "a482f37895ba1f15d4948f62508c78908fd9fe087d682bbeaa5216cbf3fa0a12"
+    },
+    {
+      "file": "thunder_lightning_03.wav",
+      "channels": 2,
+      "rate": 48000,
+      "seconds": 4.48,
+      "default": false,
+      "sha256": "3823f9d5f4d1be0b595c2ad0f8e6a98618447610ce077ba93cb694fb26b1a5dd"
+    }
+  ]
+}

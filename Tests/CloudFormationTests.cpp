@@ -4,7 +4,8 @@
 #include <cstdlib>
 #include <filesystem>
 #include <string>
-static_assert(sizeof(ShaderWeather)==1040);
+static_assert(offsetof(ShaderWeather,sheet_light_power)==1088);
+static_assert(sizeof(ShaderWeather)==1104);
 static_assert(offsetof(VolumetricCloudLayer,padding0)==12);
 static_assert(offsetof(VolumetricCloudLayer,padding1)==28);
 static void Check(bool ok,const char* message)
