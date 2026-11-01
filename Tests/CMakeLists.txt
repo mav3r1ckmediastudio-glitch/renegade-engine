@@ -157,6 +157,37 @@ set_target_properties(RenegadeBridgeTests PROPERTIES
 
 add_test(NAME RenegadeBridgeTests COMMAND RenegadeBridgeTests)
 
+add_executable(RenegadeWeatherTransitionTests WeatherTransitionTests.cpp)
+target_link_libraries(RenegadeWeatherTransitionTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeWeatherTransitionTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeWeatherTransitionTests COMMAND RenegadeWeatherTransitionTests)
+
+# G4 rain/wind and native-snow transitions; no visual/Inspector signoff implied.
+add_executable(RenegadeWeatherEffectsTransitionTests WeatherEffectsTransitionTests.cpp)
+target_link_libraries(RenegadeWeatherEffectsTransitionTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeWeatherEffectsTransitionTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeWeatherEffectsTransitionTests COMMAND RenegadeWeatherEffectsTransitionTests)
+
+# G4 sheet-lightning first: deterministic internal cloud illumination pulses.
+add_executable(RenegadeSheetLightningTests SheetLightningTests.cpp)
+target_link_libraries(RenegadeSheetLightningTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeSheetLightningTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeSheetLightningTests COMMAND RenegadeSheetLightningTests)
+
+# G4-F1 fork lightning is separate from approved volumetric sheet flashes.
+add_executable(RenegadeForkLightningTests ForkLightningTests.cpp)
+target_link_libraries(RenegadeForkLightningTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeForkLightningTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeForkLightningTests COMMAND RenegadeForkLightningTests)
+
+# Gate 3 governed creator Lua weather gameplay contract. Same sandbox and
+# shared runtime state as production; no second Lua interpreter.
+add_executable(RenegadeWeatherLuaRuntimeTests WeatherLuaRuntimeTests.cpp)
+target_link_libraries(RenegadeWeatherLuaRuntimeTests PRIVATE Renegade::RuntimeBootstrap)
+set_target_properties(RenegadeWeatherLuaRuntimeTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeWeatherLuaRuntimeTests COMMAND RenegadeWeatherLuaRuntimeTests)
+
+
 add_executable(RenegadeDiagnosticServiceTests DiagnosticServiceTests.cpp)
 target_link_libraries(RenegadeDiagnosticServiceTests PRIVATE Renegade::EngineBridge)
 set_target_properties(RenegadeDiagnosticServiceTests PROPERTIES FOLDER "Renegade/Tests")
@@ -1749,6 +1780,34 @@ target_compile_definitions(RenegadeWaterfallRuntimeLifecycleProof PRIVATE
 add_executable(RenegadeWaterfallMultiSceneProof WaterfallMultiSceneProof.cpp)
 target_link_libraries(RenegadeWaterfallMultiSceneProof PRIVATE Renegade::EngineBridge)
 target_compile_options(RenegadeWaterfallMultiSceneProof PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+add_executable(RenegadeMoonTests MoonStateTests.cpp)
+target_link_libraries(RenegadeMoonTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeMoonTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeMoonTests COMMAND RenegadeMoonTests)
+
+add_executable(RenegadeShootingStarsTests ShootingStarsStateTests.cpp)
+target_link_libraries(RenegadeShootingStarsTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeShootingStarsTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeShootingStarsTests COMMAND RenegadeShootingStarsTests)
+
+# Moonlit cloud shading reuses the existing cloud raymarch and lunar state.
+add_test(NAME RenegadeMoonlitCloudSourceContract COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/MoonlitCloudSourceContract.cmake")
+
+add_test(NAME RenegadeCloudsV2VolumetricContract COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/CloudsV2VolumetricContract.cmake")
+
+add_executable(RenegadeCloudFormationTests CloudFormationTests.cpp)
+target_link_libraries(RenegadeCloudFormationTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeCloudFormationTests COMMAND RenegadeCloudFormationTests)
+
+# G4 actual XAudio2 output/lifetime proof, manual hardware test (not silent CI).
+add_executable(RenegadeThunderAudioProof ThunderAudioTests.cpp)
+target_link_libraries(RenegadeThunderAudioProof PRIVATE Renegade::EngineBridge ole32)
+set_target_properties(RenegadeThunderAudioProof PROPERTIES FOLDER "Renegade/Tests")
+
+# UI-frame caching must preserve live poses and authoring invalidation.
+add_executable(RenegadeStudioPlayerStartCacheTests StudioPlayerStartCacheTests.cpp)
+target_link_libraries(RenegadeStudioPlayerStartCacheTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeStudioPlayerStartCacheTests COMMAND RenegadeStudioPlayerStartCacheTests)
 
 # Resolve package provenance from this integration tree, never historic fixture SHAs.
 target_compile_definitions(RenegadeInventoryG5PackageProof PRIVATE

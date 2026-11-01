@@ -1,8 +1,10 @@
 #include "RuntimeScriptRuntime.h"
 
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/ScriptDocumentService.h"
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -182,6 +184,52 @@ int main()
             "  if renegade.entity.is_valid(self.entity) then "
             "error('deleted entity remained live') end\n"
             " end\n"
+            "}\n") ||
+        !writeScript(
+            "weather.lua",
+            "return {\n"
+            " on_start=function(self)\n"
+            "  local w=renegade.weather.get_state()\n"
+            "  assert(w and not w.transitioning)\n"
+            "  local ok,err=renegade.weather.set_preset('blizzard',1)\n"
+            "  assert(ok==false and type(err)=='string')\n"
+            "  ok,err=renegade.weather.set_preset('clear',math.huge)\n"
+            "  assert(ok==false and type(err)=='string')\n"
+            "  assert(renegade.weather.set_preset('StOrM',1))\n"
+            "  w=renegade.weather.get_state()\n"
+            "  assert(w.transitioning and w.target_preset=='storm')\n"
+            "  assert(math.abs(w.target_cloud_coverage-0.95)<0.001)\n"
+            "  assert(w.duration==1 and w.progress==0)\n"
+            " end,\n"
+            " on_weather_transition_complete=function(self)\n"
+            "  completed=(completed or 0)+1\n"
+            "  assert(completed==1)\n"
+            " end,\n"
+            " on_update=function(self,dt)\n"
+            "  local w=renegade.weather.get_state()\n"
+            "  if w.transitioning then assert(w.progress>0 and w.progress<1)\n"
+            "  else assert(completed==1 and w.progress==1) end\n"
+            " end\n"
+            "}\n") ||
+        !writeScript(
+            "weather_cancel.lua",
+            "return {\n"
+            " on_start=function(self)\n"
+            "  assert(renegade.weather.set_preset('overcast',2))\n"
+            " end,\n"
+            " on_update=function(self,dt)\n"
+            "  if not canceled then\n"
+            "   assert(renegade.weather.get_state().transitioning)\n"
+            "   assert(renegade.weather.cancel())\n"
+            "   assert(not renegade.weather.get_state().transitioning)\n"
+            "   assert(renegade.weather.set_preset('clear',0))\n"
+            "   canceled=true\n"
+            "  end\n"
+            " end,\n"
+            " on_weather_transition_complete=function(self)\n"
+            "  completed=(completed or 0)+1\n"
+            "  assert(completed==1)\n"
+            " end\n"
             "}\n"))
     {
         return Fail("script fixtures: " + error);
@@ -271,6 +319,67 @@ int main()
         runtime.Shutdown();
         if (!Check(!runtime.IsInitialized(), "Shutdown did not close Lua state"))
             return 1;
+    }
+
+
+    // Weather G3: bounded Lua API, smooth game-time progression, paused state,
+    // target query, once-only completion, and cancel/instant retarget.
+    {
+        wi::scene::Scene weatherScene;
+        ScriptDocument document = CreateScriptDocument(
+            projectId, GenerateStableId(),
+            "Content/Scenes/Weather.wiscene", "g3-weather-tests");
+        if (!Add(document, ScriptScope::Level, {},
+                Source("Content/Scripts/weather.lua", ScriptPresentation::GlobalScript), error))
+            return Fail("weather attachment: " + error);
+        RuntimeScriptRuntime runtime;
+        if (!runtime.StartScene(
+                document, weatherScene, root.generic_u8string(), error))
+            return Fail("weather StartScene: " + error);
+        if (!Check(runtime.Diagnostics().empty(), "weather script startup"))
+            return 1;
+        runtime.Update(0.25f);
+        const float fogAtQuarter = CaptureWeather(weatherScene.weather).fogDensity;
+        runtime.Pause();
+        runtime.Update(0.25f);
+        if (!Check(
+                std::abs(CaptureWeather(weatherScene.weather).fogDensity -
+                    fogAtQuarter) < 0.000001f,
+                "weather progressed while Runtime paused"))
+            return 1;
+        runtime.Resume();
+        runtime.Update(0.25f);
+        runtime.Update(0.25f);
+        runtime.Update(0.25f);
+        runtime.Update(0.25f);
+        const auto finalWeather = CaptureWeather(weatherScene.weather);
+        if (!Check(runtime.Diagnostics().empty(),
+                "weather completion callback or state failed") ||
+            !Check(std::abs(finalWeather.cloudCoverage - 0.95f) < 0.0001f,
+                "weather did not reach Storm cloud coverage") ||
+            !Check(std::abs(finalWeather.fogDensity - 0.025f) < 0.0001f,
+                "weather did not reach Storm fog"))
+            return 1;
+        runtime.StopScene();
+
+        wi::scene::Scene cancelScene;
+        ScriptDocument cancelDocument = CreateScriptDocument(
+            projectId, GenerateStableId(),
+            "Content/Scenes/WeatherCancel.wiscene", "g3-weather-tests");
+        if (!Add(cancelDocument, ScriptScope::Level, {},
+                Source("Content/Scripts/weather_cancel.lua", ScriptPresentation::GlobalScript), error))
+            return Fail("cancel weather attachment: " + error);
+        if (!runtime.StartScene(
+                cancelDocument, cancelScene, root.generic_u8string(), error))
+            return Fail("cancel weather StartScene: " + error);
+        runtime.Update(0.25f); // Cancel the in-flight preset; instantly apply Clear.
+        runtime.Update(0.25f); // Emit exactly one completion callback for Clear.
+        if (!Check(runtime.Diagnostics().empty(), "weather cancel/instant path") ||
+            !Check(CaptureWeather(cancelScene.weather).skyMode ==
+                WeatherState::SkyMode::Realistic,
+                "instant Clear did not switch to realistic clear sky"))
+            return 1;
+        runtime.StopScene();
     }
 
     // EntityRefs revalidate Scene liveness inside one Runtime generation.

@@ -506,6 +506,19 @@ namespace renegade::bridge
         }
         else if (saveAs)
         {
+            // An imported/legacy Scene can lack .rmeta. Without an existing
+            // scripting companion there is nothing to clone or bind against
+            // that old identity; Save As must not require or mutate it.
+            bool sourceCompanionExists = false;
+            if (!FileExistsAsRegular(
+                    fs::u8path(ScriptDocumentPathForScene(previousScenePath)),
+                    sourceCompanionExists, error))
+                return false;
+            if (!sourceCompanionExists)
+            {
+                error.clear();
+                return true;
+            }
             bool oldExists = false;
             std::string oldHint;
             DocumentEnvelope oldSceneEnvelope;

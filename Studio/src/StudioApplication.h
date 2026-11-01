@@ -38,8 +38,13 @@
 #include "renegade/bridge/LightmapBakeService.h"
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
+#include "renegade/bridge/LightningAuthoringService.h"
+#include "../../Runtime/src/RuntimeForkLightning.h"
+#include "renegade/bridge/WeatherTransitionService.h"
 #include "renegade/bridge/SunService.h"
 #include "renegade/bridge/NightSkyService.h"
+#include "renegade/bridge/MoonService.h"
+#include "renegade/bridge/ShootingStarsService.h"
 #include "renegade/bridge/TerrainService.h"
 #include "renegade/bridge/RiverSplineService.h"
 #include "renegade/bridge/RiverUnderwaterService.h"
@@ -60,6 +65,7 @@ namespace renegade::studio
     {
     public:
         void BindSession(bridge::StudioSession& session) noexcept;
+        void PrepareCloudBodySelfTestView();
         void SetExitRequestHandler(std::function<void()> handler);
         void RequestExit();
         void UpdateLiveDiagnostics(const char* outerWorkspace);
@@ -303,6 +309,7 @@ namespace renegade::studio
             FogHeightStart,
             FogHeightEnd,
             CloudCoverage,
+            CloudMovementSpeed,
             CloudStartHeight,
             CloudThickness,
         };
@@ -527,6 +534,9 @@ namespace renegade::studio
         void ApplySelectedWeatherToggle(WeatherToggle toggle, bool value);
         void ApplySelectedSkyMode(bridge::WeatherState::SkyMode mode);
         void ApplyWeatherPreset(int preset);
+        void StartWeatherPresetTransition();
+        void TickWeatherPresetTransition(float deltaSeconds);
+        void CancelWeatherPresetTransition();
         void BeginNightSlider(NightField field);
         void PreviewNightSlider(NightField field, float value);
         void CommitNightSlider(NightField field, float value);
@@ -1052,15 +1062,46 @@ namespace renegade::studio
         wi::ecs::Entity nightColourEntity_ = wi::ecs::INVALID_ENTITY;
         XMFLOAT3 nightColourValue_;
 
-        std::array<SceneInspectorButton, 9> environmentSectionHeaders_;
-        std::array<bool, 9> environmentSectionExpanded_ = {true, false, false, false, false, false, false, false, false};
+        std::array<SceneInspectorButton, 11> environmentSectionHeaders_;
+        std::array<bool, 11> environmentSectionExpanded_ = {true, false, false, false, false, false, true, true, false, false, false};
         bool environmentSectionsCreated_ = false;
         SceneInspectorComboBox environmentPreset_;
+        SceneInspectorSlider weatherTransitionDuration_;
+        SceneInspectorButton weatherApplyNowButton_;
+        SceneInspectorButton weatherStartTransitionButton_;
+        SceneInspectorButton weatherCancelTransitionButton_;
+        int selectedWeatherPreset_ = 0;
+        float weatherTransitionDurationSeconds_ = 8.0f;
+        bridge::WeatherTransitionController weatherTransition_;
+        wi::ecs::Entity weatherTransitionEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::WeatherState weatherTransitionBefore_{};
+        std::uint64_t weatherTransitionSceneRevision_ = 0;
         SceneInspectorComboBox skyMode_;
         SceneInspectorCheckBox aerialPerspective_;
         SceneInspectorSlider skyExposure_;
         SceneInspectorSlider stars_;
         SceneInspectorCheckBox nightAuroraEnabled_;
+        SceneInspectorCheckBox shootingStarsEnabled_;
+        std::array<SceneInspectorSlider,3> shootingStarsSliders_;
+        SceneInspectorButton shootingStarsPreview_;
+        bridge::ShootingStarsState meteorSliderBefore_,meteorSliderAfter_;
+        wi::ecs::Entity meteorSliderEntity_=wi::ecs::INVALID_ENTITY;
+        bool meteorSliderActive_=false;
+        void CreateShootingStarsControls();
+        void RefreshShootingStarsControls(bool visible,bool procedural);
+        void PreviewShootingStarsSlider(std::size_t index,float value);
+        void CommitShootingStarsSlider(std::size_t index,float value);
+        SceneInspectorCheckBox moonEnabled_;
+        SceneInspectorComboBox moonPhasePreset_;
+        SceneInspectorComboBox moonMovement_;
+        std::array<SceneInspectorSlider, 5> moonSliders_;
+        bridge::MoonState moonSliderBefore_, moonSliderAfter_;
+        wi::ecs::Entity moonSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        bool moonSliderActive_ = false;
+        void CreateMoonControls();
+        void RefreshMoonControls(bool visible, bool procedural);
+        void PreviewMoonSlider(std::size_t index, float value);
+        void CommitMoonSlider(std::size_t index, float value);
         std::array<SceneInspectorSlider, static_cast<std::size_t>(NightField::Count)> nightSkySliders_;
         SceneInspectorSlider ambientIntensity_;
         SceneInspectorSlider fogStart_;
@@ -1068,10 +1109,24 @@ namespace renegade::studio
         SceneInspectorCheckBox heightFog_;
         SceneInspectorSlider fogHeightStart_;
         SceneInspectorSlider fogHeightEnd_;
+        void CaptureCloudBodyReplay();
+        uint32_t cloudBodyReplayFrames_=0;
+        bool cloudBodyReplayCaptured_=false;
+        wi::gui::ComboBox cloudFormation_;
         SceneInspectorSlider cloudCoverage_;
+        SceneInspectorSlider cloudMovementSpeed_;
         SceneInspectorSlider cloudStartHeight_;
         SceneInspectorSlider cloudThickness_;
         SceneInspectorCheckBox cloudsCastShadow_;
+        SceneInspectorComboBox lightningMode_;
+        SceneInspectorSlider sheetLightningFrequency_, forkLightningFrequency_, lightningGlow_, lightningBranches_, thunderVolume_;
+        SceneInspectorCheckBox lightningThunder_, lightningDelay_;
+        SceneInspectorComboBox lightningSoundSet_;
+        renegade::runtime::RuntimeSheetLightning studioSheetLightning_;
+        renegade::runtime::RuntimeForkLightning studioForkLightning_;
+        void CreateLightningControls();
+        void RefreshLightningControls();
+        void CommitLightning(const bridge::LightningAuthoringState& state);
         SceneInspectorComboBox precipitationMode_;
         SceneInspectorSlider precipitationIntensity_;
         SceneInspectorSlider precipitationFallSpeed_;
@@ -1649,11 +1704,14 @@ namespace renegade::studio
                 storyFlowRenderer_,
                 screenEditorRenderer_,
                 session_);
+            UpdateCloudBodySelfTest();
             renderer_.UpdateLiveDiagnostics(GetActivePath() == &storyFlowRenderer_ ? "story_flow" :
                 GetActivePath() == &screenEditorRenderer_ ? "screen_editor" : "level_editor");
         }
 
     private:
+        void UpdateCloudBodySelfTest();
+        bool cloudBodySelfTestOpened_=false;
         void PrepareProvingGround();
 
         bridge::StudioSession session_;

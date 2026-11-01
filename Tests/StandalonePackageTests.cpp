@@ -843,6 +843,11 @@ int main(int argc, char** argv)
         }
         if (exitCode != 0)
         {
+            std::string runtimeEvidence, evidenceError;
+            if (ReadFile(evidencePath, runtimeEvidence, evidenceError))
+                std::cerr << "PACKAGED_RUNTIME_EVIDENCE:\n" << runtimeEvidence << std::endl;
+            else
+                std::cerr << "PACKAGED_RUNTIME_EVIDENCE_UNAVAILABLE: " << evidenceError << std::endl;
             return Fail(root,
                 "real isolated DX12 packaged Runtime returned " +
                 std::to_string(exitCode));

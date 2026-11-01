@@ -2,6 +2,8 @@
 #include "renegade/bridge/ScriptAuthoringService.h"
 #include "renegade/bridge/ScriptDocumentService.h"
 #include "renegade/bridge/StudioSession.h"
+#include "renegade/bridge/TestLevelSnapshotService.h"
+#include <iterator>
 
 #include <chrono>
 #include <cmath>
@@ -108,19 +110,28 @@ int main()
     ok = Expect(session.Projects().HasProject(), "project became authoritative") && ok;
 
     const auto& project = session.Projects().CurrentProject();
-    DocumentEnvelope sceneEnvelope = CreateDocumentEnvelope(
-        project.projectId,
-        "scene",
-        project.startupScene,
-        "s4b-authoring-tests");
+    DocumentEnvelope sceneEnvelope;
     std::string error;
-    ok = Expect(
-        WriteDocumentEnvelope(scenePath + ".rmeta", sceneEnvelope, error),
-        "write Scene identity sidecar: " + error) && ok;
+    // Legacy/imported and newly saved Levels may not yet have an identity.
+    // The ordinary save boundary must establish it; tests must not manufacture
+    // the sidecar that Save As used to omit.
+    fs::remove(fs::u8path(scenePath + ".rmeta"), ec);
+    const fs::path legacyCopy = fs::u8path(project.rootPath) /
+        "Content/Scenes/LegacyCopy.wiscene";
+    ok = Expect(session.SaveScene(legacyCopy.generic_u8string()) &&
+        fs::is_regular_file(legacyCopy.generic_u8string() + ".rmeta") &&
+        !fs::exists(scenePath + ".rmeta") &&
+        !fs::exists(ScriptDocumentPathForScene(legacyCopy.generic_u8string())),
+        "legacy unscripted Save As creates only the new identity and preserves its source") && ok;
 
     // First save gives the authored entity its persistent Renegade ID. With no
     // scripting state loaded yet, S4B must not emit an empty companion.
     ok = Expect(session.SaveScene(scenePath), "save Scene before script attachment") && ok;
+    ok = Expect(
+        ReadDocumentEnvelope(scenePath + ".rmeta", sceneEnvelope, error) &&
+        sceneEnvelope.projectId == project.projectId &&
+        sceneEnvelope.documentType == "scene",
+        "first project save creates its own Level identity: " + error) && ok;
     ok = Expect(
         !fs::exists(fs::u8path(ScriptDocumentPathForScene(scenePath))),
         "unused Scene does not gain an empty .rscripts companion") && ok;
@@ -437,6 +448,76 @@ return {}
         reopenedAction != nullptr && persistedAction != nullptr &&
         reopenedAction->binding.sourceId == persistedAction->sourceId,
         "source discovery reuses persisted source authority") && ok;
+
+    // Exercise the creator workflow, not a manually sidecar-prepared copy.
+    const auto bytes = [](const fs::path& path)
+    {
+        std::ifstream stream(path, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(stream),
+            std::istreambuf_iterator<char>());
+    };
+    const std::string originalArchive = bytes(fs::u8path(scenePath));
+    const std::string originalIdentity = bytes(fs::u8path(scenePath + ".rmeta"));
+    const std::string originalScripts = bytes(fs::u8path(companionPath));
+    const fs::path copy = fs::u8path(project.rootPath) /
+        "Content/Scenes/Copies/WeatherCopy.wiscene";
+    ok = Expect(!fs::exists(copy) && !fs::exists(copy.generic_u8string() + ".rmeta"),
+        "Save As begins without a destination or sidecar") && ok;
+    ok = Expect(session.SaveScene(copy.generic_u8string()),
+        "ordinary Save As creates a scripted Level copy: " +
+        session.Scenes().LastError()) && ok;
+    DocumentEnvelope copyEnvelope;
+    ok = Expect(
+        ReadDocumentEnvelope(copy.generic_u8string() + ".rmeta", copyEnvelope, error) &&
+        copyEnvelope.projectId == project.projectId &&
+        copyEnvelope.documentType == "scene" &&
+        copyEnvelope.pathHint == "Content/Scenes/Copies/WeatherCopy.wiscene" &&
+        copyEnvelope.documentId != sceneEnvelope.documentId,
+        "Save As creates a fresh Level identity with the correct relative path: " + error) && ok;
+    ScriptDocument copiedScripts;
+    ok = Expect(
+        ReadScriptDocument(ScriptDocumentPathForScene(copy.generic_u8string()),
+            project.projectId, copyEnvelope.documentId, copiedScripts, error) &&
+        copiedScripts.envelope.documentId != persisted.envelope.documentId &&
+        copiedScripts.attachments.size() == persisted.attachments.size() &&
+        FindScriptAttachment(copiedScripts, actionOne) != nullptr &&
+        FindScriptAttachment(copiedScripts, scriptOne) != nullptr,
+        "Save As clones scripts under the new Level without losing instance IDs: " + error) && ok;
+    ok = Expect(bytes(fs::u8path(scenePath)) == originalArchive &&
+        bytes(fs::u8path(scenePath + ".rmeta")) == originalIdentity &&
+        bytes(fs::u8path(companionPath)) == originalScripts,
+        "Save As leaves the original Scene, identity and scripts unchanged") && ok;
+    const std::string copiedIdentityBytes = bytes(
+        fs::u8path(copy.generic_u8string() + ".rmeta"));
+    ok = Expect(session.SaveScene(copy.generic_u8string()) &&
+        bytes(fs::u8path(copy.generic_u8string() + ".rmeta")) == copiedIdentityBytes,
+        "ordinary overwrite preserves the destination Level identity") && ok;
+    ok = Expect(session.ReloadScene() && session.Scripts().EnsureCurrent(error),
+        "Save As copy reopens with working creator scripting: " + error) && ok;
+    TestLevelSnapshotService snapshots(
+        session.Scenes(), session.Commands(), &session.Scripts());
+    TestLevelSnapshot snapshot;
+    const bool snapshotCreated = snapshots.Create(project, snapshot, error);
+    ok = Expect(snapshotCreated && snapshot.IsRuntimeReady(),
+        "reopened Save As copy produces the real project-aware Test Level snapshot: " + error) && ok;
+    if (snapshotCreated)
+        ok = Expect(snapshots.Cleanup(snapshot, error),
+            "Test Level snapshot cleans up: " + error) && ok;
+
+    // Refuse malformed/foreign identity before overwriting the destination.
+    // Keep the active document and dirty work available to the creator.
+    const fs::path blocked = copy.parent_path() / "Blocked.wiscene";
+    ok = Expect(WriteScene(blocked), "write protected destination fixture") && ok;
+    const std::string protectedArchive = bytes(blocked);
+    ok = Expect(WriteText(fs::u8path(project.rootPath),
+        "Content/Scenes/Copies/Blocked.wiscene.rmeta", "invalid identity"),
+        "write malformed identity fixture") && ok;
+    session.Commands().MarkUnsaved();
+    ok = Expect(!session.SaveScene(blocked.generic_u8string()) &&
+        session.Scenes().CurrentPath() == copy.generic_u8string() &&
+        session.Commands().IsDirty() && bytes(blocked) == protectedArchive &&
+        bytes(fs::u8path(blocked.generic_u8string() + ".rmeta")) == "invalid identity",
+        "failed Save As preserves both destinations, active path and dirty work") && ok;
 
     fs::remove_all(root, ec);
     return ok ? 0 : 1;

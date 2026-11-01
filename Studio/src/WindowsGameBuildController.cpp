@@ -952,7 +952,7 @@ namespace renegade::studio
                 "Build Windows Game could not find the governed dxcompiler.dll Runtime support.");
         }
 
-        const std::vector<bridge::WindowsGameBundledResource>
+        std::vector<bridge::WindowsGameBundledResource>
             bundledResources = {
                 {
                     "renegade-terrain-default-grass-basecolor",
@@ -1067,13 +1067,39 @@ namespace renegade::studio
                     "Content/weather/snowflake.dds",
                 },
             };
+        // Preserve the existing base list and append the thunder assets to an
+        // explicitly mutable delivery list.
+        std::vector<bridge::WindowsGameBundledResource> deliveryResources(
+            bundledResources.begin(), bundledResources.end());
+        // G4: bundle all owner-created thunder originals and their mono positional
+        // playback variants in every published game. Package hashes cover each file.
+        constexpr std::array<const char*, 9> thunderFiles = {
+            "thunder_lightning_01.wav", "thunder_lightning_02.wav",
+            "thunder_booming_01.wav", "thunder_distant_02.wav",
+            "thunder_booming_02.wav", "thunder_booming_03.wav",
+            "thunder_distant_03.wav", "thunder_distant_04.wav",
+            "thunder_lightning_03.wav"
+        };
+        for (const char* name : thunderFiles)
+        {
+            for (const char* subdir : {"", "default3d/"})
+            {
+                const std::string relative =
+                    std::string("Content/weather/thunder/") + subdir + name;
+                deliveryResources.push_back({
+                    "renegade-weather-thunder-" + std::string(subdir) + name,
+                    (studioDirectory / fs::u8path(relative)).generic_u8string(),
+                    relative,
+                });
+            }
+        }
 
         progress.Stage(10, "VALIDATING STORYFLOW",
             "Checking the saved project, StoryFlow route and governed Runtime resources.");
         bridge::WindowsGameBuildProjectState projectState;
         std::string error;
         if (!bridge::PrepareWindowsGameBuildProjectState(
-                project, bundledResources, projectState, error))
+                project, deliveryResources, projectState, error))
         {
             return fail(std::move(error));
         }

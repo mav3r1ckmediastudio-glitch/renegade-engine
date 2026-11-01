@@ -635,6 +635,74 @@ int main(int argc, char** argv)
             "Gate 6 build recovery omitted governed Terrain Runtime support");
     }
 
+    // A scene moved from an older Studio install must use the current
+    // governed default terrain textures, while unrelated external assets remain
+    // blocked. Exercise actual archive round trips and the full build collector.
+    {
+        std::ifstream sceneBefore(levelOne, std::ios::binary);
+        const std::string originalSceneBytes(
+            (std::istreambuf_iterator<char>(sceneBefore)), std::istreambuf_iterator<char>());
+        if (!sceneBefore || originalSceneBytes.empty())
+            return Fail(root, "could not preserve scene fixture before relocation proof");
+        sceneBefore.close();
+        const fs::path stockRoot = root / "new-studio/Content/terrain/default_grass";
+        fs::create_directories(stockRoot, ec);
+        if (ec) return Fail(root, "cannot create relocated terrain fixture");
+        const char* names[] = {"default_grass_basecolor.tga",
+            "default_grass_normal.tga", "default_grass_surface.tga"};
+        const char* ids[] = {"renegade-terrain-default-grass-basecolor",
+            "renegade-terrain-default-grass-normal",
+            "renegade-terrain-default-grass-surface"};
+        std::vector<WindowsGameBundledResource> relocatedResources;
+        for (int i = 0; i < 3; ++i)
+        {
+            const auto file = stockRoot / names[i];
+            std::ofstream(file, std::ios::binary) << "stock-" << i;
+            relocatedResources.push_back({ids[i], file.generic_u8string(),
+                std::string("Content/terrain/default_grass/") + names[i]});
+        }
+        wi::scene::Scene movedScene;
+        const auto terrainEntity = wi::ecs::CreateEntity();
+        const auto materialEntity = wi::ecs::CreateEntity();
+        auto& movedMaterial = movedScene.materials.Create(materialEntity);
+        const auto oldRoot = root / "removed-old-studio/Content/terrain/default_grass";
+        movedMaterial.textures[wi::scene::MaterialComponent::BASECOLORMAP].name =
+            (oldRoot / names[0]).generic_u8string();
+        movedMaterial.textures[wi::scene::MaterialComponent::NORMALMAP].name =
+            (oldRoot / names[1]).generic_u8string();
+        movedMaterial.textures[wi::scene::MaterialComponent::SURFACEMAP].name =
+            (oldRoot / names[2]).generic_u8string();
+        movedScene.terrains.Create(terrainEntity).materialEntities.push_back(materialEntity);
+        auto saveMoved = [&]() {
+            wi::Archive archive(levelOne.generic_u8string(), false, false);
+            if (!archive.IsOpen()) return false;
+            movedScene.Serialize(archive);
+            return archive.SaveFile(levelOne.generic_u8string());
+        };
+        if (!saveMoved()) return Fail(root, "could not save relocated terrain scene");
+        WindowsGameBuildProjectState movedState;
+        if (!PrepareWindowsGameBuildProjectState(
+                gate10Project, relocatedResources, movedState, error) ||
+            hasOutsideProject(movedState.dependencyGraph))
+            return Fail(root, "relocated bundled terrain was rejected: " + error);
+        const auto otherEntity = wi::ecs::CreateEntity();
+        movedScene.materials.Create(otherEntity).textures[
+            wi::scene::MaterialComponent::BASECOLORMAP].name =
+            (oldRoot / names[0]).generic_u8string();
+        if (!saveMoved()) return Fail(root, "could not save external material scene");
+        WindowsGameBuildProjectState unsafeState;
+        if (!PrepareWindowsGameBuildProjectState(
+                gate10Project, relocatedResources, unsafeState, error) ||
+            !hasOutsideProject(unsafeState.dependencyGraph))
+            return Fail(root, "unrelated external material was incorrectly accepted");
+        std::ofstream restoreScene(levelOne, std::ios::binary | std::ios::trunc);
+        restoreScene.write(originalSceneBytes.data(),
+            static_cast<std::streamsize>(originalSceneBytes.size()));
+        restoreScene.close();
+        if (!restoreScene) return Fail(root, "could not restore scene fixture after relocation proof");
+
+    }
+
     // Inventory G3-E: exercise the actual StoryFlow reachability collector and
     // package-plan authority, not just InventoryDependencyProvider in isolation.
     const auto initialInventoryPath = levelOnePath + ".rinventory";

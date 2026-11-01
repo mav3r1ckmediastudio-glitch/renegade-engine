@@ -1,0 +1,13 @@
+# G4 performance core-patch decision - 30 October 2026
+
+Owner explicitly authorizes a more aggressive measured optimization pass with rollback. Preserve approved primary cloud geometry/density/lightning and all9 thunder assets. No commit/push/merge.
+
+R1: guard invisible Player Start camera-preview checks and capsule selection before expensive whole-scene resolution; final selection, missing/multiple validation and live transforms remain unchanged.
+
+GPU R1: Renegade formations1-5 use a128x128 hemispherical sky lighting/reflection cache in place of256x256, honoring smaller explicit requested sizes. Native Legacy stays at requested resolution. Main camera cloud raymarch, temporal buffers, density, shading, adaptive sample budgets and transient lightning reconstruction remain unchanged. Texture-size changes reallocate variance and reset capture phase for full initialization. cloud-capture-reference restores the requested cache for comparisons/rollback. This is an intentional cache-quality/performance tradeoff; it can soften reflected/cloud-cache lighting and must pass actual primary sky/horizon/reflection visual comparison. Do not call it pixel-identical without measurement or claim75FPS until timed.
+
+CPU R2: share Player Start lookup within a graphics frame, keyed by scene pointer, source scene revision, command revision, metadata count and frame ID. Refresh live transform on every read; absent transform falls back to normal validation. Add Player Start still performs uncached bridge validation. This removes repeated Render/Compose scans without retaining results into later frames. Validate selected preview, capsule click, drag, Undo/Redo, duplicate/missing markers and new level.
+
+GPU R2 experiment: compute the identical coverage-admission logarithm/LUT once in per-ray layer parameters, then pass it to weather and density functions used by main, shadow and ground rays. No density/sample/lighting constants or geometry change. Keep default arguments for direct proof callers. Retain only with measured benefit and frozen-image parity.
+
+Admission hoist measured no useful improvement (up35 GPU median12.803 versus12.812ms) and was REVERTED. R3 tests half the integration intervals only in the separate Renegade hemispherical cache, retaining Beer-Lambert interval integration and all main camera/shadow budgets. Capture budget goes in unused postprocess.params1.y; cloud-capture-reference requests original256 resolution and full interval count. This is an explicit off-screen quality tradeoff subject to image/reflection and motion checks, not a claim of identical sampling.

@@ -59,6 +59,9 @@ $result = [ordered]@{
         "RenegadePlayerPrefabTests",
         "RenegadeDiagnosticServiceTests",
         "RenegadeNightSkyTests",
+        "RenegadeMoonTests",
+        "RenegadeShootingStarsTests",
+        "RenegadeCloudFormationTests",
         "RenegadeDependencyProcessFixture",
         "RenegadeAssetRegistryProcessFixture"
     )

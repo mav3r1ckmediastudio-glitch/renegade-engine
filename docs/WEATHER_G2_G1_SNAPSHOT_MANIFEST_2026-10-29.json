@@ -1,0 +1,458 @@
+﻿[
+    {
+        "path":  "cmake/RenegadeCloudBodyCacheOverlay.cmake",
+        "sha256":  "1E62ACB44DF05B7983DD83DA5AFEA7BA0CE68353FB932C34599B169184D0ADD4"
+    },
+    {
+        "path":  "cmake/RenegadeCloudFieldMetricOverlay.cmake",
+        "sha256":  "9B235188BDA7BE0FA9E16B66266D0B3B1FF1F09D06C915DABD2377A9C7D4DF76"
+    },
+    {
+        "path":  "cmake/RenegadeCloudQualityOverlay.cmake",
+        "sha256":  "7E13681E3BDC9630E6FE57165078C19EE7FB37E64B66E7C3CD2AA4670D361346"
+    },
+    {
+        "path":  "cmake/RenegadeCloudReferenceOverlay.cmake",
+        "sha256":  "84FC28FA01A183BB0589BAC62BE6EF77DA5582148495CABAC437AA7DFE322E45"
+    },
+    {
+        "path":  "cmake/RenegadeNightSkyOverlay.cmake",
+        "sha256":  "E90EB7D07516B1047C6362E29A770BD3EF10C63047A9A85CA99A42975E71369F"
+    },
+    {
+        "path":  "CMakeLists.txt",
+        "sha256":  "1C2515C57344B5E6D1D8495FCC8DC811C4255AC0021B221B7CD315EBBE191A48"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_ARCHITECTURE.md",
+        "sha256":  "8904E3755A22212AB3FC496C37E2E4A4BB310CC2D0D56F9632C8927B73A0FDC4"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_BODY_CACHE_DECISION_2026-10-29.md",
+        "sha256":  "C6F344D9C2517615194E64C1D4CAAADEA4E260A0177EE07237074FA79E3A86DE"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_BOUNDARY_FOLLOWUP_2026-10-29.md",
+        "sha256":  "028E5B69BD3359CBC29E466E6549E8FD4DD0CDF9C0F8B65ED68828FC9E24C5CD"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_CONTINUOUS_DENSITY_2026-10-29.md",
+        "sha256":  "8B49AFCBC9CC00E2C8AA45360F7CD7DE624B29E764F1D9A6CD5C90E120DCC4EB"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_FIELD_METRIC_2026-10-29.md",
+        "sha256":  "146BEA0F9E8A9F49359C41DB097208E57094EBE2A19E8C854EA5C0470991B554"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_HYBRID_MOON_STUDIO_2026-10-29.md",
+        "sha256":  "157598AD732DC4740DE4757A83F6C1060AB995A676DBCA8CAF960B9FF13658F5"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_LIVE_REPLAY_2026-10-29.md",
+        "sha256":  "454E2F13818D69C28BF5692544B134A1946F19C7F0C41B146EA53508041DD20A"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_MACRO_VOLUME_2026-10-29.md",
+        "sha256":  "2ECEB07C0FB9706498AF8C363A572AF09AD792C08E60AFFD4AF336BBE7E709EE"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_MORPHOLOGY_MOON_2026-10-29.md",
+        "sha256":  "11CC4D67310B48B0D7719C34B2E1762063552E08F77AF47DE0988A3CDF9D0BB2"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_MOVEMENT_SPEED_CONTROL_2026-10-29.md",
+        "sha256":  "666FDA9D9DA1E38B15F17860CE751C4C03DFE888687FF2B0CBB812C4EE317073"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_MOVING_PREVIEW_FIX_2026-10-29.md",
+        "sha256":  "537272E286B90682A159D3E0FDB8FA7C276FFEFD5A990C780304397F27D4FB8F"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_OWNER_VISUAL_REVIEW_2026-10-29.md",
+        "sha256":  "3ED52A6E870737AB320C6DA3F9362B44017DA2788AC154ECE169571D8D996E29"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_OWNER_VISUAL_SIGNOFF_2026-10-29.md",
+        "sha256":  "B3A807E75CE7782BB466F84C8CE3ED2096834FF040CAA153D0665246FF8FCBA9"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_PERFORMANCE_OWNER_ACCEPTED_2026-10-29.md",
+        "sha256":  "C8C9D0B020E9E8710554D7569CE2A8321500D8DB3A5AC149CF9D197A06886D0B"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_VERIFICATION_2026-10-28.md",
+        "sha256":  "7B55ADE90B5D657EE9979BE7487B3228085976D39B2378BECB02AC4F61A588F2"
+    },
+    {
+        "path":  "docs/CLOUD_FORMATION_GATE1_WHOLE_BODIES_2026-10-29.md",
+        "sha256":  "596BDB14D426F68CF45CBEB3602535D121AB4C4D4F576CCE1563A603A2EB1FF5"
+    },
+    {
+        "path":  "docs/CLOUDS_V2_GATE1_2026-10-28.md",
+        "sha256":  "FCA83AE292DD57A9DC8FF35F219AF79504DCBBBA60942307FF1CBF0D3C43AC93"
+    },
+    {
+        "path":  "docs/CODEX_CLOUDS_RESUME_2026-10-29.md",
+        "sha256":  "5BB8DABE9E8D9113C3BA274E62A4CAB769E7C85FE392E340DF5F633DBAC2A390"
+    },
+    {
+        "path":  "docs/CODEX_START_CLOUDS_V2_2026-10-28.txt",
+        "sha256":  "8249381F31C7A348F79A0DB3FAC641E8DFDD53B51BE7D944F5E89A74BAC00966"
+    },
+    {
+        "path":  "docs/CODEX_WEATHER_GATE1_CLOUDS_V2_HANDOVER_2026-10-28.md",
+        "sha256":  "019B3BD4A36C84E329CDCF3229FD6A6F6C386D260EC3614CE935400FF1127D53"
+    },
+    {
+        "path":  "docs/FEATURE_MATRIX.csv",
+        "sha256":  "9A623295346A9E1FD86D1CFEBE28749D22C1FB1906CCE172939E2165E31570C4"
+    },
+    {
+        "path":  "docs/MOON_AUTHORING_V1.md",
+        "sha256":  "010C778C22295A7EACFA54613A854255C00DBF23456769FFBC7CD2474D3A0EC3"
+    },
+    {
+        "path":  "docs/MOONLIT_CLOUDS_V1.md",
+        "sha256":  "5CFC89427B9A33C49CA2EBF26E64648B6FEF7AF5FB27A0285CE7E738B65F19FB"
+    },
+    {
+        "path":  "docs/SHOOTING_STARS_V1.md",
+        "sha256":  "849B816527E7FFAA03A6EAFECD7C72920ADC022D943E6C5298857DB322C9C55F"
+    },
+    {
+        "path":  "EngineBridge/assets/moon/lroc_color_2k.jpg",
+        "sha256":  "F7130A1822681FA7512D7DCFD40DB8C10B9BA4F06777910348698260ED7A2170"
+    },
+    {
+        "path":  "EngineBridge/assets/moon/README.md",
+        "sha256":  "93D630536BC7B4CF059394BB1A21258F86C9CD17F35F818E79554D27D840CA93"
+    },
+    {
+        "path":  "EngineBridge/CMakeLists.txt",
+        "sha256":  "9B4D4A0009442B143C05F431D7F81F85FC9D61ADE0192B317ACD30124ADC0188"
+    },
+    {
+        "path":  "EngineBridge/include/renegade/bridge/CloudFormationService.h",
+        "sha256":  "A61E6E131F9CCEE33E4F73BE69B9F353FC1492C22D4D99F3556C14954009A9DF"
+    },
+    {
+        "path":  "EngineBridge/include/renegade/bridge/CommandService.h",
+        "sha256":  "191EAEABBBBD2199FDB8785D542167A20066F389E371A5394F929FAFD8B68893"
+    },
+    {
+        "path":  "EngineBridge/include/renegade/bridge/MoonService.h",
+        "sha256":  "EEC0CF3062F19DD692162401C34D55D509322C020D90B3D6C757373152FF38B0"
+    },
+    {
+        "path":  "EngineBridge/include/renegade/bridge/NightSkyService.h",
+        "sha256":  "A35498F8619F633803166A4E9C3B4674CE9820CA432ED043B662F9A78930CA1A"
+    },
+    {
+        "path":  "EngineBridge/include/renegade/bridge/ShootingStarsService.h",
+        "sha256":  "9E059B42A2E57293DFF80B60C6B0D1EA683C3AE8D7A46E50BDB8042939321725"
+    },
+    {
+        "path":  "EngineBridge/src/CommandService.cpp",
+        "sha256":  "05469C8D9045D3A25B8AB6394F961BED45F189244C29BA4EAD3EBF49E1D9A0F0"
+    },
+    {
+        "path":  "EngineBridge/src/MoonSurface.cpp",
+        "sha256":  "65128ED8F1B8E4F4A95CEB87E8625146619AC57490307D7E8953D95B7F9B0E6C"
+    },
+    {
+        "path":  "HANDOFF.md",
+        "sha256":  "EA7A375E5807923E6D11FBE3E4940331502DD83BB56A87792F372094595664AE"
+    },
+    {
+        "path":  "Runtime/CMakeLists.txt",
+        "sha256":  "B3FD96BA3956B67C1F964AEAC4E5B4B871D578A86797243B3C087B4510D94D57"
+    },
+    {
+        "path":  "Studio/CMakeLists.txt",
+        "sha256":  "DF6796E2A9BA88199017B74880FC1B7CB32D90AC65147A1977E9FD4F2D409CB6"
+    },
+    {
+        "path":  "Studio/src/MoonStudioIntegration.cpp",
+        "sha256":  "B3B637BB30ACD52F5BDDD357B98899FB86EA70EA34A2301BA890A8A4F151D630"
+    },
+    {
+        "path":  "Studio/src/NightSkyStudioIntegration.cpp",
+        "sha256":  "9D7D8A15AAE64E8E2373E0819F80D5BE792C58A17795E6B78C429577AAD7C82F"
+    },
+    {
+        "path":  "Studio/src/ShootingStarsStudioIntegration.cpp",
+        "sha256":  "F776B3F445BDD258F82332ACC554E4D7E105B54B6867DB5AE730719577929C47"
+    },
+    {
+        "path":  "Studio/src/StudioApplication.cpp",
+        "sha256":  "B2C854550E25A024F072A06607DED26855022F35925F9EE443C4BC085313F046"
+    },
+    {
+        "path":  "Studio/src/StudioApplication.h",
+        "sha256":  "AD64D63C72E948659F43DDE6A27934550FE0B4317CBF2B338D018C2280E93F0D"
+    },
+    {
+        "path":  "Tests/BridgeCommandTests.cpp",
+        "sha256":  "77D7908268EDD36D5DBA7396558EA1F7077E446C6B46645A21BBB55056DD67A8"
+    },
+    {
+        "path":  "Tests/CloudDensityVolumeAudit.h",
+        "sha256":  "59957490168E84CA6DF425352867B8B3A9457AD37F258A8BFA5893296DD2600E"
+    },
+    {
+        "path":  "Tests/CloudFormationGraphicsProof.h",
+        "sha256":  "C09A78F19230726B2A7C1753530D03755E43FFABAEC1C95100CF0EF06B831E08"
+    },
+    {
+        "path":  "Tests/CloudFormationTests.cpp",
+        "sha256":  "ADDDCC2DF6739595723DFD379E1A413B63498F6F78A62B1DED25E4E7AB8D7F30"
+    },
+    {
+        "path":  "Tests/CloudOpacityReadback.h",
+        "sha256":  "213C209B2BA2DE5949AA74E36E082A6CE24D72934ACA5B989650D3A2CB50953E"
+    },
+    {
+        "path":  "Tests/CloudStudioReplayProof.h",
+        "sha256":  "22149BE3E4A50FCF08AEEDF236FA8BA5DE7616E08EE3B583D0F929EF5D136412"
+    },
+    {
+        "path":  "Tests/CloudsV2VolumetricContract.cmake",
+        "sha256":  "960054EE4BCC7829F5715023576C87CC031F69E785DB734B01EED1CB8DBA0DD2"
+    },
+    {
+        "path":  "Tests/CMakeLists.txt",
+        "sha256":  "B4F26A03348D3007A0E038EB98457065B25A5B1E91ED293354AC110A7D5FEEAE"
+    },
+    {
+        "path":  "Tests/MoonlitCloudSourceContract.cmake",
+        "sha256":  "E404070D7B848312BF08FA0A357B6F8C6A0BE05D41B4A8FE2445C30C2604B4F2"
+    },
+    {
+        "path":  "Tests/MoonStateTests.cpp",
+        "sha256":  "5A3A5F65174F13D58F187186650D0EE556EC79F5CC2D795659F2FA1823E4CEEA"
+    },
+    {
+        "path":  "Tests/NightSkyGraphicsProof.h",
+        "sha256":  "6C6ACA121F0F1C47CB9723430793980DD23D3121F48413724F8AF2FBA4E8F3D1"
+    },
+    {
+        "path":  "Tests/NightSkySourceContract.cmake",
+        "sha256":  "A8ABEC9C68FBFEB41A51DACFF1EA4C37886F2038110A142BDCEE720563C22247"
+    },
+    {
+        "path":  "Tests/NightSkyStateTests.cpp",
+        "sha256":  "97A42644174F818B054032F93063A4D3E44DC28EC811A8D5D4CE45DC74152FCD"
+    },
+    {
+        "path":  "Tests/ShootingStarsStateTests.cpp",
+        "sha256":  "D75F276A166610EBAF4194650F7C1F89ECDB924819BDD4316DEA761E648FE506"
+    },
+    {
+        "path":  "Tools/Build-Studio-Windows.ps1",
+        "sha256":  "BCB6F43DF2ED397AFBA1FAF934C6FC9A1BD87FEB69B10FD69CD634DB19C4DEC2"
+    },
+    {
+        "path":  "Tools/night_sky/analyze_density_volume.py",
+        "sha256":  "14DA49DD639110A3E2667A66065CFBED4FE115A5CBE3F98F594C4182C27BBD78"
+    },
+    {
+        "path":  "Tools/night_sky/analyze_formation_captures.py",
+        "sha256":  "CF4C6ED71C91B084476AD8F30520042E6868E3D05030046FCA7E5669771CBFFA"
+    },
+    {
+        "path":  "Tools/night_sky/audit_density_support.py",
+        "sha256":  "836DAC9C83674B6FBE5A531354CABF526F0F03560875D79F6BACD4B2DBA6CA98"
+    },
+    {
+        "path":  "Tools/night_sky/audit_formation_topology.py",
+        "sha256":  "87F95B82BB1EEB21DD8D1F32D6C14539B9C5479BB220591169037A221CF10B42"
+    },
+    {
+        "path":  "Tools/night_sky/audit_native_cloud_noise.py",
+        "sha256":  "E62B5E38B9A0C66B7DF867634697813D925AC2690FC185658C4ED341FEB5E1A7"
+    },
+    {
+        "path":  "Tools/night_sky/calibrate_cloud_sites.py",
+        "sha256":  "4221A8DCD7EF43B16ED7D11CA44808033865E27F5A45C0B5CF3138AE4AF9F25B"
+    },
+    {
+        "path":  "Tools/night_sky/calibrate_weather_admission.py",
+        "sha256":  "CC1F8C65C4BA108595E3E6E12D77CF1146B4CCA02F65C58F11CA2EC3127BA8C5"
+    },
+    {
+        "path":  "Tools/night_sky/check_cloud_height_wind.py",
+        "sha256":  "D42F31F4DC83DC06892D1EF7BE30F0A0C8357A3E83A752793E0A2CEA0661F087"
+    },
+    {
+        "path":  "Tools/night_sky/check_formation_metrics.py",
+        "sha256":  "88D27925340CF84BD1391E95CAD1B93E0F18E7277070455D4B513BB216A63DEE"
+    },
+    {
+        "path":  "Tools/night_sky/CloudDensityVolumeAuditCS.hlsl",
+        "sha256":  "350C6EAC76EADFCD0D23FB0872E5A4D9CBA439DA13D3C71CC8FF888949A85EF7"
+    },
+    {
+        "path":  "Tools/night_sky/CloudStudioReplay.h",
+        "sha256":  "BEA020A9EBBF84B691CDE3FEB82C3F5B6144A585B15C26B04C61B54B1787D6C3"
+    },
+    {
+        "path":  "Tools/night_sky/LaunchCloudBoundaryG1Preview.cmd",
+        "sha256":  "112A581D5825CEA3BAFBBFE67BF1FC6C11AC7780FB7650749DAB2CFCEBAF2F8D"
+    },
+    {
+        "path":  "Tools/night_sky/LaunchCloudFormationsG1Preview.cmd",
+        "sha256":  "58040DAC94B5FE47EB6787F642907071419FD5D8B2F073247CBA53826EF3D839"
+    },
+    {
+        "path":  "Tools/night_sky/LaunchCloudsV2BalancedPreview.cmd",
+        "sha256":  "1B6A8717B7E54E866A3C23ED1C3CAD202A6A9509B8C6D2BADB67EE303A0E4A06"
+    },
+    {
+        "path":  "Tools/night_sky/LaunchCloudsV2CoveragePreview.cmd",
+        "sha256":  "A3092E3DCE1CA04C68B6798CAE2A2D3ECE6A65096D4FF4029FD84465D0811C73"
+    },
+    {
+        "path":  "Tools/night_sky/LaunchCloudsV2MacroPreview.cmd",
+        "sha256":  "805C3AA71002B98AA9352F9769B1A70189874CD78A63AD6D84D7C91C596A1CA6"
+    },
+    {
+        "path":  "Tools/night_sky/LaunchCloudsV2Preview.cmd",
+        "sha256":  "09DAD608957448C645347E166B8410F29FAF27B91A6A2FBF08B87A62F244F242"
+    },
+    {
+        "path":  "Tools/night_sky/LaunchMoonlitCloudPreview.cmd",
+        "sha256":  "32D2D88E18E5DFDB71C4751983B2639E1D70D1E45E05E147AB64CD42019683C8"
+    },
+    {
+        "path":  "Tools/night_sky/LaunchMoonPreview.cmd",
+        "sha256":  "B0B35AE01D5CAE194C7EBBE8041BA7A07681B7034DCE66371B8EDA0D37156E85"
+    },
+    {
+        "path":  "Tools/night_sky/LaunchSkyPreview.cmd",
+        "sha256":  "E2FC97EB7986985895EFDEB5C45E54A369F244EEA78161C75FCEB043B32892AA"
+    },
+    {
+        "path":  "Tools/night_sky/renegadeCloudBodyTemplate.hlsli",
+        "sha256":  "3DF61BF14BBA454549A137ABF77C14E64CB7E7E4C10BDE4953E4FE5CC454706E"
+    },
+    {
+        "path":  "Tools/night_sky/renegadeCloudFormations.hlsli",
+        "sha256":  "2B7023D1A1875A88E508817EA6403F4B5B32190EC438FB3BCFB728D871C92603"
+    },
+    {
+        "path":  "Tools/night_sky/renegadeCloudFormationVolumeCS.hlsl",
+        "sha256":  "52FB9AAE27B522DCF9C86363035054A0171AA403ACAA8F8A5C7C28DDE18EF736"
+    },
+    {
+        "path":  "Tools/night_sky/renegadeCloudRendererBindings.h",
+        "sha256":  "354F438F0BECFF78BF255BBEB56450D44C848365671583729B134494462883C0"
+    },
+    {
+        "path":  "Tools/night_sky/renegadeCloudsV2.hlsli",
+        "sha256":  "343954593CC4162478056E720117AC682F61A8E14E65022B4375D74FA83B1717"
+    },
+    {
+        "path":  "Tools/night_sky/renegadeMoon.hlsli",
+        "sha256":  "6C64C34714B4442F75D28DD974EE38480C9A8DB93F1573D925C5097D04E7F28D"
+    },
+    {
+        "path":  "Tools/night_sky/renegadeMoonCloudLighting.hlsli",
+        "sha256":  "94260CA519A2A1B7AE8135B7CEE95304E6F6A399EC1BE584751CA7C0B2BA374D"
+    },
+    {
+        "path":  "Tools/night_sky/renegadeNightSky.hlsli",
+        "sha256":  "8CF5B601F1BCAF9E3E64CE7596AB37E7B13EE7B6164803517BA6F48CDB537470"
+    },
+    {
+        "path":  "Tools/night_sky/renegadeShootingStars.hlsli",
+        "sha256":  "424AF2E4750A3686B98EF9D51E1C16EFFE42567566E9C05CA9CD22856E8819D3"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/offlineshadercompiler.cpp",
+        "sha256":  "F898EAA3F785FB064CB55B6F6F2FB55CB067B279CA1D921B22A06771B71E784F"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/renegadeAurora.hlsli",
+        "sha256":  "5D7DF7BFCE2438862D9DA435F151939E2F32AF62C2FB18FAF574A2F279B82406"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/renegadeCloudBodyTemplate.hlsli",
+        "sha256":  "3DF61BF14BBA454549A137ABF77C14E64CB7E7E4C10BDE4953E4FE5CC454706E"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/renegadeCloudFormations.hlsli",
+        "sha256":  "2B7023D1A1875A88E508817EA6403F4B5B32190EC438FB3BCFB728D871C92603"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/renegadeCloudFormationVolumeCS.hlsl",
+        "sha256":  "52FB9AAE27B522DCF9C86363035054A0171AA403ACAA8F8A5C7C28DDE18EF736"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/renegadeCloudsV2.hlsli",
+        "sha256":  "343954593CC4162478056E720117AC682F61A8E14E65022B4375D74FA83B1717"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/renegadeMilkyWay.hlsli",
+        "sha256":  "C61231AF8E545EAB701654EBF3E76A9CE185918559EE1854F9C800445DCC1B57"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/renegadeMoon.hlsli",
+        "sha256":  "6C64C34714B4442F75D28DD974EE38480C9A8DB93F1573D925C5097D04E7F28D"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/renegadeMoonCloudLighting.hlsli",
+        "sha256":  "94260CA519A2A1B7AE8135B7CEE95304E6F6A399EC1BE584751CA7C0B2BA374D"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/renegadeNightAtmosphere.hlsli",
+        "sha256":  "E437B4E7A42F3040584E8153C2A0CE659A236D38B71F0CC6E69ABA1CFC29984E"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/renegadeNightSky.hlsli",
+        "sha256":  "8CF5B601F1BCAF9E3E64CE7596AB37E7B13EE7B6164803517BA6F48CDB537470"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/renegadeShootingStars.hlsli",
+        "sha256":  "424AF2E4750A3686B98EF9D51E1C16EFFE42567566E9C05CA9CD22856E8819D3"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/ShaderInterop_Weather.h",
+        "sha256":  "5438402ABFACB1D3F72981E3E79ABE09747A26CBF03455FCFC23DE60A6969CD9"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/skyHF.hlsli",
+        "sha256":  "DE620B5A91076F8734E028035CC82F298B19974F037852A211A4BA2EA48EF336"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/volumetricCloud_detailnoiseCS.hlsl",
+        "sha256":  "A7CFF1AF90AA53D9EC7FE24D2E0685CEC087EA846E92959F9F7B003B1C86E603"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/volumetricCloud_renderCS.hlsl",
+        "sha256":  "4C6DADD662FA2F477046C65FC37DCEBBCDF573C3B3A1DD2797857905240E813D"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/volumetricCloud_upsamplePS.hlsl",
+        "sha256":  "E19B1A998CF2B3392DCAB68BB14ACC0869AF988AEA6069E2103BD3EA1EA8C262"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/shaders/volumetricCloudsHF.hlsli",
+        "sha256":  "542EE9FDC859DBB52096471D6FFC450A7A956355CC296F964FA4B6768B82EA08"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/wiRenderer.cpp",
+        "sha256":  "838008598D987A8700926F9185FE5B59FE9ADB0496B5ACF520C2CBC57021C6F2"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/wiRenderPath3D.cpp",
+        "sha256":  "80A85C0C21E2819A4BDD56F8DDAFAB5E9EA4FDD18710BAE1FB7A5F81AA3DF151"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/wiScene.cpp",
+        "sha256":  "CC20556D9633CEA6075C258764F3A4E3544B3D074C3CF076AB31F910EE49E1D6"
+    },
+    {
+        "path":  "WickedEngine/WickedEngine/wiScene_Components.h",
+        "sha256":  "055539C6396B9409794DCC89835ED1D7C89E8F0CB2A667B3370F71ECFF1FB6B1"
+    }
+]

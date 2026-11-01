@@ -66,6 +66,7 @@ namespace
             !NearlyEqual(before.fogHeightStart, after.fogHeightStart) ||
             !NearlyEqual(before.fogHeightEnd, after.fogHeightEnd) ||
             !NearlyEqual(before.cloudCoverage, after.cloudCoverage) ||
+            !NearlyEqual(before.cloudMovementSpeed, after.cloudMovementSpeed) ||
             !NearlyEqual(before.cloudStartHeight, after.cloudStartHeight) ||
             !NearlyEqual(before.cloudThickness, after.cloudThickness) ||
             before.cloudsCastShadow != after.cloudsCastShadow;
@@ -135,6 +136,7 @@ namespace renegade::bridge
 
         state.cloudCoverage =
             weather.volumetricCloudParameters.layerFirst.coverageAmount;
+        state.cloudMovementSpeed = weather.volumetricCloudParameters.animationMultiplier;
         state.cloudStartHeight =
             weather.volumetricCloudParameters.cloudStartHeight;
         state.cloudThickness =
@@ -194,6 +196,8 @@ namespace renegade::bridge
         // exposes it, matching the preservation contract of WeatherState.
         weather.volumetricCloudParameters.layerFirst.coverageAmount =
             state.cloudCoverage;
+        weather.volumetricCloudParameters.animationMultiplier =
+            std::clamp(state.cloudMovementSpeed, 0.0f, 12.0f);
         weather.volumetricCloudParameters.cloudStartHeight =
             state.cloudStartHeight;
         weather.volumetricCloudParameters.cloudThickness =

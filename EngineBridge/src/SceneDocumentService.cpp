@@ -3,6 +3,8 @@
 
 #include "renegade/bridge/CollisionService.h"
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/DependencyService.h"
+#include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/LightmapBakeService.h"
 #include "renegade/bridge/NightSkyService.h"
@@ -19,6 +21,8 @@
 #include <chrono>
 #include <exception>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <iomanip>
 #include <sstream>
 #include <system_error>
@@ -86,6 +90,108 @@ namespace
         fs::rename(temporary, destination, error);
         return !error;
 #endif
+    }
+
+    // A new project Scene and its stable level identity are one disk change.
+    // Reuse the existing journaled multi-document transaction so a failed
+    // second replacement cannot leave a playable-looking identity-less Scene.
+    bool CommitSceneWithNewIdentity(
+        const fs::path& archivePath,
+        const fs::path& destination,
+        const fs::path& projectRoot,
+        const renegade::bridge::DocumentEnvelope& envelope,
+        std::string& error)
+    {
+        using namespace renegade::bridge;
+        struct RenderDirectory
+        {
+            fs::path path;
+            ~RenderDirectory()
+            {
+                std::error_code ignored;
+                if (!path.empty()) fs::remove_all(path, ignored);
+            }
+        } render;
+        std::error_code ec;
+        const auto tempRoot = fs::temp_directory_path(ec);
+        if (ec)
+        {
+            error = "Could not resolve Scene identity staging directory: " + ec.message();
+            return false;
+        }
+        render.path = tempRoot / ("renegade-scene-identity-" + GenerateStableId());
+        fs::create_directories(render.path, ec);
+        if (ec)
+        {
+            error = "Could not create Scene identity staging directory: " + ec.message();
+            return false;
+        }
+        const auto renderedIdentity = render.path / "Scene.rmeta";
+        if (!WriteDocumentEnvelope(renderedIdentity.generic_u8string(), envelope, error))
+            return false;
+
+        const auto read = [](const fs::path& path, std::vector<std::uint8_t>& bytes)
+        {
+            std::ifstream stream(path, std::ios::binary);
+            if (!stream) return false;
+            bytes.assign(std::istreambuf_iterator<char>(stream), {});
+            return !stream.bad();
+        };
+        ProjectDocumentWrite sceneWrite;
+        sceneWrite.destinationPath = destination.generic_u8string();
+        if (!read(archivePath, sceneWrite.content))
+        {
+            error = "Could not read validated Scene archive for transaction.";
+            return false;
+        }
+        // The archive was already deserialized above. Transaction staging
+        // appends a suffix, so compare its exact validated bytes rather than
+        // invoking the extension-restricted Open Scene API on the staged name.
+        sceneWrite.validator = [read, expected = sceneWrite.content](
+            const std::string& path, std::string& validationError)
+        {
+            std::vector<std::uint8_t> actual;
+            if (!read(fs::u8path(path), actual) || actual != expected)
+            {
+                validationError = "Staged Scene differs from the validated archive.";
+                return false;
+            }
+            return true;
+        };
+        ProjectDocumentWrite identityWrite;
+        identityWrite.destinationPath = destination.generic_u8string() + ".rmeta";
+        if (!read(renderedIdentity, identityWrite.content))
+        {
+            error = "Could not read rendered Scene identity for transaction.";
+            return false;
+        }
+        identityWrite.validator = [envelope](
+            const std::string& path, std::string& validationError)
+        {
+            DocumentEnvelope actual;
+            if (!ReadDocumentEnvelope(path, actual, validationError)) return false;
+            if (actual.documentId != envelope.documentId ||
+                actual.projectId != envelope.projectId ||
+                actual.documentType != envelope.documentType ||
+                actual.pathHint != envelope.pathHint)
+            {
+                validationError = "Staged Scene identity does not match its document.";
+                return false;
+            }
+            return true;
+        };
+        ProjectDocumentTransactionOptions options;
+        options.allowedRoot = projectRoot.generic_u8string();
+        options.journalDirectory =
+            (projectRoot / "Intermediate/Transactions").generic_u8string();
+        std::vector<ProjectDocumentWrite> writes;
+        writes.push_back(std::move(sceneWrite));
+        writes.push_back(std::move(identityWrite));
+        const auto result = ProjectDocumentTransaction().Execute(
+            std::move(writes), std::move(options));
+        if (!result.success)
+            error = "Scene/identity transaction failed [" + result.code + "]: " + result.message;
+        return result.success;
     }
 
     void RemoveWithoutThrow(const fs::path& path)
@@ -327,6 +433,59 @@ namespace renegade::bridge
             return false;
         }
 
+        // Raw WISCENE documents remain supported without a project. Inside
+        // a project every saved Level needs its own stable .rmeta identity,
+        // including a first Save and Save As without any scripting attachments.
+        DocumentEnvelope sceneEnvelope;
+        bool createSceneIdentity = false;
+        fs::path projectRoot;
+        if (projects_.HasProject())
+        {
+            const auto& project = projects_.CurrentProject();
+            projectRoot = fs::weakly_canonical(fs::u8path(project.rootPath), fileError);
+            const auto hint = fs::relative(destination, projectRoot, fileError);
+            const auto resolved = ResolveDependencyPath(
+                project.rootPath, hint.generic_u8string());
+            if (fileError || !resolved.accepted)
+            {
+                scenes_.lastError_ = "Save the Level inside the active project: " +
+                    (fileError ? fileError.message() : resolved.error);
+                return false;
+            }
+            const fs::path sidecar = destination.generic_u8string() + ".rmeta";
+            const bool hasIdentity = fs::exists(sidecar, fileError);
+            if (fileError)
+            {
+                scenes_.lastError_ = "Could not inspect the Level identity: " + fileError.message();
+                return false;
+            }
+            if (hasIdentity)
+            {
+                std::string error;
+                if (!ReadDocumentEnvelope(sidecar.generic_u8string(), sceneEnvelope, error) ||
+                    sceneEnvelope.projectId != project.projectId ||
+                    sceneEnvelope.documentType != SceneDocumentType)
+                {
+                    scenes_.lastError_ = "The destination Level identity is invalid or belongs "
+                        "to another project. " + error;
+                    return false;
+                }
+            }
+            else
+            {
+                sceneEnvelope = CreateDocumentEnvelope(
+                    project.projectId, SceneDocumentType,
+                    resolved.canonicalRelativePath, "Renegade Studio");
+                std::string error;
+                if (!ValidateDocumentEnvelope(sceneEnvelope, error))
+                {
+                    scenes_.lastError_ = "Could not create the Level identity: " + error;
+                    return false;
+                }
+                createSceneIdentity = true;
+            }
+        }
+
         std::string identityError;
         if (!EnsurePersistentEntityIdentities(
                 scenes_.scene_,
@@ -433,14 +592,21 @@ namespace renegade::bridge
         }
 
         fileError.clear();
-        if (!ReplaceFileAtomically(temporary, destination, fileError))
+        std::string commitError;
+        const bool committed = createSceneIdentity
+            ? CommitSceneWithNewIdentity(
+                temporary, destination, projectRoot, sceneEnvelope, commitError)
+            : ReplaceFileAtomically(temporary, destination, fileError);
+        if (!committed)
         {
             RemoveWithoutThrow(temporary);
             RemoveWithoutThrow(pendingPrevious);
             scenes_.lastError_ = "The validated scene could not replace the "
-                "destination: " + fileError.message();
+                "destination: " + (createSceneIdentity ? commitError : fileError.message());
             return false;
         }
+        if (createSceneIdentity)
+            RemoveWithoutThrow(temporary);
 
         auto finalValidation = PrepareWickedSceneOpen(
             destination.generic_u8string());
@@ -466,6 +632,8 @@ namespace renegade::bridge
             {
                 RemoveWithoutThrow(destination);
             }
+            if (createSceneIdentity)
+                RemoveWithoutThrow(destination.generic_u8string() + ".rmeta");
             RemoveWithoutThrow(pendingPrevious);
             scenes_.lastError_ = "The saved scene failed final validation: " +
                 finalValidation.Error();

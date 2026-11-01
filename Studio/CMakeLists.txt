@@ -123,6 +123,8 @@ add_executable(RenegadeStudio WIN32
     src/WD01Vegetation.cpp
     src/NightSkyStudioIntegration.cpp
     src/TerrainInspectorSections.cpp
+    src/MoonStudioIntegration.cpp
+    src/ShootingStarsStudioIntegration.cpp
     src/StudioApplication.cpp
     src/RenegadePickupEditor.cpp
     src/FirstPersonAssemblyEditor.cpp
@@ -390,3 +392,17 @@ renegade_deploy_river_flow_shaders(RenegadeStudio)
 renegade_deploy_river_course_shaders(RenegadeStudio)
 
 renegade_deploy_waterfall_resources(RenegadeStudio)
+add_custom_command(TARGET RenegadeStudio POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeStudio>/Content/Licenses"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/EngineBridge/assets/moon/README.md"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/Licenses/MoonTexture-Credit.txt"
+    VERBATIM)
+
+
+# G4 nine owner-authored thunder WAV files and mono positional variants.
+add_custom_command(TARGET RenegadeStudio POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CMAKE_SOURCE_DIR}/Runtime/Content/weather/thunder"
+      "$<TARGET_FILE_DIR:RenegadeStudio>/Content/weather/thunder"
+    COMMENT "Install nine Renegade thunder SFX with 3D variants in Studio")

@@ -25,6 +25,8 @@ static_assert(offsetof(ShaderWeather, rain_color) == 160);
 static_assert(offsetof(ShaderWeather, fog) == 176);
 static_assert(offsetof(ShaderWeather, atmosphere) == 272);
 #include "NightSkyGraphicsProof.h"
+#include "CloudFormationGraphicsProof.h"
+#include "CloudStudioReplayProof.h"
 namespace
 {
     bool Near(float a, float b) noexcept { return std::fabs(a - b) < 0.0001f; }
@@ -38,6 +40,56 @@ namespace
 
 int main(int argc, char** argv)
 {
+    // Test-only repair for an isolated Cloud Body Preview scene. Never
+    // overwrite the source file or touch a running owner's Studio session.
+    if (argc == 4 && std::string(argv[1]) == "--restore-preview-cloud-motion")
+    {
+        const auto input = std::filesystem::absolute(std::filesystem::u8path(argv[2]));
+        const auto output = std::filesystem::absolute(std::filesystem::u8path(argv[3]));
+        if (input == output || !std::filesystem::is_regular_file(input) ||
+            !std::filesystem::is_directory(output.parent_path()))
+            Fail("cloud motion repair needs distinct, existing source/output paths");
+        wi::Archive source(input.generic_u8string(), true, false);
+        if (!source.IsOpen()) Fail("cannot read isolated preview cloud scene");
+        wi::scene::Scene scene;
+        scene.Serialize(source);
+        source = wi::Archive();
+        if (scene.weathers.GetCount() != 1)
+            Fail("expected exactly one isolated preview weather component");
+        auto& w = scene.weathers[0].volumetricCloudParameters;
+        if (!Near(w.animationMultiplier, 0.0f))
+            Fail("input preview is not frozen; not overwriting authored motion");
+        w.animationMultiplier = 2.0f;
+        if (w.layerFirst.windSpeed <= 0) w.layerFirst.windSpeed = 15.0f;
+        if (w.layerFirst.coverageWindSpeed <= 0) w.layerFirst.coverageWindSpeed = 30.0f;
+        scene.weather = scene.weathers[0];
+        wi::Archive target(output.generic_u8string(), false, false);
+        if (!target.IsOpen()) Fail("cannot open new isolated moving scene output");
+        scene.Serialize(target);
+        // The archive writes on Close(); assigning an empty Archive before
+        // closing discards the serialized buffer without touching the file.
+        target.Close();
+        wi::scene::Scene verify;
+        wi::Archive check(output.generic_u8string(), true, false);
+        if (!check.IsOpen()) Fail("saved moving preview did not reopen");
+        verify.Serialize(check);
+        if (verify.weathers.GetCount() != 1 ||
+            !Near(verify.weathers[0].volumetricCloudParameters.animationMultiplier, 2.0f))
+            Fail("motion multiplier failed disk roundtrip");
+        std::printf("CLOUD MOTION PREVIEW VERIFIED animation=%g wind=%g coverageWind=%g output=%s\n",
+            verify.weathers[0].volumetricCloudParameters.animationMultiplier,
+            verify.weathers[0].volumetricCloudParameters.layerFirst.windSpeed,
+            verify.weathers[0].volumetricCloudParameters.layerFirst.coverageWindSpeed,
+            output.generic_string().c_str());
+        std::fflush(stdout);
+        std::_Exit(0);
+    }
+    if (argc >= 5 && std::string(argv[1]) == "--studio-cloud-replay")
+        return RunCloudStudioReplayProof(argc, argv);
+    if (argc >= 3 && std::string(argv[1]) == "--density-audit")
+        return RunCloudFormationGraphicsProof(argc, argv);
+    if (argc >= 3 && std::string(argv[1]) == "--formation-proof")
+        return RunCloudFormationGraphicsProof(argc, argv);
     if (argc >= 3 && std::string(argv[1]) == "--graphics-proof")
         return RunNightSkyGraphicsProof(argc, argv);
     std::fprintf(stderr, "CXX WEATHER ABI: scene.weather=%zu stars=%zu gradient=%zu zenith=%zu horizon=%zu coverage=%zu sky_rotation=%zu fog=%zu atmosphere=%zu sizeof_weather=%zu scene_size=%zu\n",
@@ -166,23 +218,22 @@ int main(int argc, char** argv)
     if (argc != 1) Fail("usage: RenegadeNightSkyTests [--fixture|--verify-fixture <path.wiscene>]");
     // Every disclosure combination: collapsed children consume no rows and
     // the next header follows exactly, including the last group's action rows.
-    const std::size_t counts[] = {7, 5, 4, 2, 5, 20, 7, 4, 4};
-    for (unsigned mask = 0; mask < 512; ++mask)
+    for(bool meteorsEnabled:{false,true})
     {
-        float top = 44.0f;
-        std::size_t rows = 9;
-        for (unsigned i = 0; i < 9; ++i)
+        const std::size_t counts[]={7,5,4,meteorsEnabled?7u:3u,5,20,7,4,4,8};
+        for(unsigned mask=0;mask<1024;++mask)
         {
-            const bool expanded = (mask & (1u << i)) != 0;
-            const auto bounds = renegade::studio::MeasureEnvironmentSection(top, expanded, counts[i]);
-            if (!Near(bounds.headerTop, top) || !Near(bounds.contentTop, top + 34.0f) ||
-                bounds.nextTop < bounds.contentTop)
-                Fail("Environment disclosure overlaps or leaves a header gap");
-            top = bounds.nextTop;
-            if (expanded) rows += counts[i];
+            float top=44;std::size_t rows=10;
+            for(unsigned i=0;i<10;++i)
+            {
+                const bool expanded=(mask&(1u<<i))!=0;
+                const auto b=renegade::studio::MeasureEnvironmentSection(top,expanded,counts[i]);
+                if(!Near(b.headerTop,top)||!Near(b.contentTop,top+34)||b.nextTop<b.contentTop)
+                    Fail("Environment disclosure overlaps");
+                top=b.nextTop;if(expanded)rows+=counts[i];
+            }
+            if(!Near(top,44+rows*34))Fail("Hidden shooting star controls leave blank rows");
         }
-        if (!Near(top, 44.0f + rows * 34.0f))
-            Fail("Environment collapsed children left empty scroll rows");
     }
     using namespace renegade::bridge;
     // Opening Environment repairs a weather-only scene by creating a sun.

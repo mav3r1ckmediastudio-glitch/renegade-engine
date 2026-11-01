@@ -44,6 +44,7 @@ set(WICKED_EMBED_SHADERS ${RENEGADE_EMBED_SHADERS} CACHE BOOL "" FORCE)
 # Isolated Night Sky branch: apply Renegade shader overlay before Wicked config.
 include(cmake/RenegadeNightSkyOverlay.cmake)
 add_subdirectory(WickedEngine)
+include(cmake/RenegadeOfflineShaderCompiler.cmake)
 include(cmake/WickedBacklogShutdownFix.cmake)
 include(cmake/RenegadePhysicsTempAllocator.cmake)
 add_subdirectory(EngineBridge)
@@ -287,6 +288,16 @@ if(WIN32)
         RenegadePlayerPrefabTests
         RenegadeDiagnosticServiceTests
         RenegadeNightSkyTests
+        RenegadeMoonTests
+        RenegadeShootingStarsTests
+        RenegadeCloudFormationTests
+        RenegadeWeatherTransitionTests
+        RenegadeWeatherEffectsTransitionTests
+        RenegadeSheetLightningTests
+        RenegadeForkLightningTests
+        RenegadeWeatherLuaRuntimeTests
+        RenegadePrecipitationTests
+        RenegadeStudioPlayerStartCacheTests
         RenegadeDependencyProcessFixture
         RenegadeAssetRegistryProcessFixture
         # UI and HUD tests are registered in CTest and must also be built by CI.

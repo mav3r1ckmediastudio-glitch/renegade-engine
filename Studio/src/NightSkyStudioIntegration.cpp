@@ -85,17 +85,19 @@ namespace renegade::studio
         const bool visible = session_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
             EditableWeatherEntity() != wi::ecs::INVALID_ENTITY;
         const float width = std::max(1.0f, inspectorPanel_.GetSize().x - 24.0f);
-        const std::array<const char*, 9> titles = {"TIME OF DAY / SUN", "REALISTIC SKY", "CLOUDS", "STARS", "FOG", "OCEAN", "WEATHER / PRECIPITATION", "NIGHT ATMOSPHERE", "AURORA"};
-        const std::array<std::vector<wi::gui::Widget*>, 9> children = {{
+        const std::array<const char*, 11> titles = {"TIME OF DAY / SUN", "REALISTIC SKY", "CLOUDS", "STARS", "FOG", "OCEAN", "WEATHER / PRESETS & PRECIPITATION", "LIGHTNING & THUNDER", "NIGHT ATMOSPHERE", "AURORA", "MOON"};
+        std::array<std::vector<wi::gui::Widget*>, 11> children = {{
             {&sunPreset_, &sunTime_, &sunAzimuth_, &sunElevation_, &sunPreviewSpeed_, &sunPlayButton_, &sunPauseButton_},
-            {&environmentPreset_, &skyMode_, &aerialPerspective_, &skyExposure_, &ambientIntensity_},
-            {&cloudCoverage_, &cloudStartHeight_, &cloudThickness_, &cloudsCastShadow_},
-            {&stars_, &nightSkySliders_[11]},
+            {&skyMode_, &aerialPerspective_, &skyExposure_, &ambientIntensity_},
+            {&cloudFormation_, &cloudCoverage_, &cloudMovementSpeed_, &cloudStartHeight_, &cloudThickness_, &cloudsCastShadow_},
+            {&stars_, &nightSkySliders_[11], &shootingStarsEnabled_},
             {&fogStart_, &fogDensity_, &heightFog_, &fogHeightStart_, &fogHeightEnd_},
             {&oceanEnabled_, &oceanPreset_, &oceanResolution_, &oceanWaterHeight_, &oceanPatchLength_, &oceanWaveAmplitude_, &oceanChoppyScale_, &oceanTimeScale_, &oceanWindAzimuth_, &oceanWindSpeed_, &oceanWindDependency_, &oceanSurfaceDetail_, &oceanDisplacementTolerance_, &oceanWaterRed_, &oceanWaterGreen_, &oceanWaterBlue_, &oceanWaterOpacity_, &oceanExtinctionRed_, &oceanExtinctionGreen_, &oceanExtinctionBlue_},
-            {&precipitationMode_, &precipitationIntensity_, &precipitationFallSpeed_, &precipitationParticleScale_, &precipitationWindAzimuth_, &precipitationWindSpeed_, &precipitationTurbulence_},
+            {&environmentPreset_, &weatherTransitionDuration_, &weatherApplyNowButton_, &weatherStartTransitionButton_, &weatherCancelTransitionButton_, &precipitationMode_, &precipitationIntensity_, &precipitationFallSpeed_, &precipitationParticleScale_, &precipitationWindAzimuth_, &precipitationWindSpeed_, &precipitationTurbulence_},
+            {&lightningMode_, &sheetLightningFrequency_, &forkLightningFrequency_, &lightningGlow_, &lightningBranches_, &lightningThunder_, &thunderVolume_, &lightningDelay_, &lightningSoundSet_},
             {&nightSkySliders_[0], &nightZenithColour_, &nightHorizonColour_, &nightSkySliders_[7]},
-            {&nightAuroraEnabled_, &nightSkySliders_[8], &nightSkySliders_[9], &nightSkySliders_[10]}
+            {&nightAuroraEnabled_, &nightSkySliders_[8], &nightSkySliders_[9], &nightSkySliders_[10]},
+            {&moonEnabled_, &moonPhasePreset_, &moonSliders_[0], &moonMovement_, &moonSliders_[1], &moonSliders_[2], &moonSliders_[3], &moonSliders_[4]}
         }};
         if (!environmentSectionsCreated_)
         {
@@ -112,11 +114,20 @@ namespace renegade::studio
                 inspectorPanel_.AddWidget(&header);
             }
             CreateNightColourEditor();
+            CreateMoonControls();
+            CreateShootingStarsControls();
             environmentSectionsCreated_ = true;
         }
         // Colour channels are authored through the native hue/saturation picker.
         for (std::size_t i = 1; i <= 6; ++i) nightSkySliders_[i].SetVisible(false);
         const bool procedural = visible && session_->Scenes().GetScene().weathers.GetComponent(EditableWeatherEntity())->IsRealisticSky();
+        RefreshMoonControls(visible, procedural);
+        RefreshShootingStarsControls(visible, procedural);
+        if(visible && bridge::CaptureShootingStars(session_->Scenes().GetScene(),EditableWeatherEntity()).enabled)
+        {
+            for(auto& slider:shootingStarsSliders_)children[3].push_back(&slider);
+            children[3].push_back(&shootingStarsPreview_);
+        }
         nightZenithColour_.SetEnabled(procedural);
         nightHorizonColour_.SetEnabled(procedural);
         if (nightColourOpen_ && (!procedural || EditableWeatherEntity() != nightColourEntity_))
@@ -272,5 +283,119 @@ namespace renegade::studio
         nightColourApply_.SetVisible(false);
         nightColourCancel_.SetVisible(false);
         QueueInspectorRefresh();
+    }
+}
+
+namespace renegade::studio
+{
+    void StudioRenderPath::CommitLightning(const bridge::LightningAuthoringState& state)
+    {
+        if(!session_) return;
+        auto& scene=session_->Scenes().GetScene();
+        const auto entity=EditableWeatherEntity();
+        if(entity==wi::ecs::INVALID_ENTITY)return;
+        session_->Commands().Execute(std::make_unique<bridge::SetLightningCommand>(scene,entity,state));
+        RefreshInspector();RefreshStatus();
+    }
+
+    void StudioRenderPath::CreateLightningControls()
+    {
+        lightningMode_.Create("Lightning Effects");
+        lightningMode_.AddItem("OFF",0);
+        lightningMode_.AddItem("IN-CLOUD (SHEET)",1);
+        lightningMode_.AddItem("CLOUD-TO-GROUND (FORK)",2);
+        lightningMode_.AddItem("BOTH",3);
+        lightningMode_.SetTooltip("Choose the built-in, owner-approved sheet and fork lightning effects. Works without rain.");
+        lightningMode_.OnSelect([this](const wi::gui::EventArgs& args){
+            if(!session_)return;
+            auto state=bridge::CaptureLightning(session_->Scenes().GetScene(),EditableWeatherEntity());
+            state.mode=static_cast<bridge::LightningMode>(args.userdata);CommitLightning(state);
+        });
+        inspectorPanel_.AddWidget(&lightningMode_);
+        auto slider=[this](SceneInspectorSlider& s,const char* name,const char* label,const char* help,
+                           float lo,float hi,float steps,int which)
+        {
+            s.Create(lo,hi,0.0f,steps,name,label);
+            s.SetTooltip(help);
+            s.OnValueCommitted([this,which](float value){
+                if(!session_)return;
+                auto state=bridge::CaptureLightning(session_->Scenes().GetScene(),EditableWeatherEntity());
+                switch(which){
+                    case 0:state.sheetPerMinute=value;break;
+                    case 1:state.forkPerMinute=value;break;
+                    case 2:state.sheetIntensity=value;break;
+                    case 3:state.forkBranchDensity=value;break;
+                    case 4:state.thunderVolume=value;break;
+                }
+                CommitLightning(state);
+            });
+            inspectorPanel_.AddWidget(&s);
+        };
+        slider(sheetLightningFrequency_,"Sheet Lightning Frequency","SHEET / MIN",
+            "Average in-cloud flashes per minute (0 disables sheet events).",0,30,300,0);
+        slider(forkLightningFrequency_,"Fork Lightning Frequency","FORK / MIN",
+            "Average visible cloud-to-ground strikes per minute (0 disables fork strikes).",0,30,300,1);
+        slider(lightningGlow_,"Cloud Lightning Brightness","CLOUD GLOW",
+            "Scattered in-cloud illumination; default preserves the approved appearance.",0,.25f,250,2);
+        slider(lightningBranches_,"Fork Branch Density","BRANCHES",
+            "0 means no side branches, 1 keeps the approved 3-5 branches, 2 gives more.",0,2,200,3);
+        lightningThunder_.Create("Play thunder: ");
+        lightningThunder_.SetTooltip("Play spatial thunder for lightning events. Does not control the flashes.");
+        lightningThunder_.OnClick([this](const wi::gui::EventArgs& args){
+            if(!session_)return;
+            auto state=bridge::CaptureLightning(session_->Scenes().GetScene(),EditableWeatherEntity());
+            state.thunder=args.bValue;CommitLightning(state);
+        });
+        inspectorPanel_.AddWidget(&lightningThunder_);
+        slider(thunderVolume_,"Thunder Volume","VOLUME",
+            "Thunder level before spatial attenuation; 0 mutes.",0,1,100,4);
+        lightningDelay_.Create("Realistic sound delay: ");
+        lightningDelay_.SetTooltip("Thunder arrives after lightning based on distance at 343 metres per second.");
+        lightningDelay_.OnClick([this](const wi::gui::EventArgs& args){
+            if(!session_)return;
+            auto state=bridge::CaptureLightning(session_->Scenes().GetScene(),EditableWeatherEntity());
+            state.distanceDelay=args.bValue;CommitLightning(state);
+        });
+        inspectorPanel_.AddWidget(&lightningDelay_);
+        lightningSoundSet_.Create("Thunder Audio");
+        const char* options[]={"FOUR DEFAULT SOUNDS","ALL NINE - VARIATION",
+          "Lightning 01","Lightning 02","Booming 01","Distant 02",
+          "Booming 02","Booming 03","Distant 03","Distant 04","Lightning 03"};
+        for(unsigned i=0;i<11;++i)lightningSoundSet_.AddItem(options[i],i);
+        lightningSoundSet_.SetTooltip("Select the standard four-sound rotation, all nine, or any individual sound from the Thunder library.");
+        lightningSoundSet_.OnSelect([this](const wi::gui::EventArgs& args){
+            if(!session_)return;
+            auto state=bridge::CaptureLightning(session_->Scenes().GetScene(),EditableWeatherEntity());
+            state.thunderSoundSet=static_cast<int>(args.userdata);CommitLightning(state);
+        });
+        inspectorPanel_.AddWidget(&lightningSoundSet_);
+    }
+
+    void StudioRenderPath::RefreshLightningControls()
+    {
+        if(!session_)return;
+        const auto& scene=session_->Scenes().GetScene();
+        const auto entity=EditableWeatherEntity();
+        if(!scene.weathers.Contains(entity))return;
+        const auto s=bridge::CaptureLightning(scene,entity);
+        lightningMode_.SetSelectedByUserdataWithoutCallback(static_cast<std::uint64_t>(s.mode));
+        sheetLightningFrequency_.SetValue(s.sheetPerMinute);
+        forkLightningFrequency_.SetValue(s.forkPerMinute);
+        lightningGlow_.SetValue(s.sheetIntensity);
+        lightningBranches_.SetValue(s.forkBranchDensity);
+        lightningThunder_.SetCheck(s.thunder);
+        thunderVolume_.SetValue(s.thunderVolume);
+        lightningDelay_.SetCheck(s.distanceDelay);
+        lightningSoundSet_.SetSelectedByUserdataWithoutCallback(static_cast<std::uint64_t>(s.thunderSoundSet));
+        const bool sheet=s.mode==bridge::LightningMode::Sheet || s.mode==bridge::LightningMode::Both;
+        const bool fork=s.mode==bridge::LightningMode::Fork || s.mode==bridge::LightningMode::Both;
+        sheetLightningFrequency_.SetEnabled(sheet);
+        lightningGlow_.SetEnabled(sheet||fork);
+        forkLightningFrequency_.SetEnabled(fork);
+        lightningBranches_.SetEnabled(fork);
+        lightningThunder_.SetEnabled(sheet||fork);
+        thunderVolume_.SetEnabled((sheet||fork)&&s.thunder);
+        lightningDelay_.SetEnabled((sheet||fork)&&s.thunder);
+        lightningSoundSet_.SetEnabled((sheet||fork)&&s.thunder);
     }
 }

@@ -12,6 +12,17 @@ using Microsoft::WRL::ComPtr;
 
 namespace
 {
+    // Fade only the startup video's stream. MR_POLICY_VOLUME_SERVICE
+    // changes the process-wide session shared with Wicked/XAudio2 and
+    // leaves all editor audio silent when the reveal reaches zero.
+    void SetStartupStreamVolume(IMFAudioStreamVolume* volume,float gain) noexcept
+    {
+        UINT32 channels=0;
+        if(volume && SUCCEEDED(volume->GetChannelCount(&channels)))
+            for(UINT32 i=0;i<channels;++i)
+                (void)volume->SetChannelVolume(i,gain);
+    }
+
     constexpr wchar_t FadeOverlayClassName[] = L"RenegadeStartupFadeOverlay";
 
     LRESULT CALLBACK FadeOverlayWindowProc(
@@ -393,7 +404,7 @@ namespace renegade::studio
         {
             if (audioVolume_ != nullptr)
             {
-                audioVolume_->SetMasterVolume(0.0f);
+                SetStartupStreamVolume(audioVolume_.Get(),0.0f);
             }
             SetFadeAmount(1.0f);
             finished_ = true;
@@ -419,14 +430,14 @@ namespace renegade::studio
 
         result = MFGetService(
             session_.Get(),
-            MR_POLICY_VOLUME_SERVICE,
+            MR_STREAM_VOLUME_SERVICE,
             IID_PPV_ARGS(audioVolume_.ReleaseAndGetAddressOf()));
         if (FAILED(result) || audioVolume_ == nullptr)
         {
             Fail("Media Foundation could not obtain startup audio volume control", result);
             return;
         }
-        audioVolume_->SetMasterVolume(1.0f);
+        SetStartupStreamVolume(audioVolume_.Get(),1.0f);
 
         PROPVARIANT startPosition;
         PropVariantInit(&startPosition);
@@ -480,7 +491,7 @@ namespace renegade::studio
         SetFadeAmount(amount);
         if (audioVolume_ != nullptr)
         {
-            audioVolume_->SetMasterVolume(1.0f - amount);
+            SetStartupStreamVolume(audioVolume_.Get(),1.0f - amount);
         }
     }
 

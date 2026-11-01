@@ -3,6 +3,8 @@
 #include "shaders/ShaderInterop_Renderer.h"
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
+#include "PlayerStartFrameCache.h"
+#include "../../Tools/night_sky/CloudStudioReplay.h"
 #include "RiverNodeWidthGizmoAxis.h"
 #include "renegade/bridge/RiverWaterwayService.h"
 #include "RenegadeLivingPresenceLaunch.h"
@@ -44,6 +46,18 @@
 namespace
 {
     namespace fs = std::filesystem;
+    // Share read-only resolution within a rendered frame. Authoring commands
+    // and scene replacement invalidate immediately; live drag transforms are
+    // always refreshed rather than cached with the marker lookup.
+    renegade::bridge::PlayerStartResult ResolveStudioPlayerStart(
+        const wi::scene::Scene& scene,uint64_t sceneRevision,uint64_t commandRevision)
+    {
+        const auto* device=wi::graphics::GetDevice();
+        if(!device)return renegade::bridge::ResolvePlayerStart(scene);
+        static thread_local renegade::studio::PlayerStartFrameCache cache;
+        return cache.Resolve(scene,device->GetFrameCount(),sceneRevision,commandRevision);
+    }
+
     constexpr std::uint8_t SelectionStencilReference = 0x0F;
     constexpr wi::Color HologramIdle = wi::Color(12, 16, 19, 255);
     constexpr wi::Color HologramFocus = wi::Color(26, 31, 35, 255);
@@ -431,6 +445,45 @@ namespace renegade::studio
         SetProjectHubVisible(true);
 
         RenderPath3D::Load();
+        // Explicit isolated owner-test copy; never redirects ordinary launches.
+        if(const char* diagnosticProject=std::getenv("RENEGADE_G4_STUDIO_TEST_PROJECT"))
+            if(session_ && std::filesystem::is_regular_file(diagnosticProject))
+                OpenProjectDescriptor(diagnosticProject);
+        // Explicit local QA launch: only the separately generated preview project.
+        if ((wi::arguments::HasArgument("cloud-formation-preview") ||
+             wi::arguments::HasArgument("cloud-formation-boundary-preview") ||
+             wi::arguments::HasArgument("cloud-body-preview") ||
+             wi::arguments::HasArgument("cloud-motion-preview") ||
+             wi::arguments::HasArgument("g2-lunar-locality-review") ||
+             wi::arguments::HasArgument("g2-upper-moonlight-review") ||
+             wi::arguments::HasArgument("g2-final-moonlight-review") ||
+             wi::arguments::HasArgument("g3-weather-preview") ||
+             wi::arguments::HasArgument("g3-weather-lua-review") ||
+             wi::arguments::HasArgument("cloud-body-studio-test")) && session_)
+        {
+            const auto preview=std::filesystem::absolute(
+                wi::arguments::HasArgument("g3-weather-lua-review") ?
+                "../../../g3-weather-lua-review/Gate3WeatherLuaReview.renegade" :
+                wi::arguments::HasArgument("g3-weather-preview") ?
+                "../../../g3-weather-preview/Gate3WeatherPreview.renegade" :
+                wi::arguments::HasArgument("g2-final-moonlight-review") ?
+                "../../../g2-final-moonlight-review/Gate2FinalMoonlightReview.renegade" :
+                wi::arguments::HasArgument("g2-upper-moonlight-review") ?
+                "../../../g2-upper-moonlight-review/Gate2UpperMoonlightReview.renegade" :
+                wi::arguments::HasArgument("g2-lunar-locality-review") ?
+                "../../../g2-moonlit-locality-review/Gate2MoonlitLocalityReview.renegade" :
+                wi::arguments::HasArgument("cloud-body-studio-test") ?
+                "../../../cloud-body-studio-test/CloudBodyStudioTest.renegade" :
+                wi::arguments::HasArgument("cloud-motion-preview") ?
+                "../../../cloud-body-motion-preview/CloudBodyMotionPreview.renegade" :
+                wi::arguments::HasArgument("cloud-body-preview") ?
+                "../../../cloud-body-studio-preview/CloudBodyStudioPreview.renegade" :
+                wi::arguments::HasArgument("cloud-formation-boundary-preview") ?
+                "../../../cloud-formations-boundary-preview/CloudFormationBoundaryPreview.renegade" :
+                "../../../cloud-formations-preview/CloudFormationPreview.renegade");
+            if(std::filesystem::is_regular_file(preview))
+                OpenProjectDescriptor(preview.generic_string());
+        }
     }
 
     void StudioRenderPath::LoadGridResources()
@@ -618,7 +671,7 @@ namespace renegade::studio
             assemblyPanel_.IsVisible() || handGripPanel_.IsVisible() ||
             modelImportPanel_.IsVisible() || projectileCreatePanel_.IsVisible() || launchSocketPanel_.IsVisible()) return;
         const auto& scene = session_->Scenes().GetScene();
-        const auto start = bridge::ResolvePlayerStart(scene);
+        const auto start = ResolveStudioPlayerStart(scene,session_->Scenes().Revision(),session_->Commands().Revision());
         if (start.resolution != bridge::PlayerStartResolution::Success ||
             !session_->Scenes().IsHierarchyVisible(start.start.entity)) return;
         const auto settings = bridge::SanitizePlayerControllerSettings(start.start.settings);
@@ -1869,17 +1922,56 @@ namespace renegade::studio
         environmentPreset_.AddItem("OVERCAST", 3);
         environmentPreset_.AddItem("STORM", 4);
         environmentPreset_.SetTooltip(
-            "Apply a curated starting point. Every preset is a single "
-            "Undo/Redo command.");
-        environmentPreset_.OnSelect(
-            [this](const wi::gui::EventArgs& args)
+            "Choose a starting point. Apply it immediately or blend smoothly.");
+        environmentPreset_.OnSelect([this](const wi::gui::EventArgs& args)
         {
-            if (args.userdata != 0)
-            {
-                ApplyWeatherPreset(static_cast<int>(args.userdata));
-            }
+            selectedWeatherPreset_ = static_cast<int>(args.userdata);
+            weatherApplyNowButton_.SetEnabled(selectedWeatherPreset_ != 0);
+            weatherStartTransitionButton_.SetEnabled(selectedWeatherPreset_ != 0);
         });
         inspectorPanel_.AddWidget(&environmentPreset_);
+
+        weatherTransitionDuration_.Create(
+            0.0f, 300.0f, 8.0f, 300.0f,
+            "Transition Duration", "SECONDS");
+        weatherTransitionDuration_.SetTooltip(
+            "Duration in game seconds. 0 applies the selected preset instantly.");
+        weatherTransitionDuration_.OnValuePreview([this](const float value)
+        {
+            weatherTransitionDurationSeconds_ = std::clamp(value, 0.0f, 300.0f);
+        });
+        weatherTransitionDuration_.OnValueCommitted([this](const float value)
+        {
+            weatherTransitionDurationSeconds_ = std::clamp(value, 0.0f, 300.0f);
+        });
+        inspectorPanel_.AddWidget(&weatherTransitionDuration_);
+
+        weatherApplyNowButton_.Create("APPLY NOW");
+        weatherApplyNowButton_.SetTooltip(
+            "Apply the selected preset immediately as one Undo/Redo operation.");
+        weatherApplyNowButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            ApplyWeatherPreset(selectedWeatherPreset_);
+        });
+        inspectorPanel_.AddWidget(&weatherApplyNowButton_);
+
+        weatherStartTransitionButton_.Create("BLEND TO PRESET");
+        weatherStartTransitionButton_.SetTooltip(
+            "Gradually blend to the selected weather preset; one Undo step at completion.");
+        weatherStartTransitionButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            StartWeatherPresetTransition();
+        });
+        inspectorPanel_.AddWidget(&weatherStartTransitionButton_);
+
+        weatherCancelTransitionButton_.Create("CANCEL BLEND");
+        weatherCancelTransitionButton_.SetTooltip(
+            "Cancel the active preview and restore the previous weather.");
+        weatherCancelTransitionButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            CancelWeatherPresetTransition();
+        });
+        inspectorPanel_.AddWidget(&weatherCancelTransitionButton_);
 
         skyMode_.Create("Sky Mode");
         skyMode_.AddItem(
@@ -2026,6 +2118,21 @@ namespace renegade::studio
             200.0f,
             600.0f);
 
+        cloudFormation_.Create("Cloud formation");
+        for (const char* label : {"LEGACY (SAVED SCENE)", "CUMULUS", "TOWERING CUMULUS",
+                                  "STRATOCUMULUS", "OVERCAST", "CIRRUS"})
+            cloudFormation_.AddItem(label);
+        cloudFormation_.SetTooltip("Independent 3D formation profile. Coverage, base and depth remain authored separately.");
+        cloudFormation_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            if (!session_) return;
+            const auto entity=EditableWeatherEntity();
+            if(entity==wi::ecs::INVALID_ENTITY) return;
+            session_->Commands().Execute(std::make_unique<bridge::SetCloudFormationCommand>(
+                session_->Scenes().GetScene(),entity,static_cast<bridge::CloudFormation>(args.iValue)));
+            RefreshInspector(); RefreshStatus();
+        });
+        inspectorPanel_.AddWidget(&cloudFormation_);
         createWeatherSlider(
             cloudCoverage_,
             "Cloud Coverage",
@@ -2035,6 +2142,15 @@ namespace renegade::studio
             0.0f,
             1.0f,
             100.0f);
+        createWeatherSlider(
+            cloudMovementSpeed_,
+            "Cloud Movement Speed",
+            "MOVEMENT SPEED",
+            "Animate clouds across the sky. 0 pauses motion; 2 is the native speed. Increase temporarily to verify motion.",
+            WeatherField::CloudMovementSpeed,
+            0.0f,
+            12.0f,
+            120.0f);
         createWeatherSlider(
             cloudStartHeight_,
             "Cloud Start Height",
@@ -2135,31 +2251,33 @@ namespace renegade::studio
             400.0f);
         createPrecipitationSlider(
             precipitationWindAzimuth_,
-            "Precipitation Wind Azimuth",
+            "Environment Wind Direction",
             "WIND DIRECTION",
-            "Horizontal wind direction in degrees.",
+            "Global horizontal wind direction in degrees; also affects foliage and rain, even when precipitation is Off.",
             PrecipitationField::WindAzimuth,
             -180.0f,
             180.0f,
             360.0f);
         createPrecipitationSlider(
             precipitationWindSpeed_,
-            "Precipitation Wind Speed",
+            "Environment Wind Speed",
             "WIND SPEED",
-            "Horizontal wind strength applied to precipitation.",
+            "Global wind strength affecting responsive foliage and precipitation; works with rain and snow Off.",
             PrecipitationField::WindSpeed,
             0.0f,
             20.0f,
             400.0f);
         createPrecipitationSlider(
             precipitationTurbulence_,
-            "Precipitation Turbulence",
+            "Environment Wind Turbulence",
             "TURBULENCE",
-            "Random particle drift; higher values create snow flurries.",
+            "Global wind gust variation; also drives natural snow flurries when snowfall is enabled.",
             PrecipitationField::Turbulence,
             0.0f,
             20.0f,
             400.0f);
+
+        CreateLightningControls();
 
         nightAuroraEnabled_.Create("Aurora Enabled: ");
         nightAuroraEnabled_.SetTooltip("Enable animated Northern Lights in procedural sky; unavailable with a skybox texture. Intensity 0 disables the effect.");
@@ -3825,8 +3943,54 @@ namespace renegade::studio
             wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
     }
 
+    void StudioRenderPath::PrepareCloudBodySelfTestView()
+    {
+        if(!session_ || !wi::arguments::HasArgument("cloud-body-studio-test") ||
+            !wi::arguments::HasArgument("cloud-studio-replay-audit-exit") ||
+            !session_->Projects().HasProject() ||
+            session_->Projects().CurrentProject().projectId!="9dc8e035-52f9-4474-a319-7465698ae7cd") return;
+        AdoptOpenedSceneCamera();
+        SetEnvironmentWorkspaceActive(true);
+        RefreshHierarchy();RefreshInspector();RefreshStatus();
+    }
+
+    void StudioRenderPath::CaptureCloudBodyReplay()
+    {
+        if(cloudBodyReplayCaptured_ || !wi::arguments::HasArgument("cloud-studio-replay-audit") ||
+            !session_ || projectHubVisible_ || sceneOpenInProgress_ ||
+            !session_->Projects().HasProject()) return;
+        const bool selfTest=wi::arguments::HasArgument("cloud-studio-replay-audit-exit");
+        const auto& projectId=session_->Projects().CurrentProject().projectId;
+        const bool ownTest=selfTest && wi::arguments::HasArgument("cloud-body-studio-test") &&
+            projectId=="9dc8e035-52f9-4474-a319-7465698ae7cd";
+        const bool ownPreview=!selfTest && wi::arguments::HasArgument("cloud-body-preview") &&
+            projectId=="f39f4b51-1a9e-4ebd-820b-29d5f1409eb1";
+        if(!ownTest && !ownPreview) return;
+        auto& scene=session_->Scenes().GetScene();
+        if(scene.weather.volumetricCloudParameters.layerFirst.padding0!=1) return;
+        // Explicit QA audit freezes only this isolated scene; no project save.
+        for(size_t i=0;i<scene.weathers.GetCount();++i)
+            scene.weathers[i].volumetricCloudParameters.animationMultiplier=0;
+        scene.weather.volumetricCloudParameters.animationMultiplier=0;
+        if(++cloudBodyReplayFrames_<120) return;
+        cloudBodyReplayCaptured_=true;
+        const auto output=std::filesystem::absolute(selfTest ?
+            "../../../body-studio-replay-split" : "../../../body-studio-replay");
+        bool saved=false;
+        try { saved=renegade::cloudqa::SaveStudioReplay(*this,scene,output); }
+        catch(const std::exception& exception)
+        { wi::backlog::post(std::string("Cloud Studio replay audit: ")+exception.what()); }
+        wi::backlog::post(saved ? "Cloud Studio replay audit saved" : "Cloud Studio replay audit FAILED");
+#ifdef _WIN32
+        // Explicit disposable automation only; the exact private project GUID
+        // above is mandatory. Regular previews and owner sessions never exit here.
+        if(selfTest) PostQuitMessage(saved ? 0 : 1);
+#endif
+    }
+
     void StudioRenderPath::Update(const float dt)
     {
+        CaptureCloudBodyReplay();
         DiagnosticInputFrame diagnosticInput(diagnosticService_,
             wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
         PollTestLevel();
@@ -3892,6 +4056,7 @@ namespace renegade::studio
 
         if (session_ != nullptr)
         {
+            TickWeatherPresetTransition(dt);
             bridge::RefreshPrecipitationVisual(session_->Scenes().GetScene());
         }
         if (pathTracePreviewActive_)
@@ -3924,6 +4089,14 @@ namespace renegade::studio
                 const auto prior=riverFlowStatus_.GetText();
                 if(prior.rfind("Shared foam: ",0)==0){const auto split=prior.find(" | ");if(split!=std::string::npos)status=prior.substr(0,split+3)+status;}
                 if(prior!=status)riverFlowStatus_.SetText(status);
+            }
+            if(session_ && camera && !projectHubVisible_) {
+                auto& lightningScene=session_->Scenes().GetScene();
+                const auto revision=session_->Scenes().Revision();
+                renegade::runtime::ThunderAudio().OnSceneRevision(revision);
+                studioSheetLightning_.Update(lightningScene,revision,camera->Eye,camera->At,dt);
+                studioForkLightning_.Update(lightningScene,revision,camera->Eye,camera->At,dt);
+                renegade::runtime::ThunderAudio().Update(dt,camera->Eye,camera->At);
             }
             {auto riverBindings=riverFlow_.Bind();RenderPath3D::Update(dt);}
         }
@@ -4355,7 +4528,7 @@ namespace renegade::studio
             !projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible() && session_ && camera)
         {
             const auto& scene = session_->Scenes().GetScene();
-            const auto resolved = bridge::ResolvePlayerStart(scene);
+            const auto resolved = ResolveStudioPlayerStart(scene,session_->Scenes().Revision(),session_->Commands().Revision());
             const auto entity = resolved.start.entity;
             const auto* transform = scene.transforms.GetComponent(entity);
             if (resolved.resolution == bridge::PlayerStartResolution::Success &&
@@ -5530,6 +5703,13 @@ namespace renegade::studio
             widget.SetVisible(hasWeather);
         };
         setEnvironmentVisible(environmentPreset_);
+        setEnvironmentVisible(weatherTransitionDuration_);
+        setEnvironmentVisible(weatherApplyNowButton_);
+        setEnvironmentVisible(weatherStartTransitionButton_);
+        setEnvironmentVisible(weatherCancelTransitionButton_);
+        weatherApplyNowButton_.SetEnabled(hasWeather && selectedWeatherPreset_ != 0);
+        weatherStartTransitionButton_.SetEnabled(hasWeather && selectedWeatherPreset_ != 0);
+        weatherCancelTransitionButton_.SetEnabled(hasWeather && weatherTransition_.IsActive());
         setEnvironmentVisible(skyMode_);
         setEnvironmentVisible(aerialPerspective_);
         setEnvironmentVisible(skyExposure_);
@@ -5551,7 +5731,9 @@ namespace renegade::studio
         setEnvironmentVisible(heightFog_);
         setEnvironmentVisible(fogHeightStart_);
         setEnvironmentVisible(fogHeightEnd_);
+        setEnvironmentVisible(cloudFormation_);
         setEnvironmentVisible(cloudCoverage_);
+        setEnvironmentVisible(cloudMovementSpeed_);
         setEnvironmentVisible(cloudStartHeight_);
         setEnvironmentVisible(cloudThickness_);
         setEnvironmentVisible(cloudsCastShadow_);
@@ -5562,6 +5744,15 @@ namespace renegade::studio
         setEnvironmentVisible(precipitationWindAzimuth_);
         setEnvironmentVisible(precipitationWindSpeed_);
         setEnvironmentVisible(precipitationTurbulence_);
+        setEnvironmentVisible(lightningMode_);
+        setEnvironmentVisible(sheetLightningFrequency_);
+        setEnvironmentVisible(forkLightningFrequency_);
+        setEnvironmentVisible(lightningGlow_);
+        setEnvironmentVisible(lightningBranches_);
+        setEnvironmentVisible(lightningThunder_);
+        setEnvironmentVisible(thunderVolume_);
+        setEnvironmentVisible(lightningDelay_);
+        setEnvironmentVisible(lightningSoundSet_);
         setEnvironmentVisible(sunPreset_);
         setEnvironmentVisible(sunTime_);
         setEnvironmentVisible(sunAzimuth_);
@@ -5669,7 +5860,8 @@ namespace renegade::studio
                             : "ENTITY " + std::to_string(entity)));
 
             const auto state = bridge::CaptureWeather(*weather);
-            environmentPreset_.SetSelectedWithoutCallback(0);
+            environmentPreset_.SetSelectedWithoutCallback(selectedWeatherPreset_);
+            weatherTransitionDuration_.SetValue(weatherTransitionDurationSeconds_);
             skyMode_.SetSelectedByUserdataWithoutCallback(
                 static_cast<std::uint64_t>(state.skyMode));
             aerialPerspective_.SetCheck(state.aerialPerspective);
@@ -5690,7 +5882,9 @@ namespace renegade::studio
             heightFog_.SetCheck(state.heightFog);
             fogHeightStart_.SetValue(state.fogHeightStart);
             fogHeightEnd_.SetValue(state.fogHeightEnd);
+            cloudFormation_.SetSelectedWithoutCallback(static_cast<int>(bridge::CaptureCloudFormation(session_->Scenes().GetScene(),entity)));
             cloudCoverage_.SetValue(state.cloudCoverage);
+            cloudMovementSpeed_.SetValue(state.cloudMovementSpeed);
             cloudStartHeight_.SetValue(state.cloudStartHeight);
             cloudThickness_.SetValue(state.cloudThickness);
             cloudsCastShadow_.SetCheck(state.cloudsCastShadow);
@@ -5707,6 +5901,7 @@ namespace renegade::studio
                 precipitation.windAzimuthDegrees);
             precipitationWindSpeed_.SetValue(precipitation.windSpeed);
             precipitationTurbulence_.SetValue(precipitation.turbulence);
+            RefreshLightningControls();
 
             const auto sun = bridge::CaptureSun(
                 session_->Scenes().GetScene(),
@@ -5770,7 +5965,9 @@ namespace renegade::studio
                 state.skyMode ==
                 bridge::WeatherState::SkyMode::RealisticWithClouds;
             aerialPerspective_.SetEnabled(physicalSky);
+            cloudFormation_.SetEnabled(volumetricClouds);
             cloudCoverage_.SetEnabled(volumetricClouds);
+            cloudMovementSpeed_.SetEnabled(volumetricClouds);
             cloudStartHeight_.SetEnabled(volumetricClouds);
             cloudThickness_.SetEnabled(volumetricClouds);
             cloudsCastShadow_.SetEnabled(volumetricClouds);
@@ -5781,9 +5978,12 @@ namespace renegade::studio
             precipitationIntensity_.SetEnabled(precipitationEnabled);
             precipitationFallSpeed_.SetEnabled(precipitationEnabled);
             precipitationParticleScale_.SetEnabled(precipitationEnabled);
-            precipitationWindAzimuth_.SetEnabled(precipitationEnabled);
-            precipitationWindSpeed_.SetEnabled(precipitationEnabled);
-            precipitationTurbulence_.SetEnabled(precipitationEnabled);
+            // Global wind is independent of precipitation: a windy day can
+            // have no rain or snow. These controls write WeatherComponent
+            // wind fields used by vegetation and the GPU wind field too.
+            precipitationWindAzimuth_.SetEnabled(true);
+            precipitationWindSpeed_.SetEnabled(true);
+            precipitationTurbulence_.SetEnabled(true);
             SyncGizmoSelection();
             LayoutS1BInspectorSections();
             return;
@@ -6033,6 +6233,25 @@ namespace renegade::studio
 
         const EditorAction action = pendingAction_;
         pendingAction_ = EditorAction::None;
+        // Save an authored weather target, never an accidental in-between
+        // transient preview. Saving during a blend finalises it as ONE
+        // Undoable command first; Undo, Reopen and navigation cancel instead.
+        if (weatherTransition_.IsActive())
+        {
+            if (action == EditorAction::SaveScene ||
+                action == EditorAction::SaveSceneAs)
+            {
+                TickWeatherPresetTransition(weatherTransition_.Duration());
+            }
+            else if (action == EditorAction::Undo ||
+                     action == EditorAction::Redo ||
+                     action == EditorAction::OpenScene ||
+                     action == EditorAction::ReopenScene ||
+                     action == EditorAction::ProjectHub)
+            {
+                CancelWeatherPresetTransition();
+            }
+        }
         if (lightPlacementActive_ && action != EditorAction::CreateLight)
         {
             CancelLightPlacement();
@@ -8063,8 +8282,12 @@ bool StudioRenderPath::HandlePlayerStartCapsule(
         return false;
     }
 
+    // This path only selects on a click; Compose owns capsule hover/drawing.
+    if(!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) || flyCameraActive_ ||
+        GetGUI().HasFocus() || gizmo_.IsInteracting() || !IsPointerOverViewport(pointer))
+        return false;
     auto& scene = session_->Scenes().GetScene();
-    const auto resolved = bridge::ResolvePlayerStart(scene);
+    const auto resolved = ResolveStudioPlayerStart(scene,session_->Scenes().Revision(),session_->Commands().Revision());
     if (resolved.resolution != bridge::PlayerStartResolution::Success ||
         !session_->Scenes().IsHierarchyVisible(resolved.start.entity))
     {
@@ -9089,6 +9312,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     bool StudioRenderPath::CommitSelectedWeather(
         const bridge::WeatherState& weather)
     {
+        if (weatherTransition_.IsActive()) CancelWeatherPresetTransition();
         if (session_ == nullptr)
         {
             return false;
@@ -9141,6 +9365,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             break;
         case WeatherField::CloudCoverage:
             weather.cloudCoverage = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case WeatherField::CloudMovementSpeed:
+            weather.cloudMovementSpeed = std::clamp(value, 0.0f, 12.0f);
             break;
         case WeatherField::CloudStartHeight:
             weather.cloudStartHeight =
@@ -9290,8 +9517,116 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         CommitSelectedWeather(next);
     }
 
+    void StudioRenderPath::StartWeatherPresetTransition()
+    {
+        if (session_ == nullptr || selectedWeatherPreset_ < 1 ||
+            selectedWeatherPreset_ > 4 || projectHubVisible_ ||
+            sceneOpenInProgress_ || testLevelRuntime_.IsActive())
+            return;
+        if (weatherTransitionDurationSeconds_ <= 0.0f)
+        {
+            ApplyWeatherPreset(selectedWeatherPreset_);
+            return;
+        }
+        const auto entity = EditableWeatherEntity();
+        auto& scene = session_->Scenes().GetScene();
+        auto* component = scene.weathers.GetComponent(entity);
+        if (component == nullptr) return;
+        const auto current = bridge::CaptureWeather(*component);
+        if (!weatherTransition_.IsActive() ||
+            entity != weatherTransitionEntity_ ||
+            weatherTransitionSceneRevision_ != session_->Scenes().Revision())
+            weatherTransitionBefore_ = current;
+
+        // Retarget a running blend from the CURRENT interpolated weather,
+        // retaining the original scene state as the single Undo baseline.
+        const auto target = bridge::MakeWeatherPreset(
+            current, static_cast<bridge::WeatherPreset>(selectedWeatherPreset_ - 1));
+        if (!weatherTransition_.Start(current, target, weatherTransitionDurationSeconds_))
+            return;
+        weatherTransitionEntity_ = entity;
+        weatherTransitionSceneRevision_ = session_->Scenes().Revision();
+        weatherCancelTransitionButton_.SetEnabled(true);
+        weatherStartTransitionButton_.SetText("BLENDING // 0%");
+    }
+
+    void StudioRenderPath::TickWeatherPresetTransition(const float deltaSeconds)
+    {
+        if (!weatherTransition_.IsActive() || session_ == nullptr ||
+            projectHubVisible_ || sceneOpenInProgress_ || testLevelRuntime_.IsActive())
+            return;
+        if (weatherTransitionSceneRevision_ != session_->Scenes().Revision())
+        {
+            // A loaded different level must never receive the old transition.
+            weatherTransition_.Cancel();
+            weatherTransitionEntity_ = wi::ecs::INVALID_ENTITY;
+            weatherStartTransitionButton_.SetText("BLEND TO PRESET");
+            weatherCancelTransitionButton_.SetEnabled(false);
+            return;
+        }
+        auto& scene = session_->Scenes().GetScene();
+        auto* component = scene.weathers.GetComponent(weatherTransitionEntity_);
+        if (component == nullptr)
+        {
+            weatherTransition_.Cancel();
+            weatherTransitionEntity_ = wi::ecs::INVALID_ENTITY;
+            return;
+        }
+        weatherTransition_.Advance(deltaSeconds);
+        const auto frameState = weatherTransition_.Current();
+        bridge::ApplyWeather(*component, frameState);
+        if (scene.weathers.GetCount() > 0 &&
+            scene.weathers.GetEntity(0) == weatherTransitionEntity_)
+            scene.weather = *component;
+        const auto progress = static_cast<int>(std::round(
+            weatherTransition_.Progress() * 100.0f));
+        if (weatherTransition_.IsActive())
+        {
+            weatherStartTransitionButton_.SetText(
+                "BLENDING // " + std::to_string(progress) + "%");
+            return;
+        }
+        // One Undo/Redo command at completion; no commands while previewing.
+        bridge::ApplyWeather(*component, weatherTransitionBefore_);
+        if (scene.weathers.GetCount() > 0 &&
+            scene.weathers.GetEntity(0) == weatherTransitionEntity_)
+            scene.weather = *component;
+        session_->Commands().Execute(std::make_unique<bridge::SetWeatherCommand>(
+            scene, weatherTransitionEntity_,
+            weatherTransitionBefore_, weatherTransition_.Target()));
+        weatherTransitionEntity_ = wi::ecs::INVALID_ENTITY;
+        weatherStartTransitionButton_.SetText("BLEND TO PRESET");
+        weatherCancelTransitionButton_.SetEnabled(false);
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::CancelWeatherPresetTransition()
+    {
+        if (!weatherTransition_.IsActive() || session_ == nullptr)
+            return;
+        auto& scene = session_->Scenes().GetScene();
+        if (weatherTransitionSceneRevision_ == session_->Scenes().Revision())
+        {
+            auto* component = scene.weathers.GetComponent(weatherTransitionEntity_);
+            if (component != nullptr)
+            {
+                bridge::ApplyWeather(*component, weatherTransitionBefore_);
+                if (scene.weathers.GetCount() > 0 &&
+                    scene.weathers.GetEntity(0) == weatherTransitionEntity_)
+                    scene.weather = *component;
+            }
+        }
+        weatherTransition_.Cancel();
+        weatherTransitionEntity_ = wi::ecs::INVALID_ENTITY;
+        weatherStartTransitionButton_.SetText("BLEND TO PRESET");
+        weatherCancelTransitionButton_.SetEnabled(false);
+        RefreshInspector();
+    }
+
     void StudioRenderPath::ApplyWeatherPreset(const int preset)
     {
+        if (weatherTransition_.IsActive()) CancelWeatherPresetTransition();
         if (session_ == nullptr)
         {
             return;
@@ -12048,6 +12383,36 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         SetProjectHubVisible(false);
         projectLoadingOverlay_.SetPhase(
             RenegadeProjectLoadingOverlay::Phase::Ready);
+        if((wi::arguments::HasArgument("cloud-formation-preview") &&
+            std::filesystem::path(operation->descriptorPath).filename()=="CloudFormationPreview.renegade") ||
+           (wi::arguments::HasArgument("cloud-formation-boundary-preview") &&
+            std::filesystem::path(operation->descriptorPath).filename()=="CloudFormationBoundaryPreview.renegade") ||
+           (wi::arguments::HasArgument("g3-weather-lua-review") &&
+            session_->Projects().CurrentProject().projectId=="82f02a47-5e37-422b-aeda-3fb7ad0a9713" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="Gate3WeatherLuaReview.renegade") ||
+           (wi::arguments::HasArgument("g3-weather-preview") &&
+            session_->Projects().CurrentProject().projectId=="720d45ab-37bf-4b8d-a2ab-3b2ab91d97d0" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="Gate3WeatherPreview.renegade") ||
+           (wi::arguments::HasArgument("g2-final-moonlight-review") &&
+            session_->Projects().CurrentProject().projectId=="5af7c70c-5c88-4e8d-905c-d59a4b225b90" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="Gate2FinalMoonlightReview.renegade") ||
+           (wi::arguments::HasArgument("g2-upper-moonlight-review") &&
+            session_->Projects().CurrentProject().projectId=="3d8c144a-7897-48a2-a306-112e74d8fd54" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="Gate2UpperMoonlightReview.renegade") ||
+           (wi::arguments::HasArgument("g2-lunar-locality-review") &&
+            session_->Projects().CurrentProject().projectId=="bb7e3f74-8fa0-430d-8390-934e58421c2e" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="Gate2MoonlitLocalityReview.renegade") ||
+           (wi::arguments::HasArgument("cloud-motion-preview") &&
+            session_->Projects().CurrentProject().projectId=="e2d3e3f4-73a2-452a-b6c3-1d894f281302" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="CloudBodyMotionPreview.renegade") ||
+           (wi::arguments::HasArgument("cloud-body-preview") &&
+            session_->Projects().CurrentProject().projectId=="f39f4b51-1a9e-4ebd-820b-29d5f1409eb1" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="CloudBodyStudioPreview.renegade") ||
+           (wi::arguments::HasArgument("cloud-body-studio-test") &&
+            session_->Projects().CurrentProject().projectId=="9dc8e035-52f9-4474-a319-7465698ae7cd" &&
+            std::filesystem::path(operation->descriptorPath).filename()=="CloudBodyStudioTest.renegade"))
+            SetEnvironmentWorkspaceActive(true);
+        if(std::getenv("RENEGADE_G4_STUDIO_TEST_PROJECT"))SetEnvironmentWorkspaceActive(true);
     }
 
     void StudioRenderPath::OpenProjectDescriptor(
@@ -12291,6 +12656,12 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             return;
         }
 
+        // Lightning bolts and cloud-flash radiance are transient preview-only effects.
+        // Never serialize their ephemeral mesh entities or GPU weather fields.
+        auto& savingScene=session_->Scenes().GetScene();
+        studioForkLightning_.Reset(savingScene);
+        studioSheetLightning_.Reset(savingScene);
+        renegade::runtime::ThunderAudio().Reset();
         ClearSelectionOutline();
         const bool saved = session_->SaveScene(scenePath);
         SyncSelectionOutline();
@@ -12406,6 +12777,32 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         renderer_.RequestExit();
     }
 
+    void StudioApplication::UpdateCloudBodySelfTest()
+    {
+        if(cloudBodySelfTestOpened_ || !wi::arguments::HasArgument("cloud-body-studio-test") ||
+            !wi::arguments::HasArgument("cloud-studio-replay-audit") ||
+            !wi::arguments::HasArgument("cloud-studio-replay-audit-exit") ||
+            GetActivePath()!=&storyFlowRenderer_ || !session_.Projects().HasProject()) return;
+        const auto& project=session_.Projects().CurrentProject();
+        if(project.projectId!="9dc8e035-52f9-4474-a319-7465698ae7cd" ||
+            std::filesystem::path(project.descriptorPath).filename()!="CloudBodyStudioTest.renegade") return;
+        cloudBodySelfTestOpened_=true;
+        // Same native document/session adoption as Story Flow's Open Level.
+        // Refuse dirty scene replacement, even inside the disposable fixture.
+        const auto path=std::filesystem::path(project.rootPath)/"Content/Scenes/Main.wiscene";
+        if(session_.Commands().IsDirty() || !session_.LoadScene(path.generic_string()))
+        {
+            wi::backlog::post("Cloud self-test: native Level open FAILED",wi::backlog::LogLevel::Error);
+#ifdef _WIN32
+            PostQuitMessage(112);
+#endif
+            return;
+        }
+        renderer_.PrepareCloudBodySelfTestView();
+        storyFlowIntegration_.RequestLevelEditor();
+        wi::backlog::post("Cloud self-test: startup Level opened through native session pipeline");
+    }
+
     void StudioApplication::Initialize()
     {
         wi::Application::Initialize();
@@ -12515,7 +12912,12 @@ namespace renegade::studio
             assemblyPanel_.IsVisible() || handGripPanel_.IsVisible() || modelImportPanel_.IsVisible() ||
             !session_->Projects().HasProject()) return;
         auto& source=session_->Scenes().GetScene();
-        const auto resolved=bridge::ResolvePlayerStart(source);
+        // A camera preview can only be visible for the selected Player Start.
+        // Reject all other selections before scanning the scene's metadata.
+        const auto selectedPreviewEntity=session_->Selection().SelectedEntity();
+        if(selectedPreviewEntity==wi::ecs::INVALID_ENTITY ||
+            !bridge::IsPlayerStart(source,selectedPreviewEntity))return;
+        const auto resolved=ResolveStudioPlayerStart(source,session_->Scenes().Revision(),session_->Commands().Revision());
         if(resolved.resolution!=bridge::PlayerStartResolution::Success ||
             session_->Selection().SelectedEntity()!=resolved.start.entity ||
             !session_->Scenes().IsHierarchyVisible(resolved.start.entity)) return;

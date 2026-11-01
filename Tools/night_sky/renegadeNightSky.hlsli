@@ -5,4 +5,6 @@
 #include "renegadeNightAtmosphere.hlsli"
 #include "renegadeAurora.hlsli"
 #include "renegadeMilkyWay.hlsli"
+#include "renegadeMoon.hlsli"
+#include "renegadeShootingStars.hlsli"
 #endif

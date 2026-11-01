@@ -1,3 +1,218 @@
+## 2026-11-01: Combined pre-alpha CI target correction
+
+Owner authorizes local/GitHub feature synchronization and pre-alpha preparation.
+Candidate parent de9fa6edd81529490204500091cb3037a2d92f7a combines accepted
+Weather V2 with main's rivers, waterfalls and inventory. Wicked remains pinned
+at 82557d439a41d104f559b0d3134d160b7bf6154e. Local combined Release build and
+unfiltered CTest passed 291/291; native Windows Debug/Release GitHub checks passed.
+Studio Debug CI found six registered test executables absent from the canonical
+RenegadeStudioCI build target, producing Not Run failures rather than failed
+assertions. CMakeLists.txt now includes these weather/cache targets and the
+precipitation target. No tests excluded and no runtime/visual behavior changed.
+Validation: rerun canonical four Windows checks and full local configurations on
+this correction. Commands: cmake --build <build> --config <configuration> --target
+RenegadeStudioCI --parallel 2; ctest --test-dir <build> -C <configuration>
+--output-on-failure. New package and independent exact-commit verification remain
+pending; do not close G5. Existing original UI Designer edits remain untouched.
+
+## 2026-10-29: WEATHER V2 FIVE GATES CONFIRMED, G3 DEVELOPMENT ON SAME BRANCH
+
+Owner explicitly corrected previous seven-gate typo: **five gates**. Root `feature/weather-v2-all-gates` and Wicked matching branch remain the single continuing Weather V2 delivery. Gates 1-2 owner signed off. Gate 3 now has deterministic transition bridge, tests and editor Apply Now / Blend / Cancel controls; Release build and actual Studio/Runtime acceptance still pending. Read `docs/WEATHER_V2_GATE3_IMPLEMENTATION_CHECKPOINT_2026-10-29.md` then `docs/WEATHER_V2_GATE3_MODULAR_TRANSITIONS_PLAN_2026-10-29.md`. Do not claim G3 complete yet. Preserve accepted G1/G2 and river changes; no push/merge/PR/G4/G5/Snow V2.
+
+## 2026-10-29: GATE 2 UPPER CLOUD MOONLIGHT VIEW-ANGLE FIX — OWNER REVIEW PENDING
+
+Owner permitted Desktop Commander GUI; inspected actual above-cloud view. Root issue in G2 locality V2: direct moonlight multiplied by camera-angle factor 0.58+0.42*vicinity. Fixed in G2 V3 so direct light independent of view while soft scatter remains Moon-local. Matched 2m/6200m height GPU cases across 4 formations and Moon on/off; 16 DX12 + 16 Vulkan tests, brightened cloud tops, negligible Moon-off change, max API mean delta 0.2782. Release Studio/Runtime built, 7/7 focused regressions green. **New uniquely cloned review project ACTUALLY OPENED Main Level in Studio** and 75 FPS displayed. Reviewer window GATE 2 UPPER MOONLIGHT V3 [DX12], relaunch BUILD/Run-Weather-G2-Upper-Moonlight.cmd; documentation docs/WEATHER_V2_GATE2_UPPER_CLOUD_MOONLIGHT_2026-10-29.md. G1 visually approved unchanged, user old G2 project not saved/closed, accepted river fork untouched. G2 remains open for visual approval/performance and further atmosphere integration. No push/merge/PR/G3-5/Snow V2.
+
+## 2026-10-29: GATE 2 TWILIGHT MOON-CLOUD LIGHTING — DX12/VULKAN CANDIDATE VALIDATED
+
+Read docs/WEATHER_V2_GATE2_TWILIGHT_SLICE_2026-10-29.md first. Gate 1 owner visually signed off and exact 75 FPS preview preserved. G2 separated into new SHA256-verified worktree, accepted river fork intact. Fixed real midnight/moonlight discontinuity by smooth solar fade above solarY -0.10 and Moon ease to full below -0.30, preserving full Moon/night, daylight and one shadow raymarch. 40×2 DX12/Vulkan controlled twilight GPU captures succeeded; visual images show graded Moon-lit cloud entry instead of abrupt jump. First candidate rejected as too dark; second candidate is current. G2 Release Studio AND Runtime builds passed; 7/7 focused CTest green; DX12/Vulkan Moon+twilight GPU probes passed; preserved 114-file G1 source audit clean. Separate uniquely named G2 twilight Studio preview is RUNNING, launcher BUILD/Run-Weather-G2-Twilight-Review.cmd. Owner visual and isolated performance signoff still pending; read docs/WEATHER_V2_GATE2_TWILIGHT_SLICE_2026-10-29.md. No push/PR/merge/G3–G5/Snow V2.
+
+## 2026-10-29: WEATHER V2 GATE 2 ATMOSPHERIC LIGHTING STARTED — GATE 1 VISUALLY APPROVED
+
+The owner gave formal visual sign-off for Gate 1 and explicitly authorised starting Gate 2. This NEW isolated worktree codex/weather-v2-g2-atmospheric-20261029 contains 114 SHA256-verified copies of the full dirty/unstaged/staged and untracked accepted Gate 1 source (root and Wicked), with accepted river-enabled fork pin ceb816b844b4ab2fa56a159ac60a4f65c931bdfc. Original Gate 1 worktree, owner Studio windows and 75 FPS approved build remain untouched. Read docs/WEATHER_V2_GATE2_ATMOSPHERIC_LIGHTING_PLAN_2026-10-29.md and docs/WEATHER_G2_G1_SNAPSHOT_MANIFEST_2026-10-29.json. New BUILD/g2 configured successfully. Initial Gate 1-source moonlight/twilight baseline Release NightSkyTests build under way. First slice is safe continuous solar/twilight/moonlit-cloud transition with no extra full shadow pass; independent CPU transition envelope check passed. No push, commit, PR, merge, Gates 3–5 or Snow V2.
+
+## 2026-10-29: OWNER VISUALLY SIGNED OFF WEATHER GATE 1, AUTHORIZED GATE 2
+
+Owner explicitly visually signed off Gate 1 cloud appearance after accepting 75 FPS moving-cloud benchmark. Read docs/CLOUD_FORMATION_GATE1_OWNER_VISUAL_SIGNOFF_2026-10-29.md; it supersedes historical statements that the owner rejected the clouds. Do not mistake visual signoff for formal 4-build/CI/merge approval. Preserve exact approved RenegadeStudioCloudPerfNear64G1Oct29.exe and SHA/evidence, current accepted sources and river fork. Owner authorizes Gate 2 atmospheric light work immediately, isolated from G1; Gates 3-5 and Snow V2 are not authorized; no push/PR/merge.
+
+## 2026-10-29: OWNER CONFIRMED 75 FPS WITH CLOUD MOVEMENT SPEED 8 - PERFORMANCE ACCEPTED, GATE 1 STILL OPEN
+
+The owner replied "confirmed" to a real Studio DX12 75-FPS isolated test on DESIGN (RTX 4070 Ti, 75-Hz monitor), with actual moving Cumulus and the Movement Speed slider set to 8. Do NOT infer signoff of morphology, moon/cloud lighting, moon visibility, full gameplay performance, or Weather Gate 1. The approved, preserved build is BUILD/gate1/Studio/Release/RenegadeStudioCloudPerfNear64G1Oct29.exe; restart using BUILD/Run-Gate1-Approved-75FPS-Clouds.cmd. Evidence: BUILD/perf-near64-speed8-solo.png, 7/7 focused tests, Bridge tests, 45 original protected files unchanged, accepted Wicked river fork untouched. This renderer adds rank-first cloud admission and near-field 64m / distance-adaptive volumetric march. Other preview processes were paused briefly for GPU isolation and all resumed, no owner work saved or discarded. See docs/CLOUD_FORMATION_GATE1_PERFORMANCE_OWNER_ACCEPTED_2026-10-29.md for full matrix, acceptance scope, and preservation conditions. No commit, push, PR, merge, Weather Gates 2-5 or Snow V2.
+
+## 2026-10-29: CURRENT CLOUD MOVEMENT SPEED SLIDER PREVIEW — GATE 1 OPEN
+
+Owner-requested Cloud Movement Speed is now a native 0–12 editor slider under Environment > Clouds, wired via WeatherState/SetWeatherCommand to scene.weather Runtime, Undo/Redo and serialized scene. Current Review executable BUILD/gate1/Studio/Release/RenegadeStudioCloudSpeedG1Oct29.exe is a separately named Release build, launched in isolated Cloud Body Motion Preview with live inspector showing slider. Studio and Bridge Release builds passed, BridgeCommandTests passed (including runtime value, Undo/Redo, scene save/reopen), 7/7 focused CTest passed, independent type1/type2 +60s GPU motion proved. The 15s desktop screenshot comparison is inconclusive because Edge was foreground, not evidence for live Studio time freezing. Owner still needs to visually confirm while Studio focused and speed set high. Full evidence and relaunch shortcut in docs/CLOUD_FORMATION_GATE1_MOVEMENT_SPEED_CONTROL_2026-10-29.md / BUILD/Run-Gate1-Cloud-Speed.cmd. Protected owner files and accepted river fork untouched. No push, PR, merge, later weather gates or Snow V2.
+
+## 2026-10-29: MOVING-CLOUD PREVIEW FIX VERIFIED — GATE 1 OPEN
+
+The previous owner's Cloud Body Studio Preview was accidentally static: serialized animationMultiplier=0 from the screenshot/replay test fixture. DO NOT MODIFY old original preview. A separate clone Cloud Body Motion Preview has animationMultiplier=2, windSpeed=15, coverageWindSpeed=30, verified via Wicked native scene archive save/reopen. Latest real Renegade Studio Release build launches separate RenegadeStudioMovingCloudsG1Oct29.exe --cloud-motion-preview --dx12, and a distinct running window titled 'Renegade Studio - Gate 1 MOVING CLOUDS [DX12]' is available on DESIGN. Auto-open clone uses isolated GUID, clone registry was corrected. Original review remains untouched. Focused 7/7 tests, preservation and river fork unchanged; no push/merge. Details and relaunch script in docs/CLOUD_FORMATION_GATE1_MOVING_PREVIEW_FIX_2026-10-29.md and BUILD/Run-Gate1-Moving-Clouds.cmd. Note that movement's live pixel displacement has not independently been numerically measured; owner visual verification pending.
+
+## 2026-10-29: CURRENT OWNER VISUAL REVIEW RUNNING — GATE 1 OPEN
+
+A new 1920x1080 DX12 RenegadeStudio Cloud review window is OPEN in this isolated worktree (separate binary RenegadeStudioCloudReviewG1Oct29.exe). The Cloud Body Studio Preview project and Main Level are already loaded with Environment inspector. Day/night cloud visuals confirmed within the actual editor, ~50–56 FPS observed (not benchmark). For full instructions, evidence and outstanding defects read docs/CLOUD_FORMATION_GATE1_OWNER_VISUAL_REVIEW_2026-10-29.md; relaunch script BUILD/Run-Cloud-Gate1-Visual-Review.cmd. New thermal morphology + 3D multiscale surface pass has been GPU-rendered and linked into Studio, focused CTest 7/7 and protected sources/river fork preserved. The owner is invited to visually assess before further changes. Do not claim complete, push, PR, merge or touch other projects/windows.
+
+## 2026-10-29: HYBRID CLOUD DISTRIBUTION / SAVED-STUDIO MOON — GATE 1 OPEN
+
+Read docs/CLOUD_FORMATION_GATE1_HYBRID_MOON_STUDIO_2026-10-29.md first for latest authored source and evidence, then the earlier morphology checkpoint and mandatory original handover. The CMake-generated Wicked cloud site ranks and ±0.45-cell jitter now synchronize correctly; balanced hybrid clustering improves thin owner-reference cloud gaps, though the deep layer and soft horizon-tier morphology remain unaccepted. An archived actual Studio scene confirms Moon enabled+automatic but its ~75° elevation was ~72° away from the saved 7.6° pitch camera; fixed Moon at the saved camera renders with and without 80% clouds. No actual live owner window was manipulated. Latest focused Release tests 7/7, preservation 45/45 and accepted river fork intact. No push/PR/merge or later weather gates.
+
+## 2026-10-29: MORPHOLOGY / PLACEMENT / MOONLIGHT — GATE 1 STILL OPEN
+
+Read `docs/CLOUD_FORMATION_GATE1_MORPHOLOGY_MOON_2026-10-29.md` for the latest exact source state and evidence. Four structurally distinct cached Cumulus subfamilies, independent x/z size, decorrelated 4x4 bounded sites and measured deep/thin admission transfer are built. The synthetic 80% view still looks like a broad soft ceiling and **is not owner-ready**. Lunar cloud lighting no longer scales Sun intensity; DX12/Vulkan Moon phase/visibility tests passed, but the owner's missing-Moon Studio case is NOT reproduced/resolved. 7/7 focused Release tests, 45 protected files and accepted river fork pin verified. No commits, pushes, PR, merge or further weather gates. Original unsaved owner Studios untouched.
+
+## 2026-10-29: BODY CACHE / ACTUAL STUDIO REPLAY — GATE 1 STILL OPEN
+
+Read docs/CLOUD_FORMATION_GATE1_LIVE_REPLAY_2026-10-29.md first.
+The earlier owner previews remain rejected. Cumulus now uses a real 128-cubed
+3D morphology cache and complete-body admission. Rejected 2D Cumulus masks
+were removed. Bounds/empty-space skipping passed 48 API comparisons with at
+most one opacity byte difference. 192 raw admission views and 176 fitted/
+held-out/default/reference views were captured. Some steep 80% views still
+overfill; broad undersides remain soft/repetitive. This is NOT an owner candidate.
+
+Actual isolated Studio scene/camera capture now works. Its 1920x1009 area,
+yaw about 45 and pitch about 7.6 differ from the usual synthetic proof.
+DX12/Vulkan replays closely match its cloud opacity (mean .50/.55 byte error;
+whole-image occupied fraction difference under .002). No complete RGB parity
+or retroactive explanation of every original screenshot is claimed.
+
+Only our new QA project's noncanonical registry/stale copied content hash was
+repaired, without weakening validation. Audit 2 crashed in NVIDIA's compiler.
+Audit 3 logged a compute-PSO E_OUTOFMEMORY but later loaded/captured. Shader
+creation now has filename diagnostics plus optional CS begin/end/hash traces.
+The expensive analytic oracle is in explicit packaged reference permutations,
+rather than the production ray kernel. Both APIs rendered production/reference.
+
+Pre-split four app builds and 63 focused/source checks per config passed;
+Debug first ran out of C: at its final link, owned .ilk cleanup + retry passed.
+Newest Release app/test build also passed. Newest Debug and final live startup,
+full matrix and density/movement checks remain to run after final shader fixes.
+No current-frame performance claim may use timings contended by live Studio.
+
+Latest regression investigation: whole-body height currently receives native
+vertical NOISE wind. That can move macro geometry outside the fixed Base/Depth
+march layer in a long-running scene. A 600-second GPU wind/time readback proof
+is being added/run BEFORE changing the renderer, to establish this defect.
+
+Isolation: same codex/cloud-formations-g1-20261028 worktree; root 150eca4,
+river fork checkout/gitlink ceb816b unchanged. BUILD/macro-preservation.json
+reverified all 45 protected original authored files and native fallback bodies.
+No commits, pushes, PRs or merges. Other four types remain an incremental plan,
+not a completed new implementation. No later weather gates or Snow V2.
+
+QA project GUID f39f4b51-1a9e-4ebd-820b-29d5f1409eb1. New capture hook requires
+cloud-body-preview AND cloud-studio-replay-audit AND that GUID. Optional
+cloud-studio-replay-audit-exit is a disposable self-test only, writes separate
+body-studio-replay-split evidence, then exits its own process. It is not an
+owner launch flag. Audit 3 PID 6828 may still be open after normal close was
+requested; preserve it and any confirmation/unsaved scene. Never input into
+the rejected older previews or any owner Studio. No new owner preview offered.
+
+## 2026-10-29: COMPLETE 3D BODY PLACEMENT - IMPLEMENTATION STUDY
+
+Read docs/CLOUD_FORMATION_GATE1_WHOLE_BODIES_2026-10-29.md first.
+Both owner previews remain rejected. The stratified 2D mask improved coverage
+variance but cut cylindrical sides into unrelated 3D density; rejected internally.
+The six-view single complete body runs on DX12/Vulkan. Its reusable analytic
+template is now placed as whole formations with locally balanced ranks and
+stable height/width/rotation. No independent weather footprint clips Cumulus.
+Admission is RAW and uncalibrated. Only Cumulus has the new body path.
+
+The uncached placement proof is too slow for release. Next implementation:
+cache immutable 3D morphology and static site attributes, preserving the same
+camera/shadow density, native Legacy data and the accepted fork pin. No cache
+or new renderer binding has been implemented at this checkpoint.
+
+IMPORTANT: the four application builds, focused tests and Runtime starts below
+precede the stratified/single/whole-body changes. They are historical evidence,
+not current-source release acceptance. Current latest build is Release
+RenegadeNightSkyTests only; new four-build/API/performance/Studio validation
+is required before another owner preview. No new Studio preview was offered.
+
+Current experiments: BUILD/single-body-dx12 and -vulkan,
+whole-body-single-replay-dx12, whole-body-placement-dx12.
+Source before placement: BUILD/single-body-template-reference.hlsli.
+Rejected fitted-column source: BUILD/rejected-stratified-column-reference.hlsli.
+No commit/push/PR/merge, no later Weather gates or Snow. Original projects,
+worktrees and owner previews remain untouched.
+
+## 2026-10-29: GATE 1 MACRO VOLUME EXPERIMENT - NOT OWNER APPROVED
+
+Read docs/CLOUD_FORMATION_GATE1_MACRO_VOLUME_2026-10-29.md first. The owner
+rejected both prior previews; their earlier numeric green results remain
+historical. Current Cumulus uses a separate 3D cellular macro field in unused
+detail alpha, with native RGB retained for erosion. The height-column model
+was rejected internally. Other four formations are still earlier prototypes.
+
+Current source: same isolated branch/base 150eca4 and accepted Wicked
+ceb816b844b4ab2fa56a159ac60a4f65c931bdfc. No commit/push/PR/merge.
+All 45 original authored files hash-identical. Both APIs' native detail RGB
+are byte-identical; matched Legacy day/night screenshots pixel-identical.
+See BUILD/macro-preservation.json. Owner preview PID 33404 was responding at
+last read-only inventory; do not close/save/reload/overwrite it.
+
+Current four application builds pass (Studio/Runtime Debug/Release), seven
+focused cloud/night-sky tests pass in each config, 58 source contracts pass,
+both Studio startup-smokes exit 0. Four actual Runtime starts pass on DX12/
+Vulkan in Debug/Release, with PID-matched diagnostics, actual backend and new
+validation-project GUID confirmed; each exited 0 normally. Logs:
+BUILD/macro-apps-*-build.log, macro-focused-*-ctest.log,
+macro-source-contracts.log, macro-runtime-startup-results.json.
+Startup smoke is not a rendered Studio visual check.
+
+Current GPU studies cover 18 representative views per API at 1080p and four
+matched thin-layer views per API at 1440p. Direct 128-cubed float density
+extraction works on both APIs. These are NOT the old 256-case acceptance matrix.
+Clear/full endpoint tests pass in the small current study, but the thin-layer
+80% view is only about 56.8% sky coverage: old admission calibration is invalid.
+No new Studio preview has been offered. Surface quality and distant bands also
+remain unresolved; reference-quality captures use an opt-in higher allocation.
+
+NEXT: finish the current raw-admission calibration captures (macro-current-*
+folders, macro-admission-study and macro-admission-owner-study), compare the
+canonical 1500/5000 and thin 2280/3190 geometry, derive a measured transfer,
+then validate held-out views. Do not call a fit independent validation.
+Do not broaden to the other formations or another owner preview until Cumulus
+is credible. Full exact-source rendering/performance/save/reload checks remain
+required for any later replacement preview.
+
+A new disposable Runtime validation project lives under
+BUILD/cloud-volume-runtime-validation (new GUID throughout its text sidecars).
+It is not an owner Studio project. Existing preview projects were only read
+to create the copy. Rejected source variants and the 76-file snapshot remain.
+Owned superseded study PNG pruning recovered about 1.63 GB; canonical 80/100
+images, contact sheets, logs, metrics and a SHA/size manifest are retained.
+No original worktree or accepted source was pruned.
+
+## 2026-10-29: OWNER REJECTED BOUNDARY CANDIDATE — GATE 1 FAILED VISUALLY
+
+Owner says the clouds look worse; actual screenshot shows solid sculpted blobs
+and excessive distant fragments. Do not promote this candidate or treat its
+numerical tests as visual success. Preserve the open owner preview and its files.
+Authored source before the next architectural change is preserved under
+BUILD/rejected-boundary-source with SHA256 manifest. The accepted river pin and
+all original worktrees remain protected. Next: study supplied weather pack,
+replace explicit ellipsoid bodies with continuous 3D density formation.
+No PR/push/merge, Weather G2–G5 or Snow work is authorized.
+
+## 2026-10-29: Weather Gate 1 boundary/density candidate — OWNER REVIEW OPEN
+
+Supersedes the first candidate's appearance claims. Read
+docs/CLOUD_FORMATION_GATE1_BOUNDARY_FOLLOWUP_2026-10-29.md and the architecture
+decision before changing anything. Same isolated branch/base and accepted river
+pin; no commit, push, PR or merge. Original 45 authored files still hash-identical.
+
+World-unit cloud boundaries, calibrated macro footprints, independent internal
+3D condensate, finer bounded ray integration and conservative empty-space skips
+are implemented. Native Legacy remains the fallback. Full-history quality is
+an explicit diagnostic option; native quarter/half allocation stays default.
+All four final GPU matrices and both Studio/Runtime configurations build/pass
+their scoped checks. Performance and visible grain remain owner-review concerns.
+
+Separate preview: Renegade Cloud Boundary G1 Preview desktop shortcut, backed by
+its own project and RenegadeStudioCloudBoundaryG1.exe. Do not overwrite/close
+either preview on the owner's behalf; new windows may contain unsaved edits.
+Gate 1 stays OPEN. No Weather G2–G5 or Snow work is authorized.
+
 ## 2026-10-23 Environment probe repair, owner visually accepted
 
 Dedicated probe-only branch from main 11bbb90. See docs/ENVIRONMENT_PROBE_VISIBILITY_2026-10-23.md for crash diagnosis, native live capture, evidence and limits. Owner authorised main integration after checks. Unrelated importer/terrain and other local work excluded. No release gate closed.
@@ -3664,7 +3879,7 @@ On isolated `feature/complete-a6-recovery-20260921`, the first explicit Characte
 ## Editor logical hierarchy and selector repair — 21 September 2026
 
 **Branch:** `feature/editor-logical-hierarchy-selection`
-**Worktree:** `C:\\Users\\paulw\\source\\repos\\renegade-editor-hierarchy-selection`
+**Worktree:** `<user-profile>\\source\\repos\\renegade-editor-hierarchy-selection`
 **Base:** `origin/main` at `57086b61dce0bfef22606a6707d6cafd74e82cfe`
 
 ### Completed implementation
@@ -6849,7 +7064,7 @@ Owner supplied screenshot recommending Qwen3.8-Max. Official sources verified mo
 Completed fresh 4B rank8 training: 128 authored continuations, 96 steps, 512.6s, average loss2.5182. Full-strength17-turn evaluation still had awkward wording; scale0.65 unfamiliar12-turn test substantially improved name/engine identity, preference continuity and invented-story acknowledgement. Remains owner-review candidate; tone still sometimes formal. No personality acceptance gate closed.
 Current8384 now serves character-v6 local NF4 model through Tools/assistant_presence/chat/character_service.py atscale0.65; BUILD/character-preview.json enables trial on next launcher start. Original v31 adapter and external server retained. Electron/orb, chat RAM, Daniel, fallback8383 and knowledge18384 never closed. Current loaded client may retain old social routing until next orb launch; launcher sets RENEGADE_CHARACTER_MODE=learned for candidate backend. Learned mode bypasses all socialReply canned responses; verified technical guidance and factual access boundaries remain.
 Live client four-turn generated check passed greeting/day/fiction acknowledgement/chosen Mav3r1ck name; adapter reportedcharacter-v6. All42 live workflow cases PASS median76ms. Natural-conversation mock test PASS, legacy social-flow and main/live-speech tests PASS. git diff --check PASS. Model/data paths remain ignored BUILD/cache, no commit/push/merge. Full first-run visual acceptance, personality owner acceptance, packaging/GPU performance remain open.
-To enable learned client routing: tray Quit then PowerShell & 'C:\Users\paulw\source\repos\renegade-engine\Tools\assistant_presence\START_RENEGADE_PRESENCE.cmd'. Quit clears RAM conversation; do not restart without owner intent. Rollback helper BUILD/rollback_character_trial.ps1 restores identity-checked original8384 and disables preview, without closing orb.
+To enable learned client routing: tray Quit then PowerShell & '<user-profile>\source\repos\renegade-engine\Tools\assistant_presence\START_RENEGADE_PRESENCE.cmd'. Quit clears RAM conversation; do not restart without owner intent. Rollback helper BUILD/rollback_character_trial.ps1 restores identity-checked original8384 and disables preview, without closing orb.
 
 ## 2026-10-14 owner trial feedback and restored backstory
 Owner finds V6 significantly better and conversational, with generated joke; occasional refusal and latency remain. Identity answered correctly on fresh conversation but refused once after history; cause not yet proven. Audit confirmed established backstory document and legacy contextFor exist, but V6 origin scenario was heldout (not training) and new service ignored legacy lore in incoming personality. Restored concise established lore into character-system.txt, read per request, without service/orb restart or training. Covers workshop origin, creator control, room details, tastes and orb/Daniel identity, with explicit fiction boundary and natural generation. Future trainer reads current system, but current adapter weights unchanged. Seven-day varied training discussed; no recurring job configured in this change.
@@ -6903,7 +7118,7 @@ Closed the specific Day 1 routing blocker in source: verified-knowledge.js recog
 
 Verification: existing 80 Python knowledge tests passed; 3 new Python regression tests passed (checked evidence, fail-closed, casual/identity reset); new test-surface-followup-live.cjs passed against restarted bridge; all 42 full live workflow checks passed (median54ms/max68ms); character-routing test and git diff --check passed. Initial immediate tests raced bridge startup and correctly returned unavailable; after /health ready both live suites passed. Direct production client probe confirmed root plus follow-up intercepted and source-verified, with 'Glass classification does not make a pane destructible.'
 
-Only identity-checked Python bridge PID33652 was restarted; replacement loopback18384 health ready, read_only true. V6/Q5 gateway8384 remains ready at scale0.65; V7 candidate still separate. Existing Electron orb was deliberately left running to preserve RAM chat: its cached client module requires Quit/relaunch to load new JS routing. Owner instructions: tray orb Quit, then PowerShell: & 'C:\Users\paulw\source\repos\renegade-engine\Tools\assistant_presence\START_RENEGADE_PRESENCE.cmd'. This clears current RAM conversation. No commit/stage/push/merge; release acceptance still pending owner observation.
+Only identity-checked Python bridge PID33652 was restarted; replacement loopback18384 health ready, read_only true. V6/Q5 gateway8384 remains ready at scale0.65; V7 candidate still separate. Existing Electron orb was deliberately left running to preserve RAM chat: its cached client module requires Quit/relaunch to load new JS routing. Owner instructions: tray orb Quit, then PowerShell: & '<user-profile>\source\repos\renegade-engine\Tools\assistant_presence\START_RENEGADE_PRESENCE.cmd'. This clears current RAM conversation. No commit/stage/push/merge; release acceptance still pending owner observation.
 
 
 ## 2026-10-15 — V7 Day 1 reversible owner trial ACTIVE
@@ -6944,6 +7159,206 @@ Final service check: first verified smoke found knowledge bridge18384 absent (co
 
 Corrected owner-reported malformed wide character literal in Studio/src/TestLevelRuntimeProcess.cpp: mutableCommand.push_back(L'\0'); now contains the literal backslash-zero escape, with no embedded NUL byte. Earlier GPU lifecycle build had failed C2137 at line339; this was an implementation error. Rebuilt Release RenegadeTestLevelRuntimeProcessTests via configured VS18 CMake path: exit0, log BUILD/assistant-gpu-native-build-fix.log. Ran Tests/Release/RenegadeTestLevelRuntimeProcessTests.exe with TestLevelProcessFixture.exe: 'LP04 Gate3A process lifecycle proof passed', exit0. Scoped git diff --check passed. These low-level tests do not opt into yieldAssistantGpu, so this does not verify complete assistant unload/reload integration or restored75FPS. Previous native lifecycle/source changes remain unfinished pending opt-in integration tests and Studio build. No model start/stop, user app closure, staging/commit/push/merge in this correction.
 
+## 2026-10-29 Weather V2 Gate 3 — Lua completion and validation continuation (OPEN)
+- Same root `feature/weather-v2-all-gates` branch, with G1/G2 accepted and exact Wicked fork preserved; no push, PR or merge.
+- A concurrent development session also updated `Studio/src/StudioApplication.cpp` to finalise a pending weather blend as one command on Save/Save As rather than silently reverting. Do not overwrite this concurrent change without reviewing it.
+- Continued the existing `Runtime/src/RuntimeScriptRuntime.cpp` governed Lua weather API: `set_preset(name, seconds)`, `get_state()`, `cancel()`, target query, and optional once-per-completion `on_weather_transition_complete(self)`. Target changes, instant presets and cancellation are bounded; transitions progress on pause-aware Runtime time.
+- Added Lua lifecycle regression cases to `Tests/S3GovernedLuaRuntimeTests.cpp`. A separate `Tests/WeatherLuaRuntimeTests.cpp` and test target appeared from concurrent work, covering a real WeatherComponent Runtime scene.
+- New guide `docs/WEATHER_V2_GATE3_SCRIPTING_2026-10-29.md`; new in-progress feature matrix row `REN-REN-011`.
+- Confirmed baseline `ctest --test-dir BUILD/g3 -C Release --output-on-failure -R 'Renegade(WeatherTransitionTests|MoonTests|CloudFormationTests)$'`: 3/3 pass.
+- New Release build command: `cmake --build BUILD/g3 --config Release --target RenegadeRuntime RenegadeS3GovernedLuaRuntimeTests --parallel 6`; log `BUILD/g3-lua-validation-build.log`, running as process session 29192 at the time of this note. After build, intended test log `BUILD/g3-lua-validation-ctest.log`. Do not claim the new Lua tests passed without reading those results.
+- Open: run full Lua tests including `RenegadeWeatherLuaRuntimeTests`, inspect Studio build and first-run workflow, Test Game, FPS, persistence and Undo/Redo; G3 not owner-signed. Save during a Studio preview currently finalises the target, not a resumable in-progress transition; owner confirmation needed.
+- No Git commit for this overlapping live-session snapshot to avoid racing parallel modifications; no change to accepted G1/G2 shader or river branch.
+
+## 2026-10-30 Weather V2 G3 focused Release tests PASS (supersedes pending validation above)
+- Fixed test fixture syntax in `Tests/S3GovernedLuaRuntimeTests.cpp`, corrected GlobalScript attachment presentations and used supported `CaptureWeather` accessor in the separate `Tests/WeatherLuaRuntimeTests.cpp`. These were test fixture errors, not new Runtime build failures.
+- Final Release test build `BUILD/g3-s3-lua-final-build.log`: PASS. Final `BUILD/g3-s3-lua-final-ctest.log`: **5/5 PASS** for governed Lua Runtime, standalone Weather Lua Runtime, WeatherTransition, Moon, CloudFormation. `RenegadeRuntime.exe` Release linked successfully in prior `BUILD/g3-lua-validation-build.log`.
+- Owner reports Storm preset running at **75 FPS** (latest live result; prior 53–70 FPS screenshot report now superseded for current scene). A controlled repeatable performance benchmark and standalone Test Game remain open.
+- Latest Studio build validation launched to `BUILD/g3-studio-current-release-build.log`. G3 is not signed off, and no push/PR/merge performed.
+
+## 2026-10-30 — Owner Test Game smoke confirmation
+- Owner supplied a screenshot of `Renegade Runtime - Gate 3 Weather Presets Preview [DX12]` and confirmed **Test Game works**. Screenshot overlay shows NVIDIA GeForce RTX 4070 Ti, 1920 x 1009 resolution and 74 FPS; storm-like clouds are visible in a very dark night scene. Screenshot uploaded to current chat as `image(20261030-000418).png` (not copied into the Git repository).
+- This is direct evidence of owner-confirmed Test Game launch/render/performance, **not** evidence of runtime-scripted weather transitions reaching completion, save/reopen persistence or packaging. Continue G3 checks accordingly; do not claim an in-game transition was exercised without further evidence.
+- Prior owner observation: Storm preset running at 75 FPS in Studio; latest Runtime screenshot 74 FPS. G3 owner gate approval still pending.
+
+## 2026-10-30 — G4 owner priority pivot: sheet lightning FIRST (UNVALIDATED)
+- Owner explicitly wants **sheet lightning glowing inside cloud volumes**, not conspicuous forked or branching strike geometry. The uncommitted standalone `StormLightningService` fork and test files were discarded; nothing of that prototype was committed.
+- Existing Wicked volumetric cloud raymarch already samples local POINT lights when the native light has `SetVolumetricCloudsEnabled(true)`. First G4-S1 uses that physically integrated path, not a screen flash or renderer shader fork. Three staggered soft cloud-scattering light cells are driven by deterministic `bridge::SheetLightningController` in `EngineBridge/include/renegade/bridge/SheetLightningService.h`, connected to opt-in Runtime via `Runtime/src/RuntimeSheetLightning.h` / `RuntimeApplication.cpp`.
+- Preview only when process environment has `RENEGADE_G4_SHEET_LIGHTNING_PREVIEW=1`; otherwise zero new lights and G1/G2/G3 unaffected. `BUILD/Run-Weather-G4-Sheet-Lightning-Preview.cmd` is the dedicated Test Game launcher; do not claim it has been visually approved yet.
+- New `RenegadeSheetLightningTests` tests deterministic scheduling, quiet intervals, spatial separation, disabled state and pause/invalid time. Release build/test running at `BUILD/g4-sheet-lightning-build.log` / `BUILD/g4-sheet-lightning-tests.log` — verify exit and actual live GPU result before considering G4-S1 accepted.
+- The early G4 precipitation/wind blending foundation remains UNCOMMITTED and deferred; it is not the requested first visual gate. No push/PR/merge and no alteration to signed-off G3 commit `979e384`.
+
+## 2026-10-30 — G4 sheet lightning no-flash defect investigation (in progress)
+- Owner reports **consistent 74 FPS but no visible sheet flashes** in the first G4 Runtime; this is a visual FAIL even though G4 scheduler test was green. Live trace confirmed two real FLASH_START events at cloudStart 2280m, cellY ~2835m/~3532m and horizontal range ~2–3km. No need to retest the original invisible point-light prototype.
+- Cause identified in Wicked's general point-light path: `lightingHF.hlsli::attenuation_pointlight` uses HALF-precision squared distances and inverse-square attenuation not suited to clouds kilometres from camera. Don't just boost native point light intensity.
+- Replaced C++ transient light entities with 4 transient WeatherComponent/ShaderWeather float4 entries (3 xyz/radius cells + individual energy values), uploaded via `wiScene.cpp`. New full-precision `RenegadeSheetLightningRadiance` inside native `volumetricCloud_renderCS.hlsl` computes bounded internally scattered cloud glow at already-existing raymarch samples. The fields are un-serialized, disabled by default, and only updated when `RENEGADE_G4_SHEET_LIGHTNING_PREVIEW=1`.
+- **IMPORTANT:** This involves the paired pinned Wicked submodule `feature/weather-v2-all-gates` as well as root branch; neither is committed or pushed yet. Full rebuild and focused test currently running at `BUILD/g4-sheet-cloudfield-build.log` + `BUILD/g4-sheet-cloudfield-ctest.log` process 40052, linked Runtime then capture chain process 35144. Never claim visual proof until inspecting `BUILD/g4-sheet-flash-*.png`.
+- Opt-in launcher `BUILD/Run-Weather-G4-Sheet-Lightning-TestGame.cmd` and auto screenshot trigger `BUILD/g4-capture-visible-sheet.ps1`. Expected trace `BUILD/g4-sheet-lightning-live-trace.log` has FLASH_START and FLASH_ACTIVE. G3 accepted commit remains `979e384`; NO merge/push.
+
+## 2026-10-30 — G4 in-cloud sheet lightning latest local checkpoint
+- Earlier opt-in in-cloud native POINT lights did not show flashes despite trace and 74 FPS. Eliminated that path; cloud-scale float32 radiance via transient ShaderWeather/WeatherComponent cells is now visibly functional.
+- Reduced peak scheduler strength to 0.22, cloud range to ~1450m, spread ~620m, view-relative flash placement 4.4-6.8km out near bottom of clouds. New G4-only volumetric shader scattering and flash-only reprojection avoids severe checkerboard while normal G1/G2/G3 cloud path remains unchanged.
+- Final linked Release build `BUILD/g4-sheet-final-threshold-build.log` PASS after one serial retry for MSVC access violation in `CommandService.cpp`; tests 4/4 PASS in `BUILD/g4-sheet-final-tests.log`. Final visual evidence `BUILD/g4-sheet-before-flash.png` and `BUILD/g4-sheet-flash-1.png`, `-2.png`, `-3.png` shows visible smooth sheet illumination inside clouds and 75 FPS at 1264x681 RTX 4070 Ti.
+- Runtime opt-in launcher `BUILD/Run-Weather-G4-Sheet-Lightning-TestGame.cmd`, capture helper `BUILD/g4-capture-visible-sheet.ps1`, trace `BUILD/g4-sheet-lightning-live-trace.log`. G4 is not signed off; owner must inspect real-time visual, then Studio UX, persistence and eventual thunder remain.
+- Keep Wicked fork and root paired on `feature/weather-v2-all-gates`. Separate untracked `WeatherEffectsTransitionService` and `WeatherEffectsTransitionTests` are *deferred rain/wind work*, not part of this sheet-lightning milestone. No main merge or push.
+
+## 2026-10-30 G4-S1 sheet-lightning realism pass — VISUAL PREVIEW, NOT OWNER SIGNED OFF
+- Owner reviewed the first visible result and said **"it's a start"**; do not mislabel that as G4 acceptance.
+- Corrected visible checkerboard artefact in `volumetricCloud_reprojectCS.hlsl`: while lightning energy is present or within a short recovery interval, spatially filter the newly marched clouds from 4 quarter-res neighbours and mix only a small amount of recent history (24% during light / 12% during recovery). Outside this event, original volumetric temporal reconstruction remains unchanged.
+- Added `SheetLightningFrame::temporalRecovery` with an approximately 1.12s bounded lifetime after an event, passed in `sheet_light_power.w`; the flash itself remains short. Regression tests cover recovery after the light fades and returning to normal.
+- Revised the cloud raymarch light fields from spherical discs to overlapping shallow/oblique ellipsoids, retaining existing cloud scattering and transmittance.
+- Moved opt-in preview cells farther away (horizontal range about 7.8–10.6km) and near the lower part of the cloud layer; reduced preview pulse intensity to 0.15 and increased spread/radius to 720m/1800m respectively.
+- **Release build PASS**: `BUILD/g4-sheet-deeper-cloud-build.log`. **Focused CTest 4/4 PASS**: `BUILD/g4-sheet-deeper-cloud-tests.log`: SheetLightning, WeatherTransition, Moon, CloudFormation.
+- Automated DX12 screenshots `BUILD/g4-sheet-before-flash.png` and `BUILD/g4-sheet-flash-1.png` / `-2.png` show a localized cloud-mass flash with no obvious checkerboard. Full-size 1920x1009 overlay shows 74–75 FPS in sampled frames (RTX 4070 Ti). This is a sampled test, not a long-run controlled benchmark.
+- Runtime opt-in preview remains enabled only with `RENEGADE_G4_SHEET_LIGHTNING_PREVIEW=1` via `BUILD/Run-Weather-G4-Sheet-Lightning-TestGame.cmd`. Owner still to evaluate live visual and decide next iteration.
+- No new bolt geometry, no gameplay lightning, no thunder audio, no Studio authoring UI, no weather G4 owner signoff, no merge/push.
+
+## 2026-10-30 — G4 in-cloud sheet lightning: owner-requested 30% wider feather pass
+- Owner requested roughly 30% greater spread with a gradual fade toward each light radius, and slight visible variation. Implemented directly on DESIGN, not handed to Codex.
+- Opt-in preview cell radius `cloudLightRangeMetres` increased from 1800m to 2340m (+30%). Kept existing 720m cell spacing and event-randomised per-cell size/placement, preserving visible variation across strikes. Reduced preview intensity from 0.15 to 0.14 to avoid a hotter overlapping core.
+- `volumetricCloud_renderCS.hlsl::RenegadeSheetLightningRadiance`: independent `smoothstep` edge feather widths 0.42 / 0.49 / 0.36 multiply the existing squared attenuations of the three oblique lobes, preserving a bounded centre and fading softly to zero at the expanded extent. No additional cloud raymarch/shadow samples or visible bolt geometry. Existing G4 flash-aware reconstruction unchanged.
+- Added `RenegadeSheetLightningTests` case comparing identical-seed 1800m and 2340m storms, verifying exact 1.30x cell radius, unchanged timing/position and no larger core power.
+- Release Runtime + test target build: PASS in `BUILD/g4-sheet-wide-feather-build.log`. Focused regression CTest **4/4 PASS** in `BUILD/g4-sheet-wide-feather-ctest.log` (SheetLightning, WeatherTransition, Moon, CloudFormation).
+- Direct DX12 Runtime capture at 1920x1009, RTX 4070 Ti, shows **75 FPS** on sampled frames and visible internal cloud flashes with softer spread. Preserved prior reference captures as `BUILD/g4-baseline-g4-sheet-*.png`; new evidence `BUILD/g4-wide-pass2-flash-2.png`, `BUILD/g4-wide-pass3-flash-2.png`, other `BUILD/g4-wide-pass*-*.png`. 75 FPS is sampled, not a prolonged benchmark.
+- This remains an opt-in visual preview (`RENEGADE_G4_SHEET_LIGHTNING_PREVIEW=1`). G4 is **NOT** owner signed off. Keep the Runtime preview for owner judgement. No push/PR/merge to main. Separate untracked WeatherEffectsTransition files remain untouched.
+
+## 2026-10-30 — G4 sheet lightning OWNER ACCEPTED
+- Owner replied **"acceptable"** after reviewing 30%-wider, edge-feathered sheet lightning on DESIGN. Record that as definitive sign-off for the **sheet-lightning visual slice only**; avoid unnecessary further tweaking.
+- Signoff document: `docs/WEATHER_V2_G4_SHEET_LIGHTNING_OWNER_SIGNOFF_2026-10-30.md`. Accepted source baseline is root `6920275`, pinned Wicked `c25c9828` with Release build PASS and focused regressions 4/4 PASS. Sample DX12 Runtime FPS 75 at 1920x1009 RTX 4070 Ti.
+- Gate 4 overall still OPEN: integrated authoring controls and persistence, thunder, rain/wind and environmental response remain. Snow V2 deferred. No push, PR or merge authorized. Untracked precipitation/wind foundation files must remain untouched.
+
+## 2026-10-30 — Owner requirement: full weather scriptability + optional lightning impacts
+- See `docs/WEATHER_V2_SCRIPTABILITY_AND_LIGHTNING_IMPACT_CONTRACT_2026-10-30.md` (new design contract, **not implementation**).
+- Owner wants every preset, cloud/weather subsystem and weather event controllable from **Lua and C++**, including lightning-impact callbacks for scripts such as striking a tree and starting a fire in a future gameplay system.
+- Reuse existing authored surface classification and collision/event plumbing; do NOT reuse bullet-hole visuals or automatic bullet damage. Atmospheric lightning need not have collision unless cloud-ground impact mode is enabled. Fire propagation itself is future scope.
+- Current G3 Lua weather API includes `renegade.weather.set_preset/get_state/cancel` and `on_weather_transition_complete` but does not expose complete cloud/weather/property/event parity; full scripted coverage needs an explicit audited gate.
+
+2026-10-30 lightning owner requirement: Lightning Appearance must allow creator-owned artwork; see new `Imported lightning artwork` section in `docs/WEATHER_V2_SCRIPTABILITY_AND_LIGHTNING_IMPACT_CONTRACT_2026-10-30.md`. This is a pending feature, not currently implemented. Custom bolt artwork, impact-gameplay and full weather API parity are DEFERRED FUTURE DEVELOPMENT and are NOT requirements for G4/five-gate signoff. Preserve existing strike timing and in-cloud illumination.
+
+## 2026-10-30 - Owner weather scope and visual signoff correction
+- Owner approved the CURRENT sheet and fork lightning visual appearance, including synced cloud glow. See docs/WEATHER_V2_G4_LIGHTNING_VISUAL_SIGNOFF_2026-10-30.md. G4 overall remains OPEN for controls, effects and integration.
+- Owner deferred custom lightning artwork, physical impact gameplay, tree burning and complete Lua/C++ weather API coverage to FUTURE development. These are no longer blockers for this weather iteration, overriding earlier contradictory planning language.
+- Owner requested continuing with WIND, RAIN and SNOW. Assess the native snow baseline after wind/rain; Snow V2 was previously deferred but this is now back on the visual-development agenda, with a bounded scope.
+- Preserve all approved G1/G2/G3/Sheet/Fork visuals and the weather feature branch. Do not push, PR or merge.
+
+2026-10-30 G4 next phase: lightning visuals signed off at local checkpoint a89e3e6; continue wind, rain, snow. Read docs/WEATHER_V2_G4_WIND_RAIN_SNOW_KICKOFF_2026-10-30.md before changes. Existing PrecipitationService + Studio authoring cover basic native rain/snow/wind, but Storm preset still changes only sky/fog and does not start precipitation. WeatherEffectsTransitionService is newly registered in CMake for validation (data layer only, no live scene effects yet). Custom lightning art, gameplay impact and full weather Lua/C++ API are explicitly deferred. No push/merge; visual owner acceptance required for each environmental slice.
+
+2026-10-30 G4 Wind dry-scene milestone: FIXED precipitation OFF disabling global wind Inspector controls; renamed as Environment Wind; Rain/Snow profile switches now preserve authored global turbulence (EngineBridge/src/PrecipitationService.cpp). Tests/PrecipitationTests.cpp includes dry-wind native scene/Undo/Redo and Rain/Snow preservation regression. Release Studio and targeted 5/5 CTest PASS: BUILD/g4-wind-dry-presets-final-build.log and -tests.log. Direct DX12 Studio Environment UI verified all wind controls work with Precipitation OFF (Direction 88, Speed 12.75, Turbulence 13.56), three Undo restores originals; 75 FPS sampled. See docs/WEATHER_V2_G4_WIND_DRY_SCENE_FIX_2026-10-30.md. Still OPEN: real wind-responsive foliage visual test, rain and snow visuals, full G4 integration. No push/merge without explicit owner approval.
+
+2026-10-30 Snowstorm exact-tree: dedicated Wicked GPU snowfall and weather-snow-only continuous wind gust handling; high-density snow at max (~9450/s, cap 56000, world velocity independent of emitter volume). Release Studio exact-tree build PASS (BUILD/g4-snowstorm-exacttree-final-build.log) and focused 5/5 CTest PASS (BUILD/g4-snowstorm-exacttree-final-tests.log). Live DX12 ~75FPS with intense snow and 14.4 wind/13.9 turbulence. Reversed wind; Snow->Rain->Off and Undo restored generated preview without writing original Main.wiscene. Rain at high intensity remains an unacceptable gray wall and ~62FPS; focus next on rain visuals/performance, preserving snow and approved lightning/clouds. Snow owner visual approval, Runtime packaging and roof occlusion remain OPEN. See docs/WEATHER_V2_G4_SEPARATE_SNOW_EMITTER_2026-10-30.md. No push or merge.
+
+
+## 2026-10-30: G4 critical repair candidate, owner review and editor performance still open
+
+Owner authorized fixes/builds after read-only investigation. Read docs/WEATHER_V2_G4_CRITICAL_REPAIR_VERIFICATION_2026-10-30.md and core decision alongside exact BUILD/g4-critical-source-manifest.json. Root HEAD f073233a61e8d8814cdc29a610e242689832c37f, Wicked HEAD 7e2326c0338e625f4405d8fe5150fde9547eaded; dirty source, no commit/push/merge. Separate transient cloud illumination preserves ordinary history through lightning. Thunder fixes include native queued-voice lifetime, correct LookTo listener, and confirmed startup video process-session mute replaced by stream-only gain. All nine assets preserved, actual Studio/Test Game WASAPI loopback positive, Release builds and 7/7 focused tests passed. Controlled Storm Runtime averages 77.901 FPS, GPU median/P95 12.252/14.367 ms; dense editor remains 50-59 FPS and defect D is NOT closed. Current isolated review window and its edits are left open; original unsaved Studio PID 39748 remains minimized, saved original scene hash unchanged. Next: owner frame-by-frame/audio review and comparable editor/reference GPU profile; do not mark G4 accepted. See verification doc for changed files, exact commands/logs, risks and rollback.
+
+
+## 2026-10-30: Owner approves cloud/lightning/thunder repairs; dense-cloud performance investigated
+
+Read docs/WEATHER_V2_G4_DENSE_CLOUD_PERFORMANCE_INVESTIGATION_2026-10-30.md. Owner confirms no grid/jitter/horizon blur and good thunder/lightning; appearance is approved for preservation. Performance remains open. Seven coverage/view DX12 runs plus actual editor capture reproduce48 FPS with cloud-only90% coverage. Editor CPU median18.916ms and GPU17.567ms (overlap, do not add); GPU cloud raymarch8.478ms plus all-sky capture6.578ms dominate. Camera-preview resolution costs2.246ms even with no selection; native Scene Update1.415ms, assistant and precipitation CPU negligible. Left display60Hz vs primary75Hz is real but48FPS reproduced on primary; not the cause. Temporary profiling code restored to exact pre-investigation source hashes and normal Release Studio/Runtime rebuilt; see restoration log and manifest. No shader/approved visual change and no performance fix claimed. Next: independent CPU preview/metadata-resolution cache repair, then exact-density GPU input reuse, each measured and visually revalidated; no commit/push/merge.
+
+
+## 2026-10-30: Measured G4 performance optimization candidate ready for owner
+
+Read docs/WEATHER_V2_G4_PERFORMANCE_OPTIMIZATION_REVIEW_2026-10-30.md and core decision. Owner explicitly authorized higher-risk optimization. CPU skips unused preview/capsule checks and uses a tested frame-local Player Start cache with fresh live transforms/invalidation. Separate Renegade sky lighting/reflection cache128 + half integration intervals; primary cloud sampling/density/lightning/rain/snow/audio unchanged. Controlled Runtime75.38->95.76 FPS horizon,74.89->93.48 up35 at90% coverage; cache pass5.7->2.9ms. Dense editor screenshot63 FPS versus previous48-50, but optimized-editor CSV is excluded due Runtime-camera/filename collision, so no precise editor CPU claim. Frozen sky mean delta0.0757/255, not universal parity.11/11 regressions pass and final normal Release builds pass. Both discarded shader-admission hoist and diagnostics removed. Original saved scene and all9 WAV hashes verified. Prior diagnostic PID15216/work preserved/minimized; separate normal-review project/launcher provided. Exact final identity in BUILD/g4-critical-source-manifest.json. No commit/push/merge or performance signoff; owner reviews normal all-effects scene, motion/night/reflections/FPS next.
+
+Final normal smoke: new Studio42896 shows65 FPS with authored rain; its real Test Game child5596 shows75 FPS at1920x1009 on the primary75-Hz display. Both left open. Earlier diagnostic15216 preserved/minimized. These are on-screen observations, not full all-effects timing quantiles. Exact final digest6a632022e6ec0f28553a7f1fe3f9ae02e6e06b56596d7b51afd774d9e34fb7d1. Editor75FPS goal remains open; owner checks new visual/reflection quality next. No source or build changes after11/11 passed.
+
+
+## Owner acceptance - 30 October 2026
+
+Owner replied "im happy with that" after the update reporting normal Test Game observed75 FPS, editor around65 FPS (previous48-50), controlled cloud-only94-96 FPS uncapped,11/11 regression checks and the lighting/reflection cache tradeoff. Record acceptance of the presented optimization, current visual quality and current performance for this scoped review. This supersedes preceding statements that owner approval of this optimization is pending. Preserve the accepted candidate identified by source digest6a632022e6ec0f28553a7f1fe3f9ae02e6e06b56596d7b51afd774d9e34fb7d1 and BUILD/g4-critical-source-manifest.json. This is not a claim of75 FPS in every editor view, full four-configuration CI, completion of all Weather V2 gates, or authorization to commit/push/merge. No implementation or build change accompanies this acceptance record.
+
+
+## 2026-10-30: G4 continuation uses grass only; dry-wind visual/persistence check
+
+Owner clarifies there are no trees in Renegade yet; a future tree system is separate scope, not a weather blocker. Read docs/WEATHER_V2_G4_GRASS_WIND_VALIDATION_2026-10-30.md. No production source edits/builds/commits/pushes/merges in this continuation. Exact accepted source digest remains 6a632022e6ec0f28553a7f1fe3f9ae02e6e06b56596d7b51afd774d9e34fb7d1; source/binary hashes, original saved scene and all9 thunder assets verified. Grass painted only into separate GrassWindValidation scene; original review TestLevel still matches the preserved unsaved owner snapshot.
+
+Actual Studio dry-grass frames: calm0/0, native wind speed3/turbulence5, direction0->180 (display -180), Ctrl+Z/Ctrl+Y restores direction with correct history counts, Save/Reopen retains grass and all settings. BUILD/g4-grass-* screenshots/GIFs/contact sheets; existing targeted Release tests3/3 PASS in g4-grass-closure-tests.log. Native Wind Speed drives wave frequency, not independently controlled wind-force magnitude; no semantics changed. Owner grass-motion approval remains open.
+
+New integration blocker: actual Test Game from new Save As scene fails snapshot scripting because GrassWindValidation.wiscene.rmeta is absent. Studio log also warns about scene-relative grass/default terrain textures. Do not claim Test Game PASS for that path. Separate derived fixture retains original registered TestLevel entry inside an isolated project copy: standalone Release Runtime renders moving grass, sampled75FPS at1920x1009. Runtime PID8360/HWND594338 left open for review, current Studio35136/HWND1310952 minimized, saved clean. These are diagnostic windows, not an owner unsaved session.
+
+Next bounded repair: Save As level identity/dependency registration with live Save/Reopen/Test Game validation; separately explicit opt-in sky+rain/wind transitions using the existing controller and one Undo transaction. G4/G5 remain open; no trees required, no automatic completion based on tests or this sampled FPS.
+
+
+## 2026-10-31: G4 Save As FIXED; owner approves grass motion and existing preset transitions
+
+Owner personally tested preset transitions and confirms intended behaviour; explicitly approves grass motion. This supersedes earlier open transition-coupling/grass-owner-review items. Do not alter accepted preset semantics or add trees as a dependency. Read docs/WEATHER_V2_G4_SAVE_AS_FIX_2026-10-31.md.
+
+Confirmed SceneDocumentService omitted the .rmeta level identity on Save As. Three source files changed: EngineBridge/src/SceneDocumentService.cpp creates/validates project identities and commits a new identity with the archive through existing journaled transaction; EngineBridge/src/ScriptAuthoringService.cpp permits unscripted legacy Save As without mutating its identity-less source; Tests/S4BScriptAuthoringTests.cpp now covers first save/legacy and scripted copies, fresh IDs, unchanged sources, stable overwrite, reopen/Test Game snapshot and malformed destination failure. Studio/Runtime Release builds PASS, 13/13 focused final checks PASS (BUILD/g4-saveas-final-build.log, -regression-build.log, -final-tests.log). No renderer/shader/weather/audio code changes.
+
+Live native Studio File Save As -> Reopen -> Play -> real Runtime -> return to same clean Studio copy PASS. QA copy GrassWeatherCopy2 identity is fresh, original level/companions unchanged; Runtime29340 was child of Studio3984 and used its actual TestLevelSnapshots descriptor/ready event. Captured1920x1009 at sampled75FPS; stopped that child, Studio shows TEST LEVEL COMPLETED and snapshot cleaned. Studio3984/HWND201150 left open; older Studio35136 and Runtime8360 minimized/preserved. First UI Studio44632 closed unexpectedly before reopen test; no exit code or Windows crash event captured, cause unconfirmed, monitored repeat completed. Do not misstate that initial closure as diagnosed.
+
+Root HEAD f073233a61e8d8814cdc29a610e242689832c37f, Wicked HEAD7e2326c0338e625f4405d8fe5150fde9547eaded. Final extended source digest d2ee86910414d986ba42729231f993670a6c7233ace725c52b379f10350167cc in BUILD/g4-saveas-source-manifest.json. Every source from the accepted weather manifest still matches; original saved Main and all9 original thunder assets preserved. Approved binaries retained as .saveas-baseline.exe; source rollback copies/evidence in external critical-repair audit saveas-fix. No new commit/push/merge. G4 engineering blockers cleared and all weather/motion/preset owner approvals recorded; final independent review of this exact Save As repair is required before formal gate closure per AGENTS.md. G5 package/configuration validation remains separate.
+
+
+## 2026-10-31: WEATHER V2 G4 OWNER SIGNED OFF — CLOSED
+
+Owner independently confirms the Save As repair: "Fix confirmed and signed off". Read docs/WEATHER_V2_GATE4_OWNER_SIGNOFF_2026-10-31.md. This completes final G4 review and supersedes earlier pending grass, preset-transition and Save As acceptance notes. Root HEAD f073233a61e8d8814cdc29a610e242689832c37f / Wicked HEAD7e2326c0338e625f4405d8fe5150fde9547eaded plus exact dirty candidate digest d2ee86910414d986ba42729231f993670a6c7233ace725c52b379f10350167cc in BUILD/g4-saveas-source-manifest.json. All recorded source and binary hashes rechecked and match. No source/build/commit/push/merge change accompanies sign-off.
+
+G4 closed for the agreed weather scope: appearance/motion/audio/precipitation/grass wind, intended preset transitions, scoped performance and Save As. Preserve accepted visuals and behaviour. Next gate is G5 final integration, packaged Windows Runtime and required configuration/CI verification; none of those is declared complete by this approval. Earlier unexplained QA-session closure remains historically unconfirmed, not diagnosed by the sign-off.
+
+
+## 2026-10-31: Owner authorizes G5; validation started
+
+Owner says Proceed after G4 sign-off. G5 integration/package/four-configuration validation authorized; no push/merge. Read the G4 owner signoff and exact BUILD/g4-saveas-source-manifest.json. Accepted source hashes checked before starting fresh VS2022 x64 embedded-shader validation on external audit storage, avoiding C drive pressure (~17GB free). BUILD/g5-validation.py orchestrates configure, Studio/Runtime/BridgeTests Debug build, Debug CTest, then Release build/CTest; live state and logs are in external RenegadeAudit/WEATHER_G5_2026-10-31/validation-status.json. RDC process session38916 launched the script. These checks are IN PROGRESS, not passed; inspect status/logs before rerunning or starting competing builds. No source edits, commit, push or merge in this G5 start.
+
+Next: inspect/fix build/test failures if present; complete standalone package resource audit (including all9 thunder originals/mono variants, snow and embedded cloud shaders), real packaged-game visual/audio smoke and owner package review. G4 approvals remain protected; no extra preset coupling or trees. Full GitHub CI also requires authorized publication of the matching dirty Wicked candidate; do not publish automatically. Existing accepted editor binaries/windows and saved owner work are preserved.
+
+
+## 2026-10-31: G5 E-drive shader-path defect corrected; shader stage PASS
+
+Read docs/WEATHER_V2_G5_CROSS_VOLUME_BUILD_FIX_2026-10-31.md. Fresh E: build failed all DX12/SPIR-V input reads because ShaderInterop.h -> GetPathRelative -> MakePathRelative loses the source directory across C:/E: drive letters; DXC1.9 loads and its hash matches. Do not blame shader logic. Owner authorized correction. Root CMake includes new cmake/RenegadeOfflineShaderCompiler.cmake and Tools/OfflineShaderCompilerEntry.cpp to pass explicit source path into the offline tool before original main; no Wicked/shader/runtime source edit. Accepted G4 source stays intact.
+
+Same E: shader-generation command now completes, outputs46,677,098-byte wiShaderDump.h and proceeds to embedded-renderer C++ compilation. Full G5 builds/tests/package are still pending. Original resumed validation RDC session32232; follow-up BUILD/g5-ci-followup.py waits for it before running canonical RenegadeStudioCI plus weather test executables, Debug/Release CTest with180-second timeout. Inspect external G5 validation-status.json and *-ci-build.log/*-ci-tests.log; do not launch competing builds. Initial partial-target runner may report missing tests; only the follow-up builds the full intended test graph. Preserve initial failure logs. No push/merge or G5 closure.
+
+
+## 2026-10-31 21:27 London: G5 reconnect and validation resumed
+
+DESIGN reconnected. Previous G5 status remained running but Debug-build.log stopped at02:59:18 and no cl/link/MSBuild/python validation processes were active. Debug Studio and Runtime executables existed; no final Debug build completion, CTest or Release result, so do not report four passes. Reason for interruption unconfirmed. BUILD/g5-resume-ci.py preserves prior status/configure logs, regenerates the full CI runner without the stale PID-wait supervisor, checks accepted source hashes and resumes existing E: build via canonical RenegadeStudioCI plus weather tests, Debug/Release and unfiltered CTest with180-second timeout. New RDC session26980; initial output START configure means accepted source manifest check passed. Check external G5 validation-status.json and *-ci-build.log/*-ci-tests.log next. No application source changes or push/merge; package/live-owner review still pending.
+
+
+## 2026-10-31: G5 full Debug graph finds stale shooting-star ABI test
+
+Debug-ci-build.log reports Tests/ShootingStarsStateTests.cpp line10 asserting old ShaderWeather size1040. Shared ShaderInterop_Weather.h appends sheet_light_cell0/1/2/power, and existing accepted MoonStateTests.cpp asserts offsets1040/1056/1072/1088 and size1104. This is a stale test expectation, not grounds to alter accepted runtime/HLSL layout. BUILD/g5-repair-shooting-stars-abi.py (RDC31320) waits for active validation session26980 to exit, backs up the shooting-star test, replaces only its old size assertion with1104 and adds explicit moon/lightning field offset checks, then reruns BUILD/g5-ci-validation.py. At this record the repair is QUEUED, not yet proven compiled; check its process/logs before launching another graph. No renderer/shader changes proposed.
+
+BUILD/g5-weather-resource-audit.py PASS for Debug Studio and Runtime: all9 original thunder hashes, all9 mono variants and the snowflake texture match sources. External weather-resource-audit.json records exact checks. Release resources not yet staged, and standalone packaged-game playback/visual proof is still pending. This is build-output resource validation only, not G5 closure. Owner G4 signoff preserved; no commit/push/merge.
+
+
+## G5 validation continuation (2026-10-31)
+Debug first full suite: 257/260 passed. NightSkySourceContract expected pre-weather label; updated test to require the current weather/presets and lightning sections, targeted retest passed. River junction foam test completed successfully in 191.37 seconds when allowed more than the original 180 seconds; validation timeout raised to 900 seconds, no test skipped. Standalone packaged DX12 Runtime returned 3 on first run; targeted rerun passed after adding diagnostic output on failure, so underlying intermittent cause remains unproven. Full Debug and Release CI validation restarted via BUILD/g5-ci-validation.py, process session 31300; logs/status at <audit>\WEATHER_G5_2026-10-31. Preserve initial Debug log as Debug-ci-tests.before-retry.log. Do not claim G5 completion until full builds/tests, standalone weather packaging and live verification have passed. No push or merge without owner approval.
+
+
+## G5 local validation results (2026-10-31 22:55 GMT)
+Fresh E: build: configure, Studio/Runtime Debug and Release and CI/weather test targets all passed. Full unfiltered CTest Debug 260/260 and Release 268/268 passed; Release has eight graphics/importer cases registered only for Release. Standalone package test passed in both configurations on the full rerun; the earlier Debug exit 3 is intermittent and remains unexplained despite successful targeted and full reruns, so do not assert its root cause is fixed. River foam test passed in 193.72 seconds after increasing the previous arbitrary 180-second CTest timeout to 900 seconds. Source contract updated for current WEATHER / PRESETS & PRECIPITATION and LIGHTNING & THUNDER labels; shooting star ABI test updated for the existing 1104-byte shader layout; standalone test now reports Runtime evidence on failure. The signed-off G4 source manifest rechecked with zero mismatches. All nine originals, nine mono variants and snowflake hash match in each of the four Studio/Runtime output directories (weather-resource-audit.json). Generic isolated standalone Runtime test passed; an actual Studio-built weather package with live weather and audible output remains unverified. Logs and validation-status.json: <audit>\WEATHER_G5_2026-10-31. No push or merge; independent exact-commit review and approved publication of matching Wicked checkpoint remain necessary before G5 release signoff. Do not claim final signoff yet.
+
+
+## G5 standalone Build Game terrain issue (2026-10-31)
+Owner confirmed Test Game works; actual Build Windows Game rejected the review clone's default grass reference to an old Studio build. Discovery reads the saved archive before normal scene adoption/rebinding and only recognizes external files when they are equivalent to currently bundled source files. Review clone inherited an obsolete install-relative path. A candidate change in EngineBridge/src/WindowsGameBuildProjectService.cpp performs the same stock terrain recognition as scene adoption on a detached scene during build discovery, with current explicitly declared default grass support files; arbitrary non-terrain external material still rejected. Backup at <audit>\WEATHER_G5_2026-10-31\WindowsGameBuildProjectService.before-grass-repair.cpp. Regression tests in Tests/WindowsGameBuildProjectTests.cpp cover relocated stock terrain plus rejection of unrelated external material, and passed in Debug (relocated-grass-regression-test.log). Debug Studio rebuild running as process session 34020; current Release Studio session PID 20332 belongs to owner and must not be closed. Actual weather package, Release verification and full rerun remain pending. A separate disposable build-game-isolated-fixture was copied and its Story Flow outcome changed from next to level.complete; do not confuse this fixture-only correction with a product change. No push or merge.
+
+
+Additional terrain packaging verification: isolated Debug Studio built with the candidate; owner Release Studio PID 20332 left running. A separate attempt to inspect the full weather scene in the headless project-test executable crashed with access violation (real-weather-proof-test.log); cause unconfirmed, and experimental optional probe removed from the test source. This is not evidence of an application crash or of successful weather packaging. Separate fresh Release build started in build-grass-release via process session 13840, logs grass-release-configure.log, grass-release-build.log, grass-release-test.log. Verify actual Build Windows Game and standalone output with a disposable project when safe, plus required Release and full tests; prior 260/268 suite passes predate the terrain change.
+
+
+## G5 grass packaging Release follow-up (2026-11-01 00:15 GMT)
+Separate build-grass-release compiled Studio and Runtime plus the targeted build-project test. Initial targeted CTest did not run because the explicit build omitted its required RenegadeGate4SceneFixture target; built that prerequisite and reran, 2/2 passed (grass-release-retest.log). The focused moved-terrain and unrelated external-asset regressions now pass in Debug and Release. Full Release CI graph and unfiltered tests restarted as process session 36628; logs grass-release-full-ci-build.log and grass-release-full-ci-tests.log. An isolated Release Studio was launched as PID 25632 for the disposable build-game-isolated-fixture, but the owner is actively using Windows with an unrelated file extraction dialog; do not take focus, click, or close their windows. Actual Build Game, packaged weather/audio proof, post-change full Debug/Release tests and independent exact-commit verification remain pending. A separate headless inspection of the weather scene previously access-violated; its cause remains undiagnosed, not proof of an application failure or a passed real-scene test.
+
+
+## Owner standalone confirmation (2026-11-01)
+Owner reported Build Game works and the packaged project runs; when asked whether this was the new Release build with the grass packaging fix, owner replied yes. Preserve that owner-reported result; package path and independent artifact inspection were not captured. Full post-fix Release CI build/test continues in session 36628 with logs grass-release-full-ci-build.log and grass-release-full-ci-tests.log. Post-fix full Debug validation, exact-commit independent review and approved publication of matching Wicked checkpoint remain outstanding. No push or merge authorized.
+
+
+## Packaged weather artifact verification (2026-11-01)
+Located the owner's confirmed standalone output under the disposable build-game-isolated-fixture/Builds/Windows/Gate 3 Weather Presets Preview Windows Build. Its build-report.json records DX12 smoke passed, package isolation passed, safe rebuild passed and status gate5_validated_for_final_path; it also explicitly reports distribution_ready=false and one duplicate-scene warning, which must not be silently interpreted as release certification. Independently SHA-256 checked the packaged snowflake plus all nine owner thunder originals and all nine mono variants against source: zero mismatches. Owner reported launching the game successfully; visible/audible behavior remains the owner's report. Post-fix full Release suite passed 268/268; full Debug CI rebuild and tests continue under session 34672, logs grass-debug-full-ci-build.log and grass-debug-full-ci-tests.log.
+
+The package report's distribution_ready=false is the existing intentional LP06 promotion policy (docs/LP06_GATE5_SAFE_PROMOTION_CLOSEOUT.md), not a failed smoke test. The duplicate scene warning remains recorded. This package was built from dirty working trees and embeds their older HEAD revision labels; those labels do not certify the exact source and must not be treated as an exact-commit CI result.
+
+
+## Final post-fix local validation result (2026-11-01)
+Full post-fix Debug build completed and unfiltered CTest passed 260/260 (553.49 seconds), grass-debug-full-ci-tests.log. Full post-fix Release build and unfiltered CTest passed 268/268. Owner confirmed new Release Build Game and packaged project run. Packaged nine thunder originals, nine mono versions and snowflake independently hash verified. Local functional validation is complete; exact-commit independent review and approved remote publication/CI remain outstanding. Nothing pushed or merged.
+
+## Pre-alpha integration preparation (2026-11-01)
+Owner requests preparing the tested weather work and a fresh pre-alpha for testers. Local Wicked checkpoint c0cb547b6e5f2f8b3587ba4b30d0fe5fc704d3ee preserves accepted source. Local weather candidate will be combined with origin/main 0fbfe26, which already contains Inventory G1-G5. Original worktree and owner scenes remain preserved. Combined-source builds, exact-commit independent review, remote CI and tester package extraction proof are still required; no release gate or remote publication is claimed.
 ## 2026-10-28 G5 continuation closeout (owner acceptance and V3 candidate)
 
 Current branch/worktree: feature/inventory-core-g1-20261026 at C:\Users\paulw\source\repos\renegade-inventory-core-20261026; baseline commit b2da846 (uncommitted inventory G4/G5 changes preserved). Do not merge/push without owner approval.

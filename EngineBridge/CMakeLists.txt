@@ -165,6 +165,11 @@ add_library(RenegadeEngineBridge STATIC
     src/AudioService.cpp
     src/DecalProbeService.cpp
     src/CommandService.cpp
+    src/WeatherTransitionService.cpp
+    include/renegade/bridge/WeatherTransitionService.h
+    src/WeatherEffectsTransitionService.cpp
+    include/renegade/bridge/WeatherEffectsTransitionService.h
+    include/renegade/bridge/SheetLightningService.h
     src/CharacterDuplicateCommand.cpp
     src/HumanoidRetargetService.cpp
     src/DiagnosticService.cpp
@@ -537,3 +542,13 @@ endfunction()
 if(WIN32)
  include("${CMAKE_SOURCE_DIR}/cmake/RenegadeWaterfallResources.cmake")
 endif()
+# Embed the single lunar albedo in every linked Studio/Runtime/test binary.
+# No machine path or project-specific asset is required at runtime.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/moon/lroc_color_2k.jpg")
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/assets/moon/lroc_color_2k.jpg" _moon_hex HEX)
+string(REGEX REPLACE "(................................................................)" "\\1\n" _moon_hex "${_moon_hex}")
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," _moon_bytes "${_moon_hex}")
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/MoonSurfaceData.inc"
+    CONTENT "static const unsigned char MoonSurfaceBytes[] = {\n${_moon_bytes}\n};\n")
+target_sources(RenegadeEngineBridge PRIVATE src/MoonSurface.cpp)
+target_include_directories(RenegadeEngineBridge PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
