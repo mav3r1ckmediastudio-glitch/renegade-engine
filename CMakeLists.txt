@@ -291,6 +291,13 @@ if(WIN32)
         RenegadeMoonTests
         RenegadeShootingStarsTests
         RenegadeCloudFormationTests
+        RenegadeWeatherTransitionTests
+        RenegadeWeatherEffectsTransitionTests
+        RenegadeSheetLightningTests
+        RenegadeForkLightningTests
+        RenegadeWeatherLuaRuntimeTests
+        RenegadePrecipitationTests
+        RenegadeStudioPlayerStartCacheTests
         RenegadeDependencyProcessFixture
         RenegadeAssetRegistryProcessFixture
         # UI and HUD tests are registered in CTest and must also be built by CI.

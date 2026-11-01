@@ -1,3 +1,20 @@
+## 2026-11-01: Combined pre-alpha CI target correction
+
+Owner authorizes local/GitHub feature synchronization and pre-alpha preparation.
+Candidate parent de9fa6edd81529490204500091cb3037a2d92f7a combines accepted
+Weather V2 with main's rivers, waterfalls and inventory. Wicked remains pinned
+at 82557d439a41d104f559b0d3134d160b7bf6154e. Local combined Release build and
+unfiltered CTest passed 291/291; native Windows Debug/Release GitHub checks passed.
+Studio Debug CI found six registered test executables absent from the canonical
+RenegadeStudioCI build target, producing Not Run failures rather than failed
+assertions. CMakeLists.txt now includes these weather/cache targets and the
+precipitation target. No tests excluded and no runtime/visual behavior changed.
+Validation: rerun canonical four Windows checks and full local configurations on
+this correction. Commands: cmake --build <build> --config <configuration> --target
+RenegadeStudioCI --parallel 2; ctest --test-dir <build> -C <configuration>
+--output-on-failure. New package and independent exact-commit verification remain
+pending; do not close G5. Existing original UI Designer edits remain untouched.
+
 ## 2026-10-29: WEATHER V2 FIVE GATES CONFIRMED, G3 DEVELOPMENT ON SAME BRANCH
 
 Owner explicitly corrected previous seven-gate typo: **five gates**. Root `feature/weather-v2-all-gates` and Wicked matching branch remain the single continuing Weather V2 delivery. Gates 1-2 owner signed off. Gate 3 now has deterministic transition bridge, tests and editor Apply Now / Blend / Cancel controls; Release build and actual Studio/Runtime acceptance still pending. Read `docs/WEATHER_V2_GATE3_IMPLEMENTATION_CHECKPOINT_2026-10-29.md` then `docs/WEATHER_V2_GATE3_MODULAR_TRANSITIONS_PLAN_2026-10-29.md`. Do not claim G3 complete yet. Preserve accepted G1/G2 and river changes; no push/merge/PR/G4/G5/Snow V2.
