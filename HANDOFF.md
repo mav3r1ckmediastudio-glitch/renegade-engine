@@ -1,5 +1,18 @@
 ## 2026-11-01: Combined pre-alpha CI target correction
 
+## Recovery: hosted 361 river proof warm-up (2026-11-02)
+
+Parent 9591 passed local 305/305 and the new upload allocator regression passed
+hosted Debug/Release. The river proof timed out because fixed full software draws
+consumed its 600-second budget before linking. A separate local WARP/four-CPU
+candidate passed every original assertion, GPU readback and save/reopen in 218s.
+The hosted path now generates through normal scene updates before bounded native
+GPU draws. Desktop presentation, all assertions and 600-second timeout stay intact.
+See docs/RECOVERY_HOSTED_RIVER_PROOF_2026-11-02.md. Final successor CI/package
+acceptance remains required; use PR/VALIDATION for the exact accepted source.
+Owner currently reports no terrain darkness; retain the earlier report as a watch item.
+
+
 ## Recovery: coherent-UMA upload allocation (2026-11-02)
 
 The parent 7896 local Release 304/304 pass did not cover the hosted WARP failure:
@@ -7272,7 +7285,7 @@ Read docs/WEATHER_V2_G4_DENSE_CLOUD_PERFORMANCE_INVESTIGATION_2026-10-30.md. Own
 
 ## 2026-10-30: Measured G4 performance optimization candidate ready for owner
 
-Read docs/WEATHER_V2_G4_PERFORMANCE_OPTIMIZATION_REVIEW_2026-10-30.md and core decision. Owner explicitly authorized higher-risk optimization. CPU skips unused preview/capsule checks and uses a tested frame-local Player Start cache with fresh live transforms/invalidation. Separate Renegade sky lighting/reflection cache128 + half integration intervals; primary cloud sampling/density/lightning/rain/snow/audio unchanged. Controlled Runtime75.38->95.76 FPS horizon,74.89->93.48 up35 at90% coverage; cache pass5.7->2.9ms. Dense editor screenshot63 FPS versus previous48-50, but optimized-editor CSV is excluded due Runtime-camera/filename collision, so no precise editor CPU claim. Frozen sky mean delta0.0757/255, not universal parity.11/11 regressions pass and final normal Release builds pass. Both discarded shader-admission hoist and diagnostics removed. Original saved scene and all9 WAV hashes verified. Prior diagnostic PID15216/work preserved/minimized; separate normal-review project/launcher provided. Exact final identity in BUILD/g4-critical-source-manifest.json. No commit/push/merge or performance signoff; owner reviews normal all-effects scene, motion/night/reflections/FPS next.
+Read docs/WEATHER_V2_G4_PERFORMANCE_OPTIMIZATION_REVIEW_2026-10-30.md and core decision. Owner explicitly authorized higher-risk optimization. CPU skips unused preview/capsule checks and uses a tested frame-local Player Start cache with fresh live transforms/invalidation. Separate Renegade sky lighting/reflection cache128 + half integration intervals; primary cloud sampling/density/lightning/rain/snow/audio unchanged. Controlled Runtime75.38->95.76 FPS horizon,74.89->93.48 up35 at 90% coverage; cache pass5.7->2.9ms. Dense editor screenshot63 FPS versus previous48-50, but optimized-editor CSV is excluded due Runtime-camera/filename collision, so no precise editor CPU claim. Frozen sky mean delta0.0757/255, not universal parity.11/11 regressions pass and final normal Release builds pass. Both discarded shader-admission hoist and diagnostics removed. Original saved scene and all9 WAV hashes verified. Prior diagnostic PID15216/work preserved/minimized; separate normal-review project/launcher provided. Exact final identity in BUILD/g4-critical-source-manifest.json. No commit/push/merge or performance signoff; owner reviews normal all-effects scene, motion/night/reflections/FPS next.
 
 Final normal smoke: new Studio42896 shows65 FPS with authored rain; its real Test Game child5596 shows75 FPS at1920x1009 on the primary75-Hz display. Both left open. Earlier diagnostic15216 preserved/minimized. These are on-screen observations, not full all-effects timing quantiles. Exact final digest6a632022e6ec0f28553a7f1fe3f9ae02e6e06b56596d7b51afd774d9e34fb7d1. Editor75FPS goal remains open; owner checks new visual/reflection quality next. No source or build changes after11/11 passed.
 

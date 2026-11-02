@@ -111,6 +111,7 @@ static std::uint64_t GrassAndPaintDigest(const wi::terrain::Terrain& terrain)
 
 int main(int argc, char** argv)
 {
+
     if (argc != 2 && argc != 3) return 2;
     const auto out = fs::u8path(argv[1]);
     if (fs::exists(out) && !fs::is_empty(out))
@@ -532,10 +533,21 @@ int main(int argc, char** argv)
         const char* headlessFlag=std::getenv("RENEGADE_HOSTED_HEADLESS_GRAPHICS");
         const bool hostedOffscreen=defaultRecovery && headlessFlag &&
             std::string(headlessFlag)=="1";
-        // Match the existing hosted importer proof: execute native scene/render
-        // work and PNG readback without depending on desktop swapchain presentation.
-        // Owner hardware retains the complete Application::Run presentation path.
-        const auto proofFrame=[&]() {
+        // Hosted WARP is a software renderer. Generate the complete native
+        // terrain through normal scene updates before paying for full draws.
+        // The owner desktop keeps its original presentation/warm-up path.
+        // Both paths retain all 361-chunk, GPU readback and history assertions.
+        std::uint64_t hostedUpdateFrames = 0;
+        std::uint64_t hostedRenderFrames = 0;
+        const auto proofUpdate = [&]() {
+            wi::eventhandler::FireEvent(wi::eventhandler::EVENT_THREAD_SAFE_POINT,0);
+            render.PreUpdate();
+            render.Update(1.f/60.f);
+            gpu->SubmitCommandLists();
+            wi::renderer::UpdateGPUSuballocator();
+            ++hostedUpdateFrames;
+        };
+        const auto proofFrame = [&]() {
             if(!hostedOffscreen) {app.Run();return;}
             wi::eventhandler::FireEvent(wi::eventhandler::EVENT_THREAD_SAFE_POINT,0);
             render.PreUpdate();
@@ -544,21 +556,51 @@ int main(int argc, char** argv)
             render.Render();
             gpu->SubmitCommandLists();
             wi::renderer::UpdateGPUSuballocator();
+            ++hostedRenderFrames;
         };
         if(defaultRecovery) std::cout<<"RIVER_PROOF_FRAME_MODE "
             <<(hostedOffscreen?"hosted-offscreen":"desktop-presentation")<<std::endl;
-        if(defaultRecovery) progress("terrain-render-warmup");
-        for (int frame=0;frame<160;++frame)
+        if(hostedOffscreen)
         {
-            proofFrame();
-            if(frame%24==0) Sleep(10);
-        }
-        for(int ms=0;ms<15000 && wi::renderer::IsPipelineCreationActive();ms+=25)
-            Sleep(25);
-        for(int frame=0;frame<20;++frame) proofFrame();
-        if(defaultRecovery)
+            progress("terrain-generation-updates");
             for(int frame=0;frame<1800 && terrain->chunks.size()!=361;++frame)
-            {proofFrame();Sleep(5);}
+            {
+                proofUpdate();
+                if(frame%120==0)
+                    std::cout<<"RIVER_GENERATION_UPDATE "<<frame
+                             <<" chunks="<<terrain->chunks.size()
+                             <<" busy="<<terrain->IsGenerationBusy()<<std::endl;
+                Sleep(5);
+            }
+            terrain->Generation_Cancel();
+            Require(terrain->chunks.size()==361,
+                "Hosted native updates did not generate the full default terrain");
+            // Complete normal updates for the last published chunks. No data
+            // or renderer readiness is fabricated and no device flag changes.
+            for(int frame=0;frame<2;++frame) proofUpdate();
+            for(int ms=0;ms<15000 && wi::renderer::IsPipelineCreationActive();ms+=25)
+            {
+                wi::eventhandler::FireEvent(wi::eventhandler::EVENT_THREAD_SAFE_POINT,0);
+                Sleep(25);
+            }
+            progress("terrain-gpu-warmup");
+            for(int frame=0;frame<3;++frame) proofFrame();
+        }
+        else
+        {
+            if(defaultRecovery) progress("terrain-render-warmup");
+            for(int frame=0;frame<160;++frame)
+            {
+                proofFrame();
+                if(frame%24==0) Sleep(10);
+            }
+            for(int ms=0;ms<15000 && wi::renderer::IsPipelineCreationActive();ms+=25)
+                Sleep(25);
+            for(int frame=0;frame<20;++frame) proofFrame();
+            if(defaultRecovery)
+                for(int frame=0;frame<1800 && terrain->chunks.size()!=361;++frame)
+                {proofFrame();Sleep(5);}
+        }
         if(defaultRecovery) progress("terrain-generated");
         terrain->Generation_Cancel();
         // Never rewrite source chunk buffers while a previous submitted GPU
@@ -590,7 +632,10 @@ int main(int argc, char** argv)
             CreateRiverSplineCommand create(scene,
                 {{-85,ground,0},{-40,ground,0},{0,ground,0},{40,ground,0},{85,ground,0}},options);
             Require(create.Execute(),"Default river creation failed");
-            for(int frame=0;frame<30;++frame)proofFrame();
+            if(hostedOffscreen)
+                for(int frame=0;frame<2;++frame) proofUpdate();
+            else
+                for(int frame=0;frame<30;++frame) proofFrame();
             gpu->WaitForGPU();terrain->Generation_Cancel();
             const auto river=create.CreatedEntity();
             const auto paint=GrassAndPaintDigest(*terrain);
@@ -647,12 +692,15 @@ int main(int argc, char** argv)
                     DirectX::XMVectorSet(0,ground,0,1),DirectX::XMVectorSet(0,1,0,0))));
             camera.UpdateCamera();
             progress("history-masks-external-edit-passed");
-            for(int frame=0;frame<60;++frame)proofFrame();
+            for(int frame=0;frame<(hostedOffscreen?8:60);++frame)proofFrame();
             gpu->WaitForGPU();
             Require(wi::helper::saveTextureToFile(render.GetRenderResult3D(),
                 (out/"default-linked-river.png").generic_u8string()),"Default river screenshot failed");
             Require(!CaptureRiverWaterPrisms(scene).empty(),
                 "Default sparse-schema river lost underwater volume");
+            if(hostedOffscreen)
+                std::cout<<"HOSTED_NATIVE_GPU_FRAMES="<<hostedRenderFrames
+                         <<" UPDATE_FRAMES="<<hostedUpdateFrames<<std::endl;
             progress("render-readback-passed");
             const auto filename=(out/"default-river.wiscene").generic_u8string();
             wi::Archive disk(filename,false,false);scene.Serialize(disk);
