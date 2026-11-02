@@ -381,3 +381,7 @@ if(TARGET RenegadeStudioCI)
         RenegadeWorldPickupControllerTests
     )
 endif()
+
+if(TARGET RenegadeStudioCI AND TARGET RenegadeRuntimeSceneTransitionTests)
+    add_dependencies(RenegadeStudioCI RenegadeRuntimeSceneTransitionTests)
+endif()

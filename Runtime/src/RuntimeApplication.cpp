@@ -71,6 +71,7 @@ namespace renegade::runtime
         scenes_ = &scenes;
         projectRoot_ = std::move(projectRoot);
         scene = &scenes.GetScene();
+        sceneUpdated_ = false;
         renderSettingsInitialized_ = false;
         renderSettingsSceneRevision_ = 0;
     }
@@ -240,6 +241,8 @@ namespace renegade::runtime
                 out<<"\n";
             }
         }
+        updatedSceneRevision_ = scenes_ != nullptr ? scenes_->Revision() : 0;
+        sceneUpdated_ = scenes_ != nullptr;
         // Wicked disables native button input at dt=0. World pause must not
         // disable the menu that owns that pause. The base zero-time GUI pass
         // performs no input; advance the native GUI once with real UI time.
@@ -248,6 +251,10 @@ namespace renegade::runtime
 
     void RuntimeRenderPath::Render() const
     {
+        // A late Story Flow/input/script transition must not dispatch work on
+        // a scene whose GPU resources have never been prepared. Keep the last
+        // completed frame until the normal Update runs for the new revision.
+        if (!SceneReadyForRender()) return;
         auto riverBindings=riverFlow_.Bind();
         riverFlow_.Dispatch();
         wi::RenderPath3D::Render();
@@ -276,6 +283,7 @@ namespace renegade::runtime
 
     void RuntimeRenderPath::PreRender()
     {
+        if (!SceneReadyForRender()) return;
         riverUnderwater_.Update(*this);
         auto riverBindings=riverFlow_.Bind();
         wi::RenderPath3D::PreRender();

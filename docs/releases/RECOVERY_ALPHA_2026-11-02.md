@@ -17,6 +17,8 @@ Riverbed metadata saved by this version uses schema 2. It reads earlier schema 1
 - Living Core has source-backed river/waterfall answers and explicit Git-free package identity. Existing workflow records were revalidated against current controls, static OBJ guidance restored, and the complete offline workflow suite added to CTest. Whole-file text fingerprints tolerate Git LF/CRLF checkout conversion while rejecting every other source change. New packages bake knowledge for their own source revision. Existing extracted alphas do not update themselves when Git changes.
 - Tools/Package-RecoveryAlpha.py replaces the earlier ad hoc staging procedure. It preserves old archives, stages current binaries/companion source, rebuilds and verifies packaged knowledge, hashes files and requires recorded CI/package checks before creating a versioned ZIP.
 
+- Build Windows Game rebases verified built-in grass particles and river normal references when a project was saved under another Studio installation. Native grass resources are included in the export. Discovery and staging operate on detached scenes; unrelated external assets and custom maps remain blocked.
+- A Story Flow Start action or quick load can replace a scene after its native update. Runtime retains the completed frame until the new scene has updated, so enabled volumetric clouds never dispatch with uncreated resources.
 - Studio can start when Windows has no default audio output device. Native sound remains unavailable; configure an output device and restart Studio to enable it.
 
 ## Draw and link a river

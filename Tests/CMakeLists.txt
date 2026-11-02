@@ -1861,3 +1861,31 @@ set_target_properties(RenegadeInventoryRiverCombinedProof PROPERTIES FOLDER "Ren
 if(WIN32)
     include(${CMAKE_CURRENT_LIST_DIR}/AudioEndpointRecovery.cmake)
 endif()
+
+# Reproduce the real post-input scene adoption boundary using the production
+# RuntimeRenderPath, then verify enabled cloud resources and subsequent frames.
+if(WIN32)
+    add_executable(RenegadeRuntimeSceneTransitionTests
+        RuntimeSceneTransitionTests.cpp
+        ../Runtime/src/RuntimeApplication.cpp
+        ../Runtime/src/RuntimeLiveDiagnostics.cpp
+        ../Runtime/src/RuntimeImpactDustResource.cpp
+        ../Runtime/src/WaterfallTransparentRuntime.cpp)
+    target_link_libraries(RenegadeRuntimeSceneTransitionTests PRIVATE Renegade::RuntimeBootstrap)
+    target_compile_definitions(RenegadeRuntimeSceneTransitionTests PRIVATE
+        UNICODE _UNICODE
+        RENEGADE_SOURCE_REVISION="${G13E3_SOURCE_REVISION}"
+        RENEGADE_WICKED_REVISION="${G13E3_WICKED_REVISION}")
+    target_compile_options(RenegadeRuntimeSceneTransitionTests PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>" "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    set_target_properties(RenegadeRuntimeSceneTransitionTests PROPERTIES FOLDER "Renegade/Tests")
+    add_test(NAME RenegadeRuntimeSceneTransitionTests COMMAND RenegadeRuntimeSceneTransitionTests)
+    set_tests_properties(RenegadeRuntimeSceneTransitionTests PROPERTIES RUN_SERIAL TRUE TIMEOUT 180)
+endif()
+
+if(TARGET RenegadeRuntimeSceneTransitionTests)
+    add_custom_command(TARGET RenegadeRuntimeSceneTransitionTests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+            "$<TARGET_FILE_DIR:RenegadeRuntimeSceneTransitionTests>")
+endif()

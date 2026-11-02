@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+namespace wi::scene { class Scene; }
+
 namespace renegade::bridge
 {
     // Renegade-owned files that live beside Studio rather than inside a
@@ -22,6 +24,14 @@ namespace renegade::bridge
         std::string sourcePath;
         std::string destinationPath;
     };
+
+    // CPU-only rebinding of identified built-in resources on detached scenes.
+    // No owner archive writes or GPU resource uploads. referenceRoot is used
+    // only for package-relative scene references during the staging copy.
+    [[nodiscard]] std::size_t RebindWindowsGameBundledSceneResources(
+        wi::scene::Scene& scene,
+        const std::vector<WindowsGameBundledResource>& resources,
+        const std::string& referenceRoot = {});
 
     struct StoryFlowRuntimeRoute
     {

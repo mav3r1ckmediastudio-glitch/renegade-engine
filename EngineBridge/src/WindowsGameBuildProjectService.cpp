@@ -9,6 +9,9 @@
 
 #include <algorithm>
 #include <array>
+#include <fstream>
+#include <iterator>
+
 #include <deque>
 #include <filesystem>
 #include <sstream>
@@ -17,6 +20,111 @@
 
 namespace renegade::bridge
 {
+    std::size_t RebindWindowsGameBundledSceneResources(
+        wi::scene::Scene& scene,
+        const std::vector<WindowsGameBundledResource>& resources,
+        const std::string& referenceRoot)
+    {
+        namespace fs = std::filesystem;
+        using Material = wi::scene::MaterialComponent;
+        std::size_t changed = 0;
+        const auto find = [&](const char* id, const char* destination)
+            -> const WindowsGameBundledResource*
+        {
+            const auto it = std::find_if(resources.begin(), resources.end(),
+                [&](const auto& r) { return r.logicalName == id &&
+                    r.destinationPath == destination && !r.sourcePath.empty(); });
+            return it == resources.end() ? nullptr : &*it;
+        };
+        const auto setName = [&](auto& slot, const WindowsGameBundledResource& resource)
+        {
+            const auto name = referenceRoot.empty() ? resource.sourcePath :
+                (fs::u8path(referenceRoot) / fs::u8path(resource.destinationPath))
+                    .lexically_normal().generic_u8string();
+            if (slot.name != name) { slot.name = name; ++changed; }
+        };
+        // A filename alone is never authority for replacing creator textures.
+        // Managed vegetation/native river ownership and the original built-in
+        // path must agree; retained or on-disk bytes must match the declared
+        // current asset as well. Missing/unverifiable/custom resources stay
+        // visible to the existing fail-closed dependency collector.
+        const auto matches = [&](const auto& slot, const WindowsGameBundledResource& resource)
+        {
+            const auto path = fs::u8path(slot.name).lexically_normal().generic_u8string();
+            const auto suffix = std::string("/") + resource.destinationPath;
+            if (path != resource.destinationPath &&
+                (path.size() < suffix.size() ||
+                 path.compare(path.size()-suffix.size(), suffix.size(), suffix) != 0))
+                return false;
+            std::ifstream current(fs::u8path(resource.sourcePath), std::ios::binary);
+            if (!current) return false;
+            const std::vector<unsigned char> expected(
+                (std::istreambuf_iterator<char>(current)), {});
+            if (current.bad() || expected.empty()) return false;
+            if (slot.resource.IsValid())
+            {
+                const auto& embedded = slot.resource.GetFileData();
+                if (!embedded.empty())
+                    return embedded.size() == expected.size() &&
+                        std::equal(embedded.begin(), embedded.end(), expected.begin());
+            }
+            std::ifstream old(fs::u8path(slot.name), std::ios::binary);
+            if (!old) return false;
+            const std::vector<unsigned char> actual(
+                (std::istreambuf_iterator<char>(old)), {});
+            return !old.bad() && actual == expected;
+        };
+        const char* ids[] = {"renegade-terrain-default-grass-basecolor",
+            "renegade-terrain-default-grass-normal", "renegade-terrain-default-grass-surface"};
+        const char* destinations[] = {
+            "Content/terrain/default_grass/default_grass_basecolor.tga",
+            "Content/terrain/default_grass/default_grass_normal.tga",
+            "Content/terrain/default_grass/default_grass_surface.tga"};
+        const int slots[] = {Material::BASECOLORMAP, Material::NORMALMAP, Material::SURFACEMAP};
+        const WindowsGameBundledResource* ground[] = {
+            find(ids[0], destinations[0]),find(ids[1], destinations[1]),find(ids[2], destinations[2])};
+        const auto* grass = find("renegade-terrain-native-grass-particle", "Content/terrain/grassparticle.png");
+        for (std::size_t ti=0; ti<scene.terrains.GetCount(); ++ti)
+        {
+            auto& terrain=scene.terrains[ti];
+            if (ground[0] && ground[1] && ground[2])
+                for (const auto entity:terrain.materialEntities)
+                    if (auto* material=scene.materials.GetComponent(entity))
+                        if (wi::helper::GetFileNameFromPath(material->textures[Material::BASECOLORMAP].name)
+                            == "default_grass_basecolor.tga")
+                            for (std::size_t i=0;i<3;++i) setName(material->textures[slots[i]],*ground[i]);
+            // Detached archives have not run Terrain::Update, so its transient
+            // terrainEntity field is not an identity authority yet.
+            const auto* metadata=scene.metadatas.GetComponent(scene.terrains.GetEntity(ti));
+            if (!grass || !metadata ||
+                !metadata->bool_values.has("renegade.wicked_vegetation.manual_terrain_v1") ||
+                !metadata->bool_values.get("renegade.wicked_vegetation.manual_terrain_v1")) continue;
+            const auto rebindGrass=[&](Material& material)
+            {
+                auto& slot=material.textures[Material::BASECOLORMAP];
+                if (matches(slot,*grass)) setName(slot,*grass);
+            };
+            rebindGrass(terrain.grass_material);
+            if (auto* material=scene.materials.GetComponent(terrain.grassEntity)) rebindGrass(*material);
+            for (auto& entry:terrain.chunks)
+                if (auto* material=scene.materials.GetComponent(entry.second.grass_entity)) rebindGrass(*material);
+        }
+        const auto* normal=find("renegade-river-normal-map", "Content/river/waterNormalMap.jpg");
+        if (normal)
+            for (std::size_t i=0;i<scene.splines.GetCount();++i)
+            {
+                const auto entity=scene.splines.GetEntity(i);
+                const auto* metadata=scene.metadatas.GetComponent(entity);
+                auto* material=scene.materials.GetComponent(entity);
+                if (!material || material->shaderType!=Material::SHADERTYPE_WATER ||
+                    !metadata || !metadata->string_values.has("renegade.river.native-caustics.v1") ||
+                    metadata->string_values.get("renegade.river.native-caustics.v1")!="1") continue;
+                auto& slot=material->textures[Material::NORMALMAP];
+                if (matches(slot,*normal)) setName(slot,*normal);
+            }
+        return changed;
+    }
+
     namespace
     {
         namespace fs = std::filesystem;
@@ -298,46 +406,7 @@ namespace renegade::bridge
                     return false;
                 }
                 auto& scene = *prepared.MutablePreparedScene();
-                using Material = wi::scene::MaterialComponent;
-                const std::array<const char*, 3> names = {
-                    "default_grass_basecolor.tga", "default_grass_normal.tga",
-                    "default_grass_surface.tga"};
-                const std::array<int, 3> slots = {
-                    Material::BASECOLORMAP, Material::NORMALMAP, Material::SURFACEMAP};
-                const std::array<const char*, 3> logicalNames = {
-                    "renegade-terrain-default-grass-basecolor",
-                    "renegade-terrain-default-grass-normal",
-                    "renegade-terrain-default-grass-surface"};
-                std::array<std::string, 3> governed{};
-                for (std::size_t i = 0; i < names.size(); ++i)
-                {
-                    const std::string destination =
-                        std::string("Content/terrain/default_grass/") + names[i];
-                    const auto it = std::find_if(bundledResources.begin(), bundledResources.end(),
-                        [&](const WindowsGameBundledResource& resource)
-                        { return resource.logicalName == logicalNames[i] &&
-                                 resource.destinationPath == destination; });
-                    if (it != bundledResources.end())
-                        governed[i] = it->sourcePath;
-                }
-                if (std::all_of(governed.begin(), governed.end(),
-                        [](const std::string& value) { return !value.empty(); }))
-                {
-                    for (std::size_t ti = 0; ti < scene.terrains.GetCount(); ++ti)
-                    {
-                        for (const auto entity : scene.terrains[ti].materialEntities)
-                        {
-                            auto* material = scene.materials.GetComponent(entity);
-                            if (!material) continue;
-                            // This is the same default-material discriminator used
-                            // by RebindDefaultTerrainMaterials during scene load.
-                            const auto& base = material->textures[Material::BASECOLORMAP].name;
-                            if (wi::helper::GetFileNameFromPath(base) != names[0]) continue;
-                            for (std::size_t i = 0; i < names.size(); ++i)
-                                material->textures[slots[i]].name = governed[i];
-                        }
-                    }
-                }
+                (void)RebindWindowsGameBundledSceneResources(scene, bundledResources);
                 InspectWisceneDependencies(scene, document);
                 readerError.clear();
                 return true;
