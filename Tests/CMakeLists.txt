@@ -1902,3 +1902,14 @@ if(WIN32)
     add_test(NAME RenegadeGpuUploadBufferTests COMMAND RenegadeGpuUploadBufferTests)
     set_tests_properties(RenegadeGpuUploadBufferTests PROPERTIES RUN_SERIAL TRUE TIMEOUT 180)
 endif()
+
+# Real Win32 zero-client-area and minimize/restore binding regression.
+if(WIN32)
+    add_executable(RenegadeNativeWindowSurfaceTests NativeWindowSurfaceTests.cpp)
+    target_include_directories(RenegadeNativeWindowSurfaceTests PRIVATE
+        "${CMAKE_SOURCE_DIR}/EngineBridge/include")
+    target_link_libraries(RenegadeNativeWindowSurfaceTests PRIVATE user32)
+    set_target_properties(RenegadeNativeWindowSurfaceTests PROPERTIES FOLDER "Renegade/Tests")
+    add_test(NAME RenegadeNativeWindowSurfaceTests COMMAND RenegadeNativeWindowSurfaceTests)
+    set_tests_properties(RenegadeNativeWindowSurfaceTests PROPERTIES RUN_SERIAL TRUE TIMEOUT 30)
+endif()

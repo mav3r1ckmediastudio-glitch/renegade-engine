@@ -23,6 +23,8 @@ Riverbed metadata saved by this version uses schema 2. It reads earlier schema 1
 
 - Coherent-memory DX12 adapters use valid read-only upload buffers for native mesh suballocations. Normal GPU-memory allocations retain unordered-access support. This repairs the hosted WARP allocation failure without reducing terrain extent or bypassing assertions.
 
+- Studio and Runtime retain their last valid graphics canvas during minimized or zero-client-area transitions. A valid restored size resumes normal binding; native resize events no longer request invalid zero-sized render targets.
+
 ## Draw and link a river
 
 1. Create terrain with normal defaults in a disposable level.

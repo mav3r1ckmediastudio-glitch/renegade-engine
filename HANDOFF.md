@@ -7645,3 +7645,13 @@ Preserved diagnostic evidence: audit receipt IDs ALPHA_EXPORT_PROBE_20261102_062
 Pre-integration evidence: 3232 Release build and 303/303 unfiltered CTest passed (0 skipped; 743.90 seconds). Separate native export regression passed. Separate actual RuntimeRenderPath graphics regression passed, then two read-only inspections of the saved QA archives rebased all old-install references with unchanged input SHA-256. These are pre-integration results; final exact-head CI, full CTest and actual packaged Studio/Runtime/export acceptance remain required.
 
 Integrated precommit Studio and Runtime Release builds passed. The complete offline assistant suite remained 84/84. A diagnostic Runtime using the repaired production classes completed normal Title > Main Menu > New Game > Start into the preserved river/storm QA level; the owned-window capture showed visible water, clouds, rain, HUD and 75 FPS without the previous access violation. These diagnostic executables are excluded from the alpha manifest. Reproduction commands: `cmake --build <build> --config Release --target RenegadeStudio RenegadeRuntime --parallel 1`; `python Tests/AssistantWorkflowSuite.py --repo <checkout> --output <new-audit-directory>`. Native graphics and archive commands, executable/input hashes and screenshots are in the linked PR audit receipts.
+
+## Native window surface follow-up - 2026-11-02
+
+The e12bc01 baseline reached four green CI checks and local 305/305, but actual packaged Studio crashed on a 0x0 render-target allocation during minimize/restore. Package acceptance remains blocked for that baseline. See docs/RECOVERY_NATIVE_WINDOW_SURFACE_2026-11-02.md and PR189 for the dump attribution, bounded Windows binding repair and targeted evidence.
+
+Changed: Studio/src/main_Windows.cpp, Runtime/src/main_Windows.cpp, EngineBridge/include/renegade/bridge/NativeWindowSurface.h, Tests/NativeWindowSurfaceTests.cpp, Tests/CMakeLists.txt and recovery documentation. No Wicked source or pin change.
+
+Precommit verification: Studio/Runtime Release builds passed; new real Win32 regression passed; all 59 SourceContract tests passed; original-basename Studio survived 5 minimize/restore cycles and two true zero-height client states, with restored Project Hub visually checked. This does not replace final-head validation.
+
+Next: finish river/importer/grass/weather/runtime/export/assistant regression checks, run full 306 local tests and all four CI jobs on the final head, test the staged package, create and freshly extract/launch its archive. Preserve all existing work/backups; no main merge or external distribution. The terrain-darkness report is currently unreproduced and is not claimed repaired. Independent exact-head review remains pending.

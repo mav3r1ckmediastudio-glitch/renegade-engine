@@ -6,6 +6,7 @@
 #include "wiBacklog.h"
 
 #include <Windows.h>
+#include "renegade/bridge/NativeWindowSurface.h"
 #include <shellapi.h>
 
 #include <cstdint>
@@ -415,7 +416,7 @@ namespace
         case WM_SIZE:
             if (application.is_window_active)
             {
-                application.SetWindow(window);
+                (void)renegade::bridge::TryBindDrawableNativeWindow(window, application);
             }
             return 0;
 
@@ -432,7 +433,7 @@ namespace
                 SWP_NOACTIVATE | SWP_NOZORDER);
             if (application.is_window_active)
             {
-                application.SetWindow(window);
+                (void)renegade::bridge::TryBindDrawableNativeWindow(window, application);
             }
             return 0;
         }
@@ -585,7 +586,7 @@ int APIENTRY wWinMain(
     }
 
     ShowWindow(window, showCommand);
-    application.SetWindow(window);
+    (void)renegade::bridge::TryBindDrawableNativeWindow(window, application);
 
     bool startupHandled = false;
     bool quitWindowRequested = false;
