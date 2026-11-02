@@ -98,7 +98,6 @@ def stage(args):
     for name in ("README.md", "HANDOFF.md"):
         shutil.copy2(checkout / name, source / name)
     # Curated facts may cite source outside the usual companion source folders.
-    definitions = json.loads((checkout / "Tools/assistant_knowledge/facts.json").read_text(encoding="utf-8"))
     def evidence(value):
         if isinstance(value, dict):
             name = value.get("path")
@@ -111,7 +110,9 @@ def stage(args):
             for item in value.values(): evidence(item)
         elif isinstance(value, list):
             for item in value: evidence(item)
-    evidence(definitions)
+    # Preserve evidence for existing manual/workflow guides as well as fact cards.
+    for definition in (checkout / "Tools/assistant_knowledge").glob("*.json"):
+        evidence(json.loads(definition.read_text(encoding="utf-8")))
     database = root / "BUILD/assistant_knowledge.sqlite"
     database.parent.mkdir()
     sys.path.insert(0, str(checkout / "Tools/assistant_knowledge"))
