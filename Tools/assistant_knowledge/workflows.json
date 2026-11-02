@@ -1921,7 +1921,7 @@
       "expected_result": "The model is registered in your chosen Content folder and its placed instance is retained in the saved level. This does not automatically add collision, NPC behaviour or weapon gameplay.",
       "troubleshooting": [
         "If IMPORT ASSET is disabled, wait for the preview; if conversion fails, read the reported error rather than assuming an asset was saved.",
-        "For OBJ/FBX, keep images with the exported source. missing or changed textures appear as source warnings; use material/map selection and **CHOOSE / REPLACE MAP**. A source changed after preview can require reopening the importer.",
+        "For OBJ/FBX, missing or changed textures appear as source warnings. Keep images with the exported source; use material/map selection and **CHOOSE / REPLACE MAP**. A source changed after preview can require reopening the importer.",
         "A GLB filename does not guarantee embedded textures. External image references are not supported by this import path; export a self-contained GLB.",
         "If the status says COMMITTED; REVEAL FAILED, browse the chosen Content folder. Do not import again merely because the card was not revealed.",
         "An existing name/destination can be rejected to protect an asset. Check the error and choose a distinct name instead of overwriting files manually.",

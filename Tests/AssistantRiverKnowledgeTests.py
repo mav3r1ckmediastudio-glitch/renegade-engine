@@ -38,6 +38,7 @@ def main():
         'Why does my river have gaps in the terrain?':'reported pre-alpha defect',
         'What are waterfalls in Renegade?':'ADD WATERFALL',
         'How do I make a river?':'LINK / UPDATE BED',
+        'How do tributaries work?':'tributary',
     }
     for question,needle in cases.items():
         result=bridge_server.process_chat(
@@ -45,7 +46,7 @@ def main():
         assert result['route']=='local_verified_knowledge',(question,result)
         assert needle.casefold() in result['answer'].casefold(),(question,result)
         assert "I don't have a verified Renegade answer" not in result['answer']
-    print(f"PASS: {len(cases)} real assistant routes, 3 source-verified river/waterfall facts")
+    print(f"PASS: {len(cases)} real assistant routes, 4 source-verified river/waterfall facts")
 
 if __name__=='__main__':
     main()

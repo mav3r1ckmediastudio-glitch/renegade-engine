@@ -33,7 +33,7 @@ ENGINE_TERMS = frozenset({
     "glass", "impact", "impacts", "decals", "decal", "damage", "sfx", "fx",
     "weapons", "equipment", "loadout", "loadouts", "surface", "surfaces", "retarget", "script",
     "npc", "scene", "scenes", "asset", "assets", "launch", "player",
-    "model", "import", "importer", "terrain", "river", "rivers", "riverbed", "riverbeds",
+    "model", "import", "importer", "obj", "terrain", "river", "rivers", "riverbed", "riverbeds",
     "waterfall", "waterfalls", "tributary", "tributaries", "animation",
     "character", "characters", "npcs", "scripts", "action", "actions", "lua",
     "patrol", "wander", "wandering", "socket", "sockets", "psp", "timing", "gravity",
@@ -48,7 +48,7 @@ MAX_ANSWER_LENGTH = 1100
 def is_renegade_question(question: str) -> bool:
     tokens = set(re.findall(r"[a-z0-9_]+", question.lower()))
     import_request=bool(re.search(
-        r"\b(?:import|load|bring in)\b.{0,55}\b(?:mesh|glb|fbx|3d object)s?\b",
+        r"\b(?:import|load|bring in)\b.{0,55}\b(?:mesh|glb|fbx|obj|3d object)s?\b",
         question,re.IGNORECASE))
     stock_request=bool(re.search(
         r"\b(?:set up|setup|make|create|add|attach|wire|connect|trigger)\b.{0,50}\b(?:sliding door|interactive door|door action|switch|trigger zone|pickup|relay|sound action|play sound action)\b",
@@ -87,7 +87,7 @@ def knowledge_reply(question: str, repo: Path, database: Path) -> str:
     if recipe:
         return recipe
     how_to = bool(re.search(r"\b(?:how|steps|show me)\b",question,re.IGNORECASE))
-    river_topic = bool(re.search(r"\b(?:river|rivers|riverbed|riverbeds|waterfall|waterfalls)\b",
+    river_topic = bool(re.search(r"\b(?:river|rivers|riverbed|riverbeds|waterfall|waterfalls|tributary|tributaries)\b",
                                  question,re.IGNORECASE))
     facts = result["verified_facts"]
     if how_to and not (river_topic and facts):
@@ -120,8 +120,7 @@ def knowledge_reply(question: str, repo: Path, database: Path) -> str:
     parts = []
     budget = MAX_ANSWER_LENGTH
     if how_to and river_topic:
-        parts.append("I can explain the verified controls, but this release has not yet passed "
-                     "the complete river/waterfall walkthrough.\n")
+        parts.append("These are source-verified controls; I cannot inspect or change your open level.\n")
     for fact in facts:
         source = fact["sources"][0] if fact.get("sources") else ""
         paragraph = fact["answer"].strip()

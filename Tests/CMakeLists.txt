@@ -217,6 +217,12 @@ if(Python3_Interpreter_FOUND)
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/AssistantWorkflowSuite.py"
             --repo "${CMAKE_SOURCE_DIR}"
             --output "${CMAKE_CURRENT_BINARY_DIR}/assistant-workflow-suite")
+    find_program(RENEGADE_NODE_EXECUTABLE NAMES node node.exe)
+    if(RENEGADE_NODE_EXECUTABLE)
+        add_test(NAME RenegadeAssistantClientRecoveryRouting
+            COMMAND "${RENEGADE_NODE_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/Tools/assistant_presence/tests/test-recovery-knowledge-routing.cjs")
+    endif()
     add_test(NAME RenegadeDiagnosticReaderTests
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/ReadRenegadeDiagnosticsTests.py")
 endif()

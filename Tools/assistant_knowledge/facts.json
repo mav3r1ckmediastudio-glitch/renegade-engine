@@ -376,7 +376,7 @@
         "nodes",
         "inspector"
       ],
-      "answer": "Renegade Studio has editable spline rivers. The River V2 controls include ENABLE SPLINE FLOW + FOAM, flow arrows, river speed, contact foam, node-by-node width, and tributary connections. Select a river or control node to inspect the available settings. These source-verified controls do not prove that the released river is fitting the terrain correctly: alignment is under investigation in pre-alpha 2026.11.01.1.",
+      "answer": "Renegade Studio has editable spline rivers. The River V2 controls include ENABLE SPLINE FLOW + FOAM, flow arrows, river speed, contact foam, node-by-node width, and tributary connections. Select a river or control node to inspect the available settings. Riverbed & Banks links the water spline to its carved channel. If a safety check refuses linking, read the Inspector reason; do not bypass it.",
       "sources": [
         {
           "path": "Studio/src/RiverFlowStudioIntegration.cpp",
@@ -482,7 +482,7 @@
         "banks",
         "sculpt"
       ],
-      "answer": "To draw a river: 1. Open the Terrain river controls and select DRAW RIVER. 2. Left-drag across the terrain to draw its water spline; release to finish. 3. Select the new River Water in the scene or hierarchy. 4. In RIVERBED & BANKS adjust BED DEPTH and BANK WIDTH, then press LINK / UPDATE BED. 5. Check that its channel reports linked and that the water meets the banks. On brand-new flat terrain, ALLOW DEEPER BEDS +10M may first be needed if the desired bed extends below the terrain height range. If the water does not fit after linking, that is a reported 2026.11.01.1 defect; do not assume it is fixed. These are source-checked controls; full fresh-extract Studio workflow acceptance is pending.",
+      "answer": "To draw a river: 1. Open the Terrain river controls and select DRAW RIVER. 2. Left-drag across the terrain to draw its water spline; release to finish. 3. Turn drawing off and select the new River Water in the scene or hierarchy. 4. In RIVERBED & BANKS adjust BED DEPTH and BANK WIDTH, then press LINK / UPDATE BED. 5. Check that its channel reports linked and that visible water meets the banks. On brand-new flat terrain, ALLOW DEEPER BEDS +10M may first be needed if the desired bed extends below the terrain height range. If linking is refused, read the Inspector reason and respect the safety limits. If water still does not fit after a successful link, preserve a project copy and screenshot for a defect report.",
       "sources": [
         {
           "path": "Studio/src/StudioApplication.cpp",
