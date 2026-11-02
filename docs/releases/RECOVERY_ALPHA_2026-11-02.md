@@ -12,10 +12,12 @@ Riverbed metadata saved by this version uses schema 2. It reads earlier schema 1
 
 ## Included repairs
 
-- OBJ is restored in the normal model picker/converter, including OBJ/MTL textures and retained source dependencies. Material/map selection, CHOOSE / REPLACE MAP and source warnings are restored. FBX/GLB remain supported. Missing textures can be assigned in the importer; passing fixtures do not prove every third-party FBX compatible.
+- OBJ is restored in the normal model picker/converter, including OBJ/MTL textures and retained source dependencies. Alternating material runs (A / B / A) retain their face assignments. Material/map selection, CHOOSE / REPLACE MAP and source warnings are restored. FBX/GLB remain supported. Missing textures can be assigned in the importer; passing fixtures do not prove every third-party FBX compatible.
 - Link / Update Bed supports the default 361 resident chunks using sparse riverbed storage and local segment filtering. The 81 edited-chunk, 32 MiB document, 32-layer and 32-million composition-work limits remain. External height edits and unsupported transforms are refused instead of overwritten. The Inspector shows backend refusal reasons.
 - Living Core has source-backed river/waterfall answers and explicit Git-free package identity. Existing workflow records were revalidated against current controls, static OBJ guidance restored, and the complete offline workflow suite added to CTest. Whole-file text fingerprints tolerate Git LF/CRLF checkout conversion while rejecting every other source change. New packages bake knowledge for their own source revision. Existing extracted alphas do not update themselves when Git changes.
 - Tools/Package-RecoveryAlpha.py replaces the earlier ad hoc staging procedure. It preserves old archives, stages current binaries/companion source, rebuilds and verifies packaged knowledge, hashes files and requires recorded CI/package checks before creating a versioned ZIP.
+
+- Studio can start when Windows has no default audio output device. Native sound remains unavailable; configure an output device and restart Studio to enable it.
 
 ## Draw and link a river
 

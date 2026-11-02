@@ -291,7 +291,7 @@ void ImportModel_OBJ(const std::string& fileName, Scene& scene)
 
 			object.meshID = meshEntity;
 
-			wi::unordered_map<int, int> registered_materialIndices = {};
+			int previousMaterialIndex = -1;
 			wi::unordered_map<index_and_mat, uint32_t> uniqueVertices = {};
 
 			for (size_t i = 0; i < shape.mesh.indices.size(); i += 3)
@@ -339,9 +339,10 @@ void ImportModel_OBJ(const std::string& fileName, Scene& scene)
 					}
 
 					int materialIndex = std::clamp(i / 3 < shape.mesh.material_ids.size() ? shape.mesh.material_ids[i / 3] : 0, 0, int(materialLibrary.size()) - 1); // this indexes the material library
-					if (registered_materialIndices.count(materialIndex) == 0)
+					if (materialIndex != previousMaterialIndex)
 					{
-						registered_materialIndices[materialIndex] = (int)mesh.subsets.size();
+						// Preserve each contiguous material run (including A -> B -> A).
+						previousMaterialIndex = materialIndex;
 						mesh.subsets.push_back(MeshComponent::MeshSubset());
 						mesh.subsets.back().materialID = materialLibrary[materialIndex];
 						mesh.subsets.back().indexOffset = (uint32_t)mesh.indices.size();

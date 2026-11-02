@@ -1857,3 +1857,7 @@ target_compile_definitions(RenegadeInventoryG5PackageProof PRIVATE
 add_executable(RenegadeInventoryRiverCombinedProof InventoryRiverCombinedProof.cpp)
 target_link_libraries(RenegadeInventoryRiverCombinedProof PRIVATE Renegade::EngineBridge)
 set_target_properties(RenegadeInventoryRiverCombinedProof PROPERTIES FOLDER "Renegade/Tests")
+
+if(WIN32)
+    include(${CMAKE_CURRENT_LIST_DIR}/AudioEndpointRecovery.cmake)
+endif()

@@ -3,6 +3,41 @@
 // Included by the native importer graphics proof after its shared helpers.
 namespace
 {
+    bool VerifyAlternatingObjMaterials(const wi::scene::Scene& scene)
+    {
+        // Verify geometry-to-material association, including a return to an
+        // earlier material. Merely counting two material rows misses A/B/B.
+        std::vector<std::pair<float,std::string>> faces;
+        for (size_t m=0;m<scene.meshes.GetCount();++m)
+        {
+            const auto& mesh=scene.meshes[m];
+            for (const auto& subset:mesh.subsets)
+            {
+                const auto* name=scene.names.GetComponent(subset.materialID);
+                if (!Require(name && subset.indexCount%3==0 &&
+                    size_t(subset.indexOffset)+subset.indexCount<=mesh.indices.size(),
+                    "alternating OBJ has invalid material or subset range")) return false;
+                for (uint32_t k=0;k<subset.indexCount;k+=3)
+                {
+                    float x=0;
+                    for (uint32_t j=0;j<3;++j)
+                    {
+                        const auto index=mesh.indices[subset.indexOffset+k+j];
+                        if (!Require(index<mesh.vertex_positions.size(),
+                            "alternating OBJ has invalid vertex index")) return false;
+                        x+=mesh.vertex_positions[index].x/3.0f;
+                    }
+                    faces.emplace_back(x,name->name);
+                }
+            }
+        }
+        std::sort(faces.begin(),faces.end());
+        return Require(faces.size()==3 && faces[0].second=="MatA" &&
+            faces[1].second=="MatB" && faces[2].second=="MatA" &&
+            faces[0].first<faces[1].first && faces[1].first<faces[2].first,
+            "alternating OBJ lost the left/middle/right A/B/A material assignment");
+    }
+
     bool RunImportReliabilityProof(const fs::path& root, const fs::path& fixtures, bool cold)
     {
         const StableId projectId = "88888888-8888-4888-8888-888888888888";
@@ -35,6 +70,8 @@ namespace
                 if (!Require(reimported.IsReady(), reimported.Error()) ||
                     !Require(ApplyCreatorModelImportRecipe(*reimported.PeekMutableScene(),
                         project.generic_u8string(), projectId, recipe, error), error)) return false;
+                if (record.value("alternating_materials",false) &&
+                    !VerifyAlternatingObjMaterials(*reimported.PeekScene())) return false;
                 size_t maps = 0;
                 for (size_t m = 0; m < reimported.PeekScene()->materials.GetCount(); ++m)
                     for (const auto& texture : reimported.PeekScene()->materials[m].textures)
@@ -55,6 +92,8 @@ namespace
                 auto prepared = CreatorAssetWorkflowService().PrepareModelPlacement(
                     project.generic_u8string(), projectId, record.at("id").get<std::string>());
                 if (!Require(prepared.IsReady(), "runtime-scene asset preparation failed")) return false;
+                if (record.value("alternating_materials",false) &&
+                    !VerifyAlternatingObjMaterials(*prepared.PeekScene())) return false;
                 PlaceReusableModelCommand place(runtimeScene, prepared.ReleaseScene(),
                     record.at("id").get<std::string>(), XMFLOAT3(float(placed % 4) * 3, 1, float(placed / 4) * 3),
                     1, record.at("asset").get<std::string>());
@@ -134,6 +173,12 @@ namespace
         multi.replace(multi.find("f 5/1"), 0, "usemtl Second\n");
         write(sources / "multi.obj", "mtllib multi.mtl\n" + multi);
         write(sources / "multi.mtl", "newmtl First\nKd 1 1 1\nmap_Kd maps/checker.png\nnewmtl Second\nKd 1 1 1\n");
+        write(sources / "alternating.mtl", "newmtl MatA\nKd 1 0 0\nnewmtl MatB\nKd 0 1 0\n");
+        write(sources / "alternating.obj",
+            "mtllib alternating.mtl\no Alternating\n"
+            "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 10 0 0\nv 11 0 0\nv 10 1 0\n"
+            "v 20 0 0\nv 21 0 0\nv 20 1 0\n"
+            "usemtl MatA\nf 1 2 3\nusemtl MatB\nf 4 5 6\nusemtl MatA\nf 7 8 9\n");
         write(sources / "corrupt.mtl", "newmtl First\nKd 1 1 1\nmap_Kd bad.png\n");
         write(sources / "corrupt.obj", "mtllib corrupt.mtl\nusemtl First\n" + cube);
         fs::create_directories(sources / "missing-fbx");
@@ -153,6 +198,8 @@ namespace
             auto candidate = service.PrepareModel(source.generic_u8string());
             if (!Require(candidate.IsReady(), name + ": " + candidate.Error()) ||
                 !Require(!warnings || !candidate.Warnings().empty(), name + ": expected map warning absent")) return false;
+            const bool alternating=source.filename()=="alternating.obj";
+            if (alternating && !VerifyAlternatingObjMaterials(*candidate.PeekScene())) return false;
             const auto evidence = candidate.Evidence();
             if (assign)
             {
@@ -206,8 +253,29 @@ namespace
             const auto result = ModelImportCommitService().CommitModel(request, candidate);
             if (!Require(result.succeeded && result.committed, result.error) ||
                 !VerifyPlacement(project, projectId, result.assetId)) return false;
+            if (alternating)
+            {
+                auto prepared=CreatorAssetWorkflowService().PrepareModelPlacement(
+                    project.generic_u8string(),projectId,result.assetId);
+                if (!Require(prepared.IsReady(),"alternating OBJ committed asset cannot reopen") ||
+                    !VerifyAlternatingObjMaterials(*prepared.PeekScene())) return false;
+                const auto saved=(root/"alternating-roundtrip.wiscene").generic_u8string();
+                {
+                    wi::Archive archive(saved,false,false);
+                    prepared.PeekMutableScene()->Serialize(archive);
+                    if (!Require(archive.SaveFile(saved),"alternating OBJ scene save failed")) return false;
+                }
+                wi::scene::Scene reopened;
+                {
+                    wi::Archive archive(saved,true);
+                    if (!Require(archive.IsOpen(),"alternating OBJ scene cannot reopen")) return false;
+                    reopened.Serialize(archive);
+                }
+                if (!VerifyAlternatingObjMaterials(reopened)) return false;
+            }
             records.push_back({{"id", result.assetId}, {"asset", result.assetProjectRelativePath},
-                {"source", result.sourceProjectRelativePath}, {"maps", maps}});
+                {"source", result.sourceProjectRelativePath}, {"maps", maps},
+                {"alternating_materials", alternating}});
             std::cout << "IMPORT / PREVIEW / COMMIT / PLACEMENT / SAVE REOPEN PASS: " << name <<
                 " maps=" << maps << " warnings=" << candidate.Warnings().size() << '\n';
             return true;
@@ -219,6 +287,7 @@ namespace
             !exercise(sources / "textured.obj", "OBJ Textured", false, false) ||
             !exercise(sources / "outside/relative.obj", "OBJ Outside Texture", false, false) ||
             !exercise(sources / "multi.obj", "OBJ Multiple Materials", false, false) ||
+            !exercise(sources / "alternating.obj", "OBJ Alternating Materials", false, false) ||
             !exercise(sources / "corrupt.obj", "OBJ Corrupt Map", true, false) ||
             !exercise(sources / "missing-fbx/static.fbx", "FBX Missing Map", true, false) ||
             !exercise(sources / "missing-fbx/static.fbx", "FBX Manual Map", true, true) ||
