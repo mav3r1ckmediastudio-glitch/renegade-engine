@@ -99,7 +99,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportAddAnimation_.SetText(\"ADD ANIMATION FBX\");",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "EngineBridge/src/ModelImportCandidateService.cpp",
@@ -173,12 +173,12 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportAction_.Create(\"Gameplay action\");",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "{\"Unassigned\", \"Idle\", \"Walk\", \"Run\", \"Attack\", \"Reload\", \"Hit\", \"Death\"}",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "docs/MODEL_IMPORTER_REBUILD.md",
@@ -805,7 +805,7 @@
       ],
       "prerequisites": "A saved level and an existing Renegade 3D Sound Source with an assigned audio asset. This guide wires the Action, not audio-file importing.",
       "steps": [
-        "Attach **Play Sound** to the intended owner through **ACTION** \u2192 **ADD**.",
+        "Attach **Play Sound** to the intended owner through **ACTION** → **ADD**.",
         "Choose the existing **Sound Source** reference.",
         "For a quick test, enable **Play On Start**; otherwise configure **Play Event** and **Stop Event** and provide an event sender.",
         "Save with **Ctrl+S** and use **PLAY** to hear the configured source."
@@ -866,7 +866,7 @@
       ],
       "prerequisites": "A Player Start with saved equipment whose presentation is a saved first-person assembly. Spawn points are authored on that assembly and then selected in Weapon firing.",
       "steps": [
-        "Select **Player Start**, open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING**, and choose **Weapon hand**.",
+        "Select **Player Start**, open **STARTING EQUIPMENT** → **WEAPON FIRING**, and choose **Weapon hand**.",
         "Click **EDIT SPAWN POINTS...** to open the saved assembly's launch-socket editor.",
         "Select a **Socket** or click **NEW**, give it a distinct **Name**, and choose **Attached model** (Primary weapon, Off-hand weapon or Arms / palm).",
         "Choose **Follow bone / marker** if it must follow an animated part. Set **Position X/Y/Z (m)** and direction angles; check the orange launch arrow. **PLACE ON MODEL** is available for placement.",
@@ -941,7 +941,7 @@
       ],
       "prerequisites": "Saved equipment with a supported Launch on action and a valid first-person animation preview. A marker must be nonnegative, before clip end and at most five seconds.",
       "steps": [
-        "Select Player Start and open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING**. Choose the intended **Weapon hand** and **Launch on** action.",
+        "Select Player Start and open **STARTING EQUIPMENT** → **WEAPON FIRING**. Choose the intended **Weapon hand** and **Launch on** action.",
         "Click **SET FIRE TIME IN ANIMATION...**.",
         "Scrub **Preview time (s)** to the desired release pose and click **MARK CURRENT POSE**, or drag **Fire marker (s)**.",
         "Click **USE FIRE TIME** when the marker is valid. This transfers seconds to the firing draft; it does not save the weapon assignment.",
@@ -950,7 +950,7 @@
       "follow_up": "Choose Animation start for immediate launch or After a delay for a timed launch. Use your clip's pose, not a copied bow example time.",
       "expected_result": "The shot is scheduled at the configured action-relative time; this is not a general persisted multi-event animation timeline.",
       "troubleshooting": [
-        "USE FIRE TIME disabled: select a ready preview and a marker before the clip ends, within 0\u20135 seconds.",
+        "USE FIRE TIME disabled: select a ready preview and a marker before the clip ends, within 0–5 seconds.",
         "Missing valid action/assembly: read the preview error and check saved equipment.",
         "CANCEL leaves the original timing unchanged; closing without Apply does not commit a new binding."
       ],
@@ -1013,7 +1013,7 @@
       ],
       "prerequisites": "A Player Start with saved equipment and a launch-capable action. Hitscan is a Fire mode, not a projectile preset.",
       "steps": [
-        "Open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING** on Player Start and choose **Weapon hand** and **Launch on**.",
+        "Open **STARTING EQUIPMENT** → **WEAPON FIRING** on Player Start and choose **Weapon hand** and **Launch on**.",
         "Set **Fire mode** to **Hitscan / instant ray**.",
         "Choose **Range** and **Damage** and a valid **Spawn point**. No travelling projectile asset is selected for hitscan.",
         "Choose **Fire at** / animation timing as needed.",
@@ -1075,7 +1075,7 @@
       ],
       "prerequisites": "An open project and a GLB/FBX with a skinned mesh and skeleton. Inspect scale and textures; a static mesh is not a rigged Character.",
       "steps": [
-        "Open **ADD** \u2192 **IMPORT MODEL...** and select the rigged GLB or FBX.",
+        "Open **ADD** → **IMPORT MODEL...** and select the rigged GLB or FBX.",
         "Check that the summary identifies **CHARACTER**, bones and clips. If it reports STATIC, review the source skin/skeleton.",
         "Choose a clip from **Animation clip** and use **PLAY**, **RESTART** or **Preview time (seconds)** to inspect it; **REFERENCE POSE** is a preview mode.",
         "Set **Asset name** and a valid **Import to** Content folder. For a general NPC, keep **Asset role** as **General model**.",
@@ -1094,17 +1094,17 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "params.extensions = {\"glb\", \"fbx\", \"obj\"};",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "\"Animated import currently requires a skinned mesh and skeleton.\"",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportClip_.AddItem(\"REFERENCE POSE\");",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
@@ -1367,7 +1367,7 @@
       ],
       "prerequisites": "An open project with a Player Start, a saved weapon selected in STARTING EQUIPMENT, a launch-capable action and a saved projectile. If you only have a draft projectile, finish **SAVE AS NEW** first. This guide does not create the Player Start or weapon.",
       "steps": [
-        "Select **Player Start** in **Scene Hierarchy**, then open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING**.",
+        "Select **Player Start** in **Scene Hierarchy**, then open **STARTING EQUIPMENT** → **WEAPON FIRING**.",
         "Choose **Weapon hand** (Primary hand or Off hand) and the appropriate **Launch on** action. Use the action configured for your weapon; do not assume every bow uses Release charged action.",
         "Set **Fire mode** to **Projectile / travelling** and select your saved projectile in the projectile dropdown.",
         "Choose your weapon's defined **Spawn point**. The tested bow uses Bow_Nock; your point may have a different name.",
@@ -1452,7 +1452,7 @@
       "prerequisites": "An open Renegade project with a Player Start and a weapon/equipment setup. If you have not created these yet, ask for the Player Start or starting-equipment walkthrough first.",
       "steps": [
         "Select **Player Start** in the **Scene Hierarchy** (usually under **Characters**).",
-        "Open **STARTING EQUIPMENT** \u2192 **WEAPON FIRING**. Choose the appropriate weapon hand and launch action.",
+        "Open **STARTING EQUIPMENT** → **WEAPON FIRING**. Choose the appropriate weapon hand and launch action.",
         "Set **Fire mode** to **Projectile / travelling**, then click **NEW**.",
         "**NEW** starts with the **Bullet** preset. Keep Bullet or choose **Arrow**, **Bolt**, **Thrown projectile** or **Spell projectile**, then give it a name.",
         "Configure speed, gravity, damage and any visible model. For example, the **Arrow** preset starts at **45 m/s** and **Gravity 1**; **Stick** needs a visible model.",
@@ -1463,12 +1463,12 @@
       "evidence": [
         {
           "path": "docs/manual/PROJECTILES_FIRST_WEAPON.md",
-          "needle": "## Step 1 \u2014 Open Weapon Firing",
+          "needle": "## Step 1 — Open Weapon Firing",
           "sha256": "d1bfafd61ee8e2af9dda175753d889fd389bc72d781f186bc42c8bc296af62c2"
         },
         {
           "path": "docs/manual/PROJECTILES_FIRST_WEAPON.md",
-          "needle": "## Step 2 \u2014 Make an arrow",
+          "needle": "## Step 2 — Make an arrow",
           "sha256": "d1bfafd61ee8e2af9dda175753d889fd389bc72d781f186bc42c8bc296af62c2"
         },
         {
@@ -1620,7 +1620,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerPrefabSave_.SetText(\"SAVE AS PLAYER PREFAB\")",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
@@ -1686,7 +1686,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerPrefabReset_.SetText(\"RESET TO PREFAB\")",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
@@ -1767,7 +1767,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerEquipment_.SetText(\"STARTING EQUIPMENT\")",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "Studio/src/PlayerEquipmentEditor.cpp",
@@ -1852,7 +1852,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerEquipment_.SetText(\"STARTING EQUIPMENT\")",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "EngineBridge/src/EquipmentAssetService.cpp",
@@ -1909,7 +1909,7 @@
       ],
       "prerequisites": "An open Renegade project and a static **OBJ, GLB or FBX** model. Keep OBJ/MTL/images together. Rigged characters and external animations use separate workflows. The native picker offers OBJ/GLB/FBX.",
       "steps": [
-        "Open **ADD** \u2192 **IMPORT MODEL...**, then select your OBJ, GLB or FBX file.",
+        "Open **ADD** → **IMPORT MODEL...**, then select your OBJ, GLB or FBX file.",
         "Wait for the rendered preview. Check the model and textures; use **ROTATE LEFT** or **ROTATE RIGHT** to inspect it. Preview rotation does not change the imported asset.",
         "Enter a readable **Asset name**.",
         "Choose **Folder**, or type a project-relative folder in **Import to**, such as **Content/Models/Props**. A valid new Content folder is created during import. Do not enter a Windows absolute path.",
@@ -1937,22 +1937,22 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "params.extensions = {\"glb\", \"fbx\", \"obj\"};",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportName_.SetDescription(\"Asset name: \");",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportFolder_.SetDescription(\"Import to: \");",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportCommit_.SetText(\"IMPORT ASSET\");",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "docs/MODEL_IMPORT_DESTINATIONS.md",
@@ -1967,7 +1967,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "could not be revealed. Do not import it again.",
-          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
+          "sha256": "86aa744067e4ffa06877a2a47327746b24e119341253c2a4fb7f5ff218661115"
         },
         {
           "path": "Tests/ModelImporterRebuildGraphicsProof.cpp",

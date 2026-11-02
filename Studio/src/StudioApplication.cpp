@@ -6897,9 +6897,11 @@ namespace renegade::studio
                             modelImportMaterial_.AddItem(std::to_string(i + 1) + " // " +
                                 (materialName ? materialName->name : "Material"));
                         }
+                        modelImportCandidate_ = std::move(candidate);
+                        // Selection callbacks read the active candidate: install it first
+                        // so the initial review shows this source's maps and warnings.
                         modelImportMaterial_.SetSelected(0);
                         modelImportMapSlot_.SetSelected(0);
-                        modelImportCandidate_ = std::move(candidate);
                         modelImportFromProjectile_ = fromProjectile;
                         if (fromProjectile) {
                             modelImportFolder_.SetValue("Content/Projectiles/Models");
