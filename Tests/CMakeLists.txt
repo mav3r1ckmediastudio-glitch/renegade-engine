@@ -449,12 +449,13 @@ if(WIN32)
             "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
             "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/river-default-recovery-$<CONFIG>"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
-    # Keep every 361-chunk/data/GPU assertion. Hosted Debug runs need a bounded
-    # longer deadline than the owner-GPU Release proof; progress logs distinguish
-    # slow creation/rendering/serialization from a stalled graphics operation.
+    # Keep every 361-chunk/data/GPU assertion. The hosted software renderer took
+    # 140 seconds to create the terrain alone; allow the remaining history,
+    # readback and save/reopen checks within the same bounded ten-minute budget.
+    # Initializer diagnostics separately expose stalls before terrain creation.
     set_tests_properties(RenegadeRiverDefaultTerrainRecovery PROPERTIES
         WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
-        TIMEOUT "$<IF:$<CONFIG:Debug>,600,180>")
+        TIMEOUT 600)
 endif()
 
 add_executable(RenegadeLightTests

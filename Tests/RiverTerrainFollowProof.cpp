@@ -29,6 +29,14 @@
 #include <memory>
 #include <stdexcept>
 #include <vector>
+#include <cstdio>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#ifdef _MSC_VER
+#include <crtdbg.h>
+#include <cstdlib>
+#endif
 
 namespace fs = std::filesystem;
 using namespace renegade::bridge;
@@ -122,10 +130,65 @@ int main(int argc, char** argv)
             << std::chrono::duration<double,std::milli>(
                 std::chrono::steady_clock::now()-proofStarted).count() << std::endl;
     };
+    const char* hostedFlag = std::getenv("RENEGADE_HOSTED_HEADLESS_GRAPHICS");
+    const bool hosted = hostedFlag && std::strcmp(hostedFlag,"1") == 0;
+    if (hosted)
+    {
+        // CI has no interactive desktop. Report assertions instead of waiting
+        // for a modal CRT dialog; assertion failures still terminate the test.
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+#ifdef _MSC_VER
+        _set_error_mode(_OUT_TO_STDERR);
+#ifdef _DEBUG
+        _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+        _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+        _CrtSetReportHook([](int type, char* message, int*) -> int {
+            if (type == _CRT_ASSERT || type == _CRT_ERROR)
+            {
+                std::fputs(message ? message : "CRT assertion failure", stderr);
+                std::fflush(stderr);
+                std::abort();
+            }
+            return 0;
+        });
+#endif
+#endif
+    }
     progress("device-create");
     app.SetWindow(window);
     progress("device-created");
-    wi::initializer::InitializeComponentsImmediate();
+    {
+        // Diagnostics only: use atomic component flags and the backlog's locked
+        // snapshot to distinguish a modal failure from a slow renderer bootstrap.
+        // Do not skip initializers, ignore assertions, or synthesize readiness.
+        std::mutex diagnosticMutex;
+        std::condition_variable diagnosticWake;
+        bool finished = false;
+        std::thread diagnostic([&] {
+            std::unique_lock<std::mutex> lock(diagnosticMutex);
+            while (!diagnosticWake.wait_for(lock, std::chrono::seconds(30),
+                                            [&] { return finished; }))
+            {
+                std::cerr << "RIVER_PROOF_INITIALIZER_PENDING";
+                for (int i=0;i<wi::initializer::INITIALIZED_SYSTEM_COUNT;++i)
+                    std::cerr << " " << i << "=" <<
+                        wi::initializer::IsInitializeFinished(
+                            static_cast<wi::initializer::INITIALIZED_SYSTEM>(i));
+                std::cerr << "\nRIVER_PROOF_BACKLOG_BEGIN\n"
+                          << wi::backlog::getText()
+                          << "\nRIVER_PROOF_BACKLOG_END" << std::endl;
+            }
+        });
+        wi::initializer::InitializeComponentsImmediate();
+        {
+            std::lock_guard<std::mutex> lock(diagnosticMutex);
+            finished = true;
+        }
+        diagnosticWake.notify_one();
+        diagnostic.join();
+    }
     auto* gpu = wi::graphics::GetDevice();
     Require(gpu != nullptr,"Native graphics device unavailable");
     std::cout << "RIVER_PROOF_ADAPTER " << gpu->GetAdapterName() << std::endl;
