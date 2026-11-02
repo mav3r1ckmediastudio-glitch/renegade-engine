@@ -66,6 +66,13 @@ class RecoveryPackageTests(unittest.TestCase):
             (root / 'VERSION.txt').write_text('changed after testing')
             with self.assertRaises(ValueError): package.verify(root)
 
+    def test_stale_native_build_cannot_be_staged_as_a_new_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "native.exe"
+            binary.write_bytes(b"fixture" + b"a" * 40)
+            package.require_native_revision(binary, "a" * 40)
+            with self.assertRaises(ValueError): package.require_native_revision(binary, "b" * 40)
+
     def test_rejects_unsafe_previous_archive_paths(self):
         for name in ('../outside', '/absolute', 'C:/absolute', 'dir\\file', 'safe/../../outside'):
             with self.subTest(name=name), self.assertRaises(ValueError): package.safe_relative(name)

@@ -29,6 +29,12 @@ def sha(path):
 def git(root, *args):
     return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
 
+def require_native_revision(binary, commit):
+    # Both applications embed this exact ASCII source revision in diagnostics.
+    # Catch a stale incremental build before it can be labelled as a new commit.
+    if commit.encode("ascii") not in binary.read_bytes():
+        raise ValueError(f"Native binary lacks selected source revision; reconfigure/rebuild: {binary.name}")
+
 def safe_relative(name):
     path = PurePosixPath(name)
     if path.is_absolute() or ".." in path.parts or "\\" in name or ":" in name:
@@ -59,12 +65,18 @@ def stage(args):
         pin = git(checkout, "rev-parse", f"HEAD:{sub}")
         if git(checkout / sub, "rev-parse", "HEAD") != pin:
             raise ValueError(f"Dependency pin differs: {sub}")
+    if git(checkout / "WickedEngine", "status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all"):
+        raise ValueError("Tracked Wicked source is modified")
+    imnodes_changes = git(checkout / "ThirdParty/imnodes", "diff", "--name-only", "--ignore-submodules=all")
+    if any(name != "vcpkg" for name in imnodes_changes.splitlines()):
+        raise ValueError("Tracked ImNodes source is modified")
     if root.exists():
         raise FileExistsError("Refusing to overwrite an existing candidate")
     studio, runtime = build / "Studio/Release", build / "Runtime/Release"
     for binary in (studio / "RenegadeStudio.exe", runtime / "RenegadeRuntime.exe"):
         if not binary.is_file():
             raise FileNotFoundError(binary)
+        require_native_revision(binary, commit)
     root.mkdir(parents=True)
     with zipfile.ZipFile(args.base_zip) as previous:
         for entry in previous.infolist():
@@ -145,7 +157,7 @@ def stage(args):
     manifest = {"schema": 1, "version": args.version, "source_commit": commit,
         "source_tree": git(checkout, "rev-parse", "HEAD^{tree}"),
         "wicked_commit": git(checkout / "WickedEngine", "rev-parse", "HEAD"),
-        "base_archive_sha256": sha(args.base_zip), "status": "staged_pending_package_acceptance",
+        "base_archive_sha256": sha(args.base_zip), "native_embedded_revision_verified": True, "status": "staged_pending_package_acceptance",
         "provenance": "Private dependencies/media inherited; native binaries and companion source replaced from recovery build",
         "files": {}}
     for path in sorted(root.rglob("*")):
