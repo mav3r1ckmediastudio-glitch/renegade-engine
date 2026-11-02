@@ -7665,3 +7665,10 @@ CMakeLists.txt now adds the missing dependency. Verification used the actual Rel
 The owner manually completed the listed regression tasks and reported all passed, explicitly including river editing and grass deletion. Retain these as owner-reported acceptance; do not repeat their manual regression work. Terrain darkness remains currently unreproduced, not a claimed targeted repair. No current UI interaction is authorised by this CI correction.
 
 Next: validate the final commit's CI and local results, preserve owner acceptance evidence, prepare the package, then perform its integrity and fresh-launch checks. Do not merge main or distribute without the owner's instruction.
+
+
+## Studio cold-build job budget correction - 2026-11-02
+
+Release run 41456794306 was cancelled by the 90-minute workflow job budget, not a reported compiler error or CTest assertion. Its uploaded logs show configuration at 13:54:22 UTC, aggregate build at 13:55:21, and CTest beginning at 15:13:10: 77m49s compilation. The first 216 tests completed (254.28s summed test durations); the default-361 river proof was still running when the job was cancelled at 15:23:43, before its own 600-second deadline. Debug in the same run passed 295 tests, with 996.36s total CTest time and 447.91s river proof, then passed startup. Local exact-4f907b5 configure/build/full CTest also passed.
+
+Increase only the workflow job budget from 90 to a bounded 120 minutes, allowing measured cold compilation plus complete validation and packaging. Keep the actual aggregate, all tests, the 180-second default and 600-second river deadlines, engine safety limits and application/test source unchanged. Pre-push checks: exact diff restricted to this workflow budget/comment and handoff; workflow structural validation; unchanged application/test/tooling tree hashes. Final four-check CI must be recorded against the resulting commit before any success claim. Owner manual regression passes remain accepted; UI interaction stays paused. No main merge or distribution.
