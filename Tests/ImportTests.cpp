@@ -89,7 +89,7 @@ int main()
             ModelSourceFormat::Gltf) ||
         !renegade::bridge::ImportService::IsModelSourceFormatSupported(
             ModelSourceFormat::Glb) ||
-        renegade::bridge::ImportService::IsModelSourceFormatSupported(
+        !renegade::bridge::ImportService::IsModelSourceFormatSupported(
             ModelSourceFormat::Obj) ||
         renegade::bridge::ImportService::IsModelSourceFormatSupported(
             ModelSourceFormat::Ply) ||

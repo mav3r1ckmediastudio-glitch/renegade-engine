@@ -197,6 +197,22 @@ if(WIN32)
 endif()
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
+    # Source-only guard. Native importer and packaged Studio smoke tests are
+    # independently mandatory for release acceptance.
+    add_test(NAME RenegadeProtectedImporterSourceContract
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/ProtectedImporterSourceContract.py"
+                --repo "${CMAKE_SOURCE_DIR}")
+    add_test(NAME RenegadeAssistantRiverKnowledgeTests
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/AssistantRiverKnowledgeTests.py"
+            --repo "${CMAKE_SOURCE_DIR}"
+            --db "${CMAKE_CURRENT_BINARY_DIR}/assistant-river-qa.sqlite")
+    add_test(NAME RenegadeAssistantPackagedKnowledgeTests
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/AssistantPackagedKnowledgeTests.py"
+            --repo "${CMAKE_SOURCE_DIR}"
+            --output "${CMAKE_CURRENT_BINARY_DIR}/assistant-packaged-qa")
+    add_test(NAME RenegadeRecoveryAlphaPackageTests
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/RecoveryAlphaPackageTests.py"
+            --repo "${CMAKE_SOURCE_DIR}")
     add_test(NAME RenegadeDiagnosticReaderTests
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/ReadRenegadeDiagnosticsTests.py")
 endif()

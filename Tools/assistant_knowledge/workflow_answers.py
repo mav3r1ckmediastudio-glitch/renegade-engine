@@ -44,7 +44,7 @@ def verified_workflow(question: str, repo: Path, database: Path,
                 row=db.execute(
                     "SELECT status, manual_path, manual_hash, evidence, issues "
                     "FROM manual_guides WHERE id=?",(task["guide_id"],)).fetchone()
-            if not indexed or indexed[0]!=knowledge.git_value(repo,"rev-parse","HEAD"):
+            if not indexed or indexed[0]!=knowledge.source_revision(repo,database):
                 return None
             if not row or row[0]!="draft_source_matched" or json.loads(row[4]):
                 return None

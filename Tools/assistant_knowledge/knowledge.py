@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from contextlib import closing
 import re
 import sqlite3
 import subprocess
@@ -38,6 +39,42 @@ def git_value(root: Path, *args: str) -> str:
             stderr=subprocess.DEVNULL, timeout=8
         ).strip()
     except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
+PACKAGED_SOURCE_IDENTITY = "renegade-packaged-source.json"
+
+
+def source_revision(root: Path, database: Path) -> str:
+    """Exact source identity for Git checkouts OR explicitly staged releases.
+
+    Git-free extracted ZIPs cannot pass git rev-parse. Instead, an independent
+    package staging step pins the database SHA-256 and its originating commit.
+    A stale/tampered/missing package identity fails closed as 'unknown'.
+    Individual source facts are still verified by their own file hashes.
+    """
+    root = root.resolve()
+    database = database.resolve()
+    if (root / ".git").exists():
+        return git_value(root, "rev-parse", "HEAD")
+    identity = root / PACKAGED_SOURCE_IDENTITY
+    try:
+        record = json.loads(identity.read_text(encoding="utf-8"))
+        if record.get("schema") != 1 or record.get("kind") != "renegade_gitless_package":
+            return "unknown"
+        commit = record.get("commit")
+        if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+            return "unknown"
+        with closing(sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True)) as db:
+            metadata = dict(db.execute("SELECT key,value FROM metadata").fetchall())
+        if metadata.get("commit") != commit:
+            return "unknown"
+        if record.get("database_sha256") != sha(database):
+            return "unknown"
+        if record.get("package_version", "") != metadata.get("package_version", ""):
+            return "unknown"
+        return commit
+    except (OSError, ValueError, TypeError, KeyError, sqlite3.Error):
         return "unknown"
 
 
@@ -292,7 +329,7 @@ def search(database: Path, question: str, repo: Path, limit: int = 4, strict: bo
                                "authority": "reference_only_not_feature_proof"})
     metadata = dict(db.execute("SELECT key,value FROM metadata").fetchall())
     db.close()
-    changed_checkout = git_value(repo, "rev-parse", "HEAD") != metadata["commit"]
+    changed_checkout = source_revision(repo, database) != metadata["commit"]
     return {
         "verified_facts": facts,
         "historical_guides": guides, "manual_guides": manual_guides,

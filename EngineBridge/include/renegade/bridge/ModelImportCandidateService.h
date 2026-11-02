@@ -51,6 +51,7 @@ namespace renegade::bridge
             return scene_.IsValid() && error_.empty();
         }
         [[nodiscard]] const std::string& Error() const noexcept { return error_; }
+        [[nodiscard]] const std::vector<std::string>& Warnings() const noexcept { return warnings_; }
         [[nodiscard]] const std::string& SourcePath() const noexcept { return sourcePath_; }
         [[nodiscard]] std::uint64_t SourceBytes() const noexcept { return sourceBytes_; }
         [[nodiscard]] std::uint64_t SourceFingerprint() const noexcept { return sourceFingerprint_; }
@@ -77,6 +78,7 @@ namespace renegade::bridge
         wi::allocator::shared_ptr<wi::scene::Scene> scene_;
         std::string sourcePath_;
         std::string error_;
+        std::vector<std::string> warnings_;
         std::uint64_t sourceBytes_ = 0;
         std::uint64_t sourceFingerprint_ = 0;
         ModelSourceFormat sourceFormat_ = ModelSourceFormat::Unknown;
@@ -95,11 +97,14 @@ namespace renegade::bridge
         [[nodiscard]] ModelImportCandidate PrepareModel(const std::string& sourcePath) const;
         [[nodiscard]] ModelImportCandidate PrepareModel(const std::string& sourcePath,
             const std::vector<ModelImportTextureRelink>& relinks) const;
-        // Static GLB or FBX. FBX file textures are snapshotted before conversion;
-        // dependencies must be embedded or within the model source folder.
+        // Static GLB, FBX and OBJ. Missing maps warn without rejecting geometry.
+        // Explicit assignments update only this isolated candidate.
+        [[nodiscard]] bool AssignTexture(ModelImportCandidate& candidate,
+            const ModelImportTextureRelink& relink, std::string& error) const;
         [[nodiscard]] ModelImportCandidate PrepareStaticModel(
             const std::string& sourcePath) const;
     private:
+        static void PruneUnusedTextureDependencies(ModelImportCandidate& candidate);
         [[nodiscard]] ModelImportCandidate PrepareWithRelinks(const std::string& sourcePath,
             const std::vector<ModelImportTextureRelink>& relinks) const;
     public:

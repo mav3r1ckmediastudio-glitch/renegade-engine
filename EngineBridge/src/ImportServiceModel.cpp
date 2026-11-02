@@ -445,7 +445,7 @@ namespace renegade::bridge
     {
         return format == ModelSourceFormat::Fbx ||
             format == ModelSourceFormat::Gltf ||
-            format == ModelSourceFormat::Glb;
+            format == ModelSourceFormat::Glb || format == ModelSourceFormat::Obj;
     }
 
     const char* ImportService::ModelSourceFormatName(

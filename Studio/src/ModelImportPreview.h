@@ -17,6 +17,7 @@ namespace renegade::studio
     {
     public:
         bool Prepare(wi::scene::Scene& source, std::string& error);
+        void RefreshMaterials(const wi::scene::Scene& source);
         void Rotate(float radians);
         void Orbit(float yaw, float pitch);
         void SetView(float yaw, float pitch);

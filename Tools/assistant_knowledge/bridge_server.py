@@ -33,7 +33,8 @@ ENGINE_TERMS = frozenset({
     "glass", "impact", "impacts", "decals", "decal", "damage", "sfx", "fx",
     "weapons", "equipment", "loadout", "loadouts", "surface", "surfaces", "retarget", "script",
     "npc", "scene", "scenes", "asset", "assets", "launch", "player",
-    "model", "import", "importer", "terrain", "animation",
+    "model", "import", "importer", "terrain", "river", "rivers", "riverbed", "riverbeds",
+    "waterfall", "waterfalls", "tributary", "tributaries", "animation",
     "character", "characters", "npcs", "scripts", "action", "actions", "lua",
     "patrol", "wander", "wandering", "socket", "sockets", "psp", "timing", "gravity",
 })
@@ -85,17 +86,42 @@ def knowledge_reply(question: str, repo: Path, database: Path) -> str:
     recipe = workflow_answers.verified_workflow(question, repo, database)
     if recipe:
         return recipe
-    if re.search(r"\b(?:how|steps|show me)\b",question,re.IGNORECASE):
+    how_to = bool(re.search(r"\b(?:how|steps|show me)\b",question,re.IGNORECASE))
+    river_topic = bool(re.search(r"\b(?:river|rivers|riverbed|riverbeds|waterfall|waterfalls)\b",
+                                 question,re.IGNORECASE))
+    facts = result["verified_facts"]
+    if how_to and not (river_topic and facts):
         return ("I do not have verified step-by-step instructions for that specific task. "
                 "Tell me the editor panel and what you want to change; I will not "
                 "substitute unrelated facts or invent controls.")
-    facts = result["verified_facts"]
     if not facts:
         return ("I don't have a verified Renegade answer for that yet. "
                 "I won't guess at editor features. The knowledge database "
                 "can be expanded from the current source and tested workflow.")
+    # FTS may return several source-verified river facts sharing generic tags.
+    # Match the creator's requested task before choosing which verified answer
+    # to present, rather than blending creation, troubleshooting and waterfalls.
+    if river_topic:
+        requested_id = None
+        if re.search(r"\bwaterfalls?\b", question, re.IGNORECASE):
+            requested_id = "waterfall-current-controls"
+        elif re.search(r"\b(gap|gaps|fit|fitting|terrain|bank|banks|riverbed|riverbeds|link|linked)\b",
+                       question, re.IGNORECASE):
+            requested_id = "river-v2-terrain-width"
+        elif re.search(r"\b(draw|drawing|create|make|build)\b", question, re.IGNORECASE):
+            requested_id = "river-v2-draw-and-link"
+        elif re.search(r"\b(adjust|controls|settings|speed|foam|flow|width|node|nodes)\b",
+                       question, re.IGNORECASE):
+            requested_id = "river-v2-current-controls"
+        if requested_id:
+            scoped = [fact for fact in facts if fact["id"] == requested_id]
+            if scoped:
+                facts = scoped
     parts = []
     budget = MAX_ANSWER_LENGTH
+    if how_to and river_topic:
+        parts.append("I can explain the verified controls, but this release has not yet passed "
+                     "the complete river/waterfall walkthrough.\n")
     for fact in facts:
         source = fact["sources"][0] if fact.get("sources") else ""
         paragraph = fact["answer"].strip()

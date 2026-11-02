@@ -192,6 +192,7 @@ namespace renegade::bridge
         {
             switch (format)
             {
+            case ModelSourceFormat::Obj: return "obj";
             case ModelSourceFormat::Fbx: return "fbx";
             case ModelSourceFormat::Gltf: return "gltf";
             case ModelSourceFormat::Glb: return "glb";
@@ -201,7 +202,7 @@ namespace renegade::bridge
 
         bool IsSupportedSourceFormatToken(const std::string& value)
         {
-            return value == "fbx" || value == "gltf" || value == "glb" || value == "assembly";
+            return value == "obj" || value == "fbx" || value == "gltf" || value == "glb" || value == "assembly";
         }
 
         std::string BuildRecipeJson(
