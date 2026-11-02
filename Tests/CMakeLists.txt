@@ -1889,3 +1889,16 @@ if(TARGET RenegadeRuntimeSceneTransitionTests)
             "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
             "$<TARGET_FILE_DIR:RenegadeRuntimeSceneTransitionTests>")
 endif()
+
+# Direct DX12 rejection control plus the production coherent-UMA suballocator.
+if(WIN32)
+    add_executable(RenegadeGpuUploadBufferTests GpuUploadBufferTests.cpp)
+    target_link_libraries(RenegadeGpuUploadBufferTests PRIVATE Renegade::EngineBridge d3d12 dxgi)
+    set_target_properties(RenegadeGpuUploadBufferTests PROPERTIES FOLDER "Renegade/Tests")
+    add_custom_command(TARGET RenegadeGpuUploadBufferTests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+            "$<TARGET_FILE_DIR:RenegadeGpuUploadBufferTests>")
+    add_test(NAME RenegadeGpuUploadBufferTests COMMAND RenegadeGpuUploadBufferTests)
+    set_tests_properties(RenegadeGpuUploadBufferTests PROPERTIES RUN_SERIAL TRUE TIMEOUT 180)
+endif()

@@ -1,5 +1,17 @@
 ## 2026-11-01: Combined pre-alpha CI target correction
 
+## Recovery: coherent-UMA upload allocation (2026-11-02)
+
+The parent 7896 local Release 304/304 pass did not cover the hosted WARP failure:
+Studio Debug CI rejected an UPLOAD backing buffer with a UAV flag. Direct native
+DX12 negative/positive reproduction confirms E_INVALIDARG for the old descriptor.
+The generated renderer overlay removes only the illegal UPLOAD flag and preserves
+DEFAULT UAV support. See docs/RECOVERY_UMA_UPLOAD_CORE_DECISION_2026-11-02.md.
+New native GPU allocator regression and complete successor validation are required;
+PR receipts/VALIDATION identify the accepted source. The 7896 package is blocked,
+not shipped. Terrain darkness remains unreproduced/unrepaired.
+
+
 Owner authorizes local/GitHub feature synchronization and pre-alpha preparation.
 Candidate parent de9fa6edd81529490204500091cb3037a2d92f7a combines accepted
 Weather V2 with main's rivers, waterfalls and inventory. Wicked remains pinned

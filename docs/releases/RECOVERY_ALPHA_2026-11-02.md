@@ -21,6 +21,8 @@ Riverbed metadata saved by this version uses schema 2. It reads earlier schema 1
 - A Story Flow Start action or quick load can replace a scene after its native update. Runtime retains the completed frame until the new scene has updated, so enabled volumetric clouds never dispatch with uncreated resources.
 - Studio can start when Windows has no default audio output device. Native sound remains unavailable; configure an output device and restart Studio to enable it.
 
+- Coherent-memory DX12 adapters use valid read-only upload buffers for native mesh suballocations. Normal GPU-memory allocations retain unordered-access support. This repairs the hosted WARP allocation failure without reducing terrain extent or bypassing assertions.
+
 ## Draw and link a river
 
 1. Create terrain with normal defaults in a disposable level.
