@@ -390,3 +390,8 @@ endif()
 if(TARGET RenegadeStudioCI AND TARGET RenegadeGpuUploadBufferTests)
     add_dependencies(RenegadeStudioCI RenegadeGpuUploadBufferTests)
 endif()
+
+# CTest registration alone does not build a test in the explicit CI aggregate.
+if(TARGET RenegadeStudioCI AND TARGET RenegadeNativeWindowSurfaceTests)
+    add_dependencies(RenegadeStudioCI RenegadeNativeWindowSurfaceTests)
+endif()

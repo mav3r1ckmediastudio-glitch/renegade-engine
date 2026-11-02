@@ -7655,3 +7655,13 @@ Changed: Studio/src/main_Windows.cpp, Runtime/src/main_Windows.cpp, EngineBridge
 Precommit verification: Studio/Runtime Release builds passed; new real Win32 regression passed; all 59 SourceContract tests passed; original-basename Studio survived 5 minimize/restore cycles and two true zero-height client states, with restored Project Hub visually checked. This does not replace final-head validation.
 
 Next: finish river/importer/grass/weather/runtime/export/assistant regression checks, run full 306 local tests and all four CI jobs on the final head, test the staged package, create and freshly extract/launch its archive. Preserve all existing work/backups; no main merge or external distribution. The terrain-darkness report is currently unreproduced and is not claimed repaired. Independent exact-head review remains pending.
+
+## CI dependency correction and owner regression acceptance - 2026-11-02
+
+The 4ae6904 Studio Debug job reached CTest but could not find RenegadeNativeWindowSurfaceTests.exe. The test was registered but omitted from RenegadeStudioCI's explicit build dependencies. The earlier local preflight explicitly built the test, masking this integration error.
+
+CMakeLists.txt now adds the missing dependency. Verification used the actual Release RenegadeStudioCI aggregate after preserving and moving the existing regression executable out of its output directory. The aggregate regenerated it; the regenerated test passed; all 306 registered Release test commands had existing executables. Application and test source trees are unchanged by this correction. No test exclusion, safety-limit change or timeout increase was used.
+
+The owner manually completed the listed regression tasks and reported all passed, explicitly including river editing and grass deletion. Retain these as owner-reported acceptance; do not repeat their manual regression work. Terrain darkness remains currently unreproduced, not a claimed targeted repair. No current UI interaction is authorised by this CI correction.
+
+Next: validate the final commit's CI and local results, preserve owner acceptance evidence, prepare the package, then perform its integrity and fresh-launch checks. Do not merge main or distribute without the owner's instruction.
