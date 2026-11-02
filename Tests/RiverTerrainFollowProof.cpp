@@ -116,9 +116,20 @@ int main(int argc, char** argv)
         GetModuleHandleW(nullptr), nullptr);
     wi::Application app;
     app.allow_hdr = false;
+    const auto proofStarted = std::chrono::steady_clock::now();
+    const auto progress = [&](const char* stage) {
+        std::cout << "RIVER_PROOF_STAGE " << stage << " elapsed_ms="
+            << std::chrono::duration<double,std::milli>(
+                std::chrono::steady_clock::now()-proofStarted).count() << std::endl;
+    };
+    progress("device-create");
     app.SetWindow(window);
+    progress("device-created");
     wi::initializer::InitializeComponentsImmediate();
     auto* gpu = wi::graphics::GetDevice();
+    Require(gpu != nullptr,"Native graphics device unavailable");
+    std::cout << "RIVER_PROOF_ADAPTER " << gpu->GetAdapterName() << std::endl;
+    progress("components-initialised");
     struct GPUDrain
     {
         ~GPUDrain()
@@ -455,17 +466,37 @@ int main(int argc, char** argv)
             wi::Application& app;
             ~ScopedDisarm() { app.ActivatePath(nullptr); }
         } disarm{app};
+        const char* headlessFlag=std::getenv("RENEGADE_HOSTED_HEADLESS_GRAPHICS");
+        const bool hostedOffscreen=defaultRecovery && headlessFlag &&
+            std::string(headlessFlag)=="1";
+        // Match the existing hosted importer proof: execute native scene/render
+        // work and PNG readback without depending on desktop swapchain presentation.
+        // Owner hardware retains the complete Application::Run presentation path.
+        const auto proofFrame=[&]() {
+            if(!hostedOffscreen) {app.Run();return;}
+            wi::eventhandler::FireEvent(wi::eventhandler::EVENT_THREAD_SAFE_POINT,0);
+            render.PreUpdate();
+            render.Update(1.f/60.f);
+            render.PreRender();
+            render.Render();
+            gpu->SubmitCommandLists();
+            wi::renderer::UpdateGPUSuballocator();
+        };
+        if(defaultRecovery) std::cout<<"RIVER_PROOF_FRAME_MODE "
+            <<(hostedOffscreen?"hosted-offscreen":"desktop-presentation")<<std::endl;
+        if(defaultRecovery) progress("terrain-render-warmup");
         for (int frame=0;frame<160;++frame)
         {
-            app.Run();
+            proofFrame();
             if(frame%24==0) Sleep(10);
         }
         for(int ms=0;ms<15000 && wi::renderer::IsPipelineCreationActive();ms+=25)
             Sleep(25);
-        for(int frame=0;frame<20;++frame) app.Run();
+        for(int frame=0;frame<20;++frame) proofFrame();
         if(defaultRecovery)
             for(int frame=0;frame<1800 && terrain->chunks.size()!=361;++frame)
-            {app.Run();Sleep(5);}
+            {proofFrame();Sleep(5);}
+        if(defaultRecovery) progress("terrain-generated");
         terrain->Generation_Cancel();
         // Never rewrite source chunk buffers while a previous submitted GPU
         // frame or the generator can still own them.
@@ -478,6 +509,7 @@ int main(int argc, char** argv)
 
         if (argc==3 && std::string(argv[2])=="default-recovery")
         {
+            progress("default-361-ready");
             Require(chunksBefore==361,"Creator-default 19x19 terrain was not generated");
             const auto hit=wi::scene::Pick(wi::primitive::Ray(XMFLOAT3(0,200,0),XMFLOAT3(0,-1,0)),
                 wi::enums::FILTER_TERRAIN,~0u,scene);
@@ -495,12 +527,13 @@ int main(int argc, char** argv)
             CreateRiverSplineCommand create(scene,
                 {{-85,ground,0},{-40,ground,0},{0,ground,0},{40,ground,0},{85,ground,0}},options);
             Require(create.Execute(),"Default river creation failed");
-            for(int frame=0;frame<30;++frame)app.Run();
+            for(int frame=0;frame<30;++frame)proofFrame();
             gpu->WaitForGPU();terrain->Generation_Cancel();
             const auto river=create.CreatedEntity();
             const auto paint=GrassAndPaintDigest(*terrain);
             const auto baseline=CaptureTerrainSculpt(scene,*terrain);
             const auto start=std::chrono::steady_clock::now();
+            progress("link-start");
             SetRiverTerrainLayerCommand link(scene,terrainID,river,1.35f,2.f,true);
             if(!link.Execute())throw std::runtime_error("Default link failed: "+link.Error());
             const auto ms=std::chrono::duration<double,std::milli>(
@@ -550,15 +583,18 @@ int main(int argc, char** argv)
                 DirectX::XMMatrixLookAtLH(DirectX::XMVectorSet(15,ground+45,-70,1),
                     DirectX::XMVectorSet(0,ground,0,1),DirectX::XMVectorSet(0,1,0,0))));
             camera.UpdateCamera();
-            for(int frame=0;frame<60;++frame)app.Run();
+            progress("history-masks-external-edit-passed");
+            for(int frame=0;frame<60;++frame)proofFrame();
             gpu->WaitForGPU();
             Require(wi::helper::saveTextureToFile(render.GetRenderResult3D(),
                 (out/"default-linked-river.png").generic_u8string()),"Default river screenshot failed");
             Require(!CaptureRiverWaterPrisms(scene).empty(),
                 "Default sparse-schema river lost underwater volume");
+            progress("render-readback-passed");
             const auto filename=(out/"default-river.wiscene").generic_u8string();
             wi::Archive disk(filename,false,false);scene.Serialize(disk);
             Require(disk.SaveFile(filename),"Default river save failed");
+            progress("save-passed");
             SceneService reopened;
             Require(reopened.LoadScene(filename),"Default river cold scene hydration failed");
             auto& fresh=reopened.GetScene();
@@ -566,6 +602,7 @@ int main(int argc, char** argv)
             Require(fresh.terrains[0].chunks.size()==361,"Default terrain shrank after reopen");
             Require(RecomposeRiverTerrainLayers(fresh,fresh.terrains.GetEntity(0),error),
                 error.c_str());
+            progress("cold-hydration-recomposition-passed");
             std::cout<<"DEFAULT_361_LOCALITY_HISTORY_MASKS_EXTERNAL_EDIT_SAVE_REOPEN_PASS"<<std::endl;
             return 0;
         }

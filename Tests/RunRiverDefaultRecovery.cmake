@@ -1,0 +1,20 @@
+if(NOT DEFINED RENEGADE_RIVER_PROOF OR NOT EXISTS "${RENEGADE_RIVER_PROOF}")
+    message(FATAL_ERROR "A built native river proof is required")
+endif()
+if(NOT DEFINED RENEGADE_RIVER_OUTPUT_ROOT OR RENEGADE_RIVER_OUTPUT_ROOT STREQUAL "")
+    message(FATAL_ERROR "A disposable proof output root is required")
+endif()
+# Never delete/overwrite a prior run: the native executable deliberately refuses it.
+string(TIMESTAMP RUN_TIMESTAMP "%Y%m%dT%H%M%SZ" UTC)
+string(RANDOM LENGTH 12 ALPHABET "0123456789abcdef" RUN_NONCE)
+set(RUN_OUTPUT "${RENEGADE_RIVER_OUTPUT_ROOT}/${RUN_TIMESTAMP}-${RUN_NONCE}")
+if(EXISTS "${RUN_OUTPUT}")
+    message(FATAL_ERROR "Refusing to overwrite earlier river proof evidence")
+endif()
+message(STATUS "River default recovery evidence: ${RUN_OUTPUT}")
+execute_process(
+    COMMAND "${RENEGADE_RIVER_PROOF}" "${RUN_OUTPUT}" default-recovery
+    RESULT_VARIABLE RIVER_RESULT)
+if(NOT RIVER_RESULT EQUAL 0)
+    message(FATAL_ERROR "Native 361-chunk river recovery failed: ${RIVER_RESULT}")
+endif()

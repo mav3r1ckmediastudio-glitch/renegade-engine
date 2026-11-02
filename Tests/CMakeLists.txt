@@ -445,11 +445,16 @@ if(WIN32)
     set_target_properties(RenegadeRiverTerrainFollowProof PROPERTIES FOLDER "Renegade")
     # Exercise the real creator-default extent, not only the historical 3x3 fixture.
     add_test(NAME RenegadeRiverDefaultTerrainRecovery
-        COMMAND RenegadeRiverTerrainFollowProof
-            "${CMAKE_CURRENT_BINARY_DIR}/river-default-recovery-$<CONFIG>" default-recovery)
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
+            "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/river-default-recovery-$<CONFIG>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
+    # Keep every 361-chunk/data/GPU assertion. Hosted Debug runs need a bounded
+    # longer deadline than the owner-GPU Release proof; progress logs distinguish
+    # slow creation/rendering/serialization from a stalled graphics operation.
     set_tests_properties(RenegadeRiverDefaultTerrainRecovery PROPERTIES
         WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
-        TIMEOUT 180)
+        TIMEOUT "$<IF:$<CONFIG:Debug>,600,180>")
 endif()
 
 add_executable(RenegadeLightTests
