@@ -73,6 +73,39 @@ class RecoveryPackageTests(unittest.TestCase):
             package.require_native_revision(binary, "a" * 40)
             with self.assertRaises(ValueError): package.require_native_revision(binary, "b" * 40)
 
+    def portable_fixture(self, root):
+        (root / "LICENSES").mkdir()
+        for relative in package.REQUIRED_PRIVATE_FILES:
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"portable-runtime-fixture")
+
+    def test_portable_bundle_needs_no_development_node_modules(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.portable_fixture(root)
+            self.assertFalse((root / "Tools/assistant_presence/node_modules").exists())
+            package.require_private_runtime(root)
+
+    def test_missing_or_empty_portable_runtime_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.portable_fixture(root)
+            for relative in package.REQUIRED_PRIVATE_FILES:
+                with self.subTest(runtime=relative):
+                    path = root / relative
+                    original = path.read_bytes()
+                    path.unlink()
+                    with self.assertRaises(ValueError):
+                        package.require_private_runtime(root)
+                    path.write_bytes(b"")
+                    with self.assertRaises(ValueError):
+                        package.require_private_runtime(root)
+                    path.write_bytes(original)
+            (root / "LICENSES").rmdir()
+            with self.assertRaises(ValueError):
+                package.require_private_runtime(root)
+
     def test_rejects_unsafe_previous_archive_paths(self):
         for name in ('../outside', '/absolute', 'C:/absolute', 'dir\\file', 'safe/../../outside'):
             with self.subTest(name=name), self.assertRaises(ValueError): package.safe_relative(name)

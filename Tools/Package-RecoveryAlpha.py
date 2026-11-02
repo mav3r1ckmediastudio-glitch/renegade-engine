@@ -19,6 +19,34 @@ REQUIRED_CI = {"Windows x64 Debug", "Windows x64 Release",
 REQUIRED_SMOKE = {"startup", "onboarding", "importer", "river", "weather",
                   "test_game", "build_game", "assistant"}
 
+# Portable launchers use the bundled executables directly. Electron is a
+# development-only npm dependency; its native host supplies require("electron").
+# Validate what the shipped launchers actually execute/load, not node_modules.
+REQUIRED_PRIVATE_FILES = (
+    "AssistantRuntime/electron/electron.exe",
+    "AssistantRuntime/node/node.exe",
+    "AssistantRuntime/llama/llama-server.exe",
+    "AssistantRuntime/python-voice/python.exe",
+    "AssistantRuntime/python-stt/python.exe",
+    "AssistantRuntime/models/qwen4b-q5_k_m.gguf",
+    "AssistantRuntime/models/character-v6.gguf",
+    "AssistantRuntime/models/model-manifest.json",
+    "AssistantRuntime/speech/kokoro-v1.0.onnx",
+    "AssistantRuntime/speech/voices-v1.0.bin",
+    "AssistantRuntime/stt-model/model.bin",
+    "AssistantRuntime/stt-model/config.json",
+    "AssistantRuntime/stt-model/tokenizer.json",
+    "AssistantRuntime/stt-model/vocabulary.txt",
+)
+
+def require_private_runtime(root):
+    if not (root / "LICENSES").is_dir():
+        raise ValueError("Previous package lacks private-runtime license notices")
+    for relative in REQUIRED_PRIVATE_FILES:
+        path = root / relative
+        if not path.is_file() or path.stat().st_size == 0:
+            raise ValueError(f"Previous package lacks required portable runtime: {relative}")
+
 def sha(path):
     h = hashlib.sha256()
     with Path(path).open("rb") as stream:
@@ -90,9 +118,7 @@ def stage(args):
                 # Streaming extraction validates ZIP CRC without a multi-GB allocation.
                 with previous.open(entry) as source, destination.open("wb") as target:
                     shutil.copyfileobj(source, target)
-    for rel in ("AssistantRuntime", "LICENSES", "Tools/assistant_presence/node_modules"):
-        if not (root / rel).is_dir():
-            raise ValueError(f"Previous package lacks required private runtime: {rel}")
+    require_private_runtime(root)
     for rel in ("Tools/assistant_presence", "Tools/assistant_knowledge"):
         tracked_tree(checkout, rel, root)
     tracked_tree(checkout, "Tools/Read-RenegadeDiagnostics.py", root)
