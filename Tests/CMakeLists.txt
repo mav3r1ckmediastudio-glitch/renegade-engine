@@ -433,6 +433,13 @@ if(WIN32)
             VERBATIM)
     endif()
     set_target_properties(RenegadeRiverTerrainFollowProof PROPERTIES FOLDER "Renegade")
+    # Exercise the real creator-default extent, not only the historical 3x3 fixture.
+    add_test(NAME RenegadeRiverDefaultTerrainRecovery
+        COMMAND RenegadeRiverTerrainFollowProof
+            "${CMAKE_CURRENT_BINARY_DIR}/river-default-recovery-$<CONFIG>" default-recovery)
+    set_tests_properties(RenegadeRiverDefaultTerrainRecovery PROPERTIES
+        WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
+        TIMEOUT 180)
 endif()
 
 add_executable(RenegadeLightTests

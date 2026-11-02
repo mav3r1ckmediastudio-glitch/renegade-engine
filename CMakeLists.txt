@@ -327,6 +327,7 @@ endif()
 if(TARGET RenegadeStudioCI)
     add_dependencies(RenegadeStudioCI
         RenegadeRiverUnderwaterTests
+        RenegadeRiverTerrainFollowProof
         RenegadeRiverSplineTests
         RenegadeRiverFoamTests
         RenegadeRiverFlowFieldTests
