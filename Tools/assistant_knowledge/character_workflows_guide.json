@@ -10,7 +10,7 @@
       "sources": [
         {
           "path": "Studio/src/StudioApplication.cpp",
-          "needle": "params.extensions = {\"glb\", \"fbx\"};"
+          "needle": "params.extensions = {\"glb\", \"fbx\", \"obj\"};"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",

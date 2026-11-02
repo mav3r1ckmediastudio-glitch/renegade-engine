@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "static-model-import",
-  "title": "Import and place a static GLB or FBX model",
+  "title": "Import and place a static OBJ, GLB or FBX model",
   "status": "source_checked_prior_owner_checkpoint_native_service_pass",
   "manual_path": "docs/MODEL_IMPORTER_REBUILD.md",
   "end_to_end_acceptance": {
@@ -29,7 +29,7 @@
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
-          "needle": "params.extensions = {\"glb\", \"fbx\"};"
+          "needle": "params.extensions = {\"glb\", \"fbx\", \"obj\"};"
         }
       ]
     },
@@ -85,5 +85,9 @@
         }
       ]
     }
-  ]
+  ],
+  "recovery_review": {
+    "date": "2026-11-02",
+    "scope": "Static OBJ restored with owner-observed textured import and actual native OBJ/map/reimport proofs; existing Character/GLB/FBX paths retained. Missing-map behavior is warning and replacement, not blanket import rejection. Historical acceptance records remain historical."
+  }
 }

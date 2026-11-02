@@ -39,6 +39,19 @@ def main():
         for (raw,) in evidence:
             for proof in json.loads(raw):
                 source_files.add(proof["path"])
+        # Existing guides must survive packaging too, not only the new river cards.
+        def collect(value):
+            if isinstance(value, dict):
+                for key in ("path", "manual_path", "receipt_path"):
+                    relative = value.get(key)
+                    if isinstance(relative, str) and (repo / relative).is_file():
+                        source_files.add(relative)
+                for item in value.values(): collect(item)
+            elif isinstance(value, list):
+                for item in value: collect(item)
+        for definition in (repo / "Tools/assistant_knowledge").glob("*.json"):
+            source_files.add(definition.relative_to(repo).as_posix())
+            collect(json.loads(definition.read_text(encoding="utf-8")))
         for relative in source_files:
             dst=source/relative
             dst.parent.mkdir(parents=True,exist_ok=True)
@@ -56,6 +69,18 @@ def main():
         for question,needle in qa.items():
             answer=bridge_server.knowledge_reply(question,source,database)
             assert needle.casefold() in answer.casefold(),(question,answer)
+        import workflow_answers
+        registry=source/"Tools/assistant_knowledge/workflows.json"
+        for question,needle in {
+            "How do I import an OBJ model?":"CHOOSE / REPLACE MAP",
+            "How do I save a projectile and assign it to my player?":"APPLY TO THIS PLAYER",
+        }.items():
+            answer=workflow_answers.verified_workflow(question,source,database,registry)
+            assert answer and needle in answer,(question,answer)
+        changed=source/"Studio/src/PlayerProjectileEditor.cpp"
+        with changed.open("a",encoding="utf-8") as f: f.write("\n// source changed after packaging\n")
+        assert workflow_answers.verified_workflow(
+            "How do I save a projectile and assign it to my player?",source,database,registry) is None
         # Fail closed if the package database no longer matches its identity.
         manifest=json.loads(identity.read_text(encoding="utf-8"))
         manifest["database_sha256"]="0"*64
@@ -71,7 +96,7 @@ def main():
             f.write("\nQA source-hash mismatch\n")
         untrusted=knowledge.search(database,"What is Renegade?",source,strict=True)
         assert not any(x["id"]=="renegade-identity" for x in untrusted["verified_facts"])
-        print("PASS: Gitless package identity, three routed answers, stale index rejection, altered source rejection")
+        print("PASS: Gitless package identity, three routed answers, existing Gitless workflows, stale index and changed source rejection")
 
 
 if __name__=="__main__":

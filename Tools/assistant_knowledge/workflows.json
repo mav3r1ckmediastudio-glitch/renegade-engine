@@ -36,22 +36,22 @@
         {
           "path": "Studio/src/Phase5Gate4MaterialInspector.cpp",
           "needle": "objectSurfaceLabel_.SetText(\"SURFACE TYPE\");",
-          "sha256": "f49c0b58140a3b5d6191ae29635034ec6287e0ed38053fc7706acd277cde4eeb"
+          "sha256": "3c38161d083117e0751cd8ea0254c115cfe0eab239b37e2b2bee4dfdaaa94c94"
         },
         {
           "path": "Studio/src/Phase5Gate4MaterialInspector.cpp",
           "needle": "std::make_unique<bridge::SetObjectImpactSurfaceCommand>",
-          "sha256": "f49c0b58140a3b5d6191ae29635034ec6287e0ed38053fc7706acd277cde4eeb"
+          "sha256": "3c38161d083117e0751cd8ea0254c115cfe0eab239b37e2b2bee4dfdaaa94c94"
         },
         {
           "path": "docs/ARCHITECTURE.md",
           "needle": "Creator steps: select an object; choose Surface Type directly in its Inspector.",
-          "sha256": "bfb45dcb6ed53c8461b83d7dc65fe87c1201a67568652c6c83ce181b7ab1aad0"
+          "sha256": "e4052daa13104f612135121fdce8e755b24f261af56399eff4aa3fb42ec7f298"
         },
         {
           "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "fbef01868e30382efe1d73221ecfbb08b969116f42b23905d5d0d80b39e4ad2a"
+          "sha256": "84dc1047d3db2b845e44848faeeab5ab8ee165fe5b81b8bdb46162bc5648f88f"
         }
       ],
       "provenance": [
@@ -99,32 +99,32 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportAddAnimation_.SetText(\"ADD ANIMATION FBX\");",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "EngineBridge/src/ModelImportCandidateService.cpp",
           "needle": "External animation import currently accepts FBX only.",
-          "sha256": "ddb1b2ce46c54fb5bb288fbc169b3eca334840e0512de8fb12c23385b6352b64"
+          "sha256": "e0c4dbf4b79ba4bf7c829cc37e293b11d4cc4b88faf001ff2a547076e352dfe0"
         },
         {
           "path": "EngineBridge/src/ModelImportCandidateService.cpp",
           "needle": "External animation import requires exactly one humanoid rig.",
-          "sha256": "ddb1b2ce46c54fb5bb288fbc169b3eca334840e0512de8fb12c23385b6352b64"
+          "sha256": "e0c4dbf4b79ba4bf7c829cc37e293b11d4cc4b88faf001ff2a547076e352dfe0"
         },
         {
           "path": "docs/MODEL_IMPORTER_REBUILD.md",
           "needle": "This is bounded new-import authoring.",
-          "sha256": "c6a26397305f1fec7eafe64ebea12687a651e2ea99df8c21b3fddc4551872c10"
+          "sha256": "20910815006d9bc9bb417bb1d700878ff9069463879d77b87b0eca9ca266490c"
         },
         {
           "path": "Tools/assistant_knowledge/character_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "c76653d91d90a2e24ff7b01ef0bd5250eeaea4da1410d6165743220e9415f61f"
+          "sha256": "640a65358d5369cdd0b3ee3e556dfaeffc01b973c648a9ed3eb8bf8193e8fdba"
         },
         {
           "path": "Tools/assistant_knowledge/CHARACTER_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "21a09ac3e2ff4f7cef5eef04e99e5bacc523bfb91c6cd7a3794d54d21ad56744"
+          "sha256": "517bbf45d4bd36d935971974c81e0beb2c2cee51a4ad0af5a9be95dc46257330"
         }
       ],
       "provenance": [
@@ -173,27 +173,27 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportAction_.Create(\"Gameplay action\");",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "{\"Unassigned\", \"Idle\", \"Walk\", \"Run\", \"Attack\", \"Reload\", \"Hit\", \"Death\"}",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "docs/MODEL_IMPORTER_REBUILD.md",
           "needle": "Several clips may share an action; missing actions remain valid.",
-          "sha256": "c6a26397305f1fec7eafe64ebea12687a651e2ea99df8c21b3fddc4551872c10"
+          "sha256": "20910815006d9bc9bb417bb1d700878ff9069463879d77b87b0eca9ca266490c"
         },
         {
           "path": "Tools/assistant_knowledge/character_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "c76653d91d90a2e24ff7b01ef0bd5250eeaea4da1410d6165743220e9415f61f"
+          "sha256": "640a65358d5369cdd0b3ee3e556dfaeffc01b973c648a9ed3eb8bf8193e8fdba"
         },
         {
           "path": "Tools/assistant_knowledge/CHARACTER_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "21a09ac3e2ff4f7cef5eef04e99e5bacc523bfb91c6cd7a3794d54d21ad56744"
+          "sha256": "517bbf45d4bd36d935971974c81e0beb2c2cee51a4ad0af5a9be95dc46257330"
         }
       ],
       "provenance": [
@@ -240,27 +240,27 @@
         {
           "path": "Studio/src/AICharacterInspector.cpp",
           "needle": "AddEnum(role_, \"WANDER\", bridge::CharacterRole::Wander);",
-          "sha256": "b2d4f4de658a6999576d7778eb48b0688f98f5d3ac266fd7ea80c2bfddad7dd8"
+          "sha256": "3d714caf886c8879721d96332a96e36a613b309a1766770157c510900f709037"
         },
         {
           "path": "Runtime/src/RuntimeCharacterDecision.h",
           "needle": "case bridge::CharacterRole::Wander:",
-          "sha256": "e95e14a95b72303a252d27b1aa440fe67ba04b2439806d4c526c65a0dfb9ff4e"
+          "sha256": "ae1858596ead4314563a629090cb00cd9b763c23d80ce281982afc7e05bad90e"
         },
         {
           "path": "docs/AI_IMPLEMENTATION_HANDOFF.md",
           "needle": "resuming Wander.",
-          "sha256": "5a27a6a06f1e6e626fb93a1225818e7d5043b9ccd6d86b97c04d4777ae7600a8"
+          "sha256": "e24374daa216305ecced787114ef97f6fc80fd12bd590ee26ed7d5f9172a65ae"
         },
         {
           "path": "Tools/assistant_knowledge/npc_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "df972ecbc017c80a32863af973d5d0978544602e9b0647bc79b42ccab06dc44e"
+          "sha256": "cbae1c61d5308d6f0c90d2f22122898d1e7adc9401fec327cc3600b08dcb7249"
         },
         {
           "path": "Tools/assistant_knowledge/NPC_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "564954fd3030691d6ff3565cc4223b4f6fafad43a90c570fa9570064395f8e9d"
+          "sha256": "ee5062c3a2d4186a7c80052b150d0d343bed8865e3d9e05a614012fd56a418f5"
         }
       ],
       "provenance": [
@@ -310,37 +310,37 @@
         {
           "path": "Studio/src/AIPatrolRouteInspector.cpp",
           "needle": "create_.SetText(\"CREATE + ASSIGN ROUTE\");",
-          "sha256": "3b8d84303ee91948decad27798a4eafb543bd784d0e19927a6c38d8cb7e7d10a"
+          "sha256": "af73b24fbe144527b35af5203993fa9c39ea919c20fe1c0e6b34e4d91161af6f"
         },
         {
           "path": "Studio/src/AIPatrolRouteInspector.cpp",
           "needle": "addPoint_.SetText(\"ADD PATROL POINT\");",
-          "sha256": "3b8d84303ee91948decad27798a4eafb543bd784d0e19927a6c38d8cb7e7d10a"
+          "sha256": "af73b24fbe144527b35af5203993fa9c39ea919c20fe1c0e6b34e4d91161af6f"
         },
         {
           "path": "Studio/src/AIPatrolRouteInspector.cpp",
           "needle": "mode_.AddItem(\"PING PONG\"",
-          "sha256": "3b8d84303ee91948decad27798a4eafb543bd784d0e19927a6c38d8cb7e7d10a"
+          "sha256": "af73b24fbe144527b35af5203993fa9c39ea919c20fe1c0e6b34e4d91161af6f"
         },
         {
           "path": "Studio/src/AICharacterInspector.cpp",
           "needle": "AddEnum(role_, \"PATROL GUARD\"",
-          "sha256": "b2d4f4de658a6999576d7778eb48b0688f98f5d3ac266fd7ea80c2bfddad7dd8"
+          "sha256": "3d714caf886c8879721d96332a96e36a613b309a1766770157c510900f709037"
         },
         {
           "path": "Runtime/src/RuntimeCharacterDecision.h",
           "needle": "if (hasUsableRoute && RoleNormallyPatrols",
-          "sha256": "e95e14a95b72303a252d27b1aa440fe67ba04b2439806d4c526c65a0dfb9ff4e"
+          "sha256": "ae1858596ead4314563a629090cb00cd9b763c23d80ce281982afc7e05bad90e"
         },
         {
           "path": "Tools/assistant_knowledge/npc_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "df972ecbc017c80a32863af973d5d0978544602e9b0647bc79b42ccab06dc44e"
+          "sha256": "cbae1c61d5308d6f0c90d2f22122898d1e7adc9401fec327cc3600b08dcb7249"
         },
         {
           "path": "Tools/assistant_knowledge/NPC_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "564954fd3030691d6ff3565cc4223b4f6fafad43a90c570fa9570064395f8e9d"
+          "sha256": "ee5062c3a2d4186a7c80052b150d0d343bed8865e3d9e05a614012fd56a418f5"
         }
       ],
       "provenance": [
@@ -388,27 +388,27 @@
         {
           "path": "Studio/src/CharacterPrefabInspectorExtension.cpp",
           "needle": "save_.SetText(\"SAVE CHARACTER PREFAB\");",
-          "sha256": "ed584b564c8f8990ac2cac82b3adc6696924c82da86e26c80083b2b810600ef9"
+          "sha256": "8eea7702e8ee14bf21304912c252789b7292b728189782a58755b34327d8a661"
         },
         {
           "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
           "needle": "Patrol Route and Weapon stable IDs are treated as scene-local",
-          "sha256": "2f74264325f2ca1bc72deb5b2a28a520e5b039bb0b767b1778f5deacd7e37253"
+          "sha256": "012a9426efaf538f25f9b8e136ce9c651900bba04d6982f207b7c2d98c2caca1"
         },
         {
           "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
           "needle": "A prefab containing Actions/Scripts fails closed in an unsaved Level",
-          "sha256": "2f74264325f2ca1bc72deb5b2a28a520e5b039bb0b767b1778f5deacd7e37253"
+          "sha256": "012a9426efaf538f25f9b8e136ce9c651900bba04d6982f207b7c2d98c2caca1"
         },
         {
           "path": "Tools/assistant_knowledge/character_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "c76653d91d90a2e24ff7b01ef0bd5250eeaea4da1410d6165743220e9415f61f"
+          "sha256": "640a65358d5369cdd0b3ee3e556dfaeffc01b973c648a9ed3eb8bf8193e8fdba"
         },
         {
           "path": "Tools/assistant_knowledge/CHARACTER_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "21a09ac3e2ff4f7cef5eef04e99e5bacc523bfb91c6cd7a3794d54d21ad56744"
+          "sha256": "517bbf45d4bd36d935971974c81e0beb2c2cee51a4ad0af5a9be95dc46257330"
         }
       ],
       "provenance": [
@@ -455,27 +455,27 @@
         {
           "path": "Studio/src/S4DGlobalScriptInspector.cpp",
           "needle": "add_.Create(\"ADD\");",
-          "sha256": "765f9c6b4b6ce06433c9a6b8ac8219c757ab251d7d77e1d250fb3fe919700d56"
+          "sha256": "746e24c30f92c0d63d1e66a531ce4e52cd74f026c8a1633715b95a8ed3504d14"
         },
         {
           "path": "Studio/src/S4DGlobalScriptInspector.cpp",
           "needle": "descriptor.title = \"GLOBAL SCRIPT\";",
-          "sha256": "765f9c6b4b6ce06433c9a6b8ac8219c757ab251d7d77e1d250fb3fe919700d56"
+          "sha256": "746e24c30f92c0d63d1e66a531ce4e52cd74f026c8a1633715b95a8ed3504d14"
         },
         {
           "path": "docs/S4D_REFERENCES_GLOBAL_SCRIPT_HARDENING.md",
           "needle": "It has no entity owner",
-          "sha256": "16e7d180888f90423f5ca628abdb57b7076db71ac27e204a6bcbf0fc88e45b61"
+          "sha256": "b7af7717396b993b938ede45134c2fe5a35648bdd566bfab601344f4fafef5eb"
         },
         {
           "path": "Tools/assistant_knowledge/script_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+          "sha256": "6cb2ce8f380e1109d0539355db87baa9fa21e6279ecf5756d5d4083f9dda1539"
         },
         {
           "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+          "sha256": "390d23d24ffa98693bdf4ef47ed2daed59f17205a88496bb68d253bd90ed2911"
         }
       ],
       "provenance": [
@@ -526,17 +526,17 @@
         {
           "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
           "needle": "Expand **ACTION**",
-          "sha256": "ca3ad84cd8f0b7e658e6869c2cf7685f14aeeeff5c46b3e1c8310918b2845f0e"
+          "sha256": "344f50ee5fc844b3b982e92ba5dbfd17dd9fd2b666f93349eef5ff2abb18cbd9"
         },
         {
           "path": "Tools/assistant_knowledge/script_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+          "sha256": "6cb2ce8f380e1109d0539355db87baa9fa21e6279ecf5756d5d4083f9dda1539"
         },
         {
           "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+          "sha256": "390d23d24ffa98693bdf4ef47ed2daed59f17205a88496bb68d253bd90ed2911"
         }
       ],
       "provenance": [
@@ -587,17 +587,17 @@
         {
           "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
           "needle": "Expand **ACTION**",
-          "sha256": "ca3ad84cd8f0b7e658e6869c2cf7685f14aeeeff5c46b3e1c8310918b2845f0e"
+          "sha256": "344f50ee5fc844b3b982e92ba5dbfd17dd9fd2b666f93349eef5ff2abb18cbd9"
         },
         {
           "path": "Tools/assistant_knowledge/script_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+          "sha256": "6cb2ce8f380e1109d0539355db87baa9fa21e6279ecf5756d5d4083f9dda1539"
         },
         {
           "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+          "sha256": "390d23d24ffa98693bdf4ef47ed2daed59f17205a88496bb68d253bd90ed2911"
         }
       ],
       "provenance": [
@@ -647,17 +647,17 @@
         {
           "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
           "needle": "Expand **ACTION**",
-          "sha256": "ca3ad84cd8f0b7e658e6869c2cf7685f14aeeeff5c46b3e1c8310918b2845f0e"
+          "sha256": "344f50ee5fc844b3b982e92ba5dbfd17dd9fd2b666f93349eef5ff2abb18cbd9"
         },
         {
           "path": "Tools/assistant_knowledge/script_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+          "sha256": "6cb2ce8f380e1109d0539355db87baa9fa21e6279ecf5756d5d4083f9dda1539"
         },
         {
           "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+          "sha256": "390d23d24ffa98693bdf4ef47ed2daed59f17205a88496bb68d253bd90ed2911"
         }
       ],
       "provenance": [
@@ -707,17 +707,17 @@
         {
           "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
           "needle": "Expand **ACTION**",
-          "sha256": "ca3ad84cd8f0b7e658e6869c2cf7685f14aeeeff5c46b3e1c8310918b2845f0e"
+          "sha256": "344f50ee5fc844b3b982e92ba5dbfd17dd9fd2b666f93349eef5ff2abb18cbd9"
         },
         {
           "path": "Tools/assistant_knowledge/script_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+          "sha256": "6cb2ce8f380e1109d0539355db87baa9fa21e6279ecf5756d5d4083f9dda1539"
         },
         {
           "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+          "sha256": "390d23d24ffa98693bdf4ef47ed2daed59f17205a88496bb68d253bd90ed2911"
         }
       ],
       "provenance": [
@@ -767,17 +767,17 @@
         {
           "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
           "needle": "Expand **ACTION**",
-          "sha256": "ca3ad84cd8f0b7e658e6869c2cf7685f14aeeeff5c46b3e1c8310918b2845f0e"
+          "sha256": "344f50ee5fc844b3b982e92ba5dbfd17dd9fd2b666f93349eef5ff2abb18cbd9"
         },
         {
           "path": "Tools/assistant_knowledge/script_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+          "sha256": "6cb2ce8f380e1109d0539355db87baa9fa21e6279ecf5756d5d4083f9dda1539"
         },
         {
           "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+          "sha256": "390d23d24ffa98693bdf4ef47ed2daed59f17205a88496bb68d253bd90ed2911"
         }
       ],
       "provenance": [
@@ -827,17 +827,17 @@
         {
           "path": "docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md",
           "needle": "Expand **ACTION**",
-          "sha256": "ca3ad84cd8f0b7e658e6869c2cf7685f14aeeeff5c46b3e1c8310918b2845f0e"
+          "sha256": "344f50ee5fc844b3b982e92ba5dbfd17dd9fd2b666f93349eef5ff2abb18cbd9"
         },
         {
           "path": "Tools/assistant_knowledge/script_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+          "sha256": "6cb2ce8f380e1109d0539355db87baa9fa21e6279ecf5756d5d4083f9dda1539"
         },
         {
           "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+          "sha256": "390d23d24ffa98693bdf4ef47ed2daed59f17205a88496bb68d253bd90ed2911"
         }
       ],
       "provenance": [
@@ -886,7 +886,7 @@
         {
           "path": "Studio/src/PlayerProjectileEditor.cpp",
           "needle": "button(projectileSocketEdit_,\"EDIT SPAWN POINTS...\"",
-          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+          "sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404"
         },
         {
           "path": "Studio/src/LaunchSocketEditor.cpp",
@@ -906,12 +906,12 @@
         {
           "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "fbef01868e30382efe1d73221ecfbb08b969116f42b23905d5d0d80b39e4ad2a"
+          "sha256": "84dc1047d3db2b845e44848faeeab5ab8ee165fe5b81b8bdb46162bc5648f88f"
         },
         {
           "path": "Tools/assistant_knowledge/PROJECTILE_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "5c6581961cf0dd20c4fc983dea039f775d2b3e109ec2e49237e2189a26a31432"
+          "sha256": "fc454f10f3cc04e5be7582a6063f5eada99d76974e75d83d298622fa109bc1d8"
         }
       ],
       "provenance": [
@@ -959,32 +959,32 @@
         {
           "path": "Studio/src/PlayerProjectileEditor.cpp",
           "needle": "button(projectileTimingOpen_,\"SET FIRE TIME IN ANIMATION...\"",
-          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+          "sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404"
         },
         {
           "path": "Studio/src/PlayerProjectileEditor.cpp",
           "needle": "button(projectileTimingMark_,\"MARK CURRENT POSE\"",
-          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+          "sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404"
         },
         {
           "path": "Studio/src/PlayerProjectileEditor.cpp",
           "needle": "button(projectileTimingUse_,\"USE FIRE TIME\"",
-          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+          "sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404"
         },
         {
           "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
           "needle": "Saved release marker runtime proof",
-          "sha256": "7a27f12382241019d316813112c03e965036c73ca74c7c07fdd563f39177adf9"
+          "sha256": "d91ed18e81cae8f099a31f7adb097ec35bddaea2e2f4e8a2e249bc9656bf812f"
         },
         {
           "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "fbef01868e30382efe1d73221ecfbb08b969116f42b23905d5d0d80b39e4ad2a"
+          "sha256": "84dc1047d3db2b845e44848faeeab5ab8ee165fe5b81b8bdb46162bc5648f88f"
         },
         {
           "path": "Tools/assistant_knowledge/PROJECTILE_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "5c6581961cf0dd20c4fc983dea039f775d2b3e109ec2e49237e2189a26a31432"
+          "sha256": "fc454f10f3cc04e5be7582a6063f5eada99d76974e75d83d298622fa109bc1d8"
         }
       ],
       "provenance": [
@@ -1031,22 +1031,22 @@
         {
           "path": "Studio/src/PlayerProjectileEditor.cpp",
           "needle": "projectileFireMode_.AddItem(\"Hitscan / instant ray\");",
-          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+          "sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404"
         },
         {
           "path": "docs/P3_PROJECTILE_UX_CLEANUP.md",
           "needle": "not a projectile preset.",
-          "sha256": "7a27f12382241019d316813112c03e965036c73ca74c7c07fdd563f39177adf9"
+          "sha256": "d91ed18e81cae8f099a31f7adb097ec35bddaea2e2f4e8a2e249bc9656bf812f"
         },
         {
           "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "fbef01868e30382efe1d73221ecfbb08b969116f42b23905d5d0d80b39e4ad2a"
+          "sha256": "84dc1047d3db2b845e44848faeeab5ab8ee165fe5b81b8bdb46162bc5648f88f"
         },
         {
           "path": "Tools/assistant_knowledge/PROJECTILE_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "5c6581961cf0dd20c4fc983dea039f775d2b3e109ec2e49237e2189a26a31432"
+          "sha256": "fc454f10f3cc04e5be7582a6063f5eada99d76974e75d83d298622fa109bc1d8"
         }
       ],
       "provenance": [
@@ -1093,33 +1093,33 @@
       "evidence": [
         {
           "path": "Studio/src/StudioApplication.cpp",
-          "needle": "params.extensions = {\"glb\", \"fbx\"};",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "needle": "params.extensions = {\"glb\", \"fbx\", \"obj\"};",
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "\"Animated import currently requires a skinned mesh and skeleton.\"",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportClip_.AddItem(\"REFERENCE POSE\");",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
           "needle": "Prepared Character Assets automatically become governed Character",
-          "sha256": "2f74264325f2ca1bc72deb5b2a28a520e5b039bb0b767b1778f5deacd7e37253"
+          "sha256": "012a9426efaf538f25f9b8e136ce9c651900bba04d6982f207b7c2d98c2caca1"
         },
         {
           "path": "Tools/assistant_knowledge/character_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "c76653d91d90a2e24ff7b01ef0bd5250eeaea4da1410d6165743220e9415f61f"
+          "sha256": "640a65358d5369cdd0b3ee3e556dfaeffc01b973c648a9ed3eb8bf8193e8fdba"
         },
         {
           "path": "Tools/assistant_knowledge/CHARACTER_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "21a09ac3e2ff4f7cef5eef04e99e5bacc523bfb91c6cd7a3794d54d21ad56744"
+          "sha256": "517bbf45d4bd36d935971974c81e0beb2c2cee51a4ad0af5a9be95dc46257330"
         }
       ],
       "provenance": [
@@ -1168,32 +1168,32 @@
         {
           "path": "Studio/src/AICharacterInspector.cpp",
           "needle": "makeRemove_.SetText(isCharacter_ ? \"REMOVE CHARACTER\" : \"MAKE CHARACTER\");",
-          "sha256": "b2d4f4de658a6999576d7778eb48b0688f98f5d3ac266fd7ea80c2bfddad7dd8"
+          "sha256": "3d714caf886c8879721d96332a96e36a613b309a1766770157c510900f709037"
         },
         {
           "path": "Studio/src/AICharacterInspector.cpp",
           "needle": "role_.Create(\"Character Role\");",
-          "sha256": "b2d4f4de658a6999576d7778eb48b0688f98f5d3ac266fd7ea80c2bfddad7dd8"
+          "sha256": "3d714caf886c8879721d96332a96e36a613b309a1766770157c510900f709037"
         },
         {
           "path": "Studio/src/AICharacterInspector.cpp",
           "needle": "autonomous_.Create(\"Character Autonomous\");",
-          "sha256": "b2d4f4de658a6999576d7778eb48b0688f98f5d3ac266fd7ea80c2bfddad7dd8"
+          "sha256": "3d714caf886c8879721d96332a96e36a613b309a1766770157c510900f709037"
         },
         {
           "path": "Runtime/src/RuntimeCharacterDecision.h",
           "needle": "if (!character.authoring.autonomous)",
-          "sha256": "e95e14a95b72303a252d27b1aa440fe67ba04b2439806d4c526c65a0dfb9ff4e"
+          "sha256": "ae1858596ead4314563a629090cb00cd9b763c23d80ce281982afc7e05bad90e"
         },
         {
           "path": "Tools/assistant_knowledge/npc_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "df972ecbc017c80a32863af973d5d0978544602e9b0647bc79b42ccab06dc44e"
+          "sha256": "cbae1c61d5308d6f0c90d2f22122898d1e7adc9401fec327cc3600b08dcb7249"
         },
         {
           "path": "Tools/assistant_knowledge/NPC_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "564954fd3030691d6ff3565cc4223b4f6fafad43a90c570fa9570064395f8e9d"
+          "sha256": "ee5062c3a2d4186a7c80052b150d0d343bed8865e3d9e05a614012fd56a418f5"
         }
       ],
       "provenance": [
@@ -1240,32 +1240,32 @@
         {
           "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
           "needle": "controls.add.Create(\"ADD\");",
-          "sha256": "094807b558487eeb0b6e7f2c2376c63e3c1e28fefb88dde8882262476d3bcf09"
+          "sha256": "35954af64f77ed0f3c16079f999c8aaad9e6f916e5c094aae02d0dc72eb139ea"
         },
         {
           "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
           "needle": "controls.refresh.Create(\"REFRESH\");",
-          "sha256": "094807b558487eeb0b6e7f2c2376c63e3c1e28fefb88dde8882262476d3bcf09"
+          "sha256": "35954af64f77ed0f3c16079f999c8aaad9e6f916e5c094aae02d0dc72eb139ea"
         },
         {
           "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
           "needle": "session->Scripts().EnsureEntityOwnerIdentity(",
-          "sha256": "094807b558487eeb0b6e7f2c2376c63e3c1e28fefb88dde8882262476d3bcf09"
+          "sha256": "35954af64f77ed0f3c16079f999c8aaad9e6f916e5c094aae02d0dc72eb139ea"
         },
         {
           "path": "docs/SCRIPTING_S4A_METADATA_CONTRACT.md",
           "needle": "required and exactly one of",
-          "sha256": "424f281e48fc4b342bbf83ff2fb0647e05b211100e33708c8ea6be1ad688f1a5"
+          "sha256": "9070fff7db864b32f8d3289f739c9a9ed172906b732d8a82bc25f5bac0317cad"
         },
         {
           "path": "Tools/assistant_knowledge/script_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+          "sha256": "6cb2ce8f380e1109d0539355db87baa9fa21e6279ecf5756d5d4083f9dda1539"
         },
         {
           "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+          "sha256": "390d23d24ffa98693bdf4ef47ed2daed59f17205a88496bb68d253bd90ed2911"
         }
       ],
       "provenance": [
@@ -1312,32 +1312,32 @@
         {
           "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
           "needle": "controls.add.Create(\"ADD\");",
-          "sha256": "094807b558487eeb0b6e7f2c2376c63e3c1e28fefb88dde8882262476d3bcf09"
+          "sha256": "35954af64f77ed0f3c16079f999c8aaad9e6f916e5c094aae02d0dc72eb139ea"
         },
         {
           "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
           "needle": "controls.refresh.Create(\"REFRESH\");",
-          "sha256": "094807b558487eeb0b6e7f2c2376c63e3c1e28fefb88dde8882262476d3bcf09"
+          "sha256": "35954af64f77ed0f3c16079f999c8aaad9e6f916e5c094aae02d0dc72eb139ea"
         },
         {
           "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
           "needle": "session->Scripts().EnsureEntityOwnerIdentity(",
-          "sha256": "094807b558487eeb0b6e7f2c2376c63e3c1e28fefb88dde8882262476d3bcf09"
+          "sha256": "35954af64f77ed0f3c16079f999c8aaad9e6f916e5c094aae02d0dc72eb139ea"
         },
         {
           "path": "docs/SCRIPTING_S4A_METADATA_CONTRACT.md",
           "needle": "required and exactly one of",
-          "sha256": "424f281e48fc4b342bbf83ff2fb0647e05b211100e33708c8ea6be1ad688f1a5"
+          "sha256": "9070fff7db864b32f8d3289f739c9a9ed172906b732d8a82bc25f5bac0317cad"
         },
         {
           "path": "Tools/assistant_knowledge/script_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "888f2a0ca91ecff9fc2a7c1215cf41fa00236546b37f0caaed7d519e047ca368"
+          "sha256": "6cb2ce8f380e1109d0539355db87baa9fa21e6279ecf5756d5d4083f9dda1539"
         },
         {
           "path": "Tools/assistant_knowledge/SCRIPT_WORKFLOWS_VERIFICATION.md",
           "needle": "Native checks:",
-          "sha256": "c9848015c243137acb57a9df68e2e316df4ec5527824e11751a14afe7203bbfb"
+          "sha256": "390d23d24ffa98693bdf4ef47ed2daed59f17205a88496bb68d253bd90ed2911"
         }
       ],
       "provenance": [
@@ -1392,32 +1392,32 @@
         {
           "path": "Studio/src/PlayerEquipmentEditor.cpp",
           "needle": "equipmentProjectile_.SetText(\"WEAPON FIRING\")",
-          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+          "sha256": "b5eff96c5e93a2d1a02a60a5ca495bd931bbdbcfee3a2193212bb84b39b4bd69"
         },
         {
           "path": "Studio/src/PlayerProjectileEditor.cpp",
           "needle": "combo(projectileWeapon_,\"Weapon hand\",40)",
-          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+          "sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404"
         },
         {
           "path": "Studio/src/PlayerProjectileEditor.cpp",
           "needle": "combo(projectileAction_,\"Launch on\",80)",
-          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+          "sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404"
         },
         {
           "path": "Studio/src/PlayerProjectileEditor.cpp",
           "needle": "projectileFireMode_.AddItem(\"Projectile / travelling\")",
-          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+          "sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404"
         },
         {
           "path": "Studio/src/PlayerProjectileEditor.cpp",
           "needle": "button(projectileAssign_,\"APPLY TO THIS PLAYER\"",
-          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+          "sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404"
         },
         {
           "path": "Studio/src/PlayerProjectileEditor.cpp",
           "needle": "bridge::SaveEquipmentAsset(project.rootPath,projectId,item.equipment)",
-          "sha256": "669861700b521ecea2be840a16421a213a88f14657b59a2954d3707494274d9f"
+          "sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404"
         },
         {
           "path": "Tools/assistant_knowledge/projectile_guide.json",
@@ -1427,7 +1427,7 @@
         {
           "path": "Tools/assistant_knowledge/MANUAL_E2E_STATUS.md",
           "needle": "APPLY TO THIS PLAYER",
-          "sha256": "3e2be9c537fa563978246555206d139cfa56f93065e723b5872b3e2c6851cbf8"
+          "sha256": "490974690de7f0bb788f675f767f4428a223059839f30f1eb7cf16c8571d9ca4"
         }
       ],
       "provenance": [
@@ -1463,31 +1463,38 @@
       "evidence": [
         {
           "path": "docs/manual/PROJECTILES_FIRST_WEAPON.md",
-          "needle": "## Step 1 \u2014 Open Weapon Firing"
+          "needle": "## Step 1 \u2014 Open Weapon Firing",
+          "sha256": "d1bfafd61ee8e2af9dda175753d889fd389bc72d781f186bc42c8bc296af62c2"
         },
         {
           "path": "docs/manual/PROJECTILES_FIRST_WEAPON.md",
-          "needle": "## Step 2 \u2014 Make an arrow"
+          "needle": "## Step 2 \u2014 Make an arrow",
+          "sha256": "d1bfafd61ee8e2af9dda175753d889fd389bc72d781f186bc42c8bc296af62c2"
         },
         {
           "path": "Studio/src/PlayerProjectileEditor.cpp",
-          "needle": "button(projectileNew_,\"NEW\""
+          "needle": "button(projectileNew_,\"NEW\"",
+          "sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404"
         },
         {
           "path": "Studio/src/PlayerProjectileEditor.cpp",
-          "needle": "projectileFireMode_.AddItem(\"Projectile / travelling\")"
+          "needle": "projectileFireMode_.AddItem(\"Projectile / travelling\")",
+          "sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404"
         },
         {
           "path": "Studio/src/PlayerProjectileEditor.cpp",
-          "needle": "button(projectileAssign_,\"APPLY TO THIS PLAYER\""
+          "needle": "button(projectileAssign_,\"APPLY TO THIS PLAYER\"",
+          "sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404"
         },
         {
           "path": "EngineBridge/src/ProjectileAssetService.cpp",
-          "needle": "result.speedMetresPerSecond = 45; result.gravityScale = 1;"
+          "needle": "result.speedMetresPerSecond = 45; result.gravityScale = 1;",
+          "sha256": "695c23650183e35c6b1fd4d8e6a7b6b1a0afeefb33ade77b0eb46ee43da46ef1"
         },
         {
           "path": "EngineBridge/src/ProjectileAssetService.cpp",
-          "needle": "(d.stickOnImpact && d.meshAssetId.empty())"
+          "needle": "(d.stickOnImpact && d.meshAssetId.empty())",
+          "sha256": "695c23650183e35c6b1fd4d8e6a7b6b1a0afeefb33ade77b0eb46ee43da46ef1"
         }
       ],
       "provenance": [
@@ -1536,32 +1543,32 @@
         {
           "path": "docs/PLAYER_AUTHORING_CONTINUATION.md",
           "needle": "Add no longer exposes Player Start.",
-          "sha256": "3a1eacbe8c17aa99b0ccace1efd659d4c7ce42f61d7f51d774a929222c77ae7e"
+          "sha256": "0cd5f9da33919c58fdbbc82c8c172f2b47d0fe302b15ec62455168229e3b4ef6"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
           "needle": "PlacePlayerPrefabAt(id,position);",
-          "sha256": "423582a130f87e2449e6992d25cf4ea70480a0df1ba4f2912be4c7d3d25d61dc"
+          "sha256": "fec07c764feb6e7205f1712e7180d82281c10610dc7654d632427b2a4f5d81dd"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
           "needle": "PLAYER ALREADY PLACED // SELECT ITS INSPECTOR",
-          "sha256": "423582a130f87e2449e6992d25cf4ea70480a0df1ba4f2912be4c7d3d25d61dc"
+          "sha256": "fec07c764feb6e7205f1712e7180d82281c10610dc7654d632427b2a4f5d81dd"
         },
         {
           "path": "EngineBridge/src/PlayerPrefabService.cpp",
           "needle": "Basic Player Start",
-          "sha256": "62b08e3c29d6dc414a8d2c8514256f5e595ffc03a203dad9b267cbb7609f433b"
+          "sha256": "5d11ac999581624f418d569c341a042be89562c7bfa9bdbc0502a17f1573b861"
         },
         {
           "path": "Tools/assistant_knowledge/player_start_guide.json",
           "needle": "source_checked_prior_owner_checkpoint_native_service_pass",
-          "sha256": "eba62a047fca81cada92654e2741c534c77dd1694d322dfeba957e86dd5a3e9c"
+          "sha256": "474d504422da79d31973865c39380c9ecb9526187098ea243d41a1076209cf27"
         },
         {
           "path": "Tools/assistant_knowledge/PLAYER_START_VERIFICATION.md",
           "needle": "Result: exit 0",
-          "sha256": "acd6591f9670bee4604d62ecb8a4f0b72ff3171ebeb5a1318f57d73b4d9ac1c0"
+          "sha256": "0f8a6fcebd55576bdd0747920864772039279581abe111d77c5593de8f343797"
         }
       ],
       "provenance": [
@@ -1613,27 +1620,27 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerPrefabSave_.SetText(\"SAVE AS PLAYER PREFAB\")",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
           "needle": "const std::string title=name&&!name->name.empty()?name->name:\"Player\";",
-          "sha256": "423582a130f87e2449e6992d25cf4ea70480a0df1ba4f2912be4c7d3d25d61dc"
+          "sha256": "fec07c764feb6e7205f1712e7180d82281c10610dc7654d632427b2a4f5d81dd"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
           "needle": "bridge::SavePlayerPrefab(project.rootPath,project.projectId,title,settings)",
-          "sha256": "423582a130f87e2449e6992d25cf4ea70480a0df1ba4f2912be4c7d3d25d61dc"
+          "sha256": "fec07c764feb6e7205f1712e7180d82281c10610dc7654d632427b2a4f5d81dd"
         },
         {
           "path": "docs/PLAYER_AUTHORING_CONTINUATION.md",
           "needle": "Each save creates a separate",
-          "sha256": "3a1eacbe8c17aa99b0ccace1efd659d4c7ce42f61d7f51d774a929222c77ae7e"
+          "sha256": "0cd5f9da33919c58fdbbc82c8c172f2b47d0fe302b15ec62455168229e3b4ef6"
         },
         {
           "path": "Tools/assistant_knowledge/player_start_guide.json",
           "needle": "Native PlayerPrefabTests passed prefab save/load, local overrides and reset with Undo/Redo",
-          "sha256": "eba62a047fca81cada92654e2741c534c77dd1694d322dfeba957e86dd5a3e9c"
+          "sha256": "474d504422da79d31973865c39380c9ecb9526187098ea243d41a1076209cf27"
         }
       ]
     },
@@ -1679,27 +1686,27 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerPrefabReset_.SetText(\"RESET TO PREFAB\")",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
           "needle": "bridge::CapturePlayerPrefabBaseline(session_->Scenes().GetScene(),entity,d,error)",
-          "sha256": "423582a130f87e2449e6992d25cf4ea70480a0df1ba4f2912be4c7d3d25d61dc"
+          "sha256": "fec07c764feb6e7205f1712e7180d82281c10610dc7654d632427b2a4f5d81dd"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
           "needle": "playerPrefabReset_.SetEnabled(overridden);",
-          "sha256": "423582a130f87e2449e6992d25cf4ea70480a0df1ba4f2912be4c7d3d25d61dc"
+          "sha256": "fec07c764feb6e7205f1712e7180d82281c10610dc7654d632427b2a4f5d81dd"
         },
         {
           "path": "Tests/PlayerPrefabTests.cpp",
           "needle": "\"reset undo\"",
-          "sha256": "5a117986d0e61b11ed39d9dc7f4ed4893d6a43bd1fb9149b6b929901f1d69b4b"
+          "sha256": "75d47462df63e45ab423a2319fb4b58ad66e47b761b09f6b0a05025617c55316"
         },
         {
           "path": "Tools/assistant_knowledge/player_start_guide.json",
           "needle": "Native PlayerPrefabTests passed prefab save/load, local overrides and reset with Undo/Redo",
-          "sha256": "eba62a047fca81cada92654e2741c534c77dd1694d322dfeba957e86dd5a3e9c"
+          "sha256": "474d504422da79d31973865c39380c9ecb9526187098ea243d41a1076209cf27"
         }
       ]
     },
@@ -1750,42 +1757,42 @@
         {
           "path": "Studio/src/PlayerEquipmentEditor.cpp",
           "needle": "button(equipmentCreate_,\"CREATE FROM ASSEMBLY\"",
-          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+          "sha256": "b5eff96c5e93a2d1a02a60a5ca495bd931bbdbcfee3a2193212bb84b39b4bd69"
         },
         {
           "path": "Studio/src/PlayerEquipmentEditor.cpp",
           "needle": "button(equipmentApply_,\"APPLY LOADOUT\"",
-          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+          "sha256": "b5eff96c5e93a2d1a02a60a5ca495bd931bbdbcfee3a2193212bb84b39b4bd69"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerEquipment_.SetText(\"STARTING EQUIPMENT\")",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "Studio/src/PlayerEquipmentEditor.cpp",
           "needle": "\"Created \"+name+\". Choose it above, then APPLY LOADOUT.\"",
-          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+          "sha256": "b5eff96c5e93a2d1a02a60a5ca495bd931bbdbcfee3a2193212bb84b39b4bd69"
         },
         {
           "path": "EngineBridge/src/EquipmentAssetService.cpp",
           "needle": "FirstPersonAssemblyService().ReadSettings(root,project,presentation,settings,error)",
-          "sha256": "b40b718f0e133cb1c9712122f387927b9e952f97ab9d3260f88dfe0519795877"
+          "sha256": "ebe6506bfe1b26337d7b55a688eb2d3dbd360239a8bfdb026a1367759b7104b2"
         },
         {
           "path": "Tools/assistant_knowledge/equipment_guide.json",
           "needle": "source_checked_prior_owner_checkpoint_native_service_pass",
-          "sha256": "b7af8620f9708ff03cc0361825f354c4bfc71bc738b5c43c9c3b557674db5fce"
+          "sha256": "d93772620eab9616c404819d76edd5a728cab7bf4170d24a7cb66e3afa898bbd"
         },
         {
           "path": "Tools/assistant_knowledge/EQUIPMENT_VERIFICATION.md",
           "needle": "exit 0",
-          "sha256": "ee78a4559adcaa57e18af1863cb3ba53043b4a92c18417c7685b8caa54a79af1"
+          "sha256": "5f4ff6cf69d653faa2b5543ecad210d52682ff9f7d0af6c94a7939038b333dbb"
         },
         {
           "path": "Tests/EquipmentAssetTests.cpp",
           "needle": "\"scene cold reopen\"",
-          "sha256": "ebb024b24f15e45cdd4f4f9fa35ee61fa457d28dedc4ce4cb38e3859930e0d09"
+          "sha256": "e6b6d701a73067d19d3e12f53c9d15eea4005dafbc35795d88fe67d00a1eb3ab"
         }
       ]
     },
@@ -1835,47 +1842,47 @@
         {
           "path": "Studio/src/PlayerEquipmentEditor.cpp",
           "needle": "button(equipmentCreate_,\"CREATE FROM ASSEMBLY\"",
-          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+          "sha256": "b5eff96c5e93a2d1a02a60a5ca495bd931bbdbcfee3a2193212bb84b39b4bd69"
         },
         {
           "path": "Studio/src/PlayerEquipmentEditor.cpp",
           "needle": "button(equipmentApply_,\"APPLY LOADOUT\"",
-          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+          "sha256": "b5eff96c5e93a2d1a02a60a5ca495bd931bbdbcfee3a2193212bb84b39b4bd69"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerEquipment_.SetText(\"STARTING EQUIPMENT\")",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "EngineBridge/src/EquipmentAssetService.cpp",
           "needle": "error=\"Two-handed/support equipment reserves both hands.\"",
-          "sha256": "b40b718f0e133cb1c9712122f387927b9e952f97ab9d3260f88dfe0519795877"
+          "sha256": "ebe6506bfe1b26337d7b55a688eb2d3dbd360239a8bfdb026a1367759b7104b2"
         },
         {
           "path": "EngineBridge/src/EquipmentAssetService.cpp",
           "needle": "error=\"Off-hand slot requires OffHandOnly or EitherHand.\"",
-          "sha256": "b40b718f0e133cb1c9712122f387927b9e952f97ab9d3260f88dfe0519795877"
+          "sha256": "ebe6506bfe1b26337d7b55a688eb2d3dbd360239a8bfdb026a1367759b7104b2"
         },
         {
           "path": "Studio/src/PlayerEquipmentEditor.cpp",
           "needle": "Loadout applied. SAVE LEVEL to retain; Undo restores the previous loadout.",
-          "sha256": "e68771ed00b1f5850ad9c68a651025db97a65bdd7250c17299c1466321261075"
+          "sha256": "b5eff96c5e93a2d1a02a60a5ca495bd931bbdbcfee3a2193212bb84b39b4bd69"
         },
         {
           "path": "Tools/assistant_knowledge/equipment_guide.json",
           "needle": "source_checked_prior_owner_checkpoint_native_service_pass",
-          "sha256": "b7af8620f9708ff03cc0361825f354c4bfc71bc738b5c43c9c3b557674db5fce"
+          "sha256": "d93772620eab9616c404819d76edd5a728cab7bf4170d24a7cb66e3afa898bbd"
         },
         {
           "path": "Tools/assistant_knowledge/EQUIPMENT_VERIFICATION.md",
           "needle": "exit 0",
-          "sha256": "ee78a4559adcaa57e18af1863cb3ba53043b4a92c18417c7685b8caa54a79af1"
+          "sha256": "5f4ff6cf69d653faa2b5543ecad210d52682ff9f7d0af6c94a7939038b333dbb"
         },
         {
           "path": "Tests/EquipmentAssetTests.cpp",
           "needle": "\"scene cold reopen\"",
-          "sha256": "ebb024b24f15e45cdd4f4f9fa35ee61fa457d28dedc4ce4cb38e3859930e0d09"
+          "sha256": "e6b6d701a73067d19d3e12f53c9d15eea4005dafbc35795d88fe67d00a1eb3ab"
         }
       ]
     },
@@ -1890,19 +1897,19 @@
         "Generated textured static FBX native proof passed texture rejection, retained reimport and placement/save/reopen"
       ],
       "match": [
-        "\\b(?:import|bring in|load)\\b.{0,55}\\b(?:static\\s+)?(?:model|mesh|3d object|glb|fbx)s?\\b",
-        "\\b(?:model|mesh|glb|fbx)\\b.{0,40}\\b(?:import|bring in)\\b"
+        "\\b(?:import|bring in|load)\\b.{0,55}\\b(?:static\\s+)?(?:model|mesh|3d object|glb|fbx|obj)s?\\b",
+        "\\b(?:model|mesh|glb|fbx|obj)\\b.{0,40}\\b(?:import|bring in)\\b"
       ],
       "exclude": [
         "\\b(?:character|characters|npc|enemy|rig|rigged|skeleton|animation|animations|retarget|arms|script|code|prefab)\\b",
-        "\\b(?:obj|blend|blender file|stl|gltf|zip|unitypackage|entire|whole|automatically|autonomous)\\b",
+        "\\b(?:blend|blender file|stl|gltf|zip|unitypackage|entire|whole|automatically|autonomous)\\b",
         "\\b(?:reimport|replace|overwrite|move|texture only|textures only)\\b",
         "\\b(?:import|load)\\s+(?:(?:a|an|the|my|some)\\s+)?(?:texture|image|material)s?\\b",
         "\\b(?:runtime|lua)\\b"
       ],
-      "prerequisites": "An open Renegade project and a static **GLB or FBX** model with its required textures available. This guide covers static objects; rigged characters and external animations use separate workflows. The current native picker offers GLB/FBX.",
+      "prerequisites": "An open Renegade project and a static **OBJ, GLB or FBX** model. Keep OBJ/MTL/images together. Rigged characters and external animations use separate workflows. The native picker offers OBJ/GLB/FBX.",
       "steps": [
-        "Open **ADD** \u2192 **IMPORT MODEL...**, then select your GLB or FBX file.",
+        "Open **ADD** \u2192 **IMPORT MODEL...**, then select your OBJ, GLB or FBX file.",
         "Wait for the rendered preview. Check the model and textures; use **ROTATE LEFT** or **ROTATE RIGHT** to inspect it. Preview rotation does not change the imported asset.",
         "Enter a readable **Asset name**.",
         "Choose **Folder**, or type a project-relative folder in **Import to**, such as **Content/Models/Props**. A valid new Content folder is created during import. Do not enter a Windows absolute path.",
@@ -1914,7 +1921,7 @@
       "expected_result": "The model is registered in your chosen Content folder and its placed instance is retained in the saved level. This does not automatically add collision, NPC behaviour or weapon gameplay.",
       "troubleshooting": [
         "If IMPORT ASSET is disabled, wait for the preview; if conversion fails, read the reported error rather than assuming an asset was saved.",
-        "For a textured FBX, keep required images in the exported source folder tree with valid relative references; missing or changed textures can block import.",
+        "For OBJ/FBX, keep images with the exported source. missing or changed textures appear as source warnings; use material/map selection and **CHOOSE / REPLACE MAP**. A source changed after preview can require reopening the importer.",
         "A GLB filename does not guarantee embedded textures. External image references are not supported by this import path; export a self-contained GLB.",
         "If the status says COMMITTED; REVEAL FAILED, browse the chosen Content folder. Do not import again merely because the card was not revealed.",
         "An existing name/destination can be rejected to protect an asset. Check the error and choose a distinct name instead of overwriting files manually.",
@@ -1925,27 +1932,27 @@
         {
           "path": "Studio/src/RenegadeStudioChrome.cpp",
           "needle": "{\"IMPORT MODEL...\", true}",
-          "sha256": "24d8ecf97f72807dcf294364e9558e8bf3223954c83c3d5cfb9ba93382f58101"
+          "sha256": "cface28e927f4680714563d1c419f5e513c3bfa66e5722fc9804a5b2dc44da67"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
-          "needle": "params.extensions = {\"glb\", \"fbx\"};",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "needle": "params.extensions = {\"glb\", \"fbx\", \"obj\"};",
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportName_.SetDescription(\"Asset name: \");",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportFolder_.SetDescription(\"Import to: \");",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportCommit_.SetText(\"IMPORT ASSET\");",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "docs/MODEL_IMPORT_DESTINATIONS.md",
@@ -1960,27 +1967,27 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "could not be revealed. Do not import it again.",
-          "sha256": "39445b6ccc77ae58108bdb18916b1647e11578be037534d2fdc2b8296a244752"
+          "sha256": "c5b5717ba40a154328c6fd20c8cc1d462b12454a03b896c0dc78aa53e34ae333"
         },
         {
           "path": "Tests/ModelImporterRebuildGraphicsProof.cpp",
           "needle": "MODEL REBUILD PROOF PASS: placement/Undo/Redo/save/reopen",
-          "sha256": "b0c7f0a345849b4deab46a72e69350202962ea11b4fc229f3ee157143f682d45"
+          "sha256": "70e3906ce9e1f1adb507420ddb4b402b90d689bbd83225cc151390ad8e7634b4"
         },
         {
           "path": "docs/MODEL_IMPORTER_REBUILD.md",
           "needle": "native cancel, rotation, naming, thumbnail commit/card, drag placement, Undo/Redo",
-          "sha256": "c6a26397305f1fec7eafe64ebea12687a651e2ea99df8c21b3fddc4551872c10"
+          "sha256": "20910815006d9bc9bb417bb1d700878ff9069463879d77b87b0eca9ca266490c"
         },
         {
           "path": "Tools/assistant_knowledge/static_model_guide.json",
           "needle": "source_checked_prior_owner_checkpoint_native_service_pass",
-          "sha256": "accb04aeea7c7c2347556e99edc1ca48903dbdcf4600dfc909fd716693288d92"
+          "sha256": "84042664d53cdfb17980e1e1a62fbd975c0b0d2926fa8c803c000cd931ecd879"
         },
         {
           "path": "Tools/assistant_knowledge/STATIC_IMPORT_VERIFICATION.md",
           "needle": "Result exit 0",
-          "sha256": "a19901f4a0925adeda726b1920a742dfcf328ffdc8cfd1b72ea6388c87ba7560"
+          "sha256": "6727ac336b02538548ad188ae1ed1e54d7af9494a189fe51ebab69c62fa44f7e"
         }
       ],
       "provenance": [
@@ -1990,5 +1997,10 @@
         "Tools/assistant_knowledge/STATIC_IMPORT_VERIFICATION.md"
       ]
     }
-  ]
+  ],
+  "source_hash_format": "utf8-lf-v1",
+  "recovery_review": {
+    "date": "2026-11-02",
+    "scope": "Reviewed all 28 workflow evidence records: controls/markers retained; two shared-picker markers updated for restored static OBJ. Full-content fingerprints remain mandatory. Existing native/UI acceptance limits were not promoted."
+  }
 }

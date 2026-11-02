@@ -1,3 +1,4 @@
+import os
 """Read-only bridge tests; do not require Qwen or Studio to be installed."""
 import json
 from pathlib import Path
@@ -16,7 +17,7 @@ class BridgeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.repo = Path(__file__).resolve().parents[2]
-        cls.db = cls.repo / "BUILD/assistant_knowledge.sqlite"
+        cls.db = Path(os.environ.get("RENEGADE_KNOWLEDGE_TEST_DB", str(cls.repo / "BUILD/assistant_knowledge.sqlite")))
 
     def test_projectile_question_is_grounded_and_cited(self):
         response = bridge.process_chat({

@@ -1,3 +1,4 @@
+import os
 """Versioned multi-workflow evaluation plus stale evidence and dialogue boundaries."""
 import json
 from pathlib import Path
@@ -14,7 +15,7 @@ HERE=Path(__file__).resolve().parent
 class RemainingWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.repo=HERE.parents[1];cls.db=cls.repo/"BUILD/assistant_knowledge.sqlite"
+        cls.repo=HERE.parents[1];cls.db=Path(os.environ.get("RENEGADE_KNOWLEDGE_TEST_DB", str(Path(os.environ.get("RENEGADE_KNOWLEDGE_TEST_DB", str(cls.repo / "BUILD/assistant_knowledge.sqlite"))))))
         cls.registry=json.loads(WORKFLOWS.read_text(encoding="utf-8"))
         cls.tasks={t["id"]:t for t in cls.registry["workflows"]}
         cls.cases=json.loads((HERE/"remaining_workflow_evaluation.json").read_text(encoding="utf-8"))["cases"]
