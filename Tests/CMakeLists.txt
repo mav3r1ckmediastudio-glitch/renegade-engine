@@ -1953,3 +1953,14 @@ if(WIN32)
     add_test(NAME RenegadeNativeWindowSurfaceTests COMMAND RenegadeNativeWindowSurfaceTests)
     set_tests_properties(RenegadeNativeWindowSurfaceTests PROPERTIES RUN_SERIAL TRUE TIMEOUT 30)
 endif()
+
+
+if(TARGET RenegadeStudio AND TARGET RenegadeRuntime)
+    add_test(NAME RenegadeRockyRiverbedDeployment
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRENEGADE_ROCKY_SOURCE=${CMAKE_SOURCE_DIR}/Content/terrain/riverbed/rocky_rugged"
+            "-DRENEGADE_STUDIO_OUTPUT=$<TARGET_FILE_DIR:RenegadeStudio>"
+            "-DRENEGADE_RUNTIME_OUTPUT=$<TARGET_FILE_DIR:RenegadeRuntime>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/RockyRiverbedDeployment.cmake")
+    set_tests_properties(RenegadeRockyRiverbedDeployment PROPERTIES LABELS "Packaging" TIMEOUT 30)
+endif()

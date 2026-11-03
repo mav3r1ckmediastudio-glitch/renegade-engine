@@ -31,7 +31,7 @@ range. Existing levels receive no automatic migration.
 | Combined workflow | Current result |
 | --- | --- |
 | Expand fresh terrain fully, draw/link shallow river without Allow Deeper Beds | Native PASS; actual Studio PASS at 1,089 chunks |
-| Link before expansion, expand through all seven rings | Native PASS; actual Studio pending |
+| Link before expansion, expand through all seven rings | Native PASS; actual Studio reaches 1,089 chunks |
 | Three long rivers touch more than 81 chunks at maximum extent | Native PASS in both orders |
 | Linked river width/move, subsequent outer sculpt and expansion Undo/Redo | Native PASS in both orders |
 | Existing painted masks survive expansion; maximum rocky/grass paint history | Native PASS in both orders |
@@ -73,3 +73,29 @@ under MAX_TERRAIN_REPAIR_20261103.
 
 The partial pre-alpha stage is preserved and packaging remains stopped.
 Main is unmerged. Owner approval is required before merge or alpha distribution.
+
+
+## Application resource staging follow-up
+
+Actual output inspection found that the supplied rocky material files were
+present in source and the native proof deployment but absent from the normal
+Studio and Runtime output directories. The earlier pre-alpha base ZIP also
+lacked them. This was a packaging gap, not a new terrain-height failure.
+
+Studio and Runtime now stage the complete supplied rocky material directory
+through one shared CMake script. The new RenegadeRockyRiverbedDeployment test
+compares every required output file with source and rejects non-PNG placeholders.
+It failed against the old missing outputs, then passed after normal staging.
+The files are unchanged supplied assets; no executable or terrain C++ change
+is part of this resource follow-up. Final CI must validate the updated head.
+
+The complete preceding local Release suite passed 312/312 with zero skips in
+537.65 seconds. Both maximum-terrain desktop cases passed in 122.01 / 123.49 s.
+The additional application-output resource check passed in 0.32 s after staging.
+
+Actual Studio completed link-first expansion through all seven rings to the
+2.18 x 2.18 km maximum. The last six ring transactions took 19.020 / 21.273 /
+24.010 / 28.621 / 30.936 / 35.190 seconds in this ordinary executable session.
+These are observed operation waits, not a performance improvement claim.
+Saved-state comparison, actual rocky painting, gameplay and full cold-process
+acceptance continue separately; no release-wide PASS is claimed here.
