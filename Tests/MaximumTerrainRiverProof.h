@@ -232,10 +232,10 @@ namespace maximum_terrain_river_proof
                 "Maximum terrain collision differs from the authored surface");
         }
         stage("source-render");
-        // One real source capture is sufficient on hosted software graphics.
-        // Keep the full terrain, source resolution and subsequent preview draw;
-        // avoid rasterizing two additional identical copies of the source.
-        const int sourceDraws=boundedDraws ? (linkFirst?0:1) : 3;
+        // Hosted CTest keeps every native maximum-terrain assertion here.
+        // Fixture-dependent processes render this exact saved scene, retaining
+        // full extent/resolution without combining Debug CPU work and WARP draw.
+        const int sourceDraws=boundedDraws ? 0 : 3;
         for(int i=0;i<sourceDraws;++i)draw();
         gpu->WaitForGPU();terrain->Generation_Cancel();
         if(sourceDraws>0)

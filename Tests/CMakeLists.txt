@@ -468,10 +468,36 @@ if(WIN32)
                 "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
                 "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/terrain-maximum-${MAXIMUM_ORDER}-$<CONFIG>"
                 "-DRENEGADE_RIVER_MODE=maximum-${MAXIMUM_ORDER}"
+                "-DRENEGADE_MAXIMUM_FIXTURE=${CMAKE_CURRENT_BINARY_DIR}/terrain-maximum-${MAXIMUM_ORDER}-$<CONFIG>/completed-fixture.txt"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
         set_tests_properties(RenegadeMaximumTerrainRiver_${MAXIMUM_ORDER} PROPERTIES
             WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
-            TIMEOUT 600)
+            TIMEOUT 600
+            FIXTURES_SETUP "MaximumTerrain_${MAXIMUM_ORDER}")
+    endforeach()
+    # Debug native transactions and one WARP draw each need their own bounded
+    # budget. CTest reruns the producer and skips consumers when it fails; the
+    # wrapper also verifies both the scene and executable SHA256 before launch.
+    foreach(MAXIMUM_CHECKPOINT IN ITEMS source preview)
+        if(MAXIMUM_CHECKPOINT STREQUAL "source")
+            set(MAXIMUM_FIXTURE_ORDER expanded-first)
+            set(MAXIMUM_PREVIEW_CHECKPOINT -2)
+        else()
+            set(MAXIMUM_FIXTURE_ORDER linked-first)
+            set(MAXIMUM_PREVIEW_CHECKPOINT 1)
+        endif()
+        add_test(NAME RenegadeMaximumTerrainGPU_${MAXIMUM_CHECKPOINT}
+            COMMAND "${CMAKE_COMMAND}"
+                "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
+                "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/terrain-maximum-gpu-${MAXIMUM_CHECKPOINT}-$<CONFIG>"
+                -DRENEGADE_RIVER_MODE=maximum-render
+                "-DRENEGADE_TERRAIN_PREVIEW_CHECKPOINT=${MAXIMUM_PREVIEW_CHECKPOINT}"
+                "-DRENEGADE_MAXIMUM_FIXTURE=${CMAKE_CURRENT_BINARY_DIR}/terrain-maximum-${MAXIMUM_FIXTURE_ORDER}-$<CONFIG>/completed-fixture.txt"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
+        set_tests_properties(RenegadeMaximumTerrainGPU_${MAXIMUM_CHECKPOINT} PROPERTIES
+            WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
+            TIMEOUT 600
+            FIXTURES_REQUIRED "MaximumTerrain_${MAXIMUM_FIXTURE_ORDER}")
     endforeach()
     add_test(NAME RenegadeTerrainInitializationRecovery
         COMMAND "${CMAKE_COMMAND}"

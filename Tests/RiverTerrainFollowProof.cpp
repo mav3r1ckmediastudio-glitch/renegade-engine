@@ -115,7 +115,7 @@ static std::uint64_t GrassAndPaintDigest(const wi::terrain::Terrain& terrain)
 int main(int argc, char** argv)
 {
 
-    if (argc != 2 && argc != 3 && argc != 4) return 2;
+    if (argc != 2 && argc != 3 && argc != 4 && argc != 5) return 2;
     const auto out = fs::u8path(argv[1]);
     if (fs::exists(out) && !fs::is_empty(out))
     {
@@ -490,7 +490,15 @@ int main(int argc, char** argv)
         const bool freshInitialization=argc>=3 && std::string(argv[2])=="terrain-initialization";
         const bool maximumRecovery=argc==3 && (std::string(argv[2])=="maximum-expanded-first" ||
             std::string(argv[2])=="maximum-linked-first");
+        const bool maximumRender=argc==5 && std::string(argv[2])=="maximum-render";
         int previewCheckpoint=-1;
+        if(maximumRender)
+        {
+            const std::string checkpoint=argv[4];
+            Require(checkpoint=="-2" || checkpoint=="1",
+                "Invalid maximum terrain GPU checkpoint");
+            previewCheckpoint=checkpoint=="-2"?-2:1;
+        }
         if(argc==4)
         {
             const std::string checkpoint=argv[3];
@@ -498,7 +506,7 @@ int main(int argc, char** argv)
                 checkpoint=="1" || checkpoint=="2"),"Invalid terrain preview checkpoint");
             previewCheckpoint=checkpoint=="-1"?-1:checkpoint[0]-'0';
         }
-        const bool defaultRecovery=freshInitialization || maximumRecovery ||
+        const bool defaultRecovery=freshInitialization || maximumRecovery || maximumRender ||
             (argc==3 && std::string(argv[2])=="default-recovery");
         settings.visibleChunkRadius = defaultRecovery ? DefaultTerrainChunkRadius : 1;
         if (!defaultRecovery)
@@ -509,7 +517,19 @@ int main(int argc, char** argv)
             settings.minimumHeight = -20;
             settings.maximumHeight = 40;
         }
-        const auto terrainID = CreateTerrain(scene, settings, "Disposable Real Terrain");
+        wi::ecs::Entity terrainID=wi::ecs::INVALID_ENTITY;
+        if(maximumRender)
+        {
+            SceneService fixture;
+            Require(fixture.LoadScene(argv[3]),"Maximum render fixture load failed");
+            scene.Clear();
+            scene.Merge(fixture.GetScene());
+            Require(scene.terrains.GetCount()==1,"Maximum render fixture terrain missing");
+            terrainID=scene.terrains.GetEntity(0);
+            scene.terrains[0].terrainEntity=terrainID;
+            scene.terrains[0].scene=&scene;
+        }
+        else terrainID=CreateTerrain(scene,settings,"Disposable Real Terrain");
         Require(terrainID != wi::ecs::INVALID_ENTITY,
             "native terrain creation failed");
         auto* terrain = scene.terrains.GetComponent(terrainID);
@@ -526,7 +546,7 @@ int main(int argc, char** argv)
         std::cout << "NATIVE_TERRAIN_MATERIAL_RESOURCES=PASS\n";
         // Bound draw scheduling for the new software-rendered proof while
         // keeping the desktop, full terrain and rendering resolution unchanged.
-        const bool boundedInitialization = (freshInitialization || maximumRecovery) && hosted;
+        const bool boundedInitialization = (freshInitialization || maximumRecovery || maximumRender) && hosted;
         const int proofWidth = 960;
         const int proofHeight = 640;
         wi::scene::CameraComponent camera;
@@ -581,6 +601,38 @@ int main(int argc, char** argv)
             wi::renderer::UpdateGPUSuballocator();
             ++hostedRenderFrames;
         };
+        if(maximumRender)
+        {
+            Require(terrain->generation==16 && terrain->chunks.size()==1089 &&
+                terrain->bottomLevel==-20.f && terrain->topLevel==120.f && scene.splines.GetCount()==3,
+                "GPU fixture is not the completed maximum three-river scene");
+            std::string error;
+            Require(ValidateRiverTerrainLayers(scene,terrainID,error),error.c_str());
+            const auto authored=CaptureTerrainSculpt(scene,*terrain);
+            for(int i=0;i<12;++i)proofUpdate();
+            gpu->WaitForGPU();terrain->Generation_Cancel();
+            auto expected=authored,actual=CaptureTerrainSculpt(scene,*terrain);
+            Require(RetainChangedTerrainSculpt(expected,actual)==0,
+                "Maximum GPU fixture changed during cold native updates");
+            // Each process pays for one full-resolution GPU checkpoint, after
+            // all three native preview rebuilds and every atlas/height assertion.
+            terrain_player_preview_proof::Run(scene,render,out,true,previewCheckpoint);
+            if(previewCheckpoint==-2)
+            {
+                proofFrame();gpu->WaitForGPU();terrain->Generation_Cancel();
+                Require(wi::helper::saveTextureToFile(render.GetRenderResult3D(),
+                    (out/"maximum-linked-rivers-after-three-previews.png").generic_u8string()),
+                    "Maximum source checkpoint capture failed");
+            }
+            expected=authored;actual=CaptureTerrainSculpt(scene,*terrain);
+            Require(RetainChangedTerrainSculpt(expected,actual)==0 &&
+                ValidateRiverTerrainLayers(scene,terrainID,error),
+                "Maximum GPU checkpoint changed authored terrain or layers");
+            std::cout<<"MAXIMUM_COLD_GPU_CHECKPOINT_PASS checkpoint="<<previewCheckpoint
+                <<" chunks="<<terrain->chunks.size()<<" bindings="
+                <<terrain_player_preview_proof::CaptureBindings(scene).size()<<std::endl;
+            return 0;
+        }
         if(defaultRecovery) std::cout<<"RIVER_PROOF_FRAME_MODE "
             <<(hostedOffscreen?"hosted-offscreen":"desktop-presentation")<<std::endl;
         if(hostedOffscreen)
@@ -671,8 +723,10 @@ int main(int argc, char** argv)
             {
                 maximum_terrain_river_proof::Run(scene,terrainID,render,out,
                     std::string(argv[2])=="maximum-linked-first",hostedOffscreen,proofUpdate,proofFrame);
-                terrain_player_preview_proof::Run(scene,render,out,hostedOffscreen,
-                    std::string(argv[2])=="maximum-linked-first"?1:-2);
+                // Hosted preview/render coverage consumes this exact saved
+                // scene in fixture-dependent processes with separate deadlines.
+                if(!hostedOffscreen)
+                    terrain_player_preview_proof::Run(scene,render,out,false,-1);
                 return 0;
             }
             if (freshInitialization)

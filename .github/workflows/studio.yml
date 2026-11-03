@@ -37,11 +37,11 @@ jobs:
   studio:
     name: Renegade Studio Windows x64 ${{ matrix.configuration }}
     runs-on: windows-2025
-    # Release run 41456794306 spent 77m49s compiling before starting CTest.
-    # The 90-minute job cap cancelled the still-bounded river proof, before
-    # its 600-second test deadline. Allow cold compilation plus the complete
-    # suite/startup/package; individual CTest deadlines remain unchanged.
-    timeout-minutes: 120
+    # Run 41699012815 Release reached the overall 120-minute deadline while
+    # CTest was still active. Allow cold compilation plus the complete native
+    # and GPU fixture suite, startup and package evidence. This is a job ceiling,
+    # not an extension of any individual test's unchanged 600-second deadline.
+    timeout-minutes: 180
     env:
       # GitHub-hosted Windows runners expose a DX12 device but do not provide
       # the reliable visible-model presentation path used by the owner-hardware
