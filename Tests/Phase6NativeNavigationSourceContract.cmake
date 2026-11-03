@@ -5,6 +5,13 @@ function(require_text source_text needle description)
     endif()
 endfunction()
 
+function(reject_text source_text needle description)
+    string(FIND "${source_text}" "${needle}" found)
+    if(NOT found EQUAL -1)
+        message(FATAL_ERROR "Phase 6 native navigation source contract rejected ${description}: ${needle}")
+    endif()
+endfunction()
+
 file(READ
     "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/NavigationService.h"
     navigation_header)
@@ -91,9 +98,15 @@ require_text("${terrain_header}"
 require_text("${terrain_source}"
     "std::max(requestedPhysicsRadius, terrain.generation + 1)"
     "full fixed-terrain Jolt heightfield coverage")
-require_text("${terrain_source}"
+reject_text("${terrain_source}"
     "rootTransform->translation_local.y = -terrain.bottomLevel"
-    "fresh terrain world-zero baseline mapping")
+    "fresh terrain must not hide its encoding floor with a root offset")
+require_text("${terrain_source}"
+    "flatHeight->weight = -terrain.bottomLevel / (terrain.topLevel - terrain.bottomLevel);"
+    "fresh terrain world-zero samples inside the carving envelope")
+require_text("${terrain_source}"
+    "terrain.modifiers.push_back(flatHeight);"
+    "native initial and expansion generation share the serialized surface reference")
 require_text("${studio_application}"
     "constexpr float gridPlaneHeight = 0.02f;"
     "shader grid restored to world-zero reference")

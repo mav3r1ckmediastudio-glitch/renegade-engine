@@ -76,6 +76,14 @@ namespace renegade::bridge
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain);
 
+    // Native generation publishes chunk records before their meshes merge into
+    // the owning scene. Callers must retry an incomplete pass before caching
+    // its chunk count. Existing painted/manual chunks are never cleared again.
+    std::size_t SynchronizeWickedVegetation(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        bool& allChunksReady);
+
     VegetationPaintResult PaintWickedVegetation(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,

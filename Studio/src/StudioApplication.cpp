@@ -2798,7 +2798,7 @@ namespace renegade::studio
             "Arm river drawing, then left-drag across terrain to create a "
             "water-material spline. Release to finish one Undo/Redo step. "
             "Then select the new River Water and click LINK / UPDATE BED to cut the channel. "
-            "On new flat terrain, first use ALLOW DEEPER BEDS +10M.");
+            "New terrain supports shallow beds directly; deeper cuts may need ALLOW DEEPER BEDS +10M.");
         terrainRiverBrushButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             riverDrawingReceiver_.clear();riverDrawingControl_.clear();
@@ -2980,7 +2980,7 @@ namespace renegade::studio
         terrainRiverExtendFloorButton_.SetTooltip(
             "Explicitly extend this finite terrain's R16 elevation range "
             "10 metres downward, without moving its surface or repainting "
-            "its masks. Needed to carve through default world-zero ground. "
+            "its masks. Use for cuts beyond the current minimum elevation. "
             "Undoable; slightly reduces height encoding precision.");
         terrainRiverExtendFloorButton_.OnClick([this](const wi::gui::EventArgs&)
         {

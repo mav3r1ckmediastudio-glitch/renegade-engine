@@ -11,9 +11,16 @@ set(RUN_OUTPUT "${RENEGADE_RIVER_OUTPUT_ROOT}/${RUN_TIMESTAMP}-${RUN_NONCE}")
 if(EXISTS "${RUN_OUTPUT}")
     message(FATAL_ERROR "Refusing to overwrite earlier river proof evidence")
 endif()
-message(STATUS "River default recovery evidence: ${RUN_OUTPUT}")
+if(NOT DEFINED RENEGADE_RIVER_MODE)
+    set(RENEGADE_RIVER_MODE default-recovery)
+endif()
+if(NOT RENEGADE_RIVER_MODE STREQUAL "default-recovery" AND
+   NOT RENEGADE_RIVER_MODE STREQUAL "terrain-initialization")
+    message(FATAL_ERROR "Unknown terrain recovery proof mode")
+endif()
+message(STATUS "Terrain/river recovery evidence: ${RUN_OUTPUT}")
 execute_process(
-    COMMAND "${RENEGADE_RIVER_PROOF}" "${RUN_OUTPUT}" default-recovery
+    COMMAND "${RENEGADE_RIVER_PROOF}" "${RUN_OUTPUT}" "${RENEGADE_RIVER_MODE}"
     RESULT_VARIABLE RIVER_RESULT)
 if(NOT RIVER_RESULT EQUAL 0)
     message(FATAL_ERROR "Native 361-chunk river recovery failed: ${RIVER_RESULT}")

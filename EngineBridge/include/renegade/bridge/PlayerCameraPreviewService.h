@@ -19,9 +19,25 @@ namespace renegade::bridge
             archive.SetReadModeAndResetPos(true);
             world_->Serialize(archive);
             scene = world_.get();
+            // Ordinary authored textures can retain their native resources.
+            // Generated terrain chunk materials cannot: Resource copies share
+            // mutable internal state, and native terrain generation calls
+            // SetTexture/SetTextureVirtual when it creates this world's atlas.
+            // Sharing those wrappers rebinds the editor's terrain to the preview
+            // atlas and leaves dark chunks after selecting Player Start.
+            wi::vector<bool> terrainChunkMaterials(scene->materials.GetCount(), false);
+            for (size_t terrainIndex=0; terrainIndex<scene->terrains.GetCount(); ++terrainIndex)
+                for (const auto& entry : scene->terrains[terrainIndex].chunks) {
+                    const auto index=scene->materials.GetIndex(entry.second.entity);
+                    if (index<terrainChunkMaterials.size()) terrainChunkMaterials[index]=true;
+                }
             for (size_t i=0; i<source.materials.GetCount(); ++i) {
-                for(size_t slot=0; slot<wi::scene::MaterialComponent::TEXTURESLOT_COUNT; ++slot)
-                    scene->materials[i].textures[slot]=source.materials[i].textures[slot];
+                for(size_t slot=0; slot<wi::scene::MaterialComponent::TEXTURESLOT_COUNT; ++slot) {
+                    if (terrainChunkMaterials[i])
+                        scene->materials[i].textures[slot].resource={};
+                    else
+                        scene->materials[i].textures[slot]=source.materials[i].textures[slot];
+                }
                 scene->materials[i].SetDirty();
             }
             scene->characters.Clear(); scene->rigidbodies.Clear();

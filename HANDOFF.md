@@ -7672,3 +7672,94 @@ Next: validate the final commit's CI and local results, preserve owner acceptanc
 Release run 41456794306 was cancelled by the 90-minute workflow job budget, not a reported compiler error or CTest assertion. Its uploaded logs show configuration at 13:54:22 UTC, aggregate build at 13:55:21, and CTest beginning at 15:13:10: 77m49s compilation. The first 216 tests completed (254.28s summed test durations); the default-361 river proof was still running when the job was cancelled at 15:23:43, before its own 600-second deadline. Debug in the same run passed 295 tests, with 996.36s total CTest time and 447.91s river proof, then passed startup. Local exact-4f907b5 configure/build/full CTest also passed.
 
 Increase only the workflow job budget from 90 to a bounded 120 minutes, allowing measured cold compilation plus complete validation and packaging. Keep the actual aggregate, all tests, the 180-second default and 600-second river deadlines, engine safety limits and application/test source unchanged. Pre-push checks: exact diff restricted to this workflow budget/comment and handoff; workflow structural validation; unchanged application/test/tooling tree hashes. Final four-check CI must be recorded against the resulting commit before any success claim. Owner manual regression passes remain accepted; UI interaction stays paused. No main merge or distribution.
+
+## 2026-11-02 terrain initialization and reproduced Player Start darkness repair — OPEN
+
+Continue recovery/20261101-repair-implementation at 6c59d2a, preserving inherited
+uncommitted work, dirty imnodes, protected backups and owner sessions.
+No main merge or alpha distribution authorized.
+
+New terrain repair uses a native serialized constant HeightmapModifier at an
+identity root: initial and expansion surfaces are zero inside -20..120 metres.
+Existing archives are not migrated. Sculpt mesh heights now clamp before R16
+encoding. New terrain starts bare, and manual vegetation synchronization waits
+for actual merged chunk meshes before caching completion.
+
+Release aggregate built; targeted terrain/river tests passed 5/5. First full
+Release CTest passed 305/307; two stale source contracts required the retired
+root-offset assignment and old two-argument vegetation call. They were updated
+to require the new native surface reference and completed-chunk gate, retaining
+all previous safety checks. Full post-change validation remains pending.
+
+Owner reproduced dark chunk patches again and identified Player Start. An
+isolated native probe reproduced the exact visual corruption by preparing and
+rendering PlayerCameraPreviewService, without Test Game. All 1,444 source terrain
+texture bindings changed through shared mutable wi::Resource wrappers; negative
+probe exited 42. Private preview chunk wrappers repair the cause: same probe
+exited 0 with zero changed bindings and intact inspected after-capture.
+A three-rebuild regression is now part of TerrainInitializationRecovery.
+The previous "unreproduced/unrepaired" darkness status is superseded by this
+reproduction and native candidate fix, not by final Studio acceptance.
+
+Current owner-used Studio is the earlier RenegadeStudio-terrain-review.exe
+(alias hash BF0B8CC4...35F28). It does not contain the preview repair.
+Leave its unsaved work intact. Latest Release aggregate is rebuilding to include
+the preview repair; do not mistake an earlier normal-name binary for this source.
+
+Exact receipts, negative/fixed native captures, preserved saved scene copies and
+logs are in TERRAIN_INIT_PRESERVE_20261102_215658 under the external recovery audit.
+Mandatory canonical HANDOFF and ARCHITECTURE full reading completed during this
+continuation; earlier production edits preceded that completion, now recorded
+candidly. Remaining gates: final full suite, fresh actual Studio draw/link without
+floor extension, sculpt/limits, width/node history, unlinked expansion, cold
+process reopen, Player Start preview/reselection/Test Game return, collisions,
+standalone, old-level copies and original-file hash comparison. Do not close
+acceptance on native proof alone. See docs/TERRAIN_INITIALIZATION_RECOVERY_2026-11-02.md.
+
+## 2026-11-03: Terrain initialization and Player Start preview - local verification PASS, release OPEN
+
+This supersedes the pending local checks in the preceding terrain recovery entry.
+The implementation is based on 6c59d2a on recovery/20261101-repair-implementation.
+No main merge or alpha distribution is authorized. Independent release review stays OPEN.
+
+Final ordinary Studio hash:
+A443C2C54D269C6EBBDEDCD9076ECCF9DC8B4071D61049F6236CB05E7382D1B1.
+Runtime hash:
+F648F308BE9747464CB68817E713675D5153DDDAFE16FDE3F149C13E0306EB14.
+The final aggregate leaves both hashes identical to the actual tested binaries.
+
+Release RenegadeStudioCI aggregate PASS; final unfiltered Release CTest 307/307,
+zero skips, 207.59 s. This includes the strengthened preview regression after
+sculpt/paint/expansion, checking 1,764 bindings and clone encoded heights across
+three rebuilds. Original failing terrain and preview baselines remain preserved.
+
+Actual Studio PASS: new governed default 361-chunk terrain at zero inside
+-20..120; draw/Link at 1.35 m without Allow Deeper Beds; base and node-width
+history; Lower below zero and sustained floor clamp at -20; exact sculpt
+Undo/Redo; unlinked expansion 361/441 with Undo/Redo and all inner R16 maps
+unchanged. Cold process reopening preserves expanded sculpt and linked river
+with node width 18. Player preview stays textured before/after Test Game and
+cold reopening. Test Game and standalone actual-project Title/MainMenu/NewGame
+walks cross the channel and reach the far bank.
+
+Cold grid Jolt contact errors: river 0.002945 m, sculpt floor 0.004150 m.
+An extra sub-cell ray at the steep stress-pit edge differs by 0.097260 m, exactly
+matching the original bridge/pinned physics. Keep that strict probe failure as
+an existing limitation; do not claim exact collision parity everywhere or alter
+Wicked physics merely to make it green.
+
+Old level 5/9 native comparisons preserve original transforms/heights. The
+older linked-river/grass project COPY opens visibly with grass/rain and linked
+state; its UI resave keeps the original root, range, heights, masks and river
+layer hashes. Original owner files/backups: 145/145 unchanged. Inherited imnodes
+diff is unchanged. Unrelated caches/logs and owner interim session are retained.
+
+New docs: docs/TERRAIN_INITIALIZATION_RECOVERY_2026-11-02.md contains the complete
+result table, hashes, commands, performance caveats and known limitation.
+Architecture, terrain guidance and affected assistant fingerprints were updated;
+no feature exposure or release gate is newly marked complete.
+
+Receipts remain outside source control in TERRAIN_INIT_PRESERVE_20261102_215658.
+The final source should be pushed once for four-check CI; historical 6c59d2a green
+checks and the existing alpha do not accept the new repair. Record final commit
+and CI results externally; no result-only CI restart, main merge or alpha build.

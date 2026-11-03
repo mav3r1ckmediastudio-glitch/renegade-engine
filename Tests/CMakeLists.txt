@@ -456,6 +456,15 @@ if(WIN32)
     set_tests_properties(RenegadeRiverDefaultTerrainRecovery PROPERTIES
         WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
         TIMEOUT 600)
+    add_test(NAME RenegadeTerrainInitializationRecovery
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
+            "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/terrain-initialization-$<CONFIG>"
+            -DRENEGADE_RIVER_MODE=terrain-initialization
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
+    set_tests_properties(RenegadeTerrainInitializationRecovery PROPERTIES
+        WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
+        TIMEOUT 600)
 endif()
 
 add_executable(RenegadeLightTests

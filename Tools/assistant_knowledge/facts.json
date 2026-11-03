@@ -482,7 +482,7 @@
         "banks",
         "sculpt"
       ],
-      "answer": "To draw a river: 1. Open the Terrain river controls and select DRAW RIVER. 2. Left-drag across the terrain to draw its water spline; release to finish. 3. Turn drawing off and select the new River Water in the scene or hierarchy. 4. In RIVERBED & BANKS adjust BED DEPTH and BANK WIDTH, then press LINK / UPDATE BED. 5. Check that its channel reports linked and that visible water meets the banks. On brand-new flat terrain, ALLOW DEEPER BEDS +10M may first be needed if the desired bed extends below the terrain height range. If linking is refused, read the Inspector reason and respect the safety limits. If water still does not fit after a successful link, preserve a project copy and screenshot for a defect report.",
+      "answer": "To draw a river: 1. Open the Terrain river controls and select DRAW RIVER. 2. Left-drag across the terrain to draw its water spline; release to finish. 3. Turn drawing off and select the new River Water in the scene or hierarchy. 4. In RIVERBED & BANKS adjust BED DEPTH and BANK WIDTH, then press LINK / UPDATE BED. 5. Check that its channel reports linked and that visible water meets the banks. New default terrain supports ordinary shallow riverbeds without ALLOW DEEPER BEDS. Use that explicit range extension only when the desired cut exceeds the current minimum elevation, including on legacy terrain. If linking is refused, read the Inspector reason and respect the safety limits. If water still does not fit after a successful link, preserve a project copy and screenshot for a defect report.",
       "sources": [
         {
           "path": "Studio/src/StudioApplication.cpp",

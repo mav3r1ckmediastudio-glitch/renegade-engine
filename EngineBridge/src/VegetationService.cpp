@@ -462,14 +462,27 @@ namespace renegade::bridge
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain)
     {
+        bool allChunksReady = false;
+        return SynchronizeWickedVegetation(scene, terrain, allChunksReady);
+    }
+
+    std::size_t SynchronizeWickedVegetation(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        bool& allChunksReady)
+    {
+        allChunksReady = false;
         if (!IsWickedVegetationInitialized(scene, terrain))
             return 0;
 
+        allChunksReady = true;
         std::size_t initialized = 0;
         for (auto& entry : terrain.chunks)
         {
             if (PrepareManualChunk(scene, terrain, entry.second))
                 ++initialized;
+            if (!HasMarker(scene, entry.second.entity, ManualChunkKey))
+                allChunksReady = false;
         }
         return initialized;
     }

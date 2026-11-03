@@ -71,8 +71,14 @@ require_text("${vegetation}"
     "wd01SynchronizedChunkCount_ == terrain->chunks.size()"
     "idle vegetation maintenance lacks a chunk lifecycle gate")
 require_text("${vegetation}"
-    "bridge::SynchronizeWickedVegetation(scene, *terrain);"
+    "bridge::SynchronizeWickedVegetation(scene, *terrain, allChunksReady);"
     "new terrain chunks no longer receive Wicked vegetation")
+require_text("${vegetation}"
+    "wd01SynchronizedTerrainEntity_ = allChunksReady"
+    "vegetation lifecycle must wait for generated chunk meshes before caching identity")
+require_text("${vegetation}"
+    "wd01SynchronizedChunkCount_ = allChunksReady ? terrain->chunks.size() : 0;"
+    "vegetation lifecycle must retry incomplete chunk publication")
 require_text("${studio_header}"
     "wd01SynchronizedTerrainEntity_"
     "vegetation lifecycle identity tracking is missing")

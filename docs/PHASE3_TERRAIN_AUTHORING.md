@@ -77,3 +77,31 @@ Run Windows Debug and Release CI after this cleanup. Package Release and prove
 the standard terrain still creates, sculpts, saves, closes, opens, and remains
 unchanged after the first update on DX12. Repeat the round trip on Vulkan.
 Automated success alone is not visual acceptance.
+
+## New-terrain initialization recovery (2 November 2026 candidate)
+
+Standard new terrain now has an identity root and a surface at world Y=0 inside
+the existing -20 to +120 metre encoding range. A serialized native constant
+HeightmapModifier supplies that same surface reference to initial generation,
+later expansion rings and reopened terrain. Existing levels keep their authored
+transforms, height data, modifiers, masks and river layers.
+
+Ordinary shallow river beds can be linked on untouched new terrain without
+Allow Deeper Beds. The explicit range-extension command remains available for
+legacy terrain or cuts beyond the current minimum, with its Undo and expansion
+guards unchanged. Sculpting clamps mesh edits before encoding so visual,
+collision and saved heights stop at the same valid limits.
+
+New terrain starts without procedural grass; explicit manual painting enables
+the existing native vegetation path. Chunk synchronization acknowledges completion
+only after generated meshes are merged, preserving bare expansion rings.
+
+A separate reproduced Player Start preview defect shared generated terrain
+texture-resource wrappers with the editor scene. Native preview generation then
+rebound the editor to the preview atlas, producing dark chunks until reopening.
+Preview chunk resources are now private; authored material textures retain the
+existing sharing path. This changes no saved terrain format or Wicked pin.
+
+Native regression evidence and outstanding actual-Studio gates are tracked in
+TERRAIN_INITIALIZATION_RECOVERY_2026-11-02.md. This candidate is not release
+acceptance and does not authorize another alpha.

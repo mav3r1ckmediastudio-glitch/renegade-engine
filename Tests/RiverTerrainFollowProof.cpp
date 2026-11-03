@@ -13,6 +13,8 @@
 #include "renegade/bridge/RiverFlowRenderer.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "../EngineBridge/src/PlaceableWaterfallAuthoring.h"
+#include "TerrainInitializationProof.h"
+#include "TerrainPlayerPreviewProof.h"
 
 #include "../WickedEngine/Editor/json.hpp"
 #include "renegade/bridge/RiverUnderwaterService.h"
@@ -484,13 +486,18 @@ int main(int argc, char** argv)
             {1.0f, 1.0f, 0.96f}, 220.0f, 200.0f,
             wi::scene::LightComponent::POINT);
         TerrainState settings;
-        const bool defaultRecovery=argc==3 && std::string(argv[2])=="default-recovery";
+        const bool freshInitialization=argc==3 && std::string(argv[2])=="terrain-initialization";
+        const bool defaultRecovery=freshInitialization ||
+            (argc==3 && std::string(argv[2])=="default-recovery");
         settings.visibleChunkRadius = defaultRecovery ? DefaultTerrainChunkRadius : 1;
-        settings.propChunkRadius = 0;
-        settings.physicsChunkRadius = 0;
-        settings.physics = false;
-        settings.minimumHeight = -20;
-        settings.maximumHeight = 40;
+        if (!defaultRecovery)
+        {
+            settings.propChunkRadius = 0;
+            settings.physicsChunkRadius = 0;
+            settings.physics = false;
+            settings.minimumHeight = -20;
+            settings.maximumHeight = 40;
+        }
         const auto terrainID = CreateTerrain(scene, settings, "Disposable Real Terrain");
         Require(terrainID != wi::ecs::INVALID_ENTITY,
             "native terrain creation failed");
@@ -612,21 +619,41 @@ int main(int argc, char** argv)
         std::cout << "TERRAIN_CHUNKS=" << chunksBefore << "\n";
 
 
-        if (argc==3 && std::string(argv[2])=="default-recovery")
+        if (defaultRecovery)
         {
             progress("default-361-ready");
             Require(chunksBefore==361,"Creator-default 19x19 terrain was not generated");
+            Require(!terrain->IsGrassEnabled() && scene.hairs.GetCount() == 0,
+                "Untouched terrain generated unconfigured procedural grass");
             const auto hit=wi::scene::Pick(wi::primitive::Ray(XMFLOAT3(0,200,0),XMFLOAT3(0,-1,0)),
                 wi::enums::FILTER_TERRAIN,~0u,scene);
             Require(hit.entity!=wi::ecs::INVALID_ENTITY,"Default terrain picking failed");
             const float ground=hit.position.y;
             std::cout<<"DEFAULT_GROUND="<<ground<<" bottom="<<terrain->bottomLevel<<std::endl;
-            // The same explicit authoring operation exposed by Studio; no
-            // clipped cut, terrain shrink, changed encoding or guard bypass.
-            if (std::any_of(terrain->chunks.begin(),terrain->chunks.end(),[&](const auto& entry) { return scene.meshes.GetComponent(entry.second.entity)->vertex_positions[0].y < terrain->bottomLevel+2.f; }))
+            // Untouched production defaults: never prepare this regression with
+            // the separate Allow Deeper Beds operation. Both mesh and encoded
+            // samples must start inside the original -20..120 m envelope.
+            const auto* root = scene.transforms.GetComponent(terrainID);
+            Require(root && std::abs(root->translation_local.y) < .0001f,
+                "Fresh terrain still relies on a compensated root height");
+            Require(std::abs(ground) < .003f && terrain->bottomLevel == -20.f &&
+                terrain->topLevel == 120.f,
+                "Fresh terrain has no world-zero surface inside its default range");
+            for (const auto& entry : terrain->chunks)
             {
-                SetTerrainHeightFloorCommand floor(scene,terrainID,terrain->bottomLevel-10.f);
-                Require(floor.Execute(),"Explicit deeper-bed encoding failed");
+                const auto* mesh = scene.meshes.GetComponent(entry.second.entity);
+                Require(mesh && !mesh->vertex_positions.empty(),"Generated terrain mesh missing");
+                for (const auto& vertex : mesh->vertex_positions)
+                    Require(std::abs(vertex.y) < .003f,"Initial chunk is not flat at zero");
+                for (const auto encoded : entry.second.heightmap_data)
+                    Require(std::abs(-20.f + encoded * (140.f/65535.f)) < .003f,
+                        "Initial R16 sample still encodes the floor");
+            }
+            if (freshInitialization)
+            {
+                terrain_initialization_proof::Run(scene,terrainID,render,out,proofFrame);
+                terrain_player_preview_proof::Run(scene,render,out);
+                return 0;
             }
             RiverSplineOptions options;
             CreateRiverSplineCommand create(scene,

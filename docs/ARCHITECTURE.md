@@ -2031,3 +2031,29 @@ Screen v3 has optional per-widget image_fit (0 Stretch, 1 Contain, 2 Cover), ren
 See docs/INVENTORY_G4B3C4_CREATOR_WORKFLOW.md for final verification and explicit remaining release/module boundaries.
 
 G4-B3C4b: shared ScreenDocument::MaximumActions=128 replaces the previous 64-action guard without schema changes. Paired inventory grids permit 40 visible cells/panel within 256 native widgets. FitInventoryPagedGridSlots computes constrained native geometry; Inspector explicitly offers fit-and-apply after a size rejection. Errors render in red, weighted wrapped 14 px text directly under Apply. See INVENTORY_G4B3C4_CREATOR_WORKFLOW.md for verification.
+
+## Terrain initialization and Player Start preview isolation (November 2026 candidate)
+
+CreateTerrain replaces root-height compensation with a native serialized constant
+HeightmapModifier. The standard root remains at zero; initial samples represent
+zero within -20..120 metres. The pinned generator applies the same modifier to
+every initial and expansion chunk. Existing terrain deserialization is unchanged.
+No WISCENE schema, upstream source, core overlay or dependency pin changes.
+
+SculptTerrain clamps the canonical edited height before updating duplicated mesh
+samples and R16 encoding, keeping the mesh, saved data and refreshed native
+heightfield within the same envelope. New terrain starts bare; the existing
+manual vegetation initializer enables native grass on first painting.
+WD01's identity/count gate now caches only after generated chunk meshes have
+merged and all manual masks are ready; incomplete synchronization retries.
+
+PlayerCameraPreviewService must isolate generated terrain chunk texture resources.
+A copied wi::Resource shares mutable internal state: native preview generation's
+SetTexture/SetTextureVirtual would otherwise replace the editor's atlas through
+that shared wrapper. The private WISCENE copy receives fresh resource wrappers
+for internal chunk materials before native updates. Ordinary authored material
+resources retain the established sharing behavior. Preview creation, repeated
+rendering and destruction must preserve source texture bindings and authored
+terrain data. Reopening only clears the old symptom; resource isolation repairs
+its reproduced cause. See TERRAIN_INITIALIZATION_RECOVERY_2026-11-02.md for
+verification status.
