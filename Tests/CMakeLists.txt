@@ -472,7 +472,11 @@ if(WIN32)
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
         set_tests_properties(RenegadeMaximumTerrainRiver_${MAXIMUM_ORDER} PROPERTIES
             WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
-            TIMEOUT 600
+            # Debug checked iterators/native transaction snapshots exceeded
+            # ten minutes on the slower hosted runner in run 41722770055.
+            # Keep every assertion and product bound; Release/GPU cases retain
+            # ten minutes, while Debug native maximum-extent work gets twenty.
+            TIMEOUT "$<IF:$<CONFIG:Debug>,1200,600>"
             FIXTURES_SETUP "MaximumTerrain_${MAXIMUM_ORDER}")
     endforeach()
     # Debug native transactions and one WARP draw each need their own bounded

@@ -43,8 +43,8 @@ range. Existing levels receive no automatic migration.
 | Fresh CI and exact downloaded artifact user journeys | Pending |
 
 New native regression modes are maximum-expanded-first and maximum-linked-first.
-They generate the complete maximum native terrain and retain bounded 600-second
-CTest deadlines. They do not substitute smaller terrain or fabricated GPU data.
+They generate the complete maximum native terrain. Release and GPU checkpoints
+retain 600-second deadlines; Debug native cases receive 1,200 seconds. They do not substitute smaller terrain or fabricated GPU data.
 Hosted native transactions run in those two cases. Two fixture-dependent GPU
 cases then cold-load their exact saved scenes: source rendering consumes the
 expanded-first fixture and the preview consumes the linked-first fixture.
@@ -170,3 +170,17 @@ setting, terrain size, render resolution or product safety budget changed.
 Receipts and exact commands are retained externally under
 CI_TIMEOUT_REPAIR_20261103T2056Z. Fresh CI and exact downloaded-artifact
 acceptance remain open. No release gate is closed by these local checks.
+
+
+## Hosted Debug native-work budget correction
+
+Run 41722770055 Release completed successfully. Debug again exceeded 600
+seconds in the native maximum-terrain transaction checks, before rendering;
+the dependent GPU cases were correctly withheld. Local Release timings did
+not establish sufficient hosted Debug timing margin. The two native maximum
+cases now receive 1,200 seconds only in Debug. Release and GPU cases keep
+600 seconds. Every extent, assertion, fixture hash and product safety bound
+is unchanged. The aggregate 180-minute job ceiling remains in place.
+This is a test-execution budget correction; it is not a product-performance
+fix, a skip or a claim that Debug has passed. The new CI result remains the
+acceptance gate.
