@@ -54,10 +54,15 @@ namespace terrain_initialization_proof
                 synchronizedChunks = ready ? terrain->chunks.size() : static_cast<std::size_t>(-1);
             }
         };
-        const auto settle = [&] {
+        const auto settle = [&](const char* phase) {
+            std::cout<<"TERRAIN_INIT_STAGE "<<phase<<" updates"<<std::endl;
             for (int i=0;i<12;++i) advance();
+            // These transactions assert native data, uploads and collisions.
+            // The preview proof supplies GPU draw/readback checkpoints; settling
+            // need not rasterize twelve copies per phase on software graphics.
             gpu->WaitForGPU();
             terrain->Generation_Cancel();
+            std::cout<<"TERRAIN_INIT_STAGE "<<phase<<" ready"<<std::endl;
         };
         const auto equal = [&](TerrainSculptState expected, const char* why) {
             auto actual=CaptureTerrainSculpt(scene,*terrain);
@@ -126,14 +131,14 @@ namespace terrain_initialization_proof
         Check(Grass(*terrain)!=paintedMasks,"Grass Undo did not remove painted masks");
         Check(grassHistory.Execute(),"Grass Redo failed");
         Check(Grass(*terrain)==paintedMasks,"Grass Redo changed painted masks");
-        settle();
+        settle("painted-grass");
 
         // Every resident physics heightfield must use the generated local zero,
         // and completed sculpt strokes must rebuild its true contact geometry.
         RefreshTerrainSculptPhysics(scene,*terrain,after);
         wi::physics::SetEnabled(true);
         wi::physics::SetSimulationEnabled(false);
-        settle();
+        settle("sculpted-physics");
         for (const auto sample : {XMFLOAT3(0,100,0),XMFLOAT3(33,100,33)})
         {
             const wi::primitive::Ray ray(sample,{0,-1,0},0,200);
@@ -154,7 +159,7 @@ namespace terrain_initialization_proof
                 advance();
                 Sleep(5);
             }
-            settle();
+            settle("expanded-ring");
             Check(terrain->chunks.size()==count,"Expansion did not generate expected chunk count");
         };
         const auto verifyRing = [&](int radius) {
@@ -177,7 +182,7 @@ namespace terrain_initialization_proof
         waitFor(441);
         verifyRing(10);
         expand.Undo();
-        settle();
+        settle("expansion-undo");
         Check(terrain->chunks.size()==361,"Expansion Undo retained the outer ring");
         equal(inner,"Expansion Undo changed inner sculpt");
         Check(expand.Execute(),"Expansion Redo refused");
@@ -214,6 +219,7 @@ namespace terrain_initialization_proof
             ~RestoreScene() { render.scene=previous; }
         } restore{render,previousScene};
         render.scene=&reopened;
+        std::cout<<"TERRAIN_INIT_STAGE cold-reopen updates"<<std::endl;
         for(int i=0;i<12;++i) frame();
         gpu->WaitForGPU();loaded.Generation_Cancel();
         Check(Encoded(loaded)==savedHeights && Grass(loaded)==savedGrass,

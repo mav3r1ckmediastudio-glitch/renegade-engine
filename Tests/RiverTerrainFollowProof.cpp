@@ -114,7 +114,7 @@ static std::uint64_t GrassAndPaintDigest(const wi::terrain::Terrain& terrain)
 int main(int argc, char** argv)
 {
 
-    if (argc != 2 && argc != 3) return 2;
+    if (argc != 2 && argc != 3 && argc != 4) return 2;
     const auto out = fs::u8path(argv[1]);
     if (fs::exists(out) && !fs::is_empty(out))
     {
@@ -486,7 +486,15 @@ int main(int argc, char** argv)
             {1.0f, 1.0f, 0.96f}, 220.0f, 200.0f,
             wi::scene::LightComponent::POINT);
         TerrainState settings;
-        const bool freshInitialization=argc==3 && std::string(argv[2])=="terrain-initialization";
+        const bool freshInitialization=argc>=3 && std::string(argv[2])=="terrain-initialization";
+        int previewCheckpoint=-1;
+        if(argc==4)
+        {
+            const std::string checkpoint=argv[3];
+            Require(freshInitialization && (checkpoint=="-1" || checkpoint=="0" ||
+                checkpoint=="1" || checkpoint=="2"),"Invalid terrain preview checkpoint");
+            previewCheckpoint=checkpoint=="-1"?-1:checkpoint[0]-'0';
+        }
         const bool defaultRecovery=freshInitialization ||
             (argc==3 && std::string(argv[2])=="default-recovery");
         settings.visibleChunkRadius = defaultRecovery ? DefaultTerrainChunkRadius : 1;
@@ -513,8 +521,13 @@ int main(int argc, char** argv)
                         "native terrain material texture is missing from GPU proof deployment");
             }
         std::cout << "NATIVE_TERRAIN_MATERIAL_RESOURCES=PASS\n";
+        // Bound draw scheduling for the new software-rendered proof while
+        // keeping the desktop, full terrain and rendering resolution unchanged.
+        const bool boundedInitialization = freshInitialization && hosted;
+        const int proofWidth = 960;
+        const int proofHeight = 640;
         wi::scene::CameraComponent camera;
-        camera.CreatePerspective(960,640,0.1f,500.0f,
+        camera.CreatePerspective(proofWidth,proofHeight,0.1f,500.0f,
             DirectX::XMConvertToRadians(60.0f));
         camera.TransformCamera(DirectX::XMMatrixInverse(nullptr,
             DirectX::XMMatrixLookAtLH(
@@ -525,7 +538,7 @@ int main(int argc, char** argv)
         wi::RenderPath3D render;
         render.scene = &scene;
         render.camera = &camera;
-        render.init(960,640,96);
+        render.init(proofWidth,proofHeight,96);
         render.setOcclusionCullingEnabled(false);
         render.setMotionBlurEnabled(false);
         render.setDepthOfFieldEnabled(false);
@@ -591,7 +604,9 @@ int main(int argc, char** argv)
                 Sleep(25);
             }
             progress("terrain-gpu-warmup");
-            for(int frame=0;frame<3;++frame) proofFrame();
+            // The initialization mode draws at its dedicated preview checkpoints.
+            if(!boundedInitialization)
+                for(int frame=0;frame<3;++frame) proofFrame();
         }
         else
         {
@@ -651,8 +666,14 @@ int main(int argc, char** argv)
             }
             if (freshInitialization)
             {
-                terrain_initialization_proof::Run(scene,terrainID,render,out,proofFrame);
-                terrain_player_preview_proof::Run(scene,render,out);
+                // Settle/generate with native updates on hosted software graphics.
+                // Rasterize at explicit checkpoints instead of every settle tick.
+                const auto initializationUpdate = [&] {
+                    if(hostedOffscreen) proofUpdate(); else proofFrame();
+                };
+                terrain_initialization_proof::Run(scene,terrainID,render,out,
+                    initializationUpdate);
+                terrain_player_preview_proof::Run(scene,render,out,hostedOffscreen,previewCheckpoint);
                 return 0;
             }
             RiverSplineOptions options;

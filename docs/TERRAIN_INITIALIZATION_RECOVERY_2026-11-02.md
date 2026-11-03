@@ -121,3 +121,43 @@ Independent exact-revision verification using VERIFICATION_CHECKLIST remains ope
 No main merge, release-gate closure, alpha replacement or distribution is authorized.
 The owner's earlier running session is preserved and still uses the interim
 executable; it does not acquire this repair while running.
+
+
+## 2026-11-03: Hosted terrain regression timeout repair
+
+The first four-check run on ae045c35cbed13ec3e511eea52547441e468be15
+passed Windows baseline Debug/Release but failed both Studio configurations.
+Both applications compiled. The sole failing CTest in each was the new
+RenegadeTerrainInitializationRecovery at its existing 600-second timeout on
+Microsoft Basic Render Driver. RenegadeRiverDefaultTerrainRecovery passed in
+both configurations (Release 412.26 s; Debug 483.98 s).
+
+The new initialization helper rasterized the full scene during every settling
+tick. Native data, uploads, generation and physics now settle through native
+updates on hosted graphics. Full-resolution source captures and each preview
+render have separate bounded cases; every case still performs all three preview
+rebuilds, twelve updates per rebuild, all 1,764 binding checks and every authored
+sculpt/R16, grass, expansion, history and cold-collision assertion. Desktop mode
+retains the full presentation path. Terrain extent, renderer quality, 960x640
+configuration and the 600-second per-test deadline are unchanged.
+
+The original initialization case captures the source before/after the complete
+preview sequence. RenegadeTerrainPreviewRender0Recovery through Render2Recovery
+render the corresponding preview; they also retain all three native rebuilds.
+The Release suite now contains 310 tests. This is test scheduling only: no
+application behavior, Wicked source/pin, OS graphics setting or safety limit
+changes. Studio and Runtime remain byte-identical to the earlier UI-tested
+binaries. The two-thread exploratory candidate and four-thread combined-render
+candidate are retained externally; the latter still timed out during its third
+preview draw and is not a passing receipt.
+
+Local WARP validation uses an audit-only driver translation unit outside the
+checkout: real EnumWarpAdapter selection and software-adapter acceptance, with
+all remaining pinned driver code unchanged. Process affinity is scoped to each
+proof process. The negative executable substitutes only the preserved old
+PlayerCameraPreviewService header and must fail the terrain-atlas assertion.
+Receipts are under CI_TERRAIN_INITIALIZATION_TIMEOUT_20261103 in the recovery
+audit. Final local results and the next exact-head four-check run are recorded
+there; neither historical local success nor these fixture changes close the
+independent release gate. Main merge and another alpha distribution still
+require owner approval.

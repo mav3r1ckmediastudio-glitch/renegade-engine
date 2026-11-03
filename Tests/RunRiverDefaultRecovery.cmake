@@ -18,9 +18,19 @@ if(NOT RENEGADE_RIVER_MODE STREQUAL "default-recovery" AND
    NOT RENEGADE_RIVER_MODE STREQUAL "terrain-initialization")
     message(FATAL_ERROR "Unknown terrain recovery proof mode")
 endif()
+set(PREVIEW_ARGUMENTS)
+if(RENEGADE_RIVER_MODE STREQUAL "terrain-initialization")
+    if(NOT DEFINED RENEGADE_TERRAIN_PREVIEW_CHECKPOINT)
+        set(RENEGADE_TERRAIN_PREVIEW_CHECKPOINT -1)
+    endif()
+    if(NOT RENEGADE_TERRAIN_PREVIEW_CHECKPOINT MATCHES "^(-1|[012])$")
+        message(FATAL_ERROR "Unknown terrain preview checkpoint")
+    endif()
+    list(APPEND PREVIEW_ARGUMENTS "${RENEGADE_TERRAIN_PREVIEW_CHECKPOINT}")
+endif()
 message(STATUS "Terrain/river recovery evidence: ${RUN_OUTPUT}")
 execute_process(
-    COMMAND "${RENEGADE_RIVER_PROOF}" "${RUN_OUTPUT}" "${RENEGADE_RIVER_MODE}"
+    COMMAND "${RENEGADE_RIVER_PROOF}" "${RUN_OUTPUT}" "${RENEGADE_RIVER_MODE}" ${PREVIEW_ARGUMENTS}
     RESULT_VARIABLE RIVER_RESULT)
 if(NOT RIVER_RESULT EQUAL 0)
     message(FATAL_ERROR "Native 361-chunk river recovery failed: ${RIVER_RESULT}")

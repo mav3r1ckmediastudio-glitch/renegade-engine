@@ -465,6 +465,20 @@ if(WIN32)
     set_tests_properties(RenegadeTerrainInitializationRecovery PROPERTIES
         WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
         TIMEOUT 600)
+    # Divide full-resolution software rasterization between source captures and
+    # each preview. Every case retains all native assertions and three rebuilds.
+    foreach(PREVIEW_CHECKPOINT RANGE 0 2)
+        add_test(NAME RenegadeTerrainPreviewRender${PREVIEW_CHECKPOINT}Recovery
+            COMMAND "${CMAKE_COMMAND}"
+                "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
+                "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/terrain-preview-${PREVIEW_CHECKPOINT}-$<CONFIG>"
+                -DRENEGADE_RIVER_MODE=terrain-initialization
+                "-DRENEGADE_TERRAIN_PREVIEW_CHECKPOINT=${PREVIEW_CHECKPOINT}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
+        set_tests_properties(RenegadeTerrainPreviewRender${PREVIEW_CHECKPOINT}Recovery PROPERTIES
+            WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
+            TIMEOUT 600)
+    endforeach()
 endif()
 
 add_executable(RenegadeLightTests
