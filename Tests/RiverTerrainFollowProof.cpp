@@ -15,6 +15,7 @@
 #include "../EngineBridge/src/PlaceableWaterfallAuthoring.h"
 #include "TerrainInitializationProof.h"
 #include "TerrainPlayerPreviewProof.h"
+#include "MaximumTerrainRiverProof.h"
 
 #include "../WickedEngine/Editor/json.hpp"
 #include "renegade/bridge/RiverUnderwaterService.h"
@@ -487,6 +488,8 @@ int main(int argc, char** argv)
             wi::scene::LightComponent::POINT);
         TerrainState settings;
         const bool freshInitialization=argc>=3 && std::string(argv[2])=="terrain-initialization";
+        const bool maximumRecovery=argc==3 && (std::string(argv[2])=="maximum-expanded-first" ||
+            std::string(argv[2])=="maximum-linked-first");
         int previewCheckpoint=-1;
         if(argc==4)
         {
@@ -495,7 +498,7 @@ int main(int argc, char** argv)
                 checkpoint=="1" || checkpoint=="2"),"Invalid terrain preview checkpoint");
             previewCheckpoint=checkpoint=="-1"?-1:checkpoint[0]-'0';
         }
-        const bool defaultRecovery=freshInitialization ||
+        const bool defaultRecovery=freshInitialization || maximumRecovery ||
             (argc==3 && std::string(argv[2])=="default-recovery");
         settings.visibleChunkRadius = defaultRecovery ? DefaultTerrainChunkRadius : 1;
         if (!defaultRecovery)
@@ -523,7 +526,7 @@ int main(int argc, char** argv)
         std::cout << "NATIVE_TERRAIN_MATERIAL_RESOURCES=PASS\n";
         // Bound draw scheduling for the new software-rendered proof while
         // keeping the desktop, full terrain and rendering resolution unchanged.
-        const bool boundedInitialization = freshInitialization && hosted;
+        const bool boundedInitialization = (freshInitialization || maximumRecovery) && hosted;
         const int proofWidth = 960;
         const int proofHeight = 640;
         wi::scene::CameraComponent camera;
@@ -663,6 +666,14 @@ int main(int argc, char** argv)
                 for (const auto encoded : entry.second.heightmap_data)
                     Require(std::abs(-20.f + encoded * (140.f/65535.f)) < .003f,
                         "Initial R16 sample still encodes the floor");
+            }
+            if(maximumRecovery)
+            {
+                maximum_terrain_river_proof::Run(scene,terrainID,render,out,
+                    std::string(argv[2])=="maximum-linked-first",hostedOffscreen,proofUpdate,proofFrame);
+                terrain_player_preview_proof::Run(scene,render,out,hostedOffscreen,
+                    std::string(argv[2])=="maximum-linked-first"?1:-2);
+                return 0;
             }
             if (freshInitialization)
             {
@@ -1961,17 +1972,33 @@ int main(int argc, char** argv)
         const auto preEnvelopePaint = GrassAndPaintDigest(*terrain);
         const auto firstChunk = terrain->chunks.begin();
         Require(firstChunk != terrain->chunks.end(), "no envelope test chunks");
+        const auto firstCoordinate=firstChunk->first;
         const auto oldEncodedHeights = firstChunk->second.heightmap_data;
         Require(history.Execute(std::make_unique<SetTerrainHeightFloorCommand>(
             scene,terrainID,initialFloor - 10.0f)),
             "explicit 10m terrain height floor extension rejected");
         Require(terrain->bottomLevel == initialFloor - 10.0f,
             "height floor did not extend by 10m");
-        Require(!history.Execute(std::make_unique<ExpandTerrainCommand>(
-            scene, terrainID)),
-            "terrain ring expansion should be guarded after R16 rebasing");
-        Require(terrain->chunks.size() == chunksBefore,
-            "guarded expansion altered existing terrain chunks");
+        {
+            const auto innerEncoding=terrain_initialization_proof::Encoded(*terrain);
+            const int oldRadius=terrain->generation;
+            ExpandTerrainCommand extendedExpand(scene,terrainID);
+            Require(extendedExpand.Execute(),"Rebased terrain expansion refused");
+            const auto side=std::size_t(TerrainChunkCountPerSide(oldRadius+1));
+            for(int i=0;i<2400 && (terrain->chunks.size()!=side*side ||
+                terrain->IsGenerationBusy());++i){proofUpdate();Sleep(5);}
+            for(int i=0;i<2;++i)proofUpdate();
+            gpu->WaitForGPU();terrain->Generation_Cancel();
+            Require(terrain->chunks.size()==side*side,"Rebased expansion incomplete");
+            for(const auto& item:terrain->chunks)
+                if(std::max(std::abs(item.first.x),std::abs(item.first.z))==oldRadius+1)
+                    for(const auto& vertex:scene.meshes.GetComponent(item.second.entity)->vertex_positions)
+                        Require(std::abs(vertex.y)<.003f,"Rebased expansion created a floor-height cliff");
+            extendedExpand.Undo();
+            Require(terrain_initialization_proof::Encoded(*terrain)==innerEncoding,
+                "Rebased expansion Undo changed old encoded heights");
+        }
+        Require(terrain->chunks.size()==chunksBefore,"Rebased expansion Undo lost original extent");
         Require(scene.transforms.GetComponent(terrainID)->translation_local.y ==
             rootYBefore, "height range extension moved terrain root");
         auto envelopeCompareA = preEnvelopeHeights;
@@ -1981,7 +2008,7 @@ int main(int argc, char** argv)
             "height range re-encoding moved authored vertices");
         Require(GrassAndPaintDigest(*terrain) == preEnvelopePaint,
             "height range extension changed vegetation/paint masks");
-        Require(firstChunk->second.heightmap_data != oldEncodedHeights,
+        Require(terrain->chunks.at(firstCoordinate).heightmap_data != oldEncodedHeights,
             "height floor changed without re-encoding native R16 data");
         std::cout << "TERRAIN_HEIGHT_FLOOR_EXTEND=PASS old="
             << initialFloor << " new=" << terrain->bottomLevel << "\n";
@@ -2033,7 +2060,7 @@ int main(int argc, char** argv)
         Require(RetainChangedTerrainSculpt(
             restoredEnvelopeA,restoredEnvelopeB) == 0,
             "Undo chain failed to preserve original authored heights");
-        Require(firstChunk->second.heightmap_data == oldEncodedHeights,
+        Require(terrain->chunks.at(firstCoordinate).heightmap_data == oldEncodedHeights,
             "Undo did not restore original R16 heightmap encoding");
         Require(history.Redo(),"height range extension Redo failed");
         Require(history.Redo(),"below-zero riverbed Redo failed");

@@ -67,7 +67,9 @@ namespace terrain_player_preview_proof
         // Hosted cases divide expensive rasterization between source captures
         // (-1) and each preview (0..2). Every case keeps all three native rebuilds,
         // twelve updates apiece and every binding/sculpt/encoded-height assertion.
-        const bool drawSource=!hostedOffscreen || previewCheckpoint<0;
+        // -2 retains every rebuild/update/binding/height assertion without a
+        // duplicate draw; another maximum-terrain case supplies that checkpoint.
+        const bool drawSource=!hostedOffscreen || previewCheckpoint==-1;
         std::cout<<"PLAYER_PREVIEW_CHECKPOINT="<<previewCheckpoint<<std::endl;
         if(drawSource) std::cout<<"PLAYER_PREVIEW_STAGE source-before render"<<std::endl;
         frame(nullptr,drawSource);
@@ -130,7 +132,7 @@ namespace terrain_player_preview_proof
         frame(nullptr,drawSource);
         gpu->WaitForGPU();
         unchanged();
-        const std::size_t expectedMain=previewCheckpoint<0?2:0;
+        const std::size_t expectedMain=previewCheckpoint==-1?2:0;
         const std::size_t expectedPreview=previewCheckpoint<0?0:1;
         if(hostedOffscreen && (mainDraws!=expectedMain || previewDraws!=expectedPreview))
             throw std::runtime_error("Hosted preview proof lost a required GPU checkpoint");

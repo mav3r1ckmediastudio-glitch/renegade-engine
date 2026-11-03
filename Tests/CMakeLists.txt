@@ -443,6 +443,12 @@ if(WIN32)
             VERBATIM)
     endif()
     set_target_properties(RenegadeRiverTerrainFollowProof PROPERTIES FOLDER "Renegade")
+    add_custom_command(TARGET RenegadeRiverTerrainFollowProof POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/Content/terrain/riverbed/rocky_rugged"
+            "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/riverbed/rocky_rugged"
+        VERBATIM)
+
     # Exercise the real creator-default extent, not only the historical 3x3 fixture.
     add_test(NAME RenegadeRiverDefaultTerrainRecovery
         COMMAND "${CMAKE_COMMAND}"
@@ -456,6 +462,17 @@ if(WIN32)
     set_tests_properties(RenegadeRiverDefaultTerrainRecovery PROPERTIES
         WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
         TIMEOUT 600)
+    foreach(MAXIMUM_ORDER IN ITEMS expanded-first linked-first)
+        add_test(NAME RenegadeMaximumTerrainRiver_${MAXIMUM_ORDER}
+            COMMAND "${CMAKE_COMMAND}"
+                "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
+                "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/terrain-maximum-${MAXIMUM_ORDER}-$<CONFIG>"
+                "-DRENEGADE_RIVER_MODE=maximum-${MAXIMUM_ORDER}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
+        set_tests_properties(RenegadeMaximumTerrainRiver_${MAXIMUM_ORDER} PROPERTIES
+            WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
+            TIMEOUT 600)
+    endforeach()
     add_test(NAME RenegadeTerrainInitializationRecovery
         COMMAND "${CMAKE_COMMAND}"
             "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"

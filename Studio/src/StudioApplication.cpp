@@ -11125,20 +11125,24 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
     void StudioRenderPath::ExpandTerrain()
     {
-        if (session_ == nullptr)
+        if (!session_) return;
+        const auto entity=session_->Selection().SelectedEntity();
+        const auto revision=session_->Scenes().Revision();
+        wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+            [this,entity,revision](std::uint64_t)
         {
-            return;
-        }
-        const auto entity = session_->Selection().SelectedEntity();
-        auto& scene = session_->Scenes().GetScene();
-        if (!scene.terrains.Contains(entity))
-        {
-            return;
-        }
-        session_->Commands().Execute(
-            std::make_unique<bridge::ExpandTerrainCommand>(scene, entity));
-        RefreshInspector();
-        RefreshStatus();
+            if (!session_ || revision!=session_->Scenes().Revision() || testLevelRuntime_.IsActive())
+                return;
+            auto& scene=session_->Scenes().GetScene();
+            if (!scene.terrains.Contains(entity)) return;
+            auto error=std::make_shared<std::string>();
+            auto command=std::make_unique<bridge::ExpandTerrainCommand>(scene,entity,error);
+            const bool applied=session_->Commands().Execute(std::move(command));
+            RefreshInspector();
+            RefreshStatus();
+            if (!applied)
+                studioChrome_.SetStatusText("TERRAIN // "+*error);
+        });
     }
 
     bool StudioRenderPath::CommitTerrain(const bridge::TerrainState& terrain)

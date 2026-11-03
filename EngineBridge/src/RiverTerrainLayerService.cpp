@@ -19,11 +19,17 @@ namespace renegade::bridge
     namespace
     {
         using Json = nlohmann::json;
-        // Keep the original 81-chunk edited-footprint, 32 MiB payload and
+        // Keep the equivalent of 81 edited grids, 32 MiB payload and
         // 32M segment/vertex budgets. Resident terrain is separately bounded.
         constexpr std::size_t MaximumChunks = 81;
-        constexpr std::size_t MaximumResidentChunks =
+        constexpr std::size_t DefaultResidentChunks =
             (2 * DefaultTerrainChunkRadius + 1) * (2 * DefaultTerrainChunkRadius + 1);
+        constexpr std::size_t MaximumResidentChunks =
+            (2 * MaximumTerrainChunkRadius + 1) * (2 * MaximumTerrainChunkRadius + 1);
+        // The original 81 full grids become an equivalent changed-sample budget.
+        // Compact patches may span the whole supported world without increasing
+        // the retained height-sample, document-byte or composition-work budgets.
+        constexpr std::size_t MaximumEditedSamples = MaximumChunks * wi::terrain::vertexCount;
         constexpr std::size_t MaximumCompositionWork = 32000000;
         constexpr std::size_t MaximumPayload = 32 * 1024 * 1024;
         struct Chunk
@@ -56,12 +62,22 @@ namespace renegade::bridge
             Check(terrain && terrain->scene == &scene && terrain->terrainEntity == entity,
                 "Terrain is not bound to this active scene");
             Check(!terrain->IsCenterToCamEnabled() && !terrain->IsRemovalEnabled() &&
-                terrain->generation >= 1 && terrain->chunks.size() <= MaximumResidentChunks,
-                "River layers require complete finite resident terrain within the default 19x19 extent");
+                terrain->generation >= 1 && terrain->generation <= MaximumTerrainChunkRadius &&
+                std::isfinite(terrain->bottomLevel) && std::isfinite(terrain->topLevel) &&
+                terrain->bottomLevel < terrain->topLevel &&
+                std::isfinite(terrain->chunk_scale) && terrain->chunk_scale > 0,
+                "River layers require finite fixed terrain within the supported 33x33 extent");
             terrain->Generation_Cancel();
             const auto side = std::size_t(TerrainChunkCountPerSide(terrain->generation));
-            Check(terrain->chunks.size() == side * side,
-                "Terrain generation is incomplete");
+            Check(terrain->chunks.size() <= MaximumResidentChunks &&
+                terrain->chunks.size() == side * side, "Terrain generation is incomplete");
+            for (const auto& entry : terrain->chunks)
+            {
+                const auto x = std::int64_t(entry.first.x) - terrain->center_chunk.x;
+                const auto z = std::int64_t(entry.first.z) - terrain->center_chunk.z;
+                Check(std::abs(x) <= terrain->generation && std::abs(z) <= terrain->generation,
+                    "Terrain resident coordinates differ from its authored extent");
+            }
             const auto matrix = scene.ComputeEntityMatrixRecursive(entity);
             XMFLOAT3 up;
             DirectX::XMStoreFloat3(&up, DirectX::XMVector3TransformNormal(
@@ -94,7 +110,8 @@ namespace renegade::bridge
         }
         std::string CoordinateKey(int x, int z)
         { return std::to_string(x) + ":" + std::to_string(z); }
-        Document Read(wi::scene::Scene& scene, wi::ecs::Entity entity, bool initialize)
+        Document Read(wi::scene::Scene& scene, wi::ecs::Entity entity, bool initialize,
+            int expandingFromRadius = 0)
         {
             auto& terrain = ValidateTerrain(scene, entity);
             const auto payload = Payload(scene, entity);
@@ -109,17 +126,23 @@ namespace renegade::bridge
                 Check(payload.size() <= MaximumPayload, "River layer document exceeds bound");
                 saved = Json::parse(payload);
                 version = saved.at("version").get<int>();
-                Check(version == 1 || version == 2, "Unsupported river layer schema");
+                Check(version == 1 || version == 2 || version == 3, "Unsupported river layer schema");
                 Check(saved.at("chunks").is_array() &&
-                    saved.at("chunks").size() <= MaximumChunks,
-                    "River baseline exceeds the 81-chunk edited-footprint budget");
+                    saved.at("chunks").size() <= (version == 3 ? MaximumResidentChunks : MaximumChunks),
+                    "River baseline exceeds its bounded patch count");
+                const auto oldSide = std::size_t(TerrainChunkCountPerSide(expandingFromRadius));
+                const auto expectedCoverage = expandingFromRadius > 0
+                    ? oldSide * oldSide : terrain.chunks.size();
+                Check(expandingFromRadius == 0 ||
+                    (expandingFromRadius >= 1 && terrain.generation == expandingFromRadius + 1),
+                    "River coverage may grow by one authored ring only");
                 if (version == 1)
-                    Check(saved.at("chunks").size() == terrain.chunks.size(),
+                    Check(saved.at("chunks").size() == expectedCoverage,
                         "River baseline topology differs from terrain");
                 else
                 {
                     Check(saved.at("coverage").is_array() &&
-                        saved.at("coverage").size() == terrain.chunks.size(),
+                        saved.at("coverage").size() == expectedCoverage,
                         "River baseline topology differs from terrain");
                     for (const auto& item : saved.at("coverage"))
                         Check(residents.emplace(CoordinateKey(item.at("x").get<int>(),
@@ -145,7 +168,12 @@ namespace renegade::bridge
                 }
             }
             else Check(initialize, "Terrain has no river baseline");
-            std::size_t matched = 0;
+            std::size_t matched = 0, editedSamples = 0;
+            const auto newOuterChunk = [&](int x, int z) {
+                return expandingFromRadius > 0 &&
+                    (std::abs(std::int64_t(x) - terrain.center_chunk.x) > expandingFromRadius ||
+                     std::abs(std::int64_t(z) - terrain.center_chunk.z) > expandingFromRadius);
+            };
             for (const auto& entry : terrain.chunks)
             {
                 const auto* mesh = scene.meshes.GetComponent(entry.second.entity);
@@ -155,38 +183,79 @@ namespace renegade::bridge
                 Chunk chunk{entry.first.x, entry.first.z, entry.second.entity, {}, {},
                     MatrixValues(scene.ComputeEntityMatrixRecursive(entry.second.entity))};
                 const auto key = CoordinateKey(chunk.x,chunk.z);
+                for (float value:chunk.matrix)
+                    Check(std::isfinite(value),"Terrain chunk has a non-finite transform");
                 for (const auto& position : mesh->vertex_positions)
+                {
+                    Check(std::isfinite(position.x) && std::isfinite(position.y) &&
+                        std::isfinite(position.z),"Terrain chunk has a non-finite vertex");
                     chunk.last.push_back(position.y);
+                }
                 const auto found = storedChunks.find(key);
                 if (!payload.empty())
                 {
                     const Json* identity = nullptr;
                     if (version == 1)
                     {
-                        Check(found != storedChunks.end(), "River baseline is missing a resident chunk");
-                        identity = found->second;
+                        Check(found != storedChunks.end() || newOuterChunk(chunk.x,chunk.z),
+                            "River baseline is missing a resident chunk");
+                        if (found != storedChunks.end()) identity = found->second;
                     }
                     else
                     {
                         const auto resident = residents.find(key);
-                        Check(resident != residents.end(), "River baseline is missing a resident chunk");
-                        identity = resident->second;
-                        Check(identity->at("height_hash").get<std::string>() == HeightHash(chunk.last),
-                            "Terrain differs from last layer result; refusing to overwrite external edits");
+                        Check(resident != residents.end() || newOuterChunk(chunk.x,chunk.z),
+                            "River baseline is missing a resident chunk");
+                        if (resident != residents.end())
+                        {
+                            identity = resident->second;
+                            Check(identity->at("height_hash").get<std::string>() == HeightHash(chunk.last),
+                                "Terrain differs from last layer result; refusing to overwrite external edits");
+                        }
                     }
-                    const auto matrix = identity->at("matrix").get<std::vector<float>>();
-                    Check(matrix.size() == 16, "Invalid baseline matrix count");
-                    for (std::size_t i=0; i<16; ++i)
-                        Check(std::isfinite(matrix[i]) && std::abs(matrix[i]-chunk.matrix[i]) < .00001f,
-                            "Terrain transform changed outside the layer transaction");
+                    if (identity != nullptr)
+                    {
+                        Check(!newOuterChunk(chunk.x,chunk.z),
+                            "River coverage includes chunks outside its previous extent");
+                        const auto matrix = identity->at("matrix").get<std::vector<float>>();
+                        Check(matrix.size() == 16, "Invalid baseline matrix count");
+                        for (std::size_t i=0; i<16; ++i)
+                            Check(std::isfinite(matrix[i]) && std::abs(matrix[i]-chunk.matrix[i]) < .00001f,
+                                "Terrain transform changed outside the layer transaction");
+                    }
                 }
                 if (found != storedChunks.end())
                 {
                     ++matched;
-                    chunk.base = found->second->at("base").get<std::vector<float>>();
-                    const auto last = found->second->at("last").get<std::vector<float>>();
-                    Check(chunk.base.size() == wi::terrain::vertexCount &&
-                        last == chunk.last, "Invalid or externally edited baseline chunk");
+                    const auto& patch = *found->second;
+                    if (version == 3)
+                    {
+                        const auto indices = patch.at("indices").get<std::vector<std::size_t>>();
+                        const auto base = patch.at("base").get<std::vector<float>>();
+                        const auto last = patch.at("last").get<std::vector<float>>();
+                        Check(!indices.empty() && indices.size() == base.size() &&
+                            indices.size() == last.size() &&
+                            indices.size() <= MaximumEditedSamples - editedSamples,
+                            "River patches exceed the bounded changed-sample budget");
+                        editedSamples += indices.size();
+                        chunk.base = chunk.last;
+                        for (std::size_t i=0; i<indices.size(); ++i)
+                        {
+                            Check(indices[i] < chunk.last.size() &&
+                                (i == 0 || indices[i] > indices[i-1]) &&
+                                std::isfinite(base[i]) && base[i] != last[i] &&
+                                chunk.last[indices[i]] == last[i],
+                                "Invalid or externally edited river sample patch");
+                            chunk.base[indices[i]] = base[i];
+                        }
+                    }
+                    else
+                    {
+                        chunk.base = patch.at("base").get<std::vector<float>>();
+                        const auto last = patch.at("last").get<std::vector<float>>();
+                        Check(chunk.base.size() == wi::terrain::vertexCount &&
+                            last == chunk.last, "Invalid or externally edited baseline chunk");
+                    }
                 }
                 else chunk.base = chunk.last;
                 for (std::size_t i=0; i<chunk.base.size(); ++i)
@@ -310,18 +379,38 @@ namespace renegade::bridge
         }
         std::string Write(const Document& doc)
         {
-            Json out; out["version"]=2; out["chunks"]=Json::array();
+            const auto changedChunks = std::count_if(doc.chunks.begin(),doc.chunks.end(),
+                [](const Chunk& chunk){return chunk.base != chunk.last;});
+            const bool compact = doc.chunks.size() > DefaultResidentChunks ||
+                std::size_t(changedChunks) > MaximumChunks;
+            Json out; out["version"]=compact ? 3 : 2; out["chunks"]=Json::array();
             out["coverage"]=Json::array(); out["layers"]=Json::array();
+            std::size_t changedSamples=0;
             for (const auto& chunk : doc.chunks)
             {
                 out["coverage"].push_back({{"x",chunk.x},{"z",chunk.z},
                     {"matrix",chunk.matrix},{"height_hash",HeightHash(chunk.last)}});
-                if (chunk.base != chunk.last)
+                if (chunk.base == chunk.last) continue;
+                std::vector<std::size_t> indices;
+                std::vector<float> base,last;
+                for (std::size_t i=0;i<chunk.base.size();++i)
+                    if (chunk.base[i] != chunk.last[i])
+                    {
+                        Check(changedSamples < MaximumEditedSamples,
+                            "River channels exceed the bounded changed-sample budget");
+                        ++changedSamples;
+                        if (compact) {indices.push_back(i);base.push_back(chunk.base[i]);last.push_back(chunk.last[i]);}
+                    }
+                if (compact)
+                    out["chunks"].push_back({{"x",chunk.x},{"z",chunk.z},
+                        {"indices",std::move(indices)},{"base",std::move(base)},
+                        {"last",std::move(last)}});
+                else
                     out["chunks"].push_back({{"x",chunk.x},{"z",chunk.z},
                         {"base",chunk.base},{"last",chunk.last},{"matrix",chunk.matrix}});
             }
-            Check(out["chunks"].size() <= MaximumChunks,
-                "River channels exceed the 81-chunk edited-footprint budget; use shorter reaches");
+            Check(out["chunks"].size() <= MaximumResidentChunks,
+                "River patches exceed the supported terrain extent");
             for (const auto& layer : doc.layers)
                 out["layers"].push_back({{"river",layer.river},{"depth",layer.depth},{"bank",layer.bank}});
             auto text = out.dump();
@@ -576,9 +665,11 @@ namespace renegade::bridge
                 "Riverbed metadata exceeds the safe size limit");
             const auto document = Json::parse(payload);
             Check((document.at("version").get<int>() == 1 ||
-                 document.at("version").get<int>() == 2) &&
+                 document.at("version").get<int>() == 2 ||
+                 document.at("version").get<int>() == 3) &&
                 document.at("chunks").is_array() &&
-                document.at("chunks").size() <= MaximumChunks &&
+                document.at("chunks").size() <= (document.at("version").get<int>() == 3
+                    ? MaximumResidentChunks : MaximumChunks) &&
                 document.at("layers").is_array() &&
                 document.at("layers").size() <= 32,
                 "Riverbed metadata version or layer count is invalid");
@@ -636,6 +727,11 @@ namespace renegade::bridge
             return Commit(scene,terrain,std::move(doc),true);
         });
     }
+    bool ValidateRiverTerrainLayers(wi::scene::Scene& scene,wi::ecs::Entity terrain,std::string& error)
+    {return Run(error,[&]{(void)Read(scene,terrain,false);return true;});}
+    bool ExtendRiverTerrainCoverage(wi::scene::Scene& scene,wi::ecs::Entity terrain,
+        int previousRadius,std::string& error)
+    {return Run(error,[&]{return Commit(scene,terrain,Read(scene,terrain,false,previousRadius),true);});}
     bool RecomposeRiverTerrainLayers(wi::scene::Scene& scene,wi::ecs::Entity terrain,std::string& error)
     {return Run(error,[&]{return Commit(scene,terrain,Read(scene,terrain,false),true);});}
     bool ReadRiverTerrainBaseline(wi::scene::Scene& scene,wi::ecs::Entity terrain,
