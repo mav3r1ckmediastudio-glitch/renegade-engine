@@ -7763,3 +7763,13 @@ Receipts remain outside source control in TERRAIN_INIT_PRESERVE_20261102_215658.
 The final source should be pushed once for four-check CI; historical 6c59d2a green
 checks and the existing alpha do not accept the new repair. Record final commit
 and CI results externally; no result-only CI restart, main merge or alpha build.
+
+### Exact implementation revision
+
+Implementation and local verification source revision:
+89a7a731cfe2dd65ed12c903559070ba3dad306b.
+
+The following handoff-only commit records that immutable source identifier before
+the single CI push. It changes no application, test, guidance or dependency code.
+Final PR-head SHA, CI run URLs/status and evidence hashes belong in the external
+audit receipt. Keep main and alpha distribution blocked pending owner approval.
