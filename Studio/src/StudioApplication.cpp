@@ -11575,9 +11575,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         }
 
         TestLevelLaunchOptions options;
-        // Isolated river development runs its local Runtime without coupling
-        // Test Game to any separately installed assistant GPU service.
-        options.yieldAssistantGpu = false;
+        // A bundled companion yields its model GPU memory during Runtime.
+        // Layouts without the companion script remain an uncoupled no-op.
+        options.yieldAssistantGpu = true;
         options.executablePath = runtimePath;
         options.workingDirectory =
             fs::u8path(runtimePath).parent_path().generic_u8string();
@@ -11633,9 +11633,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
         const auto& project = session_->Projects().CurrentProject();
         TestLevelLaunchOptions options;
-        // Isolated river development runs its local Runtime without coupling
-        // Test Game to any separately installed assistant GPU service.
-        options.yieldAssistantGpu = false;
+        // A bundled companion yields its model GPU memory during Runtime.
+        // Layouts without the companion script remain an uncoupled no-op.
+        options.yieldAssistantGpu = true;
         options.executablePath = runtimePath;
         options.workingDirectory =
             fs::u8path(runtimePath).parent_path().generic_u8string();

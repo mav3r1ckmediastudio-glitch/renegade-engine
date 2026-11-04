@@ -30,6 +30,15 @@ class RecoveryPackageTests(unittest.TestCase):
         receipt.write_text(json.dumps(acceptance))
         return root, receipt, acceptance
 
+    def test_studio_play_releases_bundled_assistant_gpu_memory(self):
+        source = (args.repo / 'Studio/src/StudioApplication.cpp').read_text(encoding='utf-8')
+        for method in ('StartTestLevel', 'StartProjectPlay'):
+            with self.subTest(method=method):
+                body = source.split('void StudioRenderPath::' + method + '()', 1)[1]
+                body = body.split('\n    void StudioRenderPath::', 1)[0]
+                self.assertIn('options.yieldAssistantGpu = true;', body)
+                self.assertNotIn('options.yieldAssistantGpu = false;', body)
+
     def test_archive_excludes_smoke_profile_and_checks_crc(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
