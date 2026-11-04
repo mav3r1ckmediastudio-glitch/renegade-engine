@@ -29,6 +29,31 @@ string(FIND "${_renegade_physics_patched}" "static ReusablePhysicsTempAllocator 
 if(_renegade_installed EQUAL -1)
     message(FATAL_ERROR "Physics allocator overlay replacement failed")
 endif()
+# Keep rendered terrain and physics triangles identical, including inside cells.
+# This edits only the generated copy. See the explicit core compatibility decision.
+function(renegade_physics_replace_once anchor replacement)
+    string(REPLACE "${anchor}" "" _stripped "${_renegade_physics_patched}")
+    string(LENGTH "${_renegade_physics_patched}" _length)
+    string(LENGTH "${_stripped}" _stripped_length)
+    string(LENGTH "${anchor}" _anchor_length)
+    math(EXPR _removed "${_length} - ${_stripped_length}")
+    if(NOT _removed EQUAL _anchor_length)
+        message(FATAL_ERROR "Pinned terrain collider anchor changed or is ambiguous")
+    endif()
+    string(REPLACE "${anchor}" "${replacement}" _replacement "${_renegade_physics_patched}")
+    set(_renegade_physics_patched "${_replacement}" PARENT_SCOPE)
+endfunction()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_LIST_DIR}/RenegadeTerrainCollisionShape.inc")
+file(READ "${CMAKE_CURRENT_LIST_DIR}/RenegadeTerrainCollisionShape.inc" _renegade_terrain_collision)
+string(STRIP "${_renegade_terrain_collision}" _renegade_terrain_collision)
+renegade_physics_replace_once(
+    "Vec3 bottom_offset = Vec3::sZero();\n\n\t\tswitch (physicscomponent.shape)"
+    "${_renegade_terrain_collision}")
+renegade_physics_replace_once(
+    "mesh->GetLODSubsetRange(physicscomponent.mesh_lod, first_subset, last_subset);"
+    "mesh->GetLODSubsetRange(renegade_exact_heightfield_mesh ? 0 : physicscomponent.mesh_lod, first_subset, last_subset);")
+
 set(_renegade_physics_output "${CMAKE_CURRENT_BINARY_DIR}/renegade_physics_override/wiPhysics_Jolt.cpp")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/renegade_physics_override")
 set(_renegade_physics_existing "")

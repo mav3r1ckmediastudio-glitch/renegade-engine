@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainCollisionSurfaceProof.h"
 #include "renegade/bridge/VegetationService.h"
 #include <algorithm>
 #include <cfloat>
@@ -36,11 +37,62 @@ namespace terrain_initialization_proof
         return result;
     }
 
+    inline XMFLOAT3 MostNonplanarCell(wi::scene::Scene& scene,
+        const wi::terrain::Terrain& terrain)
+    {
+        float best = 0;
+        XMFLOAT3 sample{};
+        for (const auto& entry : terrain.chunks)
+        {
+            const auto* mesh=scene.meshes.GetComponent(entry.second.entity);
+            const auto* transform=scene.transforms.GetComponent(entry.second.entity);
+            if(!mesh||!transform)continue;
+            const auto side=std::size_t(std::sqrt(double(mesh->vertex_positions.size())));
+            if(side<2||side*side!=mesh->vertex_positions.size())continue;
+            for(std::size_t z=0;z+1<side;++z)for(std::size_t x=0;x+1<side;++x)
+            {
+                const auto n=z*side+x;
+                const auto& a=mesh->vertex_positions[n];
+                const auto& b=mesh->vertex_positions[n+1];
+                const auto& c=mesh->vertex_positions[n+side];
+                const auto& d=mesh->vertex_positions[n+side+1];
+                const float difference=std::abs(a.y+d.y-b.y-c.y);
+                if(difference>best)
+                {
+                    best=difference;
+                    DirectX::XMStoreFloat3(&sample,DirectX::XMVector3TransformCoord(
+                        DirectX::XMVectorSet((a.x+d.x)*.5f,0,(a.z+d.z)*.5f,1),
+                        DirectX::XMLoadFloat4x4(&transform->world)));
+                }
+            }
+        }
+        Check(best>.1f,"Production sculpt lacks a meaningful nonplanar-cell witness");
+        sample.y=100;
+        std::cout<<"PRODUCTION_SCULPT_NONPLANAR_CELL x="<<sample.x
+            <<" z="<<sample.z<<" diagonal_difference="<<best<<std::endl;
+        return sample;
+    }
+
+    inline float TerrainContact(wi::scene::Scene& scene,XMFLOAT3 sample,const char* phase)
+    {
+        const wi::primitive::Ray ray(sample,XMFLOAT3(0,-1,0),0,300);
+        const auto visual=wi::scene::Pick(ray,wi::enums::FILTER_TERRAIN,~0u,scene);
+        const auto contact=wi::physics::Intersects(scene,ray);
+        Check(visual.entity!=wi::ecs::INVALID_ENTITY&&contact.IsValid(),
+            "Production sculpt off-grid ray missed terrain");
+        const float error=std::abs(visual.position.y-contact.position.y);
+        std::cout<<"PRODUCTION_SCULPT_OFFGRID phase="<<phase<<" rendered="
+            <<visual.position.y<<" physics="<<contact.position.y<<" error="<<error<<std::endl;
+        Check(error<.002f,"Production sculpt/history collision differs inside a cell");
+        return visual.position.y;
+    }
+
     template<class Frame>
     void Run(wi::scene::Scene& scene, wi::ecs::Entity terrainID,
              wi::RenderPath3D& render, const std::filesystem::path& out, Frame&& frame)
     {
         using namespace renegade::bridge;
+        terrain_collision_surface_proof::Run(out);
         auto* terrain = scene.terrains.GetComponent(terrainID);
         auto* gpu = wi::graphics::GetDevice();
         std::size_t synchronizedChunks = static_cast<std::size_t>(-1);
@@ -102,8 +154,24 @@ namespace terrain_initialization_proof
         auto floorBefore=beforeLimit,floorAfter=CaptureTerrainSculpt(scene,*terrain);
         RetainChangedTerrainSculpt(floorBefore,floorAfter);
         SculptTerrainCommand floorHistory(scene,terrainID,floorBefore,floorAfter);
+        wi::physics::SetEnabled(true);
+        wi::physics::SetSimulationEnabled(false);
+        RefreshTerrainSculptPhysics(scene,*terrain,floorAfter); // normal completed-stroke path
+        settle("floor-offgrid");
+        const auto steepSample=MostNonplanarCell(scene,*terrain);
+        const float steepHeight=TerrainContact(scene,steepSample,"stroke");
         floorHistory.Undo();
+        settle("floor-offgrid-undo");
+        Check(std::abs(TerrainContact(scene,steepSample,"undo"))<.003f,
+            "Floor Undo left a lowered collision surface");
         equal(beforeLimit,"Floor-limit Undo did not restore sculpt");
+        Check(floorHistory.Execute(),"Floor collision Redo failed");
+        settle("floor-offgrid-redo");
+        Check(std::abs(TerrainContact(scene,steepSample,"redo")-steepHeight)<.003f,
+            "Floor Redo changed the sculpted collision surface");
+        floorHistory.Undo();
+        settle("floor-offgrid-restore");
+        TerrainContact(scene,steepSample,"restore");
         Check(SculptTerrain(scene,*terrain,{-180,0,-180},4,1000,.5f,
             TerrainSculptMode::Raise,0),"Ceiling-limit stroke did not apply");
         for (const auto& chunk : CaptureTerrainSculpt(scene,*terrain).chunks)
@@ -150,6 +218,10 @@ namespace terrain_initialization_proof
         }
         std::cout<<"GENERATED_AND_SCULPTED_JOLT_CONTACT_PASS"<<std::endl;
 
+        // Retain the steep witness through expansion and actual serialized cold loading.
+        Check(floorHistory.Execute(),"Persisted steep sculpt failed");
+        settle("steep-before-expansion");
+        TerrainContact(scene,steepSample,"before-expansion");
         const auto inner=CaptureTerrainSculpt(scene,*terrain);
         const auto encodedInner=Encoded(*terrain);
         ExpandTerrainCommand expand(scene,terrainID);
@@ -224,6 +296,7 @@ namespace terrain_initialization_proof
         gpu->WaitForGPU();loaded.Generation_Cancel();
         Check(Encoded(loaded)==savedHeights && Grass(loaded)==savedGrass,
             "First native updates after reopen changed authored terrain");
+        TerrainContact(reopened,steepSample,"cold-reopen");
         const auto contact=wi::physics::Intersects(reopened,
             wi::primitive::Ray(XMFLOAT3(33,100,33),XMFLOAT3(0,-1,0),0,200));
         Check(contact.IsValid() && std::abs(contact.position.y+2.f)<.02f,
