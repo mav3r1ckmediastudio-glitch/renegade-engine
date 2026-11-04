@@ -83,6 +83,13 @@ namespace renegade::bridge
         const int slots[] = {Material::BASECOLORMAP, Material::NORMALMAP, Material::SURFACEMAP};
         const WindowsGameBundledResource* ground[] = {
             find(ids[0], destinations[0]),find(ids[1], destinations[1]),find(ids[2], destinations[2])};
+        const WindowsGameBundledResource* rocky[] = {
+            find("renegade-terrain-rocky-riverbed-basecolor",
+                "Content/terrain/riverbed/rocky_rugged/rocky_basecolor.png"),
+            find("renegade-terrain-rocky-riverbed-normal",
+                "Content/terrain/riverbed/rocky_rugged/rocky_normal_dx.png"),
+            find("renegade-terrain-rocky-riverbed-surface",
+                "Content/terrain/riverbed/rocky_rugged/rocky_surface.png")};
         const auto* grass = find("renegade-terrain-native-grass-particle", "Content/terrain/grassparticle.png");
         for (std::size_t ti=0; ti<scene.terrains.GetCount(); ++ti)
         {
@@ -93,6 +100,24 @@ namespace renegade::bridge
                         if (wi::helper::GetFileNameFromPath(material->textures[Material::BASECOLORMAP].name)
                             == "default_grass_basecolor.tga")
                             for (std::size_t i=0;i<3;++i) setName(material->textures[slots[i]],*ground[i]);
+            // Rocky beds are a separate fifth terrain material. Rebase only
+            // the named built-in layout, with all three maps independently
+            // verified before changing any slot. This detached export path
+            // neither hydrates GPU resources nor modifies the creator archive.
+            if (rocky[0] && rocky[1] && rocky[2])
+                for (const auto entity : terrain.materialEntities)
+                {
+                    const auto* label = scene.names.GetComponent(entity);
+                    auto* material = scene.materials.GetComponent(entity);
+                    if (!label || label->name != "Renegade Rocky Riverbed" || !material)
+                        continue;
+                    bool verified = true;
+                    for (std::size_t i = 0; i < 3; ++i)
+                        verified = verified && matches(material->textures[slots[i]], *rocky[i]);
+                    if (verified)
+                        for (std::size_t i = 0; i < 3; ++i)
+                            setName(material->textures[slots[i]], *rocky[i]);
+                }
             // Detached archives have not run Terrain::Update, so its transient
             // terrainEntity field is not an identity authority yet.
             const auto* metadata=scene.metadatas.GetComponent(scene.terrains.GetEntity(ti));

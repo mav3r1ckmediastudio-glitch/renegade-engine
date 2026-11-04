@@ -960,6 +960,16 @@ namespace renegade::studio
                     "Content/terrain/default_grass/default_grass_surface.tga",
                 },
 
+                {"renegade-terrain-rocky-riverbed-basecolor",
+                    (studioDirectory / "Content/terrain/riverbed/rocky_rugged/rocky_basecolor.png").generic_u8string(),
+                    "Content/terrain/riverbed/rocky_rugged/rocky_basecolor.png"},
+                {"renegade-terrain-rocky-riverbed-normal",
+                    (studioDirectory / "Content/terrain/riverbed/rocky_rugged/rocky_normal_dx.png").generic_u8string(),
+                    "Content/terrain/riverbed/rocky_rugged/rocky_normal_dx.png"},
+                {"renegade-terrain-rocky-riverbed-surface",
+                    (studioDirectory / "Content/terrain/riverbed/rocky_rugged/rocky_surface.png").generic_u8string(),
+                    "Content/terrain/riverbed/rocky_rugged/rocky_surface.png"},
+
                 {"renegade-terrain-native-grass-particle",
                     (studioDirectory / "Content/terrain/grassparticle.png").generic_u8string(),
                     "Content/terrain/grassparticle.png"},

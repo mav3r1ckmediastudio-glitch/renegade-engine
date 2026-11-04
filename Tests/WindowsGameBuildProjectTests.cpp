@@ -11,6 +11,7 @@
 #include <Windows.h>
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -753,6 +754,130 @@ int main(int argc, char** argv)
         movedScene.Entity_Remove(river);movedScene.Entity_Remove(grassEntity);
         terrain.grassEntity=wi::ecs::INVALID_ENTITY;terrain.grass_material={};
         std::cout<<"PASS: relocated grass/river discovery, immutable archives, package-local names, retained identity and custom-map controls\n";
+        // Rocky beds use a separately governed terrain material. Exercise
+        // the dependency collector with real archive bytes, then the detached
+        // package-relative cook. No author archive may be rewritten.
+        const auto rockyEntity = wi::ecs::CreateEntity();
+        movedScene.names.Create(rockyEntity) = "Renegade Rocky Riverbed";
+        movedScene.materials.Create(rockyEntity);
+        terrain.materialEntities.push_back(rockyEntity);
+        const char* rockyNames[] = {
+            "rocky_basecolor.png", "rocky_normal_dx.png", "rocky_surface.png"};
+        const char* rockyIds[] = {"renegade-terrain-rocky-riverbed-basecolor",
+            "renegade-terrain-rocky-riverbed-normal", "renegade-terrain-rocky-riverbed-surface"};
+        const int rockySlots[] = {Material::BASECOLORMAP, Material::NORMALMAP, Material::SURFACEMAP};
+        const auto rockyOldRoot = root / "old-rocky-studio/Content/terrain/riverbed/rocky_rugged";
+        const auto rockyNewRoot = root / "new-studio/Content/terrain/riverbed/rocky_rugged";
+        fs::create_directories(rockyOldRoot);
+        fs::create_directories(rockyNewRoot);
+        auto rockyResources = relocatedResources;
+        std::array<std::string, 3> rockyBytes;
+        for (int i = 0; i < 3; ++i)
+        {
+            rockyBytes[i] = "approved-rocky-map-" + std::to_string(i);
+            std::ofstream(rockyOldRoot / rockyNames[i], std::ios::binary) << rockyBytes[i];
+            std::ofstream(rockyNewRoot / rockyNames[i], std::ios::binary) << rockyBytes[i];
+            rockyResources.push_back({rockyIds[i], (rockyNewRoot / rockyNames[i]).generic_u8string(),
+                std::string("Content/terrain/riverbed/rocky_rugged/") + rockyNames[i]});
+        }
+        const auto resetRocky = [&]() {
+            auto& material = *movedScene.materials.GetComponent(rockyEntity);
+            for (int i = 0; i < 3; ++i)
+            {
+                material.textures[rockySlots[i]].name = (rockyOldRoot / rockyNames[i]).generic_u8string();
+                material.textures[rockySlots[i]].resource = {};
+            }
+        };
+        const auto rockyNamesUnchanged = [&]() {
+            const auto& material = *movedScene.materials.GetComponent(rockyEntity);
+            for (int i = 0; i < 3; ++i)
+                if (material.textures[rockySlots[i]].name != (rockyOldRoot / rockyNames[i]).generic_u8string())
+                    return false;
+            return true;
+        };
+        resetRocky();
+        if (!saveMoved()) return Fail(root, "could not save Rocky export fixture");
+        WindowsGameBuildProjectState rockyUnlisted;
+        if (!PrepareWindowsGameBuildProjectState(gate10Project, relocatedResources, rockyUnlisted, error) ||
+            !hasOutsideProject(rockyUnlisted.dependencyGraph))
+            return Fail(root, "undeclared Rocky maps escaped outside-project policy");
+        std::ifstream rockyBefore(levelOne, std::ios::binary);
+        const std::string rockyArchiveBefore((std::istreambuf_iterator<char>(rockyBefore)), {});
+        rockyBefore.close();
+        WindowsGameBuildProjectState rockyAccepted;
+        if (!PrepareWindowsGameBuildProjectState(gate10Project, rockyResources, rockyAccepted, error) ||
+            hasOutsideProject(rockyAccepted.dependencyGraph))
+            return Fail(root, "verified built-in Rocky terrain was rejected: " + error);
+        std::ifstream rockyAfter(levelOne, std::ios::binary);
+        const std::string rockyArchiveAfter((std::istreambuf_iterator<char>(rockyAfter)), {});
+        rockyAfter.close();
+        if (rockyArchiveBefore != rockyArchiveAfter)
+            return Fail(root, "Rocky dependency discovery rewrote the author archive");
+        (void)RebindWindowsGameBundledSceneResources(movedScene, rockyResources, packagePrefix);
+        for (int i = 0; i < 3; ++i)
+            if (movedScene.materials.GetComponent(rockyEntity)->textures[rockySlots[i]].name !=
+                packagePrefix + "Content/terrain/riverbed/rocky_rugged/" + rockyNames[i])
+                return Fail(root, "cooked Rocky map still references an installation");
+
+        // Incomplete declarations and one altered map must leave all three
+        // original names intact and remain rejected by the full collector.
+        resetRocky();
+        auto incompleteRocky = rockyResources;
+        incompleteRocky.pop_back();
+        (void)RebindWindowsGameBundledSceneResources(movedScene, incompleteRocky);
+        if (!rockyNamesUnchanged() || !saveMoved())
+            return Fail(root, "incomplete Rocky declaration partially rewrote the material");
+        WindowsGameBuildProjectState rockyIncomplete;
+        if (!PrepareWindowsGameBuildProjectState(gate10Project, incompleteRocky, rockyIncomplete, error) ||
+            !hasOutsideProject(rockyIncomplete.dependencyGraph))
+            return Fail(root, "incomplete Rocky declaration admitted external maps");
+        std::ofstream(rockyOldRoot / rockyNames[1], std::ios::binary | std::ios::trunc) << "custom-normal";
+        (void)RebindWindowsGameBundledSceneResources(movedScene, rockyResources);
+        if (!rockyNamesUnchanged() || !saveMoved())
+            return Fail(root, "changed Rocky map was silently replaced");
+        WindowsGameBuildProjectState rockyCustom;
+        if (!PrepareWindowsGameBuildProjectState(gate10Project, rockyResources, rockyCustom, error) ||
+            !hasOutsideProject(rockyCustom.dependencyGraph))
+            return Fail(root, "changed Rocky map escaped outside-project policy");
+        std::ofstream(rockyOldRoot / rockyNames[1], std::ios::binary | std::ios::trunc) << rockyBytes[1];
+
+        // An identical basename/bytes without the complete built-in path and
+        // terrain material ownership is not authority for substitution.
+        resetRocky();
+        auto& rockyMaterial = *movedScene.materials.GetComponent(rockyEntity);
+        const auto customRockyName = (root / "creator-maps/rocky_basecolor.png").generic_u8string();
+        rockyMaterial.textures[Material::BASECOLORMAP].name = customRockyName;
+        rockyMaterial.textures[Material::BASECOLORMAP].resource.SetFileData(
+            wi::vector<uint8_t>(rockyBytes[0].begin(), rockyBytes[0].end()));
+        (void)RebindWindowsGameBundledSceneResources(movedScene, rockyResources);
+        if (rockyMaterial.textures[Material::BASECOLORMAP].name != customRockyName ||
+            rockyMaterial.textures[Material::NORMALMAP].name != (rockyOldRoot / rockyNames[1]).generic_u8string())
+            return Fail(root, "same-basename custom Rocky material was replaced");
+        resetRocky();
+        movedScene.names.GetComponent(rockyEntity)->name = "Creator Rocky";
+        (void)RebindWindowsGameBundledSceneResources(movedScene, rockyResources);
+        if (!rockyNamesUnchanged()) return Fail(root, "unowned Rocky material was replaced");
+        movedScene.names.GetComponent(rockyEntity)->name = "Renegade Rocky Riverbed";
+        terrain.materialEntities.pop_back();
+        (void)RebindWindowsGameBundledSceneResources(movedScene, rockyResources);
+        if (!rockyNamesUnchanged()) return Fail(root, "non-terrain Rocky material was replaced");
+        terrain.materialEntities.push_back(rockyEntity);
+
+        // Retained verified bytes still work after the old installation goes.
+        for (int i = 0; i < 3; ++i)
+        {
+            auto& slot = rockyMaterial.textures[rockySlots[i]];
+            slot.name = (root / "missing-rocky-studio/Content/terrain/riverbed/rocky_rugged" /
+                rockyNames[i]).generic_u8string();
+            slot.resource.SetFileData(wi::vector<uint8_t>(rockyBytes[i].begin(), rockyBytes[i].end()));
+        }
+        (void)RebindWindowsGameBundledSceneResources(movedScene, rockyResources);
+        for (int i = 0; i < 3; ++i)
+            if (rockyMaterial.textures[rockySlots[i]].name != (rockyNewRoot / rockyNames[i]).generic_u8string())
+                return Fail(root, "verified retained Rocky maps did not survive installation relocation");
+        terrain.materialEntities.pop_back();
+        movedScene.Entity_Remove(rockyEntity);
+        std::cout << "PASS: Rocky built-in closure, immutable archive, package-local cook, retained bytes and custom-map rejection\n";
         const auto otherEntity = wi::ecs::CreateEntity();
         movedScene.materials.Create(otherEntity).textures[
             wi::scene::MaterialComponent::BASECOLORMAP].name =
