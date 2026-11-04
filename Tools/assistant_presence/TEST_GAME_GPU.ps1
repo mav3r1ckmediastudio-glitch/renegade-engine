@@ -5,6 +5,7 @@ param(
 )
 # Private state only; never modifies a project, voice worker or orb.
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'PortOwnership.ps1')
 $repo=(Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $statePath=Join-Path $repo 'BUILD\assistant-gpu-session.json'
 $configPath=Join-Path $repo 'BUILD\character-preview.json'
@@ -38,17 +39,12 @@ try {
    $state=[pscustomobject]@{leases=@();restore=$false;config=$configPath;error=$null}
   }
   if(@($state.leases) -contains $Lease){exit 0}
-  $listeners=@(Get-NetTCPConnection -State Listen -LocalPort 18386 -ErrorAction SilentlyContinue)
-  if($listeners.Count -gt 1){throw 'Unexpected model listeners'}
   $owned=$null
-  if($listeners.Count){
+  if(Test-RenegadePortOccupied -Port 18386){
    if(!(Test-Path $configPath)){throw 'Cannot verify assistant model ownership'}
    $config=Get-Content $configPath -Raw|ConvertFrom-Json
-   $owned=Get-CimInstance Win32_Process -Filter ('ProcessId='+$listeners[0].OwningProcess)
-   if($owned.ExecutablePath -ne $config.server -or
-      $owned.CommandLine -notlike ('*'+$config.model+'*')){
-    throw 'Model port is not owned by the configured assistant; not terminating it'
-   }
+   $owned=Get-RenegadeVerifiedPortOwner -Port 18386 -Executable $config.server -RequiredArguments @($config.model)
+   if(!$owned){throw 'Assistant model ownership changed before GPU release'}
   }
   $state.leases=@($state.leases)+$Lease
   if($owned){$state.restore=$true}
@@ -61,7 +57,7 @@ try {
    $process.Kill()
    if(!$process.WaitForExit(10000)){throw 'Assistant model did not unload'}
   }
-  if(Get-NetTCPConnection -State Listen -LocalPort 18386 -ErrorAction SilentlyContinue){
+  if(Test-RenegadePortOccupied -Port 18386){
    throw 'Assistant model is still listening; Test Game must not start'
   }
   'ASSISTANT_GPU_RELEASED'

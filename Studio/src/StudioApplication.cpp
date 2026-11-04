@@ -5,6 +5,7 @@
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
 #include "PlayerStartFrameCache.h"
+#include "TerrainInspectorEntity.h"
 #include "../../Tools/night_sky/CloudStudioReplay.h"
 #include "RiverNodeWidthGizmoAxis.h"
 #include "renegade/bridge/RiverWaterwayService.h"
@@ -5295,10 +5296,9 @@ namespace renegade::studio
         const auto selectedEntity = hasSession
             ? session_->Selection().SelectedEntity()
             : wi::ecs::INVALID_ENTITY;
-        const auto terrainWorkspaceEntity =
-            hasSession && terrainWorkspaceActive_ &&
-            session_->Scenes().GetScene().terrains.GetCount() > 0
-            ? session_->Scenes().GetScene().terrains.GetEntity(0)
+        const auto terrainWorkspaceEntity = hasSession
+            ? TerrainInspectorEntity(session_->Scenes().GetScene(),
+                selectedEntity, terrainWorkspaceActive_)
             : wi::ecs::INVALID_ENTITY;
         const auto entity = environmentWorkspaceActive_
             ? EditableWeatherEntity()
@@ -11126,7 +11126,8 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     void StudioRenderPath::ExpandTerrain()
     {
         if (!session_) return;
-        const auto entity=session_->Selection().SelectedEntity();
+        const auto entity=TerrainInspectorEntity(session_->Scenes().GetScene(),
+            session_->Selection().SelectedEntity(),terrainWorkspaceActive_);
         const auto revision=session_->Scenes().Revision();
         wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
             [this,entity,revision](std::uint64_t)
@@ -11151,8 +11152,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         {
             return false;
         }
-        const auto entity = session_->Selection().SelectedEntity();
         auto& scene = session_->Scenes().GetScene();
+        const auto entity = TerrainInspectorEntity(scene,
+            session_->Selection().SelectedEntity(), terrainWorkspaceActive_);
         if (!scene.terrains.Contains(entity))
         {
             return false;
@@ -11205,7 +11207,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         {
             return;
         }
-        const auto entity = session_->Selection().SelectedEntity();
+        const auto entity = TerrainInspectorEntity(
+            session_->Scenes().GetScene(),
+            session_->Selection().SelectedEntity(), terrainWorkspaceActive_);
         const auto* terrain =
             session_->Scenes().GetScene().terrains.GetComponent(entity);
         if (terrain == nullptr)

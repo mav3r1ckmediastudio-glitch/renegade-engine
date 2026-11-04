@@ -1960,6 +1960,13 @@ if(TARGET RenegadeRuntimeSceneTransitionTests)
             "$<TARGET_FILE_DIR:RenegadeRuntimeSceneTransitionTests>")
 endif()
 
+if(WIN32)
+    add_test(NAME RenegadeAssistantPortOwnership
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/AssistantPortOwnershipTests.ps1")
+    set_tests_properties(RenegadeAssistantPortOwnership PROPERTIES TIMEOUT 30)
+endif()
+
 # Direct DX12 rejection control plus the production coherent-UMA suballocator.
 if(WIN32)
     add_executable(RenegadeGpuUploadBufferTests GpuUploadBufferTests.cpp)

@@ -1,6 +1,7 @@
 # Portable alpha launcher. All dependencies resolve inside the extracted package.
 $ErrorActionPreference='Stop'
 $here=Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $here 'PortOwnership.ps1')
 $repo=(Resolve-Path (Join-Path $here '..\..')).Path
 $payload=Join-Path $repo 'AssistantRuntime'
 $python=Join-Path $payload 'python-voice\python.exe'
@@ -19,16 +20,25 @@ foreach($required in @($python,$electron,$bridge,(Join-Path $payload 'speech\kok
 $mains=@(Get-CimInstance Win32_Process -Filter "Name='electron.exe'" -ErrorAction SilentlyContinue | Where-Object {$_.CommandLine -notmatch '--type='})
 if(@($mains|Where-Object {$_.CommandLine -like ('*'+$here+'*')}).Count){Write-Host 'Living Core is already running. Restore it from its tray icon.';exit 0}
 if(@($mains|Where-Object {$_.CommandLine -match 'assistant_presence|Renegade_Qwen|Renegade_Daniel'}).Count){throw 'Another Renegade companion is running. Close it through its tray Quit command first; nothing was stopped.'}
-if(-not(Healthy 18384)){
- if(Get-NetTCPConnection -LocalPort 18384 -State Listen -ErrorAction SilentlyContinue){throw 'Knowledge service port is occupied by another service.'}
+$knowledge=Healthy 18384
+if($knowledge){
+ $owner=Get-RenegadeVerifiedPortOwner -Port 18384 -Executable $python -RequiredArguments @($bridge,(Join-Path $repo 'KnowledgeSource'),(Join-Path $repo 'BUILD\assistant_knowledge.sqlite'))
+ if(!$owner){throw 'Knowledge service disappeared during ownership verification'}
+}
+if(-not $knowledge){
+ if(Test-RenegadePortOccupied -Port 18384){throw 'Knowledge service port is occupied by another service.'}
  $proc=Start-Process $python -ArgumentList @('-u',('"'+$bridge+'"'),'--repo',('"'+(Join-Path $repo 'KnowledgeSource')+'"'),'--db',('"'+(Join-Path $repo 'BUILD\assistant_knowledge.sqlite')+'"')) -WorkingDirectory $repo -WindowStyle Hidden -RedirectStandardOutput "$repo\BUILD\knowledge-out.log" -RedirectStandardError "$repo\BUILD\knowledge-err.log" -PassThru
  for($i=0;$i -lt 60;$i++){if(Healthy 18384){break};if($proc.HasExited){throw 'Knowledge service failed to start.'};Start-Sleep -Milliseconds 250}
  if(-not(Healthy 18384)){throw 'Knowledge service did not become ready.'}
 }
 $env:PATH=(Join-Path $payload 'node')+';'+$env:PATH
 $healthy=Healthy 8384
+if($healthy){
+ $owner=Get-RenegadeVerifiedPortOwner -Port 8384 -Executable (Join-Path $payload 'node\node.exe') -RequiredArguments @((Join-Path $here 'chat\llama-character-service.cjs'),(Join-Path $repo 'BUILD\character-preview.json'))
+ if(!$owner){throw 'Conversation service disappeared during ownership verification'}
+}
 if(-not $healthy){
- if(Get-NetTCPConnection -LocalPort 8384 -State Listen -ErrorAction SilentlyContinue){throw 'Conversation port is occupied by another service.'}
+ if(Test-RenegadePortOccupied -Port 8384){throw 'Conversation port is occupied by another service.'}
  $config=Join-Path $repo 'BUILD\character-preview.json'
  $settings=@{enabled=$true;runtime='llama.cpp';label='character-v6';quantisation='Q5_K_M';server=(Join-Path $payload 'llama\llama-server.exe');model=(Join-Path $payload 'models\qwen4b-q5_k_m.gguf');lora=(Join-Path $payload 'models\character-v6.gguf');manifest=(Join-Path $payload 'models\model-manifest.json')}
  [System.IO.File]::WriteAllText($config,($settings|ConvertTo-Json),(New-Object System.Text.UTF8Encoding($false)))

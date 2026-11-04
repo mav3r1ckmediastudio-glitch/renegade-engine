@@ -1,6 +1,7 @@
 #include <cmath>
 #include <iostream>
 #include <memory>
+#include "../Studio/src/TerrainInspectorEntity.h"
 
 #include "renegade/bridge/CollisionService.h"
 #include "renegade/bridge/TerrainService.h"
@@ -58,6 +59,17 @@ int main()
     wi::scene::Scene scene;
     const auto entity = wi::ecs::CreateEntity();
     auto& terrain = scene.terrains.Create(entity);
+
+    const auto playerSelection = wi::ecs::CreateEntity();
+    const auto riverSelection = wi::ecs::CreateEntity();
+    if (renegade::studio::TerrainInspectorEntity(scene, playerSelection, true) != entity ||
+        renegade::studio::TerrainInspectorEntity(scene, riverSelection, true) != entity ||
+        renegade::studio::TerrainInspectorEntity(scene, wi::ecs::INVALID_ENTITY, true) != entity ||
+        renegade::studio::TerrainInspectorEntity(scene, playerSelection, false) != playerSelection ||
+        renegade::studio::TerrainInspectorEntity(blankScene, playerSelection, true) != wi::ecs::INVALID_ENTITY)
+    {
+        return Fail("terrain workspace authoring target disagrees with its displayed terrain");
+    }
 
     const auto native = renegade::bridge::CaptureTerrain(terrain);
     if (!native.centerToCamera || !native.removeDistantChunks ||

@@ -1,6 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$ConfigPath,[switch]$BackendOnly)
 $ErrorActionPreference='Stop'
 $here=Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $here 'PortOwnership.ps1')
 $repo=(Resolve-Path (Join-Path $here '..\..')).Path
 $leasePath=Join-Path $repo 'BUILD\assistant-gpu-session.json'
 if(Test-Path $leasePath){
@@ -10,7 +11,7 @@ if(Test-Path $leasePath){
 $config=Get-Content $ConfigPath -Raw | ConvertFrom-Json
 foreach($file in @($config.server,$config.model,$config.lora,$config.manifest)){if(-not (Test-Path $file)){throw ('Missing local runtime dependency: '+$file)}}
 $ports=@(8384,18386);if($BackendOnly){$ports=@(18386)}
-foreach($port in $ports){if(Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue){throw ('Local runtime port already occupied: '+$port)}}
+foreach($port in $ports){if(Test-RenegadePortOccupied -Port $port){throw ('Local runtime port already occupied: '+$port)}}
 $node=Join-Path $repo 'AssistantRuntime\node\node.exe'
 if(-not(Test-Path $node)){$node=(Get-Command node.exe -ErrorAction Stop).Source}
 $directory=Split-Path $config.server -Parent
