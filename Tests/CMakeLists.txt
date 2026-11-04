@@ -2001,3 +2001,18 @@ if(TARGET RenegadeStudio AND TARGET RenegadeRuntime)
             -P "${CMAKE_CURRENT_SOURCE_DIR}/RockyRiverbedDeployment.cmake")
     set_tests_properties(RenegadeRockyRiverbedDeployment PROPERTIES LABELS "Packaging" TIMEOUT 30)
 endif()
+
+if(WIN32)
+    add_executable(RenegadeCreatorAssetFrameBoundaryTests CreatorAssetFrameBoundaryTests.cpp)
+    target_link_libraries(RenegadeCreatorAssetFrameBoundaryTests PRIVATE Renegade::EngineBridge)
+    target_compile_definitions(RenegadeCreatorAssetFrameBoundaryTests PRIVATE UNICODE _UNICODE)
+    target_compile_options(RenegadeCreatorAssetFrameBoundaryTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    add_dependencies(RenegadeBridgeTests RenegadeCreatorAssetFrameBoundaryTests)
+    add_custom_command(TARGET RenegadeCreatorAssetFrameBoundaryTests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+        "$<TARGET_FILE_DIR:RenegadeCreatorAssetFrameBoundaryTests>" VERBATIM)
+    add_test(NAME RenegadeCreatorAssetFrameBoundaryTests COMMAND RenegadeCreatorAssetFrameBoundaryTests CONFIGURATIONS Release)
+    set_tests_properties(RenegadeCreatorAssetFrameBoundaryTests PROPERTIES TIMEOUT 120
+        WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeCreatorAssetFrameBoundaryTests>")
+endif()

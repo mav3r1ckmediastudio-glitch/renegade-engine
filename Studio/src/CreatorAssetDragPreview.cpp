@@ -1,5 +1,6 @@
 #include "renegade/bridge/ModelAnimationPreviewService.h"
 #include "RenegadeStudioChrome.h"
+#include "CreatorAssetFrameBoundary.h"
 
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
@@ -84,6 +85,21 @@ namespace
     constexpr std::size_t MaximumPreparationCacheEntries = 16;
     std::size_t pendingPreviewCleanupCount = 0;
     bool dragCancelledUntilRelease = false;
+
+    // Native object/mesh indices are valid only after Scene::Update. Capture
+    // input now; instantiate/adopt at the next frame boundary, before that update.
+    struct DragPreviewFrameInput
+    {
+        XMFLOAT4 pointer = {};
+        bool escapePressed = false, rightPressed = false;
+        bool leftPressed = false, leftReleased = false, leftDown = false;
+    };
+    renegade::studio::detail::CreatorAssetFrameMutation previewFrameTicket;
+    std::uint64_t nextPreviewFrameSerial = 0;
+    std::uint64_t queuedPreviewFrameSerial = 0;
+    wi::ecs::Entity completedPreviewPlacement = wi::ecs::INVALID_ENTITY;
+    renegade::bridge::StudioSession* completedPreviewSession = nullptr;
+    std::uint64_t completedPreviewRevision = 0;
 
     std::string NormalizePath(const std::string& value)
     {
@@ -531,6 +547,9 @@ namespace
         scene.FindAllEntities(before);
         const std::size_t firstMaterialIndex = scene.materials.GetCount();
 
+        for (std::size_t i = 0; i < scene.terrains.GetCount(); ++i)
+            scene.terrains[i].Generation_Cancel();
+
         const auto instantiateStarted = std::chrono::steady_clock::now();
         const wi::ecs::Entity payloadRoot =
             scene.Instantiate(*templateScene, true);
@@ -740,6 +759,9 @@ namespace renegade::studio::detail
 
     void ClearCreatorAssetDragPreview()
     {
+        previewFrameTicket.Cancel();
+        queuedPreviewFrameSerial = 0;
+        completedPreviewPlacement = wi::ecs::INVALID_ENTITY;
         pendingDrop = {};
         if (preview.scene == nullptr ||
             preview.wrapper == wi::ecs::INVALID_ENTITY)
@@ -757,14 +779,15 @@ namespace renegade::studio::detail
 
     bool CreatorAssetDragPreviewBlocksSave() noexcept
     {
-        return pendingPreviewCleanupCount != 0 ||
+        return queuedPreviewFrameSerial != 0 || pendingPreviewCleanupCount != 0 ||
             preview.wrapper != wi::ecs::INVALID_ENTITY ||
             pendingDrop.active;
     }
 
-    wi::ecs::Entity UpdateCreatorAssetDragPreview(
+    wi::ecs::Entity RunCreatorAssetDragPreviewAtFrameBoundary(
         const wi::Canvas& canvas,
-        const wi::scene::CameraComponent& camera)
+        const wi::scene::CameraComponent& camera,
+        const DragPreviewFrameInput& input)
     {
         auto* chrome = CreatorAssetStudioChrome::Current();
         auto* session = bridge::StudioSession::Current();
@@ -776,7 +799,7 @@ namespace renegade::studio::detail
             return wi::ecs::INVALID_ENTITY;
         }
 
-        const XMFLOAT4 pointer = wi::input::GetPointer();
+        const XMFLOAT4 pointer = input.pointer;
 
         const auto commitPreviewAt =
             [&](const XMFLOAT4& dropPointer) -> wi::ecs::Entity
@@ -805,6 +828,8 @@ namespace renegade::studio::detail
                 return wi::ecs::INVALID_ENTITY;
             }
 
+            for (std::size_t i = 0; i < scene.terrains.GetCount(); ++i)
+                scene.terrains[i].Generation_Cancel();
             RestorePreviewLayers(scene, preview.originalLayers);
             if (auto* name = scene.names.GetComponent(preview.wrapper))
                 name->name = "Reusable Asset Instance";
@@ -840,8 +865,8 @@ namespace renegade::studio::detail
             return placedEntity;
         };
 
-        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
-            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
+        if (input.escapePressed ||
+            input.rightPressed)
         {
             if (chrome->AssetBrowserDragCandidate() ||
                 chrome->AssetBrowserDragging() ||
@@ -849,7 +874,7 @@ namespace renegade::studio::detail
                 pendingDrop.active)
             {
                 dragCancelledUntilRelease =
-                    wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
+                    input.leftDown;
                 ClearCreatorAssetDragPreview();
                 chrome->SetStatusText("ASSET DRAG // CANCELLED");
             }
@@ -858,7 +883,7 @@ namespace renegade::studio::detail
 
         // A new explicit mouse-down supersedes a previously queued release.
         if (pendingDrop.active &&
-            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+            input.leftPressed)
         {
             pendingDrop = {};
         }
@@ -936,7 +961,7 @@ namespace renegade::studio::detail
             return commitPreviewAt(dropPointer);
         }
 
-        if (wi::input::Release(wi::input::MOUSE_BUTTON_LEFT))
+        if (input.leftReleased)
         {
             if (dragCancelledUntilRelease)
             {
@@ -953,7 +978,7 @@ namespace renegade::studio::detail
         const bool dragging =
             chrome->AssetBrowserDragCandidate() &&
             chrome->AssetBrowserDragging() &&
-            wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
+            input.leftDown;
         if (!dragging)
         {
             ClearCreatorAssetDragPreview();
@@ -1054,6 +1079,71 @@ namespace renegade::studio::detail
             "ASSET DRAG // LIVE TEXTURED INSTANCE // RELEASE TO PLACE");
         wi::input::SetCursor(wi::input::CURSOR_HAND);
         return wi::ecs::INVALID_ENTITY;
+    }
+
+
+    wi::ecs::Entity UpdateCreatorAssetDragPreview(
+        const wi::Canvas& canvas,
+        const wi::scene::CameraComponent& camera)
+    {
+        auto* session = bridge::StudioSession::Current();
+        auto* chrome = CreatorAssetStudioChrome::Current();
+        const auto completed = completedPreviewSession == session && session &&
+            completedPreviewRevision == session->Scenes().Revision()
+            ? completedPreviewPlacement : wi::ecs::INVALID_ENTITY;
+        completedPreviewPlacement = wi::ecs::INVALID_ENTITY;
+        if (!session || !chrome || !session->Projects().HasProject())
+        {
+            ClearCreatorAssetDragPreview();
+            return completed;
+        }
+        const bool active = chrome->AssetBrowserDragCandidate() ||
+            chrome->AssetBrowserDragging() || pendingDrop.active ||
+            preview.wrapper != wi::ecs::INVALID_ENTITY;
+        if (!active)
+        {
+            if (!wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
+                dragCancelledUntilRelease = false;
+            ClearCreatorAssetDragPreview();
+            return completed;
+        }
+        if (queuedPreviewFrameSerial != 0)
+            return completed;
+        const DragPreviewFrameInput input{
+            wi::input::GetPointer(),
+            wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE),
+            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT),
+            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT),
+            wi::input::Release(wi::input::MOUSE_BUTTON_LEFT),
+            wi::input::Down(wi::input::MOUSE_BUTTON_LEFT)};
+        const auto revision = session->Scenes().Revision();
+        const auto projectId = session->Projects().CurrentProject().projectId;
+        const auto serial = ++nextPreviewFrameSerial;
+        queuedPreviewFrameSerial = serial;
+        // Value copies avoid retaining a camera/component pointer across frames.
+        const auto view = std::make_shared<
+            std::pair<wi::Canvas, wi::scene::CameraComponent>>(canvas, camera);
+        previewFrameTicket = QueueCreatorAssetFrameMutation(
+            [session, revision, projectId, serial, input, view](std::uint64_t)
+        {
+            if (queuedPreviewFrameSerial != serial)
+                return;
+            queuedPreviewFrameSerial = 0;
+            auto* current = bridge::StudioSession::Current();
+            if (current != session || !current->Projects().HasProject() ||
+                current->Scenes().Revision() != revision ||
+                current->Projects().CurrentProject().projectId != projectId)
+                return;
+            const auto entity = RunCreatorAssetDragPreviewAtFrameBoundary(
+                view->first, view->second, input);
+            if (entity != wi::ecs::INVALID_ENTITY)
+            {
+                completedPreviewPlacement = entity;
+                completedPreviewSession = current;
+                completedPreviewRevision = current->Scenes().Revision();
+            }
+        });
+        return completed;
     }
 
 }

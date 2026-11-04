@@ -4,6 +4,7 @@
 #include "shaders/ShaderInterop_Renderer.h"
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
+#include "CreatorAssetFrameBoundary.h"
 #include "PlayerStartFrameCache.h"
 #include "TerrainInspectorEntity.h"
 #include "../../Tools/night_sky/CloudStudioReplay.h"
@@ -7552,72 +7553,76 @@ namespace renegade::studio
         if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
             return true;
 
-        const auto& project = session_->Projects().CurrentProject();
-        bridge::PlayerPrefabDocument playerPrefab; std::string playerError;
-        if (bridge::LoadPlayerPrefab(project.rootPath, project.projectId, creatorAssetPlacementId_, playerPrefab, playerError))
+        // GUI/input runs after this frame's Scene::Update. Publishing a new
+        // object here would expose a stale mesh_index to native shadow jobs.
+        const auto assetId = creatorAssetPlacementId_;
+        const auto label = creatorAssetPlacementLabel_;
+        const auto revision = session_->Scenes().Revision();
+        const auto projectId = session_->Projects().CurrentProject().projectId;
+        creatorAssetPlacementActive_ = false; // Consume this click only once.
+        studioChrome_.SetStatusText("PLACE ASSET // QUEUED");
+        detail::QueueCreatorAssetFrameMutation(
+            [this, assetId, label, revision, projectId, surfacePosition](std::uint64_t)
         {
-            if (PlacePlayerPrefabAt(creatorAssetPlacementId_, surfacePosition))
-            { creatorAssetPlacementActive_ = false; creatorAssetPlacementId_.clear(); }
-            return true;
-        }
-        bridge::CreatorAssetWorkflowService workflow;
-        auto prepared = workflow.PrepareModelPlacement(
-            project.rootPath,
-            project.projectId,
-            creatorAssetPlacementId_);
-        if (!prepared.IsReady())
-        {
-            studioChrome_.SetStatusText(
-                "PLACE ASSET // PREPARE FAILED // " +
-                prepared.Result().error);
-            return true;
-        }
-
-        const wi::scene::Scene* preparedScene = prepared.PeekScene();
-        const float scale = bridge::HasCreatorAuthoredTransform(*preparedScene)
-            ? 1.0f
-            : bridge::ImportService::ResolveScaleFactor(
-                bridge::ModelScaleMode::Automatic,
-                *preparedScene);
-        const bridge::ModelBounds bounds =
-            bridge::ImportService::MeasureModelBounds(*preparedScene);
-        XMFLOAT3 position = surfacePosition;
-        if (bounds.valid)
-        {
-            position.y = bridge::ImportService::ResolveGroundedPlacementY(
-                surfacePosition.y,
-                bounds,
-                scale);
-        }
-
-        const bridge::StableId assetId = creatorAssetPlacementId_;
-        auto command = std::make_unique<bridge::PlaceReusableModelCommand>(
-            scene,
-            prepared.ReleaseScene(),
-            assetId,
-            position,
-            scale,
-            creatorAssetPlacementLabel_);
-        auto* placed = command.get();
-        if (!session_->Commands().Execute(std::move(command)))
-        {
-            studioChrome_.SetStatusText("PLACE ASSET // FAILED");
-            return true;
-        }
-
-        const std::string label = creatorAssetPlacementLabel_;
-        creatorAssetPlacementActive_ = false;
-        creatorAssetPlacementId_.clear();
-        creatorAssetPlacementLabel_.clear();
-        creatorAssetDropPending_ = false;
-        wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
-        session_->Selection().Select(placed->PlacedEntity());
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
-        studioChrome_.SetStatusText(
-            "PLACE ASSET // " + label +
-            " // SURFACE GROUNDED // STABLE RASSET INSTANCE");
+            if (!session_ || !session_->Projects().HasProject() ||
+                revision != session_->Scenes().Revision() ||
+                projectId != session_->Projects().CurrentProject().projectId ||
+                testLevelRuntime_.IsActive())
+                return;
+            auto& scene = session_->Scenes().GetScene();
+            for (std::size_t i = 0; i < scene.terrains.GetCount(); ++i)
+                scene.terrains[i].Generation_Cancel();
+            const auto& project = session_->Projects().CurrentProject();
+            bridge::PlayerPrefabDocument playerPrefab;
+            std::string playerError;
+            if (bridge::LoadPlayerPrefab(project.rootPath, project.projectId,
+                assetId, playerPrefab, playerError))
+            {
+                creatorAssetPlacementActive_ =
+                    !PlacePlayerPrefabAt(assetId, surfacePosition);
+                if (!creatorAssetPlacementActive_)
+                    creatorAssetPlacementId_.clear();
+                return;
+            }
+            bridge::CreatorAssetWorkflowService workflow;
+            auto prepared = workflow.PrepareModelPlacement(
+                project.rootPath, project.projectId, assetId);
+            if (!prepared.IsReady())
+            {
+                creatorAssetPlacementActive_ = true;
+                studioChrome_.SetStatusText(
+                    "PLACE ASSET // PREPARE FAILED // " + prepared.Result().error);
+                return;
+            }
+            const auto* preparedScene = prepared.PeekScene();
+            const float scale = bridge::HasCreatorAuthoredTransform(*preparedScene)
+                ? 1.0f : bridge::ImportService::ResolveScaleFactor(
+                    bridge::ModelScaleMode::Automatic, *preparedScene);
+            const auto bounds = bridge::ImportService::MeasureModelBounds(*preparedScene);
+            XMFLOAT3 position = surfacePosition;
+            if (bounds.valid)
+                position.y = bridge::ImportService::ResolveGroundedPlacementY(
+                    surfacePosition.y, bounds, scale);
+            auto command = std::make_unique<bridge::PlaceReusableModelCommand>(
+                scene, prepared.ReleaseScene(), assetId, position, scale, label);
+            auto* placed = command.get();
+            if (!session_->Commands().Execute(std::move(command)))
+            {
+                creatorAssetPlacementActive_ = true;
+                studioChrome_.SetStatusText("PLACE ASSET // FAILED");
+                return;
+            }
+            creatorAssetPlacementId_.clear();
+            creatorAssetPlacementLabel_.clear();
+            creatorAssetDropPending_ = false;
+            wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+            session_->Selection().Select(placed->PlacedEntity());
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+            studioChrome_.SetStatusText("PLACE ASSET // " + label +
+                " // SURFACE GROUNDED // STABLE RASSET INSTANCE");
+        });
         return true;
     }
 
