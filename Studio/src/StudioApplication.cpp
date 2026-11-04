@@ -7461,15 +7461,15 @@ namespace renegade::studio
         const float screenX,
         const float screenY)
     {
+        if (detail::CreatorAssetDragPreviewOwnsDrop(assetId))
+        {
+            // A live preview or a cancelled gesture consumes this release.
+            // This also suppresses the player-prefab fallback after cancellation.
+            return;
+        }
         if (fs::u8path(label).extension() == bridge::PlayerPrefabExtension)
         {
             playerPrefabDropId_ = assetId; playerPrefabDropPoint_ = {screenX, screenY};
-            return;
-        }
-        if (detail::CreatorAssetDragPreviewOwnsDrop(assetId))
-        {
-            // The live cursor instance is committed by the Studio update in
-            // this exact release frame. Do not create a second placement path.
             return;
         }
 

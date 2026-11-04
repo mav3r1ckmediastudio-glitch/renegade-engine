@@ -9,3 +9,16 @@ Studio now captures placement input and publishes new model/player-prefab object
 The shared production queue has a GPU-hosted regression for deferred, repeated and cancelled publication, native mesh-index identity and the exact shadow-view LOD lookup. Actual Studio replay of ordinary placement, drag/cancel and history is required before release acceptance. A compile pass alone does not clear the earlier release block.
 
 Maximum terrain testing also observed long synchronous editor operations on DESIGN with its existing debugging configuration: expansion Undo about67s, Redo about75s, sculpt capture/commit roughly3minutes. These are material performance observations and must accompany owner download evidence; responsive maximum-size sculpting is not established.
+
+
+## Cancelled release recovery
+
+Actual maximum-terrain GUI testing found that Escape removed the live preview
+but Chrome still delivered its mouse-up through the fallback drop route, creating
+an unwanted fifth instance despite the CANCELLED status. A shared gesture gate
+now suppresses both fallback intake and pending-drop processing until that
+cancelled gesture is consumed. A fresh explicit press rearms placement.
+Player-prefab fallback uses the same cancellation check. The production gate is
+covered by the native frame-boundary regression; actual Escape/RMB, pending
+preparation, fresh subsequent placement and saved-scene counts remain release
+acceptance requirements.

@@ -12,6 +12,36 @@ int main()
  try{
   wi::scene::Scene scene;wi::physics::SetSimulationEnabled(false);
   scene.Update(1.f/60.f);
+  // Exercise the production gate through the exact cancelled-release/fallback
+  // ordering that created an unwanted fifth model in actual packaged Studio.
+  renegade::studio::detail::CreatorAssetDragCancellation gate;
+  for (int gesture=0; gesture<3; ++gesture) {
+   const auto before=scene.objects.GetCount();
+   gate.Cancel(true); // Escape, RMB or leaving the viewport while still held.
+   Require(gate.BlocksDrop(),"Cancelled gesture admitted fallback release");
+   Require(gate.SuppressFrame(false,false,true),"Cancelled pending preparation was not suppressed");
+   Require(gate.BlocksDrop(),"Held cancellation latch cleared before mouse-up");
+   // Intake sees the latch before boundary processing consumes the release.
+   bool queued=false;
+   if(!gate.BlocksDrop()) queued=true;
+   Require(!queued,"Cancelled mouse-up queued a fresh placement");
+   Require(gate.SuppressFrame(false,true,false),"Cancelled release reached commit branch");
+   Require(!gate.BlocksDrop(),"Cancellation survived its consumed release");
+   Require(scene.objects.GetCount()==before,"Cancelled gesture mutated scene");
+   Require(!gate.SuppressFrame(true,false,true),"Fresh gesture did not rearm");
+   if(!gate.BlocksDrop()) {
+    auto ticket=renegade::studio::detail::QueueCreatorAssetFrameMutation(
+     [&scene](std::uint64_t){scene.Entity_CreateCube("fresh-after-cancel");});
+    wi::eventhandler::FireEvent(wi::eventhandler::EVENT_THREAD_SAFE_POINT,0);
+    Require(!ticket.IsPending(),"Fresh gesture publication remained pending");
+   }
+   Require(scene.objects.GetCount()==before+1,"Fresh gesture did not place exactly once");
+   scene.Update(1.f/60.f);
+  }
+  gate.Cancel(true);
+  Require(!gate.SuppressFrame(true,false,true)&&!gate.BlocksDrop(),"Fresh explicit press did not supersede cancellation");
+  gate.Cancel(false);
+  Require(!gate.BlocksDrop(),"Cancellation without held button latched a later gesture");
   // Negative control: post-update insertion has an unpublished frame index.
   wi::scene::Scene unprepared;auto entity=unprepared.Entity_CreateCube("unpublished");
   Require(unprepared.objects.GetComponent(entity)->mesh_index==~0u,"Negative control no longer reproduces unpublished index");

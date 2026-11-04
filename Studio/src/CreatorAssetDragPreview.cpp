@@ -84,7 +84,7 @@ namespace
     std::uint64_t preparationUseSerial = 0;
     constexpr std::size_t MaximumPreparationCacheEntries = 16;
     std::size_t pendingPreviewCleanupCount = 0;
-    bool dragCancelledUntilRelease = false;
+    renegade::studio::detail::CreatorAssetDragCancellation dragCancellation;
 
     // Native object/mesh indices are valid only after Scene::Update. Capture
     // input now; instantiate/adopt at the next frame boundary, before that update.
@@ -732,6 +732,10 @@ namespace renegade::studio::detail
         const float screenX,
         const float screenY)
     {
+        // Chrome still reports this gesture's release after Escape/RMB
+        // removed its preview. Never turn that release into a fresh drop.
+        if (dragCancellation.BlocksDrop())
+            return;
         auto* session = bridge::StudioSession::Current();
         if (session == nullptr || !session->Projects().HasProject() ||
             !bridge::IsValidStableId(assetId) || assetPath.empty())
@@ -752,9 +756,10 @@ namespace renegade::studio::detail
         const bridge::StableId& assetId) noexcept
     {
         return bridge::IsValidStableId(assetId) &&
-            preview.assetId == assetId &&
-            preview.scene != nullptr &&
-            IsLivePreviewWrapper(*preview.scene, preview.wrapper);
+            (dragCancellation.BlocksDrop() ||
+             (preview.assetId == assetId &&
+              preview.scene != nullptr &&
+              IsLivePreviewWrapper(*preview.scene, preview.wrapper)));
     }
 
     void ClearCreatorAssetDragPreview()
@@ -794,7 +799,7 @@ namespace renegade::studio::detail
         if (chrome == nullptr || session == nullptr ||
             !session->Projects().HasProject())
         {
-            dragCancelledUntilRelease = false;
+            dragCancellation.Reset();
             ClearCreatorAssetDragPreview();
             return wi::ecs::INVALID_ENTITY;
         }
@@ -860,7 +865,7 @@ namespace renegade::studio::detail
                     std::chrono::steady_clock::now() - commitStarted).count()));
             const wi::ecs::Entity placedEntity = placed->PlacedEntity();
             preview = {};
-            dragCancelledUntilRelease = false;
+            dragCancellation.Reset();
             wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
             return placedEntity;
         };
@@ -873,8 +878,7 @@ namespace renegade::studio::detail
                 preview.wrapper != wi::ecs::INVALID_ENTITY ||
                 pendingDrop.active)
             {
-                dragCancelledUntilRelease =
-                    input.leftDown;
+                dragCancellation.Cancel(input.leftDown);
                 ClearCreatorAssetDragPreview();
                 chrome->SetStatusText("ASSET DRAG // CANCELLED");
             }
@@ -886,6 +890,15 @@ namespace renegade::studio::detail
             input.leftPressed)
         {
             pendingDrop = {};
+        }
+
+        // Cancellation must dominate queued preparation/commit, not only
+        // the later live-preview release path.
+        if (dragCancellation.SuppressFrame(
+                input.leftPressed, input.leftReleased, input.leftDown))
+        {
+            ClearCreatorAssetDragPreview();
+            return wi::ecs::INVALID_ENTITY;
         }
 
         if (pendingDrop.active)
@@ -962,18 +975,7 @@ namespace renegade::studio::detail
         }
 
         if (input.leftReleased)
-        {
-            if (dragCancelledUntilRelease)
-            {
-                dragCancelledUntilRelease = false;
-                ClearCreatorAssetDragPreview();
-                return wi::ecs::INVALID_ENTITY;
-            }
             return commitPreviewAt(pointer);
-        }
-
-        if (dragCancelledUntilRelease)
-            return wi::ecs::INVALID_ENTITY;
 
         const bool dragging =
             chrome->AssetBrowserDragCandidate() &&
@@ -1006,7 +1008,7 @@ namespace renegade::studio::detail
         {
             if (preview.wrapper != wi::ecs::INVALID_ENTITY)
             {
-                dragCancelledUntilRelease = true;
+                dragCancellation.Cancel(input.leftDown);
                 ClearCreatorAssetDragPreview();
                 chrome->SetStatusText(
                     "ASSET DRAG // CANCELLED // LEFT SCENE VIEWPORT");
@@ -1103,7 +1105,7 @@ namespace renegade::studio::detail
         if (!active)
         {
             if (!wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
-                dragCancelledUntilRelease = false;
+                dragCancellation.Reset();
             ClearCreatorAssetDragPreview();
             return completed;
         }
