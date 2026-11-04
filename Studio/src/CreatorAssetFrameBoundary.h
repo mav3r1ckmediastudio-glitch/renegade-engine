@@ -13,7 +13,7 @@ namespace renegade::studio::detail
     public:
         void Cancel(bool leftDown) noexcept { cancelledUntilRelease_ = leftDown; }
         void Reset() noexcept { cancelledUntilRelease_ = false; }
-        bool BlocksDrop() const noexcept { return cancelledUntilRelease_; }
+        bool BlocksDrop(bool cancelPressed = false) const noexcept { return cancelPressed || cancelledUntilRelease_; }
         bool SuppressFrame(bool leftPressed, bool leftReleased, bool leftDown) noexcept
         {
             if (leftPressed) { Reset(); return false; }

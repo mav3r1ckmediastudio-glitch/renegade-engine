@@ -734,7 +734,9 @@ namespace renegade::studio::detail
     {
         // Chrome still reports this gesture's release after Escape/RMB
         // removed its preview. Never turn that release into a fresh drop.
-        if (dragCancellation.BlocksDrop())
+        if (dragCancellation.BlocksDrop(
+                wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
+                wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT)))
             return;
         auto* session = bridge::StudioSession::Current();
         if (session == nullptr || !session->Projects().HasProject() ||
@@ -756,7 +758,9 @@ namespace renegade::studio::detail
         const bridge::StableId& assetId) noexcept
     {
         return bridge::IsValidStableId(assetId) &&
-            (dragCancellation.BlocksDrop() ||
+            (dragCancellation.BlocksDrop(
+                 wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
+                 wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT)) ||
              (preview.assetId == assetId &&
               preview.scene != nullptr &&
               IsLivePreviewWrapper(*preview.scene, preview.wrapper)));
@@ -870,8 +874,11 @@ namespace renegade::studio::detail
             return placedEntity;
         };
 
-        if (input.escapePressed ||
-            input.rightPressed)
+        // A preparation can become ready before this frame captures its input.
+        // Honor live cancellation before publishing that already-queued drop.
+        if (input.escapePressed || input.rightPressed ||
+            wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
+            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
         {
             if (chrome->AssetBrowserDragCandidate() ||
                 chrome->AssetBrowserDragging() ||

@@ -42,6 +42,8 @@ int main()
   Require(!gate.SuppressFrame(true,false,true)&&!gate.BlocksDrop(),"Fresh explicit press did not supersede cancellation");
   gate.Cancel(false);
   Require(!gate.BlocksDrop(),"Cancellation without held button latched a later gesture");
+  Require(gate.BlocksDrop(true),"Same-frame cancel/release bypassed intake before deferred latch");
+  Require(!gate.BlocksDrop(false),"Same-frame input polluted the next uncancelled gesture");
   // Negative control: post-update insertion has an unpublished frame index.
   wi::scene::Scene unprepared;auto entity=unprepared.Entity_CreateCube("unpublished");
   Require(unprepared.objects.GetComponent(entity)->mesh_index==~0u,"Negative control no longer reproduces unpublished index");

@@ -22,3 +22,14 @@ Player-prefab fallback uses the same cancellation check. The production gate is
 covered by the native frame-boundary regression; actual Escape/RMB, pending
 preparation, fresh subsequent placement and saved-scene counts remain release
 acceptance requirements.
+
+The intake check also consumes synchronous Escape/RMB input when cancellation
+and mouse-up share one sampled frame, before the deferred latch can run.
+Queued Player Prefab drop identity is cleared on a consumed release. This closes
+the prefab path, which processes its drop before the drag-preview boundary.
+Actual prefab cancellation must be tested with no existing Player Start so that
+the existing-player rejection cannot mask an unwanted placement.
+
+The boundary also checks live Escape/RMB before processing an already-pending
+model preparation, so a job becoming ready cannot outrun current cancellation
+while the deferred input sample still describes the previous frame.

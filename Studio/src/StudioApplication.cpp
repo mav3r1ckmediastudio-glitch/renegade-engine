@@ -7465,6 +7465,8 @@ namespace renegade::studio
         {
             // A live preview or a cancelled gesture consumes this release.
             // This also suppresses the player-prefab fallback after cancellation.
+            // Raw cancel input is checked synchronously before prefab processing.
+            playerPrefabDropId_.clear();
             return;
         }
         if (fs::u8path(label).extension() == bridge::PlayerPrefabExtension)
