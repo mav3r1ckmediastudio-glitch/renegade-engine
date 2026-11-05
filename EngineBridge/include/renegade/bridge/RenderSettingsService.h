@@ -105,7 +105,13 @@ namespace renegade::bridge
         // This is deliberately an optional schema-v3 field so older scenes
         // inherit Wicked's native default (enabled) without a migration bump.
         bool meshBlendingEnabled = true;
+
+        // Optional schema-v3 presentation field; legacy levels retain VSync on.
+        bool verticalSyncEnabled = true;
     };
+
+    // Application presentation uses Wicked's existing swap-chain event.
+    void ApplyVerticalSync(bool enabled);
 
     using RenderSettingsApplyCallback =
         std::function<void(const RenderSettingsState&)>;

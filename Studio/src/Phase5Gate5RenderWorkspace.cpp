@@ -46,6 +46,14 @@ namespace renegade::studio
             renderWorkspacePanel_.AddWidget(&label);
         };
 
+        renderVerticalSync_.Create("VSync: ");
+        renderVerticalSync_.SetTooltip("On synchronises rendering to your display. Off uncaps rendering and may show tearing. Saved with the level and used in Test Game.");
+        renderVerticalSync_.OnClick([this](const wi::gui::EventArgs& args)
+        {
+            ApplyRenderToggle(RenderToggle::VerticalSync, args.bValue);
+        });
+        renderWorkspacePanel_.AddWidget(&renderVerticalSync_);
+
         createSection(
             renderImageLabel_,
             "Render Image Section",
@@ -414,6 +422,7 @@ namespace renegade::studio
         };
 
         title(renderWorkspaceTitle_);
+        full(renderVerticalSync_);
         section(renderImageLabel_);
         full(renderTonemap_);
         full(renderExposure_);
@@ -478,6 +487,7 @@ namespace renegade::studio
             return;
 
         const auto state = bridge::CaptureRenderSettings(session_->Scenes().GetScene());
+        renderVerticalSync_.SetCheck(state.verticalSyncEnabled);
         renderTonemap_.SetSelectedByUserdataWithoutCallback(
             static_cast<std::uint64_t>(state.tonemap));
         renderExposure_.SetValue(state.exposure);
@@ -753,6 +763,11 @@ namespace renegade::studio
         const bool resizeBuffersForMSAA)
     {
         const auto safe = bridge::SanitizeRenderSettings(state);
+        if (!appliedRenderSettingsInitialized_ ||
+            appliedRenderSettings_.verticalSyncEnabled != safe.verticalSyncEnabled)
+        {
+            bridge::ApplyVerticalSync(safe.verticalSyncEnabled);
+        }
         bridge::ApplyRenderSettingsToPath(*this, safe, resizeBuffersForMSAA);
         appliedRenderSettings_ = safe;
         appliedRenderSettingsInitialized_ = true;
@@ -782,7 +797,9 @@ namespace renegade::studio
             !appliedRenderSettingsInitialized_ ||
             bridge::HasRenderSettingsChange(appliedRenderSettings_, authored);
 
-        if (bridge::RenderSettingsMatchPath(*this, authored))
+        if (appliedRenderSettingsInitialized_ &&
+            appliedRenderSettings_.verticalSyncEnabled == authored.verticalSyncEnabled &&
+            bridge::RenderSettingsMatchPath(*this, authored))
         {
             appliedRenderSettings_ = authored;
             appliedRenderSettingsInitialized_ = true;
@@ -830,6 +847,9 @@ namespace renegade::studio
         auto state = bridge::CaptureRenderSettings(session_->Scenes().GetScene());
         switch (toggle)
         {
+        case RenderToggle::VerticalSync:
+            state.verticalSyncEnabled = value;
+            break;
         case RenderToggle::ColorGrading:
             state.colorGradingEnabled = value;
             break;

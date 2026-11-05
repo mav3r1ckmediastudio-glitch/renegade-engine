@@ -2062,3 +2062,7 @@ verification status.
 ## Riverbed locality and progress candidate (5 November 2026)
 
 Terrain snapshot application compares exact heights and rebuilds only changed chunks; its canonical normal lookup includes their one-ring neighbours. Optional scoped thread-local bridge progress reports real stages and chunk counts. The Windows Studio progress overlay has an independent UI message loop; live scene/GPU mutation remains at the existing atomic scene-safe point, with editing locked. It does not provide cancellation or asynchronous scene authoring. See RIVERBED_PERFORMANCE_2026-11-05.md for engineering evidence and open acceptance.
+
+## Application VSync presentation
+
+Render settings optionally persist renegade.render.vsync.enabled (default true) on the existing scene carrier. Studio and Runtime apply it through ApplyVerticalSync and Wicked EVENT_SET_VSYNC on first settings application and actual VSync changes. RenderSettingsMatchPath remains a RenderPath-only comparison; application callers separately compare the last applied presentation preference. Normal render commands retain Undo/Redo, dirty state and snapshot persistence. No Wicked core or shader change is required.
