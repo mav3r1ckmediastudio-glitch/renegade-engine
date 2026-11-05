@@ -77,3 +77,60 @@ Run Windows Debug and Release CI after this cleanup. Package Release and prove
 the standard terrain still creates, sculpts, saves, closes, opens, and remains
 unchanged after the first update on DX12. Repeat the round trip on Vulkan.
 Automated success alone is not visual acceptance.
+
+## New-terrain initialization recovery (2 November 2026 candidate)
+
+Standard new terrain now has an identity root and a surface at world Y=0 inside
+the existing -20 to +120 metre encoding range. A serialized native constant
+HeightmapModifier supplies that same surface reference to initial generation,
+later expansion rings and reopened terrain. Existing levels keep their authored
+transforms, height data, modifiers, masks and river layers.
+
+Ordinary shallow river beds can be linked on untouched new terrain without
+Allow Deeper Beds. The explicit range-extension command remains available for
+legacy terrain or cuts beyond the current minimum. The maximum-terrain
+continuation below replaces its earlier expansion restriction. Sculpting clamps mesh edits before encoding so visual,
+collision and saved heights stop at the same valid limits.
+
+New terrain starts without procedural grass; explicit manual painting enables
+the existing native vegetation path. Chunk synchronization acknowledges completion
+only after generated meshes are merged, preserving bare expansion rings.
+
+A separate reproduced Player Start preview defect shared generated terrain
+texture-resource wrappers with the editor scene. Native preview generation then
+rebound the editor to the preview atlas, producing dark chunks until reopening.
+Preview chunk resources are now private; authored material textures retain the
+existing sharing path. This changes no saved terrain format or Wicked pin.
+
+Native regression evidence and outstanding actual-Studio gates are tracked in
+TERRAIN_INITIALIZATION_RECOVERY_2026-11-02.md. This candidate is not release
+acceptance and does not authorize another alpha.
+
+
+## Maximum-size continuation (3 November 2026 candidate)
+
+The supported maximum is radius 16: 33 x 33 chunks, 2,178 x 2,178 metres.
+River layer coverage now accepts the complete supported resident extent.
+Expansion before linking and expansion with existing linked rivers are both
+required workflows. Linked expansion validates all old coverage, generates
+one new native ring and composes that ring before recording the command.
+Undo removes that ring; Redo restores its entity identities so later sculpt
+and river history retain their targets. Existing chunk heights and paint
+must remain unchanged.
+
+Schema v3 stores changed sample indices and baseline/result values rather
+than full grids for every touched chunk. The changed-sample budget remains
+equivalent to 81 full grids; the 32 MiB document, 32-layer and 32M composition
+work limits remain enforced. v1/v2 scenes remain readable. Rocky bed painting
+uses local segment selection and retains its original worst-case work bound.
+Unsupported or pathological edits still fail before changing the terrain.
+
+An optional explicit floor extension appends a serialized native affine
+generator adjustment, preserving its original absolute height function on
+new rings. Ordinary fresh terrain still starts at world Y=0 inside -20..120 m;
+no floor extension is needed for shallow linked channels.
+
+Implementation is under validation. Maximum-size automated, actual Studio,
+Player Start preview, Test Game, Runtime and cold-process reopening evidence
+is tracked in MAXIMUM_TERRAIN_RIVER_RECOVERY_2026-11-03.md. Earlier separate
+default-river and unlinked-expansion passes do not establish their combination.

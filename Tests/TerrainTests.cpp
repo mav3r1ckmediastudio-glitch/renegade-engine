@@ -1,6 +1,7 @@
 #include <cmath>
 #include <iostream>
 #include <memory>
+#include "../Studio/src/TerrainInspectorEntity.h"
 
 #include "renegade/bridge/CollisionService.h"
 #include "renegade/bridge/TerrainService.h"
@@ -58,6 +59,17 @@ int main()
     wi::scene::Scene scene;
     const auto entity = wi::ecs::CreateEntity();
     auto& terrain = scene.terrains.Create(entity);
+
+    const auto playerSelection = wi::ecs::CreateEntity();
+    const auto riverSelection = wi::ecs::CreateEntity();
+    if (renegade::studio::TerrainInspectorEntity(scene, playerSelection, true) != entity ||
+        renegade::studio::TerrainInspectorEntity(scene, riverSelection, true) != entity ||
+        renegade::studio::TerrainInspectorEntity(scene, wi::ecs::INVALID_ENTITY, true) != entity ||
+        renegade::studio::TerrainInspectorEntity(scene, playerSelection, false) != playerSelection ||
+        renegade::studio::TerrainInspectorEntity(blankScene, playerSelection, true) != wi::ecs::INVALID_ENTITY)
+    {
+        return Fail("terrain workspace authoring target disagrees with its displayed terrain");
+    }
 
     const auto native = renegade::bridge::CaptureTerrain(terrain);
     if (!native.centerToCamera || !native.removeDistantChunks ||
@@ -235,6 +247,32 @@ int main()
         return Fail("generated terrain chunk hierarchy did not inherit its root");
     }
 
+    // The production new-terrain generator must begin at zero without root
+    // translation, while keeping negative heights available for river carving.
+    const auto* terrainRoot = physicsScene.transforms.GetComponent(terrainEntity);
+    if (terrainRoot == nullptr || !NearlyEqual(terrainRoot->translation_local.y, 0.0f) ||
+        !NearlyEqual(physicsTerrain->bottomLevel, -20.0f) ||
+        !NearlyEqual(physicsTerrain->topLevel, 120.0f) ||
+        physicsTerrain->modifiers.size() != 1)
+    {
+        return Fail("new terrain did not retain a zero root and negative carving space");
+    }
+    float normalizedSurface = 0.0f;
+    physicsTerrain->modifiers.front()->Apply(XMFLOAT2(500.0f, -400.0f), normalizedSurface);
+    const float surfaceY = physicsTerrain->bottomLevel +
+        normalizedSurface * (physicsTerrain->topLevel - physicsTerrain->bottomLevel);
+    if (!NearlyEqual(surfaceY, 0.0f))
+    {
+        return Fail("generation input did not generate world Y=0");
+    }
+    normalizedSurface = 0.0f;
+    physicsTerrain->modifiers.front()->Apply(XMFLOAT2(-500.0f, 400.0f), normalizedSurface);
+    if (!NearlyEqual(physicsTerrain->bottomLevel + normalizedSurface *
+        (physicsTerrain->topLevel - physicsTerrain->bottomLevel), 0.0f))
+    {
+        return Fail("generation input changes across ring-expansion coordinates");
+    }
+
     const wi::ecs::Entity chunk = wi::ecs::CreateEntity();
     physicsScene.transforms.Create(chunk);
     physicsScene.Component_Attach(
@@ -249,7 +287,7 @@ int main()
         {
             mesh.vertex_positions.emplace_back(
                 static_cast<float>(x) - 1.0f,
-                physicsTerrain->bottomLevel,
+                surfaceY,
                 static_cast<float>(z) - 1.0f);
         }
     }

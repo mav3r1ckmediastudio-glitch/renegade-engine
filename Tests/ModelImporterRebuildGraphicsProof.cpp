@@ -1,4 +1,7 @@
 #include "renegade/bridge/CharacterService.h"
+#include "renegade/bridge/CreatorAssetActionPolicy.h"
+#include "renegade/bridge/SceneService.h"
+#include "renegade/bridge/TestLevelSnapshotService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "../WickedEngine/Editor/json.hpp"
 #include "renegade/bridge/PlayerService.h"
@@ -100,6 +103,14 @@ namespace
     bool VerifyPlacement(const fs::path& root, const StableId& projectId,
         const StableId& assetId)
     {
+        AssetCatalogue catalogue;
+        std::string catalogueError;
+        if (!Require(CreatorAssetWorkflowService().BuildCatalogueSnapshot(root.generic_u8string(),
+            projectId, catalogue, catalogueError), catalogueError)) return false;
+        const auto card = std::find_if(catalogue.entries.begin(), catalogue.entries.end(),
+            [&assetId](const auto& entry){ return entry.assetId == assetId; });
+        if (!Require(card != catalogue.entries.end() && CanPlaceCreatorModelAsset(*card),
+            "Asset Browser policy refuses the committed model")) return false;
         auto prepared = CreatorAssetWorkflowService().PrepareModelPlacement(
             root.generic_u8string(), projectId, assetId);
         if (!Require(prepared.IsReady(), "stable-ID placement preparation failed"))
@@ -332,6 +343,8 @@ bool VerifyRenderedCharacterCrossfades(const wi::scene::Scene& source,
     return true;
 }
 
+#include "ModelImportReliabilityProof.h"
+
 int main(int argc, char** argv)
 {
     if (argc < 4)
@@ -365,18 +378,21 @@ int main(int argc, char** argv)
     recipeCheck.externalAnimations.front().speed = 1.0f;
     recipeCheck.externalAnimations.front().action = std::string(1, char(10));
     if (!Require(!SerializeCreatorModelImportOptions(recipeCheck, encoded, recipeError), "control-character action accepted")) return 28;
-    const bool inspecting = std::string(argv[1]) == "--inspect-scene";
+    const bool auditing = std::string(argv[1]) == "--audit-importer" || std::string(argv[1]) == "--audit-importer-reopen";
+    const bool auditCold = std::string(argv[1]) == "--audit-importer-reopen";
+    const bool snapshotInspect = std::string(argv[1]) == "--inspect-snapshot-path";
+    const bool inspecting = snapshotInspect || std::string(argv[1]) == "--inspect-scene";
     const bool reopening = inspecting || std::string(argv[1]) == "--reopen";
     fs::path fixture = fs::weakly_canonical(fs::u8path(argv[1]));
     const fs::path externalFixture = fs::weakly_canonical(fs::u8path(argv[2]));
     const fs::path root = fs::absolute(fs::u8path(reopening && !inspecting ? argv[2] : argv[3]));
     const bool isFbx = fixture.extension() == ".fbx";
     const fs::path sourceRoot = root.parent_path() / (root.filename().generic_u8string() + "-source");
-    if (!reopening && !Require(fs::is_regular_file(fixture) &&
+    if (!reopening && !auditing && !Require(fs::is_regular_file(fixture) &&
             fs::is_regular_file(externalFixture), "GLB fixtures unavailable")) return 3;
 
     std::error_code ec;
-    if (!reopening) fs::remove_all(root, ec);
+    if (!reopening && !auditCold) fs::remove_all(root, ec);
     if (!reopening && isFbx)
     {
         fs::remove_all(sourceRoot, ec);
@@ -420,12 +436,46 @@ int main(int argc, char** argv)
         else
         {
             wi::initializer::InitializeComponentsImmediate();
+            if (auditing) return RunImportReliabilityProof(root, externalFixture.parent_path(), auditCold) ? 0 : 40;
             if (inspecting)
             {
                 wi::scene::Scene scene;
-                wi::Archive archive(argv[2], true);
+                std::string inspectionPath = argv[2];
+                struct RestoreSources
+                {
+                    fs::path original, hidden;
+                    ~RestoreSources()
+                    {
+                        if (!hidden.empty()) { std::error_code ignored; fs::rename(hidden, original, ignored); }
+                    }
+                } restoreSources;
+                if (snapshotInspect)
+                {
+                    std::ifstream pathFile(argv[2]);
+                    std::getline(pathFile, inspectionPath);
+                    restoreSources.original = root / "project/SourceAssets";
+                    restoreSources.hidden = root / "retained-sources-hidden";
+                    fs::rename(restoreSources.original, restoreSources.hidden);
+                }
+                wi::Archive archive(inspectionPath, true);
                 if (!Require(archive.IsOpen(), "inspection scene unavailable")) return 32;
                 scene.Serialize(archive);
+                size_t checkedMaps = 0;
+                for (size_t m = 0; m < scene.materials.GetCount(); ++m)
+                    for (const auto& texture : scene.materials[m].textures)
+                        if (!texture.name.empty())
+                        {
+                            if (!Require(texture.resource.IsValid() && texture.resource.GetTexture().IsValid(),
+                                "fresh-process scene lost map " + texture.name)) return 41;
+                            ++checkedMaps;
+                        }
+                std::cout << "FRESH SCENE MATERIAL MAPS VALID: " << checkedMaps << '\n';
+                if (snapshotInspect)
+                {
+                    if (!Require(checkedMaps > 0, "snapshot material-map test was vacuous")) return 42;
+                    std::cout << "REAL TEST LEVEL SNAPSHOT MAPS SURVIVE IN FRESH PROCESS WITH RETAINED SOURCES HIDDEN\n";
+                    return 0;
+                }
                 for (size_t i = 0; i < scene.animations.GetCount(); ++i)
                 {
                     const auto entity = scene.animations.GetEntity(i);
@@ -619,14 +669,14 @@ int main(int argc, char** argv)
                         request.assetName = "Missing Texture";
                         auto refusedMissing = ModelImportCommitService().CommitModel(request, candidate);
                         fs::rename(hidden, texturePath);
-                        if (!Require(!missing.IsReady() && !refusedMissing.committed && !refusedMissing.succeeded &&
-                            !fs::exists(root / "Content/Models/Missing Texture.rasset"), "missing texture created a successful candidate or product")) return 18;
+                        if (!Require(missing.IsReady() && !missing.Warnings().empty() && !refusedMissing.committed && !refusedMissing.succeeded &&
+                            !fs::exists(root / "Content/Models/Missing Texture.rasset"), "missing maps should warn; an already-previewed changed dependency must not commit")) return 18;
                         { std::ofstream changed(texturePath, std::ios::binary | std::ios::app); changed.put('x'); }
                         request.assetName = "Changed Texture";
                         auto refusedChanged = ModelImportCommitService().CommitModel(request, candidate);
                         { std::ofstream restored(texturePath, std::ios::binary | std::ios::trunc); restored.write(reinterpret_cast<const char*>(dependency.bytes.data()), dependency.bytes.size()); }
                         if (!Require(!refusedChanged.committed && !refusedChanged.succeeded && !fs::exists(root / "Content/Models/Changed Texture.rasset"), "changed texture was not rejected before commit")) return 19;
-                        std::cout << "FBX MISSING/CHANGED TEXTURE REJECTION PASS\n";
+                        std::cout << "FBX MISSING MAP WARNING / CHANGED PREVIEW SNAPSHOT GUARD PASS\n";
                     }
                 }
                 if (argc > 4) {

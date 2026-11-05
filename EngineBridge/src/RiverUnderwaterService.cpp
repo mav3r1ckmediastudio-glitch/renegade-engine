@@ -30,8 +30,8 @@ namespace renegade::bridge
         struct Node { XMFLOAT4 minimum{},maximum{}; };
         struct PackedPrism { std::array<XMFLOAT4,5> planes; XMFLOAT4 scattering,extinction; };
         static_assert(sizeof(Node)==32 && sizeof(PackedPrism)==112);
-        // Version 1 is emitted by RiverTerrainLayerService with sorted JSON keys:
-        // chunks, layers, version. Read only its small suffix, never copy/parse
+        // Layer schemas keep sorted JSON keys before the small suffix:
+        // chunks, [coverage], layers, version. Read only its small suffix, never copy/parse
         // the potentially 32 MB sculpt baseline on each rendering frame.
         std::unordered_map<std::string,float> LinkedDepths(const wi::scene::Scene& scene)
         {
@@ -47,7 +47,7 @@ namespace renegade::bridge
                 try
                 {
                     auto doc=nlohmann::json::parse("{"+text.substr(start));
-                    if(doc.at("version").get<int>()!=1 || !doc.at("layers").is_array() || doc.at("layers").size()>32)continue;
+                    if((doc.at("version").get<int>()!=1 && doc.at("version").get<int>()!=2) || !doc.at("layers").is_array() || doc.at("layers").size()>32)continue;
                     for(const auto& layer:doc.at("layers"))
                     {
                         auto id=layer.at("river").get<std::string>();

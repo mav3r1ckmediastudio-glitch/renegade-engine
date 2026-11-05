@@ -46,6 +46,8 @@ include(cmake/RenegadeNightSkyOverlay.cmake)
 add_subdirectory(WickedEngine)
 include(cmake/RenegadeOfflineShaderCompiler.cmake)
 include(cmake/WickedBacklogShutdownFix.cmake)
+include(cmake/WickedAudioEndpointFix.cmake)
+include(cmake/WickedUmaUploadFix.cmake)
 include(cmake/RenegadePhysicsTempAllocator.cmake)
 add_subdirectory(EngineBridge)
 include(EngineBridge/JP01PhysicsLua.cmake)
@@ -327,6 +329,7 @@ endif()
 if(TARGET RenegadeStudioCI)
     add_dependencies(RenegadeStudioCI
         RenegadeRiverUnderwaterTests
+        RenegadeRiverTerrainFollowProof
         RenegadeRiverSplineTests
         RenegadeRiverFoamTests
         RenegadeRiverFlowFieldTests
@@ -378,4 +381,17 @@ if(TARGET RenegadeStudioCI)
         RenegadeRuntimeInventorySessionTests
         RenegadeWorldPickupControllerTests
     )
+endif()
+
+if(TARGET RenegadeStudioCI AND TARGET RenegadeRuntimeSceneTransitionTests)
+    add_dependencies(RenegadeStudioCI RenegadeRuntimeSceneTransitionTests)
+endif()
+
+if(TARGET RenegadeStudioCI AND TARGET RenegadeGpuUploadBufferTests)
+    add_dependencies(RenegadeStudioCI RenegadeGpuUploadBufferTests)
+endif()
+
+# CTest registration alone does not build a test in the explicit CI aggregate.
+if(TARGET RenegadeStudioCI AND TARGET RenegadeNativeWindowSurfaceTests)
+    add_dependencies(RenegadeStudioCI RenegadeNativeWindowSurfaceTests)
 endif()

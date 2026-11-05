@@ -1,3 +1,4 @@
+import os
 """Equipment creation, hand compatibility and explicit assignment guidance."""
 import json
 from pathlib import Path
@@ -12,7 +13,7 @@ class EquipmentWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.repo=Path(__file__).resolve().parents[2]
-        cls.db=cls.repo/"BUILD/assistant_knowledge.sqlite"
+        cls.db=Path(os.environ.get("RENEGADE_KNOWLEDGE_TEST_DB", str(Path(os.environ.get("RENEGADE_KNOWLEDGE_TEST_DB", str(cls.repo / "BUILD/assistant_knowledge.sqlite"))))))
 
     def answer(self,q):
         return verified_workflow(q,self.repo,self.db)

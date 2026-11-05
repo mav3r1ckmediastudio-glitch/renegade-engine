@@ -13,6 +13,8 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <thread>
+#include "json.hpp"
 
 namespace
 {
@@ -39,6 +41,118 @@ namespace
     constexpr float Epsilon = 0.00001f;
     constexpr const char* TerrainHeightFloorOriginalKey =
         "renegade.terrain.authored-floor-original";
+
+    constexpr const char* TerrainGeneratorRangeKey =
+        "renegade.terrain.generator-range-reference.v1";
+
+    // Affine rebasing preserves the original generator's absolute heights.
+    // Existing chunks are never regenerated; later rings evaluate the same
+    // height function inside the new encoding interval.
+    bool RebaseGeneratorRange(wi::scene::Scene& scene,wi::terrain::Terrain& terrain,
+        float targetMinimum)
+    {
+        using Json=nlohmann::json;
+        auto* meta=scene.metadatas.GetComponent(terrain.terrainEntity);
+        float baseMinimum=terrain.bottomLevel,baseMaximum=terrain.topLevel;
+        std::size_t first=terrain.modifiers.size();
+        bool hasPair=meta && meta->string_values.has(TerrainGeneratorRangeKey);
+        try
+        {
+            if (hasPair)
+            {
+                const auto state=Json::parse(meta->string_values.get(TerrainGeneratorRangeKey));
+                baseMinimum=state.at("minimum").get<float>();
+                baseMaximum=state.at("maximum").get<float>();
+                first=state.at("first").get<std::size_t>();
+                const auto encoded=state.at("encoded_minimum").get<float>();
+                if (first > terrain.modifiers.size() ||
+                    terrain.modifiers.size()-first != 2 ||
+                    !std::isfinite(encoded) || encoded>=baseMaximum ||
+                    baseMaximum!=terrain.topLevel) return false;
+                for (std::size_t i=0;i<2;++i)
+                {
+                    const auto& modifier=terrain.modifiers[first+i];
+                    if (!modifier || modifier->type!=wi::terrain::Modifier::Type::Heightmap)
+                        return false;
+                    const auto* value=static_cast<const wi::terrain::HeightmapModifier*>(modifier.get());
+                    const auto blend=i==0 ? wi::terrain::Modifier::BlendMode::Multiply
+                        : wi::terrain::Modifier::BlendMode::Additive;
+                    const float expected=i==0 ? (baseMaximum-baseMinimum)/(baseMaximum-encoded)
+                        : (baseMinimum-encoded)/(baseMaximum-encoded);
+                    if (value->blend!=blend || value->width!=1 || value->height!=1 ||
+                        value->frequency!=0 || value->amount!=1 || value->data.size()!=1 ||
+                        value->data[0]!=255 || !std::isfinite(value->weight) ||
+                        std::abs(value->weight-expected)>.00001f) return false;
+                }
+            }
+            else if (meta && meta->string_values.has(TerrainHeightFloorOriginalKey))
+                baseMinimum=std::stof(meta->string_values.get(TerrainHeightFloorOriginalKey));
+        }
+        catch (...) {return false;}
+        if (!std::isfinite(baseMinimum) || !std::isfinite(baseMaximum) ||
+            baseMinimum>=baseMaximum || !std::isfinite(targetMinimum) ||
+            targetMinimum>=baseMaximum) return false;
+        if (targetMinimum==baseMinimum)
+        {
+            if (hasPair)
+            {
+                terrain.modifiers.resize(first);
+                meta->string_values.erase(TerrainGeneratorRangeKey);
+            }
+            return true;
+        }
+        auto make=[&](wi::terrain::Modifier::BlendMode blend,float weight) {
+            auto modifier=wi::allocator::make_shared<wi::terrain::HeightmapModifier>();
+            modifier->width=modifier->height=1;modifier->data={255};
+            modifier->amount=1;modifier->frequency=0;modifier->blend=blend;modifier->weight=weight;
+            return modifier;
+        };
+        auto multiply=make(wi::terrain::Modifier::BlendMode::Multiply,
+            (baseMaximum-baseMinimum)/(baseMaximum-targetMinimum));
+        auto add=make(wi::terrain::Modifier::BlendMode::Additive,
+            (baseMinimum-targetMinimum)/(baseMaximum-targetMinimum));
+        if (hasPair) terrain.modifiers.resize(first);
+        terrain.modifiers.push_back(std::move(multiply));
+        terrain.modifiers.push_back(std::move(add));
+        if (!meta) meta=&scene.metadatas.Create(terrain.terrainEntity);
+        meta->string_values.set(TerrainGeneratorRangeKey,Json{
+            {"minimum",baseMinimum},{"maximum",baseMaximum},{"first",first},
+            {"encoded_minimum",targetMinimum}}.dump());
+        return true;
+    }
+
+    bool CompleteNativeTerrainRing(wi::scene::Scene& scene,wi::terrain::Terrain& terrain,
+        std::string& error)
+    {
+        const auto side=std::size_t(renegade::bridge::TerrainChunkCountPerSide(terrain.generation));
+        const auto expected=side*side;
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+        wi::scene::CameraComponent camera;
+        for (;;)
+        {
+            if (!terrain.IsGenerationStarted() || !terrain.modifiers_to_remove.empty())
+            {error="Finish terrain initialisation before expanding";return false;}
+            for (auto id:terrain.materialEntities)
+                if (const auto* material=scene.materials.GetComponent(id);
+                    material && material->IsDirty())
+                {error="Finish applying terrain material changes before expanding";return false;}
+            terrain.Generation_Update(camera); // native publication and generation; never restart
+            while (terrain.IsGenerationBusy())
+            {
+                if (std::chrono::steady_clock::now()>=deadline)
+                {terrain.Generation_Cancel();error="Terrain expansion exceeded its generation deadline";return false;}
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            bool ready=terrain.chunks.size()==expected;
+            if (ready)
+                for (const auto& item:terrain.chunks)
+                    if (item.second.invalidated || !scene.meshes.Contains(item.second.entity))
+                    {ready=false;break;}
+            if (ready) return true;
+            if (std::chrono::steady_clock::now()>=deadline)
+            {error="Terrain expansion did not publish a complete resident ring";return false;}
+        }
+    }
 
     bool NearlyEqual(float left, float right) noexcept
     {
@@ -690,17 +804,32 @@ namespace renegade::bridge
 
         ApplyTerrain(terrain, state, false);
 
-        // Wicked generates unmodified terrain at bottomLevel. Renegade keeps the
-        // useful negative sculpt envelope, but the creator-facing world reference
-        // is Y=0. Lift the terrain root once at creation so bottomLevel maps to
-        // world zero without changing Wicked terrain internals or losing valleys.
-        if (auto* rootTransform = scene.transforms.GetComponent(entity))
+        // A new flat landscape must start at world Y=0 *inside* its encoded
+        // height range. Use Wicked's serialized native heightmap modifier as a
+        // constant generation input: it applies to every chunk, including chunks
+        // generated by later ring expansion or a regeneration after reopening.
+        // Unlike a root offset or post-generation vertex edit, the terrain's
+        // root stays at zero and the -20 m carving envelope remains usable.
+        // This is added ONLY during new creation; existing WISCENE landscapes
+        // are loaded unchanged, with their original transforms and modifiers.
+        if (terrain.bottomLevel <= 0.0f && terrain.topLevel > 0.0f)
         {
-            rootTransform->translation_local.y = -terrain.bottomLevel;
-            rootTransform->SetDirty();
-            rootTransform->UpdateTransform();
+            auto flatHeight = wi::allocator::make_shared_single<wi::terrain::HeightmapModifier>();
+            flatHeight->width = 1;
+            flatHeight->height = 1;
+            flatHeight->data = {255};
+            flatHeight->amount = 1.0f;
+            flatHeight->frequency = 0.0f; // world-independent sample (0,0)
+            flatHeight->blend = wi::terrain::Modifier::BlendMode::Normal;
+            flatHeight->weight = -terrain.bottomLevel / (terrain.topLevel - terrain.bottomLevel);
+            terrain.modifiers.push_back(flatHeight);
         }
 
+        // At local zero Wicked's altitude rules would seed procedural grass
+        // with an unconfigured material. New Renegade terrain starts bare;
+        // InitializeWickedVegetation enables native grass when the creator
+        // first paints, then owns the persisted manual chunk masks.
+        terrain.SetGrassEnabled(false);
         RestartTerrainGeneration(terrain);
         return entity;
     }
@@ -1007,98 +1136,201 @@ namespace renegade::bridge
         return true;
     }
 
-    ExpandTerrainCommand::ExpandTerrainCommand(
-        wi::scene::Scene& scene,
-        const wi::ecs::Entity terrainEntity)
-        : scene_(&scene)
-        , terrainEntity_(terrainEntity)
+    struct ExpandTerrainCommand::State
     {
-        const auto* terrain = scene.terrains.GetComponent(terrainEntity);
-        if (terrain != nullptr && !terrain->IsCenterToCamEnabled() &&
-            !terrain->IsRemovalEnabled())
+        TerrainSculptState before;
+        wi::unordered_map<wi::terrain::Chunk,wi::terrain::ChunkData> retained;
+        wi::Archive archive;
+        std::vector<wi::ecs::Entity> roots;
+        wi::vector<wi::allocator::shared_ptr<wi::terrain::Modifier>> modifiers;
+        std::string generatorRange;
+        bool hadGeneratorRange = false;
+        bool retainedReady = false;
+        bool applied = false;
+        std::shared_ptr<std::string> errorReport;
+    };
+
+    ExpandTerrainCommand::ExpandTerrainCommand(
+        wi::scene::Scene& scene,const wi::ecs::Entity terrainEntity,
+        std::shared_ptr<std::string> errorReport)
+        :scene_(&scene),terrainEntity_(terrainEntity),state_(std::make_shared<State>())
+    {
+        state_->errorReport=std::move(errorReport);
+        const auto* terrain=scene.terrains.GetComponent(terrainEntity);
+        if (terrain && !terrain->IsCenterToCamEnabled() && !terrain->IsRemovalEnabled())
         {
-            beforeRadius_ = terrain->generation;
-            afterRadius_ = std::min(
-                beforeRadius_ + 1,
-                MaximumTerrainChunkRadius);
+            beforeRadius_=terrain->generation;
+            afterRadius_=std::min(beforeRadius_+1,MaximumTerrainChunkRadius);
         }
     }
 
     bool ExpandTerrainCommand::Execute()
     {
-        return afterRadius_ > beforeRadius_ && ApplyExpandedRadius();
+        error_.clear();
+        bool applied=false;
+        if (afterRadius_<=beforeRadius_)
+            error_="Terrain is already at the maximum supported extent";
+        else applied=ApplyExpandedRadius();
+        if (state_->errorReport) *state_->errorReport=error_;
+        state_->applied=applied;
+        return applied;
+    }
+
+    void ExpandTerrainCommand::RemoveOuterRing(bool retain)
+    {
+        auto* terrain=scene_->terrains.GetComponent(terrainEntity_);
+        if (!terrain) return;
+        terrain->Generation_Cancel();
+        terrain->generation=beforeRadius_;
+        // Publish a just-finished native batch before removing its outer ring.
+        // Using the smaller radius prevents another outer batch from starting.
+        bool canPublish=terrain->IsGenerationStarted() && terrain->modifiers_to_remove.empty();
+        for (auto id:terrain->materialEntities)
+            if (const auto* material=scene_->materials.GetComponent(id);
+                material && material->IsDirty()) canPublish=false;
+        if (canPublish)
+        {
+            wi::scene::CameraComponent camera;
+            terrain->Generation_Update(camera);
+            terrain->Generation_Cancel();
+        }
+        std::vector<wi::ecs::Entity> candidates;
+        if (retain) {state_->retained.clear();state_->roots.clear();}
+        for (const auto& entry:terrain->chunks)
+        {
+            const auto distance=std::max(
+                std::abs(std::int64_t(entry.first.x)-terrain->center_chunk.x),
+                std::abs(std::int64_t(entry.first.z)-terrain->center_chunk.z));
+            if (distance<=beforeRadius_) continue;
+            for (auto id:{entry.second.entity,entry.second.grass_entity,entry.second.props_entity})
+                if (id!=wi::ecs::INVALID_ENTITY && EntityExists(*scene_,id) &&
+                    std::find(candidates.begin(),candidates.end(),id)==candidates.end())
+                    candidates.push_back(id);
+            if (retain)
+            {
+                auto saved=entry.second;
+                saved.vt={};saved.mesh_vertex_positions=nullptr;
+                if (saved.entity!=wi::ecs::INVALID_ENTITY && !EntityExists(*scene_,saved.entity))
+                    saved.entity=wi::ecs::INVALID_ENTITY;
+                state_->retained.emplace(entry.first,std::move(saved));
+            }
+        }
+        std::vector<wi::ecs::Entity> roots;
+        for (auto id:candidates)
+        {
+            bool child=false;
+            for (auto other:candidates)
+                if (id!=other && scene_->Entity_IsDescendant(id,other)) {child=true;break;}
+            if (!child) roots.push_back(id);
+        }
+        if (retain)
+        {
+            state_->roots=roots;
+            state_->archive.SetReadModeAndResetPos(false);
+            state_->archive << std::uint64_t(roots.size());
+            wi::ecs::EntitySerializer serializer;
+            for (auto id:roots) scene_->Entity_Serialize(state_->archive,serializer,id);
+            state_->retainedReady=true;
+        }
+        for (auto it=terrain->chunks.begin();it!=terrain->chunks.end();)
+        {
+            const auto distance=std::max(
+                std::abs(std::int64_t(it->first.x)-terrain->center_chunk.x),
+                std::abs(std::int64_t(it->first.z)-terrain->center_chunk.z));
+            if (distance<=beforeRadius_) {++it;continue;}
+            if (it->second.vt) it->second.vt->free(terrain->atlas);
+            it=terrain->chunks.erase(it);
+        }
+        for (auto id:roots) scene_->Entity_Remove(id);
+    }
+
+    bool ExpandTerrainCommand::RestoreOuterRing()
+    {
+        if (!state_->retainedReady) return true;
+        auto* terrain=scene_->terrains.GetComponent(terrainEntity_);
+        for (const auto& item:state_->retained)
+            if (terrain->chunks.find(item.first)!=terrain->chunks.end())
+            {error_="Expansion history conflicts with a resident outer chunk";return false;}
+        for (auto id:state_->roots)
+            if (EntityExists(*scene_,id))
+            {error_="Expansion history conflicts with an existing entity";return false;}
+        state_->archive.SetReadModeAndResetPos(true);
+        std::uint64_t count=0;state_->archive >> count;
+        if (count!=state_->roots.size()) return false;
+        wi::ecs::EntitySerializer serializer;serializer.allow_remap=false;
+        for (auto id:state_->roots)
+            if (scene_->Entity_Serialize(state_->archive,serializer)!=id) return false;
+        terrain=scene_->terrains.GetComponent(terrainEntity_);
+        for (const auto& item:state_->retained)
+        {
+            auto saved=item.second;saved.vt={};
+            if (const auto* mesh=scene_->meshes.GetComponent(saved.entity))
+                saved.mesh_vertex_positions=mesh->vertex_positions.data();
+            terrain->chunks.emplace(item.first,std::move(saved));
+        }
+        return true;
     }
 
     void ExpandTerrainCommand::Undo()
     {
-        if (scene_ == nullptr)
+        if (!state_->applied || !scene_ || !scene_->terrains.Contains(terrainEntity_)) return;
+        if(auto* gpu=wi::graphics::GetDevice())gpu->WaitForGPU();
+        RemoveOuterRing(true);
+        state_->applied=false;
+        auto* terrain=scene_->terrains.GetComponent(terrainEntity_);
+        if (!state_->before.chunks.empty())
+            (void)ApplyTerrainSculpt(*scene_,*terrain,state_->before);
+        terrain->modifiers=state_->modifiers;
+        if (auto* meta=scene_->metadatas.GetComponent(terrainEntity_))
         {
-            return;
-        }
-        auto* terrain = scene_->terrains.GetComponent(terrainEntity_);
-        if (terrain == nullptr)
-        {
-            return;
-        }
-
-        terrain->Generation_Cancel();
-        for (auto it = terrain->chunks.begin(); it != terrain->chunks.end();)
-        {
-            const int distance = std::max(
-                std::abs(it->first.x - terrain->center_chunk.x),
-                std::abs(it->first.z - terrain->center_chunk.z));
-            if (distance > beforeRadius_)
-            {
-                if (it->second.vt != nullptr)
-                {
-                    it->second.vt->free(terrain->atlas);
-                }
-                if (it->second.entity != wi::ecs::INVALID_ENTITY)
-                {
-                    scene_->Entity_Remove(it->second.entity);
-                }
-                it = terrain->chunks.erase(it);
-                continue;
-            }
-            ++it;
-        }
-        terrain->generation = beforeRadius_;
-        if (terrain->IsPhysicsEnabled() && !terrain->IsCenterToCamEnabled())
-        {
-            terrain->physics_generation = std::max(
-                terrain->physics_generation, beforeRadius_ + 1);
+            if (state_->hadGeneratorRange)
+                meta->string_values.set(TerrainGeneratorRangeKey,state_->generatorRange);
+            else meta->string_values.erase(TerrainGeneratorRangeKey);
         }
     }
 
     bool ExpandTerrainCommand::ApplyExpandedRadius()
     {
-        if (scene_ == nullptr)
-        {
-            return false;
-        }
-        auto* terrain = scene_->terrains.GetComponent(terrainEntity_);
-        if (terrain == nullptr || terrain->generation != beforeRadius_ ||
-            terrain->IsCenterToCamEnabled() || terrain->IsRemovalEnabled())
-        {
-            return false;
-        }
-        // A lowered R16 encoding floor preserves existing chunk world
-        // positions, but Wicked would generate NEW chunks at that lower
-        // baseline. Block ring expansion instead of silently introducing
-        // a 10m cliff at the old boundary. The marker is serialized, so
-        // a save/reopen cannot bypass this compatibility guard.
-        const auto* meta = scene_->metadatas.GetComponent(terrainEntity_);
-        if (HasRiverTerrainLayers(*scene_, terrainEntity_) || (meta != nullptr &&
-            meta->string_values.has(TerrainHeightFloorOriginalKey)))
-            return false;
+        if (!scene_) return false;
+        auto* terrain=scene_->terrains.GetComponent(terrainEntity_);
+        if (!terrain || terrain->generation!=beforeRadius_ ||
+            terrain->IsCenterToCamEnabled() || terrain->IsRemovalEnabled() ||
+            beforeRadius_<1 || afterRadius_>MaximumTerrainChunkRadius)
+        {error_="Terrain extent changed outside expansion history";return false;}
         terrain->Generation_Cancel();
-        terrain->generation = afterRadius_;
+        if(auto* gpu=wi::graphics::GetDevice())gpu->WaitForGPU();
+        const bool layered=HasRiverTerrainLayers(*scene_,terrainEntity_);
+        if (layered && !ValidateRiverTerrainLayers(*scene_,terrainEntity_,error_)) return false;
+        state_->before=layered ? CaptureTerrainSculpt(*scene_,*terrain) : TerrainSculptState{};
+        state_->modifiers=terrain->modifiers;
+        const auto* meta=scene_->metadatas.GetComponent(terrainEntity_);
+        state_->hadGeneratorRange=meta && meta->string_values.has(TerrainGeneratorRangeKey);
+        state_->generatorRange=state_->hadGeneratorRange
+            ? meta->string_values.get(TerrainGeneratorRangeKey) : std::string{};
+        if (!RebaseGeneratorRange(*scene_,*terrain,terrain->bottomLevel))
+        {error_="Terrain generator range reference is invalid";return false;}
+        terrain->generation=afterRadius_;
         if (terrain->IsPhysicsEnabled())
+            terrain->physics_generation=std::max(terrain->physics_generation,afterRadius_+1);
+        const bool restored=RestoreOuterRing();
+        terrain=scene_->terrains.GetComponent(terrainEntity_);
+        const bool complete=restored && (!layered || CompleteNativeTerrainRing(*scene_,*terrain,error_));
+        if (complete && (!layered ||
+            ExtendRiverTerrainCoverage(*scene_,terrainEntity_,beforeRadius_,error_)))
+            return true;
+        RemoveOuterRing(false);
+        terrain=scene_->terrains.GetComponent(terrainEntity_);
+        if (!state_->before.chunks.empty())
+            (void)ApplyTerrainSculpt(*scene_,*terrain,state_->before);
+        terrain->modifiers=state_->modifiers;
+        if (auto* current=scene_->metadatas.GetComponent(terrainEntity_))
         {
-            terrain->physics_generation = std::max(
-                terrain->physics_generation, afterRadius_ + 1);
+            if (state_->hadGeneratorRange)
+                current->string_values.set(TerrainGeneratorRangeKey,state_->generatorRange);
+            else current->string_values.erase(TerrainGeneratorRangeKey);
         }
-        return true;
+        if (error_.empty()) error_="Terrain expansion failed without committing";
+        return false;
     }
 
     TerrainSculptState CaptureTerrainSculpt(
@@ -1348,6 +1580,8 @@ namespace renegade::bridge
         // against the expanded vertical interval. Never restart the
         // background terrain generator or invalidate terrain chunks.
         const float priorMinimum = terrain.bottomLevel;
+        if (!RebaseGeneratorRange(scene,terrain,requestedMinimumHeight)) return false;
+        metadata=scene.metadatas.GetComponent(terrain.terrainEntity);
         terrain.bottomLevel = requestedMinimumHeight;
         for (auto& [coordinate, chunk] : terrain.chunks)
         {
@@ -1697,6 +1931,11 @@ namespace renegade::bridge
                 next += (flattenHeight - next) * std::min(weight, 1.0f);
                 break;
             }
+            // The brush must keep its live mesh and Jolt shape inside the
+            // same envelope as the serialized R16 heightmap. Texture-only
+            // clamping would otherwise change the authored shape on reopening.
+            // River composition retains its separate fail-closed range check.
+            next = std::clamp(next, terrain.bottomLevel, terrain.topLevel);
             if (!NearlyEqual(next, vertex.height))
             {
                 nextHeights.emplace(key, next);

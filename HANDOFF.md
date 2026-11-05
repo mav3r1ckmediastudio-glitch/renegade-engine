@@ -1,5 +1,30 @@
 ## 2026-11-01: Combined pre-alpha CI target correction
 
+## Recovery: hosted 361 river proof warm-up (2026-11-02)
+
+Parent 9591 passed local 305/305 and the new upload allocator regression passed
+hosted Debug/Release. The river proof timed out because fixed full software draws
+consumed its 600-second budget before linking. A separate local WARP/four-CPU
+candidate passed every original assertion, GPU readback and save/reopen in 218s.
+The hosted path now generates through normal scene updates before bounded native
+GPU draws. Desktop presentation, all assertions and 600-second timeout stay intact.
+See docs/RECOVERY_HOSTED_RIVER_PROOF_2026-11-02.md. Final successor CI/package
+acceptance remains required; use PR/VALIDATION for the exact accepted source.
+Owner currently reports no terrain darkness; retain the earlier report as a watch item.
+
+
+## Recovery: coherent-UMA upload allocation (2026-11-02)
+
+The parent 7896 local Release 304/304 pass did not cover the hosted WARP failure:
+Studio Debug CI rejected an UPLOAD backing buffer with a UAV flag. Direct native
+DX12 negative/positive reproduction confirms E_INVALIDARG for the old descriptor.
+The generated renderer overlay removes only the illegal UPLOAD flag and preserves
+DEFAULT UAV support. See docs/RECOVERY_UMA_UPLOAD_CORE_DECISION_2026-11-02.md.
+New native GPU allocator regression and complete successor validation are required;
+PR receipts/VALIDATION identify the accepted source. The 7896 package is blocked,
+not shipped. Terrain darkness remains unreproduced/unrepaired.
+
+
 Owner authorizes local/GitHub feature synchronization and pre-alpha preparation.
 Candidate parent de9fa6edd81529490204500091cb3037a2d92f7a combines accepted
 Weather V2 with main's rivers, waterfalls and inventory. Wicked remains pinned
@@ -7260,7 +7285,7 @@ Read docs/WEATHER_V2_G4_DENSE_CLOUD_PERFORMANCE_INVESTIGATION_2026-10-30.md. Own
 
 ## 2026-10-30: Measured G4 performance optimization candidate ready for owner
 
-Read docs/WEATHER_V2_G4_PERFORMANCE_OPTIMIZATION_REVIEW_2026-10-30.md and core decision. Owner explicitly authorized higher-risk optimization. CPU skips unused preview/capsule checks and uses a tested frame-local Player Start cache with fresh live transforms/invalidation. Separate Renegade sky lighting/reflection cache128 + half integration intervals; primary cloud sampling/density/lightning/rain/snow/audio unchanged. Controlled Runtime75.38->95.76 FPS horizon,74.89->93.48 up35 at90% coverage; cache pass5.7->2.9ms. Dense editor screenshot63 FPS versus previous48-50, but optimized-editor CSV is excluded due Runtime-camera/filename collision, so no precise editor CPU claim. Frozen sky mean delta0.0757/255, not universal parity.11/11 regressions pass and final normal Release builds pass. Both discarded shader-admission hoist and diagnostics removed. Original saved scene and all9 WAV hashes verified. Prior diagnostic PID15216/work preserved/minimized; separate normal-review project/launcher provided. Exact final identity in BUILD/g4-critical-source-manifest.json. No commit/push/merge or performance signoff; owner reviews normal all-effects scene, motion/night/reflections/FPS next.
+Read docs/WEATHER_V2_G4_PERFORMANCE_OPTIMIZATION_REVIEW_2026-10-30.md and core decision. Owner explicitly authorized higher-risk optimization. CPU skips unused preview/capsule checks and uses a tested frame-local Player Start cache with fresh live transforms/invalidation. Separate Renegade sky lighting/reflection cache128 + half integration intervals; primary cloud sampling/density/lightning/rain/snow/audio unchanged. Controlled Runtime75.38->95.76 FPS horizon,74.89->93.48 up35 at 90% coverage; cache pass5.7->2.9ms. Dense editor screenshot63 FPS versus previous48-50, but optimized-editor CSV is excluded due Runtime-camera/filename collision, so no precise editor CPU claim. Frozen sky mean delta0.0757/255, not universal parity.11/11 regressions pass and final normal Release builds pass. Both discarded shader-admission hoist and diagnostics removed. Original saved scene and all9 WAV hashes verified. Prior diagnostic PID15216/work preserved/minimized; separate normal-review project/launcher provided. Exact final identity in BUILD/g4-critical-source-manifest.json. No commit/push/merge or performance signoff; owner reviews normal all-effects scene, motion/night/reflections/FPS next.
 
 Final normal smoke: new Studio42896 shows65 FPS with authored rain; its real Test Game child5596 shows75 FPS at1920x1009 on the primary75-Hz display. Both left open. Earlier diagnostic15216 preserved/minimized. These are on-screen observations, not full all-effects timing quantiles. Exact final digest6a632022e6ec0f28553a7f1fe3f9ae02e6e06b56596d7b51afd774d9e34fb7d1. Editor75FPS goal remains open; owner checks new visual/reflection quality next. No source or build changes after11/11 passed.
 
@@ -7526,3 +7551,265 @@ Owner approved repaired recessed G11 river bank and G13 waterfall appearance in 
 Current-source four builds PASS: Release Studio, Release Runtime, Debug Runtime, Debug Studio (all MSBuild 18 after waterfall changes). Full Release CTest **280/280 PASS**, exit 0, using real E: build cwd with short `TEMP=TMP=E:\RenegadeTestTmp`; previous 12 long-path packaging fixtures and stale projectile test resolved without weakening tests. Debug waterfall targeted geometry/mixed-bank tests also PASS; corrected combined fixture authoring proof compiles Release.
 
 See `docs/INVENTORY_RIVER_INTEGRATION_VALIDATION_2026-10-28.md` and `BUILD/integration-evidence` for exact logs, scene backups, test commands and DX12 captures. Runtime screen previously left open on DESIGN. Next action requires owner direction: no GitHub CI can validate these uncommitted changes until a commit/PR is explicitly approved; **do not merge**. The full UI Designer audit is a separate follow-up.
+
+
+## 2026-11-01 Critical recovery continuation — unaccepted work
+
+Work remains isolated on recovery/20261101-repair-implementation; no merge, push or redistribution. Preserve all inherited dirty importer/assistant changes and the dirty imnodes submodule.
+
+River default-terrain failure was independently reproduced in Studio: 361 resident chunks exceeded the backend's 81 limit. The uncommitted repair retains the 81 changed-chunk budget, adds bounded sparse schema 2 composition/persistence with full resident coverage hashes, supports schema 1 migration, and preserves work/payload/transform/completeness limits. Underwater suffix reads support v2. Inspector displays actual Link errors. No approved water shaders or below-terrain surface offset changed.
+
+Serial Studio/Runtime Release build, 361-chunk default-recovery proof, legacy flat-nodescale migration proof, RiverSplineTests and RiverUnderwaterTests passed. Native proof covers width/move history, masks, external-edit rejection, cold hydration and underwater volumes. Actual Studio draw/floor extension/Link produced a visible carved river. Full Studio history/reopen/Test Game acceptance remains incomplete.
+
+Owner reports river working but editor FPS regression (roughly 53 with river/player, 64 terrain-only; Test Game 75). Player preview collapse did not recover FPS. Added profiler ranges in StudioApplication.cpp for investigation only. Separate saved-scene CPU timings are under 0.1 ms for river/underwater/waterfall checks, but live Studio timings disagree; cause not established. Owner also reproduced dark terrain clearing on reload; not repaired. Do not blindly restore prior reverted VT changes.
+
+Read-only host investigation found repeated corrected processor-core internal parity WHEA errors on an i9-13900K, including earlier today. This is a credible separate hardware stability concern, not proof that hardware caused the FPS loss. No BIOS/voltage/affinity changes made.
+
+External recovery evidence/progress pack contains checkpoints, native logs and actual Studio screenshots. Original distributed ZIP and original QA project preserved. Owner-edited disposable QA revisions backed up before saves/restarts. Importer/assistant GUI verification, grass-blackening repair and broader lost-functionality audit are still open. Compilation and native proof do not establish visual acceptance.
+
+### Performance finding correction — 2026-11-01 23:08 UTC
+The suspected river/build idle-FPS regression is superseded by a controlled environment finding. Windows IFEO Full PageHeap remains enabled for the ordinary RenegadeStudio.exe image (GlobalFlag 0x02000000, PageHeapFlags 0x3, 64-bit and WOW6432Node keys). The initial old/new comparison used a renamed old executable and was confounded. SAME instrumented candidate binary under a review filename restores 75 FPS terrain-only; its ordinary name measured approximately 64-71. Native profiler stage timings under review name also return to ~0.02-0.04 ms for river/waterfall checks, matching the separate probe, instead of ~2 ms each. This is diagnostic heap overhead, not proof of a CPU-caused FPS loss. Hardware WHEA warnings remain separate.
+
+The historical G11F continuity note already records this condition and requires owner-approved administrator action before cleanup. Registry has NOT been changed; its values were preserved read-only. Use the documented same-binary review approach for current performance tests and explicitly record verifier status. River/player scene performance and dark terrain are still being checked. No accepted feature or engine safety check disabled.
+
+### Recovery continuation — 2026-11-02 weather scene selection
+Owner accepts recovered OBJ and75FPS Studio/TestGame. Terrain darkness remains unproven/unrepaired after actual painted and persisted-grass erase cases did not reproduce; owner also currently cannot reproduce. Earlier default-grass WindowsGameBuildProjectService relocation fix operates on a detached packaging scene and does not change live VT/BVH shading.
+Owner supplied accepted G3 Storm versus scattered white clouds in current QA. Confirmed actual Cloud formation Inspector was Legacy (saved scene). G3 presets intentionally preserve independent formation; missing cloud metadata resolves to legacy density branch. Changing through normal Inspector to Cumulus immediately restored dense Weather V2 clouds in same recovery review executable, without source/build changes. Saved QA scene and cold ReopenScene retains Cumulus. Owner noon time restored after reversible night comparison. Actual native TestGame child displayed dense V2 cloud cover/rain and75FPS, readiness confirmed true with no warning. Evidence and exact device paths are in the external recovery audit progress report, not committed here. No claim of exact original scene lighting or owner visual reacceptance.
+Embedded cloud/sky shader arrays compared against accepted G5 build: all32 selected DX12/Vulkan variants identical; entire dump differs elsewhere. Current clean Wicked82557d4 includes accepted c0cb547 repairs. Do not roll back shaders or alter legacy scenes/preset independence blindly. No weather production source edit or compile was needed for scene correction. Protected backups, original ZIP, owner source projects and inherited uncommitted repairs preserved; no merge/push/distribution.
+
+### Recovery alpha preparation - owner authorised 2026-11-02
+Owner explicitly authorises a new PR, GitHub CI repairs until green and a versioned recovery alpha after verification. Main remains unmerged. Current source includes bounded default-terrain riverbed schema2 repair, recovered OBJ/material workflow and packaged assistant identity/routing. Protected source snapshots and prior ZIPs remain untouched. Source/knowledge regressions pass; full Release aggregate build is in progress. Actual Studio river history/reopen/TestGame and weather persistence evidence is recorded on the precommit source; final exact-revision/package checks remain mandatory.
+Added packaged-knowledge CTest registration and four passing release archive guard cases. Tools/Package-RecoveryAlpha.py stages current source/native outputs, rebuilds Gitless knowledge identity, preserves inherited private runtime/media, hashes shipped files and requires exact-source four-check CI plus package smoke receipts. It excludes generated profiles/logs from archive membership and refuses stale receipts, changed files, recursive ZIP output and existing archive overwrite. Tester instructions, backwards compatibility and open darkness issue are in docs/releases/RECOVERY_ALPHA_2026-11-02.md; importer feature ledger updated.
+Additional fixes and final commands/results will be recorded in PR comments and this handoff. Dirty unused imnodes/vcpkg example is preserved and excluded from the root commit; dependency pins unchanged. No independent-review or full visual acceptance claim.
+
+Recovery CI coverage follow-up: the 361-chunk default-recovery native proof previously required a manual invocation. Added RenegadeRiverDefaultTerrainRecovery to CTest and its executable to the RenegadeStudioCI build graph. It checks changed-footprint locality and payload budget, link and node/root history, grass/paint preservation, external-edit rejection, underwater volumes and serialized default-terrain reopening. Hosted execution and final exact-head full-suite results remain pending. No test skip or safety-limit change.
+
+Packaging review follow-up: stage evidence paths from every assistant JSON definition, including existing manual/workflow guides, not only fact cards. This preserves prior governed guide source fingerprints in the Git-free package. Private startup media sizes in the current build match the previous distribution; actual cold onboarding still required.
+
+Recovery broad-assistant regression discovery: focused river tests missed stale existing workflow fingerprints. First standalone83-test run also lacked its expected generated DB; a rebuilt index removed setup failures, leaving83 failing assertions and10 errors. Twenty-eight workflow records were reviewed: controls retained, but whole-file hashes were stale and two shared GLB/FBX picker markers no longer matched restored OBJ. Revalidated full-source evidence, updated static OBJ/missing-map guidance and retained existing UI acceptance caveats. Registry now explicitly uses canonical UTF-8/LF whole-file hashes so Git checkout line-ending conversion does not revoke valid guides; other content changes still revoke, with a Git-free end-to-end line-ending/tamper regression. No trust check disabled.
+The complete suite now gets an isolated generated database through AssistantWorkflowSuite.py and is registered in CTest. Updated fixed curated-fact counts for four new cards. One stale projectile source assertion was updated to the existing Storm exception and invalid-policy repair visibility; projectile production source unchanged. Final suite/CI outcomes follow in PR comments.
+
+Broad assistant repair verification: AssistantWorkflowSuite.py completed84/84 on DESIGN, including LF/CRLF equivalent-guide preservation and semantic source-tamper rejection. Extended AssistantPackagedKnowledgeTests also passes identity/river/waterfall routes and existing Git-free OBJ/projectile workflows; post-package source mutation revokes guidance. The test SQLite connection is explicitly closed for Windows cleanup. Actual packaged Electron onboarding/chat is still pending; these are offline/service tests.
+
+Package provenance guard: staging now refuses Studio/Runtime binaries that do not embed the selected exact source revision, tracked Wicked modifications and tracked ImNodes source changes. The unused nested vcpkg example remains preserved. All five release package guard tests pass, including stale native revision rejection. Explicit final-head configure/build is required before staging.
+
+Actual companion routing gap found before packaging: Electron chat/verified-knowledge.js lacked river/waterfall/tributary terms even though the Python bridge had been repaired. Restored client classification and OBJ load routing in both layers; registered a client HTTP/offline regression in CTest when Node is installed. Actual askQwenStream in learned mode, with a real source knowledge bridge and unavailable model fallback, returned verified river draw/link, waterfall and OBJ guidance. Social/greeting and existing verified-knowledge Node tests pass when their required bridge is running. River bridge6/6, Git-free old/new workflow tests and complete84/84 assistant suite pass again. Scope text now describes source-verified controls without hard-coded assertions that the previous alpha is the current release; no unsupported visual acceptance claim. Electron UI/package first-run tests remain pending.
+
+### Recovery alpha initial importer review follow-up — 2026-11-02
+
+Final source review found the material/map selection callbacks ran before the newly prepared candidate was installed. Because opening the importer resets the previous candidate, both initial callbacks returned without populating map details and source warnings; changing a dropdown later masked the defect. Install the candidate before firing selection callbacks so the first review displays the current source. This changes presentation initialisation only; source conversion/retained dependencies/commit safety are unchanged. Current whole-file workflow fingerprints were refreshed after checking their anchors. Actual packaged Studio initial-map/warning verification remains required, as do final-head native tests and CI.
+
+### Recovery alpha WD01 protected contract follow-up — 2026-11-02
+
+The full 301-case CTest run exposed a stale literal in the grass-input source contract: the existing recovery profiling scope around river drawing changed const bool riverConsumed into a scoped assignment. Inspection confirmed vegetation finalisation still runs before river handling, sun preview, shortcuts and UI early returns. Update only that exact expected profiling pattern; retain all source-order and UI-ownership checks. A copied-source positive proof passes, and a valid-code negative fixture moving grass finalisation below the UI early-return paths is rejected. The native source is unchanged by this follow-up. Final-head full CTest, all four CI checks and actual packaged grass/input verification remain required.
+
+### Recovery alpha river proof diagnostics/repeatability — 2026-11-02
+
+Full local Release CTest completed 300/301 passing; the only failure was the WD01 literal described above. The native default-361 proof passed in 23.57 seconds. GitHub Debug hit its 180-second river-proof deadline; the adapter/stage was not flushed before termination, so a slow operation versus graphics stall was not yet established. Add flushed stage/adapter/elapsed diagnostics and a bounded 600-second Debug deadline while retaining Release at 180 seconds and every production safety/data/GPU assertion. No terrain reduction or rendering-feature bypass is introduced. Use a fresh timestamp/nonce evidence directory for each CTest invocation; preserve the executable refusal to overwrite any previous output and preserve all prior run evidence. Final CI timings must be inspected before claiming this timeout resolved.
+
+The CI workflow explicitly declares hosted headless graphics. Unlike the existing importer graphics proof (native offscreen render/readback), the new default-terrain proof used Application::Run and desktop swapchain presentation for every warm-up frame. Add an explicit hosted-offscreen frame loop for that existing environment flag only, following the importer lifecycle and retaining all native scene/render/submit/readback/data checks. Owner hardware without that flag keeps Application::Run unchanged. Adapter/frame-mode/stage logs and successful CI are required to establish whether this resolves the observed hosted timeout; no claim of an engine FPS repair is made.
+
+Both desktop-presentation and hosted-offscreen native default-361 frame-mode preflights passed on DESIGN; the offscreen case completed in 20.57 seconds with all existing assertions. Two-run evidence, old scene/PNG hash preservation and native overwrite refusal exit 2 are recorded in ALPHA_RIVER_FRAME_MODES_20261102_030443. These are source/test preflights, not packaged Studio acceptance or a claim that hosted CI has passed.
+
+### Recovery alpha portable runtime layout correction — 2026-11-02
+
+Exact ec8 native build and all 301 local CTest cases passed (zero skipped/disabled). Actual staging then exposed a packaging assumption not covered by the five initial archive guards: the approved previous ZIP has no development node_modules directory. Its launcher directly executes bundled Electron, Node, Python and llama binaries; package.json has only Electron as a devDependency and no production npm dependencies. Preserve the failed partial stage and original archive. Replace the incorrect folder requirement with nonempty-file checks for the actual portable executables, model/voice/STT assets and license directory. Add positive portable-layout-without-node_modules and per-required-file missing/empty rejection cases. This corrects the validator to the real approved layout; it does not fabricate an empty dependency directory or waive runtime availability. Actual bundled Electron probing, new exact-head CI/native checks and packaged onboarding/UI acceptance remain required.
+
+Portable-layout follow-up preflight: all seven package guard tests pass, including a module-free positive layout and each missing/empty runtime rejection. The actual preserved partial payload satisfies all 14 required-file checks. Its real bundled Electron 38.4.0 / Node 22.20.0 executed a separate isolated probe and loaded the built-in Electron API successfully without node_modules; receipt PORTABLE_ELECTRON_PROBE_20261102_041831. This is runtime/layout evidence only; actual packaged companion/onboarding remains pending.
+
+### 2026-11-02 hosted native river proof diagnostics
+
+CI at ec8fc871 separated two failures: Release initialised in 578 ms, generated all 361 chunks in 140 seconds on Microsoft Basic Render Driver, and passed link/history checks before the 180-second process deadline. Debug never completed component initialisation within 600 seconds. The proof now reports locked backlog snapshots and atomic initializer flags every 30 seconds while startup is pending; hosted CRT assertions write to stderr and remain fatal instead of opening an unattended dialog. No initializer or river assertion is bypassed. Both configurations use a bounded 600-second proof deadline, retaining 361 chunks and every safety/data/GPU/history/save/reopen check. The Debug stall cause remains unconfirmed until these diagnostics run; this is not a claim that it is repaired.
+
+### 2026-11-02 alternating OBJ material runs
+
+Additional audit independently reproduced A/B/A faces becoming A/B/B in the native importer: the material registry reused an earlier material but indices/counts continued accumulating in the last subset. Preserve one subset per contiguous material run, sharing the original material entity. A separate native executable linked to the unmodified importer failed the geometry/material assertion with exit 42; the patched translation unit passed all three associations with exit 0. Evidence: OBJ_SUBSET_PROBE_20261102_050839/trials.json and native-before-clean.log/native-after.log. The first diagnostic harness faulted after reporting its expected failure because it did not drain pending renderer pipeline creation; the preserved original log is not an importer-crash claim. The corrected harness drains those jobs before GPU shutdown. Added native reliability coverage checks A/B/A after import, committed-asset preparation, scene save/reopen, retained-source cold reimport, and cold asset preparation. Full-suite, actual Studio and final-package results remain separate acceptance requirements.
+
+### 2026-11-02 missing playback endpoint during native startup
+
+427404d Debug CI exposed a fatal CreateMasteringVoice assertion at pinned wiAudio.cpp:104 before terrain creation (0.50-second failure instead of a 600-second modal wait). The Renegade-owned CMake overlay handles only HRESULT_FROM_WIN32(ERROR_NOT_FOUND), the documented no-default-output case, as unavailable native audio; the original success flag stays false and every other failed HRESULT retains its assertion/error handling. The Wicked gitlink and source files stay unchanged. Native fault injection reproduced the original missing-device assertion; the patched source exited 0 with unavailable/not-ready audio, while injected E_FAIL still asserted. Evidence: AUDIO_ENDPOINT_PROBE_20261102_055202/trials.json. Two CTest cases compile the generated production source with a test-only replacement of that API call, force assertions active for the negative control even in Release, and verify recovery versus fatal failure. No runtime fault switch or device/registry change ships. Actual owner audio and complete Debug/Release CI remain required. Microsoft API reference: https://learn.microsoft.com/en-us/windows/win32/api/xaudio2/nf-xaudio2-ixaudio2-createmasteringvoice
+
+
+## 2026-11-02 packaged recovery follow-up: relocation and late scene adoption
+
+Actual packaged Studio preflight on the preserved 427 payload found two further blockers. Build Windows Game rejected old-install grassparticle.png references; an independent native archive inspection also found the river normal tied to the earlier install. Normal Title > Main Menu > New Game > Start then crashed Runtime with 0xC0000005. A symbol-enabled relink of 3232 Runtime objects independently reproduced GraphicsDevice_DX12::ClearUAV -> VolumetricClouds_Capture -> UpdateRenderDataAsync.
+
+The export collector now shares CPU-only built-in rebinding with the detached staging cooker. Managed grass identity comes from the persisted terrain metadata/component entity (the transient terrainEntity is not initialised during detached archive inspection); native rivers require their spline, WATER material and native-caustics marker. Relocated grass/normal references require their built-in destination suffix and matching retained/on-disk bytes from the current declared asset. Same-basename custom maps, modified bytes and unrelated external materials remain subject to the existing fail-closed dependency rules. Grass particle/template resources are explicit hashed Runtime support. No creator archive is rewritten by discovery/cooking.
+
+RuntimeApplication processes queued screen actions after its native Update. A Start/quick-load/script scene change at this boundary must not render the newly adopted scene before its first normal scene update. RuntimeRenderPath fences PreRender/Render by the completed scene revision, retaining the last completed frame for this boundary. It does not disable clouds, alter authored weather, run a duplicate GUI update or advance gameplay twice.
+
+Regression coverage: WindowsGameBuildProjectTests adds relocation, immutable owner archives, package-local names, missing old installation with retained bytes, changed and same-basename custom maps. RuntimeSceneTransitionTests uses the actual RuntimeRenderPath and native DX12 resources to adopt a cloud-enabled scene between Update and PreRender/Render, verifies the boundary, then checks successful enabled-cloud frames. It is part of RenegadeStudioCI and unfiltered CTest. Targeted/native/CI/actual packaged results must be recorded against their exact final commit in PR #189 and VALIDATION.json; this entry alone is not acceptance. Terrain darkness remains unreproduced/unrepaired.
+
+Preserved diagnostic evidence: audit receipt IDs ALPHA_EXPORT_PROBE_20261102_062724, ALPHA_RUNTIME_CRASH_20261102_063555 and BUNDLED_EXPORT_FIX_DRAFT_20261102_063433 (full locations and hashes are in PR #189 and the local recovery audit). Protected owner work and prior package were not replaced. No merge or distribution is authorised by these tests.
+
+Pre-integration evidence: 3232 Release build and 303/303 unfiltered CTest passed (0 skipped; 743.90 seconds). Separate native export regression passed. Separate actual RuntimeRenderPath graphics regression passed, then two read-only inspections of the saved QA archives rebased all old-install references with unchanged input SHA-256. These are pre-integration results; final exact-head CI, full CTest and actual packaged Studio/Runtime/export acceptance remain required.
+
+Integrated precommit Studio and Runtime Release builds passed. The complete offline assistant suite remained 84/84. A diagnostic Runtime using the repaired production classes completed normal Title > Main Menu > New Game > Start into the preserved river/storm QA level; the owned-window capture showed visible water, clouds, rain, HUD and 75 FPS without the previous access violation. These diagnostic executables are excluded from the alpha manifest. Reproduction commands: `cmake --build <build> --config Release --target RenegadeStudio RenegadeRuntime --parallel 1`; `python Tests/AssistantWorkflowSuite.py --repo <checkout> --output <new-audit-directory>`. Native graphics and archive commands, executable/input hashes and screenshots are in the linked PR audit receipts.
+
+## Native window surface follow-up - 2026-11-02
+
+The e12bc01 baseline reached four green CI checks and local 305/305, but actual packaged Studio crashed on a 0x0 render-target allocation during minimize/restore. Package acceptance remains blocked for that baseline. See docs/RECOVERY_NATIVE_WINDOW_SURFACE_2026-11-02.md and PR189 for the dump attribution, bounded Windows binding repair and targeted evidence.
+
+Changed: Studio/src/main_Windows.cpp, Runtime/src/main_Windows.cpp, EngineBridge/include/renegade/bridge/NativeWindowSurface.h, Tests/NativeWindowSurfaceTests.cpp, Tests/CMakeLists.txt and recovery documentation. No Wicked source or pin change.
+
+Precommit verification: Studio/Runtime Release builds passed; new real Win32 regression passed; all 59 SourceContract tests passed; original-basename Studio survived 5 minimize/restore cycles and two true zero-height client states, with restored Project Hub visually checked. This does not replace final-head validation.
+
+Next: finish river/importer/grass/weather/runtime/export/assistant regression checks, run full 306 local tests and all four CI jobs on the final head, test the staged package, create and freshly extract/launch its archive. Preserve all existing work/backups; no main merge or external distribution. The terrain-darkness report is currently unreproduced and is not claimed repaired. Independent exact-head review remains pending.
+
+## CI dependency correction and owner regression acceptance - 2026-11-02
+
+The 4ae6904 Studio Debug job reached CTest but could not find RenegadeNativeWindowSurfaceTests.exe. The test was registered but omitted from RenegadeStudioCI's explicit build dependencies. The earlier local preflight explicitly built the test, masking this integration error.
+
+CMakeLists.txt now adds the missing dependency. Verification used the actual Release RenegadeStudioCI aggregate after preserving and moving the existing regression executable out of its output directory. The aggregate regenerated it; the regenerated test passed; all 306 registered Release test commands had existing executables. Application and test source trees are unchanged by this correction. No test exclusion, safety-limit change or timeout increase was used.
+
+The owner manually completed the listed regression tasks and reported all passed, explicitly including river editing and grass deletion. Retain these as owner-reported acceptance; do not repeat their manual regression work. Terrain darkness remains currently unreproduced, not a claimed targeted repair. No current UI interaction is authorised by this CI correction.
+
+Next: validate the final commit's CI and local results, preserve owner acceptance evidence, prepare the package, then perform its integrity and fresh-launch checks. Do not merge main or distribute without the owner's instruction.
+
+
+## Studio cold-build job budget correction - 2026-11-02
+
+Release run 41456794306 was cancelled by the 90-minute workflow job budget, not a reported compiler error or CTest assertion. Its uploaded logs show configuration at 13:54:22 UTC, aggregate build at 13:55:21, and CTest beginning at 15:13:10: 77m49s compilation. The first 216 tests completed (254.28s summed test durations); the default-361 river proof was still running when the job was cancelled at 15:23:43, before its own 600-second deadline. Debug in the same run passed 295 tests, with 996.36s total CTest time and 447.91s river proof, then passed startup. Local exact-4f907b5 configure/build/full CTest also passed.
+
+Increase only the workflow job budget from 90 to a bounded 120 minutes, allowing measured cold compilation plus complete validation and packaging. Keep the actual aggregate, all tests, the 180-second default and 600-second river deadlines, engine safety limits and application/test source unchanged. Pre-push checks: exact diff restricted to this workflow budget/comment and handoff; workflow structural validation; unchanged application/test/tooling tree hashes. Final four-check CI must be recorded against the resulting commit before any success claim. Owner manual regression passes remain accepted; UI interaction stays paused. No main merge or distribution.
+
+## 2026-11-02 terrain initialization and reproduced Player Start darkness repair — OPEN
+
+Continue recovery/20261101-repair-implementation at 6c59d2a, preserving inherited
+uncommitted work, dirty imnodes, protected backups and owner sessions.
+No main merge or alpha distribution authorized.
+
+New terrain repair uses a native serialized constant HeightmapModifier at an
+identity root: initial and expansion surfaces are zero inside -20..120 metres.
+Existing archives are not migrated. Sculpt mesh heights now clamp before R16
+encoding. New terrain starts bare, and manual vegetation synchronization waits
+for actual merged chunk meshes before caching completion.
+
+Release aggregate built; targeted terrain/river tests passed 5/5. First full
+Release CTest passed 305/307; two stale source contracts required the retired
+root-offset assignment and old two-argument vegetation call. They were updated
+to require the new native surface reference and completed-chunk gate, retaining
+all previous safety checks. Full post-change validation remains pending.
+
+Owner reproduced dark chunk patches again and identified Player Start. An
+isolated native probe reproduced the exact visual corruption by preparing and
+rendering PlayerCameraPreviewService, without Test Game. All 1,444 source terrain
+texture bindings changed through shared mutable wi::Resource wrappers; negative
+probe exited 42. Private preview chunk wrappers repair the cause: same probe
+exited 0 with zero changed bindings and intact inspected after-capture.
+A three-rebuild regression is now part of TerrainInitializationRecovery.
+The previous "unreproduced/unrepaired" darkness status is superseded by this
+reproduction and native candidate fix, not by final Studio acceptance.
+
+Current owner-used Studio is the earlier RenegadeStudio-terrain-review.exe
+(alias hash BF0B8CC4...35F28). It does not contain the preview repair.
+Leave its unsaved work intact. Latest Release aggregate is rebuilding to include
+the preview repair; do not mistake an earlier normal-name binary for this source.
+
+Exact receipts, negative/fixed native captures, preserved saved scene copies and
+logs are in TERRAIN_INIT_PRESERVE_20261102_215658 under the external recovery audit.
+Mandatory canonical HANDOFF and ARCHITECTURE full reading completed during this
+continuation; earlier production edits preceded that completion, now recorded
+candidly. Remaining gates: final full suite, fresh actual Studio draw/link without
+floor extension, sculpt/limits, width/node history, unlinked expansion, cold
+process reopen, Player Start preview/reselection/Test Game return, collisions,
+standalone, old-level copies and original-file hash comparison. Do not close
+acceptance on native proof alone. See docs/TERRAIN_INITIALIZATION_RECOVERY_2026-11-02.md.
+
+## 2026-11-03: Terrain initialization and Player Start preview - local verification PASS, release OPEN
+
+This supersedes the pending local checks in the preceding terrain recovery entry.
+The implementation is based on 6c59d2a on recovery/20261101-repair-implementation.
+No main merge or alpha distribution is authorized. Independent release review stays OPEN.
+
+Final ordinary Studio hash:
+A443C2C54D269C6EBBDEDCD9076ECCF9DC8B4071D61049F6236CB05E7382D1B1.
+Runtime hash:
+F648F308BE9747464CB68817E713675D5153DDDAFE16FDE3F149C13E0306EB14.
+The final aggregate leaves both hashes identical to the actual tested binaries.
+
+Release RenegadeStudioCI aggregate PASS; final unfiltered Release CTest 307/307,
+zero skips, 207.59 s. This includes the strengthened preview regression after
+sculpt/paint/expansion, checking 1,764 bindings and clone encoded heights across
+three rebuilds. Original failing terrain and preview baselines remain preserved.
+
+Actual Studio PASS: new governed default 361-chunk terrain at zero inside
+-20..120; draw/Link at 1.35 m without Allow Deeper Beds; base and node-width
+history; Lower below zero and sustained floor clamp at -20; exact sculpt
+Undo/Redo; unlinked expansion 361/441 with Undo/Redo and all inner R16 maps
+unchanged. Cold process reopening preserves expanded sculpt and linked river
+with node width 18. Player preview stays textured before/after Test Game and
+cold reopening. Test Game and standalone actual-project Title/MainMenu/NewGame
+walks cross the channel and reach the far bank.
+
+Cold grid Jolt contact errors: river 0.002945 m, sculpt floor 0.004150 m.
+An extra sub-cell ray at the steep stress-pit edge differs by 0.097260 m, exactly
+matching the original bridge/pinned physics. Keep that strict probe failure as
+an existing limitation; do not claim exact collision parity everywhere or alter
+Wicked physics merely to make it green.
+
+Old level 5/9 native comparisons preserve original transforms/heights. The
+older linked-river/grass project COPY opens visibly with grass/rain and linked
+state; its UI resave keeps the original root, range, heights, masks and river
+layer hashes. Original owner files/backups: 145/145 unchanged. Inherited imnodes
+diff is unchanged. Unrelated caches/logs and owner interim session are retained.
+
+New docs: docs/TERRAIN_INITIALIZATION_RECOVERY_2026-11-02.md contains the complete
+result table, hashes, commands, performance caveats and known limitation.
+Architecture, terrain guidance and affected assistant fingerprints were updated;
+no feature exposure or release gate is newly marked complete.
+
+Receipts remain outside source control in TERRAIN_INIT_PRESERVE_20261102_215658.
+The final source should be pushed once for four-check CI; historical 6c59d2a green
+checks and the existing alpha do not accept the new repair. Record final commit
+and CI results externally; no result-only CI restart, main merge or alpha build.
+
+### Exact implementation revision
+
+Implementation and local verification source revision:
+89a7a731cfe2dd65ed12c903559070ba3dad306b.
+
+The following handoff-only commit records that immutable source identifier before
+the single CI push. It changes no application, test, guidance or dependency code.
+Final PR-head SHA, CI run URLs/status and evidence hashes belong in the external
+audit receipt. Keep main and alpha distribution blocked pending owner approval.
+
+
+## 2026-11-03: Hosted terrain regression timeout repair
+
+The first four-check run on ae045c35cbed13ec3e511eea52547441e468be15
+passed Windows baseline Debug/Release but failed both Studio configurations.
+Both applications compiled. The sole failing CTest in each was the new
+RenegadeTerrainInitializationRecovery at its existing 600-second timeout on
+Microsoft Basic Render Driver. RenegadeRiverDefaultTerrainRecovery passed in
+both configurations (Release 412.26 s; Debug 483.98 s).
+
+The new initialization helper rasterized the full scene during every settling
+tick. Native data, uploads, generation and physics now settle through native
+updates on hosted graphics. Full-resolution source captures and each preview
+render have separate bounded cases; every case still performs all three preview
+rebuilds, twelve updates per rebuild, all 1,764 binding checks and every authored
+sculpt/R16, grass, expansion, history and cold-collision assertion. Desktop mode
+retains the full presentation path. Terrain extent, renderer quality, 960x640
+configuration and the 600-second per-test deadline are unchanged.
+
+The original initialization case captures the source before/after the complete
+preview sequence. RenegadeTerrainPreviewRender0Recovery through Render2Recovery
+render the corresponding preview; they also retain all three native rebuilds.
+The Release suite now contains 310 tests. This is test scheduling only: no
+application behavior, Wicked source/pin, OS graphics setting or safety limit
+changes. Studio and Runtime remain byte-identical to the earlier UI-tested
+binaries. The two-thread exploratory candidate and four-thread combined-render
+candidate are retained externally; the latter still timed out during its third
+preview draw and is not a passing receipt.
+
+Local WARP validation uses an audit-only driver translation unit outside the
+checkout: real EnumWarpAdapter selection and software-adapter acceptance, with
+all remaining pinned driver code unchanged. Process affinity is scoped to each
+proof process. The negative executable substitutes only the preserved old
+PlayerCameraPreviewService header and must fail the terrain-atlas assertion.
+Receipts are under CI_TERRAIN_INITIALIZATION_TIMEOUT_20261103 in the recovery
+audit. Final local results and the next exact-head four-check run are recorded
+there; neither historical local success nor these fixture changes close the
+independent release gate. Main merge and another alpha distribution still
+require owner approval.

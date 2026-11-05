@@ -1,3 +1,4 @@
+import os
 """Task-driven knowledge regression: practical how-tos versus isolated facts."""
 import json
 from pathlib import Path
@@ -12,7 +13,7 @@ class GuidedWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.repo=Path(__file__).resolve().parents[2]
-        cls.db=cls.repo/"BUILD/assistant_knowledge.sqlite"
+        cls.db=Path(os.environ.get("RENEGADE_KNOWLEDGE_TEST_DB", str(Path(os.environ.get("RENEGADE_KNOWLEDGE_TEST_DB", str(cls.repo / "BUILD/assistant_knowledge.sqlite"))))))
 
     def test_create_new_projectile_is_a_real_walkthrough(self):
         answer=bridge.knowledge_reply("how do i create a new projectile?",self.repo,self.db)

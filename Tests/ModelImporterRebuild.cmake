@@ -51,3 +51,30 @@ foreach(fbx_fixture IN ITEMS static_textured_cube static_embedded_cube animated_
         FIXTURES_REQUIRED ${fbx_fixture}
         TIMEOUT 180 WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeModelImporterRebuildGraphicsProof>")
 endforeach()
+
+add_test(NAME RenegadeModelImportReliability
+    COMMAND RenegadeModelImporterRebuildGraphicsProof --audit-importer
+        "${CMAKE_SOURCE_DIR}/Tests/fixtures/Importer/external_uri_triangle.glb"
+        "${CMAKE_BINARY_DIR}/model-import-reliability-proof"
+    CONFIGURATIONS Release)
+set_tests_properties(RenegadeModelImportReliability PROPERTIES
+    FIXTURES_SETUP importer_reliability TIMEOUT 300
+    WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeModelImporterRebuildGraphicsProof>")
+add_test(NAME RenegadeModelImportReliabilityColdReopen
+    COMMAND RenegadeModelImporterRebuildGraphicsProof --audit-importer-reopen
+        "${CMAKE_SOURCE_DIR}/Tests/fixtures/Importer/external_uri_triangle.glb"
+        "${CMAKE_BINARY_DIR}/model-import-reliability-proof"
+    CONFIGURATIONS Release)
+set_tests_properties(RenegadeModelImportReliabilityColdReopen PROPERTIES
+    FIXTURES_REQUIRED importer_reliability TIMEOUT 180
+    WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeModelImporterRebuildGraphicsProof>")
+
+add_test(NAME RenegadeModelImportSnapshotColdReopen
+    COMMAND RenegadeModelImporterRebuildGraphicsProof --inspect-snapshot-path
+        "${CMAKE_BINARY_DIR}/model-import-reliability-proof/runtime-snapshot-path.txt"
+        "${CMAKE_BINARY_DIR}/model-import-reliability-proof"
+    CONFIGURATIONS Release)
+set_tests_properties(RenegadeModelImportSnapshotColdReopen PROPERTIES
+    FIXTURES_REQUIRED importer_reliability
+    DEPENDS RenegadeModelImportReliabilityColdReopen TIMEOUT 180
+    WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeModelImporterRebuildGraphicsProof>")

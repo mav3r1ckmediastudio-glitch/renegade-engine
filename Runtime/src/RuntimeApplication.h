@@ -132,6 +132,15 @@ namespace renegade::runtime
         std::vector<XMFLOAT2> projectileContacts_;
         float hitConfirmSeconds_ = 0;
         std::uint64_t renderSettingsSceneRevision_ = 0;
+        // Screen actions and quick-load can adopt a scene after native Update.
+        // Its resources become renderable only after its own completed update.
+        std::uint64_t updatedSceneRevision_ = 0;
+        bool sceneUpdated_ = false;
+        [[nodiscard]] bool SceneReadyForRender() const noexcept
+        {
+            return sceneUpdated_ && scenes_ != nullptr &&
+                updatedSceneRevision_ == scenes_->Revision();
+        }
     };
 
     class RuntimeApplication final : public wi::Application

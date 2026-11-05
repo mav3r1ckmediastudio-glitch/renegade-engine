@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <memory>
 #include <vector>
 
 #include <WickedEngine.h>
@@ -187,17 +188,22 @@ namespace renegade::bridge
     class ExpandTerrainCommand final : public ICommand
     {
     public:
-        ExpandTerrainCommand(
-            wi::scene::Scene& scene,
-            wi::ecs::Entity terrainEntity);
+        ExpandTerrainCommand(wi::scene::Scene& scene,wi::ecs::Entity terrainEntity,
+            std::shared_ptr<std::string> errorReport = {});
         bool Execute() override;
         void Undo() override;
+        const std::string& Error() const noexcept {return error_;}
     private:
+        struct State;
         bool ApplyExpandedRadius();
+        void RemoveOuterRing(bool retain);
+        bool RestoreOuterRing();
         wi::scene::Scene* scene_ = nullptr;
         wi::ecs::Entity terrainEntity_ = wi::ecs::INVALID_ENTITY;
         int beforeRadius_ = 0;
         int afterRadius_ = 0;
+        std::shared_ptr<State> state_;
+        std::string error_;
     };
 
     enum class TerrainSculptMode { Raise, Lower, Smooth, Flatten };

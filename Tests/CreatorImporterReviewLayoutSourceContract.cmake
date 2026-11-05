@@ -42,7 +42,7 @@ require_text(importer_header
 # Static assets keep the compact layout; Characters expand the same native
 # importer and expose real clip/action controls rather than a painted panel.
 require_text(importer
-    "modelImportPanel_.SetSize(XMFLOAT2(560.0f, character ? 990.0f : 750.0f));"
+    "modelImportPanel_.SetSize(XMFLOAT2(1040.0f, character ? 990.0f : 750.0f));"
     "static/Character adaptive panel height")
 require_text(importer
     "modelImportName_.SetPos(XMFLOAT2(110.0f, character ? 740.0f : 500.0f));"

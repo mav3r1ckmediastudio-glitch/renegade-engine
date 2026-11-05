@@ -406,3 +406,12 @@ add_custom_command(TARGET RenegadeStudio POST_BUILD
       "${CMAKE_SOURCE_DIR}/Runtime/Content/weather/thunder"
       "$<TARGET_FILE_DIR:RenegadeStudio>/Content/weather/thunder"
     COMMENT "Install nine Renegade thunder SFX with 3D variants in Studio")
+
+
+# Native rocky riverbed material must hydrate without a source checkout.
+add_custom_command(TARGET RenegadeStudio POST_BUILD
+    COMMAND "${CMAKE_COMMAND}"
+        "-DRENEGADE_ROCKY_SOURCE=${CMAKE_SOURCE_DIR}/Content/terrain/riverbed/rocky_rugged"
+        "-DRENEGADE_ROCKY_OUTPUT=$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/riverbed/rocky_rugged"
+        -P "${CMAKE_SOURCE_DIR}/cmake/StageRockyRiverbed.cmake"
+    VERBATIM)

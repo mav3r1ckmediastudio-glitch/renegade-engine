@@ -1,3 +1,4 @@
+import os
 """Native static-model import guidance and adjacent-task exclusions."""
 import json
 from pathlib import Path
@@ -12,7 +13,7 @@ class StaticImportWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.repo=Path(__file__).resolve().parents[2]
-        cls.db=cls.repo/"BUILD/assistant_knowledge.sqlite"
+        cls.db=Path(os.environ.get("RENEGADE_KNOWLEDGE_TEST_DB", str(Path(os.environ.get("RENEGADE_KNOWLEDGE_TEST_DB", str(cls.repo / "BUILD/assistant_knowledge.sqlite"))))))
 
     def answer(self,q):
         return verified_workflow(q,self.repo,self.db)
@@ -20,6 +21,7 @@ class StaticImportWorkflowTests(unittest.TestCase):
     def test_import_phrasings(self):
         for q in ["How do I import a static model?",
                   "How do I import a GLB?",
+                  "How do I import an OBJ model?",
                   "How do I import an FBX model?",
                   "How do I bring in a model?",
                   "How do I load a 3D object?",
@@ -44,8 +46,7 @@ class StaticImportWorkflowTests(unittest.TestCase):
                                     "external animation" in a.split("\n",1)[0])
 
     def test_unavailable_native_picker_formats_are_not_promoted(self):
-        for q in ["How do I import an OBJ model?",
-                  "How do I import a GLTF model?",
+        for q in ["How do I import a GLTF model?",
                   "How do I import a Blender file as a model?",
                   "How do I import a model from a Unitypackage?",
                   "How do I import a model ZIP?"]:

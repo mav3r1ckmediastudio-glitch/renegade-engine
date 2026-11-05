@@ -30,6 +30,12 @@ namespace renegade::bridge
     [[nodiscard]] bool SetRiverTerrainLayer(wi::scene::Scene& scene,
         wi::ecs::Entity terrainEntity, wi::ecs::Entity riverEntity,
         float depth, float bankWidth, bool enabled, std::string& error);
+    // Expansion calls these inside the same scene-safe transaction. Only the
+    // newly generated outer ring may extend coverage; existing hashes stay strict.
+    [[nodiscard]] bool ValidateRiverTerrainLayers(wi::scene::Scene& scene,
+        wi::ecs::Entity terrainEntity,std::string& error);
+    [[nodiscard]] bool ExtendRiverTerrainCoverage(wi::scene::Scene& scene,
+        wi::ecs::Entity terrainEntity,int previousRadius,std::string& error);
     [[nodiscard]] bool RecomposeRiverTerrainLayers(wi::scene::Scene& scene,
         wi::ecs::Entity terrainEntity, std::string& error);
     [[nodiscard]] bool ReadRiverTerrainBaseline(wi::scene::Scene& scene,

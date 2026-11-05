@@ -11,7 +11,14 @@
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/SelectionService.h"
 #include "renegade/bridge/RiverFlowRenderer.h"
+#include "renegade/bridge/PlaceableWaterfallRenderer.h"
+#include "../EngineBridge/src/PlaceableWaterfallAuthoring.h"
+#include "TerrainInitializationProof.h"
+#include "TerrainPlayerPreviewProof.h"
+#include "MaximumTerrainRiverProof.h"
 
+#include "../WickedEngine/Editor/json.hpp"
+#include "renegade/bridge/RiverUnderwaterService.h"
 #include <Windows.h>
 #include <algorithm>
 #include <cmath>
@@ -25,6 +32,14 @@
 #include <memory>
 #include <stdexcept>
 #include <vector>
+#include <cstdio>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#ifdef _MSC_VER
+#include <crtdbg.h>
+#include <cstdlib>
+#endif
 
 namespace fs = std::filesystem;
 using namespace renegade::bridge;
@@ -99,7 +114,8 @@ static std::uint64_t GrassAndPaintDigest(const wi::terrain::Terrain& terrain)
 
 int main(int argc, char** argv)
 {
-    if (argc != 2 && argc != 3) return 2;
+
+    if (argc != 2 && argc != 3 && argc != 4 && argc != 5) return 2;
     const auto out = fs::u8path(argv[1]);
     if (fs::exists(out) && !fs::is_empty(out))
     {
@@ -112,9 +128,75 @@ int main(int argc, char** argv)
         GetModuleHandleW(nullptr), nullptr);
     wi::Application app;
     app.allow_hdr = false;
+    const auto proofStarted = std::chrono::steady_clock::now();
+    const auto progress = [&](const char* stage) {
+        std::cout << "RIVER_PROOF_STAGE " << stage << " elapsed_ms="
+            << std::chrono::duration<double,std::milli>(
+                std::chrono::steady_clock::now()-proofStarted).count() << std::endl;
+    };
+    const char* hostedFlag = std::getenv("RENEGADE_HOSTED_HEADLESS_GRAPHICS");
+    const bool hosted = hostedFlag && std::strcmp(hostedFlag,"1") == 0;
+    if (hosted)
+    {
+        // CI has no interactive desktop. Report assertions instead of waiting
+        // for a modal CRT dialog; assertion failures still terminate the test.
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+#ifdef _MSC_VER
+        _set_error_mode(_OUT_TO_STDERR);
+#ifdef _DEBUG
+        _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+        _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+        _CrtSetReportHook([](int type, char* message, int*) -> int {
+            if (type == _CRT_ASSERT || type == _CRT_ERROR)
+            {
+                std::fputs(message ? message : "CRT assertion failure", stderr);
+                std::fflush(stderr);
+                std::abort();
+            }
+            return 0;
+        });
+#endif
+#endif
+    }
+    progress("device-create");
     app.SetWindow(window);
-    wi::initializer::InitializeComponentsImmediate();
+    progress("device-created");
+    {
+        // Diagnostics only: use atomic component flags and the backlog's locked
+        // snapshot to distinguish a modal failure from a slow renderer bootstrap.
+        // Do not skip initializers, ignore assertions, or synthesize readiness.
+        std::mutex diagnosticMutex;
+        std::condition_variable diagnosticWake;
+        bool finished = false;
+        std::thread diagnostic([&] {
+            std::unique_lock<std::mutex> lock(diagnosticMutex);
+            while (!diagnosticWake.wait_for(lock, std::chrono::seconds(30),
+                                            [&] { return finished; }))
+            {
+                std::cerr << "RIVER_PROOF_INITIALIZER_PENDING";
+                for (int i=0;i<wi::initializer::INITIALIZED_SYSTEM_COUNT;++i)
+                    std::cerr << " " << i << "=" <<
+                        wi::initializer::IsInitializeFinished(
+                            static_cast<wi::initializer::INITIALIZED_SYSTEM>(i));
+                std::cerr << "\nRIVER_PROOF_BACKLOG_BEGIN\n"
+                          << wi::backlog::getText()
+                          << "\nRIVER_PROOF_BACKLOG_END" << std::endl;
+            }
+        });
+        wi::initializer::InitializeComponentsImmediate();
+        {
+            std::lock_guard<std::mutex> lock(diagnosticMutex);
+            finished = true;
+        }
+        diagnosticWake.notify_one();
+        diagnostic.join();
+    }
     auto* gpu = wi::graphics::GetDevice();
+    Require(gpu != nullptr,"Native graphics device unavailable");
+    std::cout << "RIVER_PROOF_ADAPTER " << gpu->GetAdapterName() << std::endl;
+    progress("components-initialised");
     struct GPUDrain
     {
         ~GPUDrain()
@@ -125,6 +207,82 @@ int main(int argc, char** argv)
     } drain;
     try
     {
+        if(argc==3 && std::string(argv[2])=="profile-scene")
+        {
+            const char* filename=std::getenv("RENEGADE_RIVER_PROFILE_SCENE");
+            Require(filename && filename[0],"Profile scene path is required");
+            SceneService source;
+            Require(source.LoadScene(filename),"Profile scene load failed");
+            auto& sampled=source.GetScene();
+            Require(sampled.splines.GetCount()>0,"Profile scene has no river");
+            wi::scene::CameraComponent camera;
+            camera.CreatePerspective(960,640,.1f,2000.f,DirectX::XMConvertToRadians(60.f));
+            XMFLOAT3 centre{};
+            auto river=sampled.splines.GetEntity(0);
+            auto points=SampleSplineWorldPoints(sampled,river,64);
+            for(const auto& point:points){centre.x+=point.x;centre.y+=point.y;centre.z+=point.z;}
+            centre.x/=points.size();centre.y/=points.size();centre.z/=points.size();
+            camera.TransformCamera(DirectX::XMMatrixInverse(nullptr,
+                DirectX::XMMatrixLookAtLH(
+                    DirectX::XMVectorSet(centre.x,centre.y+30,centre.z-45,1),
+                    DirectX::XMVectorSet(centre.x,centre.y,centre.z,1),
+                    DirectX::XMVectorSet(0,1,0,0))));
+            camera.UpdateCamera();
+            wi::RenderPath3D render;
+            render.scene=&sampled;render.camera=&camera;render.init(960,640,96);
+            render.setMotionBlurEnabled(false);render.setDepthOfFieldEnabled(false);
+            render.ResizeBuffers();app.ActivatePath(&render);
+            struct Disarm {wi::Application& app;~Disarm(){app.ActivatePath(nullptr);}} disarm{app};
+            for(int frame=0;frame<160;++frame)app.Run();
+            gpu->WaitForGPU();
+            const auto measure=[&](const char* name,auto&& action)
+            {
+                std::vector<double> times;
+                for(int sample=0;sample<500;++sample)
+                {
+                    const auto start=std::chrono::steady_clock::now();
+                    action();
+                    times.push_back(std::chrono::duration<double,std::milli>(
+                        std::chrono::steady_clock::now()-start).count());
+                }
+                double total=0;for(auto value:times)total+=value;
+                std::sort(times.begin(),times.end());
+                std::cout<<name<<" mean_ms="<<total/times.size()
+                    <<" p95_ms="<<times[475]<<" max_ms="<<times.back()<<std::endl;
+            };
+            std::vector<placeable_waterfall::AuthoredWaterfall> waterfallRecords;
+            std::string waterfallError;
+            Require(placeable_waterfall::EnumerateWaterfalls(sampled,waterfallRecords,waterfallError),"Waterfall enumeration failed");
+            std::cout<<"PROFILE_METADATA count="<<sampled.metadatas.GetCount()<<" waterfalls="<<waterfallRecords.size()<<std::endl;
+            measure("WATERFALL_ENUMERATE",[&]{Require(placeable_waterfall::EnumerateWaterfalls(sampled,waterfallRecords,waterfallError),"Waterfall enumeration failed");});
+            PlaceableWaterfallRenderer waterfall;
+            waterfall.Prepare(sampled,1,1.f/75.f,false);
+            measure("WATERFALL_PREPARE",[&]{waterfall.Prepare(sampled,1,1.f/75.f,false);});
+            auto prisms=CaptureRiverWaterPrisms(sampled);
+            std::cout<<"PROFILE_SCENE rivers="<<sampled.splines.GetCount()
+                <<" chunks="<<(sampled.terrains.GetCount()?sampled.terrains[0].chunks.size():0)
+                <<" triangles="<<prisms.size()<<std::endl;
+            measure("CAPTURE_PRISMS",[&]{auto data=CaptureRiverWaterPrisms(sampled);Require(data.size()==prisms.size(),"Unstable static prism count");});
+            RiverUnderwaterRenderer underwater;
+            underwater.Update(render);
+            measure("UNDERWATER_UPDATE",[&]{underwater.Update(render);});
+            std::cout<<"UNDERWATER_PASSES="<<render.custom_post_processes.size()<<std::endl;
+            RiverFlowRenderer flow;
+            flow.Prepare(sampled,1,1.f/75.f,1);
+            measure("FLOW_PREPARE",[&]{flow.Prepare(sampled,1,1.f/75.f,1);});
+            for(size_t i=0;i<sampled.splines.GetCount();++i)
+            {
+                const auto id=sampled.splines.GetEntity(i);
+                RiverFlowDiagnostics diagnostics;std::string error;
+                std::cout<<"FLOW_STATUS="<<flow.Status(id);
+                if(flow.Diagnostics(id,diagnostics,error,false))
+                    std::cout<<" rebuilds="<<diagnostics.rebuilds
+                        <<" last_build_ms="<<diagnostics.lastBuildMilliseconds;
+                std::cout<<std::endl;
+            }
+            return 0;
+        }
+
         if(argc==3 && std::string(argv[2])=="g13e8-review-reopen")
         {
             // Separate-process project/flow/native terrain proof; explicitly
@@ -329,13 +487,49 @@ int main(int argc, char** argv)
             {1.0f, 1.0f, 0.96f}, 220.0f, 200.0f,
             wi::scene::LightComponent::POINT);
         TerrainState settings;
-        settings.visibleChunkRadius = 1;
-        settings.propChunkRadius = 0;
-        settings.physicsChunkRadius = 0;
-        settings.physics = false;
-        settings.minimumHeight = -20;
-        settings.maximumHeight = 40;
-        const auto terrainID = CreateTerrain(scene, settings, "Disposable Real Terrain");
+        const bool freshInitialization=argc>=3 && std::string(argv[2])=="terrain-initialization";
+        const bool maximumRecovery=argc==3 && (std::string(argv[2])=="maximum-expanded-first" ||
+            std::string(argv[2])=="maximum-linked-first");
+        const bool maximumRender=argc==5 && std::string(argv[2])=="maximum-render";
+        int previewCheckpoint=-1;
+        if(maximumRender)
+        {
+            const std::string checkpoint=argv[4];
+            Require(checkpoint=="-2" || checkpoint=="1",
+                "Invalid maximum terrain GPU checkpoint");
+            previewCheckpoint=checkpoint=="-2"?-2:1;
+        }
+        if(argc==4)
+        {
+            const std::string checkpoint=argv[3];
+            Require(freshInitialization && (checkpoint=="-1" || checkpoint=="0" ||
+                checkpoint=="1" || checkpoint=="2"),"Invalid terrain preview checkpoint");
+            previewCheckpoint=checkpoint=="-1"?-1:checkpoint[0]-'0';
+        }
+        const bool defaultRecovery=freshInitialization || maximumRecovery || maximumRender ||
+            (argc==3 && std::string(argv[2])=="default-recovery");
+        settings.visibleChunkRadius = defaultRecovery ? DefaultTerrainChunkRadius : 1;
+        if (!defaultRecovery)
+        {
+            settings.propChunkRadius = 0;
+            settings.physicsChunkRadius = 0;
+            settings.physics = false;
+            settings.minimumHeight = -20;
+            settings.maximumHeight = 40;
+        }
+        wi::ecs::Entity terrainID=wi::ecs::INVALID_ENTITY;
+        if(maximumRender)
+        {
+            SceneService fixture;
+            Require(fixture.LoadScene(argv[3]),"Maximum render fixture load failed");
+            scene.Clear();
+            scene.Merge(fixture.GetScene());
+            Require(scene.terrains.GetCount()==1,"Maximum render fixture terrain missing");
+            terrainID=scene.terrains.GetEntity(0);
+            scene.terrains[0].terrainEntity=terrainID;
+            scene.terrains[0].scene=&scene;
+        }
+        else terrainID=CreateTerrain(scene,settings,"Disposable Real Terrain");
         Require(terrainID != wi::ecs::INVALID_ENTITY,
             "native terrain creation failed");
         auto* terrain = scene.terrains.GetComponent(terrainID);
@@ -350,8 +544,13 @@ int main(int argc, char** argv)
                         "native terrain material texture is missing from GPU proof deployment");
             }
         std::cout << "NATIVE_TERRAIN_MATERIAL_RESOURCES=PASS\n";
+        // Bound draw scheduling for the new software-rendered proof while
+        // keeping the desktop, full terrain and rendering resolution unchanged.
+        const bool boundedInitialization = (freshInitialization || maximumRecovery || maximumRender) && hosted;
+        const int proofWidth = 960;
+        const int proofHeight = 640;
         wi::scene::CameraComponent camera;
-        camera.CreatePerspective(960,640,0.1f,500.0f,
+        camera.CreatePerspective(proofWidth,proofHeight,0.1f,500.0f,
             DirectX::XMConvertToRadians(60.0f));
         camera.TransformCamera(DirectX::XMMatrixInverse(nullptr,
             DirectX::XMMatrixLookAtLH(
@@ -362,7 +561,7 @@ int main(int argc, char** argv)
         wi::RenderPath3D render;
         render.scene = &scene;
         render.camera = &camera;
-        render.init(960,640,96);
+        render.init(proofWidth,proofHeight,96);
         render.setOcclusionCullingEnabled(false);
         render.setMotionBlurEnabled(false);
         render.setDepthOfFieldEnabled(false);
@@ -374,14 +573,112 @@ int main(int argc, char** argv)
             wi::Application& app;
             ~ScopedDisarm() { app.ActivatePath(nullptr); }
         } disarm{app};
-        for (int frame=0;frame<160;++frame)
+        const char* headlessFlag=std::getenv("RENEGADE_HOSTED_HEADLESS_GRAPHICS");
+        const bool hostedOffscreen=defaultRecovery && headlessFlag &&
+            std::string(headlessFlag)=="1";
+        // Hosted WARP is a software renderer. Generate the complete native
+        // terrain through normal scene updates before paying for full draws.
+        // The owner desktop keeps its original presentation/warm-up path.
+        // Both paths retain all 361-chunk, GPU readback and history assertions.
+        std::uint64_t hostedUpdateFrames = 0;
+        std::uint64_t hostedRenderFrames = 0;
+        const auto proofUpdate = [&]() {
+            wi::eventhandler::FireEvent(wi::eventhandler::EVENT_THREAD_SAFE_POINT,0);
+            render.PreUpdate();
+            render.Update(1.f/60.f);
+            gpu->SubmitCommandLists();
+            wi::renderer::UpdateGPUSuballocator();
+            ++hostedUpdateFrames;
+        };
+        const auto proofFrame = [&]() {
+            if(!hostedOffscreen) {app.Run();return;}
+            wi::eventhandler::FireEvent(wi::eventhandler::EVENT_THREAD_SAFE_POINT,0);
+            render.PreUpdate();
+            render.Update(1.f/60.f);
+            render.PreRender();
+            render.Render();
+            gpu->SubmitCommandLists();
+            wi::renderer::UpdateGPUSuballocator();
+            ++hostedRenderFrames;
+        };
+        if(maximumRender)
         {
-            app.Run();
-            if(frame%24==0) Sleep(10);
+            Require(terrain->generation==16 && terrain->chunks.size()==1089 &&
+                terrain->bottomLevel==-20.f && terrain->topLevel==120.f && scene.splines.GetCount()==3,
+                "GPU fixture is not the completed maximum three-river scene");
+            std::string error;
+            Require(ValidateRiverTerrainLayers(scene,terrainID,error),error.c_str());
+            const auto authored=CaptureTerrainSculpt(scene,*terrain);
+            for(int i=0;i<12;++i)proofUpdate();
+            gpu->WaitForGPU();terrain->Generation_Cancel();
+            auto expected=authored,actual=CaptureTerrainSculpt(scene,*terrain);
+            Require(RetainChangedTerrainSculpt(expected,actual)==0,
+                "Maximum GPU fixture changed during cold native updates");
+            // Each process pays for one full-resolution GPU checkpoint, after
+            // all three native preview rebuilds and every atlas/height assertion.
+            terrain_player_preview_proof::Run(scene,render,out,true,previewCheckpoint);
+            if(previewCheckpoint==-2)
+            {
+                proofFrame();gpu->WaitForGPU();terrain->Generation_Cancel();
+                Require(wi::helper::saveTextureToFile(render.GetRenderResult3D(),
+                    (out/"maximum-linked-rivers-after-three-previews.png").generic_u8string()),
+                    "Maximum source checkpoint capture failed");
+            }
+            expected=authored;actual=CaptureTerrainSculpt(scene,*terrain);
+            Require(RetainChangedTerrainSculpt(expected,actual)==0 &&
+                ValidateRiverTerrainLayers(scene,terrainID,error),
+                "Maximum GPU checkpoint changed authored terrain or layers");
+            std::cout<<"MAXIMUM_COLD_GPU_CHECKPOINT_PASS checkpoint="<<previewCheckpoint
+                <<" chunks="<<terrain->chunks.size()<<" bindings="
+                <<terrain_player_preview_proof::CaptureBindings(scene).size()<<std::endl;
+            return 0;
         }
-        for(int ms=0;ms<15000 && wi::renderer::IsPipelineCreationActive();ms+=25)
-            Sleep(25);
-        for(int frame=0;frame<20;++frame) app.Run();
+        if(defaultRecovery) std::cout<<"RIVER_PROOF_FRAME_MODE "
+            <<(hostedOffscreen?"hosted-offscreen":"desktop-presentation")<<std::endl;
+        if(hostedOffscreen)
+        {
+            progress("terrain-generation-updates");
+            for(int frame=0;frame<1800 && terrain->chunks.size()!=361;++frame)
+            {
+                proofUpdate();
+                if(frame%120==0)
+                    std::cout<<"RIVER_GENERATION_UPDATE "<<frame
+                             <<" chunks="<<terrain->chunks.size()
+                             <<" busy="<<terrain->IsGenerationBusy()<<std::endl;
+                Sleep(5);
+            }
+            terrain->Generation_Cancel();
+            Require(terrain->chunks.size()==361,
+                "Hosted native updates did not generate the full default terrain");
+            // Complete normal updates for the last published chunks. No data
+            // or renderer readiness is fabricated and no device flag changes.
+            for(int frame=0;frame<2;++frame) proofUpdate();
+            for(int ms=0;ms<15000 && wi::renderer::IsPipelineCreationActive();ms+=25)
+            {
+                wi::eventhandler::FireEvent(wi::eventhandler::EVENT_THREAD_SAFE_POINT,0);
+                Sleep(25);
+            }
+            progress("terrain-gpu-warmup");
+            // The initialization mode draws at its dedicated preview checkpoints.
+            if(!boundedInitialization)
+                for(int frame=0;frame<3;++frame) proofFrame();
+        }
+        else
+        {
+            if(defaultRecovery) progress("terrain-render-warmup");
+            for(int frame=0;frame<160;++frame)
+            {
+                proofFrame();
+                if(frame%24==0) Sleep(10);
+            }
+            for(int ms=0;ms<15000 && wi::renderer::IsPipelineCreationActive();ms+=25)
+                Sleep(25);
+            for(int frame=0;frame<20;++frame) proofFrame();
+            if(defaultRecovery)
+                for(int frame=0;frame<1800 && terrain->chunks.size()!=361;++frame)
+                {proofFrame();Sleep(5);}
+        }
+        if(defaultRecovery) progress("terrain-generated");
         terrain->Generation_Cancel();
         // Never rewrite source chunk buffers while a previous submitted GPU
         // frame or the generator can still own them.
@@ -392,6 +689,147 @@ int main(int argc, char** argv)
         std::cout << "TERRAIN_CHUNKS=" << chunksBefore << "\n";
 
 
+        if (defaultRecovery)
+        {
+            progress("default-361-ready");
+            Require(chunksBefore==361,"Creator-default 19x19 terrain was not generated");
+            Require(!terrain->IsGrassEnabled() && scene.hairs.GetCount() == 0,
+                "Untouched terrain generated unconfigured procedural grass");
+            const auto hit=wi::scene::Pick(wi::primitive::Ray(XMFLOAT3(0,200,0),XMFLOAT3(0,-1,0)),
+                wi::enums::FILTER_TERRAIN,~0u,scene);
+            Require(hit.entity!=wi::ecs::INVALID_ENTITY,"Default terrain picking failed");
+            const float ground=hit.position.y;
+            std::cout<<"DEFAULT_GROUND="<<ground<<" bottom="<<terrain->bottomLevel<<std::endl;
+            // Untouched production defaults: never prepare this regression with
+            // the separate Allow Deeper Beds operation. Both mesh and encoded
+            // samples must start inside the original -20..120 m envelope.
+            const auto* root = scene.transforms.GetComponent(terrainID);
+            Require(root && std::abs(root->translation_local.y) < .0001f,
+                "Fresh terrain still relies on a compensated root height");
+            Require(std::abs(ground) < .003f && terrain->bottomLevel == -20.f &&
+                terrain->topLevel == 120.f,
+                "Fresh terrain has no world-zero surface inside its default range");
+            for (const auto& entry : terrain->chunks)
+            {
+                const auto* mesh = scene.meshes.GetComponent(entry.second.entity);
+                Require(mesh && !mesh->vertex_positions.empty(),"Generated terrain mesh missing");
+                for (const auto& vertex : mesh->vertex_positions)
+                    Require(std::abs(vertex.y) < .003f,"Initial chunk is not flat at zero");
+                for (const auto encoded : entry.second.heightmap_data)
+                    Require(std::abs(-20.f + encoded * (140.f/65535.f)) < .003f,
+                        "Initial R16 sample still encodes the floor");
+            }
+            if(maximumRecovery)
+            {
+                maximum_terrain_river_proof::Run(scene,terrainID,render,out,
+                    std::string(argv[2])=="maximum-linked-first",hostedOffscreen,proofUpdate,proofFrame);
+                // Hosted preview/render coverage consumes this exact saved
+                // scene in fixture-dependent processes with separate deadlines.
+                if(!hostedOffscreen)
+                    terrain_player_preview_proof::Run(scene,render,out,false,-1);
+                return 0;
+            }
+            if (freshInitialization)
+            {
+                // Settle/generate with native updates on hosted software graphics.
+                // Rasterize at explicit checkpoints instead of every settle tick.
+                const auto initializationUpdate = [&] {
+                    if(hostedOffscreen) proofUpdate(); else proofFrame();
+                };
+                terrain_initialization_proof::Run(scene,terrainID,render,out,
+                    initializationUpdate);
+                terrain_player_preview_proof::Run(scene,render,out,hostedOffscreen,previewCheckpoint);
+                return 0;
+            }
+            RiverSplineOptions options;
+            CreateRiverSplineCommand create(scene,
+                {{-85,ground,0},{-40,ground,0},{0,ground,0},{40,ground,0},{85,ground,0}},options);
+            Require(create.Execute(),"Default river creation failed");
+            if(hostedOffscreen)
+                for(int frame=0;frame<2;++frame) proofUpdate();
+            else
+                for(int frame=0;frame<30;++frame) proofFrame();
+            gpu->WaitForGPU();terrain->Generation_Cancel();
+            const auto river=create.CreatedEntity();
+            const auto paint=GrassAndPaintDigest(*terrain);
+            const auto baseline=CaptureTerrainSculpt(scene,*terrain);
+            const auto start=std::chrono::steady_clock::now();
+            progress("link-start");
+            SetRiverTerrainLayerCommand link(scene,terrainID,river,1.35f,2.f,true);
+            if(!link.Execute())throw std::runtime_error("Default link failed: "+link.Error());
+            const auto ms=std::chrono::duration<double,std::milli>(
+                std::chrono::steady_clock::now()-start).count();
+            auto linked=CaptureTerrainSculpt(scene,*terrain);
+            auto before=baseline,after=linked;
+            Require(RetainChangedTerrainSculpt(before,after)>0,"Default link did not carve terrain");
+            Require(after.chunks.size()<81,"Local river unexpectedly changed the whole terrain");
+            Require(linked.riverLayerDocument.size()<32*1024*1024,"Payload guard exceeded");
+            std::cout<<"DEFAULT_LINK_PASS chunks="<<chunksBefore
+                <<" changed="<<after.chunks.size()<<" bytes="<<linked.riverLayerDocument.size()
+                <<" latency_ms="<<ms<<std::endl;
+            link.Undo();
+            auto undo=CaptureTerrainSculpt(scene,*terrain);before=baseline;after=undo;
+            Require(RetainChangedTerrainSculpt(before,after)==0,"Default link Undo changed baseline");
+            Require(link.Execute(),"Default link Redo failed");
+            before=linked;after=CaptureTerrainSculpt(scene,*terrain);
+            Require(RetainChangedTerrainSculpt(before,after)==0,"Default link Redo changed result");
+            const auto node=scene.splines.GetComponent(river)->spline_node_entities[2];
+            auto old=CaptureTransform(*scene.transforms.GetComponent(node));
+            auto wide=old;wide.scale.x=1.5f;
+            SetWatercourseTransformCommand width(scene,node,old,wide);
+            Require(width.Execute(),"Default linked node width update failed");
+            width.Undo();before=linked;after=CaptureTerrainSculpt(scene,*terrain);
+            Require(RetainChangedTerrainSculpt(before,after)==0,"Width Undo did not restore channel");
+            // Move the full river into new chunks, then verify the former
+            // footprint is restored and exact history survives.
+            auto pose=CaptureTransform(*scene.transforms.GetComponent(river));
+            auto moved=pose;moved.translation.z+=130.f;
+            SetWatercourseTransformCommand move(scene,river,pose,moved);
+            Require(move.Execute(),"Local layer could not move into new chunks");
+            move.Undo();before=linked;after=CaptureTerrainSculpt(scene,*terrain);
+            Require(RetainChangedTerrainSculpt(before,after)==0,"Move Undo did not restore channel");
+            Require(GrassAndPaintDigest(*terrain)==paint,"River transaction changed grass/paint");
+            // External edits outside the sparse footprint still fail closed.
+            auto& farChunk=terrain->chunks.begin()->second;
+            auto* farMesh=scene.meshes.GetComponent(farChunk.entity);
+            const float oldHeight=farMesh->vertex_positions[0].y;
+            farMesh->vertex_positions[0].y+=.01f;
+            std::string error;
+            Require(!RecomposeRiverTerrainLayers(scene,terrainID,error),
+                "Unknown external height mutation was silently adopted");
+            farMesh->vertex_positions[0].y=oldHeight;
+            Require(RecomposeRiverTerrainLayers(scene,terrainID,error),
+                "Valid scene was rejected after external-edit negative control");
+            camera.TransformCamera(DirectX::XMMatrixInverse(nullptr,
+                DirectX::XMMatrixLookAtLH(DirectX::XMVectorSet(15,ground+45,-70,1),
+                    DirectX::XMVectorSet(0,ground,0,1),DirectX::XMVectorSet(0,1,0,0))));
+            camera.UpdateCamera();
+            progress("history-masks-external-edit-passed");
+            for(int frame=0;frame<(hostedOffscreen?8:60);++frame)proofFrame();
+            gpu->WaitForGPU();
+            Require(wi::helper::saveTextureToFile(render.GetRenderResult3D(),
+                (out/"default-linked-river.png").generic_u8string()),"Default river screenshot failed");
+            Require(!CaptureRiverWaterPrisms(scene).empty(),
+                "Default sparse-schema river lost underwater volume");
+            if(hostedOffscreen)
+                std::cout<<"HOSTED_NATIVE_GPU_FRAMES="<<hostedRenderFrames
+                         <<" UPDATE_FRAMES="<<hostedUpdateFrames<<std::endl;
+            progress("render-readback-passed");
+            const auto filename=(out/"default-river.wiscene").generic_u8string();
+            wi::Archive disk(filename,false,false);scene.Serialize(disk);
+            Require(disk.SaveFile(filename),"Default river save failed");
+            progress("save-passed");
+            SceneService reopened;
+            Require(reopened.LoadScene(filename),"Default river cold scene hydration failed");
+            auto& fresh=reopened.GetScene();
+            Require(fresh.terrains.GetCount()==1,"Default terrain missing after reopen");
+            Require(fresh.terrains[0].chunks.size()==361,"Default terrain shrank after reopen");
+            Require(RecomposeRiverTerrainLayers(fresh,fresh.terrains.GetEntity(0),error),
+                error.c_str());
+            progress("cold-hydration-recomposition-passed");
+            std::cout<<"DEFAULT_361_LOCALITY_HISTORY_MASKS_EXTERNAL_EDIT_SAVE_REOPEN_PASS"<<std::endl;
+            return 0;
+        }
         if(argc==3 && (std::string(argv[2])=="flat-nodescale"||
                         std::string(argv[2])=="flat-nodescale-review")){
             // G13E8 real native 3x3 terrain, not a synthetic or unsupported
@@ -477,6 +915,41 @@ int main(int argc, char** argv)
             auto p0=terrainAfter,p1=CaptureTerrainSculpt(scene,*terrain);
             Require(RetainChangedTerrainSculpt(p0,p1)==0,
                 "G13E8 invalid width edit changed ground");
+            // Build a genuine schema-v1 full baseline for this native 3x3
+            // scene, then exercise the supported explicit update/migration.
+            TerrainSculptState legacyBase;std::string legacyError;
+            Require(ReadRiverTerrainBaseline(scene,terrainID,legacyBase,legacyError),
+                "Legacy compatibility baseline capture failed");
+            auto& payload=scene.metadatas.GetComponent(terrainID)->string_values.get(RiverTerrainLayersMetadataKey);
+            auto v2=nlohmann::json::parse(payload);
+            nlohmann::json v1;v1["version"]=1;v1["layers"]=v2["layers"];
+            v1["chunks"]=nlohmann::json::array();
+            for(const auto& entry:terrain->chunks)
+            {
+                const auto base=std::find_if(legacyBase.chunks.begin(),legacyBase.chunks.end(),
+                    [&](const auto& item){return item.entity==entry.second.entity;});
+                Require(base!=legacyBase.chunks.end(),"Missing native legacy base");
+                const auto resident=std::find_if(v2["coverage"].begin(),v2["coverage"].end(),
+                    [&](const auto& item){return item.at("x")==entry.first.x && item.at("z")==entry.first.z;});
+                std::vector<float> last;
+                for(const auto& position:scene.meshes.GetComponent(entry.second.entity)->vertex_positions)
+                    last.push_back(position.y);
+                v1["chunks"].push_back({{"x",entry.first.x},{"z",entry.first.z},
+                    {"base",base->heights},{"last",last},{"matrix",resident->at("matrix")}});
+            }
+            payload=v1.dump();
+            auto legacyBefore=CaptureTerrainSculpt(scene,*terrain);
+            Require(RecomposeRiverTerrainLayers(scene,terrainID,legacyError),
+                "Native schema-v1 channel update was rejected");
+            auto legacyAfter=CaptureTerrainSculpt(scene,*terrain);
+            legacyBefore.riverLayerDocument.clear();legacyAfter.riverLayerDocument.clear();
+            Require(RetainChangedTerrainSculpt(legacyBefore,legacyAfter)==0,
+                "Schema-v1 migration altered native channel heights");
+            Require(nlohmann::json::parse(scene.metadatas.GetComponent(terrainID)->string_values.get(RiverTerrainLayersMetadataKey)).at("version")==2,
+                "Explicit legacy update did not produce sparse schema");
+            Require(!CaptureRiverWaterPrisms(scene).empty(),
+                "Sparse schema lost underwater channel depth");
+            std::cout<<"LEGACY_V1_NATIVE_HEIGHT_PARITY_AND_V2_UNDERWATER_PASS"<<std::endl;
             const auto filename=(out/"g13e8-scaled-native.wiscene").generic_u8string();
             wi::Archive disk(filename,false,false);scene.Serialize(disk);
             Require(disk.SaveFile(filename),"G13E8 native scaled river save failed");
@@ -1553,17 +2026,33 @@ int main(int argc, char** argv)
         const auto preEnvelopePaint = GrassAndPaintDigest(*terrain);
         const auto firstChunk = terrain->chunks.begin();
         Require(firstChunk != terrain->chunks.end(), "no envelope test chunks");
+        const auto firstCoordinate=firstChunk->first;
         const auto oldEncodedHeights = firstChunk->second.heightmap_data;
         Require(history.Execute(std::make_unique<SetTerrainHeightFloorCommand>(
             scene,terrainID,initialFloor - 10.0f)),
             "explicit 10m terrain height floor extension rejected");
         Require(terrain->bottomLevel == initialFloor - 10.0f,
             "height floor did not extend by 10m");
-        Require(!history.Execute(std::make_unique<ExpandTerrainCommand>(
-            scene, terrainID)),
-            "terrain ring expansion should be guarded after R16 rebasing");
-        Require(terrain->chunks.size() == chunksBefore,
-            "guarded expansion altered existing terrain chunks");
+        {
+            const auto innerEncoding=terrain_initialization_proof::Encoded(*terrain);
+            const int oldRadius=terrain->generation;
+            ExpandTerrainCommand extendedExpand(scene,terrainID);
+            Require(extendedExpand.Execute(),"Rebased terrain expansion refused");
+            const auto side=std::size_t(TerrainChunkCountPerSide(oldRadius+1));
+            for(int i=0;i<2400 && (terrain->chunks.size()!=side*side ||
+                terrain->IsGenerationBusy());++i){proofUpdate();Sleep(5);}
+            for(int i=0;i<2;++i)proofUpdate();
+            gpu->WaitForGPU();terrain->Generation_Cancel();
+            Require(terrain->chunks.size()==side*side,"Rebased expansion incomplete");
+            for(const auto& item:terrain->chunks)
+                if(std::max(std::abs(item.first.x),std::abs(item.first.z))==oldRadius+1)
+                    for(const auto& vertex:scene.meshes.GetComponent(item.second.entity)->vertex_positions)
+                        Require(std::abs(vertex.y)<.003f,"Rebased expansion created a floor-height cliff");
+            extendedExpand.Undo();
+            Require(terrain_initialization_proof::Encoded(*terrain)==innerEncoding,
+                "Rebased expansion Undo changed old encoded heights");
+        }
+        Require(terrain->chunks.size()==chunksBefore,"Rebased expansion Undo lost original extent");
         Require(scene.transforms.GetComponent(terrainID)->translation_local.y ==
             rootYBefore, "height range extension moved terrain root");
         auto envelopeCompareA = preEnvelopeHeights;
@@ -1573,7 +2062,7 @@ int main(int argc, char** argv)
             "height range re-encoding moved authored vertices");
         Require(GrassAndPaintDigest(*terrain) == preEnvelopePaint,
             "height range extension changed vegetation/paint masks");
-        Require(firstChunk->second.heightmap_data != oldEncodedHeights,
+        Require(terrain->chunks.at(firstCoordinate).heightmap_data != oldEncodedHeights,
             "height floor changed without re-encoding native R16 data");
         std::cout << "TERRAIN_HEIGHT_FLOOR_EXTEND=PASS old="
             << initialFloor << " new=" << terrain->bottomLevel << "\n";
@@ -1625,7 +2114,7 @@ int main(int argc, char** argv)
         Require(RetainChangedTerrainSculpt(
             restoredEnvelopeA,restoredEnvelopeB) == 0,
             "Undo chain failed to preserve original authored heights");
-        Require(firstChunk->second.heightmap_data == oldEncodedHeights,
+        Require(terrain->chunks.at(firstCoordinate).heightmap_data == oldEncodedHeights,
             "Undo did not restore original R16 heightmap encoding");
         Require(history.Redo(),"height range extension Redo failed");
         Require(history.Redo(),"below-zero riverbed Redo failed");

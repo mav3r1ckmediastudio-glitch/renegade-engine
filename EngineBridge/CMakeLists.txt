@@ -212,6 +212,7 @@ add_library(RenegadeEngineBridge STATIC
     src/ResourceAssetRuntimeService.cpp
     src/VideoAssetService.cpp
     src/ModelImporterFailureAdapter.cpp
+    src/ModelImporterObj.cpp
     src/ReusableAssetService.cpp
     src/ReusableAssetPlacementService.cpp
     src/CharacterPrefabPlacementRouter.cpp

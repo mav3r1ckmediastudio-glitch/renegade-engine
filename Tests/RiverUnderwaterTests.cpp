@@ -41,6 +41,15 @@ int main()
         setDepth("0.499");Require(CaptureRiverWaterPrisms(scene).empty(),"shallow stream cutoff");
         setDepth("0.5");Require(CaptureRiverWaterPrisms(scene).size()==1,"half metre river eligible");
         setDepth("2");auto captured=CaptureRiverWaterPrisms(scene);Require(captured.size()==1&&std::abs(captured[0].minimum.y)<.001f,"linked depth drives lower bound");
+        // Sparse v2 coverage can be large, but it sorts before the same
+        // bounded layers/version suffix. Rendering must still discover depth.
+        auto sparse=std::string("{\"chunks\":[],\"coverage\":[\"")+
+            std::string(20000,'x')+"\"],\"layers\":[{\"bank\":2,\"depth\":2,\"river\":\""+
+            id+"\"}],\"version\":2}";
+        scene.metadatas.GetComponent(terrain)->string_values.set(RiverTerrainLayersMetadataKey,sparse);
+        auto sparseCaptured=CaptureRiverWaterPrisms(scene);
+        Require(sparseCaptured.size()==1 && std::abs(sparseCaptured[0].minimum.y)<.001f,
+            "v2 sparse metadata must retain bounded underwater depth readback");
         scene.objects.GetComponent(river)->SetRenderable(false);Require(CaptureRiverWaterPrisms(scene).empty(),"hidden water excluded");scene.objects.GetComponent(river)->SetRenderable(true);
         // Native mesh GPU recreation belongs to the graphics proof, not a no-device unit test.
         scene.objects.Remove(river);scene.meshes.Remove(river);

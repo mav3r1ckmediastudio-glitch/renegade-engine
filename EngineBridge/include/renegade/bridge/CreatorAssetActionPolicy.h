@@ -21,7 +21,8 @@ namespace renegade::bridge
             const char b = lower(static_cast<unsigned char>(value[1]));
             const char c = lower(static_cast<unsigned char>(value[2]));
             return (a == 'f' && b == 'b' && c == 'x') ||
-                (a == 'g' && b == 'l' && c == 'b');
+                (a == 'g' && b == 'l' && c == 'b') ||
+                (a == 'o' && b == 'b' && c == 'j');
         }
         return value.size() == 4 &&
             lower(static_cast<unsigned char>(value[0])) == 'g' &&

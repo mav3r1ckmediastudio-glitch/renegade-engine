@@ -41,7 +41,8 @@ class ProjectileManualContract(unittest.TestCase):
         self.assertIn("Saving the projectile alone does not assign it", MANUAL)
 
     def test_one_point_firing_policy_is_hidden(self):
-        self.assertIn("const bool multiple=projectileAvailableSocketCount_>1;", STUDIO)
+        self.assertIn("const bool multiple=projectileAvailableSocketCount_>1 && !storm;", STUDIO)
+        self.assertIn("const bool policyVisible=!storm && (multiple||projectileSocketPolicy_.GetSelected()>0);", STUDIO)
         self.assertIn("projectileSocketPolicy_.SetVisible(policyVisible);", STUDIO)
         self.assertIn("dropdown is normally hidden", MANUAL)
 

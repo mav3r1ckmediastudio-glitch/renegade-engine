@@ -49,7 +49,7 @@ class KnowledgeTests(unittest.TestCase):
 
     def test_facts_are_verified_by_checked_out_source(self):
         status = self.build()
-        self.assertEqual(status["verified_facts"], 12)
+        self.assertEqual(status["verified_facts"], 16)
         result = kb.search(self.db, "How can I make glass impact sounds?", self.repo)
         self.assertEqual(result["verified_facts"][0]["id"], "surface-type")
         self.assertEqual(result["verified_facts"][0]["authority"], "source_verified")
@@ -75,7 +75,7 @@ class KnowledgeTests(unittest.TestCase):
         path = self.repo / "EngineBridge/include/renegade/bridge/ImpactSurface.h"
         path.write_text("enum class ImpactSurfaceType", encoding="utf-8")
         status = self.build()
-        self.assertEqual(status["verified_facts"], 11)
+        self.assertEqual(status["verified_facts"], 15)
         self.assertFalse(any(f["id"] == "surface-type" for f in
                              kb.search(self.db, "glass", self.repo)["verified_facts"]))
 

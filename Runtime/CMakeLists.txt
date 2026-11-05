@@ -231,3 +231,12 @@ add_custom_command(TARGET RenegadeRuntime POST_BUILD
       "${CMAKE_CURRENT_SOURCE_DIR}/Content/weather/thunder"
       "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/weather/thunder"
     COMMENT "Install owner-created thunder audio in Runtime")
+
+
+# Native rocky riverbed material must hydrate without a source checkout.
+add_custom_command(TARGET RenegadeRuntime POST_BUILD
+    COMMAND "${CMAKE_COMMAND}"
+        "-DRENEGADE_ROCKY_SOURCE=${CMAKE_SOURCE_DIR}/Content/terrain/riverbed/rocky_rugged"
+        "-DRENEGADE_ROCKY_OUTPUT=$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/riverbed/rocky_rugged"
+        -P "${CMAKE_SOURCE_DIR}/cmake/StageRockyRiverbed.cmake"
+    VERBATIM)

@@ -27,6 +27,9 @@ def verified_workflow(question: str, repo: Path, database: Path,
         data=json.loads(registry.read_text(encoding="utf-8"))
         if data.get("schema")!=1 or not isinstance(data.get("workflows"),list):
             return None
+        hash_format = data.get("source_hash_format", "raw-sha256")
+        if hash_format not in {"raw-sha256", "utf8-lf-v1"}:
+            return None
         for task in data["workflows"]:
             patterns=task["match"]
             if not any(re.search(pattern,question,re.IGNORECASE) for pattern in patterns):
@@ -44,7 +47,7 @@ def verified_workflow(question: str, repo: Path, database: Path,
                 row=db.execute(
                     "SELECT status, manual_path, manual_hash, evidence, issues "
                     "FROM manual_guides WHERE id=?",(task["guide_id"],)).fetchone()
-            if not indexed or indexed[0]!=knowledge.git_value(repo,"rev-parse","HEAD"):
+            if not indexed or indexed[0]!=knowledge.source_revision(repo,database):
                 return None
             if not row or row[0]!="draft_source_matched" or json.loads(row[4]):
                 return None
@@ -79,7 +82,11 @@ def verified_workflow(question: str, repo: Path, database: Path,
                 if proof["needle"] not in p.read_text(encoding="utf-8"):
                     return None
                 # New task evidence is pinned to whole files, not only labels.
-                if proof.get("sha256") and knowledge.sha(p)!=proof["sha256"]:
+                # Canonical UTF-8/LF hashes tolerate Git checkout line endings;
+                # every other character still participates in the whole-file hash.
+                digest = (hashlib.sha256(p.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+                    if hash_format == "utf8-lf-v1" else knowledge.sha(p))
+                if proof.get("sha256") and digest != proof["sha256"]:
                     return None
             extra=""
             if "expected_result" in task:

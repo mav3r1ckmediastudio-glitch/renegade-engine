@@ -48,11 +48,11 @@ namespace renegade::studio
         constexpr const char* DeveloperPublisher = "Maverick Media Studio";
         constexpr DWORD SmokeTimeoutMilliseconds = 120000;
 
-        // Rebase only an explicitly governed built-in WATER normal reference.
+        // Rebase identified, byte-verified built-in resources for the package copy.
         // Read the owner scene, serialize a detached copy, and keep all other
         // scene-relative resources relative to the original scene directory.
-        bool CookRiverNormalReference(
-            const fs::path& governedNormal,
+        bool CookBundledSceneReferences(
+            const std::vector<bridge::WindowsGameBundledResource>& resources,
             const bridge::WindowsGameBuildFile& file,
             const std::string& source,
             const std::string& output,
@@ -63,7 +63,7 @@ namespace renegade::studio
             auto prepared = bridge::PrepareWickedSceneOpen(source);
             if (!prepared.IsReady())
             {
-                error = "River package scene preparation failed: " + prepared.Error();
+                error = "Bundled resource scene preparation failed: " + prepared.Error();
                 return false;
             }
             auto& scene = *prepared.MutablePreparedScene();
@@ -74,25 +74,12 @@ namespace renegade::studio
                 (void)part;
                 packageRoot = packageRoot.parent_path();
             }
-            const fs::path packagedNormal = packageRoot / "Content/river/waterNormalMap.jpg";
-            const fs::path relativeNormal = packagedNormal.lexically_relative(outputPath.parent_path());
-            bool changed = false;
-            for(size_t i=0;i<scene.metadatas.GetCount();++i)if(bridge::placeable_waterfall::IsWaterfall(scene,scene.metadatas.GetEntity(i)))changed=true;
+            bool changed = bridge::RebindWindowsGameBundledSceneResources(
+                scene, resources,
+                packageRoot.lexically_relative(outputPath.parent_path()).generic_u8string()) != 0;
+            for(size_t i=0;i<scene.metadatas.GetCount();++i)
+                if(bridge::placeable_waterfall::IsWaterfall(scene,scene.metadatas.GetEntity(i))) changed=true;
             bridge::RemoveGeneratedWaterfallVisuals(scene);
-            for (size_t index = 0; index < scene.materials.GetCount(); ++index)
-            {
-                auto& material = scene.materials[index];
-                if (material.shaderType != wi::scene::MaterialComponent::SHADERTYPE_WATER)
-                    continue;
-                auto& normal = material.textures[wi::scene::MaterialComponent::NORMALMAP];
-                std::error_code ec;
-                if (normal.name.empty() || !fs::equivalent(fs::u8path(normal.name), governedNormal, ec) || ec)
-                    continue; // Custom maps are never replaced by basename.
-                // Wicked preserves names that are already relative. All other
-                // resources retain their original scene-relative serialization.
-                normal.name = relativeNormal.generic_u8string();
-                changed = true;
-            }
             if (!changed)
                 return true;
             wi::Archive archive(source, false, false);
@@ -117,7 +104,7 @@ namespace renegade::studio
             archive = wi::Archive(); // Never let destruction overwrite owner source.
             if (!saved)
             {
-                error = "Could not write package-local river normal reference.";
+                error = "Could not write package-local bundled scene references.";
                 return false;
             }
             return true;
@@ -973,6 +960,23 @@ namespace renegade::studio
                     "Content/terrain/default_grass/default_grass_surface.tga",
                 },
 
+                {"renegade-terrain-rocky-riverbed-basecolor",
+                    (studioDirectory / "Content/terrain/riverbed/rocky_rugged/rocky_basecolor.png").generic_u8string(),
+                    "Content/terrain/riverbed/rocky_rugged/rocky_basecolor.png"},
+                {"renegade-terrain-rocky-riverbed-normal",
+                    (studioDirectory / "Content/terrain/riverbed/rocky_rugged/rocky_normal_dx.png").generic_u8string(),
+                    "Content/terrain/riverbed/rocky_rugged/rocky_normal_dx.png"},
+                {"renegade-terrain-rocky-riverbed-surface",
+                    (studioDirectory / "Content/terrain/riverbed/rocky_rugged/rocky_surface.png").generic_u8string(),
+                    "Content/terrain/riverbed/rocky_rugged/rocky_surface.png"},
+
+                {"renegade-terrain-native-grass-particle",
+                    (studioDirectory / "Content/terrain/grassparticle.png").generic_u8string(),
+                    "Content/terrain/grassparticle.png"},
+                {"renegade-terrain-native-grass-scene",
+                    (studioDirectory / "Content/terrain/grass.wiscene").generic_u8string(),
+                    "Content/terrain/grass.wiscene"},
+
                 {"renegade-waterfall-PlaceableWaterfallPS.cso", (studioDirectory / "Content/waterfall/PlaceableWaterfallPS.cso").generic_u8string(), "Content/waterfall/PlaceableWaterfallPS.cso"},
                 {"renegade-waterfall-PlaceableWaterfallVS.cso", (studioDirectory / "Content/waterfall/PlaceableWaterfallVS.cso").generic_u8string(), "Content/waterfall/PlaceableWaterfallVS.cso"},
                 {"renegade-waterfall-AeratedWater.png", (studioDirectory / "Content/waterfall/AeratedWater.png").generic_u8string(), "Content/waterfall/AeratedWater.png"},
@@ -1169,17 +1173,17 @@ namespace renegade::studio
         progress.Stage(50, "STAGING PACKAGE INPUTS",
             "Collecting Runtime support, licences and governed package documents.");
         request.staging.cookProjectCopy =
-        [normal = studioDirectory / "Content/river/waterNormalMap.jpg"](
+        [resources = projectState.bundledResources](
             const bridge::WindowsGameBuildFile& file, const std::string& source,
             const std::string& output, std::string& cookError)
         {
             try
             {
-                return CookRiverNormalReference(normal, file, source, output, cookError);
+                return CookBundledSceneReferences(resources, file, source, output, cookError);
             }
             catch (const std::exception& exception)
             {
-                cookError = "River normal package preparation failed: " + std::string(exception.what());
+                cookError = "Bundled scene package preparation failed: " + std::string(exception.what());
                 return false;
             }
         };

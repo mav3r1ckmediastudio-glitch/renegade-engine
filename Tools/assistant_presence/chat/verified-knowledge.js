@@ -7,7 +7,8 @@ const KEYWORDS=new Set([
  'renegade','wicked','studio','editor','inspector','projectile','projectiles',
  'hitscan','arrow','arrows','bullet','bullets','bolt','bolts','spawn','bow','weapon','weapons','equipment','loadout','loadouts',
  'surface','surfaces','retarget','script','npc','scene','scenes',
- 'asset','assets','launch','player','model','import','importer','terrain',
+ 'asset','assets','launch','player','model','import','importer','obj','terrain',
+ 'river','rivers','riverbed','riverbeds','waterfall','waterfalls','tributary','tributaries',
  'animation','character','characters','npcs','scripts','action','actions','lua',
  'patrol','wander','wandering','socket','sockets','psp','timing','gravity','glass','impact','impacts','decals','decal','damage','sfx','fx'
 ]);
@@ -23,7 +24,7 @@ function isEngineQuestion(question){
  if(/^(?:is that something you actually did(?:,? or part of your character)?|tell me about your (?:fictional )?(?:day|backstory)|who are you|what are you)[?.! ]*$/i.test(question) &&
     !/\b(?:import|editor|scene|project|npc|script|animation)\b/i.test(question))return false;
  const words=new Set(String(question).toLowerCase().match(/[a-z0-9_]+/g)||[]);
- const importRequest=/\b(?:import|load|bring in)\b.{0,55}\b(?:mesh|glb|fbx|3d object)s?\b/i.test(String(question));
+ const importRequest=/\b(?:import|load|bring in)\b.{0,55}\b(?:mesh|glb|fbx|obj|3d object)s?\b/i.test(String(question));
  const stockRequest=/\b(?:set up|setup|make|create|add|attach|wire|connect|trigger)\b.{0,50}\b(?:sliding door|interactive door|door action|switch|trigger zone|pickup|relay|sound action|play sound action)\b/i.test(String(question));
  return stockRequest || importRequest || [...words].some(w=>KEYWORDS.has(w)) ||
   ([...words].some(w=>CAPABILITY.has(w)) && [...words].some(w=>VERBS.has(w)));

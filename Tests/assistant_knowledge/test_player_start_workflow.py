@@ -1,3 +1,4 @@
+import os
 """Independent Player Start receipt, prerequisites-first layout and routing."""
 import json
 from pathlib import Path
@@ -14,7 +15,7 @@ class PlayerStartWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.repo=Path(__file__).resolve().parents[2]
-        cls.db=cls.repo/"BUILD/assistant_knowledge.sqlite"
+        cls.db=Path(os.environ.get("RENEGADE_KNOWLEDGE_TEST_DB", str(Path(os.environ.get("RENEGADE_KNOWLEDGE_TEST_DB", str(cls.repo / "BUILD/assistant_knowledge.sqlite"))))))
 
     def test_placement_variations(self):
         for q in ["How do I add Player Start?","How do I create a player spawn?",

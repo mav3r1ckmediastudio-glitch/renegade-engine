@@ -197,6 +197,32 @@ if(WIN32)
 endif()
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
+    # Source-only guard. Native importer and packaged Studio smoke tests are
+    # independently mandatory for release acceptance.
+    add_test(NAME RenegadeProtectedImporterSourceContract
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/ProtectedImporterSourceContract.py"
+                --repo "${CMAKE_SOURCE_DIR}")
+    add_test(NAME RenegadeAssistantRiverKnowledgeTests
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/AssistantRiverKnowledgeTests.py"
+            --repo "${CMAKE_SOURCE_DIR}"
+            --db "${CMAKE_CURRENT_BINARY_DIR}/assistant-river-qa.sqlite")
+    add_test(NAME RenegadeAssistantPackagedKnowledgeTests
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/AssistantPackagedKnowledgeTests.py"
+            --repo "${CMAKE_SOURCE_DIR}"
+            --output "${CMAKE_CURRENT_BINARY_DIR}/assistant-packaged-qa")
+    add_test(NAME RenegadeRecoveryAlphaPackageTests
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/RecoveryAlphaPackageTests.py"
+            --repo "${CMAKE_SOURCE_DIR}")
+    add_test(NAME RenegadeAssistantWorkflowSuite
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/AssistantWorkflowSuite.py"
+            --repo "${CMAKE_SOURCE_DIR}"
+            --output "${CMAKE_CURRENT_BINARY_DIR}/assistant-workflow-suite")
+    find_program(RENEGADE_NODE_EXECUTABLE NAMES node node.exe)
+    if(RENEGADE_NODE_EXECUTABLE)
+        add_test(NAME RenegadeAssistantClientRecoveryRouting
+            COMMAND "${RENEGADE_NODE_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/Tools/assistant_presence/tests/test-recovery-knowledge-routing.cjs")
+    endif()
     add_test(NAME RenegadeDiagnosticReaderTests
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/ReadRenegadeDiagnosticsTests.py")
 endif()
@@ -417,6 +443,89 @@ if(WIN32)
             VERBATIM)
     endif()
     set_target_properties(RenegadeRiverTerrainFollowProof PROPERTIES FOLDER "Renegade")
+    add_custom_command(TARGET RenegadeRiverTerrainFollowProof POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/Content/terrain/riverbed/rocky_rugged"
+            "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/riverbed/rocky_rugged"
+        VERBATIM)
+
+    # Exercise the real creator-default extent, not only the historical 3x3 fixture.
+    add_test(NAME RenegadeRiverDefaultTerrainRecovery
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
+            "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/river-default-recovery-$<CONFIG>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
+    # Keep every 361-chunk/data/GPU assertion. The hosted software renderer took
+    # 140 seconds to create the terrain alone; allow the remaining history,
+    # readback and save/reopen checks within the same bounded ten-minute budget.
+    # Initializer diagnostics separately expose stalls before terrain creation.
+    set_tests_properties(RenegadeRiverDefaultTerrainRecovery PROPERTIES
+        WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
+        TIMEOUT 600)
+    foreach(MAXIMUM_ORDER IN ITEMS expanded-first linked-first)
+        add_test(NAME RenegadeMaximumTerrainRiver_${MAXIMUM_ORDER}
+            COMMAND "${CMAKE_COMMAND}"
+                "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
+                "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/terrain-maximum-${MAXIMUM_ORDER}-$<CONFIG>"
+                "-DRENEGADE_RIVER_MODE=maximum-${MAXIMUM_ORDER}"
+                "-DRENEGADE_MAXIMUM_FIXTURE=${CMAKE_CURRENT_BINARY_DIR}/terrain-maximum-${MAXIMUM_ORDER}-$<CONFIG>/completed-fixture.txt"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
+        set_tests_properties(RenegadeMaximumTerrainRiver_${MAXIMUM_ORDER} PROPERTIES
+            WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
+            # Debug checked iterators/native transaction snapshots exceeded
+            # ten minutes on the slower hosted runner in run 41722770055.
+            # Keep every assertion and product bound; Release/GPU cases retain
+            # ten minutes, while Debug native maximum-extent work gets twenty.
+            TIMEOUT "$<IF:$<CONFIG:Debug>,1200,600>"
+            FIXTURES_SETUP "MaximumTerrain_${MAXIMUM_ORDER}")
+    endforeach()
+    # Debug native transactions and one WARP draw each need their own bounded
+    # budget. CTest reruns the producer and skips consumers when it fails; the
+    # wrapper also verifies both the scene and executable SHA256 before launch.
+    foreach(MAXIMUM_CHECKPOINT IN ITEMS source preview)
+        if(MAXIMUM_CHECKPOINT STREQUAL "source")
+            set(MAXIMUM_FIXTURE_ORDER expanded-first)
+            set(MAXIMUM_PREVIEW_CHECKPOINT -2)
+        else()
+            set(MAXIMUM_FIXTURE_ORDER linked-first)
+            set(MAXIMUM_PREVIEW_CHECKPOINT 1)
+        endif()
+        add_test(NAME RenegadeMaximumTerrainGPU_${MAXIMUM_CHECKPOINT}
+            COMMAND "${CMAKE_COMMAND}"
+                "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
+                "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/terrain-maximum-gpu-${MAXIMUM_CHECKPOINT}-$<CONFIG>"
+                -DRENEGADE_RIVER_MODE=maximum-render
+                "-DRENEGADE_TERRAIN_PREVIEW_CHECKPOINT=${MAXIMUM_PREVIEW_CHECKPOINT}"
+                "-DRENEGADE_MAXIMUM_FIXTURE=${CMAKE_CURRENT_BINARY_DIR}/terrain-maximum-${MAXIMUM_FIXTURE_ORDER}-$<CONFIG>/completed-fixture.txt"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
+        set_tests_properties(RenegadeMaximumTerrainGPU_${MAXIMUM_CHECKPOINT} PROPERTIES
+            WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
+            TIMEOUT 600
+            FIXTURES_REQUIRED "MaximumTerrain_${MAXIMUM_FIXTURE_ORDER}")
+    endforeach()
+    add_test(NAME RenegadeTerrainInitializationRecovery
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
+            "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/terrain-initialization-$<CONFIG>"
+            -DRENEGADE_RIVER_MODE=terrain-initialization
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
+    set_tests_properties(RenegadeTerrainInitializationRecovery PROPERTIES
+        WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
+        TIMEOUT 600)
+    # Divide full-resolution software rasterization between source captures and
+    # each preview. Every case retains all native assertions and three rebuilds.
+    foreach(PREVIEW_CHECKPOINT RANGE 0 2)
+        add_test(NAME RenegadeTerrainPreviewRender${PREVIEW_CHECKPOINT}Recovery
+            COMMAND "${CMAKE_COMMAND}"
+                "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
+                "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/terrain-preview-${PREVIEW_CHECKPOINT}-$<CONFIG>"
+                -DRENEGADE_RIVER_MODE=terrain-initialization
+                "-DRENEGADE_TERRAIN_PREVIEW_CHECKPOINT=${PREVIEW_CHECKPOINT}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
+        set_tests_properties(RenegadeTerrainPreviewRender${PREVIEW_CHECKPOINT}Recovery PROPERTIES
+            WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
+            TIMEOUT 600)
+    endforeach()
 endif()
 
 add_executable(RenegadeLightTests
@@ -1818,3 +1927,92 @@ target_compile_definitions(RenegadeInventoryG5PackageProof PRIVATE
 add_executable(RenegadeInventoryRiverCombinedProof InventoryRiverCombinedProof.cpp)
 target_link_libraries(RenegadeInventoryRiverCombinedProof PRIVATE Renegade::EngineBridge)
 set_target_properties(RenegadeInventoryRiverCombinedProof PROPERTIES FOLDER "Renegade/Tests")
+
+if(WIN32)
+    include(${CMAKE_CURRENT_LIST_DIR}/AudioEndpointRecovery.cmake)
+endif()
+
+# Reproduce the real post-input scene adoption boundary using the production
+# RuntimeRenderPath, then verify enabled cloud resources and subsequent frames.
+if(WIN32)
+    add_executable(RenegadeRuntimeSceneTransitionTests
+        RuntimeSceneTransitionTests.cpp
+        ../Runtime/src/RuntimeApplication.cpp
+        ../Runtime/src/RuntimeLiveDiagnostics.cpp
+        ../Runtime/src/RuntimeImpactDustResource.cpp
+        ../Runtime/src/WaterfallTransparentRuntime.cpp)
+    target_link_libraries(RenegadeRuntimeSceneTransitionTests PRIVATE Renegade::RuntimeBootstrap)
+    target_compile_definitions(RenegadeRuntimeSceneTransitionTests PRIVATE
+        UNICODE _UNICODE
+        RENEGADE_SOURCE_REVISION="${G13E3_SOURCE_REVISION}"
+        RENEGADE_WICKED_REVISION="${G13E3_WICKED_REVISION}")
+    target_compile_options(RenegadeRuntimeSceneTransitionTests PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>" "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    set_target_properties(RenegadeRuntimeSceneTransitionTests PROPERTIES FOLDER "Renegade/Tests")
+    add_test(NAME RenegadeRuntimeSceneTransitionTests COMMAND RenegadeRuntimeSceneTransitionTests)
+    set_tests_properties(RenegadeRuntimeSceneTransitionTests PROPERTIES RUN_SERIAL TRUE TIMEOUT 180)
+endif()
+
+if(TARGET RenegadeRuntimeSceneTransitionTests)
+    add_custom_command(TARGET RenegadeRuntimeSceneTransitionTests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+            "$<TARGET_FILE_DIR:RenegadeRuntimeSceneTransitionTests>")
+endif()
+
+if(WIN32)
+    add_test(NAME RenegadeAssistantPortOwnership
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/AssistantPortOwnershipTests.ps1")
+    set_tests_properties(RenegadeAssistantPortOwnership PROPERTIES TIMEOUT 30)
+endif()
+
+# Direct DX12 rejection control plus the production coherent-UMA suballocator.
+if(WIN32)
+    add_executable(RenegadeGpuUploadBufferTests GpuUploadBufferTests.cpp)
+    target_link_libraries(RenegadeGpuUploadBufferTests PRIVATE Renegade::EngineBridge d3d12 dxgi)
+    set_target_properties(RenegadeGpuUploadBufferTests PROPERTIES FOLDER "Renegade/Tests")
+    add_custom_command(TARGET RenegadeGpuUploadBufferTests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+            "$<TARGET_FILE_DIR:RenegadeGpuUploadBufferTests>")
+    add_test(NAME RenegadeGpuUploadBufferTests COMMAND RenegadeGpuUploadBufferTests)
+    set_tests_properties(RenegadeGpuUploadBufferTests PROPERTIES RUN_SERIAL TRUE TIMEOUT 180)
+endif()
+
+# Real Win32 zero-client-area and minimize/restore binding regression.
+if(WIN32)
+    add_executable(RenegadeNativeWindowSurfaceTests NativeWindowSurfaceTests.cpp)
+    target_include_directories(RenegadeNativeWindowSurfaceTests PRIVATE
+        "${CMAKE_SOURCE_DIR}/EngineBridge/include")
+    target_link_libraries(RenegadeNativeWindowSurfaceTests PRIVATE user32)
+    set_target_properties(RenegadeNativeWindowSurfaceTests PROPERTIES FOLDER "Renegade/Tests")
+    add_test(NAME RenegadeNativeWindowSurfaceTests COMMAND RenegadeNativeWindowSurfaceTests)
+    set_tests_properties(RenegadeNativeWindowSurfaceTests PROPERTIES RUN_SERIAL TRUE TIMEOUT 30)
+endif()
+
+
+if(TARGET RenegadeStudio AND TARGET RenegadeRuntime)
+    add_test(NAME RenegadeRockyRiverbedDeployment
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRENEGADE_ROCKY_SOURCE=${CMAKE_SOURCE_DIR}/Content/terrain/riverbed/rocky_rugged"
+            "-DRENEGADE_STUDIO_OUTPUT=$<TARGET_FILE_DIR:RenegadeStudio>"
+            "-DRENEGADE_RUNTIME_OUTPUT=$<TARGET_FILE_DIR:RenegadeRuntime>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/RockyRiverbedDeployment.cmake")
+    set_tests_properties(RenegadeRockyRiverbedDeployment PROPERTIES LABELS "Packaging" TIMEOUT 30)
+endif()
+
+if(WIN32)
+    add_executable(RenegadeCreatorAssetFrameBoundaryTests CreatorAssetFrameBoundaryTests.cpp)
+    target_link_libraries(RenegadeCreatorAssetFrameBoundaryTests PRIVATE Renegade::EngineBridge)
+    target_compile_definitions(RenegadeCreatorAssetFrameBoundaryTests PRIVATE UNICODE _UNICODE)
+    target_compile_options(RenegadeCreatorAssetFrameBoundaryTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    add_dependencies(RenegadeBridgeTests RenegadeCreatorAssetFrameBoundaryTests)
+    add_custom_command(TARGET RenegadeCreatorAssetFrameBoundaryTests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+        "$<TARGET_FILE_DIR:RenegadeCreatorAssetFrameBoundaryTests>" VERBATIM)
+    add_test(NAME RenegadeCreatorAssetFrameBoundaryTests COMMAND RenegadeCreatorAssetFrameBoundaryTests CONFIGURATIONS Release)
+    set_tests_properties(RenegadeCreatorAssetFrameBoundaryTests PROPERTIES TIMEOUT 120
+        WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeCreatorAssetFrameBoundaryTests>")
+endif()

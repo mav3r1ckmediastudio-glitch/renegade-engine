@@ -122,6 +122,8 @@ namespace renegade::studio
         void RefreshAssemblyDraft();
         void OpenStaticModelImporter(bool fromProjectile = false);
         void AppendModelImportAnimations();
+        void AssignModelImportTexture();
+        void RefreshModelImportTextureInfo();
         void CommitStaticModelImporter();
         void RestoreGovernedMaterialTextures();
 
@@ -1459,6 +1461,9 @@ namespace renegade::studio
         bool assemblyPreviewRefreshPending_ = false, assemblyDraftPreviewDirty_ = true;
         float assemblyPreviewRefreshDelay_ = 0;
         wi::gui::Window modelImportPanel_;
+        wi::gui::ComboBox modelImportMaterial_, modelImportMapSlot_;
+        wi::gui::Button modelImportAssignMap_;
+        wi::gui::Label modelImportMapInfo_, modelImportWarnings_;
         wi::gui::Label modelImportSummary_;
         wi::gui::Label modelImportPreviewImage_;
         wi::gui::Button modelImportRotateLeft_;
@@ -1479,6 +1484,7 @@ namespace renegade::studio
         wi::gui::Button modelImportCancel_;
         std::unique_ptr<bridge::ModelImportCandidate> modelImportCandidate_;
         bridge::StableId modelImportProjectId_;
+        std::uint64_t modelImportGeneration_ = 0;
         TestLevelRuntimeProcess testLevelRuntime_;
         bool testLevelFrameSuspended_ = false;
         bool projectPreviewActive_ = false;

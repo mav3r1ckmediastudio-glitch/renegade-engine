@@ -577,9 +577,14 @@ namespace renegade::studio
             return;
         }
 
-        bridge::SynchronizeWickedVegetation(scene, *terrain);
-        wd01SynchronizedTerrainEntity_ = terrainEntity;
-        wd01SynchronizedChunkCount_ = terrain->chunks.size();
+        bool allChunksReady = false;
+        bridge::SynchronizeWickedVegetation(scene, *terrain, allChunksReady);
+        // A final batch can already be counted while its meshes still belong
+        // to the generator scene. Retry until publication; then idle frames
+        // retain the existing constant-time identity/count check.
+        wd01SynchronizedTerrainEntity_ = allChunksReady
+            ? terrainEntity : wi::ecs::INVALID_ENTITY;
+        wd01SynchronizedChunkCount_ = allChunksReady ? terrain->chunks.size() : 0;
     }
 
     void StudioRenderPath::DisableWd01VegetationBrush()

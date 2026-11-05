@@ -266,7 +266,7 @@ namespace renegade::bridge
         if (!request.characterAsset && (candidate.Evidence().HasRigOrAnimationPayload() ||
             candidate.Summary().animations != 0))
         {
-            result.error = "This model importer accepts static GLB or FBX content only.";
+            result.error = "Static import requires a model without rig or animation content.";
             return result;
         }
 
@@ -296,12 +296,15 @@ namespace renegade::bridge
             return result;
         }
         const bool isFbx = candidate.SourceFormat() == ModelSourceFormat::Fbx;
-        if (!isFbx && candidate.SourceFormat() != ModelSourceFormat::Glb)
+        const bool isObj = candidate.SourceFormat() == ModelSourceFormat::Obj;
+        const bool hasBundle = isFbx || isObj || !candidate.Dependencies().empty();
+        const std::string format = isFbx ? "fbx" : isObj ? "obj" : "glb";
+        if (!isFbx && !isObj && candidate.SourceFormat() != ModelSourceFormat::Glb)
         {
             result.error = "Unsupported model candidate source format.";
             return result;
         }
-        if (!isFbx && !SelfContainedGlb(sourceBytes, result.error)) return result;
+        if (!isFbx && !isObj && !SelfContainedGlb(sourceBytes, result.error)) return result;
         for (const auto& dependency : candidate.Dependencies())
         {
             std::vector<std::uint8_t> current;
@@ -359,13 +362,13 @@ namespace renegade::bridge
                 return result;
             }
         }
-        const fs::path sourceBundle = isFbx ? sourceFolder / fs::u8path(request.assetName) : sourceFolder;
-        if (isFbx && fs::exists(sourceBundle, ec) && !fs::is_empty(sourceBundle, ec))
+        const fs::path sourceBundle = hasBundle ? sourceFolder / fs::u8path(request.assetName) : sourceFolder;
+        if (hasBundle && fs::exists(sourceBundle, ec) && !fs::is_empty(sourceBundle, ec))
         {
             result.error = "Model source bundle already exists; choose another asset name.";
             return result;
         }
-        const fs::path retainedSource = isFbx
+        const fs::path retainedSource = hasBundle
             ? sourceBundle / sourcePath.filename()
             : sourceFolder / fs::u8path(request.assetName + ".glb");
         std::vector<fs::path> dependencyPaths;
@@ -384,7 +387,7 @@ namespace renegade::bridge
                         fs::remove(parent, ignored);
                 fs::remove(bundle, ignored);
             }
-        } cleanup{isFbx ? sourceBundle : fs::path{}, dependencyPaths};
+        } cleanup{hasBundle ? sourceBundle : fs::path{}, dependencyPaths};
         for (size_t index = 0; index < candidate.Dependencies().size(); ++index)
         {
             const auto& dependency = candidate.Dependencies()[index];
@@ -402,7 +405,7 @@ namespace renegade::bridge
             }
             dependencyPaths.push_back(destination);
         }
-        if (isFbx)
+        if (hasBundle)
         {
             fs::create_directories(sourceBundle, ec);
             if (ec || !Within(fs::weakly_canonical(sourceBundle, ec), root) || ec)
@@ -516,12 +519,15 @@ namespace renegade::bridge
                 authoredRecipe.externalAnimations.push_back(std::move(clip));
             }
         }
-        for(size_t d=0;d<candidate.Dependencies().size();++d) {
-            const auto& dependency=candidate.Dependencies()[d];
-            if(dependency.explicitRelink)
-                authoredRecipe.textureRelinks.push_back({dependency.materialIndex,dependency.textureSlot,
-                    dependencyPaths[d].lexically_relative(root).generic_u8string()});
-        }
+        // Record every retained map by material slot. Reimport must not depend
+        // on obsolete absolute paths baked into FBX/MTL or the original source tree.
+        for (size_t i = 0; i < candidate.PeekScene()->materials.GetCount(); ++i)
+            for (size_t slot = 0; slot < wi::scene::MaterialComponent::TEXTURESLOT_COUNT; ++slot)
+                for (size_t d = 0; d < candidate.Dependencies().size(); ++d)
+                    if (!candidate.Dependencies()[d].previewResourceName.empty() &&
+                        candidate.PeekScene()->materials[i].textures[slot].name == candidate.Dependencies()[d].previewResourceName)
+                        authoredRecipe.textureRelinks.push_back({std::uint32_t(i), std::uint32_t(slot),
+                            dependencyPaths[d].lexically_relative(root).generic_u8string()});
         std::string authoredOptions;
         if (!SerializeCreatorModelImportOptions(authoredRecipe, authoredOptions, result.error)) return result;
         std::vector<std::uint8_t> payload;
@@ -554,20 +560,20 @@ namespace renegade::bridge
                     for (size_t d = 0; d < candidate.Dependencies().size(); ++d)
                     {
                         const auto& dependency = candidate.Dependencies()[d];
-                        if (dependency.referenceName.empty() ||
+                        if (dependency.previewResourceName.empty() ||
                             texture.name != dependency.previewResourceName) continue;
                         texture.name = dependencyPaths[d].generic_u8string();
                         texture.resource = wi::resourcemanager::Load(texture.name,
                             wi::resourcemanager::Flags::IMPORT_RETAIN_FILEDATA,
                             dependency.bytes.data(), dependency.bytes.size());
                         if (!texture.resource.IsValid() || !texture.resource.GetTexture().IsValid())
-                            throw std::runtime_error("Retained FBX texture could not decode.");
+                            throw std::runtime_error("Retained model texture could not decode.");
                     }
                 }
                 commitScene.materials[i].SetDirty();
             }
             if (!SerializeScene(commitScene,
-                    (isFbx ? sourceBundle : workFolder) /
+                    (hasBundle ? sourceBundle : workFolder) /
                         fs::u8path(".renegade-" + result.assetId + ".import.wiscene"),
                     payload, result.error)) return result;
         }
@@ -609,15 +615,15 @@ namespace renegade::bridge
         if (!count(morphCount, metadataValue.morphTargetCount)) return result;
 
         nlohmann::json recipe = {{"options", nlohmann::json::object()},
-            {"source_format", isFbx ? "fbx" : "glb"}};
+            {"source_format", format}};
         recipe["options"] = nlohmann::json::parse(authoredOptions);
         const std::string recipeJson = recipe.dump();
         ReusableModelAssetDocument document;
         document.manifest.projectId = request.projectId;
         document.manifest.assetId = result.assetId;
         document.manifest.sourceAssetId = result.sourceAssetId;
-        document.manifest.sourceFormat = isFbx ? "fbx" : "glb";
-        document.manifest.importer = isFbx ? "wicked.fbx" : "wicked.gltf";
+        document.manifest.sourceFormat = format;
+        document.manifest.importer = isObj ? "wicked.obj" : isFbx ? "wicked.fbx" : "wicked.gltf";
         document.manifest.settingsJson = recipeJson;
         document.manifest.payloadHash = Hash(payload);
         document.payload = std::move(payload);

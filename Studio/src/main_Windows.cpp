@@ -7,6 +7,7 @@
 #include "RenegadeLivingPresenceLaunch.h"
 
 #include <Windows.h>
+#include "renegade/bridge/NativeWindowSurface.h"
 
 #include <algorithm>
 #include <cwchar>
@@ -176,7 +177,7 @@ namespace
             else if (application != nullptr &&
                      windowReadyForWicked && !IsIconic(window))
             {
-                application->SetWindow(window);
+                (void)renegade::bridge::TryBindDrawableNativeWindow(window, *application);
             }
             return 0;
 
@@ -210,7 +211,7 @@ namespace
             else if (application != nullptr &&
                      windowReadyForWicked && !IsIconic(window))
             {
-                application->SetWindow(window);
+                (void)renegade::bridge::TryBindDrawableNativeWindow(window, *application);
             }
             return 0;
         }
@@ -266,7 +267,7 @@ namespace
                 // A background resize or monitor DPI transition must not leave
                 // the swapchain stretched relative to mouse hit coordinates.
                 if (windowReadyForWicked && !IsIconic(window))
-                    application->SetWindow(window);
+                    (void)renegade::bridge::TryBindDrawableNativeWindow(window, *application);
             }
             if (startupIdentityActive && startupIdentityPrompt != nullptr)
                 startupIdentityPrompt->Focus();
@@ -387,7 +388,7 @@ int APIENTRY wWinMain(
         std::to_string(workWidth) + "x" + std::to_string(workHeight));
 
     windowReadyForWicked = true;
-    application->SetWindow(window);
+    (void)renegade::bridge::TryBindDrawableNativeWindow(window, *application);
     application->SetExitRequestHandler([window]() { DestroyWindow(window); });
     SetWindowTextW(window, GraphicsBackendTitle());
     LogGate2A("WICKED_WINDOW_BOUND");
@@ -679,7 +680,7 @@ int APIENTRY wWinMain(
                 // Render the actual live Project Hub while Gate 2C still fully
                 // covers the client area. Gate 2D never transitions to a fake
                 // Hub image: the real Studio surface is already underneath.
-                application->SetWindow(window);
+                (void)renegade::bridge::TryBindDrawableNativeWindow(window, *application);
                 application->Run();
                 firstStudioFrameReady = true;
                 LogGate2D("LIVE_HUB_FRAME_READY_BEHIND_HANDSHAKE");
@@ -745,7 +746,7 @@ int APIENTRY wWinMain(
                 }
 
                 windowReadyForWicked = true;
-                application->SetWindow(window);
+                (void)renegade::bridge::TryBindDrawableNativeWindow(window, *application);
                 application->Run();
                 LogGate2D("HANDOFF_TO_LIVE_HUB");
                 LogGate2C("HANDOFF_TO_STUDIO");
@@ -776,7 +777,7 @@ int APIENTRY wWinMain(
     {
         // Gate 2C could not establish an owner surface. Keep the old Gate 2B
         // fail-open contract: render Studio first, then remove the opaque prompt.
-        application->SetWindow(window);
+        (void)renegade::bridge::TryBindDrawableNativeWindow(window, *application);
         application->Run();
         firstStudioFrameReady = true;
         identityPrompt.Shutdown();
@@ -786,7 +787,7 @@ int APIENTRY wWinMain(
 
     if (message.message != WM_QUIT && !firstStudioFrameReady)
     {
-        application->SetWindow(window);
+        (void)renegade::bridge::TryBindDrawableNativeWindow(window, *application);
         application->Run();
         firstStudioFrameReady = true;
         if (revealAcceptedHandoff)

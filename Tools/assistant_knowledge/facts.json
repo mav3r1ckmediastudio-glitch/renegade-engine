@@ -356,6 +356,155 @@
           "needle": "projectileImpactMode_.AddItem(\"Stick into the object\")"
         }
       ]
+    },
+    {
+      "id": "river-v2-current-controls",
+      "title": "Renegade rivers: spline flow, foam, width and tributaries",
+      "tags": [
+        "river",
+        "rivers",
+        "riverbed",
+        "riverbeds",
+        "spline",
+        "water",
+        "flow",
+        "flowing",
+        "foam",
+        "width",
+        "tributary",
+        "tributaries",
+        "nodes",
+        "inspector"
+      ],
+      "answer": "Renegade Studio has editable spline rivers. The River V2 controls include ENABLE SPLINE FLOW + FOAM, flow arrows, river speed, contact foam, node-by-node width, and tributary connections. Select a river or control node to inspect the available settings. Riverbed & Banks links the water spline to its carved channel. If a safety check refuses linking, read the Inspector reason; do not bypass it.",
+      "sources": [
+        {
+          "path": "Studio/src/RiverFlowStudioIntegration.cpp",
+          "needle": "\"ENABLE SPLINE FLOW + FOAM\""
+        },
+        {
+          "path": "Studio/src/RiverFlowStudioIntegration.cpp",
+          "needle": "\"SELECTED NODE WIDTH (m)\""
+        },
+        {
+          "path": "Studio/src/RiverFlowStudioIntegration.cpp",
+          "needle": "\"DRAW TRIBUTARY FROM THIS NODE\""
+        }
+      ]
+    },
+    {
+      "id": "river-v2-terrain-width",
+      "title": "River width, bed and terrain banks",
+      "tags": [
+        "river",
+        "rivers",
+        "terrain",
+        "banks",
+        "bank",
+        "bed",
+        "riverbed",
+        "riverbeds",
+        "surface",
+        "water",
+        "waterplane",
+        "gaps",
+        "fit",
+        "fitting",
+        "width",
+        "alignment"
+      ],
+      "answer": "River-node width is set in metres under SELECTED NODE WIDTH. If Riverbed & Banks displays CHANNEL // NOT LINKED, the LINK / UPDATE BED button is the intended channel-cut action; moving spline points then updates the linked channel, and REMOVE BED restores the base terrain. Use a COPIED project when investigating existing gaps, and use Undo if needed. If water floats, crosses banks or does not fit after linking, that is a reported pre-alpha defect, not expected behaviour. Preserve the project and a screenshot.",
+      "sources": [
+        {
+          "path": "Studio/src/RiverFlowStudioIntegration.cpp",
+          "needle": "Width in metres at this point; the nearby channel and linked banks follow smoothly."
+        },
+        {
+          "path": "Studio/src/RiverFlowStudioIntegration.cpp",
+          "needle": "Linked riverbeds update with the river."
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "terrainRiverCarveButton_.SetText(\"LINK / UPDATE BED\");"
+        }
+      ]
+    },
+    {
+      "id": "waterfall-current-controls",
+      "title": "Renegade waterfall placement and spray controls",
+      "tags": [
+        "waterfall",
+        "waterfalls",
+        "water",
+        "terrain",
+        "cascade",
+        "mist",
+        "spray",
+        "crest",
+        "landing",
+        "impact"
+      ],
+      "answer": "Waterfalls have their own placement controls. ADD WATERFALL creates a waterfall without requiring a river; use CREST / TOP and LANDING / BOTTOM to move its handles. Available visual controls include width, flow/intensity, turbulence, airborne spray, ambient mist and impact spray. This describes the present UI; it does not claim the current pre-alpha has passed every visual or terrain-alignment test.",
+      "sources": [
+        {
+          "path": "Studio/src/WaterfallStudioIntegration.cpp",
+          "needle": "\"ADD WATERFALL\""
+        },
+        {
+          "path": "Studio/src/WaterfallStudioIntegration.cpp",
+          "needle": "\"CREST / TOP - SELECT & MOVE\""
+        },
+        {
+          "path": "Studio/src/WaterfallStudioIntegration.cpp",
+          "needle": "\"IMPACT SPRAY\""
+        }
+      ]
+    },
+    {
+      "id": "river-v2-draw-and-link",
+      "title": "How to draw a river and link it to the terrain in Renegade Studio",
+      "tags": [
+        "river",
+        "rivers",
+        "how",
+        "draw",
+        "drawing",
+        "create",
+        "make",
+        "carve",
+        "link",
+        "riverbed",
+        "riverbeds",
+        "terrain",
+        "water",
+        "steps",
+        "channel",
+        "banks",
+        "sculpt"
+      ],
+      "answer": "To draw a river: 1. Open the Terrain river controls and select DRAW RIVER. 2. Left-drag across the terrain to draw its water spline; release to finish. 3. Turn drawing off and select the new River Water in the scene or hierarchy. 4. In RIVERBED & BANKS adjust BED DEPTH and BANK WIDTH, then press LINK / UPDATE BED. 5. Check that its channel reports linked and that visible water meets the banks. New default terrain supports ordinary shallow riverbeds without ALLOW DEEPER BEDS. Use that explicit range extension only when the desired cut exceeds the current minimum elevation, including on legacy terrain. If linking is refused, read the Inspector reason and respect the safety limits. If water still does not fit after a successful link, preserve a project copy and screenshot for a defect report.",
+      "sources": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "terrainRiverBrushButton_.SetText(\"DRAW RIVER\");"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "Then select the new River Water and click LINK / UPDATE BED to cut the channel."
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "terrainRiverCarveButton_.SetText(\"LINK / UPDATE BED\");"
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "\"Riverbed Depth\", \"BED DEPTH\""
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "needle": "\"Riverbank Width\", \"BANK WIDTH\""
+        }
+      ]
     }
   ]
 }

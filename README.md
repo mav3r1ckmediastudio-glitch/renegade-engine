@@ -51,7 +51,7 @@ build lifecycle, creator UX, diagnostics and higher-level gameplay framework.
 
 - Rebuilt native importer workflow rather than the former painted/non-interactive
   importer prototype.
-- Static GLB/GLTF and FBX import with native preview, rotation controls, retained
+- Static OBJ, GLB/GLTF and FBX import with native preview, material/map controls, retained
   source provenance, texture handling and save/reopen verification.
 - Character import workflow with native preview, Character creation and reusable
   Character Prefabs.

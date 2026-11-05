@@ -5,6 +5,20 @@
 
 namespace renegade::studio
 {
+    void ModelImportPreview::RefreshMaterials(const wi::scene::Scene& source)
+    {
+        if (!previewScene_.IsValid()) return;
+        for (size_t i = 0; i < source.materials.GetCount() && i < previewScene_->materials.GetCount(); ++i)
+        {
+            for (size_t slot = 0; slot < wi::scene::MaterialComponent::TEXTURESLOT_COUNT; ++slot)
+                previewScene_->materials[i].textures[slot] = source.materials[i].textures[slot];
+            previewScene_->materials[i].normalMapStrength = source.materials[i].normalMapStrength;
+            previewScene_->materials[i].SetOcclusionEnabled_Secondary(source.materials[i].IsOcclusionEnabled_Secondary());
+            previewScene_->materials[i].SetDirty();
+        }
+        renderedFrames_ = 0;
+    }
+
     bool ModelImportPreview::Prepare(wi::scene::Scene& source, std::string& error)
     {
         paired_ = pairedPlaying_ = false;assemblyHands_={};assemblyShieldHeld_=false;

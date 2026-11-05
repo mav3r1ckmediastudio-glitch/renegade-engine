@@ -1,5 +1,6 @@
 #include "renegade/bridge/RiverbedMaterialService.h"
 #include "renegade/bridge/RiverTerrainLayerService.h"
+#include "renegade/bridge/TerrainService.h"
 #include "renegade/bridge/RiverSplineService.h"
 #include "renegade/bridge/SpecialistComponentService.h"
 #include <algorithm>
@@ -17,7 +18,9 @@ namespace renegade::bridge
             const wi::scene::Scene& scene,const wi::terrain::Terrain& t)
         {
             if(t.IsCenterToCamEnabled() || t.IsRemovalEnabled() ||
-               t.chunks.empty() || t.chunks.size()>81 ||
+               t.generation<1 || t.generation>MaximumTerrainChunkRadius ||
+               t.chunks.size()!=std::size_t(TerrainChunkCountPerSide(t.generation))*
+                   TerrainChunkCountPerSide(t.generation) ||
                t.materialEntities.size()<4 || t.materialEntities.size()>5)return false;
             if(t.materialEntities.size()==5)
             {
@@ -179,6 +182,7 @@ namespace renegade::bridge
             return false;
         }
         terrain->Generation_Cancel();
+        if(!ValidateRiverTerrainLayers(*scene_,terrain_,error_))return false;
         if(!ValidRockTerrain(*scene_,*terrain))
         {
             error_="Rocky bed requires four original slots, optionally followed by its shared Rocky Riverbed slot";
@@ -193,7 +197,10 @@ namespace renegade::bridge
             return false;
         }
         masks_.clear();
-        std::size_t painted=0;
+        std::size_t painted=0,work=0;
+        // Preserve the original worst-case 81 full grids x 127 segments.
+        // Local segment selection makes maximum resident extent affordable.
+        constexpr std::size_t MaximumPaintWork=81*wi::terrain::vertexCount*127;
         for(auto& kv:terrain->chunks)
         {
             auto& c=kv.second;
@@ -204,13 +211,39 @@ namespace renegade::bridge
             mask.pixels.resize(wi::terrain::vertexCount,0);
             if(reuseMaterial_)mask.before.assign(c.blendmap_layers.back().pixels.begin(),
                 c.blendmap_layers.back().pixels.end());
-            for(std::size_t i=0;i<mask.pixels.size();++i)
+            std::vector<XMFLOAT3> positions;
+            positions.reserve(mesh->vertex_positions.size());
+            float minX=std::numeric_limits<float>::max(),minZ=minX;
+            float maxX=-minX,maxZ=-minX;
+            for(const auto& vertex:mesh->vertex_positions)
             {
                 XMFLOAT3 p;
                 DirectX::XMStoreFloat3(&p,DirectX::XMVector3TransformCoord(
-                    DirectX::XMLoadFloat3(&mesh->vertex_positions[i]),world));
+                    DirectX::XMLoadFloat3(&vertex),world));
+                positions.push_back(p);
+                minX=std::min(minX,p.x);maxX=std::max(maxX,p.x);
+                minZ=std::min(minZ,p.z);maxZ=std::max(maxZ,p.z);
+            }
+            std::vector<std::size_t> segments;
+            const float padding=spline->width+3.2f; // outer feather + maximum variation
+            for(std::size_t j=1;j<points.size();++j)
+            {
+                const auto& a=points[j-1];const auto& b=points[j];
+                if(std::min(a.x,b.x)-padding>maxX ||
+                   std::max(a.x,b.x)+padding<minX ||
+                   std::min(a.z,b.z)-padding>maxZ ||
+                   std::max(a.z,b.z)+padding<minZ)continue;
+                segments.push_back(j);
+            }
+            const auto cost=segments.size()*wi::terrain::vertexCount;
+            if(cost>MaximumPaintWork-work)
+            {error_="Rocky bed paint exceeds its bounded work budget";masks_.clear();return false;}
+            work+=cost;
+            for(std::size_t i=0;i<mask.pixels.size();++i)
+            {
+                const auto& p=positions[i];
                 float minSq=std::numeric_limits<float>::max();
-                for(std::size_t j=1;j<points.size();++j)
+                for(const auto j:segments)
                 {
                     const auto& a=points[j-1];
                     const auto& b=points[j];
