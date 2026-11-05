@@ -708,6 +708,13 @@ namespace renegade::bridge
             return false;
         }
 
+        std::string riverNormalError;
+        if (!RestoreBundledRiverWaterNormals(*prepared.scene_, riverNormalError))
+        {
+            lastError_ = "Could not restore river water: " + riverNormalError;
+            return false;
+        }
+
         std::string lightmapError;
         if (!LightmapBakeService::HydratePersistedLightmaps(
                 *prepared.scene_, lightmapError))

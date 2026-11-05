@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <utility>
+#include <string>
 #include <vector>
 #include <WickedEngine.h>
 #include "renegade/bridge/CommandService.h"
@@ -29,6 +30,10 @@ namespace renegade::bridge
     // One-time migration for existing Renegade water splines; authored native
     // shadow settings remain editable after migration.
     void RestoreRiverCaustics(wi::scene::Scene& scene);
+    // Repair only missing bundled stock normals on native WATER splines.
+    // Valid or custom bindings and all authored optics/animation stay intact.
+    [[nodiscard]] bool RestoreBundledRiverWaterNormals(
+        wi::scene::Scene& scene, std::string& error);
     // Test-only shader IDs are process-local and must NEVER enter WISCENE.
     // Masks just the opt-in diagnostic ID for the synchronous archive write,
     // restoring the exact material ID on scope exit, including exceptions.

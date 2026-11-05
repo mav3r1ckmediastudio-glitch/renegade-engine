@@ -7813,3 +7813,12 @@ audit. Final local results and the next exact-head four-check run are recorded
 there; neither historical local success nor these fixture changes close the
 independent release gate. Main merge and another alpha distribution still
 require owner approval.
+
+
+## 2026-11-05 owner-accepted riverbed and water-normal follow-up
+
+Focused follow-up to merged recovery PR189 (main1ccf6dd). Includes changed-chunk terrain restoration with neighbour normal lookups, independent progress painting and focus restoration, and missing-stock-water-normal hydration before Studio/Runtime scene adoption. Custom/empty/valid normal bindings and authored water settings remain intact. Source includes native no-op/local history assertions, interactive focus regression and Windows fixture-driven save/reopen/cold-runtime/missing-bundle proof. The latter requires an explicit marked disposable fixture; it is not a new unattended CTest.
+
+Owner confirmed Preview3 carving worked well and combined water-normal preview works a treat, then authorized merge to main. New preview SHA25681d22423ce5443980c872c23413741aa69553d1861deac70c1ae8af47bf03452. Targeted Release builds and default/max terrain native cases passed; normal persistence warm/cold/missing-bundle proof passed3/3 and packaged Studio startup/Story Flow/hierarchy inspection passed. See docs/RIVERBED_PERFORMANCE_2026-11-05.md and docs/RIVER_WATER_NORMAL_RELOAD_REPAIR_2026-11-05.md for exact scope and limits. Full four-way branch CI required before merge; no external alpha release authorized.
+
+Work is isolated from the original dirty recovery checkout. Its inherited HANDOFF/imnodes/cache/log changes and all user projects/backups remain there untouched. The Wicked submodule pointer and cloud shaders are unchanged; experimental cloud measurements/patch are excluded. Workflow evidence hashes are refreshed only for modified source files with existing needles retained. Next: exact commit CI and merge outcome recorded in PR.

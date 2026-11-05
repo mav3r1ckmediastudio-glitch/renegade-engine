@@ -1,3 +1,4 @@
+#include "RiverbedProgressWindow.h"
 #include <wiProfiler.h>
 #include "../../EngineBridge/src/PlaceableWaterfallAuthoring.h"
 #include <sstream>
@@ -8123,6 +8124,7 @@ void StudioRenderPath::QueueSelectedRiverLayer(const bool enabled, const bool mo
             studioChrome_.SetStatusText("STREAM FIT // Downhill surface and linked channel // Undo ready");
             return;
         }
+        RiverbedProgressWindow progressWindow;
         const auto rollback=bridge::CaptureTerrainSculpt(current,*terrain);
         auto command=std::make_unique<bridge::SetRiverTerrainLayerCommand>(
             current,terrainID,river,depth,bank,enabled);
