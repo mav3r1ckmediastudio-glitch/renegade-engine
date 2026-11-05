@@ -2057,3 +2057,8 @@ rendering and destruction must preserve source texture bindings and authored
 terrain data. Reopening only clears the old symptom; resource isolation repairs
 its reproduced cause. See TERRAIN_INITIALIZATION_RECOVERY_2026-11-02.md for
 verification status.
+
+
+## Riverbed locality and progress candidate (5 November 2026)
+
+Terrain snapshot application compares exact heights and rebuilds only changed chunks; its canonical normal lookup includes their one-ring neighbours. Optional scoped thread-local bridge progress reports real stages and chunk counts. The Windows Studio progress overlay has an independent UI message loop; live scene/GPU mutation remains at the existing atomic scene-safe point, with editing locked. It does not provide cancellation or asynchronous scene authoring. See RIVERBED_PERFORMANCE_2026-11-05.md for engineering evidence and open acceptance.

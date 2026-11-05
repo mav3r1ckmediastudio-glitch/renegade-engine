@@ -46,7 +46,7 @@
         {
           "path": "docs/ARCHITECTURE.md",
           "needle": "Creator steps: select an object; choose Surface Type directly in its Inspector.",
-          "sha256": "81457de634d3f202e63945865c52d21941de9f3a40b124d1396fa84f4134a0a0"
+          "sha256": "96fd5d7ece25aeac068a798bcf1b45fba8434cdbbbb8d43b24830194e7c36ff3"
         },
         {
           "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
@@ -99,7 +99,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportAddAnimation_.SetText(\"ADD ANIMATION FBX\");",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "EngineBridge/src/ModelImportCandidateService.cpp",
@@ -173,12 +173,12 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportAction_.Create(\"Gameplay action\");",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "{\"Unassigned\", \"Idle\", \"Walk\", \"Run\", \"Attack\", \"Reload\", \"Hit\", \"Death\"}",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "docs/MODEL_IMPORTER_REBUILD.md",
@@ -1094,17 +1094,17 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "params.extensions = {\"glb\", \"fbx\", \"obj\"};",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "\"Animated import currently requires a skinned mesh and skeleton.\"",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportClip_.AddItem(\"REFERENCE POSE\");",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
@@ -1620,7 +1620,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerPrefabSave_.SetText(\"SAVE AS PLAYER PREFAB\")",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
@@ -1686,7 +1686,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerPrefabReset_.SetText(\"RESET TO PREFAB\")",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
@@ -1767,7 +1767,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerEquipment_.SetText(\"STARTING EQUIPMENT\")",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "Studio/src/PlayerEquipmentEditor.cpp",
@@ -1852,7 +1852,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerEquipment_.SetText(\"STARTING EQUIPMENT\")",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "EngineBridge/src/EquipmentAssetService.cpp",
@@ -1937,22 +1937,22 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "params.extensions = {\"glb\", \"fbx\", \"obj\"};",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportName_.SetDescription(\"Asset name: \");",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportFolder_.SetDescription(\"Import to: \");",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportCommit_.SetText(\"IMPORT ASSET\");",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "docs/MODEL_IMPORT_DESTINATIONS.md",
@@ -1967,7 +1967,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "could not be revealed. Do not import it again.",
-          "sha256": "ec750b3a22724ef62e9fe153ec2dc1ea38fd3d1c7c189ce1b9dce841974a952e"
+          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
         },
         {
           "path": "Tests/ModelImporterRebuildGraphicsProof.cpp",

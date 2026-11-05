@@ -1,3 +1,4 @@
+#include "renegade/bridge/TerrainOperationProgress.h"
 #include "renegade/bridge/RiverWaterwayService.h"
 #include "renegade/bridge/RiverTerrainLayerService.h"
 #include "renegade/bridge/RiverSplineService.h"
@@ -550,10 +551,12 @@ namespace renegade::bridge
                     work+=cost;
                 }
             }
+            ReportTerrainOperation("Calculating riverbed",0,doc.chunks.size());
             TerrainSculptState next;
             std::size_t chunkIndex=0;
             for (auto& chunk : doc.chunks)
             {
+                ReportTerrainOperation("Calculating riverbed",chunkIndex,doc.chunks.size());
                 const auto& locality=local[chunkIndex++];
                 const auto* mesh = scene.meshes.GetComponent(chunk.entity);
                 const auto world = scene.ComputeEntityMatrixRecursive(chunk.entity);
@@ -715,6 +718,7 @@ namespace renegade::bridge
             Check(IsValidStableId(id),"Save/assign a persistent river identity before linking terrain");
             Check(std::isfinite(depth)&&depth>=.05f&&depth<=5 &&
                 std::isfinite(bank)&&bank>=.5f&&bank<=20,"Invalid riverbed depth/bank width");
+            ReportTerrainOperation("Validating terrain");
             auto doc=Read(scene,terrain,true);
             auto found=std::find_if(doc.layers.begin(),doc.layers.end(),[&](const Layer& l){return l.river==id;});
             if (enabled)
@@ -966,6 +970,7 @@ namespace renegade::bridge
         auto* terrain=scene_->terrains.GetComponent(terrain_);
         if(!terrain) return false;
         if(captured_) return ApplyTerrainSculpt(*scene_,*terrain,after_);
+        ReportTerrainOperation("Preparing riverbed");
         before_=CaptureTerrainSculpt(*scene_,*terrain);
         if(!SetRiverTerrainLayer(*scene_,terrain_,river_,depth_,bank_,enabled_,error_)) return false;
         after_=CaptureTerrainSculpt(*scene_,*terrain);captured_=true;return true;

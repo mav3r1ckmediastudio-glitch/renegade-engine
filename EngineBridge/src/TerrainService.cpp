@@ -1,3 +1,4 @@
+#include "renegade/bridge/TerrainOperationProgress.h"
 #include "renegade/bridge/TerrainService.h"
 #include "renegade/bridge/RiverTerrainLayerService.h"
 #include "renegade/bridge/ImpactSurface.h"
@@ -280,12 +281,13 @@ namespace
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,
         const XMFLOAT3* brushCenter = nullptr,
-        const float brushRadius = 0.0f)
+        const float brushRadius = 0.0f,
+        const std::unordered_set<wi::ecs::Entity>* included = nullptr)
     {
         TerrainStageTrace trace("grid");
         TerrainGrid grid;
         std::size_t includedChunks = 0;
-        const std::size_t reservedChunkCount = brushCenter == nullptr
+        const std::size_t reservedChunkCount = included ? included->size() : brushCenter == nullptr
             ? terrain.chunks.size()
             : std::min<std::size_t>(terrain.chunks.size(), 16);
         grid.reserve(reservedChunkCount * wi::terrain::vertexCount);
@@ -293,6 +295,7 @@ namespace
         for (auto& entry : terrain.chunks)
         {
             auto& chunk = entry.second;
+            if(included && !included->count(chunk.entity)) continue;
             if (brushCenter != nullptr)
             {
                 const float dx = chunk.sphere.center.x - brushCenter->x;
@@ -406,6 +409,7 @@ namespace
         const bool refreshPhysics)
     {
         const float spacing = std::max(0.001f, terrain.chunk_scale);
+        std::size_t completedChunks=0;
         for (auto* chunk : chunks)
         {
             if (chunk == nullptr || terrain.scene == nullptr)
@@ -435,6 +439,7 @@ namespace
                 continue;
             }
 
+            renegade::bridge::ReportTerrainOperation("Updating terrain",completedChunks,chunks.size());
             mesh->vertex_normals.resize(mesh->vertex_positions.size());
             mesh->vertex_tangents.resize(mesh->vertex_positions.size());
             for (std::size_t index = 0;
@@ -493,8 +498,10 @@ namespace
 
             if (refreshPhysics && terrain.IsPhysicsEnabled())
             {
+                renegade::bridge::ReportTerrainOperation("Rebuilding collision",completedChunks,chunks.size());
                 RefreshChunkPhysics(terrain, *chunk, *mesh);
             }
+            renegade::bridge::ReportTerrainOperation("Updating terrain",++completedChunks,chunks.size());
         }
     }
 
@@ -1441,7 +1448,34 @@ namespace renegade::bridge
         const bool refreshPhysics)
     {
         terrain.Generation_Cancel();
-        TerrainGrid grid = BuildTerrainGrid(scene, terrain);
+        ReportTerrainOperation("Finding changed chunks");
+        std::unordered_map<wi::ecs::Entity,wi::terrain::Chunk> coordinates;
+        for(const auto& entry:terrain.chunks) coordinates.emplace(entry.second.entity,entry.first);
+        // History snapshots retain full validation, but only changed heights
+        // may cause mesh, texture, BVH or collision reconstruction.
+        std::unordered_set<wi::ecs::Entity> edited;
+        std::size_t applicableChunks=0;
+        for(const auto& saved:state.chunks) {
+            const auto* mesh=scene.meshes.GetComponent(saved.entity);
+            if(!mesh || mesh->vertex_positions.size()!=saved.heights.size() || !coordinates.count(saved.entity)) continue;
+            ++applicableChunks;
+            for(std::size_t i=0;i<saved.heights.size();++i)
+                if(mesh->vertex_positions[i].y!=saved.heights[i]) {edited.insert(saved.entity);break;}
+        }
+        // Normal/tangent lookups require the neighbouring samples, including
+        // duplicated corners. Keep the existing global grid-key convention.
+        std::unordered_set<wi::ecs::Entity> lookup;
+        for(const auto entity:edited) {
+            const auto found=coordinates.find(entity);
+            if(found==coordinates.end()) continue;
+            for(int z=-1;z<=1;++z)for(int x=-1;x<=1;++x) {
+                wi::terrain::Chunk key=found->second;key.x+=x;key.z+=z;
+                const auto chunk=terrain.chunks.find(key);
+                if(chunk!=terrain.chunks.end())lookup.insert(chunk->second.entity);
+            }
+        }
+        TerrainGrid grid = edited.empty() ? TerrainGrid{} :
+            BuildTerrainGrid(scene, terrain,nullptr,0.f,&lookup);
         if (!state.riverLayerDocument.empty() || HasRiverTerrainLayers(scene, terrain.terrainEntity))
         {
             // Layer transactions cannot partially restore a stale topology.
@@ -1463,6 +1497,7 @@ namespace renegade::bridge
         std::unordered_set<wi::terrain::ChunkData*> changedChunks;
         for (const auto& saved : state.chunks)
         {
+            if(!edited.count(saved.entity)) continue;
             auto* mesh = scene.meshes.GetComponent(saved.entity);
             if (mesh == nullptr || mesh->vertex_positions.size() != saved.heights.size())
                 continue;
@@ -1505,7 +1540,7 @@ namespace renegade::bridge
             if (!metadata) metadata = &scene.metadatas.Create(terrain.terrainEntity);
             metadata->string_values.set(RiverTerrainLayersMetadataKey, state.riverLayerDocument);
         }
-        return !changedChunks.empty() || hadLayers || !state.riverLayerDocument.empty();
+        return !changedChunks.empty() || applicableChunks != 0 || hadLayers || !state.riverLayerDocument.empty();
     }
 
     bool SetAuthoredTerrainHeightFloor(

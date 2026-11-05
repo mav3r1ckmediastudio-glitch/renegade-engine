@@ -1,3 +1,4 @@
+#include "renegade/bridge/TerrainOperationProgress.h"
 #include "renegade/bridge/RiverSplineService.h"
 #include "renegade/bridge/RiverTerrainLayerService.h"
 #include "renegade/bridge/RiverbedMaterialService.h"
@@ -767,7 +768,19 @@ int main(int argc, char** argv)
             std::cout<<"DEFAULT_LINK_PASS chunks="<<chunksBefore
                 <<" changed="<<after.chunks.size()<<" bytes="<<linked.riverLayerDocument.size()
                 <<" latency_ms="<<ms<<std::endl;
-            link.Undo();
+            std::size_t rebuildBudget=0;
+            const TerrainOperationProgress observe=[&](const char* stage,std::size_t,std::size_t total) {
+                if(std::string(stage)=="Updating terrain") rebuildBudget=std::max(rebuildBudget,total);
+            };
+            {
+                ScopedTerrainOperationProgress progress(observe);
+                Require(ApplyTerrainSculpt(scene,*terrain,linked),"Unchanged terrain restore failed");
+                Require(rebuildBudget==0,"Unchanged snapshot rebuilt terrain");
+                link.Undo();
+            }
+            Require(rebuildBudget==after.chunks.size(),
+                "River Undo rebuilt chunks outside its changed footprint");
+            std::cout<<"LOCAL_UNDO_REBUILD_CHUNKS="<<rebuildBudget<<std::endl;
             auto undo=CaptureTerrainSculpt(scene,*terrain);before=baseline;after=undo;
             Require(RetainChangedTerrainSculpt(before,after)==0,"Default link Undo changed baseline");
             Require(link.Execute(),"Default link Redo failed");

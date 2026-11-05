@@ -69,6 +69,52 @@ namespace renegade::bridge
         }
     }
 
+    bool RestoreBundledRiverWaterNormals(wi::scene::Scene& scene,
+        std::string& error)
+    {
+        error.clear();
+        if (wi::graphics::GetDevice() == nullptr) return true;
+        std::vector<wi::ecs::Entity> missing;
+        for (std::size_t i = 0; i < scene.splines.GetCount(); ++i)
+        {
+            const auto entity = scene.splines.GetEntity(i);
+            const auto* material = scene.materials.GetComponent(entity);
+            if (!material || material->shaderType !=
+                wi::scene::MaterialComponent::SHADERTYPE_WATER) continue;
+            const auto& normal = material->textures[
+                wi::scene::MaterialComponent::NORMALMAP];
+            // An empty slot can be intentional; a custom map is never replaced.
+            if (normal.name.empty() || std::filesystem::u8path(normal.name)
+                .filename() != "waterNormalMap.jpg") continue;
+            if (normal.resource.IsValid() &&
+                normal.resource.GetTexture().IsValid()) continue;
+            missing.push_back(entity);
+        }
+        if (missing.empty()) return true;
+        const auto path = std::filesystem::u8path(wi::helper::GetExecutablePath())
+            .parent_path() / "Content/river/waterNormalMap.jpg";
+        const auto resource = wi::resourcemanager::Load(path.generic_u8string(),
+            wi::resourcemanager::Flags::IMPORT_RETAIN_FILEDATA |
+            wi::resourcemanager::Flags::IMPORT_NORMALMAP);
+        if (!resource.IsValid() || !resource.GetTexture().IsValid())
+        {
+            error = "Missing or unreadable bundled river normal map: " +
+                path.generic_u8string();
+            return false;
+        }
+        for (const auto entity : missing)
+        {
+            auto& material = *scene.materials.GetComponent(entity);
+            auto& normal = material.textures[
+                wi::scene::MaterialComponent::NORMALMAP];
+            // Keep the actual resource-manager key for embedding in Test Game.
+            normal.name = path.generic_u8string();
+            normal.resource = resource;
+            material.SetDirty();
+        }
+        return true;
+    }
+
     bool IsRiverSplineStrokeValid(
         const std::vector<XMFLOAT3>& points) noexcept
     {

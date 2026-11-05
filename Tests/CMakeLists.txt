@@ -392,6 +392,14 @@ add_test(NAME RenegadeRiverSplineTests COMMAND RenegadeRiverSplineTests)
 
 if(WIN32)
     add_executable(RenegadeRiverSplineGraphicsProof RiverSplineGraphicsProof.cpp)
+    # Explicit disposable-project DX12 persistence proof; requires fixture args.
+    add_executable(RenegadeRiverWaterNormalPersistenceProof RiverWaterNormalPersistenceProof.cpp)
+    target_link_libraries(RenegadeRiverWaterNormalPersistenceProof PRIVATE Renegade::EngineBridge)
+    add_custom_command(TARGET RenegadeRiverWaterNormalPersistenceProof POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeRiverWaterNormalPersistenceProof>/Content/river"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/waterNormalMap.jpg"
+            "$<TARGET_FILE_DIR:RenegadeRiverWaterNormalPersistenceProof>/Content/river/waterNormalMap.jpg")
     target_link_libraries(RenegadeRiverSplineGraphicsProof PRIVATE Renegade::EngineBridge)
     # Disposable DX12 diagnostics: one native Wicked WATER rectangular plane
     # with identical material, varied orientation and absolute elevation.

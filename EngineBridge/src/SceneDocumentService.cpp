@@ -312,6 +312,13 @@ namespace renegade::bridge
         // does not reconstruct ObjectComponent::lightmap. Hydrate the prepared
         // candidate here, at Studio's thread-safe adoption point, so a failure
         // leaves the active document untouched.
+        std::string riverNormalError;
+        if (!RestoreBundledRiverWaterNormals(*prepared.scene_, riverNormalError))
+        {
+            scenes_.lastError_ = "Could not restore river water: " + riverNormalError;
+            return false;
+        }
+
         std::string lightmapError;
         if (!LightmapBakeService::HydratePersistedLightmaps(
                 *prepared.scene_, lightmapError))
