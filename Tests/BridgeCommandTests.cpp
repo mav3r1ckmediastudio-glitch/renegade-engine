@@ -1,3 +1,4 @@
+#include "EditorPointLookupWorkProbe.h"
 #include "../Studio/src/EditorOverlayProjection.h"
 #include <algorithm>
 #include <chrono>
@@ -129,6 +130,9 @@ int main()
                 return Fail("post-TAA editor overlay followed camera jitter");
         }
     }
+
+    if (!renegade::tests::EditorPointLookupAvoidsSceneEnumeration())
+        return Fail("Editor point lookups enumerated or rebuilt scene storage");
 
     const auto initialSceneRevision = scenes.Revision();
     scenes.NewScene();

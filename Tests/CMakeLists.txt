@@ -156,6 +156,9 @@ set_target_properties(RenegadeBridgeTests PROPERTIES
 )
 
 add_test(NAME RenegadeBridgeTests COMMAND RenegadeBridgeTests)
+add_test(NAME RenegadeEditorPointLookupSourceContract
+    COMMAND ${CMAKE_COMMAND} -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/EditorPointLookupSourceContract.cmake)
 
 add_executable(RenegadeWeatherTransitionTests WeatherTransitionTests.cpp)
 target_link_libraries(RenegadeWeatherTransitionTests PRIVATE Renegade::EngineBridge)
