@@ -7826,3 +7826,7 @@ Work is isolated from the original dirty recovery checkout. Its inherited HANDOF
 ## 2026-11-05 VSync control candidate
 
 Separate branch from accepted main e413a50d4fd2c9f7ba70e75ef76aaf7e68233b1c; Wicked remains 82557d439a41d104f559b0d3134d160b7bf6154e. Adds saved VSync on/off at the top of Render workspace, command history and Runtime carry-through via the existing native presentation event. Legacy levels default on. Initial source tests cover request forwarding, VSync-only change detection and existing serialization/history paths. Build and native UI/presentation proof pending. Meshlet changes excluded; no merge or distribution authorised. See docs/VSYNC_CONTROL_2026-11-05.md.
+
+## 2026-11-06 Goblin Cave editor visibility investigation
+Isolated candidate from owner VSync preview 63d2dd4; Wicked pin unchanged at 82557d4. SceneService::ContainsEntity now queries every registered component manager directly, avoiding whole-scene allocation/enumeration for every marker. No cache, authored content, rendering settings or shader changes. Sparse component-only, direct mutation, merge, clear and deleted entity regressions added to BridgeCommandTests. Build, actual Goblin Cave Studio and Test Game validation pending. Preserve owner light deletions. No merge or alpha distribution authorised.
+

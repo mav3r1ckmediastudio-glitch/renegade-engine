@@ -56,6 +56,52 @@ int main()
     renegade::bridge::SelectionService selection;
     renegade::bridge::CommandService commands;
 
+    // Point lookup must agree with native enumeration even for sparse
+    // entities mutated outside SceneService and across scene replacement.
+    {
+        renegade::bridge::SceneService probe;
+        probe.NewScene();
+        auto& scene = probe.GetScene();
+        const auto sparse = wi::ecs::CreateEntity();
+        const auto absent = wi::ecs::CreateEntity();
+        if (probe.ContainsEntity(sparse) || probe.ContainsEntity(absent) ||
+            probe.ContainsEntity(wi::ecs::INVALID_ENTITY))
+            return Fail("empty point lookup invented an entity");
+        scene.names.Create(sparse) = "Name only";
+        if (!probe.ContainsEntity(sparse))
+            return Fail("name-only entity missing from point lookup");
+        scene.metadatas.Create(sparse);
+        scene.names.Remove(sparse);
+        if (!probe.ContainsEntity(sparse))
+            return Fail("metadata-only entity missing after name removal");
+        scene.metadatas.Remove(sparse);
+        if (probe.ContainsEntity(sparse))
+            return Fail("point lookup retained removed native components");
+        scene.layers.Create(sparse);
+        if (!probe.ContainsEntity(sparse))
+            return Fail("layer-only entity missing from point lookup");
+        scene.Clear();
+        if (probe.ContainsEntity(sparse))
+            return Fail("clear retained a stale point lookup");
+        wi::scene::Scene incoming;
+        incoming.animation_datas.Create(sparse);
+        scene.Merge(incoming);
+        if (!probe.ContainsEntity(sparse))
+            return Fail("animation-data-only entity missing after merge");
+        scene.names.Create(sparse) = "__renegade_internal_lookup_test";
+        if (probe.IsHierarchyVisible(sparse))
+            return Fail("internal entity became a visible hierarchy marker");
+        scene.names.Remove(sparse);
+        if (!probe.IsHierarchyVisible(sparse))
+            return Fail("native sparse entity hidden from hierarchy");
+        scene.Entity_Remove(sparse);
+        if (probe.ContainsEntity(sparse) || probe.IsHierarchyVisible(sparse))
+            return Fail("deleted entity remained visible");
+        probe.NewScene();
+        if (probe.ContainsEntity(sparse))
+            return Fail("scene replacement retained a stale point lookup");
+    }
+
     const auto initialSceneRevision = scenes.Revision();
     scenes.NewScene();
     if (scenes.Revision() != initialSceneRevision + 1)
