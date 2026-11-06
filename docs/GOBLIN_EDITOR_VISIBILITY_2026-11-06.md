@@ -33,7 +33,7 @@ unchanged. This does not alter authored entity transforms.
   acceptance of icons and capsule remains pending.
 - Owner deleted lights were saved before testing. UI shows 40 remaining lights.
   Scene SHA256 still matches that saved owner checkpoint after the binary swap.
-  No geometry, lighting, particles, material or render-setting quality changes.
+  No geometry, lighting, particles, material or render-setting quality changes during the membership-only comparison.
 - Studio Play launched the original proven Runtime with casting arms visible.
   Runtime floor/torch view read 75 FPS and exited cleanly. This is NOT a matched
   proof of improvement over the owner's reported 65 FPS main-structure view.
@@ -55,13 +55,36 @@ Original preview binaries are preserved in the package's Before_Goblin_Visibilit
 checkpoint. Owner level backup is in the project's OWNER_LIGHT_DELETIONS checkpoint.
 The original preview source/cloud experiment worktree was not edited.
 
-## Remaining performance work
+## Native rock LOD follow-up
 
-The source GLTF contains approximately 53,389,629 triangles summed across all
-instances. This is potential source geometry, NOT a measured visible draw count.
-The converted mesh path currently provides only the base detail level. Investigate
-native LODs and GPU shadow cost without removing the owner's remaining lights or
-reducing the accepted close-up appearance. A headless Unreal LOD query returned -1
-and is inconclusive; do not claim the pack's original LOD count is established.
+The original GLTF totals approximately 53,389,629 triangles across all source
+instances. The owner's current 5,494 objects total 53,306,769 at LOD0.
 
-No main merge, alpha distribution or release-gate closure.
+Seven repeated static rock meshes now have four native detail levels. Original
+vertices, LOD0 indices, materials and collision detail remain intact. Lower levels
+use meshoptimizer's shape-preserving simplification with locked borders and
+relative error limits of 0.001, 0.002 and 0.003. Source-level Unreal LOD counts
+remain unknown: the headless query returned -1 and was inconclusive.
+
+Calculated all-instance geometry at the authored reference camera falls from
+53,306,769 to32,033,349 triangles. These are NOT visibility-filtered GPU draw
+counts. Actual same reference-view editor HUD after the LOD change read130 FPS.
+The scene was cold loaded and visually inspected with no obvious appearance
+failure. All87 texture references resolve, all421 giant rocks remain textured,
+and the native collision walk test passed7.09441 metres.
+
+Actual Studio Play used the proven63d2dd4 Runtime. After activating mouse capture,
+two views toward the cave/machinery read75 FPS with casting arms visible.
+Foregrounding Studio confirmed active Runtime ready=true; closing Runtime then
+reported a clean exit and returned to Studio. This does not establish an all-view
+minimum or reproduce the owner's exact earlier65 FPS viewpoint.
+
+Owner's40 lights,15 shadow casters and current22 particle emitters were retained.
+Current effects are10 flame and12 smoke emitters after owner edits; do not restore
+the old16+16 set without reviewing those owner changes. All placed objects and
+authored player settings remain intact. Backup before LODs and RockLOD_Report.json
+are retained in the project SourceAssets. Full native LOD0 geometry remains the
+collision source. The engine fix itself remains compiled source afa5a4c.
+
+Owner acceptance, wider gameplay sampling, independent review and full CI remain
+open. No main merge, alpha distribution or release-gate closure.
