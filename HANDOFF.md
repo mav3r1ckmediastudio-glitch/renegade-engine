@@ -7830,3 +7830,5 @@ Separate branch from accepted main e413a50d4fd2c9f7ba70e75ef76aaf7e68233b1c; Wic
 ## 2026-11-06 Goblin Cave editor visibility investigation
 Isolated candidate from owner VSync preview 63d2dd4; Wicked pin unchanged at 82557d4. SceneService::ContainsEntity now queries every registered component manager directly, avoiding whole-scene allocation/enumeration for every marker. No cache, authored content, rendering settings or shader changes. Sparse component-only, direct mutation, merge, clear and deleted entity regressions added to BridgeCommandTests. Build, actual Goblin Cave Studio and Test Game validation pending. Preserve owner light deletions. No merge or alpha distribution authorised.
 
+
+Owner additionally reports wobbling asset icons and Player Start capsule. Both GUI paths projected through TAA-jittered VP after temporal resolve. A shared EditorOverlayViewProjection cancels clip-space jitter for icon rendering/hit tests and capsule edges, retaining TAA for the actual scene. Added camera sample-pattern regression. Native visual acceptance remains pending.

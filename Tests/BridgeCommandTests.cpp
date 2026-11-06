@@ -1,3 +1,4 @@
+#include "../Studio/src/EditorOverlayProjection.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -100,6 +101,33 @@ int main()
         probe.NewScene();
         if (probe.ContainsEntity(sparse))
             return Fail("scene replacement retained a stale point lookup");
+    }
+
+    // GUI marker/capsule projections stay fixed while the native TAA camera
+    // moves through its sample pattern; the scene camera itself is untouched.
+    {
+        using namespace DirectX;
+        wi::scene::CameraComponent camera;
+        camera.CreatePerspective(1600, 900, 0.1f, 1000.f);
+        camera.jitter = XMFLOAT2(0, 0);
+        camera.UpdateCamera();
+        const auto point = XMVectorSet(1.25f, 0.5f, 10.f, 1.f);
+        XMFLOAT4 reference;
+        XMStoreFloat4(&reference, XMVector4Transform(point,
+            renegade::studio::EditorOverlayViewProjection(camera)));
+        for (const XMFLOAT2 sample : {XMFLOAT2(-0.0004f,0.0006f),
+                XMFLOAT2(0.0003f,-0.0005f), XMFLOAT2(0,0)})
+        {
+            camera.jitter = sample;
+            camera.UpdateCamera();
+            XMFLOAT4 projected;
+            XMStoreFloat4(&projected, XMVector4Transform(point,
+                renegade::studio::EditorOverlayViewProjection(camera)));
+            if (!NearlyEqual(reference.x/reference.w,projected.x/projected.w) ||
+                !NearlyEqual(reference.y/reference.w,projected.y/projected.w) ||
+                camera.jitter.x != sample.x || camera.jitter.y != sample.y)
+                return Fail("post-TAA editor overlay followed camera jitter");
+        }
     }
 
     const auto initialSceneRevision = scenes.Revision();

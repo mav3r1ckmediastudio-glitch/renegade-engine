@@ -1,3 +1,4 @@
+#include "EditorOverlayProjection.h"
 #include "RiverbedProgressWindow.h"
 #include <wiProfiler.h>
 #include "../../EngineBridge/src/PlaceableWaterfallAuthoring.h"
@@ -4581,7 +4582,7 @@ namespace renegade::studio
                 const auto feet = transform->GetPosition();
                 const float radius = settings.capsuleRadius;
                 const float height = bridge::PlayerCapsuleTotalHeight(settings);
-                const auto vp = camera->GetViewProjection();
+                const auto vp = EditorOverlayViewProjection(*camera);
                 const auto edge = [&](const XMFLOAT3& a, const XMFLOAT3& b)
                 {
                     XMFLOAT4 ca, cb;
