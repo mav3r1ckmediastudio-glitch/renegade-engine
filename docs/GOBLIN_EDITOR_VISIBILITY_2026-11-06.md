@@ -88,3 +88,5 @@ collision source. The engine fix itself remains compiled source afa5a4c.
 
 Owner acceptance, wider gameplay sampling, independent review and full CI remain
 open. No main merge, alpha distribution or release-gate closure.
+
+Final repeat: the same reference view read105 FPS after Test Game returned. Record the observed editor range as105-130 FPS, not a stable130 FPS minimum. Studio is left open. Full CI and owner acceptance remain pending.
