@@ -2066,3 +2066,7 @@ Terrain snapshot application compares exact heights and rebuilds only changed ch
 ## Application VSync presentation
 
 Render settings optionally persist renegade.render.vsync.enabled (default true) on the existing scene carrier. Studio and Runtime apply it through ApplyVerticalSync and Wicked EVENT_SET_VSYNC on first settings application and actual VSync changes. RenderSettingsMatchPath remains a RenderPath-only comparison; application callers separately compare the last applied presentation preference. Normal render commands retain Undo/Redo, dirty state and snapshot persistence. No Wicked core or shader change is required.
+
+## Editor point queries and post-TAA overlays
+SceneService point membership asks registered native component managers directly, without whole-scene enumeration or a persistent cache. Editor GUI markers and capsule edges cancel the render camera's clip-space TAA jitter after resolve; the scene rendering projection retains it. See GOBLIN_EDITOR_VISIBILITY_2026-11-06.md.
+

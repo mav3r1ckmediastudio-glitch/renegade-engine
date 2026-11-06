@@ -7832,3 +7832,7 @@ Isolated candidate from owner VSync preview 63d2dd4; Wicked pin unchanged at 825
 
 
 Owner additionally reports wobbling asset icons and Player Start capsule. Both GUI paths projected through TAA-jittered VP after temporal resolve. A shared EditorOverlayViewProjection cancels clip-space jitter for icon rendering/hit tests and capsule edges, retaining TAA for the actual scene. Added camera sample-pattern regression. Native visual acceptance remains pending.
+
+### Goblin editor native result
+Compiled afa5a4c665a255b6db98db4cf1bb8c19e44c004d; Release builds and focused BridgeCommandTests pass. Actual same saved cave/reference camera native editor HUD 21 -> 81 FPS, repeat 77 FPS. Owner's remaining 40 lights and Main.wiscene bytes preserved. Marker picking checked; TAA projection regression passes. Studio Play original Runtime renders cave/casting arms, floor view75 FPS, clean exit. Original 63d2dd4 Runtime retained; newly compiled Runtime startup capture inconclusive and not installed. Main-view Runtime65 FPS remains open. See docs/GOBLIN_EDITOR_VISIBILITY_2026-11-06.md and artifacts/goblin-visibility. Owner visual acceptance and full CI pending; no merge or alpha distribution.
+
