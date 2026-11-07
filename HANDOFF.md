@@ -1,3 +1,30 @@
+## 2026-11-06: Owner-requested intensity slider 0-500 range (local preview)
+
+Studio/src/StudioApplication.cpp changes only the Light Intensity slider's
+track maximum from 2000 to 500, with 50000 subdivisions (0.01 native units).
+Typed-entry support above the track maximum remains native; no scene component
+values or serialization change. Lower track range gives four times the pointer
+resolution at the same width. Slow-drag modifier deferred after owner selected
+this bounded range change. Existing live-text slider repair is retained.
+Validation: exact generated Release compile command for StudioApplication.cpp and
+existing Studio link response completed successfully. Local private owner-preview
+exe/manifest backed up and replaced. No full CI, merge or public release.
+## 2026-11-06: Numeric slider live-entry rendering repair (local owner preview)
+
+Parent 3908a861ee23d3000494cd7601a8c4180f326569, uncommitted candidate.
+Changed Studio/src/RenegadeStudioChrome.cpp only: active numeric slider fields render
+Wicked's existing text-input buffer, caret and selection; idle chrome stays owned.
+The old custom Render always displayed GetText(), hiding pending typed input.
+No bridge, serializer, Runtime or Wicked source/API changes.
+Verification: generated Release cl command compiled this object; generated Studio
+link command relinked against existing private-preview objects/libraries; installed
+exe backed up before local replacement. Actual Studio decimal range entry 17.25 was
+visible before Enter. Test range restored to 18. Owner continuing manual edits.
+Full CMake build was not completed: dependency regeneration began rebuilding native
+shader dump and was stopped; this is an incremental compile/link result, not CI.
+Save/reopen of the cleaned Cave Ruins scene succeeded; all 53 remaining lights and
+manual edits preserved, four rejected dust emitters removed, three beam flags off.
+No merge, upstream change or public release. Owner UI acceptance remains open.
 ## 2026-11-01: Combined pre-alpha CI target correction
 
 ## Recovery: hosted 361 river proof warm-up (2026-11-02)
@@ -7844,3 +7871,151 @@ Final native repeat: reference-view editor105 FPS, hence measured HUD observatio
 
 ## Shared editor query regression prevention
 Owner accepts the improvement and requests protection against recurrence across projects. Added EditorPointLookupWorkProbe to BridgeCommandTests:5500 native entities,88 light/metadata/camera markers,20 repeated query passes; all native component managers are instrumented, the legacy enumeration trips the positive control, and production queries must perform zero enumeration/mutation. Added CTest EditorPointLookupSourceContract for the shared query and marker visitor, including typed-array scan and reconstruction rejection. Mutation fixtures reject the original63d2dd4 bad SceneService implementation and a direct marker scan; current source passes. Final focused Release test passes10.42s. Source contract separately passes. AGENTS.md and architecture now require bounded point queries, actual-change invalidation for derived caches, and populated matched-view performance checks. Tests/docs only in this step: running Studio/Runtime and owner scene untouched. These shared safeguards apply to all projects using the patched build, while rock LOD data remains project/asset-specific. Main integration and full CI remain pending; no merge or distribution authorised.
+
+## 2026-11-07: Responsive Test Level launch, local owner preview
+
+Parent 3908a861ee23d3000494cd7601a8c4180f326569; Wicked remains pinned at
+82557d439a41d104f559b0d3134d160b7bf6154e. No Runtime or Wicked source changed.
+Preserve earlier numeric-entry and 0-500 light slider changes in this working tree.
+
+Measured Cave Ruins baseline: UI snapshot 24584 ms, including archive write 19670 ms,
+then assistant GPU handoff 2970 ms. External USB HDD writes dominated; navigation
+had zero agents and was not the cause. An uncompressed foreground-write trial did
+not help. Final design captures owned bytes on the UI thread and writes/validates
+on a cancellable launch worker; guarded local SSD shadow-project staging retains
+4 GiB free. Embedded native assets and governed dependency closure stay portable.
+Original synchronous API paths remain; normal Save/Build Game are unchanged.
+
+A repeated launch exposed native resource streaming containers being rebound to
+the disposable archive and source bytes discarded. Corrected by retaining native
+compressed-serialization resource policy while serializing, then emitting the
+owned archive uncompressed. Do not disable that retention step. Added a headless
+regression capturing/deleting two native-resource snapshots and checking source
+texture bytes survive; independent deferred validation still round-trips content.
+
+Validation: exact generated Release compile/link commands, not a full rebuild or CI.
+Snapshot primitive, Runtime snapshot/dependency closure and process lifecycle suites
+passed (3 executables). Handoff source contract passed. Process suite covers ready,
+timeout, failure, cancellation, cleanup and relaunch. Actual Studio Cave Ruins final
+first/repeat launches reached player+casting-arms+audio ready in 10556/14335 ms.
+UI capture was 2664/5020 ms, responsive afterward during write/validation/GPU lease.
+First/repeat snapshot writes were 272/257 ms. Runtime visually inspected; native
+textures, torches, beams and casting arms present. Generated session cleanup checked
+on clean exit. Receipts: project SourceAssets Launch_Retained_First_Heartbeat.json,
+Launch_Retained_Repeat_Heartbeat.json, Launch_Verified_Timings.tsv and Runtime captures.
+
+Remaining: short synchronous live-scene capture pause, additional memory for retained
+native bytes, native validation cancellation waits until validation returns, and
+cross-project/full CI/owner acceptance still pending. Local private Studio executable
+and manifest replaced with backup; no commit, merge, alpha package or public release.
+
+Watch item: final repeat Studio log contained one unresolved Zweihander normal-map
+path warning. Visible cave materials and player arms matched the first run, but
+asset-completeness across all scene props is not proven by that screenshot.
+Crash-trial disposable sessions were removed explicitly after final clean-exit checks.
+
+## 2026-11-07: Test Game animated activity indicator (local owner preview)
+
+Owner requests a visual activity aid rather than accurate percentages. Parent remains
+3908a861ee23d3000494cd7601a8c4180f326569 with the retained local launch/UI changes.
+Added Studio/src/TestGameProgressWindow.h and wired StartTestLevel/PollTestLevel/
+StopTestLevel in StudioApplication.cpp. A separate Windows message thread paints a
+double-buffered moving bar and stage caption, including while UI-safe capture blocks.
+It owns only presentation state, never scene data; no waits, GPU resources, activation
+or input capture. It hides on foreign-process focus and closes on ready/failure/Stop
+or destroyed owner. No percentage claims or serialized-state changes.
+
+Validation: build_indicator.cmd uses the existing generated Release StudioApplication
+compile and Studio executable link commands; BUILD_EXIT=0. Native handoff source
+contract passed. Actual Cave Ruins launch captured moving bar at distinct positions
+in consecutive frames during Capturing scene, then stage captions during preparation.
+Runtime confirmed player, casting arms and audio ready. On Studio focus Runtime
+reported ready/state Running; native progress HWND was absent (0), and clean Runtime
+exit returned to Studio. Evidence: project source-assets TestGameProgress_0..13.png.
+Private Studio executable/manifest backed up before replacement. Feature matrix and
+architecture updated. No full CI, source commit, merge or public package; owner visual
+acceptance remains pending. Existing initial capture cost and launch flow unchanged.
+
+## 2026-11-07: Cave Ruins standalone export and engine-only owner candidate
+
+Owner conditionally authorized packaging today's engine fixes once standalone export
+worked, explicitly excluding Unreal asset packs. Actual Studio Build Windows Game
+first rejected the imported demo's incomplete Game Start -> Level flow. Backed up
+its original flow and added a Level Complete -> Complete Game terminal route; no
+engine validation bypass. The first hand-authored terminal route mistakenly named
+a Level destination entry; corrected to an empty entry and reopened Studio. Final
+Story Flow reported Runtime Ready and normal Build Game produced gate5 validated
+output, passed_gate4 smoke, and committed the output by directory rename.
+
+Copied the generated game to a different writable directory, preserving the source
+export. Launched its named EXE with no project argument. Native diagnostics confirmed
+player_spawned, player_view_asset_loaded and audio_scene_synced. Held W for 700 ms:
+position moved from (-20.636120,1.014791,-16.828766) to
+(-18.501724,1.145401,-14.645258). Visually inspected cave, lighting, flames, beams and
+casting arms. Standalone closed cleanly with exit 0. Project-local evidence includes
+Build_Game_Passed/Standalone_Relocated captures and normal build-report manifests.
+This is launch/movement evidence, not an exhaustive gameplay or performance test.
+
+Engine-only owner-candidate packaging uses the previous base file manifest as an
+allowlist, current verified Studio and matching Runtime copies, and fresh release
+notes/manifests. Every included file is hashed against the expected base/override
+inventory during archive writing. Existing Content files matched the original base
+hashes before packaging. Owner projects, Unreal imports, exported game, diagnostic
+executables, mutable Saved state, test fixtures outside the base inventory, caches
+and binary backups are not inputs. No source merge, public upload or distribution.
+The candidate retains the prior engine built-ins and assistant dependencies. Local
+changes use incremental Release commands; no new full CI certification is claimed.
+Final archive receipt and immutable source review copy live beside the candidate;
+archive completion and owner acceptance follow this entry.
+
+Owner-candidate archive writing completed successfully (package_engine_only_20261107.py,
+exit 0): Renegade-PreAlpha-OwnerCandidate-2026.11.07.1-Win64.zip, 5,535,951,712 bytes,
+20,712 members. SHA256 28bf0c1cd84f16a506389722356476a19fffc791bc8e004c5f924058a39be07a.
+All included source inputs matched their base/explicit override hashes while writing.
+Sibling Audit contains archive receipt, exact source review copy, tracked diff and
+standalone validation JSON. No Unreal project/export paths were package inputs.
+Whole-archive CRC and critical executable hash re-read are the final outstanding
+archive checks at this checkpoint; owner/full CI acceptance remains separate.
+
+Final archive verification completed: verify_engine_candidate_zip.py exit 0;
+all 20,712 members passed CRC, and archived Studio/Runtime/both Runtime copies plus
+launcher SHA256 checks passed against the generated manifest. No further code changes
+were made. Studio remains in the owner's Cave Ruins Level Editor. Candidate is ready
+for private owner testing, with full exact-tree CI and broader acceptance still open.
+
+## 2026-11-07: Combined engine PR and four-way Windows CI preparation
+
+Owner explicitly authorized a new PR and CI after local gameplay/standalone checks.
+New branch fix/studio-lighting-testgame-20261107 preserves the previously tested
+3908a861ee23d3000494cd7601a8c4180f326569 parent and its VSync/visibility/overlay commits.
+GitHub main is e413a50d4fd2c9f7ba70e75ef76aaf7e68233b1c and is an ancestor; local origin
+is a separate local repository with a stale main reference, so the authoritative
+GitHub main ref was fetched separately without changing origin or other worktrees.
+
+PR scope: saved VSync; indexed native editor membership and source work guard;
+stable TAA editor markers; active numeric input and 0-500 intensity slider;
+owned-byte background Test Game preparation, guarded SSD staging and validation;
+retained native resource data across cleanup/relaunch; animated launch indicator.
+Only engine C++/tests/docs/workflow evidence are committed. Owner projects, Unreal
+meshes/textures/particles, demo lighting values, build archives, logs and temporary
+helper scripts are excluded. Existing assistant workflow evidence markers are
+rechecked and hashes refreshed for the modified source/docs without promoting any
+acceptance status or changing unrelated workflows. No Wicked pin/source changes.
+
+Earlier exact generated Release compile/link, focused launch tests, native Studio
+input/save/reopen/repeated launch and relocated standalone evidence remains in the
+preceding entries. New PR CI must validate fresh Debug/Release Studio and native
+Windows baseline builds. Do not merge or claim four green checks before completion.
+Private ZIP remains the earlier locally verified candidate; it is not a new exact
+commit full-source CI artifact. Owner retains merge and wider-release approval.
+
+PR preflight revalidation: focused Release CTest snapshot/runtime-process/source
+contracts passed 5/5 in 46.95 seconds. Fresh isolated AssistantWorkflowSuite initially
+exposed two projectile manual evidence headings and arrow text stored as mojibake.
+Corrected ten dash/arrow literals in workflows.json and refreshed 17 reviewed whole
+source-file fingerprints. No test assertions or acceptance status were relaxed;
+the evaluation fixture remained byte-unchanged. With per-process Git safe-directory
+configuration for this external-drive checkout, the rebuilt isolated assistant suite
+passed 84/84 in 35.776 seconds. Git diff --check passed. Only the explicit engine,
+test, workflow-registry and documentation paths are staged; generated caches/logs
+and the temporary visibility helper stay untracked and are excluded from the PR.

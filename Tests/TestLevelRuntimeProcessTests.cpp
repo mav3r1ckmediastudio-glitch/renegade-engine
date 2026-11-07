@@ -1,3 +1,7 @@
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <WickedEngine.h>
 #include "TestLevelRuntimeProcess.h"
 
 #include <Windows.h>
@@ -80,6 +84,20 @@ namespace
                 .generic_u8string();
         snapshot.descriptorPath =
             (session / "TestLevel.renegade").generic_u8string();
+        return snapshot;
+    }
+
+    TestLevelSnapshot MakeDeferredSnapshot(const fs::path& root, const std::string& token)
+    {
+        auto snapshot = MakeSnapshot(root, token);
+        wi::scene::Scene scene;
+        scene.Entity_CreateTransform("Deferred validation fixture");
+        wi::Archive archive(snapshot.scenePath, false, false);
+        scene.Serialize(archive);
+        Expect(archive.SaveFile(snapshot.scenePath), "deferred fixture scene writes");
+        archive = wi::Archive();
+        std::ofstream(snapshot.scenePath + ".pending-validation")
+            << "renegade-pending-scene-validation-v1\n";
         return snapshot;
     }
 
@@ -405,6 +423,59 @@ int main(int argc, char** argv)
             snapshot.projectRoot,
             snapshot.sessionDirectory,
             cleanupError);
+        fs::remove_all(root);
+    }
+
+    {
+        const auto root = MakeRoot("deferred-ready");
+        const auto snapshot = MakeDeferredSnapshot(root, "session");
+        TestLevelRuntimeProcess process;
+        std::string error;
+        auto started = std::chrono::steady_clock::now();
+        Expect(process.Launch(Options(fixturePath, "ready-exit0"), snapshot, error),
+            "deferred validation queues launch");
+        Expect(std::chrono::steady_clock::now()-started < std::chrono::milliseconds(250),
+            "deferred launch returns without waiting for validation");
+        const auto result = PollUntilFinished(process);
+        Expect(result.state == TestLevelProcessState::Completed && result.ready,
+            "validated deferred snapshot reaches ready and completes");
+        ExpectCleaned(snapshot, result, "deferred ready");
+        fs::remove_all(root);
+    }
+    {
+        const auto root = MakeRoot("deferred-invalid");
+        const auto snapshot = MakeDeferredSnapshot(root, "session");
+        fs::remove(fs::u8path(snapshot.scenePath));
+        TestLevelRuntimeProcess process;
+        std::string error;
+        Expect(process.Launch(Options(fixturePath, "ready-exit0"), snapshot, error),
+            "missing deferred archive queues validation");
+        const auto result = PollUntilFinished(process);
+        Expect(result.state == TestLevelProcessState::LaunchFailed && !result.ready,
+            "invalid deferred archive never starts a Runtime");
+        Expect(process.ProcessId() == 0, "invalid deferred snapshot has no child");
+        ExpectCleaned(snapshot, result, "deferred validation failure");
+        fs::remove_all(root);
+    }
+    {
+        const auto root = MakeRoot("deferred-cancel-restart");
+        const auto first = MakeDeferredSnapshot(root, "first");
+        TestLevelRuntimeProcess process;
+        std::string error;
+        Expect(process.Launch(Options(fixturePath, "ready-hang"), first, error),
+            "cancellable deferred preparation queues");
+        process.Stop();
+        const auto stopped = PollUntilFinished(process);
+        Expect(stopped.state == TestLevelProcessState::Stopped,
+            "preparation cancellation completes as stopped");
+        ExpectCleaned(first, stopped, "deferred cancellation");
+        const auto second = MakeDeferredSnapshot(root, "second");
+        Expect(process.Launch(Options(fixturePath, "ready-exit0"), second, error),
+            "launch can restart after cancelling preparation");
+        const auto completed = PollUntilFinished(process);
+        Expect(completed.state == TestLevelProcessState::Completed,
+            "restart after cancellation completes");
+        ExpectCleaned(second, completed, "deferred restart");
         fs::remove_all(root);
     }
 

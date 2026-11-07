@@ -823,6 +823,13 @@ namespace renegade::studio
             wi::Color(6, 10, 12, 255),
             inputBorder,
             cmd);
+        // The active native field owns the live editing buffer, caret and selection.
+        // GetText() contains only the previously committed value.
+        if (valueInputField.GetState() == wi::gui::ACTIVE)
+        {
+            valueInputField.Render(canvas, cmd);
+            return;
+        }
         DrawText(
             valueInputField.GetText(),
             inputPos.x + 7.0f,
