@@ -1,4 +1,5 @@
 #include "MarkerIconOverlay.h"
+#include "EditorOverlayProjection.h"
 #include "StudioApplication.h"
 
 #include "renegade/bridge/AudioService.h"
@@ -81,7 +82,7 @@ namespace renegade::studio
         {
             const XMVECTOR clip = XMVector4Transform(
                 XMVectorSet(world.x, world.y, world.z, 1.0f),
-                camera.GetViewProjection());
+                EditorOverlayViewProjection(camera));
             const float w = XMVectorGetW(clip);
             if (w <= 0.001f)
                 return false;

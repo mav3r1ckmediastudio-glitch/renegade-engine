@@ -1,4 +1,7 @@
+#include "renegade/bridge/TestLevelLaunchTiming.h"
+#include "EditorOverlayProjection.h"
 #include "RiverbedProgressWindow.h"
+#include "TestGameProgressWindow.h"
 #include <wiProfiler.h>
 #include "../../EngineBridge/src/PlaceableWaterfallAuthoring.h"
 #include <sstream>
@@ -50,6 +53,7 @@
 namespace
 {
     namespace fs = std::filesystem;
+    std::unique_ptr<renegade::studio::TestGameProgressWindow> testGameProgress;
     // Share read-only resolution within a rendered frame. Authoring commands
     // and scene replacement invalidate immediately; live drag transforms are
     // always refreshed rather than cached with the marker lookup.
@@ -1832,11 +1836,11 @@ namespace renegade::studio
             lightIntensity_,
             "Light Intensity",
             "INTENSITY",
-            "Brightness in Wicked's native physical units for this type.",
+            "Brightness in native units. Slider: 0-500; type an exact value and press Enter.",
             LightField::Intensity,
             0.0f,
-            2000.0f,
-            20000.0f);
+            500.0f,
+            50000.0f);
         createLightSlider(
             lightRange_,
             "Light Range",
@@ -4051,7 +4055,7 @@ namespace renegade::studio
             statusLabel_.SetText(
                 state == TestLevelProcessState::Running
                     ? "TEST LEVEL // RUNNING // UNSAVED SNAPSHOT"
-                    : "TEST LEVEL // STARTING // UNSAVED SNAPSHOT");
+                    : testLevelRuntime_.LastResult().message);
             if (session_ != nullptr)
                 studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
             studioChrome_.SetStatusText(statusLabel_.GetText());
@@ -4581,7 +4585,7 @@ namespace renegade::studio
                 const auto feet = transform->GetPosition();
                 const float radius = settings.capsuleRadius;
                 const float height = bridge::PlayerCapsuleTotalHeight(settings);
-                const auto vp = camera->GetViewProjection();
+                const auto vp = EditorOverlayViewProjection(*camera);
                 const auto edge = [&](const XMFLOAT3& a, const XMFLOAT3& b)
                 {
                     XMFLOAT4 ca, cb;
@@ -11551,13 +11555,19 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         bridge::TestLevelSnapshot snapshot;
         std::string error;
         ClearSelectionOutline();
-        const bool snapshotCreated = snapshotService.Create(
+        bridge::TestLevelLaunchTiming launchTimings(
+            session_->Projects().CurrentProject().rootPath, "studio_launch");
+        testGameProgress = std::make_unique<TestGameProgressWindow>();
+        studioChrome_.SetStatusText("TEST LEVEL // CAPTURING LEVEL");
+        const bool snapshotCreated = snapshotService.CreateDeferred(
             session_->Projects().CurrentProject(),
             snapshot,
             error);
+        launchTimings.Mark("snapshot");
         SyncSelectionOutline();
         if (!snapshotCreated)
         {
+            testGameProgress.reset();
             studioChrome_.SetTestLevelState(
                 RenegadeStudioChrome::TestLevelState::Idle);
             studioChrome_.SetStatusText("TEST LEVEL // SNAPSHOT FAILED");
@@ -11571,6 +11581,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         const std::string runtimePath = ResolveTestLevelRuntimePath();
         if (runtimePath.empty())
         {
+            testGameProgress.reset();
             std::string cleanupError;
             snapshotService.Cleanup(snapshot, cleanupError);
             studioChrome_.SetTestLevelState(
@@ -11606,6 +11617,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 std::move(snapshot),
                 error))
         {
+            testGameProgress.reset();
             studioChrome_.SetTestLevelState(
                 RenegadeStudioChrome::TestLevelState::Idle);
             studioChrome_.SetStatusText("TEST LEVEL // LAUNCH FAILED");
@@ -11619,6 +11631,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             RenegadeStudioChrome::TestLevelState::Starting);
         studioChrome_.SetStatusText(
             "TEST LEVEL // STARTING // UNSAVED SNAPSHOT");
+        launchTimings.Mark("runtime_process_launch");
     }
 
     void StudioRenderPath::StartProjectPlay()
@@ -11683,10 +11696,22 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     {
         if (!testLevelRuntime_.IsActive())
         {
+            testGameProgress.reset();
             return;
         }
 
         const TestLevelProcessResult result = testLevelRuntime_.Poll();
+        if (result.finished || result.state == TestLevelProcessState::Running)
+            testGameProgress.reset();
+        else if (testGameProgress)
+        {
+            const auto& message = result.message;
+            testGameProgress->SetStage(
+                message.find("VALIDATING") != std::string::npos ? "Checking level..." :
+                message.find("GRAPHICS") != std::string::npos ? "Preparing graphics..." :
+                message.find("LEVEL DATA") != std::string::npos ? "Preparing level..." :
+                "Opening game...");
+        }
         if (result.state == TestLevelProcessState::Running)
         {
             studioChrome_.SetTestLevelState(
@@ -11734,6 +11759,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
     void StudioRenderPath::StopTestLevel()
     {
+        testGameProgress.reset();
         if (!testLevelRuntime_.IsActive())
         {
             studioChrome_.SetTestLevelState(

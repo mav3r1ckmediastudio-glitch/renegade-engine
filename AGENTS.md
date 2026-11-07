@@ -50,3 +50,9 @@ Before handing work to another AI or human:
 
 Never put secrets, credentials, personal access tokens, or machine-specific
 absolute paths in committed files.
+
+## Editor performance guardrails
+- Point membership/visibility checks must use native component lookups or a validated index. Never enumerate all scene entities or build an entity set per marker, light or point query.
+- Whole-scene discovery and derived-list rebuilds require an actual content/lifecycle change or explicit operation. Do not hide stale state with a slower update timer.
+- Preserve direct native mutation, import, delete, Undo/Redo, clear and reload correctness when introducing caches. Transform or lighting-value edits do not justify rebuilding an asset inventory.
+- Keep the instrumented EditorPointLookupWorkProbe and marker source contract passing. Validate performance changes in a populated owner project at matched camera, quality and VSync settings; empty-scene FPS alone is insufficient.

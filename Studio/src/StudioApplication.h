@@ -501,6 +501,7 @@ namespace renegade::studio
 
         enum class RenderToggle
         {
+            VerticalSync,
             ColorGrading,
             Bloom,
             EyeAdaptation,
@@ -1219,6 +1220,7 @@ namespace renegade::studio
         wi::gui::Label terrainRiverStatus_;
         wi::gui::Window renderWorkspacePanel_;
         wi::gui::Label renderWorkspaceTitle_;
+        SceneInspectorCheckBox renderVerticalSync_;
         wi::gui::Label renderImageLabel_;
         SceneInspectorComboBox renderTonemap_;
         SceneInspectorSlider renderExposure_;

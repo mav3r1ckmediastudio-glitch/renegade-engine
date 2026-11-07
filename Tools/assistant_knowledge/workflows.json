@@ -46,7 +46,7 @@
         {
           "path": "docs/ARCHITECTURE.md",
           "needle": "Creator steps: select an object; choose Surface Type directly in its Inspector.",
-          "sha256": "96fd5d7ece25aeac068a798bcf1b45fba8434cdbbbb8d43b24830194e7c36ff3"
+          "sha256": "0803f71f4bed3bcd95c38aadc0d2a94981d81167d002b0806ee8bb6a05254c2c"
         },
         {
           "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
@@ -99,7 +99,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportAddAnimation_.SetText(\"ADD ANIMATION FBX\");",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "EngineBridge/src/ModelImportCandidateService.cpp",
@@ -173,12 +173,12 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportAction_.Create(\"Gameplay action\");",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "{\"Unassigned\", \"Idle\", \"Walk\", \"Run\", \"Attack\", \"Reload\", \"Hit\", \"Death\"}",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "docs/MODEL_IMPORTER_REBUILD.md",
@@ -950,7 +950,7 @@
       "follow_up": "Choose Animation start for immediate launch or After a delay for a timed launch. Use your clip's pose, not a copied bow example time.",
       "expected_result": "The shot is scheduled at the configured action-relative time; this is not a general persisted multi-event animation timeline.",
       "troubleshooting": [
-        "USE FIRE TIME disabled: select a ready preview and a marker before the clip ends, within 0–5 seconds.",
+        "USE FIRE TIME disabled: select a ready preview and a marker before the clip ends, within 0â€“5 seconds.",
         "Missing valid action/assembly: read the preview error and check saved equipment.",
         "CANCEL leaves the original timing unchanged; closing without Apply does not commit a new binding."
       ],
@@ -1094,17 +1094,17 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "params.extensions = {\"glb\", \"fbx\", \"obj\"};",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "\"Animated import currently requires a skinned mesh and skeleton.\"",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportClip_.AddItem(\"REFERENCE POSE\");",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
@@ -1620,7 +1620,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerPrefabSave_.SetText(\"SAVE AS PLAYER PREFAB\")",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
@@ -1686,7 +1686,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerPrefabReset_.SetText(\"RESET TO PREFAB\")",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
@@ -1767,7 +1767,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerEquipment_.SetText(\"STARTING EQUIPMENT\")",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "Studio/src/PlayerEquipmentEditor.cpp",
@@ -1852,7 +1852,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerEquipment_.SetText(\"STARTING EQUIPMENT\")",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "EngineBridge/src/EquipmentAssetService.cpp",
@@ -1932,27 +1932,27 @@
         {
           "path": "Studio/src/RenegadeStudioChrome.cpp",
           "needle": "{\"IMPORT MODEL...\", true}",
-          "sha256": "cface28e927f4680714563d1c419f5e513c3bfa66e5722fc9804a5b2dc44da67"
+          "sha256": "0ecae503125f08e2c3a56a25f41fe24e8da8d292484c45be845bd504065f19a3"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "params.extensions = {\"glb\", \"fbx\", \"obj\"};",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportName_.SetDescription(\"Asset name: \");",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportFolder_.SetDescription(\"Import to: \");",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportCommit_.SetText(\"IMPORT ASSET\");",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "docs/MODEL_IMPORT_DESTINATIONS.md",
@@ -1967,7 +1967,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "could not be revealed. Do not import it again.",
-          "sha256": "35faa45123f26f1c89154942254c078c957cf1e3ebe65ba93c86e038d052c66f"
+          "sha256": "51860d71509c71548bc347c07671c9041fb043e717f38755b1e14c05b0624f0c"
         },
         {
           "path": "Tests/ModelImporterRebuildGraphicsProof.cpp",

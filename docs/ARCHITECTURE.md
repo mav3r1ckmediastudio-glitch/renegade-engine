@@ -2062,3 +2062,52 @@ verification status.
 ## Riverbed locality and progress candidate (5 November 2026)
 
 Terrain snapshot application compares exact heights and rebuilds only changed chunks; its canonical normal lookup includes their one-ring neighbours. Optional scoped thread-local bridge progress reports real stages and chunk counts. The Windows Studio progress overlay has an independent UI message loop; live scene/GPU mutation remains at the existing atomic scene-safe point, with editing locked. It does not provide cancellation or asynchronous scene authoring. See RIVERBED_PERFORMANCE_2026-11-05.md for engineering evidence and open acceptance.
+
+## Application VSync presentation
+
+Render settings optionally persist renegade.render.vsync.enabled (default true) on the existing scene carrier. Studio and Runtime apply it through ApplyVerticalSync and Wicked EVENT_SET_VSYNC on first settings application and actual VSync changes. RenderSettingsMatchPath remains a RenderPath-only comparison; application callers separately compare the last applied presentation preference. Normal render commands retain Undo/Redo, dirty state and snapshot persistence. No Wicked core or shader change is required.
+
+## Editor point queries and post-TAA overlays
+SceneService point membership asks registered native component managers directly, without whole-scene enumeration or a persistent cache. Editor GUI markers and capsule edges cancel the render camera's clip-space TAA jitter after resolve; the scene rendering projection retains it. See GOBLIN_EDITOR_VISIBILITY_2026-11-06.md.
+
+
+## Entity lookup work budget
+The native component managers already own authoritative membership indexes. Per-entity editor visibility/picking must query them without enumerating entity arrays or rebuilding an asset inventory. EditorPointLookupWorkProbe wraps every registered manager, checks the legacy scanner trips its counters, and requires zero enumeration or mutation across repeated queries in a5500-entity scene. This is a deterministic work check, independent of machine speed. The marker source contract rejects direct whole-scene scans in its visitor. Future derived caches require content/lifecycle invalidation and existing direct-mutation correctness.
+
+
+## Test Level launch preparation (local candidate, 7 November 2026)
+
+Studio captures the authoring scene and project dependency closure on the UI thread,
+then transfers an owned, uncompressed, embedded-asset archive buffer to the launch
+worker. The worker writes and fully validates that independent snapshot before
+requesting the assistant GPU lease and starting Runtime. It never reads the live
+scene. Ordinary save and Build Game serialization remain unchanged. Existing
+synchronous snapshot/process entry points retain their behavior for other callers.
+
+On Windows, the worker may stage its complete temporary shadow project under
+LOCALAPPDATA/Renegade/TestLevelStorage when that location is on a different volume
+and has the payload, companion files and a 4 GiB reserve available. An exact source
+ownership marker and fresh session directory govern reuse. Otherwise it writes to
+the project snapshot location in the background. The descriptor argument follows
+the staged path; embedded data and governed companion files preserve isolation.
+Successful exit, failed launch and cancellation clean the owned temporary session.
+
+Launch polling is nonblocking and reports preparation stages. Cancellation during
+preparation is cooperative, with native validation allowed to complete before
+cleanup. A short UI capture pause remains; the native live scene is not serialized
+concurrently. Stage timings append to Intermediate/TestLevelLaunchTimings.tsv.
+See HANDOFF for measured local evidence and remaining validation limits.
+
+Native snapshot serialization must retain embedded resource file data before emitting
+uncompressed bytes. Native streaming containers are rebound during serialization;
+clearing their retained data would leave the live editor dependent on a disposable
+snapshot after cleanup. The bridge preserves the native compressed-write retention
+policy during Serialize, then switches only the emitted archive to uncompressed.
+
+The transient Test Game progress painter has its own Windows message thread and
+owned shared presentation state. It animates a double-buffered indeterminate bar
+through synchronous scene capture and asynchronous launch preparation without
+reading the live scene or waiting on the Studio thread. Stage captions follow
+launch polling. The window does not activate or take input, hides when another
+process has focus, and closes on readiness, failure, Stop or owner-window teardown.
+No percentage, renderer resources, authored state or launch scheduling changes.

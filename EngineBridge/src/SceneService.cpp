@@ -908,9 +908,16 @@ namespace renegade::bridge
             return false;
         }
 
-        wi::unordered_set<wi::ecs::Entity> entities;
-        scene_.FindAllEntities(entities);
-        return entities.count(entity) != 0;
+        // Point queries must not enumerate every entity in the scene.
+        // Ask each registered component manager so component-only entities and
+        // future component types retain the same semantics as FindAllEntities.
+        // No cache is kept: direct native add/remove/merge remains visible.
+        for (const auto& entry : scene_.componentLibrary.entries)
+        {
+            if (entry.second.component_manager->Contains(entity))
+                return true;
+        }
+        return false;
     }
 
     wi::ecs::Entity SceneService::WeatherEntity() const

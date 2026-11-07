@@ -108,6 +108,8 @@ namespace renegade::studio
         [[nodiscard]] static const char* OwnershipMarkerFileName() noexcept;
 
     private:
+        bool LaunchPrepared(TestLevelLaunchOptions options,
+            bridge::TestLevelSnapshot snapshot, std::string& error);
         struct Implementation;
         Implementation* implementation_ = nullptr;
     };

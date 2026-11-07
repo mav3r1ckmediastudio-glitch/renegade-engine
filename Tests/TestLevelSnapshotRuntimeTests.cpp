@@ -1,8 +1,10 @@
+#include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/InventoryService.h"
 #include "renegade/bridge/InventoryItemCatalogueService.h"
 #include "renegade/bridge/InventoryScreenAssignmentService.h"
 #include "renegade/bridge/InventoryScreenAdapter.h"
 #include "../EngineBridge/src/PlaceableWaterfallAuthoring.h"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -340,6 +342,50 @@ int main()
         session.Commands());
     renegade::bridge::TestLevelSnapshot snapshot;
     std::string snapshotError;
+    const auto nativeMaterial = wi::ecs::CreateEntity();
+    auto nativeResource = wi::resourcemanager::Load(
+        externalTexture.generic_u8string(), wi::resourcemanager::Flags::IMPORT_DELAY);
+    if (!nativeResource.IsValid()) return Fail("native snapshot texture fixture failed");
+    auto& nativeMap = session.Scenes().GetScene().materials.Create(nativeMaterial)
+        .textures[wi::scene::MaterialComponent::BASECOLORMAP];
+    nativeMap.name = externalTexture.generic_u8string();
+    nativeMap.resource = nativeResource;
+    for (int attempt = 0; attempt != 2; ++attempt)
+    {
+        TestLevelSnapshot deferred;
+        if (!snapshots.CreateDeferred(project, deferred, snapshotError))
+            return Fail("deferred project snapshot capture failed");
+        const auto& retained = nativeResource.GetFileData();
+        if (retained.size() != PngBytes().size() ||
+            !std::equal(retained.begin(), retained.end(), PngBytes().begin()))
+            return Fail("snapshot discarded source texture bytes needed after temporary cleanup");
+        if (!snapshots.Cleanup(deferred, snapshotError))
+            return Fail("native resource capture cleanup failed");
+    }
+    session.Scenes().GetScene().Entity_Remove(nativeMaterial);
+    {
+        TestLevelSnapshot deferred;
+        if (!snapshots.CreateDeferred(project, deferred, snapshotError))
+            return Fail("deferred project snapshot capture failed");
+        if (!fs::is_regular_file(deferred.scenePath + ".pending-validation"))
+            return Fail("deferred snapshot lost its validation gate");
+        if (!TestLevelSnapshotService::FinalizeDeferredScene(deferred, snapshotError, true))
+            return Fail("owned deferred snapshot finalization failed");
+        if (fs::exists(deferred.scenePath + ".pending-validation"))
+            return Fail("validation gate remained after finalization");
+        wi::Archive archive(deferred.scenePath, true, false);
+        if (!archive.IsOpen() || archive.IsCompressionEnabled())
+            return Fail("disposable snapshot was not a valid uncompressed WISCENE");
+        auto prepared = PrepareWickedSceneOpen(deferred.scenePath);
+        if (!prepared.IsReady()) return Fail("deferred snapshot did not round-trip");
+        if (ReadBytes(scenePath) != authoritativeBytes ||
+            session.Scenes().CurrentPath() != pathBeforeSnapshot ||
+            session.Commands().UndoCount() != undoBeforeSnapshot ||
+            session.Commands().RedoCount() != redoBeforeSnapshot)
+            return Fail("deferred capture changed the authoritative document/history");
+        if (!snapshots.Cleanup(deferred, snapshotError))
+            return Fail("deferred snapshot cleanup failed");
+    }
     if (!snapshots.Create(project, snapshot, snapshotError))
     {
         std::cerr << snapshotError << '\n';

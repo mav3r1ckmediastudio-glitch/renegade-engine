@@ -1,3 +1,5 @@
+#include "EditorPointLookupWorkProbe.h"
+#include "../Studio/src/EditorOverlayProjection.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -55,6 +57,82 @@ int main()
     renegade::bridge::SceneService scenes;
     renegade::bridge::SelectionService selection;
     renegade::bridge::CommandService commands;
+
+    // Point lookup must agree with native enumeration even for sparse
+    // entities mutated outside SceneService and across scene replacement.
+    {
+        renegade::bridge::SceneService probe;
+        probe.NewScene();
+        auto& scene = probe.GetScene();
+        const auto sparse = wi::ecs::CreateEntity();
+        const auto absent = wi::ecs::CreateEntity();
+        if (probe.ContainsEntity(sparse) || probe.ContainsEntity(absent) ||
+            probe.ContainsEntity(wi::ecs::INVALID_ENTITY))
+            return Fail("empty point lookup invented an entity");
+        scene.names.Create(sparse) = "Name only";
+        if (!probe.ContainsEntity(sparse))
+            return Fail("name-only entity missing from point lookup");
+        scene.metadatas.Create(sparse);
+        scene.names.Remove(sparse);
+        if (!probe.ContainsEntity(sparse))
+            return Fail("metadata-only entity missing after name removal");
+        scene.metadatas.Remove(sparse);
+        if (probe.ContainsEntity(sparse))
+            return Fail("point lookup retained removed native components");
+        scene.layers.Create(sparse);
+        if (!probe.ContainsEntity(sparse))
+            return Fail("layer-only entity missing from point lookup");
+        scene.Clear();
+        if (probe.ContainsEntity(sparse))
+            return Fail("clear retained a stale point lookup");
+        wi::scene::Scene incoming;
+        incoming.animation_datas.Create(sparse);
+        scene.Merge(incoming);
+        if (!probe.ContainsEntity(sparse))
+            return Fail("animation-data-only entity missing after merge");
+        scene.names.Create(sparse) = "__renegade_internal_lookup_test";
+        if (probe.IsHierarchyVisible(sparse))
+            return Fail("internal entity became a visible hierarchy marker");
+        scene.names.Remove(sparse);
+        if (!probe.IsHierarchyVisible(sparse))
+            return Fail("native sparse entity hidden from hierarchy");
+        scene.Entity_Remove(sparse);
+        if (probe.ContainsEntity(sparse) || probe.IsHierarchyVisible(sparse))
+            return Fail("deleted entity remained visible");
+        probe.NewScene();
+        if (probe.ContainsEntity(sparse))
+            return Fail("scene replacement retained a stale point lookup");
+    }
+
+    // GUI marker/capsule projections stay fixed while the native TAA camera
+    // moves through its sample pattern; the scene camera itself is untouched.
+    {
+        using namespace DirectX;
+        wi::scene::CameraComponent camera;
+        camera.CreatePerspective(1600, 900, 0.1f, 1000.f);
+        camera.jitter = XMFLOAT2(0, 0);
+        camera.UpdateCamera();
+        const auto point = XMVectorSet(1.25f, 0.5f, 10.f, 1.f);
+        XMFLOAT4 reference;
+        XMStoreFloat4(&reference, XMVector4Transform(point,
+            renegade::studio::EditorOverlayViewProjection(camera)));
+        for (const XMFLOAT2 sample : {XMFLOAT2(-0.0004f,0.0006f),
+                XMFLOAT2(0.0003f,-0.0005f), XMFLOAT2(0,0)})
+        {
+            camera.jitter = sample;
+            camera.UpdateCamera();
+            XMFLOAT4 projected;
+            XMStoreFloat4(&projected, XMVector4Transform(point,
+                renegade::studio::EditorOverlayViewProjection(camera)));
+            if (!NearlyEqual(reference.x/reference.w,projected.x/projected.w) ||
+                !NearlyEqual(reference.y/reference.w,projected.y/projected.w) ||
+                camera.jitter.x != sample.x || camera.jitter.y != sample.y)
+                return Fail("post-TAA editor overlay followed camera jitter");
+        }
+    }
+
+    if (!renegade::tests::EditorPointLookupAvoidsSceneEnumeration())
+        return Fail("Editor point lookups enumerated or rebuilt scene storage");
 
     const auto initialSceneRevision = scenes.Revision();
     scenes.NewScene();

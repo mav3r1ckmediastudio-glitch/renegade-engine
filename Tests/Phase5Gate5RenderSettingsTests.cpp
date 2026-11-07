@@ -34,7 +34,7 @@ int main()
         defaults.antiAliasing != AntiAliasingMode::Off ||
         defaults.motionBlurEnabled || !defaults.depthOfFieldEnabled ||
         defaults.sharpenEnabled || defaults.chromaticAberrationEnabled ||
-        !defaults.ditherEnabled)
+        !defaults.ditherEnabled || !defaults.verticalSyncEnabled)
     {
         return Fail("Gate 5 defaults do not match the documented baseline");
     }
@@ -82,7 +82,21 @@ int main()
         return Fail("fresh scene did not resolve to deterministic Gate 5 defaults");
     }
 
+    // VSync-only edits must survive change detection and command history.
+    auto uncapped = defaults;
+    uncapped.verticalSyncEnabled = false;
+    if (!HasRenderSettingsChange(defaults, uncapped))
+        return Fail("VSync-only edit was ignored");
+    int requestedVSync = -1;
+    auto subscription = wi::eventhandler::Subscribe(wi::eventhandler::EVENT_SET_VSYNC,
+        [&](uint64_t value) { requestedVSync = int(value); });
+    ApplyVerticalSync(false);
+    if (requestedVSync != 0) return Fail("Uncapped presentation request was not forwarded");
+    ApplyVerticalSync(true);
+    if (requestedVSync != 1) return Fail("VSync presentation request was not forwarded");
+
     auto authored = defaults;
+    authored.verticalSyncEnabled = false;
     authored.tonemap = RenderTonemap::Uchimura;
     authored.exposure = 1.75f;
     authored.brightness = 0.12f;

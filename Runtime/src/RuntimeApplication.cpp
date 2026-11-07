@@ -107,13 +107,20 @@ namespace renegade::runtime
         const auto authored =
             bridge::CaptureRenderSettings(activeScene);
         renderSettingsSceneRevision_ = scenes_->Revision();
-        if (bridge::RenderSettingsMatchPath(*this, authored))
+        if (renderSettingsInitialized_ &&
+            renderSettings_.verticalSyncEnabled == authored.verticalSyncEnabled &&
+            bridge::RenderSettingsMatchPath(*this, authored))
         {
             renderSettings_ = authored;
             renderSettingsInitialized_ = true;
             return;
         }
 
+        if (!renderSettingsInitialized_ ||
+            renderSettings_.verticalSyncEnabled != authored.verticalSyncEnabled)
+        {
+            bridge::ApplyVerticalSync(authored.verticalSyncEnabled);
+        }
         bridge::ApplyRenderSettingsToPath(
             *this,
             authored,

@@ -1,3 +1,4 @@
+#include "renegade/bridge/TestLevelLaunchTiming.h"
 #include "TestLevelRuntimeProcess.h"
 
 // Windows.h's min/max macros silently break std::max and
@@ -10,6 +11,8 @@
 #endif
 #include <Windows.h>
 
+#include "renegade/bridge/SceneDocumentService.h"
+#include <future>
 #include <algorithm>
 #include <atomic>
 #include <filesystem>
@@ -363,6 +366,12 @@ namespace renegade::studio
 {
     struct TestLevelRuntimeProcess::Implementation
     {
+        std::future<bool> launchTask;
+        std::atomic<bool> launching{false};
+        std::atomic<bool> cancelLaunch{false};
+        std::atomic<int> launchStage{0};
+        TestLevelProcessResult preparingResult;
+        std::string launchError;
         HANDLE process = nullptr;
         HANDLE readyEvent = nullptr;
         HANDLE job = nullptr;
@@ -536,6 +545,12 @@ namespace renegade::studio
     {
         if (implementation_ != nullptr)
         {
+            if (implementation_->launching.load())
+            {
+                implementation_->cancelLaunch.store(true);
+                if (implementation_->launchTask.valid()) implementation_->launchTask.wait();
+                implementation_->launching.store(false);
+            }
             if (IsActive())
             {
                 implementation_->ForceTerminateAndFinalize(
@@ -549,8 +564,7 @@ namespace renegade::studio
     }
 
     bool TestLevelRuntimeProcess::Launch(
-        TestLevelLaunchOptions options,
-        bridge::TestLevelSnapshot snapshot,
+        TestLevelLaunchOptions options, bridge::TestLevelSnapshot snapshot,
         std::string& error)
     {
         error.clear();
@@ -559,8 +573,70 @@ namespace renegade::studio
             error = "A Test Level Runtime is already active.";
             return false;
         }
+        implementation_->cancelLaunch.store(false);
+        // Keep low-level fixture and invalid-input behaviour synchronous.
+        const bool pending = options.ownsSnapshot &&
+            bridge::TestLevelSnapshotService::NeedsDeferredScenePreparation(snapshot);
+        if ((!options.yieldAssistantGpu && !pending) || options.executablePath.empty() ||
+            GetFileAttributesW(Utf8ToWide(options.executablePath).c_str()) == INVALID_FILE_ATTRIBUTES ||
+            (options.ownsSnapshot && !snapshot.IsValid()))
+            return LaunchPrepared(std::move(options), std::move(snapshot), error);
+        implementation_->preparingResult = {};
+        implementation_->preparingResult.state = TestLevelProcessState::Starting;
+        implementation_->preparingResult.message = "TEST LEVEL // PREPARING LEVEL";
+        implementation_->launchError.clear();
+        implementation_->cancelLaunch.store(false);
+        implementation_->launchStage.store(0);
+        const auto cleanupRoot = snapshot.projectRoot;
+        const auto cleanupSession = snapshot.sessionDirectory;
+        const bool cleanupOwned = options.ownsSnapshot;
+        implementation_->launching.store(true);
+        try
+        {
+            implementation_->launchTask = std::async(std::launch::async,
+                [this, options = std::move(options), snapshot = std::move(snapshot)]() mutable
+                {
+                    try { return LaunchPrepared(std::move(options), std::move(snapshot),
+                        implementation_->launchError); }
+                    catch (const std::exception& e)
+                    {
+                        implementation_->result = implementation_->Finalize(
+                            TestLevelProcessState::LaunchFailed, false, 0,
+                            std::string("Test Level preparation failed: ") + e.what());
+                        return false;
+                    }
+                });
+        }
+        catch (const std::exception& e)
+        {
+            implementation_->launching.store(false);
+            error = std::string("Could not schedule Test Level preparation: ") + e.what();
+            if (cleanupOwned)
+            {
+                std::string cleanupError;
+                if (!bridge::TestLevelSnapshotService::CleanupDirectory(
+                        cleanupRoot, cleanupSession, cleanupError))
+                    error += " Cleanup failed: " + cleanupError;
+            }
+            return false;
+        }
+        return true;
+    }
+
+    bool TestLevelRuntimeProcess::LaunchPrepared(
+        TestLevelLaunchOptions options,
+        bridge::TestLevelSnapshot snapshot,
+        std::string& error)
+    {
+        error.clear();
+        if (implementation_ == nullptr || implementation_->process != nullptr)
+        {
+            error = "A Test Level Runtime is already active.";
+            return false;
+        }
 
         implementation_->CloseHandles();
+        bridge::TestLevelLaunchTiming launchTimings(snapshot.projectRoot, "process_launch");
         implementation_->snapshot = std::move(snapshot);
         implementation_->cleanupDone = false;
         implementation_->watcherFailureInjected = false;
@@ -600,6 +676,25 @@ namespace renegade::studio
             return failLaunch(error);
         }
 
+        if (options.ownsSnapshot &&
+            bridge::TestLevelSnapshotService::NeedsDeferredScenePreparation(implementation_->snapshot))
+        {
+            const auto priorDescriptor=implementation_->snapshot.descriptorPath;
+            if(!bridge::TestLevelSnapshotService::FinalizeDeferredScene(
+                    implementation_->snapshot,error,true,[this](bool validating)
+                    {
+                        implementation_->launchStage.store(validating?0:3);
+                        return !implementation_->cancelLaunch.load();
+                    }))
+                return failLaunch(error);
+            if(priorDescriptor!=implementation_->snapshot.descriptorPath)
+                for(auto& argument:options.arguments)
+                    if(argument==priorDescriptor)argument=implementation_->snapshot.descriptorPath;
+            launchTimings.Mark("snapshot_validation");
+        }
+        if (implementation_->cancelLaunch.load())
+            return failLaunch("Test Level preparation was cancelled.");
+        implementation_->launchStage.store(1);
         const std::wstring executable = Utf8ToWide(options.executablePath);
         if (GetFileAttributesW(executable.c_str()) == INVALID_FILE_ATTRIBUTES)
         {
@@ -623,6 +718,10 @@ namespace renegade::studio
             }
         }
 
+        launchTimings.Mark("assistant_release");
+        if (implementation_->cancelLaunch.load())
+            return failLaunch("Test Level preparation was cancelled.");
+        implementation_->launchStage.store(2);
         const std::wstring readyEventName = MakeReadyEventName();
         implementation_->readyEvent = CreateEventW(
             nullptr,
@@ -790,6 +889,27 @@ namespace renegade::studio
 
     TestLevelProcessResult TestLevelRuntimeProcess::Poll()
     {
+        if (implementation_ != nullptr && implementation_->launching.load())
+        {
+            if (implementation_->launchTask.wait_for(std::chrono::milliseconds(0)) !=
+                std::future_status::ready)
+            {
+                implementation_->preparingResult.message =
+                    implementation_->cancelLaunch.load() ? "TEST LEVEL // CANCELLING" :
+                    implementation_->launchStage.load() == 3 ? "TEST LEVEL // PREPARING LEVEL DATA" :
+                    implementation_->launchStage.load() == 0 ? "TEST LEVEL // VALIDATING LEVEL" :
+                    implementation_->launchStage.load() == 1 ? "TEST LEVEL // PREPARING GRAPHICS MEMORY" :
+                    "TEST LEVEL // STARTING GAME";
+                return implementation_->preparingResult;
+            }
+            const bool launched = implementation_->launchTask.get();
+            implementation_->launching.store(false);
+            if (implementation_->cancelLaunch.load())
+                return implementation_->ForceTerminateAndFinalize(
+                    TestLevelProcessState::Stopped, ForcedStopExitCode,
+                    "Test Level preparation was cancelled.");
+            if (!launched) return implementation_->result;
+        }
         if (implementation_ == nullptr || !IsActive())
         {
             return LastResult();
@@ -905,6 +1025,12 @@ namespace renegade::studio
 
     TestLevelProcessResult TestLevelRuntimeProcess::Stop()
     {
+        if (implementation_ != nullptr && implementation_->launching.load())
+        {
+            implementation_->cancelLaunch.store(true);
+            implementation_->preparingResult.message = "TEST LEVEL // CANCELLING";
+            return implementation_->preparingResult;
+        }
         if (implementation_ == nullptr || !IsActive())
         {
             return LastResult();
@@ -918,14 +1044,16 @@ namespace renegade::studio
     bool TestLevelRuntimeProcess::IsActive() const noexcept
     {
         return implementation_ != nullptr &&
-            implementation_->process != nullptr &&
-            !implementation_->result.finished;
+            (implementation_->launching.load() ||
+             (implementation_->process != nullptr && !implementation_->result.finished));
     }
 
     const TestLevelProcessResult& TestLevelRuntimeProcess::LastResult() const noexcept
     {
         static const TestLevelProcessResult empty;
-        return implementation_ != nullptr ? implementation_->result : empty;
+        if (implementation_ == nullptr) return empty;
+        return implementation_->launching.load()
+            ? implementation_->preparingResult : implementation_->result;
     }
 
     bool TestLevelRuntimeProcess::WriteOwnershipMarker(
@@ -1087,6 +1215,8 @@ namespace renegade::studio
 {
     std::uint32_t TestLevelRuntimeProcess::ProcessId() const noexcept
     {
+        if (implementation_ != nullptr && implementation_->launching.load()) return 0;
+
         return implementation_ && implementation_->process ? GetProcessId(implementation_->process) : 0;
     }
 }

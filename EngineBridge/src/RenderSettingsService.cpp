@@ -159,6 +159,7 @@ namespace
     constexpr const char* KeyChromaticAberrationAmount = "renegade.render.chromatic_aberration.amount";
     constexpr const char* KeyDitherEnabled = "renegade.render.dither.enabled";
     constexpr const char* KeyMeshBlendingEnabled = "renegade.render.mesh_blending.enabled";
+    constexpr const char* KeyVerticalSyncEnabled = "renegade.render.vsync.enabled";
 }
 
 namespace renegade::bridge
@@ -259,7 +260,8 @@ namespace renegade::bridge
             left.chromaticAberrationEnabled != right.chromaticAberrationEnabled ||
             !NearlyEqual(left.chromaticAberrationAmount, right.chromaticAberrationAmount) ||
             left.ditherEnabled != right.ditherEnabled ||
-            left.meshBlendingEnabled != right.meshBlendingEnabled;
+            left.meshBlendingEnabled != right.meshBlendingEnabled ||
+            left.verticalSyncEnabled != right.verticalSyncEnabled;
     }
 
     bool IsHardwareRayTracingAvailable() noexcept
@@ -364,6 +366,7 @@ namespace renegade::bridge
         state.chromaticAberrationAmount = ReadValue(metadata->float_values, KeyChromaticAberrationAmount, defaults.chromaticAberrationAmount);
         state.ditherEnabled = ReadValue(metadata->bool_values, KeyDitherEnabled, defaults.ditherEnabled);
         state.meshBlendingEnabled = ReadValue(metadata->bool_values, KeyMeshBlendingEnabled, defaults.meshBlendingEnabled);
+        state.verticalSyncEnabled = ReadValue(metadata->bool_values, KeyVerticalSyncEnabled, defaults.verticalSyncEnabled);
         return SanitizeRenderSettings(state);
     }
 
@@ -573,6 +576,7 @@ namespace renegade::bridge
         metadata->float_values.set(KeyChromaticAberrationAmount, safe.chromaticAberrationAmount);
         metadata->bool_values.set(KeyDitherEnabled, safe.ditherEnabled);
         metadata->bool_values.set(KeyMeshBlendingEnabled, safe.meshBlendingEnabled);
+        metadata->bool_values.set(KeyVerticalSyncEnabled, safe.verticalSyncEnabled);
         return true;
     }
 
@@ -581,6 +585,11 @@ namespace renegade::bridge
         const auto carrier = FindRenderSettingsCarrier(scene);
         if (carrier != wi::ecs::INVALID_ENTITY)
             scene.Entity_Remove(carrier);
+    }
+
+    void ApplyVerticalSync(const bool enabled)
+    {
+        wi::eventhandler::FireEvent(wi::eventhandler::EVENT_SET_VSYNC, enabled ? 1 : 0);
     }
 
     void ApplyRenderSettingsToPath(

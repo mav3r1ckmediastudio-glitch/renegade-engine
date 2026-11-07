@@ -1,3 +1,4 @@
+#include "renegade/bridge/TestLevelLaunchTiming.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/TestLevelSnapshotService.h"
 #include "renegade/bridge/ImpactAudioService.h"
@@ -24,6 +25,9 @@
 #include "renegade/bridge/ScriptDocumentService.h"
 
 #include <algorithm>
+#include <mutex>
+#include <unordered_map>
+#include <cstdlib>
 #include <atomic>
 #include <unordered_set>
 #include <vector>
@@ -40,6 +44,17 @@
 namespace
 {
     namespace fs = std::filesystem;
+
+    struct PendingSceneCaptures
+    {
+        std::mutex mutex;
+        std::unordered_map<std::string, wi::vector<std::uint8_t>> bytes;
+    };
+    PendingSceneCaptures& PendingCaptures()
+    {
+        static PendingSceneCaptures captures;
+        return captures;
+    }
 
     std::atomic<std::uint64_t> snapshotSequence{0};
     constexpr const char* TestLevelStartupScene =
@@ -151,6 +166,16 @@ namespace
         const fs::path& sessionDirectory,
         std::string& error)
     {
+        {
+            auto& captures = PendingCaptures();
+            std::lock_guard<std::mutex> lock(captures.mutex);
+            for (auto i=captures.bytes.begin(); i!=captures.bytes.end();)
+            {
+                if (fs::u8path(i->first).parent_path().parent_path().parent_path() == sessionDirectory)
+                    i=captures.bytes.erase(i);
+                else ++i;
+            }
+        }
         std::error_code removeError;
         fs::remove_all(sessionDirectory, removeError);
         if (removeError)
@@ -1203,21 +1228,38 @@ namespace renegade::bridge
     }
 
     bool TestLevelSnapshotService::Create(
+        const ProjectMetadata& project, TestLevelSnapshot& snapshot,
+        std::string& error, TestLevelSnapshotFailureInjection failure)
+    {
+        return CreateProjectSnapshot(project, snapshot, error, failure, false);
+    }
+
+    bool TestLevelSnapshotService::CreateDeferred(
+        const ProjectMetadata& project, TestLevelSnapshot& snapshot,
+        std::string& error)
+    {
+        return CreateProjectSnapshot(project, snapshot, error,
+            TestLevelSnapshotFailureInjection::None, true);
+    }
+
+    bool TestLevelSnapshotService::CreateProjectSnapshot(
         const ProjectMetadata& project,
         TestLevelSnapshot& snapshot,
         std::string& error,
-        const TestLevelSnapshotFailureInjection failureInjection)
+        const TestLevelSnapshotFailureInjection failureInjection,
+        const bool deferValidation)
     {
         snapshot = {};
         error.clear();
 
+        TestLevelLaunchTiming timings(project.rootPath, "project_snapshot");
         TestLevelSnapshot created;
         const auto sceneFailure =
             failureInjection ==
                 TestLevelSnapshotFailureInjection::AfterArchiveWrite
             ? TestLevelSnapshotFailureInjection::AfterArchiveWrite
             : TestLevelSnapshotFailureInjection::None;
-        if (!Create(project.rootPath, created, error, sceneFailure))
+        if (!CreateSceneSnapshot(project.rootPath, created, error, sceneFailure, deferValidation))
         {
             return false;
         }
@@ -1358,10 +1400,18 @@ namespace renegade::bridge
     }
 
     bool TestLevelSnapshotService::Create(
+        const std::string& projectRoot, TestLevelSnapshot& snapshot,
+        std::string& error, TestLevelSnapshotFailureInjection failure)
+    {
+        return CreateSceneSnapshot(projectRoot, snapshot, error, failure, false);
+    }
+
+    bool TestLevelSnapshotService::CreateSceneSnapshot(
         const std::string& projectRoot,
         TestLevelSnapshot& snapshot,
         std::string& error,
-        const TestLevelSnapshotFailureInjection failureInjection)
+        const TestLevelSnapshotFailureInjection failureInjection,
+        const bool deferValidation)
     {
         snapshot = {};
         error.clear();
@@ -1372,6 +1422,7 @@ namespace renegade::bridge
             return false;
         }
 
+        TestLevelLaunchTiming timings(projectRoot, "scene_snapshot");
         const std::string currentPathBefore = scenes_.CurrentPath();
         const bool dirtyBefore = commands_.IsDirty();
         const std::size_t undoBefore = commands_.UndoCount();
@@ -1437,6 +1488,11 @@ namespace renegade::bridge
                         "Could not create a WISCENE archive for the Test "
                         "Level snapshot.");
                 }
+                // Disposable previews favour launch latency over compressed disk size.
+                // Embedded asset bytes and ordinary project saves are unchanged.
+                // Native resource serialization must retain embedded source bytes: it
+                // updates streaming containers to this disposable archive. Preserve
+                // the compressed-write retention policy, then emit uncompressed bytes.
                 archive.SetCompressionEnabled(true);
                 // Imported model maps can be native retained resources rather
                 // than governed texture bindings. The shadow scene must carry
@@ -1450,8 +1506,30 @@ namespace renegade::bridge
                 wi::resourcemanager::SetMode(wi::resourcemanager::Mode::EMBED_FILE_DATA);
                 RemoveGeneratedWaterfallVisuals(scenes_.GetScene());
                 scenes_.GetScene().Serialize(archive);
-                archiveWritten = archive.SaveFile(scenePath.generic_u8string());
-                archive = wi::Archive();
+                archive.SetCompressionEnabled(false);
+                timings.Mark("serialize");
+                if (deferValidation)
+                {
+                    wi::vector<std::uint8_t> bytes;
+                    archive.WriteData(bytes);
+                    archive = wi::Archive();
+                    std::ofstream placeholder(scenePath, std::ios::binary | std::ios::trunc);
+                    placeholder.close();
+                    archiveWritten = bool(placeholder);
+                    if (archiveWritten)
+                    {
+                        auto& captures = PendingCaptures();
+                        std::lock_guard<std::mutex> lock(captures.mutex);
+                        captures.bytes.emplace(scenePath.generic_u8string(), std::move(bytes));
+                    }
+                    timings.Mark("capture_owned_bytes");
+                }
+                else
+                {
+                    archiveWritten = archive.SaveFile(scenePath.generic_u8string());
+                    timings.Mark("archive_write");
+                    archive = wi::Archive();
+                }
             }
             catch (const std::exception& exception)
             {
@@ -1479,13 +1557,21 @@ namespace renegade::bridge
                     "Injected Test Level snapshot failure after archive write.");
             }
 
-            auto validation = PrepareWickedSceneOpen(
-                scenePath.generic_u8string());
-            if (!validation.IsReady())
+            if (deferValidation)
             {
-                return failAndCleanup(
-                    "The Test Level snapshot failed WISCENE validation: " +
-                    validation.Error());
+                std::ofstream pending(scenePath.generic_u8string() + ".pending-validation",
+                    std::ios::binary | std::ios::trunc);
+                pending << "renegade-pending-scene-validation-v1\n";
+                pending.close();
+                if (!pending) return failAndCleanup("Could not mark pending scene validation.");
+            }
+            else
+            {
+                auto validation = PrepareWickedSceneOpen(scenePath.generic_u8string());
+                timings.Mark("deserialize_validate");
+                if (!validation.IsReady())
+                    return failAndCleanup("The Test Level snapshot failed WISCENE validation: " +
+                        validation.Error());
             }
 
             // Serialization is allowed to inspect the live Wicked scene, but
@@ -1519,6 +1605,127 @@ namespace renegade::bridge
                 exception.what();
             return false;
         }
+    }
+
+    bool TestLevelSnapshotService::NeedsDeferredScenePreparation(
+        const TestLevelSnapshot& snapshot)
+    {
+        auto& captures = PendingCaptures();
+        std::lock_guard<std::mutex> lock(captures.mutex);
+        std::error_code ec;
+        return captures.bytes.find(snapshot.scenePath) != captures.bytes.end() ||
+            fs::is_regular_file(fs::u8path(snapshot.scenePath + ".pending-validation"), ec);
+    }
+
+    bool TestLevelSnapshotService::FinalizeDeferredScene(
+        TestLevelSnapshot& snapshot, std::string& error, const bool preferLocalStorage,
+        const std::function<bool(bool)>& progress)
+    {
+        error.clear();
+        TestLevelLaunchTiming timings(snapshot.projectRoot, "snapshot_finalize");
+        try
+        {
+            const auto originalRoot=fs::absolute(fs::u8path(snapshot.projectRoot)).lexically_normal();
+            const auto originalSession=fs::absolute(fs::u8path(snapshot.sessionDirectory)).lexically_normal();
+            if (originalSession.parent_path() != originalRoot/"Intermediate"/"TestLevelSnapshots" ||
+                fs::absolute(fs::u8path(snapshot.scenePath)).lexically_normal() !=
+                    originalSession/"Content"/"Scenes"/"TestLevel.wiscene")
+            {
+                error="Refusing deferred preparation outside the owned snapshot directory.";
+                return false;
+            }
+            wi::vector<std::uint8_t> bytes;
+            {
+                auto& captures=PendingCaptures();
+                std::lock_guard<std::mutex> lock(captures.mutex);
+                auto i=captures.bytes.find(snapshot.scenePath);
+                if(i!=captures.bytes.end()){bytes=std::move(i->second);captures.bytes.erase(i);}
+            }
+            if (!bytes.empty() && preferLocalStorage)
+            {
+#ifdef _WIN32
+                const auto* local=_wgetenv(L"LOCALAPPDATA");
+                if(local && *local)
+                {
+                    fs::path localRoot=fs::path(local)/"Renegade"/"TestLevelStorage"/
+                        std::to_string(std::hash<std::string>{}(originalRoot.generic_u8string()));
+                    std::error_code ec;
+                    const auto space=fs::space(fs::path(local),ec);
+                    std::uintmax_t companionBytes=0;
+                    for(const auto& f:fs::recursive_directory_iterator(originalSession))
+                        if(f.is_regular_file())companionBytes+=f.file_size();
+                    constexpr std::uintmax_t reserve=4ull*1024*1024*1024;
+                    if(!ec && localRoot.root_name()!=originalRoot.root_name() &&
+                        space.available>reserve+bytes.size()+companionBytes)
+                    {
+                        const auto owner=localRoot/".renegade-test-storage-owner";
+                        const std::string ownerText="renegade-local-test-storage-v1\n"+
+                            originalRoot.generic_u8string();
+                        bool owned=false;
+                        if(fs::is_regular_file(owner))
+                        {
+                            std::ifstream f(owner,std::ios::binary);
+                            std::string actual((std::istreambuf_iterator<char>(f)),{});
+                            owned=actual==ownerText;
+                        }
+                        else if(!fs::exists(localRoot))
+                        {
+                            fs::create_directories(localRoot,ec);
+                            if(!ec){std::ofstream f(owner,std::ios::binary);f<<ownerText;f.close();owned=bool(f);}
+                        }
+                        if(owned)
+                        {
+                            const auto destination=localRoot/"Intermediate"/"TestLevelSnapshots"/
+                                originalSession.filename();
+                            fs::create_directories(destination.parent_path(),ec);
+                            if(!ec && fs::create_directory(destination,ec))
+                            {
+                                fs::copy(originalSession,destination,fs::copy_options::recursive,ec);
+                                if(!ec)
+                                {
+                                    snapshot.projectRoot=localRoot.generic_u8string();
+                                    snapshot.sessionDirectory=destination.generic_u8string();
+                                    snapshot.scenePath=(destination/"Content"/"Scenes"/"TestLevel.wiscene").generic_u8string();
+                                    if(!snapshot.descriptorPath.empty())
+                                        snapshot.descriptorPath=(destination/"TestLevel.renegade").generic_u8string();
+                                    std::string cleanupWarning;
+                                    RemoveSnapshotDirectory(originalSession,cleanupWarning);
+                                }
+                                else {std::error_code ignored;fs::remove_all(destination,ignored);}
+                            }
+                        }
+                    }
+                }
+#endif
+            }
+            if(!bytes.empty())
+            {
+                if(progress && !progress(false)){error="Test Level preparation was cancelled.";return false;}
+                std::ofstream file(fs::u8path(snapshot.scenePath),std::ios::binary|std::ios::trunc);
+                constexpr std::size_t chunk=8*1024*1024;
+                for(std::size_t offset=0;file && offset<bytes.size();offset+=chunk)
+                {
+                    if(progress && !progress(false)){error="Test Level preparation was cancelled.";return false;}
+                    const auto size=std::min(chunk,bytes.size()-offset);
+                    file.write(reinterpret_cast<const char*>(bytes.data()+offset),size);
+                }
+                file.close();
+                if(!file){error="Could not write the owned Test Level snapshot.";return false;}
+                bytes.clear();
+            }
+            timings.Mark("archive_write");
+            if(progress && !progress(true)){error="Test Level preparation was cancelled.";return false;}
+            {
+                auto validation=PrepareWickedSceneOpen(snapshot.scenePath);
+                if(!validation.IsReady()){error="Test Level snapshot validation failed: "+validation.Error();return false;}
+            }
+            timings.Mark("deserialize_validate");
+            std::error_code ec;
+            fs::remove(fs::u8path(snapshot.scenePath+".pending-validation"),ec);
+            if(ec){error="Could not finish snapshot validation: "+ec.message();return false;}
+            return true;
+        }
+        catch(const std::exception& e){error=std::string("Deferred snapshot preparation failed: ")+e.what();return false;}
     }
 
     bool TestLevelSnapshotService::CleanupDirectory(
