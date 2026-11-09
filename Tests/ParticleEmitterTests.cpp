@@ -41,7 +41,8 @@ int main()
         const auto safe = SanitizeParticleEmitterState(unsafe);
         Check(safe.maxParticles == 100u, "particle budget clamp");
         Check(Near(safe.fixedTimestep, 0.1f), "fixed timestep clamp");
-        Check(Near(safe.size, 0.001f), "size clamp");
+        Check(safe.size == 0.000001f, "positive microscopic size clamp");
+        auto tiny=unsafe;tiny.size=.0001225f;Check(Near(SanitizeParticleEmitterState(tiny).size,.0001225f),"one percent of fine ember size survives native sanitization");
         Check(Near(safe.emitCount, 0.0f), "emit clamp");
         Check(Near(safe.life, 0.001f), "life clamp");
         Check(safe.framesX == 1u && safe.framesY == 1024u, "sprite dimensions clamp");

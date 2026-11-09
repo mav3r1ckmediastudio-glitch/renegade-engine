@@ -2027,3 +2027,80 @@ if(WIN32)
     set_tests_properties(RenegadeCreatorAssetFrameBoundaryTests PROPERTIES TIMEOUT 120
         WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeCreatorAssetFrameBoundaryTests>")
 endif()
+
+# Registry and cross-translation-unit lifetime regression for shared allocators.
+add_executable(RenegadeSharedAllocatorRegistryTests
+    SharedAllocatorRegistry/main.cpp
+    SharedAllocatorRegistry/A.cpp
+    SharedAllocatorRegistry/B.cpp
+    SharedAllocatorRegistry/C.cpp)
+target_include_directories(RenegadeSharedAllocatorRegistryTests PRIVATE
+    ${PROJECT_SOURCE_DIR}/WickedEngine/WickedEngine)
+add_test(NAME RenegadeSharedAllocatorRegistryTests COMMAND RenegadeSharedAllocatorRegistryTests)
+add_dependencies(RenegadeBridgeTests RenegadeSharedAllocatorRegistryTests)
+
+add_executable(RenegadeParticleDuplicateGraphicsProof ParticleDuplicateGraphicsProof.cpp)
+target_link_libraries(RenegadeParticleDuplicateGraphicsProof PRIVATE Renegade::EngineBridge)
+target_compile_definitions(RenegadeParticleDuplicateGraphicsProof PRIVATE UNICODE _UNICODE)
+target_compile_options(RenegadeParticleDuplicateGraphicsProof PRIVATE
+    "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>" "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>")
+add_dependencies(RenegadeBridgeTests RenegadeParticleDuplicateGraphicsProof)
+add_test(NAME RenegadeParticleDuplicateGraphicsProof
+    COMMAND RenegadeParticleDuplicateGraphicsProof
+        "${PROJECT_SOURCE_DIR}/Tests/fixtures/Importer/rig_checker.png"
+    CONFIGURATIONS Release)
+set_tests_properties(RenegadeParticleDuplicateGraphicsProof PROPERTIES
+    TIMEOUT 180 WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeParticleDuplicateGraphicsProof>")
+
+add_executable(RenegadeLightPickerTests LightPickerTests.cpp)
+target_link_libraries(RenegadeLightPickerTests PRIVATE Renegade::RuntimeBootstrap)
+target_compile_options(RenegadeLightPickerTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+add_dependencies(RenegadeBridgeTests RenegadeLightPickerTests)
+add_test(NAME RenegadeLightPickerTests COMMAND RenegadeLightPickerTests)
+add_executable(RenegadeParticleEffectTests ParticleEffectTests.cpp)
+target_link_libraries(RenegadeParticleEffectTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeParticleEffectTests COMMAND RenegadeParticleEffectTests)
+add_executable(RenegadeParticleEffectSeed ParticleEffectSeed.cpp)
+target_link_libraries(RenegadeParticleEffectSeed PRIVATE Renegade::EngineBridge)
+
+add_executable(RenegadeParticleMovementGraphicsProof ParticleMovementGraphicsProof.cpp)
+target_link_libraries(RenegadeParticleMovementGraphicsProof PRIVATE Renegade::EngineBridge)
+add_dependencies(RenegadeParticleMovementGraphicsProof RenegadeParticleMovementShaders)
+add_custom_command(TARGET RenegadeParticleMovementGraphicsProof POST_BUILD
+ COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeParticleMovementGraphicsProof>/Content/particles"
+ COMMAND ${CMAKE_COMMAND} -E copy_if_different ${RENEGADE_FIELD_FILES} "$<TARGET_FILE_DIR:RenegadeParticleMovementGraphicsProof>/Content/particles" VERBATIM)
+
+add_executable(RenegadeEditorPointLookupFocusedTests EditorPointLookupFocusedTests.cpp)
+target_link_libraries(RenegadeEditorPointLookupFocusedTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeEditorPointLookupFocusedTests COMMAND RenegadeEditorPointLookupFocusedTests)
+
+add_executable(RenegadeParticleHazeGraphicsProof ParticleHazeGraphicsProof.cpp)
+target_link_libraries(RenegadeParticleHazeGraphicsProof PRIVATE Renegade::EngineBridge)
+
+add_executable(RenegadeParticleTextureLibraryTests ParticleTextureLibraryTests.cpp)
+target_link_libraries(RenegadeParticleTextureLibraryTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeParticleTextureLibraryTests COMMAND RenegadeParticleTextureLibraryTests "${CMAKE_SOURCE_DIR}/assets/particles/TextureLibrary")
+
+add_executable(RenegadeParticleLuaTests ParticleLuaTests.cpp)
+target_link_libraries(RenegadeParticleLuaTests PRIVATE Renegade::RuntimeBootstrap)
+target_compile_options(RenegadeParticleLuaTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+add_test(NAME RenegadeParticleLuaTests COMMAND RenegadeParticleLuaTests "${CMAKE_SOURCE_DIR}/assets/particles/TextureLibrary")
+
+add_executable(RenegadeParticleLuaPlayerFixture ParticleLuaPlayerFixture.cpp)
+target_link_libraries(RenegadeParticleLuaPlayerFixture PRIVATE Renegade::EngineBridge)
+target_compile_options(RenegadeParticleLuaPlayerFixture PRIVATE /utf-8)
+
+add_executable(RenegadeParticleLifetimeTests ParticleLifetimeTests.cpp)
+target_link_libraries(RenegadeParticleLifetimeTests PRIVATE Renegade::EngineBridge)
+target_compile_options(RenegadeParticleLifetimeTests PRIVATE /utf-8)
+add_test(NAME RenegadeParticleLifetimeTests COMMAND RenegadeParticleLifetimeTests)
+
+add_executable(RenegadeParticleLifetimeGraphicsProof ParticleLifetimeGraphicsProof.cpp)
+target_link_libraries(RenegadeParticleLifetimeGraphicsProof PRIVATE Renegade::EngineBridge)
+target_compile_options(RenegadeParticleLifetimeGraphicsProof PRIVATE /utf-8)
+
+add_executable(RenegadeParticleLibraryFinalize ParticleLibraryFinalize.cpp)
+target_link_libraries(RenegadeParticleLibraryFinalize PRIVATE Renegade::EngineBridge)
+target_compile_options(RenegadeParticleLibraryFinalize PRIVATE /utf-8)
+
+add_dependencies(RenegadeBridgeTests RenegadeParticleEffectTests RenegadeEditorPointLookupFocusedTests RenegadeParticleTextureLibraryTests RenegadeParticleLuaTests RenegadeParticleLifetimeTests)

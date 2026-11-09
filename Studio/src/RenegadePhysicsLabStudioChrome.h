@@ -21,6 +21,9 @@ namespace renegade::studio
         void SetLayout(float width, float height);
         void OnAction(std::function<void(Action)> callback);
         void RequestCurrentWorkspaceReconcile();
+        void PrepareViewportPlacement();
+        void SetParticlePickerAction(std::function<void(bool)> action) { particlePickerAction_=std::move(action); particleWorkspace_.SetEffectEditor([this](){if(particlePickerAction_)particlePickerAction_(true);}); }
+        std::function<void(bool)> particlePickerAction_;
 
         [[nodiscard]] bool IsPhysicsLabActive() const noexcept
         {

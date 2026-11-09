@@ -200,20 +200,31 @@ namespace renegade::studio
                     return true;
                 }
 
-                bridge::ScriptDocument* document = nullptr;
-                if (!PrepareScriptDocument(*session, document, error))
-                    return false;
-
                 const bridge::StableId sourceId =
                     bridge::PersistentEntityId(scene, source);
                 const bridge::StableId duplicateId =
                     bridge::PersistentEntityId(scene, duplicate);
-                if (!bridge::IsValidStableId(sourceId) ||
-                    !bridge::IsValidStableId(duplicateId))
+                if (!bridge::IsValidStableId(duplicateId))
                 {
-                    error = "Duplicated Character lacks stable Scene identity.";
+                    error = "Duplicated entity lacks stable Scene identity.";
                     return false;
                 }
+                // A freshly placed ordinary entity has no persistent identity
+                // until its first save, so it cannot own governed attachments.
+                // Its native components can still be duplicated immediately.
+                if (sourceId.empty() && !bridge::IsRenegadeCharacter(scene, source))
+                {
+                    error.clear();
+                    return true;
+                }
+                if (!bridge::IsValidStableId(sourceId))
+                {
+                    error = "Source entity has malformed stable Scene identity.";
+                    return false;
+                }
+                bridge::ScriptDocument* document = nullptr;
+                if (!PrepareScriptDocument(*session, document, error))
+                    return false;
                 if (!HasEntityScripts(*document, sourceId))
                 {
                     error.clear();

@@ -1,4 +1,13 @@
 add_library(RenegadeEngineBridge STATIC
+    src/ParticleEffectService.cpp
+    src/ParticleEffectRuntimeService.cpp
+    src/ParticleEffectRuntimeDependencies.cpp
+    src/ParticleEffectMarkerService.cpp
+    src/ParticleTextureLibraryService.cpp
+    src/ParticleMovementFieldService.cpp
+    src/ParticleLifetimeService.cpp
+    src/ParticleShapeService.cpp
+    src/ParticleTimingService.cpp
     src/PlaceableWaterfallRenderer.cpp
     src/RiverCourseRenderer.cpp
     src/RiverCourseSurfaceBinding.cpp
@@ -195,6 +204,7 @@ add_library(RenegadeEngineBridge STATIC
     src/ScreenInventoryGridAuthoring.cpp
     src/IdentityService.cpp
     src/LightService.cpp
+    src/LightPresetService.cpp
     src/RiverSplineService.cpp
     src/RiverTerrainLayerService.cpp
     include/renegade/bridge/RiverTerrainLayerService.h

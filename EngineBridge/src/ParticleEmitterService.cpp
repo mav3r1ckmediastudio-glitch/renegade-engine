@@ -199,7 +199,7 @@ namespace renegade::bridge
             result.maxParticles, 100u, 1000000u);
         result.fixedTimestep = std::clamp(
             FiniteOr(result.fixedTimestep, -1.0f), -1.0f, 0.1f);
-        result.size = std::clamp(FiniteOr(result.size, 1.0f), 0.001f, 100.0f);
+        result.size = std::clamp(FiniteOr(result.size, 1.0f), 0.000001f, 100.0f);
         result.randomFactor = std::clamp(
             FiniteOr(result.randomFactor, 1.0f), 0.0f, 1.0f);
         result.normalFactor = std::clamp(

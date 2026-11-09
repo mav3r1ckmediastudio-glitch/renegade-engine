@@ -21,6 +21,7 @@ namespace renegade::bridge
         StudioSession() noexcept
         {
             current_ = this;
+            selection_.BindScene(scenes_.GetScene());
 
             // Entity duplication is a single editor Undo/Redo action even when
             // part of its governed authoring state lives in the Scene's
