@@ -1,24 +1,21 @@
-# Tools
+# Renegade tools
 
-Renegade-owned import, shader, packaging, migration, feature-inventory, and
-validation tools live here.
+Build, import, shader, packaging, validation and assistant tooling. Current
+integrated baseline: main 618b231, 10 November 2026.
 
-## Phase 1 Windows baseline
+- Build-Studio-Windows.ps1 configures/builds Studio and Runtime with embedded
+  shaders, builds the test graph, runs CTest and records application outputs.
+- Build-Windows.ps1 builds the pinned native Wicked reference baseline;
+  Collect-Windows-Baseline.ps1 records the toolchain.
+- Windows-Build.Common.ps1 owns the exact pin guard, shared DirectXMath selection,
+  native command failure propagation, logging and hashes.
+- Package-RecoveryAlpha.py stages/archives approved recovery candidates using
+  exact source/validation identity. It is not permission to distribute a build.
+- assistant_knowledge contains curated, source-fingerprinted knowledge/manual
+  support; assistant_presence owns the installed assistant transport/UI tooling.
+- Shader/resource tools support the currently integrated build graph; they do not
+  yet constitute a third-party shader-editor plugin SDK.
 
-- `Collect-Windows-Baseline.ps1` records the machine and toolchain.
-- `Build-Windows.ps1` verifies the Wicked pin, compiles x64 Debug/Release
-  reference targets, packages the editor, and records evidence.
-- `Run-Windows-Smoke.ps1` runs the required human-observed DX12 and Vulkan
-  checks.
-- `Windows-Build.Common.ps1` contains shared pin, MSBuild, logging, and hashing
-  helpers.
-
-See `docs/BUILD_WINDOWS.md` for the exact workflow.
-
-## Phase 2 Studio shell
-
-- `Build-Studio-Windows.ps1` configures the Renegade-owned CMake graph, builds
-  `RenegadeStudio` for x64 Debug and/or Release, packages the executable and
-  fixture content, and records hashes and logs.
-
-See `docs/PHASE2_STUDIO_SHELL.md` for scope and acceptance evidence.
+See [BUILD_WINDOWS](../docs/BUILD_WINDOWS.md), [current status](../docs/CURRENT_STATUS.md),
+[assistant knowledge](assistant_knowledge/README.md) and
+[documentation index](../docs/README.md).

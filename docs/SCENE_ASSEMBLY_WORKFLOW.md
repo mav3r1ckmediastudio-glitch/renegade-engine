@@ -1,7 +1,7 @@
 # Editor multi-selection and scene prefabs
 
 Status: first assembly workflow accepted by the owner on 10 November 2026 at 110b6a6.
-The owner accepted usability. Functional component/behaviour support is now implemented; final native/UI/standalone verification and CI results are recorded separately below.
+The owner accepted usability. Full functional support is merged in PR #193 as main 618b231 on 10 November 2026. Feature head cb590f0 passed all four pre-merge checks; native/UI/reopen/standalone evidence is recorded in evidence/scene-prefab-functional/.
 The first acceptance gate is one small real assembly, before wider feature work.
 
 ## Required demonstration
@@ -75,7 +75,7 @@ Terrain, river spline controls and waterfall handles keep their accepted exclusi
 authoring selection and transaction paths. This grouping prototype must not
 bypass linked-terrain safety limits.
 
-## Scope of the first gate
+## Historical scope of the first gate
 
 The initial demonstration covers native scene components, geometry, component
 transforms and materials. Linked source updates, prefab overrides, nested prefab
@@ -161,7 +161,7 @@ The Asset Browser offers PREFABS in its format filter and marks saved scene
 assemblies as PREFAB with a readable extension-free name. This pass does not add
 linked-source behaviour or change the accepted Save/Place/Unpack interaction.
 
-## Follow-up local evidence - 10 November 2026
+## Historical usability follow-up evidence - 10 November 2026
 
 ![Selection usability and saved assembly](evidence/selection-usability-followup/usability-demonstration.jpg)
 
@@ -193,19 +193,16 @@ playable-character acceptance is claimed from this small geometry fixture.
 
 ## Current main integration
 
-The feature branch integrates light/particle main 6036b20 after owner instruction.
-Ordered selection normalizes internal particle layers at its shared bridge boundary,
-including set and toggle operations. Geometry prefab workflow and ten focused checks
-pass locally; Studio shows both pickers alongside the accepted prefab interaction.
-See evidence/selection-prefab-integration/ and HANDOFF for commands and source hashes.
+PR #192 lighting/particles and PR #193 functional prefabs are merged together.
+The scripted brazier proof passes independent placement, hierarchy Duplicate/Delete
+Undo/Redo, component edits, cold reopen, Unpack and package-relative Runtime.
+See [current status](CURRENT_STATUS.md) and
+[full evidence](evidence/scene-prefab-functional/README.md). Earlier gateway-only
+receipts above are historical; they no longer define the complete prefab scope.
 
-This is an integration checkpoint. General prefab completion requires a functional
-assembly carrying light behaviour, complete layered particles, script properties
-and internal entity references, supported material/shader resources and dependencies.
-The next proof is a working brazier through independent placement, Duplicate/Delete
-Undo/Redo, component editing, cold reopen, unpack and standalone Runtime. Existing
-CI covers the earlier isolated geometry checkpoint and cannot close this requirement.
-
+There is no explicit prefab entity-count cap. Script/data budgets still apply,
+and large castle assemblies have not been stress-tested. Prefab instances are
+independent copies; source-linked updates remain future work.
 
 ## Functional assembly workflow
 

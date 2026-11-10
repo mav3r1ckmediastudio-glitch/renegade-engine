@@ -1,5 +1,7 @@
 # LP06 — Named Standalone and Safe Rebuild
 
+> **Current-main reconciliation — 10 November 2026:** This retains the standalone design and original baseline. Current Build Game uses the integrated dependency/staging/identity/integrity path, including #193 package proof; current build prerequisites are in BUILD_WINDOWS.md. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 ## Outcome
 
 LP06 completes the core Gate 3 standalone proof. A representative Renegade

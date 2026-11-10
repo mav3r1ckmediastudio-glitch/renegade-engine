@@ -1,5 +1,7 @@
 # Player Arms & Combat Framework
 
+> **Current-main reconciliation — 10 November 2026:** This remains the combat design/acceptance contract. Source integrations #178/#181/#182 do not declare every family, polish target or release gate complete. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 **Status:** Canonical design authority for the Alpha Playability programme.
 **Scope:** Player first-person presentation, equipment/actions, ranged combat, directional melee, bows, crossbows, magic, projectiles, impact feedback and combat feel.
 **Underlying rule:** extend the accepted Renegade Player; do not create a second player controller, physics world, animation runtime or damage/event system.

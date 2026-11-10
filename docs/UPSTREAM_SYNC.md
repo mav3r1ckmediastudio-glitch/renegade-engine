@@ -7,17 +7,32 @@
 | Fork | `https://github.com/mav3r1ckmediastudio-glitch/WickedEngine.git` |
 | Official upstream | `https://github.com/turanszkij/WickedEngine.git` |
 | Branch | `renegade-rocky-riverbed-v1` |
-| Commit | `ceb816b844b4ab2fa56a159ac60a4f65c931bdfc` |
-| Pin authority | PR #186, merged main `150eca4b761d3f62f122df3ab5e8536ec084f926` |
-| Prior official baseline | `3a800b7134aafe58461093c8abb2e274d4e64033` |
-| Renegade integration date | `2026-10-28` |
+| Commit | `82557d439a41d104f559b0d3134d160b7bf6154e` |
+| Pin authority | PR #188, merged main `f64d31977ccc073c626d42a8973dbfa37acb3eed`; retained through PR #193 |
+| Prior river pin | `ceb816b844b4ab2fa56a159ac60a4f65c931bdfc` (PR #186/#187) |
+| Earlier official baseline | `3a800b7134aafe58461093c8abb2e274d4e64033` |
+| Renegade integration date | `2026-11-01`; reconciled `2026-11-10` |
 | Integration | Pinned Git submodule at `/WickedEngine` |
 
-The submodule now uses the river-enabled Renegade fork accepted through PR #186.
-Preserve this gitlink and fork URL during inventory integration. The previous
-official baseline below is historical, not the active checkout authority.
-See RIVER_G13E14_SINGLE_COMBINED_TEST_2026-10-28.md and the integration validation report.
-Existing configure-time overlays remain separate from the pinned commit.
+The current gitlink and Tools/Windows-Build.Common.ps1 agree on 82557d4.
+The previous river-only and official pins below are historical.
+
+## Reproducible overlays are separate from the pin
+
+CMake applies documented Renegade overlays for sky/weather and the shared
+allocator/particle authoring paths. Relevant decisions include
+[shared allocator](SHARED_ALLOCATOR_CORE_DECISION_2026-11-08.md),
+[particle fields](PARTICLE_MOVEMENT_FIELDS_CORE_DECISION.md),
+[lifetime](PARTICLE_LIFETIME_CORE_DECISION.md) and
+[shapes/timing](PARTICLE_SHAPES_TIMING_CORE_DECISION.md).
+The patch scripts/files in the current CMake graph are the reproduction authority.
+No feature documentation update authorizes arbitrary upstream source changes.
+
+Shared Windows build-script guards expect a clean tracked submodule before
+starting; CMake can then generate the approved patch state. Do not repeatedly
+reset patched owner worktrees. Use an isolated clean build checkout and preserve
+all existing work. A dirty generated source tree is not a changed gitlink.
+See [BUILD_WINDOWS](BUILD_WINDOWS.md).
 
 ## Phase-boundary sync procedure
 
@@ -47,7 +62,7 @@ record:
 ## Historical official baseline currency (July 2026)
 
 Upstream `master` was fetched on 2026-07-30 during a grid investigation and
-resolved to `3a800b7134aafe58461093c8abb2e274d4e64033` â€” the exact commit
+resolved to `3a800b7134aafe58461093c8abb2e274d4e64033` — the exact commit
 pinned here. That July observation describes the previous official baseline; the active
 river fork pin is recorded above.
 Recheck at the next phase boundary rather than assuming drift.
@@ -70,7 +85,7 @@ The original planning analysis used a `WickedEngine-master(1).zip` attachment
 that is no longer present. That comparison is obsolete: the Git submodule at
 the pinned SHA is now the sole baseline of record and the ZIP has no standing.
 
-## Weather V2 local candidate (2026-11-01)
+## Historical Weather V2 integration note (2026-11-01)
 The upstream baseline above remains unchanged. The Renegade fork checkpoint for the owner-approved Weather V2 candidate is c0cb547b6e5f2f8b3587ba4b30d0fe5fc704d3ee. Core-patch rationale and verification are recorded in WEATHER_V2_G4_CRITICAL_REPAIR_CORE_DECISION_2026-10-30.md and the associated performance decision. This checkpoint is local and requires approved publication before fresh remote CI can fetch it. No upstream sync is implied.
 
 Native Windows solution CI correction: fork checkpoint 82557d439a41d104f559b0d3134d160b7bf6154e adds direct wiArguments.h includes in wiRenderer.cpp and wiScene.cpp. CMake PCH had supplied these declarations implicitly; the native solution requires explicit includes. No function or shader behaviour changes. Both build paths remain required.

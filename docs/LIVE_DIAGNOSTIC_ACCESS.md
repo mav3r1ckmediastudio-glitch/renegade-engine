@@ -1,5 +1,7 @@
 # Live diagnostic access — implementation candidate
 
+> **Current-main reconciliation — 10 November 2026:** The Studio/Runtime diagnostics stack is integrated; it was used for the #193 native/reopen/package evidence. Access/permission boundaries and measured heartbeat semantics remain unchanged. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 Base: `5ae9cb579613d58b52a4db9fc89e13e0c0cd884d`, PR #140,
 `scripting/s5c-cross-script-events`. This task is not accepted or owner-proven.
 Main does not yet contain the existing DiagnosticService; preserve the PR #140

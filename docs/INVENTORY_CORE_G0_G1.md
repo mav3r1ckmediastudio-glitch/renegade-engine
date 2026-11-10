@@ -1,5 +1,7 @@
 # Optional Inventory Core — G0/G1 checkpoint
 
+> **Current-main reconciliation — 10 November 2026:** This is the original G0/G1 core record; later Inventory G1–G5 source merged with rivers through #187. Its “no Runtime/Studio/Lua/HUD integration” status applies only to G0/G1, not current main. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 **Date:** 26 October 2026
 **Branch:** `feature/inventory-core-g1-20261026`
 **Base:** `main` at `11bbb90e4214776d5e51c8bc4cba2e7f1ccde296`

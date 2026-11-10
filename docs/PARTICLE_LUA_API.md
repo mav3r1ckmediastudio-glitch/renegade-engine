@@ -1,5 +1,7 @@
 # Particle effects from Lua
 
+> **Current-main reconciliation — 10 November 2026:** Implemented source is merged through PR #192 and retained in #193. The original local observations below remain scoped evidence, not current branch/merge instructions. See [CURRENT_STATUS](CURRENT_STATUS.md); owner/independent limits are not automatically closed.
+
 Save an effect in the Particle Picker, then use `renegade.particles` in a governed
 creator script. The whole saved effect is one instance, including every layer and
 movement field. Changes affect that instance; they do not overwrite your preset.

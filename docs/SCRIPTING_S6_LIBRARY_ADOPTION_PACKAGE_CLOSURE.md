@@ -1,5 +1,7 @@
 # Renegade Scripting S6 — Library Adoption & Package Closure
 
+> **Current-main reconciliation — 10 November 2026:** Script Library adoption/package closure is integrated in main. It remains distinct from a proposed general third-party plugin SDK. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 Status: integrated implementation / final acceptance gate
 
 S6 is intentionally delivered as one end-to-end scripting gate rather than six

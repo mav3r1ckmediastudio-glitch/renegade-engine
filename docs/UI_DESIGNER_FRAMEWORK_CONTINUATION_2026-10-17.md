@@ -39,7 +39,7 @@ Native Designer proved exact source selection for NEW GAME, inherited orange fon
 
 Native Runtime showed LINKED HEALTH: 100 in inherited orange font42 and a linked Slider initial value 0.2. This proves inherited binding formatting and actual possessed-player adaptation, plus value-control defaults. Snapshot: hud_loaded/visible true, bindings ready, zero issues, UI-owned gameplay pause. Evidence: BUILD/ui-components-native/ui-runtime-hud-native-qa/component-health-linked.png and component-health-live.json.
 
-## Current ordered-interaction source — build in progress
+## Current ordered-interaction source â€” build in progress
 
 Reviewed follow-ups keep component container structure local, make isolated simulation discover/evaluate inherited bindings and restore resolved fallbacks, strengthen the source-action-independence test, guard normal Button dispatch to one release, and improve text-limit error contrast.
 

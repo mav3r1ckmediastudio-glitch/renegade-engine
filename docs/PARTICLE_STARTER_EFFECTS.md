@@ -1,4 +1,7 @@
 # Final particle starter collection
+
+> **Current-main reconciliation — 10 November 2026:** This is a local QA-catalog curation receipt. The eight named QA records and local catalog changes are not proof that every fresh installation/project ships those eight presets. Use the actual installed/project catalogs; do not infer distribution of local QA files.
+
 The eight samples are Brazier Fire, Candle Flame, Embers, Swirling Leaves, Smoke, Steam, Ground Mist and Heat Shimmer.
 
 Brazier Fire uses the approved flame, smoke and heat shimmer plus all three approved ember layers. Its ember sizes are 35% of the standalone sample to match the fire, as requested by the owner. Its two ember air fields retain the approved settings. Flame, smoke and shimmer have zero field influence, so the added air fields only affect embers. The Ember sample retains the complete approved three-layer setup. Swirling Leaves retains the approved three-leaf composite and fields.

@@ -1,5 +1,7 @@
 # P3 projectile authoring and weapon assignment
 
+> **Current-main reconciliation — 10 November 2026:** Physical projectiles/Hitscan and surface presentation are integrated through #181/#182. Follow existing native controls; older development candidates are scoped history. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 ## Owner instructions - 2026-10-06
 
 P3 remains focused on projectile simulation, collision and impact presentation.

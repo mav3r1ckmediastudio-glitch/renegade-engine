@@ -43,3 +43,16 @@ Choose one:
 - [ ] FAIL
 
 Record evidence, limitations, and follow-up tasks in `HANDOFF.md`.
+
+
+## Documentation reconciliation
+
+- [ ] Current summary identifies the exact merged baseline and current gitlink.
+- [ ] Integrated source, CI, scoped native tests, owner acceptance and independent
+      release verification are described separately.
+- [ ] Dated evidence retains its original source/configuration and failed checks.
+- [ ] No historical pending/branch instruction is presented as the current task.
+- [ ] Changed guide links, UTF-8 text and source fingerprints are checked.
+- [ ] Required assistant trust/abstention tests pass after guide changes.
+- [ ] A CI-free docs task changes no engine/workflow/assets or protection rules;
+      skip instructions and any pending checks are reported honestly.

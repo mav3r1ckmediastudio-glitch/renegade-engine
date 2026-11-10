@@ -1,5 +1,7 @@
 # Particle lifetime controls
 
+> **Current-main reconciliation — 10 November 2026:** Implemented source is merged through PR #192 and retained in #193. The original local observations below remain scoped evidence, not current branch/merge instructions. See [CURRENT_STATUS](CURRENT_STATUS.md); owner/independent limits are not automatically closed.
+
 Select a layer in the Particle Picker, open **Lifetime**, then tick **Use lifetime
 curves**. The colour strip and graphs show how that layer changes as a particle
 ages. Existing presets start with this option off.

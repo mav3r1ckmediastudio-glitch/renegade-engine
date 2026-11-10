@@ -1,5 +1,7 @@
 # Light picker and saved behaviours
 
+> **Current-main reconciliation — 10 November 2026:** Merged through #192 and retained by #193. See [CURRENT_STATUS](CURRENT_STATUS.md) for exact candidate CI and scoped native evidence. Source integration does not replace any outstanding independent acceptance.
+
 ## Owner-approved scope
 
 One native colour/light picker contains Point, Spot, Directional and Area light
@@ -80,7 +82,7 @@ numeric writes. Existing light and governed Lua tests cover preserved native
 authoring/runtime boundaries. Native Studio visual/input/save/reopen and Test
 Game checks are recorded in HANDOFF.md; compile alone is not acceptance.
 
-No merge, CI submission or alpha distribution is part of this local owner task.
+The picker source is integrated through PR #192 (main 6036b20), and its combined prefab path is verified in PR #193. Earlier local-task restrictions describe that checkpoint; no alpha distribution is authorized by either merge.
 
 The picker owns the modal input/frame boundary: the populated Level retains its
 last rendered frame while the private preview updates at 30 Hz. Static previews

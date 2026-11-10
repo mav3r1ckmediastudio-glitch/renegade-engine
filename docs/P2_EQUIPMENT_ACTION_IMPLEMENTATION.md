@@ -1,12 +1,14 @@
 # P2 equipment and action framework
 
+> **Current-main reconciliation — 10 November 2026:** P2 is integrated through the combined #181 stream (10 October); #180 is not awaiting merge. Existing weapon-specific UX/behaviour and independent-verification limitations remain. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 ## Current P2 checkpoint - 2026-10-06
 
 Owner accepted movement and Build Game behavior: "ive checked movement and build
 game, and both act as expected". This supplements the native and automated
 checks recorded in HANDOFF.md; the owner-built package was not independently
-identified by executable hash or source revision. PR #180 integrates this branch;
-Windows CI and independent exact-head review remain required before merge.
+identified by executable hash or source revision. The P2 stream was integrated through the combined PR #181 on 10 October 2026;
+its original acceptance limits remain distinct from that merge.
 
 Implemented: governed equipment assets and starting loadouts, staged semantic
 actions, hold/release/cancel, independent sword/shield hand presentation,

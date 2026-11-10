@@ -1,5 +1,7 @@
 # Renegade Character & AI implementation handoff
 
+> **Current-main reconciliation — 10 November 2026:** Character navigation/behaviour is part of integrated main. Early AI-01/02 “not implemented”/pending statements are historical; do not claim all advanced AI or crowd/animation features are complete. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 ## Current integrated status — 2026-10-03
 
 This document retains the detailed AI-01 through AI-04 gate evidence below as

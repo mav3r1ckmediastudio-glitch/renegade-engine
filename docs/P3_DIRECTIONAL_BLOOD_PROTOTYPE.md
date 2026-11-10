@@ -1,4 +1,4 @@
-## Directional blood prototype â€” 2026-10-09
+## Directional blood prototype — 2026-10-09
 
 Owner requested an experiment beyond the repeating large animated sprite.
 Engineering opt-in: RENEGADE_DIRECTIONAL_BLOOD=1. Default retains the accepted

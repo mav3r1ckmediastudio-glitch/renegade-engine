@@ -1,5 +1,7 @@
 # Particle shapes and effect timing
 
+> **Current-main reconciliation — 10 November 2026:** Implemented source is merged through PR #192 and retained in #193. The original local observations below remain scoped evidence, not current branch/merge instructions. See [CURRENT_STATUS](CURRENT_STATUS.md); owner/independent limits are not automatically closed.
+
 Select a layer in the particle picker and press **Shapes** to choose Point, Box, Sphere, Cone, Disc, Ring or Cylinder. Radius, height, cone angle and ring thickness are enabled where relevant. Sphere can emit from its surface. Box uses the layer half widths. Shapes use local +Z as their forward axis; Pitch, Yaw and Roll aim them. Outward speed adds velocity along the shape normals. Motion velocity and movement fields still work alongside this. Stationary looping sprites stay at their placed position and do not use emission shapes.
 
 Press **Timing...** beside Whole Effect. Enable timing, choose Loop or Play once, then set Duration, Delay and Burst / layer. Delay comes before each emission window. Duration stops new emission while existing particles finish their lifetimes. Loop repeats delay + duration. Burst adds the chosen number at each window start, in addition to the authored per-layer burst. Set emission rate to zero for a burst-only effect. Restart replays from the initial delay; pause/resume freezes and continues the clock. Stationary layers show during the window and restart their flipbook at its start.

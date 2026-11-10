@@ -1,5 +1,7 @@
 # Character workflow implementation progress
 
+> **Current-main reconciliation — 10 November 2026:** Character/importer/animation source is integrated. Old gate/branch checkpoints below retain their dates; current product orientation is CURRENT_STATUS.md, not an instruction to resume an old CW branch. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 ## Current integrated status — 2026-10-03
 
 This file preserves the CW gate history below. The old

@@ -1,5 +1,7 @@
 # P3 continuation handoff - 2026-10-06
 
+> **Current-main reconciliation — 10 November 2026:** The combined P2/P3 source and original impact resources merged through #181/#182. Read CURRENT_STATUS.md before treating older “next” steps as current work. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 ## Start here
 
 P2 integration PR: https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/pull/180

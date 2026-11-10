@@ -1,5 +1,7 @@
 # River water normal-map reload repair — 5 November 2026
 
+> **Current-main reconciliation — 10 November 2026:** This repair is merged through #190. Custom/empty/valid resource bindings remain protected; the original test observations are scoped evidence. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 ## Reproduced problem
 The owner's saved five-river fixture loads each WATER spline with normal strength 1, UV animation V -0.001, frame rate30 and a missing normal resource. Both the original project and a disposable copy resolve the stored filename to Content/Scenes/waterNormalMap.jpg, where no file exists. The supplied map is deployed beside Studio and Runtime in Content/river.
 

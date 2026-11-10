@@ -1,5 +1,7 @@
 # VSync control
 
+> **Current-main reconciliation — 10 November 2026:** VSync source is integrated through #191. Measurements are local observations; the original branch/baseline text below is historical. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 Owner requested an immediate on/off control for visible uncapped frame rates.
 This branch starts at accepted main e413a50d4fd2c9f7ba70e75ef76aaf7e68233b1c and retains Wicked 82557d439a41d104f559b0d3134d160b7bf6154e. Meshlet experiments are excluded.
 

@@ -7,7 +7,7 @@ Wicked Engine as the rendering and low-level foundation while exposing Wicked's
 relevant capabilities through Renegade-owned editor, scripting, runtime, and
 programmer surfaces.
 
-Renegade is a working title.
+Renegade Engine is the current project name. This charter records product goals, not a claim that every V1 capability or release gate is complete.
 
 ## Primary user
 

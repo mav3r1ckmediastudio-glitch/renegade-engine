@@ -1,5 +1,7 @@
 # Maximum terrain and river recovery — 3 November 2026
 
+> **Current-main reconciliation — 10 November 2026:** Maximum-terrain recovery is integrated through #189. Its 33×33 coverage and existing transaction/work/payload budgets remain; this receipt is not a performance guarantee. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 Status: product native and actual Studio checks pass on DESIGN with the
 interaction-latency qualification below. Local validation of the hosted CI
 scheduling repair passes; fresh CI is the next gate. Packaging remains paused; fresh CI, exact-artifact
