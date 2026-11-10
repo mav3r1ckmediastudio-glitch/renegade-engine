@@ -1,5 +1,7 @@
 # Renegade Story Flow — Gate 10 Runtime/Build/Standalone Closeout
 
+> **Current-main reconciliation — 10 November 2026:** This is a scoped programme/gate record. Story Flow/runtime/build source is integrated; do not treat the old implementation branch or Wicked pin as today’s checkout authority. CURRENT_STATUS.md records current integration without certifying every historical gate. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 **Status:** active implementation and verification
 
 **Gate 10 baseline:** `1243a5da6f661e624a4672df47b8cdf12288f02f`

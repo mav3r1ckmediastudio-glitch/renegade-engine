@@ -1,5 +1,40 @@
 # Architecture
 
+## Current integrated ownership — 10 November 2026
+
+The current source baseline is main 618b231 (PR #193), with Wicked pinned to
+82557d439a41d104f559b0d3134d160b7bf6154e. See CURRENT_STATUS.md for merge and CI
+provenance. Historical implementation notes below retain their original scope.
+
+Wicked owns native scene/ECS, rendering and low-level systems. EngineBridge owns
+UI-independent scene/project documents, stable identity, commands, script/asset
+transactions and dependency closure. Studio owns creator interactions and private
+previews; Runtime owns game lifecycle, actual gameplay and governed creator Lua.
+Both consume the same native data/services. Neither editor panels nor plugins
+should invent a parallel scene, selection, history or asset registry.
+
+Recent durable additions are recorded under “Selection and scene-assembly
+authoring”, “Light and particle authoring” and “General scene prefabs” below.
+Prefab recipe schema 2 carries governed script templates; normal native
+serialization retains other components and resources. Runtime validates packages
+while preserving authored assembly copies/identities. Library scripts become
+project-owned through the existing adoption transaction.
+
+Core patches are reproducible configure-time overlays, separate from the
+unchanged Wicked gitlink. See UPSTREAM_SYNC.md and the named core decisions.
+Performance-sensitive point queries use native lookups; derived inventories
+rebuild on actual content/lifecycle changes, not every frame or a hidden timer.
+
+A general plugin ABI, custom shader-editor integration and commercial marketplace
+are proposals. Existing C++ services and script Library support do not establish
+a supported native third-party SDK.
+
+## Historical and subsystem detail
+
+The sections below are retained implementation/specification records. A section
+describing a former candidate or failed experiment is not current release status.
+Use CURRENT_STATUS.md and the current feature ledger to resolve status conflicts.
+
 ## Dependency direction
 
 ```text

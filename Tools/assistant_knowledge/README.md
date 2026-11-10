@@ -1,6 +1,41 @@
-# Renegade Assistant — RA-01 Knowledge Database Prototype
+# Renegade Assistant knowledge and manual support
 
-**Status:** Read-only local prototype built and tested on DESIGN, 2026-10-13. Not Studio-integrated, packaged, merged, or owner-accepted. No LLM inference or editor mutations.
+**Current integrated baseline:** main 618b231, 10 November 2026.
+The knowledge/assistant source is integrated, including packaging and Studio
+transport work consolidated through #184 and later recovery. The RA-01 prototype
+status below is historical; it does not describe today's integration state.
+
+knowledge.py builds an offline SQLite FTS/reference index plus curated
+source-verified facts/manuals. workflows.json supplies bounded, reviewed answers.
+The installed presence/dock transport is separate from the knowledge authority.
+Markdown remains reference-only; indexing CURRENT_STATUS or a new guide never
+automatically promotes it to verified instructions or editor permission.
+
+Preserve strict source fingerprints, packaged source identity, source-marker
+validation, abstention, and draft/publication boundaries. Documentation changes
+require reviewing affected guide claims and updating only matching fingerprint
+metadata; never weaken runtime verification to make a stale recipe pass.
+
+Run the complete local assistant checks from the repository root:
+
+~~~powershell
+python Tests/AssistantWorkflowSuite.py --repo . --output BUILD/docs-assistant-workflow
+python Tests/AssistantPackagedKnowledgeTests.py --repo . --output BUILD/docs-assistant-package
+~~~
+
+These commands build disposable local knowledge/test outputs; they do not run
+hosted CI or a new engine build. The documentation reconciliation does not claim
+new native UI acceptance for old tutorial receipts.
+
+Current reading: [project status](../../docs/CURRENT_STATUS.md),
+[creator guide](../../docs/CREATOR_GUIDE.md),
+[documentation index](../../docs/README.md).
+Historical manual QA/publication limits remain in MANUAL_E2E_STATUS.md.
+
+## Historical RA-01 prototype and development records
+
+The dated prototype counts, paths and “not integrated” statements below apply only
+to their recorded checkout. The current index is rebuilt from current source.
 
 ## Why this exists
 

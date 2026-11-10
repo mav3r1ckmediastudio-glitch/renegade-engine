@@ -46,7 +46,7 @@
         {
           "path": "docs/ARCHITECTURE.md",
           "needle": "Creator steps: select an object; choose Surface Type directly in its Inspector.",
-          "sha256": "fd02ff7e39688184a8ab838db03670002ebe53e8c0b9914d6af456c0c738c46a"
+          "sha256": "1346fc3eb0746d298dcb83e5551622b55f251a21ec8149dbdbcb4a7c8b0f9027"
         },
         {
           "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
@@ -114,7 +114,7 @@
         {
           "path": "docs/MODEL_IMPORTER_REBUILD.md",
           "needle": "This is bounded new-import authoring.",
-          "sha256": "20910815006d9bc9bb417bb1d700878ff9069463879d77b87b0eca9ca266490c"
+          "sha256": "69906a1ca85691eabfdfab961b22b3707cbe416bdec634955217f7e51ee9849f"
         },
         {
           "path": "Tools/assistant_knowledge/character_workflows_guide.json",
@@ -183,7 +183,7 @@
         {
           "path": "docs/MODEL_IMPORTER_REBUILD.md",
           "needle": "Several clips may share an action; missing actions remain valid.",
-          "sha256": "20910815006d9bc9bb417bb1d700878ff9069463879d77b87b0eca9ca266490c"
+          "sha256": "69906a1ca85691eabfdfab961b22b3707cbe416bdec634955217f7e51ee9849f"
         },
         {
           "path": "Tools/assistant_knowledge/character_workflows_guide.json",
@@ -250,7 +250,7 @@
         {
           "path": "docs/AI_IMPLEMENTATION_HANDOFF.md",
           "needle": "resuming Wander.",
-          "sha256": "e24374daa216305ecced787114ef97f6fc80fd12bd590ee26ed7d5f9172a65ae"
+          "sha256": "24bf6a15283ab931d5ba5432487ee092e295e25bd14e2ad3c2248af61cc5c435"
         },
         {
           "path": "Tools/assistant_knowledge/npc_workflows_guide.json",
@@ -393,12 +393,12 @@
         {
           "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
           "needle": "Patrol Route and Weapon stable IDs are treated as scene-local",
-          "sha256": "012a9426efaf538f25f9b8e136ce9c651900bba04d6982f207b7c2d98c2caca1"
+          "sha256": "dc35be42a6eb7f274dd16adf943525fe6fd2a1f76e79e2ec610fb269081e37ae"
         },
         {
           "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
           "needle": "A prefab containing Actions/Scripts fails closed in an unsaved Level",
-          "sha256": "012a9426efaf538f25f9b8e136ce9c651900bba04d6982f207b7c2d98c2caca1"
+          "sha256": "dc35be42a6eb7f274dd16adf943525fe6fd2a1f76e79e2ec610fb269081e37ae"
         },
         {
           "path": "Tools/assistant_knowledge/character_workflows_guide.json",
@@ -1109,7 +1109,7 @@
         {
           "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
           "needle": "Prepared Character Assets automatically become governed Character",
-          "sha256": "012a9426efaf538f25f9b8e136ce9c651900bba04d6982f207b7c2d98c2caca1"
+          "sha256": "dc35be42a6eb7f274dd16adf943525fe6fd2a1f76e79e2ec610fb269081e37ae"
         },
         {
           "path": "Tools/assistant_knowledge/character_workflows_guide.json",
@@ -1977,7 +1977,7 @@
         {
           "path": "docs/MODEL_IMPORTER_REBUILD.md",
           "needle": "native cancel, rotation, naming, thumbnail commit/card, drag placement, Undo/Redo",
-          "sha256": "20910815006d9bc9bb417bb1d700878ff9069463879d77b87b0eca9ca266490c"
+          "sha256": "69906a1ca85691eabfdfab961b22b3707cbe416bdec634955217f7e51ee9849f"
         },
         {
           "path": "Tools/assistant_knowledge/static_model_guide.json",
@@ -2006,5 +2006,10 @@
   "prefab_integration_review": {
     "date": "2026-11-10",
     "scope": "Reviewed existing importer, animation, player-prefab, equipment and Surface Type controls after general selection integration. Controls and scoped instructions retained; renewed three changed whole-file fingerprints. Existing native acceptance and UI limits unchanged."
+  },
+  "documentation_reconciliation_review": {
+    "date": "2026-11-10",
+    "source_main": "618b2310ec7d6a7889d490e93304e39043f7e5ff",
+    "scope": "Reviewed affected Markdown evidence after current-state reconciliation. Native controls/source are unchanged; all curated evidence needles retained. Updated only affected Markdown fingerprints. Historical native QA and publication limits retained; new orientation pages remain reference-only."
   }
 }

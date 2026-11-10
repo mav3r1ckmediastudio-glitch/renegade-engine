@@ -1,5 +1,7 @@
 # P3 Authored Projectiles gate
 
+> **Current-main reconciliation — 10 November 2026:** Implementation is integrated through #181/#182. Gate obligations below are preserved; no universal combat/physics/visual acceptance follows merely from a merge. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 One bounded gate covers four checks requested by the owner. Health is not a
 prerequisite; this work makes no claim that Player/NPC gameplay health exists.
 

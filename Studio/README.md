@@ -1,47 +1,25 @@
-# Studio
+# Renegade Studio
 
-Renegade's custom Windows-first editor application.
+Renegade's Windows-first creator application. Current integrated baseline:
+main 618b231, 10 November 2026. See [current status](../docs/CURRENT_STATUS.md)
+and [creator guide](../docs/CREATOR_GUIDE.md).
 
-## Current Phase 3 increment
+Studio owns Project Hub, Story Flow/Journey, Level/Screen authoring, hierarchy,
+Inspector and Asset Browser workflows, private modal previews, native gizmos,
+Undo/Redo and save/reopen. It uses EngineBridge services for durable state and
+transactions rather than embedding the stock Wicked Editor.
 
-`RenegadeStudio` is a Windows-first shell that:
+Current authoring includes terrain/rivers/waterfalls/weather, rendering/audio,
+model/Character imports, Player/equipment, lights and layered particles.
+Multi-selection and functional scene prefabs are integrated with the pickers.
+Camera/terrain/river tool gestures retain exclusive ownership when appropriate.
 
-- owns its window, branding, message loop, and per-monitor DPI setup;
-- renders through Wicked's `RenderPath3D`;
-- obtains scene state through `Renegade::EngineBridge`;
-- starts in a Renegade-owned holographic Project Hub;
-- creates, validates, opens, and remembers `.renegade` projects;
-- renders a generated live Proving Ground instead of presenting only a cube;
-- exposes permanent hierarchy, inspector, content, toolbar, and viewport
-  regions;
-- selects scene objects by clicking them in the viewport and synchronises that
-  selection with the hierarchy, inspector, and transform gizmo;
-- draws an editor-only cyan silhouette around the selected object;
-- supports right-mouse freelook and keyboard fly navigation within the
-  viewport;
-- edits position, rotation, and scale through the Inspector;
-- replaces the Transform inspector with a curated Environment inspector when
-  the scene's weather entity is selected;
-- authors physical sky mode, aerial perspective, exposure, ambient light,
-  distance and height fog, volumetric-cloud coverage and volume, and cloud
-  shadows through undoable EngineBridge commands;
-- applies Clear, Scattered, Overcast, and Storm as single-step undoable
-  presets;
-- switches Move, Rotate, and Scale gizmos with W/E/R;
-- focuses, duplicates, and deletes selected entities;
-- provides undoable full-transform, duplicate, and delete commands;
-- supports Ctrl+S, Ctrl+Shift+S, Ctrl+D, Delete, F, Ctrl+Z, and Ctrl+Y;
-- draws Renegade's own infinite grid from `Studio/shaders`, in an explicit
-  colour/depth render pass it opens itself, so the grid is never a scene
-  entity, never selectable, and never serialized;
-- toggles grid visibility from the command bar or `G` and remembers the choice
-  across restarts through `ProjectService` editor preferences; and
-- preserves Save As, Reopen, DX12, Vulkan, input, and DPI paths.
+Test Game captures native state on its owning thread, then performs owned
+snapshot writing/validation and launch preparation in the background with an
+animated activity indication. The initial capture is still synchronous.
+Point visibility/membership queries use native lookups; selection-derived
+outlines update on selection changes. Frame-rate claims require populated scenes
+and matched settings.
 
-ADR 0002 accepts `wiGUI` as the native foundation. The visual language,
-components, layout, and workflows belong to Renegade.
-
-See `docs/PHASE3_PROJECT_HUB.md` and
-`docs/PHASE3_VIEWPORT_INTERACTION.md`, then
-`docs/PHASE3_EDITOR_USABILITY.md` and
-`docs/PHASE3_ENVIRONMENT_AUTHORING.md`, for the current acceptance criteria.
+Build with [BUILD_WINDOWS](../docs/BUILD_WINDOWS.md). The early PHASE2/PHASE3
+documents preserve their acceptance history; they are not today's feature list.

@@ -1,5 +1,7 @@
 # Terrain initialization and Player Start preview recovery
 
+> **Current-main reconciliation — 10 November 2026:** Recovery merged through #189; subsequent riverbed locality and normal-map repairs merged through #190. This dated receipt retains its original tests and limitations; “review candidate” is not current merge status. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 Validation updated 2026-11-03 on DESIGN.
 Branch: recovery/20261101-repair-implementation.
 Base: 6c59d2a089d3fa57f92f03534354927e9ff8676e.

@@ -1,5 +1,7 @@
 # P1 status and recovery checkpoint
 
+> **Current-main reconciliation — 10 November 2026:** The P1 functional checkpoint merged through #178. Later P2/P3 integration does not close the entire Alpha combat programme. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 ## Current checkpoint - 2026-10-05
 
 PR #178 merged into main on 2026-10-05 at `7105a95ddcc103d6a024a17fddefd62f705a86b3`.

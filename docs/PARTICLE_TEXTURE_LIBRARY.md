@@ -1,4 +1,6 @@
-# Particle texture library — local candidate, 9 November 2026
+# Particle texture library
+
+> **Current-main reconciliation — 10 November 2026:** Implemented source is merged through PR #192 and retained in #193. The original local observations below remain scoped evidence, not current branch/merge instructions. See [CURRENT_STATUS](CURRENT_STATUS.md); owner/independent limits are not automatically closed.
 
 Open Add > Particle, choose a layer, then Browse textures / sheets. The native browser provides Included and Project tabs, search, categories, static/animated filters, a thumbnail size control and paging. The initial grid shows twenty textures; smaller thumbnails show up to thirty-five. The right preview animates sheets and shows atlas settings before use. Cancel leaves the layer unchanged. Use texture changes only that layer's image, atlas and optional recommended blend; movement, fields, lifetime and size remain authored.
 
@@ -10,7 +12,7 @@ Selecting a placed effect retains the usual name and transform inspector plus Ed
 
 Automated verification: RenegadeParticleTextureLibraryTests covers exact catalog counts, sheet metadata, static atlas selection, adoption/reuse, cold profile loading, project rejection, governed products, layer setting preservation, distortion slot routing and invalid input. ParticleEffectTests covers root markers, duplication, stationary sprites and cold scene reload. Native browser/selection acceptance and final regression results are recorded in HANDOFF.md.
 
-This is a local candidate. No merge, push, release or redistribution approval is implied. Existing accepted effect presets remain unchanged; library content is a curated source selection rather than a replacement effect setup.
+This source is integrated in main. The following local verification records are historical; merge does not grant additional release or redistribution clearance. Existing accepted effect presets remain unchanged; library content is a curated source selection rather than a replacement effect setup.
 
 Final local verification: Studio and matching Runtime Release builds passed, along with eleven focused particle/light/marker/point-lookup/inspector-source checks. Native checks covered all fifty entries, the 20/35 grids, animated sheets, governed adoption, native external import and editable 4x16 mist layout. Final compact-inspector screenshots document click selection and picker editing. Original eighteen effect presets and the latest saved QA scene were preserved. Owner review remains pending.
 

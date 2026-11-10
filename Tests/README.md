@@ -1,52 +1,29 @@
-# Tests
+# Renegade tests
 
-`RenegadeBridgeTests` is the automated suite: a single executable run by CTest
-in both Debug and Release from `.github/workflows/studio.yml`. See
-`docs/TEST_STRATEGY.md` for the full strategy.
+The suite is a CTest graph of multiple executables, source/resource contracts and
+Python/Node checks, not a single RenegadeBridgeTests process. Current integrated
+baseline: main 618b231, 10 November 2026. Tests/CMakeLists.txt and configured
+ctest -N output are the registration authority.
 
-## It runs without a graphics device
+RenegadeBridgeTests remains a headless test/aggregate build foundation. New proof
+targets can be build dependencies without being registered to execute on a hosted
+GPU-less runner. Native/GPU proofs explicitly create a graphics device; actual
+Studio, save/reopen and standalone visual checks remain separate evidence.
 
-This constraint shapes everything here. `wi::graphics::GetDevice()` returns
-null, so anything that dereferences it crashes the test process. In practice
-that rules out:
+- Headless tests must not call renderer-dependent primitive factories or advance
+  rendered scenes. Test pure state/commands or renderer-independent blueprints.
+- Native tests verify scene/component/material/resource/history and disk behaviour
+  with an initialized device where required.
+- Source/resource contracts detect ownership, deployment and schema regressions;
+  they do not establish artistic quality.
+- Assistant tests enforce source fingerprints, manual/receipt boundaries,
+  packaged identity and abstention. Do not renew fingerprints without reviewing
+  the affected guide/controls.
+- Functional assembly proofs cover geometry and a real scripted brazier, including
+  independent copies, reference remapping, Unpack and package loading.
 
-- Wicked's primitive factories — `Entity_CreateCube`, `Entity_CreateSphere`,
-  `Entity_CreatePlane`, `Entity_CreateMeshFromData` — because they all call
-  `MeshComponent::CreateRenderData()`.
-- `Scene::Update()`.
-- Reloading any archive containing meshes or materials, because their
-  deserializers call `CreateRenderData()` too.
-
-An earlier CI failure came from ignoring this: the suite called
-`SceneService::CreateProvingGround()` directly and the executable crashed.
-
-Two patterns work around it. Scene *composition* is asserted through the
-renderer-independent `ProvingGroundBlueprint()` rather than by instantiating
-the scene. Save and reload round trips use a mesh-free fixture, leaving full
-generated-scene reload to packaged-Release acceptance. Component authoring
-needs no device, so transform, weather, and future light and material commands
-are fully covered here.
-
-## What is covered
-
-- Hierarchy listing, parent/child ordering, and internal-entity filtering.
-- Selection state.
-- Complete transform commands with Undo/Redo, repeated history, and no-op
-  filtering.
-- Entity duplication and deletion with Undo/Redo.
-- Curated weather commands: apply, undo, redo, preset content, and preservation
-  of Wicked weather values outside the curated state.
-- Proving Ground blueprint structure: no internal helper entities, no grid
-  geometry, no duplicate names, ground relief wider than the grid, four deck
-  edges, a weather entity, a shadow-casting sun, a volumetric light.
-- Headless WISCENE save and reload including a saved transform and serialized
-  weather.
-- Project lifecycle, recent-project persistence, and editor preferences
-  surviving a restart.
-
-## Adding a test
-
-Assert against `EngineBridge` services and commands, never against Studio
-widgets. If a test needs a mesh, a material, or a rendered frame, it does not
-belong here — add it to the packaged Windows acceptance checklist for the
-milestone instead.
+Run local tests using the configured build; see
+[BUILD_WINDOWS](../docs/BUILD_WINDOWS.md) and
+[TEST_STRATEGY](../docs/TEST_STRATEGY.md).
+The documentation reconciliation suppresses hosted CI by owner instruction;
+local doc/assistant/source checks are not a new binary build or release gate.

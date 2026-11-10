@@ -1,5 +1,7 @@
 # Riverbed locality and progress candidate — 5 November 2026
 
+> **Current-main reconciliation — 10 November 2026:** This repair is merged through #190. Keep the original measured operation/scene/hardware limits; current main does not promise the same latency everywhere. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 Base: 8fcc02a53fd0b2b392b4cbec7cb7c5e7bd2cdecc. Local uncommitted candidate;
 not merged, released, or accepted against the owner's unsaved river.
 

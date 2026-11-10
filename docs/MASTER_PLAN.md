@@ -1,5 +1,7 @@
 # Custom Game Engine Master Build Plan
 
+> **Current-main reconciliation — 10 November 2026:** This is the original July 2026 planning baseline. Its dates, estimates, placeholder labels and “not yet built” statements are historical. Current progress and approved scope are in [ROADMAP](ROADMAP.md) and [CURRENT_STATUS](CURRENT_STATUS.md); this reconciliation does not silently approve new roadmap scope.
+
 **Foundation:** Wicked Engine
 **Working title:** Renegade (placeholder)
 **Prepared for:** Maverick

@@ -1,5 +1,7 @@
 # Model importer rebuild — first vertical slice
 
+> **Current-main reconciliation — 10 November 2026:** The importer is integrated in current main; OBJ/terrain recovery is merged through #189 and later input/performance fixes through #191. Preserve the documented supported-format and missing-resource boundaries. See [CURRENT_STATUS](CURRENT_STATUS.md).
+
 ## Current integrated status — 2026-10-03
 
 The clean native importer rebuild is now integrated into `main`. Static model

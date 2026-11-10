@@ -76,3 +76,22 @@ Release-gate work must be checked by a different AI or human:
 - Do not overwrite another agent's uncommitted work.
 - Re-read upstream state before external writes.
 - Never commit credentials, private tokens, personal data, or hidden reasoning.
+
+
+## Documentation closeout and current-state reconciliation
+
+At each feature integration, reconcile current README/status/roadmap, architecture,
+handoff, feature rows and affected creator/API guides. Replace superseded current
+claims rather than appending another candidate note. Link immutable failed/accepted
+receipts with their original commit and scope; keep implementation, CI, owner
+acceptance, independent review and distribution status distinct.
+
+Use CURRENT_STATUS.md and docs/README.md to identify current guidance. Check the
+actual gitlink and build-script pin before changing pin text. A historical row's
+evidence pin is not automatically the current engine baseline.
+
+For an explicitly owner-authorized CI-free documentation pass, use a separate
+docs branch and a [skip ci] commit; do not modify workflows/protection or manually
+dispatch CI. Run applicable local link/encoding/source/assistant checks and record
+their results. Skipped checks are not green checks. Preserve the skip marker in
+a later merge commit if the owner also wants that merge to avoid CI.

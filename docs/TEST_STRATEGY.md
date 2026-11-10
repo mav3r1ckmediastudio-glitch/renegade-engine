@@ -16,39 +16,25 @@ nominal automated pass.
 
 ## Automated layer
 
-Built and running in `RenegadeBridgeTests`:
+The configured CTest graph contains many native/headless executables plus
+source/resource, Python and Node checks. Import/reimport, Lua, project identity,
+dependencies, standalone staging/integrity and companion persistence tests already
+exist; they are not merely planned. Registration and counts depend on build options.
 
-- EngineBridge unit tests.
-- Command and undo/redo state tests, including repeated history and no-op
-  filtering.
-- Curated weather command tests: application, undo, redo, preset content, and
-  preservation of Wicked weather values the curated state does not cover.
-- Generated Proving Ground blueprint structure, including rejection of internal
-  helper entities and of duplicate entity names.
-- Project metadata, recent-project persistence, and editor-preference round
-  trips.
-- Headless WISCENE save and reload over a mesh-free scene.
+RenegadeBridgeTests remains a headless authority and aggregate build dependency.
+Renderer-dependent scene factories and Scene::Update require an initialized device;
+use pure state or blueprints in headless tests and explicit native/GPU proof
+executables for resource/render checks. A proof target being compiled by CI is
+not evidence that its manual graphics path executed there.
 
-Planned, not yet built:
+The latest prefab candidate passed 60 source contracts and eleven focused checks
+locally, plus the geometry and scripted-brazier native proofs. Actual Studio
+Save/Reopen and package-relative Runtime were observed. See CURRENT_STATUS.md and
+evidence/scene-prefab-functional/ for exact commands, source/binary hashes and
+boundaries. Counts describe that candidate, not a permanent suite size.
 
-- Asset import/reimport fixtures.
-- WISCENE migration tests.
-- Lua API smoke tests.
-- Standalone packaging tests.
-
-### Headless constraint
-
-`RenegadeBridgeTests` runs without a graphics device. Anything that reaches
-`MeshComponent::CreateRenderData()` or `Scene::Update()` will dereference a null
-device and crash the test process, which means Wicked's primitive factories and
-any scene reload carrying meshes cannot be exercised there.
-
-Two consequences shape the test design. Scene *generation* is asserted through
-the renderer-independent `ProvingGroundBlueprint()` rather than by building the
-scene. Save and reload round trips use a mesh-free fixture, and full
-generated-scene reload stays a packaged-Release acceptance step. Component
-authoring — transforms, weather, and in future lights and materials — needs no
-device and is therefore fully testable.
+Assistant/manual checks must retain fail-closed source fingerprints, test
+sensitivity to changed source and explicit publication/owner-acceptance limits.
 
 ## Visual and behavioural layer
 
