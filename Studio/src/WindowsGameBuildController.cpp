@@ -1075,6 +1075,12 @@ namespace renegade::studio
         // explicitly mutable delivery list.
         std::vector<bridge::WindowsGameBundledResource> deliveryResources(
             bundledResources.begin(), bundledResources.end());
+        // Effect-owned vector field variants are required Runtime support.
+        for(int variant=0;variant<7;++variant) {
+            const auto relative="Content/particles/MovementField"+std::to_string(variant)+".cso";
+            deliveryResources.push_back({"renegade-particle-movement-"+std::to_string(variant),
+                (studioDirectory/fs::u8path(relative)).generic_u8string(),relative});
+        }
         // G4: bundle all owner-created thunder originals and their mono positional
         // playback variants in every published game. Package hashes cover each file.
         constexpr std::array<const char*, 9> thunderFiles = {

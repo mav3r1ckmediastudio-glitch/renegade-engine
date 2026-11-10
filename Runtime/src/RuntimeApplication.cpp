@@ -1,3 +1,4 @@
+#include "renegade/bridge/ParticleEffectService.h"
 #include "../../EngineBridge/src/PlaceableWaterfallAuthoring.h"
 #include <cstdlib>
 #include <fstream>
@@ -221,7 +222,7 @@ namespace renegade::runtime
             ThunderAudio().Update(paused_ ? 0.0f : dt, camera->Eye, camera->At);
         if(scene)RecordWeatherDiagnostic(*scene,dt);
         const auto nativeBegin=std::chrono::steady_clock::now();
-        {auto riverBindings=riverFlow_.Bind();RenderPath3D::Update(dt);}
+        {auto riverBindings=riverFlow_.Bind();bridge::UpdateParticleEffectSprites(*scene,paused_?0.0f:dt);RenderPath3D::Update(dt);}
         if(const char* trace=std::getenv("RENEGADE_G13E14_STAGE_TRACE")){
             static std::uint64_t frame=0;
             if(++frame<=20 || frame%10==0){
@@ -1030,6 +1031,15 @@ namespace renegade::runtime
             uiBindingCpuTiming_.Observe(static_cast<std::uint64_t>(std::max<std::int64_t>(0,elapsed)));
         }
         RefreshUiComposition();
+        // Creator Lua can spawn/delete effects and recreate particle counter
+        // buffers. Run it before Wicked prepares visibility and GPU uploads.
+        // Like pickup removal above, these are scene mutations for this frame.
+        if (gameplayFrame)
+        {
+            SyncCreatorScriptsForScene();
+            if (!paused_)
+                creatorScripts_.Update(dt);
+        }
         renderer_.SetInterfaceDeltaTime(dt);
         wi::Application::Update(paused_ ? 0.0f : dt);
         // Current-pose marks must reach decal visibility/render upload after
@@ -1069,7 +1079,6 @@ namespace renegade::runtime
 
         if (gameplayFrame)
         {
-            SyncCreatorScriptsForScene();
             if (player_.IsSpawned())
             {
                 if (renderer_.camera != nullptr)
@@ -1102,8 +1111,6 @@ namespace renegade::runtime
                 if (worldPickupFeedbackSeconds_==0.0f)
                     worldPickupFeedback_.clear();
             }
-            if (!paused_)
-                creatorScripts_.Update(dt);
             renderer_.SetInteractionPrompt(!worldPickupFeedback_.empty()
                 ? worldPickupFeedback_ : !pickupFrame.prompt.empty()
                     ? pickupFrame.prompt : creatorScripts_.CurrentPrompt());

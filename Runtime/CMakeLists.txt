@@ -240,3 +240,5 @@ add_custom_command(TARGET RenegadeRuntime POST_BUILD
         "-DRENEGADE_ROCKY_OUTPUT=$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/riverbed/rocky_rugged"
         -P "${CMAKE_SOURCE_DIR}/cmake/StageRockyRiverbed.cmake"
     VERBATIM)
+
+renegade_deploy_particle_fields(RenegadeRuntime)

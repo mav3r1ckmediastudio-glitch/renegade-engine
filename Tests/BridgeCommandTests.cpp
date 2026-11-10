@@ -559,7 +559,7 @@ int main()
         scenes.GetScene().names.GetComponent(duplicate);
     if (!ContainsEntity(scenes.GetScene(), duplicate) ||
         duplicateName == nullptr ||
-        duplicateName->name != "Child Copy")
+        duplicateName->name != "Child 2")
     {
         return Fail("duplicate entity was not created and named");
     }

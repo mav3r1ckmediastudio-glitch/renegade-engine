@@ -144,7 +144,7 @@ namespace renegade::studio
             {"tool", !levelEditor ? std::string("not_applicable") : lightPlacementActive_ ? std::string("light_placement") :
                 creatorAssetPlacementActive_ ? std::string("asset_placement") : gizmo_.isTranslator ? std::string("translate") :
                 gizmo_.isRotator ? std::string("rotate") : gizmo_.isScalator ? std::string("scale") : std::string("select")},
-            {"placement_active", lightPlacementActive_ || creatorAssetPlacementActive_},
+            {"placement_active", lightPlacementActive_ || particlePlacementActive_ || creatorAssetPlacementActive_},
             {"gizmo_drag_active", gizmoDragActive_}, {"terrain_stroke_active", terrainStrokeActive_},
             {"asset_drop_pending", creatorAssetDropPending_}},
             "Studio/src/StudioLiveDiagnostics.cpp");

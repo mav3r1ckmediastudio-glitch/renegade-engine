@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <functional>
 
 #include <WickedEngine.h>
 
@@ -21,6 +22,7 @@ namespace renegade::studio
         RenegadeParticleEmitterWorkspace& operator=(RenegadeParticleEmitterWorkspace&&) = delete;
 
         void Create();
+        void SetEffectEditor(std::function<void()>);
         void SetActive(bool active);
         [[nodiscard]] bool IsActive() const noexcept;
         void SetBounds(const XMFLOAT4& bounds);

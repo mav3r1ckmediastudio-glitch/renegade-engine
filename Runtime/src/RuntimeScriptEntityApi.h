@@ -27,6 +27,9 @@ namespace renegade::runtime
     // revalidates the live Scene's persistent Renegade identity on every call.
     // That preserves S3's stale-ref guarantees while keeping gameplay mutation
     // independent of Wicked's global Lua VM and raw ECS IDs.
+    struct RuntimeLightAnimationState {
+        float intensity=1,r=1,g=1,b=1,x=0,y=0,z=0,qx=0,qy=0,qz=0,qw=1,seed=0;
+    };
     class RuntimeScriptEntityApi final
     {
     public:
@@ -75,6 +78,8 @@ namespace renegade::runtime
             const XMFLOAT3& scale,
             std::string& error) const;
 
+        bool GetLightState(const RuntimeScriptEntityReference&,RuntimeLightAnimationState&,std::string&) const;
+        bool SetLightState(const RuntimeScriptEntityReference&,const RuntimeLightAnimationState&,std::string&) const;
     private:
         [[nodiscard]] bool ResolveTransform(
             const RuntimeScriptEntityReference& reference,

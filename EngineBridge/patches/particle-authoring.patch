@@ -1,0 +1,271 @@
+diff --git a/WickedEngine/shaders/ShaderInterop_EmittedParticle.h b/WickedEngine/shaders/ShaderInterop_EmittedParticle.h
+index bfce3f6d..6bb92212 100644
+--- a/WickedEngine/shaders/ShaderInterop_EmittedParticle.h
++++ b/WickedEngine/shaders/ShaderInterop_EmittedParticle.h
+@@ -38,6 +38,18 @@ enum EMITTER_OPTIONS
+ 	EMITTER_OPTION_BIT_WEATHER_SNOW = 1 << 6,
+ };
+ 
++// Runtime data for Renegade effect-owned analytic vector fields.
++struct RenegadeParticleFieldGPU
++{
++ float4 toFieldX;
++ float4 toFieldY;
++ float4 toFieldZ;
++ float4 axisX_strength;
++ float4 axisY_type;
++ float4 axisZ_falloff;
++ float4 motion; // layer influence, lift, noise scale, animation phase
++};
++
+ CBUFFER(EmittedParticleCB, CBSLOT_OTHER_EMITTEDPARTICLE)
+ {
+ 	uint		xEmitBufferOffset;
+@@ -90,6 +102,11 @@ CBUFFER(EmittedParticleCB, CBSLOT_OTHER_EMITTEDPARTICLE)
+ 	float		xParticleDrag;
+ 
+ 	ShaderTransform xEmitterBaseMeshUnormRemap;
++
++ float4 xParticleVariation; // independent size and speed ranges
++ uint4 xMovementFieldCount;
++ RenegadeParticleFieldGPU xMovementFields[4];
++ float4 xEmissionShapeParams;
+ };
+ 
+ struct EmitLocation
+diff --git a/WickedEngine/shaders/emittedparticle_emitCS.hlsl b/WickedEngine/shaders/emittedparticle_emitCS.hlsl
+index d7c97551..eb545062 100644
+--- a/WickedEngine/shaders/emittedparticle_emitCS.hlsl
++++ b/WickedEngine/shaders/emittedparticle_emitCS.hlsl
+@@ -158,6 +158,26 @@ void main(uint3 DTid : SV_DispatchThreadID)
+ 
+ #endif // EMIT_FROM_MESH
+ 
++#if defined(RENEGADE_PARTICLE_VARIATION) && !defined(EMIT_FROM_MESH)
++    if(xMovementFieldCount.z>=2) {
++        float3 u=float3(rng.next_float(),rng.next_float(),rng.next_float());
++        float phi=PI*2*u.y,cs=cos(phi),sn=sin(phi),radius=xEmissionShapeParams.x;
++        uint shape=xMovementFieldCount.z;
++        if(shape==2) {
++            float z=1-2*u.x,h=sqrt(max(0,1-z*z));nor=float3(h*cs,h*sn,z);
++            emitPos=nor*radius*(xMovementFieldCount.w!=0?1:pow(u.z,1.0/3.0));
++        }else if(shape==3) {
++            float r=radius*sqrt(u.x),z=lerp(1,xEmissionShapeParams.z,u.z),h=sqrt(max(0,1-z*z));
++            emitPos=float3(r*cs,r*sn,0);nor=float3(h*cs,h*sn,z);
++        }else {
++            float r=radius*sqrt(u.x);
++            if(shape==5){float lo=max(0,radius-xEmissionShapeParams.w*.5),hi=radius+xEmissionShapeParams.w*.5;r=sqrt(lerp(lo*lo,hi*hi,u.x));}
++            emitPos=float3(r*cs,r*sn,shape==6?(u.z-.5)*xEmissionShapeParams.y:0);
++            nor=shape==6?float3(cs,sn,0):float3(0,0,1);
++        }
++        nor=normalize(mul((float3x3)worldMatrix,nor));
++    }
++#endif
+ 	float3 pos = mul(worldMatrix, float4(emitPos, 1)).xyz;
+ 	
+ 	// Blocker shadow map check using previous frame:
+@@ -179,6 +199,11 @@ void main(uint3 DTid : SV_DispatchThreadID)
+ 	particle.maxLife = xParticleLifeSpan + xParticleLifeSpan * (rng.next_float() - 0.5f) * xParticleLifeSpanRandomness;
+ 	particle.life = particle.maxLife;
+ 	particle.sizeBeginEnd = float2(particleStartingSize, particleStartingSize * xParticleScaling);
++ #ifdef RENEGADE_PARTICLE_VARIATION
++ particle.sizeBeginEnd *= max(.01,1+(rng.next_float()*2-1)*xParticleVariation.x);
++ particle.velocity *= max(.01,1+(rng.next_float()*2-1)*xParticleVariation.y);
++ #endif
++
+ 
+ 	baseColor.r *= lerp(1, rng.next_float(), xParticleRandomColorFactor);
+ 	baseColor.g *= lerp(1, rng.next_float(), xParticleRandomColorFactor);
+diff --git a/WickedEngine/shaders/emittedparticle_simulateCS.hlsl b/WickedEngine/shaders/emittedparticle_simulateCS.hlsl
+index 7b9c578f..ec180b25 100644
+--- a/WickedEngine/shaders/emittedparticle_simulateCS.hlsl
++++ b/WickedEngine/shaders/emittedparticle_simulateCS.hlsl
+@@ -25,6 +25,11 @@ RWBuffer<float4> vertexBuffer_COL : register(u10);
+ RWStructuredBuffer<uint> culledIndirectionBuffer : register(u11);
+ RWStructuredBuffer<uint> culledIndirectionBuffer2 : register(u12);
+ 
++#ifdef RENEGADE_MOVEMENT_FIELDS
++#include "renegade_particle_fieldsHF.hlsli"
++Texture1DArray<float4> renegadeLifetimeTex : register(t1);
++#endif
++
+ //#define SPH_FLOOR_COLLISION
+ //#define SPH_BOX_COLLISION
+ 
+@@ -46,12 +51,25 @@ void main(uint3 DTid : SV_DispatchThreadID, uint Gid : SV_GroupIndex)
+ 	particle.life -= dt;
+ 
+ 	const float lifeLerp = 1 - particle.life / particle.maxLife;
+-	const float particleSize = lerp(particle.sizeBeginEnd.x, particle.sizeBeginEnd.y, lifeLerp);
+-	const float lifeOpa = opacityCurveTex.SampleLevel(sampler_linear_clamp, lifeLerp, 0);
++	float particleSize = lerp(particle.sizeBeginEnd.x, particle.sizeBeginEnd.y, lifeLerp);
++    float lifeOpa;
++    float3 lifetimeColour=1;
++    #ifdef RENEGADE_MOVEMENT_FIELDS
++    if(xMovementFieldCount.y!=0) {
++        const float lookupU=(saturate(lifeLerp)*255.0+0.5)/256.0;
++        const float4 appearance=renegadeLifetimeTex.SampleLevel(sampler_linear_clamp,float2(lookupU,0),0);
++        particleSize=particle.sizeBeginEnd.x*renegadeLifetimeTex.SampleLevel(sampler_linear_clamp,float2(lookupU,1),0).x;
++        lifeOpa=appearance.a;lifetimeColour=appearance.rgb;
++    } else
++    #endif
++    lifeOpa = opacityCurveTex.SampleLevel(sampler_linear_clamp, lifeLerp, 0);
+ 
+ 	// integrate:
+ 	particle.force += xParticleGravity;
+ 	particle.velocity += particle.force * dt;
++	#ifdef RENEGADE_MOVEMENT_FIELDS
++	RenegadeApplyMovementFields(particle.position, particle.velocity, dt, particleIndex);
++	#endif
+ 	particle.position += particle.velocity * dt;
+ 
+ 	// reset force for next frame:
+@@ -302,6 +320,7 @@ void main(uint3 DTid : SV_DispatchThreadID, uint Gid : SV_GroupIndex)
+ 
+ 		float opacity = saturate(lifeOpa * EmitterGetMaterial().GetBaseColor().a);
+ 		float4 particleColor = unpack_rgba(particle.color);
++    particleColor.rgb *= lifetimeColour;
+ 		particleColor.a *= opacity;
+ 		
+ 		float rotation = rotation_rotationVel.x;
+diff --git a/WickedEngine/wiEmittedParticle.cpp b/WickedEngine/wiEmittedParticle.cpp
+index 5a25529b..f8a8a1e3 100644
+--- a/WickedEngine/wiEmittedParticle.cpp
++++ b/WickedEngine/wiEmittedParticle.cpp
+@@ -36,6 +36,9 @@ namespace wi
+ 	static Shader sphbinningCS;
+ 	static Shader sphdensityCS;
+ 	static Shader sphforceCS;
++	static Shader movementFieldShaders[7];
++	void EmittedParticleSystem::SetMovementFieldShaders(const Shader* shaders) { for(int i=0;i<7;++i)movementFieldShaders[i]=shaders[i]; }
++	bool EmittedParticleSystem::MovementFieldShadersReady() { return movementFieldShaders[0].IsValid() && movementFieldShaders[1].IsValid() && movementFieldShaders[2].IsValid() && movementFieldShaders[3].IsValid() && movementFieldShaders[4].IsValid() && movementFieldShaders[5].IsValid() && movementFieldShaders[6].IsValid(); }
+ 	static Shader simulateCS;
+ 	static Shader simulateCS_SORTING;
+ 	static Shader simulateCS_DEPTHCOLLISIONS;
+@@ -362,6 +365,7 @@ namespace wi
+ 		}
+ 
+ 		worldMatrix = transform.world;
++        if(!IsPaused() && dt>0)movementFieldTime+=std::min(dt,1.0f);
+ 
+ 		// Swap CURRENT alivelist with NEW alivelist
+ 		std::swap(aliveList[0], aliveList[1]);
+@@ -427,6 +431,7 @@ namespace wi
+ 	}
+ 	void EmittedParticleSystem::Restart()
+ 	{
++        bursted_on_create=false;burst=0;emit=0;emit_locations.clear();
+ 		SetPaused(false);
+ 		counterBuffer = {}; // will be recreated
+ 	}
+@@ -502,6 +507,22 @@ namespace wi
+ 			cb.xEmitterFrameRate = frameRate;
+ 			cb.xParticleGravity = gravity;
+ 			cb.xParticleDrag = drag;
++            cb.xParticleVariation={movementSizeVariation,movementSpeedVariation,0,0};
++            cb.xMovementFieldCount = {0,opacityCurveTex.IsValid()&&opacityCurveTex.desc.array_size==2?1u:0u,emissionShape,emissionShapeSurface?1u:0u};
++        cb.xEmissionShapeParams=emissionShapeParams;
++            if(MovementFieldShadersReady()) {
++                cb.xMovementFieldCount.x = (uint32_t)std::min(size_t(4),movementFields.size());
++                for(uint32_t i=0;i<cb.xMovementFieldCount.x;++i) {
++                    const auto& f=movementFields[i];auto& gpu=cb.xMovementFields[i];
++                    XMMATRIX m=XMLoadFloat4x4(&f.localToEffect)*XMLoadFloat4x4(&movementFieldParentToEmitter)*XMLoadFloat4x4(&worldMatrix);
++                    XMMATRIX inv=XMMatrixTranspose(XMMatrixInverse(nullptr,m));
++                    XMStoreFloat4(&gpu.toFieldX,inv.r[0]);XMStoreFloat4(&gpu.toFieldY,inv.r[1]);XMStoreFloat4(&gpu.toFieldZ,inv.r[2]);
++                    XMFLOAT3 x,y,z;XMStoreFloat3(&x,XMVector3Normalize(m.r[0]));XMStoreFloat3(&y,XMVector3Normalize(m.r[1]));XMStoreFloat3(&z,XMVector3Normalize(m.r[2]));
++                    gpu.axisX_strength={x.x,x.y,x.z,f.strength};gpu.axisY_type={y.x,y.y,y.z,float(f.type)};gpu.axisZ_falloff={z.x,z.y,z.z,f.falloff};
++                    gpu.motion={f.influence,f.lift,f.noiseScale,movementFieldTime*f.animationSpeed};
++                }
++            }
++
+ 			// Snow spawn volume does not scale wind/fall speeds. Use actual
+ 			// authored world-metre/second velocity for the weather effect.
+ 			if (IsWeatherSnow() || IsWeatherRain())
+@@ -591,7 +612,8 @@ namespace wi
+ 
+ 			// emit the required amounts
+ 			device->EventBegin("Emit", cmd);
+-			device->BindComputeShader(mesh == nullptr ? (IsVolumeEnabled() ? &emitCS_VOLUME : &emitCS) : &emitCS_FROMMESH, cmd);
++			const bool varied=(movementSizeVariation>0||movementSpeedVariation>0||emissionShape>1)&&MovementFieldShadersReady();
++            device->BindComputeShader(varied ? &movementFieldShaders[mesh==nullptr?(IsVolumeEnabled()?5:4):6] : (mesh == nullptr ? (IsVolumeEnabled() ? &emitCS_VOLUME : &emitCS) : &emitCS_FROMMESH), cmd);
+ 			uint bufferoffset = (uint)alloc.offset;
+ 			for (auto& location : emit_locations)
+ 			{
+@@ -741,7 +763,11 @@ namespace wi
+ 
+ 			device->EventBegin("Simulate", cmd);
+ 
+-			device->BindResource(&opacityCurveTex, 0, cmd);
++			const bool lifetimeLookup=opacityCurveTex.IsValid()&&opacityCurveTex.desc.array_size==2;
++            // Native BindResource expects a resource object, even for a null descriptor.
++            static const Texture emptyLifetimeTexture;
++            device->BindResource(lifetimeLookup?&emptyLifetimeTexture:&opacityCurveTex, 0, cmd);
++            device->BindResource(lifetimeLookup?&opacityCurveTex:&emptyLifetimeTexture, 1, cmd);
+ 
+ 			device->BindUAV(&particleBuffer, 0, cmd);
+ 			device->BindUAV(&aliveList[0], 1, cmd);
+@@ -762,22 +788,22 @@ namespace wi
+ 			{
+ 				if (IsDepthCollisionEnabled())
+ 				{
+-					device->BindComputeShader(&simulateCS_SORTING_DEPTHCOLLISIONS, cmd);
++					device->BindComputeShader((!movementFields.empty() || opacityCurveTex.desc.array_size==2) && MovementFieldShadersReady() ? &movementFieldShaders[3] : &simulateCS_SORTING_DEPTHCOLLISIONS, cmd);
+ 				}
+ 				else
+ 				{
+-					device->BindComputeShader(&simulateCS_SORTING, cmd);
++					device->BindComputeShader((!movementFields.empty() || opacityCurveTex.desc.array_size==2) && MovementFieldShadersReady() ? &movementFieldShaders[1] : &simulateCS_SORTING, cmd);
+ 				}
+ 			}
+ 			else
+ 			{
+ 				if (IsDepthCollisionEnabled())
+ 				{
+-					device->BindComputeShader(&simulateCS_DEPTHCOLLISIONS, cmd);
++					device->BindComputeShader((!movementFields.empty() || opacityCurveTex.desc.array_size==2) && MovementFieldShadersReady() ? &movementFieldShaders[2] : &simulateCS_DEPTHCOLLISIONS, cmd);
+ 				}
+ 				else
+ 				{
+-					device->BindComputeShader(&simulateCS, cmd);
++					device->BindComputeShader((!movementFields.empty() || opacityCurveTex.desc.array_size==2) && MovementFieldShadersReady() ? &movementFieldShaders[0] : &simulateCS, cmd);
+ 				}
+ 			}
+ 			device->DispatchIndirect(&indirectBuffers, offsetof(EmitterIndirectArgs, dispatch), cmd);
+diff --git a/WickedEngine/wiEmittedParticle.h b/WickedEngine/wiEmittedParticle.h
+index 677697fb..834c8e51 100644
+--- a/WickedEngine/wiEmittedParticle.h
++++ b/WickedEngine/wiEmittedParticle.h
+@@ -146,6 +146,24 @@ namespace wi
+ 
+ 		bool IsInactive() const { return active_frames == 0; }
+ 
++        // Renegade project metadata hydrates these nonserialized runtime values.
++        struct MovementField {
++            XMFLOAT4X4 localToEffect = wi::math::IDENTITY_MATRIX;
++            uint32_t type = 0;
++            float strength=1, influence=1, falloff=.3f, lift=0, noiseScale=1, animationSpeed=.5f;
++        };
++        wi::vector<MovementField> movementFields;
++        std::string movementFieldSource;
++        XMFLOAT4X4 movementFieldParentToEmitter = wi::math::IDENTITY_MATRIX;
++        bool movementFieldRootSpace=false;
++        float movementFieldTime=0;
++        float movementSizeVariation=0,movementSpeedVariation=0;
++        uint32_t emissionShape=0;bool emissionShapeSurface=false;
++        XMFLOAT4 emissionShapeParams={.5f,1,.9396926f,.1f};
++        std::string emissionShapeSource;
++        static void SetMovementFieldShaders(const wi::graphics::Shader* shaders);
++        static bool MovementFieldShadersReady();
++
+ 		// Non-serialized attributes:
+ 		XMFLOAT3 center;
+ 		uint32_t layerMask = ~0u;
+@@ -180,6 +198,8 @@ namespace wi
+ 		//	peak : start peak of the opacity relative to particle lifetime [0,1]
+ 		void SetOpacityCurveControl(float peakStart, float peakEnd);
+ 		const wi::graphics::Texture* GetOpacityCurveTex() const { return &opacityCurveTex; }
++ // Renegade: derived per-particle lifetime lookup; native archive/layout unchanged.
++ void SetOpacityCurveTex(const wi::graphics::Texture& texture) { opacityCurveTex=texture; }
+ 
+ 		void Serialize(wi::Archive& archive, wi::ecs::EntitySerializer& seri);
+ 

@@ -2,3 +2,6 @@
 # sources stable across Windows/Linux checkout so immutable FNV hashes remain
 # valid in CI and in downloaded Studio packages.
 Library/Scripts/**/*.lua text eol=lf
+
+# Unified patch payloads intentionally preserve upstream context whitespace.
+EngineBridge/patches/*.patch -whitespace

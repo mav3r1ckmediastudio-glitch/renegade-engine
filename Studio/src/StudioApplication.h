@@ -7,6 +7,8 @@
 
 #include <array>
 #include "ModelImportPreview.h"
+#include "LightPickerWindow.h"
+#include "ParticlePickerWindow.h"
 #include "renegade/bridge/PlayerCameraPreviewService.h"
 #include <cstdint>
 #include <functional>
@@ -187,6 +189,14 @@ namespace renegade::studio
         [[nodiscard]] bool IsTestLevelRuntimeActive() const noexcept
         {
             return testLevelRuntime_.IsActive();
+        }
+
+        void OpenParticlePicker(bool editSelected=false);
+
+        [[nodiscard]] bool IsLightAuthoringInputActive() const noexcept
+        {
+            return particlePlacementActive_ || particlePicker_.IsVisible() || lightPlacementActive_ || lightFinishRmbHeld_ ||
+                lightPicker_.IsVisible() || lightPickerFrameSuspended_;
         }
 
         [[nodiscard]] bool IsPhysicsLabActive() const noexcept
@@ -1026,6 +1036,19 @@ namespace renegade::studio
         SceneInspectorButton environmentProbeRefresh_;
         wi::gui::Label lightLabel_;
         SceneInspectorComboBox lightType_;
+        SceneInspectorButton lightPickerButton_;
+        LightPickerWindow lightPicker_;
+        ParticlePickerWindow particlePicker_;
+        bridge::ParticleEffect particlePlacementSetup_;
+        bool particlePlacementActive_=false,particleKeepPlacing_=true;
+        bool HandleParticlePlacement(const XMFLOAT4&);
+        void UpdateParticlePicker(float);
+        bridge::LightPreset lightPlacementSetup_;
+        bool lightKeepPlacing_ = true;
+        bool lightFinishRmbHeld_ = false;
+        bool lightPickerFrameSuspended_ = false;
+        void OpenLightPicker(wi::scene::LightComponent::LightType type, bool editSelected=false);
+        void UpdateLightPicker(float dt);
         SceneInspectorSlider lightColorRed_;
         SceneInspectorSlider lightColorGreen_;
         SceneInspectorSlider lightColorBlue_;
