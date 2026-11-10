@@ -186,7 +186,8 @@ namespace renegade::studio
 
         for (const auto& provider : providers_)
         {
-            if (provider == nullptr || !provider->IsVisible(context))
+            if (provider == nullptr || (context.transformOnly && provider->Descriptor().id!="transform") ||
+                !provider->IsVisible(context))
                 continue;
 
             const auto& descriptor = provider->Descriptor();
@@ -223,7 +224,8 @@ namespace renegade::studio
     {
         for (const auto& provider : providers_)
         {
-            if (provider != nullptr && provider->IsVisible(context))
+            if (provider != nullptr && (!context.transformOnly || provider->Descriptor().id=="transform") &&
+                provider->IsVisible(context))
                 provider->Refresh(context);
         }
     }

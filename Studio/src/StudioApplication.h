@@ -1,4 +1,5 @@
 #pragma once
+#include "renegade/bridge/SceneAssemblyService.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/RiverFlowRenderer.h"
 #include "renegade/bridge/EquipmentActionState.h"
@@ -64,6 +65,11 @@ namespace renegade::studio
     class StudioRenderPath : public wi::RenderPath3D_PathTracing
     {
     public:
+        void SelectViewportObject(wi::ecs::Entity entity,bool toggle) {
+            SelectSceneObject(entity,toggle);
+            RefreshHierarchy();QueueInspectorRefresh();
+        }
+
         void BindSession(bridge::StudioSession& session) noexcept;
         void PrepareCloudBodySelfTestView();
         void SetExitRequestHandler(std::function<void()> handler);
@@ -244,6 +250,7 @@ namespace renegade::studio
             Undo,
             Redo,
             FocusSelection,
+            GroupSelection, EditGroupPieces, FinishGroupEdit, SaveGroupPrefab, UnpackGroup,
             DuplicateSelection,
             DeleteSelection,
             CreateLight,
@@ -813,6 +820,13 @@ namespace renegade::studio
         void SetTransformTool(TransformTool tool);
         void SetProjectHubVisible(bool visible);
         void SyncGizmoSelection();
+        void SelectSceneObject(wi::ecs::Entity,bool toggle=false);
+        void RunAssemblyAction(EditorAction);
+        void SaveAssemblyPrefabDialog();
+        void CreateScenePrefabSavePanel();
+        void CommitScenePrefabSave();
+        void DrawSelectionGesture(wi::graphics::CommandList) const;
+        bool HandleAssemblyToolbar(const XMFLOAT4&);
         void FinishGizmoDrag();
         void SyncSelectionOutline();
         void SaveSceneAfterTransientCleanup(
@@ -1490,7 +1504,15 @@ namespace renegade::studio
         TestLevelRuntimeProcess testLevelRuntime_;
         bool testLevelFrameSuspended_ = false;
         bool projectPreviewActive_ = false;
+        wi::gui::Window scenePrefabSavePanel_;
+        SceneInspectorTextInputField scenePrefabName_;
+        SceneInspectorButton scenePrefabSaveButton_,scenePrefabCancelButton_;
+        wi::gui::Label scenePrefabHelp_;
+        std::vector<wi::ecs::Entity> scenePrefabSaveSelection_;
+        std::uint64_t scenePrefabSaveRevision_=~0ull;
+        bool scenePrefabSaving_=false;
         Translator gizmo_;
+        wi::scene::TransformComponent multiInspectorTransform_;
         wi::graphics::Shader gridVertexShader_;
         wi::graphics::Shader gridPixelShader_;
         wi::graphics::PipelineState gridPipeline_;
@@ -1505,6 +1527,13 @@ namespace renegade::studio
         std::vector<wi::ecs::Entity> outlinedEntities_;
         std::vector<std::uint8_t> outlinedEntityPreviousStencils_;
         bridge::TransformState gizmoTransformBefore_;
+        std::vector<std::pair<wi::ecs::Entity,bridge::TransformState>> selectionTransformsBefore_;
+        std::uint64_t gizmoSelectionRevision_=~0ull, outlineSelectionRevision_=~0ull;
+        wi::ecs::Entity editingAssembly_=wi::ecs::INVALID_ENTITY;
+        std::uint64_t editingSceneRevision_=~0ull;
+        bool selectionGesture_=false, selectionBox_=false, selectionGestureAdd_=false;
+        XMFLOAT4 selectionGestureStart_={}, selectionGestureEnd_={};
+        wi::ecs::Entity selectionGestureHit_=wi::ecs::INVALID_ENTITY;
         std::unique_ptr<bridge::RiverNodeMovePreview> riverGizmoPreview_;
         std::uint64_t riverGizmoPreviewRevision_=0;
         XMFLOAT4 viewportBounds_ = {};

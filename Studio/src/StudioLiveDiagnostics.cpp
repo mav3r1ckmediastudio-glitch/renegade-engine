@@ -13,6 +13,11 @@ namespace renegade::studio
         case EditorAction::Undo: return "Undo";
         case EditorAction::Redo: return "Redo";
         case EditorAction::FocusSelection: return "FocusSelection";
+        case EditorAction::GroupSelection:return "GroupSelection";
+        case EditorAction::EditGroupPieces:return "EditGroupPieces";
+        case EditorAction::FinishGroupEdit:return "FinishGroupEdit";
+        case EditorAction::SaveGroupPrefab:return "SaveGroupPrefab";
+        case EditorAction::UnpackGroup:return "UnpackGroup";
         case EditorAction::DuplicateSelection: return "DuplicateSelection";
         case EditorAction::DeleteSelection: return "DeleteSelection";
         case EditorAction::CreateLight: return "CreateLight";
@@ -138,6 +143,8 @@ namespace renegade::studio
             {"player_camera_preview_error", playerCameraPreviewError_},
             {"scene_loading", sceneOpenInProgress_}, {"has_selection", selectedValid},
             {"selected_entity", selectedValid ? bridge::DiagnosticValue(static_cast<std::uint64_t>(selected)) : bridge::DiagnosticValue(nullptr)},
+            {"selected_count",session_?static_cast<std::uint64_t>(session_->Selection().Entities().size()):0ull},
+            {"editing_assembly",static_cast<std::uint64_t>(editingAssembly_)},
             {"selected_name", selectedName}, {"selection_scope", std::string("process-local ECS id")},
             {"inspector_owner", levelEditor ? workspace : std::string(outerWorkspace)},
             {"selection_applicable", levelEditor},

@@ -84,11 +84,23 @@ namespace renegade::bridge
     // creator placement path instead of adding a second prefab editor path, so
     // the compatibility entry point now means "placeable scene asset" while
     // CanPlaceCreatorImportedModelAsset retains the precise model-only policy.
+    inline bool CanPlaceCreatorScenePrefabAsset(const AssetCatalogueEntry& entry) noexcept
+    {
+        constexpr const char* suffix=".rasset";
+        return entry.registered && IsValidStableId(entry.assetId) && entry.importedProduct &&
+            entry.productAvailable && entry.importer=="renegade.scene.assembly" &&
+            (entry.state==AssetCatalogueState::Current || entry.state==AssetCatalogueState::Moved) &&
+            entry.projectRelativePath.rfind("Content/Prefabs/",0)==0 &&
+            entry.projectRelativePath.size()>7 &&
+            entry.projectRelativePath.compare(entry.projectRelativePath.size()-7,7,suffix)==0;
+    }
+
     inline bool CanPlaceCreatorModelAsset(
         const AssetCatalogueEntry& entry) noexcept
     {
         return CanPlaceCreatorImportedModelAsset(entry) ||
-            CanPlaceCreatorCharacterPrefabAsset(entry);
+            CanPlaceCreatorCharacterPrefabAsset(entry) ||
+            CanPlaceCreatorScenePrefabAsset(entry);
     }
 
     inline bool CanPlaceCreatorSceneAsset(

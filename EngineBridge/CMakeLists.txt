@@ -1,4 +1,6 @@
 add_library(RenegadeEngineBridge STATIC
+    src/SceneAssemblyService.cpp
+    src/SceneAssemblyPrefab.cpp
     src/PlaceableWaterfallRenderer.cpp
     src/RiverCourseRenderer.cpp
     src/RiverCourseSurfaceBinding.cpp

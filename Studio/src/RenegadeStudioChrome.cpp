@@ -1108,31 +1108,16 @@ namespace renegade::studio
             }
         }
 
-        const auto selected = std::find_if(
-            hierarchyRows_.begin(),
-            hierarchyRows_.end(),
-            [](const HierarchyRow& row)
-            {
-                return row.selected;
-            });
-        if (selected == hierarchyRows_.end())
-            return;
-
-        collapsedHierarchyCategories_[
-            static_cast<std::size_t>(selected->category)] = false;
-        collapsedHierarchyEntities_.erase(selected->entity);
-
-        const std::size_t selectedIndex = static_cast<std::size_t>(
-            std::distance(hierarchyRows_.begin(), selected));
-        int ancestorDepth = selected->depth;
-        for (std::size_t index = selectedIndex; index-- > 0 && ancestorDepth > 0;)
-        {
-            const auto& ancestor = hierarchyRows_[index];
-            if (ancestor.category == selected->category &&
-                ancestor.depth < ancestorDepth)
-            {
-                collapsedHierarchyEntities_.erase(ancestor.entity);
-                ancestorDepth = ancestor.depth;
+        for(std::size_t selectedIndex=0;selectedIndex<hierarchyRows_.size();++selectedIndex) {
+            const auto& selected=hierarchyRows_[selectedIndex];if(!selected.selected)continue;
+            collapsedHierarchyCategories_[static_cast<std::size_t>(selected.category)]=false;
+            collapsedHierarchyEntities_.erase(selected.entity);
+            int ancestorDepth=selected.depth;
+            for(std::size_t index=selectedIndex;index-- >0 && ancestorDepth>0;) {
+                const auto& ancestor=hierarchyRows_[index];
+                if(ancestor.category==selected.category && ancestor.depth<ancestorDepth) {
+                    collapsedHierarchyEntities_.erase(ancestor.entity);ancestorDepth=ancestor.depth;
+                }
             }
         }
     }
@@ -1943,7 +1928,7 @@ namespace renegade::studio
                 constexpr float itemHeight = 30.0f;
                 const float popupX = menuPositions[activeMenu_] - 8.0f;
                 constexpr std::array<int, 6> popupItemCounts = {
-                    5, 4, 9, 4, 1, 4};
+                    5, 9, 9, 4, 1, 4};
                 const int item = static_cast<int>(
                     (y - TopBarHeight) / itemHeight);
                 const bool inPopup = x >= popupX &&
@@ -1966,11 +1951,12 @@ namespace renegade::studio
                             Action::Save, Action::SaveAs, Action::Reopen};
                         invoke(actions[item]);
                     }
-                    else if (activeMenu_ == 1 && item >= 0 && item < 4)
+                    else if (activeMenu_ == 1 && item >= 0 && item < 9)
                     {
-                        constexpr std::array<Action, 4> actions = {
-                            Action::Undo, Action::Redo,
-                            Action::Duplicate, Action::Delete};
+                        constexpr std::array<Action, 9> actions = {
+                            Action::Undo, Action::Redo, Action::Duplicate, Action::Delete,
+                            Action::GroupSelection,Action::EditGroupPieces,Action::FinishGroupEdit,
+                            Action::SaveGroupPrefab,Action::UnpackGroup};
                         invoke(actions[item]);
                     }
                     else if (activeMenu_ == 2 && item >= 0 && item < 9)
@@ -3502,7 +3488,10 @@ namespace renegade::studio
             else if (activeMenu_ == 1)
             {
                 items = {{"UNDO", true}, {"REDO", true},
-                    {"DUPLICATE", true}, {"DELETE", true}};
+                    {"DUPLICATE", true}, {"DELETE", true},
+                    {"GROUP SELECTION   Ctrl+G",true},{"EDIT PIECES",true},
+                    {"FINISH EDITING   Esc",true},{"SAVE AS PREFAB...",true},
+                    {"UNPACK   Ctrl+Shift+G",true}};
             }
             else if (activeMenu_ == 2)
             {

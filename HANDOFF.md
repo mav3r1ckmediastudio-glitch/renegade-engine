@@ -1,3 +1,27 @@
+## 2026-11-10: Isolated selection and scene-prefab usability gate
+
+Branch feature/editor-selection-prefabs-20261110 starts at ec11c667e8f4b694a7b7695615f6e4fe72ff38f6.
+Separate worktree E:/RenegadeTestTmp/SelectionPrefabs20261110; owner dirty lighting/
+particle/castle worktrees preserved. No Wicked source or submodule revision changes.
+No main merge, hosted CI, package or distribution is authorised by this work.
+
+Reused SelectionService, native Translator, CommandService, hierarchy transforms,
+native entity serialization and the governed .rasset placement/registry pipeline.
+New SceneAssemblyService supplies ordered selection history, atomic command batches,
+Group/Unpack and native scene-prefab saving. Visible actions and explicit Edit Pieces
+mode avoid an invisible grouping state. Unpack skips internal placement containers.
+
+First gate: three-piece gateway, no castle assets. See
+docs/SCENE_ASSEMBLY_WORKFLOW.md and Tests/SceneAssemblyWorkflowTests.cpp.
+Local Windows Release Studio/Runtime/proof build passed. Native proof covers
+component transforms/material colours, shared-resource exclusion, cold .rasset
+preparation, normal placement, scene persistence and Unpack history. Core and
+targeted point-lookup/marker source contracts passed. Actual Studio trial and
+standalone Runtime evidence are recorded in the workflow document.
+Debug/Release hosted CI, independent review and owner usability acceptance remain
+pending. This is a bounded geometry-assembly prototype, not linked prefab updates
+or companion-document scripting templates.
+
 ## 2026-11-06: Owner-requested intensity slider 0-500 range (local preview)
 
 Studio/src/StudioApplication.cpp changes only the Light Intensity slider's

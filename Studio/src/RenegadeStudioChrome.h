@@ -293,6 +293,7 @@ namespace renegade::studio
             Reopen,
             Undo,
             Redo,
+            GroupSelection, EditGroupPieces, FinishGroupEdit, SaveGroupPrefab, UnpackGroup,
             Duplicate,
             Delete,
             CreatePointLight,

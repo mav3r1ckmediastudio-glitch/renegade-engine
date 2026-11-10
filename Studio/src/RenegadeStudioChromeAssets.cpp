@@ -298,7 +298,10 @@ namespace renegade::studio
             creatorAssetRefreshPending_ = true;
             return false;
         }
-        if (creatorVisibleThumbnailPaths_.count(normalizedPath) == 0)
+        // Scene-assembly saves have a valid browser card before a model-import
+        // thumbnail exists. Do not turn a successful save/reveal into an error.
+        if (!bridge::CanPlaceCreatorScenePrefabAsset(*found) &&
+            creatorVisibleThumbnailPaths_.count(normalizedPath) == 0)
         {
             error = "The governed asset card is visible, but its captured thumbnail could not be loaded.";
             creatorAssetRefreshPending_ = true;

@@ -172,6 +172,14 @@ namespace renegade::bridge
                 }
 
                 const std::string optionsJson = stored.at("options").dump();
+                if(manifest.sourceFormat=="scene-assembly") {
+                    const auto& options=stored.at("options");
+                    if(manifest.importer!="renegade.scene.assembly" || options.size()!=1 ||
+                        !options.contains("schema_version") || options.at("schema_version")!=1) {
+                        error="Scene prefab recipe has an unsupported schema.";return false;
+                    }
+                    error.clear();return true;
+                }
                 if (manifest.sourceFormat == "assembly") {
                     FirstPersonAssemblySettings assembly;
                     if (manifest.importer != "renegade.first_person.assembly" ||

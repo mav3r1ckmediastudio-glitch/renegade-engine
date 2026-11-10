@@ -202,7 +202,7 @@ namespace renegade::bridge
 
         bool IsSupportedSourceFormatToken(const std::string& value)
         {
-            return value == "obj" || value == "fbx" || value == "gltf" || value == "glb" || value == "assembly";
+            return value == "obj" || value == "fbx" || value == "gltf" || value == "glb" || value == "assembly" || value == "scene-assembly";
         }
 
         std::string BuildRecipeJson(

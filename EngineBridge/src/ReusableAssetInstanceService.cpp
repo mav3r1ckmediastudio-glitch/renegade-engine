@@ -1,4 +1,5 @@
 #include "renegade/bridge/ReusableAssetInstanceService.h"
+#include "renegade/bridge/SceneAssemblyService.h"
 
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/AnimationService.h"
@@ -25,6 +26,28 @@ namespace renegade::bridge
         {
             return entity != wi::ecs::INVALID_ENTITY &&
                 scene.transforms.GetComponent(entity) != nullptr;
+        }
+
+        void MarkScenePrefabInstance(wi::scene::Scene& scene,wi::ecs::Entity instance,wi::ecs::Entity payload)
+        {
+            auto authored=payload;
+            if(!IsSceneAssembly(scene,authored)) {
+                // Native Instantiate inserts a structural root above the authored prefab.
+                wi::vector<wi::ecs::Entity> children;scene.GatherChildren(payload,children);
+                authored=wi::ecs::INVALID_ENTITY;
+                for(auto child:children)if(IsSceneAssembly(scene,child)) {
+                    authored=child;break;
+                }
+                if(authored==wi::ecs::INVALID_ENTITY)return;
+            }
+            auto* wrapper=scene.metadatas.GetComponent(instance);
+            if(!wrapper)wrapper=&scene.metadatas.Create(instance);
+            wrapper->string_values.set(SceneAssemblyKey,"1");
+            // The placement wrapper is the only editable group boundary.
+            auto* container=scene.metadatas.GetComponent(payload);
+            if(!container)container=&scene.metadatas.Create(payload);
+            container->bool_values.set("renegade.scene_assembly_payload",true);
+            scene.metadatas.GetComponent(authored)->bool_values.set("renegade.scene_assembly_payload",true);
         }
 
         void StartCharacterIdlePreview(
@@ -157,7 +180,8 @@ namespace renegade::bridge
                     continue;
                 const wi::ecs::Entity entity = scene.names.GetEntity(index);
                 if (entitiesBefore.count(entity) == 0 &&
-                    scene.transforms.GetComponent(entity) != nullptr)
+                    scene.transforms.GetComponent(entity) != nullptr &&
+                    !scene.hierarchy.Contains(entity))
                 {
                     return entity;
                 }
@@ -619,6 +643,7 @@ namespace renegade::bridge
                 payloadMetadata->bool_values.set(
                     ReusableAssetPayloadRootMetadataKey, true);
 
+                MarkScenePrefabInstance(*scene_,entity_,payloadRoot_);
                 ApplyReusableAssetName(*scene_, entity_, payloadRoot_, displayName_);
                 if (!AssignFreshReusableHierarchyIdentities(*scene_, entity_) ||
                     !PromotePreparedCharacter() ||
@@ -701,7 +726,8 @@ namespace renegade::bridge
                 ReusableAssetPayloadRootMetadataKey, true);
 
             scene_->Component_Attach(payloadRoot_, entity_, true);
-            ApplyReusableAssetName(*scene_, entity_, payloadRoot_, displayName_);
+            MarkScenePrefabInstance(*scene_,entity_,payloadRoot_);
+                ApplyReusableAssetName(*scene_, entity_, payloadRoot_, displayName_);
             if (!AssignFreshReusableHierarchyIdentities(*scene_, entity_) ||
                 !PromotePreparedCharacter() ||
                 !ApplyPlacementCompanion())

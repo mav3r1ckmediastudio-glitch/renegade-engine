@@ -2027,3 +2027,13 @@ if(WIN32)
     set_tests_properties(RenegadeCreatorAssetFrameBoundaryTests PROPERTIES TIMEOUT 120
         WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeCreatorAssetFrameBoundaryTests>")
 endif()
+
+# General scene assembly proof. The CPU suite is CI-safe; the geometry workflow
+# runs explicitly on a real Windows graphics device for owner acceptance.
+if(WIN32)
+    add_executable(RenegadeSceneAssemblyWorkflowProof SceneAssemblyWorkflowTests.cpp)
+    target_link_libraries(RenegadeSceneAssemblyWorkflowProof PRIVATE Renegade::EngineBridge)
+    target_compile_definitions(RenegadeSceneAssemblyWorkflowProof PRIVATE UNICODE _UNICODE)
+    target_compile_options(RenegadeSceneAssemblyWorkflowProof PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    add_test(NAME RenegadeSceneAssemblyCore COMMAND RenegadeSceneAssemblyWorkflowProof --core)
+endif()
