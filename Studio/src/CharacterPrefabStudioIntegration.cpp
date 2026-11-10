@@ -5,6 +5,7 @@
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/ScriptDocumentService.h"
+#include "renegade/bridge/SceneAssemblyScriptService.h"
 #include "renegade/bridge/StudioSession.h"
 
 #include <algorithm>
@@ -185,6 +186,7 @@ namespace renegade::studio
                bridge::DuplicateEntityCompanionCallbacks& callbacks,
                std::string& error)
             {
+                auto entityPairs = callbacks.entityPairs;
                 callbacks = {};
                 bridge::StudioSession* session = nullptr;
                 if (!CurrentStudioScene(scene, session, error))
@@ -198,54 +200,13 @@ namespace renegade::studio
                     return true;
                 }
 
-                const bridge::StableId sourceId =
-                    bridge::PersistentEntityId(scene, source);
-                const bridge::StableId duplicateId =
-                    bridge::PersistentEntityId(scene, duplicate);
-                if (!bridge::IsValidStableId(duplicateId))
-                {
-                    error = "Duplicated entity lacks stable Scene identity.";
-                    return false;
-                }
-                // A freshly placed ordinary entity has no persistent identity
-                // until its first save, so it cannot own governed attachments.
-                // Its native components can still be duplicated immediately.
-                if (sourceId.empty() && !bridge::IsRenegadeCharacter(scene, source))
-                {
-                    error.clear();
-                    return true;
-                }
-                if (!bridge::IsValidStableId(sourceId))
-                {
-                    error = "Source entity has malformed stable Scene identity.";
-                    return false;
-                }
                 bridge::ScriptDocument* document = nullptr;
-                if (!PrepareScriptDocument(*session, document, error))
-                    return false;
-                if (!HasEntityScripts(*document, sourceId))
-                {
-                    error.clear();
-                    return true;
-                }
-                if (!bridge::IsValidStableId(sourceId) ||
-                    !bridge::IsValidStableId(duplicateId))
-                {
-                    error = "Duplicated scripted object lacks stable Scene identity.";
-                    return false;
-                }
-
+                if (!PrepareScriptDocument(*session, document, error))return false;
                 const bridge::ScriptDocument before = *document;
-                std::vector<bridge::StableId> created;
-                if (!bridge::DuplicateEntityScriptAttachments(
-                        *document,
-                        sourceId,
-                        duplicateId,
-                        created,
-                        error))
+                if(entityPairs.empty())entityPairs.emplace_back(source,duplicate);
+                if(!bridge::DuplicateHierarchyScriptAttachments(*document,scene,entityPairs,error))
                 {
-                    *document = before;
-                    return false;
+                    *document=before;return false;
                 }
                 const bridge::ScriptDocument after = *document;
                 callbacks.undo = [document, before]() mutable
@@ -269,6 +230,15 @@ namespace renegade::studio
                std::string& error)
             {
                 callbacks = {};
+                if(bridge::HasSceneAssemblyScriptTemplate(scene,payloadRoot))
+                {
+                    bridge::StudioSession* session = nullptr;
+                    if(!CurrentStudioScene(scene,session,error))return false;
+                    bridge::ScriptDocument* document = nullptr;
+                    if(!PrepareScriptDocument(*session,document,error))return false;
+                    return bridge::ApplySceneAssemblyScripts(scene,payloadRoot,
+                        session->Projects().CurrentProject().rootPath,document,callbacks,error);
+                }
                 bridge::CharacterPrefabDocument prefab;
                 std::string markerError;
                 const bool hasPrefab =

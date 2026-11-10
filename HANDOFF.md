@@ -1,3 +1,45 @@
+# Functional general prefab completion candidate (10 November 2026)
+
+Source parent: 7bd1cd5858e66af999782c718da10ba0661924d9; integrates main
+6036b200841a37102c18a02133d257392086141f. The functional child commit is the
+published PR #193 head; source/binary hashes and exact local commands/results:
+docs/evidence/scene-prefab-functional/. Final CI is next; independent verification
+of that exact head remains required. Do not merge main or distribute a build
+without owner approval. Preserve owner work and castle assets.
+
+Implemented native lights/effects/material-shader state and component-only prefab
+placement, governed script attachment templates with source validation, fresh
+per-instance IDs and remapped internal references, hierarchy duplicate/delete
+history, behaviour-preserving Unpack and preserved instance edits on package load.
+Reuses the existing command, companion, project transaction and asset pipelines.
+See docs/SCENE_ASSEMBLY_WORKFLOW.md and docs/ARCHITECTURE.md for scope/boundaries.
+
+Release Studio/Runtime/proofs build. Eleven focused checks, all 60 source contracts,
+all six previously failing CI checks, the original geometry workflow and complete
+functional brazier workflow PASS locally. Actual Studio Save Prefab/card drag/
+Unpack/Save/Reopen and package-relative standalone Runtime visually verified;
+four actual governed scripts started. Evidence contains screenshots and diagnostic
+snapshots. The two interim integration workflows were intentionally cancelled;
+do not use the old isolated workflow results as acceptance for this candidate.
+
+The Wicked pin is unchanged. Main's existing CMake-generated allocator and
+particle core patches are present in the isolated worktree per main's documented
+decisions; do not reset or stage that submodule as a feature change.
+
+Changed production areas: SceneAssemblyScriptService; ScriptDocumentService codec;
+SceneAssemblyPrefab; SceneAssemblyService; hierarchy duplicate and script companion
+integration; placement error state and component-only validation; Runtime reusable
+instance preservation; Studio Save/Delete/Unpack. Tests include typed template
+codec/rejection/history tests and a real DX12 functional/package proof. Four old
+source contracts were migrated to current UI/input semantics; reviewed assistant
+workflow fingerprints renewed without changing acceptance limitations.
+
+Next: push this full candidate once, run the normal Windows baseline and Studio
+Debug/Release CI, repair any demonstrated failures locally before another run.
+Keep PR draft until exact-commit review and owner approval. No castle work here.
+
+---
+
 ## 2026-11-10: Prefab branch main integration (local checkpoint)
 
 User authorised resolving PR #193 conflicts against current main before extending

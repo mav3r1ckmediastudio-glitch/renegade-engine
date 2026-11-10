@@ -1,6 +1,7 @@
 add_library(RenegadeEngineBridge STATIC
     src/SceneAssemblyService.cpp
     src/SceneAssemblyPrefab.cpp
+    src/SceneAssemblyScriptService.cpp
 
     src/ParticleEffectService.cpp
     src/ParticleEffectRuntimeService.cpp

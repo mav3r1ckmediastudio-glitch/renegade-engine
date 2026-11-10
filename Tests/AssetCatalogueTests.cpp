@@ -275,6 +275,22 @@ int main()
     staticModel.meshCount = 1;
     staticModel.materialCount = 1;
 
+    {
+        AssetCatalogueMetadataDocument componentMetadata;
+        componentMetadata.projectId = ProjectId;
+        ModelDerivedMetadata componentOnly;
+        componentOnly.known = true;
+        Check(SetAssetModelDerivedMetadata(componentMetadata, SceneId, componentOnly, error),
+            "component-only prefab must retain a known zero mesh count");
+        std::string json;
+        AssetCatalogueMetadataDocument reopened;
+        Check(SerializeAssetCatalogueMetadata(componentMetadata, json, error) &&
+            DeserializeAssetCatalogueMetadata(json, reopened, error) &&
+            reopened.records.size() == 1 && reopened.records[0].model.known &&
+            reopened.records[0].model.meshCount == 0,
+            "component-only catalogue metadata must roundtrip");
+    }
+
     Check(SetAssetCreatorTags(metadata, SoldierProductId,
             {" Medieval ", "enemy", "MEDIEVAL"}, error),
         "creator-tag canonicalisation failed");

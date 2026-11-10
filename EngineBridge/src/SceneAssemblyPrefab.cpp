@@ -1,4 +1,5 @@
 #include "renegade/bridge/SceneAssemblyService.h"
+#include "renegade/bridge/SceneAssemblyScriptService.h"
 #include "renegade/bridge/FirstPersonAssemblyService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
@@ -27,7 +28,7 @@ ProjectDocumentWrite Write(const fs::path& path,const std::vector<std::uint8_t>&
     };return w;
 }
 bool PrepareAssembly(wi::scene::Scene& source,const std::vector<Entity>& selected,
-    wi::scene::Scene& result,std::string& error) {
+    wi::scene::Scene& result,std::string& error,const std::string& projectRoot,const StableId& project,const ScriptDocument* scripts) {
     const auto roots=SelectionRoots(source,selected);
     if(roots.empty()){error="Select pieces or a group first.";return false;}
     std::set<Entity> members;
@@ -115,6 +116,13 @@ bool PrepareAssembly(wi::scene::Scene& source,const std::vector<Entity>& selecte
         auto* t=result.transforms.GetComponent(root);XMStoreFloat3(&t->translation_local,center);t->SetDirty();t->UpdateTransform();
         for(auto e:clonedRoots)result.Component_Attach(e,root);
     }
+    SceneEntityPairs pairs;
+    for(auto e:members)pairs.emplace_back(e,reader.remap.at(e));
+    if(!CaptureSceneAssemblyScripts(projectRoot,project,source,scripts,pairs,result,root,error))return false;
+    // Retain a useful authored name if this root carries behaviour when unpacked.
+    auto* authoredMetadata=result.metadatas.GetComponent(root);
+    if(!authoredMetadata)authoredMetadata=&result.metadatas.Create(root);
+    authoredMetadata->string_values.set("renegade.scene_assembly.authored_name",result.names.GetComponent(root)->name);
     // Creator-authored root is recognized by the existing placement pipeline.
     result.names.GetComponent(root)->name="__renegade_creator_authored_transform";
     auto* metadata=result.metadatas.GetComponent(root);if(!metadata)metadata=&result.metadatas.Create(root);
@@ -127,7 +135,7 @@ bool PrepareAssembly(wi::scene::Scene& source,const std::vector<Entity>& selecte
 }
 }
 bool SaveSceneAssemblyPrefab(const std::string& projectRoot,const StableId& project,
-    wi::scene::Scene& source,const std::vector<Entity>& selected,const std::string& name,StableId& asset,std::string& error) {
+    wi::scene::Scene& source,const std::vector<Entity>& selected,const std::string& name,StableId& asset,std::string& error,const ScriptDocument* scripts) {
     asset.clear();
     if(name.empty()||name.size()>80||name=="."||name==".."||name.back()=='.'||name.back()==' '||
         name.find_first_of("<>:\"/\\|?*")!=std::string::npos||
@@ -136,7 +144,7 @@ bool SaveSceneAssemblyPrefab(const std::string& projectRoot,const StableId& proj
     }
     std::error_code ec;const auto root=fs::weakly_canonical(fs::u8path(projectRoot),ec);
     if(ec||!fs::is_directory(root)||!IsValidStableId(project)){error="Open a project before saving a prefab.";return false;}
-    wi::scene::Scene scene;if(!PrepareAssembly(source,selected,scene,error))return false;
+    wi::scene::Scene scene;if(!PrepareAssembly(source,selected,scene,error,projectRoot,project,scripts))return false;
     AssetRegistry registry;if(!ReadAssetRegistry(projectRoot,project,registry,error))return false;
     const auto id=GenerateStableId(),sourceId=GenerateStableId();
     const std::string relative="Content/Prefabs/"+name+".rasset";
@@ -149,7 +157,12 @@ bool SaveSceneAssemblyPrefab(const std::string& projectRoot,const StableId& proj
         auto canonical=fs::weakly_canonical(p.parent_path(),ec);auto rel=canonical.lexically_relative(root);
         if(ec||rel.empty()||*rel.begin()==".."){error="Prefab destination escapes the project.";return false;}
     }
-    const std::string recipe="{\"options\":{\"schema_version\":1},\"source_format\":\"scene-assembly\"}";
+    bool scripted=false;
+    for(size_t i=0;i<scene.metadatas.GetCount();++i)
+        scripted|=scene.metadatas[i].string_values.has(SceneAssemblyScriptTemplateKey);
+    // Older geometry-only readers reject version 2 instead of silently dropping behaviour.
+    const std::string recipe=std::string("{\"options\":{\"schema_version\":")+
+        (scripted?"2":"1")+"},\"source_format\":\"scene-assembly\"}";
     ReusableModelAssetDocument document;auto& manifest=document.manifest;
     manifest.projectId=project;manifest.assetId=id;manifest.sourceAssetId=sourceId;
     manifest.sourceFormat="scene-assembly";manifest.importer="renegade.scene.assembly";manifest.settingsJson=recipe;

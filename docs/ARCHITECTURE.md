@@ -2142,3 +2142,29 @@ LightPresetService owns reusable setups, six governed scripts and undoable chang
 ParticleEffectService owns composite layers, four local fields, lifetime curves, shapes and shared timing. RuntimeParticleLua exposes governed instance-safe commands. Runtime closure includes presets and texture products. Marker/hierarchy selection resolve complete effect roots.
 A bounded configure overlay reproduces particle changes on the pinned Wicked tree. The shared allocator overlay keeps preview Scene lifetimes consistent across translation units. Neither changes the upstream pin.
 Size edits queue a selected-emitter update before GPU preparation. Selection does not restart the effect. Percentages use per-layer loaded references; whole-effect scaling is separate.
+
+
+## General scene prefabs: component and behaviour preservation (2026-11-10)
+
+Scene assembly assets reuse the governed .rasset pipeline and native component
+serialization. Geometry, lights, layered particle effects, their material shader
+selections, curves, fields and project-owned texture bindings travel together.
+Component-only assets retain a known zero mesh count; model-import placement still
+requires geometry. Scripted scene-assembly recipes use schema 2 so older readers
+reject unsupported behaviour instead of silently dropping it.
+
+SceneAssemblyScriptService copies the shared ScriptDocument attachment codec into
+a typed root template. Save validates source modules/dependencies and rejects
+entity references outside the selected hierarchy. Placement assigns fresh object
+and script-instance identities, remaps internal references, and applies scene plus
+companion changes through the existing command transaction. Ordinary hierarchy
+duplication preserves explicit external references; prefab export requires a
+self-contained entity graph. Delete removes all hierarchy-owned script attachments
+with symmetric Undo/Redo. Unknown typed attachment fields remain round-trippable.
+
+Unpack removes structural wrappers and retains an authored root carrying native
+components or behaviours as a named individual object. Undo restores the boundary.
+Packaged reusable-asset validation preserves authored scene-assembly copies and
+unpacked contents instead of replacing them with the source product, so instance
+edits and script owners survive startup. This is independent-copy placement;
+source-update propagation and a custom shader-authoring system are separate work.

@@ -10,6 +10,7 @@
 #include <utility>
 
 #include <wiConfig.h>
+#include "json.hpp"
 
 namespace
 {
@@ -1300,6 +1301,87 @@ namespace renegade::bridge
         // unresolved Inspector references for later repair instead of deleting state.
         error.clear();
         return true;
+    }
+
+    bool SerializeScriptAttachmentTemplates(
+        const StableId& projectId, const std::vector<ScriptAttachment>& attachments,
+        std::string& text, std::string& error)
+    {
+        text.clear();
+        auto checked = CreateScriptDocument(projectId, GenerateStableId(),
+            "Content/Scenes/Prefab.wiscene", "scene-assembly-v1");
+        checked.attachments = attachments;
+        if (!ValidateScriptDocument(checked, error)) return false;
+        wi::config::File file;
+        std::unordered_set<std::string> reserved;
+        for (std::size_t i = 0; i < attachments.size(); ++i)
+            WriteAttachment(file, i, attachments[i], reserved);
+        nlohmann::json sections = nlohmann::json::object();
+        for (const auto& section : file.GetSortedSections())
+        {
+            auto values = nlohmann::json::object();
+            for (const auto& value : *section.second) values[value.first] = value.second;
+            sections[section.first] = std::move(values);
+        }
+        text = nlohmann::json({{"format", "renegade-scene-prefab-scripts"},
+            {"version", 1}, {"project_id", projectId},
+            {"attachment_count", attachments.size()}, {"sections", sections}}).dump();
+        if (text.size() > 16u * 1024u * 1024u)
+        {
+            text.clear(); error = "Prefab script templates exceed the supported size."; return false;
+        }
+        error.clear(); return true;
+    }
+
+    bool DeserializeScriptAttachmentTemplates(
+        const std::string& text, const StableId& projectId,
+        std::vector<ScriptAttachment>& attachments, std::string& error)
+    {
+        attachments.clear();
+        if (text.size() > 16u * 1024u * 1024u)
+        { error = "Prefab script templates exceed the supported size."; return false; }
+        try
+        {
+            const auto stored = nlohmann::json::parse(text);
+            if (!stored.is_object() || stored.size() != 5 ||
+                stored.at("format") != "renegade-scene-prefab-scripts" ||
+                stored.at("version") != 1 || stored.at("project_id") != projectId ||
+                !stored.at("attachment_count").is_number_unsigned() ||
+                !stored.at("sections").is_object())
+            { error = "Prefab script templates have an invalid version or project."; return false; }
+            const auto count = stored.at("attachment_count").get<std::size_t>();
+            if (count > MaximumAttachmentCount)
+            { error = "Prefab has too many script attachments."; return false; }
+            wi::config::File file;
+            for (const auto& section : stored.at("sections").items())
+            {
+                if (!section.value().is_object())
+                { error = "Malformed prefab script section."; return false; }
+                auto& target = file.GetSection(section.key().c_str());
+                for (const auto& value : section.value().items())
+                {
+                    if (!value.value().is_string())
+                    { error = "Malformed prefab script field."; return false; }
+                    target.Set(value.key().c_str(), value.value().get<std::string>());
+                }
+            }
+            std::unordered_set<std::string> consumed;
+            std::vector<ScriptAttachment> parsed;
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                ScriptAttachment attachment;
+                if (!ReadAttachment(file, i, attachment, consumed, error)) return false;
+                parsed.push_back(std::move(attachment));
+            }
+            auto checked = CreateScriptDocument(projectId, GenerateStableId(),
+                "Content/Scenes/Prefab.wiscene", "scene-assembly-v1");
+            checked.attachments = parsed;
+            if (!ValidateScriptDocument(checked, error)) return false;
+            attachments = std::move(parsed);
+            error.clear(); return true;
+        }
+        catch (const nlohmann::json::exception&)
+        { error = "Malformed prefab script templates."; return false; }
     }
 
     bool WriteScriptDocument(

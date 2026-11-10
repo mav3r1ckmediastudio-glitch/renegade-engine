@@ -232,11 +232,14 @@ require_text(scene_document_source
     "(void)RepairReusableAssetCollisionTargets(*prepared.scene_);"
     "pre-physics WISCENE reusable-body repair")
 require_text(studio_source
-    "ResolveReusableSelectionRoot(scene, selection)"
-    "viewport reusable-child selection promotion")
+    "entity=bridge::ResolveAssemblySelection(scene,entity,editingAssembly_);"
+    "viewport reusable and assembly child selection promotion")
 require_text(studio_source
-    "CollectReusableSelectionObjects(scene, reusableRoot, renderObjects)"
-    "whole reusable-root descendant outline")
+    "for(auto root:session_->Selection().Entities())"
+    "outline each selected root")
+require_text(studio_source
+    "included=included || scene.Entity_IsDescendant(e,root);"
+    "whole selected-root descendant outline")
 require_text(studio_header
     "outlinedEntityPreviousStencils_"
     "multi-object selection stencil restoration")

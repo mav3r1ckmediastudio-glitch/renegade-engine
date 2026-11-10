@@ -3,6 +3,7 @@
 #include "renegade/bridge/SelectionService.h"
 #include "renegade/bridge/ReusableAssetService.h"
 namespace renegade::bridge {
+struct ScriptDocument;
 inline constexpr const char* SceneAssemblyKey = "renegade.scene_assembly";
 bool AssemblyTransformChanged(const TransformState&,const TransformState&) noexcept;
 bool IsSceneAssembly(const wi::scene::Scene&,wi::ecs::Entity);
@@ -44,13 +45,13 @@ private:
 class SceneAssemblyCommand final : public ICommand {
 public:
     SceneAssemblyCommand(wi::scene::Scene&,std::vector<wi::ecs::Entity>,std::string name="Group");
-    SceneAssemblyCommand(wi::scene::Scene&,wi::ecs::Entity unpackRoot);
+    SceneAssemblyCommand(wi::scene::Scene&,wi::ecs::Entity unpackRoot,bool preserveRoot=false);
     bool Execute() override;
     void Undo() override;
     wi::ecs::Entity Root() const {return root_;}
     const std::vector<wi::ecs::Entity>& Pieces() const {return pieces_;}
 private:
-    struct State {wi::ecs::Entity entity,parent;TransformState transform;};
+    struct State {wi::ecs::Entity entity,parent;TransformState transform;bool hadMetadata;wi::scene::MetadataComponent metadata;std::string name;};
     void Restore();
     wi::scene::Scene& scene_;
     std::vector<wi::ecs::Entity> pieces_;
@@ -60,8 +61,9 @@ private:
     wi::Archive rootSnapshot_;
     std::vector<std::pair<wi::ecs::Entity,wi::Archive>> payloadSnapshots_;
     TransformState rootTransform_;
-    bool unpack_=false,initialized_=false,hasRootSnapshot_=false;
+    bool unpack_=false,initialized_=false,hasRootSnapshot_=false,keepRoot_=false;
+    std::vector<wi::ecs::Entity> authoredRoots_;
 };
 bool SaveSceneAssemblyPrefab(const std::string& projectRoot,const StableId& projectId,
-    wi::scene::Scene&,const std::vector<wi::ecs::Entity>&,const std::string& name,StableId& asset,std::string& error);
+    wi::scene::Scene&,const std::vector<wi::ecs::Entity>&,const std::string& name,StableId& asset,std::string& error,const ScriptDocument* scripts=nullptr);
 }

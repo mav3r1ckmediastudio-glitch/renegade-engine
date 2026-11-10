@@ -1,0 +1,105 @@
+PASS: create native review environment
+PASS: native fixture saved: BrazierSource.wiscene
+PASS: create isolated functional review project
+PASS: adopt and establish the saved Level and scripting companion
+PASS: prepare native Studio script document
+PASS: script document available
+PASS: adopt governed light source:
+PASS: create the real flame light and its governed behaviour
+PASS: read included texture library:
+PASS: find actual fixture texture: supplied-candle
+PASS: adopt project-owned texture: Candle flame sheet
+PASS: find actual fixture texture: supplied-smoke
+PASS: adopt project-owned texture: Smoke sheet
+PASS: find actual fixture texture:
+PASS: adopt project-owned texture: Ember fleck atlas cell
+PASS: create complete three-layer effect
+PASS: effect has all emitters and its stationary flame sprite
+PASS: group meshes, light and complete effect through the normal command
+PASS: configure root behaviour with real light/effect references:
+PASS: duplicate copies root and child behaviours atomically
+PASS: edit one light component and Undo restores its local transform
+PASS: save complete scripted prefab:
+PASS: cold reopen complete prefab:
+PASS: payload retains geometry, light, emitters, sprite and behaviour templates
+PASS: PBR/unlit shaders and authored material settings survive cold prefab load
+PASS: layered particle playback, curves, fields, shapes and shader selection survive
+PASS: each layer retains its governed texture identity
+PASS: each layer retains its governed texture identity
+PASS: each layer retains its governed texture identity
+PASS: save light/effect-only prefab without geometry:
+PASS: cold prepare component-only prefab:
+PASS: no artificial mesh is required for reusable lights and effects
+PASS: place component-only prefab with its light behaviour
+PASS: component-only placement Undo restores the scene and behaviour graph
+PASS: delete copied assembly removes its complete behaviour graph
+PASS: assembly delete Undo/Redo preserves graph identity
+PASS: place a complete independent instance through the real Studio hook
+PASS: placement Undo/Redo owns all behaviour attachments
+PASS: second placement receives another independent behaviour graph
+PASS: remove original donors while both placed instances remain complete
+PASS: per-instance light parameter and script-property edits have reliable Undo/Redo
+PASS: editing one instance leaves the other unchanged
+PASS: start actual governed Runtime scripts:
+PASS: both placed prefabs start their two independent behaviours
+PASS: light behaviours animate and component references remain valid
+PASS: script stop restores the instance's authored light
+PASS: script stop restores the instance's authored light
+PASS: save and cold reopen both full instances through StudioSession
+PASS: cold scene retains independent instance and script identities
+PASS: start actual governed Runtime scripts:
+PASS: both placed prefabs start their two independent behaviours
+PASS: light behaviours animate and component references remain valid
+PASS: script stop restores the instance's authored light
+PASS: script stop restores the instance's authored light
+PASS: one Unpack retains meshes, light, effect and named root behaviour object
+PASS: save unpacked functional assembly
+PASS: cold reopen unpacked native scene
+PASS: cold read unpacked behaviour companion:
+PASS: start actual governed Runtime scripts:
+PASS: both placed prefabs start their two independent behaviours
+PASS: light behaviours animate and component references remain valid
+PASS: script stop restores the instance's authored light
+PASS: script stop restores the instance's authored light
+PASS: Unpack Undo restores the complete selected unit for review
+PASS: save bounded Runtime review route:
+PASS: open private fixture descriptor
+PASS: prepare real dependency closure for scripted prefab package:
+PASS: hash Runtime support: BrazierProof.exe
+PASS: hash Runtime support: dxcompiler.dll
+PASS: hash Runtime support: Content/river/RenegadeRiverUnderwaterCS.cso
+PASS: hash Runtime support: Content/river/RiverContactFoamPS.cso
+PASS: hash Runtime support: Content/river/RiverFoamTransportCS.cso
+PASS: hash Runtime support: Content/river/RiverWaterwayFoamPS.cso
+PASS: hash Runtime support: Content/river/RiverWaterwayFoamCS.cso
+PASS: hash Runtime support: Content/river/RiverRapidsPS.cso
+PASS: hash Runtime support: Content/river/RiverRapidsCS.cso
+PASS: hash Runtime support: Content/river/RiverRefinedFoamPS.cso
+PASS: hash Runtime support: Content/river/RiverFoamDetailCS.cso
+PASS: hash Runtime support: Content/river/RiverSurfaceVS.cso
+PASS: hash Runtime support: Content/river/RiverSurfaceShadowVS.cso
+PASS: hash Runtime support: Content/river/RiverCoursePS.cso
+PASS: hash Runtime support: Content/river/RiverCourseVS.cso
+PASS: hash Runtime support: Content/river/RiverCourseShadowVS.cso
+PASS: hash Runtime support: Content/waterfall/PlaceableWaterfallPS.cso
+PASS: hash Runtime support: Content/waterfall/PlaceableWaterfallVS.cso
+PASS: hash Runtime support: Content/Particles/MovementField0.cso
+PASS: hash Runtime support: Content/Particles/MovementField1.cso
+PASS: hash Runtime support: Content/Particles/MovementField2.cso
+PASS: hash Runtime support: Content/Particles/MovementField3.cso
+PASS: hash Runtime support: Content/Particles/MovementField4.cso
+PASS: hash Runtime support: Content/Particles/MovementField5.cso
+PASS: hash Runtime support: Content/Particles/MovementField6.cso
+PASS: plan private native package:
+PASS: stage Runtime, sources, textures and shaders through native package services:
+PASS: write disposable proof executable icon
+PASS: apply native package-relative bootstrap identity:
+PASS: private package hashes and closure validate:
+PASS: native scene is in the governed package closure
+PASS: cold load staged native scene
+PASS: validate packaged reusable assets without replacing edited scene copies:
+PASS: package load preserves instance edits and script owner identities
+PASS: saved script references still resolve after package refresh:
+REVIEW PROJECT: <isolated-worktree>/Proof/FunctionalBrazier5/BrazierReview/BrazierReview.renegade
+PRIVATE PACKAGE: <isolated-worktree>/Proof/FunctionalBrazier5/Packages/.renegade-staging/BrazierProof Windows Build.3aa1eb90-571e-4dd1-90f3-ad36eedb0e3e
+FUNCTIONAL SCENE PREFAB WORKFLOW PASSED

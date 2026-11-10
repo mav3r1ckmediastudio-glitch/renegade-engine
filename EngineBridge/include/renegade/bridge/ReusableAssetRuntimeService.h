@@ -23,6 +23,7 @@ namespace renegade::bridge
     {
         std::size_t discoveredInstanceCount = 0;
         std::size_t refreshedInstanceCount = 0;
+        std::size_t preservedSceneAssemblyCount = 0;
         std::vector<PackagedReusableAssetRefreshRecord> records;
     };
 

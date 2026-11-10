@@ -6900,6 +6900,14 @@ namespace renegade::studio
             return;
         }
 
+        bridge::ScriptDocument* scripts=nullptr;
+        if(!session_->Scenes().CurrentPath().empty()) {
+            std::string error;
+            if(!session_->Scripts().EnsureCurrent(error)) {
+                studioChrome_.SetStatusText("DELETE NOT APPLIED // "+error);return;
+            }
+            scripts=session_->Scripts().Document();
+        }
         if(session_->Selection().Entities().size()>1) {
             auto& scene=session_->Scenes().GetScene();
             const auto roots=bridge::SelectionRoots(scene,session_->Selection().Entities());
@@ -6909,7 +6917,7 @@ namespace renegade::studio
                     bridge::placeable_waterfall::WaterfallOwner(scene,e)!=wi::ecs::INVALID_ENTITY) {
                     studioChrome_.SetStatusText("Select linked terrain or water tools individually for deletion");return;
                 }
-                batch->Add(std::make_unique<bridge::DeleteEntityCommand>(scene,e));
+                batch->Add(bridge::MakeDeleteSceneHierarchyCommand(scene,scripts,e));
             }
             ClearSelectionOutline();
             if(session_->Commands().Execute(std::make_unique<bridge::SelectionHistoryCommand>(
@@ -6937,13 +6945,7 @@ namespace renegade::studio
             return;
         }
         ClearSelectionOutline();
-        std::unique_ptr<bridge::ICommand> deleteCommand;
-        auto& deletingScene=session_->Scenes().GetScene();
-        if(deletingScene.lights.Contains(entity)) {
-            std::string error;auto& scripting=session_->Scripts();
-            auto* doc=scripting.EnsureCurrent(error)?scripting.Document():nullptr;
-            deleteCommand=bridge::MakeDeleteLightSetupCommand(deletingScene,doc,entity);
-        } else deleteCommand=std::make_unique<bridge::DeleteEntityCommand>(deletingScene,entity);
+        auto deleteCommand=bridge::MakeDeleteSceneHierarchyCommand(session_->Scenes().GetScene(),scripts,entity);
         if (!session_->Commands().Execute(std::move(deleteCommand)))
         {
             SyncSelectionOutline();
@@ -7899,10 +7901,11 @@ namespace renegade::studio
             auto command = std::make_unique<bridge::PlaceReusableModelCommand>(
                 scene, prepared.ReleaseScene(), assetId, position, scale, label);
             auto* placed = command.get();
+            const auto placementError = command->ErrorState();
             if (!session_->Commands().Execute(std::move(command)))
             {
                 creatorAssetPlacementActive_ = true;
-                studioChrome_.SetStatusText("PLACE ASSET // FAILED");
+                studioChrome_.SetStatusText(placementError->empty()?"PLACE ASSET // FAILED":"PLACE ASSET // "+*placementError);
                 return;
             }
             creatorAssetPlacementId_.clear();
@@ -9714,7 +9717,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         scenePrefabName_.SetCancelInputEnabled(false);
         scenePrefabName_.OnInputAccepted([this](const wi::gui::EventArgs&){CommitScenePrefabSave();});
         scenePrefabSavePanel_.AddWidget(&scenePrefabName_);
-        scenePrefabHelp_.Create("Prefab Destination");scenePrefabHelp_.SetText("A reusable copy in this project's Content/Prefabs folder.");
+        scenePrefabHelp_.Create("Prefab Destination");scenePrefabHelp_.SetText("Includes components and behaviours. Saved in Content/Prefabs.");
         scenePrefabHelp_.SetPos({18,90});scenePrefabHelp_.SetSize({400,50});
         scenePrefabHelp_.font.params.size=12;scenePrefabHelp_.SetFitTextEnabled(true);
         scenePrefabSavePanel_.AddWidget(&scenePrefabHelp_);
@@ -9741,7 +9744,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             std::vector<wi::ecs::Entity>{target}:session_->Selection().Entities();
         auto* name=session_->Scenes().GetScene().names.GetComponent(target);
         scenePrefabName_.SetValue(name?name->name:"New Prefab");
-        scenePrefabHelp_.SetText("A reusable copy in this project's Content/Prefabs folder.");
+        scenePrefabHelp_.SetText("Includes components and behaviours. Saved in Content/Prefabs.");
         scenePrefabSavePanel_.SetPos({std::max(0.f,(GetLogicalWidth()-440)*.5f),std::max(0.f,(GetLogicalHeight()-210)*.5f)});
         scenePrefabSavePanel_.SetVisible(true);scenePrefabSaving_=false;
     }
@@ -9757,11 +9760,18 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 scenePrefabHelp_.SetText("The scene changed. Close this window and select the pieces again.");return;
             }
             const auto& project=session_->Projects().CurrentProject();bridge::StableId asset;std::string error;
+            const bridge::ScriptDocument* scripts=nullptr;
+            if(!session_->Scenes().CurrentPath().empty()) {
+                if(!session_->Scripts().EnsureCurrent(error)) {
+                    scenePrefabHelp_.SetText("Could not read the selected objects' scripts: "+error);return;
+                }
+                scripts=session_->Scripts().Document();
+            }
             // The selection stencil is an editor preview, not prefab content.
             // Restore the authored values before serializing, just as Scene Save does.
             ClearSelectionOutline();
             const bool saved=bridge::SaveSceneAssemblyPrefab(project.rootPath,project.projectId,session_->Scenes().GetScene(),
-                scenePrefabSaveSelection_,name,asset,error);
+                scenePrefabSaveSelection_,name,asset,error,scripts);
             SyncSelectionOutline();
             if(saved) {
                 scenePrefabSavePanel_.SetVisible(false);
@@ -9815,12 +9825,24 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                     session_->Selection().Select(editingAssembly_);
                 editingAssembly_=wi::ecs::INVALID_ENTITY;
             } else if(action==EditorAction::UnpackGroup) {
-                auto command=std::make_unique<bridge::SceneAssemblyCommand>(scene,selected);
+                bridge::ScriptDocument* scripts=nullptr;
+                if(!session_->Scenes().CurrentPath().empty()) {
+                    std::string error;
+                    if(!session_->Scripts().EnsureCurrent(error)) {
+                        SyncSelectionOutline();studioChrome_.SetStatusText("UNPACK NOT APPLIED // "+error);return;
+                    }
+                    scripts=session_->Scripts().Document();
+                }
+                const auto owner=bridge::PersistentEntityId(scene,selected);
+                const bool keepRoot=scripts&&std::any_of(scripts->attachments.begin(),scripts->attachments.end(),[&](const auto& row) {
+                    return row.scope==bridge::ScriptScope::Entity&&row.ownerEntityId==owner;
+                });
+                auto command=std::make_unique<bridge::SceneAssemblyCommand>(scene,selected,keepRoot);
                 auto* result=command.get();
                 if(session_->Commands().Execute(std::make_unique<bridge::SelectionHistoryCommand>(
                     session_->Selection(),std::move(command),[result]{return result->Pieces();}))) {
                     session_->Selection().Set(result->Pieces());editingAssembly_=wi::ecs::INVALID_ENTITY;
-                    studioChrome_.SetStatusText("Unpacked into independent pieces | Undo restores the group");
+                    studioChrome_.SetStatusText("Unpacked "+std::to_string(result->Pieces().size())+" objects | Behaviours retained | Undo restores the group");
                 } else studioChrome_.SetStatusText("Select a group or prefab to unpack");
             } else if(action==EditorAction::SaveGroupPrefab) {
                 SaveAssemblyPrefabDialog();

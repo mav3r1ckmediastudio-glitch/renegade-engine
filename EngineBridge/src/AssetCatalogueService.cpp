@@ -101,11 +101,8 @@ namespace renegade::bridge
                 error.clear();
                 return true;
             }
-            if (model.meshCount == 0)
-            {
-                error = "Known model metadata must contain at least one mesh.";
-                return false;
-            }
+            // An inspected component-only prefab has a known mesh count of zero.
+            // Geometry requirements belong to the model-import/placement path.
             if (model.armatureCount == 0 && model.boneCount != 0)
             {
                 error = "Model metadata cannot contain bones without an armature.";

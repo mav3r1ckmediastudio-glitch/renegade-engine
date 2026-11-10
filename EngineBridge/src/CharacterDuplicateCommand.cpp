@@ -194,6 +194,13 @@ namespace renegade::bridge
 
             companion_ = {};
             companionActive_ = false;
+            for (const auto& mapping : duplicateSerializer.remap)
+            {
+                if (mapping.second != wi::ecs::INVALID_ENTITY &&
+                    !std::binary_search(entitiesBefore.begin(), entitiesBefore.end(), mapping.second) &&
+                    (mapping.first == source_ || scene_->Entity_IsDescendant(mapping.first, source_)))
+                    companion_.entityPairs.emplace_back(mapping.first, mapping.second);
+            }
             if (duplicateCompanionFactory)
             {
                 std::string companionError;

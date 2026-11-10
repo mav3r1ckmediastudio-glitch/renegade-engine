@@ -126,7 +126,7 @@ require_text(studio_source
 # Environment + Terrain lists appearing together: Terrain selects its terrain
 # component (or INVALID when none exists), while Environment selects weather.
 require_text(studio_source
-    "const auto entity = environmentWorkspaceActive_\n            ? EditableWeatherEntity()\n            : terrainWorkspaceActive_\n                ? terrainWorkspaceEntity\n                : selectedEntity;"
+    "const auto entity = multiple ? wi::ecs::INVALID_ENTITY : environmentWorkspaceActive_\n            ? EditableWeatherEntity()\n            : terrainWorkspaceActive_\n                ? terrainWorkspaceEntity\n                : selectedEntity;"
     "specialist Inspector entity arbitration")
 require_text(studio_source
     "const auto setEnvironmentVisible ="

@@ -125,8 +125,8 @@ require_text(prefab_template
 # reusable instance referenced to its base Character Asset, and strips the
 # transient prefab marker before the Scene snapshot is captured.
 require_text(studio_integration
-    "DuplicateEntityScriptAttachments("
-    "fresh Action/Script duplication")
+    "DuplicateHierarchyScriptAttachments("
+    "fresh hierarchy Action/Script duplication")
 require_text(studio_integration
     "SetReusablePlacementCompanionFactory("
     "prefab placement Studio hook")

@@ -11,6 +11,7 @@
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/SelectionService.h"
+#include "renegade/bridge/SceneAssemblyScriptService.h"
 #include "renegade/bridge/VideoAssetService.h"
 
 namespace renegade::bridge
@@ -36,6 +37,7 @@ namespace renegade::bridge
                     DuplicateEntityCompanionCallbacks& callbacks,
                     std::string& error) -> bool
                 {
+                    auto entityPairs = callbacks.entityPairs;
                     callbacks = {};
                     if (&scenes_.GetScene() != &scene || !projects_.HasProject())
                     {
@@ -60,70 +62,9 @@ namespace renegade::bridge
                         return false;
                     }
 
-                    const StableId sourceId = PersistentEntityId(scene, source);
-                    const StableId duplicateId = PersistentEntityId(scene, duplicate);
-                    bool hasSourceAttachments = false;
-                    for (const auto& attachment : document->attachments)
-                    {
-                        if (attachment.scope == ScriptScope::Entity &&
-                            attachment.ownerEntityId == sourceId)
-                        {
-                            hasSourceAttachments = true;
-                            break;
-                        }
-                    }
-                    if (!hasSourceAttachments)
-                    {
-                        error.clear();
-                        return true;
-                    }
-
-                    // Sources with no governed scripts need no companion identity.
-                    // Fresh unsaved pieces are still valid native duplicate targets.
-                    if (!IsValidStableId(sourceId) || !IsValidStableId(duplicateId) ||
-                        sourceId == duplicateId)
-                    {
-                        error = "Scene duplication did not establish two distinct persistent entity IDs.";
-                        return false;
-                    }
-
                     const ScriptDocument before = *document;
-                    std::vector<StableId> created;
-                    if (!DuplicateEntityScriptAttachments(
-                            *document,
-                            sourceId,
-                            duplicateId,
-                            created,
-                            error))
-                    {
-                        *document = before;
-                        return false;
-                    }
-
-                    // A property explicitly targeting the source actor is a
-                    // self-reference for duplication purposes. Repoint only
-                    // that reference to the new actor; references to other
-                    // same-Scene entities intentionally remain unchanged.
-                    for (const StableId& scriptId : created)
-                    {
-                        auto* attachment = FindScriptAttachment(*document, scriptId);
-                        if (attachment == nullptr)
-                        {
-                            *document = before;
-                            error = "Duplicated script attachment disappeared before reference remap.";
-                            return false;
-                        }
-                        for (auto& property : attachment->properties)
-                        {
-                            if (property.type == ScriptPropertyType::EntityReference &&
-                                property.referenceId == sourceId)
-                            {
-                                property.referenceId = duplicateId;
-                                property.pathHint.clear();
-                            }
-                        }
-                    }
-                    if (!ValidateScriptDocumentAgainstScene(*document, scene, error))
+                    if (entityPairs.empty())entityPairs.emplace_back(source,duplicate);
+                    if (!DuplicateHierarchyScriptAttachments(*document, scene, entityPairs, error))
                     {
                         *document = before;
                         return false;

@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <utility>
 
 #include <WickedEngine.h>
 
@@ -86,6 +87,9 @@ namespace renegade::bridge
     // state (currently .rscripts) using the new persistent entity identities.
     struct DuplicateEntityCompanionCallbacks
     {
+        // Native source-to-copy hierarchy pairs are factory input. Capture them
+        // before clearing callback outputs; source and target IDs are distinct.
+        std::vector<std::pair<wi::ecs::Entity,wi::ecs::Entity>> entityPairs;
         std::function<void()> undo;
         std::function<bool()> redo;
     };

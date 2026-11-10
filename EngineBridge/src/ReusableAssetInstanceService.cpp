@@ -1,5 +1,6 @@
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/SceneAssemblyService.h"
+#include "renegade/bridge/SceneAssemblyScriptService.h"
 
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/AnimationService.h"
@@ -591,13 +592,19 @@ namespace renegade::bridge
     {
         companion_ = {};
         companionActive_ = false;
+        errorState_->clear();
         if (!placementCompanionFactory)
+        {
+            if(HasSceneAssemblyScriptTemplate(*scene_,payloadRoot_))
+            { *errorState_="Scripted prefab placement requires the active Studio script companion."; return false; }
             return true;
+        }
 
         std::string error;
         if (!placementCompanionFactory(
                 *scene_, entity_, payloadRoot_, companion_, error))
         {
+            *errorState_ = error.empty()?"Prefab behaviour could not be applied.":error;
             if (companion_.undo)
                 companion_.undo();
             companion_ = {};

@@ -1,4 +1,5 @@
 #include "renegade/bridge/SceneAssemblyService.h"
+#include "renegade/bridge/SceneAssemblyScriptService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include <algorithm>
@@ -140,25 +141,55 @@ bool SelectionBatchCommand::Execute() {
 void SelectionBatchCommand::Undo() {for(auto it=commands_.rbegin();it!=commands_.rend();++it)(*it)->Undo();}
 SceneAssemblyCommand::SceneAssemblyCommand(wi::scene::Scene& s,std::vector<Entity> pieces,std::string name)
     :scene_(s),pieces_(SelectionRoots(s,pieces)),name_(std::move(name)){}
-SceneAssemblyCommand::SceneAssemblyCommand(wi::scene::Scene& s,Entity root)
-    :scene_(s),root_(root),unpack_(true){}
+SceneAssemblyCommand::SceneAssemblyCommand(wi::scene::Scene& s,Entity root,bool preserveRoot)
+    :scene_(s),root_(root),unpack_(true),keepRoot_(preserveRoot){}
 static void ApplyLocal(wi::scene::TransformComponent& t,const TransformState& v) {
     t.translation_local=v.translation;t.rotation_local=v.rotation;t.scale_local=v.scale;t.SetDirty();t.UpdateTransform();
+}
+static bool AuthoredContainer(const wi::scene::Scene& scene,Entity e) {
+    if(const auto* m=scene.metadatas.GetComponent(e);m&&m->bool_values.has(SceneAssemblyAuthoredRootKey)&&
+        m->bool_values.get(SceneAssemblyAuthoredRootKey))return true;
+    // Discover native component types through their registered managers only
+    // during explicit Unpack; never discard an authored light/controller/etc.
+    for(const auto& entry:scene.componentLibrary.entries) {
+        const auto* manager=entry.second.component_manager.get();
+        if(manager==&scene.names||manager==&scene.transforms||manager==&scene.hierarchy||
+            manager==&scene.metadatas||manager==&scene.layers)continue;
+        if(manager->Contains(e))return true;
+    }
+    return false;
+}
+static void StripAssemblyContainer(wi::scene::Scene& scene,Entity e) {
+    auto* m=scene.metadatas.GetComponent(e);if(!m)return;
+    if(m->string_values.has("renegade.scene_assembly.authored_name"))
+        if(auto* name=scene.names.GetComponent(e))name->name=m->string_values.get("renegade.scene_assembly.authored_name");
+    m->string_values.erase(SceneAssemblyKey);
+    m->bool_values.erase("renegade.scene_assembly_payload");m->bool_values.erase(SceneAssemblyAuthoredRootKey);
+    m->string_values.erase(ReusableAssetInstanceIdMetadataKey);
+    m->int_values.erase(ReusableAssetInstanceVersionMetadataKey);
+    m->bool_values.erase(ReusableAssetPayloadRootMetadataKey);
+    m->string_values.erase(ReusableAssetInstanceDisplayNameMetadataKey);
 }
 bool SceneAssemblyCommand::Execute() {
     if(!initialized_) {
         if(unpack_) {
             if(!IsSceneAssembly(scene_,root_))return false;
+            keepRoot_=keepRoot_||AuthoredContainer(scene_,root_);
+            if(keepRoot_){pieces_.push_back(root_);authoredRoots_.push_back(root_);}
             auto gather=[&](auto&& self,Entity parent)->void {
                 for(size_t i=0;i<scene_.hierarchy.GetCount();++i) {
                     if(scene_.hierarchy[i].parentID!=parent)continue;
                     const auto e=scene_.hierarchy.GetEntity(i);
                     auto* m=scene_.metadatas.GetComponent(e);
                     if(m&&m->bool_values.has("renegade.scene_assembly_payload")&&m->bool_values.get("renegade.scene_assembly_payload")) {
-                        payloadSnapshots_.emplace_back(e,wi::Archive{});
-                        wi::ecs::EntitySerializer serializer;
-                        scene_.Entity_Serialize(payloadSnapshots_.back().second,serializer,e,wi::scene::Scene::EntitySerializeFlags::NONE);
-                        wi::jobsystem::Wait(serializer.ctx);
+                        if(AuthoredContainer(scene_,e)) {
+                            pieces_.push_back(e);authoredRoots_.push_back(e);
+                        } else {
+                            payloadSnapshots_.emplace_back(e,wi::Archive{});
+                            wi::ecs::EntitySerializer serializer;
+                            scene_.Entity_Serialize(payloadSnapshots_.back().second,serializer,e,wi::scene::Scene::EntitySerializeFlags::NONE);
+                            wi::jobsystem::Wait(serializer.ctx);
+                        }
                         self(self,e);
                     } else pieces_.push_back(e);
                 }
@@ -171,7 +202,9 @@ bool SceneAssemblyCommand::Execute() {
         for(auto e:pieces_) {
             auto* t=scene_.transforms.GetComponent(e);if(!t)return false;
             auto* h=scene_.hierarchy.GetComponent(e);
-            before_.push_back({e,h?h->parentID:INVALID_ENTITY,CaptureTransform(*t)});
+            const auto* m=scene_.metadatas.GetComponent(e);const auto* name=scene_.names.GetComponent(e);
+            before_.push_back({e,h?h->parentID:INVALID_ENTITY,CaptureTransform(*t),m!=nullptr,
+                m?*m:wi::scene::MetadataComponent{},name?name->name:std::string{}});
         }
         if(!unpack_) {
             XMVECTOR center=XMVectorZero();
@@ -192,8 +225,13 @@ bool SceneAssemblyCommand::Execute() {
             if(parent!=INVALID_ENTITY)scene_.Component_Attach(e,parent);
             else scene_.Component_Detach(e);
         }
+        for(auto e:authoredRoots_)StripAssemblyContainer(scene_,e);
+        for(auto e:pieces_) {
+            auto* m=scene_.metadatas.GetComponent(e);if(!m)m=&scene_.metadatas.Create(e);
+            m->bool_values.set(SceneAssemblyPreserveContentsKey,true);
+        }
         for(const auto& snapshot:payloadSnapshots_)scene_.Entity_Remove(snapshot.first,false);
-        scene_.Entity_Remove(root_,false);
+        if(!keepRoot_)scene_.Entity_Remove(root_,false);
     } else {
         if(scene_.transforms.Contains(root_))return false;
         if(hasRootSnapshot_) {
@@ -222,13 +260,28 @@ void SceneAssemblyCommand::Restore() {
         scene_.hierarchy.Remove(v.entity);
         if(v.parent!=INVALID_ENTITY)scene_.Component_Attach(v.entity,v.parent,true);
         if(auto* t=scene_.transforms.GetComponent(v.entity))ApplyLocal(*t,v.transform);
+        if(unpack_) {
+            // Restore only metadata changed by Unpack. Persistent IDs adopted by
+            // a later scene Save remain valid even when an older operation is undone.
+            const auto liveId=PersistentEntityId(scene_,v.entity);
+            if(v.hadMetadata) {
+                auto* m=scene_.metadatas.GetComponent(v.entity);if(!m)m=&scene_.metadatas.Create(v.entity);*m=v.metadata;
+            } else scene_.metadatas.Remove(v.entity);
+            if(IsValidStableId(liveId)&&PersistentEntityId(scene_,v.entity).empty()) {
+                auto* m=scene_.metadatas.GetComponent(v.entity);if(!m)m=&scene_.metadatas.Create(v.entity);
+                m->string_values.set(PersistentEntityIdMetadataKey,liveId);
+            }
+            if(auto* name=scene_.names.GetComponent(v.entity))name->name=v.name;
+        }
     }
 }
 void SceneAssemblyCommand::Undo() {
     if(unpack_) {
-        rootSnapshot_.SetReadModeAndResetPos(true);wi::ecs::EntitySerializer ser;ser.allow_remap=false;
-        scene_.Entity_Serialize(rootSnapshot_,ser,INVALID_ENTITY,wi::scene::Scene::EntitySerializeFlags::NONE);
-        wi::jobsystem::Wait(ser.ctx);
+        if(!keepRoot_) {
+            rootSnapshot_.SetReadModeAndResetPos(true);wi::ecs::EntitySerializer ser;ser.allow_remap=false;
+            scene_.Entity_Serialize(rootSnapshot_,ser,INVALID_ENTITY,wi::scene::Scene::EntitySerializeFlags::NONE);
+            wi::jobsystem::Wait(ser.ctx);
+        }
         for(auto& snapshot:payloadSnapshots_) {
             snapshot.second.SetReadModeAndResetPos(true);
             wi::ecs::EntitySerializer reader;reader.allow_remap=false;

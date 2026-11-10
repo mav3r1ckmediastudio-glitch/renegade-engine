@@ -2116,3 +2116,20 @@ target_link_libraries(RenegadeParticleLibraryFinalize PRIVATE Renegade::EngineBr
 target_compile_options(RenegadeParticleLibraryFinalize PRIVATE /utf-8)
 
 add_dependencies(RenegadeBridgeTests RenegadeParticleEffectTests RenegadeEditorPointLookupFocusedTests RenegadeParticleTextureLibraryTests RenegadeParticleLuaTests RenegadeParticleLifetimeTests)
+
+# General prefab behaviour graph: deterministic CPU coverage in normal CI, plus
+# a real-device Studio/Runtime/content proof invoked explicitly on owner hardware.
+if(WIN32)
+    add_executable(RenegadeScenePrefabScriptTests ScenePrefabScriptTests.cpp)
+    target_link_libraries(RenegadeScenePrefabScriptTests PRIVATE Renegade::EngineBridge)
+    target_compile_options(RenegadeScenePrefabScriptTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    add_test(NAME RenegadeScenePrefabScriptTests COMMAND RenegadeScenePrefabScriptTests)
+    set_tests_properties(RenegadeScenePrefabScriptTests PROPERTIES TIMEOUT 30)
+    add_dependencies(RenegadeBridgeTests RenegadeScenePrefabScriptTests)
+    add_executable(RenegadeScenePrefabFunctionalProof ScenePrefabFunctionalProof.cpp
+        "${CMAKE_SOURCE_DIR}/Studio/src/CharacterPrefabStudioIntegration.cpp")
+    target_link_libraries(RenegadeScenePrefabFunctionalProof PRIVATE Renegade::RuntimeBootstrap)
+    target_compile_definitions(RenegadeScenePrefabFunctionalProof PRIVATE UNICODE _UNICODE)
+    add_dependencies(RenegadeBridgeTests RenegadeScenePrefabFunctionalProof)
+    target_compile_options(RenegadeScenePrefabFunctionalProof PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+endif()

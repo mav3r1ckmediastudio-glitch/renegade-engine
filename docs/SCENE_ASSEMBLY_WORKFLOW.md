@@ -1,7 +1,7 @@
 # Editor multi-selection and scene prefabs
 
 Status: first assembly workflow accepted by the owner on 10 November 2026 at 110b6a6.
-The owner accepted usability. Full functional prefab content support remains required and unfinished.
+The owner accepted usability. Functional component/behaviour support is now implemented; final native/UI/standalone verification and CI results are recorded separately below.
 The first acceptance gate is one small real assembly, before wider feature work.
 
 ## Required demonstration
@@ -60,7 +60,7 @@ relationships symmetrically.
 
 Scene prefabs use the existing .rasset manifest, project registry/provenance,
 managed projection, dependency staging and ProjectDocumentTransaction. Their
-source format is scene-assembly, importer renegade.scene.assembly, recipe schema 1.
+source format is scene-assembly, importer renegade.scene.assembly, recipe schema 1, or schema 2 when behaviour templates are present.
 Native scene serialization retains component state. A shared native entity remap
 copies the selected hierarchy and follows mesh/material/animation-data references
 to closure. References to authored objects outside the selection fail explicitly.
@@ -205,3 +205,31 @@ and internal entity references, supported material/shader resources and dependen
 The next proof is a working brazier through independent placement, Duplicate/Delete
 Undo/Redo, component editing, cold reopen, unpack and standalone Runtime. Existing
 CI covers the earlier isolated geometry checkpoint and cannot close this requirement.
+
+
+## Functional assembly workflow
+
+Use the same Group, Edit Pieces, Save Prefab, drag placement and Unpack actions
+for meshes, lights, particle effects and script-bearing objects. No extra grouping
+mode or companion-file management is exposed to the creator. Each placed copy has
+independent editable light/effect settings, fresh script identities and remapped
+references to its own components. Materials retain their native shader selection
+and authored texture bindings; project-governed Lua sources and module dependencies
+use the existing script runtime and package dependency closure.
+
+Save includes component behaviours. If a script references an object outside the
+selection, include that object or clear the reference, then save again. The modal
+shows the error without creating a partial prefab. A prefab containing only a light
+and particle effect is supported. Imported model geometry requirements remain
+enforced for ordinary imported model cards.
+
+Unpack preserves behaviours. An authored group root with its own behaviour remains
+as a named independent controller object; empty placement wrappers disappear.
+Undo restores the complete group. Save/reopen and packaged runtime startup retain
+instance edits and script references.
+
+The functional acceptance fixture is a small brazier: two meshes with different
+material shader selections, a governed flickering flame light, three particle
+layers (stationary flame, lit smoke, cone embers), a field and lifetime curve, three
+project texture assets, and a controller referencing its own light/effect. This
+uses generated geometry and stock included resources, without castle assets.
