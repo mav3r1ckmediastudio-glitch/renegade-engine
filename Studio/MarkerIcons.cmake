@@ -12,12 +12,12 @@ target_sources(RenegadeStudio PRIVATE
 )
 
 set(RENEGADE_MARKER_ICON_OUTPUT
-    "${CMAKE_BINARY_DIR}/Studio/$<CONFIG>/Content/editor/markericons")
+    "$<TARGET_FILE_DIR:RenegadeStudio>/Content/editor/markericons")
 add_custom_target(RenegadeMarkerIconAssets
     COMMAND ${CMAKE_COMMAND} -E remove_directory
         "${RENEGADE_MARKER_ICON_OUTPUT}"
     COMMAND ${CMAKE_COMMAND} -E make_directory
-        "${CMAKE_BINARY_DIR}/Studio/$<CONFIG>/Content/editor"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/editor"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_LIST_DIR}/Content/editor/markericons"
         "${RENEGADE_MARKER_ICON_OUTPUT}"

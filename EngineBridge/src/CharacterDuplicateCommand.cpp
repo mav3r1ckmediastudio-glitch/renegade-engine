@@ -5,6 +5,8 @@
 #include "renegade/bridge/IdentityService.h"
 
 #include <algorithm>
+#include <array>
+#include <vector>
 #include <utility>
 
 namespace
@@ -64,12 +66,72 @@ namespace renegade::bridge
             }
 
             const auto entitiesBefore = EnumeratePersistentSceneEntities(*scene_);
-            duplicate_ = scene_->Entity_Duplicate(source_);
+            // Use the native duplication algorithm while retaining its entity
+            // remap, so live material resources can follow every copied child.
+            wi::Archive duplicateArchive;
+            wi::ecs::EntitySerializer duplicateSerializer;
+            scene_->Entity_Serialize(duplicateArchive, duplicateSerializer, source_,
+                wi::scene::Scene::EntitySerializeFlags::RECURSIVE);
+            duplicateArchive.SetReadModeAndResetPos(true);
+            duplicate_ = scene_->Entity_Serialize(duplicateArchive, duplicateSerializer,
+                wi::ecs::INVALID_ENTITY,
+                wi::scene::Scene::EntitySerializeFlags::RECURSIVE |
+                wi::scene::Scene::EntitySerializeFlags::KEEP_INTERNAL_ENTITY_REFERENCES);
+            wi::jobsystem::Wait(duplicateSerializer.ctx);
             if (duplicate_ == wi::ecs::INVALID_ENTITY)
                 return false;
 
-            if (auto* name = scene_->names.GetComponent(duplicate_))
-                name->name += " Copy";
+            struct LiveMaterialBindings
+            {
+                wi::ecs::Entity entity;
+                std::array<wi::scene::MaterialComponent::TextureMap,
+                    wi::scene::MaterialComponent::TEXTURESLOT_COUNT> textures;
+            };
+            std::vector<LiveMaterialBindings> liveBindings;
+            for (const auto& mapping : duplicateSerializer.remap)
+            {
+                // KEEP_INTERNAL_ENTITY_REFERENCES also mentions shared external
+                // objects. Only newly created materials belong to this command.
+                if (std::binary_search(entitiesBefore.begin(), entitiesBefore.end(),
+                        mapping.second))
+                    continue;
+                const auto* original = scene_->materials.GetComponent(mapping.first);
+                auto* copy = scene_->materials.GetComponent(mapping.second);
+                if (original == nullptr || copy == nullptr)
+                    continue;
+                LiveMaterialBindings binding;
+                binding.entity = mapping.second;
+                bool hasLiveResource = false;
+                for (size_t slot = 0; slot < binding.textures.size(); ++slot)
+                {
+                    binding.textures[slot] = original->textures[slot];
+                    hasLiveResource |= original->textures[slot].resource.IsValid();
+                }
+                if (!hasLiveResource)
+                    continue;
+                for (size_t slot = 0; slot < binding.textures.size(); ++slot)
+                    copy->textures[slot] = binding.textures[slot];
+                copy->SetDirty();
+                liveBindings.push_back(std::move(binding));
+            }
+
+            if (auto* name = scene_->names.GetComponent(duplicate_)) {
+                std::string base=name->name;
+                // Remove legacy accumulated Copy suffixes, then an existing numeric suffix.
+                while(base.size()>5&&base.compare(base.size()-5,5," Copy")==0)base.resize(base.size()-5);
+                const auto space=base.find_last_of(' ');
+                if(space!=std::string::npos && space+1<base.size() &&
+                   std::all_of(base.begin()+space+1,base.end(),[](unsigned char c){return c>='0'&&c<='9';}))
+                    base.resize(space);
+                if(base.empty())base="Entity";
+                std::string candidate;unsigned suffix=2;bool clash;
+                do {
+                    candidate=base+" "+std::to_string(suffix++);clash=false;
+                    for(size_t i=0;i<scene_->names.GetCount();++i)
+                        if(scene_->names.GetEntity(i)!=duplicate_&&scene_->names[i].name==candidate){clash=true;break;}
+                }while(clash);
+                name->name=candidate;
+            }
 
             // Wicked duplicates MetadataComponent values verbatim. Replace every
             // copied persistent ID in the new hierarchy before any Character or
@@ -147,6 +209,32 @@ namespace renegade::bridge
                 companionActive_ =
                     static_cast<bool>(companion_.undo) ||
                     static_cast<bool>(companion_.redo);
+            }
+
+            // Managed textures deliberately have no loose filename. Their
+            // metadata survives native serialization, but the live resource does
+            // not. Retain it for Redo as well as the first duplicate, composing
+            // with existing governed script attachment callbacks.
+            if (!liveBindings.empty())
+            {
+                auto companionRedo = std::move(companion_.redo);
+                companion_.redo = [scene = scene_, bindings = std::move(liveBindings),
+                    companionRedo = std::move(companionRedo)]() mutable
+                {
+                    if (companionRedo && !companionRedo())
+                        return false;
+                    for (const auto& binding : bindings)
+                    {
+                        auto* material = scene->materials.GetComponent(binding.entity);
+                        if (material == nullptr)
+                            return false;
+                        for (size_t slot = 0; slot < binding.textures.size(); ++slot)
+                            material->textures[slot] = binding.textures[slot];
+                        material->SetDirty();
+                    }
+                    return true;
+                };
+                companionActive_ = true;
             }
 
             snapshot_.SetReadModeAndResetPos(false);

@@ -1,3 +1,40 @@
+## 2026-11-10: Prefab branch main integration (local checkpoint)
+
+User authorised resolving PR #193 conflicts against current main before extending
+prefab contents. Feature parent 0cac613e24143b5096a0d2edabb28e1d9c1def10; main parent
+6036b200841a37102c18a02133d257392086141f (light/particle PR #192). Updated only the
+isolated feature worktree. Owner dirty projects, castle assets and separate CI
+worktrees remain untouched. Wicked pin stays 82557d439a41d104f559b0d3134d160b7bf6154e.
+
+Resolved nine overlaps. SelectionService now combines scene-bound particle effect
+root normalization with ordered multi-selection, toggling, revisions and pruning.
+Retained both CMake source/test additions, marker routing, duplicate identity guards
+and both documentation histories. Added mixed effect/object selection regression.
+Native UI inspection exposed assembly toolbar overlap on Add menus; toolbar drawing
+and hit testing now yield to native menu popups and light/particle/prefab modals.
+
+Validation, Windows x64 Release (exit 0):
+cmake --build BUILD/selection --target RenegadeStudio RenegadeRuntime RenegadeSceneAssemblyWorkflowProof --parallel 2
+cmake --build BUILD/selection --target RenegadeLightPickerTests RenegadeParticleEffectTests RenegadeEditorPointLookupFocusedTests RenegadeAssetCatalogueTests --parallel 2
+ctest --test-dir BUILD/selection -C Release -R "RenegadeSceneAssemblyCore|RenegadeAssetCatalogueTests|RenegadeLightPickerTests|RenegadeParticleEffectTests|RenegadeEditorPointLookupFocusedTests|MarkerIconsSourceContract|EditorPointLookupSourceContract|CW05.*SourceContract|Particle.*SourceContract" --output-on-failure
+CandidateBin/RenegadeSceneAssemblyWorkflowProof.exe Proof/IntegratedBaseline
+
+10/10 focused checks passed. Full native geometry workflow passed. Actual Studio:
+three-source selection, Group, Duplicate, Undo Duplicate and Undo Group restored
+selection. Native Firelight and Particle Picker previews rendered. Rebuilt Add menu
+was unobstructed with three objects selected. Standalone Runtime rendered the saved
+review scene. Evidence: docs/evidence/selection-prefab-integration/.
+
+This closes local conflict-resolution verification only. User accepted usability
+and explicitly requires complete functional prefab contents: lights, layered
+particles, governed script attachments/references and supported shader/material
+resources. Those contents are NOT established by the earlier geometry checkpoint.
+Next: a working scripted brazier prefab; independent instances; component edit and
+Undo; save/reopen/unpack; standalone and packaged native state/dependency proof.
+Hold push until the extended candidate is verified to avoid another mid-work CI.
+No PR merge or distribution without approval; independent exact-commit release
+verification remains pending. Main branch is not modified.
+
 ## 2026-11-10: Selection usability continuation
 
 Owner accepted the first demonstrated assembly workflow at 110b6a6582ff319b19009f98fcd0589790a6d639.
@@ -62,6 +99,27 @@ Owner confirmed the demonstrated workflow works as expected at 110b6a6.
 Debug/Release hosted CI and independent review remain pending.
 This is a bounded geometry-assembly prototype, not linked prefab updates
 or companion-document scripting templates.
+
+## 2026-11-10: Studio CI assistant evidence repair
+Parent: 3e01bccbec712312314d02a992e80653666e2bdf (PR #192).
+Both Studio jobs in run 42723573254 compiled and failed only RenegadeAssistantPackagedKnowledgeTests and RenegadeAssistantWorkflowSuite. Whole-file fingerprints for StudioApplication.cpp and ARCHITECTURE.md were stale after picker integration.
+Reviewed the parent-to-picker changes: existing import, animation, player prefab, equipment and surface workflows/labels remain. Refreshed those 16 evidence records to the current canonical UTF-8/LF hashes. No verification code, acceptance receipt, workflow steps or tests weakened.
+Validation from repository root (Python 3.14; output directories outside source):
+- python Tests/AssistantWorkflowSuite.py --repo . --output <qa>/workflow-fix-suite: 84 tests PASS, including corrupt-source refusal.
+- python Tests/AssistantPackagedKnowledgeTests.py --repo . --output <qa>/workflow-fix-package: PASS, including Git-free identity, existing workflows and changed-source rejection.
+- git diff --check: PASS.
+Only workflows.json and this handoff changed. No castle changes, native changes, merge or distribution. Next: verify replacement Runtime/Studio Debug/Release CI on this commit; prior native test successes do not close the release gate.
+
+# Light and particle picker CI checkpoint
+Scope: light picker, six scripted behaviours and reusable setups; layered particle picker, texture browser, local movement fields, lifetime curves, emission shapes, timing and governed Lua controls.
+Layer size % affects only the selected layer using its own loaded reference. Its 1% floor is supported by native sanitization and Lua. Size edits update only that preview emitter; layer selection does not restart the composite. Whole Effect controls remain composite-wide.
+Castle meshes/scenes, model-import preview lifetime work, selection-outline depth changes and importer rebuild tests are excluded. A bounded shared allocator registry correction is a prerequisite for multiple preview Scenes and has its own decision and regression.
+Wicked remains pinned. ParticleCoreOverlay reproduces native changes from a clean checkout.
+Local evidence: Release Studio/Runtime builds; 11 focused checks; five lifetime and seven shape/timing GPU cases; standalone Lua; four microscopic-size checks and native capture of a one-percent ember size. The isolated GPU proof preserves the root and other emitter during resize. Simultaneous mouse testing was not valid UI-binding evidence. Owner acceptance is pending.
+Starter presets remain project data; no castle project is published here. This CI request does not authorize merge or release distribution.
+Next: normal Runtime/Studio Debug/Release workflows for this exact branch. Castle work remains deferred.
+
+---
 
 ## 2026-11-06: Owner-requested intensity slider 0-500 range (local preview)
 

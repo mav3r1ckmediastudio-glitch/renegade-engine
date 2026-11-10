@@ -888,6 +888,12 @@ namespace renegade::studio
 
     void StudioRenderPath::PreRender()
     {
+        if(lightPickerFrameSuspended_) {
+            lightPicker_.PreRenderPreview();particlePicker_.PreRenderPreview();
+            wi::RenderPath2D::PreRender();
+            return;
+        }
+        lightPicker_.PreRenderPreview();particlePicker_.PreRenderPreview();
         if (testLevelFrameSuspended_ || testLevelRuntime_.IsActive())
         {
             // Runtime owns the live 3D world during Test Level. Keep only the
@@ -912,6 +918,11 @@ namespace renegade::studio
 
     void StudioRenderPath::Render() const
     {
+        if(lightPickerFrameSuspended_) {
+            lightPicker_.RenderPreview();particlePicker_.RenderPreview();
+            wi::RenderPath2D::Render();
+            return;
+        }
         if (testLevelFrameSuspended_ || testLevelRuntime_.IsActive())
         {
             wi::RenderPath2D::Render();
@@ -925,6 +936,7 @@ namespace renegade::studio
             modelImportPreview_->Render();
             // Retain the rendered texture once ready, until the view rotates.
         }
+        lightPicker_.RenderPreview();particlePicker_.RenderPreview();
         if (assemblyPanel_.IsVisible() && assemblyPreview_ && assemblyPreview_->NeedsRender())
             assemblyPreview_->Render();
         if (projectileCreatePanel_.IsVisible() && projectilePreview_ && projectilePreview_->NeedsRender())
@@ -1778,6 +1790,13 @@ namespace renegade::studio
             lightLabel_,
             "Light Section",
             "LIGHT // NATIVE WICKED");
+        lightPickerButton_.Create("Open Light Picker");
+        lightPickerButton_.SetText("COLOUR / LIGHT PICKER...");
+        lightPickerButton_.OnClick([this](const wi::gui::EventArgs&) {
+            if(session_&&(bridge::ParticleEffectRoot(session_->Scenes().GetScene(),session_->Selection().SelectedEntity())!=wi::ecs::INVALID_ENTITY||session_->Scenes().GetScene().emitters.Contains(session_->Selection().SelectedEntity())))OpenParticlePicker(true);
+            else OpenLightPicker(wi::scene::LightComponent::POINT, true);
+        });
+        inspectorPanel_.AddWidget(&lightPickerButton_);
         lightType_.Create("Light Type");
         lightType_.AddItem(
             "DIRECTIONAL",
@@ -3599,6 +3618,10 @@ namespace renegade::studio
         CreatePickupEditor();
         CreateAssemblyEditor();
         CreateEquipmentEditor();
+        lightPicker_.Create();
+        GetGUI().AddWidget(&lightPicker_);
+        particlePicker_.Create();GetGUI().AddWidget(&particlePicker_);GetGUI().AddWidget(&particlePicker_.TextureBrowserWidget());
+        studioChrome_.SetParticlePickerAction([this](bool edit){OpenParticlePicker(edit);});
         GetGUI().AddWidget(&modelImportPanel_);
 
         assistantDock_.Create();
@@ -3866,6 +3889,9 @@ namespace renegade::studio
         gui.SetColor(HologramActive, wi::gui::ACTIVE);
         gui.SetColor(HologramFocus, wi::gui::DEACTIVATING);
         gui.SetColor(HologramPanel, wi::gui::WIDGET_ID_WINDOW_BASE);
+        // Dropdown lists have their own colour; ordinary widget states do not
+        // replace Wicked's translucent default menu surface.
+        gui.SetColor(wi::Color(33,35,37,255), wi::gui::WIDGET_ID_COMBO_DROPDOWN);
         gui.SetColor(
             wi::Color(7, 10, 12, 255),
             wi::gui::WIDGET_ID_TEXTINPUTFIELD_IDLE);
@@ -4062,6 +4088,7 @@ namespace renegade::studio
         DiagnosticInputFrame diagnosticInput(diagnosticService_,
             wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
         PollTestLevel();
+        lightPickerFrameSuspended_=lightPicker_.IsVisible()||particlePicker_.IsVisible();
         // STOP may run from the 2D GUI update below. Retain 2D ownership for
         // the rest of that frame; 3D must first receive a fresh Scene::Update.
         testLevelFrameSuspended_ = testLevelRuntime_.IsActive();
@@ -4122,6 +4149,19 @@ namespace renegade::studio
             return;
         }
 
+        if(lightPickerFrameSuspended_) {
+            // The modal owns the only active 3D preview. Keep the last authored
+            // viewport image; never prepare two different Scene worlds every
+            // frame just to edit one light. Retain this boundary through a
+            // close/apply gesture until a fresh main Scene::Update next frame.
+            wi::RenderPath2D::Update(dt);
+            if(lightPicker_.IsVisible())UpdateLightPicker(dt);
+            if(particlePicker_.IsVisible())UpdateParticlePicker(dt);
+            pendingAction_=EditorAction::None;
+            diagnosticInput.StopAt("light_picker");
+            return;
+        }
+
         if (session_ != nullptr)
         {
             ScopedCPUProfiling("Studio weather authoring");
@@ -4170,7 +4210,7 @@ namespace renegade::studio
                 studioForkLightning_.Update(lightningScene,revision,camera->Eye,camera->At,dt);
                 renegade::runtime::ThunderAudio().Update(dt,camera->Eye,camera->At);
             }
-            {ScopedCPUProfiling("Studio native 3D update");auto riverBindings=riverFlow_.Bind();RenderPath3D::Update(dt);}
+            {ScopedCPUProfiling("Studio native 3D update");auto riverBindings=riverFlow_.Bind();bridge::UpdateParticleEffectSprites(*scene,dt);RenderPath3D::Update(dt);}
         }
 
         TickWaterfallStudioProof();
@@ -4248,6 +4288,13 @@ namespace renegade::studio
             }
         }
 
+        if(particlePicker_.IsVisible()){UpdateParticlePicker(dt);return;}
+        if (lightPicker_.IsVisible()) {
+            UpdateLightPicker(dt);
+            diagnosticInput.StopAt("light_picker");
+            pendingAction_=EditorAction::None;
+            return;
+        }
         if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_)
         {
             if (modelImportPreview_->NeedsRender())
@@ -4400,6 +4447,7 @@ namespace renegade::studio
             return;
         }
 
+        if(HandleParticlePlacement(pointer))return;
         if (HandleLightPlacement(pointer))
         {
             diagnosticInput.StopAt("light_placement");
@@ -4597,6 +4645,11 @@ namespace renegade::studio
 
     void StudioRenderPath::Compose(const wi::graphics::CommandList cmd) const
     {
+        if(lightPickerFrameSuspended_) {
+            if(pathTracePreviewActive_)RenderPath3D_PathTracing::Compose(cmd);
+            else wi::RenderPath3D::Compose(cmd);
+            return;
+        }
         if (testLevelFrameSuspended_ || testLevelRuntime_.IsActive())
         {
             wi::RenderPath2D::Compose(cmd);
@@ -5205,12 +5258,13 @@ namespace renegade::studio
             return;
         }
 
+        if(particlePlacementActive_){statusLabel_.SetText("PLACE EFFECT // CLICK A SURFACE // RMB TO FINISH");return;}
         if (lightPlacementActive_)
         {
             statusLabel_.SetText(
                 std::string("PLACE ") +
                 PlacementLightName(lightPlacementType_) +
-                " LIGHT // LEFT CLICK SURFACE // ESC OR RIGHT CLICK CANCEL");
+                " LIGHT // LEFT CLICK TO PLACE // RMB TO FINISH");
             studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
             studioChrome_.SetStatusText(statusLabel_.GetText());
             return;
@@ -5260,6 +5314,8 @@ namespace renegade::studio
         for (const auto& entity : session_->Scenes().ListEntities())
         {
             if(waterfallRenderer_.Owns(entity.entity))continue;
+            const auto effectRoot = bridge::ParticleEffectRoot(scene,entity.entity);
+            if(effectRoot != wi::ecs::INVALID_ENTITY && effectRoot != entity.entity)continue;
             // A broken Gate 5 build could serialize Wicked's fallback Weather
             // onto the Terrain entity. Hide only the dedicated Environment
             // carrier; legacy dual-role terrain must remain discoverable.
@@ -5801,6 +5857,8 @@ namespace renegade::studio
             widget.SetVisible(hasLight);
         };
         setLightVisible(lightLabel_);
+        const bool particleEffectSelected=hasSession&&!environmentWorkspaceActive_&&!terrainWorkspaceActive_&&(bridge::ParticleEffectRoot(session_->Scenes().GetScene(),selectedEntity)!=wi::ecs::INVALID_ENTITY||session_->Scenes().GetScene().emitters.Contains(selectedEntity));
+        lightPickerButton_.SetVisible(hasLight||particleEffectSelected);lightPickerButton_.SetText(particleEffectSelected?"EDIT EFFECT...":"COLOUR / LIGHT PICKER...");
         setLightVisible(lightType_);
         setLightVisible(lightColorRed_);
         setLightVisible(lightColorGreen_);
@@ -6273,7 +6331,7 @@ namespace renegade::studio
             oceanSliderActive_ ||
             lightSliderActive_ ||
             materialSliderActive_ ||
-            lightPlacementActive_ ||
+            lightPlacementActive_ || particlePlacementActive_ ||
             terrainSliderActive_ ||
             terrainTextureScaleActive_ ||
             terrainStrokeActive_)
@@ -6380,7 +6438,7 @@ namespace renegade::studio
                 CancelWeatherPresetTransition();
             }
         }
-        if (lightPlacementActive_ && action != EditorAction::CreateLight)
+        if ((lightPlacementActive_||particlePlacementActive_) && action != EditorAction::CreateLight)
         {
             CancelLightPlacement();
         }
@@ -6879,10 +6937,14 @@ namespace renegade::studio
             return;
         }
         ClearSelectionOutline();
-        if (!session_->Commands().Execute(
-                std::make_unique<bridge::DeleteEntityCommand>(
-                    session_->Scenes().GetScene(),
-                    entity)))
+        std::unique_ptr<bridge::ICommand> deleteCommand;
+        auto& deletingScene=session_->Scenes().GetScene();
+        if(deletingScene.lights.Contains(entity)) {
+            std::string error;auto& scripting=session_->Scripts();
+            auto* doc=scripting.EnsureCurrent(error)?scripting.Document():nullptr;
+            deleteCommand=bridge::MakeDeleteLightSetupCommand(deletingScene,doc,entity);
+        } else deleteCommand=std::make_unique<bridge::DeleteEntityCommand>(deletingScene,entity);
+        if (!session_->Commands().Execute(std::move(deleteCommand)))
         {
             SyncSelectionOutline();
             return;
@@ -7508,34 +7570,119 @@ namespace renegade::studio
         return changed;
     }
 
-    void StudioRenderPath::CreateLight(
-        const wi::scene::LightComponent::LightType type)
+
+    void StudioRenderPath::OpenParticlePicker(bool editSelected) {
+        if(!session_||!session_->Projects().HasProject()||testLevelRuntime_.IsActive())return;
+        CancelLightPlacement();lightPicker_.SetVisible(false);particlePlacementActive_=false;StopSunPreview(true);
+        auto target=editSelected?session_->Selection().SelectedEntity():wi::ecs::INVALID_ENTITY;
+        auto& scene=session_->Scenes().GetScene();auto root=bridge::ParticleEffectRoot(scene,target);
+        if(root!=wi::ecs::INVALID_ENTITY)target=root;
+        if(editSelected&&!scene.emitters.Contains(target)&&root==wi::ecs::INVALID_ENTITY)return;
+        studioChrome_.PrepareViewportPlacement();
+        particlePicker_.SetPos({std::max(8.0f,(GetLogicalWidth()-1150)*.5f),32});
+        particlePicker_.Open(*session_,target);
+    }
+    void StudioRenderPath::UpdateParticlePicker(float dt) {
+        if(!particlePicker_.MatchesSession(*session_)){particlePicker_.SetVisible(false);return;}
+        particlePicker_.UpdatePreview(dt);if(!particlePicker_.TakeApplyRequest())return;
+        auto setup=particlePicker_.Draft();std::string error;
+        if(!bridge::ValidateParticleEffect(setup,error)){particlePicker_.ShowError(error);return;}
+        auto target=particlePicker_.Target();
+        if(target==wi::ecs::INVALID_ENTITY){
+            particlePlacementSetup_=setup;particleKeepPlacing_=particlePicker_.KeepPlacing();
+            session_->Selection().Clear();studioChrome_.PrepareViewportPlacement();
+            SetEnvironmentWorkspaceActive(false);SetTerrainWorkspaceActive(false);SetRenderWorkspaceActive(false);
+            DisableWd01VegetationBrush();particlePlacementActive_=true;particlePicker_.SetVisible(false);
+            RefreshHierarchy();RefreshInspector();RefreshStatus();
+        }else {
+            const auto revision=session_->Scenes().Revision();const auto project=session_->Projects().CurrentProject();
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,setup,target,revision,project](uint64_t){
+                if(!session_||session_->Scenes().Revision()!=revision)return;
+                auto command=std::make_unique<bridge::ParticleEffectCommand>(session_->Scenes().GetScene(),project.rootPath,project.projectId,setup,target);
+                if(session_->Commands().Execute(std::move(command))){RefreshHierarchy();RefreshInspector();RefreshStatus();}
+            });
+            particlePicker_.SetVisible(false);
+        }
+    }
+    bool StudioRenderPath::HandleParticlePlacement(const XMFLOAT4& pointer) {
+        if(!particlePlacementActive_||!session_)return false;
+        if(wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT)){
+            particlePlacementActive_=false;lightFinishRmbHeld_=true;RefreshStatus();return true;
+        }
+        if(GetGUI().HasFocus()||!IsPointerOverViewport(pointer))return true;
+        auto ray=wi::renderer::GetPickRay((long)pointer.x,(long)pointer.y,*this,*camera);
+        auto picked=wi::scene::Pick(ray,wi::enums::FILTER_OBJECT_ALL|wi::enums::FILTER_TERRAIN,~0u,session_->Scenes().GetScene());
+        XMFLOAT3 pos=picked.position;bool surface=picked.entity!=wi::ecs::INVALID_ENTITY;
+        if(!surface&&std::abs(ray.direction.y)>.0001f){
+            float d=-ray.origin.y/ray.direction.y;if(d>=ray.TMin&&d<=ray.TMax){pos={ray.origin.x+ray.direction.x*d,0,ray.origin.z+ray.direction.z*d};surface=true;}
+        }
+        if(!surface){wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);return true;}
+        wi::input::SetCursor(wi::input::CURSOR_CROSS);
+        wi::renderer::DrawSphere(wi::primitive::Sphere(pos,.12f),{.54f,.88f,.82f,.9f},false);
+        if(!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))return true;
+        auto setup=particlePlacementSetup_;auto revision=session_->Scenes().Revision();auto project=session_->Projects().CurrentProject();
+        wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,setup,pos,revision,project](uint64_t){
+            if(!session_||session_->Scenes().Revision()!=revision)return;
+            auto command=std::make_unique<bridge::ParticleEffectCommand>(session_->Scenes().GetScene(),project.rootPath,project.projectId,setup,wi::ecs::INVALID_ENTITY,pos);
+            auto* result=command.get();if(session_->Commands().Execute(std::move(command))){session_->Selection().Select(result->Entity());RefreshHierarchy();RefreshInspector();RefreshStatus();}
+        });
+        particlePlacementActive_=particleKeepPlacing_;return true;
+    }
+
+    void StudioRenderPath::OpenLightPicker(const wi::scene::LightComponent::LightType type,bool editSelected)
     {
-        if (session_ == nullptr || camera == nullptr)
-        {
-            return;
+        if(!session_||!session_->Projects().HasProject()||testLevelRuntime_.IsActive())return;
+        particlePlacementActive_=false;particlePicker_.SetVisible(false);
+        CancelLightPlacement();StopSunPreview(true);
+        const auto target=editSelected?session_->Selection().SelectedEntity():wi::ecs::INVALID_ENTITY;
+        if(editSelected&&!session_->Scenes().GetScene().lights.Contains(target))return;
+        lightPicker_.SetPos({std::max(8.0f,(GetLogicalWidth()-1020.0f)*.5f),40});
+        studioChrome_.PrepareViewportPlacement();
+        if(target==wi::ecs::INVALID_ENTITY)session_->Selection().Clear();
+        lightPicker_.Open(*session_,type,target);
+    }
+    void StudioRenderPath::UpdateLightPicker(float dt)
+    {
+        if(!lightPicker_.MatchesSession(*session_)){lightPicker_.SetVisible(false);return;}
+        lightPicker_.UpdatePreview(dt);
+        if(!lightPicker_.TakePlaceRequest()&&!lightPicker_.TakeApplyRequest())return;
+        const auto setup=lightPicker_.Draft();
+        std::string error;
+        bridge::ScriptDocument* scripts=nullptr;
+        if(session_->Scripts().EnsureCurrent(error))scripts=session_->Scripts().Document();
+        if(setup.behaviour!=bridge::LightBehaviour::Constant) {
+            if(!scripts||!bridge::EnsureLightBehaviourSource(session_->Projects().CurrentProject().rootPath,error)){
+                lightPicker_.ShowError(error);return;
+            }
         }
-
-        StopSunPreview(true);
-        SetEnvironmentWorkspaceActive(false);
-        SetTerrainWorkspaceActive(false);
-
-        lightPlacementActive_ = false;
-        if (type != wi::scene::LightComponent::DIRECTIONAL)
-        {
-            lightPlacementType_ = type;
-            lightPlacementActive_ = true;
-            ClearSelectionOutline();
-            RefreshStatus();
-            return;
+        const auto target=lightPicker_.Target();
+        if(target==wi::ecs::INVALID_ENTITY) {
+            lightPlacementSetup_=setup;lightPlacementType_=setup.light.type;
+            lightKeepPlacing_=lightPicker_.KeepPlacing();
+            session_->Selection().Clear();
+            studioChrome_.PrepareViewportPlacement();
+            SetEnvironmentWorkspaceActive(false);SetTerrainWorkspaceActive(false);SetRenderWorkspaceActive(false);
+            DisableWd01VegetationBrush();
+            lightPlacementActive_=true;ClearSelectionOutline();lightPicker_.SetVisible(false);
+            RefreshHierarchy();RefreshInspector();RefreshStatus();
+        } else {
+            const auto revision=session_->Scenes().Revision();
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this,setup,target,revision](uint64_t){
+                    if(!session_||session_->Scenes().Revision()!=revision)return;
+                    std::string error;
+                    bridge::ScriptDocument* doc=session_->Scripts().EnsureCurrent(error)?session_->Scripts().Document():nullptr;
+                    if(session_->Commands().Execute(std::make_unique<bridge::LightSetupCommand>(
+                       session_->Scenes().GetScene(),doc,setup,target))) {
+                        RefreshHierarchy();RefreshInspector();RefreshStatus();
+                    }
+                });
+            lightPicker_.SetVisible(false);
         }
-
-        XMFLOAT3 position = camera->Eye;
-        position.x += camera->At.x * 5.0f;
-        position.y += camera->At.y * 5.0f;
-        position.z += camera->At.z * 5.0f;
-
-        PlaceLight(type, position);
+    }
+    void StudioRenderPath::CreateLight(const wi::scene::LightComponent::LightType type)
+    {
+        OpenLightPicker(type);
     }
 
     void StudioRenderPath::PlaceLight(
@@ -7549,11 +7696,13 @@ namespace renegade::studio
         }
 
         ClearSelectionOutline();
-        auto command = std::make_unique<bridge::CreateLightCommand>(
-            session_->Scenes().GetScene(),
-            type,
-            position,
-            rotation);
+        std::string error;
+        bridge::ScriptDocument* scripts=session_->Scripts().EnsureCurrent(error)
+            ?session_->Scripts().Document():nullptr;
+        if(lightPlacementSetup_.behaviour!=bridge::LightBehaviour::Constant&&!scripts)return;
+        auto command = std::make_unique<bridge::LightSetupCommand>(
+            session_->Scenes().GetScene(),scripts,lightPlacementSetup_,
+            wi::ecs::INVALID_ENTITY,position,rotation);
         auto* createCommand = command.get();
         if (!session_->Commands().Execute(std::move(command)))
         {
@@ -7561,9 +7710,9 @@ namespace renegade::studio
             return;
         }
 
-        lightPlacementActive_ = false;
+        lightPlacementActive_ = lightKeepPlacing_;
         wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
-        session_->Selection().Select(createCommand->CreatedEntity());
+        session_->Selection().Select(createCommand->Entity());
         RefreshHierarchy();
         RefreshInspector();
         RefreshStatus();
@@ -7571,6 +7720,7 @@ namespace renegade::studio
 
     void StudioRenderPath::CancelLightPlacement()
     {
+        particlePlacementActive_=false;
         if (!lightPlacementActive_)
         {
             return;
@@ -7771,14 +7921,20 @@ namespace renegade::studio
 
     bool StudioRenderPath::HandleLightPlacement(const XMFLOAT4& pointer)
     {
+        // Consume the entire finish gesture, including a held RMB, so it cannot
+        // become fly-camera navigation on the frame after placement ends.
+        if(lightFinishRmbHeld_) {
+            if(!wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT))lightFinishRmbHeld_=false;
+            return true;
+        }
         if (!lightPlacementActive_ || session_ == nullptr)
         {
             return false;
         }
 
-        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
-            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
+        if (wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
         {
+            lightFinishRmbHeld_=true;
             CancelLightPlacement();
             return true;
         }
@@ -7835,7 +7991,9 @@ namespace renegade::studio
         {
             rotation = RotationFromTo(XMFLOAT3(0, 0, -1), picked.normal);
         }
-        PlaceLight(lightPlacementType_, picked.position, rotation);
+        XMFLOAT3 anchor;
+        XMStoreFloat3(&anchor,XMLoadFloat3(&picked.position)+XMLoadFloat3(&picked.normal)*0.08f);
+        PlaceLight(lightPlacementType_, anchor, rotation);
         return true;
     }
 
@@ -7877,7 +8035,7 @@ bool StudioRenderPath::HandleAudioSceneIcons(
 
     auto& scene = session_->Scenes().GetScene();
     const auto selected = session_->Selection().SelectedEntity();
-    const bool canSelect = !lightPlacementActive_ && !flyCameraActive_ &&
+    const bool canSelect = !lightPlacementActive_ && !particlePlacementActive_ && !flyCameraActive_ &&
         !GetGUI().HasFocus() && !gizmo_.IsInteracting() &&
         IsPointerOverViewport(pointer) &&
         wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
@@ -8297,7 +8455,7 @@ bool StudioRenderPath::HandleRiverSplineControlPoints(const XMFLOAT4& pointer)
     auto& scene = session_->Scenes().GetScene();
     const auto selected = session_->Selection().SelectedEntity();
     const bool canPick = !terrainRiverBrushActive_ && !IsWd01VegetationBrushActive() && !flyCameraActive_ &&
-        !lightPlacementActive_ && !GetGUI().HasFocus() &&
+        !lightPlacementActive_ && !particlePlacementActive_ && !GetGUI().HasFocus() &&
         !gizmo_.IsInteracting() && !studioChrome_.ConsumedPointerThisFrame() &&
         IsPointerOverViewport(pointer) &&
         wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
@@ -8409,7 +8567,7 @@ bool StudioRenderPath::HandleDecalProbeSceneIcons(
     }
 
     auto& scene = session_->Scenes().GetScene();
-    const bool canSelect = !lightPlacementActive_ && !flyCameraActive_ &&
+    const bool canSelect = !lightPlacementActive_ && !particlePlacementActive_ && !flyCameraActive_ &&
         !GetGUI().HasFocus() && !gizmo_.IsInteracting() &&
         IsPointerOverViewport(pointer) &&
         wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
@@ -8719,7 +8877,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         const auto selected = session_->Selection().SelectedEntity();
         wi::ecs::Entity hit = wi::ecs::INVALID_ENTITY;
         float bestDistanceSquared = 22.0f * 22.0f;
-        const bool canSelect = !lightPlacementActive_ &&
+        const bool canSelect = !lightPlacementActive_ && !particlePlacementActive_ &&
             !flyCameraActive_ && !GetGUI().HasFocus() &&
             !gizmo_.IsInteracting() &&
             IsPointerOverViewport(pointer) &&
@@ -9466,7 +9624,8 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
     bool StudioRenderPath::HandleAssemblyToolbar(const XMFLOAT4& pointer)
     {
-        if(pendingAction_!=EditorAction::None)return false;
+        if(pendingAction_!=EditorAction::None || studioChrome_.HasOpenMenuPopup() ||
+            scenePrefabSavePanel_.IsVisible() || lightPicker_.IsVisible() || particlePicker_.IsVisible())return false;
         if(!session_ || projectHubVisible_ || environmentWorkspaceActive_ || terrainWorkspaceActive_ || renderWorkspaceActive_ ||
             modelImportPanel_.IsVisible() || assemblyPanel_.IsVisible() || handGripPanel_.IsVisible() ||
             !session_->Selection().HasSelection())return false;
@@ -9489,7 +9648,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
     void StudioRenderPath::DrawSelectionGesture(wi::graphics::CommandList cmd) const
     {
-        if(scenePrefabSavePanel_.IsVisible())return;
+        // Native menus and modal pickers own this screen space and gesture.
+        if(scenePrefabSavePanel_.IsVisible() || studioChrome_.HasOpenMenuPopup() ||
+            lightPicker_.IsVisible() || particlePicker_.IsVisible())return;
         if(session_ && !projectHubVisible_ && !environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
             !modelImportPanel_.IsVisible() && !assemblyPanel_.IsVisible() && !handGripPanel_.IsVisible() &&
             session_->Selection().HasSelection()) {
@@ -13036,6 +13197,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             projectHubChrome_.SetNewProjectMode(false);
         }
         hubNewProjectNameInput_.SetVisible(visible && hubNewProjectMode_);
+        if(visible)lightPicker_.SetVisible(false);
         hubNewProjectConfirmButton_.SetVisible(visible && hubNewProjectMode_);
         hubNewProjectCancelButton_.SetVisible(visible && hubNewProjectMode_);
         // Stock workspace surfaces stay hidden. RenegadeStudioChrome owns the

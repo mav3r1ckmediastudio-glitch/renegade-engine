@@ -2136,3 +2136,9 @@ Native scene-duplicate companion hooks first determine whether the source has
 script attachments. Fresh unsaved geometry with no attachments needs no saved
 identity; scripted duplication retains strict persistent-ID validation and rollback.
 The native graphics proof installs the real Studio hook to cover this boundary.
+
+## Light and particle authoring
+LightPresetService owns reusable setups, six governed scripts and undoable changes. Pickers call bridge commands.
+ParticleEffectService owns composite layers, four local fields, lifetime curves, shapes and shared timing. RuntimeParticleLua exposes governed instance-safe commands. Runtime closure includes presets and texture products. Marker/hierarchy selection resolve complete effect roots.
+A bounded configure overlay reproduces particle changes on the pinned Wicked tree. The shared allocator overlay keeps preview Scene lifetimes consistent across translation units. Neither changes the upstream pin.
+Size edits queue a selected-emitter update before GPU preparation. Selection does not restart the effect. Percentages use per-layer loaded references; whole-effect scaling is separate.

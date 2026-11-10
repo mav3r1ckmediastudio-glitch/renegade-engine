@@ -1,3 +1,4 @@
+#include "renegade/bridge/ParticleEffectRuntimeDependencies.h"
 #include "renegade/bridge/TestLevelLaunchTiming.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/TestLevelSnapshotService.h"
@@ -1299,6 +1300,9 @@ namespace renegade::bridge
             if (!scenes_.CurrentPath().empty() &&
                 !SnapshotInventoryProjectInputs(project, created, scenes_.CurrentPath(), error))
                 return failAndCleanup("Could not snapshot inventory gameplay inputs: " + error);
+
+            if (!SnapshotParticleEffectRuntimeInputs(project.rootPath, project.projectId, created.sessionDirectory, error))
+                return failAndCleanup("Could not snapshot particle runtime catalog: " + error);
 
             if (!SnapshotGovernedMaterialInputs(
                     project,

@@ -1,7 +1,7 @@
 # Editor multi-selection and scene prefabs
 
 Status: first assembly workflow accepted by the owner on 10 November 2026 at 110b6a6.
-The selection usability follow-up is locally verified; hosted CI and new owner review remain pending.
+The owner accepted usability. Full functional prefab content support remains required and unfinished.
 The first acceptance gate is one small real assembly, before wider feature work.
 
 ## Required demonstration
@@ -190,3 +190,18 @@ its embedded commit string remains the accepted parent. New owner acceptance,
 hosted Debug/Release CI and independent exact-commit review remain pending.
 No linked updates, overrides, scripting-template, collision, packaged-build or
 playable-character acceptance is claimed from this small geometry fixture.
+
+## Current main integration
+
+The feature branch integrates light/particle main 6036b20 after owner instruction.
+Ordered selection normalizes internal particle layers at its shared bridge boundary,
+including set and toggle operations. Geometry prefab workflow and ten focused checks
+pass locally; Studio shows both pickers alongside the accepted prefab interaction.
+See evidence/selection-prefab-integration/ and HANDOFF for commands and source hashes.
+
+This is an integration checkpoint. General prefab completion requires a functional
+assembly carrying light behaviour, complete layered particles, script properties
+and internal entity references, supported material/shader resources and dependencies.
+The next proof is a working brazier through independent placement, Duplicate/Delete
+Undo/Redo, component editing, cold reopen, unpack and standalone Runtime. Existing
+CI covers the earlier isolated geometry checkpoint and cannot close this requirement.

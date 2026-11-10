@@ -1,0 +1,78 @@
+PASS: Shift-toggle selects three pieces
+PASS: Shift-toggle removes one piece
+PASS: native scene saved: MeshSource.wiscene
+PASS: create isolated real Studio companion project
+PASS: adopt the validated legacy project before opening its Level
+PASS: open saved Level through the real Studio session
+PASS: establish the saved Level and empty scripting companion before adding fresh pieces
+PASS: fresh native piece has no saved entity ID
+PASS: fresh native piece has no saved entity ID
+PASS: fresh native piece has no saved entity ID
+PASS: prepare real Studio script document:
+PASS: default Studio companion allows immediate duplication of three unsaved pieces
+PASS: default companion multi-duplicate Undo
+PASS: installed Character companion allows immediate duplication of three unsaved pieces
+PASS: real Studio companion multi-duplicate Undo and Redo preserve the selected copies
+PASS: load independent mesh pieces through SceneService
+PASS: loaded mesh is valid for ordinary editor actions
+PASS: loaded mesh is valid for ordinary editor actions
+PASS: loaded mesh is valid for ordinary editor actions
+PASS: prepare a new mesh action after undoing numeric scale
+PASS: duplicate three independent loaded mesh objects
+PASS: mesh duplicate Undo restores original selection
+PASS: mesh duplicate Redo restores copies and selection
+PASS: delete three loaded mesh copies together
+PASS: mesh delete Undo restores all copies and selection
+PASS: group selected pieces
+PASS: group preserves world transforms
+PASS: parent plus child selection transforms once
+PASS: whole group versus Edit Pieces selection
+PASS: group Undo restores independent objects
+PASS: group Redo preserves identity
+PASS: duplicate complete assembly
+PASS: duplicate is separate named assembly
+PASS: move duplicate as one unit
+PASS: duplicate retains three independently editable pieces
+PASS: edit one component
+PASS: original assembly stays independent
+PASS: Undo restores edited component
+PASS: multi move records one Undo
+PASS: multi move Undo restores both
+PASS: project registry created
+PASS: save prefab:
+PASS: browser catalogue includes saved prefab:
+PASS: ordinary Asset Browser allows placing the saved scene prefab
+PASS: invalid prefab remains blocked by placement policy
+PASS: unrelated product is not admitted as a scene prefab
+PASS: prefab filter finds the saved assembly by durable source format
+PASS: existing prefab never overwritten silently
+PASS: cold prefab preparation:
+PASS: prefab contains only selected geometry and its materials
+PASS: prefab preserves all three authored material colours
+PASS: save instances using an external shared mesh/material: A prefab with that name already exists. Choose a new name.
+PASS: shared resource closure excludes the unselected donor object
+PASS: shared donor material retained
+PASS: place another prefab instance through ordinary placement command
+PASS: placed prefab has exactly its three visible pieces
+PASS: placement Undo removes whole instance
+PASS: placement Redo restores whole instance
+PASS: native scene saved: AssemblyRoundtrip.wiscene
+PASS: cold scene reopen
+PASS: cold reopen preserves prefab instance identity
+PASS: prepare independent native drag template
+PASS: native drag adoption exposes editable assembly
+PASS: native drag adoption unpacks exactly three components without geometry loss
+PASS: native drag Unpack Undo restores assembly
+PASS: native drag Unpack Redo preserves geometry
+PASS: unpack cold prefab instance
+PASS: unpack exposes three pieces with no geometry loss
+PASS: unpacked piece is independently selectable
+PASS: unpacked piece is independently selectable
+PASS: unpacked piece is independently selectable
+PASS: unpack Undo restores prefab
+PASS: unpack Redo preserves all geometry
+PASS: native scene saved: AssemblyUnpacked.wiscene
+PASS: native scene saved: AssemblySource.wiscene
+PASS: create native review project:
+REVIEW PROJECT: <isolated-worktree>/Proof/IntegratedBaseline/AssemblyReview/AssemblyReview.renegade
+ASSEMBLY WORKFLOW PASSED

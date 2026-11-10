@@ -3,6 +3,7 @@
 #include "StudioApplication.h"
 
 #include "renegade/bridge/AudioService.h"
+#include "renegade/bridge/ParticleEffectMarkerService.h"
 #include "renegade/bridge/PlayerService.h"
 
 #include <array>
@@ -302,7 +303,9 @@ namespace renegade::studio
                         // Probes must remain visible even in existing packages without
                         // a probe PNG. Draw in the editor GUI pass, never the global
                         // debug queue consumed by offscreen preview render paths.
-                        if (kind == MarkerIconKind::EnvironmentProbe)
+                        const bool particleFallback = kind == MarkerIconKind::ParticleEmitter &&
+                            (index >= resources_.size() || !resources_[index].IsValid());
+                        if (kind == MarkerIconKind::EnvironmentProbe || particleFallback)
                         {
                             const wi::Color color = isSelected
                                 ? wi::Color(255, 122, 31, 255)
@@ -328,7 +331,17 @@ namespace renegade::studio
                             }
                             line(XMFLOAT2(center.x-radius,center.y), XMFLOAT2(center.x+radius,center.y));
                             line(XMFLOAT2(center.x,center.y-radius), XMFLOAT2(center.x,center.y+radius));
-                            if (isSelected)
+                            if (particleFallback)
+                            {
+                                // Four satellite sparks distinguish the fallback from a probe.
+                                for (int i=0;i<4;++i) {
+                                    const float a=XM_PIDIV2*i+XM_PIDIV4;
+                                    const float x=center.x+std::cos(a)*(radius+6);
+                                    const float y=center.y+std::sin(a)*(radius+6);
+                                    line({x-2,y-2},{x+2,y+2});line({x-2,y+2},{x+2,y-2});
+                                }
+                            }
+                            if (isSelected && kind == MarkerIconKind::EnvironmentProbe)
                             {
                                 const auto* transform = scene.transforms.GetComponent(entity);
                                 if (transform)
@@ -372,7 +385,8 @@ namespace renegade::studio
             {
                 return IsVisible() && owner_ != nullptr &&
                     !owner_->IsProjectHubVisible() &&
-                    !owner_->IsTestLevelRuntimeActive();
+                    !owner_->IsTestLevelRuntimeActive() &&
+                    !owner_->IsLightAuthoringInputActive();
             }
 
             void ForEachMarker(
@@ -437,9 +451,8 @@ namespace renegade::studio
                         emit(MarkerIconKind::AudioSource, entity, transform->GetPosition());
                 }
 
-                for (std::size_t index = 0; index < scene.emitters.GetCount(); ++index)
+                for (const auto entity : bridge::ParticleEffectMarkerEntities(scene))
                 {
-                    const wi::ecs::Entity entity = scene.emitters.GetEntity(index);
                     const auto* transform = scene.transforms.GetComponent(entity);
                     if (transform != nullptr)
                         emit(MarkerIconKind::ParticleEmitter, entity, transform->GetPosition());

@@ -130,6 +130,9 @@ add_executable(RenegadeStudio WIN32
     src/FirstPersonAssemblyEditor.cpp
     src/PlayerPrefabEditor.cpp
     src/PlayerEquipmentEditor.cpp
+    src/LightPickerWindow.cpp
+    src/ParticlePickerWindow.cpp
+    src/ParticleTextureBrowser.cpp
     src/PlayerProjectileEditor.cpp
     src/StudioLiveDiagnostics.cpp
     src/StudioApplication.h
@@ -161,6 +164,7 @@ target_link_libraries(RenegadeStudio
     PRIVATE
         Renegade::EngineBridge
         Renegade::ScreenRenderer
+        Renegade::RuntimeBootstrap
         Renegade::TestLevelRuntimeProcess
         mfplat
         winhttp
@@ -415,3 +419,14 @@ add_custom_command(TARGET RenegadeStudio POST_BUILD
         "-DRENEGADE_ROCKY_OUTPUT=$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/riverbed/rocky_rugged"
         -P "${CMAKE_SOURCE_DIR}/cmake/StageRockyRiverbed.cmake"
     VERBATIM)
+
+renegade_deploy_particle_fields(RenegadeStudio)
+
+# Studio-only catalogue; chosen textures are adopted into governed project assets.
+add_custom_target(RenegadeParticleTextureLibraryAssets
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:RenegadeStudio>/Content/Particles/TextureLibrary"
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory
+        "${CMAKE_SOURCE_DIR}/assets/particles/TextureLibrary"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/Particles/TextureLibrary"
+)
+add_dependencies(RenegadeStudio RenegadeParticleTextureLibraryAssets)

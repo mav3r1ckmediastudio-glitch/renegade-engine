@@ -1,3 +1,5 @@
+#include "renegade/bridge/ParticleEffectRuntimeService.h"
+#include <type_traits>
 #include "RuntimeScriptRuntime.h"
 #include "RuntimeScriptEntityApi.h"
 #include "InventoryLuaBridge.h"
@@ -196,6 +198,7 @@ namespace renegade::runtime
             std::unique_ptr<InventoryLuaContext> inventoryLua;
         };
 
+        std::unique_ptr<bridge::ParticleEffectRuntimeService> particles;
         lua_State* lua = nullptr;
         MemoryBudget memory;
         wi::scene::Scene* scene = nullptr;
@@ -821,6 +824,40 @@ namespace renegade::runtime
 
             lua_pushboolean(state, 1);
             return 1;
+        }
+
+
+        #include "RuntimeParticleLua.inl"
+
+        static int LightGetStateLua(lua_State* state) {
+            Impl* owner=FromUpvalue(state);
+            if(!owner||!owner->scene)return PushNilError(state,"Light API is not bound to a Level.");
+            RuntimeScriptEntityReference ref;std::string error;RuntimeLightAnimationState s;
+            if(!owner->ReadEntityReferenceForApi(state,1,ref,error))return PushNilError(state,error);
+            RuntimeScriptEntityApi api(*owner->scene,owner->entitiesById,owner->generation);
+            if(!api.GetLightState(ref,s,error))return PushNilError(state,error);
+            lua_newtable(state);
+#define LIGHT_FIELD(f) lua_pushnumber(state,s.f);lua_setfield(state,-2,#f);
+            LIGHT_FIELD(intensity) LIGHT_FIELD(r) LIGHT_FIELD(g) LIGHT_FIELD(b)
+            LIGHT_FIELD(x) LIGHT_FIELD(y) LIGHT_FIELD(z)
+            LIGHT_FIELD(qx) LIGHT_FIELD(qy) LIGHT_FIELD(qz) LIGHT_FIELD(qw) LIGHT_FIELD(seed)
+#undef LIGHT_FIELD
+            return 1;
+        }
+        static int LightSetStateLua(lua_State* state) {
+            Impl* owner=FromUpvalue(state);
+            if(!owner||!owner->scene)return PushFalseError(state,"Light API is not bound to a Level.");
+            RuntimeScriptEntityReference ref;std::string error;RuntimeLightAnimationState s;
+            if(!owner->ReadEntityReferenceForApi(state,1,ref,error))return PushFalseError(state,error);
+            if(!lua_istable(state,2))return PushFalseError(state,"Light state must be a table.");
+#define LIGHT_FIELD(f) lua_getfield(state,2,#f);if(!lua_isnumber(state,-1)){lua_pop(state,1);return PushFalseError(state,"Missing numeric light field: " #f);}s.f=float(lua_tonumber(state,-1));lua_pop(state,1);
+            LIGHT_FIELD(intensity) LIGHT_FIELD(r) LIGHT_FIELD(g) LIGHT_FIELD(b)
+            LIGHT_FIELD(x) LIGHT_FIELD(y) LIGHT_FIELD(z)
+            LIGHT_FIELD(qx) LIGHT_FIELD(qy) LIGHT_FIELD(qz) LIGHT_FIELD(qw)
+#undef LIGHT_FIELD
+            RuntimeScriptEntityApi api(*owner->scene,owner->entitiesById,owner->generation);
+            if(!api.SetLightState(ref,s,error))return PushFalseError(state,error);
+            lua_pushboolean(state,1);return 1;
         }
 
         static int AudioPlayLua(lua_State* state)
@@ -1497,6 +1534,13 @@ namespace renegade::runtime
             lua_pushcclosure(lua, TransformSetLocalScaleLua, 1);
             lua_setfield(lua, -2, "set_local_scale");
             lua_setfield(lua, -2, "transform");
+
+            lua_newtable(lua);
+            lua_pushinteger(lua,1);lua_setfield(lua,-2,"contract_version");
+            lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,LightGetStateLua,1);lua_setfield(lua,-2,"get_state");
+            lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,LightSetStateLua,1);lua_setfield(lua,-2,"set_state");
+            lua_setfield(lua,-2,"light");
+            RegisterParticleLua();
 
             lua_newtable(lua);
             lua_pushinteger(lua, 1);
@@ -2214,6 +2258,9 @@ namespace renegade::runtime
             if (!BeginScene(activeScene, std::move(root), error))
                 return false;
 
+            particles = std::make_unique<bridge::ParticleEffectRuntimeService>(
+                activeScene, projectRoot, document.envelope.projectId);
+
             std::vector<bridge::ScriptAttachment> ordered;
             ordered.reserve(document.attachments.size());
             for (const auto& attachment : document.attachments)
@@ -2266,6 +2313,7 @@ namespace renegade::runtime
             weatherCompletionPending = false;
             if (lua == nullptr)
             {
+                particles.reset();
                 instances.clear();
                 entitiesById.clear();
                 gameplayEvents.Clear();
@@ -2287,6 +2335,7 @@ namespace renegade::runtime
                 }
             }
             ReleaseInstances();
+            particles.reset();
             weatherTransition = bridge::WeatherTransitionController{};
             entitiesById.clear();
             gameplayEvents.Clear();

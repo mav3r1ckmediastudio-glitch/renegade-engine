@@ -1,6 +1,10 @@
 #include "StudioApplication.h"
 
 #include "InspectorSectionFramework.h"
+#include "AICharacterInspector.h"
+#include "Phase7Gate7DNativeTimelineInspector.h"
+#include "Phase7Gate7ESpecialistInspector.h"
+#include "Phase7Gate7FMeshBlendInspector.h"
 #include "renegade/bridge/ObjectImpactSurfaceService.h"
 #include "S4BScriptAttachmentInspector.h"
 #include "S4DGlobalScriptInspector.h"
@@ -223,7 +227,7 @@ namespace renegade::studio
                 transformSectionHeader_.SetPos(XMFLOAT2(12.0f, layout.top));
                 transformSectionHeader_.SetSize(XMFLOAT2(layout.width, layout.headerHeight));
                 transformSectionHeader_.SetText(
-                    std::string(layout.expanded ? "▼  " : "▶  ") + "TRANSFORM");
+                    std::string(layout.expanded ? "-  " : "+  ") + "TRANSFORM");
 
                 if (!layout.expanded)
                 {
@@ -299,7 +303,7 @@ namespace renegade::studio
                 renderingSectionHeader_.SetPos(XMFLOAT2(12.0f, layout.top));
                 renderingSectionHeader_.SetSize(XMFLOAT2(layout.width, layout.headerHeight));
                 renderingSectionHeader_.SetText(
-                    std::string(layout.expanded ? "▼  " : "▶  ") + "RENDERING");
+                    std::string(layout.expanded ? "-  " : "+  ") + "RENDERING");
                 if (!layout.expanded)
                 {
                     for (wi::gui::Widget* widget : {
@@ -355,7 +359,7 @@ namespace renegade::studio
                 materialsSectionHeader_.SetPos(XMFLOAT2(12.0f, layout.top));
                 materialsSectionHeader_.SetSize(XMFLOAT2(layout.width, layout.headerHeight));
                 materialsSectionHeader_.SetText(
-                    std::string(layout.expanded ? "▼  " : "▶  ") + "MATERIALS");
+                    std::string(layout.expanded ? "-  " : "+  ") + "MATERIALS");
                 if (!layout.expanded)
                 {
                     SetS1BMaterialContentVisible(false);
@@ -783,6 +787,7 @@ namespace renegade::studio
             float y = bottom + 8.0f;
             fullAt(lightLabel_, y, 20.0f); y += 20.0f;
             for (wi::gui::Widget* widget : {
+                static_cast<wi::gui::Widget*>(&lightPickerButton_),
                 static_cast<wi::gui::Widget*>(&lightType_),
                 static_cast<wi::gui::Widget*>(&lightColorRed_),
                 static_cast<wi::gui::Widget*>(&lightColorGreen_),
@@ -803,6 +808,9 @@ namespace renegade::studio
             bottom = y;
         }
 
+        if(hasSession&&selected!=wi::ecs::INVALID_ENTITY&&!light&&(bridge::ParticleEffectRoot(scene,selected)!=wi::ecs::INVALID_ENTITY||scene.emitters.Contains(selected))){
+            fullAt(lightPickerButton_,bottom+8.0f);bottom+=42.0f;
+        }
         const float actionStart = bottom + 16.0f;
         constexpr float gap = 8.0f;
         const float three = (panelWidth - 40.0f) / 3.0f;
@@ -825,5 +833,74 @@ namespace renegade::studio
         saveButton_.SetSize(XMFLOAT2(three, 28.0f));
         saveAsButton_.SetSize(XMFLOAT2(three, 28.0f));
         reopenButton_.SetSize(XMFLOAT2(three, 28.0f));
+
+        // Placed particle effects have one compact authoring route. Keep the
+        // existing command-backed name/transforms and move all layer editing
+        // into the picker, including legacy standalone emitters.
+        const bool particleEffect = hasSession && selected != wi::ecs::INVALID_ENTITY &&
+            (bridge::ParticleEffectRoot(scene, selected) != wi::ecs::INVALID_ENTITY ||
+                scene.emitters.Contains(selected));
+        if (particleEffect)
+        {
+            // Each provider owns and hides its own controls. Do not toggle
+            // native Window visibility: it re-shows uncollapsed children.
+            PrepareAICharacterInspector(*this);
+            PreparePhase7Gate7AAnimationInspector(*this);
+            PreparePhase7Gate7DNativeTimelineInspector(*this);
+            PreparePhase7Gate7ESpecialistInspector(*this);
+            PreparePhase7Gate7FMeshBlendInspector(*this);
+            PrepareS4BScriptAttachmentInspector(*this);
+            PrepareS4DGlobalScriptInspector(*this);
+            SetS1BMaterialContentVisible(false);
+            for(auto& bit:sceneLayerBits_)bit.SetVisible(false);
+            sceneLayerLabel_.SetVisible(false);
+            sceneLayerAllButton_.SetVisible(false);
+            sceneLayerNoneButton_.SetVisible(false);
+            sceneMetadataLabel_.SetVisible(false);
+            sceneMetadataPreset_.SetVisible(false);
+            transformSectionHeader_.SetVisible(false);
+            renderingSectionHeader_.SetVisible(false);
+            materialsSectionHeader_.SetVisible(false);
+            for (wi::gui::Widget* widget : {
+                static_cast<wi::gui::Widget*>(&sceneIdentityLabel_),
+                static_cast<wi::gui::Widget*>(&sceneNameInput_),
+                static_cast<wi::gui::Widget*>(&lightPickerButton_),
+                static_cast<wi::gui::Widget*>(&positionLabel_),
+                static_cast<wi::gui::Widget*>(&rotationLabel_),
+                static_cast<wi::gui::Widget*>(&scaleLabel_),
+                static_cast<wi::gui::Widget*>(&translationX_),
+                static_cast<wi::gui::Widget*>(&translationY_),
+                static_cast<wi::gui::Widget*>(&translationZ_),
+                static_cast<wi::gui::Widget*>(&rotationX_),
+                static_cast<wi::gui::Widget*>(&rotationY_),
+                static_cast<wi::gui::Widget*>(&rotationZ_),
+                static_cast<wi::gui::Widget*>(&scaleX_),
+                static_cast<wi::gui::Widget*>(&scaleY_),
+                static_cast<wi::gui::Widget*>(&scaleZ_),
+                static_cast<wi::gui::Widget*>(&focusButton_),
+                static_cast<wi::gui::Widget*>(&duplicateButton_),
+                static_cast<wi::gui::Widget*>(&deleteButton_),
+                static_cast<wi::gui::Widget*>(&undoButton_),
+                static_cast<wi::gui::Widget*>(&redoButton_),
+                static_cast<wi::gui::Widget*>(&saveButton_),
+                static_cast<wi::gui::Widget*>(&saveAsButton_),
+                static_cast<wi::gui::Widget*>(&reopenButton_)})
+                widget->SetVisible(true);
+            fullAt(sceneIdentityLabel_,20,20);fullAt(sceneNameInput_,44);
+            fullAt(lightPickerButton_,84,32);
+            const float fieldWidth=(innerWidth-16)/3;
+            const auto vectorRow=[&](wi::gui::Widget& label,wi::gui::Widget& x,
+                wi::gui::Widget& y,wi::gui::Widget& z,float top) {
+                fullAt(label,top,20);
+                wi::gui::Widget* fields[]={&x,&y,&z};
+                for(int i=0;i<3;++i){fields[i]->SetPos({12+i*(fieldWidth+8),top+20});fields[i]->SetSize({fieldWidth,28});}
+            };
+            vectorRow(positionLabel_,translationX_,translationY_,translationZ_,134);
+            vectorRow(rotationLabel_,rotationX_,rotationY_,rotationZ_,194);
+            vectorRow(scaleLabel_,scaleX_,scaleY_,scaleZ_,254);
+            focusButton_.SetPos({12,326});duplicateButton_.SetPos({12+three+gap,326});deleteButton_.SetPos({12+(three+gap)*2,326});
+            undoButton_.SetPos({12,366});redoButton_.SetPos({20+two,366});
+            saveButton_.SetPos({12,406});saveAsButton_.SetPos({12+three+gap,406});reopenButton_.SetPos({12+(three+gap)*2,406});
+        }
     }
 }

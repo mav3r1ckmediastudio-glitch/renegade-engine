@@ -318,6 +318,8 @@ namespace renegade::studio
         std::array<bool, ParticleSectionCount> sectionExpanded = {
             true, false, false, false, false, false, false};
 
+        std::function<void()> effectEditor;
+        SceneInspectorButton editEffect;
         SceneInspectorButton appearanceHeader;
         SceneInspectorButton attachmentHeader;
         SceneInspectorButton emissionHeader;
@@ -835,6 +837,7 @@ namespace renegade::studio
 
         void CreateControls()
         {
+            editEffect.Create("Edit layered effect");editEffect.SetText("PARTICLE PICKER / EDIT EFFECT...");editEffect.OnClick([this](auto&){if(effectEditor)effectEditor();});
             const auto sectionHeader =
                 [this](
                     SceneInspectorButton& button,
@@ -1144,7 +1147,7 @@ namespace renegade::studio
             ConfigureField(sphE, 0, 1, 0, 100, 0.018f, 0.005f, false, 3, "Particle SPH E", "SPH VISCOSITY", [](auto& s, float v){ s.sphE = v; });
 
             controls = {
-                &appearanceHeader, &attachmentHeader, &emissionHeader, &particleHeader,
+                &editEffect,                &appearanceHeader, &attachmentHeader, &emissionHeader, &particleHeader,
                 &motionHeader, &spriteHeader, &advancedHeader,
                 &chooseTexture, &clearTexture, &restart, &burst, &resetDefaults, &useAllFrames,
                 &burstCount, &debugVisual, &autoRestart, &parent,
@@ -1346,6 +1349,7 @@ namespace renegade::studio
                 return sectionExpanded[index];
             };
 
+            full(editEffect);
             if (header(appearanceHeader, ParticleSection::Appearance, "APPEARANCE"))
             {
                 two(chooseTexture, clearTexture); full(blendMode); full(shaderType);
@@ -1458,6 +1462,8 @@ namespace renegade::studio
     { return impl_->pointerConsumed; }
     bool RenegadeParticleEmitterWorkspace::HasSelectedEmitter() const noexcept
     { return impl_->SelectedIsEmitter(); }
+
+    void RenegadeParticleEmitterWorkspace::SetEffectEditor(std::function<void()> f){impl_->effectEditor=std::move(f);}
 
     void RenegadeParticleEmitterWorkspace::CreateEmitterInFrontOfCamera()
     {

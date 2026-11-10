@@ -144,6 +144,16 @@ namespace renegade::studio
             });
     }
 
+    void RenegadePhysicsLabStudioChrome::PrepareViewportPlacement()
+    {
+        workspaceTransitionRequested_=true;
+        particleAddMenuOpen_=false;
+        SetPhysicsLabActive(false);
+        SetAudioWorkspaceActive(false);
+        SetParticleWorkspaceActive(false);
+        SetNavigationWorkspaceActive(false);
+    }
+
     void RenegadePhysicsLabStudioChrome::RequestCurrentWorkspaceReconcile()
     {
         if (!physicsLab_.IsActive() && !audioWorkspace_.IsActive() &&
@@ -394,8 +404,8 @@ namespace renegade::studio
             SetNavigationWorkspaceActive(false);
             if (studioAction_)
                 studioAction_(Action::SceneWorkspace);
-            SetParticleWorkspaceActive(true);
-            particleWorkspace_.CreateEmitterInFrontOfCamera();
+            if(particlePickerAction_)particlePickerAction_(false);
+            else {SetParticleWorkspaceActive(true);particleWorkspace_.CreateEmitterInFrontOfCamera();}
             skipBaseUpdate = true;
         }
         else if (leftPressed && NavigationAddMenuItemHit(pointerBeforeBase))
@@ -457,7 +467,7 @@ namespace renegade::studio
             {
                 auto& scene = session->Scenes().GetScene();
                 const auto selected = session->Selection().SelectedEntity();
-                if (bridge::IsParticleEmitter(scene, selected))
+                if (!particlePickerAction_ && bridge::IsParticleEmitter(scene, selected))
                 {
                     if (!particleWorkspace_.IsActive())
                     {

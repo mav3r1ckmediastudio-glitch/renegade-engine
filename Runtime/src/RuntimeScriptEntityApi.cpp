@@ -1,6 +1,7 @@
 #include "RuntimeScriptEntityApi.h"
 
 #include <cmath>
+#include <algorithm>
 
 namespace renegade::runtime
 {
@@ -201,6 +202,32 @@ namespace renegade::runtime
         transform->UpdateTransform();
         error.clear();
         return true;
+    }
+
+
+    bool RuntimeScriptEntityApi::GetLightState(const RuntimeScriptEntityReference& ref,RuntimeLightAnimationState& s,std::string& error) const {
+        wi::ecs::Entity e;if(!Resolve(ref,e,error))return false;
+        const auto* l=scene_->lights.GetComponent(e);const auto* t=scene_->transforms.GetComponent(e);
+        if(!l||!t){error="EntityRef does not reference a Light with a Transform.";return false;}
+        s.intensity=l->intensity;s.r=l->color.x;s.g=l->color.y;s.b=l->color.z;
+        s.x=t->translation_local.x;s.y=t->translation_local.y;s.z=t->translation_local.z;
+        s.qx=t->rotation_local.x;s.qy=t->rotation_local.y;s.qz=t->rotation_local.z;s.qw=t->rotation_local.w;
+        uint32_t hash=2166136261u;for(unsigned char c:ref.stableId){hash^=c;hash*=16777619u;}
+        s.seed=float(hash&0xffffffu)/16777216.0f;error.clear();return true;
+    }
+    bool RuntimeScriptEntityApi::SetLightState(const RuntimeScriptEntityReference& ref,const RuntimeLightAnimationState& s,std::string& error) const {
+        for(float v:{s.intensity,s.r,s.g,s.b,s.x,s.y,s.z,s.qx,s.qy,s.qz,s.qw})
+            if(!std::isfinite(v)){error="Light animation values must be finite.";return false;}
+        const float norm=s.qx*s.qx+s.qy*s.qy+s.qz*s.qz+s.qw*s.qw;
+        if(!std::isfinite(norm)||norm<0.000001f){error="Light rotation must be a finite nonzero quaternion.";return false;}
+        wi::ecs::Entity e;if(!Resolve(ref,e,error))return false;
+        auto* l=scene_->lights.GetComponent(e);auto* t=scene_->transforms.GetComponent(e);
+        if(!l||!t){error="EntityRef does not reference a Light with a Transform.";return false;}
+        l->intensity=std::clamp(s.intensity,0.0f,100000.0f);
+        l->color={std::clamp(s.r,0.0f,1.0f),std::clamp(s.g,0.0f,1.0f),std::clamp(s.b,0.0f,1.0f)};
+        t->translation_local={s.x,s.y,s.z};const float inv=1/std::sqrt(norm);
+        t->rotation_local={s.qx*inv,s.qy*inv,s.qz*inv,s.qw*inv};t->SetDirty();t->UpdateTransform();
+        error.clear();return true;
     }
 
     bool RuntimeScriptEntityApi::IsFinite(const XMFLOAT3& value) noexcept

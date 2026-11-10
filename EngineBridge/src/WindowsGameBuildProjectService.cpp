@@ -1,3 +1,4 @@
+#include "renegade/bridge/ParticleEffectRuntimeDependencies.h"
 #include "renegade/bridge/WindowsGameBuildProjectService.h"
 #include "renegade/bridge/ImpactAudioService.h"
 #include "renegade/bridge/SceneDocumentService.h"
@@ -443,8 +444,10 @@ namespace renegade::bridge
             ReusableAssetDependencyProvider reusableAssetProvider(project.projectId);
             ResourceAssetDependencyProvider resourceAssetProvider(project.projectId);
 
+            ParticleEffectRuntimeDependencyProvider particleProvider(project.projectId);
             DependencyCollector collector(project.rootPath);
-            if (!collector.RegisterProvider(projectProvider, error) ||
+            if (!collector.RegisterProvider(particleProvider, error) ||
+                !collector.RegisterProvider(projectProvider, error) ||
                 !collector.RegisterProvider(flowProvider, error) ||
                 !collector.RegisterProvider(screenProvider, error) ||
                 !collector.RegisterProvider(sceneProvider, error) ||
