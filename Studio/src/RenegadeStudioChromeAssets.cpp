@@ -298,7 +298,10 @@ namespace renegade::studio
             creatorAssetRefreshPending_ = true;
             return false;
         }
-        if (creatorVisibleThumbnailPaths_.count(normalizedPath) == 0)
+        // Scene-assembly saves have a valid browser card before a model-import
+        // thumbnail exists. Do not turn a successful save/reveal into an error.
+        if (!bridge::CanPlaceCreatorScenePrefabAsset(*found) &&
+            creatorVisibleThumbnailPaths_.count(normalizedPath) == 0)
         {
             error = "The governed asset card is visible, but its captured thumbnail could not be loaded.";
             creatorAssetRefreshPending_ = true;
@@ -322,10 +325,21 @@ namespace renegade::studio
         // The move dialog owns input while open. Base chrome otherwise
         // collapses the drawer on a click outside its body, hiding this dialog.
         const bool moving = creatorMovePanel_.IsVisible();
-        if (!moving)
+        const auto popupOwnsInput = [](const wi::gui::ComboBox& combo)
+        {
+            return combo.GetState() == wi::gui::ACTIVE ||
+                combo.GetState() == wi::gui::DEACTIVATING;
+        };
+        // A dropdown selection/dismissal owns the complete click. Base chrome
+        // otherwise selects the folder/card underneath before the popup runs.
+        const bool filtering = ActiveBottomTab() == 0 &&
+            (popupOwnsInput(creatorAssetStateCombo_) ||
+             popupOwnsInput(creatorAssetFormatCombo_) ||
+             popupOwnsInput(creatorAssetRigCombo_));
+        if (!moving && !filtering)
             RenegadeStudioChrome::Update(canvas, dt);
         UpdateCreatorAssetControls(canvas, dt);
-        if (moving)
+        if (moving || filtering)
             creatorAssetControlConsumed_ = true;
     }
 
@@ -382,6 +396,7 @@ namespace renegade::studio
         creatorAssetFormatCombo_.AddItem("FBX", 1);
         creatorAssetFormatCombo_.AddItem("GLTF", 2);
         creatorAssetFormatCombo_.AddItem("GLB", 3);
+        creatorAssetFormatCombo_.AddItem("PREFABS", 11);
         creatorAssetFormatCombo_.AddItem("PNG", 4);
         creatorAssetFormatCombo_.AddItem("JPG", 5);
         creatorAssetFormatCombo_.AddItem("JPEG", 6);
@@ -497,7 +512,7 @@ namespace renegade::studio
 
         constexpr float gap = 4.0f;
         constexpr float stateWidth = 70.0f;
-        constexpr float formatWidth = 58.0f;
+        constexpr float formatWidth = 110.0f;
         constexpr float rigWidth = 70.0f;
         constexpr float placeWidth = 80.0f;
         constexpr float saveWidth = 70.0f;
@@ -559,6 +574,7 @@ namespace renegade::studio
         case 1: query.sourceFormat = "fbx"; break;
         case 2: query.sourceFormat = "gltf"; break;
         case 3: query.sourceFormat = "glb"; break;
+        case 11: query.sourceFormat = "scene-assembly"; break;
         case 4: query.sourceFormat = "png"; break;
         case 5: query.sourceFormat = "jpg"; break;
         case 6: query.sourceFormat = "jpeg"; break;
@@ -681,6 +697,7 @@ namespace renegade::studio
         creatorAssetControlConsumed_ =
             engaged(creatorAssetSearch_) || engaged(creatorAssetTags_) ||
             engaged(creatorAssetStateCombo_) || engaged(creatorAssetFormatCombo_) ||
+            engaged(creatorAssetRigCombo_) ||
             engaged(creatorAssetSaveTagsButton_) || engaged(creatorAssetMoveButton_) || creatorMovePanel_.IsVisible();
 
         if (creatorAssetRefreshPending_)
@@ -789,9 +806,10 @@ namespace renegade::studio
                     fs::u8path(creatorCurrentPath_).lexically_normal().generic_u8string())
                 continue;
             AssetCard card;
-            card.name = entry.name;
+            const bool scenePrefab=bridge::CanPlaceCreatorScenePrefabAsset(entry);
+            card.name = scenePrefab?fs::u8path(entry.name).stem().generic_u8string():entry.name;
             card.relativePath = entry.projectRelativePath;
-            card.typeLabel = entry.type == bridge::AssetType::Player ? "PLAYER PREFAB" : UpperAscii(bridge::AssetCatalogueStateLabel(entry.state));
+            card.typeLabel = scenePrefab?"PREFAB":entry.type == bridge::AssetType::Player ? "PLAYER PREFAB" : UpperAscii(bridge::AssetCatalogueStateLabel(entry.state));
             fs::path thumbnailPath =
                 fs::u8path(project.rootPath) /
                 fs::u8path(entry.projectRelativePath);
@@ -805,7 +823,7 @@ namespace renegade::studio
                         fs::u8path(card.relativePath)
                             .lexically_normal().generic_u8string());
             }
-            if (!entry.sourceFormat.empty())
+            if (!scenePrefab && !entry.sourceFormat.empty())
                 card.typeLabel += " / " + UpperAscii(entry.sourceFormat);
             if (entry.dependencyClass == bridge::DependencyClass::Texture)
                 card.typeLabel += " / TEXTURE";

@@ -204,6 +204,15 @@ namespace renegade::bridge
         const wi::scene::Scene& scene,
         std::string& error);
 
+    // Portable prefab attachment templates reuse the same typed attachment codec.
+    // No script executes during capture or read; source/dependency bindings stay governed.
+    [[nodiscard]] bool SerializeScriptAttachmentTemplates(
+        const StableId& projectId, const std::vector<ScriptAttachment>& attachments,
+        std::string& text, std::string& error);
+    [[nodiscard]] bool DeserializeScriptAttachmentTemplates(
+        const std::string& text, const StableId& projectId,
+        std::vector<ScriptAttachment>& attachments, std::string& error);
+
     [[nodiscard]] bool WriteScriptDocument(
         const std::string& filePath,
         const ScriptDocument& document,

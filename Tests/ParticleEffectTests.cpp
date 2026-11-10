@@ -33,6 +33,16 @@ int main(){
  for(size_t i=0;i<scene.emitters.GetCount();++i){selection.Select(scene.emitters.GetEntity(i));Check(selection.SelectedEntity()==entity,"all layer picks select one effect root");}
  auto unrelated=scene.Entity_CreateTransform("Unrelated object");selection.Select(unrelated);Check(selection.SelectedEntity()==unrelated,"ordinary selection unchanged");
  selection.Clear();Check(!selection.HasSelection(),"clear effect selection");
+ selection.Set({scene.emitters.GetEntity(0),unrelated,scene.emitters.GetEntity(1)});
+ Check(selection.Entities()==std::vector<wi::ecs::Entity>({entity,unrelated}),"multi-selection normalizes and deduplicates effect layers");
+ selection.Toggle(scene.emitters.GetEntity(2));
+ Check(selection.Entities()==std::vector<wi::ecs::Entity>({unrelated}),"Shift-toggle on another layer removes the whole effect only");
+ selection.Toggle(scene.emitters.GetEntity(0));
+ Check(selection.Entities()==std::vector<wi::ecs::Entity>({unrelated,entity})&&selection.Contains(scene.emitters.GetEntity(1)),"Shift-toggle adds the complete effect alongside an ordinary object");
+ auto selectionRevision=selection.Revision();selection.Set(selection.Entities());
+ Check(selection.Revision()==selectionRevision,"normalized selection does not cause idle invalidation");
+ selection.Clear();
+
  auto captured=CaptureParticleEffect(scene,entity);Check(captured.layers.size()==3,"capture editable layers");
  if(captured.layers.size()==3){Check(!captured.layers[1].enabled&&captured.layers[1].emitter.emitCount==51,"disabled layer retains authored values");
   captured.layers[1].enabled=true;captured.layers[2].emitter.life=2.5f;

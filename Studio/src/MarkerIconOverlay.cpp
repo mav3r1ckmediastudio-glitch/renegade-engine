@@ -252,10 +252,9 @@ namespace renegade::studio
                 state = wi::gui::FOCUS;
                 if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
                 {
-                    session->Selection().Select(candidate);
-                    owner_->RefreshHierarchy();
-                    owner_->QueueInspectorRefresh();
-                    owner_->RefreshStatus();
+                    owner_->SelectViewportObject(candidate,
+                        wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) ||
+                        wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT));
                     Activate();
                 }
                 else if (state == wi::gui::ACTIVE &&
@@ -297,7 +296,7 @@ namespace renegade::studio
                         const float dy = pointer.y - center.y;
                         const bool hovered = entity == hoveredEntity_ ||
                             dx * dx + dy * dy <= HoverRadius * HoverRadius;
-                        const bool isSelected = entity == selected;
+                        const bool isSelected = session->Selection().Contains(entity);
                         const float size = MarkerSize +
                             (isSelected ? SelectedExtraSize : hovered ? HoverExtraSize : 0.0f);
                         const std::size_t index = static_cast<std::size_t>(kind);

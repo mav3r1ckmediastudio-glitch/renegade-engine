@@ -1,0 +1,25 @@
+Test project <isolated-worktree>/BUILD/selection
+      Start   1: RenegadeMarkerIconsSourceContract
+ 1/10 Test   #1: RenegadeMarkerIconsSourceContract ....................   Passed    0.02 sec
+      Start   3: RenegadeParticleEmitterSourceContract
+ 2/10 Test   #3: RenegadeParticleEmitterSourceContract ................   Passed    0.02 sec
+      Start   4: RenegadeParticleEmitterOwnerFeedbackSourceContract
+ 3/10 Test   #4: RenegadeParticleEmitterOwnerFeedbackSourceContract ...   Passed    0.02 sec
+      Start 108: RenegadeCW05CharacterPrefabSourceContract
+ 4/10 Test #108: RenegadeCW05CharacterPrefabSourceContract ............   Passed    0.02 sec
+      Start 151: RenegadeAssetCatalogueTests
+ 5/10 Test #151: RenegadeAssetCatalogueTests ..........................   Passed    0.12 sec
+      Start 196: RenegadeEditorPointLookupSourceContract
+ 6/10 Test #196: RenegadeEditorPointLookupSourceContract ..............   Passed    0.02 sec
+      Start 319: RenegadeSceneAssemblyCore
+ 7/10 Test #319: RenegadeSceneAssemblyCore ............................   Passed    0.02 sec
+      Start 322: RenegadeLightPickerTests
+ 8/10 Test #322: RenegadeLightPickerTests .............................   Passed    0.25 sec
+      Start 323: RenegadeParticleEffectTests
+ 9/10 Test #323: RenegadeParticleEffectTests ..........................   Passed    0.22 sec
+      Start 324: RenegadeEditorPointLookupFocusedTests
+10/10 Test #324: RenegadeEditorPointLookupFocusedTests ................   Passed    0.04 sec
+
+100% tests passed out of 10
+
+Total Test time (real) =   0.91 sec

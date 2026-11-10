@@ -1,3 +1,147 @@
+# Functional general prefab completion candidate (10 November 2026)
+
+Source parent: 7bd1cd5858e66af999782c718da10ba0661924d9; integrates main
+6036b200841a37102c18a02133d257392086141f. The functional child commit is the
+published PR #193 head; source/binary hashes and exact local commands/results:
+docs/evidence/scene-prefab-functional/. Final CI is next; independent verification
+of that exact head remains required. Do not merge main or distribute a build
+without owner approval. Preserve owner work and castle assets.
+
+Implemented native lights/effects/material-shader state and component-only prefab
+placement, governed script attachment templates with source validation, fresh
+per-instance IDs and remapped internal references, hierarchy duplicate/delete
+history, behaviour-preserving Unpack and preserved instance edits on package load.
+Reuses the existing command, companion, project transaction and asset pipelines.
+See docs/SCENE_ASSEMBLY_WORKFLOW.md and docs/ARCHITECTURE.md for scope/boundaries.
+
+Release Studio/Runtime/proofs build. Eleven focused checks, all 60 source contracts,
+all six previously failing CI checks, the original geometry workflow and complete
+functional brazier workflow PASS locally. Actual Studio Save Prefab/card drag/
+Unpack/Save/Reopen and package-relative standalone Runtime visually verified;
+four actual governed scripts started. Evidence contains screenshots and diagnostic
+snapshots. The two interim integration workflows were intentionally cancelled;
+do not use the old isolated workflow results as acceptance for this candidate.
+
+The Wicked pin is unchanged. Main's existing CMake-generated allocator and
+particle core patches are present in the isolated worktree per main's documented
+decisions; do not reset or stage that submodule as a feature change.
+
+Changed production areas: SceneAssemblyScriptService; ScriptDocumentService codec;
+SceneAssemblyPrefab; SceneAssemblyService; hierarchy duplicate and script companion
+integration; placement error state and component-only validation; Runtime reusable
+instance preservation; Studio Save/Delete/Unpack. Tests include typed template
+codec/rejection/history tests and a real DX12 functional/package proof. Four old
+source contracts were migrated to current UI/input semantics; reviewed assistant
+workflow fingerprints renewed without changing acceptance limitations.
+
+Next: push this full candidate once, run the normal Windows baseline and Studio
+Debug/Release CI, repair any demonstrated failures locally before another run.
+Keep PR draft until exact-commit review and owner approval. No castle work here.
+
+---
+
+## 2026-11-10: Prefab branch main integration (local checkpoint)
+
+User authorised resolving PR #193 conflicts against current main before extending
+prefab contents. Feature parent 0cac613e24143b5096a0d2edabb28e1d9c1def10; main parent
+6036b200841a37102c18a02133d257392086141f (light/particle PR #192). Updated only the
+isolated feature worktree. Owner dirty projects, castle assets and separate CI
+worktrees remain untouched. Wicked pin stays 82557d439a41d104f559b0d3134d160b7bf6154e.
+
+Resolved nine overlaps. SelectionService now combines scene-bound particle effect
+root normalization with ordered multi-selection, toggling, revisions and pruning.
+Retained both CMake source/test additions, marker routing, duplicate identity guards
+and both documentation histories. Added mixed effect/object selection regression.
+Native UI inspection exposed assembly toolbar overlap on Add menus; toolbar drawing
+and hit testing now yield to native menu popups and light/particle/prefab modals.
+
+Validation, Windows x64 Release (exit 0):
+cmake --build BUILD/selection --target RenegadeStudio RenegadeRuntime RenegadeSceneAssemblyWorkflowProof --parallel 2
+cmake --build BUILD/selection --target RenegadeLightPickerTests RenegadeParticleEffectTests RenegadeEditorPointLookupFocusedTests RenegadeAssetCatalogueTests --parallel 2
+ctest --test-dir BUILD/selection -C Release -R "RenegadeSceneAssemblyCore|RenegadeAssetCatalogueTests|RenegadeLightPickerTests|RenegadeParticleEffectTests|RenegadeEditorPointLookupFocusedTests|MarkerIconsSourceContract|EditorPointLookupSourceContract|CW05.*SourceContract|Particle.*SourceContract" --output-on-failure
+CandidateBin/RenegadeSceneAssemblyWorkflowProof.exe Proof/IntegratedBaseline
+
+10/10 focused checks passed. Full native geometry workflow passed. Actual Studio:
+three-source selection, Group, Duplicate, Undo Duplicate and Undo Group restored
+selection. Native Firelight and Particle Picker previews rendered. Rebuilt Add menu
+was unobstructed with three objects selected. Standalone Runtime rendered the saved
+review scene. Evidence: docs/evidence/selection-prefab-integration/.
+
+This closes local conflict-resolution verification only. User accepted usability
+and explicitly requires complete functional prefab contents: lights, layered
+particles, governed script attachments/references and supported shader/material
+resources. Those contents are NOT established by the earlier geometry checkpoint.
+Next: a working scripted brazier prefab; independent instances; component edit and
+Undo; save/reopen/unpack; standalone and packaged native state/dependency proof.
+Hold push until the extended candidate is verified to avoid another mid-work CI.
+No PR merge or distribution without approval; independent exact-commit release
+verification remains pending. Main branch is not modified.
+
+## 2026-11-10: Selection usability continuation
+
+Owner accepted the first demonstrated assembly workflow at 110b6a6582ff319b19009f98fcd0589790a6d639.
+Follow-up remains on feature/editor-selection-prefabs-20261110. Owner dirty light,
+particle and castle worktrees preserved; no upstream/submodule changes.
+
+Added shared-world-pivot numeric edits with atomic validation/Undo, whole-assembly
+box containment and component crossing, clearer labels/help, single-target guards,
+and recovery from an invalid Edit Pieces state. Saved prefab cards are readable,
+automatically revealed and discoverable through PREFABS. Dropdowns now own their
+selection/dismissal click. Save modal hides selection overlays; prefab serialization
+clears editor-only selection stencils before capturing authored components.
+
+Actual Studio trial exposed an additional fresh-piece Duplicate regression: both
+companion hooks demanded saved IDs before checking for any script attachments.
+Unscripted pieces now take the valid no-companion path; script identity checks stay.
+The graphics proof links the real Studio integration and exercises both hooks with
+fresh unsaved meshes in a previously saved project. Tests/CMakeLists makes the
+registered CPU proof a RenegadeBridgeTests dependency so normal CI builds it.
+
+Validation (Windows x64 Release developer shell; exit 0):
+cmake --build BUILD/selection --target RenegadeStudio RenegadeRuntime RenegadeSceneAssemblyWorkflowProof --parallel 2
+cmake --build BUILD/selection --target RenegadeAssetCatalogueTests --parallel 2
+ctest --test-dir BUILD/selection -C Release -R "RenegadeSceneAssemblyCore|RenegadeAssetCatalogueTests|EditorPointLookupSourceContract|MarkerIconsSourceContract|CW05.*SourceContract" --output-on-failure
+CandidateBin/RenegadeSceneAssemblyWorkflowProof.exe Proof/FinalUsabilityAcceptance
+
+5/5 targeted CTest checks and native graphics workflow passed. Actual Studio:
+fresh multi-duplicate/delete/Undo/Redo, shared numeric move/rotate/scale, invalid
+scale without mutation, group-edit Undo recovery, containment/crossing, multi-group
+Unpack guard, clean Save Prefab, automatic reveal, drag placement, isolated outlines,
+save/reopen, box select, Unpack and Undo. PREFABS filter retained the current folder.
+Standalone Runtime rendered the saved scene using the supported spectator startup;
+75 FPS was VSync limited, not a performance benchmark or playable-character gate.
+Evidence and candidate source/binary hashes: docs/evidence/selection-usability-followup/.
+
+Local follow-up verification is complete; new owner acceptance, hosted Debug/Release
+CI and independent exact-commit verification remain pending. Linked prefab updates,
+overrides and scripted companion templates remain outside this bounded gate.
+No castle edits, main merge or build distribution. See docs/SCENE_ASSEMBLY_WORKFLOW.md.
+
+## 2026-11-10: Isolated selection and scene-prefab usability gate
+
+Branch feature/editor-selection-prefabs-20261110 starts at ec11c667e8f4b694a7b7695615f6e4fe72ff38f6.
+Separate isolated worktree; owner dirty lighting/
+particle/castle worktrees preserved. No Wicked source or submodule revision changes.
+No main merge or build distribution is authorised. Hosted CI remains pending.
+
+Reused SelectionService, native Translator, CommandService, hierarchy transforms,
+native entity serialization and the governed .rasset placement/registry pipeline.
+New SceneAssemblyService supplies ordered selection history, atomic command batches,
+Group/Unpack and native scene-prefab saving. Visible actions and explicit Edit Pieces
+mode avoid an invisible grouping state. Unpack skips internal placement containers.
+
+First gate: three-piece gateway, no castle assets. See
+docs/SCENE_ASSEMBLY_WORKFLOW.md and Tests/SceneAssemblyWorkflowTests.cpp.
+Local Windows Release Studio/Runtime/proof build passed. Native proof covers
+component transforms/material colours, shared-resource exclusion, cold .rasset
+preparation, normal placement, scene persistence and Unpack history. Core and
+targeted point-lookup/marker source contracts passed. Actual Studio trial and
+standalone Runtime evidence are recorded in the workflow document.
+Owner confirmed the demonstrated workflow works as expected at 110b6a6.
+Debug/Release hosted CI and independent review remain pending.
+This is a bounded geometry-assembly prototype, not linked prefab updates
+or companion-document scripting templates.
+
 ## 2026-11-10: Studio CI assistant evidence repair
 Parent: 3e01bccbec712312314d02a992e80653666e2bdf (PR #192).
 Both Studio jobs in run 42723573254 compiled and failed only RenegadeAssistantPackagedKnowledgeTests and RenegadeAssistantWorkflowSuite. Whole-file fingerprints for StudioApplication.cpp and ARCHITECTURE.md were stale after picker integration.

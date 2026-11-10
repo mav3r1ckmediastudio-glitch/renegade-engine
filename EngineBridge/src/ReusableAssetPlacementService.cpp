@@ -172,6 +172,14 @@ namespace renegade::bridge
                 }
 
                 const std::string optionsJson = stored.at("options").dump();
+                if(manifest.sourceFormat=="scene-assembly") {
+                    const auto& options=stored.at("options");
+                    if(manifest.importer!="renegade.scene.assembly" || options.size()!=1 ||
+                        !options.contains("schema_version") || (options.at("schema_version")!=1 && options.at("schema_version")!=2)) {
+                        error="Scene prefab recipe has an unsupported schema.";return false;
+                    }
+                    error.clear();return true;
+                }
                 if (manifest.sourceFormat == "assembly") {
                     FirstPersonAssemblySettings assembly;
                     if (manifest.importer != "renegade.first_person.assembly" ||
@@ -435,7 +443,11 @@ namespace renegade::bridge
         // does not expose ordinary mesh/object evidence, the normal validation
         // below will reject it; otherwise a failure here is a corrupt hierarchy
         // and must not silently fall back to unscaled raw mesh coordinates.
-        if (!ImportService::RebuildHierarchyAwareModelBounds(*prepared.scene_))
+        const bool modelContent=prepared.scene_->objects.GetCount()>0&&prepared.scene_->meshes.GetCount()>0;
+        const bool componentPrefab=document.manifest.sourceFormat=="scene-assembly"&&
+            document.manifest.importer=="renegade.scene.assembly"&&
+            prepared.scene_->transforms.GetCount()>0&&HasCreatorAuthoredTransform(*prepared.scene_);
+        if (modelContent && !ImportService::RebuildHierarchyAwareModelBounds(*prepared.scene_))
         {
             result.error =
                 "Reusable asset placement could not derive hierarchy-aware model bounds.";
@@ -445,7 +457,9 @@ namespace renegade::bridge
 
         result.sceneSummary = ImportService::Summarize(*prepared.scene_);
         result.modelEvidence = ImportService::SummarizeModelEvidence(*prepared.scene_);
-        if (result.sceneSummary.meshes == 0 || result.sceneSummary.objects == 0)
+        // Lights/effects/controllers are legitimate prefab contents even without
+        // render meshes. Ordinary model assets retain their geometry requirement.
+        if (!modelContent && !componentPrefab)
         {
             result.error = "Reusable asset payload contains no placeable model content.";
             prepared.scene_.reset();

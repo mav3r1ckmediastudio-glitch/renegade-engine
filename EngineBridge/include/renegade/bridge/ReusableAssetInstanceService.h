@@ -83,6 +83,9 @@ namespace renegade::bridge
         [[nodiscard]] wi::ecs::Entity PlacedEntity() const noexcept;
         [[nodiscard]] wi::ecs::Entity PayloadRootEntity() const noexcept;
         [[nodiscard]] const StableId& AssetId() const noexcept;
+        // A retained read-only result lets UI report a failed command after
+        // CommandService has released it, without a dangling command pointer.
+        [[nodiscard]] std::shared_ptr<const std::string> ErrorState() const noexcept { return errorState_; }
 
     private:
         struct CapturedMaterialResource
@@ -108,6 +111,7 @@ namespace renegade::bridge
         wi::Archive snapshot_;
         std::vector<CapturedMaterialResource> materialResources_;
         std::size_t firstMaterialIndex_ = 0;
+        std::shared_ptr<std::string> errorState_ = std::make_shared<std::string>();
         ReusablePlacementCompanionCallbacks companion_;
         bool companionActive_ = false;
         bool adoptExisting_ = false;

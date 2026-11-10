@@ -853,6 +853,7 @@ namespace renegade::studio::detail
                 preview.assetPath,
                 preview.preparedCharacterAsset);
             auto* placed = command.get();
+            const auto placementError = command->ErrorState();
             const auto commitStarted = std::chrono::steady_clock::now();
             if (!session->Commands().Execute(std::move(command)))
             {
@@ -860,7 +861,7 @@ namespace renegade::studio::detail
                     name->name = DragPreviewWrapperName;
                 ClearCreatorAssetDragPreview();
                 chrome->SetStatusText(
-                    "ASSET DRAG // DROP COMMIT FAILED");
+                    placementError->empty()?"ASSET DRAG // DROP COMMIT FAILED":"ASSET DRAG // "+*placementError);
                 return wi::ecs::INVALID_ENTITY;
             }
 

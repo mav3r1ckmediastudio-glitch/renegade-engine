@@ -1,0 +1,20 @@
+{
+  "source_parent": "110b6a6582ff319b19009f98fcd0589790a6d639",
+  "note": "Local candidate built before follow-up checkpoint; source/binary hashes establish candidate provenance. Hosted CI and independent exact-commit review pending.",
+  "sha256": {
+    "EngineBridge/include/renegade/bridge/SceneAssemblyService.h": "cdc24876a2c542834a1d873d748dbea0a686ff938a68a2a755aa988db482de57",
+    "EngineBridge/include/renegade/bridge/StudioSession.h": "40c78134292a34f0537edb079b4816ade1712d702b41edb5a3cd98fef8366df2",
+    "EngineBridge/src/AssetCatalogueService.cpp": "71309fe6edc041b523ebc6bf67591a2880c3775dc18fe40cf9eaae8fd84023a4",
+    "EngineBridge/src/SceneAssemblyService.cpp": "825a6f32298c5972b0252b5419fb6ebc01fd2d1a814df36f4b9e2f6b882ec67f",
+    "Studio/src/CharacterPrefabStudioIntegration.cpp": "e1162cca22df7588fd3d97cd5064ade1ae2462e822f07089308138828777c5ab",
+    "Studio/src/RenegadeStudioChrome.cpp": "44d948c209e1ee1169dadf55041c9550756b5825f438a1290a8ab733b140fd27",
+    "Studio/src/RenegadeStudioChromeAssets.cpp": "432cdc3e890bdfc33cdce5cbc3b331f775f963245e41909d1b2929807cd3225f",
+    "Studio/src/S1BInspectorSectionMigration.cpp": "d9cafc1d5b86253b85bd6896f0b2ea919e5951713164a08e3da025aaa2cb856b",
+    "Studio/src/StudioApplication.cpp": "c51fdfc8e932f86c78b9493b9dd296e56ba3338105670c92eaea03f9d4f80eb7",
+    "Tests/CMakeLists.txt": "ba44a2c8fc3280b3b7729a9a9deb1e09768bdb03a52505f9421515a955a03558",
+    "Tests/SceneAssemblyWorkflowTests.cpp": "2ddec421bb489a61ad65a7bc111347f97f7d76c26e1b82d5c926ed6654c93832",
+    "CandidateBin/RenegadeStudio.exe": "5716048b0bfac13f7413149c76ad61f2dc6d9452a62f597dbe652f1539b53a65",
+    "CandidateBin/RenegadeRuntime.exe": "78f1b65045608fa8f8318a70afe159bb418b356b863fed23d577e17449bd5e10",
+    "CandidateBin/RenegadeSceneAssemblyWorkflowProof.exe": "6497c44124a2cafe9741c855e005826ce932f3b56f15a52785489e5ed5c45678"
+  }
+}

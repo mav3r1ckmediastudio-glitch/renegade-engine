@@ -1,6 +1,8 @@
 #include "renegade/bridge/ReusableAssetRuntimeService.h"
 
 #include "renegade/bridge/ReusableAssetInstanceService.h"
+#include "renegade/bridge/SceneAssemblyService.h"
+#include "renegade/bridge/SceneAssemblyScriptService.h"
 #include "renegade/bridge/ReusableAssetService.h"
 
 #include <algorithm>
@@ -407,6 +409,25 @@ namespace renegade::bridge
             }
             preparedById.emplace(instance.assetId, std::move(prepared));
         }
+
+        // Independent scene-prefab copies (including unpacked members and
+        // nested model assets) are already authoritative native scene state.
+        // The packaged products above are still validated, but replacing these
+        // hierarchies would discard component edits and break script owner IDs.
+        const auto preserve=[&](const ReusableAssetInstanceRecord& instance) {
+            auto e=instance.instanceRoot;
+            for(size_t remaining=scene.hierarchy.GetCount()+1;e!=wi::ecs::INVALID_ENTITY&&remaining--; ) {
+                const auto* m=scene.metadatas.GetComponent(e);
+                if(IsSceneAssembly(scene,e)||(m&&m->bool_values.has(SceneAssemblyPreserveContentsKey)&&
+                    m->bool_values.get(SceneAssemblyPreserveContentsKey)))return true;
+                const auto* h=scene.hierarchy.GetComponent(e);if(!h)break;e=h->parentID;
+            }
+            return false;
+        };
+        const auto countBeforePreserve=instances.size();
+        instances.erase(std::remove_if(instances.begin(),instances.end(),preserve),instances.end());
+        result.preservedSceneAssemblyCount=countBeforePreserve-instances.size();
+        if(instances.empty())return true;
 
         struct PendingReplacement
         {

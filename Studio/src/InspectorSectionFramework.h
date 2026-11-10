@@ -23,6 +23,7 @@ namespace renegade::studio
         bool hasSelection = false;
         std::uint64_t selectionRevision = 0;
         const void* userData = nullptr;
+        bool transformOnly = false;
     };
 
     struct InspectorSectionDescriptor final

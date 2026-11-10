@@ -2112,8 +2112,59 @@ launch polling. The window does not activate or take input, hides when another
 process has focus, and closes on readiness, failure, Stop or owner-window teardown.
 No percentage, renderer resources, authored state or launch scheduling changes.
 
+## Selection and scene-assembly authoring
+
+SceneAssemblyService owns shared-pivot numeric selection transforms and grouping
+history. Studio supplies the ordered selection and explicit operation (world pivot
+position, rotation delta in degrees, or scale factor). Command preparation validates
+every selected root before any mutation; a non-representable parent transform
+rejects the entire edit. Existing native Translator manipulation remains the
+viewport gizmo path, with one atomic batch for its completed drag.
+
+BoxSelectionHits consumes projected object bounds only on a completed selection
+gesture. Full containment aggregates all visible component bounds per assembly;
+crossing requires intersection with at least one real component. The operation
+uses a local lookup index and keeps deterministic discovery order. It adds no
+whole-scene discovery to idle frames or point-marker queries.
+
+Edit Pieces and Unpack have one explicit assembly target. Multi-selection keeps
+set operations (transform, duplicate, delete, group, save as a new prefab).
+Source-independent scene prefabs retain their governed assembly importer identity
+in the catalogue; their JSON authoring recipe is not the browser's asset type.
+
+Native scene-duplicate companion hooks first determine whether the source has
+script attachments. Fresh unsaved geometry with no attachments needs no saved
+identity; scripted duplication retains strict persistent-ID validation and rollback.
+The native graphics proof installs the real Studio hook to cover this boundary.
+
 ## Light and particle authoring
 LightPresetService owns reusable setups, six governed scripts and undoable changes. Pickers call bridge commands.
 ParticleEffectService owns composite layers, four local fields, lifetime curves, shapes and shared timing. RuntimeParticleLua exposes governed instance-safe commands. Runtime closure includes presets and texture products. Marker/hierarchy selection resolve complete effect roots.
 A bounded configure overlay reproduces particle changes on the pinned Wicked tree. The shared allocator overlay keeps preview Scene lifetimes consistent across translation units. Neither changes the upstream pin.
 Size edits queue a selected-emitter update before GPU preparation. Selection does not restart the effect. Percentages use per-layer loaded references; whole-effect scaling is separate.
+
+
+## General scene prefabs: component and behaviour preservation (2026-11-10)
+
+Scene assembly assets reuse the governed .rasset pipeline and native component
+serialization. Geometry, lights, layered particle effects, their material shader
+selections, curves, fields and project-owned texture bindings travel together.
+Component-only assets retain a known zero mesh count; model-import placement still
+requires geometry. Scripted scene-assembly recipes use schema 2 so older readers
+reject unsupported behaviour instead of silently dropping it.
+
+SceneAssemblyScriptService copies the shared ScriptDocument attachment codec into
+a typed root template. Save validates source modules/dependencies and rejects
+entity references outside the selected hierarchy. Placement assigns fresh object
+and script-instance identities, remaps internal references, and applies scene plus
+companion changes through the existing command transaction. Ordinary hierarchy
+duplication preserves explicit external references; prefab export requires a
+self-contained entity graph. Delete removes all hierarchy-owned script attachments
+with symmetric Undo/Redo. Unknown typed attachment fields remain round-trippable.
+
+Unpack removes structural wrappers and retains an authored root carrying native
+components or behaviours as a named individual object. Undo restores the boundary.
+Packaged reusable-asset validation preserves authored scene-assembly copies and
+unpacked contents instead of replacing them with the source product, so instance
+edits and script owners survive startup. This is independent-copy placement;
+source-update propagation and a custom shader-authoring system are separate work.

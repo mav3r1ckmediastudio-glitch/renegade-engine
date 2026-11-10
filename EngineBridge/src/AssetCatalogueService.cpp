@@ -101,11 +101,8 @@ namespace renegade::bridge
                 error.clear();
                 return true;
             }
-            if (model.meshCount == 0)
-            {
-                error = "Known model metadata must contain at least one mesh.";
-                return false;
-            }
+            // An inspected component-only prefab has a known mesh count of zero.
+            // Geometry requirements belong to the model-import/placement path.
             if (model.armatureCount == 0 && model.boneCount != 0)
             {
                 error = "Model metadata cannot contain bones without an armature.";
@@ -918,8 +915,8 @@ namespace renegade::bridge
                 entry.sourceAssetId = provenance.sourceAssetId;
                 entry.importer = provenance.importer;
                 entry.importerVersion = provenance.importerVersion;
-                entry.sourceFormat = SourceFormatForPath(
-                    pathForAssetId(provenance.sourceAssetId));
+                entry.sourceFormat = entry.importer=="renegade.scene.assembly" ? "scene-assembly" :
+                    SourceFormatForPath(pathForAssetId(provenance.sourceAssetId));
 
                 const auto source = activeById.find(provenance.sourceAssetId);
                 entry.sourceAvailable = source != activeById.end() &&
@@ -1013,8 +1010,8 @@ namespace renegade::bridge
                 entry.sourceAssetId = imported->second->sourceAssetId;
                 entry.importer = imported->second->importer;
                 entry.importerVersion = imported->second->importerVersion;
-                entry.sourceFormat = SourceFormatForPath(
-                    pathForAssetId(imported->second->sourceAssetId));
+                entry.sourceFormat = entry.importer=="renegade.scene.assembly" ? "scene-assembly" :
+                    SourceFormatForPath(pathForAssetId(imported->second->sourceAssetId));
             }
             catalogue.entries.push_back(std::move(entry));
         }

@@ -115,6 +115,7 @@ namespace renegade::studio
     bool StudioRenderPath::IsS1BRenderingSectionVisible() const
     {
         if (session_ == nullptr || !session_->Selection().HasSelection() ||
+            session_->Selection().Entities().size()>1 ||
             environmentWorkspaceActive_ || terrainWorkspaceActive_)
         {
             return false;
@@ -175,6 +176,7 @@ namespace renegade::studio
             {
                 return session_ != nullptr && !environmentWorkspaceActive_ &&
                     !terrainWorkspaceActive_ && session_->Selection().HasSelection() &&
+                    session_->Selection().Entities().size()==1 &&
                     bridge::CanAuthorObjectImpactSurface(
                         session_->Scenes().GetScene(),
                         session_->Selection().SelectedEntity());
@@ -263,6 +265,14 @@ namespace renegade::studio
                     y.SetSize(XMFLOAT2(fieldWidth, 28.0f));
                     z.SetSize(XMFLOAT2(fieldWidth, 28.0f));
                 };
+                const bool multiple=session_ && session_->Selection().Entities().size()>1;
+                positionLabel_.SetText(multiple?"PIVOT POSITION / WORLD":"POSITION");
+                rotationLabel_.SetText(multiple?"ROTATE SELECTION / DEGREES":"ROTATION / DEGREES");
+                scaleLabel_.SetText(multiple?"SCALE SELECTION / FACTOR":"SCALE");
+                for(auto* field:{&rotationX_,&rotationY_,&rotationZ_})
+                    field->SetTooltip(multiple?"Rotate all selected objects around their shared pivot. 0 adds no rotation.":"Local rotation in degrees.");
+                for(auto* field:{&scaleX_,&scaleY_,&scaleZ_})
+                    field->SetTooltip(multiple?"Scale the selection around its shared pivot. 1 keeps its current size; 2 doubles it.":"Local scale.");
                 positionLabel_.SetPos(XMFLOAT2(12.0f, layout.contentTop));
                 positionLabel_.SetSize(XMFLOAT2(layout.width, 20.0f));
                 row(translationX_, translationY_, translationZ_, layout.contentTop + 20.0f);
@@ -556,9 +566,8 @@ namespace renegade::studio
         const auto selected = hasSession && session_->Selection().HasSelection()
             ? session_->Selection().SelectedEntity()
             : wi::ecs::INVALID_ENTITY;
-        const std::uint64_t selectionRevision = selected != wi::ecs::INVALID_ENTITY
-            ? static_cast<std::uint64_t>(selected)
-            : 0u;
+        const bool multiple=hasSession && session_->Selection().Entities().size()>1;
+        const std::uint64_t selectionRevision=hasSession?session_->Selection().Revision():0;
         const int viewToken = projectHubVisible_
             ? 1
             : environmentWorkspaceActive_ ? 2
@@ -573,6 +582,7 @@ namespace renegade::studio
             ResetS1BInspectorDisclosure();
             inspectorDisclosureSelectionRevision_ = selectionRevision;
             inspectorDisclosureViewToken_ = viewToken;
+            if(multiple)(void)inspectorSectionRegistry_.SetExpanded("transform",true);
         }
         static wi::scene::Scene emptyScene;
         const auto& scene = hasSession
@@ -614,7 +624,8 @@ namespace renegade::studio
             scene.probes.Contains(selected);
         const bool light = hasSession && selected != wi::ecs::INVALID_ENTITY &&
             scene.lights.Contains(selected);
-        const bool sceneComponents = hasSession && selected != wi::ecs::INVALID_ENTITY && !player;
+        const bool groupSelection=bridge::IsSceneAssembly(scene,selected);
+        const bool sceneComponents = hasSession && !multiple && !groupSelection && selected != wi::ecs::INVALID_ENTITY && !player;
 
         float registryTop = 44.0f;
         if (sceneComponents)
@@ -656,11 +667,18 @@ namespace renegade::studio
             registryTop = y + 4.0f;
         }
 
+        if(groupSelection && !multiple) {
+            sceneIdentityLabel_.SetVisible(true);sceneIdentityLabel_.SetPos({12,44});
+            sceneIdentityLabel_.SetSize({innerWidth,20});
+            sceneNameInput_.SetVisible(true);sceneNameInput_.SetPos({12,68});
+            sceneNameInput_.SetSize({innerWidth,28});
+            if(auto* name=scene.names.GetComponent(selected))sceneNameInput_.SetValue(name->name);
+            registryTop=104;
+        }
         InspectorSectionContext context;
-        context.hasSelection = hasSession && selected != wi::ecs::INVALID_ENTITY;
-        context.selectionRevision = selected != wi::ecs::INVALID_ENTITY
-            ? static_cast<std::uint64_t>(selected)
-            : 0u;
+        context.transformOnly=multiple||groupSelection;
+        context.hasSelection = hasSession && !multiple && selected != wi::ecs::INVALID_ENTITY;
+        context.selectionRevision=selectionRevision;
         context.userData = this;
         inspectorSectionRegistry_.RefreshVisibleSections(context);
         const auto layouts = inspectorSectionRegistry_.LayoutVisibleSections(

@@ -2028,6 +2028,18 @@ if(WIN32)
         WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeCreatorAssetFrameBoundaryTests>")
 endif()
 
+# General scene assembly proof. The CPU suite is CI-safe; the geometry workflow
+# runs explicitly on a real Windows graphics device for owner acceptance.
+if(WIN32)
+    add_executable(RenegadeSceneAssemblyWorkflowProof SceneAssemblyWorkflowTests.cpp
+        "${CMAKE_SOURCE_DIR}/Studio/src/CharacterPrefabStudioIntegration.cpp")
+    target_link_libraries(RenegadeSceneAssemblyWorkflowProof PRIVATE Renegade::EngineBridge)
+    target_compile_definitions(RenegadeSceneAssemblyWorkflowProof PRIVATE UNICODE _UNICODE)
+    target_compile_options(RenegadeSceneAssemblyWorkflowProof PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    add_dependencies(RenegadeBridgeTests RenegadeSceneAssemblyWorkflowProof)
+    add_test(NAME RenegadeSceneAssemblyCore COMMAND RenegadeSceneAssemblyWorkflowProof --core)
+endif()
+
 # Registry and cross-translation-unit lifetime regression for shared allocators.
 add_executable(RenegadeSharedAllocatorRegistryTests
     SharedAllocatorRegistry/main.cpp
@@ -2104,3 +2116,20 @@ target_link_libraries(RenegadeParticleLibraryFinalize PRIVATE Renegade::EngineBr
 target_compile_options(RenegadeParticleLibraryFinalize PRIVATE /utf-8)
 
 add_dependencies(RenegadeBridgeTests RenegadeParticleEffectTests RenegadeEditorPointLookupFocusedTests RenegadeParticleTextureLibraryTests RenegadeParticleLuaTests RenegadeParticleLifetimeTests)
+
+# General prefab behaviour graph: deterministic CPU coverage in normal CI, plus
+# a real-device Studio/Runtime/content proof invoked explicitly on owner hardware.
+if(WIN32)
+    add_executable(RenegadeScenePrefabScriptTests ScenePrefabScriptTests.cpp)
+    target_link_libraries(RenegadeScenePrefabScriptTests PRIVATE Renegade::EngineBridge)
+    target_compile_options(RenegadeScenePrefabScriptTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    add_test(NAME RenegadeScenePrefabScriptTests COMMAND RenegadeScenePrefabScriptTests)
+    set_tests_properties(RenegadeScenePrefabScriptTests PROPERTIES TIMEOUT 30)
+    add_dependencies(RenegadeBridgeTests RenegadeScenePrefabScriptTests)
+    add_executable(RenegadeScenePrefabFunctionalProof ScenePrefabFunctionalProof.cpp
+        "${CMAKE_SOURCE_DIR}/Studio/src/CharacterPrefabStudioIntegration.cpp")
+    target_link_libraries(RenegadeScenePrefabFunctionalProof PRIVATE Renegade::RuntimeBootstrap)
+    target_compile_definitions(RenegadeScenePrefabFunctionalProof PRIVATE UNICODE _UNICODE)
+    add_dependencies(RenegadeBridgeTests RenegadeScenePrefabFunctionalProof)
+    target_compile_options(RenegadeScenePrefabFunctionalProof PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+endif()
