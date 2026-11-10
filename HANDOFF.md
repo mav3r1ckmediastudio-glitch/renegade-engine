@@ -1,3 +1,13 @@
+## 2026-11-10: Studio CI assistant evidence repair
+Parent: 3e01bccbec712312314d02a992e80653666e2bdf (PR #192).
+Both Studio jobs in run 42723573254 compiled and failed only RenegadeAssistantPackagedKnowledgeTests and RenegadeAssistantWorkflowSuite. Whole-file fingerprints for StudioApplication.cpp and ARCHITECTURE.md were stale after picker integration.
+Reviewed the parent-to-picker changes: existing import, animation, player prefab, equipment and surface workflows/labels remain. Refreshed those 16 evidence records to the current canonical UTF-8/LF hashes. No verification code, acceptance receipt, workflow steps or tests weakened.
+Validation from repository root (Python 3.14; output directories outside source):
+- python Tests/AssistantWorkflowSuite.py --repo . --output <qa>/workflow-fix-suite: 84 tests PASS, including corrupt-source refusal.
+- python Tests/AssistantPackagedKnowledgeTests.py --repo . --output <qa>/workflow-fix-package: PASS, including Git-free identity, existing workflows and changed-source rejection.
+- git diff --check: PASS.
+Only workflows.json and this handoff changed. No castle changes, native changes, merge or distribution. Next: verify replacement Runtime/Studio Debug/Release CI on this commit; prior native test successes do not close the release gate.
+
 # Light and particle picker CI checkpoint
 Scope: light picker, six scripted behaviours and reusable setups; layered particle picker, texture browser, local movement fields, lifetime curves, emission shapes, timing and governed Lua controls.
 Layer size % affects only the selected layer using its own loaded reference. Its 1% floor is supported by native sanitization and Lua. Size edits update only that preview emitter; layer selection does not restart the composite. Whole Effect controls remain composite-wide.
