@@ -2031,9 +2031,11 @@ endif()
 # General scene assembly proof. The CPU suite is CI-safe; the geometry workflow
 # runs explicitly on a real Windows graphics device for owner acceptance.
 if(WIN32)
-    add_executable(RenegadeSceneAssemblyWorkflowProof SceneAssemblyWorkflowTests.cpp)
+    add_executable(RenegadeSceneAssemblyWorkflowProof SceneAssemblyWorkflowTests.cpp
+        "${CMAKE_SOURCE_DIR}/Studio/src/CharacterPrefabStudioIntegration.cpp")
     target_link_libraries(RenegadeSceneAssemblyWorkflowProof PRIVATE Renegade::EngineBridge)
     target_compile_definitions(RenegadeSceneAssemblyWorkflowProof PRIVATE UNICODE _UNICODE)
     target_compile_options(RenegadeSceneAssemblyWorkflowProof PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+    add_dependencies(RenegadeBridgeTests RenegadeSceneAssemblyWorkflowProof)
     add_test(NAME RenegadeSceneAssemblyCore COMMAND RenegadeSceneAssemblyWorkflowProof --core)
 endif()

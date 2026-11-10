@@ -1,7 +1,5 @@
 #include "CharacterPrefabStudioIntegration.h"
 
-#include "RenegadeStudioChrome.h"
-
 #include "renegade/bridge/CharacterPrefabService.h"
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/IdentityService.h"
@@ -208,16 +206,20 @@ namespace renegade::studio
                     bridge::PersistentEntityId(scene, source);
                 const bridge::StableId duplicateId =
                     bridge::PersistentEntityId(scene, duplicate);
-                if (!bridge::IsValidStableId(sourceId) ||
-                    !bridge::IsValidStableId(duplicateId))
-                {
-                    error = "Duplicated Character lacks stable Scene identity.";
-                    return false;
-                }
+                // Fresh/legacy geometry may not have a persistent ID until its
+                // first scene save. With no governed scripts on that source there
+                // is no companion state to copy and no reason to reject Duplicate.
+                // Keep strict identity validation when scripts actually exist.
                 if (!HasEntityScripts(*document, sourceId))
                 {
                     error.clear();
                     return true;
+                }
+                if (!bridge::IsValidStableId(sourceId) ||
+                    !bridge::IsValidStableId(duplicateId))
+                {
+                    error = "Duplicated scripted object lacks stable Scene identity.";
+                    return false;
                 }
 
                 const bridge::ScriptDocument before = *document;

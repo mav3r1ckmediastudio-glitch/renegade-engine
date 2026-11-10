@@ -6,6 +6,9 @@
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneDocumentService.h"
+#include "renegade/bridge/SceneService.h"
+#include "renegade/bridge/StudioSession.h"
+#include "../Studio/src/CharacterPrefabStudioIntegration.h"
 #include <Windows.h>
 #include <filesystem>
 #include <fstream>
@@ -92,6 +95,55 @@ static int Core() {
     Check(selectionHistory.Execute(std::make_unique<SelectionHistoryCommand>(authoring,std::move(selectedDelete),
         []{return std::vector<Entity>{};}))&&!authoring.HasSelection(),"delete clears removed selection");
     Check(selectionHistory.Undo()&&authoring.SelectedEntity()==selectedRoot&&multi.transforms.Contains(selectedRoot),"delete Undo restores and reselects the group");
+    std::vector<SelectionScreenBounds> screen={
+        {one,10,10,20,30},{one,70,10,80,30},{two,35,12,45,25}};
+    Check(BoxSelectionHits(screen,0,0,25,40,true).empty(),
+        "containment box does not select an entire group from one enclosed piece");
+    Check(BoxSelectionHits(screen,0,0,85,40,true)==std::vector<Entity>({one,two}),
+        "containment box selects whole groups once in discovery order");
+    Check(BoxSelectionHits(screen,0,0,25,40,false)==std::vector<Entity>({one}),
+        "crossing box selects the intersecting assembly once");
+    Check(BoxSelectionHits(screen,90,0,100,40,false).empty(),"empty box does not invent a selection");
+    wi::scene::Scene transforms;CommandService transformHistory;std::string transformError;
+    auto ta=transforms.Entity_CreateTransform("Left"),tb=transforms.Entity_CreateTransform("Right");
+    transforms.transforms.GetComponent(ta)->Translate(XMFLOAT3{-2,0,0});
+    transforms.transforms.GetComponent(tb)->Translate(XMFLOAT3{2,0,0});
+    const std::vector<Entity> pair={ta,tb};
+    auto edit=[&](SelectionTransformOperation op,int axis,float value) {
+        auto command=CreateSelectionTransformCommand(transforms,pair,op,axis,value,transformError);
+        return command&&transformHistory.Execute(std::move(command));
+    };
+    Check(edit(SelectionTransformOperation::Position,0,10)&&Near(World(transforms,ta).x,8)&&Near(World(transforms,tb).x,12),
+        "numeric move sets the common world pivot and retains spacing");
+    Check(transformHistory.Undo()&&Near(World(transforms,ta).x,-2)&&Near(World(transforms,tb).x,2),
+        "numeric move Undo restores both objects");
+    Check(edit(SelectionTransformOperation::RotateDegrees,1,90)&&Near(World(transforms,ta).z,2)&&Near(World(transforms,tb).z,-2),
+        "numeric rotation moves both objects around the shared pivot");
+    Check(transformHistory.Undo()&&Near(World(transforms,ta).x,-2),"numeric rotation Undo restores positions");
+    Check(edit(SelectionTransformOperation::ScaleFactor,0,2)&&Near(World(transforms,ta).x,-4)&&
+        Near(World(transforms,tb).x,4)&&Near(transforms.transforms.GetComponent(ta)->scale_local.x,2),
+        "numeric scale changes object size and spacing together");
+    Check(transformHistory.Undo()&&Near(World(transforms,tb).x,2)&&Near(transforms.transforms.GetComponent(ta)->scale_local.x,1),
+        "numeric scale Undo restores size and spacing");
+    const auto beforeInvalid=transformHistory.UndoCount();
+    Check(!edit(SelectionTransformOperation::ScaleFactor,0,0)&&transformHistory.UndoCount()==beforeInvalid&&
+        Near(World(transforms,tb).x,2),"invalid scale leaves all objects and history unchanged");
+    Check(!edit(SelectionTransformOperation::RotateDegrees,1,0)&&transformHistory.UndoCount()==beforeInvalid,
+        "neutral rotation does not create an Undo entry");
+    auto numericParent=transforms.Entity_CreateTransform("Scaled Parent");
+    auto* numericParentTransform=transforms.transforms.GetComponent(numericParent);
+    numericParentTransform->Scale(XMFLOAT3{2,2,2});numericParentTransform->RotateRollPitchYaw(XMFLOAT3{0,.3f,0});
+    numericParentTransform->UpdateTransform();
+    transforms.Component_Attach(ta,numericParent);
+    Check(edit(SelectionTransformOperation::Position,1,5)&&Near(World(transforms,ta).y,5)&&Near(World(transforms,tb).y,5),
+        "numeric multi-edit respects a transformed parent");
+    Check(transformHistory.Undo(),"parented multi-edit Undo");
+    numericParentTransform=transforms.transforms.GetComponent(numericParent);
+    numericParentTransform->scale_local={2,1,1};numericParentTransform->SetDirty();numericParentTransform->UpdateTransform();
+    const auto safeA=World(transforms,ta),safeB=World(transforms,tb);
+    Check(!edit(SelectionTransformOperation::RotateDegrees,1,45)&&
+        Near(World(transforms,ta).x,safeA.x)&&Near(World(transforms,tb).x,safeB.x),
+        "unsupported parent shear rejects the entire edit without partial changes");
     std::cout<<"CORE ASSEMBLY CHECKS PASSED"<<std::endl;return 0;
 }
 int main(int argc,char** argv) {
@@ -117,6 +169,75 @@ int main(int argc,char** argv) {
     SelectionService selection;selection.Select(left);selection.Toggle(right);selection.Toggle(lintel);
     Check(selection.Entities().size()==3&&selection.SelectedEntity()==lintel,"Shift-toggle selects three pieces");
     selection.Toggle(right);Check(!selection.Contains(right),"Shift-toggle removes one piece");selection.Toggle(right);
+    Save(scene,output/"MeshSource.wiscene");
+    {
+        StudioSession hookSession;
+        hookSession.Projects().Initialize((output/"hook-editor-state.json").generic_u8string());
+        Check(hookSession.Projects().CreateProject(output.generic_u8string(),"CompanionHookReview",
+            (output/"MeshSource.wiscene").generic_u8string()),"create isolated real Studio companion project");
+        const auto hookPath=fs::u8path(hookSession.Projects().PendingProject().rootPath)/"Content/Scenes/Main.wiscene";
+        Check(hookSession.Projects().CommitPendingProject(),"adopt the validated legacy project before opening its Level");
+        Check(hookSession.LoadScene(hookPath.generic_u8string()),"open saved Level through the real Studio session");
+        Check(hookSession.SaveScene(hookPath.generic_u8string()),"establish the saved Level and empty scripting companion before adding fresh pieces");
+        auto& hookScene=hookSession.Scenes().GetScene();
+        std::vector<Entity> freshPieces;
+        for(int i=0;i<3;++i) {
+            auto e=hookScene.Entity_CreateCube("Fresh Piece "+std::to_string(i+1));freshPieces.push_back(e);
+            Check(PersistentEntityId(hookScene,e).empty(),"fresh native piece has no saved entity ID");
+        }
+        const auto originalCount=hookScene.objects.GetCount();
+        std::string hookError;
+        const bool hookReady=hookSession.Scripts().EnsureCurrent(hookError);
+        Check(hookReady,"prepare real Studio script document: "+hookError);
+        const auto duplicateFresh=[&] {
+            hookSession.Selection().Set(freshPieces);
+            auto commands=std::make_unique<SelectionBatchCommand>();std::vector<DuplicateEntityCommand*> results;
+            for(auto e:freshPieces) {
+                auto c=std::make_unique<DuplicateEntityCommand>(hookScene,e);results.push_back(c.get());commands->Add(std::move(c));
+            }
+            return hookSession.Commands().Execute(std::make_unique<SelectionHistoryCommand>(hookSession.Selection(),std::move(commands),[results] {
+                std::vector<Entity> copies;for(auto* c:results)copies.push_back(c->DuplicatedEntity());return copies;
+            }));
+        };
+        Check(duplicateFresh()&&hookScene.objects.GetCount()==originalCount+3,
+            "default Studio companion allows immediate duplication of three unsaved pieces");
+        Check(hookSession.Commands().Undo()&&hookScene.objects.GetCount()==originalCount,
+            "default companion multi-duplicate Undo");
+        renegade::studio::InstallCharacterPrefabStudioIntegration();
+        Check(duplicateFresh()&&hookScene.objects.GetCount()==originalCount+3,
+            "installed Character companion allows immediate duplication of three unsaved pieces");
+        Check(hookSession.Commands().Undo()&&hookSession.Commands().Redo()&&
+            hookScene.objects.GetCount()==originalCount+3&&hookSession.Selection().Entities().size()==3,
+            "real Studio companion multi-duplicate Undo and Redo preserve the selected copies");
+        ClearReusablePlacementCompanionFactory();
+    }
+    SceneService loadedMesh;
+    Check(loadedMesh.LoadScene((output/"MeshSource.wiscene").generic_u8string()),"load independent mesh pieces through SceneService");
+    auto& loaded=loadedMesh.GetScene(); loaded.Update(1.f/60.f);
+    SelectionService loadedSelection;std::vector<Entity> loadedPieces;
+    for(size_t i=0;i<loaded.objects.GetCount();++i) {
+        auto e=loaded.objects.GetEntity(i);loadedPieces.push_back(e);
+        Check(loadedMesh.ContainsEntity(e),"loaded mesh is valid for ordinary editor actions");
+    }
+    loadedSelection.Set(loadedPieces);CommandService meshHistory;
+    std::string meshError;
+    Check(meshHistory.Execute(CreateSelectionTransformCommand(loaded,loadedPieces,SelectionTransformOperation::ScaleFactor,0,1.5f,meshError)) &&
+        meshHistory.Undo(),"prepare a new mesh action after undoing numeric scale" );
+    auto meshCopies=std::make_unique<SelectionBatchCommand>();std::vector<DuplicateEntityCommand*> copyResults;
+    for(auto e:SelectionRoots(loaded,loadedSelection.Entities())) {
+        auto copyCommand=std::make_unique<DuplicateEntityCommand>(loaded,e);
+        copyResults.push_back(copyCommand.get());meshCopies->Add(std::move(copyCommand));
+    }
+    Check(meshHistory.Execute(std::make_unique<SelectionHistoryCommand>(loadedSelection,std::move(meshCopies),[copyResults] {
+        std::vector<Entity> result;for(auto* c:copyResults)result.push_back(c->DuplicatedEntity());return result;
+    }))&&loaded.objects.GetCount()==6&&loadedSelection.Entities().size()==3,"duplicate three independent loaded mesh objects");
+    Check(meshHistory.Undo()&&loaded.objects.GetCount()==3&&loadedSelection.Entities()==loadedPieces,"mesh duplicate Undo restores original selection");
+    Check(meshHistory.Redo()&&loaded.objects.GetCount()==6&&loadedSelection.Entities().size()==3,"mesh duplicate Redo restores copies and selection");
+    auto meshDeletes=std::make_unique<SelectionBatchCommand>();
+    for(auto e:loadedSelection.Entities())meshDeletes->Add(std::make_unique<DeleteEntityCommand>(loaded,e));
+    Check(meshHistory.Execute(std::make_unique<SelectionHistoryCommand>(loadedSelection,std::move(meshDeletes),[]{return std::vector<Entity>{};}))&&
+        loaded.objects.GetCount()==3&&!loadedSelection.HasSelection(),"delete three loaded mesh copies together");
+    Check(meshHistory.Undo()&&loaded.objects.GetCount()==6&&loadedSelection.Entities().size()==3,"mesh delete Undo restores all copies and selection");
     CommandService history;
     auto group=std::make_unique<SceneAssemblyCommand>(scene,selection.Entities(),"Stone Gateway");
     auto* groupResult=group.get();Check(history.Execute(std::move(group)),"group selected pieces");
@@ -159,6 +280,10 @@ int main(int argc,char** argv) {
     Check(!CanPlaceCreatorScenePrefabAsset(blocked),"invalid prefab remains blocked by placement policy");
     blocked=*card;blocked.importer="untrusted.other";
     Check(!CanPlaceCreatorScenePrefabAsset(blocked),"unrelated product is not admitted as a scene prefab");
+    AssetCatalogueQuery prefabQuery;prefabQuery.sourceFormat="scene-assembly";
+    const auto prefabCards=QueryAssetCatalogue(catalogue,prefabQuery);
+    Check(prefabCards.size()==1&&prefabCards.front().assetId==asset,
+        "prefab filter finds the saved assembly by durable source format");
     StableId clash;
     Check(!SaveSceneAssemblyPrefab(projectRoot.generic_u8string(),project,scene,{root},"Stone Gateway",clash,error),"existing prefab never overwritten silently");
     auto prepared=ReusableAssetService().PrepareModelAssetPlacement({projectRoot.generic_u8string(),project,asset});

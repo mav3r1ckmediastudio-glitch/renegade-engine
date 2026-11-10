@@ -1,9 +1,49 @@
+## 2026-11-10: Selection usability continuation
+
+Owner accepted the first demonstrated assembly workflow at 110b6a6582ff319b19009f98fcd0589790a6d639.
+Follow-up remains on feature/editor-selection-prefabs-20261110. Owner dirty light,
+particle and castle worktrees preserved; no upstream/submodule changes.
+
+Added shared-world-pivot numeric edits with atomic validation/Undo, whole-assembly
+box containment and component crossing, clearer labels/help, single-target guards,
+and recovery from an invalid Edit Pieces state. Saved prefab cards are readable,
+automatically revealed and discoverable through PREFABS. Dropdowns now own their
+selection/dismissal click. Save modal hides selection overlays; prefab serialization
+clears editor-only selection stencils before capturing authored components.
+
+Actual Studio trial exposed an additional fresh-piece Duplicate regression: both
+companion hooks demanded saved IDs before checking for any script attachments.
+Unscripted pieces now take the valid no-companion path; script identity checks stay.
+The graphics proof links the real Studio integration and exercises both hooks with
+fresh unsaved meshes in a previously saved project. Tests/CMakeLists makes the
+registered CPU proof a RenegadeBridgeTests dependency so normal CI builds it.
+
+Validation (Windows x64 Release developer shell; exit 0):
+cmake --build BUILD/selection --target RenegadeStudio RenegadeRuntime RenegadeSceneAssemblyWorkflowProof --parallel 2
+cmake --build BUILD/selection --target RenegadeAssetCatalogueTests --parallel 2
+ctest --test-dir BUILD/selection -C Release -R "RenegadeSceneAssemblyCore|RenegadeAssetCatalogueTests|EditorPointLookupSourceContract|MarkerIconsSourceContract|CW05.*SourceContract" --output-on-failure
+CandidateBin/RenegadeSceneAssemblyWorkflowProof.exe Proof/FinalUsabilityAcceptance
+
+5/5 targeted CTest checks and native graphics workflow passed. Actual Studio:
+fresh multi-duplicate/delete/Undo/Redo, shared numeric move/rotate/scale, invalid
+scale without mutation, group-edit Undo recovery, containment/crossing, multi-group
+Unpack guard, clean Save Prefab, automatic reveal, drag placement, isolated outlines,
+save/reopen, box select, Unpack and Undo. PREFABS filter retained the current folder.
+Standalone Runtime rendered the saved scene using the supported spectator startup;
+75 FPS was VSync limited, not a performance benchmark or playable-character gate.
+Evidence and candidate source/binary hashes: docs/evidence/selection-usability-followup/.
+
+Local follow-up verification is complete; new owner acceptance, hosted Debug/Release
+CI and independent exact-commit verification remain pending. Linked prefab updates,
+overrides and scripted companion templates remain outside this bounded gate.
+No castle edits, main merge or build distribution. See docs/SCENE_ASSEMBLY_WORKFLOW.md.
+
 ## 2026-11-10: Isolated selection and scene-prefab usability gate
 
 Branch feature/editor-selection-prefabs-20261110 starts at ec11c667e8f4b694a7b7695615f6e4fe72ff38f6.
-Separate worktree E:/RenegadeTestTmp/SelectionPrefabs20261110; owner dirty lighting/
+Separate isolated worktree; owner dirty lighting/
 particle/castle worktrees preserved. No Wicked source or submodule revision changes.
-No main merge, hosted CI, package or distribution is authorised by this work.
+No main merge or build distribution is authorised. Hosted CI remains pending.
 
 Reused SelectionService, native Translator, CommandService, hierarchy transforms,
 native entity serialization and the governed .rasset placement/registry pipeline.
@@ -18,8 +58,9 @@ component transforms/material colours, shared-resource exclusion, cold .rasset
 preparation, normal placement, scene persistence and Unpack history. Core and
 targeted point-lookup/marker source contracts passed. Actual Studio trial and
 standalone Runtime evidence are recorded in the workflow document.
-Debug/Release hosted CI, independent review and owner usability acceptance remain
-pending. This is a bounded geometry-assembly prototype, not linked prefab updates
+Owner confirmed the demonstrated workflow works as expected at 110b6a6.
+Debug/Release hosted CI and independent review remain pending.
+This is a bounded geometry-assembly prototype, not linked prefab updates
 or companion-document scripting templates.
 
 ## 2026-11-06: Owner-requested intensity slider 0-500 range (local preview)

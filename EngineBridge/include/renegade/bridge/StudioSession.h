@@ -61,13 +61,6 @@ namespace renegade::bridge
 
                     const StableId sourceId = PersistentEntityId(scene, source);
                     const StableId duplicateId = PersistentEntityId(scene, duplicate);
-                    if (!IsValidStableId(sourceId) || !IsValidStableId(duplicateId) ||
-                        sourceId == duplicateId)
-                    {
-                        error = "Scene duplication did not establish two distinct persistent entity IDs.";
-                        return false;
-                    }
-
                     bool hasSourceAttachments = false;
                     for (const auto& attachment : document->attachments)
                     {
@@ -82,6 +75,15 @@ namespace renegade::bridge
                     {
                         error.clear();
                         return true;
+                    }
+
+                    // Sources with no governed scripts need no companion identity.
+                    // Fresh unsaved pieces are still valid native duplicate targets.
+                    if (!IsValidStableId(sourceId) || !IsValidStableId(duplicateId) ||
+                        sourceId == duplicateId)
+                    {
+                        error = "Scene duplication did not establish two distinct persistent entity IDs.";
+                        return false;
                     }
 
                     const ScriptDocument before = *document;

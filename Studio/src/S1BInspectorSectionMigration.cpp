@@ -261,6 +261,14 @@ namespace renegade::studio
                     y.SetSize(XMFLOAT2(fieldWidth, 28.0f));
                     z.SetSize(XMFLOAT2(fieldWidth, 28.0f));
                 };
+                const bool multiple=session_ && session_->Selection().Entities().size()>1;
+                positionLabel_.SetText(multiple?"PIVOT POSITION / WORLD":"POSITION");
+                rotationLabel_.SetText(multiple?"ROTATE SELECTION / DEGREES":"ROTATION / DEGREES");
+                scaleLabel_.SetText(multiple?"SCALE SELECTION / FACTOR":"SCALE");
+                for(auto* field:{&rotationX_,&rotationY_,&rotationZ_})
+                    field->SetTooltip(multiple?"Rotate all selected objects around their shared pivot. 0 adds no rotation.":"Local rotation in degrees.");
+                for(auto* field:{&scaleX_,&scaleY_,&scaleZ_})
+                    field->SetTooltip(multiple?"Scale the selection around its shared pivot. 1 keeps its current size; 2 doubles it.":"Local scale.");
                 positionLabel_.SetPos(XMFLOAT2(12.0f, layout.contentTop));
                 positionLabel_.SetSize(XMFLOAT2(layout.width, 20.0f));
                 row(translationX_, translationY_, translationZ_, layout.contentTop + 20.0f);

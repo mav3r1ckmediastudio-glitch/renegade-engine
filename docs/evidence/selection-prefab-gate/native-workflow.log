@@ -16,13 +16,13 @@ PASS: Undo restores edited component
 PASS: multi move records one Undo
 PASS: multi move Undo restores both
 PASS: project registry created
-PASS: save prefab: 
-PASS: browser catalogue includes saved prefab: 
+PASS: save prefab:
+PASS: browser catalogue includes saved prefab:
 PASS: ordinary Asset Browser allows placing the saved scene prefab
 PASS: invalid prefab remains blocked by placement policy
 PASS: unrelated product is not admitted as a scene prefab
 PASS: existing prefab never overwritten silently
-PASS: cold prefab preparation: 
+PASS: cold prefab preparation:
 PASS: prefab contains only selected geometry and its materials
 PASS: prefab preserves all three authored material colours
 PASS: save instances using an external shared mesh/material: A prefab with that name already exists. Choose a new name.
@@ -49,6 +49,6 @@ PASS: unpack Undo restores prefab
 PASS: unpack Redo preserves all geometry
 PASS: native scene saved: AssemblyUnpacked.wiscene
 PASS: native scene saved: AssemblySource.wiscene
-PASS: create native review project: 
-REVIEW PROJECT: E:/RenegadeTestTmp/SelectionPrefabs20261110/Proof/VerifiedDrag/AssemblyReview/AssemblyReview.renegade
+PASS: create native review project:
+REVIEW PROJECT: <isolated-worktree>/Proof/VerifiedDrag/AssemblyReview/AssemblyReview.renegade
 ASSEMBLY WORKFLOW PASSED

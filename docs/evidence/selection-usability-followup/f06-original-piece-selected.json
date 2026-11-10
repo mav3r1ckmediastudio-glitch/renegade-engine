@@ -1,0 +1,188 @@
+{
+  "schema": "renegade.diagnostics.v2",
+  "elapsed_ms": 334797,
+  "heartbeat_age_ms": 2,
+  "application_heartbeat_age_ms": 2,
+  "transport_alive": true,
+  "process_foreground": true,
+  "endpoint_port": 38741,
+  "state": {
+    "editor": {
+      "asset_drop_pending": false,
+      "editing_assembly": 0,
+      "gizmo_drag_active": false,
+      "has_selection": true,
+      "inspector_owner": "scene",
+      "placement_active": false,
+      "player_camera_preview_collapsed": false,
+      "player_camera_preview_error": "",
+      "player_camera_preview_ready": false,
+      "player_camera_preview_resizing": false,
+      "player_camera_preview_visible": false,
+      "player_camera_preview_width": 432,
+      "project": "<isolated-worktree>/Proof/CompanionAcceptance/AssemblyReview/AssemblyReview.renegade",
+      "project_open": true,
+      "scene": "<isolated-worktree>/Proof/CompanionAcceptance/AssemblyReview/Content/Scenes/Main.wiscene",
+      "scene_loading": false,
+      "selected_count": 1,
+      "selected_entity": 54,
+      "selected_name": "Left Pier",
+      "selection_applicable": true,
+      "selection_scope": "process-local ECS id",
+      "terrain_stroke_active": false,
+      "tool": "translate",
+      "workspace": "scene"
+    },
+    "input": {
+      "applicable": true,
+      "fly_camera_active": false,
+      "gui_focus": false,
+      "pointer_over_viewport": true,
+      "snapshot_elapsed_ms": 334609
+    },
+    "inspector_refresh": {
+      "elapsed_ms": 334042,
+      "stage": "refresh_entered"
+    },
+    "last_action": {
+      "elapsed_ms": 217594,
+      "name": "SaveGroupPrefab",
+      "sequence": 1,
+      "source": "Studio/src/StudioApplication.cpp:ProcessPendingAction",
+      "stage": "handler_returned"
+    },
+    "last_pointer": {
+      "camera_active": false,
+      "camera_handler_reached": true,
+      "elapsed_ms": 334276,
+      "left_down": true,
+      "right_down": false,
+      "routing_stop": "update.completed",
+      "source": "Studio/src/StudioApplication.cpp:StudioRenderPath::Update"
+    },
+    "process": {
+      "build_commit": "110b6a6582ff319b19009f98fcd0589790a6d639",
+      "configuration": "Release",
+      "pid": 23876,
+      "started_unix_ms": 1794316634096,
+      "type": "studio"
+    },
+    "selected_river": {
+      "available": false
+    },
+    "test_level": {
+      "active": false,
+      "child_pid": 0,
+      "message": "",
+      "ready": false,
+      "state_code": 0,
+      "warning": ""
+    },
+    "vegetation": {
+      "brush_active": false,
+      "mode": "paint",
+      "stroke_active": false
+    }
+  },
+  "events": [
+    {
+      "severity": "info",
+      "source": "DiagnosticEndpoint.cpp",
+      "code": "endpoint.listening",
+      "message": "127.0.0.1:38741",
+      "sequence": 1,
+      "elapsed_ms": 495,
+      "repetitions": 1
+    },
+    {
+      "severity": "info",
+      "source": "Studio/src/StudioLiveDiagnostics.cpp",
+      "code": "editor.changed",
+      "message": "Live state changed; inspect editor",
+      "sequence": 2,
+      "elapsed_ms": 66107,
+      "repetitions": 1
+    },
+    {
+      "severity": "info",
+      "source": "Studio/src/TestLevelRuntimeProcess.cpp",
+      "code": "test_level.changed",
+      "message": "Live state changed; inspect test_level",
+      "sequence": 3,
+      "elapsed_ms": 66107,
+      "repetitions": 1
+    },
+    {
+      "severity": "info",
+      "source": "Studio/src/StudioLiveDiagnostics.cpp",
+      "code": "editor.changed",
+      "message": "Live state changed; inspect editor",
+      "sequence": 4,
+      "elapsed_ms": 83211,
+      "repetitions": 4
+    },
+    {
+      "severity": "info",
+      "source": "Studio/src/StudioApplication.cpp:ProcessPendingAction",
+      "code": "requested",
+      "message": "OpenSceneWorkspace",
+      "sequence": 5,
+      "elapsed_ms": 214096,
+      "repetitions": 1
+    },
+    {
+      "severity": "info",
+      "source": "Studio/src/StudioApplication.cpp:ProcessPendingAction",
+      "code": "handler_entered",
+      "message": "OpenSceneWorkspace",
+      "sequence": 6,
+      "elapsed_ms": 214096,
+      "repetitions": 1
+    },
+    {
+      "severity": "info",
+      "source": "Studio/src/StudioApplication.cpp:ProcessPendingAction",
+      "code": "handler_returned",
+      "message": "OpenSceneWorkspace",
+      "sequence": 7,
+      "elapsed_ms": 214096,
+      "repetitions": 1
+    },
+    {
+      "severity": "info",
+      "source": "Studio/src/StudioLiveDiagnostics.cpp",
+      "code": "editor.changed",
+      "message": "Live state changed; inspect editor",
+      "sequence": 8,
+      "elapsed_ms": 216020,
+      "repetitions": 1
+    },
+    {
+      "severity": "info",
+      "source": "Studio/src/StudioApplication.cpp:ProcessPendingAction",
+      "code": "handler_entered",
+      "message": "SaveGroupPrefab",
+      "sequence": 9,
+      "elapsed_ms": 217594,
+      "repetitions": 1
+    },
+    {
+      "severity": "info",
+      "source": "Studio/src/StudioApplication.cpp:ProcessPendingAction",
+      "code": "handler_returned",
+      "message": "SaveGroupPrefab",
+      "sequence": 10,
+      "elapsed_ms": 217594,
+      "repetitions": 1
+    },
+    {
+      "severity": "info",
+      "source": "Studio/src/StudioLiveDiagnostics.cpp",
+      "code": "editor.changed",
+      "message": "Live state changed; inspect editor",
+      "sequence": 11,
+      "elapsed_ms": 334102,
+      "repetitions": 2
+    }
+  ]
+}

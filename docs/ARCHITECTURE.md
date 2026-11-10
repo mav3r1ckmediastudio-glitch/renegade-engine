@@ -2111,3 +2111,28 @@ reading the live scene or waiting on the Studio thread. Stage captions follow
 launch polling. The window does not activate or take input, hides when another
 process has focus, and closes on readiness, failure, Stop or owner-window teardown.
 No percentage, renderer resources, authored state or launch scheduling changes.
+
+## Selection and scene-assembly authoring
+
+SceneAssemblyService owns shared-pivot numeric selection transforms and grouping
+history. Studio supplies the ordered selection and explicit operation (world pivot
+position, rotation delta in degrees, or scale factor). Command preparation validates
+every selected root before any mutation; a non-representable parent transform
+rejects the entire edit. Existing native Translator manipulation remains the
+viewport gizmo path, with one atomic batch for its completed drag.
+
+BoxSelectionHits consumes projected object bounds only on a completed selection
+gesture. Full containment aggregates all visible component bounds per assembly;
+crossing requires intersection with at least one real component. The operation
+uses a local lookup index and keeps deterministic discovery order. It adds no
+whole-scene discovery to idle frames or point-marker queries.
+
+Edit Pieces and Unpack have one explicit assembly target. Multi-selection keeps
+set operations (transform, duplicate, delete, group, save as a new prefab).
+Source-independent scene prefabs retain their governed assembly importer identity
+in the catalogue; their JSON authoring recipe is not the browser's asset type.
+
+Native scene-duplicate companion hooks first determine whether the source has
+script attachments. Fresh unsaved geometry with no attachments needs no saved
+identity; scripted duplication retains strict persistent-ID validation and rollback.
+The native graphics proof installs the real Studio hook to cover this boundary.

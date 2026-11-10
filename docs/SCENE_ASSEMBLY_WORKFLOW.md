@@ -1,6 +1,7 @@
 # Editor multi-selection and scene prefabs
 
-Status: isolated prototype; owner usability acceptance pending.
+Status: first assembly workflow accepted by the owner on 10 November 2026 at 110b6a6.
+The selection usability follow-up is locally verified; hosted CI and new owner review remain pending.
 The first acceptance gate is one small real assembly, before wider feature work.
 
 ## Required demonstration
@@ -138,3 +139,54 @@ existing generic file presentation rather than a captured prefab thumbnail.
 The successful save/reveal path accepts that card without issuing a misleading
 thumbnail error. Linked updates, overrides and broader prefab features stay
 outside this gate.
+
+## Selection usability follow-up
+
+The accepted workflow stays intact. Single-target actions Edit Pieces and Unpack
+require one selected assembly; selecting several no longer quietly edits only the
+last group. The viewport explains Shift toggling and empty-space box selection.
+A live box hint names containment/crossing and the additive/cancel behaviour.
+
+Left-to-right containment evaluates each complete assembly's projected bounds.
+Enclosing only a pier no longer selects a larger assembly outside the box.
+Crossing selection can still catch part of an assembly. Group-bound aggregation
+uses an operation-local index and runs only when the box is released.
+
+Numeric multi-selection labels distinguish world pivot position, rotation in
+degrees and scale factor. 0 rotation and factor 1 are neutral. World-space edits
+and atomic history are prepared through SceneAssemblyService; invalid scale or
+unrepresentable parent shear fails before any selected object changes.
+
+The Asset Browser offers PREFABS in its format filter and marks saved scene
+assemblies as PREFAB with a readable extension-free name. This pass does not add
+linked-source behaviour or change the accepted Save/Place/Unpack interaction.
+
+## Follow-up local evidence - 10 November 2026
+
+![Selection usability and saved assembly](evidence/selection-usability-followup/usability-demonstration.jpg)
+
+Fresh unsaved pieces now duplicate immediately, including when the real Studio
+script companion hooks are installed. Previously those hooks rejected missing saved
+IDs before discovering there were no script attachments. The graphics proof covers
+both default and Studio hooks; strict identity validation remains for scripts.
+
+The actual Studio pass exercised multi-object move/rotate/scale, invalid-scale
+rejection, Duplicate/Delete with selection restored through Undo/Redo, and Undo
+leaving Edit Pieces safely. Containment around only one pier excludes the whole
+group; crossing catches it. Multi-group Unpack reports a clear single-target hint.
+
+Save Prefab opens a clean modal and reveals the new PREFAB card automatically.
+Selecting a source pier does not highlight another placed instance. The PREFABS
+filter retains the current folder; its dropdown no longer clicks folders below.
+The final fixture saves separate source pieces and one placed Gateway instance.
+Save/Reopen preserves both; box selection finds three source pieces, one Unpack
+exposes exactly three prefab pieces, and Undo restores the selected Gateway.
+Standalone Runtime renders the saved geometry through normal spectator startup.
+
+Windows Release Studio/Runtime/native proof builds passed. The full native graphics
+proof and 5/5 targeted CTest checks passed; see adjacent logs, diagnostic snapshots,
+and source/binary hash manifest. The candidate was built before checkpointing, so
+its embedded commit string remains the accepted parent. New owner acceptance,
+hosted Debug/Release CI and independent exact-commit review remain pending.
+No linked updates, overrides, scripting-template, collision, packaged-build or
+playable-character acceptance is claimed from this small geometry fixture.

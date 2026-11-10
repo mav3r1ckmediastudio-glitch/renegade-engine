@@ -4726,6 +4726,7 @@ namespace renegade::studio
 
         if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
             !projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible() &&
+            !scenePrefabSavePanel_.IsVisible() &&
             outlinedSelection_ != wi::ecs::INVALID_ENTITY &&
             selectionOutlineMask_.IsValid())
         {
@@ -4742,6 +4743,7 @@ namespace renegade::studio
 
         if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
             !projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible() &&
+            !scenePrefabSavePanel_.IsVisible() &&
             !gizmoSuppressedForCameraView_ &&
             gizmoEntity_ != wi::ecs::INVALID_ENTITY)
         {
@@ -6780,6 +6782,10 @@ namespace renegade::studio
 
     void StudioRenderPath::DuplicateSelection()
     {
+        diagnosticService_.Record(bridge::DiagnosticSeverity::Info,"studio.selection","duplicate.begin",
+            "valid="+std::to_string(IsSelectedEntityValid())+" selected="+
+            std::to_string(session_?session_->Selection().Entities().size():0)+" roots="+
+            std::to_string(session_?bridge::SelectionRoots(session_->Scenes().GetScene(),session_->Selection().Entities()).size():0));
         if (!IsSelectedEntityValid())
         {
             return;
@@ -6793,11 +6799,14 @@ namespace renegade::studio
                 results.push_back(c.get());batch->Add(std::move(c));
             }
             ClearSelectionOutline();
-            if(session_->Commands().Execute(std::make_unique<bridge::SelectionHistoryCommand>(
+            const bool duplicated=session_->Commands().Execute(std::make_unique<bridge::SelectionHistoryCommand>(
                 session_->Selection(),std::move(batch),[results] {
                     std::vector<wi::ecs::Entity> selected;for(auto* c:results)selected.push_back(c->DuplicatedEntity());
                     return selected;
-                }))) {
+                }));
+            diagnosticService_.Record(duplicated?bridge::DiagnosticSeverity::Info:bridge::DiagnosticSeverity::Error,
+                "studio.selection","duplicate.result",duplicated?"Selection duplicated":"Duplicate command refused the selection");
+            if(duplicated) {
                 std::vector<wi::ecs::Entity> values;
                 for(auto* c:results)values.push_back(c->DuplicatedEntity());
                 session_->Selection().Set(std::move(values));
@@ -9406,6 +9415,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 const float top=std::min(pointer.y,selectionGestureStart_.y),bottom=std::max(pointer.y,selectionGestureStart_.y);
                 std::vector<wi::ecs::Entity> selected=selectionGestureAdd_?session_->Selection().Entities():std::vector<wi::ecs::Entity>{};
                 const auto vp=EditorOverlayViewProjection(*camera);
+                std::vector<bridge::SelectionScreenBounds> screenBounds;
                 // Scene's native object bounds are already prepared this frame.
                 // Box queries run only on release, never as a per-frame scene scan.
                 for(size_t i=0;i<scene.objects.GetCount() && i<scene.aabb_objects.size();++i) {
@@ -9425,13 +9435,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                         float y=(-clip.y/clip.w*.5f+.5f)*GetLogicalHeight();
                         xmin=std::min(xmin,x);xmax=std::max(xmax,x);ymin=std::min(ymin,y);ymax=std::max(ymax,y);
                     }
-                    if(visible && (pointer.x>=selectionGestureStart_.x ?
-                        xmin>=left && xmax<=right && ymin>=top && ymax<=bottom :
-                        xmin<=right && xmax>=left && ymin<=bottom && ymax>=top)) {
-                        auto root=bridge::ResolveAssemblySelection(scene,e,editingAssembly_);
-                        if(std::find(selected.begin(),selected.end(),root)==selected.end())selected.push_back(root);
-                    }
+                    if(visible)screenBounds.push_back({
+                        bridge::ResolveAssemblySelection(scene,e,editingAssembly_),xmin,ymin,xmax,ymax});
                 }
+                for(auto root:bridge::BoxSelectionHits(screenBounds,left,top,right,bottom,pointer.x>=selectionGestureStart_.x))
+                    if(std::find(selected.begin(),selected.end(),root)==selected.end())selected.push_back(root);
                 session_->Selection().Set(std::move(selected));SyncGizmoSelection();
             } else if(!selectionGestureAdd_)session_->Selection().Clear();
             selectionBox_=false;
@@ -9466,8 +9474,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         if(pointer.x<x || pointer.x>x+520 || pointer.y<y || pointer.y>y+30)return false;
         if(!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))return wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
         const int item=int((pointer.x-x)/130.f);
+        if(item<0 || item>=4 || pointer.x-x-item*130.f>=122.f)return true;
+
         const auto selected=session_->Selection().SelectedEntity();
-        const bool group=bridge::IsSceneAssembly(session_->Scenes().GetScene(),selected);
+        const bool group=session_->Selection().Entities().size()==1 &&
+            bridge::IsSceneAssembly(session_->Scenes().GetScene(),selected);
         if(item==0 && session_->Selection().Entities().size()>1)pendingAction_=EditorAction::GroupSelection;
         if(item==1 && (group||editingAssembly_!=wi::ecs::INVALID_ENTITY))
             pendingAction_=editingAssembly_!=wi::ecs::INVALID_ENTITY?EditorAction::FinishGroupEdit:EditorAction::EditGroupPieces;
@@ -9478,11 +9489,13 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
     void StudioRenderPath::DrawSelectionGesture(wi::graphics::CommandList cmd) const
     {
+        if(scenePrefabSavePanel_.IsVisible())return;
         if(session_ && !projectHubVisible_ && !environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
             !modelImportPanel_.IsVisible() && !assemblyPanel_.IsVisible() && !handGripPanel_.IsVisible() &&
             session_->Selection().HasSelection()) {
             const float x=viewportBounds_.x+16,y=viewportBounds_.y+54;
-            const bool group=bridge::IsSceneAssembly(session_->Scenes().GetScene(),session_->Selection().SelectedEntity());
+            const bool group=session_->Selection().Entities().size()==1 &&
+                bridge::IsSceneAssembly(session_->Scenes().GetScene(),session_->Selection().SelectedEntity());
             const char* labels[]={"Group","Edit Pieces","Save Prefab","Unpack"};
             if(editingAssembly_!=wi::ecs::INVALID_ENTITY)labels[1]="Finish Editing";
             const bool enabled[]={session_->Selection().Entities().size()>1,group||editingAssembly_!=wi::ecs::INVALID_ENTITY,true,group};
@@ -9495,6 +9508,14 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 wi::font::Draw(labels[i],text,cmd);
             }
         }
+        if(session_ && !projectHubVisible_ && !environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
+            !modelImportPanel_.IsVisible() && !assemblyPanel_.IsVisible() && !handGripPanel_.IsVisible() &&
+            editingAssembly_==wi::ecs::INVALID_ENTITY) {
+            wi::font::Params help;help.posX=viewportBounds_.x+16;
+            help.posY=viewportBounds_.y+(session_->Selection().HasSelection()?94.f:54.f);
+            help.size=12;help.color=wi::Color(170,190,190,255);
+            wi::font::Draw("Shift+click: toggle selection  |  Drag empty space: box select",help,cmd);
+        }
         if(selectionGesture_ && selectionBox_) {
             const float x=std::min(selectionGestureStart_.x,selectionGestureEnd_.x);
             const float y=std::min(selectionGestureStart_.y,selectionGestureEnd_.y);
@@ -9505,6 +9526,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 p.blendFlag=wi::enums::BLENDMODE_ALPHA;wi::image::Draw(nullptr,p,cmd);
             };
             rect(x,y,w,h,wi::Color(70,210,190,30));
+            wi::font::Params hint;hint.posX=x;hint.posY=std::max(viewportBounds_.y+8,y-22);
+            hint.size=12;hint.color=wi::Color(190,250,235,255);
+            const bool enclosed=selectionGestureEnd_.x>=selectionGestureStart_.x;
+            const std::string mode=selectionGestureAdd_?"ADD: ":"SELECT: ";
+            wi::font::Draw(mode+(enclosed?"fully enclosed objects":"intersecting objects")+"  |  Esc: cancel",hint,cmd);
             const wi::Color edge(100,230,210,230);
             rect(x,y,w,1,edge);rect(x,y+h,w,1,edge);rect(x,y,1,h,edge);rect(x+w,y,1,h,edge);
         }
@@ -9570,9 +9596,18 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 scenePrefabHelp_.SetText("The scene changed. Close this window and select the pieces again.");return;
             }
             const auto& project=session_->Projects().CurrentProject();bridge::StableId asset;std::string error;
-            if(bridge::SaveSceneAssemblyPrefab(project.rootPath,project.projectId,session_->Scenes().GetScene(),
-                scenePrefabSaveSelection_,name,asset,error)) {
+            // The selection stencil is an editor preview, not prefab content.
+            // Restore the authored values before serializing, just as Scene Save does.
+            ClearSelectionOutline();
+            const bool saved=bridge::SaveSceneAssemblyPrefab(project.rootPath,project.projectId,session_->Scenes().GetScene(),
+                scenePrefabSaveSelection_,name,asset,error);
+            SyncSelectionOutline();
+            if(saved) {
                 scenePrefabSavePanel_.SetVisible(false);
+                // A successful save is an explicit content lifecycle change.
+                // Refresh the folder inventory before revealing a newly created Prefabs folder.
+                assetBrowserCurrentFolder_="Content/Prefabs";
+                RefreshAssetBrowser();
                 bridge::AssetCatalogue catalogue;std::string revealError;
                 studioChrome_.SetActiveBottomTab(0,true);
                 if(!bridge::CreatorAssetWorkflowService().BuildCatalogueSnapshot(project.rootPath,project.projectId,catalogue,revealError) ||
@@ -9592,6 +9627,14 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             if(!session_ || revision!=session_->Scenes().Revision() || testLevelRuntime_.IsActive())return;
             auto& scene=session_->Scenes().GetScene();
             auto selected=session_->Selection().SelectedEntity();
+            if(action==EditorAction::UnpackGroup && session_->Selection().Entities().size()!=1) {
+                studioChrome_.SetStatusText("Select one group or prefab to unpack.");
+                return;
+            }
+            if(action==EditorAction::EditGroupPieces && session_->Selection().Entities().size()!=1) {
+                studioChrome_.SetStatusText("Select one group or prefab to edit its pieces.");
+                return;
+            }
             ClearSelectionOutline();
             if(action==EditorAction::GroupSelection) {
                 auto command=std::make_unique<bridge::SceneAssemblyCommand>(scene,session_->Selection().Entities(),"Group");
@@ -9602,10 +9645,10 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                     studioChrome_.SetStatusText("Group created | Edit > Edit Pieces to change a component");
                 } else studioChrome_.SetStatusText("Select at least two separate pieces to group");
             } else if(action==EditorAction::EditGroupPieces) {
-                if(bridge::IsSceneAssembly(scene,selected)) {
+                if(session_->Selection().Entities().size()==1 && bridge::IsSceneAssembly(scene,selected)) {
                     editingAssembly_=selected;editingSceneRevision_=revision;
                     studioChrome_.SetStatusText("Editing pieces | Click a piece or select it in the hierarchy | Esc to finish");
-                } else studioChrome_.SetStatusText("Select a group or prefab first");
+                } else studioChrome_.SetStatusText("Select one group or prefab first");
             } else if(action==EditorAction::FinishGroupEdit) {
                 if(editingSceneRevision_==revision && scene.transforms.Contains(editingAssembly_))
                     session_->Selection().Select(editingAssembly_);
@@ -9677,39 +9720,14 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
         if(session_->Selection().Entities().size()>1) {
             auto& scene=session_->Scenes().GetScene();
-            const auto roots=bridge::SelectionRoots(scene,session_->Selection().Entities());
-            if(roots.empty() || !std::isfinite(value))return;
-            XMVECTOR center=XMVectorZero();for(auto e:roots)center+=bridge::AssemblyWorldMatrix(scene,e).r[3];
-            center/=float(roots.size());XMFLOAT3 pivot;XMStoreFloat3(&pivot,center);
-            XMFLOAT3 delta={};
-            auto setAxis=[&](XMFLOAT3& v,float f){if(axis==0)v.x=f;else if(axis==1)v.y=f;else v.z=f;};
-            XMMATRIX change;
-            if(tool==TransformTool::Translate) {
-                const float current=axis==0?pivot.x:axis==1?pivot.y:pivot.z;
-                setAxis(delta,value-current);change=XMMatrixTranslation(delta.x,delta.y,delta.z);
-            } else {
-                XMMATRIX operation;
-                if(tool==TransformTool::Rotate) {
-                    setAxis(delta,value*XM_PI/180.f);
-                    operation=XMMatrixRotationRollPitchYaw(delta.x,delta.y,delta.z);
-                } else {
-                    if(value<=0.00001f)return;
-                    delta={1,1,1};setAxis(delta,value);operation=XMMatrixScaling(delta.x,delta.y,delta.z);
-                }
-                change=XMMatrixTranslation(-pivot.x,-pivot.y,-pivot.z)*operation*XMMatrixTranslation(pivot.x,pivot.y,pivot.z);
-            }
-            auto batch=std::make_unique<bridge::SelectionBatchCommand>();
-            for(auto e:roots) {
-                const auto before=bridge::CaptureTransform(*scene.transforms.GetComponent(e));
-                auto world=bridge::AssemblyWorldMatrix(scene,e)*change;
-                if(auto* h=scene.hierarchy.GetComponent(e))world*=XMMatrixInverse(nullptr,bridge::AssemblyWorldMatrix(scene,h->parentID));
-                wi::scene::TransformComponent t;t.MatrixTransform(world);t.UpdateTransform();
-                auto after=bridge::CaptureTransform(t);
-                if(bridge::AssemblyTransformChanged(before,after))
-                    batch->Add(std::make_unique<bridge::SetTransformCommand>(scene,e,before,after));
-            }
-            session_->Commands().Execute(std::move(batch));
-            SyncGizmoSelection();RefreshInspector();RefreshStatus();return;
+            const auto operation=tool==TransformTool::Translate?bridge::SelectionTransformOperation::Position:
+                tool==TransformTool::Rotate?bridge::SelectionTransformOperation::RotateDegrees:bridge::SelectionTransformOperation::ScaleFactor;
+            std::string error;
+            auto command=bridge::CreateSelectionTransformCommand(scene,session_->Selection().Entities(),operation,axis,value,error);
+            if(command)session_->Commands().Execute(std::move(command));
+            SyncGizmoSelection();RefreshInspector();RefreshStatus();
+            if(!error.empty())studioChrome_.SetStatusText(error);
+            return;
         }
         const auto entity = session_->Selection().SelectedEntity();
         auto* transform =
@@ -13048,6 +13066,13 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
     void StudioRenderPath::SyncGizmoSelection()
     {
+        // Undo/delete/reopen can remove the group being edited without another
+        // viewport click. Never leave an orphaned "Finish Editing" mode behind.
+        if(session_ && editingAssembly_!=wi::ecs::INVALID_ENTITY &&
+            (editingSceneRevision_!=session_->Scenes().Revision() ||
+             !bridge::IsSceneAssembly(session_->Scenes().GetScene(),editingAssembly_)))
+            editingAssembly_=wi::ecs::INVALID_ENTITY;
+
         if(riverGizmoPreview_)
         {
             if(session_ && riverGizmoPreviewRevision_==session_->Scenes().Revision())

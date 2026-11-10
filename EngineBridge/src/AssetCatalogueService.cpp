@@ -918,8 +918,8 @@ namespace renegade::bridge
                 entry.sourceAssetId = provenance.sourceAssetId;
                 entry.importer = provenance.importer;
                 entry.importerVersion = provenance.importerVersion;
-                entry.sourceFormat = SourceFormatForPath(
-                    pathForAssetId(provenance.sourceAssetId));
+                entry.sourceFormat = entry.importer=="renegade.scene.assembly" ? "scene-assembly" :
+                    SourceFormatForPath(pathForAssetId(provenance.sourceAssetId));
 
                 const auto source = activeById.find(provenance.sourceAssetId);
                 entry.sourceAvailable = source != activeById.end() &&
@@ -1013,8 +1013,8 @@ namespace renegade::bridge
                 entry.sourceAssetId = imported->second->sourceAssetId;
                 entry.importer = imported->second->importer;
                 entry.importerVersion = imported->second->importerVersion;
-                entry.sourceFormat = SourceFormatForPath(
-                    pathForAssetId(imported->second->sourceAssetId));
+                entry.sourceFormat = entry.importer=="renegade.scene.assembly" ? "scene-assembly" :
+                    SourceFormatForPath(pathForAssetId(imported->second->sourceAssetId));
             }
             catalogue.entries.push_back(std::move(entry));
         }

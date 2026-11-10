@@ -9,6 +9,16 @@ bool IsSceneAssembly(const wi::scene::Scene&,wi::ecs::Entity);
 wi::ecs::Entity ResolveAssemblySelection(const wi::scene::Scene&,wi::ecs::Entity,wi::ecs::Entity editing=wi::ecs::INVALID_ENTITY);
 std::vector<wi::ecs::Entity> SelectionRoots(const wi::scene::Scene&,const std::vector<wi::ecs::Entity>&);
 XMMATRIX AssemblyWorldMatrix(const wi::scene::Scene&,wi::ecs::Entity);
+// UI-independent shared-pivot numeric edits. Preparation never mutates the scene.
+enum class SelectionTransformOperation { Position, RotateDegrees, ScaleFactor };
+std::unique_ptr<ICommand> CreateSelectionTransformCommand(wi::scene::Scene&,
+    const std::vector<wi::ecs::Entity>&,SelectionTransformOperation,int axis,float value,std::string& error);
+struct SelectionScreenBounds {
+    wi::ecs::Entity root;
+    float left,top,right,bottom;
+};
+std::vector<wi::ecs::Entity> BoxSelectionHits(const std::vector<SelectionScreenBounds>&,
+    float left,float top,float right,float bottom,bool fullyEnclosed);
 // Keep authoring selection and the scene operation in one Undo/Redo entry.
 class SelectionHistoryCommand final : public ICommand {
 public:

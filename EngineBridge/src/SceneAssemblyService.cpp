@@ -3,6 +3,7 @@
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include <algorithm>
 #include <cmath>
+#include <unordered_map>
 namespace renegade::bridge {
 using namespace wi::ecs;
 bool AssemblyTransformChanged(const TransformState& a,const TransformState& b) noexcept {
@@ -40,6 +41,86 @@ std::vector<Entity> SelectionRoots(const wi::scene::Scene& scene,const std::vect
             h=scene.hierarchy.GetComponent(h->parentID);
         }if(!covered)result.push_back(e);
     }return result;
+}
+std::vector<Entity> BoxSelectionHits(const std::vector<SelectionScreenBounds>& objects,
+    float left,float top,float right,float bottom,bool fullyEnclosed) {
+    // Test the union of an assembly's visible pieces, not each child separately.
+    // Preserve discovery order for a predictable active object.
+    // A crossing gesture must intersect a visible piece, not just empty space
+    // between an assembly's components.
+    if(!fullyEnclosed) {
+        std::vector<Entity> hits;std::unordered_map<Entity,bool> seen;
+        for(const auto& b:objects)if(b.left<=right&&b.right>=left&&b.top<=bottom&&b.bottom>=top)
+            if(seen.emplace(b.root,true).second)hits.push_back(b.root);
+        return hits;
+    }
+    std::vector<SelectionScreenBounds> units;
+    std::unordered_map<Entity,size_t> indices;
+    for(const auto& b:objects) {
+        const auto inserted=indices.emplace(b.root,units.size());
+        if(inserted.second)units.push_back(b);
+        else {
+            auto& unit=units[inserted.first->second];
+            unit.left=std::min(unit.left,b.left);unit.top=std::min(unit.top,b.top);
+            unit.right=std::max(unit.right,b.right);unit.bottom=std::max(unit.bottom,b.bottom);
+        }
+    }
+    std::vector<Entity> hits;
+    for(const auto& u:units)if(fullyEnclosed ?
+        u.left>=left&&u.right<=right&&u.top>=top&&u.bottom<=bottom :
+        u.left<=right&&u.right>=left&&u.top<=bottom&&u.bottom>=top)hits.push_back(u.root);
+    return hits;
+}
+std::unique_ptr<ICommand> CreateSelectionTransformCommand(wi::scene::Scene& scene,
+    const std::vector<Entity>& selected,SelectionTransformOperation operation,int axis,float value,std::string& error) {
+    error.clear();
+    const auto roots=SelectionRoots(scene,selected);
+    if(roots.empty()||axis<0||axis>2||!std::isfinite(value)) {
+        error="Enter a finite transform value for the selected objects.";return {};
+    }
+    if(operation==SelectionTransformOperation::ScaleFactor&&value<=0.00001f) {
+        error="Enter a scale factor greater than zero. 1 keeps the current size.";return {};
+    }
+    XMVECTOR center=XMVectorZero();
+    for(auto e:roots)center+=AssemblyWorldMatrix(scene,e).r[3];
+    center/=float(roots.size());XMFLOAT3 pivot;XMStoreFloat3(&pivot,center);
+    XMFLOAT3 delta={};
+    auto setAxis=[&](XMFLOAT3& v,float f){if(axis==0)v.x=f;else if(axis==1)v.y=f;else v.z=f;};
+    XMMATRIX change;
+    if(operation==SelectionTransformOperation::Position) {
+        const float current=axis==0?pivot.x:axis==1?pivot.y:pivot.z;
+        setAxis(delta,value-current);change=XMMatrixTranslation(delta.x,delta.y,delta.z);
+    } else {
+        XMMATRIX edit;
+        if(operation==SelectionTransformOperation::RotateDegrees) {
+            setAxis(delta,XMConvertToRadians(value));edit=XMMatrixRotationRollPitchYaw(delta.x,delta.y,delta.z);
+        } else {
+            delta={1,1,1};setAxis(delta,value);edit=XMMatrixScaling(delta.x,delta.y,delta.z);
+        }
+        change=XMMatrixTranslation(-pivot.x,-pivot.y,-pivot.z)*edit*XMMatrixTranslation(pivot.x,pivot.y,pivot.z);
+    }
+    auto batch=std::make_unique<SelectionBatchCommand>();
+    for(auto e:roots) {
+        const auto before=CaptureTransform(*scene.transforms.GetComponent(e));
+        auto local=AssemblyWorldMatrix(scene,e)*change;
+        if(auto* h=scene.hierarchy.GetComponent(e))
+            local*=XMMatrixInverse(nullptr,AssemblyWorldMatrix(scene,h->parentID));
+        XMVECTOR scale,rotation,translation;
+        if(XMMatrixIsNaN(local)||XMMatrixIsInfinite(local)||
+            !XMMatrixDecompose(&scale,&rotation,&translation,local)) {
+            error="These parent transforms cannot support that edit. Nothing was changed.";return {};
+        }
+        TransformState after;
+        XMStoreFloat3(&after.translation,translation);XMStoreFloat4(&after.rotation,rotation);XMStoreFloat3(&after.scale,scale);
+        const auto rebuilt=XMMatrixScalingFromVector(scale)*XMMatrixRotationQuaternion(rotation)*XMMatrixTranslationFromVector(translation);
+        XMFLOAT4X4 wanted,actual;XMStoreFloat4x4(&wanted,local);XMStoreFloat4x4(&actual,rebuilt);
+        for(int row=0;row<4;++row)for(int column=0;column<4;++column)
+            if(std::abs(wanted.m[row][column]-actual.m[row][column])>0.0001f*std::max(1.f,std::abs(wanted.m[row][column]))) {
+                error="Use uniform parent scales for this edit. Nothing was changed.";return {};
+            }
+        if(AssemblyTransformChanged(before,after))batch->Add(std::make_unique<SetTransformCommand>(scene,e,before,after));
+    }
+    return batch;
 }
 SelectionHistoryCommand::SelectionHistoryCommand(SelectionService& selection,std::unique_ptr<ICommand> command,
     std::function<Selection()> after)

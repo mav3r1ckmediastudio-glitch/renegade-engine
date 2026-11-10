@@ -2632,7 +2632,7 @@ namespace renegade::studio
             if (!asset.thumbnail.IsValid())
             {
                 DrawText(
-                    asset.directory ? "DIR" : "FILE",
+                    asset.directory ? "DIR" : asset.typeLabel=="PREFAB" ? "PREFAB" : "FILE",
                     x + 12.0f,
                     y + 15.0f,
                     8,
