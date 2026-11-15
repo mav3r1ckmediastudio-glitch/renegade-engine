@@ -3,6 +3,7 @@
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/ProjectService.h"
 #include <Windows.h>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 using namespace renegade::bridge;
@@ -47,7 +48,7 @@ int main(int argc, char **argv)
         return 2;
     auto camera = scene->Entity_CreateCamera("Review camera", 1280, 720);
     auto *ct = scene->transforms.GetComponent(camera);
-    ct->Translate({0, 2, -5});
+    ct->Translate(XMFLOAT3(0, 2, -5));
     ct->UpdateTransform();
     scene->cameras.GetComponent(camera)->TransformCamera(*ct);
     scene->cameras.GetComponent(camera)->UpdateCamera();
