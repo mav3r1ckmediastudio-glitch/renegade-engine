@@ -2,6 +2,7 @@
 #include "renegade/bridge/DialogueAssetService.h"
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/ProjectService.h"
+#include "renegade/bridge/StoryFlowProjectHomeService.h"
 #include <Windows.h>
 #include <cstdlib>
 #include <filesystem>
@@ -95,6 +96,59 @@ int main(int argc, char **argv)
     {
         std::cerr << error;
         return 9;
+    }
+    const auto home = StoryFlowProjectHomeService{}.Ensure(projects.CurrentProject());
+    if (!home.succeeded)
+    {
+        std::cerr << home.message;
+        return 10;
+    }
+    FlowDocument flow;
+    if (!ReadFlowDocument(home.flowPath, project.projectId, flow, error))
+    {
+        std::cerr << error;
+        return 11;
+    }
+    std::string levelId, completeId;
+    for (const auto &node : flow.nodes)
+    {
+        if (node.kind == FlowNodeKind::Level)
+        {
+            if (!levelId.empty())
+                return 12;
+            levelId = node.id;
+        }
+        if (node.kind == FlowNodeKind::CompleteGame)
+            completeId = node.id;
+    }
+    if (levelId.empty())
+        return 13;
+    if (completeId.empty())
+    {
+        FlowNode end;
+        end.id = GenerateStableId();
+        end.kind = FlowNodeKind::CompleteGame;
+        end.name = "Complete Game";
+        completeId = end.id;
+        flow.nodes.push_back(end);
+    }
+    bool linked = false;
+    for (const auto &route : flow.routes)
+        if (route.sourceNodeId == levelId && route.destinationNodeId == completeId)
+            linked = true;
+    if (!linked)
+    {
+        FlowRoute route;
+        route.id = GenerateStableId();
+        route.sourceNodeId = levelId;
+        route.destinationNodeId = completeId;
+        route.outcome = "level.complete";
+        flow.routes.push_back(route);
+    }
+    if (!WriteFlowDocument(home.flowPath, flow, error))
+    {
+        std::cerr << error;
+        return 14;
     }
     std::cout << project.descriptorPath << '\n';
     std::cout.flush();

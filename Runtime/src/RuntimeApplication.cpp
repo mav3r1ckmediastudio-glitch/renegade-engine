@@ -5,6 +5,7 @@
 #include <cmath>
 #include <filesystem>
 #include "RuntimeApplication.h"
+#include "RuntimeSingleLevelSavePolicy.h"
 #include "RuntimeWeatherDiagnostic.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
 #include "InventoryUiInputPolicy.h"
@@ -3678,15 +3679,17 @@ namespace renegade::runtime
         std::string& sceneId,std::string& error) const
     {
         sceneId.clear();
-        // G5D only supports authored direct-Scene Runtime sessions. A Story
-        // Flow multi-level game requires a separate flow-node resume journal,
-        // and may not silently reset the player into the wrong level.
+        // A direct scene or unconditional Start -> one Level -> Complete
+        // route can reset to the same authored scene. Other Flow shapes need
+        // their own resume journal and remain rejected.
+        const bool flowCanReset=startupResult_.startupFlowPath.empty() ||
+            SupportsSingleLevelQuickSave(flow_.Document(),flow_.CurrentNode());
         if (gameSaveLocalAppData_.empty() ||
-            !player_.IsSpawned() ||
-            !startupResult_.startupFlowPath.empty() ||
+            !player_.IsSpawned() || !flowCanReset ||
+            !startupResult_.startupScreenPath.empty() ||
             startupResult_.startupScenePath.empty() ||
             scenes_.CurrentPath().empty()) {
-            error="Quick save requires an active direct-scene game with a Player Start.";
+            error="Quick save requires a direct scene or simple single-level game with a Player Start.";
             return false;
         }
         std::error_code ec;

@@ -1,3 +1,7 @@
+add_executable(RenegadeDialogueSavePolicyTests DialogueSavePolicyTests.cpp)
+target_link_libraries(RenegadeDialogueSavePolicyTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeDialogueSavePolicyTests COMMAND RenegadeDialogueSavePolicyTests)
+set_target_properties(RenegadeDialogueSavePolicyTests PROPERTIES FOLDER "Renegade/Tests")
 add_executable(RenegadeDialogueAssetTests DialogueAssetTests.cpp)
 target_link_libraries(RenegadeDialogueAssetTests PRIVATE Renegade::EngineBridge)
 add_test(NAME RenegadeDialogueAssetTests COMMAND RenegadeDialogueAssetTests)

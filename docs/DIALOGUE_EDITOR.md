@@ -45,10 +45,10 @@ packaging roots. Test Game stages validated conversation assets into its shadow
 project. Bindings live in WISCENE metadata and survive native save/reopen.
 
 Dialogue memory is an additional bounded payload in quick-save format 2; format-1
-quick saves remain readable. Inventory-free direct-scene games can quick-save
-using an empty native inventory snapshot. Existing scene-identity and direct-scene
-save restrictions remain; multi-level Story Flow resume is not implemented by this
-change. Quick load closes the conversation and restores remembered choices;
+quick saves remain readable. Inventory-free direct-scene and simple single-level games can quick-save
+using an empty native inventory snapshot. Scene identity remains mandatory. The only supported Flow shape is an
+unconditional Game Start -> one Level -> Complete Game route, with no startup
+menu. Branched or multi-level Story Flow resume still requires a separate journal. Quick load closes the conversation and restores remembered choices;
 resuming in the middle of a spoken line is not implemented.
 
 ## Current limits and acceptance
@@ -66,5 +66,5 @@ without inventory. Automated checks alone do not establish these acceptances.
 
 For local Windows review, configure with the normal embedded-shader setting and
 build `RenegadeDialogueReview` in Release. This aggregate builds Studio, Runtime,
-the three focused tests and the disposable project author in one MSBuild graph.
+the four focused tests and the disposable project author in one MSBuild graph.
 The author accepts only a fresh directory named `dialogue-proof-20261115`.

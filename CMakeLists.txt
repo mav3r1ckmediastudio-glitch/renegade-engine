@@ -401,7 +401,7 @@ endif()
 
 # Dialogue tests must be built by the explicit Studio CI aggregate before CTest.
 if(TARGET RenegadeStudioCI)
-    add_dependencies(RenegadeStudioCI RenegadeDialogueTests RenegadeDialogueAssetTests)
+    add_dependencies(RenegadeStudioCI RenegadeDialogueTests RenegadeDialogueAssetTests RenegadeDialogueSavePolicyTests)
 endif()
 
 # One graph for local dialogue authoring, native save and gameplay review.
@@ -410,6 +410,6 @@ if(WIN32)
     add_dependencies(RenegadeDialogueReview
         RenegadeStudio RenegadeRuntime RenegadeDialogueTests
         RenegadeDialogueAssetTests RenegadeRuntimeGameSaveSlotTests
-        RenegadeDialogueReviewAuthor)
+        RenegadeDialogueSavePolicyTests RenegadeDialogueReviewAuthor)
     set_target_properties(RenegadeDialogueReview PROPERTIES FOLDER "Renegade/Tests")
 endif()
