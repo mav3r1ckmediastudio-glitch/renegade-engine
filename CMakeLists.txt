@@ -398,3 +398,8 @@ endif()
 if(TARGET RenegadeStudioCI AND TARGET RenegadeNativeWindowSurfaceTests)
     add_dependencies(RenegadeStudioCI RenegadeNativeWindowSurfaceTests)
 endif()
+
+# Dialogue tests must be built by the explicit Studio CI aggregate before CTest.
+if(TARGET RenegadeStudioCI)
+    add_dependencies(RenegadeStudioCI RenegadeDialogueTests RenegadeDialogueAssetTests)
+endif()

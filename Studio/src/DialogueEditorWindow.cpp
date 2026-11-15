@@ -133,7 +133,7 @@ struct DialogueEditorWindow::Impl
             auto &l = doc.lines[index];
             if (!seen.insert(l.id).second)
             {
-                Row("Continue to: " + l.id, depth, {index});
+                Row("Continue to: " + l.speaker + " - " + l.text.substr(0, 40), depth, {index});
                 return;
             }
             Row(l.speaker + ": " + l.text, depth, {index});
@@ -211,7 +211,8 @@ struct DialogueEditorWindow::Impl
         next.ClearItems();
         next.AddItem("End conversation");
         for (auto &line : doc.lines)
-            next.AddItem(line.id + " - " + line.text.substr(0, 30));
+            next.AddItem((line.id == doc.entry ? std::string("Opening") : line.speaker) + ": " +
+                         line.text.substr(0, 40));
         std::string destination = o                              ? o->next
                                   : r && r->outcomes.size() == 1 ? r->outcomes[0].next
                                   : l && !r                      ? l->next
