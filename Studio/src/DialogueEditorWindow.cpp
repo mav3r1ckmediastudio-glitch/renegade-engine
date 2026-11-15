@@ -111,13 +111,22 @@ class DialogueOutline : public wi::gui::TreeList
             std::string label = item.name;
             if (wi::font::TextWidth(label, p) > box.siz.x - 16)
             {
-                while (!label.empty() && wi::font::TextWidth(label + "...", p) > box.siz.x - 16)
+                // Measure only UTF-8 boundaries, with logarithmic font measurements
+                // even when an authored line contains thousands of characters.
+                std::vector<size_t> ends{0};
+                for (size_t n = 1; n < label.size(); ++n)
+                    if ((static_cast<unsigned char>(label[n]) & 0xC0) != 0x80)
+                        ends.push_back(n);
+                size_t low = 0, high = ends.size() - 1;
+                while (low < high)
                 {
-                    size_t end = label.size() - 1;
-                    while (end > 0 && (static_cast<unsigned char>(label[end]) & 0xC0) == 0x80)
-                        --end;
-                    label.resize(end);
+                    const size_t mid = (low + high + 1) / 2;
+                    if (wi::font::TextWidth(label.substr(0, ends[mid]) + "...", p) <= box.siz.x - 16)
+                        low = mid;
+                    else
+                        high = mid - 1;
                 }
+                label.resize(ends[low]);
                 label += "...";
             }
             wi::font::Draw(label, p, cmd);

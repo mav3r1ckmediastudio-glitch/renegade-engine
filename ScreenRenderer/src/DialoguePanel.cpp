@@ -32,7 +32,13 @@ bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &pr
         w.style.text.wrap = true;
         const auto accent = ScreenColor{std::uint8_t(view.theme.accent >> 16), std::uint8_t(view.theme.accent >> 8),
                                         std::uint8_t(view.theme.accent), 255};
-        w.style.normal.background = {43, 46, 48, 255};
+        w.style.normal.background =
+            kind == ScreenWidgetKind::Button ? ScreenColor{43, 46, 48, 255} : ScreenColor{33, 35, 37, 255};
+        if (kind == ScreenWidgetKind::Text)
+        {
+            w.style.text.horizontalAlignment = ScreenHorizontalAlignment::Left;
+            w.style.text.verticalAlignment = ScreenVerticalAlignment::Top;
+        }
         w.style.normal.foreground = {240, 243, 242, 255};
         w.style.hover.background = w.style.focused.background = {48, 75, 69, 255};
         w.style.hover.foreground = w.style.focused.foreground = {245, 250, 248, 255};
@@ -50,7 +56,9 @@ bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &pr
         }
         d.widgets.push_back(w);
     };
+    add(ScreenWidgetKind::Image, "", {0, 0, 1200, 280});
     add(ScreenWidgetKind::Text, view.speaker, {26, 18, 520, 36});
+    d.widgets.back().style.normal.foreground = {137, 225, 208, 255};
     add(ScreenWidgetKind::Text, view.text, {26, 62, 520, 184});
     // Four visible replies per page; all remaining replies remain reachable.
     const auto pages = (view.replies.size() + 3) / 4;
