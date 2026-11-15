@@ -2,6 +2,7 @@
 #include "renegade/bridge/TestLevelLaunchTiming.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/TestLevelSnapshotService.h"
+#include "renegade/bridge/DialogueAssetService.h"
 #include "renegade/bridge/ImpactAudioService.h"
 #include "renegade/bridge/InventoryTestLevelSnapshot.h"
 #include "renegade/bridge/InventoryDependencyProvider.h"
@@ -1300,6 +1301,13 @@ namespace renegade::bridge
             if (!scenes_.CurrentPath().empty() &&
                 !SnapshotInventoryProjectInputs(project, created, scenes_.CurrentPath(), error))
                 return failAndCleanup("Could not snapshot inventory gameplay inputs: " + error);
+
+            std::string dialogueError;
+            const auto dialogues=ListDialogueAssets(project.rootPath,project.projectId,dialogueError);
+            if(!dialogueError.empty())return failAndCleanup("Could not snapshot dialogue: "+dialogueError);
+            for(const auto& dialogue:dialogues)
+                if(!SaveDialogueAsset(created.sessionDirectory,dialogue,error))
+                    return failAndCleanup("Could not snapshot dialogue: "+error);
 
             if (!SnapshotParticleEffectRuntimeInputs(project.rootPath, project.projectId, created.sessionDirectory, error))
                 return failAndCleanup("Could not snapshot particle runtime catalog: " + error);

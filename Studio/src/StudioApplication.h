@@ -1,4 +1,5 @@
 #pragma once
+#include "DialogueEditorWindow.h"
 #include "renegade/bridge/SceneAssemblyService.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/RiverFlowRenderer.h"
@@ -1051,6 +1052,7 @@ namespace renegade::studio
         wi::gui::Label lightLabel_;
         SceneInspectorComboBox lightType_;
         SceneInspectorButton lightPickerButton_;
+        DialogueEditorWindow dialogueEditor_;
         LightPickerWindow lightPicker_;
         ParticlePickerWindow particlePicker_;
         bridge::ParticleEffect particlePlacementSetup_;

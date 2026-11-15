@@ -3277,6 +3277,9 @@ namespace renegade::studio
                 pendingLightType_ = wi::scene::LightComponent::DIRECTIONAL;
                 RequestDiagnosticAction(EditorAction::CreateLight);
                 break;
+            case RenegadeStudioChrome::Action::OpenDialogue:
+                if(session_&&!projectHubVisible_){dialogueEditor_.SetPos({std::max(8.0f,(GetLogicalWidth()-1150)*.5f),32});dialogueEditor_.Open(*session_,*this);}
+                break;
             case RenegadeStudioChrome::Action::CreateRectangleLight:
                 pendingLightType_ = wi::scene::LightComponent::RECTANGLE;
                 RequestDiagnosticAction(EditorAction::CreateLight);
@@ -3618,6 +3621,7 @@ namespace renegade::studio
         CreatePickupEditor();
         CreateAssemblyEditor();
         CreateEquipmentEditor();
+        dialogueEditor_.Create();GetGUI().AddWidget(&dialogueEditor_);
         lightPicker_.Create();
         GetGUI().AddWidget(&lightPicker_);
         particlePicker_.Create();GetGUI().AddWidget(&particlePicker_);GetGUI().AddWidget(&particlePicker_.TextureBrowserWidget());
@@ -4088,7 +4092,8 @@ namespace renegade::studio
         DiagnosticInputFrame diagnosticInput(diagnosticService_,
             wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
         PollTestLevel();
-        lightPickerFrameSuspended_=lightPicker_.IsVisible()||particlePicker_.IsVisible();
+        lightPickerFrameSuspended_=lightPicker_.IsVisible()||particlePicker_.IsVisible()||dialogueEditor_.IsVisible();
+        if(session_)dialogueEditor_.Tick(*session_,*this);
         // STOP may run from the 2D GUI update below. Retain 2D ownership for
         // the rest of that frame; 3D must first receive a fresh Scene::Update.
         testLevelFrameSuspended_ = testLevelRuntime_.IsActive();

@@ -1,3 +1,11 @@
+add_executable(RenegadeDialogueAssetTests DialogueAssetTests.cpp)
+target_link_libraries(RenegadeDialogueAssetTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeDialogueAssetTests COMMAND RenegadeDialogueAssetTests)
+set_target_properties(RenegadeDialogueAssetTests PROPERTIES FOLDER "Renegade/Tests")
+add_executable(RenegadeDialogueTests DialogueTests.cpp ../EngineBridge/src/DialogueService.cpp)
+target_include_directories(RenegadeDialogueTests PRIVATE ../EngineBridge/include)
+add_test(NAME RenegadeDialogueTests COMMAND RenegadeDialogueTests)
+set_target_properties(RenegadeDialogueTests PROPERTIES FOLDER "Renegade/Tests")
 # INV-G1 core tests deliberately avoid Wicked and all Runtime/UI dependencies.
 add_executable(RenegadeInventoryCoreTests
     InventoryCoreTests.cpp
@@ -2133,3 +2141,8 @@ if(WIN32)
     add_dependencies(RenegadeBridgeTests RenegadeScenePrefabFunctionalProof)
     target_compile_options(RenegadeScenePrefabFunctionalProof PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 endif()
+
+# Explicitly invoked disposable owner-review project author; never a normal CTest.
+add_executable(RenegadeDialogueReviewAuthor DialogueReviewAuthor.cpp)
+target_link_libraries(RenegadeDialogueReviewAuthor PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeDialogueReviewAuthor PROPERTIES FOLDER "Renegade/Tests")

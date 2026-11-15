@@ -22,7 +22,8 @@ namespace {
 namespace fs=std::filesystem;
 constexpr std::size_t MaxInventory=16u*1024u*1024u;
 constexpr std::size_t MaxWorld=4u*1024u*1024u;
-constexpr std::size_t MaxFile=MaxInventory+MaxWorld+1024u;
+constexpr std::size_t MaxDialogue=4u*1024u*1024u;
+constexpr std::size_t MaxFile=MaxInventory+MaxWorld+MaxDialogue+1024u;
 
 std::uint64_t Checksum(const std::string& bytes) {
     std::uint64_t hash=14695981039346656037ull;
@@ -76,14 +77,14 @@ bool Encode(const RuntimeGameSaveState& state,std::string& bytes,std::string& er
     // copies of inventory item definitions or world object meshes.
     std::ostringstream payload;
     payload<<std::setprecision(std::numeric_limits<float>::max_digits10);
-    payload<<"RENEGADE_GAME_SAVE 1 "<<state.projectId<<' '<<state.sceneId<<' '
+    payload<<"RENEGADE_GAME_SAVE 2 "<<state.projectId<<' '<<state.sceneId<<' '
            <<state.playerHealth<<' '<<state.playerMaxHealth<<' '
            <<static_cast<unsigned>(state.playerDead)<<' '
            <<state.playerX<<' '<<state.playerY<<' '<<state.playerZ<<' '
            <<state.playerYaw<<' '<<state.playerPitch<<' '
-           <<state.inventoryBytes.size()<<' '<<state.retiredWorldBytes.size()<<'\n';
+           <<state.inventoryBytes.size()<<' '<<state.retiredWorldBytes.size()<<' '<<state.dialogueBytes.size()<<'\n';
     const std::string prefix=payload.str();
-    const auto contents=prefix+state.inventoryBytes+state.retiredWorldBytes;
+    const auto contents=prefix+state.inventoryBytes+state.retiredWorldBytes+state.dialogueBytes;
     std::ostringstream output;
     output<<std::hex<<std::setw(16)<<std::setfill('0')<<Checksum(contents)<<'\n';
     bytes=output.str()+contents;
@@ -122,22 +123,23 @@ bool Decode(const std::string& bytes,RuntimeGameSaveState& state,std::string& er
     std::istringstream input(bytes.substr(headerStart,headerEnd-headerStart));
     std::string magic,extra;
     unsigned version=0,dead=0;
-    std::size_t inventorySize=0,worldSize=0;
+    std::size_t inventorySize=0,worldSize=0,dialogueSize=0;
     RuntimeGameSaveState parsed;
     if(!(input>>magic>>version>>parsed.projectId>>parsed.sceneId>>
             parsed.playerHealth>>parsed.playerMaxHealth>>dead>>
             parsed.playerX>>parsed.playerY>>parsed.playerZ>>
             parsed.playerYaw>>parsed.playerPitch>>inventorySize>>worldSize) ||
-        (input>>extra) || magic!="RENEGADE_GAME_SAVE" || version!=1 ||
+        (version==2 && !(input>>dialogueSize)) || (input>>extra) || magic!="RENEGADE_GAME_SAVE" || (version!=1&&version!=2) ||
         dead>1 || inventorySize==0 || inventorySize>MaxInventory ||
         worldSize==0 || worldSize>MaxWorld ||
-        inventorySize+worldSize!=bytes.size()-headerEnd-1) {
+        dialogueSize>MaxDialogue || inventorySize+worldSize+dialogueSize!=bytes.size()-headerEnd-1) {
         error="Quick save header or payload lengths are invalid.";
         return false;
     }
     parsed.playerDead=dead==1;
     parsed.inventoryBytes=bytes.substr(headerEnd+1,inventorySize);
     parsed.retiredWorldBytes=bytes.substr(headerEnd+1+inventorySize,worldSize);
+    parsed.dialogueBytes=bytes.substr(headerEnd+1+inventorySize+worldSize,dialogueSize);
     if(!ValidateRuntimeGameSaveState(parsed,error))return false;
     state=std::move(parsed);
     error.clear();
@@ -151,6 +153,7 @@ bool ValidateRuntimeGameSaveState(const RuntimeGameSaveState& state,
        !bridge::IsValidStableId(state.sceneId) ||
        state.inventoryBytes.empty() || state.inventoryBytes.size()>MaxInventory ||
        state.retiredWorldBytes.empty() || state.retiredWorldBytes.size()>MaxWorld ||
+       state.dialogueBytes.size()>MaxDialogue ||
        !std::isfinite(state.playerHealth) ||
        !std::isfinite(state.playerMaxHealth) ||
        state.playerMaxHealth<=0 || state.playerMaxHealth>1000000.f ||

@@ -765,6 +765,7 @@ namespace renegade::screen
         DragSink dragSink;
         ScreenInstanceRoot root;
         bool attached=false;
+        wi::gui::Window* embeddedParent=nullptr;
         std::vector<std::unique_ptr<ScreenSurface>> surfaces;
         std::unordered_map<bridge::StableId, ScreenSurface*> byId;
         std::unordered_map<bridge::StableId, bridge::ScreenRect> logicalRects;
@@ -1176,10 +1177,19 @@ namespace renegade::screen
         impl_->root.priority_change=false;
         renderPath.GetGUI().AddWidget(&impl_->root);impl_->attached=true;
     }
+    void ScreenRenderer::EmbedInWindow(wi::RenderPath2D& renderPath,wi::gui::Window& parent)
+    {
+        if(!impl_->loaded)return;
+        DetachPresentation(renderPath);
+        parent.AddWidget(&impl_->root,wi::gui::Window::AttachmentOptions::NONE);
+        impl_->embeddedParent=&parent;impl_->attached=true;
+    }
     void ScreenRenderer::DetachPresentation(wi::RenderPath2D& renderPath) noexcept
     {
         if(!impl_->attached)return;
-        renderPath.GetGUI().RemoveWidget(&impl_->root);impl_->attached=false;
+        if(impl_->embeddedParent)impl_->embeddedParent->RemoveWidget(&impl_->root);
+        else renderPath.GetGUI().RemoveWidget(&impl_->root);
+        impl_->embeddedParent=nullptr;impl_->attached=false;
     }
 
     bool ScreenRenderer::IsInputEnabled() const noexcept

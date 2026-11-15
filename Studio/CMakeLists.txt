@@ -71,6 +71,7 @@ if(NOT RENEGADE_IMNODES_REVISION_RESULT EQUAL 0 OR
 endif()
 
 add_executable(RenegadeStudio WIN32
+    src/DialogueEditorWindow.cpp
     src/WaterfallStudioIntegration.cpp
     src/WaterfallTransparentStudio.cpp
     src/RiverFlowStudioIntegration.cpp

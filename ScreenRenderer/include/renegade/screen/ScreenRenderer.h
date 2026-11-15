@@ -141,6 +141,8 @@ namespace renegade::screen
         void SetInputEnabled(bool enabled) noexcept;
         void SetPresentationVisible(bool visible) noexcept;
         void AttachPresentation(wi::RenderPath2D& renderPath);
+        // Embed the same native surfaces above an editor Window background.
+        void EmbedInWindow(wi::RenderPath2D& renderPath,wi::gui::Window& parent);
         void DetachPresentation(wi::RenderPath2D& renderPath) noexcept;
         [[nodiscard]] bool IsInputEnabled() const noexcept;
         void SetFocusedWidget(const bridge::StableId& widgetId);

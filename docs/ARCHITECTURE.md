@@ -2203,3 +2203,17 @@ Packaged reusable-asset validation preserves authored scene-assembly copies and
 unpacked contents instead of replacing them with the source product, so instance
 edits and script owners survive startup. This is independent-copy placement;
 source-update propagation and a custom shader-authoring system are separate work.
+
+
+## Dialogue candidate (15 November 2026; unmerged)
+
+DialogueService is a UI-independent, versioned conversation and memory authority.
+Studio outline and Advanced controls edit one document with a bounded local history;
+NPC assignment uses the normal scene command boundary. Transactional .rdialogue
+assets live in project Content/Dialogue and explicit package roots. Runtime caches
+bindings on SceneService revision changes, then queries only bound transforms.
+Preview and gameplay share DialogueSession and ScreenRenderer/DialoguePanel.
+Event actions enter the existing gameplay event queue before memory/advance commits.
+Quick-save v2 appends bounded dialogue memory while retaining v1 reads. No Wicked
+source or submodule pin change is part of this candidate. See DIALOGUE_EDITOR.md
+for outstanding presentation and native acceptance limits.

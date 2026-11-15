@@ -1,4 +1,5 @@
 add_library(RenegadeScreenRenderer STATIC
+    src/DialoguePanel.cpp
     include/renegade/screen/ScreenRenderer.h
     src/ScreenRenderer.cpp
 )

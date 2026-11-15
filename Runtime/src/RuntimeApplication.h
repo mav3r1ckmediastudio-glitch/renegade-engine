@@ -1,5 +1,6 @@
 #include "RuntimeGameplayAttributeWorld.h"
 #pragma once
+#include "RuntimeDialogue.h"
 #include "renegade/bridge/RiverFlowRenderer.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 
@@ -145,6 +146,7 @@ namespace renegade::runtime
 
     class RuntimeApplication final : public wi::Application
     {
+        RuntimeDialogue dialogue_;
     public:
         void SetBootstrapResult(RuntimeBootstrapResult result);
         void SetSmokeOptions(bool autoPlay, bool exitOnComplete) noexcept;
