@@ -100,7 +100,8 @@ AssignDialogueCommand::AssignDialogueCommand(wi::scene::Scene &s, wi::ecs::Entit
 }
 void AssignDialogueCommand::Apply(const std::string &id)
 {
-    auto &m = scene_->metadatas.Create(entity_);
+    auto *existing = scene_->metadatas.GetComponent(entity_);
+    auto &m = existing ? *existing : scene_->metadatas.Create(entity_);
     if (id.empty())
         m.string_values.erase(DialogueMetadataKey);
     else
