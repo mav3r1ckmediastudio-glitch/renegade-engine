@@ -63,3 +63,8 @@ Required native evidence: editor visual/layout and interaction; Save/Discard and
 Undo/Redo; assignment save/reopen; both permit paths; input/cursor restoration;
 Test Game; dependency-closed standalone package; quick-save/quick-load with and
 without inventory. Automated checks alone do not establish these acceptances.
+
+For local Windows review, configure with the normal embedded-shader setting and
+build `RenegadeDialogueReview` in Release. This aggregate builds Studio, Runtime,
+the three focused tests and the disposable project author in one MSBuild graph.
+The author accepts only a fresh directory named `dialogue-proof-20261115`.

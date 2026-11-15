@@ -403,3 +403,13 @@ endif()
 if(TARGET RenegadeStudioCI)
     add_dependencies(RenegadeStudioCI RenegadeDialogueTests RenegadeDialogueAssetTests)
 endif()
+
+# One graph for local dialogue authoring, native save and gameplay review.
+if(WIN32)
+    add_custom_target(RenegadeDialogueReview)
+    add_dependencies(RenegadeDialogueReview
+        RenegadeStudio RenegadeRuntime RenegadeDialogueTests
+        RenegadeDialogueAssetTests RenegadeRuntimeGameSaveSlotTests
+        RenegadeDialogueReviewAuthor)
+    set_target_properties(RenegadeDialogueReview PROPERTIES FOLDER "Renegade/Tests")
+endif()

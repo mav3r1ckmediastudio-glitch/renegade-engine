@@ -4,6 +4,8 @@
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/screen/DialoguePanel.h"
 #include <algorithm>
+#include <charconv>
+#include <cmath>
 #include <set>
 namespace renegade::studio
 {
@@ -473,22 +475,30 @@ struct DialogueEditorWindow::Impl
         textSize.Create("Dialogue font size");
         textSize.SetDescription("Text size: ");
         Add(textSize, 840, 390, 260, 28);
-        textSize.OnInputAccepted([this](auto &e) {
+        textSize.OnInput([this](auto &e) {
             if (sync)
                 return;
+            float parsed = 0;
+            const auto result = std::from_chars(e.sValue.data(), e.sValue.data() + e.sValue.size(), parsed);
+            if (result.ec != std::errc{} || result.ptr != e.sValue.data() + e.sValue.size() || !std::isfinite(parsed))
+                return;
             Before();
-            doc.theme.textSize = std::clamp(e.fValue, 14.f, 48.f);
+            doc.theme.textSize = std::clamp(parsed, 14.f, 48.f);
             if (preview.Active())
                 Start();
         });
         opacity.Create("Dialogue opacity");
         opacity.SetDescription("Opacity: ");
         Add(opacity, 840, 430, 260, 28);
-        opacity.OnInputAccepted([this](auto &e) {
+        opacity.OnInput([this](auto &e) {
             if (sync)
                 return;
+            float parsed = 0;
+            const auto result = std::from_chars(e.sValue.data(), e.sValue.data() + e.sValue.size(), parsed);
+            if (result.ec != std::errc{} || result.ptr != e.sValue.data() + e.sValue.size() || !std::isfinite(parsed))
+                return;
             Before();
-            doc.theme.panelOpacity = std::clamp(e.fValue, .2f, 1.f);
+            doc.theme.panelOpacity = std::clamp(parsed, .2f, 1.f);
             if (preview.Active())
                 Start();
         });
@@ -609,15 +619,22 @@ struct DialogueEditorWindow::Impl
         value.OnInput([this](auto &e) {
             if (sync)
                 return;
+            int parsed = 0;
+            const auto result = std::from_chars(e.sValue.data(), e.sValue.data() + e.sValue.size(), parsed);
+            if (result.ec != std::errc{} || result.ptr != e.sValue.data() + e.sValue.size())
+            {
+                status = "Enter a whole number for this rule.";
+                return;
+            }
             if (C())
             {
                 Before();
-                C()->value = e.iValue;
+                C()->value = parsed;
             }
             else if (A())
             {
                 Before();
-                A()->value = e.iValue;
+                A()->value = parsed;
             }
             Rebuild();
         });

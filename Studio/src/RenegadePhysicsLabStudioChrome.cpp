@@ -24,7 +24,7 @@ namespace
     constexpr float AddPopupX = 328.0f;
     constexpr float AddPopupWidth = 226.0f;
     constexpr float AddItemHeight = 30.0f;
-    constexpr int ExistingAddItemCount = 9;
+    constexpr int ExistingAddItemCount = 10;
     constexpr float AddMenuLabelRight = 377.0f;
 
     void DrawRect(
@@ -391,7 +391,7 @@ namespace renegade::studio
         bool skipBaseUpdate = false;
         if (leftPressed && ParticleAddMenuItemHit(pointerBeforeBase))
         {
-            // The native ADD popup owns nine rows. This tenth row is drawn and
+            // The native ADD popup owns ten rows. This eleventh row is drawn and
             // handled by the bounded particle wrapper. Close the base popup and
             // skip its update for this one frame so the click cannot leak into
             // the viewport beneath the extended popup.
@@ -410,7 +410,7 @@ namespace renegade::studio
         }
         else if (leftPressed && NavigationAddMenuItemHit(pointerBeforeBase))
         {
-            // Navigation extends the same ADD popup with an eleventh row. The
+            // Navigation extends the same ADD popup with a twelfth row. The
             // grid itself is a persistent native Wicked VoxelGrid entity.
             navigationMenuConsumed_ = true;
             particleAddMenuOpen_ = false;
