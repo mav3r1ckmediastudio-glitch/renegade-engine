@@ -32,7 +32,7 @@ bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &pr
         w.style.text.wrap = true;
         const auto accent = ScreenColor{std::uint8_t(view.theme.accent >> 16), std::uint8_t(view.theme.accent >> 8),
                                         std::uint8_t(view.theme.accent), 255};
-        w.style.normal.background = {30, 34, 36, 240};
+        w.style.normal.background = {43, 46, 48, 255};
         w.style.normal.foreground = {240, 243, 242, 255};
         w.style.hover.background = w.style.focused.background = {48, 75, 69, 255};
         w.style.hover.foreground = w.style.focused.foreground = {245, 250, 248, 255};

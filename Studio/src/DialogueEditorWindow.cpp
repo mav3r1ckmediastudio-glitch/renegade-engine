@@ -1,5 +1,4 @@
 #include "DialogueEditorWindow.h"
-#include "RenegadeStudioChrome.h"
 #include "renegade/bridge/DialogueAssetService.h"
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/screen/DialoguePanel.h"
@@ -10,6 +9,124 @@
 namespace renegade::studio
 {
 using namespace bridge;
+namespace
+{
+// Match the solid charcoal / pale teal controls in LightPickerWindow and
+// ParticlePickerWindow. Keep this styling local to the dialogue workspace.
+constexpr wi::Color Teal(137, 225, 208, 255);
+constexpr wi::Color Panel(33, 35, 37, 255);
+constexpr wi::Color Inset(27, 30, 31, 255);
+constexpr wi::Color Text(235, 238, 239, 255);
+void Rect(float x, float y, float w, float h, wi::Color c, wi::graphics::CommandList cmd)
+{
+    wi::image::Params p(x, y, w, h, c);
+    wi::image::Draw(nullptr, p, cmd);
+}
+class DialogueButton : public wi::gui::Button
+{
+  public:
+    bool primary = false;
+    void Render(const wi::Canvas &, wi::graphics::CommandList cmd) const override
+    {
+        if (!IsVisible())
+            return;
+        const bool engaged = GetState() == wi::gui::FOCUS || GetState() == wi::gui::ACTIVE;
+        Rect(translation.x, translation.y, scale.x, scale.y, engaged ? Teal : wi::Color(91, 96, 98, 255), cmd);
+        Rect(translation.x + 1, translation.y + 1, scale.x - 2, scale.y - 2,
+             primary ? Teal : wi::Color(48, 51, 53, 255), cmd);
+        wi::font::Params fp(translation.x + scale.x * .5f, translation.y + scale.y * .5f, 13, wi::font::WIFALIGN_CENTER,
+                            wi::font::WIFALIGN_CENTER,
+                            !IsEnabled() ? wi::Color(125, 130, 132, 255)
+                            : primary    ? wi::Color(18, 30, 29, 255)
+                                         : Text);
+        fp.bolden = .12f;
+        wi::font::Draw(GetText(), fp, cmd);
+    }
+};
+class DialogueCheckBox : public wi::gui::CheckBox
+{
+  public:
+    void Render(const wi::Canvas &, wi::graphics::CommandList cmd) const override
+    {
+        if (!IsVisible())
+            return;
+        Rect(translation.x, translation.y, 18, 18, GetState() == wi::gui::FOCUS ? Teal : wi::Color(105, 112, 113, 255),
+             cmd);
+        Rect(translation.x + 1, translation.y + 1, 16, 16, Inset, cmd);
+        if (GetCheck())
+            Rect(translation.x + 4, translation.y + 4, 10, 10, Teal, cmd);
+        wi::font::Params fp(translation.x + 27, translation.y + 9, 13, wi::font::WIFALIGN_LEFT,
+                            wi::font::WIFALIGN_CENTER, IsEnabled() ? Text : wi::Color(120, 128, 129, 255));
+        wi::font::Draw(GetName(), fp, cmd);
+    }
+};
+class DialogueOutline : public wi::gui::TreeList
+{
+  public:
+    void Render(const wi::Canvas &canvas, wi::graphics::CommandList cmd) const override
+    {
+        if (!IsVisible())
+            return;
+        ApplyScissor(canvas, scissorRect, cmd);
+        Rect(translation.x, translation.y, scale.x, scale.y, Inset, cmd);
+        wi::font::Params title(translation.x + 8, translation.y + 3, 13);
+        title.color = wi::Color(164, 177, 177, 255);
+        wi::font::Draw("CONVERSATION", title, cmd);
+        const auto area = GetHitbox_ListArea();
+        wi::graphics::Rect clip{int(area.pos.x), int(area.pos.y), int(area.pos.x + area.siz.x),
+                                int(area.pos.y + area.siz.y)};
+        ApplyScissor(canvas, clip, cmd);
+        int visible = 0, parentLevel = 0;
+        bool parentOpen = true;
+        for (size_t index = 0; index < items.size(); ++index)
+        {
+            const auto &item = items[index];
+            if (!parentOpen && item.level > parentLevel)
+                continue;
+            ++visible;
+            parentLevel = item.level;
+            parentOpen = item.open;
+            const auto box = GetHitbox_Item(visible, item.level);
+            if (!box.intersects(area))
+                continue;
+            const bool reply = item.name.rfind("REPLY:", 0) == 0;
+            const bool rule = item.name.rfind("Condition:", 0) == 0 || item.name.rfind("Action:", 0) == 0 ||
+                              item.name.rfind("Show if:", 0) == 0;
+            const auto tint = reply ? Teal : rule ? wi::Color(207, 187, 141, 255) : Text;
+            Rect(box.pos.x, box.pos.y, box.siz.x, box.siz.y - 1,
+                 item.selected                  ? wi::Color(55, 77, 73, 255)
+                 : int(index) == item_highlight ? wi::Color(43, 50, 50, 255)
+                                                : wi::Color(34, 37, 39, 255),
+                 cmd);
+            Rect(box.pos.x, box.pos.y + 3, 2, box.siz.y - 7, tint, cmd);
+            const auto opener = GetHitbox_ItemOpener(visible, item.level);
+            if (DoesItemHaveChildren(int(index)))
+            {
+                wi::font::Params p(opener.pos.x, box.pos.y + 2, 13);
+                p.color = Teal;
+                wi::font::Draw(item.open ? "v" : ">", p, cmd);
+            }
+            wi::font::Params p(box.pos.x + 8, box.pos.y + 2, 14);
+            p.color = tint;
+            std::string label = item.name;
+            if (wi::font::TextWidth(label, p) > box.siz.x - 16)
+            {
+                while (!label.empty() && wi::font::TextWidth(label + "...", p) > box.siz.x - 16)
+                {
+                    size_t end = label.size() - 1;
+                    while (end > 0 && (static_cast<unsigned char>(label[end]) & 0xC0) == 0x80)
+                        --end;
+                    label.resize(end);
+                }
+                label += "...";
+            }
+            wi::font::Draw(label, p, cmd);
+        }
+        ApplyScissor(canvas, scissorRect, cmd);
+        scrollbar.Render(canvas, cmd);
+    }
+};
+} // namespace
 struct DialogueEditorWindow::Impl
 {
     DialogueEditorWindow *owner;
@@ -38,13 +155,14 @@ struct DialogueEditorWindow::Impl
     float uiScale = 1;
     std::vector<DialogueDocument> assets;
     std::vector<DialogueDocument> undo, redo;
-    RenegadeButton save, newDoc, load, discard, assign, addLine, addReply, remove, undoButton, redoButton, play,
+    DialogueButton save, newDoc, load, discard, assign, addLine, addReply, remove, undoButton, redoButton, play,
         addOutcome, addCondition, addAction;
-    RenegadeCheckBox advancedBox, onceBox, permitBox, matchAllBox;
-    RenegadeComboBox library, next, kind;
-    RenegadeTextInputField name, speaker, text, key, value, textSize, opacity;
-    wi::gui::TreeList tree;
-    wi::gui::Label help, selectionLabel;
+    DialogueCheckBox advancedBox, onceBox, permitBox, matchAllBox;
+    wi::gui::ComboBox library, next, kind;
+    wi::gui::TextInputField name, speaker, text, key, value, textSize, opacity;
+    DialogueOutline tree;
+    wi::gui::Label help, selectionLabel, outlineBackground, propertiesBackground, previewBackground, previewHeading,
+        previewHint, appearanceHeading;
     explicit Impl(DialogueEditorWindow *w) : owner(w)
     {
     }
@@ -55,10 +173,9 @@ struct DialogueEditorWindow::Impl
         owner->AddWidget(&w);
         layout.push_back({&w, {x, y}, {width, height}});
     }
-    void Button(RenegadeButton &b, const char *label, float x, float y, float w, std::function<void()> fn)
+    void Button(DialogueButton &b, const char *label, float x, float y, float w, std::function<void()> fn)
     {
         b.Create(label);
-        b.SetRenderTextSize(13);
         Add(b, x, y, w, 30);
         b.OnClick([fn](auto &) { fn(); });
     }
@@ -112,6 +229,8 @@ struct DialogueEditorWindow::Impl
         item.name = std::move(label);
         item.level = depth;
         item.userdata = refs.size();
+        item.selected = ref.l == selected.l && ref.r == selected.r && ref.o == selected.o && ref.c == selected.c &&
+                        ref.a == selected.a;
         const auto key = doc.id + "/" + (ref.l >= 0 && size_t(ref.l) < doc.lines.size() ? doc.lines[ref.l].id : "") +
                          "/" + std::to_string(ref.r) + "/" + std::to_string(ref.o) + "/" + std::to_string(ref.c) + "/" +
                          std::to_string(ref.a) + "/" + std::to_string(depth);
@@ -205,6 +324,7 @@ struct DialogueEditorWindow::Impl
         name.SetValue(doc.name);
         textSize.SetValue(doc.theme.textSize);
         opacity.SetValue(doc.theme.panelOpacity);
+        opacity.SetVisible(advanced);
         speaker.SetValue(l ? l->speaker : "");
         text.SetValue(r && !o ? r->text : l ? l->text : "");
         selectionLabel.SetText(c ? "CONDITION" : a ? "ACTION" : o ? "OUTCOME" : r ? "PLAYER REPLY" : "NPC LINE");
@@ -308,8 +428,25 @@ struct DialogueEditorWindow::Impl
     }
     void Create()
     {
+        auto background = [this](wi::gui::Label &label, float x, float y, float w, float h) {
+            label.Create("");
+            label.SetText("");
+            label.SetEnabled(false);
+            Add(label, x, y, w, h);
+        };
+        background(outlineBackground, 18, 120, 690, 350);
+        background(propertiesBackground, 728, 120, 394, 350);
+        background(previewBackground, 18, 550, 1110, 260);
+        auto heading = [this](wi::gui::Label &label, const char *title, float x, float y, float w) {
+            label.Create(title);
+            label.SetText(title);
+            Add(label, x, y, w, 24);
+        };
+        heading(previewHeading, "In-game preview", 28, 484, 340);
+        heading(previewHint, "Try the replies below. Preview uses its own test flags.", 28, 516, 600);
+        heading(appearanceHeading, "Presentation", 745, 361, 340);
         Button(save, "Save", 1010, 34, 110, [this] { Save(); });
-        save.SetPrimaryStyle(true);
+        save.primary = true;
         Button(newDoc, "New", 18, 34, 70, [this] {
             if (Dirty())
             {
@@ -332,6 +469,7 @@ struct DialogueEditorWindow::Impl
                 SelectDocument(assets[i]);
         });
         library.Create("Conversations");
+        library.SetText("");
         Add(library, 98, 34, 197, 30);
         Button(discard, "Discard", 385, 34, 80, [this] {
             DialogueDocument d;
@@ -393,7 +531,7 @@ struct DialogueEditorWindow::Impl
             doc.name = e.sValue;
             Rebuild();
         });
-        Button(addLine, "+ NPC Line", 18, 122, 125, [this] {
+        Button(addLine, "+ NPC Line", 28, 130, 125, [this] {
             auto *l = L();
             if (!l)
                 return;
@@ -419,7 +557,7 @@ struct DialogueEditorWindow::Impl
             selected = {int(doc.lines.size() - 1)};
             Changed();
         });
-        Button(addReply, "+ Player Reply", 153, 122, 145, [this] {
+        Button(addReply, "+ Player Reply", 163, 130, 145, [this] {
             auto *l = L();
             if (!l)
                 return;
@@ -434,7 +572,7 @@ struct DialogueEditorWindow::Impl
             selected.o = selected.c = selected.a = -1;
             Changed();
         });
-        Button(remove, "Delete selected", 308, 122, 140, [this] {
+        Button(remove, "Delete selected", 318, 130, 140, [this] {
             auto *l = L();
             if (!l)
                 return;
@@ -512,7 +650,7 @@ struct DialogueEditorWindow::Impl
             Rebuild();
         });
         tree.Create("Conversation outline");
-        Add(tree, 18, 164, 690, 302);
+        Add(tree, 28, 171, 670, 289);
         tree.OnSelect([this](auto &e) {
             if (e.userdata < refs.size())
             {
@@ -521,7 +659,7 @@ struct DialogueEditorWindow::Impl
             }
         });
         selectionLabel.Create("Selection");
-        Add(selectionLabel, 735, 122, 370, 28);
+        Add(selectionLabel, 745, 130, 360, 28);
         speaker.Create("Speaker");
         speaker.SetDescription("Speaker: ");
         Add(speaker, 815, 164, 285, 28);
@@ -546,6 +684,7 @@ struct DialogueEditorWindow::Impl
             Rebuild();
         });
         next.Create("Continue to");
+        next.SetText("Continue: ");
         next.SetTooltip("Continue to this named section, or end the conversation.");
         Add(next, 815, 248, 285, 28);
         next.OnSelect([this](auto &e) {
@@ -579,6 +718,7 @@ struct DialogueEditorWindow::Impl
             Rebuild();
         });
         kind.Create("Rule type");
+        kind.SetText("");
         Add(kind, 750, 164, 350, 28);
         kind.OnSelect([this](auto &e) {
             if (sync)
@@ -675,16 +815,55 @@ struct DialogueEditorWindow::Impl
             selected.c = -1;
             Changed();
         });
-        Button(play, "Preview from start", 18, 480, 190, [this] { Start(); });
+        Button(play, "Restart preview", 918, 484, 200, [this] { Start(); });
         permitBox.Create("Test: has_permit");
-        Add(permitBox, 250, 486, 22, 22);
+        Add(permitBox, 650, 490, 22, 22);
         permitBox.OnClick([this](auto &) { Start(); });
         for (auto *input :
-             std::vector<RenegadeTextInputField *>{&name, &speaker, &text, &key, &value, &textSize, &opacity})
+             std::vector<wi::gui::TextInputField *>{&name, &speaker, &text, &key, &value, &textSize, &opacity})
             input->SetCancelInputEnabled(false);
         help.Create("Dialogue status");
         help.font.params.size = 13;
-        Add(help, 18, 520, 1100, 38);
+        Add(help, 18, 822, 1100, 28);
+    }
+    void ApplyTheme()
+    {
+        wi::gui::Theme theme;
+        theme.image.background = false;
+        theme.image.color = Panel;
+        theme.font.color = Text;
+        theme.font.shadow_color = wi::Color::Transparent();
+        theme.shadow = 0;
+        theme.tooltipImage.background = false;
+        theme.tooltipImage.color = wi::Color(46, 49, 51, 255);
+        theme.tooltipFont.color = Text;
+        owner->SetTheme(theme);
+        owner->SetColor(wi::Color(43, 46, 48, 255), wi::gui::IDLE);
+        owner->SetColor(wi::Color(65, 78, 77, 255), wi::gui::FOCUS);
+        owner->SetColor(wi::Color(60, 108, 101, 255), wi::gui::ACTIVE);
+        owner->SetColor(Panel, wi::gui::WIDGET_ID_WINDOW_BASE);
+        owner->SetColor(Panel, wi::gui::WIDGET_ID_COMBO_DROPDOWN);
+        owner->font.params.size = 16;
+        owner->font.params.bolden = .15f;
+        for (auto *label : {&outlineBackground, &propertiesBackground, &previewBackground})
+            label->SetColor(Inset);
+        for (auto *label : {&help, &selectionLabel, &previewHeading, &previewHint, &appearanceHeading})
+        {
+            label->SetColor(wi::Color::Transparent());
+            label->font.params.size = label == &help || label == &previewHint ? 13 : 16;
+            label->font.params.bolden = label == &help || label == &previewHint ? 0 : .15f;
+        }
+        previewHint.font.params.color = wi::Color(164, 177, 177, 255);
+        for (auto *input : {&name, &speaker, &text, &key, &value, &textSize, &opacity})
+        {
+            input->font.params.size = input->font_description.params.size = 14;
+            input->SetColor(wi::Color(43, 46, 48, 255), wi::gui::IDLE);
+        }
+        for (auto *combo : {&library, &next, &kind})
+        {
+            combo->font.params.size = combo->selected_font.params.size = 14;
+        }
+        tree.font.params.size = 14;
     }
 };
 DialogueEditorWindow::DialogueEditorWindow() : impl_(std::make_unique<Impl>(this))
@@ -699,8 +878,9 @@ void DialogueEditorWindow::Create()
 {
     wi::gui::Window::Create("Dialogue Editor", WindowControls::CLOSE | WindowControls::MOVE);
     SetSize({1150, 860});
-    SetColor(wi::Color(31, 34, 36, 255));
+    SetControlSize(28);
     impl_->Create();
+    impl_->ApplyTheme();
     SetVisible(false);
     OnClose([this](auto &) {
         if (impl_->Dirty())
@@ -742,7 +922,9 @@ void DialogueEditorWindow::Open(StudioSession &s, wi::RenderPath2D &path)
         item.widget->SetSize({item.size.x * i.uiScale, item.size.y * i.uiScale});
     }
     SetVisible(true);
+    i.ApplyTheme();
     i.RefreshFields();
+    i.Start();
 }
 void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
 {
@@ -769,7 +951,7 @@ void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
     {
         i.refreshPreview = false;
         auto viewport =
-            ScreenRect{GetPos().x + 18 * i.uiScale, GetPos().y + 570 * i.uiScale, 1110 * i.uiScale, 260 * i.uiScale};
+            ScreenRect{GetPos().x + 18 * i.uiScale, GetPos().y + 550 * i.uiScale, 1110 * i.uiScale, 260 * i.uiScale};
         if (i.preview.Active())
         {
             if (i.panel.Show(i.preview.View(), i.project, i.root, path, viewport, i.status))
@@ -780,7 +962,7 @@ void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
     }
     else if (i.preview.Active())
         i.panel.Layout(path,
-                       {GetPos().x + 18 * i.uiScale, GetPos().y + 570 * i.uiScale, 1110 * i.uiScale, 260 * i.uiScale});
+                       {GetPos().x + 18 * i.uiScale, GetPos().y + 550 * i.uiScale, 1110 * i.uiScale, 260 * i.uiScale});
     i.help.SetText((i.Dirty() ? "UNSAVED  |  " : "") + i.status);
     i.undoButton.SetEnabled(!i.undo.empty());
     i.redoButton.SetEnabled(!i.redo.empty());

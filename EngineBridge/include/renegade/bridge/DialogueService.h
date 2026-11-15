@@ -53,7 +53,7 @@ struct DialogueLine
 struct DialogueTheme
 {
     float textSize = 22;
-    float panelOpacity = .94f;
+    float panelOpacity = 1.f;
     unsigned accent = 0x89e1d0;
 };
 struct DialogueDocument
