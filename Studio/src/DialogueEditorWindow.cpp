@@ -713,7 +713,7 @@ void DialogueEditorWindow::Create()
 }
 void DialogueEditorWindow::Open(StudioSession &s, wi::RenderPath2D &path)
 {
-    if (!s.Projects().HasProject())
+    if (IsVisible() || !s.Projects().HasProject())
         return;
     auto &i = *impl_;
     i.session = &s;

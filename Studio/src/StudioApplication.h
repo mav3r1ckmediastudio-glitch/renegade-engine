@@ -1052,6 +1052,7 @@ namespace renegade::studio
         wi::gui::Label lightLabel_;
         SceneInspectorComboBox lightType_;
         SceneInspectorButton lightPickerButton_;
+        wi::gui::GUI dialogueGui_;
         DialogueEditorWindow dialogueEditor_;
         LightPickerWindow lightPicker_;
         ParticlePickerWindow particlePicker_;
@@ -1063,6 +1064,9 @@ namespace renegade::studio
         bool lightKeepPlacing_ = true;
         bool lightFinishRmbHeld_ = false;
         bool lightPickerFrameSuspended_ = false;
+        bool dialogueFrameSuspended_=false;
+        bool dialogueGuiActive_=false;
+        bool dialogueSavedGuiVisibility_=true;
         void OpenLightPicker(wi::scene::LightComponent::LightType type, bool editSelected=false);
         void UpdateLightPicker(float dt);
         SceneInspectorSlider lightColorRed_;

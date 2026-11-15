@@ -3278,7 +3278,7 @@ namespace renegade::studio
                 RequestDiagnosticAction(EditorAction::CreateLight);
                 break;
             case RenegadeStudioChrome::Action::OpenDialogue:
-                if(session_&&!projectHubVisible_){dialogueEditor_.SetPos({std::max(8.0f,(GetLogicalWidth()-1150)*.5f),32});dialogueEditor_.Open(*session_,*this);}
+                if(session_&&!projectHubVisible_&&!testLevelRuntime_.IsActive()){dialogueEditor_.SetPos({std::max(8.0f,(GetLogicalWidth()-1150)*.5f),32});dialogueEditor_.Open(*session_,*this);}
                 break;
             case RenegadeStudioChrome::Action::CreateRectangleLight:
                 pendingLightType_ = wi::scene::LightComponent::RECTANGLE;
@@ -3621,7 +3621,7 @@ namespace renegade::studio
         CreatePickupEditor();
         CreateAssemblyEditor();
         CreateEquipmentEditor();
-        dialogueEditor_.Create();GetGUI().AddWidget(&dialogueEditor_);
+        dialogueEditor_.Create();dialogueGui_.AddWidget(&dialogueEditor_);
         lightPicker_.Create();
         GetGUI().AddWidget(&lightPicker_);
         particlePicker_.Create();GetGUI().AddWidget(&particlePicker_);GetGUI().AddWidget(&particlePicker_.TextureBrowserWidget());
@@ -4092,7 +4092,11 @@ namespace renegade::studio
         DiagnosticInputFrame diagnosticInput(diagnosticService_,
             wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
         PollTestLevel();
-        lightPickerFrameSuspended_=lightPicker_.IsVisible()||particlePicker_.IsVisible()||dialogueEditor_.IsVisible();
+        dialogueFrameSuspended_=dialogueEditor_.IsVisible();
+        if(dialogueFrameSuspended_&&!dialogueGuiActive_){dialogueSavedGuiVisibility_=GetGUI().IsVisible();dialogueGuiActive_=true;}
+        if(dialogueFrameSuspended_)GetGUI().SetVisible(false);
+        else if(dialogueGuiActive_){GetGUI().SetVisible(dialogueSavedGuiVisibility_);dialogueGuiActive_=false;}
+        lightPickerFrameSuspended_=lightPicker_.IsVisible()||particlePicker_.IsVisible()||dialogueFrameSuspended_;
         if(session_)dialogueEditor_.Tick(*session_,*this);
         // STOP may run from the 2D GUI update below. Retain 2D ownership for
         // the rest of that frame; 3D must first receive a fresh Scene::Update.
@@ -4154,6 +4158,17 @@ namespace renegade::studio
             return;
         }
 
+        if(dialogueFrameSuspended_){
+            // A separate native GUI owns the modal. Background chrome never
+            // receives clicks or shortcuts while a conversation is being edited.
+            wi::RenderPath2D::Update(dt);
+            dialogueGui_.Update(*this,dt);
+            if(session_)dialogueEditor_.Tick(*session_,*this);
+            wi::input::HidePointer(false);
+            pendingAction_=EditorAction::None;
+            diagnosticInput.StopAt("dialogue_editor");
+            return;
+        }
         if(lightPickerFrameSuspended_) {
             // The modal owns the only active 3D preview. Keep the last authored
             // viewport image; never prepare two different Scene worlds every
@@ -4650,6 +4665,12 @@ namespace renegade::studio
 
     void StudioRenderPath::Compose(const wi::graphics::CommandList cmd) const
     {
+        if(dialogueFrameSuspended_){
+            if(pathTracePreviewActive_)RenderPath3D_PathTracing::Compose(cmd);
+            else wi::RenderPath3D::Compose(cmd);
+            dialogueGui_.Render(*this,cmd);
+            return;
+        }
         if(lightPickerFrameSuspended_) {
             if(pathTracePreviewActive_)RenderPath3D_PathTracing::Compose(cmd);
             else wi::RenderPath3D::Compose(cmd);

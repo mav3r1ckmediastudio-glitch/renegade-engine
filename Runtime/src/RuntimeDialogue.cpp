@@ -39,13 +39,14 @@ bool RuntimeDialogue::Update(wi::scene::Scene &scene, std::uint64_t revision, co
             return true;
         }
         auto action = panel_.TakeAction();
-        if (input.pausePressed || wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
+        if (input.pausePressed || wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
+            wi::input::Press(wi::input::GAMEPAD_BUTTON_XBOX_B))
             action = "@close";
         if (wi::input::Press(wi::input::KEYBOARD_BUTTON_DOWN) || wi::input::Press(wi::input::GAMEPAD_BUTTON_DOWN))
             panel_.Navigate(1);
         if (wi::input::Press(wi::input::KEYBOARD_BUTTON_UP) || wi::input::Press(wi::input::GAMEPAD_BUTTON_UP))
             panel_.Navigate(-1);
-        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ENTER) || wi::input::Press(wi::input::GAMEPAD_BUTTON_1))
+        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ENTER) || wi::input::Press(wi::input::GAMEPAD_BUTTON_XBOX_A))
             panel_.Activate();
         if (!action.empty())
         {
@@ -83,7 +84,7 @@ bool RuntimeDialogue::Update(wi::scene::Scene &scene, std::uint64_t revision, co
         if (closest)
         {
             prompt_ = "Interact: Talk to " + closest->document.name;
-            if (input.interactPressed)
+            if (input.interactPressed || wi::input::Press(wi::input::GAMEPAD_BUTTON_XBOX_A))
             {
                 if (session_.Start(closest->document, memory_, error_))
                     refresh_ = true;
