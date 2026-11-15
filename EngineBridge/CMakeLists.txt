@@ -362,7 +362,9 @@ execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     OUTPUT_VARIABLE RENEGADE_DIAGNOSTIC_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE
     COMMAND_ERROR_IS_FATAL ANY)
-target_compile_definitions(RenegadeEngineBridge PRIVATE
+# Only this translation unit reads the stamp. Target-wide definitions forced
+# every bridge source to recompile after each otherwise unrelated commit.
+set_property(SOURCE src/DiagnosticService.cpp APPEND PROPERTY COMPILE_DEFINITIONS
     RENEGADE_DIAGNOSTIC_REVISION="${RENEGADE_DIAGNOSTIC_REVISION}"
     RENEGADE_DIAGNOSTIC_CONFIGURATION="$<CONFIG>")
 
