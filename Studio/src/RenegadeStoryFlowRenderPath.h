@@ -274,8 +274,9 @@ namespace renegade::studio
             conditionEditor_.SetEnabled(false);
 
             journeyViewButton_.Create("Story Flow Journey View");
+            journeyViewButton_.SetIcon("journey");
             journeyViewButton_.SetText("JOURNEY");
-            journeyViewButton_.SetTooltip("Show the high-level player journey presentation.");
+            journeyViewButton_.SetTooltip("Journey View — Show the high-level player journey presentation.");
             journeyViewButton_.SetShadowRadius(0.0f);
             journeyViewButton_.OnClick([this](const wi::gui::EventArgs&)
             {
@@ -283,8 +284,9 @@ namespace renegade::studio
             });
 
             graphViewButton_.Create("Story Flow Graph View");
+            graphViewButton_.SetIcon("graph");
             graphViewButton_.SetText("GRAPH");
-            graphViewButton_.SetTooltip("Show exact Story Flow topology and route wiring.");
+            graphViewButton_.SetTooltip("Graph View — Show exact Story Flow topology and route wiring.");
             graphViewButton_.SetShadowRadius(0.0f);
             graphViewButton_.OnClick([this](const wi::gui::EventArgs&)
             {
@@ -292,9 +294,10 @@ namespace renegade::studio
             });
 
             saveFlowButton_.Create("Story Flow Save");
+            saveFlowButton_.SetIcon("save");
             saveFlowButton_.SetText("SAVE");
             saveFlowButton_.SetTooltip(
-                "Save the authoritative StoryFlow document. Shortcut: Ctrl+S.");
+                "Save — Save the authoritative StoryFlow document. Shortcut: Ctrl+S.");
             saveFlowButton_.SetShadowRadius(0.0f);
             saveFlowButton_.OnClick([this](const wi::gui::EventArgs&)
             {
@@ -302,9 +305,10 @@ namespace renegade::studio
             });
 
             addCompleteTerminalButton_.Create("Story Flow Journey Add Complete Game");
+            addCompleteTerminalButton_.SetIcon("victory");
             addCompleteTerminalButton_.SetText("+ COMPLETE");
             addCompleteTerminalButton_.SetTooltip(
-                "Add a Complete Game terminal destination to StoryFlow.");
+                "Complete Game — Add a Complete Game terminal destination to StoryFlow.");
             addCompleteTerminalButton_.SetShadowRadius(0.0f);
             addCompleteTerminalButton_.OnClick([this](const wi::gui::EventArgs&)
             {
@@ -312,9 +316,10 @@ namespace renegade::studio
             });
 
             addReturnTerminalButton_.Create("Story Flow Journey Add Return Menu");
+            addReturnTerminalButton_.SetIcon("return");
             addReturnTerminalButton_.SetText("+ RETURN");
             addReturnTerminalButton_.SetTooltip(
-                "Add a Return To Main Menu terminal destination to StoryFlow.");
+                "Return — Add a Return To Main Menu terminal destination to StoryFlow.");
             addReturnTerminalButton_.SetShadowRadius(0.0f);
             addReturnTerminalButton_.OnClick([this](const wi::gui::EventArgs&)
             {
@@ -322,9 +327,10 @@ namespace renegade::studio
             });
 
             addQuitTerminalButton_.Create("Story Flow Journey Add Quit");
+            addQuitTerminalButton_.SetIcon("quit");
             addQuitTerminalButton_.SetText("+ QUIT");
             addQuitTerminalButton_.SetTooltip(
-                "Add a Quit terminal destination to StoryFlow.");
+                "Quit — Add a Quit terminal destination to StoryFlow.");
             addQuitTerminalButton_.SetShadowRadius(0.0f);
             addQuitTerminalButton_.OnClick([this](const wi::gui::EventArgs&)
             {
@@ -363,16 +369,18 @@ namespace renegade::studio
                 screenLibraryCombo_.SetSelectedWithoutCallback(0);
             });
             libraryRefreshButton_.Create("Story Flow Refresh UI Library");
+            libraryRefreshButton_.SetIcon("refresh");
             libraryRefreshButton_.SetText("REFRESH UI");
             libraryRefreshButton_.SetRenderTextSize(10);
-            libraryRefreshButton_.SetTooltip("Refresh Screen and HUD documents after external changes.");
+            libraryRefreshButton_.SetTooltip("Refresh — Refresh Screen and HUD documents after external changes.");
             libraryRefreshButton_.OnClick([this](const wi::gui::EventArgs&)
             {
                 if (libraryRefreshRequested_) libraryRefreshRequested_();
             });
             fitButton_.Create("Story Flow Fit");
+            fitButton_.SetIcon("fit");
             fitButton_.SetText("FIT / HOME");
-            fitButton_.SetTooltip("Frame all content in the active Story Flow view.");
+            fitButton_.SetTooltip("Fit — Frame all content in the active Story Flow view.");
             fitButton_.SetShadowRadius(0.0f);
             fitButton_.OnClick([this](const wi::gui::EventArgs&)
             {
@@ -380,8 +388,9 @@ namespace renegade::studio
             });
 
             startButton_.Create("Story Flow Start");
+            startButton_.SetIcon("game-start");
             startButton_.SetText("START");
-            startButton_.SetTooltip("Center the permanent Game Start destination.");
+            startButton_.SetTooltip("Game Start — Center the permanent Game Start destination.");
             startButton_.SetShadowRadius(0.0f);
             startButton_.OnClick([this](const wi::gui::EventArgs&)
             {
@@ -404,8 +413,9 @@ namespace renegade::studio
             });
 
             findButton_.Create("Story Flow Find");
+            findButton_.SetIcon("search");
             findButton_.SetText("FIND");
-            findButton_.SetTooltip("Focus the first exact or partial Story Flow node-name match.");
+            findButton_.SetTooltip("Search — Focus the first exact or partial Story Flow node-name match.");
             findButton_.SetShadowRadius(0.0f);
             findButton_.OnClick([this](const wi::gui::EventArgs&)
             {
@@ -413,9 +423,10 @@ namespace renegade::studio
             });
 
             deleteSelectionButton_.Create("Story Flow Delete Selection");
+            deleteSelectionButton_.SetIcon("delete");
             deleteSelectionButton_.SetText("DELETE");
             deleteSelectionButton_.SetTooltip(
-                "Delete the selected Graph route or non-Game-Start node. Delete also works from the keyboard in Graph View.");
+                "Delete — Delete the selected Graph route or non-Game-Start node. Delete also works from the keyboard in Graph View.");
             deleteSelectionButton_.SetShadowRadius(0.0f);
             deleteSelectionButton_.SetVisible(false);
             deleteSelectionButton_.SetEnabled(false);
@@ -609,6 +620,7 @@ namespace renegade::studio
         void Compose(const wi::graphics::CommandList cmd) const override
         {
             wi::RenderPath2D::Compose(cmd);
+            if(workspaceActive_&&!destinationComposer_.IsOpen())journeyChrome_.RenderIconTooltip(*this,cmd);
         }
 
         void SyncCanvas(const wi::Canvas& canvas)
@@ -1102,28 +1114,16 @@ namespace renegade::studio
             const auto& shell = journeyChrome_.ShellLayout();
             const float viewSwitchY =
                 shell.workspaceTitle.Bottom() - 34.0f;
-            journeyViewButton_.SetPos(XMFLOAT2(
-                shell.workspaceTitle.x + 20.0f, viewSwitchY));
-            journeyViewButton_.SetSize(XMFLOAT2(82.0f, 26.0f));
-            graphViewButton_.SetPos(XMFLOAT2(
-                shell.workspaceTitle.x + 108.0f, viewSwitchY));
-            graphViewButton_.SetSize(XMFLOAT2(62.0f, 26.0f));
-            screenLibraryCombo_.SetPos(XMFLOAT2(shell.workspaceTitle.x + 498.0f, viewSwitchY));
-            screenLibraryCombo_.SetSize(XMFLOAT2(180.0f, 27.0f));
-            libraryRefreshButton_.SetPos(XMFLOAT2(shell.workspaceTitle.x + 684.0f, viewSwitchY));
-            libraryRefreshButton_.SetSize(XMFLOAT2(86.0f, 26.0f));
-            saveFlowButton_.SetPos(XMFLOAT2(
-                shell.workspaceTitle.x + 178.0f, viewSwitchY));
-            saveFlowButton_.SetSize(XMFLOAT2(64.0f, 26.0f));
-            addCompleteTerminalButton_.SetPos(XMFLOAT2(
-                shell.workspaceTitle.x + 250.0f, viewSwitchY));
-            addCompleteTerminalButton_.SetSize(XMFLOAT2(86.0f, 26.0f));
-            addReturnTerminalButton_.SetPos(XMFLOAT2(
-                shell.workspaceTitle.x + 342.0f, viewSwitchY));
-            addReturnTerminalButton_.SetSize(XMFLOAT2(82.0f, 26.0f));
-            addQuitTerminalButton_.SetPos(XMFLOAT2(
-                shell.workspaceTitle.x + 430.0f, viewSwitchY));
-            addQuitTerminalButton_.SetSize(XMFLOAT2(62.0f, 26.0f));
+            RenegadeButton* compact[]={&journeyViewButton_,&graphViewButton_,&saveFlowButton_,
+                &addCompleteTerminalButton_,&addReturnTerminalButton_,&addQuitTerminalButton_,&libraryRefreshButton_};
+            for(int i=0;i<7;++i) {
+                compact[i]->SetPos({shell.workspaceTitle.x+20.f+i*36.f,viewSwitchY-4.f});
+                compact[i]->SetSize({32,32});
+            }
+            journeyViewButton_.SetIconSelected(workspace_.ActiveView()==bridge::StoryFlowViewMode::Journey);
+            graphViewButton_.SetIconSelected(workspace_.ActiveView()==bridge::StoryFlowViewMode::Graph);
+            screenLibraryCombo_.SetPos({shell.workspaceTitle.x+286.f,viewSwitchY});
+            screenLibraryCombo_.SetSize({180,27});
 
             // Canvas navigation lives in the existing lower-left navigation
             // host area, away from Level/Screen lifecycle controls in the two
@@ -1132,7 +1132,7 @@ namespace renegade::studio
                 RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight + 18.0f,
                 height - 52.0f);
             fitButton_.SetPos(XMFLOAT2(shell.workspaceTitle.x + 140.0f, shell.workspaceTitle.y + 43.0f));
-            fitButton_.SetSize(XMFLOAT2(90.0f, 28.0f));
+            fitButton_.SetSize(XMFLOAT2(32.0f, 32.0f));
             startButton_.SetPos(XMFLOAT2(workspaceLeft + 76.0f, canvasNavY));
             startButton_.SetSize(XMFLOAT2(64.0f, 28.0f));
             canvasNavigationBounds_ = XMFLOAT4(
@@ -1143,7 +1143,7 @@ namespace renegade::studio
 
             const float inspectorX = workspaceLeft + graphWidth + 14.0f;
             const float findY = shell.workspaceTitle.y + 22.0f;
-            const float findButtonWidth = 62.0f;
+            const float findButtonWidth = 32.0f;
             const float findFieldWidth = std::clamp(
                 graphWidth * 0.28f, 210.0f, 320.0f);
             const float findX = workspaceLeft +
@@ -1152,7 +1152,7 @@ namespace renegade::studio
             findInput_.SetSize(XMFLOAT2(findFieldWidth, 27.0f));
             findButton_.SetPos(XMFLOAT2(
                 findX + findFieldWidth + 6.0f, findY));
-            findButton_.SetSize(XMFLOAT2(findButtonWidth, 27.0f));
+            findButton_.SetSize(XMFLOAT2(findButtonWidth, 32.0f));
 
             deleteSelectionButton_.SetPos(XMFLOAT2(
                 workspaceLeft + graphWidth + std::max(0.0f, inspectorWidth - 88.0f),

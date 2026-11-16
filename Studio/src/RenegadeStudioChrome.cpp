@@ -435,6 +435,22 @@ namespace renegade::studio
         renderTextSize_ = std::clamp(size, 8, 18);
     }
 
+    void RenegadeButton::Update(const wi::Canvas& canvas,float dt)
+    {
+        ReleaseButton::Update(canvas,dt);
+        if(!icon_.empty()) {
+            const XMFLOAT4 b{translation.x,translation.y,scale.x,scale.y};
+            auto title=icons::Title(icon_);
+            auto tooltip=GetTooltip();
+            if(tooltip.rfind(title,0)!=0) tooltip=title+" — "+tooltip;
+            iconTooltip_.Update(tooltip,b,dt,IsVisible()&&!force_disable&&icons::Contains(b,wi::input::GetPointer()));
+        }
+    }
+    void RenegadeButton::RenderTooltip(const wi::Canvas& canvas,wi::graphics::CommandList cmd) const
+    {
+        if(icon_.empty()) wi::gui::Button::RenderTooltip(canvas,cmd);
+        else iconTooltip_.Render(canvas,cmd);
+    }
     void RenegadeButton::Render(
         const wi::Canvas& canvas,
         const wi::graphics::CommandList cmd) const
@@ -445,7 +461,10 @@ namespace renegade::studio
         ui::ButtonVisual visual{enabled, enabled && state==wi::gui::FOCUS,
             enabled && (state==wi::gui::ACTIVE || state==wi::gui::DEACTIVATING),
             primaryStyle_, accentOutlineStyle_};
-        theme::DrawButton(translation.x,translation.y,scale.x,scale.y,GetText(),
+        if(!icon_.empty()) {
+            icons::Button({0,icon_,{translation.x,translation.y,scale.x,scale.y},enabled,iconSelected_},
+                visual.hovered,visual.pressed,false,cmd);
+        } else theme::DrawButton(translation.x,translation.y,scale.x,scale.y,GetText(),
             visual,renderTextSize_,cmd);
     }
 
@@ -996,6 +1015,7 @@ namespace renegade::studio
     void RenegadeStudioChrome::Create()
     {
         SetName("Renegade-owned Studio chrome");
+        icons::Load();
         brandLockup_ = wi::resourcemanager::Load(
             "Content/ui/renegade-engine-fractured-crest-logo.png");
         SetLayout(width_, height_);
@@ -1237,6 +1257,7 @@ namespace renegade::studio
         activeMenu_ = -1;
         activeViewportMenu_ = -1;
         menuGesture_.Cancel();
+        toolbarInteraction_.CancelPointer();
         pointerConsumed_ = false;
         hierarchyScrollbarDragging_ = false;
         assetBrowserDragCandidate_ = false;
@@ -1508,6 +1529,27 @@ namespace renegade::studio
         return pointerConsumed_;
     }
 
+    std::vector<icons::Control> RenegadeStudioChrome::ToolbarControls() const
+    {
+        std::vector<icons::Control> c;
+        const char* tools[]={"select","move","rotate","scale"};
+        const bool compact=width_<1120.f;
+        const float side=compact?28.f:32.f, step=side+4.f;
+        for(int i=0;i<4;++i)c.push_back({i,tools[i],{compact?588.f+i*step:600.f+i*step,16,side,side},true,activeTool_==i,i==1?"Move / Translate (W)":i==2?"Rotate (E)":i==3?"Scale (R)":"Select"});
+        if(!compact) {
+        c.push_back({4,"undo",{756,16,32,32},true,false,"Undo (Ctrl+Z)"});
+        c.push_back({5,"redo",{792,16,32,32},true,false,"Redo (Ctrl+Y)"});
+        c.push_back({6,"save",{828,16,32,32},true,false,"Save (Ctrl+S)"});
+        }
+        const float start=width_-196.f;
+        c.push_back({7,testLevelState_==TestLevelState::Running?"stop":"play",{start-44,16,32,32},testLevelState_!=TestLevelState::Starting,false,
+            testLevelState_==TestLevelState::Starting?"Starting Test Game":testLevelState_==TestLevelState::Running?"Stop Test Game":"Test Game"});
+        const char* modes[]={"scene","environment","terrain","render","physics"};
+        const bool active[]={IsSceneWorkspaceActive()&&!physicsWorkspaceActive_,environmentWorkspaceActive_,terrainWorkspaceActive_,renderWorkspaceActive_,physicsWorkspaceActive_};
+        for(int i=0;i<5;++i)c.push_back({8+i,modes[i],{start+i*36.f,16,32,32},true,active[i]});
+        return c;
+    }
+
     void RenegadeStudioChrome::Update(
         const wi::Canvas& canvas,
         const float dt)
@@ -1526,6 +1568,21 @@ namespace renegade::studio
             }
         }
         pointerConsumed_ = false;
+        const int toolbarCommand=toolbarInteraction_.Update(ToolbarControls(),dt,IsEnabled()&&IsVisible()&&!HasOpenMenuPopup());
+        if(toolbarInteraction_.Consumed()) {
+            pointerConsumed_=true;
+            if(toolbarCommand>=0) {
+                if(toolbarCommand<4) {if(toolSelected_)toolSelected_(toolbarCommand);}
+                else if(action_) {
+                    const Action actions[]={Action::Undo,Action::Redo,Action::Save,
+                        testLevelState_==TestLevelState::Running?Action::TestLevelStop:Action::TestLevelPlay,
+                        Action::SceneWorkspace,Action::EnvironmentWorkspace,Action::TerrainWorkspace,
+                        Action::RenderWorkspace,Action::PhysicsWorkspace};
+                    action_(actions[toolbarCommand-4]);
+                }
+            }
+            return;
+        }
         if(menuGesture_.Target()>=0)
         {
             pointerConsumed_=true;
@@ -1925,76 +1982,6 @@ namespace renegade::studio
                     }
                     pointerConsumed_ = true;
                     return;
-                }
-            }
-
-            const float menuEnd = 580.0f;
-            const float firstToolX = menuEnd + 13.0f;
-            constexpr std::array<float, 4> widths = {
-                82.0f, 102.0f, 82.0f, 82.0f};
-            float toolX = firstToolX;
-            for (int index = 0; index < 4; ++index)
-            {
-                if (x >= toolX && x < toolX + widths[index] &&
-                    y >= 15.0f && y < 49.0f)
-                {
-                    if (toolSelected_)
-                    {
-                        toolSelected_(index);
-                    }
-                    activeMenu_ = -1;
-                    activeViewportMenu_ = -1;
-                    consumed = true;
-                    break;
-                }
-                toolX += widths[index] + 5.0f;
-            }
-
-            const float sceneMetaX = width_ - 445.0f;
-            if (!consumed &&
-                x >= sceneMetaX - 108.0f && x < sceneMetaX - 8.0f &&
-                y >= 15.0f && y < 49.0f)
-            {
-                if (action_)
-                {
-                    if (testLevelState_ == TestLevelState::Idle)
-                    {
-                        action_(Action::TestLevelPlay);
-                    }
-                    else if (testLevelState_ == TestLevelState::Running)
-                    {
-                        action_(Action::TestLevelStop);
-                    }
-                }
-                activeMenu_ = -1;
-                activeViewportMenu_ = -1;
-                consumed = true;
-            }
-            if (!consumed && y >= 34.0f && y < 58.0f)
-            {
-                if (x >= sceneMetaX + 12.0f && x < sceneMetaX + 62.0f)
-                {
-                    if (action_)
-                        action_(Action::SceneWorkspace);
-                    consumed = true;
-                }
-                else if (x >= sceneMetaX + 64.0f && x < sceneMetaX + 162.0f)
-                {
-                    if (action_)
-                        action_(Action::EnvironmentWorkspace);
-                    consumed = true;
-                }
-                else if (x >= sceneMetaX + 164.0f && x < sceneMetaX + 224.0f)
-                {
-                    if (action_)
-                        action_(Action::TerrainWorkspace);
-                    consumed = true;
-                }
-                else if (x >= sceneMetaX + 226.0f && x < sceneMetaX + 286.0f)
-                {
-                    if (action_)
-                        action_(Action::RenderWorkspace);
-                    consumed = true;
                 }
             }
 
@@ -2677,163 +2664,9 @@ namespace renegade::studio
         }
         DrawRect(menuX, 0.0f, 1.0f, TopBarHeight, BorderSoft, cmd);
 
-        // Transform tools use squared controls and a single state line.
-        constexpr std::array<const char*, 4> tools = {
-            "SELECT", "TRANSLATE", "ROTATE", "SCALE"};
-        float toolX = menuX + 13.0f;
-        for (int index = 0; index < static_cast<int>(tools.size()); ++index)
-        {
-            const float controlWidth = index == 1 ? 102.0f : 82.0f;
-            const bool active = activeTool_ == index;
-            if (active)
-            {
-                DrawRect(
-                    toolX,
-                    15.0f,
-                    controlWidth,
-                    34.0f,
-                    wi::Color(16, 23, 28, 220),
-                    cmd);
-                DrawRect(
-                    toolX,
-                    47.0f,
-                    controlWidth,
-                    2.0f,
-                    Forge,
-                    cmd);
-            }
-            DrawText(
-                tools[index],
-                toolX + 11.0f,
-                26.0f,
-                SceneChromeSmallTextSize,
-                active ? TextStrong : TextSecondary,
-                cmd,
-                0.45f,
-                active ? 0.12f : 0.0f);
-            toolX += controlWidth + 5.0f;
-        }
-
-        const float sceneMetaWidth = 445.0f;
-        const float sceneMetaX = width_ - sceneMetaWidth;
-        DrawRect(
-            sceneMetaX - 116.0f,
-            0.0f,
-            1.0f,
-            TopBarHeight,
-            BorderSoft,
-            cmd);
-        const bool testLevelStarting =
-            testLevelState_ == TestLevelState::Starting;
-        const bool testLevelRunning =
-            testLevelState_ == TestLevelState::Running;
-        const char* transportGlyph = testLevelRunning
-            ? "■"
-            : testLevelStarting ? "…" : "▶";
-        const char* transportLabel = testLevelRunning
-            ? "STOP"
-            : testLevelStarting ? "STARTING" : "PLAY";
-        const wi::Color transportColor = testLevelStarting
-            ? Muted
-            : testLevelRunning ? Forge : Success;
-        DrawText(
-            transportGlyph,
-            sceneMetaX - 96.0f,
-            20.0f,
-            16,
-            transportColor,
-            cmd,
-            0.0f,
-            0.1f);
-        DrawText(
-            transportLabel,
-            sceneMetaX - 70.0f,
-            26.0f,
-            SceneChromeSmallTextSize,
-            testLevelStarting ? Muted : TextStrong,
-            cmd,
-            0.75f,
-            0.12f);
-        DrawRect(
-            sceneMetaX,
-            0.0f,
-            1.0f,
-            TopBarHeight,
-            BorderSoft,
-            cmd);
-        DrawText(
-            sceneName_,
-            sceneMetaX + 20.0f,
-            17.0f,
-            SceneChromeStandardTextSize,
-            Text,
-            cmd,
-            1.25f,
-            0.08f);
-        const bool sceneWorkspaceActive =
-            !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
-            !renderWorkspaceActive_;
-        const wi::Color sceneWorkspaceColor =
-            sceneWorkspaceActive ? TextStrong : TextSecondary;
-        const wi::Color environmentWorkspaceColor =
-            environmentWorkspaceActive_ ? TextStrong : TextSecondary;
-        const wi::Color terrainWorkspaceColor =
-            terrainWorkspaceActive_ ? TextStrong : TextSecondary;
-        const wi::Color renderWorkspaceColor =
-            renderWorkspaceActive_ ? TextStrong : TextSecondary;
-        DrawText(
-            "SCENE",
-            sceneMetaX + 14.0f,
-            38.0f,
-            SceneChromeSmallTextSize,
-            sceneWorkspaceColor,
-            cmd,
-            1.1f,
-            sceneWorkspaceActive ? 0.12f : 0.0f);
-        DrawText(
-            "ENVIRONMENT",
-            sceneMetaX + 66.0f,
-            38.0f,
-            SceneChromeSmallTextSize,
-            environmentWorkspaceColor,
-            cmd,
-            1.1f,
-            environmentWorkspaceActive_ ? 0.12f : 0.0f);
-        DrawText(
-            "TERRAIN",
-            sceneMetaX + 166.0f,
-            38.0f,
-            SceneChromeSmallTextSize,
-            terrainWorkspaceColor,
-            cmd,
-            1.05f,
-            terrainWorkspaceActive_ ? 0.12f : 0.0f);
-        DrawText(
-            "RENDER",
-            sceneMetaX + 228.0f,
-            38.0f,
-            SceneChromeSmallTextSize,
-            renderWorkspaceColor,
-            cmd,
-            1.05f,
-            renderWorkspaceActive_ ? 0.12f : 0.0f);
-        DrawRect(
-            renderWorkspaceActive_
-                ? sceneMetaX + 226.0f
-                : terrainWorkspaceActive_
-                    ? sceneMetaX + 164.0f
-                    : environmentWorkspaceActive_
-                        ? sceneMetaX + 64.0f
-                        : sceneMetaX + 12.0f,
-            57.0f,
-            renderWorkspaceActive_
-                ? 60.0f
-                : terrainWorkspaceActive_
-                    ? 60.0f
-                    : environmentWorkspaceActive_ ? 98.0f : 50.0f,
-            2.0f,
-            Forge,
-            cmd);
+        for(const auto& c:ToolbarControls())
+            icons::Button(c,icons::Contains(c.bounds,wi::input::GetPointer())&&!HasOpenMenuPopup(),
+                toolbarInteraction_.Held(c.command),toolbarInteraction_.Focused(c.command),cmd);
 
         // Left hierarchy panel:
         DrawRect(
@@ -3483,9 +3316,10 @@ namespace renegade::studio
                     }
     }
 
-    void RenegadeStudioChrome::RenderPopups(const wi::Canvas&,
+    void RenegadeStudioChrome::RenderPopups(const wi::Canvas& canvas,
         const wi::graphics::CommandList cmd) const
     {
+        if(!HasOpenMenuPopup()) toolbarInteraction_.RenderTooltip(canvas,cmd);
         if (!IsVisible()) return;
         const float viewportTop = TopBarHeight + SceneTabsHeight;
         const auto drawPopup = [this,cmd](

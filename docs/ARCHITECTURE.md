@@ -2322,3 +2322,27 @@ Render workspace exit as hierarchy selection, so a newly selected asset owns
 its Inspector even when a different property tab was previously active. Shared
 InspectorContentWidth reserves Window::GetControlSize for the scrollbar before
 it appears, and narrow layer masks wrap to four columns with measured row space.
+
+
+### Approved Studio icon catalogue and toolbar input (16 November 2026)
+
+Studio owns the 65-icon SVG catalogue, title manifest and one padded 48 px atlas.
+The existing Wicked Canvas supplies logical/physical scaling; StudioIcons draws
+atlas source rectangles and shared opaque button faces. Loading happens once
+per texture rather than per button/frame. The editor logo and creator-authored
+runtime Screen resources remain separate.
+
+Custom Studio and Story Flow chrome use common control descriptors for pixels,
+bounds, enablement and action identity. Interaction owns one matching-release
+gesture and transient tooltip state; native buttons reuse their existing
+callback authority. Keyboard focus is separate from hover/held/selected states.
+An exclusive GUI owner cancels held input and tips while temporarily retaining
+keyboard focus; clicking elsewhere releases it. No new scene inventory,
+authoritative selection, graph model, history or serialization format is added.
+See UI_ICON_INTEGRATION.md and its scoped native evidence.
+
+JourneyWorkspaceHeaderHeight now keeps the Story Flow shell, native workspace,
+canvas hit region and scissor boundary in agreement. The 192 logical px header
+reserves clear row spacing around Fit. Persistent viewport controls such as Audio
+continue to render during popups; exclusive input and the foreground popup pass
+provide ownership instead of hiding the control.

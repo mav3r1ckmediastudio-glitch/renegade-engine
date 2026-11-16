@@ -18,7 +18,7 @@
 
 namespace
 {
-    constexpr float HeaderHeight = 182.0f;
+    constexpr float HeaderHeight = renegade::studio::JourneyWorkspaceHeaderHeight;
     constexpr float Padding = 18.0f;
     constexpr float NodeWidth = 210.0f;
     constexpr float NodeHeight = 112.0f;
@@ -1400,15 +1400,18 @@ namespace renegade::studio
     {
         saveButton_.Create("Story Flow Save");
         saveButton_.SetText("SAVE");
-        saveButton_.SetTooltip("Transactionally save the authoritative Story Flow document.");
+        saveButton_.SetIcon("save");
+        saveButton_.SetTooltip("Save — Transactionally save the authoritative Story Flow document.");
         saveButton_.OnClick([this](const wi::gui::EventArgs&) { SaveFlow(); });
         undoButton_.Create("Story Flow Undo");
         undoButton_.SetText("UNDO");
-        undoButton_.SetTooltip("Undo the previous Story Flow semantic edit.");
+        undoButton_.SetIcon("undo");
+        undoButton_.SetTooltip("Undo — Undo the previous Story Flow semantic edit.");
         undoButton_.OnClick([this](const wi::gui::EventArgs&) { UndoFlow(); });
         redoButton_.Create("Story Flow Redo");
         redoButton_.SetText("REDO");
-        redoButton_.SetTooltip("Redo the next Story Flow semantic edit.");
+        redoButton_.SetIcon("redo");
+        redoButton_.SetTooltip("Redo — Redo the next Story Flow semantic edit.");
         redoButton_.OnClick([this](const wi::gui::EventArgs&) { RedoFlow(); });
         connectButton_.Create("Story Flow Connect");
         connectButton_.SetText("CONNECT");
@@ -1589,12 +1592,12 @@ namespace renegade::studio
         const auto headerButton = [&x, top](wi::gui::Widget& widget, const float width)
         {
             widget.SetPos(XMFLOAT2(x, top));
-            widget.SetSize(XMFLOAT2(width, 28.0f));
+            widget.SetSize(XMFLOAT2(width, 32.0f));
             x += width + 5.0f;
         };
-        headerButton(undoButton_, 56.0f);
-        headerButton(redoButton_, 56.0f);
-        headerButton(saveButton_, 56.0f);
+        headerButton(undoButton_, 32.0f);
+        headerButton(redoButton_, 32.0f);
+        headerButton(saveButton_, 32.0f);
         headerButton(connectButton_, 78.0f);
         const float inspectorX = translation.x + GraphWidth() + 14.0f;
         const float inspectorWidth = std::max(90.0f, width_ - GraphWidth() - 28.0f);

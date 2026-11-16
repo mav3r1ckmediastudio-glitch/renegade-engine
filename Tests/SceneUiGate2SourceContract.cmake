@@ -56,7 +56,7 @@ forbid_text(story_flow_integration_source
 # Return-to-StoryFlow belongs in the scene-tab strip, not the viewport chip row.
 # Keep it right-aligned before the Inspector and clear of the 230 px active tab.
 require_text(story_flow_integration_source
-    "constexpr float ReturnButtonWidth = 132.0f;"
+    "constexpr float ReturnButtonWidth = 32.0f;"
     "return-control width")
 require_text(story_flow_integration_source
     "constexpr float SceneTabSafeOffset = 242.0f;"
@@ -65,7 +65,7 @@ require_text(story_flow_integration_source
     "bounds.z - ReturnButtonWidth - 12.0f"
     "right-aligned return control")
 require_text(story_flow_integration_source
-    "bounds.y - 31.0f"
+    "bounds.y - 33.0f"
     "scene-tab-strip vertical placement")
 forbid_text(story_flow_integration_source
     "bounds.x + 12.0f,\n                bounds.y + 12.0f"

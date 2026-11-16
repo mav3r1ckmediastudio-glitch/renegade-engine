@@ -442,3 +442,10 @@ add_custom_target(RenegadeParticleTextureLibraryAssets
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/Particles/TextureLibrary"
 )
 add_dependencies(RenegadeStudio RenegadeParticleTextureLibraryAssets)
+
+# Renegade-owned approved icon artwork. Studio-only; never adopted into projects.
+add_custom_command(TARGET RenegadeStudio POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/icons"
+    VERBATIM)

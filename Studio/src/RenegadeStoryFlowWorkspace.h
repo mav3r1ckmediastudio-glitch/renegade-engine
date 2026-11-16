@@ -138,6 +138,12 @@ namespace renegade::studio
         }
 
         void Update(const wi::Canvas& canvas, float dt) override;
+        void RenderTooltip(const wi::Canvas& canvas,wi::graphics::CommandList cmd) const override
+        {
+            if(!IsVisible()||!IsEnabled())return;
+            for(const auto* b:{&saveButton_,&undoButton_,&redoButton_})
+                if(b->IsVisible())b->RenderTooltip(canvas,cmd);
+        }
         void Render(
             const wi::Canvas& canvas,
             wi::graphics::CommandList cmd) const override;

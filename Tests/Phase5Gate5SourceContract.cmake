@@ -180,7 +180,7 @@ foreach(token IN ITEMS
 endforeach()
 
 foreach(token IN ITEMS
-    "RENDER"
+    "\"render\""
     "Action::RenderWorkspace"
     "SetRenderWorkspaceActive")
     string(FIND "${studio_chrome_text}" "${token}" found)

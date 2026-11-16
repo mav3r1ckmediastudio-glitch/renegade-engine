@@ -124,6 +124,10 @@ namespace renegade::studio
         CreatorAssetStudioChrome::OnAction(
             [this](const Action action)
             {
+                if(action==Action::PhysicsWorkspace) {
+                    if(studioAction_)studioAction_(Action::SceneWorkspace);
+                    SetPhysicsLabActive(true); return;
+                }
                 if(action==Action::CreateParticleEffect || action==Action::CreateNavigationGrid)
                 {
                     PrepareViewportPlacement();ResetDisclosureState();SetActiveBottomTab(-1,true);
@@ -186,6 +190,7 @@ namespace renegade::studio
     void RenegadePhysicsLabStudioChrome::SetPhysicsLabActive(const bool active)
     {
         physicsLab_.SetActive(active);
+        SetPhysicsWorkspaceIndicator(active);
         physicsLab_.SetBounds(ViewportBounds());
         if (active)
         {
@@ -392,16 +397,7 @@ namespace renegade::studio
         CreatorAssetStudioChrome::Update(canvas,dt);
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
-        if (!CreatorAssetStudioChrome::ConsumedPointerThisFrame() && PhysicsTabHit(pointer) &&
-            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
-        {
-            physicsTabConsumed_ = true;
-            particleAddMenuOpen_ = false;
-            if (studioAction_)
-                studioAction_(Action::SceneWorkspace);
-            SetPhysicsLabActive(true);
-        }
-        else if (!CreatorAssetStudioChrome::ConsumedPointerThisFrame() && !HasOpenMenuPopup() &&
+        if (!CreatorAssetStudioChrome::ConsumedPointerThisFrame() && !HasOpenMenuPopup() &&
             AudioViewportToolHit(pointer) &&
             wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
         {
@@ -488,7 +484,8 @@ namespace renegade::studio
             return;
         CreatorAssetStudioChrome::Render(canvas, cmd);
         RenderAudioViewportTool(cmd);
-        RenderPhysicsTab(cmd);
+        // Physics uses the shared compact workspace control.
+
         physicsLab_.Render(canvas, cmd);
         particleWorkspace_.Render(canvas, cmd);
         navigationWorkspace_.Render(canvas, cmd);
@@ -573,8 +570,8 @@ namespace renegade::studio
     void RenegadePhysicsLabStudioChrome::RenderAudioViewportTool(
         const wi::graphics::CommandList cmd) const
     {
-        if (HasOpenMenuPopup())
-            return;
+        // Popup ownership blocks input, not persistent toolbar presentation.
+        // The shared foreground popup pass already draws above this button.
         const XMFLOAT4 bounds = AudioViewportToolBounds();
         const bool active = audioWorkspace_.IsActive();
         DrawBorderedRect(

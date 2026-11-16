@@ -10,6 +10,7 @@
 #include <WickedEngine.h>
 #include "StudioUiPolicy.h"
 #include "StudioButtonVisual.h"
+#include "StudioIcons.h"
 
 #include "renegade/bridge/AssetCatalogueService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
@@ -44,6 +45,10 @@ namespace renegade::studio
     class RenegadeButton : public ReleaseButton
     {
     public:
+        void SetIcon(const std::string& id) { icon_=id; icons::Load(); SetTooltip(icons::Title(id)); }
+        void SetIconSelected(bool value) noexcept { iconSelected_=value; }
+        void Update(const wi::Canvas& canvas,float dt) override;
+        void RenderTooltip(const wi::Canvas& canvas,wi::graphics::CommandList cmd) const override;
         void SetRenderTextSize(int size) noexcept;
         void SetPrimaryStyle(bool primary) noexcept { primaryStyle_ = primary; }
         void SetAccentOutlineStyle(bool accent) noexcept { accentOutlineStyle_ = accent; }
@@ -52,6 +57,9 @@ namespace renegade::studio
 
     private:
         int renderTextSize_ = 12;
+        std::string icon_;
+        bool iconSelected_=false;
+        icons::Tooltip iconTooltip_;
         bool primaryStyle_ = false;
         bool accentOutlineStyle_ = false;
     };
@@ -317,6 +325,7 @@ namespace renegade::studio
             TerrainWorkspace,
             RenderWorkspace,
             SceneWorkspace,
+            PhysicsWorkspace,
             TestLevelPlay,
             TestLevelStop,
             BuildWindowsGame,
@@ -352,6 +361,7 @@ namespace renegade::studio
 
         void Create();
         void SetLayout(float width, float height);
+        void SetPhysicsWorkspaceIndicator(bool active) noexcept { physicsWorkspaceActive_=active; }
         void SetAssistantDockWidth(float width) noexcept;
         [[nodiscard]] float AssistantDockWidth() const noexcept
         {
@@ -510,6 +520,9 @@ namespace renegade::studio
             float inspectorX,
             wi::graphics::CommandList cmd) const;
 
+        std::vector<icons::Control> ToolbarControls() const;
+        icons::Interaction toolbarInteraction_;
+        bool physicsWorkspaceActive_=false;
         float width_ = 1920.0f;
         float height_ = 1080.0f;
         float hierarchyWidth_ = 320.0f;

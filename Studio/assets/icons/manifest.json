@@ -1,0 +1,591 @@
+{
+  "version": "1.0-design-handoff",
+  "icon_count": 65,
+  "assets": [
+    {
+      "id": "select",
+      "title": "Select",
+      "tooltip": "Select",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/select.svg"
+    },
+    {
+      "id": "move",
+      "title": "Move / Translate",
+      "tooltip": "Move / Translate",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/move.svg"
+    },
+    {
+      "id": "rotate",
+      "title": "Rotate",
+      "tooltip": "Rotate",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/rotate.svg"
+    },
+    {
+      "id": "scale",
+      "title": "Scale",
+      "tooltip": "Scale",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/scale.svg"
+    },
+    {
+      "id": "pan",
+      "title": "Pan",
+      "tooltip": "Pan",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/pan.svg"
+    },
+    {
+      "id": "focus",
+      "title": "Focus",
+      "tooltip": "Focus",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/focus.svg"
+    },
+    {
+      "id": "undo",
+      "title": "Undo",
+      "tooltip": "Undo",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/undo.svg"
+    },
+    {
+      "id": "redo",
+      "title": "Redo",
+      "tooltip": "Redo",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/redo.svg"
+    },
+    {
+      "id": "scene",
+      "title": "Scene",
+      "tooltip": "Scene",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/scene.svg"
+    },
+    {
+      "id": "environment",
+      "title": "Environment",
+      "tooltip": "Environment",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/environment.svg"
+    },
+    {
+      "id": "terrain",
+      "title": "Terrain",
+      "tooltip": "Terrain",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/terrain.svg"
+    },
+    {
+      "id": "render",
+      "title": "Render Settings",
+      "tooltip": "Render Settings",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/render.svg"
+    },
+    {
+      "id": "physics",
+      "title": "Physics Lab",
+      "tooltip": "Physics Lab",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/physics.svg"
+    },
+    {
+      "id": "audio",
+      "title": "Audio",
+      "tooltip": "Audio",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/audio.svg"
+    },
+    {
+      "id": "characters",
+      "title": "Characters",
+      "tooltip": "Characters",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/characters.svg"
+    },
+    {
+      "id": "storyflow",
+      "title": "StoryFlow",
+      "tooltip": "StoryFlow",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/storyflow.svg"
+    },
+    {
+      "id": "prefabs",
+      "title": "Prefabs",
+      "tooltip": "Prefabs",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/prefabs.svg"
+    },
+    {
+      "id": "particles",
+      "title": "Particles",
+      "tooltip": "Particles",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/particles.svg"
+    },
+    {
+      "id": "vegetation",
+      "title": "Vegetation",
+      "tooltip": "Vegetation",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/vegetation.svg"
+    },
+    {
+      "id": "water",
+      "title": "Water",
+      "tooltip": "Water",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/water.svg"
+    },
+    {
+      "id": "weather",
+      "title": "Weather",
+      "tooltip": "Weather",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/weather.svg"
+    },
+    {
+      "id": "lighting",
+      "title": "Lighting",
+      "tooltip": "Lighting",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "main-toolbar",
+      "svg": "svg/lighting.svg"
+    },
+    {
+      "id": "assets",
+      "title": "Assets",
+      "tooltip": "Assets",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/assets.svg"
+    },
+    {
+      "id": "layers",
+      "title": "Layers",
+      "tooltip": "Layers",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/layers.svg"
+    },
+    {
+      "id": "hierarchy",
+      "title": "Hierarchy",
+      "tooltip": "Hierarchy",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/hierarchy.svg"
+    },
+    {
+      "id": "inspector",
+      "title": "Inspector",
+      "tooltip": "Inspector",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/inspector.svg"
+    },
+    {
+      "id": "settings",
+      "title": "Settings",
+      "tooltip": "Settings",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/settings.svg"
+    },
+    {
+      "id": "play",
+      "title": "Play",
+      "tooltip": "Play",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/play.svg"
+    },
+    {
+      "id": "stop",
+      "title": "Stop",
+      "tooltip": "Stop",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/stop.svg"
+    },
+    {
+      "id": "save",
+      "title": "Save",
+      "tooltip": "Save",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/save.svg"
+    },
+    {
+      "id": "add",
+      "title": "Add",
+      "tooltip": "Add",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/add.svg"
+    },
+    {
+      "id": "delete",
+      "title": "Delete",
+      "tooltip": "Delete",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/delete.svg"
+    },
+    {
+      "id": "duplicate",
+      "title": "Duplicate",
+      "tooltip": "Duplicate",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/duplicate.svg"
+    },
+    {
+      "id": "link",
+      "title": "Link",
+      "tooltip": "Link",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/link.svg"
+    },
+    {
+      "id": "unlink",
+      "title": "Unlink",
+      "tooltip": "Unlink",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/unlink.svg"
+    },
+    {
+      "id": "visibility",
+      "title": "Visibility",
+      "tooltip": "Visibility",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/visibility.svg"
+    },
+    {
+      "id": "hide",
+      "title": "Hide",
+      "tooltip": "Hide",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/hide.svg"
+    },
+    {
+      "id": "search",
+      "title": "Search",
+      "tooltip": "Search",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/search.svg"
+    },
+    {
+      "id": "filter",
+      "title": "Filter",
+      "tooltip": "Filter",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/filter.svg"
+    },
+    {
+      "id": "arrange",
+      "title": "Arrange",
+      "tooltip": "Arrange",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/arrange.svg"
+    },
+    {
+      "id": "build-game",
+      "title": "Build Game",
+      "tooltip": "Build Game",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/build-game.svg"
+    },
+    {
+      "id": "validate",
+      "title": "Validate",
+      "tooltip": "Validate",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/validate.svg"
+    },
+    {
+      "id": "hub",
+      "title": "Project Hub",
+      "tooltip": "Project Hub",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/hub.svg"
+    },
+    {
+      "id": "levels",
+      "title": "Levels",
+      "tooltip": "Levels",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/levels.svg"
+    },
+    {
+      "id": "screens",
+      "title": "Screens",
+      "tooltip": "Screens",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/screens.svg"
+    },
+    {
+      "id": "variables",
+      "title": "Variables",
+      "tooltip": "Variables",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/variables.svg"
+    },
+    {
+      "id": "journey",
+      "title": "Journey View",
+      "tooltip": "Journey View",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/journey.svg"
+    },
+    {
+      "id": "graph",
+      "title": "Graph View",
+      "tooltip": "Graph View",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/graph.svg"
+    },
+    {
+      "id": "game-start",
+      "title": "Game Start",
+      "tooltip": "Game Start",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/game-start.svg"
+    },
+    {
+      "id": "level",
+      "title": "Level Destination",
+      "tooltip": "Level Destination",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/level.svg"
+    },
+    {
+      "id": "victory",
+      "title": "Complete Game",
+      "tooltip": "Complete Game",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/victory.svg"
+    },
+    {
+      "id": "dialogue",
+      "title": "Dialogue Line",
+      "tooltip": "Dialogue Line",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/dialogue.svg"
+    },
+    {
+      "id": "choice",
+      "title": "Choice",
+      "tooltip": "Choice",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/choice.svg"
+    },
+    {
+      "id": "branch",
+      "title": "Branch",
+      "tooltip": "Branch",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/branch.svg"
+    },
+    {
+      "id": "condition",
+      "title": "Condition",
+      "tooltip": "Condition",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/condition.svg"
+    },
+    {
+      "id": "event",
+      "title": "Action / Event",
+      "tooltip": "Action / Event",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/event.svg"
+    },
+    {
+      "id": "flag",
+      "title": "Flag",
+      "tooltip": "Flag",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/flag.svg"
+    },
+    {
+      "id": "quest",
+      "title": "Quest",
+      "tooltip": "Quest",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/quest.svg"
+    },
+    {
+      "id": "camera",
+      "title": "Camera",
+      "tooltip": "Camera",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/camera.svg"
+    },
+    {
+      "id": "delay",
+      "title": "Delay / Wait",
+      "tooltip": "Delay / Wait",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/delay.svg"
+    },
+    {
+      "id": "note",
+      "title": "Note",
+      "tooltip": "Note",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "storyflow",
+      "svg": "svg/note.svg"
+    },
+    {
+      "id": "refresh",
+      "title": "Refresh",
+      "tooltip": "Refresh",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/refresh.svg"
+    },
+    {
+      "id": "fit",
+      "title": "Fit View",
+      "tooltip": "Fit View",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/fit.svg"
+    },
+    {
+      "id": "return",
+      "title": "Return",
+      "tooltip": "Return",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/return.svg"
+    },
+    {
+      "id": "quit",
+      "title": "Quit",
+      "tooltip": "Quit",
+      "shortcut": null,
+      "shortcut_note": "Use actual existing binding; do not hard-code an assumed shortcut",
+      "group": "common-actions",
+      "svg": "svg/quit.svg"
+    }
+  ]
+}
