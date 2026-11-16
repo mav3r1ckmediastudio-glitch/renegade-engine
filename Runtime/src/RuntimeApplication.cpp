@@ -832,6 +832,7 @@ namespace renegade::runtime
                 event.payload=batch[0].key+":"+std::to_string(batch[0].value);
                 return creatorScripts_.EnqueueGameplayEvent(std::move(event),error);
             });
+            dialogue_.SetInteractBinding(inputMap_.bindings[static_cast<std::size_t>(bridge::GameplayAction::Interact)]);
             if(dialogue_.Update(scenes_.GetScene(),scenes_.Revision(),startupResult_.project.rootPath,
                     startupResult_.project.projectId,renderer_,player_.entity,gameplayInput_,
                     !paused_&&!typingInOtherUi&&!inventoryOverlayOpen_&&

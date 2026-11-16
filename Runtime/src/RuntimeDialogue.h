@@ -44,6 +44,7 @@ class RuntimeDialogue
     {
         session_.SetEventSink(std::move(sink));
     }
+    void SetInteractBinding(const bridge::GameplayActionBinding &);
     // Returns true when this frame's gameplay input belongs to dialogue.
     bool Update(wi::scene::Scene &, std::uint64_t revision, const std::string &root, const std::string &project,
                 wi::RenderPath2D &, wi::ecs::Entity player, bridge::GameplayInputFrame input, bool allowed);
@@ -59,7 +60,7 @@ class RuntimeDialogue
     bridge::DialogueMemory memory_;
     bridge::DialogueSession session_;
     screen::DialoguePanel panel_;
-    std::string root_, project_, prompt_, error_;
+    std::string root_, project_, prompt_, error_, interactKey_ = "E";
     bool refresh_ = false;
 };
 } // namespace renegade::runtime

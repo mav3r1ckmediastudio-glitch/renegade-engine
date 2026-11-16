@@ -89,6 +89,8 @@ class DialogueSession
     // Event batches must be accepted atomically. No state/advance on rejection.
     using EventSink = std::function<bool(const std::vector<DialogueAction> &, std::string &)>;
     bool Start(const DialogueDocument &, DialogueMemory &, std::string &error);
+    // Live authoring refresh: preserve progress/memory, never execute outcomes.
+    bool RefreshDocument(const DialogueDocument &, std::string &error);
     void Close() noexcept
     {
         current_.clear();

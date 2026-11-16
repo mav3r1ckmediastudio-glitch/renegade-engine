@@ -270,6 +270,20 @@ bool DialogueSession::Start(const DialogueDocument &d, DialogueMemory &m, std::s
     ++visit_;
     return true;
 }
+bool DialogueSession::RefreshDocument(const DialogueDocument &d, std::string &e)
+{
+    if (!ValidateDialogue(d, e)) return false;
+    if (!memory_ || d.id != document_.id || d.projectId != document_.projectId)
+    { e = "Start this conversation before refreshing its preview."; return false; }
+    document_ = d;
+    if (current_.empty() || !Line())
+    {
+        current_ = d.entry;
+        ++visit_;
+    }
+    e.clear();
+    return true;
+}
 bool DialogueSession::Matches(const std::vector<DialogueCondition> &cs, bool all) const
 {
     if (cs.empty())
@@ -382,16 +396,12 @@ DialogueDocument MakeGuardDialogue(const std::string &p, const std::string &id)
     DialogueReply work;
     work.id = "work";
     work.text = "I have a permit.";
-    work.outcomes.push_back({{}, true,
-        {{DialogueActionKind::SetFlag, "has_permit", 1},
-         {DialogueActionKind::SetFlag, "access_granted", 1}}, "permit"});
+    work.outcomes.push_back({{}, true, {}, "permit"});
     DialogueReply gate;
     gate.id = "gate";
     gate.text = "Let me through.";
-    gate.outcomes.push_back({{{DialogueConditionKind::FlagEquals, "has_permit", 1}},
-                             true,
-                             {{DialogueActionKind::SetFlag, "access_granted", 1}},
-                             "permit"});
+    // Keep the basic example literal. Authors add conditional behaviour in
+    // Advanced; one sample reply must not secretly change another reply's route.
     gate.outcomes.push_back({{}, true, {}, "refused"});
     DialogueReply bye;
     bye.id = "bye";

@@ -15,6 +15,20 @@ int main()
     {
         std::string error;
         auto d = MakeGuardDialogue("project", "guard");
+        DialogueSession basicSession;
+        DialogueMemory basicMemory;
+        basicMemory.values["has_permit"] = 1;
+        Check(basicSession.Start(d, basicMemory, error) && basicSession.Choose("gate", error) &&
+              basicSession.View().text == "Come back with a permit.", "basic sample refusal is independent of hidden flags");
+        Check(basicSession.Start(d, basicMemory, error) && basicSession.Choose("work", error) &&
+              basicSession.View().text == "Everything seems in order.", "basic sample permit acknowledgement");
+        // Explicit Advanced fixture: retain full condition/action/memory proof
+        // separately from the creator's simple three-choice example.
+        d.lines[0].replies[0].outcomes[0].actions = {
+            {DialogueActionKind::SetFlag, "has_permit", 1}, {DialogueActionKind::SetFlag, "access_granted", 1}};
+        d.lines[0].replies[1].outcomes.insert(d.lines[0].replies[1].outcomes.begin(),
+            {{{DialogueConditionKind::FlagEquals, "has_permit", 1}}, true,
+             {{DialogueActionKind::SetFlag, "access_granted", 1}}, "permit"});
         Check(ValidateDialogue(d, error), "valid guard");
         DialogueDocument copy;
         Check(DecodeDialogue(EncodeDialogue(d), copy, error), "save reopen");
@@ -53,6 +67,31 @@ int main()
         Check(s.Choose("gate", error) && s.View().text == "Everything seems in order.", "permit branch");
         Check(m.values["access_granted"] == 1, "action mutates memory");
         Check(s.Continue(error) && !s.Active(), "end");
+        {
+            auto live = MakeGuardDialogue("project", "live");
+            live.lines[0].voice = "Content/Audio/opening.wav";
+            DialogueMemory previewMemory;
+            previewMemory.values["creator_flag"] = 7;
+            DialogueSession preview;
+            Check(preview.Start(live, previewMemory, error), "live preview start");
+            const auto visit = preview.View().voiceKey;
+            live.lines[0].text = "Edited immediately";
+            live.lines[0].replies[0].outcomes[0].next = "captain";
+            Check(preview.RefreshDocument(live, error) && preview.View().text == "Edited immediately",
+                  "unsaved text updates the current preview");
+            Check(preview.View().voiceKey == visit && previewMemory.values["creator_flag"] == 7,
+                  "live text editing preserves voice visit and private test memory");
+            Check(preview.Choose("work", error) && preview.View().text == "Speak to the captain in the courtyard.",
+                  "unsaved connection updates are used immediately");
+            auto invalidEdit = live;
+            invalidEdit.lines[0].text.clear();
+            Check(!preview.RefreshDocument(invalidEdit, error) && preview.View().text == "Speak to the captain in the courtyard.",
+                  "unfinished fields preserve the last valid preview");
+            live.lines.erase(live.lines.begin() + 1);
+            live.lines[0].replies[0].outcomes[0].next = "permit";
+            Check(preview.RefreshDocument(live, error) && preview.View().text == "Edited immediately",
+                  "deleting the displayed line returns preview to the opening");
+        }
         d.lines[0].replies[0].once = true;
         Check(s.Start(d, m, error) && s.Choose("work", error), "once choose");
         Check(s.Start(d, m, error) && s.View().replies.size() == 2, "once hidden");

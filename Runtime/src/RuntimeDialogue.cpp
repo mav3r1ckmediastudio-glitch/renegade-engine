@@ -1,7 +1,22 @@
 #include "RuntimeDialogue.h"
 #include <cmath>
+#include <algorithm>
 namespace renegade::runtime
 {
+void RuntimeDialogue::SetInteractBinding(const bridge::GameplayActionBinding &binding)
+{
+    interactKey_ = binding.keyboard;
+    if (interactKey_.empty())
+    {
+        if (!binding.mouse.empty()) interactKey_ = binding.mouse + " mouse button";
+        else if (!binding.gamepad.empty()) interactKey_ = "Gamepad " + binding.gamepad;
+        else interactKey_ = "your Interact control";
+    }
+    if (interactKey_ == "SPACE") interactKey_ = "Space";
+    if (interactKey_ == "LSHIFT") interactKey_ = "Left Shift";
+    if (interactKey_ == "ESCAPE") interactKey_ = "Esc";
+    std::replace(interactKey_.begin(), interactKey_.end(), '_', ' ');
+}
 bool RuntimeDialogue::Update(wi::scene::Scene &scene, std::uint64_t revision, const std::string &root,
                              const std::string &project, wi::RenderPath2D &path, wi::ecs::Entity player,
                              bridge::GameplayInputFrame input, bool allowed)
@@ -19,6 +34,7 @@ bool RuntimeDialogue::Update(wi::scene::Scene &scene, std::uint64_t revision, co
         for (size_t i = 0; i < scene.metadatas.GetCount(); ++i)
         {
             auto entity = scene.metadatas.GetEntity(i);
+            if (entity == player || IsPlayerStart(scene, entity)) continue;
             auto id = AssignedDialogue(scene, entity);
             if (id.empty())
                 continue;
@@ -57,6 +73,7 @@ bool RuntimeDialogue::Update(wi::scene::Scene &scene, std::uint64_t revision, co
             else if (action != "@refresh")
                 session_.Choose(action, error_);
             refresh_ = true;
+            wi::backlog::post("Dialogue action: " + action + " -> " + session_.View().voiceKey);
         }
     }
     else if (allowed)
@@ -83,7 +100,7 @@ bool RuntimeDialogue::Update(wi::scene::Scene &scene, std::uint64_t revision, co
         }
         if (closest)
         {
-            prompt_ = "Interact: Talk to " + closest->document.name;
+            prompt_ = "Press " + interactKey_ + " to talk to " + closest->document.name;
             if (input.interactPressed || wi::input::Press(wi::input::GAMEPAD_BUTTON_XBOX_A))
             {
                 if (session_.Start(closest->document, memory_, error_))

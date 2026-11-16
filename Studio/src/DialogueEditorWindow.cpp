@@ -2,6 +2,7 @@
 #include "StudioTheme.h"
 #include "renegade/bridge/DialogueAssetService.h"
 #include "renegade/bridge/StudioSession.h"
+#include "renegade/bridge/PlayerService.h"
 #include "renegade/screen/DialoguePanel.h"
 #include <algorithm>
 #include <charconv>
@@ -244,7 +245,8 @@ struct DialogueEditorWindow::Impl
     screen::DialoguePanel panel;
     std::string project, root, saved, status, previewResult;
     std::shared_ptr<int> lifetime = std::make_shared<int>(0);
-    std::uint64_t generation = 0, targetRevision = ~std::uint64_t(0);
+    std::uint64_t generation = 0, targetRevision = ~std::uint64_t(0), editRevision = 0, previewRevision = 0;
+    std::string previewError;
     std::vector<SceneEntity> targets;
     bool testGameRequested = false;
     bool advanced = false, sync = false, refreshPreview = false, selectionPlaced = false;
@@ -275,7 +277,7 @@ struct DialogueEditorWindow::Impl
     DialogueText text;
     DialogueOutline tree;
     wi::gui::Label help, selectionLabel, previewHeading, previewHint, appearanceHeading, conversationHeading, textHeading, destinationHeading, ruleSummary, voiceHeading;
-    wi::gui::Label workflow, voiceHint, gameHeading, gameHint;
+    wi::gui::Label workflow, voiceHint, gameHeading, gameHint, exampleNote;
     DialogueButton showAdvanced, audition, importVoice, voiceFolder, refreshVoices, testGame;
     explicit Impl(DialogueEditorWindow *w) : owner(w)
     {
@@ -303,6 +305,7 @@ struct DialogueEditorWindow::Impl
     }
     void Before()
     {
+        ++editRevision;
         undo.push_back(doc);
         if (undo.size() > 128)
             undo.erase(undo.begin());
@@ -338,6 +341,7 @@ struct DialogueEditorWindow::Impl
     }
     void Changed()
     {
+        ++editRevision;
         Rebuild();
         RefreshFields();
     }
@@ -441,7 +445,7 @@ struct DialogueEditorWindow::Impl
         for (size_t i = 0; i < doc.lines.size(); ++i)
             if (!seen.count(doc.lines[i].id))
             {
-                Row("Shared / unlinked section", 0, {int(i)});
+                Row("Unused NPC line - connect from a reply's Continue to", 0, {int(i)});
                 line(int(i), 1);
             }
     }
@@ -461,7 +465,15 @@ struct DialogueEditorWindow::Impl
         opacity.SetVisible(advanced && r && !c && !a);
         textSize.SetVisible(advanced && r && !c && !a);
         appearanceHeading.SetVisible(advanced && r && !c && !a);
-        permitBox.SetVisible(advanced);
+        bool usesPermit = false;
+        for (const auto &line : doc.lines)
+            for (const auto &reply : line.replies)
+            {
+                for (const auto &condition : reply.conditions) usesPermit |= condition.key == "has_permit";
+                for (const auto &outcome : reply.outcomes)
+                    for (const auto &condition : outcome.conditions) usesPermit |= condition.key == "has_permit";
+            }
+        permitBox.SetVisible(advanced && usesPermit);
         speaker.SetValue(l ? l->speaker : "");
         int voiceIndex = 0;
         if (l) for (size_t n = 0; n < voicePaths.size(); ++n)
@@ -531,6 +543,8 @@ struct DialogueEditorWindow::Impl
     void Start()
     {
         previewResult.clear();
+        previewError.clear();
+        previewRevision = editRevision;
         memory = {};
         memory.values["has_permit"] = permitBox.GetCheck() ? 1 : 0;
         preview.SetItemQuery([this](auto &key, int count) {
@@ -553,7 +567,7 @@ struct DialogueEditorWindow::Impl
         target.ClearItems();
         target.AddItem("Choose an NPC or scene object...");
         for (const auto &item : session->Scenes().ListEntities())
-            if (item.hasTransform && item.logicalAsset &&
+            if (item.hasTransform && item.logicalAsset && !IsPlayerStart(session->Scenes().GetScene(), item.entity) &&
                 (item.category == SceneEntityCategory::Characters || item.category == SceneEntityCategory::Models ||
                  item.category == SceneEntityCategory::Other))
             {
@@ -689,6 +703,9 @@ struct DialogueEditorWindow::Impl
         heading(previewHeading, "2. Try the replies", 32, 575, 340);
         heading(previewHint, "Try the conversation as your player will see it.", 32, 606, 650);
         heading(workflow, "Select a line to edit. Add replies, then select a reply and Add response.", 32, 118, 800);
+        exampleNote.Create("Example voice recordings");
+        exampleNote.SetText("Included voice clips are examples. Add your own WAV/OGG recordings for spoken dialogue; lines without a clip display as text only.");
+        Add(exampleNote, 840, 76, 450, 44);
         heading(conversationHeading, "1. Write the conversation", 32, 146, 740);
         heading(textHeading, "Dialogue text", 890, 207, 360);
         heading(destinationHeading, "Continue to", 890, 334, 360);
@@ -710,7 +727,8 @@ struct DialogueEditorWindow::Impl
             selectedDocument.entry = L()->id;
             panel.StopVoice();
             previewResult.clear();
-            if (preview.Start(selectedDocument, memory, status)) refreshPreview = true;
+            if (preview.Start(selectedDocument, memory, status))
+            { previewRevision = editRevision; previewError.clear(); refreshPreview = true; }
         });
         Button(voiceFolder, "Open voice folder", 890, 518, 180, [this] {
             namespace fs = std::filesystem;
@@ -811,7 +829,7 @@ struct DialogueEditorWindow::Impl
         });
         testGame.primary = true;
         heading(gameHint, "Choose the object that should speak this conversation.", 32, 890, 1260);
-        heading(voiceHint, "In game: approach the NPC (within 3 m), press Interact (E by default). Use arrows + Enter; Esc closes.", 32, 916, 1260);
+        heading(voiceHint, "In game: approach the NPC (within 3 m), press Interact (E by default). Use arrows + Enter; Esc closes.", 32, 910, 1260);
         name.Create("Conversation name");
         name.SetDescription("Name: ");
         Add(name, 88, 76, 730, 30);
@@ -914,8 +932,6 @@ struct DialogueEditorWindow::Impl
                 return;
             Before();
             doc.theme.textSize = std::clamp(parsed, 14.f, 48.f);
-            if (preview.Active())
-                Start();
         });
         opacity.Create("Dialogue opacity");
         opacity.SetDescription("Opacity: ");
@@ -929,8 +945,6 @@ struct DialogueEditorWindow::Impl
                 return;
             Before();
             doc.theme.panelOpacity = std::clamp(parsed, .2f, 1.f);
-            if (preview.Active())
-                Start();
         });
         matchAllBox.Create("Match all conditions");
         Add(matchAllBox, 890, 405, 22, 22);
@@ -1119,7 +1133,7 @@ struct DialogueEditorWindow::Impl
             input->SetCancelInputEnabled(false);
         help.Create("Dialogue status");
         help.font.params.size = 13;
-        Add(help, 24, 948, 1270, 24);
+        Add(help, 24, 938, 1270, 24);
         const std::pair<wi::gui::Widget *, const char *> tips[] = {
             {&library, "Choose a saved conversation, then Open. Save or Discard any current edits first."},
             {&newDoc, "Create a text-only conversation with one opening NPC line. Add replies and responses as needed."},
@@ -1141,7 +1155,7 @@ struct DialogueEditorWindow::Impl
             {&voiceFolder, "Open this project's Content/Audio/Dialogue folder. Add your own recordings there, then Refresh clips."},
             {&refreshVoices, "Rescan this project's audio folders after adding recordings outside the editor."},
             {&audition, "Play the selected NPC line and its attached recording in the preview below."},
-            {&play, "Restart the preview at the opening line and reset its private test flags."},
+            {&play, "Reset preview progress and private test flags. Valid text and branch edits already update the preview automatically."},
             {&permitBox, "Start the preview with the sample has_permit flag enabled. This changes preview state only."},
             {&target, "Choose the NPC or scene object players will approach to start this conversation. A selected scene object is chosen automatically."},
             {&assign, "Save the conversation, attach it to the chosen NPC and save the current level. Replaces that NPC's previous conversation."},
@@ -1201,10 +1215,10 @@ struct DialogueEditorWindow::Impl
         owner->SetColor(Panel, wi::gui::WIDGET_ID_COMBO_DROPDOWN);
         owner->font.params.size = 16;
         owner->font.params.bolden = .15f;
-        for (auto *label : {&help, &selectionLabel, &previewHeading, &previewHint, &appearanceHeading, &conversationHeading, &textHeading, &destinationHeading, &ruleSummary, &voiceHeading, &workflow, &voiceHint, &gameHeading, &gameHint})
+        for (auto *label : {&help, &selectionLabel, &previewHeading, &previewHint, &appearanceHeading, &conversationHeading, &textHeading, &destinationHeading, &ruleSummary, &voiceHeading, &workflow, &voiceHint, &gameHeading, &gameHint, &exampleNote})
         {
             label->SetColor(wi::Color::Transparent());
-            const bool caption = label == &help || label == &previewHint || label == &workflow || label == &voiceHint || label == &gameHint;
+            const bool caption = label == &help || label == &previewHint || label == &workflow || label == &voiceHint || label == &gameHint || label == &exampleNote;
             label->font.params.size = caption ? 13 : 16;
             label->font.params.bolden = caption ? 0 : .15f;
         }
@@ -1300,6 +1314,15 @@ void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
         return;
     }
     i.FitToCanvas(path);
+    if (i.previewRevision != i.editRevision)
+    {
+        i.previewRevision = i.editRevision;
+        if (i.preview.RefreshDocument(i.doc, i.previewError))
+        {
+            i.previewResult.clear();
+            i.refreshPreview = true;
+        }
+    }
     if (i.targetRevision != s.Scenes().Revision()) i.RefreshTargets();
     const int targetIndex = i.target.GetSelected();
     const bool hasTarget = targetIndex > 0 && size_t(targetIndex) <= i.targets.size();
@@ -1349,8 +1372,8 @@ void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
     else
         i.panel.Layout(path, {GetPos().x + 24 * i.uiScale, GetPos().y + control_size + 640 * i.uiScale,
                               1270 * i.uiScale, 190 * i.uiScale});
-    i.previewHint.SetText(i.preview.Active() ? (i.Dirty() ? "Restart to try your latest edits. Preview flags stay separate from the game."
-                                                         : "Click a reply to follow its response. This preview has its own test flags.")
+    i.previewHint.SetText(!i.previewError.empty() ? "Complete the edit to update the preview: " + i.previewError
+                        : i.preview.Active() ? "Live preview: edits update automatically. Restart resets your test progress."
                                             : "This branch has ended. The preview stays here so you can restart or keep editing.");
     i.help.SetText((i.Dirty() ? "UNSAVED  |  " : "") + i.status);
     i.undoButton.SetEnabled(!i.undo.empty());
