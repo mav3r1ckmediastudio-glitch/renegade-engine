@@ -381,8 +381,10 @@ DialogueDocument MakeGuardDialogue(const std::string &p, const std::string &id)
     l.text = "What business have you here?";
     DialogueReply work;
     work.id = "work";
-    work.text = "I am looking for work.";
-    work.outcomes.push_back({{}, true, {}, "captain"});
+    work.text = "I have a permit.";
+    work.outcomes.push_back({{}, true,
+        {{DialogueActionKind::SetFlag, "has_permit", 1},
+         {DialogueActionKind::SetFlag, "access_granted", 1}}, "permit"});
     DialogueReply gate;
     gate.id = "gate";
     gate.text = "Let me through.";

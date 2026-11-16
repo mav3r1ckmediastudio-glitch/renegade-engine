@@ -4666,8 +4666,11 @@ namespace renegade::studio
     void StudioRenderPath::Compose(const wi::graphics::CommandList cmd) const
     {
         if(dialogueFrameSuspended_){
-            if(pathTracePreviewActive_)RenderPath3D_PathTracing::Compose(cmd);
-            else wi::RenderPath3D::Compose(cmd);
+            // A resize can replace the suspended scene's render targets before
+            // another 3D frame is produced. Never sample those unwritten buffers.
+            wi::image::Params backdrop(0,0,float(GetLogicalWidth()),float(GetLogicalHeight()),HologramPanel);
+            wi::image::Draw(nullptr,backdrop,cmd);
+            wi::RenderPath2D::Compose(cmd);
             dialogueGui_.Render(*this,cmd);
             return;
         }

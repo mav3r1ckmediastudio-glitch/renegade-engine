@@ -242,7 +242,7 @@ struct DialogueEditorWindow::Impl
         XMFLOAT2 pos, size;
     };
     std::vector<LayoutItem> layout;
-    float uiScale = 1;
+    float uiScale = 1, canvasWidth = 0, canvasHeight = 0, canvasDpi = 0;
     std::vector<DialogueDocument> assets;
     std::vector<DialogueDocument> undo, redo;
     DialogueButton save, newDoc, load, discard, assign, addLine, addReply, remove, undoButton, redoButton, play,
@@ -976,6 +976,26 @@ struct DialogueEditorWindow::Impl
         help.font.params.size = 13;
         Add(help, 24, 839, 1270, 20);
     }
+    void FitToCanvas(wi::RenderPath2D &path)
+    {
+        const float width = float(path.GetLogicalWidth());
+        const float height = float(path.GetLogicalHeight());
+        const float dpi = path.GetDPIScaling();
+        if (width < 64 || height < 100 ||
+            (width == canvasWidth && height == canvasHeight && dpi == canvasDpi)) return;
+        canvasWidth = width;
+        canvasHeight = height;
+        canvasDpi = dpi;
+        uiScale = std::clamp(std::min((width - 32) / 1320.f, (height - 64) / 900.f), .4f, 1.f);
+        owner->SetSize({1320 * uiScale, 900 * uiScale});
+        owner->SetPos({std::max(8.f, (width - 1320 * uiScale) * .5f), 24});
+        for (auto &item : layout)
+        {
+            item.widget->SetPos({item.pos.x * uiScale, item.pos.y * uiScale});
+            item.widget->SetSize({item.size.x * uiScale, item.size.y * uiScale});
+        }
+        tree.uiScale = uiScale;
+    }
     void ApplyTheme()
     {
         wi::gui::Theme theme;
@@ -1062,17 +1082,9 @@ void DialogueEditorWindow::Open(StudioSession &s, wi::RenderPath2D &path)
         i.SelectDocument(MakeGuardDialogue(i.project, GenerateStableId()));
         i.saved.clear();
     }
-    i.uiScale =
-        std::clamp(std::min((path.GetLogicalWidth() - 32) / 1320.f, (path.GetLogicalHeight() - 64) / 900.f), .65f, 1.f);
-    SetSize({1320 * i.uiScale, 900 * i.uiScale});
-    SetPos({std::max(8.f, (path.GetLogicalWidth() - 1320 * i.uiScale) * .5f), 24});
-    for (auto &item : i.layout)
-    {
-        item.widget->SetPos({item.pos.x * i.uiScale, item.pos.y * i.uiScale});
-        item.widget->SetSize({item.size.x * i.uiScale, item.size.y * i.uiScale});
-    }
+    i.canvasWidth = i.canvasHeight = i.canvasDpi = 0;
+    i.FitToCanvas(path);
     SetVisible(true);
-    i.tree.uiScale = i.uiScale;
     i.ApplyTheme();
     i.RefreshFields();
     i.Start();
@@ -1087,6 +1099,7 @@ void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
             SetVisible(false);
         return;
     }
+    i.FitToCanvas(path);
     auto action = i.panel.TakeAction();
     if (!action.empty())
     {
@@ -1114,6 +1127,8 @@ void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
     else if (i.preview.Active())
         i.panel.Layout(path, {GetPos().x + 24 * i.uiScale, GetPos().y + control_size + 640 * i.uiScale,
                               1270 * i.uiScale, 190 * i.uiScale});
+    i.previewHint.SetText(i.preview.Active() ? "Try the conversation as your player will see it."
+                                            : "Conversation ended. Restart to try it again.");
     i.help.SetText((i.Dirty() ? "UNSAVED  |  " : "") + i.status);
     i.undoButton.SetEnabled(!i.undo.empty());
     i.redoButton.SetEnabled(!i.redo.empty());

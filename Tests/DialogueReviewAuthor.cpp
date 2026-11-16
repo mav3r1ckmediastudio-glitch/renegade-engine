@@ -70,9 +70,8 @@ int main(int argc, char **argv)
     }
     const auto project = projects.CurrentProject();
     auto doc = MakeGuardDialogue(project.projectId, GenerateStableId());
-    doc.lines[0].replies[0].text = "I have a permit.";
-    doc.lines[0].replies[0].outcomes[0].actions = {{DialogueActionKind::SetFlag, "has_permit", 1}};
-    doc.lines[0].replies[0].outcomes[0].next = "opening";
+    // Use the production guard example so review replies cannot diverge from
+    // the normal creator template or accidentally loop to the opening line.
     std::string error;
     if (!SaveDialogueAsset(project.rootPath, doc, error))
     {

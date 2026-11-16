@@ -34,6 +34,12 @@ int main()
         const std::string legacy = "renegade-dialogue 1 \"project\" \"legacy\" \"Legacy\" \"opening\"\n22 1 14572317 1\n\"opening\" \"Guard\" \"Welcome.\" \"\" 0\n";
         Check(DecodeDialogue(legacy, copy, error) && copy.lines[0].voice.empty(), "legacy silent dialogue loads");
         Check(DecodeDialogue(EncodeDialogue(d), copy, error), "restore guard fixture");
+        DialogueSession permitSession;
+        DialogueMemory permitMemory;
+        Check(permitSession.Start(d, permitMemory, error) && permitSession.Choose("work", error) &&
+              permitSession.View().text == "Everything seems in order.", "showing permit advances to guard acknowledgement");
+        Check(permitMemory.values["has_permit"] == 1 && permitMemory.values["access_granted"] == 1,
+              "showing permit grants access");
         DialogueSession s;
         DialogueMemory m;
         Check(s.Start(copy, m, error), "start");
