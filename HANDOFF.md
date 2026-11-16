@@ -14,8 +14,10 @@ in 0.75 seconds. The earlier shared display build has 14 passing suites and nati
 UI/game evidence below. The new automatic selection needs final native owner
 review; the currently open review window still holds the previous UI and the
 owner's UNSAVED conversation edits. Preserve it. The updated normal Studio
-executable is ready, but do not replace/restart the active review session without
-preserving its edits. In that current session, Advanced then selecting a player
+executable and on-disk review executable are ready for the next launch. The old
+loaded review binary was renamed to a timestamped before-advanced backup, leaving
+the live process and its unsaved edits intact. Do not restart that active review
+session without preserving its edits. In that current session, Advanced then selecting a player
 reply exposes the existing tools; selecting an outcome exposes actions.
 
 An annotated guide was generated from the exact selected screenshot. It is a
