@@ -10,6 +10,7 @@ bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &pr
 {
     using namespace bridge;
     renderer_.Reset(path);
+    pending_.clear();
     ids_.clear();
     actions_.clear();
     focus_ = 0;
@@ -46,6 +47,9 @@ bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &pr
         }
         w.style.normal.foreground = {240, 243, 242, 255};
         w.style.hover.background = w.style.focused.background = {44, 35, 29, 255};
+        w.style.hover.background = {65, 52, 41, 255};
+        w.style.pressed.background = accent;
+        w.style.pressed.foreground = {255, 255, 255, 255};
         w.style.hover.foreground = w.style.focused.foreground = {244, 244, 244, 255};
         w.style.borderColor = accent;
         w.style.borderWidth = kind == ScreenWidgetKind::Button ? 1.f : 0.f;
@@ -84,7 +88,7 @@ bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &pr
             d, root, path,
             [this](const std::string &id) {
                 auto it = std::find(ids_.begin(), ids_.end(), id);
-                if (it != ids_.end())
+                if (it != ids_.end() && pending_.empty())
                     pending_ = actions_[size_t(it - ids_.begin())];
             },
             error))

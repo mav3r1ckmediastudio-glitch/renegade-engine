@@ -4092,6 +4092,7 @@ namespace renegade::studio
         DiagnosticInputFrame diagnosticInput(diagnosticService_,
             wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
         PollTestLevel();
+        if (dialogueEditor_.TakeTestGameRequest()) StartTestLevel();
         dialogueFrameSuspended_=dialogueEditor_.IsVisible();
         if(dialogueFrameSuspended_&&!dialogueGuiActive_){dialogueSavedGuiVisibility_=GetGUI().IsVisible();dialogueGuiActive_=true;}
         if(dialogueFrameSuspended_)GetGUI().SetVisible(false);

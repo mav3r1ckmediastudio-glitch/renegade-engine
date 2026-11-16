@@ -1,11 +1,52 @@
 #include "renegade/bridge/DialogueAssetService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
+#include "renegade/bridge/AudioService.h"
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 namespace renegade::bridge
 {
 namespace fs = std::filesystem;
+bool ImportDialogueVoice(const std::string &root, const std::string &source, std::string &relative, std::string &error)
+{
+    relative.clear();
+    error.clear();
+    if (source.empty() || !ValidateAudioAssetForWicked(source, error)) return false;
+    std::error_code ec;
+    const auto base = fs::weakly_canonical(fs::u8path(root), ec);
+    if (ec || root.empty()) { error = "Open a project before importing a voice clip."; return false; }
+    const auto file = fs::canonical(fs::u8path(source), ec);
+    if (ec) { error = "Could not read the selected voice clip."; return false; }
+    const auto existing = file.lexically_relative(base).generic_u8string();
+    if (existing.rfind("Content/Audio/", 0) == 0 && IsDialogueVoicePath(existing))
+    {
+        relative = existing;
+        return true;
+    }
+    const auto size = fs::file_size(file, ec);
+    if (ec || size > 128ull * 1024 * 1024) { error = "Choose a voice clip smaller than 128 MB."; return false; }
+    auto stem = file.stem().u8string();
+    for (auto &c : stem) if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_') c = '_';
+    stem.resize(std::min(size_t(60), stem.size()));
+    auto extension = file.extension().u8string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    const auto path = "Content/Audio/Dialogue/" + stem + "-" + GenerateStableId() + extension;
+    std::ifstream in(file, std::ios::binary);
+    ProjectDocumentWrite write;
+    write.destinationPath = (base / fs::u8path(path)).generic_u8string();
+    write.content.resize(size_t(size));
+    if (!in.read(reinterpret_cast<char *>(write.content.data()), std::streamsize(size)))
+    { error = "Could not read the complete voice clip."; return false; }
+    ProjectDocumentTransactionOptions options;
+    options.allowedRoot = root;
+    options.journalDirectory = (base / "Saved/Transactions").generic_u8string();
+    const auto result = ProjectDocumentTransaction().Execute({std::move(write)}, options);
+    if (!result.success) { error = result.message; return false; }
+    relative = path;
+    return true;
+}
 bool ResolveDialogueVoicePath(const std::string &root, const std::string &relative, std::string &absolute, std::string &error)
 {
     absolute.clear();

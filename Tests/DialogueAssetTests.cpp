@@ -47,6 +47,39 @@ int main()
     CHECK(std::filesystem::file_size(snapshot / d.lines[0].voice) == std::filesystem::file_size(voiceFile));
     std::filesystem::remove(voiceFile);
     CHECK(!SnapshotDialogueVoices(root.generic_u8string(), snapshot.generic_u8string(), d, error));
+    // Creator recordings are copied into the project; collisions never replace
+    // an earlier clip, and a project-owned recording is reused in place.
+    const auto recording = root / "my-recording.wav";
+    {
+        std::ofstream out(recording, std::ios::binary);
+        auto le = [&](unsigned value, unsigned bytes) {
+            for (unsigned n = 0; n < bytes; ++n) out.put(char((value >> (8 * n)) & 255));
+        };
+        out << "RIFF"; le(38, 4); out << "WAVEfmt "; le(16, 4); le(1, 2); le(1, 2);
+        le(44100, 4); le(88200, 4); le(2, 2); le(16, 2); out << "data"; le(2, 4); le(0, 2);
+    }
+    std::string imported, secondImport, reused;
+    CHECK(ImportDialogueVoice(root.generic_u8string(), recording.generic_u8string(), imported, error));
+    CHECK(imported.rfind("Content/Audio/Dialogue/my-recording-", 0) == 0);
+    CHECK(ResolveDialogueVoicePath(root.generic_u8string(), imported, resolved, error));
+    CHECK(std::filesystem::file_size(resolved) == std::filesystem::file_size(recording));
+    CHECK(ImportDialogueVoice(root.generic_u8string(), recording.generic_u8string(), secondImport, error));
+    CHECK(secondImport != imported && std::filesystem::exists(root / imported));
+    CHECK(ImportDialogueVoice(root.generic_u8string(), (root / imported).generic_u8string(), reused, error));
+    CHECK(reused == imported);
+    CHECK(!ImportDialogueVoice(root.generic_u8string(), (root / "missing.wav").generic_u8string(), reused, error));
+    const auto corrupt = root / "broken.wav";
+    { std::ofstream out(corrupt); out << "not audio"; }
+    CHECK(!ImportDialogueVoice(root.generic_u8string(), corrupt.generic_u8string(), reused, error));
+    const auto unsupported = root / "recording.mp3";
+    std::filesystem::copy_file(recording, unsupported);
+    CHECK(!ImportDialogueVoice(root.generic_u8string(), unsupported.generic_u8string(), reused, error));
+    d.lines[0].voice = imported;
+    CHECK(SaveDialogueAsset(root.generic_u8string(), d, error));
+    CHECK(LoadDialogueAsset(root.generic_u8string(), project, id, reopened, error));
+    CHECK(reopened.lines[0].voice == imported);
+    CHECK(SnapshotDialogueVoices(root.generic_u8string(), snapshot.generic_u8string(), reopened, error));
+    CHECK(std::filesystem::exists(snapshot / imported));
     auto scene = wi::allocator::make_shared<wi::scene::Scene>();
     auto npc = scene->Entity_CreateTransform("Gate Guard");
     scene->metadatas.Create(npc).string_values.set("creator.note", "Preserve this");

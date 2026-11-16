@@ -8,6 +8,9 @@
 #include <cmath>
 #include <set>
 #include <filesystem>
+#ifdef _WIN32
+#include <shellapi.h>
+#endif
 namespace renegade::studio
 {
 using namespace bridge;
@@ -27,15 +30,21 @@ class DialogueButton : public wi::gui::Button
 {
   public:
     bool primary = false, accented = false;
-    void Render(const wi::Canvas &, wi::graphics::CommandList cmd) const override
+    void Render(const wi::Canvas &canvas, wi::graphics::CommandList cmd) const override
     {
         if (!IsVisible())
             return;
-        const bool engaged = GetState() == wi::gui::FOCUS || GetState() == wi::gui::ACTIVE;
-        Rect(translation.x, translation.y, scale.x, scale.y, engaged || accented || primary ? Accent : theme::Border, cmd);
-        Rect(translation.x + 1, translation.y + 1, scale.x - 2, scale.y - 2,
-             primary ? Accent : theme::Focus, cmd);
-        wi::font::Params fp(translation.x + scale.x * .5f, translation.y + scale.y * .5f, theme::ControlSize, wi::font::WIFALIGN_CENTER,
+        ApplyScissor(canvas, scissorRect, cmd);
+        const bool enabled = IsEnabled();
+        const bool pressed = enabled && (GetState() == wi::gui::ACTIVE || GetState() == wi::gui::DEACTIVATING);
+        const bool hovered = enabled && GetState() == wi::gui::FOCUS;
+        const float offset = pressed ? 2.f : 0.f;
+        const auto fill = !enabled ? theme::Idle : pressed ? wi::Color(133, 52, 16, 255)
+            : hovered ? (primary ? wi::Color(246, 117, 48, 255) : wi::Color(58, 66, 72, 255))
+            : primary ? Accent : theme::Focus;
+        Rect(translation.x, translation.y, scale.x, scale.y, enabled && (hovered || pressed || accented || primary) ? Accent : theme::Border, cmd);
+        Rect(translation.x + 1, translation.y + 1 + offset, scale.x - 2, scale.y - 2 - offset, fill, cmd);
+        wi::font::Params fp(translation.x + scale.x * .5f, translation.y + scale.y * .5f + offset, theme::ControlSize, wi::font::WIFALIGN_CENTER,
                             wi::font::WIFALIGN_CENTER,
                             !IsEnabled() ? wi::Color(125, 130, 132, 255)
                             : primary    ? theme::Text
@@ -226,7 +235,11 @@ struct DialogueEditorWindow::Impl
     DialogueMemory memory;
     DialogueSession preview;
     screen::DialoguePanel panel;
-    std::string project, root, saved, status;
+    std::string project, root, saved, status, previewResult;
+    std::shared_ptr<int> lifetime = std::make_shared<int>(0);
+    std::uint64_t generation = 0, targetRevision = ~std::uint64_t(0);
+    std::vector<SceneEntity> targets;
+    bool testGameRequested = false;
     bool advanced = false, sync = false, refreshPreview = false, selectionPlaced = false;
     struct Ref
     {
@@ -249,13 +262,14 @@ struct DialogueEditorWindow::Impl
         addOutcome, addCondition, addAction;
     DialogueButton advancedBox;
     DialogueCheckBox onceBox, permitBox, matchAllBox;
-    wi::gui::ComboBox library, next, kind, voice;
+    wi::gui::ComboBox library, next, kind, voice, target;
     std::vector<std::string> voicePaths;
     wi::gui::TextInputField name, speaker, key, value, textSize, opacity;
     DialogueText text;
     DialogueOutline tree;
     wi::gui::Label help, selectionLabel, previewHeading, previewHint, appearanceHeading, conversationHeading, textHeading, destinationHeading, ruleSummary, voiceHeading;
-    DialogueButton showAdvanced, audition;
+    wi::gui::Label workflow, voiceHint, gameHeading, gameHint;
+    DialogueButton showAdvanced, audition, importVoice, voiceFolder, refreshVoices, testGame;
     explicit Impl(DialogueEditorWindow *w) : owner(w)
     {
     }
@@ -432,11 +446,15 @@ struct DialogueEditorWindow::Impl
         voice.SetSelectedWithoutCallback(voiceIndex);
         voice.SetVisible(l && !r);
         voiceHeading.SetVisible(l && !r);
+        importVoice.SetVisible(l && !r);
+        voiceFolder.SetVisible(l && !r);
+        refreshVoices.SetVisible(l && !r);
+        addLine.SetText(r ? "+ Add response" : "+ Add NPC line");
         audition.SetVisible(l && !r);
         audition.SetEnabled(l && !l->voice.empty());
         text.SetValue(r && !o ? r->text : l ? l->text : "");
         textHeading.SetVisible(l && !o && !c && !a);
-        destinationHeading.SetVisible((o || r && r->outcomes.size() == 1 || l && !r) && !c && !a);
+        destinationHeading.SetVisible((o || r && r->outcomes.size() == 1 || l && !r && l->replies.empty()) && !c && !a);
         ruleSummary.SetText(r && r->outcomes.size() > 1 ? "Conditional replies are preserved." : "");
         ruleSummary.SetVisible(!advanced && r && r->outcomes.size() > 1);
         showAdvanced.SetVisible(!advanced && r && r->outcomes.size() > 1);
@@ -457,7 +475,7 @@ struct DialogueEditorWindow::Impl
             if (doc.lines[i].id == destination)
                 idx = int(i + 1);
         next.SetSelected(idx);
-        next.SetVisible((o || r && r->outcomes.size() == 1 || l && !r) && !c && !a);
+        next.SetVisible((o || r && r->outcomes.size() == 1 || l && !r && l->replies.empty()) && !c && !a);
         matchAllBox.SetVisible(advanced && o && !c && !a);
         matchAllBox.SetCheck(o ? o->matchAll : true);
         onceBox.SetVisible(advanced && r && !o);
@@ -489,6 +507,7 @@ struct DialogueEditorWindow::Impl
     }
     void Start()
     {
+        previewResult.clear();
         memory = {};
         memory.values["has_permit"] = permitBox.GetCheck() ? 1 : 0;
         preview.SetItemQuery([this](auto &key, int count) {
@@ -502,10 +521,82 @@ struct DialogueEditorWindow::Impl
         if (preview.Start(doc, memory, status))
             refreshPreview = true;
     }
-    void Save()
+    void RefreshTargets()
+    {
+        const auto previous = target.GetSelected();
+        auto keep = previous > 0 && size_t(previous) <= targets.size() ? targets[previous - 1].entity
+            : session->Selection().SelectedEntity();
+        targets.clear();
+        target.ClearItems();
+        target.AddItem("Choose an NPC or scene object...");
+        for (const auto &item : session->Scenes().ListEntities())
+            if (item.hasTransform && item.logicalAsset &&
+                (item.category == SceneEntityCategory::Characters || item.category == SceneEntityCategory::Models ||
+                 item.category == SceneEntityCategory::Other))
+            {
+                targets.push_back(item);
+                target.AddItem(item.name + "  (#" + std::to_string(item.entity) + ")");
+            }
+        int selectedIndex = 0;
+        for (size_t n = 0; n < targets.size(); ++n)
+            if (targets[n].entity == keep) selectedIndex = int(n + 1);
+        if (!selectedIndex)
+            for (size_t n = 0; n < targets.size(); ++n)
+                if (AssignedDialogue(session->Scenes().GetScene(), targets[n].entity) == doc.id)
+                { selectedIndex = int(n + 1); break; }
+        target.SetSelectedWithoutCallback(selectedIndex);
+        targetRevision = session->Scenes().Revision();
+    }
+    bool Attach()
+    {
+        const int index = target.GetSelected();
+        if (index <= 0 || size_t(index) > targets.size())
+        { status = "Choose the NPC or object that should speak this conversation."; return false; }
+        if (!Save()) return false;
+        const auto entity = targets[index - 1].entity;
+        if (AssignedDialogue(session->Scenes().GetScene(), entity) != doc.id &&
+            !session->Commands().Execute(std::make_unique<AssignDialogueCommand>(session->Scenes().GetScene(), entity, doc.id)))
+        { status = "This object is no longer available. Choose another NPC."; return false; }
+        if (session->Scenes().CurrentPath().empty())
+        { status = "Attached in memory. Save your level once in the main editor to keep the NPC binding."; return false; }
+        if (!session->SaveScene(session->Scenes().CurrentPath()))
+        { status = "NPC attached, but saving the level failed: " + session->Scenes().LastError(); return false; }
+        status = "Conversation and level saved. Walk within 3 m of the NPC and press Interact (E by default).";
+        return true;
+    }
+    void ImportVoice()
+    {
+        if (!L() || R()) return;
+        const auto lineId = L()->id, documentId = doc.id;
+        const auto token = generation;
+        std::weak_ptr<int> alive = lifetime;
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "Dialogue voice clip (WAV or OGG)";
+        params.extensions = {"wav", "ogg"};
+        params.multiselect = false;
+        wi::helper::FileDialog(params, [this, alive, token, lineId, documentId](const std::string &file) {
+            if (file.empty() || alive.expired()) return;
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this, alive, token, lineId, documentId, file](uint64_t) {
+                    if (alive.expired() || token != generation || !owner->IsVisible() || doc.id != documentId) return;
+                    auto line = std::find_if(doc.lines.begin(), doc.lines.end(), [&](auto &l) { return l.id == lineId; });
+                    if (line == doc.lines.end()) return;
+                    std::string clip;
+                    if (!ImportDialogueVoice(root, file, clip, status)) return;
+                    Before();
+                    line->voice = clip;
+                    selected = {int(line - doc.lines.begin())};
+                    ReloadLibrary();
+                    Changed();
+                    status = "Voice clip copied into this project and attached to the selected NPC line. Save to keep it.";
+                });
+        });
+    }
+    bool Save()
     {
         if (!SaveDialogueAsset(root, doc, status))
-            return;
+            return false;
         auto declaration = "data:Content/Dialogue/" + doc.id + ".rdialogue";
         auto include = session->Projects().CurrentProject().alwaysInclude;
         for (const auto &line : doc.lines)
@@ -520,19 +611,20 @@ struct DialogueEditorWindow::Impl
         if (!session->Projects().SetAlwaysInclude(include))
         {
             status = "Dialogue saved; packaging registration failed: " + session->Projects().LastError();
-            return;
+            return false;
         }
         saved = EncodeDialogue(doc);
-        status = "Saved conversation. Save the scene after assigning an NPC.";
+        status = "Conversation saved. Choose an NPC below, then Save & attach.";
         ReloadLibrary();
         RefreshFields();
+        return true;
     }
     void ReloadLibrary()
     {
         assets = ListDialogueAssets(root, project, status);
         voicePaths.clear();
         voice.ClearItems();
-        voice.AddItem("No voice clip");
+        voice.AddItem("No voice (text only)");
         namespace fs = std::filesystem;
         std::error_code ec;
         const auto audioFolder = fs::u8path(root) / "Content/Audio";
@@ -551,6 +643,8 @@ struct DialogueEditorWindow::Impl
         library.ClearItems();
         for (auto &d : assets)
             library.AddItem(d.name);
+        for (size_t n = 0; n < assets.size(); ++n)
+            if (assets[n].id == doc.id) library.SetSelectedWithoutCallback(int(n));
     }
     void SelectDocument(DialogueDocument d)
     {
@@ -560,8 +654,7 @@ struct DialogueEditorWindow::Impl
         undo.clear();
         redo.clear();
         Changed();
-        preview.Close();
-        refreshPreview = true;
+        Start();
     }
     void Create()
     {
@@ -570,13 +663,14 @@ struct DialogueEditorWindow::Impl
             label.SetText(title);
             Add(label, x, y, w, 24);
         };
-        heading(previewHeading, "In-game preview", 32, 575, 340);
+        heading(previewHeading, "2. Try the replies", 32, 575, 340);
         heading(previewHint, "Try the conversation as your player will see it.", 32, 606, 650);
-        heading(conversationHeading, "Conversation", 32, 126, 740);
+        heading(workflow, "Select a line to edit. Add replies, then select a reply and Add response.", 32, 118, 800);
+        heading(conversationHeading, "1. Write the conversation", 32, 146, 740);
         heading(textHeading, "Dialogue text", 890, 207, 360);
         heading(destinationHeading, "Continue to", 890, 334, 360);
         heading(ruleSummary, "", 890, 441, 360);
-        heading(voiceHeading, "Voice clip", 890, 411, 360);
+        heading(voiceHeading, "Voice (optional WAV / OGG)", 890, 411, 380);
         voice.Create("Voice clip");
         voice.SetText("");
         Add(voice, 890, 438, 380, 30);
@@ -586,13 +680,29 @@ struct DialogueEditorWindow::Impl
             L()->voice = e.iValue > 0 && size_t(e.iValue) <= voicePaths.size() ? voicePaths[e.iValue - 1] : "";
             RefreshFields();
         });
-        Button(audition, "Preview line", 1100, 485, 170, [this] {
+        Button(importVoice, "Add voice clip...", 890, 478, 180, [this] { ImportVoice(); });
+        Button(audition, "Play this line", 1080, 478, 190, [this] {
             if (!L()) return;
             auto selectedDocument = doc;
             selectedDocument.entry = L()->id;
             panel.StopVoice();
             if (preview.Start(selectedDocument, memory, status)) refreshPreview = true;
         });
+        Button(voiceFolder, "Open voice folder", 890, 518, 180, [this] {
+            namespace fs = std::filesystem;
+            std::error_code ec;
+            const auto base = fs::weakly_canonical(fs::u8path(root), ec);
+            const auto folder = fs::weakly_canonical(base / "Content/Audio/Dialogue", ec);
+            const auto relative = folder.lexically_relative(base);
+            if (ec || relative.empty() || *relative.begin() == "..") { status = "The voice folder is outside this project."; return; }
+            fs::create_directories(folder, ec);
+            if (ec) { status = "Could not create the project voice folder: " + ec.message(); return; }
+#ifdef _WIN32
+            ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#endif
+            status = "Add WAV/OGG recordings to Content/Audio/Dialogue, then Refresh clips. New lines can remain text-only.";
+        });
+        Button(refreshVoices, "Refresh clips", 1080, 518, 190, [this] { ReloadLibrary(); RefreshFields(); status = "Project WAV/OGG list refreshed."; });
         Button(showAdvanced, "Show in Advanced", 1075, 478, 195, [this] { advanced = true; Changed(); });
         heading(appearanceHeading, "Presentation", 890, 473, 350);
         Button(save, "Save", 1192, 20, 100, [this] { Save(); });
@@ -605,6 +715,12 @@ struct DialogueEditorWindow::Impl
             }
             auto d = MakeGuardDialogue(project, GenerateStableId());
             d.name = "New Conversation";
+            d.lines.clear();
+            d.entry = "opening";
+            DialogueLine opening;
+            opening.id = d.entry;
+            opening.text = "Your opening line";
+            d.lines.push_back(std::move(opening));
             SelectDocument(d);
             saved.clear();
         });
@@ -658,19 +774,20 @@ struct DialogueEditorWindow::Impl
             selected = {0};
             Changed();
         });
-        Button(assign, "Assign to selected NPC", 1072, 76, 220, [this] {
-            if (Dirty())
-            {
-                status = "Save the conversation before assigning it.";
-                return;
-            }
-            auto entity = session->Selection().SelectedEntity();
-            if (session->Commands().Execute(
-                    std::make_unique<AssignDialogueCommand>(session->Scenes().GetScene(), entity, doc.id)))
-                status = "Assigned. Save the scene to keep this NPC binding.";
-            else
-                status = "Select an NPC or object with a transform first.";
+        heading(gameHeading, "3. Attach to an NPC", 32, 853, 230);
+        target.Create("NPC or scene object");
+        target.SetText("");
+        Add(target, 260, 848, 360, 32);
+        Button(assign, "Save & attach", 635, 848, 170, [this] { Attach(); });
+        Button(testGame, "Test in game", 1080, 848, 210, [this] {
+            if (!Attach()) return;
+            testGameRequested = true;
+            panel.Hide(*path);
+            owner->SetVisible(false);
         });
+        testGame.primary = true;
+        heading(gameHint, "Choose the object that should speak this conversation.", 32, 890, 1260);
+        heading(voiceHint, "In game: approach the NPC (within 3 m), press Interact (E by default). Use arrows + Enter; Esc closes.", 32, 916, 1260);
         name.Create("Conversation name");
         name.SetDescription("Name: ");
         Add(name, 88, 76, 730, 30);
@@ -800,7 +917,7 @@ struct DialogueEditorWindow::Impl
             Rebuild();
         });
         tree.Create("Conversation outline");
-        Add(tree, 32, 164, 800, 330);
+        Add(tree, 32, 184, 800, 310);
         tree.OnSelect([this](auto &e) {
             if (e.userdata < refs.size())
             {
@@ -830,7 +947,10 @@ struct DialogueEditorWindow::Impl
             if (R())
                 R()->text = e.sValue;
             else
+            {
                 L()->text = e.sValue;
+                if (!L()->voice.empty()) status = "Text updated. The attached recording is unchanged; add a replacement clip if needed.";
+            }
             Rebuild();
         });
         next.Create("Continue to");
@@ -974,7 +1094,46 @@ struct DialogueEditorWindow::Impl
             input->SetCancelInputEnabled(false);
         help.Create("Dialogue status");
         help.font.params.size = 13;
-        Add(help, 24, 839, 1270, 20);
+        Add(help, 24, 948, 1270, 24);
+        const std::pair<wi::gui::Widget *, const char *> tips[] = {
+            {&library, "Choose a saved conversation, then Open. Save or Discard any current edits first."},
+            {&newDoc, "Create a text-only conversation with one opening NPC line. Add replies and responses as needed."},
+            {&load, "Open the conversation chosen in the list. Its preview starts at the opening line."},
+            {&discard, "Reload the last saved conversation and discard unsaved text, connections and voice choices."},
+            {&save, "Save conversation text, branching and voice references in this project. Use Save & attach below for an NPC."},
+            {&undoButton, "Undo the last conversation edit."}, {&redoButton, "Redo an undone conversation edit."},
+            {&advancedBox, "Show conditions, outcomes, actions, one-time replies and presentation controls in this workspace."},
+            {&name, "The name shown in this project's conversation library."},
+            {&tree, "Select a spoken line or player reply to edit it. Click its arrow to expand the connected responses."},
+            {&addLine, "Select a player reply, then Add response to create and connect the NPC's answer. A line without replies can continue to another NPC line."},
+            {&addReply, "Add a player choice beneath the selected NPC line. Select that reply and Add response to write its answer."},
+            {&remove, "Delete the selected reply, condition, action or NPC line. The opening NPC line cannot be removed. Undo restores deletions."},
+            {&speaker, "Name displayed above this NPC's spoken line in game."},
+            {&text, "Edit the selected NPC speech or player reply. Voice recordings are optional and attached separately."},
+            {&next, "Choose the NPC response this reply leads to, or End conversation. Add response creates a new connected line."},
+            {&voice, "Attach a WAV or OGG from this project's audio folder to this NPC line. No voice means text-only; changing text does not generate audio."},
+            {&importVoice, "Browse your computer for a recording. Copies the WAV/OGG into this project and attaches it to this line."},
+            {&voiceFolder, "Open this project's Content/Audio/Dialogue folder. Add your own recordings there, then Refresh clips."},
+            {&refreshVoices, "Rescan this project's audio folders after adding recordings outside the editor."},
+            {&audition, "Play the selected NPC line and its attached recording in the preview below."},
+            {&play, "Restart the preview at the opening line and reset its private test flags."},
+            {&permitBox, "Start the preview with the sample has_permit flag enabled. This changes preview state only."},
+            {&target, "Choose the NPC or scene object players will approach to start this conversation. A selected scene object is chosen automatically."},
+            {&assign, "Save the conversation, attach it to the chosen NPC and save the current level. Replaces that NPC's previous conversation."},
+            {&testGame, "Save and attach to the chosen NPC, save the level, then launch the normal Test Game. Walk to the NPC and press Interact (E by default)."},
+            {&showAdvanced, "Show this reply's conditional outcomes without removing any existing rules."},
+            {&onceBox, "Hide this reply after it has been chosen. Its used state is included in game saves."},
+            {&matchAllBox, "Require all conditions for this outcome; turn off to accept any matching condition."},
+            {&kind, "Choose whether this rule reads a flag, value or inventory item, or writes a flag/value or gameplay event."},
+            {&key, "The flag, value, item or registered gameplay event name used by this rule."},
+            {&value, "Whole-number value compared or written by this rule."},
+            {&addOutcome, "Add another conditional result for this reply. Outcomes are checked in order."},
+            {&addCondition, "Add a condition to the selected outcome, or control whether the selected reply is shown."},
+            {&addAction, "Add a flag/value update or gameplay event to the selected outcome."},
+            {&textSize, "Set the in-game dialogue text size. Restart the preview to see the result."},
+            {&opacity, "Set the in-game panel opacity. Editor controls remain opaque."}
+        };
+        for (const auto &tip : tips) tip.first->SetTooltip(tip.second);
     }
     void FitToCanvas(wi::RenderPath2D &path)
     {
@@ -986,8 +1145,8 @@ struct DialogueEditorWindow::Impl
         canvasWidth = width;
         canvasHeight = height;
         canvasDpi = dpi;
-        uiScale = std::clamp(std::min((width - 32) / 1320.f, (height - 64) / 900.f), .4f, 1.f);
-        owner->SetSize({1320 * uiScale, 900 * uiScale});
+        uiScale = std::clamp(std::min((width - 32) / 1320.f, (height - 64) / 990.f), .4f, 1.f);
+        owner->SetSize({1320 * uiScale, 990 * uiScale});
         owner->SetPos({std::max(8.f, (width - 1320 * uiScale) * .5f), 24});
         for (auto &item : layout)
         {
@@ -1017,11 +1176,12 @@ struct DialogueEditorWindow::Impl
         owner->SetColor(Panel, wi::gui::WIDGET_ID_COMBO_DROPDOWN);
         owner->font.params.size = 16;
         owner->font.params.bolden = .15f;
-        for (auto *label : {&help, &selectionLabel, &previewHeading, &previewHint, &appearanceHeading, &conversationHeading, &textHeading, &destinationHeading, &ruleSummary, &voiceHeading})
+        for (auto *label : {&help, &selectionLabel, &previewHeading, &previewHint, &appearanceHeading, &conversationHeading, &textHeading, &destinationHeading, &ruleSummary, &voiceHeading, &workflow, &voiceHint, &gameHeading, &gameHint})
         {
             label->SetColor(wi::Color::Transparent());
-            label->font.params.size = label == &help || label == &previewHint ? 13 : 16;
-            label->font.params.bolden = label == &help || label == &previewHint ? 0 : .15f;
+            const bool caption = label == &help || label == &previewHint || label == &workflow || label == &voiceHint || label == &gameHint;
+            label->font.params.size = caption ? 13 : 16;
+            label->font.params.bolden = caption ? 0 : .15f;
         }
         previewHint.font.params.color = theme::Muted;
         for (auto *input : std::vector<wi::gui::TextInputField *>{&name, &speaker, &text, &key, &value, &textSize, &opacity})
@@ -1029,7 +1189,7 @@ struct DialogueEditorWindow::Impl
             input->font.params.size = input->font_description.params.size = 14;
             input->SetColor(theme::Idle, wi::gui::IDLE);
         }
-        for (auto *combo : {&library, &next, &kind, &voice})
+        for (auto *combo : {&library, &next, &kind, &voice, &target})
         {
             combo->font.params.size = combo->selected_font.params.size = 14;
         }
@@ -1041,13 +1201,14 @@ DialogueEditorWindow::DialogueEditorWindow() : impl_(std::make_unique<Impl>(this
 }
 DialogueEditorWindow::~DialogueEditorWindow()
 {
+    impl_->lifetime.reset();
     if (impl_ && impl_->path)
         impl_->panel.Hide(*impl_->path);
 }
 void DialogueEditorWindow::Create()
 {
     wi::gui::Window::Create("Dialogue Editor", WindowControls::CLOSE | WindowControls::MOVE);
-    SetSize({1320, 900});
+    SetSize({1320, 990});
     SetControlSize(28);
     impl_->Create();
     impl_->ApplyTheme();
@@ -1066,10 +1227,13 @@ void DialogueEditorWindow::Open(StudioSession &s, wi::RenderPath2D &path)
     if (IsVisible() || !s.Projects().HasProject())
         return;
     auto &i = *impl_;
+    ++i.generation;
     i.session = &s;
     i.path = &path;
     i.project = s.Projects().CurrentProject().projectId;
     i.root = s.Projects().CurrentProject().rootPath;
+    i.targets.clear();
+    i.target.ClearItems();
     i.ReloadLibrary();
     auto id = AssignedDialogue(s.Scenes().GetScene(), s.Selection().SelectedEntity());
     DialogueDocument d;
@@ -1087,6 +1251,7 @@ void DialogueEditorWindow::Open(StudioSession &s, wi::RenderPath2D &path)
     SetVisible(true);
     i.ApplyTheme();
     i.RefreshFields();
+    i.RefreshTargets();
     i.Start();
 }
 void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
@@ -1100,11 +1265,29 @@ void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
         return;
     }
     i.FitToCanvas(path);
+    if (i.targetRevision != s.Scenes().Revision()) i.RefreshTargets();
+    const int targetIndex = i.target.GetSelected();
+    const bool hasTarget = targetIndex > 0 && size_t(targetIndex) <= i.targets.size();
+    i.assign.SetEnabled(hasTarget);
+    i.testGame.SetEnabled(hasTarget && !s.Scenes().CurrentPath().empty());
+    if (hasTarget)
+    {
+        const auto &npc = i.targets[targetIndex - 1];
+        const bool attached = AssignedDialogue(s.Scenes().GetScene(), npc.entity) == i.doc.id;
+        i.gameHint.SetText((attached ? "Attached to " : "Ready to attach to ") + npc.name +
+            (s.Scenes().CurrentPath().empty() ? ". Save your level once before testing." : ". Save & attach keeps the conversation and level together."));
+    }
+    else i.gameHint.SetText("Choose the NPC or scene object that should speak this conversation. No assignment yet.");
     auto action = i.panel.TakeAction();
     if (!action.empty())
     {
-        if (action == "@close")
+        wi::backlog::post("Dialogue preview action: " + action);
+        if (action == "@restart") i.Start();
+        else if (action == "@close")
+        {
             i.preview.Close();
+            i.previewResult = "Preview stopped. Restart to try the conversation again.";
+        }
         else if (action == "@continue")
             i.preview.Continue(i.status);
         else if (action != "@refresh")
@@ -1116,19 +1299,23 @@ void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
         i.refreshPreview = false;
         auto viewport = ScreenRect{GetPos().x + 24 * i.uiScale, GetPos().y + control_size + 640 * i.uiScale,
                                    1270 * i.uiScale, 190 * i.uiScale};
-        if (i.preview.Active())
+        auto view = i.preview.View();
+        if (!i.preview.Active())
         {
-            if (i.panel.Show(i.preview.View(), i.project, i.root, path, viewport, i.status))
-                i.panel.EmbedInWindow(path, *this);
+            view.active = true;
+            view.speaker = "Conversation ended";
+            view.text = i.previewResult.empty() ? "This branch ends here. Restart to try another reply, or add a response to continue it." : i.previewResult;
+            view.voiceKey = i.doc.id + ":preview-ended";
+            view.replies = {{"@restart", "Restart conversation"}};
         }
-        else
-            i.panel.Hide(path);
+        if (i.panel.Show(view, i.project, i.root, path, viewport, i.status))
+            i.panel.EmbedInWindow(path, *this);
     }
-    else if (i.preview.Active())
+    else
         i.panel.Layout(path, {GetPos().x + 24 * i.uiScale, GetPos().y + control_size + 640 * i.uiScale,
                               1270 * i.uiScale, 190 * i.uiScale});
-    i.previewHint.SetText(i.preview.Active() ? "Try the conversation as your player will see it."
-                                            : "Conversation ended. Restart to try it again.");
+    i.previewHint.SetText(i.preview.Active() ? "Click a reply to follow its response. This preview has its own test flags."
+                                            : "This branch has ended. The preview stays here so you can restart or keep editing.");
     i.help.SetText((i.Dirty() ? "UNSAVED  |  " : "") + i.status);
     i.undoButton.SetEnabled(!i.undo.empty());
     i.redoButton.SetEnabled(!i.redo.empty());
@@ -1147,6 +1334,13 @@ void DialogueEditorWindow::Render(const wi::Canvas &canvas, wi::graphics::Comman
     section(18, 116, 830, 438);
     section(874, 116, 420, 438);
     section(18, 566, 1276, 266);
+    section(18, 840, 1276, 100);
     wi::gui::Window::Render(canvas, cmd);
+}
+bool DialogueEditorWindow::TakeTestGameRequest()
+{
+    const bool requested = impl_->testGameRequested;
+    impl_->testGameRequested = false;
+    return requested;
 }
 } // namespace renegade::studio
