@@ -1,5 +1,23 @@
 # Editable dialogue displays - local receipt
 
+## Final combined local validation
+
+At checkout `00c2146de0668f9a5d3b65cd246535760352df70`, Release Studio,
+Runtime and all selected test targets built successfully. All **16 related
+CTest suites passed in 10.07 seconds**, including scene transitions and native
+window startup alongside the dialogue, Lua, display, persistence and snapshot
+checks below. Exact commands and binary hashes are recorded in HANDOFF.md.
+No implementation changes were needed for this pass.
+
+The owner subsequently confirmed **"works perfectly"** after the Advanced
+controls correction. Its pending owner check is closed. The previous unsaved
+review session was no longer running when final validation began; historical
+session warnings below do not describe the current state. Automated input was
+stopped when another window owned foreground focus. No new mouse-driven
+Apply/save/Back proof or independent release-checklist pass is asserted.
+
+## Earlier implementation receipts
+
 Display implementation baseline: `4e8f1fa44c565411d00ccc2f494ceb6cb9de7927`.
 The later Advanced-selection correction is Studio source
 `d38d23eafc7e38c8a86b3ee7fec59d2ff98b2e58`; it built and passed five focused

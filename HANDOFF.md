@@ -1,3 +1,40 @@
+# Basic dialogue beta validation - 16 November 2026
+
+Validated checkout: `00c2146de0668f9a5d3b65cd246535760352df70`.
+Functional Studio source: `d38d23eafc7e38c8a86b3ee7fec59d2ff98b2e58`;
+subsequent commits contain documentation only. The owner confirmed "works
+perfectly" after the Advanced correction, closing its pending owner review.
+This supersedes the older live-session/unsaved-state notes below: Studio was
+closed at the start of final validation. A fresh isolated review was launched;
+input stopped when another window had foreground focus. No owner project or
+unsaved conversation was discarded, and no new automated visual proof is claimed.
+
+Release Studio, Runtime and all selected test targets built successfully.
+All 16 related CTest suites PASS in 10.07 seconds: dialogue core/assets/save
+policy/scripting/display, governed Lua and its source contract, Screen runtime/
+renderer/authoring/history/completion, Test Level snapshots and native reload,
+game save slots, scene transitions and native window startup. Build/check
+process exited 0. No implementation changes were needed during this pass.
+
+Commands (repository root, existing embedded-shader native configuration):
+```powershell
+cmake --build BUILD/native --config Release --parallel 4 --target RenegadeStudio RenegadeRuntime RenegadeDialogueTests RenegadeDialogueAssetTests RenegadeDialogueSavePolicyTests RenegadeDialogueDisplayTests RenegadeDialogueScriptingTests RenegadeS3GovernedLuaRuntimeTests RenegadeScreenAuthoringSessionTests RenegadeScreenAuthoringCompletionTests RenegadeScreenRendererTests RenegadeRuntimeScreenTests RenegadeTestLevelSnapshotTests RenegadeTestLevelSnapshotRuntimeTests RenegadeRuntimeGameSaveSlotTests RenegadeRuntimeSceneTransitionTests RenegadeNativeWindowSurfaceTests
+ctest --test-dir BUILD/native -C Release -R 'RenegadeDialogue|RenegadeS3GovernedLuaRuntime|RenegadeScreenAuthoringSessionTests|RenegadeScreenAuthoringCompletionTests|RenegadeTestLevelSnapshot|RenegadeRuntimeGameSaveSlotTests|RenegadeScreenRendererTests|RenegadeRuntimeScreenTests|RenegadeRuntimeSceneTransitionTests|RenegadeNativeWindowSurfaceTests' --output-on-failure
+```
+
+SHA-256 of the validated binaries:
+- Studio: `9CBA89A276EC9B1F3FBEAECE9E0380A5D3FEC73C05B57B2A820716706A7663B3`
+- Runtime: `AE904D6B689FB31889C5BF6A1F2DBE863B83420BC93EE8AA2B2F955F5B9EB95F`
+
+Basic dialogue implementation and local validation are complete. Existing native
+game/display and scripting receipts remain below. This is not all-engine Debug/
+Release CI, packaged distribution, or an independent release-checklist pass.
+Next integration step is a separately authorized PR/CI and exact-commit review.
+No push, PR, CI, merge or release was performed. Preserve the existing Wicked
+overlay/copied baseline and unrelated arms/Blender work.
+
+---
+
 # Advanced controls visibility correction - 16 November 2026
 
 Latest LOCAL Studio source: d38d23eafc7e38c8a86b3ee7fec59d2ff98b2e58.
