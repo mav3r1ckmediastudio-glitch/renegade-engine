@@ -15,6 +15,7 @@ class DialogueEditorWindow final : public wi::gui::Window
     void Create();
     void Open(bridge::StudioSession &, wi::RenderPath2D &);
     void Tick(bridge::StudioSession &, wi::RenderPath2D &);
+    void Render(const wi::Canvas &, wi::graphics::CommandList) const override;
 
   private:
     struct Impl;

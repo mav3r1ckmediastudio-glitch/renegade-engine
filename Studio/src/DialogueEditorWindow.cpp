@@ -170,8 +170,7 @@ struct DialogueEditorWindow::Impl
     wi::gui::ComboBox library, next, kind;
     wi::gui::TextInputField name, speaker, text, key, value, textSize, opacity;
     DialogueOutline tree;
-    wi::gui::Label help, selectionLabel, outlineBackground, propertiesBackground, previewBackground, previewHeading,
-        previewHint, appearanceHeading;
+    wi::gui::Label help, selectionLabel, previewHeading, previewHint, appearanceHeading;
     explicit Impl(DialogueEditorWindow *w) : owner(w)
     {
     }
@@ -437,15 +436,6 @@ struct DialogueEditorWindow::Impl
     }
     void Create()
     {
-        auto background = [this](wi::gui::Label &label, float x, float y, float w, float h) {
-            label.Create("");
-            label.SetText("");
-            label.SetEnabled(false);
-            Add(label, x, y, w, h);
-        };
-        background(outlineBackground, 18, 120, 690, 350);
-        background(propertiesBackground, 728, 120, 394, 350);
-        background(previewBackground, 18, 550, 1110, 260);
         auto heading = [this](wi::gui::Label &label, const char *title, float x, float y, float w) {
             label.Create(title);
             label.SetText(title);
@@ -833,7 +823,7 @@ struct DialogueEditorWindow::Impl
             input->SetCancelInputEnabled(false);
         help.Create("Dialogue status");
         help.font.params.size = 13;
-        Add(help, 18, 822, 1100, 28);
+        Add(help, 18, 812, 1100, 20);
     }
     void ApplyTheme()
     {
@@ -850,12 +840,12 @@ struct DialogueEditorWindow::Impl
         owner->SetColor(wi::Color(43, 46, 48, 255), wi::gui::IDLE);
         owner->SetColor(wi::Color(65, 78, 77, 255), wi::gui::FOCUS);
         owner->SetColor(wi::Color(60, 108, 101, 255), wi::gui::ACTIVE);
-        owner->SetColor(Panel, wi::gui::WIDGET_ID_WINDOW_BASE);
+        // The workspace paints its opaque base and section fills before native
+        // controls. Decoration widgets would compete in Window's focus ordering.
+        owner->SetColor(wi::Color::Transparent(), wi::gui::WIDGET_ID_WINDOW_BASE);
         owner->SetColor(Panel, wi::gui::WIDGET_ID_COMBO_DROPDOWN);
         owner->font.params.size = 16;
         owner->font.params.bolden = .15f;
-        for (auto *label : {&outlineBackground, &propertiesBackground, &previewBackground})
-            label->SetColor(Inset);
         for (auto *label : {&help, &selectionLabel, &previewHeading, &previewHint, &appearanceHeading})
         {
             label->SetColor(wi::Color::Transparent());
@@ -959,8 +949,8 @@ void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
     if (i.refreshPreview)
     {
         i.refreshPreview = false;
-        auto viewport =
-            ScreenRect{GetPos().x + 18 * i.uiScale, GetPos().y + 550 * i.uiScale, 1110 * i.uiScale, 260 * i.uiScale};
+        auto viewport = ScreenRect{GetPos().x + 18 * i.uiScale, GetPos().y + control_size + 550 * i.uiScale,
+                                   1110 * i.uiScale, 260 * i.uiScale};
         if (i.preview.Active())
         {
             if (i.panel.Show(i.preview.View(), i.project, i.root, path, viewport, i.status))
@@ -970,10 +960,26 @@ void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
             i.panel.Hide(path);
     }
     else if (i.preview.Active())
-        i.panel.Layout(path,
-                       {GetPos().x + 18 * i.uiScale, GetPos().y + 550 * i.uiScale, 1110 * i.uiScale, 260 * i.uiScale});
+        i.panel.Layout(path, {GetPos().x + 18 * i.uiScale, GetPos().y + control_size + 550 * i.uiScale,
+                              1110 * i.uiScale, 260 * i.uiScale});
     i.help.SetText((i.Dirty() ? "UNSAVED  |  " : "") + i.status);
     i.undoButton.SetEnabled(!i.undo.empty());
     i.redoButton.SetEnabled(!i.redo.empty());
+}
+void DialogueEditorWindow::Render(const wi::Canvas &canvas, wi::graphics::CommandList cmd) const
+{
+    if (!IsVisible())
+        return;
+    ApplyScissor(canvas, scissorRect, cmd);
+    Rect(translation.x, translation.y, scale.x, scale.y, Panel, cmd);
+    Rect(translation.x, translation.y, scale.x, control_size, wi::Color(43, 46, 48, 255), cmd);
+    const float s = impl_->uiScale;
+    auto section = [&](float x, float y, float w, float h) {
+        Rect(translation.x + x * s, translation.y + control_size + y * s, w * s, h * s, Inset, cmd);
+    };
+    section(18, 120, 690, 350);
+    section(728, 120, 394, 350);
+    section(18, 550, 1110, 260);
+    wi::gui::Window::Render(canvas, cmd);
 }
 } // namespace renegade::studio
