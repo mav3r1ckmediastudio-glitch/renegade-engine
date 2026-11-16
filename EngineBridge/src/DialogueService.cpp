@@ -1,6 +1,7 @@
 #include "renegade/bridge/DialogueService.h"
 #include <algorithm>
 #include <cmath>
+#include <cctype>
 #include <iomanip>
 #include <set>
 #include <sstream>
@@ -41,6 +42,22 @@ bool Conditions(std::istream &in, std::vector<DialogueCondition> &cs)
     return true;
 }
 } // namespace
+bool IsDialogueVoicePath(const std::string &path)
+{
+    if (path.empty()) return true;
+    if (path.size() > 1024 || path.rfind("Content/", 0) != 0 ||
+        path.find_first_of("\\:\n\r\t") != std::string::npos || path.find('\0') != std::string::npos)
+        return false;
+    std::istringstream parts(path);
+    std::string part;
+    while (std::getline(parts, part, '/'))
+        if (part.empty() || part == "." || part == "..") return false;
+    const auto dot = path.find_last_of('.');
+    if (dot == std::string::npos) return false;
+    auto ext = path.substr(dot);
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    return ext == ".wav" || ext == ".ogg";
+}
 bool ValidateDialogue(const DialogueDocument &d, std::string &e)
 {
     auto fail = [&](const char *s) {
@@ -57,7 +74,7 @@ bool ValidateDialogue(const DialogueDocument &d, std::string &e)
     std::set<std::string> lines, ids;
     for (auto &l : d.lines)
         if (!Token(l.id) || !lines.insert(l.id).second || !ids.insert(l.id).second || l.speaker.empty() ||
-            !Text(l.speaker) || l.text.empty() || !Text(l.text) || l.replies.size() > 64)
+            !Text(l.speaker) || !IsDialogueVoicePath(l.voice) || l.text.empty() || !Text(l.text) || l.replies.size() > 64)
             return fail("Invalid or duplicate line; each line needs a speaker and text.");
     if (!lines.count(d.entry))
         return fail("Opening line is missing.");
@@ -109,14 +126,14 @@ bool ValidateDialogue(const DialogueDocument &d, std::string &e)
 std::string EncodeDialogue(const DialogueDocument &d)
 {
     std::ostringstream o;
-    o << "renegade-dialogue 1 " << std::quoted(d.projectId) << ' ' << std::quoted(d.id) << ' ' << std::quoted(d.name)
+    o << "renegade-dialogue 2 " << std::quoted(d.projectId) << ' ' << std::quoted(d.id) << ' ' << std::quoted(d.name)
       << ' ' << std::quoted(d.entry) << '\n'
       << std::setprecision(9) << d.theme.textSize << ' ' << d.theme.panelOpacity << ' ' << d.theme.accent << ' '
       << d.lines.size() << '\n';
     for (auto &l : d.lines)
     {
         o << std::quoted(l.id) << ' ' << std::quoted(l.speaker) << ' ' << std::quoted(l.text) << ' '
-          << std::quoted(l.next) << ' ' << l.replies.size() << '\n';
+          << std::quoted(l.next) << ' ' << std::quoted(l.voice) << ' ' << l.replies.size() << '\n';
         for (auto &r : l.replies)
         {
             o << std::quoted(r.id) << ' ' << std::quoted(r.text) << ' ' << r.once << ' ';
@@ -147,14 +164,14 @@ bool DecodeDialogue(const std::string &bytes, DialogueDocument &out, std::string
     size_t count;
     if (!(in >> magic >> version >> std::quoted(d.projectId) >> std::quoted(d.id) >> std::quoted(d.name) >>
           std::quoted(d.entry) >> d.theme.textSize >> d.theme.panelOpacity >> d.theme.accent >> count) ||
-        magic != "renegade-dialogue" || version != 1 || count > 4096)
+        magic != "renegade-dialogue" || (version != 1 && version != 2) || count > 4096)
         return false;
     for (size_t i = 0; i < count; ++i)
     {
         DialogueLine l;
         size_t n;
-        if (!(in >> std::quoted(l.id) >> std::quoted(l.speaker) >> std::quoted(l.text) >> std::quoted(l.next) >> n) ||
-            n > 64)
+        if (!(in >> std::quoted(l.id) >> std::quoted(l.speaker) >> std::quoted(l.text) >> std::quoted(l.next)) ||
+            (version >= 2 && !(in >> std::quoted(l.voice))) || !(in >> n) || n > 64)
             return false;
         for (size_t j = 0; j < n; ++j)
         {
@@ -250,6 +267,7 @@ bool DialogueSession::Start(const DialogueDocument &d, DialogueMemory &m, std::s
     document_ = d;
     memory_ = &m;
     current_ = d.entry;
+    ++visit_;
     return true;
 }
 bool DialogueSession::Matches(const std::vector<DialogueCondition> &cs, bool all) const
@@ -284,6 +302,8 @@ DialogueView DialogueSession::View() const
         v.active = true;
         v.speaker = l->speaker;
         v.text = l->text;
+        v.voice = l->voice;
+        v.voiceKey = document_.id + ":" + l->id + ":" + std::to_string(visit_);
         for (auto &r : l->replies)
         {
             auto key = document_.id + ":" + r.id;
@@ -305,6 +325,7 @@ bool DialogueSession::Continue(std::string &e)
         return false;
     }
     current_ = l->next;
+    ++visit_;
     e.clear();
     return true;
 }
@@ -339,6 +360,7 @@ bool DialogueSession::Choose(const std::string &id, std::string &e)
                     if (r.once)
                         memory_->usedReplies.push_back(document_.id + ":" + r.id);
                     current_ = o.next;
+                    ++visit_;
                     e.clear();
                     return true;
                 }

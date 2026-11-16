@@ -4,6 +4,8 @@
 namespace renegade::bridge
 {
 inline constexpr const char *DialogueMetadataKey = "renegade.dialogue.asset";
+bool ResolveDialogueVoicePath(const std::string &root, const std::string &relative, std::string &absolute, std::string &error);
+bool SnapshotDialogueVoices(const std::string &sourceRoot, const std::string &destinationRoot, const DialogueDocument &, std::string &error);
 std::string DialogueAssetPath(const std::string &root, const std::string &id);
 bool SaveDialogueAsset(const std::string &root, const DialogueDocument &, std::string &error);
 bool LoadDialogueAsset(const std::string &root, const std::string &project, const std::string &id, DialogueDocument &,

@@ -1342,8 +1342,11 @@ namespace renegade::bridge
             const auto dialogues=ListDialogueAssets(project.rootPath,project.projectId,dialogueError);
             if(!dialogueError.empty())return failAndCleanup("Could not snapshot dialogue: "+dialogueError);
             for(const auto& dialogue:dialogues)
-                if(!SaveDialogueAsset(created.sessionDirectory,dialogue,error))
+            {
+                if(!SaveDialogueAsset(created.sessionDirectory,dialogue,error) ||
+                   !SnapshotDialogueVoices(project.rootPath,created.sessionDirectory,dialogue,error))
                     return failAndCleanup("Could not snapshot dialogue: "+error);
+            }
 
             if (!SnapshotParticleEffectRuntimeInputs(project.rootPath, project.projectId, created.sessionDirectory, error))
                 return failAndCleanup("Could not snapshot particle runtime catalog: " + error);

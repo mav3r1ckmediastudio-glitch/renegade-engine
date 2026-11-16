@@ -19,12 +19,30 @@ int main()
         DialogueDocument copy;
         Check(DecodeDialogue(EncodeDialogue(d), copy, error), "save reopen");
         Check(EncodeDialogue(copy) == EncodeDialogue(d), "lossless codec");
+        // Voice references are portable, optional and backwards compatible.
+        auto voiced = d;
+        voiced.lines[0].voice = "Content/Audio/Dialogue/guard-opening.wav";
+        Check(DecodeDialogue(EncodeDialogue(voiced), copy, error) && copy.lines[0].voice == voiced.lines[0].voice,
+              "voice clip survives save reopen");
+        auto invalidVoice = voiced;
+        invalidVoice.lines[0].voice = "Content/../outside.wav";
+        Check(!ValidateDialogue(invalidVoice, error), "voice traversal rejected");
+        invalidVoice.lines[0].voice = "C:/private/voice.wav";
+        Check(!ValidateDialogue(invalidVoice, error), "absolute voice rejected");
+        invalidVoice.lines[0].voice = "Content/Audio/voice.exe";
+        Check(!ValidateDialogue(invalidVoice, error), "non-audio voice rejected");
+        const std::string legacy = "renegade-dialogue 1 \"project\" \"legacy\" \"Legacy\" \"opening\"\n22 1 14572317 1\n\"opening\" \"Guard\" \"Welcome.\" \"\" 0\n";
+        Check(DecodeDialogue(legacy, copy, error) && copy.lines[0].voice.empty(), "legacy silent dialogue loads");
+        Check(DecodeDialogue(EncodeDialogue(d), copy, error), "restore guard fixture");
         DialogueSession s;
         DialogueMemory m;
         Check(s.Start(copy, m, error), "start");
+        const auto firstVisit = s.View().voiceKey;
+        Check(firstVisit == s.View().voiceKey, "redraw preserves voice visit");
         Check(s.View().replies.size() == 3, "three replies");
         Check(s.Choose("gate", error) && s.View().text == "Come back with a permit.", "fallback");
         Check(s.Continue(error) && s.View().replies.size() == 3, "reconnect opening");
+        Check(s.View().voiceKey != firstVisit, "returning to opening starts a new voice visit");
         m.values["has_permit"] = 1;
         Check(s.Choose("gate", error) && s.View().text == "Everything seems in order.", "permit branch");
         Check(m.values["access_granted"] == 1, "action mutates memory");

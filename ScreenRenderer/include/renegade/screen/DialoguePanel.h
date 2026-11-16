@@ -7,10 +7,12 @@ namespace renegade::screen
 class DialoguePanel
 {
   public:
+    ~DialoguePanel() { StopVoice(); }
     bool Show(const bridge::DialogueView &, const std::string &project, const std::string &root, wi::RenderPath2D &,
               bridge::ScreenRect viewport, std::string &error);
     void Hide(wi::RenderPath2D &path)
     {
+        StopVoice();
         renderer_.Reset(path);
         ids_.clear();
         pending_.clear();
@@ -40,6 +42,7 @@ class DialoguePanel
     {
         renderer_.SetAccessibilitySettings(settings);
     }
+    void StopVoice();
     void Navigate(int direction);
     void Activate();
     void Layout(wi::RenderPath2D &path, bridge::ScreenRect r)
@@ -52,6 +55,8 @@ class DialoguePanel
     ScreenRenderer renderer_;
     std::vector<std::string> ids_, actions_;
     size_t focus_ = 0, page_ = 0;
-    std::string pending_;
+    std::string pending_, voiceKey_;
+    wi::Resource voiceResource_;
+    wi::audio::SoundInstance voiceInstance_;
 };
 } // namespace renegade::screen

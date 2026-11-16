@@ -31,6 +31,22 @@ int main()
     CHECK(LoadDialogueAsset(root.generic_u8string(), project, id, reopened, error));
     CHECK(EncodeDialogue(d) == EncodeDialogue(reopened));
     CHECK(!LoadDialogueAsset(root.generic_u8string(), project, "../escape", reopened, error));
+    const auto voiceFolder = root / "Content/Audio/Dialogue";
+    std::filesystem::create_directories(voiceFolder);
+    const auto voiceFile = voiceFolder / "guard.wav";
+    { std::ofstream out(voiceFile, std::ios::binary); out << "test audio bytes"; }
+    d.lines[0].voice = "Content/Audio/Dialogue/guard.wav";
+    CHECK(SaveDialogueAsset(root.generic_u8string(), d, error));
+    CHECK(LoadDialogueAsset(root.generic_u8string(), project, id, reopened, error));
+    CHECK(reopened.lines[0].voice == d.lines[0].voice);
+    std::string resolved;
+    CHECK(ResolveDialogueVoicePath(root.generic_u8string(), d.lines[0].voice, resolved, error));
+    CHECK(!ResolveDialogueVoicePath(root.generic_u8string(), "Content/../outside.wav", resolved, error));
+    const auto snapshot = root / "Snapshot";
+    CHECK(SnapshotDialogueVoices(root.generic_u8string(), snapshot.generic_u8string(), d, error));
+    CHECK(std::filesystem::file_size(snapshot / d.lines[0].voice) == std::filesystem::file_size(voiceFile));
+    std::filesystem::remove(voiceFile);
+    CHECK(!SnapshotDialogueVoices(root.generic_u8string(), snapshot.generic_u8string(), d, error));
     auto scene = wi::allocator::make_shared<wi::scene::Scene>();
     auto npc = scene->Entity_CreateTransform("Gate Guard");
     scene->metadatas.Create(npc).string_values.set("creator.note", "Preserve this");

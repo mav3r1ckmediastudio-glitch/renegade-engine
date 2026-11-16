@@ -6,6 +6,42 @@
 namespace renegade::bridge
 {
 namespace fs = std::filesystem;
+bool ResolveDialogueVoicePath(const std::string &root, const std::string &relative, std::string &absolute, std::string &error)
+{
+    absolute.clear();
+    if (relative.empty()) return true;
+    if (!IsDialogueVoicePath(relative)) { error = "Choose a project audio clip in Content."; return false; }
+    std::error_code ec;
+    const auto base = fs::weakly_canonical(fs::u8path(root), ec);
+    if (ec) { error = "Could not resolve the project audio folder."; return false; }
+    const auto file = fs::weakly_canonical(base / fs::u8path(relative), ec);
+    const auto rel = file.lexically_relative(base);
+    if (ec || rel.empty() || *rel.begin() == ".." || !fs::is_regular_file(file, ec) || ec)
+    { error = "Voice clip is missing or outside this project: " + relative; return false; }
+    absolute = file.generic_u8string();
+    return true;
+}
+bool SnapshotDialogueVoices(const std::string &sourceRoot, const std::string &destinationRoot,
+                            const DialogueDocument &document, std::string &error)
+{
+    for (const auto &line : document.lines)
+    {
+        if (line.voice.empty()) continue;
+        std::string source;
+        if (!ResolveDialogueVoicePath(sourceRoot, line.voice, source, error)) return false;
+        std::error_code ec;
+        const auto destinationBase = fs::weakly_canonical(fs::u8path(destinationRoot), ec);
+        if (ec) { error = "Could not resolve voice snapshot folder."; return false; }
+        const auto destination = fs::weakly_canonical(destinationBase / fs::u8path(line.voice), ec);
+        const auto relative = destination.lexically_relative(destinationBase);
+        if (ec || relative.empty() || *relative.begin() == "..")
+        { error = "Voice snapshot path leaves the destination project."; return false; }
+        fs::create_directories(destination.parent_path(), ec);
+        if (!ec) fs::copy_file(fs::u8path(source), destination, fs::copy_options::overwrite_existing, ec);
+        if (ec) { error = "Could not snapshot voice clip: " + ec.message(); return false; }
+    }
+    return true;
+}
 std::string DialogueAssetPath(const std::string &root, const std::string &id)
 {
     if (!IsValidStableId(id))

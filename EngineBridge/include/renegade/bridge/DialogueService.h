@@ -49,12 +49,13 @@ struct DialogueLine
     std::string id, speaker = "NPC", text;
     std::vector<DialogueReply> replies;
     std::string next;
+    std::string voice; // Optional project-relative audio clip.
 };
 struct DialogueTheme
 {
     float textSize = 22;
     float panelOpacity = 1.f;
-    unsigned accent = 0x89e1d0;
+    unsigned accent = 0xde5b1d;
 };
 struct DialogueDocument
 {
@@ -69,11 +70,12 @@ struct DialogueMemory
 };
 struct DialogueView
 {
-    std::string speaker, text;
+    std::string speaker, text, voice, voiceKey;
     std::vector<std::pair<std::string, std::string>> replies;
     bool active = false;
     DialogueTheme theme;
 };
+bool IsDialogueVoicePath(const std::string &);
 bool ValidateDialogue(const DialogueDocument &, std::string &error);
 std::string EncodeDialogue(const DialogueDocument &);
 bool DecodeDialogue(const std::string &, DialogueDocument &, std::string &error);
@@ -113,6 +115,7 @@ class DialogueSession
     DialogueDocument document_;
     DialogueMemory *memory_ = nullptr;
     std::string current_;
+    unsigned long long visit_ = 0;
     ItemQuery items_;
     EventSink events_;
 };
