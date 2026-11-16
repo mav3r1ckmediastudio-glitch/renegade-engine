@@ -927,6 +927,7 @@ namespace renegade::studio
         std::uint64_t inspectorDisclosureSelectionRevision_ =
             static_cast<std::uint64_t>(-1);
         int inspectorDisclosureViewToken_ = -1;
+        SceneInspectorButton inspectorMetadataHeader_;
         SceneInspectorButton transformSectionHeader_;
         SceneInspectorButton renderingSectionHeader_;
         SceneInspectorButton materialsSectionHeader_;

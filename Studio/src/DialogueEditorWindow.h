@@ -1,5 +1,6 @@
 #pragma once
 #include <WickedEngine.h>
+#include "StudioModalWindow.h"
 #include <memory>
 #include <string>
 namespace renegade::bridge
@@ -8,7 +9,7 @@ class StudioSession;
 }
 namespace renegade::studio
 {
-class DialogueEditorWindow final : public wi::gui::Window
+class DialogueEditorWindow final : public StudioModalWindow
 {
   public:
     DialogueEditorWindow();

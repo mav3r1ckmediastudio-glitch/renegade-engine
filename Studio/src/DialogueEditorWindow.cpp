@@ -764,8 +764,8 @@ struct DialogueEditorWindow::Impl
         heading(previewHint, "Try the conversation as your player will see it.", 32, 606, 650);
         heading(workflow, "Select a line to edit. Add replies, then select a reply and Add response.", 32, 118, 800);
         exampleNote.Create("Example voice recordings");
-        exampleNote.SetText("Included voice clips are examples. Add your own WAV/OGG recordings for spoken dialogue; lines without a clip display as text only.");
-        Add(exampleNote, 740, 600, 550, 34);
+        exampleNote.SetText("Add your own WAV/OGG voice clips. Lines without a clip display text only.");
+        Add(exampleNote, 740, 612, 550, 24);
         heading(conversationHeading, "1. Write the conversation", 32, 146, 740);
         heading(textHeading, "Dialogue text", 890, 207, 360);
         heading(destinationHeading, "Continue to", 890, 334, 360);
@@ -1265,14 +1265,8 @@ struct DialogueEditorWindow::Impl
         canvasWidth = width;
         canvasHeight = height;
         canvasDpi = dpi;
-        uiScale = std::clamp(std::min((width - 32) / 1320.f, (height - 64) / 990.f), .4f, 1.f);
-        owner->SetSize({1320 * uiScale, 990 * uiScale});
-        owner->SetPos({std::max(8.f, (width - 1320 * uiScale) * .5f), 24});
-        for (auto &item : layout)
-        {
-            item.widget->SetPos({item.pos.x * uiScale, item.pos.y * uiScale});
-            item.widget->SetSize({item.size.x * uiScale, item.size.y * uiScale});
-        }
+        uiScale = 1.f;
+        owner->SetSize({1320,990});
         tree.uiScale = uiScale;
     }
     void ApplyTheme()
@@ -1327,20 +1321,15 @@ DialogueEditorWindow::~DialogueEditorWindow()
 }
 void DialogueEditorWindow::Create()
 {
-    wi::gui::Window::Create("Dialogue Editor", WindowControls::CLOSE | WindowControls::MOVE);
-    // Keep native child coordinates on its unit-scale content transform. The
-    // workspace fits the canvas, so only its conversation list should scroll.
-    RemoveWidget(&scrollbar_vertical);
-    RemoveWidget(&scrollbar_horizontal);
-    scrollbar_vertical.Detach();
-    scrollbar_horizontal.Detach();
-    scrollbar_vertical.SetListLength(0);
-    scrollbar_horizontal.SetListLength(0);
-    scrollbar_vertical.SetVisible(false);
-    scrollbar_horizontal.SetVisible(false);
+    StudioModalWindow::Create("Dialogue Editor", WindowControls::CLOSE | WindowControls::MOVE);
     SetSize({1320, 990});
     SetControlSize(28);
     impl_->Create();
+    PinFooter(impl_->save,18,8);
+    PinFooter(impl_->assign,132,8);
+    PinFooter(impl_->testGame,316,8);
+    PinFooter(impl_->discard,120,8,true);
+    PinFooter(impl_->help,18,44,false,true);
     impl_->ApplyTheme();
     SetVisible(false);
     OnClose([this](auto &) {
@@ -1451,7 +1440,7 @@ void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
     if (i.refreshPreview)
     {
         i.refreshPreview = false;
-        auto viewport = ScreenRect{GetPos().x + 24 * i.uiScale, GetPos().y + control_size + 640 * i.uiScale,
+        auto viewport = ScreenRect{ContentOrigin().x + 24 * i.uiScale, ContentOrigin().y + 640 * i.uiScale,
                                    1270 * i.uiScale, 190 * i.uiScale};
         auto view = i.preview.View();
         if (!i.preview.Active())
@@ -1463,10 +1452,10 @@ void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
             view.replies = {{"@restart", "Restart conversation"}};
         }
         if (i.panel.Show(view, i.project, i.root, path, viewport, i.status))
-            i.panel.EmbedInWindow(path, *this);
+            i.panel.EmbedInWindow(path, ContentWindow());
     }
     else
-        i.panel.Layout(path, {GetPos().x + 24 * i.uiScale, GetPos().y + control_size + 640 * i.uiScale,
+        i.panel.Layout(path, {ContentOrigin().x + 24 * i.uiScale, ContentOrigin().y + 640 * i.uiScale,
                               1270 * i.uiScale, 190 * i.uiScale});
     i.previewHint.SetText(!i.previewError.empty() ? "Complete the edit to update the preview: " + i.previewError
                         : i.preview.Active() ? "Live preview: edits update automatically. Restart resets your test progress."
@@ -1482,14 +1471,6 @@ void DialogueEditorWindow::Render(const wi::Canvas &canvas, wi::graphics::Comman
     ApplyScissor(canvas, scissorRect, cmd);
     Rect(translation.x, translation.y, scale.x, scale.y, Panel, cmd);
     Rect(translation.x, translation.y, scale.x, control_size, theme::Idle, cmd);
-    const float s = impl_->uiScale;
-    auto section = [&](float x, float y, float w, float h) {
-        Rect(translation.x + x * s, translation.y + control_size + y * s, w * s, h * s, Inset, cmd);
-    };
-    section(18, 116, 830, 438);
-    section(874, 116, 420, 438);
-    section(18, 566, 1276, 266);
-    section(18, 840, 1276, 100);
     wi::gui::Window::Render(canvas, cmd);
 }
 bool DialogueEditorWindow::TakeTestGameRequest()

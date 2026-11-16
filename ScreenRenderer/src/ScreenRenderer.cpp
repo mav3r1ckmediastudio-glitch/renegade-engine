@@ -698,13 +698,22 @@ namespace renegade::screen
             Widget::Update(canvas,dt);
             state=wi::gui::IDLE;priority_change=false;
             if(!IsVisible())return;
-            bool blocked=force_disable;
+            const auto pointer=wi::input::GetPointer();
+            const auto clip=parent?parent->scissorRect:scissorRect;
+            const bool outside=parent && (pointer.x<clip.left || pointer.x>=clip.right || pointer.y<clip.top || pointer.y>=clip.bottom);
+            bool blocked=force_disable || outside;
             for(auto it=surfaces.rbegin();it!=surfaces.rend();++it)
             {
                 auto* surface=*it;
                 surface->force_disable=blocked;
                 surface->Update(canvas,dt);
                 surface->force_disable=false;
+                if(parent)
+                {
+                    auto& r=surface->scissorRect;
+                    r.left=std::max(r.left,clip.left);r.right=std::min(r.right,clip.right);
+                    r.top=std::max(r.top,clip.top);r.bottom=std::min(r.bottom,clip.bottom);
+                }
                 surface->priority_change=false;
                 if(surface->IsVisible() && surface->IsEnabled() && surface->GetState()>wi::gui::IDLE)
                 {blocked=true;state=wi::gui::FOCUS;}

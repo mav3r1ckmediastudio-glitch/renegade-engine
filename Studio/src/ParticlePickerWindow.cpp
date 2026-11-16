@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include "RenegadeStudioChrome.h"
 #include "StudioButtonVisual.h"
+#include "StudioNumericControl.h"
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/ParticleEffectRuntimeService.h"
 #include "renegade/bridge/CreatorTextureWorkflowService.h"
@@ -47,7 +48,7 @@ public:
 };
 
 
-class ParticleControl : public wi::gui::Slider {
+class ParticleControl : public StudioPickerSlider {
 public:
  float minimum=0,maximum=1,increment=.01f;bool integer=false;
  void Configure(float lo,float hi,float stepSize,bool whole=false,int precision=2){
@@ -561,14 +562,15 @@ struct ParticlePickerWindow::Impl {
   size.Configure(10,300,5,true);amount.Configure(0,200,5,true);height.Configure(25,200,5,true);spread.Configure(0,200,5,true);
   red.Configure(0,1,.01f);green.Configure(0,1,.01f);blue.Configure(0,1,.01f);opacity.Configure(0,1,.01f);brightness.Configure(0,5,.05f);
   cols.Configure(1,32,1,true);rows.Configure(1,32,1,true);frames.Configure(1,256,1,true);fps.Configure(0,60,1,true);fps.SetTooltip("Continuous emitters: 0 advances from Frame start over the particle lifetime. Stationary sprites: 0 pauses animation.");
-  Label(status,"Choose a saved effect or configure emitter layers.",18,798,1104,12);Visibility();
+  Label(status,"Choose a saved effect or configure emitter layers.",18,798,1104,12);
+  window.PinFooter(keep,18,12);window.PinFooter(finishHint,176,12);window.PinFooter(cancel,308,8,true);window.PinFooter(apply,174,8,true);window.PinFooter(status,18,44,false,true);Visibility();
  }
  wi::gui::Label previewHeading,globalHeading,help,finishHint,cameraHint;PickerButton restart,fit,blank;
 };
 ParticlePickerWindow::ParticlePickerWindow():impl_(std::make_unique<Impl>(*this)){}
 ParticlePickerWindow::~ParticlePickerWindow(){RemoveWidgets();}
 void ParticlePickerWindow::Create(){
- wi::gui::Window::Create("Particle Picker",WindowControls::CLOSE|WindowControls::MOVE);SetControlSize(28);SetSize({1150,850});
+ StudioModalWindow::Create("Particle Picker",WindowControls::CLOSE|WindowControls::MOVE);SetControlSize(28);SetSize({1150,850});
  SetColor(theme::Panel,wi::gui::WIDGET_ID_WINDOW_BASE);
  SetColor(theme::Panel,wi::gui::WIDGET_ID_COMBO_DROPDOWN);impl_->textureBrowser.Create();impl_->Build();SetVisible(false);
 }

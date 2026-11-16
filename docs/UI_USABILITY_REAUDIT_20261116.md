@@ -1,5 +1,7 @@
 # Renegade UI usability re-audit — 16 November 2026
 
+> Follow-up: U01–U07 have a completed implementation and scoped native validation in [UI_USABILITY_COMPLETION_20261116.md](UI_USABILITY_COMPLETION_20261116.md). The findings and screenshots below retain the historical audit state.
+
 This follows the first cohesion pass and approved icon integration. It checks the existing editor against the agreed opaque charcoal/orange direction and Dialogue-style button interaction.
 
 The 65-family source inventory is retained in [UI_USABILITY_COVERAGE_20261116.csv](UI_USABILITY_COVERAGE_20261116.csv). Native coverage is recorded separately: opening a panel does not establish that every advanced workflow, asset state or runtime scenario passes. This is an audit and prioritized correction list, rather than a release acceptance certificate.

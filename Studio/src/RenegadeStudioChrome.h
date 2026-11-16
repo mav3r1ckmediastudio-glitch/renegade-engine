@@ -1,4 +1,5 @@
 #pragma once
+#include "StudioNumericControl.h"
 
 #include <array>
 #include <string>
@@ -86,7 +87,7 @@ namespace renegade::studio
         int renderTextSize_ = 12;
     };
 
-    class RenegadeSlider : public wi::gui::Slider
+    class RenegadeSlider : public StudioNumericSlider
     {
     public:
         void Create(

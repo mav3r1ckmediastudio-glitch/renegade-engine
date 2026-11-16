@@ -449,3 +449,6 @@ add_custom_command(TARGET RenegadeStudio POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/icons"
     VERBATIM)
+
+# Shared readable modal viewport and pinned action footer.
+target_sources(RenegadeStudio PRIVATE src/StudioModalWindow.cpp src/StudioModalWindow.h src/StudioNumericControl.h src/StudioNumericControl.cpp)

@@ -622,6 +622,27 @@ plan, manifest, integrity and safe-promotion services govern the staged bytes.
 
 ## UI foundation
 
+### Shared Studio modal and numeric boundaries (16 November 2026)
+
+Light, Particle, Texture Library and Dialogue derive from StudioModalWindow.
+The outer canvas-bounded native Window retains its title and pinned footer;
+a native scroll-body owns content drawing and input clipping. Pixel geometry
+is established before attaching widgets to the scaled native parent transform.
+An Escape press is claimed once across enabled modal instances; existing
+document dirty guards remain authoritative. Embedded ScreenInstanceRoot hosts
+inherit their parent scissor and reject pointer input outside that host.
+Parentless Runtime Screens retain their existing behavior.
+
+StudioNumericControl supplies shared rail/label states and bounded wrapped help
+while retaining native text-entry parsing. Physics uses a matching content
+drawing/input clip and responsive tab rows. Hub commands use the shared release
+gesture. Inspector selection/view changes reset disclosure and scroll state;
+primary component controls precede optional generic conversion and collapsed
+layers/metadata. Private picker previews temporarily render shaded and restore
+the scene view mode. Authored Screen styling remains document-owned.
+See UI_USABILITY_COMPLETION_20261116.md for validation and explicit limits.
+
+
 ADR 0002 accepts Wicked's native `wiGUI` as Renegade's production integration
 and rendering foundation after the Phase 2 HDR-source, DPI, input, persistence,
 DX12, and Vulkan gate.

@@ -1,6 +1,7 @@
 #include "LightPickerWindow.h"
 #include "RenegadeStudioChrome.h"
 #include "StudioButtonVisual.h"
+#include "StudioNumericControl.h"
 #include "renegade/bridge/StudioSession.h"
 #include "../../Runtime/src/RuntimeScriptRuntime.h"
 #include <algorithm>
@@ -171,7 +172,7 @@ struct LightPickerWindow::Impl {
  wi::gui::Label savedTitle,typeTitle,colourTitle,behaviourTitle,settingsTitle,previewTitle,status,help,nameLabel;
  wi::gui::Label previewImage;
  PickerButton saveColour,saveNew,update,place,cancel,advanced;
- wi::gui::Slider brightness,range,strength,speed,movement,outerCone,innerCone,radius,length,height,boost;
+ StudioPickerSlider brightness,range,strength,speed,movement,outerCone,innerCone,radius,length,height,boost;
  PickerCheckBox shadows,keep,randomise,animate,volumetrics;
  bool expanded=false;
  std::vector<wi::gui::Label*> captions;
@@ -185,7 +186,7 @@ struct LightPickerWindow::Impl {
  void Button(PickerButton& b,const char* text,float x,float y,float width) {
   b.Create(text);b.SetText(text);b.SetRenderTextSize(12);Add(b,x,y,width,30);
  }
- void Slider(wi::gui::Slider& s,const char* label,float lo,float hi,float value,float x,float y,float width) {
+ void Slider(StudioPickerSlider& s,const char* label,float lo,float hi,float value,float x,float y,float width) {
   s.Create(lo,hi,value,1000,label);s.SetText(label);s.SetSize({width,22});Add(s,x,y,width,22);
   s.OnSlide([this](const wi::gui::EventArgs&){dirtyPreview=true;});
  }
@@ -350,6 +351,8 @@ struct LightPickerWindow::Impl {
   cancel.OnClick([this](const wi::gui::EventArgs&){window.SetVisible(false);});
   place.OnClick([this](const wi::gui::EventArgs&){if(target==wi::ecs::INVALID_ENTITY)placeRequest=true;else applyRequest=true;});
   Label(status,"Choose a light or saved preset, then Place Light.",18,784,970,12);
+  window.PinFooter(keep,18,12);window.PinFooter(previewTitleHint_,174,12);
+  window.PinFooter(cancel,300,8,true);window.PinFooter(place,170,8,true);window.PinFooter(status,18,44,false,true);
   Advanced();
  }
  wi::gui::Label previewTitleHint_;
@@ -364,7 +367,7 @@ struct LightPickerWindow::Impl {
 LightPickerWindow::LightPickerWindow():impl_(std::make_unique<Impl>(*this)){}
 LightPickerWindow::~LightPickerWindow(){RemoveWidgets();}
 void LightPickerWindow::Create() {
- wi::gui::Window::Create("Light Picker",WindowControls::CLOSE|WindowControls::MOVE);
+ StudioModalWindow::Create("Light Picker",WindowControls::CLOSE|WindowControls::MOVE);
  SetSize({1020,840});SetControlSize(28);SetColor(theme::Panel,wi::gui::WIDGET_ID_WINDOW_BASE);
  SetColor(theme::Panel,wi::gui::WIDGET_ID_COMBO_DROPDOWN);
  impl_->Build();SetVisible(false);

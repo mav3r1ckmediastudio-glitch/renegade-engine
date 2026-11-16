@@ -919,7 +919,11 @@ namespace renegade::studio
     void StudioRenderPath::PreRender()
     {
         if(lightPickerFrameSuspended_) {
+            // Private previews stay shaded; restore the scene preference immediately.
+            const auto savedMode=wi::renderer::GetWireframeMode();
+            wi::renderer::SetWireframeMode(static_cast<wi::renderer::WIREFRAME_MODE>(0));
             lightPicker_.PreRenderPreview();particlePicker_.PreRenderPreview();
+            wi::renderer::SetWireframeMode(savedMode);
             wi::RenderPath2D::PreRender();
             return;
         }
@@ -949,7 +953,11 @@ namespace renegade::studio
     void StudioRenderPath::Render() const
     {
         if(lightPickerFrameSuspended_) {
+            // Private previews stay shaded; restore the scene preference immediately.
+            const auto savedMode=wi::renderer::GetWireframeMode();
+            wi::renderer::SetWireframeMode(static_cast<wi::renderer::WIREFRAME_MODE>(0));
             lightPicker_.RenderPreview();particlePicker_.RenderPreview();
+            wi::renderer::SetWireframeMode(savedMode);
             wi::RenderPath2D::Render();
             return;
         }

@@ -151,6 +151,7 @@ namespace renegade::studio
             inspectorPanel_.AddWidget(&button);
         };
 
+        createHeader(inspectorMetadataHeader_,"Scene metadata header","Layers and metadata for the selected object.","object-metadata");
         createHeader(
             transformSectionHeader_,
             "S1B Transform Section Header",
@@ -203,6 +204,48 @@ namespace renegade::studio
         if (!inspectorSectionRegistry_.Register(std::move(surface), error))
             studioChrome_.SetStatusText("SURFACE INSPECTOR // " + error);
         error.clear();
+        auto metadata=std::make_shared<CallbackInspectorSectionProvider>(
+            MakeSection("object-metadata","LAYERS / METADATA",900,false),
+            [this](const InspectorSectionContext& c){return c.hasSelection && !c.transformOnly;},
+            [](const InspectorSectionContext&,float w){return 112.f+float(w>=332?4:8)*26.f;},
+            CallbackInspectorSectionProvider::RefreshFn{},
+            [this](const InspectorSectionContext&,const InspectorSectionLayout& layout){
+                inspectorMetadataHeader_.SetVisible(true);
+                inspectorMetadataHeader_.SetPos({12,layout.top});inspectorMetadataHeader_.SetSize({layout.width,layout.headerHeight});
+                inspectorMetadataHeader_.SetText(layout.expanded?"▼ LAYERS / METADATA":"▶ LAYERS / METADATA");
+                sceneLayerLabel_.SetVisible(layout.expanded);sceneLayerAllButton_.SetVisible(layout.expanded);sceneLayerNoneButton_.SetVisible(layout.expanded);
+                sceneMetadataLabel_.SetVisible(layout.expanded);sceneMetadataPreset_.SetVisible(layout.expanded);scenePickupButton_.SetVisible(layout.expanded);
+                for(auto& bit:sceneLayerBits_)bit.SetVisible(layout.expanded);
+                if(!layout.expanded)return;
+                const float innerWidth=layout.width;float y=layout.contentTop;
+                const auto section=[&](wi::gui::Widget& w){w.SetPos({12,y});w.SetSize({innerWidth,20});y+=20;};
+            section(sceneLayerLabel_);
+            const float half = (innerWidth - 8.0f) * 0.5f;
+            sceneLayerAllButton_.SetPos(XMFLOAT2(12.0f, y));
+            sceneLayerNoneButton_.SetPos(XMFLOAT2(20.0f + half, y));
+            sceneLayerAllButton_.SetSize(XMFLOAT2(half, 28.0f));
+            sceneLayerNoneButton_.SetSize(XMFLOAT2(half, 28.0f));
+            y += 34.0f;
+            const float bitGap = 4.0f;
+            const std::size_t bitColumns = innerWidth >= 332.f ? 8u : 4u;
+            const float bitWidth = (innerWidth - bitGap * float(bitColumns-1)) / float(bitColumns);
+            for (std::size_t bit = 0; bit < sceneLayerBits_.size(); ++bit)
+            {
+                const float x = 12.0f + static_cast<float>(bit % bitColumns) * (bitWidth + bitGap);
+                const float bitY = y + static_cast<float>(bit / bitColumns) * 26.0f;
+                sceneLayerBits_[bit].SetPos(XMFLOAT2(x, bitY));
+                sceneLayerBits_[bit].SetSize(XMFLOAT2(bitWidth, 22.0f));
+            }
+            y += float((sceneLayerBits_.size()+bitColumns-1)/bitColumns)*26.f+4.f;
+            section(sceneMetadataLabel_);
+            sceneMetadataPreset_.SetPos({12.0f,y});
+            sceneMetadataPreset_.SetSize({half,28.0f});
+            scenePickupButton_.SetPos({20.0f+half,y});
+            scenePickupButton_.SetSize({half,28.0f});
+            y += 34.0f;
+            });
+        if(!inspectorSectionRegistry_.Register(std::move(metadata),error))wi::backlog::post(error);
+
         auto transform = std::make_shared<CallbackInspectorSectionProvider>(
             MakeSection("transform", "TRANSFORM", 10, false),
             [this](const InspectorSectionContext&)
@@ -533,7 +576,7 @@ namespace renegade::studio
 
     void StudioRenderPath::ResetS1BInspectorDisclosure()
     {
-        for (const char* sectionId : {"transform", "rendering", "materials", Phase7AnimationSectionId, S4BActionSectionId, S4BScriptSectionId, S4DGlobalScriptSectionId})
+        for (const char* sectionId : {"object-metadata", AICharacterSectionId, "transform", "rendering", "materials", Phase7AnimationSectionId, S4BActionSectionId, S4BScriptSectionId, S4DGlobalScriptSectionId})
             (void)inspectorSectionRegistry_.SetExpanded(sectionId, false);
     }
 
@@ -547,6 +590,7 @@ namespace renegade::studio
         PreparePhase7Gate7AAnimationInspector(*this);
         PrepareS4BScriptAttachmentInspector(*this);
         PrepareS4DGlobalScriptInspector(*this);
+        inspectorMetadataHeader_.SetVisible(false);
         transformSectionHeader_.SetVisible(false);
         renderingSectionHeader_.SetVisible(false);
         materialsSectionHeader_.SetVisible(false);
@@ -605,8 +649,14 @@ namespace renegade::studio
             viewToken != inspectorDisclosureViewToken_)
         {
             ResetS1BInspectorDisclosure();
+            // A newly selected asset starts at its identity and primary controls,
+            // rather than inheriting the previous asset's scroll position.
+            inspectorPanel_.scrollbar_vertical.SetOffset(0);
+            inspectorPanel_.scrollbar_horizontal.SetOffset(0);
             inspectorDisclosureSelectionRevision_ = selectionRevision;
             inspectorDisclosureViewToken_ = viewToken;
+            if(hasSession && session_->Scenes().GetScene().characters.Contains(selected))
+                (void)inspectorSectionRegistry_.SetExpanded(AICharacterSectionId,true);
             if(multiple)(void)inspectorSectionRegistry_.SetExpanded("transform",true);
         }
         static wi::scene::Scene emptyScene;
@@ -670,30 +720,6 @@ namespace renegade::studio
             };
             section(sceneIdentityLabel_);
             full(sceneNameInput_);
-            section(sceneLayerLabel_);
-            const float half = (innerWidth - 8.0f) * 0.5f;
-            sceneLayerAllButton_.SetPos(XMFLOAT2(12.0f, y));
-            sceneLayerNoneButton_.SetPos(XMFLOAT2(20.0f + half, y));
-            sceneLayerAllButton_.SetSize(XMFLOAT2(half, 28.0f));
-            sceneLayerNoneButton_.SetSize(XMFLOAT2(half, 28.0f));
-            y += 34.0f;
-            const float bitGap = 4.0f;
-            const std::size_t bitColumns = innerWidth >= 332.f ? 8u : 4u;
-            const float bitWidth = (innerWidth - bitGap * float(bitColumns-1)) / float(bitColumns);
-            for (std::size_t bit = 0; bit < sceneLayerBits_.size(); ++bit)
-            {
-                const float x = 12.0f + static_cast<float>(bit % bitColumns) * (bitWidth + bitGap);
-                const float bitY = y + static_cast<float>(bit / bitColumns) * 26.0f;
-                sceneLayerBits_[bit].SetPos(XMFLOAT2(x, bitY));
-                sceneLayerBits_[bit].SetSize(XMFLOAT2(bitWidth, 22.0f));
-            }
-            y += float((sceneLayerBits_.size()+bitColumns-1)/bitColumns)*26.f+4.f;
-            section(sceneMetadataLabel_);
-            sceneMetadataPreset_.SetPos({12.0f,y});
-            sceneMetadataPreset_.SetSize({half,28.0f});
-            scenePickupButton_.SetPos({20.0f+half,y});
-            scenePickupButton_.SetSize({half,28.0f});
-            y += 34.0f;
             registryTop = y + 4.0f;
         }
 
@@ -705,18 +731,7 @@ namespace renegade::studio
             if(auto* name=scene.names.GetComponent(selected))sceneNameInput_.SetValue(name->name);
             registryTop=104;
         }
-        InspectorSectionContext context;
-        context.transformOnly=multiple||groupSelection;
-        context.hasSelection = hasSession && !multiple && selected != wi::ecs::INVALID_ENTITY;
-        context.selectionRevision=selectionRevision;
-        context.userData = this;
-        inspectorSectionRegistry_.RefreshVisibleSections(context);
-        const auto layouts = inspectorSectionRegistry_.LayoutVisibleSections(
-            context, registryTop, innerWidth);
-        float bottom = registryTop;
-        for (const auto& layout : layouts)
-            bottom = std::max(bottom, layout.top + layout.totalHeight);
-
+        float bottom=registryTop;
         const auto fullAt = [innerWidth](wi::gui::Widget& widget, const float y, const float height = 28.0f)
         {
             widget.SetPos(XMFLOAT2(12.0f, y));
@@ -838,6 +853,20 @@ namespace renegade::studio
             bottom = y;
         }
 
+        registryTop=bottom+8.f;
+        InspectorSectionContext context;
+        context.transformOnly=multiple||groupSelection;
+        context.hasSelection = hasSession && !multiple && selected != wi::ecs::INVALID_ENTITY;
+        context.selectionRevision=selectionRevision;
+        context.userData = this;
+        inspectorSectionRegistry_.RefreshVisibleSections(context);
+        const auto layouts = inspectorSectionRegistry_.LayoutVisibleSections(
+            context, registryTop, innerWidth);
+        bottom = registryTop;
+        for (const auto& layout : layouts)
+            bottom = std::max(bottom, layout.top + layout.totalHeight);
+
+
         if(hasSession&&selected!=wi::ecs::INVALID_ENTITY&&!light&&(bridge::ParticleEffectRoot(scene,selected)!=wi::ecs::INVALID_ENTITY||scene.emitters.Contains(selected))){
             fullAt(lightPickerButton_,bottom+8.0f);bottom+=42.0f;
         }
@@ -882,6 +911,7 @@ namespace renegade::studio
             PrepareS4BScriptAttachmentInspector(*this);
             PrepareS4DGlobalScriptInspector(*this);
             SetS1BMaterialContentVisible(false);
+            inspectorMetadataHeader_.SetVisible(false);
             for(auto& bit:sceneLayerBits_)bit.SetVisible(false);
             sceneLayerLabel_.SetVisible(false);
             sceneLayerAllButton_.SetVisible(false);

@@ -3418,8 +3418,8 @@ namespace renegade::studio
             }
             else
             {
-                items = {{"HIERARCHY // FIXED", false},
-                    {"INSPECTOR // FIXED", false},
+                items = {{"DRAG PANEL DIVIDERS TO RESIZE", false},
+                    {"INSPECTOR WIDTH IS ADJUSTABLE", false},
                     {activeBottomTab_ >= 0 ? "CLOSE BOTTOM DRAWER" :
                         "OPEN BOTTOM DRAWER", true},
                     {"OPEN LIVING CORE ORB", true}};
