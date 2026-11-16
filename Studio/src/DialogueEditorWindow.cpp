@@ -1364,8 +1364,17 @@ void DialogueEditorWindow::Open(StudioSession &s, wi::RenderPath2D &path)
     i.root = s.Projects().CurrentProject().rootPath;
     i.panel.SetEmbeddedPreview();
     if(i.resumeAfterDisplay){
-        i.resumeAfterDisplay=false;i.ReloadDisplays();i.ReloadLibrary();i.RefreshFields();
-        i.refreshPreview=true;SetVisible(true);i.FitToCanvas(path);return;
+        i.resumeAfterDisplay=false;
+        i.ReloadDisplays();
+        i.ReloadLibrary();
+        i.FitToCanvas(path);
+        // Native Window::SetVisible shows all children. Reapply the current
+        // basic/Advanced and selected-row visibility only after showing it.
+        SetVisible(true);
+        i.RefreshFields();
+        i.RefreshTargets();
+        i.refreshPreview=true;
+        return;
     }
     i.ReloadDisplays();
     i.targets.clear();

@@ -2372,3 +2372,9 @@ Light creation reconciles hierarchy and inspector immediately when clearing
 selection. Native resize queues a one-time inspector refresh, including after
 the modal's 2D Window update; background layout cannot retain controls for an old
 selection or fixed legacy geometry. No second selection or render graph is added.
+
+Dialogue display-editor resume follows native Window visibility semantics:
+fit, show the parent, then restore the selected row's basic/Advanced field
+visibility and NPC targets. Showing the parent after hiding individual fields
+would re-enable every child. The normal Open and resume paths must preserve this
+ordering. See evidence/ui-dialogue-resume for the full native round trip.

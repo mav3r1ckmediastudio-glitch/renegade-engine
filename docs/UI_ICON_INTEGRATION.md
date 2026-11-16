@@ -153,3 +153,9 @@ Light creation refreshes hierarchy/inspector when it clears selection, and nativ
 resize queues one complete inspector reconciliation. Exact-binary before/after
 evidence, build and 67-check receipt: evidence/ui-modal-resize/README.md.
 The separately observed fixed-height modal clipping remains an audit finding.
+
+Returning from Edit display exposed a second lifecycle issue: native Window show
+re-enabled conditional Dialogue controls after they had been hidden. Resume now
+shows first and reapplies current field/target visibility afterwards. Basic,
+Advanced and resized-display round trips pass in Icons9; see the exact-binary
+receipt in evidence/ui-dialogue-resume.
