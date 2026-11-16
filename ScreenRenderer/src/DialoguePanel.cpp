@@ -10,6 +10,8 @@ bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &pr
 {
     using namespace bridge;
     renderer_.Reset(path);
+    renderer_.SetInputEnabled(false);
+    pointerArmed_ = false;
     pending_.clear();
     ids_.clear();
     actions_.clear();

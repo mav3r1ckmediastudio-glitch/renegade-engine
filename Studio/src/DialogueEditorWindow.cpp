@@ -282,9 +282,9 @@ struct DialogueEditorWindow::Impl
     }
     template <class W> void Add(W &w, float x, float y, float width, float height)
     {
-        w.SetPos({x, y});
+        w.SetPos({x, y + 28});
         w.SetSize({width, height});
-        owner->AddWidget(&w);
+        owner->AddWidget(&w, wi::gui::Window::AttachmentOptions::NONE);
         layout.push_back({&w, {x, y}, {width, height}});
     }
     void Button(DialogueButton &b, const char *label, float x, float y, float w, std::function<void()> fn)
@@ -709,6 +709,7 @@ struct DialogueEditorWindow::Impl
             auto selectedDocument = doc;
             selectedDocument.entry = L()->id;
             panel.StopVoice();
+            previewResult.clear();
             if (preview.Start(selectedDocument, memory, status)) refreshPreview = true;
         });
         Button(voiceFolder, "Open voice folder", 890, 518, 180, [this] {
@@ -1173,7 +1174,7 @@ struct DialogueEditorWindow::Impl
         owner->SetPos({std::max(8.f, (width - 1320 * uiScale) * .5f), 24});
         for (auto &item : layout)
         {
-            item.widget->SetPos({item.pos.x * uiScale, item.pos.y * uiScale});
+            item.widget->SetPos({item.pos.x * uiScale, 28 + item.pos.y * uiScale});
             item.widget->SetSize({item.size.x * uiScale, item.size.y * uiScale});
         }
         tree.uiScale = uiScale;
@@ -1337,7 +1338,8 @@ void DialogueEditorWindow::Tick(StudioSession &s, wi::RenderPath2D &path)
     else
         i.panel.Layout(path, {GetPos().x + 24 * i.uiScale, GetPos().y + control_size + 640 * i.uiScale,
                               1270 * i.uiScale, 190 * i.uiScale});
-    i.previewHint.SetText(i.preview.Active() ? "Click a reply to follow its response. This preview has its own test flags."
+    i.previewHint.SetText(i.preview.Active() ? (i.Dirty() ? "Restart to try your latest edits. Preview flags stay separate from the game."
+                                                         : "Click a reply to follow its response. This preview has its own test flags.")
                                             : "This branch has ended. The preview stays here so you can restart or keep editing.");
     i.help.SetText((i.Dirty() ? "UNSAVED  |  " : "") + i.status);
     i.undoButton.SetEnabled(!i.undo.empty());

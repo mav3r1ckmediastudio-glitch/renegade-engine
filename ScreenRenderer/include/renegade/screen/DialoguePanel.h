@@ -47,6 +47,14 @@ class DialoguePanel
     void Activate();
     void Layout(wi::RenderPath2D &path, bridge::ScreenRect r)
     {
+        // A line rebuild can put a new button under the releasing pointer.
+        // Wait for that gesture to clear before accepting a fresh press.
+        if (!pointerArmed_ && !wi::input::Down(wi::input::MOUSE_BUTTON_LEFT) &&
+            !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            renderer_.SetInputEnabled(true);
+            pointerArmed_ = true;
+        }
         renderer_.SetViewport(r);
         renderer_.ApplyLayout(path);
     }
@@ -56,6 +64,7 @@ class DialoguePanel
     std::vector<std::string> ids_, actions_;
     size_t focus_ = 0, page_ = 0;
     std::string pending_, voiceKey_;
+    bool pointerArmed_ = false;
     wi::Resource voiceResource_;
     wi::audio::SoundInstance voiceInstance_;
 };
