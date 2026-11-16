@@ -1,3 +1,59 @@
+# Approved icon integration and owner corrections — 16 November 2026
+
+Implementation/evidence commit:
+5bfe2d4e2ea2f2412d539d91eae8df4d2baac4f0
+on fix/ui-cohesion-pass1-20261116, following UI checkpoint 9eb8410.
+Source and asset files are unchanged after that commit. This handoff update is
+documentation only. No push, PR, hosted CI, merge or release was performed.
+
+Integrated the owner-approved 65-icon SVG catalogue and one padded atlas,
+shared square icon rendering, matching-release input, delayed title tooltips,
+keyboard focus and compact native controls across Studio and Story Flow.
+Changed StudioIcons, Studio chrome/header, Physics chrome, Story Flow chrome/
+layout/render path/workspace and return control, Studio asset installation,
+four obsolete source-contract expectations, feature matrix and architecture.
+Full detail and binary-specific screenshots: docs/UI_ICON_INTEGRATION.md and
+docs/evidence/ui-icon-integration/README.md.
+
+Owner review then requested clear space below Fit and reported Audio disappearing
+when a viewport menu opens. A shared 192 logical px Journey header now gives Fit
+a 9 px gap above the lower row and keeps canvas hit/scissor bounds aligned.
+Audio stays rendered during Perspective/Lit/Show menus; popup input ownership
+and foreground composition remain. All three dropdown cases and the row gap
+were visually verified in the latest native build.
+
+Latest live review executable:
+BUILD/native/Studio/Release/RenegadeStudio-Icons4.exe
+SHA-256 E6596CA2670F860C0F05B02AB7AA353BA1EF21034E4374D3AE32C7F491A8E2DC.
+It uses BUILD/ui-icon-owner-review/DialogueReview.renegade and separate review
+preferences. Existing owner-operated Studio windows were preserved. Do not
+close them or discard edits. The reviewed project retains seven entities/two
+lights. Previous native receipts also cover hold/cancel/release, tooltips,
+keyboard Tab/Enter, narrow 1280/1024 layouts and save/reopen. The binary was
+built before commit, so its embedded configure-time Git stamp is not the new
+implementation hash; do not treat it as a release/package identity receipt.
+
+Configure: cmake -S . -B BUILD/native -DRENEGADE_EMBED_SHADERS=ON.
+Build: MSBuild BUILD/native/Studio/RenegadeStudio.vcxproj /t:Build
+/p:BuildProjectReferences=false /p:Configuration=Release /p:Platform=x64
+/p:TargetName=RenegadeStudio-Icons4 /v:minimal, with CL=/MP6. Exit 0.
+Also built RenegadeStoryFlowJourneyUiLayoutTests; its existing tests pass unchanged.
+Combined validation:
+ctest --test-dir BUILD/native -C Release -R
+'SourceContract|StudioUiPolicy|RenegadeDialogue|^RenegadeStoryFlowJourneyUiLayoutTests$'
+--output-on-failure
+67/67 pass in 9.73 seconds. This is 60 source contracts, UI policy, five dialogue
+suites and Journey UI layout. All 65 atlas crops exactly match the approved PNG
+artwork. Source and installed atlas hashes match. git diff --check passes.
+
+Remaining: owner acceptance of the latest live UI, real Windows OS DPI checks at
+125%/150%, remaining specialist UI audit families, and hosted Debug/Release CI
+only when requested. No universal UI/release gate is certified. The six existing
+Wicked overlays and gitlink were not staged or modified by icon integration.
+Preserve original dialogue and concurrent arms work.
+
+---
+
 # Studio UI cohesion first pass — 16 November 2026
 
 Isolated checkout `E:\RenegadeUI-20261116`, branch
