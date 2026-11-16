@@ -1,3 +1,57 @@
+# Remaining UI audit corrections completed — 16 November 2026
+
+Implementation/evidence commit: d55b61ac28266c11550e338faa72312175da0b72
+on fix/ui-cohesion-pass1-20261116. This follows the already-local whole-scene
+wireframe commits fada1d6 / 2ddc4ca. All seven U01-U07 findings have implemented
+corrections and scoped native receipts. Read
+docs/UI_USABILITY_COMPLETION_20261116.md and its evidence index; the historical
+re-audit now links to that follow-up and retains its original findings.
+
+Changed StudioModalWindow and StudioNumericControl (new header/source pairs),
+LightPickerWindow, ParticlePickerWindow, ParticleTextureBrowser and
+DialogueEditorWindow header/source, S1BInspectorSectionMigration,
+StudioApplication header/source, RenegadeProjectHub header/source,
+RenegadePhysicsLabWorkspace, RenegadeImGuiBridge,
+RenegadeScreenEditorWorkspace, RenegadeStudioChrome header/source,
+Studio/CMakeLists and ScreenRenderer/src/ScreenRenderer.cpp.
+Architecture and the cohesion/icon feature rows were updated.
+
+Key behavior: readable scrollable modal body with pinned footer; one topmost
+Escape per physical press; Dialogue dirty guard retained; embedded Screen host
+clip for both input and rendering; Physics matching clip and wrapped tabs;
+Hub release gestures; primary-first inspectors with fresh selection scroll;
+shared numeric rails/bounded help; approved common-action icons and UI font.
+Private picker previews render shaded, then restore main scene wireframe mode.
+Authored Screen appearance and native document transactions are preserved.
+
+Final native review app remains open on DESIGN:
+BUILD/native/Studio/Release/RenegadeStudio-UIFinish7.exe
+SHA256 DB13A9DAA42D17206D7ACCEAE826C4B5BCD8A9F8A274EC7432E07182D2447C5F.
+It was built before commit and has configure-time Git stamp 2ddc4ca; identify
+it by hash and this implementation commit, not its older UI stamp.
+Native review used a disposable seven-entity DialogueReview project and
+isolated preferences. No owner project, authored dialogue or Screen saved.
+Temporary dirty-name guard test was discarded to the saved conversation.
+
+Release build passed (69.30 s); current four Screen suites were rebuilt and
+passed separately; final 71 selected CTests passed (11.96 s); diff check passes.
+Exact commands, hashes and binary-specific screenshots are in the completion
+receipt. Broad resize/Screen/dirty-guard proof uses UIFinish5; final UIFinish7
+adds only note spacing and inspector scroll reset, then separately verifies
+those changes, Graph/Hub, numeric help, Physics and all four asset handoffs.
+Do not attribute all prototype screenshots to the final binary.
+
+No Debug, hosted CI, push, PR, merge, distribution or release-gate closure.
+Narrow modal content intentionally scrolls instead of shrinking all text.
+OS DPI 125/150%, all Physics pages at 1024, path-traced transitions and
+independent exact-commit verification remain outside these receipts.
+Existing configured Wicked overlays remain dirty/unstaged and the gitlink
+was not changed. No owner work was removed.
+Next: owner review of the open candidate; prepare one combined UI/wireframe PR
+only when requested, with the required broader build validation before pushing.
+
+---
+
 # SHOW whole-scene wireframe modes — 16 November 2026
 
 Implementation commit: fada1d6353691a14508b9b748ec8335631984cfb,
