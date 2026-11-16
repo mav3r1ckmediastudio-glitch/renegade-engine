@@ -1,3 +1,30 @@
+# Dialogue PR preparation - 16 November 2026
+
+The owner authorized a separate dialogue PR and its four hosted CI checks.
+Merge is not authorized. Latest fetched main is `7093cf4da660cebd7c686aac1b44d6e00181f556`
+and is already an ancestor of the dialogue branch (0 commits behind). The
+previous validated checkpoint is `db14f27`; runtime/editor behaviour is unchanged.
+
+Pre-publication inspection found two registered suites absent from the explicit
+CI aggregate. CMakeLists.txt now includes RenegadeDialogueScriptingTests and
+RenegadeDialogueDisplayTests in both RenegadeStudioCI and RenegadeDialogueReview.
+Configure succeeded; the generated Studio CI project explicitly references all
+five dialogue executables. Both newer targets rebuilt successfully and the
+same 16-suite regression set passed again in 9.95 seconds (exit 0). Commands:
+`cmake -S . -B BUILD/native -DRENEGADE_EMBED_SHADERS=ON`, then
+`cmake --build BUILD/native --config Release --parallel 4 --target RenegadeDialogueScriptingTests RenegadeDialogueDisplayTests`,
+then the same 16-suite CTest filter recorded below. The feature matrix now
+records owner acceptance and pending hosted checks.
+
+Publish the existing feature/dialogue-editor-20261115 branch with a normal
+fast-forward push, open a focused PR against main, and verify both Debug/Release
+jobs in each automatic Studio and Windows baseline workflow. No workflow edits,
+Wicked gitlink changes, unrelated arms work or UI-audit changes are included.
+The pre-existing Wicked working-tree overlay/copied baseline remains untouched.
+Do not merge or claim hosted CI success until the checks complete.
+
+---
+
 # Basic dialogue beta validation - 16 November 2026
 
 Validated checkout: `00c2146de0668f9a5d3b65cd246535760352df70`.
