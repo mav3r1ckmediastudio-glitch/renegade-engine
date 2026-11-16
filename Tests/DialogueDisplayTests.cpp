@@ -81,6 +81,7 @@ int main(int argc,char** argv){
  CHECK(fs::exists(snapshot/"Content/UI/custom.ttf")&&fs::exists(snapshot/"Content/UI/panel.png"));
  CHECK(find(reopened,"text").style.text.fontSize==31);
  fs::remove(root/"Content/UI/panel.png");
+ CHECK(!LoadDialogueDisplay(root.generic_u8string(),project,reopened,error));
  CHECK(!SnapshotDialogueDisplay(root.generic_u8string(),(root/"Broken").generic_u8string(),project,error));
  CHECK(SetDialogueDisplayAssignment(root.generic_u8string(),project,{},error));
  CHECK(LoadDialogueDisplay(root.generic_u8string(),project,reopened,error)&&reopened.envelope.documentId.empty());

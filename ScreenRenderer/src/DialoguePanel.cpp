@@ -10,6 +10,7 @@ bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &pr
                          wi::RenderPath2D &path, bridge::ScreenRect viewport, std::string &error)
 {
     using namespace bridge;
+    const auto requestedViewport = viewport;
     renderer_.Reset(path);
     renderer_.SetInputEnabled(false);
     pointerArmed_ = false;
@@ -122,7 +123,14 @@ bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &pr
                     pending_ = actions_[size_t(it - ids_.begin())];
             },
             error))
+    {
+        if(!display_.envelope.documentId.empty()){
+            wi::backlog::post("Dialogue display could not render: "+error+" Using the built-in display.",wi::backlog::LogLevel::Warning);
+            display_={};
+            return Show(view,project,root,path,requestedViewport,error);
+        }
         return false;
+    }
     renderer_.SetViewport(viewport);
     renderer_.ApplyLayout(path);
     if (!ids_.empty())

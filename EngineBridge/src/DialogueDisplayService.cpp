@@ -104,6 +104,10 @@ bool LoadDialogueDisplay(const std::string& root,const StableId& project,ScreenD
     std::string path;if(!ResolveRuntimeScreenDocumentPath(root,project,a.screenId,a.path,path,error)||!ReadScreenDocument(path,project,out,error))return false;
     ScreenDocument resolved;if(!ResolveScreenTheme(root,out,resolved,error))return false;
     if(!ValidateDialogueDisplay(resolved,project,error))return false;
+    RuntimeScreenDependencyDocument dependencies;
+    if(!MakeRuntimeScreenDependencyReader(project)(path,dependencies,error))return false;
+    for(const auto& relative:dependencies.imagePaths){std::string absolute;if(!Path(root,relative,absolute,error))return false;}
+    for(const auto& relative:dependencies.fontPaths){std::string absolute;if(!Path(root,relative,absolute,error))return false;}
     out=std::move(resolved);return true;
 }
 bool BuildDialogueDisplay(const ScreenDocument& source,const DialogueView& view,size_t page,ScreenDocument& out,
