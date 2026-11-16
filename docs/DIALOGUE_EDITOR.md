@@ -39,8 +39,9 @@ An outcome can match all or any conditions. The final unconditional Otherwise is
 mandatory. Outcomes are evaluated in order. Add Outcome inserts before Otherwise.
 Flags and values are project-session dialogue memory; flags use integer 0/1.
 An event action sends `dialogue.action` with a `key:value` payload through the
-existing governed creator event queue. This is the script integration point;
-there is no claim of built-in quest, gate, item-giving or reputation services.
+existing governed creator event queue. Creator Lua can also start/stop authored
+conversations and read/write this same memory; see [Dialogue scripting](DIALOGUE_SCRIPTING.md).
+There is no claim of built-in quest, gate, item-giving or reputation services.
 Runtime accepts one event per outcome to preserve atomic queue admission.
 
 Preview uses the same conversation evaluator and **ScreenRenderer** as Runtime.
@@ -100,8 +101,7 @@ resuming in the middle of a spoken line is not implemented.
 ## Current limits and acceptance
 
 Portraits, cinematic camera tracks, gestures, timed replies, custom
-Screen layout assignment, global UI themes, a graph view and general Lua dialogue
-memory APIs remain future work. The current Screen is generated through native
+Screen layout assignment, global UI themes, a graph view and automatic conditional NPC continuation remain future work. The current Screen is generated through native
 Screen widgets with authored font size/opacity, not an independently editable
 Screen asset. No unsupported controls are advertised as working.
 

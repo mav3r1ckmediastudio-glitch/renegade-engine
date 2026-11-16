@@ -2244,3 +2244,25 @@ are never synthesized for unsaved Levels.
 Quick-save v2 appends bounded dialogue memory while retaining v1 reads. No Wicked
 source or submodule pin change is part of this candidate. See DIALOGUE_EDITOR.md
 for outstanding presentation and native acceptance limits.
+
+
+### Governed dialogue scripting (16 November 2026; local candidate)
+
+RuntimeDialogueScriptApi supplies host callbacks to the existing governed creator
+Lua VM. RuntimeScriptRuntime validates opaque EntityRef ownership, generation and
+live identity before passing a native NPC to the host. The dialogue namespace
+controls the same RuntimeDialogue session and memory used by ordinary interaction;
+no Wicked global Lua access or independent conversation state is introduced.
+PrepareScene runs before creator on_start so its first start survives the next
+Update. Entity bindings refresh on scene revision; script-only assets are resolved
+from a lazy per-scene catalogue, never discovered per frame. Exact asset IDs take
+precedence over names; duplicate names are rejected.
+
+Memory mutations use existing bounded keys/int values and refresh the Screen on
+the following Runtime update. Existing voice visit identity prevents refresh from
+replaying a clip. New lifecycle events share the governed GameplayEvent FIFO and
+its dispatch phase, with no reentrant callbacks. Lua capabilities are configured
+only while stopped and released after on_stop, before replacing scene authority.
+DialogueScriptingTests drives real saved assets and RuntimeDialogue through the
+governed Lua runtime, including both conditional paths and deleted NPC references.
+See DIALOGUE_SCRIPTING.md for creator calls and event semantics.

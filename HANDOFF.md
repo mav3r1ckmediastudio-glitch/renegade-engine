@@ -1,3 +1,57 @@
+# Dialogue scripting beta integration - 16 November 2026
+
+Tested LOCAL engine source: bedcf30f744f2b4ce9c3432b96084573879f6199.
+Branch feature/dialogue-editor-20261115; main baseline 7093cf4.
+Owner chose to retain the current simple editor for beta and authorized scripting
+support. No node redesign, generated voices, push, PR, CI, merge or release was
+performed. PR #195 remains closed and unmerged. Original owner project and the
+separate arms/weapon work were preserved; Wicked pin/overlays were not changed.
+
+Added renegade.dialogue contract 1 to the existing governed creator Lua runtime:
+- Start a saved conversation by NPC EntityRef, exact name or asset ID, optionally
+  at an authored line ID. An active conversation cannot be silently replaced.
+- Stop/query active state and get/set shared flags and signed integer values.
+- Lifecycle events dialogue.started / dialogue.finished / dialogue.closed through
+  the existing FIFO, plus the existing authored dialogue.action event.
+- State, Screen and voice use the same RuntimeDialogue session as NPC Interact.
+  Scene preparation precedes Lua on_start. Setters refresh reply availability
+  without replaying the spoken line. Saved-state codec/schema remains unchanged.
+- Reject stale/deleted NPC references, ambiguous names, bad line IDs, embedded NUL,
+  invalid keys/types, integer overflow and memory growth beyond saved capacity.
+- Fix native Runtime startup requested as minimised: wait for a drawable window
+  before Run can start engine initialisers with a null graphics device.
+
+Validation at the tested source:
+- Release Runtime and focused targets built successfully.
+- 13 focused CTest suites PASS in 5.28 seconds; GNU C++17 core 50 checks PASS.
+- New integration test executes governed Lua against real saved dialogue assets
+  and RuntimeDialogue, not a callback-only mock: conditional permit/refusal,
+  authored action event, shared memory/codec, lifecycle counts, deleted NPC,
+  duplicate names, invalid inputs and capacity limit.
+- Separate native Runtime: minimised launch responsive, restore, on_start starts
+  captain by name, stop, start permit by asset/line ID, two start/two close events,
+  retained flag/value, matching captain/permit voice clips, graceful exit 0.
+  QA uses a deliberate terminal Lua error marker only after all assertions pass;
+  this disables the disposable proof script, not a production error acceptance.
+- Native receipt: docs/evidence/dialogue-scripting/README.md.
+- Initial aggregate could not replace the owner's open Studio executable
+  (LNK1104). A separate Studio candidate is built alongside it; the open editor
+  is not terminated. RenegadeStudio-DialogueScripting.exe linked successfully
+  alongside it. Runtime changes are available to its next Test Game launch.
+
+Reproduce from repo root with the normal embedded-shader configuration:
+cmake -S . -B BUILD/native -DRENEGADE_EMBED_SHADERS=ON
+cmake --build BUILD/native --config Release --parallel 4 --target RenegadeRuntime RenegadeDialogueScriptingTests RenegadeS3GovernedLuaRuntimeTests RenegadeRuntimeSceneTransitionTests RenegadeNativeWindowSurfaceTests
+ctest --test-dir BUILD/native -C Release -R 'RenegadeDialogue|RenegadeS3GovernedLuaRuntime|RenegadeRuntimeSceneTransitionTests|RenegadeTestLevelSnapshot|RenegadeRuntimeGameSaveSlotTests|RenegadeScreenRendererTests|RenegadeRuntimeScreenTests|RenegadeNativeWindowSurfaceTests' --output-on-failure
+
+Creator API and copyable NPC example: docs/DIALOGUE_SCRIPTING.md.
+The editor remains the same simple/Advanced authoring UI accepted at ed2e69a.
+New package distribution, new owner visual acceptance and independent release
+acceptance are not claimed. Automatic conditional NPC continuation, quest-specific
+services and graph editing remain outside this beta integration.
+
+---
+
 # Dialogue editor usability review - 16 November 2026
 
 Tested LOCAL engine commit: ed2e69ab410045bbad3b6db384fe80b6bc008c17.
