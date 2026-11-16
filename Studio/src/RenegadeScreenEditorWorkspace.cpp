@@ -527,7 +527,7 @@ namespace renegade::studio
         fitCanvasButton_.SetTooltip("Fit the design canvas. Wheel zooms at the cursor; middle mouse pans; minimap click/drag recentres; double-click returns to StoryFlow.");
         fitCanvasButton_.OnClick([this](const wi::gui::EventArgs&) { FitCanvas(); });
         returnButton_.Create("Screen Editor Return");
-        returnButton_.SetText("< STORY FLOW");
+        returnButton_.SetText("< BACK");
         returnButton_.SetTooltip("Autosave the current Screen and StoryFlow before returning; block if saving fails.");
         returnButton_.OnClick([this](const wi::gui::EventArgs&)
         {

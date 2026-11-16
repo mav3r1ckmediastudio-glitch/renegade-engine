@@ -670,6 +670,8 @@ struct DialogueEditorWindow::Impl
     {
         if (!SetDialogueDisplayAssignment(root,project,assignment,status)) return false;
         auto include=session->Projects().CurrentProject().alwaysInclude;
+        if(!selectedDisplay.path.empty() && selectedDisplay.path!=assignment.path)
+            include.erase(std::remove(include.begin(),include.end(),"runtime_screen_document:"+selectedDisplay.path),include.end());
         auto add=[&](std::string value){if(std::find(include.begin(),include.end(),value)==include.end())include.push_back(std::move(value));};
         add(std::string("data:")+DialogueDisplaySettingsPath);
         if(!assignment.path.empty())add("runtime_screen_document:"+assignment.path);
@@ -763,7 +765,7 @@ struct DialogueEditorWindow::Impl
         heading(workflow, "Select a line to edit. Add replies, then select a reply and Add response.", 32, 118, 800);
         exampleNote.Create("Example voice recordings");
         exampleNote.SetText("Included voice clips are examples. Add your own WAV/OGG recordings for spoken dialogue; lines without a clip display as text only.");
-        Add(exampleNote, 840, 111, 450, 30);
+        Add(exampleNote, 740, 600, 550, 34);
         heading(conversationHeading, "1. Write the conversation", 32, 146, 740);
         heading(textHeading, "Dialogue text", 890, 207, 360);
         heading(destinationHeading, "Continue to", 890, 334, 360);
