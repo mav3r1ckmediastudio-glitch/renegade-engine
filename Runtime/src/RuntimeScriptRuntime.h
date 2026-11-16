@@ -4,6 +4,7 @@
 #include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/GameplayEventService.h"
 #include "renegade/bridge/InventoryGameplayGateway.h"
+#include "RuntimeDialogueScriptApi.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -80,6 +81,10 @@ namespace renegade::runtime
             bridge::InventoryGameplayGateway*(
                 const bridge::StableId& scriptInstanceId,
                 const bridge::StableId& ownerEntityId)> provider);
+
+        // Configure before StartScene. Empty callbacks omit renegade.dialogue.
+        // The host owns the same conversation/memory used by normal NPC input.
+        void SetDialogueApi(RuntimeDialogueScriptApi api);
 
         // Engine/runtime producers publish through the same bounded FIFO that
         // governed creator scripts consume in Update(). This is the single

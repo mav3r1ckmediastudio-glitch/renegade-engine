@@ -3370,6 +3370,8 @@ namespace renegade::runtime
         inventoryOverlayCache_={};
         renderer_.SetInventoryOverlay({},false);
         creatorScripts_.SetInventoryGatewayProvider({});
+        creatorScripts_.SetDialogueApi({});
+        dialogue_.SetLifecycleSink({});
 
         scriptSceneRevision_ = scenes_.Revision();
         if (startupResult_.startupScenePath.empty())
@@ -3456,6 +3458,20 @@ namespace renegade::runtime
                         scriptInstanceId, ownerEntityId);
                 });
         }
+        // Prepare the same session used by NPC interaction before on_start can
+        // call dialogue.start(). No second Lua VM or independent memory store.
+        dialogue_.PrepareScene(scenes_.GetScene(), scenes_.Revision(),
+            startupResult_.project.rootPath, startupResult_.project.projectId,
+            renderer_, player_.entity);
+        dialogue_.SetLifecycleSink([this](const std::string& name,
+            const std::string& asset, const std::string& npc, std::string& error) {
+            bridge::GameplayEvent event;
+            event.name = name;
+            event.payload = asset;
+            event.senderEntityId = npc;
+            return creatorScripts_.EnqueueGameplayEvent(std::move(event), error);
+        });
+        creatorScripts_.SetDialogueApi(dialogue_.ScriptApi(scenes_.GetScene(), renderer_));
         LoadInventoryAuthoredScreen();
         if (!creatorScripts_.StartSceneFromCompanion(
                 startupResult_.startupScenePath,
@@ -3504,6 +3520,8 @@ namespace renegade::runtime
         inventoryUiStatus_.clear();
         inventorySession_.Reset();
         creatorScripts_.SetInventoryGatewayProvider({});
+        creatorScripts_.SetDialogueApi({});
+        dialogue_.SetLifecycleSink({});
         renderer_.SetInteractionPrompt({});
         ReportCreatorScriptDiagnostics();
         scriptSceneRevision_ = 0;

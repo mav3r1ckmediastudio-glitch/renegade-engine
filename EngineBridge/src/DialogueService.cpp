@@ -58,6 +58,7 @@ bool IsDialogueVoicePath(const std::string &path)
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
     return ext == ".wav" || ext == ".ogg";
 }
+bool IsDialogueMemoryKey(const std::string &key) { return Token(key); }
 bool ValidateDialogue(const DialogueDocument &d, std::string &e)
 {
     auto fail = [&](const char *s) {

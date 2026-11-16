@@ -76,6 +76,7 @@ struct DialogueView
     DialogueTheme theme;
 };
 bool IsDialogueVoicePath(const std::string &);
+bool IsDialogueMemoryKey(const std::string &);
 bool ValidateDialogue(const DialogueDocument &, std::string &error);
 std::string EncodeDialogue(const DialogueDocument &);
 bool DecodeDialogue(const std::string &, DialogueDocument &, std::string &error);
