@@ -23,7 +23,7 @@ bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &pr
     auto add = [&](ScreenWidgetKind kind, std::string text, ScreenRect rect, std::string action = "") {
         ScreenWidget w;
         w.id = GenerateStableId();
-        w.name = action.empty() ? text : action;
+        w.name = action.empty() ? (text.empty() ? "Dialogue panel" : text) : action;
         w.kind = kind;
         w.text = std::move(text);
         w.rect = rect;

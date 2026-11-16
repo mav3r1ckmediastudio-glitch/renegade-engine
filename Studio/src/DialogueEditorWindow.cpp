@@ -146,7 +146,7 @@ struct DialogueEditorWindow::Impl
     DialogueSession preview;
     screen::DialoguePanel panel;
     std::string project, root, saved, status;
-    bool advanced = false, sync = false, refreshPreview = false;
+    bool advanced = false, sync = false, refreshPreview = false, selectionPlaced = false;
     struct Ref
     {
         int l = -1, r = -1, o = -1, c = -1, a = -1;
@@ -237,8 +237,9 @@ struct DialogueEditorWindow::Impl
         item.name = std::move(label);
         item.level = depth;
         item.userdata = refs.size();
-        item.selected = ref.l == selected.l && ref.r == selected.r && ref.o == selected.o && ref.c == selected.c &&
-                        ref.a == selected.a;
+        item.selected = !selectionPlaced && ref.l == selected.l && ref.r == selected.r && ref.o == selected.o &&
+                        ref.c == selected.c && ref.a == selected.a;
+        selectionPlaced = selectionPlaced || item.selected;
         const auto key = doc.id + "/" + (ref.l >= 0 && size_t(ref.l) < doc.lines.size() ? doc.lines[ref.l].id : "") +
                          "/" + std::to_string(ref.r) + "/" + std::to_string(ref.o) + "/" + std::to_string(ref.c) + "/" +
                          std::to_string(ref.a) + "/" + std::to_string(depth);
@@ -253,6 +254,7 @@ struct DialogueEditorWindow::Impl
         for (size_t n = 0; n < rowKeys.size() && n < size_t(tree.GetItemCount()); ++n)
             expanded[rowKeys[n]] = tree.GetItem(int(n)).open;
         tree.ClearItems();
+        selectionPlaced = false;
         refs.clear();
         rowKeys.clear();
         std::set<std::string> seen;
