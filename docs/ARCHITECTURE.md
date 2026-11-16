@@ -2359,3 +2359,16 @@ releases Audio/legacy particle/navigation, chooses the selected entity's typed
 specialist if appropriate, and otherwise restores the Scene inspector. This is
 event driven: opening the global Audio mix with a retained ordinary selection
 does not immediately close it. Physics Lab retains its authoring target flow.
+
+### Suspended-scene preview composition (16 November 2026)
+
+Light, Particle and Dialogue share one opaque 2D modal composition boundary.
+Only their private preview may render while the main scene is suspended; the
+main 3D render result must not be sampled because resizing can replace it before
+another scene frame writes it. The close frame retains that ownership until the
+next normal scene Update. See evidence/ui-modal-resize for the native regression.
+
+Light creation reconciles hierarchy and inspector immediately when clearing
+selection. Native resize queues a one-time inspector refresh, including after
+the modal's 2D Window update; background layout cannot retain controls for an old
+selection or fixed legacy geometry. No second selection or render graph is added.

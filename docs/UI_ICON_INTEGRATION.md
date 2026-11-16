@@ -143,3 +143,13 @@ Error/Windows Error Reporting event was found during the check; the exit cause
 was not established. The other open Icons5 instance remains the previous
 toolbar-only correction and does not contain this routing fix. Native proof
 used a separate copied project/preferences. Owner acceptance remains pending.
+
+## Modal resize failure found during the usability audit
+
+A native 1280x720 shrink/restore with the Light Picker open reproduced main
+viewport stripes and stale inspector geometry. Light/Particle/Dialogue now share
+the safe opaque 2D composition boundary; no suspended main 3D image is sampled.
+Light creation refreshes hierarchy/inspector when it clears selection, and native
+resize queues one complete inspector reconciliation. Exact-binary before/after
+evidence, build and 67-check receipt: evidence/ui-modal-resize/README.md.
+The separately observed fixed-height modal clipping remains an audit finding.

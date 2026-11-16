@@ -4202,6 +4202,12 @@ namespace renegade::studio
             // frame just to edit one light. Retain this boundary through a
             // close/apply gesture until a fresh main Scene::Update next frame.
             wi::RenderPath2D::Update(dt);
+            // Resize invalidates the background inspector layout even while the
+            // main scene is paused. Reconcile once after the native window update.
+            if(inspectorRefreshPending_) {
+                inspectorRefreshPending_=false;
+                RefreshInspector();
+            }
             if(lightPicker_.IsVisible())UpdateLightPicker(dt);
             if(particlePicker_.IsVisible())UpdateParticlePicker(dt);
             pendingAction_=EditorAction::None;
@@ -4713,19 +4719,14 @@ namespace renegade::studio
 
     void StudioRenderPath::Compose(const wi::graphics::CommandList cmd) const
     {
-        if(dialogueFrameSuspended_){
-            // A resize can replace the suspended scene's render targets before
-            // another 3D frame is produced. Never sample those unwritten buffers.
+        if(lightPickerFrameSuspended_) {
+            // Every suspended-scene modal uses the same 2D composition boundary.
+            // Resize can replace the main 3D targets while only a private preview
+            // is rendering, so no modal may sample the main scene's unwritten image.
             wi::image::Params backdrop(0,0,float(GetLogicalWidth()),float(GetLogicalHeight()),HologramPanel);
             wi::image::Draw(nullptr,backdrop,cmd);
             wi::RenderPath2D::Compose(cmd);
-            dialogueGui_.Render(*this,cmd);
-            ComposeUiForeground(cmd);
-            return;
-        }
-        if(lightPickerFrameSuspended_) {
-            if(pathTracePreviewActive_)RenderPath3D_PathTracing::Compose(cmd);
-            else wi::RenderPath3D::Compose(cmd);
+            if(dialogueFrameSuspended_)dialogueGui_.Render(*this,cmd);
             ComposeUiForeground(cmd);
             return;
         }
@@ -5338,6 +5339,9 @@ namespace renegade::studio
             diagnostics_->rect.bottom = static_cast<std::int32_t>(
                 LogicalToPhysical(viewportBounds_.w));
         }
+        // Native Window layout and the section registry both own child geometry.
+        // A resize must finish with the current selection's complete layout.
+        QueueInspectorRefresh();
     }
 
     void StudioRenderPath::RefreshStatus()
@@ -7759,7 +7763,14 @@ namespace renegade::studio
         if(editSelected&&!session_->Scenes().GetScene().lights.Contains(target))return;
         lightPicker_.SetPos({std::max(8.0f,(GetLogicalWidth()-1020.0f)*.5f),40});
         studioChrome_.PrepareViewportPlacement();
-        if(target==wi::ecs::INVALID_ENTITY)session_->Selection().Clear();
+        if(target==wi::ecs::INVALID_ENTITY) {
+            session_->Selection().Clear();
+            // Creation clears the selection before the modal pauses Studio.
+            // Keep hierarchy and section visibility consistent with that state.
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+        }
         lightPicker_.Open(*session_,type,target);
     }
     void StudioRenderPath::UpdateLightPicker(float dt)
