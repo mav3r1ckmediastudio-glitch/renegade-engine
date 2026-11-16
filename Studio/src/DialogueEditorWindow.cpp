@@ -251,6 +251,7 @@ struct DialogueEditorWindow::Impl
     std::vector<SceneEntity> targets;
     bool testGameRequested = false;
     bool advanced = false, sync = false, refreshPreview = false, selectionPlaced = false;
+    bool expandAdvancedRules = false;
     struct Ref
     {
         int l = -1, r = -1, o = -1, c = -1, a = -1;
@@ -382,8 +383,14 @@ struct DialogueEditorWindow::Impl
     }
     void Rebuild()
     {
-        for (size_t n = 0; n < rowKeys.size() && n < size_t(tree.GetItemCount()); ++n)
-            expanded[rowKeys[n]] = tree.GetItem(int(n)).open;
+        if (expandAdvancedRules)
+        {
+            expanded.clear();
+            expandAdvancedRules = false;
+        }
+        else
+            for (size_t n = 0; n < rowKeys.size() && n < size_t(tree.GetItemCount()); ++n)
+                expanded[rowKeys[n]] = tree.GetItem(int(n)).open;
         tree.ClearItems();
         tree.hints.clear();
         selectionPlaced = false;
@@ -465,6 +472,10 @@ struct DialogueEditorWindow::Impl
         auto *o = O();
         auto *c = C();
         auto *a = A();
+        workflow.SetText(!advanced ? "Select a line to edit. Add replies, then select a reply and Add response."
+            : !r ? "Advanced is on. Select or add a player reply to edit conditions and alternative outcomes."
+            : o ? "Advanced: edit this outcome's conditions and destination. Add actions with + Action."
+                : "Advanced: add conditions or outcomes to this reply. Select an outcome below it to add actions.");
         name.SetValue(doc.name);
         textSize.SetValue(doc.theme.textSize);
         opacity.SetValue(doc.theme.panelOpacity);
@@ -805,7 +816,7 @@ struct DialogueEditorWindow::Impl
             status = "Add WAV/OGG recordings to Content/Audio/Dialogue, then Refresh clips. New lines can remain text-only.";
         });
         Button(refreshVoices, "Refresh clips", 1080, 518, 190, [this] { ReloadLibrary(); RefreshFields(); status = "Project WAV/OGG list refreshed."; });
-        Button(showAdvanced, "Show in Advanced", 1075, 478, 195, [this] { advanced = true; Changed(); });
+        Button(showAdvanced, "Show in Advanced", 1075, 478, 195, [this] { advanced = true; expandAdvancedRules = true; Changed(); });
         heading(appearanceHeading, "Presentation", 890, 473, 350);
         Button(save, "Save", 1192, 20, 100, [this] { Save(); });
         save.primary = true;
@@ -854,7 +865,18 @@ struct DialogueEditorWindow::Impl
         });
         Button(advancedBox, "Advanced", 1030, 20, 140, [this] {
             advanced = !advanced;
-            if (!advanced) selected.o = selected.c = selected.a = -1;
+            if (advanced)
+            {
+                expandAdvancedRules = true;
+                if (L() && !R() && !L()->replies.empty())
+                {
+                    selected.r = 0;
+                    selected.o = selected.c = selected.a = -1;
+                    status = "Advanced enabled: showing the first player reply's rules. Select an outcome to edit its actions.";
+                }
+                else status = "Advanced enabled. Select a player reply or its outcome to edit rules.";
+            }
+            else selected.o = selected.c = selected.a = -1;
             Changed();
         });
         advancedBox.accented = true;
