@@ -1,3 +1,58 @@
+# UI usability re-audit and modal lifecycle corrections — 16 November 2026
+
+This supersedes the native-coverage limits in the Audio handoff below where
+explicit new checks are recorded. Owner subsequently confirmed Audio-to-asset
+switching. Native review now also covers model-row, same-asset and Physics
+authoring-target selection. No additional feature duplication was proposed.
+
+Local implementation/evidence commits:
+- 6a61ab7b97b9438cbcaddb34c2465e33ee05affe: shared suspended-modal composition,
+  immediate cleared-selection presentation, one-time resize inspector refresh.
+- d04da64e42880521bed707dc0750de757b20b04e: show Dialogue parent before restoring
+  conditional child visibility on return from Edit display.
+- 57b58f51361535422db3278cb0f8a04b92f365df: audit, coverage, pinned source inventory
+  and screenshots. Read docs/UI_USABILITY_REAUDIT_20261116.md and the coverage CSV.
+
+Latest reviewed executable:
+BUILD/native/Studio/Release/RenegadeStudio-Icons9.exe
+SHA-256 43D1C97E707BEF733EDCED29EB14FC3A1A2EA45D9B4BBB08C1A50C91B5101C01.
+Source is pinned to d04da64 for this receipt; the build predates that commit and
+its configure-time Git stamp is not the review identity. Modal GPU before/after
+proof is explicitly Icons6/Icons8; Icons9 adds the Dialogue return correction.
+See docs/evidence/ui-modal-resize and docs/evidence/ui-dialogue-resume.
+
+Release Build target Icons9 completed exit 0 (CL=/MP6):
+MSBuild BUILD/native/Studio/RenegadeStudio.vcxproj /t:Build
+/p:BuildProjectReferences=false /p:Configuration=Release /p:Platform=x64
+/p:TargetName=RenegadeStudio-Icons9 /v:minimal.
+ctest --test-dir BUILD/native -C Release
+-R 'SourceContract|StudioUiPolicy|RenegadeDialogue|^RenegadeStoryFlowJourneyUiLayoutTests$'
+--output-on-failure: 67/67 pass, 5.70 s. Existing C4834 warning remains.
+Native Basic/Advanced/Edit display/resize/Back cases pass on exact Icons9.
+Native Icons8 Light/Particle/Dialogue resize and close cases are documented.
+Docs staged whitespace check passes. These are selected checks, not hosted CI.
+
+All 65 original UI families are inventoried; 30 have scoped fresh native
+observations. Remaining asset states and Runtime/DPI scenarios are explicit in
+the CSV. Seven open findings: small-window modal footers/readability (P1);
+Physics scroll clipping/tabs; Hub press-time commands; inspector ordering;
+remaining visual-role adapters; numeric tooltip overflow; stale Window wording.
+Do not claim these remaining findings are fixed or every family native-tested.
+
+Review used copied DialogueReview project and isolated preferences. Disposable
+numeric/navigation edits were undone. No owner project, authored dialogue,
+authored Screen, Runtime gameplay or save schema changed. The Icons9 review app
+was left open. No push, PR, hosted CI, merge or release was performed.
+
+Concurrent wireframe/view-mode work appeared after the reviewed build in
+CMakeLists.txt, Studio application/chrome/diagnostics files, source contracts,
+a new cmake overlay and docs/WIREFRAME_VIEW_MODE.md. Preserved without staging
+in these audit commits. That evolving tree is outside this receipt. Wicked
+overlays remain dirty and unstaged; no gitlink update was made by this audit.
+Do not rebuild mixed concurrent source and reuse the Icons9 test identity.
+
+---
+
 # Audio-to-asset inspector handoff — 16 November 2026
 
 Implementation/evidence commit: 1663001dd76a2f5962d557182dd149f55e262544
