@@ -3,6 +3,7 @@
 #include "renegade/bridge/DialogueAssetService.h"
 #include "renegade/bridge/AudioService.h"
 #include <algorithm>
+#include <limits>
 namespace renegade::screen
 {
 bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &project, const std::string &root,
@@ -28,6 +29,23 @@ bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &pr
         const auto pages = (view.replies.size()+3)/4;
         page_ = pages ? std::min(page_,pages-1) : 0;
         if (!embedded_) viewport = {0,0,path.GetLogicalWidth(),path.GetLogicalHeight()};
+        else
+        {
+            // Conversation preview is a close-up. The UI editor and Runtime
+            // retain the full artboard position; this keeps its text readable.
+            std::vector<ScreenRect> rects;
+            if(!ResolveScreenWidgetRects(d,rects,error)) return false;
+            float left=std::numeric_limits<float>::max(),top=left,right=-left,bottom=-left;
+            for(size_t n=0;n<d.widgets.size();++n)if(d.widgets[n].visible){
+                left=std::min(left,rects[n].x);top=std::min(top,rects[n].y);
+                right=std::max(right,rects[n].x+rects[n].width);bottom=std::max(bottom,rects[n].y+rects[n].height);
+            }
+            if(right>left&&bottom>top){
+                for(size_t n=0;n<d.widgets.size();++n){auto& w=d.widgets[n];w.rect=rects[n];
+                    w.rect.x-=left;w.rect.y-=top;w.parentId.clear();w.layoutMode=ScreenLayoutMode::Absolute;}
+                d.designWidth=right-left;d.designHeight=bottom-top;d.safeArea={};
+            }
+        }
     }
     else
     {

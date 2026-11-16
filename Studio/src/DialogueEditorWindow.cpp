@@ -468,6 +468,10 @@ struct DialogueEditorWindow::Impl
         name.SetValue(doc.name);
         textSize.SetValue(doc.theme.textSize);
         opacity.SetValue(doc.theme.panelOpacity);
+        textSize.SetEnabled(selectedDisplay.screenId.empty());
+        opacity.SetEnabled(selectedDisplay.screenId.empty());
+        textSize.SetTooltip(selectedDisplay.screenId.empty()?"Set the built-in dialogue text size.":"This custom display owns its fonts and sizes. Use Edit display, then STYLE / FONT.");
+        opacity.SetTooltip(selectedDisplay.screenId.empty()?"Set the built-in dialogue panel opacity.":"This custom display owns its backgrounds and opacity. Use Edit display.");
         opacity.SetVisible(advanced && r && !c && !a);
         textSize.SetVisible(advanced && r && !c && !a);
         appearanceHeading.SetVisible(advanced && r && !c && !a);
@@ -1292,7 +1296,7 @@ struct DialogueEditorWindow::Impl
             input->font.params.size = input->font_description.params.size = 14;
             input->SetColor(theme::Idle, wi::gui::IDLE);
         }
-        for (auto *combo : {&library, &next, &kind, &voice, &target})
+        for (auto *combo : {&library, &next, &kind, &voice, &target, &display})
         {
             combo->font.params.size = combo->selected_font.params.size = 14;
         }

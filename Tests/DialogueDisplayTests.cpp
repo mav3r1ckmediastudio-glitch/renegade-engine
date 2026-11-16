@@ -5,8 +5,29 @@
 #include <iostream>
 using namespace renegade::bridge;
 #define CHECK(x) do { if(!(x)){std::cerr<<"Dialogue display line "<<__LINE__<<": "<<#x<<" "<<error<<'\n';return 1;} }while(false)
-int main(){
+int main(int argc,char** argv){
  namespace fs=std::filesystem;std::string error;auto project=GenerateStableId();
+ if(argc==2){
+    const auto root=fs::absolute(fs::u8path(argv[1]));
+    CHECK(root.filename()=="dialogue-display-native-20261116");
+    DocumentEnvelope scene;CHECK(ReadDocumentEnvelope((root/"Content/Scenes/Main.wiscene.rmeta").generic_u8string(),scene,error));
+    auto d=MakeDialogueDisplayTemplate(scene.projectId,"Content/UI/Dialogue/NativeDisplay.renegade-screen");
+    d.widgets.front().rect={80,220,1120,330};d.widgets.front().style.normal.background={48,25,12,255};
+    d.widgets.front().style.borderWidth=3;
+    for(auto& w:d.widgets){
+        w.style.text.fontSize=w.kind==ScreenWidgetKind::Text?28:23;
+        w.style.normal.foreground={242,210,156,255};
+        if(fs::exists(root/"Content/UI/Fonts/Georgia.ttf"))w.style.text.fontResource="Content/UI/Fonts/Georgia.ttf";
+        if(w.dialogueRole=="text")w.rect={24,62,450,210};
+        if(w.kind==ScreenWidgetKind::Button && (w.dialogueRole.rfind("reply",0)==0||w.dialogueRole=="continue")){w.rect.width=530;w.rect.x=550;}
+        if(w.dialogueRole=="previous")w.rect={550,268,150,36};
+        if(w.dialogueRole=="next")w.rect={710,268,150,36};
+        if(w.dialogueRole=="close")w.rect={870,268,210,36};
+    }
+    CHECK(WriteScreenDocument((root/d.envelope.pathHint).generic_u8string(),d,error));
+    CHECK(SetDialogueDisplayAssignment(root.generic_u8string(),scene.projectId,{d.envelope.documentId,d.envelope.pathHint},error));
+    std::cout<<"NATIVE_DIALOGUE_DISPLAY_AUTHORED "<<d.envelope.documentId<<'\n';return 0;
+ }
  const auto root=fs::temp_directory_path()/("renegade-dialogue-display-"+GenerateStableId());
  fs::create_directories(root/"Content/UI");
  auto source=MakeDialogueDisplayTemplate(project,"Content/UI/Dialogue.renegade-screen");
