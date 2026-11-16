@@ -410,6 +410,7 @@ if(WIN32)
     add_dependencies(RenegadeDialogueReview
         RenegadeStudio RenegadeRuntime RenegadeDialogueTests
         RenegadeDialogueAssetTests RenegadeRuntimeGameSaveSlotTests
-        RenegadeDialogueSavePolicyTests RenegadeDialogueReviewAuthor)
+        RenegadeDialogueSavePolicyTests RenegadeDialogueReviewAuthor
+        RenegadeTestLevelSnapshotRuntimeTests RenegadeTestLevelSnapshotTests)
     set_target_properties(RenegadeDialogueReview PROPERTIES FOLDER "Renegade/Tests")
 endif()

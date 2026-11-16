@@ -278,6 +278,14 @@ int main()
     {
         return Fail("authoritative LP04 Runtime fixture scene could not be saved");
     }
+    // Saved script-free Levels still need stable identity for Runtime saves.
+    const auto sourceIdentity = renegade::bridge::CreateDocumentEnvelope(
+        project.projectId, "scene", project.startupScene, "snapshot identity regression");
+    std::string identityError;
+    const auto identityPath = scenePath.generic_u8string() + ".rmeta";
+    if (!renegade::bridge::WriteDocumentEnvelope(identityPath, sourceIdentity, identityError))
+        return Fail("script-free fixture could not write its scene identity");
+    const auto sourceIdentityBytes = ReadBytes(fs::u8path(identityPath));
     const auto authoritativeBytes = ReadBytes(scenePath);
     if (authoritativeBytes.empty())
     {
@@ -399,6 +407,25 @@ int main()
     }
 
     const fs::path snapshotRoot = fs::u8path(snapshot.sessionDirectory);
+    renegade::bridge::DocumentEnvelope snapshotIdentity;
+    if (!renegade::bridge::ReadDocumentEnvelope(snapshot.scenePath + ".rmeta", snapshotIdentity, snapshotError) ||
+        snapshotIdentity.documentId != sourceIdentity.documentId ||
+        snapshotIdentity.projectId != project.projectId || snapshotIdentity.documentType != "scene" ||
+        snapshotIdentity.pathHint != fs::u8path(snapshot.scenePath).lexically_relative(snapshotRoot).generic_u8string() ||
+        ReadBytes(fs::u8path(identityPath)) != sourceIdentityBytes)
+        return Fail("script-free snapshot lost identity, failed to retarget it, or modified the source");
+
+    {
+        auto foreign = sourceIdentity;
+        foreign.projectId = renegade::bridge::GenerateStableId();
+        if (!renegade::bridge::WriteDocumentEnvelope(identityPath, foreign, identityError))
+            return Fail("foreign scene identity fixture failed");
+        renegade::bridge::TestLevelSnapshot rejectedIdentity;
+        if (snapshots.Create(project, rejectedIdentity, identityError) || rejectedIdentity.IsValid())
+            return Fail("script-free snapshot accepted another project's scene identity");
+        if (!renegade::bridge::WriteDocumentEnvelope(identityPath, sourceIdentity, identityError))
+            return Fail("source scene identity restore failed");
+    }
     if (!fs::is_regular_file(
             snapshotRoot / renegade::bridge::AssetRegistryDocumentName) ||
         !fs::is_regular_file(
