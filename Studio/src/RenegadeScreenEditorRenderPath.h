@@ -1,4 +1,5 @@
 #pragma once
+#include "renegade/bridge/DialogueDisplayService.h"
 
 #include <algorithm>
 #include <cmath>
@@ -254,6 +255,7 @@ namespace renegade::studio
             }
 
             session_ = std::move(candidate);
+            standaloneEditing_ = handoff.screenNodeId.empty();
             projectRoot_ = projectRoot;
             open_ = true;
             advancedExpanded_ = false;
@@ -369,7 +371,12 @@ namespace renegade::studio
             RenegadeScreenEditorWorkspace::CoordinatedSaveCallback callback)
         {
             EnsureLoaded();
-            workspace_.OnCoordinatedSave(std::move(callback));
+            workspace_.OnCoordinatedSave([this,callback=std::move(callback)](bridge::ScreenAuthoringSession& screen,std::string& error){
+                const auto& d=screen.Document();
+                if(std::any_of(d.widgets.begin(),d.widgets.end(),[](const auto& w){return !w.dialogueRole.empty();}) &&
+                    !bridge::ValidateDialogueDisplay(d,d.envelope.projectId,error))return false;
+                return standaloneEditing_?screen.Save(error):callback(screen,error);
+            });
         }
 
         void OnExternalFlowDirty(std::function<bool()> callback)
@@ -505,6 +512,7 @@ namespace renegade::studio
         std::string projectRoot_;
         bool loaded_ = false;
         bool open_ = false;
+        bool standaloneEditing_ = false;
         bool previewDirty_ = false;
         bool previewSourceConflict_ = false;
         bool advancedExpanded_ = false;

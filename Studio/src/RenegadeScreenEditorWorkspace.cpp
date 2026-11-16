@@ -3,6 +3,7 @@
 #include "ScreenCanvasGrid.h"
 #include "ScreenElementSnap.h"
 #include "renegade/bridge/ScreenWidgetPresets.h"
+#include "renegade/bridge/DialogueDisplayService.h"
 
 #include <algorithm>
 #include <cctype>
@@ -720,6 +721,18 @@ namespace renegade::studio
         basicActionButton_.SetTooltip("Select a governed symbolic button action; destinations remain owned by StoryFlow.");
         basicActionButton_.OnClick([this](const wi::gui::EventArgs&)
         {
+            if(session_&&session_->IsLoaded()&&std::any_of(session_->Document().widgets.begin(),session_->Document().widgets.end(),
+                [](const auto& w){return !w.dialogueRole.empty();})){
+                const auto* selected=session_->FindWidget(selectedWidgetId_);if(!selected)return;
+                const auto id=selectedWidgetId_;
+                std::vector<RenegadeScreenChoicePicker::Choice> choices={{"Decoration / no dialogue role",""}};
+                if(selected->kind==bridge::ScreenWidgetKind::Text){choices.push_back({"Speaker name","speaker"});choices.push_back({"Dialogue text","text"});}
+                else for(const auto* role:{"reply1","reply2","reply3","reply4","continue","previous","next","close"})choices.push_back({role,role});
+                basicActionPicker_.Open("DIALOGUE ELEMENT ROLE",std::move(choices),selected->dialogueRole,[this,id](const std::string& role){
+                    std::string error;if(!session_->UpdateDialogueRole(id,role,error)){SetStatus(error);return;}
+                    RefreshAfterMutation("DIALOGUE ROLE UPDATED // STYLE AND LAYOUT PRESERVED");
+                });return;
+            }
             OpenBasicActionPicker();
         });
 
@@ -1003,8 +1016,10 @@ namespace renegade::studio
             timeline_.NextRedo() != ScreenEditorUndoTimeline::Kind::None);
 
         const bool selectedReady = selected != nullptr;
+        const bool dialogue = loaded && std::any_of(session_->Document().widgets.begin(),session_->Document().widgets.end(),
+            [](const auto& w){return !w.dialogueRole.empty();});
         const bool actionReady = selectedReady &&
-            selected->kind == bridge::ScreenWidgetKind::Button &&
+            (selected->kind == bridge::ScreenWidgetKind::Button || (dialogue && selected->kind == bridge::ScreenWidgetKind::Text)) &&
             !inspectorSuppressed_;
         basicActionButton_.SetVisible(actionReady && !focusCanvas_ && !rightCollapsed_);
         imageAssetButton_.SetVisible(selectedReady && !focusCanvas_ && !rightCollapsed_ &&
@@ -1023,7 +1038,7 @@ namespace renegade::studio
         }
         appearanceButton_.SetVisible(
             selectedReady && !focusCanvas_ && !rightCollapsed_ && !inspectorSuppressed_);
-        destinationButton_.SetVisible(actionReady && !focusCanvas_ && !rightCollapsed_ &&
+        destinationButton_.SetVisible(!dialogue && actionReady && !focusCanvas_ && !rightCollapsed_ &&
             !projectScreens_.empty() &&
             static_cast<bool>(openScreenRoute_));
         const bool hasContext = loaded && std::any_of(projectScreens_.begin(),projectScreens_.end(),[&](const auto& e){return e.available&&!e.nodeId.empty()&&e.documentId==session_->Document().envelope.documentId;});
@@ -1031,7 +1046,7 @@ namespace renegade::studio
         destinationButton_.SetText(hasContext?"DESTINATION":"NO FLOW CONTEXT");
         destinationButton_.SetTooltip(hasContext?"Choose the destination in this Flow context.":"Standalone Screen: routes are disabled. Open or add an explicit Screen node in Journey first.");
         if (actionReady)
-            basicActionButton_.SetText("ACTION: " + selected->actionId);
+            basicActionButton_.SetText(dialogue ? "ROLE: " + (selected->dialogueRole.empty()?std::string("DECORATION"):selected->dialogueRole) : "ACTION: " + selected->actionId);
         const bool inspectorAvailable = selectedReady && !focusCanvas_ && !rightCollapsed_ &&
             !inspectorSuppressed_;
         deleteButton_.SetVisible(inspectorAvailable &&

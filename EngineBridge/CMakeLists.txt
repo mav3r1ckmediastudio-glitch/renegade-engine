@@ -1,6 +1,7 @@
 add_library(RenegadeEngineBridge STATIC
     src/DialogueService.cpp
     src/DialogueAssetService.cpp
+    src/DialogueDisplayService.cpp
     src/SceneAssemblyService.cpp
     src/SceneAssemblyPrefab.cpp
     src/SceneAssemblyScriptService.cpp

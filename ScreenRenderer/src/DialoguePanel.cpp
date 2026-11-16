@@ -22,6 +22,15 @@ bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &pr
         return true;
     }
     ScreenDocument d;
+    if (!display_.envelope.documentId.empty())
+    {
+        if (!BuildDialogueDisplay(display_,view,page_,d,ids_,actions_,error)) return false;
+        const auto pages = (view.replies.size()+3)/4;
+        page_ = pages ? std::min(page_,pages-1) : 0;
+        if (!embedded_) viewport = {0,0,path.GetLogicalWidth(),path.GetLogicalHeight()};
+    }
+    else
+    {
     d.envelope =
         CreateDocumentEnvelope(project, "runtime-screen", "Content/Dialogue/Preview.renegade-screen", "dialogue-v1");
     d.designWidth = 1200;
@@ -85,6 +94,7 @@ bool DialoguePanel::Show(const bridge::DialogueView &view, const std::string &pr
         add(ScreenWidgetKind::Button, "Next", {780, 184, 186, 28}, "@next");
     }
     add(ScreenWidgetKind::Button, "Close", {980, 184, 194, 28}, "@close");
+    }
     renderer_.SetViewport(viewport);
     if (!renderer_.Load(
             d, root, path,

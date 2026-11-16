@@ -4093,6 +4093,9 @@ namespace renegade::studio
             wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
         PollTestLevel();
         if (dialogueEditor_.TakeTestGameRequest()) StartTestLevel();
+        std::string displayId,displayPath;
+        if(dialogueEditor_.TakeDisplayEditorRequest(displayId,displayPath) && dialogueDisplayEditor_)
+            dialogueDisplayEditor_(displayId,displayPath);
         dialogueFrameSuspended_=dialogueEditor_.IsVisible();
         if(dialogueFrameSuspended_&&!dialogueGuiActive_){dialogueSavedGuiVisibility_=GetGUI().IsVisible();dialogueGuiActive_=true;}
         if(dialogueFrameSuspended_)GetGUI().SetVisible(false);
@@ -13635,7 +13638,22 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             });
         screenEditorRenderer_.OnReturnRequested([this]()
         {
+            if(returnToDialogue_){
+                returnToDialogue_=false;storyFlowIntegration_.RequestLevelEditor();
+                renderer_.OpenDialogueEditor();return;
+            }
             storyFlowIntegration_.RequestStoryFlow();
+        });
+        renderer_.OnDialogueDisplayEditor([this](const std::string& id,const std::string& path){
+            if(!session_.Projects().HasProject())return;
+            const auto& project=session_.Projects().CurrentProject();
+            StoryFlowScreenEditorHandoff handoff;std::string error;
+            if(!BuildStandaloneScreenEditorHandoff(project.rootPath,project.projectId,id,path,handoff,error)||
+                !screenEditorRenderer_.OpenScreen(handoff,project.rootPath,project.projectId,error)){
+                wi::backlog::post("Dialogue display editor: "+error,wi::backlog::LogLevel::Error);
+                renderer_.OpenDialogueEditor();return;
+            }
+            returnToDialogue_=true;storyFlowIntegration_.RequestScreenEditor();
         });
         ActivatePath(&renderer_);
     }

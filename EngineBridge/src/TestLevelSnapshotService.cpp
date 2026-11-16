@@ -3,6 +3,7 @@
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/TestLevelSnapshotService.h"
 #include "renegade/bridge/DialogueAssetService.h"
+#include "renegade/bridge/DialogueDisplayService.h"
 #include "renegade/bridge/ImpactAudioService.h"
 #include "renegade/bridge/InventoryTestLevelSnapshot.h"
 #include "renegade/bridge/InventoryDependencyProvider.h"
@@ -1339,6 +1340,8 @@ namespace renegade::bridge
                 return failAndCleanup("Could not snapshot inventory gameplay inputs: " + error);
 
             std::string dialogueError;
+            if (!SnapshotDialogueDisplay(project.rootPath,created.sessionDirectory,project.projectId,error))
+                return failAndCleanup("Could not snapshot dialogue display: "+error);
             const auto dialogues=ListDialogueAssets(project.rootPath,project.projectId,dialogueError);
             if(!dialogueError.empty())return failAndCleanup("Could not snapshot dialogue: "+dialogueError);
             for(const auto& dialogue:dialogues)

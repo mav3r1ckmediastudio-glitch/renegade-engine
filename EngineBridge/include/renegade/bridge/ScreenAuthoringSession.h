@@ -405,6 +405,26 @@ namespace renegade::bridge
             ScreenWidgetAuthoringEdit edit,
             std::string& error);
 
+        bool UpdateDialogueRole(const StableId& id, std::string role, std::string& error)
+        {
+            auto candidate = Document();
+            for (auto& widget : candidate.widgets)
+                if (widget.id == id)
+                {
+                    widget.dialogueRole = std::move(role);
+                    if (widget.kind == ScreenWidgetKind::Button && !widget.dialogueRole.empty())
+                    {
+                        widget.actionId = "dialogue.ui." + widget.dialogueRole;
+                        if (std::none_of(candidate.actions.begin(), candidate.actions.end(),
+                            [&](const auto& a){return a.id == widget.actionId;}))
+                            candidate.actions.push_back({widget.actionId});
+                    }
+                    return CommitMutation(std::move(candidate), error);
+                }
+            error = "Select a dialogue element first.";
+            return false;
+        }
+
         // Direct preview manipulation updates geometry every frame.
         using GeometryCapture = std::vector<std::pair<StableId, ScreenRect>>;
         bool CaptureGeometry(const std::vector<StableId>& ids, GeometryCapture& capture,

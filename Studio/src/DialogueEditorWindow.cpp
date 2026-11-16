@@ -1,6 +1,7 @@
 #include "DialogueEditorWindow.h"
 #include "StudioTheme.h"
 #include "renegade/bridge/DialogueAssetService.h"
+#include "renegade/bridge/DialogueDisplayService.h"
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/screen/DialoguePanel.h"
@@ -272,6 +273,11 @@ struct DialogueEditorWindow::Impl
     DialogueButton advancedBox;
     DialogueCheckBox onceBox, permitBox, matchAllBox;
     wi::gui::ComboBox library, next, kind, voice, target;
+    wi::gui::ComboBox display;
+    DialogueButton editDisplay;
+    std::vector<DialogueDisplayAssignment> displays;
+    DialogueDisplayAssignment selectedDisplay, displayRequest;
+    bool resumeAfterDisplay = false;
     std::vector<std::string> voicePaths;
     wi::gui::TextInputField name, speaker, key, value, textSize, opacity;
     DialogueText text;
@@ -656,6 +662,54 @@ struct DialogueEditorWindow::Impl
         RefreshFields();
         return true;
     }
+    bool UseDisplay(const DialogueDisplayAssignment& assignment)
+    {
+        if (!SetDialogueDisplayAssignment(root,project,assignment,status)) return false;
+        auto include=session->Projects().CurrentProject().alwaysInclude;
+        auto add=[&](std::string value){if(std::find(include.begin(),include.end(),value)==include.end())include.push_back(std::move(value));};
+        add(std::string("data:")+DialogueDisplaySettingsPath);
+        if(!assignment.path.empty())add("runtime_screen_document:"+assignment.path);
+        if(!session->Projects().SetAlwaysInclude(include)){status=session->Projects().LastError();return false;}
+        selectedDisplay=assignment;
+        if(!panel.ReloadDisplay(root,project,status))return false;
+        refreshPreview=true;status="Project dialogue display saved. Preview and the next Test Game use this display.";
+        return true;
+    }
+    void ReloadDisplays()
+    {
+        const bool previous=sync;sync=true;displays.clear();display.ClearItems();
+        display.AddItem("Built-in display");display.AddItem("Create a new display...");
+        std::string error;
+        if(!ReadDialogueDisplayAssignment(root,project,selectedDisplay,error))status=error;
+        namespace fs=std::filesystem;std::error_code ec;
+        auto folder=fs::u8path(root)/"Content/UI";
+        if(fs::exists(folder,ec))for(fs::recursive_directory_iterator it(folder,ec),end;it!=end&&!ec;it.increment(ec)){
+            if(!it->is_regular_file(ec)||it->path().extension()!=".renegade-screen")continue;
+            ScreenDocument screen;std::string ignored;
+            if(!ReadScreenDocument(it->path().generic_u8string(),project,screen,ignored)||
+                std::none_of(screen.widgets.begin(),screen.widgets.end(),[](const auto& w){return !w.dialogueRole.empty();}))continue;
+            displays.push_back({screen.envelope.documentId,it->path().lexically_relative(fs::u8path(root)).generic_u8string()});
+            display.AddItem(it->path().stem().u8string());
+        }
+        int selection=0;
+        for(size_t n=0;n<displays.size();++n)if(displays[n].screenId==selectedDisplay.screenId)selection=int(n)+2;
+        display.SetSelected(selection);
+        editDisplay.SetText(selectedDisplay.screenId.empty()?"Customise display":"Edit display");
+        if(!panel.ReloadDisplay(root,project,error))status="Display needs repair: "+error;
+        sync=previous;
+    }
+    void EditDisplay(bool create=false)
+    {
+        if(create||selectedDisplay.screenId.empty()){
+            const auto relative="Content/UI/Dialogue/Dialogue-"+GenerateStableId()+".renegade-screen";
+            auto screen=MakeDialogueDisplayTemplate(project,relative);
+            if(!WriteScreenDocument((std::filesystem::u8path(root)/relative).generic_u8string(),screen,status)||
+                !UseDisplay({screen.envelope.documentId,relative}))return;
+            ReloadDisplays();
+        }
+        displayRequest=selectedDisplay;resumeAfterDisplay=true;
+        panel.Hide(*path);owner->SetVisible(false);
+    }
     void ReloadLibrary()
     {
         assets = ListDialogueAssets(root, project, status);
@@ -833,6 +887,16 @@ struct DialogueEditorWindow::Impl
         name.Create("Conversation name");
         name.SetDescription("Name: ");
         Add(name, 88, 76, 730, 30);
+        display.Create("In-game dialogue display");display.SetText("");
+        display.SetTooltip("Project-wide game dialogue layout. Create or edit a display to change its fonts, artwork, colours and position in the UI editor.");
+        Add(display,846,76,270,30);
+        display.OnSelect([this](auto& e){
+            if(sync)return;
+            if(e.iValue==1){EditDisplay(true);return;}
+            const auto chosen=e.iValue>=2&&size_t(e.iValue-2)<displays.size()?displays[size_t(e.iValue-2)]:DialogueDisplayAssignment{};
+            UseDisplay(chosen);ReloadDisplays();
+        });
+        Button(editDisplay,"Customise display",1125,76,165,[this]{EditDisplay();});
         name.OnInput([this](auto &e) {
             if (sync)
                 return;
@@ -1281,6 +1345,12 @@ void DialogueEditorWindow::Open(StudioSession &s, wi::RenderPath2D &path)
     i.path = &path;
     i.project = s.Projects().CurrentProject().projectId;
     i.root = s.Projects().CurrentProject().rootPath;
+    i.panel.SetEmbeddedPreview();
+    if(i.resumeAfterDisplay){
+        i.resumeAfterDisplay=false;i.ReloadDisplays();i.ReloadLibrary();i.RefreshFields();
+        i.refreshPreview=true;SetVisible(true);i.FitToCanvas(path);return;
+    }
+    i.ReloadDisplays();
     i.targets.clear();
     i.target.ClearItems();
     i.ReloadLibrary();
@@ -1401,5 +1471,10 @@ bool DialogueEditorWindow::TakeTestGameRequest()
     const bool requested = impl_->testGameRequested;
     impl_->testGameRequested = false;
     return requested;
+}
+bool DialogueEditorWindow::TakeDisplayEditorRequest(std::string& id,std::string& path)
+{
+    if(impl_->displayRequest.screenId.empty())return false;
+    id=impl_->displayRequest.screenId;path=impl_->displayRequest.path;impl_->displayRequest={};return true;
 }
 } // namespace renegade::studio

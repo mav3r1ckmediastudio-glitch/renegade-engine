@@ -140,6 +140,8 @@ void RuntimeDialogue::PrepareScene(wi::scene::Scene &scene, std::uint64_t revisi
         revision_ = revision;
         root_ = root;
         project_ = project;
+        if (!panel_.ReloadDisplay(root,project,error_))
+            wi::backlog::post("Dialogue display: " + error_ + " Using the built-in display.",wi::backlog::LogLevel::Warning);
         for (size_t i = 0; i < scene.metadatas.GetCount(); ++i)
         {
             auto entity = scene.metadatas.GetEntity(i);
