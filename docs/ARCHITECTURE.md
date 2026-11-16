@@ -2378,3 +2378,12 @@ fit, show the parent, then restore the selected row's basic/Advanced field
 visibility and NPC targets. Showing the parent after hiding individual fields
 would re-enable every child. The normal Open and resume paths must preserve this
 ordering. See evidence/ui-dialogue-resume for the full native round trip.
+
+## Whole-scene viewport view modes — 16 November 2026
+
+SHOW uses the existing native renderer through one Studio setter shared with
+Render diagnostics. View mode is a ProjectService editor preference, separate
+from authored render settings and Runtime. Native diagnostic lifecycle resets
+restore that preference; path tracing temporarily suspends it. Dedicated
+coplanar overlay PSOs are compiled through a bounded generated-source overlay,
+with the original renderer and submodule pin preserved. See WIREFRAME_VIEW_MODE.md.

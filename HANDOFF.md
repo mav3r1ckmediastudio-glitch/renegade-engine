@@ -1,3 +1,34 @@
+# SHOW whole-scene wireframe modes — 16 November 2026
+
+Implementation commit: fada1d6353691a14508b9b748ec8335631984cfb,
+on fix/ui-cohesion-pass1-20261116. Owner requested whole-scene modes only
+and gave positive feedback during native review.
+
+Changed CMakeLists, cmake/WickedWireframeOverlayFix.cmake, StudioApplication
+header/source, RenegadeStudioChrome header/source, Phase5Gate9RenderDiagnostics,
+and Tests/Phase5Gate9SourceContract. Documentation: WIREFRAME_VIEW_MODE,
+FEATURE_MATRIX, ARCHITECTURE, UPSTREAM_SYNC and evidence/wireframe-show.
+
+SHOW exposes Shaded / Wireframe / Shaded + Wireframe beside independent Grid.
+One setter shares native state with diagnostics and persists only editor prefs.
+Fixes native overlay edges failing the strict depth test using six dedicated
+read-only coplanar PSOs in a generated renderer. Original PSOs remain unchanged.
+Do not add the renderer to WickedEngine_common: embedded/external targets compile
+it individually. Build common and embedded library before relinking Studio.
+
+Exact commands and hashes are in docs/WIREFRAME_VIEW_MODE.md. Release builds pass;
+67/67 focused checks pass (2.58 s); diff check passes. Native Wireframe4 checks
+cover all three modes, clean scene/history, SHOW indication and fresh-process
+restoration. Final Wireframe5 differs only in ASCII active-state markers.
+No hosted CI, push, PR, merge, Runtime distribution or Debug proof.
+
+Existing owner Studio windows, project data and dirty configured Wicked overlays
+are preserved. No gitlink change. Complex terrain, transparent overlay parity,
+MSAA and path-trace transition native checks remain scoped limitations.
+Next: owner review of final candidate; broader checks before any requested PR.
+
+---
+
 # UI usability re-audit and modal lifecycle corrections — 16 November 2026
 
 This supersedes the native-coverage limits in the Audio handoff below where
@@ -576,3 +607,7 @@ The [complete pre-reconciliation handoff](https://github.com/mav3r1ckmediastudio
 the earlier commands, failures, snapshots and checkpoints. Dated evidence remains
 in the repository. Historical “no merge”, “CI pending” and machine observations
 apply to their original checkpoint, not automatically to today's main.
+
+Final follow-up: Wireframe5 fresh-process mode restoration, readable ASCII
+markers and corrected shaded overlay were visually verified. Its review window
+is left open. Source implementation remains fada1d6353691a14508b9b748ec8335631984cfb.
