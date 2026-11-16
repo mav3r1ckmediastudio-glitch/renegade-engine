@@ -20,6 +20,7 @@ int main()
     auto permitted = gate.outcomes.front();
     permitted.next = "permit";
     permitted.conditions = {{DialogueConditionKind::FlagEquals, "has_permit", 1}};
+    permitted.actions.push_back({DialogueActionKind::Event, "open_gate", 1});
     gate.outcomes.insert(gate.outcomes.begin(), permitted);
     CHECK(SaveDialogueAsset(root.generic_u8string(), document, error));
     auto duplicate = document;
@@ -30,8 +31,8 @@ int main()
     CHECK(SaveDialogueAsset(root.generic_u8string(), unique, error));
     auto scene = wi::allocator::make_shared<wi::scene::Scene>();
     const auto npc = scene->Entity_CreateTransform("Guard");
-    StableId npcId;
-    CHECK(EnsurePersistentEntityId(*scene, npc, npcId, error));
+    const StableId npcId = GenerateStableId();
+    CHECK(AssignPersistentEntityId(*scene, npc, npcId, error));
     AssignDialogueCommand assignment(*scene, npc, asset);
     CHECK(assignment.Execute());
     wi::RenderPath2D path;
@@ -43,6 +44,12 @@ int main()
         return scripts.EnqueueGameplayEvent(std::move(event), e);
     });
     scripts.SetDialogueApi(dialogue.ScriptApi(*scene, path));
+    dialogue.SetEventSink([&](const std::vector<DialogueAction> &actions, std::string &e) {
+        if (actions.size() != 1) return false;
+        GameplayEvent event; event.name = "dialogue.action";
+        event.payload = actions[0].key + ":" + std::to_string(actions[0].value);
+        return scripts.EnqueueGameplayEvent(std::move(event), e);
+    });
     const std::string source = R"lua(
 local d = renegade.dialogue
 return {
@@ -78,6 +85,9 @@ return {
   elseif event.name=='dialogue.closed' then
    assert(not d.is_active())
    assert(d.set_value('closes',d.get_value('closes')+1))
+  elseif event.name=='dialogue.action' then
+   assert(event.payload=='open_gate:1')
+   assert(d.set_flag('gate_opened',true))
   elseif event.name=='qa.deleted' then
    local ok,err=d.start(ctx.entity)
    assert(ok==false and type(err)=='string' and not d.is_active())
@@ -113,7 +123,7 @@ return {
     CHECK(dialogue.View().text == "Everything seems in order.");
     CHECK(dialogue.Continue(error));
     scripts.Update(0.016f);
-    CHECK(healthy() && dialogue.Memory().values.at("finishes") == 1);
+    CHECK(healthy() && dialogue.Memory().values.at("finishes") == 1 && dialogue.Memory().values.at("gate_opened") == 1);
     auto api = dialogue.ScriptApi(*scene, path);
     CHECK(api.setValue("has_permit", 0, error));
     CHECK(api.start(npc, {}, {}, error));
