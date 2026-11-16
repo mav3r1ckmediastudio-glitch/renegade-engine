@@ -1,3 +1,45 @@
+# Audio-to-asset inspector handoff — 16 November 2026
+
+Implementation/evidence commit: 1663001dd76a2f5962d557182dd149f55e262544
+on fix/ui-cohesion-pass1-20261116. This supersedes the toolbar-only correction
+below for the new report that Audio stays active after an asset click.
+
+Explicit viewport, legacy/modern hierarchy and completed box selection now
+release specialist inspector ownership after updating the existing selection.
+Sound/legacy particle/navigation entities retain their typed specialist;
+ordinary assets immediately use the Scene inspector. Opening global Audio with
+an old ordinary selection remains possible. Physics Lab keeps hierarchy targets.
+
+Release build command (CL=/MP6):
+MSBuild BUILD/native/Studio/RenegadeStudio.vcxproj /t:Build
+/p:BuildProjectReferences=false /p:Configuration=Release /p:Platform=x64
+/p:TargetName=RenegadeStudio-Icons6 /v:minimal
+Completed with exit 0, including a final incremental confirmation.
+BUILD/native/Studio/Release/RenegadeStudio-Icons6.exe SHA-256:
+83FC83470A2798ACA3E5398C7A17DE1C4DA4CD477435583C0509C9BA165EF6ED.
+Built before commit; its configure-time Git stamp is not a release identity.
+
+ctest --test-dir BUILD/native -C Release
+-R 'SourceContract|StudioUiPolicy|RenegadeDialogue|^RenegadeStoryFlowJourneyUiLayoutTests$'
+--output-on-failure
+All 67 pass in 12.06 s. git diff --check passes.
+
+Native exact-binary screenshots verify Player selection, opening Audio with
+retained selection, and clicking Point Light in the viewport immediately showing
+LIGHT // Point Light without a panel click. Reopening Audio and expanding a
+hierarchy category also preserve mix ownership until an asset is picked.
+The review process closed before model-row, same-asset and Physics native checks;
+those are not claimed as passes. Exit cause was not established (no matching
+Application Error/WER event found). See docs/evidence/ui-icon-integration.
+OS DPI 125/150 percent and owner acceptance remain pending.
+
+The existing Icons5 instance was preserved; it is the previous toolbar-only
+build and does not contain this fix. The native check used a separate copied
+project/preferences in BUILD/ui-audio-selection-review. No owner project edits,
+push, PR, hosted CI, merge or release. Dirty Wicked overlays remain unstaged.
+
+---
+
 # Audio/prefab context correction — owner confirmed 16 November 2026
 
 Implementation commit: 239be816e821e7040a59ffb4d3997f927c93ba37.
