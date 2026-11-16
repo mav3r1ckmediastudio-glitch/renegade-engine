@@ -1,0 +1,1139 @@
+{
+  "source_ref": "d04da64e42880521bed707dc0750de757b20b04e",
+  "normalization": "UTF-8 without BOM; CRLF/CR converted to LF; SHA-256",
+  "families": [
+    {
+      "id": "01",
+      "group": "Entry",
+      "surface": "Startup reveal, identity prompt, handshake and transition",
+      "source_owners": [
+        {
+          "path": "Studio/src/StartupIdentityPrompt.cpp",
+          "normalized_sha256": "346a7c2ba2b52e074f7d9da714b3af6321bab60be8e2f3e8c063b6bacbdbc4ce",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/StartupIdentityHandshake.h",
+          "normalized_sha256": "9c5b1746ffb4104d57e1a24c348bbf074031c4f313a584ed6520c8afac34ef3b",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/StartupIrisTransition.h",
+          "normalized_sha256": "e190403286faf38d1951a9bea9dee8405cf2b37ac5faa535ce7800cfa75b65cc",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/main_Windows.cpp",
+          "normalized_sha256": "4499288e5b37f7566cf2c3ea54ba394ecfe5285ab96c4ada7e4cff0f2ac60330",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "group": "Entry",
+      "surface": "Project Hub, recents, project artwork and New Project modal",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeProjectHub.cpp",
+          "normalized_sha256": "b333765ec1ff84dedf8afe78c816b392b4b9030c061d13d909cdd27ae528e804",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "group": "Entry",
+      "surface": "Project loader, Ready handoff and failed-load recovery",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeProjectLoadingOverlay.cpp",
+          "normalized_sha256": "d634d5e0babf22e2af52de55232dda32c61d1f362583d5fb8084bca2ab004553",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "group": "Shell",
+      "surface": "File / Edit / Add / View / Build / Window menus",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeStudioChrome.cpp",
+          "normalized_sha256": "52daf52d823c420d1db65eac1b779ecee50919b213414f612212012110e64638",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/RenegadePhysicsLabStudioChrome.cpp",
+          "normalized_sha256": "9adfa36bd2cca9a6da0d54f13dcd568e98adb7566532407ef4d3fabbb5fa2fff",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "05",
+      "group": "Shell",
+      "surface": "Selection tools, viewport controls, scene tabs and workspace navigation",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeStudioChrome.cpp",
+          "normalized_sha256": "52daf52d823c420d1db65eac1b779ecee50919b213414f612212012110e64638",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "06",
+      "group": "Shell",
+      "surface": "Hierarchy/search, categories, groups, multi-selection and prefab actions",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeStudioChrome.cpp",
+          "normalized_sha256": "52daf52d823c420d1db65eac1b779ecee50919b213414f612212012110e64638",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/CreatorAssetDragPreview.cpp",
+          "normalized_sha256": "87a07f2ff5fd9a80b08c50a236edc70ce7e09c6253fec91e597e01fb09cb0940",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "07",
+      "group": "Shell",
+      "surface": "Asset browser: folders, cards, filters, tags, import, move and placement",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeStudioChromeAssets.cpp",
+          "normalized_sha256": "63638263634bf6ece48201c47c1a02b025f2cdaa001b37a4db3241956d686217",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/RenegadeStudioAssetBrowserReadability.cpp",
+          "normalized_sha256": "435db0c7d783e47381c9d6542c60c5bf5b216a2230b6987236ad3d87d8eb0c47",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "08",
+      "group": "Shell",
+      "surface": "Console, Output, Diagnostics and status footer",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeStudioChrome.cpp",
+          "normalized_sha256": "52daf52d823c420d1db65eac1b779ecee50919b213414f612212012110e64638",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/StudioLiveDiagnostics.cpp",
+          "normalized_sha256": "48d61b594be4f642ecd4b349506cf593a0d7d9fc54c0b3ebbe42c31f3e98ce5e",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "09",
+      "group": "Scene",
+      "surface": "Transform, rendering, layers and object component sections",
+      "source_owners": [
+        {
+          "path": "Studio/src/S1BInspectorSectionMigration.cpp",
+          "normalized_sha256": "4d2b4dc950d91fe38c0836fc4f5d4bfad0a0f03f7a23ec39a6c0880c2da9bd69",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/InspectorSectionFramework.cpp",
+          "normalized_sha256": "0949d2120b44e88d6c3620153e5a1b682cf8680e2b5139ff2b42486ffa99d9d1",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "10",
+      "group": "Scene",
+      "surface": "Camera, decal and environment-probe inspectors",
+      "source_owners": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "11",
+      "group": "Scene",
+      "surface": "Material core, UV, texture and shader-specific controls",
+      "source_owners": [
+        {
+          "path": "Studio/src/Phase5Gate4MaterialInspector.cpp",
+          "normalized_sha256": "47b8acc6100027ddc4b5b0bdebef78b65dcaadea32a3162ec25cfb1ad08d09f3",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "12",
+      "group": "Scene",
+      "surface": "Hair material inspector",
+      "source_owners": [
+        {
+          "path": "Studio/src/Phase7HairMaterialInspector.cpp",
+          "normalized_sha256": "27fb5e53550f5dfa72aea136a8ff2ebf6feee7991baa5863b62b0289af0880e9",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "13",
+      "group": "Scene",
+      "surface": "Save Prefab modal and assembly/group management",
+      "source_owners": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/RenegadeStudioChrome.cpp",
+          "normalized_sha256": "52daf52d823c420d1db65eac1b779ecee50919b213414f612212012110e64638",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "14",
+      "group": "Lighting",
+      "surface": "Selected-light Inspector",
+      "source_owners": [
+        {
+          "path": "Studio/src/S1BInspectorSectionMigration.cpp",
+          "normalized_sha256": "4d2b4dc950d91fe38c0836fc4f5d4bfad0a0f03f7a23ec39a6c0880c2da9bd69",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "15",
+      "group": "Lighting",
+      "surface": "Light Picker: presets, colour, behaviour, preview, placement, Advanced",
+      "source_owners": [
+        {
+          "path": "Studio/src/LightPickerWindow.cpp",
+          "normalized_sha256": "283f8b23da68775f1f5e6b2d4fc557a1ac58991f0665c28fe4f39f9143e07b95",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "16",
+      "group": "Effects",
+      "surface": "Particle Picker: library, layers, preview, emitter settings and Advanced",
+      "source_owners": [
+        {
+          "path": "Studio/src/ParticlePickerWindow.cpp",
+          "normalized_sha256": "10a2ea21df4f1dd4cdb56287c80692d4d59ecd1f8fc683ffe265cdd1dafb5888",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "17",
+      "group": "Effects",
+      "surface": "Particle lifetime/timing/field controls and layer operations",
+      "source_owners": [
+        {
+          "path": "Studio/src/ParticlePickerWindow.cpp",
+          "normalized_sha256": "10a2ea21df4f1dd4cdb56287c80692d4d59ecd1f8fc683ffe265cdd1dafb5888",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "18",
+      "group": "Effects",
+      "surface": "Particle Texture Library: engine/project, categories, thumbnails, import/use",
+      "source_owners": [
+        {
+          "path": "Studio/src/ParticleTextureBrowser.cpp",
+          "normalized_sha256": "ae825d693881821992acbe9a6be157dd20afeb8fecb794994671481058d0f5db",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "19",
+      "group": "Effects",
+      "surface": "Older selected-emitter Inspector / compiled V3-over-V2 wrapper",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeParticleEmitterWorkspaceV3.cpp",
+          "normalized_sha256": "af8aeee1c9d01fa69a73eb25685e230784aceb8dedd520584d3bde6be976c384",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/RenegadeParticleEmitterWorkspaceV2.cpp",
+          "normalized_sha256": "49b18732a3c9efb1239ec6a05639b9e5fe33c721943fb9b8b59ea64204ee3dd1",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "20",
+      "group": "Environment",
+      "surface": "Time of day/sun, realistic sky and clouds",
+      "source_owners": [
+        {
+          "path": "Studio/src/NightSkyStudioIntegration.cpp",
+          "normalized_sha256": "480479151e0483fa8c0836776140d6ce2025dfb1d4df1ebd56ef327e30003d26",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "21",
+      "group": "Environment",
+      "surface": "Stars, shooting stars, fog, night atmosphere and aurora",
+      "source_owners": [
+        {
+          "path": "Studio/src/NightSkyStudioIntegration.cpp",
+          "normalized_sha256": "480479151e0483fa8c0836776140d6ce2025dfb1d4df1ebd56ef327e30003d26",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/ShootingStarsStudioIntegration.cpp",
+          "normalized_sha256": "f776b3f445bdd258f82332acc554e4d7e105b54b6867db5ae730719577929c47",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "22",
+      "group": "Environment",
+      "surface": "Moon appearance, movement and phase controls",
+      "source_owners": [
+        {
+          "path": "Studio/src/MoonStudioIntegration.cpp",
+          "normalized_sha256": "cd73e4f6c14680b9e340f0f0fde76ecfeaf9ede26820ec3ee2ba78af38936e09",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "23",
+      "group": "Environment",
+      "surface": "Ocean settings and presets",
+      "source_owners": [
+        {
+          "path": "Studio/src/NightSkyStudioIntegration.cpp",
+          "normalized_sha256": "480479151e0483fa8c0836776140d6ce2025dfb1d4df1ebd56ef327e30003d26",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "24",
+      "group": "Environment",
+      "surface": "Weather transitions, precipitation, lightning and thunder",
+      "source_owners": [
+        {
+          "path": "Studio/src/NightSkyStudioIntegration.cpp",
+          "normalized_sha256": "480479151e0483fa8c0836776140d6ce2025dfb1d4df1ebd56ef327e30003d26",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "25",
+      "group": "Terrain",
+      "surface": "Terrain creation/size/height, sculpting, materials and blending",
+      "source_owners": [
+        {
+          "path": "Studio/src/TerrainInspectorSections.cpp",
+          "normalized_sha256": "bf6afff475bd1610ec1614c1aeb3fa4b3227849992e0e6a18cb48fe3005190f6",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "26",
+      "group": "Terrain",
+      "surface": "Vegetation/grass painting, appearance and simulation",
+      "source_owners": [
+        {
+          "path": "Studio/src/WD01Vegetation.cpp",
+          "normalized_sha256": "ef6cf4473095b38dcf87892b7f15f04d910fea947c14ba5da14643cea69d7b47",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/TerrainInspectorSections.cpp",
+          "normalized_sha256": "bf6afff475bd1610ec1614c1aeb3fa4b3227849992e0e6a18cb48fe3005190f6",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "27",
+      "group": "Terrain",
+      "surface": "River drawing, tributaries, riverbed linking and appearance",
+      "source_owners": [
+        {
+          "path": "Studio/src/RiverFlowStudioIntegration.cpp",
+          "normalized_sha256": "c1c76ce29d12d7f327b1b7b0ce75bf29a3d0c33d50c7bc9603aa1aa6b22462e9",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/TerrainInspectorSections.cpp",
+          "normalized_sha256": "bf6afff475bd1610ec1614c1aeb3fa4b3227849992e0e6a18cb48fe3005190f6",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "28",
+      "group": "Terrain",
+      "surface": "Waterfalls and dedicated selected-waterfall Inspector",
+      "source_owners": [
+        {
+          "path": "Studio/src/WaterfallStudioIntegration.cpp",
+          "normalized_sha256": "f0451ceac169fa710cb00bc3f65b6704f45d4c6e1bc50e791d3be843255f7c85",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "29",
+      "group": "Terrain",
+      "surface": "Riverbed preparation progress/error window",
+      "source_owners": [
+        {
+          "path": "Studio/src/RiverbedProgressWindow.h",
+          "normalized_sha256": "3d2509687ceb6ef2e5e75d5e9d4ae4066b78ffc1d53d4eceaa74bb3ae8bd5290",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "30",
+      "group": "Render",
+      "surface": "Render settings, postprocessing and ray/path tracing",
+      "source_owners": [
+        {
+          "path": "Studio/src/Phase5Gate5RenderWorkspace.cpp",
+          "normalized_sha256": "446335dd15d9ad5f4c7e4faf41c313713ed4dc926af65420a8c93827115f769c",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/Phase5Gate7RayPathTracing.cpp",
+          "normalized_sha256": "99c28f357e62f345f1513e3e49003db5d18df2b327cf2c44191c8ffb05b4d1ed",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "31",
+      "group": "Render",
+      "surface": "Lightmap baking, vertex AO and diagnostics/profiler",
+      "source_owners": [
+        {
+          "path": "Studio/src/Phase5Gate8LightmapBaking.cpp",
+          "normalized_sha256": "252543774b6b3873b53d818c4e227110cb5866baf30cd02561f503d12cdfbf7e",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/Phase5Gate9RenderDiagnostics.cpp",
+          "normalized_sha256": "e133a49c8b1f912f8dab155de727accc4594337d6dd31556d798a1493174824f",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "32",
+      "group": "Physics",
+      "surface": "World, rigid body and constraints",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadePhysicsLabWorkspace.cpp",
+          "normalized_sha256": "a2006e5ad025ca8c0e34c1d92aa767334bcbf95972a847f088e032eba5edb584",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadePhysicsLabStudioChrome.cpp",
+          "normalized_sha256": "9adfa36bd2cca9a6da0d54f13dcd568e98adb7566532407ef4d3fabbb5fa2fff",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "33",
+      "group": "Physics",
+      "surface": "Character physics, vehicle, ragdoll, soft body and secondary collider",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadePhysicsLabWorkspace.cpp",
+          "normalized_sha256": "a2006e5ad025ca8c0e34c1d92aa767334bcbf95972a847f088e032eba5edb584",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "34",
+      "group": "AI / animation",
+      "surface": "Character identity/role/personality/faction/awareness and Advanced",
+      "source_owners": [
+        {
+          "path": "Studio/src/AICharacterInspector.cpp",
+          "normalized_sha256": "cfc955debeab453c4c9a44e70df92369186105d19e5818e3c5f3ef997a339c8f",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/CharacterPrefabInspectorExtension.cpp",
+          "normalized_sha256": "8eea7702e8ee14bf21304912c252789b7292b728189782a58755b34327d8a661",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "35",
+      "group": "AI / animation",
+      "surface": "AI combat and patrol routes",
+      "source_owners": [
+        {
+          "path": "Studio/src/AICombatInspector.cpp",
+          "normalized_sha256": "f96a885daf31e33acc47eb0dc517c303ca6fe667ba1b843299b10047395f6b4b",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/AIPatrolRouteInspector.cpp",
+          "normalized_sha256": "af73b24fbe144527b35af5203993fa9c39ea919c20fe1c0e6b34e4d91161af6f",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "36",
+      "group": "AI / animation",
+      "surface": "Animation clips, humanoid retargeting and character controls",
+      "source_owners": [
+        {
+          "path": "Studio/src/Phase7Gate7AAnimationInspector.cpp",
+          "normalized_sha256": "47ebfb27b6bf7cb9c5cfa68ecbd1b793072fb2de81b0136dc35d861db3398e7e",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/Phase7Gate7BHumanoidRetargetInspector.cpp",
+          "normalized_sha256": "f0eb0dd97e426a561caa1bed671b4d6677f20f3ef23d64183d261f7a0c189e48",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/Phase7Gate7CCharacterControlsInspector.cpp",
+          "normalized_sha256": "99cdd3534f06ad0bc555aa31ee2914958b460a9aa5209e066648184901664f70",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "37",
+      "group": "AI / animation",
+      "surface": "Native timeline/keyframes and mesh blending",
+      "source_owners": [
+        {
+          "path": "Studio/src/Phase7Gate7DNativeTimelineInspector.cpp",
+          "normalized_sha256": "adf251cde50e339a13df6b3bdf3ce1e000436ab2630a720983f1c4e5c84c0cea",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/Phase7Gate7FMeshBlendInspector.cpp",
+          "normalized_sha256": "72c32f0ad873f72affa4fa78a37329a66cccfa007e9e24a66847f0bf9f3e036b",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "38",
+      "group": "AI / animation",
+      "surface": "Specialist component inspectors",
+      "source_owners": [
+        {
+          "path": "Studio/src/Phase7Gate7ESpecialistInspector.cpp",
+          "normalized_sha256": "b8b90180f84fb745212769afc1e8788f58514f4078f4cf5ac55456eab0395595",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "39",
+      "group": "Scripts",
+      "surface": "Action, script attachment, editable script properties and global scripts",
+      "source_owners": [
+        {
+          "path": "Studio/src/S4BScriptAttachmentInspector.cpp",
+          "normalized_sha256": "35954af64f77ed0f3c16079f999c8aaad9e6f916e5c094aae02d0dc72eb139ea",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/S4CScriptPropertyControls.cpp",
+          "normalized_sha256": "f6afcbde6465ef36f6d92554ca947669fbcb00b92515e3662538cfb1659ad80b",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/S4DGlobalScriptInspector.cpp",
+          "normalized_sha256": "746e24c30f92c0d63d1e66a531ce4e52cd74f026c8a1633715b95a8ed3504d14",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "40",
+      "group": "Audio / navigation",
+      "surface": "Audio workspace: sources, spatial/global sound, zones and playback",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeAudioWorkspace.cpp",
+          "normalized_sha256": "fac4ec8f45f20249020973652d0c9468a2d3e550b64a39401e8e5e1ba4efabdb",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "41",
+      "group": "Audio / navigation",
+      "surface": "Navigation grid and agent/path controls",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeNavigationWorkspace.cpp",
+          "normalized_sha256": "edfafa5cbc22b9b79b771d3d8c382954b94e0139656a0239b76b24eca9fe6a60",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "42",
+      "group": "Assets / player",
+      "surface": "Model/animation importer, map assignment and live preview",
+      "source_owners": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/ModelImportPreview.cpp",
+          "normalized_sha256": "9614360a2399da1066758bf8c62412d39ef51ff08fed03673ecbe2dd7629607e",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeStudioChromeAssets.cpp",
+          "normalized_sha256": "63638263634bf6ece48201c47c1a02b025f2cdaa001b37a4db3241956d686217",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "43",
+      "group": "Assets / player",
+      "surface": "Player controller/start, player prefab and camera preview",
+      "source_owners": [
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/PlayerPrefabEditor.cpp",
+          "normalized_sha256": "fec07c764feb6e7205f1712e7180d82281c10610dc7654d632427b2a4f5d81dd",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "44",
+      "group": "Assets / player",
+      "surface": "First-person assembly, hand setup and grip tools",
+      "source_owners": [
+        {
+          "path": "Studio/src/FirstPersonAssemblyEditor.cpp",
+          "normalized_sha256": "b7d72933f2849f17cd2433c7844fe33b92d2268724b4de5d7d8c76917f577414",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/FirstPersonAssemblyHandEditor.h",
+          "normalized_sha256": "db23a111ab3a4d9e4635f3c087f315698953f8858e9f489f3c31764b8a97cab3",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "45",
+      "group": "Assets / player",
+      "surface": "Starting equipment and weapon firing",
+      "source_owners": [
+        {
+          "path": "Studio/src/PlayerEquipmentEditor.cpp",
+          "normalized_sha256": "b5eff96c5e93a2d1a02a60a5ca495bd931bbdbcfee3a2193212bb84b39b4bd69",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "normalized_sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "46",
+      "group": "Assets / player",
+      "surface": "Projectile creation/preview, Advanced and firing timing",
+      "source_owners": [
+        {
+          "path": "Studio/src/PlayerProjectileEditor.cpp",
+          "normalized_sha256": "a58cc6d2746b507f9f12e2083c6170c98ddf77235183d737f20e0def42018404",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "47",
+      "group": "Assets / player",
+      "surface": "Weapon launch sockets",
+      "source_owners": [
+        {
+          "path": "Studio/src/LaunchSocketEditor.cpp",
+          "normalized_sha256": "a31dc0769a3ab7e4d976010447f5044af96200e5da53828919cad54129bd11a2",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "48",
+      "group": "Assets / player",
+      "surface": "Pickup and Item editor",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadePickupEditor.cpp",
+          "normalized_sha256": "63b2edf27102542e8307571794d8d60b337c1c33ebd08b697889f6d01c251ec2",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "49",
+      "group": "Dialogue",
+      "surface": "Conversation library, NPC/reply editing, audio, preview and Advanced",
+      "source_owners": [
+        {
+          "path": "Studio/src/DialogueEditorWindow.cpp",
+          "normalized_sha256": "e955ebfea7e0d3947b7ebced3edb320891a749989e66a0af138afb240ac4f3a5",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "50",
+      "group": "Dialogue",
+      "surface": "Display assignment, Edit/Customise Display and save/attach/Test Game",
+      "source_owners": [
+        {
+          "path": "Studio/src/DialogueEditorWindow.cpp",
+          "normalized_sha256": "e955ebfea7e0d3947b7ebced3edb320891a749989e66a0af138afb240ac4f3a5",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/RenegadeScreenEditorRenderPath.h",
+          "normalized_sha256": "42e5e0ec704139f061f5938d31fd3c156d55556bd6f78792dc00618d1db35ead",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "51",
+      "group": "Storyflow",
+      "surface": "Journey chrome, navigation, cards, overview and commands",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeStoryFlowJourneyChrome.h",
+          "normalized_sha256": "e49cfd610897431b8d35816a63fc71593ec910bf3a89948dd0484784fbed2fc7",
+          "same_as_original": false
+        },
+        {
+          "path": "Studio/src/RenegadeStoryFlowWorkspace.cpp",
+          "normalized_sha256": "8317e15852ddc36e7c25d8b794cf89cc181764eff16223b4e4fa79c30c351bd3",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "52",
+      "group": "Storyflow",
+      "surface": "Graph / ImNodes canvas and chrome",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeStoryFlowGraphEditor.cpp",
+          "normalized_sha256": "df2f3377a98494317187f27ef7d531aa28d1ad37318684a9219b6b9a71b0d146",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeImGuiBridge.cpp",
+          "normalized_sha256": "ede542a0568afdfe3f5fb185267634a6eac84bb6e3a960675792d786e6f36eb1",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "53",
+      "group": "Storyflow",
+      "surface": "Route conditions and destination composer / library",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeStoryFlowConditionEditor.h",
+          "normalized_sha256": "fffc688426aa4b441f630d160806cfd5ce20328aaf21991c9ca23aa148777df2",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeStoryFlowDestinationComposer.h",
+          "normalized_sha256": "2623e626a30853ba722086ada2a17c5082bebdd9b167bd6b3754a952b9847b89",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/StoryFlowStudioIntegration.h",
+          "normalized_sha256": "11b28c213087f2e9e82b757a01c57cd78a926d43ef88e0545b58c61682fd4124",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "54",
+      "group": "UI Designer",
+      "surface": "Canvas, layers, library, basic Inspector, alignment/grid/snap",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeScreenEditorWorkspace.cpp",
+          "normalized_sha256": "c7c4cd35e428d2ca0a60587e76f6dea585017464aeb27fa854d6d365699392ac",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/ScreenEditorLibraryPalette.h",
+          "normalized_sha256": "8adc358416ec9916a6221543c37b12d6b5a593530a95213deb52f9366c4b22e3",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "55",
+      "group": "UI Designer",
+      "surface": "Advanced layout, graphics/fonts, themes, composition and components",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeScreenEditorAdvancedInspector.h",
+          "normalized_sha256": "3d4e05141d4e447a6033b6a0a27870fdca063d57fe6eaf8090be30c2eb467997",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeScreenLayoutInspector.h",
+          "normalized_sha256": "c3afcf112657d81090eb404319289e3b4a1a3ec52aed7ef55522552dbec4ca92",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeScreenThemeInspector.h",
+          "normalized_sha256": "17fc7410e5dd216b4359be6bfcf57b143e897b8395108a2ddab77550d2ac442b",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeScreenCompositionInspector.h",
+          "normalized_sha256": "8c7156b0991f55cfb65e988283de096e3363c8be8969519a6a6ed7802e5e977e",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeScreenComponentInspector.h",
+          "normalized_sha256": "d5679f17489e00a822081d47236f0d62f62228396a89dda56c85e012f928cb41",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "56",
+      "group": "UI Designer",
+      "surface": "Animation, simulation, interactions, controls and data binding",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeScreenAnimationInspector.h",
+          "normalized_sha256": "bf6785d3c89c4673237fb2c068426ada1eed8f4d869817fa14078ee9ed7c8a17",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeScreenSimulationInspector.h",
+          "normalized_sha256": "895fc9694ae2bf2de3d106ddbeb7f87ad59797eed6d46428a0ff365ecdec68a5",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeScreenInteractionInspector.h",
+          "normalized_sha256": "0cc9546aef666ce549b95443542ca565933559e1831b9fc60de002e615cc5e59",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeScreenControlInspector.h",
+          "normalized_sha256": "5d4b418195fba63e98054df373599e9f62fb3137a980f75159264a27e86ad3e4",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeScreenDataBindingInspector.h",
+          "normalized_sha256": "43904a4dde668a6374f1e5db849153118d344d10cc45fd1e106e6c9c384b3df2",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "57",
+      "group": "UI Designer",
+      "surface": "Inventory and gameplay-attribute tooling",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeScreenInventoryInspector.h",
+          "normalized_sha256": "ea5ec58063baadf1be53dd82ad55e5bb85e04de4bc6ec01e30e3abb49e999145",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeGameplayAttributeInspector.h",
+          "normalized_sha256": "d1097fabafb3333195599f4e3357477f2db525854107889dddbdbadf61b9a30c",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "58",
+      "group": "UI Designer",
+      "surface": "Choice, colour, font/image/action pickers and text entry",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeScreenChoicePicker.h",
+          "normalized_sha256": "bf45e2d0e797967b4ad591dee88525e355b33301f771fced7b15945c611097ab",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeScreenColorPicker.h",
+          "normalized_sha256": "3d4632d0e666f4d8d1c66cf679a2029bcbc2f93a34ae380d2af41119cb1b0e04",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/RenegadeScreenLiteralTextInput.h",
+          "normalized_sha256": "4f416521f83b1da8b94f7f5ae9e893c7d369bf8a737b49e3bd7ee7b1d34733fd",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "59",
+      "group": "Run / build",
+      "surface": "Test Game handoff/progress and Windows Build Game",
+      "source_owners": [
+        {
+          "path": "Studio/src/TestGameProgressWindow.h",
+          "normalized_sha256": "39847dbab2f4145903d8a1a8a127512660d83f2f7f55b5891bae6f78026d85e5",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/WindowsGameBuildController.cpp",
+          "normalized_sha256": "8630b5376b1690554c2bad6399cbf886cc41fe685135fbec858f049879eea1c6",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/TestLevelRuntimeProcess.cpp",
+          "normalized_sha256": "a70c6ca32e2bd0e4f1ba4402494457546cbeb9e921c736f5bc1da969d28f52e6",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "60",
+      "group": "Runtime",
+      "surface": "Starter main menu/new game/save-load/options/accessibility/credits",
+      "source_owners": [
+        {
+          "path": "EngineBridge/src/ProjectUiScaffoldService.cpp",
+          "normalized_sha256": "dd5fad9bc6a59f99544d28a34f544d6e19ddd154ac63803a74ee213712617470",
+          "same_as_original": true
+        },
+        {
+          "path": "EngineBridge/src/ScreenService.cpp",
+          "normalized_sha256": "5fa2b0ed7d50f0bc8ac391b7d2e3b13ba03e8622153ab1385f4858f5be1bad61",
+          "same_as_original": true
+        },
+        {
+          "path": "Runtime/src/RuntimeScreen.cpp",
+          "normalized_sha256": "e70f4013b85f661c96fd16c3e8875ba8ffeb4b95f550385c78d32cd79d4237c5",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "61",
+      "group": "Runtime",
+      "surface": "HUD, inventory templates/overlays and UI composition",
+      "source_owners": [
+        {
+          "path": "Runtime/src/RuntimeUiComposition.h",
+          "normalized_sha256": "b953a0ea56bd946c6e8fd14508e18df2f8ccc9c9cdc676cf1eae1781e9f74028",
+          "same_as_original": true
+        },
+        {
+          "path": "Runtime/src/RuntimeApplication.cpp",
+          "normalized_sha256": "234fc6701ca6d65a3fe6be207699956c6c97bf0c3997fd0e326005cfc5899e1d",
+          "same_as_original": true
+        },
+        {
+          "path": "EngineBridge/src/InventoryScreenAdapter.cpp",
+          "normalized_sha256": "3ebe2794bcd44e9901b67b56a9d64ca68e95bc0eee06a6e37ef0b55792d10919",
+          "same_as_original": true
+        },
+        {
+          "path": "EngineBridge/src/InventoryPagedScreenAdapter.cpp",
+          "normalized_sha256": "87dd8f6e9630d9ac475e1a50e5b053450b9bee126d0463ecea1e4e69414e854d",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "62",
+      "group": "Runtime",
+      "surface": "Dialogue default/custom/fallback display and reply navigation",
+      "source_owners": [
+        {
+          "path": "ScreenRenderer/src/DialoguePanel.cpp",
+          "normalized_sha256": "d46d2f9af86ccb6c9368e4f62805a27648aadf3b522a77d9a91c9fbbad02d8af",
+          "same_as_original": true
+        },
+        {
+          "path": "EngineBridge/src/DialogueDisplayService.cpp",
+          "normalized_sha256": "6047929650e43c44a7a920419fab2a7e1e7f09983f6888a18e5f6a759f5897bd",
+          "same_as_original": true
+        },
+        {
+          "path": "Runtime/src/RuntimeDialogue.cpp",
+          "normalized_sha256": "9853ce5c3711d27c505fb25e9c43cc172cce0e0f8af2e60bba6686c458880509",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "63",
+      "group": "Runtime",
+      "surface": "Procedural pause, interaction prompt, aim/hit indicators and fallback inventory",
+      "source_owners": [
+        {
+          "path": "Runtime/src/RuntimeApplication.cpp",
+          "normalized_sha256": "234fc6701ca6d65a3fe6be207699956c6c97bf0c3997fd0e326005cfc5899e1d",
+          "same_as_original": true
+        }
+      ]
+    },
+    {
+      "id": "64",
+      "group": "Companion",
+      "surface": "Living Core orb launch, chat and voice panels",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeLivingPresenceLaunch.h",
+          "normalized_sha256": "062e2d73b8e021bc894df06d536fe55a82736bc26ea0ea5c67a62d336574a117",
+          "same_as_original": true
+        },
+        {
+          "path": "Tools/assistant_presence/main.js",
+          "normalized_sha256": "56e0fad50c442f9bb7cd03b53664ef1f9f80bd5e6b7a2a222f35c940dde43593",
+          "same_as_original": true
+        },
+        {
+          "path": "Tools/assistant_presence/chat.html",
+          "normalized_sha256": "e2b059fdb370ce539f72c5a02aa79faee03976c96763bf50331849ecbd56774f",
+          "same_as_original": false
+        },
+        {
+          "path": "Tools/assistant_presence/voice-panel.html",
+          "normalized_sha256": "ea9107ab56f23e0b497c02bfa31d6ed43b3be73e6c63ccd02e0b687e2fa3c4ed",
+          "same_as_original": false
+        }
+      ]
+    },
+    {
+      "id": "65",
+      "group": "Companion",
+      "surface": "Legacy dock, guide/history and support controls",
+      "source_owners": [
+        {
+          "path": "Studio/src/RenegadeAssistantDock.cpp",
+          "normalized_sha256": "aa667f97584baa9e3396300da68edc44545133674077e82d04c372a4abd207a1",
+          "same_as_original": true
+        },
+        {
+          "path": "Studio/src/StudioApplication.cpp",
+          "normalized_sha256": "50fe56f7a66bc01094f4064a1de1725187477924883b835b6e9c476478773bcd",
+          "same_as_original": false
+        }
+      ]
+    }
+  ],
+  "shared_foundations": [
+    {
+      "path": "Studio/src/StudioTheme.h",
+      "normalized_sha256": "b12593fa7ca90cf943dfe52c016de0bb68f5c5ded92036733e8d66f32c5056df"
+    },
+    {
+      "path": "Studio/src/StudioButtonVisual.h",
+      "normalized_sha256": "188ebf35e44cb6e637885dea40470d6844ffa97143b98c9427854395e1816e7a"
+    },
+    {
+      "path": "Studio/src/StudioUiPolicy.h",
+      "normalized_sha256": "5ef95bc145743735d45e0e2904076911c9c089aef39c16234da77b731b44b02b"
+    },
+    {
+      "path": "Studio/src/StudioIcons.h",
+      "normalized_sha256": "2b78b4861300001cbf0f884ae64e47dc6adfee0b3b3c92d05acc63fbd646aa98"
+    }
+  ]
+}
