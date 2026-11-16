@@ -2213,9 +2213,28 @@ NPC assignment uses the normal scene command boundary. Transactional .rdialogue
 assets live in project Content/Dialogue and explicit package roots. Runtime caches
 bindings on SceneService revision changes, then queries only bound transforms.
 Preview and gameplay share DialogueSession and ScreenRenderer/DialoguePanel.
-The dialogue workspace owns a local opaque charcoal/pale-teal theme consistent
-with the Light/Particle pickers. Decorative section fills render before native
-controls and never participate in focus ordering. It uses a separate native GUI
+The dialogue workspace uses Studio's opaque dark palette and orange accent,
+with its native default font family and readable script rows. Decorative section
+fills render before native controls and never participate in focus ordering.
+Dialogue modal composition draws an opaque 2D backdrop rather than reading 3D
+render targets while scene updates are suspended. Canvas/DPI changes refit its
+layout. A completed preview remains a visible terminal card; Runtime still closes
+completed conversations. The NPC picker refreshes on scene lifecycle revision,
+not on every frame; binding checks use native component lookup. Save-and-attach
+uses the existing assignment command and StudioSession scene-save boundary, and
+Test in game queues the normal Studio Test Level launch on the following update.
+Local voice import validates audio and adopts it with a project document transaction.
+Fixed workspace controls retain Wicked's native unit-scale content parent; only
+the window's outer scrollbars are removed. Preview replacement input waits for
+the preceding pointer gesture to clear. Revision-driven preview document refresh
+preserves progress/memory/voice keys, executes no outcomes, and rejects incomplete
+documents transactionally. The basic example is literal; Advanced rules remain
+general. The Runtime prompt takes its key from the configured Interact binding.
+File-dialog completion checks lifetime, open generation and document/line identity.
+Dialogue format 2 adds optional project-relative WAV/OGG voice references while
+retaining format-1 reads. DialoguePanel uses the existing Voice mixer bus, stops
+clips on line transitions/close, and preserves a visit key across pagination.
+Save registers audio package roots; Test Game stages validated project clips. It uses a separate native GUI
 while the ordinary Studio GUI and scene input are suspended. Preview Screen roots
 attach to the dialogue window so modal layering and teardown remain explicit.
 Event actions enter the existing gameplay event queue before memory/advance commits.

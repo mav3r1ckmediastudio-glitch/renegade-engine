@@ -1,33 +1,74 @@
-# Dialogue editor review candidate — 16 November 2026
+# Dialogue editor usability review - 16 November 2026
 
-Branch `feature/dialogue-editor-20261115`, base main `7093cf4`; draft PR #195.
-Current tested engine code: `63cc73d373162de4f6cf3e490cb3f9804d7c7bec`.
-The native outline editor and Advanced controls use opaque charcoal/pale-teal
-styling matching the Light/Particle pickers. Other arms/weapon work is untouched.
+Tested LOCAL engine commit: ed2e69ab410045bbad3b6db384fe80b6bc008c17.
+Branch feature/dialogue-editor-20261115; base main 7093cf4.
+The owner tested this native build and reported: "that all seems to work now".
+PR #195 remains CLOSED unmerged. No commits were pushed and no CI/merge/release
+was started. Owner review of this UI does not authorize those further actions.
+Other arms/weapon work and the pinned Wicked revision are unchanged.
 
-The previously recorded script-free Test Game quick-save failure is FIXED.
-TestLevelSnapshotService now stages scene identity independently of creator
-script attachments, preserving the source document ID and retargeting its path.
-It preserves the source file, rejects foreign project identities, and keeps the
-Runtime identity guard. Unsaved/unidentified Levels remain playable without
-inventing save identity.
+Current behaviour:
+- Studio dark/orange styling and native fonts; distinct hover/pressed/disabled
+  feedback, one mouse-release action, tooltips and three numbered workflow steps.
+- Valid edits refresh preview without Save. Progress/private memory/voice visits
+  remain stable; unfinished fields retain the last valid preview with a hint.
+- Preview end/stop keeps a visible terminal card with Restart. A replacement
+  button cannot consume the click that ended the previous line.
+- Reply rows show their next response or ending. Unused NPC lines explain that
+  a reply's Continue to connects them; Add response creates a linked line.
+- Local WAV/OGG import adopts a validated copy without overwriting clips. Open
+  voice folder and Refresh clips expose local recordings. New lines can stay
+  text-only; a visible note identifies example clips and invites creator audio.
+  Existing Sael take-2 recordings remain example assets; no new voices generated.
+- NPC chooser, attachment status, Save & attach and Test in game provide the
+  complete authoring path. Player Start markers are excluded as dialogue targets.
+- The Runtime prompt names the project's actual Interact binding (E by default).
+- The basic guard example uses literal fixed responses. Its old hidden permit
+  flag/actions caused a later Let me through choice to approve entry. Conditional
+  behaviour remains tested separately and available through Advanced. The review
+  asset was updated without changing the owner's new captain connection.
 
-Verification at `63cc73d`: Windows Release Studio/Runtime build; nine focused
-suites pass (2.64 s), including the new snapshot regression. Three scripting and
-inventory regressions pass (1.72 s). Actual Studio Test Game created the identity
-sidecar, logged QUICK SAVE COMPLETE and QUICK LOAD COMPLETE, and restored the
-refusal branch after a permit-granting reply. Native screenshot is in
-[the review receipt](docs/evidence/dialogue-editor/README.md).
+Changed code in the latest revision: DialogueService.h/.cpp, DialogueEditorWindow.cpp,
+RuntimeDialogue.h/.cpp, RuntimeApplication.cpp, DialogueTests.cpp. Earlier local
+usability commits added voice adoption, asset tests, the dialog launch integration,
+button/tooltip feedback and shared preview input isolation.
 
-Earlier native Basic/Advanced, Save/Undo/Redo/Discard, both preview/game branches,
-actual Studio Build Windows Game and packaged F5/F9 evidence remains scoped to
-`4122820`. The follow-up changes snapshot identity staging, not dialogue UI or
-Runtime save decoding. See [the workflow](docs/DIALOGUE_EDITOR.md) for details.
+Validation:
+- GNU C++17 core suite: 50 checks PASS.
+- Release Studio/Runtime and aggregate/focused targets built successfully.
+- Nine focused CTest suites PASS in 4.94 seconds at the tested engine source.
+- Tests cover live unsaved text/connection changes, voice-visit and memory
+  preservation, incomplete edits, deleting the displayed line, basic refusal even
+  with an old permit flag, Advanced conditions/actions/save memory, clip adoption,
+  serialization/snapshot/binding Undo/Redo and native scene reopen.
+- Native 7753f94 restored all controls with no outer scrolling. Its pressed Test
+  in game button showed depressed fill and the normal launch path saved the
+  current conversation/scene and launched the separate Runtime.
+- Native ed2e69a owner Test Game log recorded work -> captain and matching audio,
+  then gate -> refused and sael-refused.wav, continuation -> opening, and bye ->
+  end. Owner reported that the changes work after reviewing the new build.
 
-OPEN: populated-inventory live dialogue save/load, controller hardware, larger
-DPI layouts, live reply pagination and independent owner/release review. No merge,
-release or alpha distribution was performed. Check CI on the current PR head;
-local focused passes are not a four-green claim.
+Commands:
+cmake -S . -B BUILD/native -DRENEGADE_EMBED_SHADERS=ON
+cmake --build BUILD/native --config Release --parallel 4 --target RenegadeDialogueReview RenegadeRuntimeSceneTransitionTests RenegadeScreenRendererTests RenegadeRuntimeScreenTests
+ctest --test-dir BUILD/native -C Release -R 'RenegadeDialogue|RenegadeRuntimeSceneTransitionTests|RenegadeTestLevelSnapshot|RenegadeRuntimeGameSaveSlotTests|RenegadeScreenRendererTests|RenegadeRuntimeScreenTests' --output-on-failure
+g++ -std=c++17 -I EngineBridge/include EngineBridge/src/DialogueService.cpp Tests/DialogueTests.cpp -o dialogue-tests
+./dialogue-tests
+
+Preserved failures: 4a39dc3 could click through to the replacement preview button
+and allowed outer scrolling. 29dcf54 fixed the preview gesture but directly
+parenting controls to the scaled window hid them off-screen (owner screenshots).
+7753f94 restored the native unit-scale content parent and removed only the outer
+scrollbars. The opaque 2D composition resize fix remains; no unwritten suspended
+3D targets are sampled. Earlier responsive exits had code 0, not an application
+fault receipt. No blanket crash/performance pass is claimed.
+
+Limits: Debug/CI have not run for these local revisions. A new packaged build
+has not been verified at ed2e69a; older package receipts retain their original
+scope. Runtime was exercised as the actual separate Test Game player, not an
+embedded simulation. Controller hardware, live pagination, explicit manual
+file-picker save/reopen coverage and populated-inventory native save remain
+separate checks. Do not promote these into an independent release-gate PASS.
 
 ---
 

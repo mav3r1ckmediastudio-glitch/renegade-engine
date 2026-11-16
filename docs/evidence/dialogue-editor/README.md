@@ -1,4 +1,43 @@
-# Native dialogue review — 16 November 2026
+# Current usability candidate - 16 November 2026
+
+Tested engine source: ed2e69ab410045bbad3b6db384fe80b6bc008c17.
+Windows x64 Release/DX12. Nine focused suites pass in 4.94 seconds; the portable
+core suite passes 50 checks. See HANDOFF.md for exact build/test commands.
+The owner reviewed the native build and reported: "that all seems to work now".
+PR #195 remains CLOSED; local changes are unpushed. No new CI or merge occurred.
+
+Current UI uses opaque Studio dark/orange colours, native fonts, hover/pressed/
+disabled feedback, tooltips, numbered workflow, visible response destinations,
+a persistent preview ending, and local recording import/folder/refresh controls.
+Unsaved valid edits update preview while preserving progress and the current
+voice visit. The UI identifies sample clips as examples, and Runtime names the
+configured Interact key. NPC selection excludes Player Start markers.
+
+The simple example now has fixed response links. Its old automatic has_permit
+flag made a later Let me through reply take the approval branch. Advanced
+conditions/actions are retained and exercised in an explicit separate test
+fixture. The owner's captain connection was preserved in the review asset.
+
+Latest native Test Game log:
+- work -> captain; sael-captain.wav
+- gate -> refused; sael-refused.wav
+- Continue -> opening
+- bye -> end
+
+Failures remain part of the receipt: 4a39dc3 could activate a replacement preview
+button from the same click and allowed outer scrolling (see
+[pre-fix capture](usability-before-gesture.png)). 29dcf54 isolated the gesture but
+its direct scaled-window attachments hid the editor controls. 7753f94 restored
+native unit-scale content attachment and removed the outer scrollbars. Owner
+review occurred after those repairs, at ed2e69a.
+
+The older orange screenshots below were recorded before this latest usability
+revision; pale-teal screenshots are rejected historical styling. Older package,
+save/load and CI evidence does not validate the latest tree. A newly packaged
+build and broader manual/controller/file-picker checks remain unclaimed.
+---
+
+# Historical native dialogue review - 16 November 2026
 
 Tested code: `41228200d9fa43de1154f58d70ccb2f422684f81` on
 `feature/dialogue-editor-20261115`; base main `7093cf4`.

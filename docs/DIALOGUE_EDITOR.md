@@ -9,16 +9,31 @@ verified separately at `63cc73d`; the receipt preserves both revisions.
 
 ## Creator workflow
 
-Open **Add > Dialogue Editor**. The first conversation is the Gate Guard example.
-Write the NPC line, add player replies, and select a reply before using **+ NPC
-Line** to write its response. Use **Continue** to reconnect to a named section.
-Save the conversation, select an NPC/object, and choose **Assign to selected NPC**.
-Save the Level to persist its native metadata binding. No script is needed for
-ordinary lines and replies. Assignment uses normal scene Undo/Redo. Conversation
-edits use their own bounded snapshot Undo/Redo and explicit Save/Discard.
+Open **Add > Dialogue Editor**. Three numbered sections show the complete workflow:
+
+1. **Write the conversation**: select a line to edit it, add player replies, then
+   select a reply and **Add response** to write and connect the NPC's answer.
+   Reply rows show their destination or explicitly say that they end the conversation.
+   New creates a single text-only opening line; the existing Gate Guard is an example.
+   An unused NPC line is connected by selecting a reply and choosing that line in
+   **Continue to**. The basic example's choices have fixed responses: no hidden
+   permit flag changes the route of another sample reply.
+2. **Try the replies**: click choices in the preview. An ended or stopped branch
+   keeps a visible end card and Restart button instead of leaving an empty panel.
+3. **Attach to an NPC**: choose an NPC or scene object in the editor's object list.
+   **Save & attach** saves the conversation, assigns it and saves the current level.
+   **Test in game** performs those same saves and starts the normal Test Game.
+   Approach the chosen NPC within three metres and press Interact (E by default).
+   The level must have been saved once before this launch action is enabled.
+
+Tools and fields provide hover tooltips. Buttons have distinct hover, pressed
+and disabled appearance; activation follows one mouse-release gesture. No script
+is needed for ordinary lines and replies. Assignment uses normal scene Undo/Redo.
+Conversation edits use their own bounded Undo/Redo and explicit Save/Discard.
 
 **Advanced** reveals outcomes, conditions, actions and one-time replies in the
-same outline. Turning it off preserves the data and leaves rule-count badges.
+same script workspace. Turning it off preserves the data; conditional replies
+retain a quiet summary and a Show in Advanced button.
 Conditions support flag equality, minimum values and player inventory item counts.
 An outcome can match all or any conditions. The final unconditional Otherwise is
 mandatory. Outcomes are evaluated in order. Add Outcome inserts before Otherwise.
@@ -29,21 +44,41 @@ there is no claim of built-in quest, gate, item-giving or reputation services.
 Runtime accepts one event per outcome to preserve atomic queue admission.
 
 Preview uses the same conversation evaluator and **ScreenRenderer** as Runtime.
-The permit checkbox changes `has_permit` in isolated preview memory. Preview
+The optional permit checkbox appears for authored has_permit rules and changes only isolated preview memory. Preview
 events are simulated without changing the live scene. Preview starts when
-the editor opens; **Restart preview** resets it to the current document.
+the editor opens. Valid edits refresh the preview without Save, preserving the
+current line, test memory and voice visit. Unfinished fields retain the last
+valid preview and show a hint; deleting the displayed line returns to the opening.
+Restart explicitly resets test progress. Saving and Test in game persist assets;
+an already running Test Game uses its isolated launch snapshot.
 
-The workspace follows the native Light/Particle picker styling: fully opaque
-charcoal surfaces, pale teal actions and replies, legible native text fields,
-and separate conversation, properties and preview areas. It does not inherit
-the older translucent Studio chrome. Section fills are drawn before controls,
-so decorative surfaces cannot intercept input or cover the preview. New in-game
-panels default to fully opaque. Text size is a basic presentation setting;
-optional in-game opacity is under Advanced and never changes the editor shell.
+The owner rejected the original turquoise outline UI. The revised workspace
+uses Studio's opaque dark palette and orange accent, native default font family,
+16-point headings, 14-point controls and 18-point script rows. The Advanced button
+adds rules in place. Row drawing, picking and scrolling share one geometry;
+section backgrounds are painted before controls. New in-game panels default to
+opaque with orange accents. Presentation font size and optional in-game opacity
+are under Advanced; neither changes the editor shell.
+
+Select an NPC line and use **Add voice clip...** to browse local WAV/OGG recordings.
+The recording is validated, copied into Content/Audio/Dialogue without overwriting
+other clips and attached to that line. **Open voice folder** exposes the project's
+recordings; after adding files externally, **Refresh clips** updates the list.
+Choose **No voice (text only)** for silent lines. New lines are text-only, and
+editing text does not generate or replace audio. **Play this line** auditions the
+selected section; Restart returns to the opening. The same clip plays
+in the editor and Runtime through the existing Voice mixer bus. Changing line or
+closing the conversation stops the previous clip; pagination does not restart it.
+Silent lines remain valid. Missing clips/audio devices leave text usable and log
+the audio problem. Save registers clip dependencies for packaging; Test Game
+copies them into its project snapshot. Dialogue format 2 adds optional voice paths
+and retains format-1 reading. Voice references cannot leave project Content.
 
 ## In-game behaviour
 
-An assigned object within three metres offers an Interact talk prompt. Interact
+An assigned NPC/object within three metres offers a prompt naming the project's
+actual Interact key, for example **Press E to talk to Gate Guard**. Player Start
+markers are excluded from NPC selection and Runtime dialogue targets. Interact
 uses the project's existing binding. The dialogue owns movement/look/combat input
 until it closes; Escape closes it without also opening Pause. Mouse replies,
 arrow/D-pad navigation and Enter/controller activation use shared native Screen
@@ -64,7 +99,7 @@ resuming in the middle of a spoken line is not implemented.
 
 ## Current limits and acceptance
 
-Voice audio, portraits, cinematic camera tracks, gestures, timed replies, custom
+Portraits, cinematic camera tracks, gestures, timed replies, custom
 Screen layout assignment, global UI themes, a graph view and general Lua dialogue
 memory APIs remain future work. The current Screen is generated through native
 Screen widgets with authored font size/opacity, not an independently editable
