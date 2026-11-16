@@ -282,9 +282,9 @@ struct DialogueEditorWindow::Impl
     }
     template <class W> void Add(W &w, float x, float y, float width, float height)
     {
-        w.SetPos({x, y + 28});
+        w.SetPos({x, y});
         w.SetSize({width, height});
-        owner->AddWidget(&w, wi::gui::Window::AttachmentOptions::NONE);
+        owner->AddWidget(&w);
         layout.push_back({&w, {x, y}, {width, height}});
     }
     void Button(DialogueButton &b, const char *label, float x, float y, float w, std::function<void()> fn)
@@ -838,7 +838,8 @@ struct DialogueEditorWindow::Impl
                 o->next = n.id;
             else if (!l->replies.empty())
             {
-                status = "Select an outcome to add its response.";
+                status = advanced ? "Select a reply outcome, then Add response."
+                                  : "Select a player reply, then Add response to write the NPC's answer.";
                 undo.pop_back();
                 return;
             }
@@ -1174,7 +1175,7 @@ struct DialogueEditorWindow::Impl
         owner->SetPos({std::max(8.f, (width - 1320 * uiScale) * .5f), 24});
         for (auto &item : layout)
         {
-            item.widget->SetPos({item.pos.x * uiScale, 28 + item.pos.y * uiScale});
+            item.widget->SetPos({item.pos.x * uiScale, item.pos.y * uiScale});
             item.widget->SetSize({item.size.x * uiScale, item.size.y * uiScale});
         }
         tree.uiScale = uiScale;
@@ -1232,6 +1233,16 @@ DialogueEditorWindow::~DialogueEditorWindow()
 void DialogueEditorWindow::Create()
 {
     wi::gui::Window::Create("Dialogue Editor", WindowControls::CLOSE | WindowControls::MOVE);
+    // Keep native child coordinates on its unit-scale content transform. The
+    // workspace fits the canvas, so only its conversation list should scroll.
+    RemoveWidget(&scrollbar_vertical);
+    RemoveWidget(&scrollbar_horizontal);
+    scrollbar_vertical.Detach();
+    scrollbar_horizontal.Detach();
+    scrollbar_vertical.SetListLength(0);
+    scrollbar_horizontal.SetListLength(0);
+    scrollbar_vertical.SetVisible(false);
+    scrollbar_horizontal.SetVisible(false);
     SetSize({1320, 990});
     SetControlSize(28);
     impl_->Create();
