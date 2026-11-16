@@ -1,24 +1,34 @@
-# Dialogue implementation candidate — 15 November 2026
+# Dialogue editor review candidate — 16 November 2026
 
-Branch `feature/dialogue-editor-20261115`, based on main `7093cf4`.
-Owner authorized building the outline conversation editor with an Advanced toggle
-and in-game UI. Existing arms/weapon changes were left untouched in their separate
-checkout. See [dialogue workflow and acceptance](docs/DIALOGUE_EDITOR.md).
+Branch `feature/dialogue-editor-20261115`, base main `7093cf4`; draft PR #195.
+Tested engine code: `41228200d9fa43de1154f58d70ccb2f422684f81`.
+Owner requested the native outline editor with Advanced and in-game UI, then
+required styling to match the new Light/Particle editors. The workspace now uses
+opaque charcoal panels, pale teal controls/replies, readable native text fields,
+and automatic shared Screen preview. Section backgrounds cannot cover controls
+or steal their focus. Other arms/weapon work remains untouched.
 
-Implemented source: pure conversation evaluator/codec/memory, transactional assets,
-native metadata assignment command, native editor/Advanced controls and bounded
-history, shared Screen presentation, Runtime interaction/input routing, Test Game
-staging, packaging declarations and backward-readable quick-save v2 memory.
+Implemented services and source are described in [the dialogue workflow](docs/DIALOGUE_EDITOR.md).
+Native screenshots, exact build/test commands and limitations are in
+[the review receipt](docs/evidence/dialogue-editor/README.md).
 
-Verification: GNU C++17 core test binary passed 32 behavioural checks. New native
-editor/asset/panel/host sources passed GNU syntax checks against exact pinned Wicked
-headers using Linux platform declarations (not Windows link or visual evidence).
-Windows Release build and native asset/save tests are in progress in a separate
-checkout. UI, Test Game and standalone acceptance are OPEN. No merge or release.
+Verification at the tested code: Windows Release Studio/Runtime linked; all seven
+focused native suites passed (0.69 s); 32 GNU/native core checks passed. Native
+Studio Basic/Advanced/condition layouts and opacity edit/save/exit/open passed.
+Both permit branches passed in preview and Test Game; arrow/Enter and Escape
+input worked. Actual Studio Build Windows Game passed its DX12 smoke and packaged
+the saved dialogue. The standalone executed both outcomes; F5 before acquiring a
+permit, acquisition, then F9 restored the earlier refusal state. This live save
+proof is inventory-free; do not claim populated-inventory or controller hardware
+acceptance. The retained C4834 launch-call warning is noted in the receipt.
 
-Next: finish Windows link; run Dialogue/DialogueAsset/GameSaveSlot tests; inspect
-and exercise native editor, assignment/reopen, both branches, Test Game and a
-standalone package. Resolve failures before offering this candidate as complete.
+OPEN: script-free Test Game quick-save fails because SnapshotCreatorScripts skips
+the scene `.rmeta` identity when no scripts are attached. Do not weaken Runtime's
+identity guard. Stage scene identity independently and add a snapshot regression
+as a follow-up. Packaged save/load includes the identity and passed. Larger DPI,
+live reply pagination and independent owner/release review remain open. No merge,
+release or new alpha was authorized or performed. CI status must be checked on
+the current PR head; no four-green claim is recorded here.
 
 ---
 

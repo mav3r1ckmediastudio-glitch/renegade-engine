@@ -1,8 +1,10 @@
 # Dialogue editor candidate — 15 November 2026
 
 Base: main `7093cf4`. Isolated branch: `feature/dialogue-editor-20261115`.
-This is an unmerged implementation candidate. Windows, visual and standalone
-acceptance must be recorded before calling it complete.
+This is an unmerged implementation candidate. Windows Release, native editor,
+Test Game dialogue and standalone save/load evidence is recorded for code
+`4122820` in [the native review receipt](evidence/dialogue-editor/README.md).
+Independent acceptance remains open; the receipt records one Test Game save issue.
 
 ## Creator workflow
 
@@ -27,8 +29,16 @@ Runtime accepts one event per outcome to preserve atomic queue admission.
 
 Preview uses the same conversation evaluator and **ScreenRenderer** as Runtime.
 The permit checkbox changes `has_permit` in isolated preview memory. Preview
-events report the action without changing the live scene. Text size and opacity
-are authored appearance settings; preview starts from the current document.
+events are simulated without changing the live scene. Preview starts when
+the editor opens; **Restart preview** resets it to the current document.
+
+The workspace follows the native Light/Particle picker styling: fully opaque
+charcoal surfaces, pale teal actions and replies, legible native text fields,
+and separate conversation, properties and preview areas. It does not inherit
+the older translucent Studio chrome. Section fills are drawn before controls,
+so decorative surfaces cannot intercept input or cover the preview. New in-game
+panels default to fully opaque. Text size is a basic presentation setting;
+optional in-game opacity is under Advanced and never changes the editor shell.
 
 ## In-game behaviour
 
@@ -63,6 +73,10 @@ Required native evidence: editor visual/layout and interaction; Save/Discard and
 Undo/Redo; assignment save/reopen; both permit paths; input/cursor restoration;
 Test Game; dependency-closed standalone package; quick-save/quick-load with and
 without inventory. Automated checks alone do not establish these acceptances.
+
+The current script-free Test Game snapshot omits the scene identity companion,
+so quick-save there correctly fails. Packaged single-level save/load passed with
+dialogue memory restored. See the receipt before making broader save claims.
 
 For local Windows review, configure with the normal embedded-shader setting and
 build `RenegadeDialogueReview` in Release. This aggregate builds Studio, Runtime,

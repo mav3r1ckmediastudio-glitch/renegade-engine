@@ -2213,6 +2213,11 @@ NPC assignment uses the normal scene command boundary. Transactional .rdialogue
 assets live in project Content/Dialogue and explicit package roots. Runtime caches
 bindings on SceneService revision changes, then queries only bound transforms.
 Preview and gameplay share DialogueSession and ScreenRenderer/DialoguePanel.
+The dialogue workspace owns a local opaque charcoal/pale-teal theme consistent
+with the Light/Particle pickers. Decorative section fills render before native
+controls and never participate in focus ordering. It uses a separate native GUI
+while the ordinary Studio GUI and scene input are suspended. Preview Screen roots
+attach to the dialogue window so modal layering and teardown remain explicit.
 Event actions enter the existing gameplay event queue before memory/advance commits.
 Quick-save v2 appends bounded dialogue memory while retaining v1 reads. No Wicked
 source or submodule pin change is part of this candidate. See DIALOGUE_EDITOR.md
