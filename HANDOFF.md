@@ -1,3 +1,27 @@
+# Audio/prefab context correction — owner confirmed 16 November 2026
+
+Implementation commit: 239be816e821e7040a59ffb4d3997f927c93ba37.
+StudioApplication.cpp now excludes Audio/particle/navigation and Physics from
+the selected-object prefab toolbar and its pointer hit targets. The scene editing
+guide/footer follows that context; viewport box-selection feedback is preserved.
+Audio had reused Scene mode internally, exposing the toolbar for a retained asset
+selection. The owner subsequently confirmed the reported issue was fixed.
+
+Release build BUILD/native/Studio/Release/RenegadeStudio-Icons5.exe passed:
+ACFD66371311AC6096A27BBB8DBD75AE406840E248A44946BCE4ED6CD5562EF3.
+Same MSBuild configuration as below, TargetName=RenegadeStudio-Icons5.
+The same 67-test CTest filter passed in 2.75 s. git diff --check passed.
+No new screenshot receipt is claimed for this small owner-confirmed correction.
+Docs: UI_ICON_INTEGRATION, ARCHITECTURE and FEATURE_MATRIX.
+
+The owner's Icons4 window had unsaved scene edits: do not close or discard it.
+Icons5 uses BUILD/ui-audio-context-review and separate preferences. No owner
+project or existing window was closed. No push, PR, hosted CI, merge or release.
+The existing dirty Wicked overlays remain unstaged. Remaining UI/DPI scope below
+is unchanged; owner confirmation applies to this reported context issue.
+
+---
+
 # Approved icon integration and owner corrections — 16 November 2026
 
 Implementation/evidence commit:
