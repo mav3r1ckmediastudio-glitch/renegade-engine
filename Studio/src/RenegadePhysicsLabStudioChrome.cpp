@@ -170,6 +170,31 @@ namespace renegade::studio
         SetNavigationWorkspaceActive(false);
     }
 
+    void RenegadePhysicsLabStudioChrome::OnSceneSelectionChanged()
+    {
+        // Physics Lab keeps hierarchy selection as its authoring target.
+        if (physicsLab_.IsActive())
+            return;
+
+        workspaceTransitionRequested_ = true;
+        particleAddMenuOpen_ = false;
+        SetAudioWorkspaceActive(false);
+        SetParticleWorkspaceActive(false);
+        SetNavigationWorkspaceActive(false);
+
+        auto* session = bridge::StudioSession::Current();
+        if (!session || !session->Selection().HasSelection())
+            return;
+        auto& scene = session->Scenes().GetScene();
+        const auto selected = session->Selection().SelectedEntity();
+        if (!particlePickerAction_ && bridge::IsParticleEmitter(scene, selected))
+            SetParticleWorkspaceActive(true);
+        else if (bridge::IsRenegadeNavigationEntity(scene, selected))
+            SetNavigationWorkspaceActive(true);
+        else if (bridge::IsRenegadeSoundSource(scene, selected))
+            SetAudioWorkspaceActive(true);
+    }
+
     void RenegadePhysicsLabStudioChrome::RequestCurrentWorkspaceReconcile()
     {
         if (!physicsLab_.IsActive() && !audioWorkspace_.IsActive() &&

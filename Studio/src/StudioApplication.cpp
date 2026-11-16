@@ -1131,6 +1131,7 @@ namespace renegade::studio
             SetEnvironmentWorkspaceActive(false);
             SetTerrainWorkspaceActive(false);
             SetRenderWorkspaceActive(false);
+            studioChrome_.OnSceneSelectionChanged();
             RefreshInspector();
             RefreshStatus();
         });
@@ -3206,6 +3207,8 @@ namespace renegade::studio
                 editingSceneRevision_==session_->Scenes().Revision()?editingAssembly_:wi::ecs::INVALID_ENTITY);
             SetEnvironmentWorkspaceActive(false);
             SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
+            studioChrome_.OnSceneSelectionChanged();
             RefreshHierarchy();
             RefreshInspector();
             RefreshStatus();
@@ -9674,6 +9677,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         for(auto existing:session_->Selection().Entities())if(authoringTool(existing))toggle=false;
         if(toggle)session_->Selection().Toggle(entity);else session_->Selection().Select(entity);
         SyncGizmoSelection();
+        studioChrome_.OnSceneSelectionChanged();
     }
 
     bool StudioRenderPath::HandleViewportSelection(const XMFLOAT4& pointer)
@@ -9726,6 +9730,12 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 session_->Selection().Set(std::move(selected));SyncGizmoSelection();
             } else if(!selectionGestureAdd_)session_->Selection().Clear();
             selectionBox_=false;
+            if(session_->Selection().HasSelection()) {
+                SetEnvironmentWorkspaceActive(false);
+                SetTerrainWorkspaceActive(false);
+                SetRenderWorkspaceActive(false);
+                studioChrome_.OnSceneSelectionChanged();
+            }
             RefreshHierarchy();RefreshInspector();RefreshStatus();return true;
         }
         if(GetGUI().HasFocus() || !IsPointerOverViewport(pointer) ||

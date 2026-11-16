@@ -2352,3 +2352,10 @@ specialist-context exclusion: Audio (including particle/navigation ownership)
 and Physics do not expose scene assembly controls. Scene viewport selection
 feedback remains independent, so suppressing this contextual toolbar does not
 remove box-selection feedback.
+
+Explicit viewport and hierarchy selection events reconcile specialist inspector
+ownership after changing StudioSession selection. OnSceneSelectionChanged
+releases Audio/legacy particle/navigation, chooses the selected entity's typed
+specialist if appropriate, and otherwise restores the Scene inspector. This is
+event driven: opening the global Audio mix with a retained ordinary selection
+does not immediately close it. Physics Lab retains its authoring target flow.

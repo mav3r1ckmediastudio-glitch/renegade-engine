@@ -112,3 +112,34 @@ the reported issue was fixed. No additional exact-binary screenshot claim is
 made for this correction; the earlier receipts keep their original provenance.
 The existing owner-operated window with unsaved edits was preserved. The new
 review instance uses a separate copied project and preferences.
+
+## Selected-asset inspector handoff
+
+The previous Audio correction suppressed scene prefab controls, but did not
+release Audio's inspector ownership on a new asset selection. Explicit viewport
+picks, both hierarchy paths and completed box selections now notify the chrome
+after updating the authoritative selection. The chrome releases Audio, legacy
+particle and navigation ownership, then chooses the matching specialist for a
+sound, legacy particle or navigation entity. Ordinary assets use the existing
+Scene inspector immediately. Render ownership is also cleared by the modern
+hierarchy path, consistent with viewport selection.
+
+Opening Audio with an existing ordinary selection still shows the global mix;
+it is the explicit selection event that hands ownership back. Empty-background
+clicks keep that mix open. Physics Lab retains hierarchy targets for its
+authoring workflow. No scene inventory scan or second selection model is added.
+
+Release candidate: BUILD/native/Studio/Release/RenegadeStudio-Icons6.exe,
+SHA-256 83FC83470A2798ACA3E5398C7A17DE1C4DA4CD477435583C0509C9BA165EF6ED.
+The same 67 selected checks pass (12.06 s). Native proof: select Player Start,
+open Audio (mix stays open with the retained selection and prefab controls
+hidden), click Point Light in the viewport: LIGHT // Point Light appears
+immediately, without clicking the panel. Reopening Audio also remains possible.
+Expanding Models leaves Audio active, as intended for a category-only click.
+
+The review process closed before the model-row, same-asset and Physics native
+checks could complete. Those are not claimed as native passes. No Application
+Error/Windows Error Reporting event was found during the check; the exit cause
+was not established. The other open Icons5 instance remains the previous
+toolbar-only correction and does not contain this routing fix. Native proof
+used a separate copied project/preferences. Owner acceptance remains pending.

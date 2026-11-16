@@ -66,3 +66,24 @@ The new instance has a separate copied project/preferences. All 67 selected
 checks pass, including rebuilt Journey fixed/responsive layout tests. Native
 evidence is scoped to its stated binary; OS DPI 125%/150% and owner signoff remain
 pending. No hosted CI, PR, push, merge or release was performed.
+
+## Audio selection handoff checkpoint
+
+RenegadeStudio-Icons6.exe SHA-256:
+83FC83470A2798ACA3E5398C7A17DE1C4DA4CD477435583C0509C9BA165EF6ED.
+This binary was built before the implementation commit; the configure-time Git
+stamp is not an exact release identity receipt.
+
+- audio-selection-player-before: viewport pick shows Player Start inspector.
+- audio-selection-mix: Audio opens with Player retained; global mix is visible
+  and scene prefab controls are hidden.
+- audio-selection-light: one viewport click on Point Light immediately replaces
+  Audio with LIGHT // Point Light. No inspector-panel click occurred.
+- audio-selection-model-category: Audio was reopened, then Models expanded;
+  category expansion keeps Audio open until an asset is selected.
+
+The process closed before the hierarchy model-row, repeated same-asset and
+Physics target checks completed; no native pass is claimed for those cases.
+The code routes both hierarchy paths and completed box selection through the
+same handoff. All 67 selected regressions pass. No owner project was modified.
+The existing Icons5 window was preserved and remains the previous correction.
