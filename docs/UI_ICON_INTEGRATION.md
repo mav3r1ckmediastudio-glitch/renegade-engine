@@ -94,3 +94,21 @@ The owner-correction executable is RenegadeStudio-Icons4.exe:
 E6596CA2670F860C0F05B02AB7AA353BA1EF21034E4374D3AE32C7F491A8E2DC.
 It uses the same Release Build command with TargetName=RenegadeStudio-Icons4.
 The latest combined 67-test command passes (9.73 s, exit 0).
+
+## Specialist inspector context correction
+
+Opening Audio retains a Scene workspace internally. The selected-object toolbar
+had checked only Scene mode, so Group/Edit Pieces/Save Prefab/Unpack appeared
+whenever an asset was selected. DrawSelectionGesture now excludes Audio,
+particles, navigation and Physics from that toolbar, its scene-editing hints
+and the assembly-editing footer. HandleAssemblyToolbar excludes the same
+specialist contexts, so hidden controls cannot respond to pointer input.
+Viewport box-selection feedback remains available.
+
+Release build RenegadeStudio-Icons5.exe passed, SHA-256:
+ACFD66371311AC6096A27BBB8DBD75AE406840E248A44946BCE4ED6CD5562EF3.
+The same 67 selected checks pass (2.75 s, exit 0). The owner then confirmed
+the reported issue was fixed. No additional exact-binary screenshot claim is
+made for this correction; the earlier receipts keep their original provenance.
+The existing owner-operated window with unsaved edits was preserved. The new
+review instance uses a separate copied project and preferences.

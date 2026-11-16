@@ -9749,6 +9749,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
     bool StudioRenderPath::HandleAssemblyToolbar(const XMFLOAT4& pointer)
     {
+        // Specialist inspectors do not own scene/prefab action hit targets.
+        if(studioChrome_.IsAudioWorkspaceActive() || studioChrome_.IsPhysicsLabActive())
+            return false;
         if(pendingAction_!=EditorAction::None || studioChrome_.HasOpenMenuPopup() ||
             scenePrefabSavePanel_.IsVisible() || lightPicker_.IsVisible() || particlePicker_.IsVisible())return false;
         if(!session_ || projectHubVisible_ || environmentWorkspaceActive_ || terrainWorkspaceActive_ || renderWorkspaceActive_ ||
@@ -9773,10 +9776,14 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
     void StudioRenderPath::DrawSelectionGesture(wi::graphics::CommandList cmd) const
     {
+        const bool showSceneSelectionTools =
+            !studioChrome_.IsAudioWorkspaceActive() && !studioChrome_.IsPhysicsLabActive();
+        // Keep box-selection feedback available in the viewport, while the
+        // prefab toolbar and scene-editing hints belong only to scene editing.
         // Native menus and modal pickers own this screen space and gesture.
         if(scenePrefabSavePanel_.IsVisible() || studioChrome_.HasOpenMenuPopup() ||
             lightPicker_.IsVisible() || particlePicker_.IsVisible())return;
-        if(session_ && !projectHubVisible_ && !environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
+        if(showSceneSelectionTools && session_ && !projectHubVisible_ && !environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
             !modelImportPanel_.IsVisible() && !assemblyPanel_.IsVisible() && !handGripPanel_.IsVisible() &&
             session_->Selection().HasSelection()) {
             const float x=viewportBounds_.x+16,y=viewportBounds_.y+54;
@@ -9794,7 +9801,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 wi::font::Draw(labels[i],text,cmd);
             }
         }
-        if(session_ && !projectHubVisible_ && !environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
+        if(showSceneSelectionTools && session_ && !projectHubVisible_ && !environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
             !modelImportPanel_.IsVisible() && !assemblyPanel_.IsVisible() && !handGripPanel_.IsVisible() &&
             editingAssembly_==wi::ecs::INVALID_ENTITY) {
             wi::font::Params help;help.posX=viewportBounds_.x+16;
@@ -9820,7 +9827,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             const wi::Color edge(100,230,210,230);
             rect(x,y,w,1,edge);rect(x,y+h,w,1,edge);rect(x,y,1,h,edge);rect(x+w,y,1,h,edge);
         }
-        if(editingAssembly_!=wi::ecs::INVALID_ENTITY && session_ &&
+        if(showSceneSelectionTools && editingAssembly_!=wi::ecs::INVALID_ENTITY && session_ &&
             editingSceneRevision_==session_->Scenes().Revision() &&
             session_->Scenes().GetScene().transforms.Contains(editingAssembly_)) {
             auto* n=session_->Scenes().GetScene().names.GetComponent(editingAssembly_);

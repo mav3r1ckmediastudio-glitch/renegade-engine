@@ -2346,3 +2346,9 @@ canvas hit region and scissor boundary in agreement. The 192 logical px header
 reserves clear row spacing around Fit. Persistent viewport controls such as Audio
 continue to render during popups; exclusive input and the foreground popup pass
 provide ownership instead of hiding the control.
+
+Selected-object prefab toolbar presentation and pointer hit targets share the
+specialist-context exclusion: Audio (including particle/navigation ownership)
+and Physics do not expose scene assembly controls. Scene viewport selection
+feedback remains independent, so suppressing this contextual toolbar does not
+remove box-selection feedback.
