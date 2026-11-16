@@ -232,7 +232,7 @@ namespace renegade::studio
 
             [[nodiscard]] float Measure() const noexcept
             {
-                return 472.0f;
+                return 480.0f;
             }
 
             void Refresh()
@@ -268,7 +268,13 @@ namespace renegade::studio
                     y += height + 6.0f;
                 };
 
-                place(status_, 20.0f);
+                for (auto* label : {&status_, &info_})
+                {
+                    label->font.params.size=12;
+                    label->font.params.bolden=.12f;
+                    label->SetFitTextEnabled(false);
+                }
+                place(status_, 40.0f);
                 place(newClip_);
                 place(clips_);
                 place(timer_);
@@ -289,7 +295,7 @@ namespace renegade::studio
                 place(keys_);
                 place(keyTime_);
                 place(deleteKey_);
-                place(info_, 42.0f);
+                place(info_, 48.0f);
             }
 
         private:

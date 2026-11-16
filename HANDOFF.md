@@ -26,13 +26,16 @@ Marker Icons, S1B and protected importer source contracts pass. Pure policy test
 also pass with g++ C++17; width tests cover 280/360/480 px and tiny bounds.
 
 Latest native binary SHA-256:
-`8AC7907B8A63F38ACDC328BFD51DEE96D97B4A15548D8586BF8B55CA96AF0775`.
+`9E7E371B96B0EDBF769535D210DB09F2E9E86780E7862499197072A0F1F221AD`.
 It is staged as canonical `BUILD/native/Studio/Release/RenegadeStudio.exe`.
 The owner closed the preceding session and authorized reopening. Final review
 uses `BUILD/ui-correction-review/DialogueReview.renegade` and isolated local
 preferences. Do not close an owner-operated Studio session or discard edits.
-Native verification of the latest corrections is still in progress. The older
-first-pass menu/Physics screenshots do not certify the corrected binary.
+Native review confirms complete numeric fields in Environment/Render/Player,
+immediate newly placed light inspection, and single-click light selection from
+both Environment and Render. The saved review scene reopened with seven entities
+and two lights. Narrow layer bits wrap into four columns. Evidence records each
+binary separately; earlier menu/Physics screenshots are scoped to their capture.
 See `docs/UI_COHESION_PASS1.md` for current scope and acceptance targets.
 
 The six pre-existing Wicked working-tree overlays were copied unchanged into

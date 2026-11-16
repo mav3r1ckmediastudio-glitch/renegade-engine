@@ -58,7 +58,7 @@ are preserved. Native review uses a disposable copied project and preferences.
 - Native review initially confirmed menu coverage, all twelve Add rows, clean
   Physics Lab and Story Flow. The owner then found inspector occlusion, title/
   Character text overlap and numeric clipping. These prompted the corrections
-  below. Final native verification of those corrections remains in progress.
+  below. Scoped native verification of those corrections passed as recorded below.
 
 Native acceptance targets: existing-project loading and Story Flow handoff;
 Search Scene behind File/Edit; all twelve Add rows; Physics Lab without cyan
@@ -83,3 +83,28 @@ Character body text uses the common 12 px weight and is measured at the actual
 content width, so its reason/status rows cannot resize over subsequent controls.
 The protected importer keeps its original native control types for this pass;
 its full interaction/typography migration remains a separate audited surface.
+
+## Native acceptance checkpoint
+
+Binary 8AC7907B8A63F38ACDC328BFD51DEE96D97B4A15548D8586BF8B55CA96AF0775
+passed the reported core checks: complete numeric fields in narrow Environment,
+Render and Player inspectors; immediate Player selection; newly placed Point
+Light inspector without a panel click; clear Audio heading; matching twelve-row
+Add popup; File covering Search Scene while the light inspector stays visible;
+held Timeline action waits until release and toggles once. The test scene saved
+with seven entities. See evidence/ui-cohesion-pass1/README.md and screenshots.
+
+The text/grid follow-up binary is
+429072F38556E50363F74723EB647A7198A2BEFB8BC1D050ACA97ADE7A4D16C7.
+It adds narrow layer-grid wrapping and adequate Timeline status/help typography.
+Native reopening preserved seven entities and two lights, complete Environment
+numeric fields and the four-column narrow layer grid.
+
+Final binary 9E7E371B96B0EDBF769535D210DB09F2E9E86780E7862499197072A0F1F221AD
+also routes deliberate viewport selection back from Environment/Terrain/Render
+to the selected asset Inspector, matching hierarchy selection. Native checks
+from Environment and Render each selected the light with one viewport click and
+immediately displayed LIGHT // Point Light, without clicking the panel. The
+marker/frame-loop/Scene UI contracts pass after this correction. This latest
+binary is open for owner review. No production project or owner unsaved state
+was discarded. No hosted CI, push, PR, merge or package occurred.

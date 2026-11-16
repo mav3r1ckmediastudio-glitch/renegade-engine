@@ -9658,6 +9658,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         if(editingAssembly_!=wi::ecs::INVALID_ENTITY && entity!=editingAssembly_ &&
             !scene.Entity_IsDescendant(entity,editingAssembly_))editingAssembly_=wi::ecs::INVALID_ENTITY;
         entity=bridge::ResolveAssemblySelection(scene,entity,editingAssembly_);
+        // A deliberate viewport selection owns the Inspector just like a
+        // hierarchy selection, even when Environment or Render was active.
+        SetEnvironmentWorkspaceActive(false);
+        SetTerrainWorkspaceActive(false);
+        SetRenderWorkspaceActive(false);
         const auto authoringTool=[&](wi::ecs::Entity e) {
             return scene.terrains.Contains(e) ||
                 bridge::RiverTransformNeedsTerrainTransaction(scene,e) ||

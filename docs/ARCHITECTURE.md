@@ -2314,3 +2314,11 @@ commands routed through the specialist chrome callback. No new authoritative
 scene, project UI asset or gameplay presentation format is introduced. The
 runtime authored Screen remains separate. See UI_COHESION_PASS1.md for scope
 and acceptance status.
+
+Popup exclusivity pauses ordinary GUI input and specialist manual controls,
+without calling Activate on the entire chrome backdrop. This preserves native
+Inspector drawing order. Viewport selection uses the same Environment/Terrain/
+Render workspace exit as hierarchy selection, so a newly selected asset owns
+its Inspector even when a different property tab was previously active. Shared
+InspectorContentWidth reserves Window::GetControlSize for the scrollbar before
+it appears, and narrow layer masks wrap to four columns with measured row space.

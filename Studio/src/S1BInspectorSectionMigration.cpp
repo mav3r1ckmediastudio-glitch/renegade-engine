@@ -576,14 +576,14 @@ namespace renegade::studio
         inspectorLabel_.SetTooltip(heading);
         auto metrics = inspectorLabel_.font.params;
         metrics.h_wrap = -1;
-        if (wi::font::TextWidth(heading,metrics) > innerWidth-4.f)
+        if (wi::font::TextWidth(heading,metrics) > innerWidth-20.f)
         {
             do {
                 if (heading.empty()) break;
                 auto cut=heading.size()-1;
                 while (cut>0 && (static_cast<unsigned char>(heading[cut])&0xc0)==0x80) --cut;
                 heading.resize(cut);
-            } while (wi::font::TextWidth(heading+"...",metrics)>innerWidth-4.f);
+            } while (wi::font::TextWidth(heading+"...",metrics)>innerWidth-20.f);
             heading+="...";
         }
         inspectorLabel_.SetText(heading);
@@ -678,15 +678,16 @@ namespace renegade::studio
             sceneLayerNoneButton_.SetSize(XMFLOAT2(half, 28.0f));
             y += 34.0f;
             const float bitGap = 4.0f;
-            const float bitWidth = (innerWidth - bitGap * 7.0f) / 8.0f;
+            const std::size_t bitColumns = innerWidth >= 332.f ? 8u : 4u;
+            const float bitWidth = (innerWidth - bitGap * float(bitColumns-1)) / float(bitColumns);
             for (std::size_t bit = 0; bit < sceneLayerBits_.size(); ++bit)
             {
-                const float x = 12.0f + static_cast<float>(bit % 8u) * (bitWidth + bitGap);
-                const float bitY = y + static_cast<float>(bit / 8u) * 26.0f;
+                const float x = 12.0f + static_cast<float>(bit % bitColumns) * (bitWidth + bitGap);
+                const float bitY = y + static_cast<float>(bit / bitColumns) * 26.0f;
                 sceneLayerBits_[bit].SetPos(XMFLOAT2(x, bitY));
                 sceneLayerBits_[bit].SetSize(XMFLOAT2(bitWidth, 22.0f));
             }
-            y += 108.0f;
+            y += float((sceneLayerBits_.size()+bitColumns-1)/bitColumns)*26.f+4.f;
             section(sceneMetadataLabel_);
             sceneMetadataPreset_.SetPos({12.0f,y});
             sceneMetadataPreset_.SetSize({half,28.0f});
