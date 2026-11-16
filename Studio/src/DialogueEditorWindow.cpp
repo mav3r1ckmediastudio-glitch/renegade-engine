@@ -77,6 +77,7 @@ class DialogueOutline : public wi::gui::TreeList
 {
   public:
     float uiScale = 1;
+    std::vector<std::string> hints;
     std::vector<int> VisibleRows() const
     {
         std::vector<int> rows;
@@ -192,6 +193,12 @@ class DialogueOutline : public wi::gui::TreeList
                 draw(item.name.substr(0, colon), x, y + 7 * uiScale, theme::CaptionSize, Accent, .15f);
                 draw(item.name.substr(colon + 2), x, y + 24 * uiScale, theme::ScriptSize, Text, .12f);
             }
+            else if (reply)
+            {
+                draw(item.name.substr(7), x, y + 8 * uiScale, theme::ScriptSize, Text, .12f);
+                if (size_t(index) < hints.size())
+                    draw(hints[index], x, y + 32 * uiScale, theme::CaptionSize, theme::Muted);
+            }
             else
                 draw(reply ? item.name.substr(7) : item.name, x, y + 17 * uiScale,
                      reply ? theme::ScriptSize : theme::ControlSize, Text, reply ? .12f : 0.f);
@@ -284,7 +291,11 @@ struct DialogueEditorWindow::Impl
     {
         b.Create(label);
         Add(b, x, y, w, 32);
-        b.OnClick([fn](auto &) { fn(); });
+        b.OnClick([fn](auto &) {
+            // Pinned native Button revisits DEACTIVATING while held. Act on
+            // release once, matching the shared Screen renderer's gesture rule.
+            if (!wi::input::Down(wi::input::MOUSE_BUTTON_LEFT)) fn();
+        });
     }
     bool Dirty() const
     {
@@ -347,12 +358,24 @@ struct DialogueEditorWindow::Impl
         rowKeys.push_back(key);
         refs.push_back(ref);
         tree.AddItem(item);
+        std::string hint;
+        if (ref.l >= 0 && ref.r >= 0 && ref.o < 0 && ref.c < 0 && ref.a < 0)
+        {
+            const auto &reply = doc.lines[ref.l].replies[ref.r];
+            if (reply.outcomes.size() != 1) hint = "Conditional responses - Show in Advanced";
+            else if (reply.outcomes.front().next.empty()) hint = "Ends conversation - add a response to continue";
+            else
+                for (const auto &line : doc.lines)
+                    if (line.id == reply.outcomes.front().next) { hint = "Then: " + line.text; break; }
+        }
+        tree.hints.push_back(std::move(hint));
     }
     void Rebuild()
     {
         for (size_t n = 0; n < rowKeys.size() && n < size_t(tree.GetItemCount()); ++n)
             expanded[rowKeys[n]] = tree.GetItem(int(n)).open;
         tree.ClearItems();
+        tree.hints.clear();
         selectionPlaced = false;
         refs.clear();
         rowKeys.clear();
