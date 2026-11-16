@@ -2219,6 +2219,9 @@ controls and never participate in focus ordering. It uses a separate native GUI
 while the ordinary Studio GUI and scene input are suspended. Preview Screen roots
 attach to the dialogue window so modal layering and teardown remain explicit.
 Event actions enter the existing gameplay event queue before memory/advance commits.
+Test Game scene identity staging is independent of script attachments, so saved
+script-free Levels retain the identity needed by Runtime saves. Unknown identities
+are never synthesized for unsaved Levels.
 Quick-save v2 appends bounded dialogue memory while retaining v1 reads. No Wicked
 source or submodule pin change is part of this candidate. See DIALOGUE_EDITOR.md
 for outstanding presentation and native acceptance limits.

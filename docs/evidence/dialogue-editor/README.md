@@ -66,15 +66,44 @@ proving the earlier dialogue memory was restored
 inventory-free Level. Inventory payload integration has automated coverage;
 a populated-inventory live dialogue save/load case is not claimed.
 
-## Open issue
+## Original Test Game failure and resolution
 
-Quick-save in the temporary **Test Game** project fails for this script-free
+At `4122820`, quick-save in the temporary **Test Game** project failed for this script-free
 fixture because `SnapshotCreatorScripts` skips the Level `.rmeta` sidecar when
-there are no script attachments. The Runtime correctly refuses a save without
+there are no script attachments. The Runtime correctly refused a save without
 scene identity. The packaged game includes that identity and passed the native
-save/load proof above. Do not claim Test Game quick-save acceptance or weaken
-the identity check. Follow up by staging scene identity independently of creator
-script attachments and adding a snapshot regression.
+save/load proof above. This failure is preserved as historical evidence; the Runtime identity check
+was not weakened.
+
+### Resolution at `63cc73d373162de4f6cf3e490cb3f9804d7c7bec`
+
+Scene identity is now staged independently of creator scripts. The bridge
+retains the source document/project IDs, retargets the path hint, and stages the
+transactional write under short OS temp storage before copying into the disposable
+snapshot. A script-free Runtime snapshot regression checks that identity exists,
+its path is correct, source bytes are unchanged, and foreign project ownership
+is rejected. Missing identity is still allowed for ordinary unsaved Test Game
+play; Runtime save requirements remain unchanged.
+
+Windows Release Studio/Runtime rebuilt successfully. Nine focused suites passed
+(2.64 seconds), using the earlier commands with `RenegadeTestLevelSnapshot` added
+to the CTest expression and the two snapshot targets added to the aggregate.
+The following additional scripted-scene and inventory checks passed, 3/3 (1.72 s):
+
+```powershell
+cmake --build BUILD/native --config Release --parallel 4 --target RenegadeS4BScriptAuthoringTests RenegadeS5ReusableScriptOwnerTests RenegadeInventoryTestLevelProjectionTests
+ctest --test-dir BUILD/native -C Release -R 'RenegadeS4BScriptAuthoringTests|RenegadeS5CoreGameplayLuaTestsReusableOwner|RenegadeInventoryTestLevelProjectionTests' --output-on-failure
+```
+
+Actual Studio Test Game created a scene identity companion with the original
+project/document IDs and `Content/Scenes/TestLevel.wiscene` path hint. The native
+Runtime log reported `QUICK SAVE COMPLETE` for F5 before obtaining a permit.
+The permit reply then caused the gate success response. Escape/F9 reported
+`QUICK LOAD COMPLETE`; E, Down, Enter returned the gate refusal response,
+proving that the earlier dialogue memory was restored
+([native capture](test-game-memory-restored.png)). Runtime reported zero creator
+script instances for this inventory-free fixture. Both review Runtime processes
+closed cleanly. Earlier standalone evidence above remains at `4122820`.
 
 Controller hardware, reply pagination in the live UI, larger DPI/resolution
 layouts and independent owner/release verification remain open. Automated tests

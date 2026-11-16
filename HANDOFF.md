@@ -1,34 +1,33 @@
 # Dialogue editor review candidate — 16 November 2026
 
 Branch `feature/dialogue-editor-20261115`, base main `7093cf4`; draft PR #195.
-Tested engine code: `41228200d9fa43de1154f58d70ccb2f422684f81`.
-Owner requested the native outline editor with Advanced and in-game UI, then
-required styling to match the new Light/Particle editors. The workspace now uses
-opaque charcoal panels, pale teal controls/replies, readable native text fields,
-and automatic shared Screen preview. Section backgrounds cannot cover controls
-or steal their focus. Other arms/weapon work remains untouched.
+Current tested engine code: `63cc73d373162de4f6cf3e490cb3f9804d7c7bec`.
+The native outline editor and Advanced controls use opaque charcoal/pale-teal
+styling matching the Light/Particle pickers. Other arms/weapon work is untouched.
 
-Implemented services and source are described in [the dialogue workflow](docs/DIALOGUE_EDITOR.md).
-Native screenshots, exact build/test commands and limitations are in
+The previously recorded script-free Test Game quick-save failure is FIXED.
+TestLevelSnapshotService now stages scene identity independently of creator
+script attachments, preserving the source document ID and retargeting its path.
+It preserves the source file, rejects foreign project identities, and keeps the
+Runtime identity guard. Unsaved/unidentified Levels remain playable without
+inventing save identity.
+
+Verification at `63cc73d`: Windows Release Studio/Runtime build; nine focused
+suites pass (2.64 s), including the new snapshot regression. Three scripting and
+inventory regressions pass (1.72 s). Actual Studio Test Game created the identity
+sidecar, logged QUICK SAVE COMPLETE and QUICK LOAD COMPLETE, and restored the
+refusal branch after a permit-granting reply. Native screenshot is in
 [the review receipt](docs/evidence/dialogue-editor/README.md).
 
-Verification at the tested code: Windows Release Studio/Runtime linked; all seven
-focused native suites passed (0.69 s); 32 GNU/native core checks passed. Native
-Studio Basic/Advanced/condition layouts and opacity edit/save/exit/open passed.
-Both permit branches passed in preview and Test Game; arrow/Enter and Escape
-input worked. Actual Studio Build Windows Game passed its DX12 smoke and packaged
-the saved dialogue. The standalone executed both outcomes; F5 before acquiring a
-permit, acquisition, then F9 restored the earlier refusal state. This live save
-proof is inventory-free; do not claim populated-inventory or controller hardware
-acceptance. The retained C4834 launch-call warning is noted in the receipt.
+Earlier native Basic/Advanced, Save/Undo/Redo/Discard, both preview/game branches,
+actual Studio Build Windows Game and packaged F5/F9 evidence remains scoped to
+`4122820`. The follow-up changes snapshot identity staging, not dialogue UI or
+Runtime save decoding. See [the workflow](docs/DIALOGUE_EDITOR.md) for details.
 
-OPEN: script-free Test Game quick-save fails because SnapshotCreatorScripts skips
-the scene `.rmeta` identity when no scripts are attached. Do not weaken Runtime's
-identity guard. Stage scene identity independently and add a snapshot regression
-as a follow-up. Packaged save/load includes the identity and passed. Larger DPI,
-live reply pagination and independent owner/release review remain open. No merge,
-release or new alpha was authorized or performed. CI status must be checked on
-the current PR head; no four-green claim is recorded here.
+OPEN: populated-inventory live dialogue save/load, controller hardware, larger
+DPI layouts, live reply pagination and independent owner/release review. No merge,
+release or alpha distribution was performed. Check CI on the current PR head;
+local focused passes are not a four-green claim.
 
 ---
 

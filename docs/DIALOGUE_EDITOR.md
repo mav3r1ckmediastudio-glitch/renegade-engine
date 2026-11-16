@@ -4,7 +4,8 @@ Base: main `7093cf4`. Isolated branch: `feature/dialogue-editor-20261115`.
 This is an unmerged implementation candidate. Windows Release, native editor,
 Test Game dialogue and standalone save/load evidence is recorded for code
 `4122820` in [the native review receipt](evidence/dialogue-editor/README.md).
-Independent acceptance remains open; the receipt records one Test Game save issue.
+Independent acceptance remains open. The Test Game save issue was fixed and
+verified separately at `63cc73d`; the receipt preserves both revisions.
 
 ## Creator workflow
 
@@ -74,9 +75,10 @@ Undo/Redo; assignment save/reopen; both permit paths; input/cursor restoration;
 Test Game; dependency-closed standalone package; quick-save/quick-load with and
 without inventory. Automated checks alone do not establish these acceptances.
 
-The current script-free Test Game snapshot omits the scene identity companion,
-so quick-save there correctly fails. Packaged single-level save/load passed with
-dialogue memory restored. See the receipt before making broader save claims.
+Test Game now stages saved scene identity independently of script attachments.
+The script-free native F5/F9 dialogue-memory check passed at `63cc73d`. Unsaved
+Levels without a scene identity remain playable, but cannot quick-save. Packaged
+single-level save/load also passed; see the receipt for the tested revisions.
 
 For local Windows review, configure with the normal embedded-shader setting and
 build `RenegadeDialogueReview` in Release. This aggregate builds Studio, Runtime,
