@@ -1,5 +1,6 @@
 #include "DialogueEditorWindow.h"
 #include "StudioTheme.h"
+#include "StudioButtonVisual.h"
 #include "renegade/bridge/DialogueAssetService.h"
 #include "renegade/bridge/DialogueDisplayService.h"
 #include "renegade/bridge/StudioSession.h"
@@ -28,31 +29,19 @@ void Rect(float x, float y, float w, float h, wi::Color c, wi::graphics::Command
     wi::image::Params p(x, y, w, h, c);
     wi::image::Draw(nullptr, p, cmd);
 }
-class DialogueButton : public wi::gui::Button
+class DialogueButton : public ReleaseButton
 {
   public:
     bool primary = false, accented = false;
     void Render(const wi::Canvas &canvas, wi::graphics::CommandList cmd) const override
     {
-        if (!IsVisible())
-            return;
-        ApplyScissor(canvas, scissorRect, cmd);
-        const bool enabled = IsEnabled();
-        const bool pressed = enabled && (GetState() == wi::gui::ACTIVE || GetState() == wi::gui::DEACTIVATING);
-        const bool hovered = enabled && GetState() == wi::gui::FOCUS;
-        const float offset = pressed ? 2.f : 0.f;
-        const auto fill = !enabled ? theme::Idle : pressed ? wi::Color(133, 52, 16, 255)
-            : hovered ? (primary ? wi::Color(246, 117, 48, 255) : wi::Color(58, 66, 72, 255))
-            : primary ? Accent : theme::Focus;
-        Rect(translation.x, translation.y, scale.x, scale.y, enabled && (hovered || pressed || accented || primary) ? Accent : theme::Border, cmd);
-        Rect(translation.x + 1, translation.y + 1 + offset, scale.x - 2, scale.y - 2 - offset, fill, cmd);
-        wi::font::Params fp(translation.x + scale.x * .5f, translation.y + scale.y * .5f + offset, theme::ControlSize, wi::font::WIFALIGN_CENTER,
-                            wi::font::WIFALIGN_CENTER,
-                            !IsEnabled() ? wi::Color(125, 130, 132, 255)
-                            : primary    ? theme::Text
-                                         : Text);
-        fp.bolden = .12f;
-        wi::font::Draw(GetText(), fp, cmd);
+        if (!IsVisible()) return;
+        ApplyScissor(canvas,scissorRect,cmd);
+        const bool enabled=IsEnabled();
+        theme::DrawButton(translation.x,translation.y,scale.x,scale.y,GetText(),
+            {enabled,enabled&&GetState()==wi::gui::FOCUS,
+             enabled&&(GetState()==wi::gui::ACTIVE||GetState()==wi::gui::DEACTIVATING),primary,accented},
+            theme::ControlSize,cmd);
     }
 };
 class DialogueCheckBox : public wi::gui::CheckBox

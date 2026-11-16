@@ -1,5 +1,6 @@
 #include "ParticleTextureBrowser.h"
 #include "RenegadeStudioChrome.h"
+#include "StudioButtonVisual.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -7,21 +8,24 @@
 
 namespace renegade::studio {
 namespace {
-constexpr wi::Color Teal(137,225,208,255),Panel(33,35,37,255),Text(235,238,239,255);
+constexpr wi::Color Teal=theme::Accent,Panel=theme::Panel,Text=theme::Text;
 void Rect(float x,float y,float w,float h,wi::Color c,wi::graphics::CommandList cmd){wi::image::Draw(nullptr,wi::image::Params(x,y,w,h,c),cmd);}
 void Caption(const std::string& text,float x,float y,int size,wi::graphics::CommandList cmd,wi::Color color=Text){wi::font::Draw(text,wi::font::Params(x,y,size,wi::font::WIFALIGN_LEFT,wi::font::WIFALIGN_TOP,color),cmd);}
 void Backdrop(float x,float y,float w,float h,bool checker,wi::graphics::CommandList cmd){
  Rect(x,y,w,h,wi::Color(19,21,23,255),cmd);if(!checker)return;
  const int n=6;for(int j=0;j<n;++j)for(int i=0;i<n;++i)if((i+j)%2)Rect(x+i*w/n,y+j*h/n,w/n+.5f,h/n+.5f,wi::Color(37,40,42,255),cmd);
 }
-class BrowserButton:public wi::gui::Button {
+class BrowserButton:public ReleaseButton {
 public:bool chosen=false,primary=false;
  void Render(const wi::Canvas& canvas,wi::graphics::CommandList cmd)const override{
-  if(!IsVisible())return;ApplyScissor(canvas,scissorRect,cmd);auto edge=chosen||GetState()==wi::gui::FOCUS?Teal:wi::Color(85,91,94,255);
-  Rect(translation.x,translation.y,scale.x,scale.y,edge,cmd);Rect(translation.x+1,translation.y+1,scale.x-2,scale.y-2,primary||chosen?Teal:wi::Color(45,49,51,255),cmd);
-  auto color=!IsEnabled()?wi::Color(115,122,124,255):primary||chosen?wi::Color(15,28,27,255):Text;
-  wi::font::Draw(GetText(),wi::font::Params(translation.x+scale.x*.5f,translation.y+scale.y*.5f,12,wi::font::WIFALIGN_CENTER,wi::font::WIFALIGN_CENTER,color),cmd);
- }
+  if(!IsVisible())return;
+  ApplyScissor(canvas,scissorRect,cmd);
+  const bool enabled=IsEnabled();
+  theme::DrawButton(translation.x,translation.y,scale.x,scale.y,GetText(),
+    {enabled,enabled&&GetState()==wi::gui::FOCUS,
+     enabled&&(GetState()==wi::gui::ACTIVE||GetState()==wi::gui::DEACTIVATING),primary,chosen},
+    12,cmd);
+    }
 };
 class TextureTile:public wi::gui::Button {
 public:

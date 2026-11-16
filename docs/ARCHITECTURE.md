@@ -2293,3 +2293,24 @@ Project display selection registers the setting plus the typed Screen dependency
 root. The existing Screen provider follows artwork, fonts and theme/component
 Screens. Test Level snapshots copy the same explicit dependency closure.
 See DIALOGUE_DISPLAYS.md for the creator workflow and supported roles.
+
+
+### Studio UI composition and shared button presentation (16 November 2026; first pass)
+
+StudioUiPolicy owns the pure visibility and release-gesture rules. The active
+level workspace is the only surface allowed to show scene editor markers;
+loading, Physics Lab and modal tools suppress them. MarkerIconOverlay keeps
+its native GUI input registration but emits pixels only from Studio's clipped
+world-overlay pass. Studio composes the pinned upstream scene image and debug
+image, then world overlays, then the native 2D GUI. Loading covers or chrome
+popups compose last, independent of GUI widget activation order. Physics Lab
+routes through this composition path while retaining its native scene Render.
+
+StudioButtonVisual and StudioTheme own shared action-button drawing and opaque
+palette tokens. Native Wicked button update/callback semantics remain intact;
+custom menu rows use ReleaseAction for matching-release invocation. All twelve
+Add options belong to the base menu model, including particle and navigation
+commands routed through the specialist chrome callback. No new authoritative
+scene, project UI asset or gameplay presentation format is introduced. The
+runtime authored Screen remains separate. See UI_COHESION_PASS1.md for scope
+and acceptance status.

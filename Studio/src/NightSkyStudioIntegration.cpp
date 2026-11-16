@@ -84,7 +84,7 @@ namespace renegade::studio
     {
         const bool visible = session_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
             EditableWeatherEntity() != wi::ecs::INVALID_ENTITY;
-        const float width = std::max(1.0f, inspectorPanel_.GetSize().x - 24.0f);
+        const float width = ui::InspectorContentWidth(inspectorPanel_.GetSize().x, inspectorPanel_.GetControlSize());
         const std::array<const char*, 11> titles = {"TIME OF DAY / SUN", "REALISTIC SKY", "CLOUDS", "STARS", "FOG", "OCEAN", "WEATHER / PRESETS & PRECIPITATION", "LIGHTNING & THUNDER", "NIGHT ATMOSPHERE", "AURORA", "MOON"};
         std::array<std::vector<wi::gui::Widget*>, 11> children = {{
             {&sunPreset_, &sunTime_, &sunAzimuth_, &sunElevation_, &sunPreviewSpeed_, &sunPlayButton_, &sunPauseButton_},

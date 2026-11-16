@@ -21,6 +21,7 @@ file(READ "${STUDIO_HEADER}" studio_header_source)
 file(READ "${STUDIO_SOURCE}" studio_source)
 file(READ "${CHROME_HEADER}" chrome_header_source)
 file(READ "${CHROME_SOURCE}" chrome_source)
+file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/S1BInspectorSectionMigration.cpp" inspector_layout_source)
 
 function(require_text haystack_var needle description)
     string(FIND "${${haystack_var}}" "${needle}" found)
@@ -125,12 +126,18 @@ require_text(studio_header_source
 
 # Existing headings were already readable and must stay that way while the
 # functional Inspector remains the scrollable opaque window host.
+require_text(inspector_layout_source
+    "inspectorLabel_.font.params.size = 14;"
+    "bounded 14 px Inspector heading")
+require_text(inspector_layout_source
+    "inspectorLabel_.SetWrapEnabled(false);"
+    "heading cannot wrap into the first disclosure")
+require_text(inspector_layout_source
+    "ui::InspectorContentWidth(panelWidth, inspectorPanel_.GetControlSize())"
+    "numeric fields reserve the native scrollbar column")
 require_text(studio_source
-    "inspectorLabel_.font.params.size = 16;"
-    "16 px Inspector heading")
-require_text(studio_source
-    "label.font.params.size = 13;"
-    "13 px Inspector section headings")
+    "label.font.params.size = 12;"
+    "12 px Inspector section headings")
 require_text(studio_source
     "inspectorPanel_.SetSize(XMFLOAT2("
     "Inspector window layout authority")

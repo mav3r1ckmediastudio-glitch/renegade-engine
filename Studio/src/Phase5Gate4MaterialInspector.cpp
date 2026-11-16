@@ -574,7 +574,7 @@ namespace renegade::studio
             materialInspectorMaterialCount_ = 0;
             materialInspectorEntity_ = wi::ecs::INVALID_ENTITY;
             setCommonVisible(false);
-            LayoutMaterialInspector(std::max(1.0f, inspectorPanel_.GetSize().x - 24.0f));
+            LayoutMaterialInspector(ui::InspectorContentWidth(inspectorPanel_.GetSize().x, inspectorPanel_.GetControlSize()));
             return;
         }
 
@@ -586,7 +586,7 @@ namespace renegade::studio
             materialInspectorMaterialCount_ = 0;
             materialInspectorEntity_ = wi::ecs::INVALID_ENTITY;
             setCommonVisible(false);
-            LayoutMaterialInspector(std::max(1.0f, inspectorPanel_.GetSize().x - 24.0f));
+            LayoutMaterialInspector(ui::InspectorContentWidth(inspectorPanel_.GetSize().x, inspectorPanel_.GetControlSize()));
             return;
         }
 
@@ -740,7 +740,7 @@ namespace renegade::studio
         materialInteriorOffsetZ_.SetValue(state.interiorMappingOffset.z);
         materialInteriorRotation_.SetValue(state.interiorMappingRotationDegrees);
 
-        LayoutMaterialInspector(std::max(1.0f, inspectorPanel_.GetSize().x - 24.0f));
+        LayoutMaterialInspector(ui::InspectorContentWidth(inspectorPanel_.GetSize().x, inspectorPanel_.GetControlSize()));
     }
 
     bool StudioRenderPath::CommitSelectedMaterial(const bridge::MaterialState& state)

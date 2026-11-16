@@ -561,7 +561,32 @@ namespace renegade::studio
         }
 
         const float panelWidth = inspectorPanel_.GetSize().x;
-        const float innerWidth = std::max(1.0f, panelWidth - 24.0f);
+        // Reserve the scrollbar column before it appears, avoiding a one-frame
+        // overflow and repeated scrollbar/layout width changes.
+        const float innerWidth = ui::InspectorContentWidth(panelWidth, inspectorPanel_.GetControlSize());
+        inspectorLabel_.SetWrapEnabled(false);
+        inspectorLabel_.SetFitTextEnabled(false);
+        inspectorLabel_.font.params.size = 14;
+        inspectorLabel_.font.params.bolden = .12f;
+        inspectorLabel_.SetSize({innerWidth,28.f});
+        auto heading = inspectorLabel_.GetText();
+        const auto priorTitle = inspectorLabel_.GetTooltip();
+        if (heading.size() >= 3 && heading.compare(heading.size()-3,3,"...")==0 && !priorTitle.empty())
+            heading = priorTitle;
+        inspectorLabel_.SetTooltip(heading);
+        auto metrics = inspectorLabel_.font.params;
+        metrics.h_wrap = -1;
+        if (wi::font::TextWidth(heading,metrics) > innerWidth-4.f)
+        {
+            do {
+                if (heading.empty()) break;
+                auto cut=heading.size()-1;
+                while (cut>0 && (static_cast<unsigned char>(heading[cut])&0xc0)==0x80) --cut;
+                heading.resize(cut);
+            } while (wi::font::TextWidth(heading+"...",metrics)>innerWidth-4.f);
+            heading+="...";
+        }
+        inspectorLabel_.SetText(heading);
         const bool hasSession = session_ != nullptr;
         const auto selected = hasSession && session_->Selection().HasSelection()
             ? session_->Selection().SelectedEntity()
@@ -663,7 +688,11 @@ namespace renegade::studio
             }
             y += 108.0f;
             section(sceneMetadataLabel_);
-            full(sceneMetadataPreset_);
+            sceneMetadataPreset_.SetPos({12.0f,y});
+            sceneMetadataPreset_.SetSize({half,28.0f});
+            scenePickupButton_.SetPos({20.0f+half,y});
+            scenePickupButton_.SetSize({half,28.0f});
+            y += 34.0f;
             registryTop = y + 4.0f;
         }
 

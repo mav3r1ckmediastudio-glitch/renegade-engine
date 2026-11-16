@@ -390,7 +390,7 @@ namespace renegade::studio
         renderWorkspacePanel_.SetPos(XMFLOAT2(bounds.z, bounds.y));
         renderWorkspacePanel_.SetSize(XMFLOAT2(panelWidth, panelHeight));
 
-        const float fieldWidth = std::max(180.0f, panelWidth - 28.0f);
+        const float fieldWidth = ui::InspectorContentWidth(panelWidth, renderWorkspacePanel_.GetControlSize());
         float y = 10.0f;
         const auto title = [fieldWidth, &y](wi::gui::Widget& widget)
         {

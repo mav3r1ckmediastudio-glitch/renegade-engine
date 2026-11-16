@@ -1,3 +1,47 @@
+# Studio UI cohesion first pass — 16 November 2026
+
+Isolated checkout `E:\RenegadeUI-20261116`, branch
+`fix/ui-cohesion-pass1-20261116`, based on dialogue checkpoint `7d4839a`.
+The original dialogue checkout and concurrent arms work were not modified.
+No push, PR, merge or release is authorized/performed by this UI pass.
+
+The owner requested fixing the audited UI before toolbar icon integration.
+Changes: shared opaque charcoal/orange action faces and release-only callbacks;
+one twelve-row Add menu; world overlays before GUI; final foreground popups and
+loading cover; Physics Lab marker suppression; flow-owned Pickup/metadata row;
+reserved Audio heading; bounded heading/Character text; scrollbar-safe content
+width across Scene/Player, Environment, Terrain/River, Material, Render and
+Waterfall. The protected importer keeps its accepted native control types.
+
+Native owner review found an inspector occlusion regression caused by promoting
+the whole chrome for popup input. This is corrected by exclusive popup updates
+without chrome promotion. The owner also exposed separate Environment/Render
+sizing paths; all discovered inspector width paths now use the shared policy.
+
+Release Studio and five dialogue regression targets built successfully. Six
+CTest suites pass (UI policy plus dialogue core/assets/save policy/display/
+scripting). All 60 source contracts pass after preserving importer types and
+updating obsolete menu-count/typography expectations. Existing JP01 Physics Lab,
+Marker Icons, S1B and protected importer source contracts pass. Pure policy tests
+also pass with g++ C++17; width tests cover 280/360/480 px and tiny bounds.
+
+Latest native binary SHA-256:
+`8AC7907B8A63F38ACDC328BFD51DEE96D97B4A15548D8586BF8B55CA96AF0775`.
+It is staged as canonical `BUILD/native/Studio/Release/RenegadeStudio.exe`.
+The owner closed the preceding session and authorized reopening. Final review
+uses `BUILD/ui-correction-review/DialogueReview.renegade` and isolated local
+preferences. Do not close an owner-operated Studio session or discard edits.
+Native verification of the latest corrections is still in progress. The older
+first-pass menu/Physics screenshots do not certify the corrected binary.
+See `docs/UI_COHESION_PASS1.md` for current scope and acceptance targets.
+
+The six pre-existing Wicked working-tree overlays were copied unchanged into
+this independent dependency worktree. Do not stage the Wicked gitlink or its
+dirty overlay, change pins, or include unrelated arms work. The old dialogue PR
+instructions below remain historical and belong to its separate checkout.
+
+---
+
 # Dialogue PR preparation - 16 November 2026
 
 The owner authorized a separate dialogue PR and its four hosted CI checks.

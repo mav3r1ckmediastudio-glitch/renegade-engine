@@ -151,6 +151,13 @@ set_target_properties(RenegadeTerrainSurfacePacker PROPERTIES
     FOLDER "Renegade/Tools"
 )
 add_dependencies(RenegadeStudio RenegadeTerrainSurfacePacker)
+
+# Pure interaction policy runs without a GPU or editor window.
+add_executable(RenegadeStudioUiPolicyTests ../Tests/StudioUiPolicyTests.cpp)
+target_compile_features(RenegadeStudioUiPolicyTests PRIVATE cxx_std_17)
+add_dependencies(RenegadeStudio RenegadeStudioUiPolicyTests)
+add_test(NAME StudioUiPolicy COMMAND RenegadeStudioUiPolicyTests)
+
 # Use the canonical RenegadeStudio.exe output required by Studio/Runtime CI.
 # The separately built V4 inventory review candidate remains in BUILD for QA.
 

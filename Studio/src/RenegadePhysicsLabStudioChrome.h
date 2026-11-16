@@ -57,6 +57,8 @@ namespace renegade::studio
         void Render(
             const wi::Canvas& canvas,
             wi::graphics::CommandList cmd) const override;
+        void RenderPopups(const wi::Canvas& canvas,
+            wi::graphics::CommandList cmd) const override;
         const char* GetWidgetTypeName() const override
         {
             return "RenegadePhysicsLabStudioChrome";

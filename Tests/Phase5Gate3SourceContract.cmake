@@ -96,8 +96,11 @@ foreach(token IN ITEMS
     "ENVIRONMENT PROBE"
     "Action::CreateDecal"
     "Action::CreateEnvironmentProbe"
-    "5, 9, 9, 4, 1, 4"
-    "activeMenu_ == 2 && item >= 0 && item < 9"
+    "5, 9, 12, 4, 1, 4"
+    "menu == 2 && item >= 0 && item < 12"
+    "std::array<Action, 12>"
+    "Action::CreateParticleEffect"
+    "Action::CreateNavigationGrid"
     "Action::CreateProjectile")
     string(FIND "${chrome_text}" "${token}" found)
     if(found EQUAL -1)

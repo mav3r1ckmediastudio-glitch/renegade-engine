@@ -1,4 +1,5 @@
 #include "RenegadeStudioChrome.h"
+#include "StudioButtonVisual.h"
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -92,15 +93,15 @@ namespace
         }
     }
 
-    constexpr wi::Color Surface0 = wi::Color(8, 12, 16, 255);
-    constexpr wi::Color Surface2 = wi::Color(16, 23, 28, 255);
-    constexpr wi::Color Border = wi::Color(38, 52, 61, 255);
+    constexpr wi::Color Surface0 = renegade::studio::theme::Canvas;
+    constexpr wi::Color Surface2 = renegade::studio::theme::Panel;
+    constexpr wi::Color Border = renegade::studio::theme::Border;
     constexpr wi::Color BorderSoft = wi::Color(25, 36, 43, 255);
     constexpr wi::Color Text = wi::Color(214, 214, 214, 255);
     constexpr wi::Color TextStrong = wi::Color(244, 244, 244, 255);
     constexpr wi::Color TextSecondary = wi::Color(226, 226, 226, 255);
     constexpr wi::Color Muted = wi::Color(142, 151, 156, 255);
-    constexpr wi::Color Forge = wi::Color(210, 91, 29, 255);
+    constexpr wi::Color Forge = renegade::studio::theme::Accent;
     constexpr wi::Color HoverEdge = wi::Color(72, 78, 82, 255);
     constexpr wi::Color Success = wi::Color(76, 195, 138, 255);
 
@@ -435,64 +436,17 @@ namespace renegade::studio
     }
 
     void RenegadeButton::Render(
-        const wi::Canvas&,
+        const wi::Canvas& canvas,
         const wi::graphics::CommandList cmd) const
     {
-        if (!IsVisible())
-        {
-            return;
-        }
-        const bool engaged =
-            state == wi::gui::ACTIVE || state == wi::gui::FOCUS;
-        if (accentOutlineStyle_ && IsEnabled())
-        {
-            DrawBorderedRect(translation.x, translation.y, scale.x, scale.y,
-                engaged ? wi::Color(222, 91, 29, 146) : wi::Color(222, 91, 29, 84),
-                engaged ? wi::Color(255, 172, 111, 255) : wi::Color(222, 91, 29, 255), cmd);
-        }
-        else if (primaryStyle_ && IsEnabled())
-        {
-            const auto rounded = [cmd](float x, float y, float w, float h, wi::Color color)
-            {
-                wi::image::Params p(x, y, w, h, color);
-                p.blendFlag = wi::enums::BLENDMODE_ALPHA;
-                p.enableCornerRounding();
-                for (auto& corner : p.corners_rounding)
-                {
-                    corner.radius = 5.0f;
-                    corner.segments = 6;
-                }
-                wi::image::Draw(nullptr, p, cmd);
-            };
-            rounded(translation.x, translation.y + 2.0f, scale.x, scale.y - 2.0f,
-                wi::Color(110, 57, 31, 255));
-            rounded(translation.x, translation.y, scale.x, scale.y - 2.0f,
-                engaged ? wi::Color(255, 163, 105, 255) : wi::Color(251, 137, 75, 255));
-            DrawRect(translation.x + 5.0f, translation.y + 2.0f,
-                scale.x - 10.0f, 1.0f, wi::Color(255, 198, 155, 255), cmd);
-        }
-        else
-            DrawBorderedRect(
-                translation.x,
-                translation.y,
-                scale.x,
-                scale.y,
-                engaged ? wi::Color(28, 20, 16, 255) : Surface2,
-                engaged ? Forge : Border,
-                cmd);
-        const std::string text = GetText();
-        const float textWidth = static_cast<float>(text.size()) *
-            static_cast<float>(renderTextSize_) * 0.7f;
-        DrawText(
-            text,
-            translation.x + std::max(8.0f, (scale.x - textWidth) * 0.5f),
-            translation.y + std::max(4.0f,
-                (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
-            renderTextSize_,
-            !IsEnabled() ? Muted : accentOutlineStyle_ ? wi::Color(255, 255, 255, 255) : primaryStyle_ ? wi::Color(33, 22, 16, 255) : TextStrong,
-            cmd,
-            0.25f,
-            0.16f);
+        if (!IsVisible()) return;
+        ApplyScissor(canvas, scissorRect, cmd);
+        const bool enabled=IsEnabled();
+        ui::ButtonVisual visual{enabled, enabled && state==wi::gui::FOCUS,
+            enabled && (state==wi::gui::ACTIVE || state==wi::gui::DEACTIVATING),
+            primaryStyle_, accentOutlineStyle_};
+        theme::DrawButton(translation.x,translation.y,scale.x,scale.y,GetText(),
+            visual,renderTextSize_,cmd);
     }
 
     void RenegadeCheckBox::SetRenderTextSize(const int size) noexcept
@@ -1163,6 +1117,7 @@ namespace renegade::studio
     {
         activeMenu_ = -1;
         activeViewportMenu_ = -1;
+        menuGesture_.Cancel();
         ResetHierarchyDisclosureToSelection();
         SetHierarchyFilter(hierarchyFilter_);
         ResetAssetFolderDisclosureToSelection();
@@ -1281,6 +1236,7 @@ namespace renegade::studio
         hoveredSplitter_ = 0;
         activeMenu_ = -1;
         activeViewportMenu_ = -1;
+        menuGesture_.Cancel();
         pointerConsumed_ = false;
         hierarchyScrollbarDragging_ = false;
         assetBrowserDragCandidate_ = false;
@@ -1570,6 +1526,32 @@ namespace renegade::studio
             }
         }
         pointerConsumed_ = false;
+        if(menuGesture_.Target()>=0)
+        {
+            pointerConsumed_=true;
+            if (!IsEnabled() || dt <= 0 || wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
+            {
+                menuGesture_.Cancel();activeMenu_=-1;Deactivate();return;
+            }
+            if(wi::input::Release(wi::input::MOUSE_BUTTON_LEFT))
+            {
+                const int action=menuGesture_.Release(HitMenuItem(wi::input::GetPointer()));
+                activeMenu_=-1;
+                Deactivate();
+                if(action>=0)InvokeMenuItem(action/32,action%32);
+            }
+            else if(!wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
+            { menuGesture_.Cancel(); activeMenu_=-1; Deactivate(); }
+            return;
+        }
+        if(activeMenu_>=0 && wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) &&
+            wi::input::GetPointer().y>=TopBarHeight &&
+            HitMenuItem(wi::input::GetPointer())<0)
+        {
+            // Dismissal owns the complete click, including hierarchy/canvas input.
+            activeMenu_=-1;activeViewportMenu_=-1;
+            pointerConsumed_=true;Deactivate();return;
+        }
         const XMFLOAT4 layoutPointer = wi::input::GetPointer();
         const float inspectorEdge = width_ - inspectorWidth_ - assistantDockWidth_;
         const float bottomTabsEdge =
@@ -1928,7 +1910,7 @@ namespace renegade::studio
                 constexpr float itemHeight = 30.0f;
                 const float popupX = menuPositions[activeMenu_] - 8.0f;
                 constexpr std::array<int, 6> popupItemCounts = {
-                    5, 9, 10, 4, 1, 4};
+                    5, 9, 12, 4, 1, 4};
                 const int item = static_cast<int>(
                     (y - TopBarHeight) / itemHeight);
                 const bool inPopup = x >= popupX &&
@@ -1937,75 +1919,12 @@ namespace renegade::studio
                         popupItemCounts[activeMenu_] * itemHeight;
                 if (inPopup)
                 {
-                    const auto invoke = [this](const Action command)
+                    if (!(activeMenu_==5 && item<2))
                     {
-                        if (action_)
-                        {
-                            action_(command);
-                        }
-                    };
-                    if (activeMenu_ == 0 && item >= 0 && item < 5)
-                    {
-                        constexpr std::array<Action, 5> actions = {
-                            Action::ProjectHub, Action::OpenScene,
-                            Action::Save, Action::SaveAs, Action::Reopen};
-                        invoke(actions[item]);
+                        menuGesture_.Begin(activeMenu_*32+item);
                     }
-                    else if (activeMenu_ == 1 && item >= 0 && item < 9)
-                    {
-                        constexpr std::array<Action, 9> actions = {
-                            Action::Undo, Action::Redo, Action::Duplicate, Action::Delete,
-                            Action::GroupSelection,Action::EditGroupPieces,Action::FinishGroupEdit,
-                            Action::SaveGroupPrefab,Action::UnpackGroup};
-                        invoke(actions[item]);
-                    }
-                    else if (activeMenu_ == 2 && item >= 0 && item < 10)
-                    {
-                        constexpr std::array<Action, 10> actions = {
-                            Action::CreatePointLight,
-                            Action::CreateSpotLight,
-                            Action::CreateDirectionalLight,
-                            Action::CreateRectangleLight,
-                            Action::CreateCamera,
-                            Action::CreateDecal,
-                            Action::CreateEnvironmentProbe,
-                            Action::ImportStaticGlb, Action::CreateProjectile, Action::OpenDialogue};
-                        invoke(actions[item]);
-                    }
-                    else if (activeMenu_ == 3 && item >= 0 && item < 4)
-                    {
-                        if (item == 0)
-                        {
-                            invoke(Action::Focus);
-                        }
-                        else if (item == 1)
-                        {
-                            invoke(Action::ToggleGrid);
-                        }
-                        else
-                        {
-                            SetActiveBottomTab(item == 2 ? 0 : 3, true);
-                        }
-                    }
-                    else if (activeMenu_ == 4 && item == 0)
-                    {
-                        invoke(Action::BuildWindowsGame);
-                    }
-                    else if (activeMenu_ == 5 && item >= 0 && item < 4)
-                    {
-                        if (item == 2)
-                        {
-                            SetActiveBottomTab(
-                                activeBottomTab_ >= 0 ? -1 : 0,
-                                true);
-                        }
-                        else if (item == 3)
-                        {
-                            invoke(Action::ToggleAssistant);
-                        }
-                    }
-                    activeMenu_ = -1;
-                    consumed = true;
+                    pointerConsumed_ = true;
+                    return;
                 }
             }
 
@@ -2377,6 +2296,7 @@ namespace renegade::studio
             pointerConsumed_ = consumed || drawerTabInteraction ||
                 insideDrawer;
         }
+        state=HasOpenMenuPopup()?wi::gui::FOCUS:wi::gui::IDLE;
         hitBox = wi::primitive::Hitbox2D(
             XMFLOAT2(-1.0f, -1.0f),
             XMFLOAT2(0.0f, 0.0f));
@@ -3428,126 +3348,6 @@ namespace renegade::studio
                 cmd);
         }
 
-        const auto drawPopup = [cmd](
-            const float x,
-            const float y,
-            const std::vector<std::pair<std::string, bool>>& items)
-        {
-            constexpr float popupWidth = 226.0f;
-            constexpr float itemHeight = 30.0f;
-            DrawBorderedRect(
-                x,
-                y,
-                popupWidth,
-                itemHeight * static_cast<float>(items.size()),
-                wi::Color(7, 11, 13, 252),
-                Border,
-                cmd);
-            for (std::size_t index = 0; index < items.size(); ++index)
-            {
-                const float itemY = y + index * itemHeight;
-                if (index > 0)
-                {
-                    DrawRect(
-                        x + 8.0f,
-                        itemY,
-                        popupWidth - 16.0f,
-                        1.0f,
-                        BorderSoft,
-                        cmd);
-                }
-                DrawText(
-                    items[index].first,
-                    x + 12.0f,
-                    itemY + 10.0f,
-                    SceneChromeSmallTextSize,
-                    items[index].second ? TextStrong : Muted,
-                    cmd,
-                    0.35f,
-                    0.16f);
-            }
-        };
-
-        if (activeMenu_ >= 0)
-        {
-            constexpr std::array<const char*, 6> menuLabels = {
-                "FILE", "EDIT", "ADD", "VIEW", "BUILD", "WINDOW"};
-            float popupX = 214.0f;
-            for (int index = 0; index < activeMenu_; ++index)
-            {
-                popupX +=
-                    std::string(menuLabels[index]).size() * 8.0f + 25.0f;
-            }
-            std::vector<std::pair<std::string, bool>> items;
-            if (activeMenu_ == 0)
-            {
-                items = {{"PROJECT HUB", true}, {"OPEN SCENE...", true},
-                    {"SAVE", true}, {"SAVE AS...", true},
-                    {"REOPEN SCENE", true}};
-            }
-            else if (activeMenu_ == 1)
-            {
-                items = {{"UNDO", true}, {"REDO", true},
-                    {"DUPLICATE", true}, {"DELETE", true},
-                    {"GROUP SELECTION   Ctrl+G",true},{"EDIT PIECES",true},
-                    {"FINISH EDITING   Esc",true},{"SAVE AS PREFAB...",true},
-                    {"UNPACK   Ctrl+Shift+G",true}};
-            }
-            else if (activeMenu_ == 2)
-            {
-                items = {{"POINT LIGHT", true}, {"SPOT LIGHT", true},
-                    {"DIRECTIONAL LIGHT", true}, {"RECTANGLE LIGHT", true},
-                    {"CAMERA", true}, {"DECAL", true},
-                    {"ENVIRONMENT PROBE", true}, {"IMPORT MODEL...", true}, {"PROJECTILE...", true}, {"DIALOGUE EDITOR...", true}};
-            }
-            else if (activeMenu_ == 3)
-            {
-                items = {{"FOCUS SELECTION", true},
-                    {gridVisible_ ? "HIDE EDITOR GRID" : "SHOW EDITOR GRID", true},
-                    {"ASSET BROWSER", true}, {"DIAGNOSTICS", true}};
-            }
-            else if (activeMenu_ == 4)
-            {
-                items = {{"BUILD WINDOWS GAME...", true}};
-            }
-            else
-            {
-                items = {{"HIERARCHY // FIXED", false},
-                    {"INSPECTOR // FIXED", false},
-                    {activeBottomTab_ >= 0 ? "CLOSE BOTTOM DRAWER" :
-                        "OPEN BOTTOM DRAWER", true},
-                    {"OPEN LIVING CORE ORB", true}};
-            }
-            drawPopup(popupX, TopBarHeight, items);
-        }
-
-        if (activeViewportMenu_ >= 0)
-        {
-            const float popupX = hierarchyWidth_ + 12.0f;
-            if (activeViewportMenu_ == 0)
-            {
-                drawPopup(
-                    popupX,
-                    viewportTop + 42.0f,
-                    {{"PERSPECTIVE", true},
-                        {"ORTHOGRAPHIC // NOT EXPOSED", false}});
-            }
-            else if (activeViewportMenu_ == 1)
-            {
-                drawPopup(
-                    popupX,
-                    viewportTop + 42.0f,
-                    {{"LIT", true}, {"UNLIT // NOT EXPOSED", false}});
-            }
-            else
-            {
-                drawPopup(
-                    popupX,
-                    viewportTop + 42.0f,
-                    {{gridVisible_ ? "✓  EDITOR GRID" : "EDITOR GRID", true}});
-            }
-        }
-
         // Status is secondary information, never a second toolbar. The footer
         // summary is bounded before the FPS group so long errors cannot collide
         // with right-side status. The complete status remains in statusText_
@@ -3599,4 +3399,207 @@ namespace renegade::studio
             cmd,
             0.9f);
     }
+    int RenegadeStudioChrome::HitMenuItem(const XMFLOAT4& p) const noexcept
+    {
+        if(activeMenu_<0 || activeMenu_>=6) return -1;
+        constexpr const char* names[]={"FILE","EDIT","ADD","VIEW","BUILD","WINDOW"};
+        constexpr int counts[]={5,9,12,4,1,4};
+        float x=214;
+        for(int i=0;i<activeMenu_;++i)x+=std::string(names[i]).size()*8.0f+25.0f;
+        if(p.x<x || p.x>=x+226 || p.y<TopBarHeight ||
+            p.y>=TopBarHeight+counts[activeMenu_]*30) return -1;
+        return activeMenu_*32+int((p.y-TopBarHeight)/30);
+    }
+
+    void RenegadeStudioChrome::InvokeMenuItem(int menu,int item)
+    {
+                    const auto invoke = [this](const Action command)
+                    {
+                        if (action_)
+                        {
+                            action_(command);
+                        }
+                    };
+                    if (menu == 0 && item >= 0 && item < 5)
+                    {
+                        constexpr std::array<Action, 5> actions = {
+                            Action::ProjectHub, Action::OpenScene,
+                            Action::Save, Action::SaveAs, Action::Reopen};
+                        invoke(actions[item]);
+                    }
+                    else if (menu == 1 && item >= 0 && item < 9)
+                    {
+                        constexpr std::array<Action, 9> actions = {
+                            Action::Undo, Action::Redo, Action::Duplicate, Action::Delete,
+                            Action::GroupSelection,Action::EditGroupPieces,Action::FinishGroupEdit,
+                            Action::SaveGroupPrefab,Action::UnpackGroup};
+                        invoke(actions[item]);
+                    }
+                    else if (menu == 2 && item >= 0 && item < 12)
+                    {
+                        constexpr std::array<Action, 12> actions = {
+                            Action::CreatePointLight,
+                            Action::CreateSpotLight,
+                            Action::CreateDirectionalLight,
+                            Action::CreateRectangleLight,
+                            Action::CreateCamera,
+                            Action::CreateDecal,
+                            Action::CreateEnvironmentProbe,
+                            Action::ImportStaticGlb, Action::CreateProjectile, Action::OpenDialogue,
+                            Action::CreateParticleEffect,Action::CreateNavigationGrid};
+                        invoke(actions[item]);
+                    }
+                    else if (menu == 3 && item >= 0 && item < 4)
+                    {
+                        if (item == 0)
+                        {
+                            invoke(Action::Focus);
+                        }
+                        else if (item == 1)
+                        {
+                            invoke(Action::ToggleGrid);
+                        }
+                        else
+                        {
+                            SetActiveBottomTab(item == 2 ? 0 : 3, true);
+                        }
+                    }
+                    else if (menu == 4 && item == 0)
+                    {
+                        invoke(Action::BuildWindowsGame);
+                    }
+                    else if (menu == 5 && item >= 0 && item < 4)
+                    {
+                        if (item == 2)
+                        {
+                            SetActiveBottomTab(
+                                activeBottomTab_ >= 0 ? -1 : 0,
+                                true);
+                        }
+                        else if (item == 3)
+                        {
+                            invoke(Action::ToggleAssistant);
+                        }
+                    }
+    }
+
+    void RenegadeStudioChrome::RenderPopups(const wi::Canvas&,
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!IsVisible()) return;
+        const float viewportTop = TopBarHeight + SceneTabsHeight;
+        const auto drawPopup = [this,cmd](
+            const float x,
+            const float y,
+            const std::vector<std::pair<std::string, bool>>& items)
+        {
+            constexpr float popupWidth = 226.0f;
+            constexpr float itemHeight = 30.0f;
+            DrawBorderedRect(
+                x,
+                y,
+                popupWidth,
+                itemHeight * static_cast<float>(items.size()),
+                theme::Panel,
+                Border,
+                cmd);
+            for (std::size_t index = 0; index < items.size(); ++index)
+            {
+                const float itemY = y + index * itemHeight;
+                const auto pointer=wi::input::GetPointer();
+                const bool hovered=pointer.x>=x && pointer.x<x+popupWidth &&
+                    pointer.y>=itemY && pointer.y<itemY+itemHeight;
+                const bool pressed=activeMenu_>=0 &&
+                    menuGesture_.Target()==activeMenu_*32+static_cast<int>(index) &&
+                    wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
+                theme::DrawButton(x+3,itemY+2,popupWidth-6,itemHeight-4,
+                    items[index].first,{items[index].second,hovered,pressed,false,false},
+                    11,cmd,true);
+
+            }
+        };
+
+        if (activeMenu_ >= 0)
+        {
+            constexpr std::array<const char*, 6> menuLabels = {
+                "FILE", "EDIT", "ADD", "VIEW", "BUILD", "WINDOW"};
+            float popupX = 214.0f;
+            for (int index = 0; index < activeMenu_; ++index)
+            {
+                popupX +=
+                    std::string(menuLabels[index]).size() * 8.0f + 25.0f;
+            }
+            std::vector<std::pair<std::string, bool>> items;
+            if (activeMenu_ == 0)
+            {
+                items = {{"PROJECT HUB", true}, {"OPEN SCENE...", true},
+                    {"SAVE", true}, {"SAVE AS...", true},
+                    {"REOPEN SCENE", true}};
+            }
+            else if (activeMenu_ == 1)
+            {
+                items = {{"UNDO", true}, {"REDO", true},
+                    {"DUPLICATE", true}, {"DELETE", true},
+                    {"GROUP SELECTION   Ctrl+G",true},{"EDIT PIECES",true},
+                    {"FINISH EDITING   Esc",true},{"SAVE AS PREFAB...",true},
+                    {"UNPACK   Ctrl+Shift+G",true}};
+            }
+            else if (activeMenu_ == 2)
+            {
+                items = {{"POINT LIGHT", true}, {"SPOT LIGHT", true},
+                    {"DIRECTIONAL LIGHT", true}, {"RECTANGLE LIGHT", true},
+                    {"CAMERA", true}, {"DECAL", true},
+                    {"ENVIRONMENT PROBE", true}, {"IMPORT MODEL...", true}, {"PROJECTILE...", true}, {"DIALOGUE EDITOR...", true},
+                    {"PARTICLE EMITTER", true}, {"NAVIGATION GRID", true}};
+            }
+            else if (activeMenu_ == 3)
+            {
+                items = {{"FOCUS SELECTION", true},
+                    {gridVisible_ ? "HIDE EDITOR GRID" : "SHOW EDITOR GRID", true},
+                    {"ASSET BROWSER", true}, {"DIAGNOSTICS", true}};
+            }
+            else if (activeMenu_ == 4)
+            {
+                items = {{"BUILD WINDOWS GAME...", true}};
+            }
+            else
+            {
+                items = {{"HIERARCHY // FIXED", false},
+                    {"INSPECTOR // FIXED", false},
+                    {activeBottomTab_ >= 0 ? "CLOSE BOTTOM DRAWER" :
+                        "OPEN BOTTOM DRAWER", true},
+                    {"OPEN LIVING CORE ORB", true}};
+            }
+            drawPopup(popupX, TopBarHeight, items);
+        }
+
+        if (activeViewportMenu_ >= 0)
+        {
+            const float popupX = hierarchyWidth_ + 12.0f;
+            if (activeViewportMenu_ == 0)
+            {
+                drawPopup(
+                    popupX,
+                    viewportTop + 42.0f,
+                    {{"PERSPECTIVE", true},
+                        {"ORTHOGRAPHIC // NOT EXPOSED", false}});
+            }
+            else if (activeViewportMenu_ == 1)
+            {
+                drawPopup(
+                    popupX,
+                    viewportTop + 42.0f,
+                    {{"LIT", true}, {"UNLIT // NOT EXPOSED", false}});
+            }
+            else
+            {
+                drawPopup(
+                    popupX,
+                    viewportTop + 42.0f,
+                    {{gridVisible_ ? "✓  EDITOR GRID" : "EDITOR GRID", true}});
+            }
+        }
+
+    }
+
 }

@@ -8,6 +8,8 @@
 #include <unordered_set>
 
 #include <WickedEngine.h>
+#include "StudioUiPolicy.h"
+#include "StudioButtonVisual.h"
 
 #include "renegade/bridge/AssetCatalogueService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
@@ -39,7 +41,7 @@ namespace renegade::studio
         int renderTextSize_ = 10;
     };
 
-    class RenegadeButton : public wi::gui::Button
+    class RenegadeButton : public ReleaseButton
     {
     public:
         void SetRenderTextSize(int size) noexcept;
@@ -49,7 +51,7 @@ namespace renegade::studio
         const char* GetWidgetTypeName() const override { return "RenegadeButton"; }
 
     private:
-        int renderTextSize_ = 10;
+        int renderTextSize_ = 12;
         bool primaryStyle_ = false;
         bool accentOutlineStyle_ = false;
     };
@@ -62,7 +64,7 @@ namespace renegade::studio
         const char* GetWidgetTypeName() const override { return "RenegadeCheckBox"; }
 
     private:
-        int renderTextSize_ = 10;
+        int renderTextSize_ = 12;
     };
 
     class RenegadeComboBox : public wi::gui::ComboBox
@@ -73,7 +75,7 @@ namespace renegade::studio
         const char* GetWidgetTypeName() const override { return "RenegadeComboBox"; }
 
     private:
-        int renderTextSize_ = 10;
+        int renderTextSize_ = 12;
     };
 
     class RenegadeSlider : public wi::gui::Slider
@@ -307,6 +309,8 @@ namespace renegade::studio
             CreateEnvironmentProbe,
             ImportStaticGlb,
             CreateProjectile,
+            CreateParticleEffect,
+            CreateNavigationGrid,
             Focus,
             ToggleGrid,
             EnvironmentWorkspace,
@@ -391,6 +395,8 @@ namespace renegade::studio
         {
             return activeMenu_ >= 0 || activeViewportMenu_ >= 0;
         }
+        virtual void RenderPopups(const wi::Canvas& canvas,
+            wi::graphics::CommandList cmd) const;
         void OnHierarchySelected(std::function<void(std::uint64_t, bool)> callback);
         void OnToolSelected(std::function<void(int)> callback);
         void OnAction(std::function<void(Action)> callback);
@@ -515,6 +521,9 @@ namespace renegade::studio
         int hoveredSplitter_ = 0;
         int activeTool_ = 1;
         int activeBottomTab_ = -1;
+        int HitMenuItem(const XMFLOAT4& pointer) const noexcept;
+        void InvokeMenuItem(int menu,int item);
+        ui::ReleaseAction menuGesture_;
         int activeMenu_ = -1;
         int activeViewportMenu_ = -1;
         bool gridVisible_ = true;

@@ -39,7 +39,7 @@ bool StudioRenderPath::LayoutWaterfallInspector(){
  inspectorPanel_.wi::gui::Widget::SetVisible(false);waterfallInspector_.SetPos(inspectorPanel_.GetPos());waterfallInspector_.SetSize(inspectorPanel_.GetSize());
  wf::AuthoredWaterfall record;std::string error;if(!wf::ReadWaterfall(session_->Scenes().GetScene(),root,record,error)){waterfallStatus_.SetText(error);return true;}
  auto& d=record.settings;wf::SyncLandingHandle(session_->Scenes().GetScene(),root,d);
- const float width=std::max(180.f,waterfallInspector_.GetSize().x-24);float y=38;
+ const float width=ui::InspectorContentWidth(waterfallInspector_.GetSize().x,waterfallInspector_.GetControlSize());float y=38;
  auto place=[&](wi::gui::Widget& w,float height=28){w.SetPos({12,y});w.SetSize({width,height});y+=height+8;};
  place(waterfallPlacement_);place(waterfallCrestButton_);place(waterfallLandingButton_);place(waterfallSliders_[0]);place(waterfallWater_);place(waterfallSliders_[1]);place(waterfallSliders_[2]);place(waterfallSpray_);for(size_t i=3;i<6;++i)place(waterfallSliders_[i]);place(waterfallStatus_,48);place(waterfallDeleteButton_);
  float values[]={d.width,d.intensity,d.turbulence,d.spray,d.mist,d.impactSpray};for(size_t i=0;i<6;++i)if(!waterfallSliders_[i].IsDragging())waterfallSliders_[i].SetValue(values[i]);
