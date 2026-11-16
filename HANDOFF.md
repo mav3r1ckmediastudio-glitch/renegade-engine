@@ -1,3 +1,96 @@
+# Advanced controls visibility correction - 16 November 2026
+
+Latest LOCAL Studio source: d38d23eafc7e38c8a86b3ee7fec59d2ff98b2e58.
+The owner reported that Advanced appeared to expose no controls while an NPC
+line was selected. Conditions/outcomes belong to player replies and actions to
+outcomes; the existing tree retained Basic mode's collapsed reply state.
+DialogueEditorWindow.cpp now expands rule branches when Advanced is enabled,
+selects the first player reply when invoked from an NPC with replies, and shows
+selection-specific instructions. Show in Advanced also forces rule expansion.
+This changes authoring selection/visibility only, not conversation assets/runtime.
+
+Release Studio built successfully. The five focused dialogue CTest suites PASS
+in 0.75 seconds. The earlier shared display build has 14 passing suites and native
+UI/game evidence below. The new automatic selection needs final native owner
+review; the currently open review window still holds the previous UI and the
+owner's UNSAVED conversation edits. Preserve it. The updated normal Studio
+executable is ready, but do not replace/restart the active review session without
+preserving its edits. In that current session, Advanced then selecting a player
+reply exposes the existing tools; selecting an outcome exposes actions.
+
+An annotated guide was generated from the exact selected screenshot. It is a
+labelled instructional image, not native software verification. No generated
+image is used as implementation evidence. No push, PR, CI, merge or release.
+
+---
+
+# Editable dialogue displays - 16 November 2026
+
+Latest LOCAL engine source: 4e8f1fa44c565411d00ccc2f494ceb6cb9de7927.
+Branch feature/dialogue-editor-20261115, main baseline 7093cf4.
+Owner required creator-editable dialogue boxes before signoff and approved the
+shown direction with "this looks good". This is visual approval, not permission
+for a PR, CI, merge or distribution. All work remains local; PR #195 stays closed.
+
+The Dialogue Editor now offers a project display selector and Customise/Edit
+Display. New creates a normal project-owned Screen template and opens the existing
+native UI editor through its standalone handoff. Speaker/text/reply/navigation
+roles are separate from names, content, styles and geometry. The normal Style /
+Font, graphic browser, layout, Undo/Redo and save workflow applies. The project
+selection and typed packaging roots persist; changing display removes the old
+selection's explicit root. The shared panel adapts the template for preview,
+Interact and scripted conversations, preserving game logic, audio and memory.
+
+Changed code: DialogueDisplayService.h/.cpp; ScreenService.h/.cpp;
+ScreenAuthoringSession.h; TestLevelSnapshotService.cpp; DialoguePanel.h/.cpp;
+RuntimeDialogue.cpp; DialogueEditorWindow.h/.cpp; StudioApplication.h/.cpp;
+RenegadeScreenEditorRenderPath.h; RenegadeScreenEditorWorkspace.cpp; bridge/test
+CMake lists; DialogueDisplayTests.cpp. See docs/DIALOGUE_DISPLAYS.md.
+
+Validation:
+- Release Runtime and native Studio builds succeed; the latest delivery targets
+  the normal RenegadeStudio.exe without closing the owner's review window.
+- 14 focused CTest suites PASS in 7.61 seconds at the final source. Receipt:
+  docs/evidence/dialogue-display/README.md.
+- Integration tests cover roles, renamed elements, custom styles/geometry, reply
+  pagination, Continue/Close, native Screen history/Undo, save/reload, assignment,
+  foreign project rejection, missing roles/hidden parents and staged fonts/artwork.
+- Native Runtime at 68c7dcc showed a deliberately different project layout using
+  Georgia, gold text, a brown opaque background, changed size and screen position.
+  Enter selected work -> captain with matching Sael audio and a visible Continue.
+- Native Studio at 2de8dff opened the assigned display through Edit display in the
+  actual UI editor. Full artboard, Layers, role-bearing text and font controls
+  were inspected. The owner's input moved to another window during the final
+  Apply/save/return interaction, so automation stopped. This last mouse-driven
+  round trip remains for owner review; automated persistence checks passed. The
+  owner subsequently returned to the conversation workspace and reported its
+  header overlap, confirming the native return handoff was reachable.
+- Initial native review exposed the audio-example note overlapping the new
+  selector/button, then the selection heading. Final placement is in the preview
+  caption area. The editor's return label is now generic Back for either origin.
+- Missing resources or renderer rejection keep runtime dialogue playable via the
+  built-in display; staging rejects incomplete assets so creators can repair them.
+
+Reproduce:
+cmake -S . -B BUILD/native -DRENEGADE_EMBED_SHADERS=ON
+cmake --build BUILD/native --config Release --parallel 4 --target RenegadeRuntime RenegadeDialogueDisplayTests RenegadeDialogueScriptingTests RenegadeS3GovernedLuaRuntimeTests RenegadeScreenAuthoringSessionTests RenegadeScreenAuthoringCompletionTests RenegadeScreenRendererTests RenegadeRuntimeScreenTests RenegadeTestLevelSnapshotRuntimeTests RenegadeRuntimeGameSaveSlotTests
+cmake --build BUILD/native --config Release --target RenegadeStudio -- /p:BuildProjectReferences=false
+ctest --test-dir BUILD/native -C Release -R 'RenegadeDialogue|RenegadeS3GovernedLuaRuntime|RenegadeScreenAuthoringSessionTests|RenegadeScreenAuthoringCompletionTests|RenegadeTestLevelSnapshot|RenegadeRuntimeGameSaveSlotTests|RenegadeScreenRendererTests|RenegadeRuntimeScreenTests' --output-on-failure
+
+No current package-distribution or independent release acceptance is claimed.
+The owner then reported the NPC LINE overlap from the earlier review candidate.
+The review executable was refreshed from the final normal Studio binary; both
+now have identical contents. The example-audio note lives in the preview caption
+area, clear of NPC LINE and the display selector. This was visually confirmed
+in the refreshed live review at the owner's resolution; see header-fixed.png in
+the receipt. The owner currently has unsaved conversation edits open in the
+review window: preserve them and do not restart it again. Preserve the
+owner's original projects, unrelated arms work and the existing Wicked overlay
+state. The separate review project is disposable and contains copied example
+recordings; none were generated for this task.
+
+---
+
 # Dialogue scripting beta integration - 16 November 2026
 
 Tested LOCAL engine source: bedcf30f744f2b4ce9c3432b96084573879f6199.

@@ -32,8 +32,11 @@ is needed for ordinary lines and replies. Assignment uses normal scene Undo/Redo
 Conversation edits use their own bounded Undo/Redo and explicit Save/Discard.
 
 **Advanced** reveals outcomes, conditions, actions and one-time replies in the
-same script workspace. Turning it off preserves the data; conditional replies
-retain a quiet summary and a Show in Advanced button.
+same script workspace. Enabling it expands the reply branches and, when an NPC
+line with replies is selected, selects its first reply so the actual rule controls
+appear immediately. Select an outcome to edit its actions. A line with no replies
+shows guidance to add/select a player reply. Turning Advanced off preserves the
+data; conditional replies retain a quiet summary and a Show in Advanced button.
 Conditions support flag equality, minimum values and player inventory item counts.
 An outcome can match all or any conditions. The final unconditional Otherwise is
 mandatory. Outcomes are evaluated in order. Add Outcome inserts before Otherwise.
@@ -100,10 +103,10 @@ resuming in the middle of a spoken line is not implemented.
 
 ## Current limits and acceptance
 
-Portraits, cinematic camera tracks, gestures, timed replies, custom
-Screen layout assignment, global UI themes, a graph view and automatic conditional NPC continuation remain future work. The current Screen is generated through native
-Screen widgets with authored font size/opacity, not an independently editable
-Screen asset. No unsupported controls are advertised as working.
+Portraits, cinematic camera tracks, gestures, timed replies, a graph view and
+automatic conditional NPC continuation remain future work. Project-wide custom dialogue displays use editable Screen assets in the existing
+UI editor; see [Custom dialogue displays](DIALOGUE_DISPLAYS.md). The built-in
+display remains available. No unsupported controls are advertised as working.
 
 Required native evidence: editor visual/layout and interaction; Save/Discard and
 Undo/Redo; assignment save/reopen; both permit paths; input/cursor restoration;

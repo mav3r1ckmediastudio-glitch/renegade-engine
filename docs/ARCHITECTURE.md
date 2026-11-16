@@ -2266,3 +2266,30 @@ only while stopped and released after on_stop, before replacing scene authority.
 DialogueScriptingTests drives real saved assets and RuntimeDialogue through the
 governed Lua runtime, including both conditional paths and deleted NPC references.
 See DIALOGUE_SCRIPTING.md for creator calls and event semantics.
+
+
+### Editable dialogue displays (16 November 2026; local candidate)
+
+DialogueDisplayService owns the project-wide Screen assignment and the pure
+authoring-template-to-conversation-view adapter. Screen v3 adds an optional
+dialogue_role per widget. Roles remain separate from names, text, geometry,
+styles and focus order, so ordinary UI authoring does not disconnect content.
+The existing Screen authoring history, transactions and resource pipeline remain
+authoritative. Required roles are validated before assignment/save; dialogue-role
+controls do not also execute unrelated local actions or attribute bindings.
+
+DialoguePanel resolves the template once per scene lifecycle, populates a copy
+when dialogue changes, then uses the existing ScreenRenderer, gesture gating
+and Voice mixer. Runtime uses the full authored artboard; the conversation
+editor shows a readable close-up while the UI editor retains full positioning.
+Missing resources or a renderer rejection fall back to the built-in display with
+a diagnostic. Test Game staging rejects incomplete custom displays instead.
+
+Dialogue Editor opens the existing standalone Screen handoff on the following
+frame and returns through the normal workspace activation boundary. In-progress
+conversation history stays resident. A standalone Screen saves independently of
+Story Flow routes; the coordinated save path remains for explicit Flow contexts.
+Project display selection registers the setting plus the typed Screen dependency
+root. The existing Screen provider follows artwork, fonts and theme/component
+Screens. Test Level snapshots copy the same explicit dependency closure.
+See DIALOGUE_DISPLAYS.md for the creator workflow and supported roles.
