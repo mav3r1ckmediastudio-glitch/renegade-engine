@@ -71,6 +71,7 @@ if(NOT RENEGADE_IMNODES_REVISION_RESULT EQUAL 0 OR
 endif()
 
 add_executable(RenegadeStudio WIN32
+    src/DialogueEditorWindow.cpp
     src/WaterfallStudioIntegration.cpp
     src/WaterfallTransparentStudio.cpp
     src/RiverFlowStudioIntegration.cpp
@@ -179,10 +180,14 @@ target_compile_definitions(RenegadeStudio
     PRIVATE
         UNICODE
         _UNICODE
+)
+
+# Preserve exact provenance without invalidating every editor object on commit.
+set_property(SOURCE src/RenegadeProjectHub.cpp src/WindowsGameBuildController.cpp
+    APPEND PROPERTY COMPILE_DEFINITIONS
         RENEGADE_SOURCE_REVISION="${RENEGADE_SOURCE_REVISION}"
         RENEGADE_WICKED_REVISION="${RENEGADE_WICKED_REVISION}"
-        RENEGADE_IMNODES_REVISION="${RENEGADE_IMNODES_REVISION}"
-)
+        RENEGADE_IMNODES_REVISION="${RENEGADE_IMNODES_REVISION}")
 
 target_compile_options(RenegadeStudio
     PRIVATE

@@ -1,6 +1,8 @@
 target_sources(RenegadeRuntimeBootstrap PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/src/RuntimeScriptRuntime.h
     ${CMAKE_CURRENT_LIST_DIR}/src/RuntimeScriptRuntime.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/RuntimeDialogueScriptApi.h
+    ${CMAKE_CURRENT_LIST_DIR}/src/RuntimeDialogueLua.inl
     ${CMAKE_CURRENT_LIST_DIR}/src/InventoryLuaBridge.h
     ${CMAKE_CURRENT_LIST_DIR}/src/InventoryLuaBridge.cpp
 )

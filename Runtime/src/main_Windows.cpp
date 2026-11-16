@@ -601,6 +601,15 @@ int APIENTRY wWinMain(
         }
         else
         {
+            // A launch requested as minimised has no drawable surface yet.
+            // Do not start asynchronous engine initialisers with a null device.
+            // The restore/resize message will retry the normal window binding.
+            if (!wi::graphics::GetDevice() &&
+                !renegade::bridge::TryBindDrawableNativeWindow(window, application))
+            {
+                WaitMessage();
+                continue;
+            }
             // Automated Test Game has no user foreground window: Wicked
             // intentionally stops rendering when unfocused. Force active only
             // for this opt-in local test so the real controller/scene still

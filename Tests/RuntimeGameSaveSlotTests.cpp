@@ -28,6 +28,7 @@ int main() {
     // including a dynamically dropped stack with stable identity and pose.
     written.retiredWorldBytes="RENEGADE_WORLD_PICKUPS 2 "+productId+" "+
         sceneId+" 0 1\n"+droppedId+" potion 3 2.125 0.25 -4.5\n";
+    written.dialogueBytes="renegade-dialogue-memory 1 1 \"access_granted\" 1 0 ";
     written.playerHealth=45.125f;
     written.playerMaxHealth=100.0f;
     written.playerX=8.25f;
@@ -44,6 +45,7 @@ int main() {
     CHECK(RuntimeGameSaveSlot::ReadQuick(local,saveDataId,
         productId,sceneId,retrieved,error));
     CHECK(retrieved.inventoryBytes==written.inventoryBytes);
+    CHECK(retrieved.dialogueBytes==written.dialogueBytes);
     CHECK(retrieved.retiredWorldBytes==written.retiredWorldBytes);
     CHECK(retrieved.playerHealth==45.125f && retrieved.playerMaxHealth==100.f);
     CHECK(retrieved.playerX==8.25f && retrieved.playerY==2.75f &&

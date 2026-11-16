@@ -1,0 +1,86 @@
+#pragma once
+#include "renegade/bridge/DialogueService.h"
+#include "renegade/screen/ScreenRenderer.h"
+#include "renegade/bridge/DialogueDisplayService.h"
+namespace renegade::screen
+{
+// Shared Screen renderer and input surfaces for editor preview and game.
+class DialoguePanel
+{
+  public:
+    ~DialoguePanel() { StopVoice(); }
+    bool ReloadDisplay(const std::string& root,const std::string& project,std::string& error)
+    {
+        display_ = {};
+        bridge::ScreenDocument candidate;
+        if (!bridge::LoadDialogueDisplay(root,project,candidate,error)) return false;
+        display_ = std::move(candidate);
+        return true;
+    }
+    void SetEmbeddedPreview() { embedded_ = true; }
+    bool Show(const bridge::DialogueView &, const std::string &project, const std::string &root, wi::RenderPath2D &,
+              bridge::ScreenRect viewport, std::string &error);
+    void Hide(wi::RenderPath2D &path)
+    {
+        StopVoice();
+        renderer_.Reset(path);
+        ids_.clear();
+        pending_.clear();
+    }
+    std::string TakeAction()
+    {
+        auto r = pending_;
+        pending_.clear();
+        if (r == "@next")
+        {
+            ++page_;
+            return "@refresh";
+        }
+        if (r == "@previous")
+        {
+            if (page_)
+                --page_;
+            return "@refresh";
+        }
+        return r;
+    }
+    void EmbedInWindow(wi::RenderPath2D &path, wi::gui::Window &parent)
+    {
+        embedded_ = true;
+        renderer_.EmbedInWindow(path, parent);
+    }
+    void SetAccessibilitySettings(bridge::ScreenAccessibilitySettings settings)
+    {
+        renderer_.SetAccessibilitySettings(settings);
+    }
+    void StopVoice();
+    void Navigate(int direction);
+    void Activate();
+    void Layout(wi::RenderPath2D &path, bridge::ScreenRect r)
+    {
+        if (!embedded_ && !display_.envelope.documentId.empty())
+            r = {0,0,path.GetLogicalWidth(),path.GetLogicalHeight()};
+        // A line rebuild can put a new button under the releasing pointer.
+        // Wait for that gesture to clear before accepting a fresh press.
+        if (!pointerArmed_ && !wi::input::Down(wi::input::MOUSE_BUTTON_LEFT) &&
+            !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            renderer_.SetInputEnabled(true);
+            pointerArmed_ = true;
+        }
+        renderer_.SetViewport(r);
+        renderer_.ApplyLayout(path);
+    }
+
+  private:
+    ScreenRenderer renderer_;
+    bridge::ScreenDocument display_;
+    bool embedded_ = false;
+    std::vector<std::string> ids_, actions_;
+    size_t focus_ = 0, page_ = 0;
+    std::string pending_, voiceKey_;
+    bool pointerArmed_ = false;
+    wi::Resource voiceResource_;
+    wi::audio::SoundInstance voiceInstance_;
+};
+} // namespace renegade::screen

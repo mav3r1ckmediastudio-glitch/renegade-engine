@@ -96,9 +96,11 @@ foreach(token IN ITEMS
     "ENVIRONMENT PROBE"
     "Action::CreateDecal"
     "Action::CreateEnvironmentProbe"
-    "5, 9, 9, 4, 1, 4"
-    "activeMenu_ == 2 && item >= 0 && item < 9"
-    "Action::CreateProjectile")
+    "5, 9, 10, 4, 1, 4"
+    "activeMenu_ == 2 && item >= 0 && item < 10"
+    "Action::CreateProjectile"
+    "Action::OpenDialogue"
+    "DIALOGUE EDITOR...")
     string(FIND "${chrome_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Gate 3 ADD menu missing ${token}")

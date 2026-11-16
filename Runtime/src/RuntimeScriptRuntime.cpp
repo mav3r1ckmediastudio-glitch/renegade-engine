@@ -3,6 +3,8 @@
 #include "RuntimeScriptRuntime.h"
 #include "RuntimeScriptEntityApi.h"
 #include "InventoryLuaBridge.h"
+#include "renegade/bridge/DialogueService.h"
+#include <limits>
 
 #include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/CommandService.h"
@@ -216,6 +218,7 @@ namespace renegade::runtime
         std::function<void(const bridge::GameplayEvent&)> eventObserver;
         std::function<bridge::InventoryGameplayGateway*(
             const bridge::StableId&, const bridge::StableId&)> inventoryGatewayProvider;
+        RuntimeDialogueScriptApi dialogueApi;
         std::uint64_t dispatchedEventCount = 0;
         std::uint64_t eventDeliveryAttemptCount = 0;
         std::uint64_t lastEventSequence = 0;
@@ -633,6 +636,8 @@ namespace renegade::runtime
             lua_pushlstring(state, error.data(), error.size());
             return 2;
         }
+
+#include "RuntimeDialogueLua.inl"
 
         static int EntityGetNameLua(lua_State* state)
         {
@@ -1645,6 +1650,7 @@ namespace renegade::runtime
                     RegisterInventoryLua(lua, -1, instance.inventoryLua.get());
                 }
             }
+            RegisterDialogueLua();
             lua_setfield(lua, environmentIndex, "renegade");
 
             lua_pushlightuserdata(lua, this);
@@ -2488,6 +2494,12 @@ namespace renegade::runtime
         // instance-scoped gateways. StopScene must precede provider replacement.
         if (impl_ && !impl_->running)
             impl_->inventoryGatewayProvider = std::move(provider);
+    }
+
+    void RuntimeScriptRuntime::SetDialogueApi(RuntimeDialogueScriptApi api)
+    {
+        if (impl_ && !impl_->running)
+            impl_->dialogueApi = std::move(api);
     }
 
     bool RuntimeScriptRuntime::EnqueueGameplayEvent(

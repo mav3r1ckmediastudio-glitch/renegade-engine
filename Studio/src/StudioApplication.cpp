@@ -3277,6 +3277,9 @@ namespace renegade::studio
                 pendingLightType_ = wi::scene::LightComponent::DIRECTIONAL;
                 RequestDiagnosticAction(EditorAction::CreateLight);
                 break;
+            case RenegadeStudioChrome::Action::OpenDialogue:
+                if(session_&&!projectHubVisible_&&!testLevelRuntime_.IsActive()){dialogueEditor_.SetPos({std::max(8.0f,(GetLogicalWidth()-1150)*.5f),32});dialogueEditor_.Open(*session_,*this);}
+                break;
             case RenegadeStudioChrome::Action::CreateRectangleLight:
                 pendingLightType_ = wi::scene::LightComponent::RECTANGLE;
                 RequestDiagnosticAction(EditorAction::CreateLight);
@@ -3618,6 +3621,7 @@ namespace renegade::studio
         CreatePickupEditor();
         CreateAssemblyEditor();
         CreateEquipmentEditor();
+        dialogueEditor_.Create();dialogueGui_.AddWidget(&dialogueEditor_);
         lightPicker_.Create();
         GetGUI().AddWidget(&lightPicker_);
         particlePicker_.Create();GetGUI().AddWidget(&particlePicker_);GetGUI().AddWidget(&particlePicker_.TextureBrowserWidget());
@@ -4088,7 +4092,16 @@ namespace renegade::studio
         DiagnosticInputFrame diagnosticInput(diagnosticService_,
             wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
         PollTestLevel();
-        lightPickerFrameSuspended_=lightPicker_.IsVisible()||particlePicker_.IsVisible();
+        if (dialogueEditor_.TakeTestGameRequest()) StartTestLevel();
+        std::string displayId,displayPath;
+        if(dialogueEditor_.TakeDisplayEditorRequest(displayId,displayPath) && dialogueDisplayEditor_)
+            dialogueDisplayEditor_(displayId,displayPath);
+        dialogueFrameSuspended_=dialogueEditor_.IsVisible();
+        if(dialogueFrameSuspended_&&!dialogueGuiActive_){dialogueSavedGuiVisibility_=GetGUI().IsVisible();dialogueGuiActive_=true;}
+        if(dialogueFrameSuspended_)GetGUI().SetVisible(false);
+        else if(dialogueGuiActive_){GetGUI().SetVisible(dialogueSavedGuiVisibility_);dialogueGuiActive_=false;}
+        lightPickerFrameSuspended_=lightPicker_.IsVisible()||particlePicker_.IsVisible()||dialogueFrameSuspended_;
+        if(session_)dialogueEditor_.Tick(*session_,*this);
         // STOP may run from the 2D GUI update below. Retain 2D ownership for
         // the rest of that frame; 3D must first receive a fresh Scene::Update.
         testLevelFrameSuspended_ = testLevelRuntime_.IsActive();
@@ -4149,6 +4162,17 @@ namespace renegade::studio
             return;
         }
 
+        if(dialogueFrameSuspended_){
+            // A separate native GUI owns the modal. Background chrome never
+            // receives clicks or shortcuts while a conversation is being edited.
+            wi::RenderPath2D::Update(dt);
+            dialogueGui_.Update(*this,dt);
+            if(session_)dialogueEditor_.Tick(*session_,*this);
+            wi::input::HidePointer(false);
+            pendingAction_=EditorAction::None;
+            diagnosticInput.StopAt("dialogue_editor");
+            return;
+        }
         if(lightPickerFrameSuspended_) {
             // The modal owns the only active 3D preview. Keep the last authored
             // viewport image; never prepare two different Scene worlds every
@@ -4645,6 +4669,15 @@ namespace renegade::studio
 
     void StudioRenderPath::Compose(const wi::graphics::CommandList cmd) const
     {
+        if(dialogueFrameSuspended_){
+            // A resize can replace the suspended scene's render targets before
+            // another 3D frame is produced. Never sample those unwritten buffers.
+            wi::image::Params backdrop(0,0,float(GetLogicalWidth()),float(GetLogicalHeight()),HologramPanel);
+            wi::image::Draw(nullptr,backdrop,cmd);
+            wi::RenderPath2D::Compose(cmd);
+            dialogueGui_.Render(*this,cmd);
+            return;
+        }
         if(lightPickerFrameSuspended_) {
             if(pathTracePreviewActive_)RenderPath3D_PathTracing::Compose(cmd);
             else wi::RenderPath3D::Compose(cmd);
@@ -13605,7 +13638,22 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             });
         screenEditorRenderer_.OnReturnRequested([this]()
         {
+            if(returnToDialogue_){
+                returnToDialogue_=false;storyFlowIntegration_.RequestLevelEditor();
+                renderer_.OpenDialogueEditor();return;
+            }
             storyFlowIntegration_.RequestStoryFlow();
+        });
+        renderer_.OnDialogueDisplayEditor([this](const std::string& id,const std::string& path){
+            if(!session_.Projects().HasProject())return;
+            const auto& project=session_.Projects().CurrentProject();
+            StoryFlowScreenEditorHandoff handoff;std::string error;
+            if(!BuildStandaloneScreenEditorHandoff(project.rootPath,project.projectId,id,path,handoff,error)||
+                !screenEditorRenderer_.OpenScreen(handoff,project.rootPath,project.projectId,error)){
+                wi::backlog::post("Dialogue display editor: "+error,wi::backlog::LogLevel::Error);
+                renderer_.OpenDialogueEditor();return;
+            }
+            returnToDialogue_=true;storyFlowIntegration_.RequestScreenEditor();
         });
         ActivatePath(&renderer_);
     }

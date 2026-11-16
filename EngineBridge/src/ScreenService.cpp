@@ -891,6 +891,18 @@ namespace renegade::bridge
                     widget.id;
                 return false;
             }
+            if (!widget.dialogueRole.empty())
+            {
+                const bool text = widget.dialogueRole == "speaker" || widget.dialogueRole == "text";
+                const bool button = widget.dialogueRole == "continue" || widget.dialogueRole == "close" ||
+                    widget.dialogueRole == "previous" || widget.dialogueRole == "next" ||
+                    widget.dialogueRole == "reply1" || widget.dialogueRole == "reply2" ||
+                    widget.dialogueRole == "reply3" || widget.dialogueRole == "reply4";
+                if (document.schemaVersion < 3 || (!text && !button) ||
+                    (text && widget.kind != ScreenWidgetKind::Text) ||
+                    (button && widget.kind != ScreenWidgetKind::Button))
+                { error = "Dialogue roles require a matching Text or Button in Screen v3."; return false; }
+            }
             if (widget.layoutMode == ScreenLayoutMode::Anchored &&
                 (!IsFiniteUnit(widget.anchors.minimumX) ||
                  !IsFiniteUnit(widget.anchors.minimumY) ||
@@ -1347,6 +1359,7 @@ namespace renegade::bridge
                         "kind",
                         ScreenWidgetKindName(widget.kind));
                     section.Set("name", widget.name);
+                    if (!widget.dialogueRole.empty()) section.Set("dialogue_role", widget.dialogueRole);
                     section.Set("x", widget.rect.x);
                     section.Set("y", widget.rect.y);
                     section.Set("width", widget.rect.width);
@@ -1657,6 +1670,7 @@ namespace renegade::bridge
                     return false;
                 }
                 widget.name = section.GetText("name");
+                if (section.Has("dialogue_role")) widget.dialogueRole = section.GetText("dialogue_role");
                 widget.rect.x = section.GetFloat("x");
                 widget.rect.y = section.GetFloat("y");
                 widget.rect.width = section.GetFloat("width");

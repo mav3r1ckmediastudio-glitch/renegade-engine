@@ -2203,3 +2203,93 @@ Packaged reusable-asset validation preserves authored scene-assembly copies and
 unpacked contents instead of replacing them with the source product, so instance
 edits and script owners survive startup. This is independent-copy placement;
 source-update propagation and a custom shader-authoring system are separate work.
+
+
+## Dialogue candidate (15 November 2026; unmerged)
+
+DialogueService is a UI-independent, versioned conversation and memory authority.
+Studio outline and Advanced controls edit one document with a bounded local history;
+NPC assignment uses the normal scene command boundary. Transactional .rdialogue
+assets live in project Content/Dialogue and explicit package roots. Runtime caches
+bindings on SceneService revision changes, then queries only bound transforms.
+Preview and gameplay share DialogueSession and ScreenRenderer/DialoguePanel.
+The dialogue workspace uses Studio's opaque dark palette and orange accent,
+with its native default font family and readable script rows. Decorative section
+fills render before native controls and never participate in focus ordering.
+Dialogue modal composition draws an opaque 2D backdrop rather than reading 3D
+render targets while scene updates are suspended. Canvas/DPI changes refit its
+layout. A completed preview remains a visible terminal card; Runtime still closes
+completed conversations. The NPC picker refreshes on scene lifecycle revision,
+not on every frame; binding checks use native component lookup. Save-and-attach
+uses the existing assignment command and StudioSession scene-save boundary, and
+Test in game queues the normal Studio Test Level launch on the following update.
+Local voice import validates audio and adopts it with a project document transaction.
+Fixed workspace controls retain Wicked's native unit-scale content parent; only
+the window's outer scrollbars are removed. Preview replacement input waits for
+the preceding pointer gesture to clear. Revision-driven preview document refresh
+preserves progress/memory/voice keys, executes no outcomes, and rejects incomplete
+documents transactionally. The basic example is literal; Advanced rules remain
+general. The Runtime prompt takes its key from the configured Interact binding.
+File-dialog completion checks lifetime, open generation and document/line identity.
+Dialogue format 2 adds optional project-relative WAV/OGG voice references while
+retaining format-1 reads. DialoguePanel uses the existing Voice mixer bus, stops
+clips on line transitions/close, and preserves a visit key across pagination.
+Save registers audio package roots; Test Game stages validated project clips. It uses a separate native GUI
+while the ordinary Studio GUI and scene input are suspended. Preview Screen roots
+attach to the dialogue window so modal layering and teardown remain explicit.
+Event actions enter the existing gameplay event queue before memory/advance commits.
+Test Game scene identity staging is independent of script attachments, so saved
+script-free Levels retain the identity needed by Runtime saves. Unknown identities
+are never synthesized for unsaved Levels.
+Quick-save v2 appends bounded dialogue memory while retaining v1 reads. No Wicked
+source or submodule pin change is part of this candidate. See DIALOGUE_EDITOR.md
+for outstanding presentation and native acceptance limits.
+
+
+### Governed dialogue scripting (16 November 2026; local candidate)
+
+RuntimeDialogueScriptApi supplies host callbacks to the existing governed creator
+Lua VM. RuntimeScriptRuntime validates opaque EntityRef ownership, generation and
+live identity before passing a native NPC to the host. The dialogue namespace
+controls the same RuntimeDialogue session and memory used by ordinary interaction;
+no Wicked global Lua access or independent conversation state is introduced.
+PrepareScene runs before creator on_start so its first start survives the next
+Update. Entity bindings refresh on scene revision; script-only assets are resolved
+from a lazy per-scene catalogue, never discovered per frame. Exact asset IDs take
+precedence over names; duplicate names are rejected.
+
+Memory mutations use existing bounded keys/int values and refresh the Screen on
+the following Runtime update. Existing voice visit identity prevents refresh from
+replaying a clip. New lifecycle events share the governed GameplayEvent FIFO and
+its dispatch phase, with no reentrant callbacks. Lua capabilities are configured
+only while stopped and released after on_stop, before replacing scene authority.
+DialogueScriptingTests drives real saved assets and RuntimeDialogue through the
+governed Lua runtime, including both conditional paths and deleted NPC references.
+See DIALOGUE_SCRIPTING.md for creator calls and event semantics.
+
+
+### Editable dialogue displays (16 November 2026; local candidate)
+
+DialogueDisplayService owns the project-wide Screen assignment and the pure
+authoring-template-to-conversation-view adapter. Screen v3 adds an optional
+dialogue_role per widget. Roles remain separate from names, text, geometry,
+styles and focus order, so ordinary UI authoring does not disconnect content.
+The existing Screen authoring history, transactions and resource pipeline remain
+authoritative. Required roles are validated before assignment/save; dialogue-role
+controls do not also execute unrelated local actions or attribute bindings.
+
+DialoguePanel resolves the template once per scene lifecycle, populates a copy
+when dialogue changes, then uses the existing ScreenRenderer, gesture gating
+and Voice mixer. Runtime uses the full authored artboard; the conversation
+editor shows a readable close-up while the UI editor retains full positioning.
+Missing resources or a renderer rejection fall back to the built-in display with
+a diagnostic. Test Game staging rejects incomplete custom displays instead.
+
+Dialogue Editor opens the existing standalone Screen handoff on the following
+frame and returns through the normal workspace activation boundary. In-progress
+conversation history stays resident. A standalone Screen saves independently of
+Story Flow routes; the coordinated save path remains for explicit Flow contexts.
+Project display selection registers the setting plus the typed Screen dependency
+root. The existing Screen provider follows artwork, fonts and theme/component
+Screens. Test Level snapshots copy the same explicit dependency closure.
+See DIALOGUE_DISPLAYS.md for the creator workflow and supported roles.

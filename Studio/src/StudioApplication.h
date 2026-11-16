@@ -1,4 +1,5 @@
 #pragma once
+#include "DialogueEditorWindow.h"
 #include "renegade/bridge/SceneAssemblyService.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/RiverFlowRenderer.h"
@@ -67,6 +68,10 @@ namespace renegade::studio
     class StudioRenderPath : public wi::RenderPath3D_PathTracing
     {
     public:
+        void OnDialogueDisplayEditor(std::function<void(const std::string&,const std::string&)> callback)
+        { dialogueDisplayEditor_ = std::move(callback); }
+        void OpenDialogueEditor()
+        { if(session_) dialogueEditor_.Open(*session_,*this); }
         void SelectViewportObject(wi::ecs::Entity entity,bool toggle) {
             SelectSceneObject(entity,toggle);
             RefreshHierarchy();QueueInspectorRefresh();
@@ -1051,6 +1056,9 @@ namespace renegade::studio
         wi::gui::Label lightLabel_;
         SceneInspectorComboBox lightType_;
         SceneInspectorButton lightPickerButton_;
+        wi::gui::GUI dialogueGui_;
+        DialogueEditorWindow dialogueEditor_;
+        std::function<void(const std::string&,const std::string&)> dialogueDisplayEditor_;
         LightPickerWindow lightPicker_;
         ParticlePickerWindow particlePicker_;
         bridge::ParticleEffect particlePlacementSetup_;
@@ -1061,6 +1069,9 @@ namespace renegade::studio
         bool lightKeepPlacing_ = true;
         bool lightFinishRmbHeld_ = false;
         bool lightPickerFrameSuspended_ = false;
+        bool dialogueFrameSuspended_=false;
+        bool dialogueGuiActive_=false;
+        bool dialogueSavedGuiVisibility_=true;
         void OpenLightPicker(wi::scene::LightComponent::LightType type, bool editSelected=false);
         void UpdateLightPicker(float dt);
         SceneInspectorSlider lightColorRed_;
@@ -1772,6 +1783,7 @@ namespace renegade::studio
     private:
         void UpdateCloudBodySelfTest();
         bool cloudBodySelfTestOpened_=false;
+        bool returnToDialogue_ = false;
         void PrepareProvingGround();
 
         bridge::StudioSession session_;

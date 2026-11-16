@@ -2,6 +2,8 @@
 #include "renegade/bridge/TestLevelLaunchTiming.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/TestLevelSnapshotService.h"
+#include "renegade/bridge/DialogueAssetService.h"
+#include "renegade/bridge/DialogueDisplayService.h"
 #include "renegade/bridge/ImpactAudioService.h"
 #include "renegade/bridge/InventoryTestLevelSnapshot.h"
 #include "renegade/bridge/InventoryDependencyProvider.h"
@@ -961,12 +963,81 @@ namespace
         return true;
     }
 
-    bool SnapshotCreatorScripts(
-        const renegade::bridge::ProjectMetadata& project,
-        const renegade::bridge::TestLevelSnapshot& snapshot,
-        renegade::bridge::SceneService& scenes,
-        renegade::bridge::ScriptAuthoringService* scripts,
-        std::string& error)
+    // Saved scene identity is needed by Runtime saves even without scripts.
+    // Keep unsaved/unidentified Levels playable, but never synthesize identity
+    // or accept a companion owned by a different project.
+    bool SnapshotSceneIdentity(const renegade::bridge::ProjectMetadata &project,
+                               const renegade::bridge::TestLevelSnapshot &snapshot, const std::string &sourceScenePath,
+                               std::string &error)
+    {
+        using namespace renegade::bridge;
+        if (sourceScenePath.empty())
+            return true;
+        std::error_code ec;
+        const auto source = fs::u8path(sourceScenePath + ".rmeta");
+        const auto status = fs::status(source, ec);
+        if (status.type() == fs::file_type::not_found)
+        {
+            error.clear();
+            return true;
+        }
+        if (ec || !fs::is_regular_file(status))
+        {
+            error = "Could not inspect the active Scene identity for Test Level.";
+            return false;
+        }
+        DocumentEnvelope envelope;
+        if (!ReadDocumentEnvelope(source.generic_u8string(), envelope, error))
+            return false;
+        if (envelope.projectId != project.projectId || envelope.documentType != "scene")
+        {
+            error = "Test Level scene identity does not match the active project/Scene.";
+            return false;
+        }
+        if (!RetargetDocumentEnvelope(envelope, TestLevelStartupScene, error))
+            return false;
+
+        // The transactional writer uses longer journal suffixes. Render under
+        // short OS temp storage, then install into the disposable deep snapshot.
+        auto staging = fs::temp_directory_path(ec);
+        if (ec)
+        {
+            error = "Could not resolve short Test Level identity staging storage.";
+            return false;
+        }
+        staging /= fs::u8path("renegade-tli-" + GenerateStableId());
+        struct Cleanup
+        {
+            fs::path path;
+            ~Cleanup()
+            {
+                std::error_code ignored;
+                fs::remove_all(path, ignored);
+            }
+        } cleanup{staging};
+        fs::create_directories(staging, ec);
+        if (ec)
+        {
+            error = "Could not create short Test Level identity staging storage.";
+            return false;
+        }
+        const auto rendered = staging / "Scene.rmeta";
+        if (!WriteDocumentEnvelope(rendered.generic_u8string(), envelope, error))
+            return false;
+        fs::copy_file(rendered, fs::u8path(snapshot.scenePath + ".rmeta"), fs::copy_options::overwrite_existing, ec);
+        if (ec)
+        {
+            error = "Could not install the Test Level scene identity: " + ec.message();
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    bool SnapshotCreatorScripts(const renegade::bridge::ProjectMetadata &project,
+                                const renegade::bridge::TestLevelSnapshot &snapshot,
+                                renegade::bridge::SceneService &scenes,
+                                renegade::bridge::ScriptAuthoringService *scripts, std::string &error)
     {
         using namespace renegade::bridge;
 
@@ -1100,15 +1171,6 @@ namespace
             return false;
         }
 
-        DocumentEnvelope snapshotSceneEnvelope = sceneEnvelope;
-        if (!RetargetDocumentEnvelope(
-                snapshotSceneEnvelope,
-                TestLevelStartupScene,
-                error))
-        {
-            error = "Could not retarget the Test Level Scene identity: " + error;
-            return false;
-        }
         // Transactional Renegade document writes create render and journal
         // suffixes. The Test Level snapshot already lives under a deliberately
         // deep project/Intermediate path, so doing those transactions in-place
@@ -1137,33 +1199,6 @@ namespace
             std::error_code ignored;
             fs::remove_all(stagingRoot, ignored);
         };
-
-        const fs::path stagedSceneEnvelopePath =
-            stagingRoot / "TestLevelScene.rmeta";
-        const fs::path finalSceneEnvelopePath =
-            fs::u8path(snapshot.scenePath + ".rmeta");
-        if (!WriteDocumentEnvelope(
-                stagedSceneEnvelopePath.generic_u8string(),
-                snapshotSceneEnvelope,
-                error))
-        {
-            cleanupStaging();
-            error = "Could not stage the Test Level Scene identity: " + error;
-            return false;
-        }
-
-        fs::copy_file(
-            stagedSceneEnvelopePath,
-            finalSceneEnvelopePath,
-            fs::copy_options::overwrite_existing,
-            stagingError);
-        if (stagingError)
-        {
-            cleanupStaging();
-            error = "Could not install the Test Level Scene identity: " +
-                stagingError.message();
-            return false;
-        }
 
         ScriptDocument snapshotDocument = document;
         snapshotDocument.scenePathHint = TestLevelStartupScene;
@@ -1290,6 +1325,9 @@ namespace renegade::bridge
                     "Could not snapshot creator scripting state: " + error);
             }
 
+            if (!SnapshotSceneIdentity(project, created, scenes_.CurrentPath(), error))
+                return failAndCleanup("Could not snapshot scene identity: " + error);
+
             // A new unsaved Level has no authored scene-adjacent inventory.
             // Preserve Test Level for such inventory-free scenes.
             if (!scenes_.CurrentPath().empty() && !SnapshotInventoryCompanions(
@@ -1300,6 +1338,18 @@ namespace renegade::bridge
             if (!scenes_.CurrentPath().empty() &&
                 !SnapshotInventoryProjectInputs(project, created, scenes_.CurrentPath(), error))
                 return failAndCleanup("Could not snapshot inventory gameplay inputs: " + error);
+
+            std::string dialogueError;
+            if (!SnapshotDialogueDisplay(project.rootPath,created.sessionDirectory,project.projectId,error))
+                return failAndCleanup("Could not snapshot dialogue display: "+error);
+            const auto dialogues=ListDialogueAssets(project.rootPath,project.projectId,dialogueError);
+            if(!dialogueError.empty())return failAndCleanup("Could not snapshot dialogue: "+dialogueError);
+            for(const auto& dialogue:dialogues)
+            {
+                if(!SaveDialogueAsset(created.sessionDirectory,dialogue,error) ||
+                   !SnapshotDialogueVoices(project.rootPath,created.sessionDirectory,dialogue,error))
+                    return failAndCleanup("Could not snapshot dialogue: "+error);
+            }
 
             if (!SnapshotParticleEffectRuntimeInputs(project.rootPath, project.projectId, created.sessionDirectory, error))
                 return failAndCleanup("Could not snapshot particle runtime catalog: " + error);

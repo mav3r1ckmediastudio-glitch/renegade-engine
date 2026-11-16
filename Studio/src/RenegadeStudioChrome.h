@@ -300,6 +300,7 @@ namespace renegade::studio
             CreateSpotLight,
             CreateDirectionalLight,
             CreateRectangleLight,
+            OpenDialogue,
             CreatePlayerStart,
             CreateCamera,
             CreateDecal,

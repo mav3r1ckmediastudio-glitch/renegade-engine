@@ -1928,7 +1928,7 @@ namespace renegade::studio
                 constexpr float itemHeight = 30.0f;
                 const float popupX = menuPositions[activeMenu_] - 8.0f;
                 constexpr std::array<int, 6> popupItemCounts = {
-                    5, 9, 9, 4, 1, 4};
+                    5, 9, 10, 4, 1, 4};
                 const int item = static_cast<int>(
                     (y - TopBarHeight) / itemHeight);
                 const bool inPopup = x >= popupX &&
@@ -1959,9 +1959,9 @@ namespace renegade::studio
                             Action::SaveGroupPrefab,Action::UnpackGroup};
                         invoke(actions[item]);
                     }
-                    else if (activeMenu_ == 2 && item >= 0 && item < 9)
+                    else if (activeMenu_ == 2 && item >= 0 && item < 10)
                     {
-                        constexpr std::array<Action, 9> actions = {
+                        constexpr std::array<Action, 10> actions = {
                             Action::CreatePointLight,
                             Action::CreateSpotLight,
                             Action::CreateDirectionalLight,
@@ -1969,7 +1969,7 @@ namespace renegade::studio
                             Action::CreateCamera,
                             Action::CreateDecal,
                             Action::CreateEnvironmentProbe,
-                            Action::ImportStaticGlb, Action::CreateProjectile};
+                            Action::ImportStaticGlb, Action::CreateProjectile, Action::OpenDialogue};
                         invoke(actions[item]);
                     }
                     else if (activeMenu_ == 3 && item >= 0 && item < 4)
@@ -3498,7 +3498,7 @@ namespace renegade::studio
                 items = {{"POINT LIGHT", true}, {"SPOT LIGHT", true},
                     {"DIRECTIONAL LIGHT", true}, {"RECTANGLE LIGHT", true},
                     {"CAMERA", true}, {"DECAL", true},
-                    {"ENVIRONMENT PROBE", true}, {"IMPORT MODEL...", true}, {"PROJECTILE...", true}};
+                    {"ENVIRONMENT PROBE", true}, {"IMPORT MODEL...", true}, {"PROJECTILE...", true}, {"DIALOGUE EDITOR...", true}};
             }
             else if (activeMenu_ == 3)
             {

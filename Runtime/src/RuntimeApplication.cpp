@@ -5,6 +5,7 @@
 #include <cmath>
 #include <filesystem>
 #include "RuntimeApplication.h"
+#include "RuntimeSingleLevelSavePolicy.h"
 #include "RuntimeWeatherDiagnostic.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
 #include "InventoryUiInputPolicy.h"
@@ -578,6 +579,7 @@ namespace renegade::runtime
 
     void RuntimeApplication::ShutdownForProcessExit() noexcept
     {
+        dialogue_.Close(renderer_);
         hudSession_.Reset(renderer_);
         diagnosticService_.StopLocalEndpoint();
         StopCreatorScripts();
@@ -792,7 +794,7 @@ namespace renegade::runtime
 
         const bool typingInOtherUi=renderer_.GetGUI().IsTyping();
         const bool gameplayInputAllowed =
-            !uiComposition_.Resolve().gameplayInputBlocked && !typingInOtherUi;
+            !uiComposition_.Resolve().gameplayInputBlocked && !typingInOtherUi && !dialogue_.Active();
         const bool gameplayFrame = !scenes_.CurrentPath().empty();
         // G13E14 one-level verification uses the exact regular controller and
         // Jolt/scene movement path; synthetic input is gated to the developer
@@ -816,6 +818,25 @@ namespace renegade::runtime
             // first-person presentation to the same post-physics position.
             gameplayInput_ = (gameplayInputAllowed || inventoryInteractionAllowed)
                 ? bridge::CaptureGameplayInput(inputMap_, dt) : bridge::GameplayInputFrame{};
+            dialogue_.SetAccessibilitySettings(uiAccessibility_.presentation);
+            dialogue_.SetItemQuery([this](const std::string& item,int count){
+                const auto* inventory=inventorySession_.Inventory();
+                const auto* container=inventory?inventory->FindContainer("player"):nullptr;
+                if(!container)return false;std::uint64_t total=0;
+                for(const auto& stack:container->stacks)if(stack.definitionId==item)total+=stack.quantity;
+                return total>=static_cast<std::uint64_t>(count);
+            });
+            dialogue_.SetEventSink([this](const std::vector<bridge::DialogueAction>& batch,std::string& error){
+                if(batch.size()!=1){error="Use one gameplay event per outcome for atomic dispatch.";return false;}
+                bridge::GameplayEvent event;event.name="dialogue.action";
+                event.payload=batch[0].key+":"+std::to_string(batch[0].value);
+                return creatorScripts_.EnqueueGameplayEvent(std::move(event),error);
+            });
+            dialogue_.SetInteractBinding(inputMap_.bindings[static_cast<std::size_t>(bridge::GameplayAction::Interact)]);
+            if(dialogue_.Update(scenes_.GetScene(),scenes_.Revision(),startupResult_.project.rootPath,
+                    startupResult_.project.projectId,renderer_,player_.entity,gameplayInput_,
+                    !paused_&&!typingInOtherUi&&!inventoryOverlayOpen_&&
+                    !uiComposition_.Resolve().gameplayInputBlocked))gameplayInput_={};
             if (inventoryOverlayOpen_) {
                 // G5G modal focus: inventory navigation and E must not
                 // also move/aim/fire/interact with the world Player.
@@ -1092,7 +1113,7 @@ namespace renegade::runtime
                         playerSettings_);
                 }
                 wi::input::HidePointer(!paused_ &&
-                    !(inventoryOverlayOpen_ && inventoryScreenPresenter_->IsLoaded()));
+                    !dialogue_.Active() && !(inventoryOverlayOpen_ && inventoryScreenPresenter_->IsLoaded()));
             }
             else
             {
@@ -1111,7 +1132,7 @@ namespace renegade::runtime
                 if (worldPickupFeedbackSeconds_==0.0f)
                     worldPickupFeedback_.clear();
             }
-            renderer_.SetInteractionPrompt(!worldPickupFeedback_.empty()
+            renderer_.SetInteractionPrompt(dialogue_.Active()?std::string{}:!dialogue_.Prompt().empty()?dialogue_.Prompt():!worldPickupFeedback_.empty()
                 ? worldPickupFeedback_ : !pickupFrame.prompt.empty()
                     ? pickupFrame.prompt : creatorScripts_.CurrentPrompt());
             RefreshInventoryOverlay(true,
@@ -3349,6 +3370,8 @@ namespace renegade::runtime
         inventoryOverlayCache_={};
         renderer_.SetInventoryOverlay({},false);
         creatorScripts_.SetInventoryGatewayProvider({});
+        creatorScripts_.SetDialogueApi({});
+        dialogue_.SetLifecycleSink({});
 
         scriptSceneRevision_ = scenes_.Revision();
         if (startupResult_.startupScenePath.empty())
@@ -3435,6 +3458,20 @@ namespace renegade::runtime
                         scriptInstanceId, ownerEntityId);
                 });
         }
+        // Prepare the same session used by NPC interaction before on_start can
+        // call dialogue.start(). No second Lua VM or independent memory store.
+        dialogue_.PrepareScene(scenes_.GetScene(), scenes_.Revision(),
+            startupResult_.project.rootPath, startupResult_.project.projectId,
+            renderer_, player_.entity);
+        dialogue_.SetLifecycleSink([this](const std::string& name,
+            const std::string& asset, const std::string& npc, std::string& error) {
+            bridge::GameplayEvent event;
+            event.name = name;
+            event.payload = asset;
+            event.senderEntityId = npc;
+            return creatorScripts_.EnqueueGameplayEvent(std::move(event), error);
+        });
+        creatorScripts_.SetDialogueApi(dialogue_.ScriptApi(scenes_.GetScene(), renderer_));
         LoadInventoryAuthoredScreen();
         if (!creatorScripts_.StartSceneFromCompanion(
                 startupResult_.startupScenePath,
@@ -3483,6 +3520,8 @@ namespace renegade::runtime
         inventoryUiStatus_.clear();
         inventorySession_.Reset();
         creatorScripts_.SetInventoryGatewayProvider({});
+        creatorScripts_.SetDialogueApi({});
+        dialogue_.SetLifecycleSink({});
         renderer_.SetInteractionPrompt({});
         ReportCreatorScriptDiagnostics();
         scriptSceneRevision_ = 0;
@@ -3615,7 +3654,7 @@ namespace renegade::runtime
             RefreshUiBindingSources();
         }
         RefreshEffectivePause();
-        if (inventoryOwnsInput) wi::input::HidePointer(false);
+        if (dialogue_.Active() || inventoryOwnsInput) wi::input::HidePointer(false);
         else if (state.cursor == bridge::ScreenCursorPolicy::Show) wi::input::HidePointer(false);
         else if (state.cursor == bridge::ScreenCursorPolicy::Hide) wi::input::HidePointer(true);
     }
@@ -3659,15 +3698,17 @@ namespace renegade::runtime
         std::string& sceneId,std::string& error) const
     {
         sceneId.clear();
-        // G5D only supports authored direct-Scene Runtime sessions. A Story
-        // Flow multi-level game requires a separate flow-node resume journal,
-        // and may not silently reset the player into the wrong level.
-        if (gameSaveLocalAppData_.empty() || !inventorySession_.Enabled() ||
-            !player_.IsSpawned() ||
-            !startupResult_.startupFlowPath.empty() ||
+        // A direct scene or unconditional Start -> one Level -> Complete
+        // route can reset to the same authored scene. Other Flow shapes need
+        // their own resume journal and remain rejected.
+        const bool flowCanReset=startupResult_.startupFlowPath.empty() ||
+            SupportsSingleLevelQuickSave(flow_.Document(),flow_.CurrentNode());
+        if (gameSaveLocalAppData_.empty() ||
+            !player_.IsSpawned() || !flowCanReset ||
+            !startupResult_.startupScreenPath.empty() ||
             startupResult_.startupScenePath.empty() ||
             scenes_.CurrentPath().empty()) {
-            error="Quick save requires an active direct-scene game with inventory and a Player Start.";
+            error="Quick save requires a direct scene or simple single-level game with a Player Start.";
             return false;
         }
         std::error_code ec;
@@ -3699,7 +3740,9 @@ namespace renegade::runtime
         RuntimeGameSaveState state;
         state.projectId=startupResult_.project.projectId;
         state.sceneId=sceneId;
-        if (!inventorySession_.CaptureRuntimeState(state.inventoryBytes,error) ||
+        state.dialogueBytes=bridge::EncodeDialogueMemory(dialogue_.Memory());
+        if (!inventorySession_.Enabled())state.inventoryBytes=bridge::InventoryService{}.SerializeSnapshot();
+        if ((inventorySession_.Enabled() && !inventorySession_.CaptureRuntimeState(state.inventoryBytes,error)) ||
             !worldPickups_.CaptureRuntimeState(state.projectId,sceneId,
                                               state.retiredWorldBytes,error))
             return false;
@@ -3725,6 +3768,8 @@ namespace renegade::runtime
         if (!RuntimeGameSaveSlot::ReadQuick(gameSaveLocalAppData_,saveId,
                 projectId,sceneId,state,error))
             return false;
+        bridge::DialogueMemory restoredDialogue;
+        if(!state.dialogueBytes.empty()&&!bridge::DecodeDialogueMemory(state.dialogueBytes,restoredDialogue,error))return false;
         // Verify all inventory bytes without touching the gameplay inventory
         // or invalidating any script-gateway pointers.
         bridge::InventoryService validation;
@@ -3736,7 +3781,7 @@ namespace renegade::runtime
         // Reload the authored scene first: an earlier quick save can legitimately
         // include pickups that were collected after the save was written.
         if (!ResetPlaySession(error))return false;
-        if(!inventorySession_.Enabled() || !player_.IsSpawned()) {
+        if((!inventorySession_.Enabled() && state.inventoryBytes!=bridge::InventoryService{}.SerializeSnapshot()) || !player_.IsSpawned()) {
             error="Quick load could not reopen the saved inventory/Player.";
             return false;
         }
@@ -3751,7 +3796,7 @@ namespace renegade::runtime
                 projectId,sceneId,state.retiredWorldBytes,error,false,
                 &validation))
             return false;
-        if(!inventorySession_.RestoreRuntimeState(state.inventoryBytes,error))
+        if(inventorySession_.Enabled() && !inventorySession_.RestoreRuntimeState(state.inventoryBytes,error))
             return false;
         auto* transform=scenes_.GetScene().transforms.GetComponent(player_.entity);
         if(!transform) {error="Restored Player transform is unavailable.";return false;}
@@ -3763,6 +3808,7 @@ namespace renegade::runtime
            body && body->physicsobject)
             wi::physics::SetPosition(*body,position);
         player_.yaw=state.playerYaw;player_.pitch=state.playerPitch;
+        dialogue_.Memory()=std::move(restoredDialogue);
         combatState_.playerHealth=state.playerHealth;
         combatState_.playerMaxHealth=state.playerMaxHealth;
         combatState_.playerDead=state.playerDead;
@@ -3774,6 +3820,7 @@ namespace renegade::runtime
 
     bool RuntimeApplication::ResetPlaySession(std::string& error)
     {
+        dialogue_.Reset(renderer_);
         if(!LoadGameplayAttributes(error))return false;
         uiComposition_.ClearPrimary();
         uiComposition_.ClearHud();hudSession_.Reset(renderer_);hudSelection_.LeaveLevel();

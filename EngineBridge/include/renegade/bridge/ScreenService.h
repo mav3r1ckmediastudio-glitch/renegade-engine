@@ -264,6 +264,8 @@ namespace renegade::bridge
         std::string text;
         std::string resourcePath;
         std::string actionId;
+        // Optional dialogue presentation role; independent of names/text/style.
+        std::string dialogueRole;
         // Empty means the design canvas. A parent establishes a proper Screen
         // scene graph without exposing Wicked widget ownership to documents.
         StableId parentId;

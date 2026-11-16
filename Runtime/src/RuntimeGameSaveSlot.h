@@ -9,6 +9,7 @@ struct RuntimeGameSaveState {
     std::string sceneId;
     std::string inventoryBytes;
     std::string retiredWorldBytes;
+    std::string dialogueBytes;
     float playerHealth=100.0f;
     float playerMaxHealth=100.0f;
     bool playerDead=false;
