@@ -78,3 +78,15 @@ require_text("${root_cmake}" "include(Tests/Phase5Gate6.cmake)" "Gate 6 regressi
 require_text("${root_cmake}" "include(Tests/Phase5Gate5.cmake)" "Gate 5 regression contract was dropped")
 
 message(STATUS "Phase 5 Gate 9 source contract passed")
+
+# Whole-scene view modes persist separately from transient diagnostics.
+read_required("cmake/WickedWireframeOverlayFix.cmake" wireframe_fix)
+read_required("Studio/src/RenegadeStudioChrome.cpp" viewport_chrome)
+require_text("${root_cmake}" "include(cmake/WickedWireframeOverlayFix.cmake)" "coplanar overlay correction is not compiled")
+require_text("${wireframe_fix}" "DSSTYPE_DEPTHREAD" "overlay must accept coplanar depth without depth/stencil writes")
+require_text("${wireframe_fix}" "wireframe_overlay ?" "dedicated PSOs must be selected only for overlay draws")
+require_text("${wireframe_fix}" "DSSTYPE_DEFAULT" "original PSO state must be restored after overlay creation")
+require_text("${wireframe_fix}" "HEADER_FILE_ONLY TRUE" "generated renderer must replace rather than duplicate the pinned source")
+require_text("${viewport_chrome}" "Action::ViewWireframeOverlay" "SHOW overlay mode dispatch is missing")
+require_text("${studio_application}" "viewport_wireframe_only" "whole-scene editor mode preference is missing")
+require_text("${studio_application}" "viewport_wireframe_overlay" "overlay editor preference is missing")

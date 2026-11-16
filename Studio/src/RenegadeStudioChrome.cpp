@@ -1588,17 +1588,17 @@ namespace renegade::studio
             pointerConsumed_=true;
             if (!IsEnabled() || dt <= 0 || wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
             {
-                menuGesture_.Cancel();activeMenu_=-1;Deactivate();return;
+                menuGesture_.Cancel();activeMenu_=-1;activeViewportMenu_=-1;Deactivate();return;
             }
             if(wi::input::Release(wi::input::MOUSE_BUTTON_LEFT))
             {
                 const int action=menuGesture_.Release(HitMenuItem(wi::input::GetPointer()));
-                activeMenu_=-1;
+                activeMenu_=-1;activeViewportMenu_=-1;
                 Deactivate();
                 if(action>=0)InvokeMenuItem(action/32,action%32);
             }
             else if(!wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
-            { menuGesture_.Cancel(); activeMenu_=-1; Deactivate(); }
+            { menuGesture_.Cancel(); activeMenu_=-1; activeViewportMenu_=-1; Deactivate(); }
             return;
         }
         if(activeMenu_>=0 && wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) &&
@@ -2003,17 +2003,20 @@ namespace renegade::studio
                 }
                 chipX += chipWidth + 6.0f;
             }
-            if (!consumed && activeViewportMenu_ == 2 &&
-                x >= hierarchyWidth_ + 12.0f &&
-                x < hierarchyWidth_ + 225.0f &&
-                y >= viewportTop + 42.0f && y < viewportTop + 72.0f)
+            if (!consumed && activeViewportMenu_ == 2)
             {
-                if (action_)
+                const int item = HitMenuItem(wi::input::GetPointer());
+                if (item >= 0)
                 {
-                    action_(Action::ToggleGrid);
+                    // Use the same hold/release/cancel ownership as main menus.
+                    menuGesture_.Begin(item);
                 }
-                activeViewportMenu_ = -1;
-                consumed = true;
+                else
+                {
+                    activeViewportMenu_ = -1;
+                }
+                pointerConsumed_ = true;
+                return;
             }
 
             const float searchY = TopBarHeight + PanelHeaderHeight + 10.0f;
@@ -2942,7 +2945,7 @@ namespace renegade::studio
                 chipWidth,
                 28.0f,
                 wi::Color(9, 14, 17, 220),
-                activeViewportMenu_ == chipIndex ? Forge : Border,
+                (activeViewportMenu_ == chipIndex || (chipIndex == 2 && viewportViewMode_ != 0)) ? Forge : Border,
                 cmd);
             DrawText(
                 chip,
@@ -3234,6 +3237,15 @@ namespace renegade::studio
     }
     int RenegadeStudioChrome::HitMenuItem(const XMFLOAT4& p) const noexcept
     {
+        if (activeViewportMenu_ == 2)
+        {
+            const float x = hierarchyWidth_ + 12.0f;
+            const float y = TopBarHeight + SceneTabsHeight + 42.0f;
+            if (p.x < x || p.x >= x + 226 || p.y < y || p.y >= y + 150)
+                return -1;
+            const int row = int((p.y - y) / 30);
+            return row == 1 ? -1 : 6 * 32 + row; // View Mode heading.
+        }
         if(activeMenu_<0 || activeMenu_>=6) return -1;
         constexpr const char* names[]={"FILE","EDIT","ADD","VIEW","BUILD","WINDOW"};
         constexpr int counts[]={5,9,12,4,1,4};
@@ -3253,7 +3265,14 @@ namespace renegade::studio
                             action_(command);
                         }
                     };
-                    if (menu == 0 && item >= 0 && item < 5)
+                    if (menu == 6)
+                    {
+                        if (item == 0) invoke(Action::ToggleGrid);
+                        else if (item == 2) invoke(Action::ViewShaded);
+                        else if (item == 3) invoke(Action::ViewWireframe);
+                        else if (item == 4) invoke(Action::ViewWireframeOverlay);
+                    }
+                    else if (menu == 0 && item >= 0 && item < 5)
                     {
                         constexpr std::array<Action, 5> actions = {
                             Action::ProjectHub, Action::OpenScene,
@@ -3343,8 +3362,9 @@ namespace renegade::studio
                 const auto pointer=wi::input::GetPointer();
                 const bool hovered=pointer.x>=x && pointer.x<x+popupWidth &&
                     pointer.y>=itemY && pointer.y<itemY+itemHeight;
-                const bool pressed=activeMenu_>=0 &&
-                    menuGesture_.Target()==activeMenu_*32+static_cast<int>(index) &&
+                const int gestureMenu = activeViewportMenu_ == 2 ? 6 : activeMenu_;
+                const bool pressed=gestureMenu>=0 &&
+                    menuGesture_.Target()==gestureMenu*32+static_cast<int>(index) &&
                     wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
                 theme::DrawButton(x+3,itemY+2,popupWidth-6,itemHeight-4,
                     items[index].first,{items[index].second,hovered,pressed,false,false},
@@ -3430,7 +3450,11 @@ namespace renegade::studio
                 drawPopup(
                     popupX,
                     viewportTop + 42.0f,
-                    {{gridVisible_ ? "✓  EDITOR GRID" : "EDITOR GRID", true}});
+                    {{gridVisible_ ? "[x] EDITOR GRID" : "[ ] EDITOR GRID", true},
+                        {"VIEW MODE", false},
+                        {viewportViewMode_ == 0 ? "[x] SHADED" : "[ ] SHADED", true},
+                        {viewportViewMode_ == 1 ? "[x] WIREFRAME" : "[ ] WIREFRAME", true},
+                        {viewportViewMode_ == 2 ? "[x] SHADED + WIREFRAME" : "[ ] SHADED + WIREFRAME", true}});
             }
         }
 

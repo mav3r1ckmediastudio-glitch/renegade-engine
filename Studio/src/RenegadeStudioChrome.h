@@ -321,6 +321,9 @@ namespace renegade::studio
             CreateNavigationGrid,
             Focus,
             ToggleGrid,
+            ViewShaded,
+            ViewWireframe,
+            ViewWireframeOverlay,
             EnvironmentWorkspace,
             TerrainWorkspace,
             RenderWorkspace,
@@ -381,6 +384,7 @@ namespace renegade::studio
         void SetActiveTool(int toolIndex) noexcept;
         void SetHierarchyFilter(std::string filter);
         void SetGridVisible(bool visible) noexcept;
+        void SetViewportViewMode(int mode) noexcept { viewportViewMode_ = mode; }
         void SetEnvironmentWorkspaceActive(bool active) noexcept;
         void SetTerrainWorkspaceActive(bool active) noexcept;
         void SetRenderWorkspaceActive(bool active) noexcept;
@@ -540,6 +544,7 @@ namespace renegade::studio
         int activeMenu_ = -1;
         int activeViewportMenu_ = -1;
         bool gridVisible_ = true;
+        int viewportViewMode_ = 0;
         bool environmentWorkspaceActive_ = false;
         bool terrainWorkspaceActive_ = false;
         bool renderWorkspaceActive_ = false;

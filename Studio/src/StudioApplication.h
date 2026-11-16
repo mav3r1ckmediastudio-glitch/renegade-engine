@@ -816,6 +816,7 @@ namespace renegade::studio
             bool playerStart = false);
         void DrawEditorGrid(wi::graphics::CommandList cmd) const;
         void SetGridVisible(bool visible);
+        void SetEditorViewMode(int mode);
         void CreateProjectHub();
         void CreateWorkspaceShell();
         void SelectAssetBrowserFolder(const std::string& relativePath);

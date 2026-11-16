@@ -812,6 +812,34 @@ namespace renegade::studio
         device->Draw(static_cast<uint32_t>(vertices.size()),0,cmd);
     }
 
+    void StudioRenderPath::SetEditorViewMode(int mode)
+    {
+        if (pathTracePreviewActive_) return;
+        // Negative requests restore the saved editor preference without writing
+        // or recursively refreshing diagnostics. No scene/runtime state changes.
+        const bool restore = mode < 0;
+        if (restore)
+        {
+            mode = 0;
+            if (session_ != nullptr)
+            {
+                auto& prefs = session_->Projects();
+                mode = prefs.GetEditorPreference("viewport_wireframe_only", false) ? 1 :
+                    (prefs.GetEditorPreference("viewport_wireframe_overlay", false) ? 2 : 0);
+            }
+        }
+        mode = std::clamp(mode, 0, 2);
+        wi::renderer::SetWireframeMode(static_cast<wi::renderer::WIREFRAME_MODE>(mode));
+        studioChrome_.SetViewportViewMode(mode);
+        if (!restore && session_ != nullptr)
+        {
+            auto& prefs = session_->Projects();
+            prefs.SetEditorPreference("viewport_wireframe_only", mode == 1);
+            prefs.SetEditorPreference("viewport_wireframe_overlay", mode == 2);
+        }
+        if (!restore) RefreshGate9DiagnosticsControls();
+    }
+
     void StudioRenderPath::SetGridVisible(const bool visible)
     {
         gridVisible_ = visible;
@@ -3310,6 +3338,12 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::Focus:
                 RequestDiagnosticAction(EditorAction::FocusSelection);
                 break;
+            case RenegadeStudioChrome::Action::ViewShaded:
+                SetEditorViewMode(0); break;
+            case RenegadeStudioChrome::Action::ViewWireframe:
+                SetEditorViewMode(1); break;
+            case RenegadeStudioChrome::Action::ViewWireframeOverlay:
+                SetEditorViewMode(2); break;
             case RenegadeStudioChrome::Action::ToggleGrid:
                 RequestDiagnosticAction(EditorAction::ToggleGrid);
                 break;
