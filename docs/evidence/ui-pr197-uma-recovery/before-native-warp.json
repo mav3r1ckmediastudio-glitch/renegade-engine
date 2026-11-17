@@ -1,0 +1,7 @@
+{
+  "exit_code": 1,
+  "timeout": false,
+  "exe_sha256": "8b677d6e06de4d2b4ec80cd8d770d6bb0fd16a3699d6c1601fb582fd7a984a75",
+  "actual_warp_reported": true,
+  "expected_failure": true
+}

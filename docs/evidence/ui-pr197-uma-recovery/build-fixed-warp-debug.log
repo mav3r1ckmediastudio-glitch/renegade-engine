@@ -1,0 +1,39 @@
+MSBuild version 18.6.3+84d3e95b4 for .NET Framework
+
+  Jolt.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Debug\Jolt.lib
+  LUA.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\LUA\Debug\LUA.lib
+  Utility.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Utility\Debug\Utility.lib
+cl : command line  warning D9025: overriding '/EHc' with '/EHc-' [E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_common.vcxproj]
+  wiGraphicsDevice_DX12_Warp.cpp
+  WickedEngine_common.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_common.dir\Debug\WickedEngine_common.lib
+  Copying PDB for PCH reuse from WickedEngine_common for WickedEngine_ext_shaders
+cl : command line  warning D9025: overriding '/EHc' with '/EHc-' [E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_ext_shaders.vcxproj]
+  wiRendererWireframe.cpp
+  WickedEngine_ext_shaders.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Debug\WickedEngine_ext_shaders.lib
+  offlineshadercompiler.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Debug\offlineshadercompiler.exe
+  Copying PDB for PCH reuse from WickedEngine_common for WickedEngine_emb_shaders
+  Generating wiShaderDump.h
+cl : command line  warning D9025: overriding '/EHc' with '/EHc-' [E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_emb_shaders.vcxproj]
+  wiRendererWireframe.cpp
+  WickedEngine_emb_shaders.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Debug\WickedEngine.lib
+  DiagnosticService.cpp
+  RenegadeEngineBridge.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\EngineBridge\Debug\RenegadeEngineBridge.lib
+  RenegadeGpuUploadBufferTests.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\Tests\Debug\RenegadeGpuUploadBufferTests.exe
+MSBuild version 18.6.3+84d3e95b4 for .NET Framework
+
+  Jolt.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Debug\Jolt.lib
+  LUA.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\LUA\Debug\LUA.lib
+  Utility.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Utility\Debug\Utility.lib
+  WickedEngine_common.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_common.dir\Debug\WickedEngine_common.lib
+  Copying PDB for PCH reuse from WickedEngine_common for WickedEngine_ext_shaders
+  WickedEngine_ext_shaders.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Debug\WickedEngine_ext_shaders.lib
+  offlineshadercompiler.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Debug\offlineshadercompiler.exe
+  Copying PDB for PCH reuse from WickedEngine_common for WickedEngine_emb_shaders
+  WickedEngine_emb_shaders.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Debug\WickedEngine.lib
+  RenegadeEngineBridge.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\EngineBridge\Debug\RenegadeEngineBridge.lib
+  RenegadeTerrainSurfacePacker.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\Studio\Debug\RenegadeTerrainSurfacePacker.exe
+  RenegadeRiverShaderCompiler.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\EngineBridge\Debug\RenegadeRiverShaderCompiler.exe
+  Generating ../river-shaders/RenegadeRiverUnderwaterCS.cso
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=24472
+  RiverTerrainFollowProof.cpp
+  RenegadeRiverTerrainFollowProof.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\Tests\Debug\RenegadeRiverTerrainFollowProof.exe

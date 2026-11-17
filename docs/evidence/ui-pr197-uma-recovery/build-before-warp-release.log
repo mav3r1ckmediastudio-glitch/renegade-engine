@@ -1,0 +1,19 @@
+MSBuild version 18.6.3+84d3e95b4 for .NET Framework
+
+  Jolt.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Release\Jolt.lib
+  LUA.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\LUA\Release\LUA.lib
+  Utility.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Utility\Release\Utility.lib
+cl : command line  warning D9025: overriding '/EHc' with '/EHc-' [E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_common.vcxproj]
+  wiGraphicsDevice_DX12_Warp.cpp
+  WickedEngine_common.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_common.dir\Release\WickedEngine_common.lib
+cl : command line  warning D9025: overriding '/EHc' with '/EHc-' [E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_ext_shaders.vcxproj]
+  wiRenderer.cpp
+  WickedEngine_ext_shaders.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine_ext_shaders.lib
+  offlineshadercompiler.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Release\offlineshadercompiler.exe
+  Generating wiShaderDump.h
+cl : command line  warning D9025: overriding '/EHc' with '/EHc-' [E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_emb_shaders.vcxproj]
+  wiRenderer.cpp
+  WickedEngine_emb_shaders.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine.lib
+  DiagnosticService.cpp
+  RenegadeEngineBridge.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\EngineBridge\Release\RenegadeEngineBridge.lib
+  RenegadeGpuUploadBufferTests.vcxproj -> E:\RenegadeUIPreflight-20261117\BUILD\renegade\Tests\Release\RenegadeGpuUploadBufferTests.exe

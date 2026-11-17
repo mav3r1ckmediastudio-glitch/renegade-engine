@@ -19,8 +19,12 @@ reverse-Z comparison is strictly GREATER and writes depth/stencil. An overlay
 on an already-rendered surface is coplanar, so these edges fail that test.
 Studio cannot replace an internally chosen native PSO through its adapter.
 
-cmake/WickedWireframeOverlayFix.cmake compiles a generated copy of
-WickedEngine/WickedEngine/wiRenderer.cpp after the existing overlays. It adds
+On Windows, cmake/WickedWireframeOverlayFix.cmake consumes the existing
+UMA-corrected RenegadeWickedFix/wiRenderer.cpp stage and writes the distinct
+wiRendererWireframe.cpp final stage. Both raw and intermediate renderers
+are header-only; embedded/external targets compile only the final source.
+This preserves the coherent-UMA upload policy alongside the wireframe change.
+On other platforms the wireframe stage consumes the pinned source. It adds
 six dedicated overlay PSOs using DSSTYPE_DEPTHREAD (GREATER_EQUAL, no depth
 writes, no stencil writes), selected only by DRAWSCENE_WIREFRAME_OVERLAY.
 Original shaded and wireframe-only PSOs retain their original state.
@@ -80,3 +84,15 @@ variants were not separately exercised by this scoped native review.
 Final Wireframe5 native follow-up: fresh-process Wireframe restoration, ASCII active
 markers, exclusive overlay selection and visible coplanar triangle edges all verified.
 The latest review process is left open with SHOW displaying the overlay selection.
+
+## PR #197 composition recovery — 17 November 2026
+
+The original generated-file collision discarded the UMA memory fix and failed
+hosted Studio Debug/Release on the software GPU despite hardware preflight
+passing. The distinct composition stages above correct that integration error.
+RenegadeRendererOverlayComposition validates cold/repeated configuration,
+both target source selections, stable output and both patch policies.
+RENEGADE_TEST_FORCE_WARP defaults OFF and permits isolated Windows test builds
+to exercise the unchanged allocator/render path on actual WARP.
+See [reproduction and recovery evidence](UI_PR197_UMA_RECOVERY_20261117.md).
+Historical build hashes and results above describe earlier implementations.

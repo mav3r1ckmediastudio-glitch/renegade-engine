@@ -1,0 +1,7 @@
+{
+  "exit_code": 0,
+  "test_warp_option_off": true,
+  "actual_nvidia_reported": true,
+  "production_allocator_and_alias_pass": true,
+  "exe_sha256": "f3513153d8db0abbfb8639e670e29745170204711d4b2270ac52f87213788c64"
+}

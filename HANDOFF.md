@@ -1,3 +1,25 @@
+# PR #197 UMA/wireframe recovery — 17 November 2026
+
+PR #197 remains draft. Original tip 585407a: both baseline jobs passed;
+Studio Debug and Release failed. No merge or release occurred.
+Correction: affe8d14ecde5e92302658368dc841b45c3f09e8 composes wireframe on the existing UMA stage into
+a distinct final renderer. Both shader targets compile exactly one composed
+source. A cold/reconfigure regression rejects the original generator.
+
+Actual WARP: same allocator failure reproduced before correction; corrected
+Debug 11/11 and Release 11/11 affected checks pass. Source/help/policy 66/66
+pass. Normal NVIDIA allocator and native Release Studio viewport/modal
+review pass with test-WARP OFF. Test assertions/deadlines are unchanged.
+This is scoped recovery validation, not a new full local 322/335 run.
+
+Read docs/UI_PR197_UMA_RECOVERY_20261117.md and its evidence index.
+Next: one corrective push to the existing branch, retain draft, and verify
+all four hosted checks SUCCESS at the exact corrected PR head. Do not
+recommend merge based on mergeable status or historical local results.
+No merge or release is authorized. Existing Wicked overlays are preserved.
+
+---
+
 # Combined UI/wireframe ready for PR — 17 November 2026
 
 Application implementation: 7fd95b5b3607974e7275673fa0bcc3e1b1c6af2a.

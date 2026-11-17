@@ -1,0 +1,7 @@
+-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26200.
+-- Renegade coherent-UMA upload-buffer recovery enabled (Wicked pin unchanged)
+-- Renegade coplanar wireframe overlay fix enabled (submodule unchanged)
+-- RENDERER_UMA_WIREFRAME_COMPOSITION_PASS 0fbf3381bf6e468495b2f3afdb92b9b5c386f78c5054168defef7bef4244fcca
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: E:/RenegadeUI-20261116/BUILD/ui197-uma-recovery/composition-fixed/80704dfc7c/build

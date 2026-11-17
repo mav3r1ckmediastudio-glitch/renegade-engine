@@ -1,3 +1,5 @@
+> Historical hardware preflight. The first hosted Studio matrix failed because the wireframe generator overwrote the existing coherent-UMA memory correction. See [the recovery receipt](UI_PR197_UMA_RECOVERY_20261117.md) for reproduction on real WARP and corrected validation. These earlier local results do not represent hosted CI success.
+
 # Combined Studio UI and wireframe validation — 17 November 2026
 
 Application implementation: `7fd95b5b3607974e7275673fa0bcc3e1b1c6af2a`.
