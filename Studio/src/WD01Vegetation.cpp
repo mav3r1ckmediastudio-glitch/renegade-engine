@@ -200,6 +200,7 @@ namespace renegade::studio
             terrainRiverStrokePoints_.clear();
             terrainRiverBrushButton_.SetText("DRAW RIVER");
             terrainRiverStatus_.SetText("RIVER // READY");
+            DisableTerrainPropBrush();
             value.brushActive = true;
             value.mode = bridge::VegetationBrushMode::Paint;
             value.paint.SetText("PAINT [ACTIVE]");
@@ -221,6 +222,7 @@ namespace renegade::studio
             terrainRiverStrokePoints_.clear();
             terrainRiverBrushButton_.SetText("DRAW RIVER");
             terrainRiverStatus_.SetText("RIVER // READY");
+            DisableTerrainPropBrush();
             value.brushActive = true;
             value.mode = bridge::VegetationBrushMode::Delete;
             value.paint.SetText("PAINT");

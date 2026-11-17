@@ -53,3 +53,5 @@ The marker travels with native components through scene adoption and disappears 
 4. Stage bulk edits away from the live document, support cancel before commit, and verify Undo/Redo, Save As, ordinary save and reopen. Inspect narrow and wide panels and the result in the standalone player. Keep all streaming implementations outside P2.
 
 See the terrain-prop section in `HANDOFF.md` for branch state, measured results and pre-push checks.
+
+P2 authoring extends these formats and interfaces; see [Terrain props P2](TERRAIN_PROP_P2.md) for the v2 schema, v1 migration and command boundary. The measurements above retain their original P0/P1 scope.

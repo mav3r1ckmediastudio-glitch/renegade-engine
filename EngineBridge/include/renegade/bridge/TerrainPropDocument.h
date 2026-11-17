@@ -1,5 +1,6 @@
 #pragma once
 #include "renegade/bridge/TerrainPropProjection.h"
+#include "renegade/bridge/TerrainPropAuthoring.h"
 #include "renegade/bridge/IdentityService.h"
 #include <filesystem>
 
@@ -24,7 +25,13 @@ namespace renegade::bridge
         }
         std::vector<TerrainPropProfile> profiles;
         std::vector<TerrainPropPage> pages;
+        TerrainPropAuthoringState authoring;
     };
+
+    // Compare authored content for history rebasing; high-water mark intentionally excluded.
+    bool TerrainPropDocumentContentEqual(const TerrainPropDocument&, const TerrainPropDocument&);
+    bool ComputeTerrainPropDocumentContentDigest(const TerrainPropDocument&,
+        std::string& digest, std::string& error);
 
     // Write immutable products before publishing their reference in authored
     // metadata. Existing WISCENE save/backup/rollback then selects one revision.

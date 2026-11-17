@@ -13,6 +13,7 @@ namespace renegade::bridge
         std::array<float, 3> position{};
         float yawRadians = 0;
         float scale = 1;
+        std::uint64_t candidateKey = 0; // Zero identifies migrated v1/manual placements.
     };
 
     struct TerrainPropPage

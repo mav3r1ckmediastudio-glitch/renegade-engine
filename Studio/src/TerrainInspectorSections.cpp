@@ -9,13 +9,13 @@ namespace renegade::studio
 {
 namespace
 {
-    constexpr int TerrainParents[15]={-1,0,0,0,-1,4,4,4,4,4,4,-1,11,11,11};
-    constexpr const char* TerrainIds[15]={"terrain","terrain.size","terrain.sculpt","terrain.materials",
+    constexpr int TerrainParents[16]={-1,0,0,0,-1,4,4,4,4,4,4,-1,11,11,11,-1};
+    constexpr const char* TerrainIds[16]={"terrain","terrain.size","terrain.sculpt","terrain.materials",
         "rivers","rivers.paint","rivers.bed","rivers.flow","rivers.appearance","rivers.waterfalls","rivers.advanced",
-        "vegetation","vegetation.paint","vegetation.appearance","vegetation.simulation"};
-    constexpr const char* TerrainTitles[15]={"TERRAIN","SIZE & HEIGHT RANGE","SCULPTING","MATERIALS & BLENDING",
+        "vegetation","vegetation.paint","vegetation.appearance","vegetation.simulation","terrain.props"};
+    constexpr const char* TerrainTitles[16]={"TERRAIN","SIZE & HEIGHT RANGE","SCULPTING","MATERIALS & BLENDING",
         "RIVERS","PAINTING","RIVERBED & BANKS","FLOW & DIRECTION","WATER COLOUR & CLARITY","WATERFALLS","ADVANCED",
-        "VEGETATION","PAINTING","APPEARANCE","SIMULATION & DETAIL"};
+        "VEGETATION","PAINTING","APPEARANCE","SIMULATION & DETAIL","TERRAIN PROPS"};
     void Place(wi::gui::Widget& widget,float x,float y,float width,float height=28)
     {widget.SetPos(XMFLOAT2(x,y));widget.SetSize(XMFLOAT2(std::max(1.f,width),height));}
 }
@@ -44,7 +44,7 @@ void StudioRenderPath::LayoutTerrainSections()
         !renderWorkspaceActive_ && !projectHubVisible_;
     selectedRiverInspectorActive_=selectedMode;
     const float width=ui::InspectorContentWidth(inspectorPanel_.GetSize().x,inspectorPanel_.GetControlSize());
-    std::array<std::vector<wi::gui::Widget*>,15> rows;
+    std::array<std::vector<wi::gui::Widget*>,16> rows;
     rows[1]={&terrainSizeReadout_,&expandTerrainButton_,&terrainChunkScale_,&terrainMinimumHeight_,&terrainMaximumHeight_,&terrainLodBias_};
     rows[2]={&terrainSculptMode_,&terrainBrushRadius_,&terrainBrushStrength_,&terrainBrushFalloff_,&terrainBrushReadout_,&terrainStrokeDiagnostic_};
     rows[3]={&terrainMaterialPreset_,&terrainTextureScale_,&terrainLowAltitudeBlend_,&terrainBaseBlend_,&terrainSlopeBlend_,&terrainApplyDefaultGrassButton_,&terrainReloadMaterialButton_};
@@ -74,6 +74,7 @@ void StudioRenderPath::LayoutTerrainSections()
     rows[8]={&terrainRiverAppearance_[0],&terrainRiverAppearance_[1],&terrainRiverAppearance_[2],&terrainRiverAppearance_[3],&terrainRiverFogDensity_,&terrainRiverAppearance_[4]};
     rows[9]={&addWaterfallButton_};
     rows[10]={&terrainRiverExtendFloorButton_};
+    rows[15]=TerrainPropWidgets();
     rows[11]=TerrainVegetationWidgets(3);rows[12]=TerrainVegetationWidgets(0);rows[13]=TerrainVegetationWidgets(1);rows[14]=TerrainVegetationWidgets(2);
     // Keep the per-river material controls synchronized with whichever water
     // spline or child control point is selected. Do not fight an active drag.
@@ -253,7 +254,7 @@ void StudioRenderPath::LayoutTerrainSections()
         for(auto* widget:rows[i])
         {
             widget->SetVisible(true);
-            const float height=(widget==&riverFlowStatus_||widget==&terrainRiverStatus_||widget==&terrainStrokeDiagnostic_||i==11)?40.f:28.f;
+            const float height=(widget==&riverFlowStatus_||widget==&terrainRiverStatus_||widget==&terrainStrokeDiagnostic_||i==11)?40.f:(i==15 && widget==rows[15].back()?54.f:28.f);
             Place(*widget,36,y,width-24,height);y+=height+6;
         }
         if(!rows[i].empty())y+=4;

@@ -11,7 +11,7 @@ namespace renegade::bridge
     namespace
     {
         constexpr std::size_t HeaderBytes = 24;
-        constexpr std::size_t RecordBytes = 32;
+        constexpr std::size_t RecordBytes = 40;
         constexpr std::size_t MaxProfiles = 65536;
         constexpr std::size_t MaxPlacements = 1000000;
 
@@ -51,10 +51,11 @@ namespace renegade::bridge
                 return false;
             }
         }
-        std::unordered_set<std::uint64_t> ids;
+        std::unordered_set<std::uint64_t> ids, keys;
         for (const auto& placement : page.placements)
         {
             if (!placement.id || !ids.insert(placement.id).second ||
+                (placement.candidateKey && !keys.insert(placement.candidateKey).second) ||
                 placement.profileIndex >= profiles.size() ||
                 !std::all_of(placement.position.begin(), placement.position.end(),
                     [](float coordinate) { return std::isfinite(coordinate); }) ||
@@ -74,7 +75,7 @@ namespace renegade::bridge
         if (!ValidateTerrainPropPage(page, error)) return false;
         std::vector<std::uint8_t> bytes{'R','P','P','G'};
         bytes.reserve(HeaderBytes + page.profiles.size() * 16 + page.placements.size() * RecordBytes);
-        Append(bytes, std::uint32_t{1});
+        Append(bytes, std::uint32_t{2});
         Append(bytes, page.cellX);
         Append(bytes, page.cellZ);
         Append(bytes, static_cast<std::uint32_t>(page.profiles.size()));
@@ -88,6 +89,7 @@ namespace renegade::bridge
             for (float coordinate : p.position) Append(bytes, coordinate);
             Append(bytes, p.yawRadians);
             Append(bytes, p.scale);
+            Append(bytes, p.candidateKey);
         }
         out.swap(bytes);
         return true;
@@ -102,7 +104,8 @@ namespace renegade::bridge
             return false;
         }
         const auto* cursor = bytes.data() + 4;
-        if (Read<std::uint32_t>(cursor) != 1)
+        const auto version = Read<std::uint32_t>(cursor);
+        if (version != 1 && version != 2)
         {
             error = "Unsupported terrain prop page version.";
             return false;
@@ -113,7 +116,7 @@ namespace renegade::bridge
         const auto profiles = Read<std::uint32_t>(cursor);
         const auto placements = Read<std::uint32_t>(cursor);
         if (profiles > MaxProfiles || placements > MaxPlacements ||
-            bytes.size() != HeaderBytes + profiles * 16ull + placements * RecordBytes)
+            bytes.size() != HeaderBytes + profiles * 16ull + placements * (version == 1 ? 32ull : RecordBytes))
         {
             error = "Invalid terrain prop page length.";
             return false;
@@ -132,6 +135,7 @@ namespace renegade::bridge
             for (auto& coordinate : p.position) coordinate = Read<float>(cursor);
             p.yawRadians = Read<float>(cursor);
             p.scale = Read<float>(cursor);
+            if (version == 2) p.candidateKey = Read<std::uint64_t>(cursor);
         }
         if (!ValidateTerrainPropPage(page, error)) return false;
         out = std::move(page);

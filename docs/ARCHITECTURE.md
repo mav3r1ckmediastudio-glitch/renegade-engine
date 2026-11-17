@@ -2412,3 +2412,22 @@ with the original renderer and submodule pin preserved. See WIREFRAME_VIEW_MODE.
 ## Terrain prop placement authority
 
 The P0/P1 bridge owns immutable placement revisions and a shared native projection. The archive boundary, wire formats, restore path and proposed P2/streaming interfaces are specified in [Terrain props P0/P1](TERRAIN_PROP_P1.md).
+
+
+### Terrain prop P2 authoring authority
+
+TerrainPropAuthoring owns deterministic world-lattice candidates, distance-sampled
+strokes, saved recipes/mixes, clearings/tombstones and stable override identities.
+TerrainPropTerrain captures finite native terrain grids once per explicit operation;
+workers sample copied data and do not access live scene components.
+TerrainPropEditService publishes one authoring command at the existing scene-safe
+point and updates changed projection pages with rollback. Undo/Redo retain the
+placement allocation high-water mark; content comparison permits ordinary chained
+history without accepting divergent authored state.
+
+Digest-addressed manifests/pages use schema 2 and retain v1 reads. The normal
+WISCENE layer reference remains the selected revision authority. Runtime restores
+that same persisted population; transient native resources remain excluded from
+authored scene archives. Collision, asset and texture streaming interfaces remain
+proposals for later stages. See [P2 authoring](TERRAIN_PROP_P2.md) and the latest
+HANDOFF.md receipts for validation and limits.

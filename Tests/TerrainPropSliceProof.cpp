@@ -6,6 +6,8 @@
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
 #include "renegade/bridge/PlayerService.h"
+#include "renegade/bridge/ResourceAssetCacheIdentityService.h"
+#include <iterator>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -88,7 +90,22 @@ namespace
                 page.placements.push_back({doc.AllocatePlacementId(), static_cast<unsigned>(i),
                     {static_cast<float>(i * 8), 0, static_cast<float>(j * 8)}, 0, 1});
         }
+
+        page.placements[0].candidateKey = 123;
         doc.pages.push_back(page);
+        auto& authoring = doc.authoring;
+        authoring.recipe.seed = 987654321;
+        authoring.recipe.cellSize = 64;
+        authoring.recipe.candidateStep = 2;
+        authoring.recipe.mix.name = "Woodland \"test\" mix";
+        authoring.recipe.mix.entries.push_back({doc.profiles[0].id, .03f, 3, .8f, 1.2f});
+        authoring.savedMixes.push_back(authoring.recipe.mix);
+        authoring.bindings = {{123,1}, {456,97}};
+        authoring.tombstones = {456};
+        authoring.clearings = {{50,50,4}};
+        authoring.overrides.push_back({123,1,doc.profiles[0].id,
+            page.placements[0].position,page.placements[0].yawRadians,page.placements[0].scale});
+        doc.nextPlacementId = 98;
         auto owner = scenes.GetScene().Entity_CreateTransform("Terrain layer");
         std::string error;
         Check(PublishTerrainPropRevision(root, project.projectId, doc, scenes.GetScene(), owner, error), error);
@@ -114,7 +131,84 @@ namespace
         auto revision = live.metadatas.GetComponent(owner)->string_values.get("renegade.terrain_props.revision");
         TerrainPropDocument roundTrip;
         Check(ReadTerrainPropRevision(root, project.projectId, revision, roundTrip, error), error);
-        Check(roundTrip.pages[0].placements[95].id == 96 && roundTrip.AllocatePlacementId() == 97, "reopened stable ID");
+        Check(roundTrip.pages[0].placements[95].id == 96 && roundTrip.AllocatePlacementId() == 98, "reopened stable ID");
+
+        Check(roundTrip.authoring.recipe.seed == 987654321 && roundTrip.authoring.recipe.cellSize == 64 &&
+            roundTrip.authoring.recipe.candidateStep == 2 &&
+            roundTrip.authoring.recipe.mix.name == authoring.recipe.mix.name &&
+            roundTrip.authoring.savedMixes.size() == 1 &&
+            roundTrip.authoring.savedMixes[0].entries[0].densityPerSquareMetre == .03f &&
+            roundTrip.authoring.bindings.size() == 2 && roundTrip.authoring.tombstones[0] == 456 &&
+            roundTrip.authoring.clearings[0].radius == 4 && roundTrip.authoring.overrides[0].placementId == 1 &&
+            roundTrip.pages[0].placements[0].candidateKey == 123,
+            "authoring recipe, mix, exclusions, overrides and candidate keys did not persist");
+        const auto revisionStore = root / "Content/TerrainProps/Revisions";
+        std::ifstream manifestFile(revisionStore / (revision + ".rprops"), std::ios::binary);
+        std::string manifestText{std::istreambuf_iterator<char>(manifestFile), std::istreambuf_iterator<char>()};
+        auto rejectManifest = [&](std::string text)
+        {
+            std::vector<std::uint8_t> content(text.begin(), text.end());
+            std::string hash;
+            Check(ComputePayloadSha256(content, hash, error), error);
+            {
+                std::ofstream file(revisionStore / (hash + ".rprops"), std::ios::binary);
+                file << text;
+            }
+            TerrainPropDocument unchanged = roundTrip;
+            Check(!ReadTerrainPropRevision(root, project.projectId, hash, unchanged, error) &&
+                unchanged.authoring.recipe.seed == roundTrip.authoring.recipe.seed &&
+                unchanged.nextPlacementId == roundTrip.nextPlacementId,
+                "invalid manifest accepted or changed caller state");
+        };
+        auto negativeSeed = manifestText;
+        negativeSeed.replace(negativeSeed.find("AUTHORING 1 987654321"), 21, "AUTHORING 1 -1");
+        rejectManifest(negativeSeed);
+        auto overflowingSeed = manifestText;
+        overflowingSeed.replace(overflowingSeed.find("987654321"), 9, "18446744073709551616");
+        rejectManifest(overflowingSeed);
+        rejectManifest(manifestText + "unexpected trailing data");
+        auto legacyText = manifestText.substr(0, manifestText.find("AUTHORING 1 "));
+        legacyText[7] = '1';
+        std::vector<std::uint8_t> legacyPageBytes;
+        auto legacyPage = doc.pages[0];
+        legacyPage.placements[0].candidateKey = 0;
+        Check(EncodeTerrainPropPage(legacyPage, legacyPageBytes, error), error);
+        for (size_t n = legacyPage.placements.size(); n-- > 0;)
+        {
+            const auto offset = 24 + legacyPage.profiles.size() * 16 + n * 40;
+            legacyPageBytes.erase(legacyPageBytes.begin() + offset + 32, legacyPageBytes.begin() + offset + 40);
+        }
+        legacyPageBytes[4] = 1;
+        std::string legacyPageDigest;
+        Check(ComputePayloadSha256(legacyPageBytes, legacyPageDigest, error), error);
+        const auto lastLine = legacyText.rfind('\n', legacyText.size() - 2) + 1;
+        legacyText.replace(lastLine, 64, legacyPageDigest);
+        {
+            std::ofstream file(revisionStore / (legacyPageDigest + ".rppg"), std::ios::binary);
+            file.write(reinterpret_cast<const char*>(legacyPageBytes.data()), legacyPageBytes.size());
+        }
+        std::vector<std::uint8_t> legacyManifest(legacyText.begin(), legacyText.end());
+        std::string legacyDigest;
+        Check(ComputePayloadSha256(legacyManifest, legacyDigest, error), error);
+        {
+            std::ofstream file(revisionStore / (legacyDigest + ".rprops"), std::ios::binary);
+            file << legacyText;
+        }
+        TerrainPropDocument migrated;
+        Check(ReadTerrainPropRevision(root, project.projectId, legacyDigest, migrated, error), error);
+        Check(migrated.authoring.bindings.empty() && migrated.authoring.recipe.mix.entries.empty() &&
+            migrated.pages[0].placements[0].id == 1 && migrated.pages[0].placements[0].candidateKey == 0 &&
+            migrated.nextPlacementId == 98, "v1 manifest/page migration changed IDs or counter");
+        auto invalid = doc;
+        invalid.authoring.bindings[0].placementId = 98;
+        Check(!PublishTerrainPropRevision(root, project.projectId, invalid, live, owner, error) &&
+            live.metadatas.GetComponent(owner)->string_values.get("renegade.terrain_props.revision") == revision,
+            "invalid binding advanced revision");
+        invalid = doc;
+        invalid.authoring.recipe.mix.entries[0].profileId = {{99}};
+        Check(!PublishTerrainPropRevision(root, project.projectId, invalid, live, owner, error),
+            "unknown recipe profile accepted");
+
         auto options = ProjectDocumentTransactionOptions{};
         options.operationHook = [](auto stage, size_t index, const auto&, auto&)
         {
@@ -122,15 +216,15 @@ namespace
                 ? ProjectDocumentTransactionHookAction::Fail : ProjectDocumentTransactionHookAction::Continue;
         };
         doc.pages[0].placements[0].scale = 1.5f;
+        doc.authoring.overrides[0].scale = 1.5f;
         Check(!PublishTerrainPropRevision(root, project.projectId, doc, live, owner, error, options),
             "injected failure did not roll back");
         Check(live.metadatas.GetComponent(owner)->string_values.get("renegade.terrain_props.revision") == revision,
             "failed publish advanced active revision");
         // Lose the page temporarily. Both open and save must refuse to
         // publish a broken reference, while the existing visible scene survives.
-        fs::path pageFile;
-        for (const auto& item : fs::directory_iterator(root / "Content/TerrainProps/Revisions"))
-            if (item.path().extension() == ".rppg") pageFile = item.path();
+        const auto activePageLine = manifestText.rfind('\n', manifestText.find("AUTHORING 1 ") - 2) + 1;
+        fs::path pageFile = revisionStore / (manifestText.substr(activePageLine, 64) + ".rppg");
         Check(!pageFile.empty(), "missing fixture page");
         fs::path hidden = pageFile;
         hidden += ".held";

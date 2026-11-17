@@ -576,3 +576,5 @@ target_include_directories(RenegadeEngineBridge PRIVATE "${CMAKE_CURRENT_BINARY_
 target_sources(RenegadeEngineBridge PRIVATE src/TerrainPropPage.cpp)
 target_sources(RenegadeEngineBridge PRIVATE src/TerrainPropProjection.cpp)
 target_sources(RenegadeEngineBridge PRIVATE src/TerrainPropDocument.cpp)
+
+target_sources(RenegadeEngineBridge PRIVATE src/TerrainPropAuthoring.cpp src/TerrainPropTerrain.cpp src/TerrainPropEditService.cpp)

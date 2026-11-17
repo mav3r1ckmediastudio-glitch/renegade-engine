@@ -33,12 +33,12 @@ int main()
         TerrainPropPage page;
         page.cellX = -8;
         page.profiles = {{{1}}, {{2}}, {{3}}};
-        page.placements = {{0x100000001ull, 0, {1,2,3}, 1, 2},
+        page.placements = {{0x100000001ull, 0, {1,2,3}, 1, 2, 71},
             {22, 1, {4,5,6}, 2, 1}, {33, 2, {7,8,9}, 0, 1}};
         std::vector<std::uint8_t> bytes;
         std::string error;
         Check(EncodeTerrainPropPage(page, bytes, error), "encode");
-        Check(bytes.size() == 168, "wire layout");
+        Check(bytes.size() == 192, "wire layout");
         ProjectDocumentTransactionOptions options;
         options.allowedRoot = root.string();
         options.journalDirectory = (root / "journal").string();
@@ -52,8 +52,14 @@ int main()
         Check(DecodeTerrainPropPage(ReadBytes(pagePath), reopened, error), "reopen");
         std::vector<std::uint8_t> again;
         Check(EncodeTerrainPropPage(reopened, again, error) && again == bytes, "identity and transform round trip");
+        Check(reopened.placements[0].candidateKey == 71, "candidate key round trip");
+        auto legacy = bytes;
+        for (int n = 2; n >= 0; --n) legacy.erase(legacy.begin() + 24 + 48 + n * 40 + 32, legacy.begin() + 24 + 48 + n * 40 + 40);
+        legacy[4] = 1;
+        TerrainPropPage migrated;
+        Check(DecodeTerrainPropPage(legacy, migrated, error) && migrated.placements[0].candidateKey == 0 && migrated.placements[0].id == page.placements[0].id, "v1 read compatibility");
         auto damaged = bytes;
-        damaged[4] = 2;
+        damaged[4] = 3;
         Check(!DecodeTerrainPropPage(damaged, reopened, error), "future version");
         damaged = bytes;
         damaged.pop_back();
@@ -91,7 +97,7 @@ int main()
             reopened.placements[0].id == 0x100000001ull && reopened.placements[0].scale == 3,
             "same identity after retry");
         fs::remove_all(root);
-        std::cout << "PASS page v1 round trip, corrupt inputs, stable IDs, rollback and retry\n";
+        std::cout << "PASS page v1 migration and v2 round trip, corrupt inputs, stable IDs, rollback and retry\n";
         return 0;
     }
     catch (const std::exception& failure)

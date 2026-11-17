@@ -2834,6 +2834,7 @@ namespace renegade::studio
         terrainSculptMode_.SetTooltip("Choose how dragging the left mouse button changes terrain.");
         terrainSculptMode_.OnSelect([this](const wi::gui::EventArgs& args)
         {
+            DisableTerrainPropBrush();
             terrainSculptModeValue_ = static_cast<bridge::TerrainSculptMode>(args.userdata);
             terrainRiverBrushActive_ = false;
             DisableWd01VegetationBrush();
@@ -2890,6 +2891,7 @@ namespace renegade::studio
             "New terrain supports shallow beds directly; deeper cuts may need ALLOW DEEPER BEDS +10M.");
         terrainRiverBrushButton_.OnClick([this](const wi::gui::EventArgs&)
         {
+            DisableTerrainPropBrush();
             riverDrawingReceiver_.clear();riverDrawingControl_.clear();
             terrainRiverBrushActive_ = !terrainRiverBrushActive_;
             if (terrainRiverBrushActive_)
@@ -3127,6 +3129,7 @@ namespace renegade::studio
         inspectorPanel_.AddWidget(&terrainRiverStatus_);
 
         CreateWd01VegetationControls();
+        CreateTerrainPropControls();
 
         focusButton_.Create("Focus Selected");
         focusButton_.SetText("FOCUS [F]");
@@ -4324,6 +4327,7 @@ namespace renegade::studio
         }
 
         TickWaterfallStudioProof();
+        TickTerrainPropProof();
         {ScopedCPUProfiling("Studio player camera preview");UpdatePlayerCameraPreview(dt);}
 
         if (inspectorRefreshPending_)
@@ -4428,6 +4432,7 @@ namespace renegade::studio
         }
 
         {ScopedCPUProfiling("Studio vegetation tick");TickWd01Vegetation();}
+        TickTerrainProps();
 
         // Process the asset browser's drag release after GUI callbacks and
         // before chrome input ownership can short-circuit this frame.
@@ -4462,14 +4467,14 @@ namespace renegade::studio
             if(wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))scenePrefabSavePanel_.SetVisible(false);
             return;
         }
-        const bool sceneOverlayAvailable = SceneOverlaysVisible();
+        const bool sceneOverlayAvailable = SceneOverlaysVisible() && !IsTerrainPropBrushActive();
         if (selectionGesture_)
         {
             if (!sceneOverlayAvailable || scenePopupInputCaptured_ || studioChrome_.HasOpenMenuPopup())
                 selectionGesture_ = selectionBox_ = false;
             else if (HandleViewportSelection(pointer)) return; // Also finish a drag released over a panel.
         }
-        if(SceneOverlayInputAllowed(pointer) && HandleAssemblyToolbar(pointer))return;
+        if(!IsTerrainPropBrushActive() && SceneOverlayInputAllowed(pointer) && HandleAssemblyToolbar(pointer))return;
         // An anchored drawing gesture owns viewport input before icon picking
         // or the selected node's gizmo can capture the same press.
         const bool drawingTributary = !riverDrawingReceiver_.empty();
@@ -4488,6 +4493,7 @@ namespace renegade::studio
         // from this frame. HandleWd01Vegetation() applies its own focus and
         // viewport guards after completing an in-flight release, so this does
         // not let a brush begin through the UI.
+        const bool propsConsumed = HandleTerrainProps(pointer);
         const bool vegetationConsumed =
             HandleWd01Vegetation(pointer);
         bool riverConsumed=false;
@@ -4540,6 +4546,7 @@ namespace renegade::studio
             return;
         }
 
+        if (propsConsumed) { diagnosticInput.StopAt("terrain_props"); return; }
         if (vegetationConsumed)
         {
             diagnosticInput.StopAt("vegetation");
@@ -6163,6 +6170,7 @@ namespace renegade::studio
         setTerrainVisible(terrainRiverExtendFloorButton_);
         setTerrainVisible(terrainRiverStatus_);
         RefreshWd01VegetationControls(hasTerrain);
+        RefreshTerrainPropControls();
 
         translationX_.SetEnabled(hasTransform);
         translationY_.SetEnabled(hasTransform);
