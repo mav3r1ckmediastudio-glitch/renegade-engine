@@ -176,6 +176,42 @@ int main()
         Check(empty.changedPages.size()==first.pages.size() &&
             std::all_of(empty.changedPages.begin(),empty.changedPages.end(),[](const auto& d){return d.hadBefore && !d.hasAfter;}),
             "empty final page removal delta");
+        TerrainPropAuthoringState indexedState;
+        indexedState.recipe.mix.entries={{{{1}},1,0,1,1}};
+        TerrainPropEditRequest indexedRequest;indexedRequest.bounds={0,0,64,64};
+        for(int z=0;z<128;++z)for(int x=0;x<128;++x)
+            indexedState.clearings.push_back({x*.5f,z*.5f,.1f});
+        TerrainPropEdit indexed;
+        Check(BuildTerrainPropEdit({},indexedState,1,indexedRequest,ground,indexed,error),error.c_str());
+        Check(indexed.work.discIndexEntries==16384 && indexed.work.discTests<500000 &&
+            indexed.work.discBucketLookups<50000,"many clearings use bounded local index lookups");
+        Check(Placements(indexed).size()>3000,"small clearings retain population outside circles");
+        for(const auto& pair:Placements(indexed))
+        {
+            const auto& pos=pair.second.position;
+            const float cx=std::clamp(std::round(pos[0]*2)*.5f,0.f,63.5f);
+            const float cz=std::clamp(std::round(pos[2]*2)*.5f,0.f,63.5f);
+            Check(std::hypot(pos[0]-cx,pos[2]-cz)>.09999f,"clearing index matches independent nearest-centre oracle");
+        }
+        indexedState.clearings={{0,0,100000}};
+        Check(BuildTerrainPropEdit({},indexedState,1,indexedRequest,ground,indexed,error),error.c_str());
+        Check(indexed.pages.empty() && indexed.work.discIndexEntries==1 &&
+            indexed.work.discTests<=4225 && indexed.work.discBucketLookups<=4225*9,
+            "huge-radius clearing stores one index entry and bounded queries");
+        indexedState.clearings.clear();indexedRequest.operation=TerrainPropEditOperation::Paint;
+        indexedRequest.radius=.11f;indexedRequest.sampleDistance=.5f;
+        for(int z=0;z<64;++z)for(int i=0;i<64;++i)
+            indexedRequest.path.push_back({float(z%2?63-i:i),0,float(z)});
+        Check(BuildTerrainPropEdit({},indexedState,1,indexedRequest,ground,indexed,error),error.c_str());
+        Check(indexed.work.discIndexEntries>8000 && indexed.work.discTests<500000 &&
+            indexed.work.discBucketLookups<50000,"many stroke stamps use bounded local index lookups");
+        Check(!indexed.pages.empty(),"many-stamp brush produces authored placements");
+        // Cancellation is checked while building the index, before candidates.
+        int indexProgressCalls=0;
+        indexedRequest.progress=[&](float){return ++indexProgressCalls<2;};
+        auto preserved=first;
+        Check(!BuildTerrainPropEdit({},indexedState,1,indexedRequest,ground,preserved,error) &&
+            Bytes(preserved)==Bytes(first),"index construction cancellation preserves output");
         std::cout<<checks<<" terrain prop authoring checks passed\n";
         return 0;
     }

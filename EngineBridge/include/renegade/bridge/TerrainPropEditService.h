@@ -5,6 +5,10 @@
 
 namespace renegade::bridge
 {
+    // Explicit lifecycle/content-change query; never invoke this per point/frame.
+    bool ResolveTerrainPropAuthoringOwner(const wi::scene::Scene&,const StableId& projectId,
+        wi::ecs::Entity defaultTerrainOwner,wi::ecs::Entity& owner,std::string& error);
+
     // Lifetime belongs to one open document. Call mutations only at the same
     // native scene-safe point used by ordinary editor commands.
     class TerrainPropEditService : public std::enable_shared_from_this<TerrainPropEditService>
@@ -14,6 +18,7 @@ namespace renegade::bridge
             StableId projectId, wi::ecs::Entity layerOwner);
         ~TerrainPropEditService();
         bool Read(TerrainPropDocument&, std::string& error);
+        bool Reconcile(std::string& error);
         std::string Revision() const;
         // One command per staged stroke/Generate Apply. The revision token is
         // checked again at Execute, Undo and Redo; stale edits never overwrite.
@@ -30,7 +35,7 @@ namespace renegade::bridge
         std::filesystem::path root_;
         StableId project_;
         wi::ecs::Entity owner_;
-        StableId freshLayer_;
+        StableId freshLayer_, knownLayer_;
         std::uint64_t highWater_ = 1;
         std::unique_ptr<TerrainPropProjection> projection_;
         TerrainPropDocument displayed_;

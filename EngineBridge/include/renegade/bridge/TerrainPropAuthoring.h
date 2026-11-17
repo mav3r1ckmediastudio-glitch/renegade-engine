@@ -53,8 +53,14 @@ namespace renegade::bridge
         bool hadBefore = false, hasAfter = false;
         TerrainPropPage before, after;
     };
+    struct TerrainPropEditWork
+    {
+        // Transient diagnostics; these counters are never serialized.
+        std::uint64_t discIndexEntries = 0, discBucketLookups = 0, discTests = 0;
+    };
     struct TerrainPropEdit
     {
+        TerrainPropEditWork work;
         TerrainPropAuthoringState authoring;
         std::vector<TerrainPropPage> pages;
         std::vector<TerrainPropPageDelta> changedPages;

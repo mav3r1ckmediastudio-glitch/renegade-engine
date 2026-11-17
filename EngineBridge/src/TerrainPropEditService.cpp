@@ -64,7 +64,68 @@ namespace renegade::bridge
         else if (!ReadTerrainPropRevision(root_,project_,revision,doc,error)) return false;
         highWater_ = std::max(highWater_,doc.nextPlacementId);
         doc.nextPlacementId = highWater_;
+        knownLayer_=doc.layerId;
         output = std::move(doc);
+        return true;
+    }
+
+    bool ResolveTerrainPropAuthoringOwner(const wi::scene::Scene& scene,const StableId& project,
+        wi::ecs::Entity fallback,wi::ecs::Entity& output,std::string& error)
+    {
+        error.clear();
+        if(!IsValidStableId(project)) {error="Invalid terrain prop project.";return false;}
+        auto owner=wi::ecs::INVALID_ENTITY;
+        for(size_t i=0;i<scene.metadatas.GetCount();++i)
+        {
+            const auto& m=scene.metadatas[i];
+            if(m.runtimeProjectionOnly || !m.string_values.has(RevisionKey)) continue;
+            if(!m.string_values.has("renegade.terrain_props.project") ||
+                m.string_values.get("renegade.terrain_props.project")!=project)
+            {error="Terrain prop layer belongs to a different or invalid project.";return false;}
+            const auto entity=scene.metadatas.GetEntity(i);
+            if(!scene.transforms.Contains(entity))
+            {error="Terrain prop layer has no authored owner.";return false;}
+            if(owner!=wi::ecs::INVALID_ENTITY)
+            {error="Multiple terrain prop layers require an explicit owner selection.";return false;}
+            owner=entity;
+        }
+        if(owner==wi::ecs::INVALID_ENTITY) owner=fallback;
+        if(!scene.transforms.Contains(owner))
+        {error="Terrain prop authoring needs an existing terrain or layer owner.";return false;}
+        output=owner;
+        return true;
+    }
+
+    bool TerrainPropEditService::Reconcile(std::string& error)
+    {
+        error_.clear();
+        if(!scene_.transforms.Contains(owner_))
+        {
+            // The UI retains this service through same-document deletion so
+            // Undo can restore its authored owner and immutable revision.
+            projection_.reset();
+            if(!knownLayer_.empty())
+            {
+                std::vector<wi::ecs::Entity> orphaned;
+                for(size_t i=0;i<scene_.metadatas.GetCount();++i)
+                {
+                    const auto& m=scene_.metadatas[i];
+                    if(m.runtimeProjectionOnly && m.string_values.has(LayerKey) &&
+                        m.string_values.get(LayerKey)==knownLayer_)
+                        orphaned.push_back(scene_.metadatas.GetEntity(i));
+                }
+                for(auto entity:orphaned) scene_.Entity_Remove(entity,false);
+            }
+            projectionRevision_.clear();
+            error.clear();
+            return true;
+        }
+        if(projection_ && projectionRevision_==Revision())
+        {error.clear();return true;}
+        TerrainPropDocument authoritative;
+        if(!Read(authoritative,error_) || !PrepareProjection(authoritative,error_))
+        {error=error_;return false;}
+        error.clear();
         return true;
     }
 

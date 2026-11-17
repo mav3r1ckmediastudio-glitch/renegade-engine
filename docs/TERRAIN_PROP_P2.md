@@ -18,7 +18,13 @@ Studio captures a finite-terrain height snapshot through `CaptureTerrainPropTerr
 
 `BuildTerrainPropEdit` accepts pages, authoring state, the placement counter, revision tokens, finite world bounds and an operation. It stages a result without changing its inputs. Progress returns false to cancel. The output includes resulting pages and authoring state, changed-page deltas, changed bounds and the next placement ID. Invalid input, capacity failure and cancellation leave the caller's output unchanged.
 
+The palette resolves a scene's existing P0/P1 authored layer before creating a terrain-owned layer. A separate legacy layer owner remains independent of terrain deletion. Deleting the actual layer owner removes its transient display at a scene-safe point; Undo restores it from the authoritative revision. Multiple existing layers require explicit owner selection and are reported as ambiguous by this first palette. Services are reused across same-document history and discarded on document replacement.
+
 `TerrainPropEditService` belongs to one open document. Its command is executed at the editor's existing native scene-safe point. Execute rejects a changed revision. Undo and Redo compare complete authored content while excluding only the allocation high-water mark, then apply against the current revision. This allows chained history after an Undo publishes a revision containing a newer counter; it does not allow a divergent edit to be overwritten.
+
+The shared history service calls `ICommand::TryUndo` before moving a command between stacks. Its default preserves ordinary commands' existing Undo behavior; terrain-prop commands return failure when publication fails, leaving history and displayed content intact.
+
+Brush stamps and clearings use a radius-aware spatial index. They retain one index entry per disc, including large clearings, with cancellation during index construction and queries. A 20-million-operation lookup budget bounds pathological overlapping records. The transient work counters used by focused tests are not serialized.
 
 Live updates prepare changed pages and preserve shared mesh/material prototypes. Publication and projection installation form one logical operation. Failed publication rolls staged native components back and retains the old reference/display; cancellation discards staging. Restored transient components carry a runtime-only layer tag so opening an existing scene and beginning a new edit cannot leave duplicate projections. Ordinary authored WISCENE writes continue to exclude all transient projection content.
 

@@ -14,12 +14,18 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <sstream>
+#include <unordered_map>
 
 namespace renegade::studio
 {
 namespace
 {
     using namespace bridge;
+    void StyleLabel(wi::gui::Label& label)
+    {
+        label.SetColor(wi::Color::Transparent());label.font.params.size=12;
+        label.font.params.color=wi::Color(178,178,176,255);label.font.params.h_align=wi::font::WIFALIGN_LEFT;
+    }
     struct PropEntryControls
     {
         wi::gui::Label label;
@@ -46,7 +52,10 @@ namespace
         std::vector<std::pair<StableId,std::string>> choices;
         TerrainPropDocument draft;
         std::shared_ptr<TerrainPropEditService> service;
-        wi::ecs::Entity owner = wi::ecs::INVALID_ENTITY;
+        std::unordered_map<wi::ecs::Entity,std::shared_ptr<TerrainPropEditService>> services;
+        wi::ecs::Entity owner = wi::ecs::INVALID_ENTITY, terrain = wi::ecs::INVALID_ENTITY;
+        std::uint64_t reconcileRevision = UINT64_MAX;
+        bool ownerPresentLast = true;
         std::string projectId, revision;
         std::uint64_t lifecycleRevision = UINT64_MAX;
         bool created = false, armed = false, stroke = false, rebuild = false, reload = false, addPending = false;
@@ -59,11 +68,6 @@ namespace
     };
     std::unique_ptr<PropPalette> palette;
     PropPalette& Props() { if (!palette) palette = std::make_unique<PropPalette>(); return *palette; }
-    std::string Revision(const wi::scene::Scene& scene, wi::ecs::Entity owner)
-    {
-        const auto* m = scene.metadatas.GetComponent(owner);
-        return m ? m->string_values.get("renegade.terrain_props.revision") : "";
-    }
     TerrainPropProfileId ProfileId(const StableId& id)
     {
         std::string hex;
@@ -167,7 +171,8 @@ std::vector<wi::gui::Widget*> StudioRenderPath::TerrainPropWidgets()
 void StudioRenderPath::RefreshTerrainPropControls()
 {
     auto& p=Props();if(!p.created)return;
-    bool enabled=session_ && session_->Projects().HasProject() && session_->Scenes().GetScene().terrains.GetCount()==1;
+    bool enabled=session_ && session_->Projects().HasProject() && session_->Scenes().GetScene().terrains.GetCount()==1 &&
+        p.service && session_->Scenes().GetScene().transforms.Contains(p.owner);
     const bool busy=p.staging || p.mutation.IsPending();
     for(auto* w:TerrainPropWidgets())w->SetEnabled(enabled&&!busy);
     p.status.SetEnabled(true);p.cancel.SetEnabled(enabled);
@@ -175,59 +180,90 @@ void StudioRenderPath::RefreshTerrainPropControls()
 void StudioRenderPath::SyncTerrainPropPalette(bool force)
 {
     auto& p=Props();
-    if(!session_ || !session_->Projects().HasProject() || session_->Scenes().GetScene().terrains.GetCount()!=1){
+    const bool hasProject=session_ && session_->Projects().HasProject();
+    const bool sameDocument=hasProject && p.projectId==session_->Projects().CurrentProject().projectId &&
+        p.lifecycleRevision==session_->Scenes().Revision();
+    if(!sameDocument && (p.service || !p.services.empty())){
         if(p.staging)p.staging->cancelled=true;p.mutation.Cancel();p.armed=p.stroke=false;p.pending=-2;p.path.clear();
-        p.owner=wi::ecs::INVALID_ENTITY;p.projectId.clear();p.revision.clear();p.service.reset();return;
+        p.service.reset();p.services.clear();p.owner=wi::ecs::INVALID_ENTITY;p.revision.clear();p.reconcileRevision=UINT64_MAX;p.ownerPresentLast=true;
     }
-    auto& scene=session_->Scenes().GetScene();
-    auto owner=scene.terrains.GetEntity(0);const auto& project=session_->Projects().CurrentProject();
-    auto revision=Revision(scene,owner);
-    const bool lifecycle=p.owner!=owner || p.projectId!=project.projectId || p.lifecycleRevision!=session_->Scenes().Revision();
-    if(lifecycle){if(p.staging)p.staging->cancelled=true;p.mutation.Cancel();p.armed=p.stroke=false;p.path.clear();}
-    if(lifecycle || force || revision!=p.revision)
-    {
-        if(lifecycle || !p.service)p.service=std::make_shared<TerrainPropEditService>(scene,project.rootPath,project.projectId,owner);
+    if(!hasProject)return;
+    auto& scene=session_->Scenes().GetScene();const auto& project=session_->Projects().CurrentProject();
+    auto reconcile=[this,&p,&scene]{
+        if(!p.service || p.staging || p.mutation.IsPending())return;
+        bool present=scene.transforms.Contains(p.owner);
+        auto history=session_->Commands().Revision();
+        if(history==p.reconcileRevision && present==p.ownerPresentLast)return;
+        auto service=p.service;auto lifecycle=session_->Scenes().Revision();
+        p.mutation=detail::QueueCreatorAssetFrameMutation([this,service,lifecycle,history,present](std::uint64_t){
+            if(!session_ || lifecycle!=session_->Scenes().Revision())return;
+            std::string error;if(!service->Reconcile(error))Props().status.SetText(error);
+            if(Props().service==service){Props().reconcileRevision=history;Props().ownerPresentLast=present;}
+        });
+    };
+    const bool hasTerrain=scene.terrains.GetCount()==1;
+    if(hasTerrain && p.service && !scene.transforms.Contains(p.owner) && scene.terrains.GetEntity(0)!=p.terrain){
+        reconcile();p.service.reset();p.owner=wi::ecs::INVALID_ENTITY;p.revision.clear();
+        p.reconcileRevision=UINT64_MAX;p.ownerPresentLast=true;
+    }
+    if(!hasTerrain || (p.service && !scene.transforms.Contains(p.owner))){
+        if(p.staging)p.staging->cancelled=true;
+        p.armed=p.stroke=false;p.pending=-2;p.path.clear();
+        reconcile();return;
+    }
+    auto terrain=scene.terrains.GetEntity(0);
+    if(!p.service){
+        wi::ecs::Entity owner=wi::ecs::INVALID_ENTITY;std::string error;
+        if(!ResolveTerrainPropAuthoringOwner(scene,project.projectId,terrain,owner,error)){p.status.SetText(error);return;}
+        auto known=p.services.find(owner);
+        if(known!=p.services.end())p.service=known->second;
+        else {p.service=std::make_shared<TerrainPropEditService>(scene,project.rootPath,project.projectId,owner);p.services.emplace(owner,p.service);}
+        p.owner=owner;p.projectId=project.projectId;p.lifecycleRevision=session_->Scenes().Revision();
+        p.revision="__refresh__";p.reload=true;
+    }
+    p.terrain=terrain;
+    const auto revision=p.service->Revision();
+    if(!p.ownerPresentLast)force=true;
+    if(force || revision!=p.revision){
         TerrainPropDocument document;std::string error;
         if(!p.service->Read(document,error)){p.status.SetText(error);return;}
-        p.draft=std::move(document);p.owner=owner;p.projectId=project.projectId;p.revision=p.service->Revision();p.lifecycleRevision=session_->Scenes().Revision();p.rebuild=true;
+        p.draft=std::move(document);p.revision=revision;p.rebuild=true;
         if(p.revision.empty() && p.draft.pages.empty())p.draft.authoring.recipe.candidateStep=4;
-        p.reload=true;
     }
-    if(p.reload)
-    {
+    if(p.reload){
         p.reload=false;p.choices.clear();p.picker.ClearItems();
         AssetRegistry registry;std::string error;
         if(ReadAssetRegistry(project.rootPath,project.projectId,registry,error))
             for(const auto& r:registry.records)
                 if(r.sourceAvailable && r.dependencyClass==DependencyClass::ImportedContent &&
-                    std::filesystem::u8path(r.projectRelativePath).extension()==ReusableAssetExtension)
-                {
+                    std::filesystem::u8path(r.projectRelativePath).extension()==ReusableAssetExtension){
                     const auto label=std::filesystem::u8path(r.projectRelativePath).stem().u8string();
                     p.choices.emplace_back(r.assetId,label);p.picker.AddItem(label);
                 }
         if(!p.choices.empty())p.picker.SetSelectedWithoutCallback(0);
     }
+    reconcile();
 }
 
 void StudioRenderPath::QueueTerrainPropEdit(int operation)
 {
     auto& p=Props();if(!session_ || !p.service || p.staging || p.mutation.IsPending() ||
         session_->Scenes().GetScene().terrains.GetCount()!=1 ||
-        session_->Scenes().GetScene().terrains.GetEntity(0)!=p.owner)return;
+        session_->Scenes().GetScene().terrains.GetEntity(0)!=p.terrain)return;
     auto service=p.service;auto document=p.draft;const auto expected=p.revision;
     auto job=std::make_shared<PropStaging>();job->document=document;job->expectedRevision=expected;
     job->sceneRevision=session_->Scenes().Revision();job->commandRevision=session_->Commands().Revision();
     p.staging=job;
-    const auto path=p.path;const float radius=p.radius.GetValue();const auto owner=p.owner;
+    const auto path=p.path;const float radius=p.radius.GetValue();const auto terrainEntity=p.terrain;
     p.status.SetText("PREPARING TERRAIN PROPS... 0%");
-    p.mutation=detail::QueueCreatorAssetFrameMutation([this,job,service,operation,path,radius,owner](std::uint64_t){
+    p.mutation=detail::QueueCreatorAssetFrameMutation([this,job,service,operation,path,radius,terrainEntity](std::uint64_t){
         if(job->cancelled || !session_ || session_->Scenes().Revision()!=job->sceneRevision ||
             session_->Commands().Revision()!=job->commandRevision){
             job->cancelled=true;job->ready=true;return;
         }
         if(operation<0){job->ready=true;return;}
         TerrainPropTerrainSnapshot terrain;std::string error;
-        if(!CaptureTerrainPropTerrain(session_->Scenes().GetScene(),owner,terrain,error)){
+        if(!CaptureTerrainPropTerrain(session_->Scenes().GetScene(),terrainEntity,terrain,error)){
             job->error=error;job->ready=true;return;
         }
         TerrainPropEditRequest request;request.operation=static_cast<TerrainPropEditOperation>(operation);
@@ -275,7 +311,10 @@ void StudioRenderPath::TickTerrainProps()
                 auto service=p.service;
                 p.mutation=detail::QueueCreatorAssetFrameMutation([this,job,service](std::uint64_t){
                     if(job->cancelled || !session_ || session_->Scenes().Revision()!=job->sceneRevision ||
-                        session_->Commands().Revision()!=job->commandRevision)return;
+                        session_->Commands().Revision()!=job->commandRevision || gizmoDragActive_ ||
+                        gizmo_.IsInteracting() || terrainStrokeActive_ || riverGizmoPreview_){
+                        Props().status.SetText("SCENE CHANGED // Staged props discarded. Apply again.");return;
+                    }
                     auto command=service->MakeCommand(job->document,job->expectedRevision);
                     if(command && session_->Commands().Execute(std::move(command))){
                         Props().revision="__refresh__";SyncTerrainPropPalette();RefreshStatus();RefreshHierarchy();
@@ -292,7 +331,9 @@ void StudioRenderPath::TickTerrainProps()
         p.addPending=false;
         int index=p.picker.GetSelected();
         if(index>=0 && size_t(index)<p.choices.size()){
-            const auto& choice=p.choices[index];const auto id=ProfileId(choice.first);
+            const auto& choice=p.choices[index];
+            const auto existing=std::find_if(p.draft.profiles.begin(),p.draft.profiles.end(),[&](const auto& profile){return profile.modelAssetId==choice.first;});
+            const auto id=existing!=p.draft.profiles.end()?existing->id:ProfileId(choice.first);
             auto& entries=p.draft.authoring.recipe.mix.entries;
             if(std::none_of(entries.begin(),entries.end(),[&](const auto& e){return e.profileId==id;})){
                 if(std::none_of(p.draft.profiles.begin(),p.draft.profiles.end(),[&](const auto& e){return e.id==id;})){
@@ -369,9 +410,23 @@ void StudioRenderPath::TickTerrainPropProof()
     if(!descriptor || !logfile || !session_ || !camera)return;
     static int stage=0,frames=0,settle=0;static size_t generated=0,erased=0;
     static std::string generatedRevision, erasedRevision;
+    static auto previousTick=std::chrono::steady_clock::now();
+    const auto now=std::chrono::steady_clock::now();
+    const double intervalMs=std::chrono::duration<double,std::milli>(now-previousTick).count();previousTick=now;
+    static std::vector<double> baselineIntervals,populatedIntervals;
+    static int populatedWarmup=0;
     if(stage<0 || stage>=20)return;
     auto log=[logfile](const std::string& text){std::ofstream out(logfile,std::ios::app);out<<text<<std::endl;};
     auto require=[](bool okay,const std::string& message){if(!okay)throw std::runtime_error(message);};
+    auto reportFrames=[this,log](std::vector<double> intervals,const char* label){
+        std::sort(intervals.begin(),intervals.end());
+        const auto& texture=GetRenderResult3D();
+        log(std::string("FRAME_INTERVAL ")+label+" samples="+std::to_string(intervals.size())+
+            " median_ms="+std::to_string(intervals[intervals.size()/2])+" p95_ms="+std::to_string(intervals[intervals.size()*95/100])+
+            " native_objects="+std::to_string(session_->Scenes().GetScene().objects.GetCount())+
+            " viewport="+std::to_string(texture.desc.width)+"x"+std::to_string(texture.desc.height)+
+            " camera="+std::to_string(camera->Eye.x)+","+std::to_string(camera->Eye.y)+","+std::to_string(camera->Eye.z));
+    };
     auto count=[](const TerrainPropDocument& d){size_t n=0;for(const auto& page:d.pages)n+=page.placements.size();return n;};
     try
     {
@@ -393,7 +448,7 @@ void StudioRenderPath::TickTerrainPropProof()
                 if(!s.weathers.GetCount())CreateEnvironment(s,WeatherState{});
                 if(!s.terrains.GetCount()){
                     TerrainState terrain;terrain.visibleChunkRadius=1;terrain.physicsChunkRadius=2;
-                    terrain.minimumHeight=-1;terrain.maximumHeight=2;CreateTerrain(s,terrain,"P2 Review Terrain");
+                    terrain.minimumHeight=-1;terrain.maximumHeight=2;(void)bridge::CreateTerrain(s,terrain,"P2 Review Terrain");
                 }
                 auto& light=s.lights.Create(wi::ecs::CreateEntity());light.SetType(wi::scene::LightComponent::DIRECTIONAL);light.intensity=3;
                 editorCameraTransform_.ClearTransform();
@@ -408,11 +463,16 @@ void StudioRenderPath::TickTerrainPropProof()
         {
             if(++settle<90)return;
             SyncTerrainPropPalette();require(p.service!=nullptr,"Palette service unavailable");
+            if(p.mutation.IsPending())return;
+            if(baselineIntervals.size()<120){baselineIntervals.push_back(intervalMs);return;}
+            reportFrames(baselineIntervals,"baseline");
             require(p.choices.size()>=3,"Fixture needs tree, bush, boulder registered by P1 SliceProof");
             p.draft.authoring.recipe.candidateStep=2;p.draft.authoring.recipe.seed=3926;
             p.draft.authoring.recipe.mix.name="P2 woodland";p.draft.authoring.recipe.mix.entries.clear();
             for(size_t i=0;i<3;++i){
                 const auto& choice=p.choices[i];TerrainPropProfile profile;profile.id=ProfileId(choice.first);profile.modelAssetId=choice.first;
+                auto existing=std::find_if(p.draft.profiles.begin(),p.draft.profiles.end(),[&](const auto& p){return p.modelAssetId==choice.first;});
+                if(existing!=p.draft.profiles.end())profile=*existing;
                 if(std::none_of(p.draft.profiles.begin(),p.draft.profiles.end(),[&](const auto& p){return p.id==profile.id;}))p.draft.profiles.push_back(profile);
                 TerrainPropMixEntry entry;entry.profileId=profile.id;entry.densityPerSquareMetre=.01f;entry.minSpacing=2;
                 p.draft.authoring.recipe.mix.entries.push_back(entry);
@@ -425,6 +485,9 @@ void StudioRenderPath::TickTerrainPropProof()
         {
             require(p.status.GetText().find("APPLIED")!=std::string::npos,"Generate failed: "+p.status.GetText());
             generated=count(p.draft);require(generated>0,"Generate produced no placements");generatedRevision=p.revision;
+            if(++populatedWarmup<60)return;
+            if(populatedIntervals.size()<120){populatedIntervals.push_back(intervalMs);return;}
+            reportFrames(populatedIntervals,"populated");
             log("GENERATE_APPLY_PASS placements="+std::to_string(generated));
             require(wi::helper::saveTextureToFile(GetRenderResult3D(),(std::filesystem::path(logfile).parent_path()/"studio-generated.png").u8string()),"Capture failed");
             p.path={{{-4,0,-4}},{{4,0,4}}};p.radius.SetValue(12);QueueTerrainPropEdit(int(TerrainPropEditOperation::Erase));stage=4;return;

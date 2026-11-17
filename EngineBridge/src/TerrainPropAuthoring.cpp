@@ -47,6 +47,59 @@ namespace
         std::vector<std::uint8_t> x,y; std::string error;
         return EncodeTerrainPropPage(a,x,error) && EncodeTerrainPropPage(b,y,error) && x == y;
     }
+    // A disc occupies one centre bucket at the smallest power-of-two scale
+    // containing its radius. Point queries need only neighbouring buckets at
+    // occupied scales; a huge clearing does not fan out over the whole map.
+    class DiscIndex
+    {
+        using Key=std::tuple<int,std::int64_t,std::int64_t>;
+        std::map<Key,std::vector<TerrainPropClearing>> buckets_;
+        std::array<bool,18> occupied_{};
+        TerrainPropEditWork& work_;
+    public:
+        explicit DiscIndex(TerrainPropEditWork& work) : work_(work) {}
+        bool Add(const TerrainPropClearing& c,const TerrainPropBounds& bounds,
+            const std::function<bool()>& guard)
+        {
+            ++work_.discIndexEntries;
+            if (!guard()) return false;
+            // Double bounds also safely reject finite, extreme legacy centres.
+            if (double(c.x)+c.radius<bounds.minX || double(c.x)-c.radius>bounds.maxX ||
+                double(c.z)+c.radius<bounds.minZ || double(c.z)-c.radius>bounds.maxZ) return true;
+            int level=0; double size=1;
+            while(size<c.radius) {size*=2;++level;}
+            const auto x=static_cast<std::int64_t>(std::floor(double(c.x)/size));
+            const auto z=static_cast<std::int64_t>(std::floor(double(c.z)/size));
+            occupied_[level]=true;
+            buckets_[{level,x,z}].push_back(c);
+            return true;
+        }
+        bool Contains(float x,float z,bool& found,const std::function<bool()>& guard) const
+        {
+            found=false;
+            double size=1;
+            for(int level=0;level<int(occupied_.size());++level,size*=2)
+            {
+                if(!occupied_[level])continue;
+                const auto bx=static_cast<std::int64_t>(std::floor(double(x)/size));
+                const auto bz=static_cast<std::int64_t>(std::floor(double(z)/size));
+                for(auto iz=bz-1;iz<=bz+1;++iz) for(auto ix=bx-1;ix<=bx+1;++ix)
+                {
+                    ++work_.discBucketLookups;
+                    if(!guard())return false;
+                    const auto bucket=buckets_.find({level,ix,iz});
+                    if(bucket==buckets_.end())continue;
+                    for(const auto& c:bucket->second)
+                    {
+                        ++work_.discTests;
+                        if(!guard())return false;
+                        if(InDisc(x,z,c.x,c.z,c.radius)){found=true;return true;}
+                    }
+                }
+            }
+            return true;
+        }
+    };
     bool ValidateMix(const TerrainPropMix& mix)
     {
         if (mix.name.size() > 256 || mix.name.find('\0') != std::string::npos || mix.entries.size() > 64) return false;
@@ -190,19 +243,38 @@ bool BuildTerrainPropEdit(const std::vector<TerrainPropPage>& pages,
     {
         if (!SampleTerrainPropStroke(request.path,request.sampleDistance,stamps,error)) return false;
         if (stamps.empty()) { error="Paint and erase need a terrain brush path."; return false; }
+        if(request.operation==TerrainPropEditOperation::Erase && stamps.size()>Limit-s.clearings.size())
+        {error="Terrain clearing capacity exceeded.";return false;}
     }
-    const auto covered=[&](float x,float z) {
-        if (!In(b,x,z)) return false;
-        if (stamps.empty()) return true;
-        for (const auto& stamp:stamps)
-            if (InDisc(x,z,stamp[0],stamp[2],request.radius)) return true;
-        return false;
-    };
+    float currentProgress=0;
     const auto progress=[&](float value) {
+        currentProgress=value;
         if (!request.progress || request.progress(value)) return true;
         error="Terrain prop edit cancelled."; return false;
     };
     if (!progress(0)) return false;
+    bool discFailed=false;
+    const std::function<bool()> discGuard=[&] {
+        if(discFailed)return false;
+        const auto work=edit.work.discIndexEntries+edit.work.discBucketLookups+edit.work.discTests;
+        if(work>20000000)
+        {error="Terrain brush/clearing lookup work budget exceeded.";discFailed=true;return false;}
+        if((work%4096)==0 && !progress(currentProgress)){discFailed=true;return false;}
+        return true;
+    };
+    DiscIndex strokeIndex(edit.work),clearingIndex(edit.work);
+    for(const auto& stamp:stamps)
+        if(!strokeIndex.Add({stamp[0],stamp[2],request.radius},b,discGuard))return false;
+    if(request.operation==TerrainPropEditOperation::Generate || request.operation==TerrainPropEditOperation::Paint)
+        for(const auto& clearing:s.clearings)
+            if(!clearingIndex.Add(clearing,b,discGuard))return false;
+    const auto covered=[&](float x,float z) {
+        if(discFailed || !In(b,x,z))return false;
+        if(stamps.empty())return true;
+        bool found=false;
+        if(!strokeIndex.Contains(x,z,found,discGuard))discFailed=true;
+        return found;
+    };
     std::unordered_set<std::uint64_t> tombstones(s.tombstones.begin(),s.tombstones.end());
     if (request.operation==TerrainPropEditOperation::Erase)
     {
@@ -216,16 +288,20 @@ bool BuildTerrainPropEdit(const std::vector<TerrainPropPage>& pages,
                 if (p.candidateKey) tombstones.insert(p.candidateKey);
                 it=items.erase(it);
             } else ++it;
+            if(discFailed)return false;
         }
         s.overrides.erase(std::remove_if(s.overrides.begin(),s.overrides.end(),
             [&](const auto& o){return covered(o.position[0],o.position[2]);}),s.overrides.end());
+        if(discFailed)return false;
     }
     else if (request.operation==TerrainPropEditOperation::Reproject)
     {
         for (auto& pair:items)
         {
             auto& p=pair.second.placement;
-            if (!covered(p.position[0],p.position[2])) continue;
+            const bool inside=covered(p.position[0],p.position[2]);
+            if(discFailed)return false;
+            if(!inside)continue;
             float y=0;
             if (height(p.position[0],p.position[2],y) && Finite(y)) p.position[1]=y;
         }
@@ -300,10 +376,12 @@ bool BuildTerrainPropEdit(const std::vector<TerrainPropPage>& pages,
         {
             if ((++completed%128)==0 && !progress(float(completed/std::max(1.0,count))*.9f)) return false;
             Candidate c;
-            if (!candidate(x,z,entry,c) || !covered(c.x,c.z) || tombstones.count(c.key)) continue;
+            if (!candidate(x,z,entry,c))continue;
+            const bool inside=covered(c.x,c.z);
+            if(discFailed)return false;
+            if(!inside || tombstones.count(c.key))continue;
             bool blocked=false;
-            for (const auto& clearing:s.clearings)
-                if (InDisc(c.x,c.z,clearing.x,clearing.z,clearing.radius)) { blocked=true; break; }
+            if(!clearingIndex.Contains(c.x,c.z,blocked,discGuard))return false;
             if (blocked) continue;
             // Global candidate priorities, including the adjacent cells outside
             // the requested region, make spacing independent of cell traversal.
@@ -365,6 +443,7 @@ bool BuildTerrainPropEdit(const std::vector<TerrainPropPage>& pages,
             items[p.id]={p,o.profileId};
         }
     }
+    if(discFailed)return false;
     s.bindings.clear();
     std::map<std::uint64_t,std::uint64_t> orderedBindings(bindings.begin(),bindings.end());
     for (const auto& pair:orderedBindings) s.bindings.push_back({pair.first,pair.second});

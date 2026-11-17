@@ -164,6 +164,43 @@ namespace
         Check(scene.objects.GetCount()==6,"Save As source lost P2 placements");
         Check(documents.Open(second.string()),scenes.LastError());
         Check(scene.objects.GetCount()==8,"Save As reopen lost P2 placements");
+        const auto lifecycleOwner=scene.Entity_FindByName("Terrain layer");
+        auto lifecycle=std::make_shared<TerrainPropEditService>(scene,fs::u8path(project.rootPath),
+            project.projectId,lifecycleOwner);
+        Check(lifecycle->Read(current,error) && lifecycle->Reconcile(error),error);
+        const auto fallback=scene.Entity_CreateTransform("Fallback terrain");
+        wi::ecs::Entity resolved=wi::ecs::INVALID_ENTITY;
+        Check(ResolveTerrainPropAuthoringOwner(scene,project.projectId,fallback,resolved,error) &&
+            resolved==lifecycleOwner,"P1 separate authored owner was not resolved");
+        const auto duplicate=scene.Entity_CreateTransform("Ambiguous layer");
+        auto& duplicateMetadata=scene.metadatas.Create(duplicate);
+        duplicateMetadata.string_values.set("renegade.terrain_props.project",project.projectId);
+        duplicateMetadata.string_values.set("renegade.terrain_props.revision",lifecycle->Revision());
+        Check(!ResolveTerrainPropAuthoringOwner(scene,project.projectId,fallback,resolved,error),
+            "ambiguous layer selection silently chose one");
+        scene.Entity_Remove(duplicate,false);
+        const auto beforeDeleteRevision=lifecycle->Revision();
+        const auto beforeDeleteLayer=current.layerId;
+        Check(commands.Execute(std::make_unique<DeleteEntityCommand>(scene,lifecycleOwner)),
+            "delete authored layer");
+        Check(lifecycle->Reconcile(error),error);
+        Check(scene.objects.GetCount()==0 && scene.meshes.GetCount()==0 &&
+            scene.materials.GetCount()==0 && scene.rigidbodies.GetCount()==0,
+            "deleted layer left projected objects/resources/physics");
+        Check(!lifecycle->Read(current,error),"deleted owner accepted authoring");
+        Check(commands.Undo(),"undo authored layer deletion");
+        Check(lifecycle->Reconcile(error),error);
+        Check(lifecycle->Read(current,error) && current.layerId==beforeDeleteLayer &&
+            lifecycle->Revision()==beforeDeleteRevision && current.nextPlacementId==5 &&
+            scene.objects.GetCount()==8,"Undo owner did not restore authoritative layer");
+        const auto validObjects=Objects(scene);
+        scene.metadatas.GetComponent(lifecycleOwner)->string_values.set(
+            "renegade.terrain_props.revision",std::string(64,'0'));
+        Check(!lifecycle->Reconcile(error) && Objects(scene)==validObjects,
+            "invalid authoritative revision replaced live display");
+        scene.metadatas.GetComponent(lifecycleOwner)->string_values.set(
+            "renegade.terrain_props.revision",beforeDeleteRevision);
+        Check(lifecycle->Reconcile(error),error);
         std::cout<<"PASS P2 native changed-cell projection, cancellation, failed Execute/Undo/Redo, "
             "stable IDs, high-water, stale revision, Save As/reopen\n";
     }
