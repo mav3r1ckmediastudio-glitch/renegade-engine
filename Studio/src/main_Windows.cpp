@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cwchar>
 #include <cstring>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -405,6 +406,10 @@ int APIENTRY wWinMain(
         return 3;
     }
 
+    MSG message = {};
+    const bool terrainPropProof = std::getenv("RENEGADE_TERRAIN_PROP_PROOF_PROJECT") &&
+        std::getenv("RENEGADE_TERRAIN_PROP_PROOF_LOG");
+    if (!terrainPropProof) {
     const std::filesystem::path revealPath =
         executableDirectory / L"Content" / L"startup" / L"renegade_logo_reveal_v2.mp4";
     LogGate2A("MEDIA_FILE // " + DescribeFile(revealPath));
@@ -414,7 +419,6 @@ int APIENTRY wWinMain(
     LogGate2A("MEDIA_FOUNDATION_REVEAL_BEGIN");
     const bool revealStarted = reveal.Start(window, revealPath.wstring());
 
-    MSG message = {};
     bool revealAcceptedHandoff = false;
     if (revealStarted)
     {
@@ -795,6 +799,11 @@ int APIENTRY wWinMain(
         LogGate2C("FAIL_OPEN_HANDOFF_TO_STUDIO");
     }
 
+    } else {
+        windowReadyForWicked = true;
+        (void)renegade::bridge::TryBindDrawableNativeWindow(window, *application);
+        LogGate2A("TERRAIN_PROP_PROOF_STARTUP_MEDIA_SKIPPED");
+    }
     while (message.message != WM_QUIT)
     {
         if (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
