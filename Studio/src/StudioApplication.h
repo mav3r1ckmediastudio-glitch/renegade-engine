@@ -121,6 +121,12 @@ namespace renegade::studio
         void RefreshStatus();
         void RefreshHierarchy();
         void RefreshInspector();
+        void SetInspectorHeading(const std::string& text)
+        {
+            // Keep the full title independent of the fitted display string.
+            inspectorLabel_.SetTooltip(text);
+            inspectorLabel_.SetText(text);
+        }
         void QueueInspectorRefresh() noexcept;
         void RefreshProjectHub();
         void RefreshAssetBrowser();

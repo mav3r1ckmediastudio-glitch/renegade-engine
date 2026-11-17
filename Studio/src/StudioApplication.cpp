@@ -1201,7 +1201,7 @@ namespace renegade::studio
         GetGUI().AddWidget(&inspectorPanel_);
 
         inspectorLabel_.Create("Transform Inspector");
-        inspectorLabel_.SetText("TRANSFORM // SELECT AN ENTITY");
+        SetInspectorHeading("TRANSFORM // SELECT AN ENTITY");
         inspectorLabel_.font.params.size = 16;
         inspectorLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         inspectorLabel_.SetColor(wi::Color::Transparent());
@@ -6193,7 +6193,7 @@ namespace renegade::studio
         {
             const auto* name =
                 session_->Scenes().GetScene().names.GetComponent(entity);
-            inspectorLabel_.SetText(
+            SetInspectorHeading(
                 environmentWorkspaceActive_
                     ? "ENVIRONMENT // SCENE WEATHER"
                     : "ENVIRONMENT // " +
@@ -6335,7 +6335,7 @@ namespace renegade::studio
         {
             const auto* name =
                 session_->Scenes().GetScene().names.GetComponent(entity);
-            inspectorLabel_.SetText(
+            SetInspectorHeading(
                 "TERRAIN // " +
                 (multiple ? std::to_string(session_->Selection().Entities().size())+" OBJECTS" :
                     name != nullptr && !name->name.empty()
@@ -6392,7 +6392,7 @@ namespace renegade::studio
         {
             const auto* name =
                 session_->Scenes().GetScene().names.GetComponent(entity);
-            inspectorLabel_.SetText(
+            SetInspectorHeading(
                 "LIGHT // " +
                 (multiple ? std::to_string(session_->Selection().Entities().size())+" OBJECTS" :
                     name != nullptr && !name->name.empty()
@@ -6436,7 +6436,7 @@ namespace renegade::studio
         {
             if (!hasLight)
             {
-                inspectorLabel_.SetText(terrainWorkspaceActive_
+                SetInspectorHeading(terrainWorkspaceActive_
                     ? "TERRAIN // CREATE OR EDIT LANDSCAPE"
                     : "TRANSFORM // SELECT AN ENTITY");
             }
@@ -6457,11 +6457,11 @@ namespace renegade::studio
             session_->Scenes().GetScene().names.GetComponent(entity);
         if (hasPlayerStart)
         {
-            inspectorLabel_.SetText("PLAYER START // SPAWN + CONTROLLER");
+            SetInspectorHeading("PLAYER START // SPAWN + CONTROLLER");
         }
         else if (!hasLight)
         {
-            inspectorLabel_.SetText(
+            SetInspectorHeading(
                 std::string(multiple ? "SELECTION PIVOT // " : hasSelectedRiver ? "RIVER // " : "TRANSFORM // ") +
                 (multiple ? std::to_string(session_->Selection().Entities().size())+" OBJECTS" :
                     name != nullptr && !name->name.empty()

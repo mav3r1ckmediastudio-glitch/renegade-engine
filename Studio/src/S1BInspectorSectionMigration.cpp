@@ -613,10 +613,9 @@ namespace renegade::studio
         inspectorLabel_.font.params.size = 14;
         inspectorLabel_.font.params.bolden = .12f;
         inspectorLabel_.SetSize({innerWidth,28.f});
-        auto heading = inspectorLabel_.GetText();
-        const auto priorTitle = inspectorLabel_.GetTooltip();
-        if (heading.size() >= 3 && heading.compare(heading.size()-3,3,"...")==0 && !priorTitle.empty())
-            heading = priorTitle;
+        auto heading = inspectorLabel_.GetTooltip();
+        if (heading.empty())
+            heading = inspectorLabel_.GetText();
         inspectorLabel_.SetTooltip(heading);
         auto metrics = inspectorLabel_.font.params;
         metrics.h_wrap = -1;
