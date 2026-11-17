@@ -1,7 +1,23 @@
 # Bounded decision: docs/WIREFRAME_VIEW_MODE.md. Compile a generated renderer;
 # preserve the pinned submodule and every existing configured overlay.
 set(_wf_src "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/wiRenderer.cpp")
-file(READ "${_wf_src}" _wf_text)
+# Compose on the UMA-corrected stage instead of replacing that stage.
+# Each stage owns a distinct output, so reconfigure never toggles one file
+# between two different renderers or discards the earlier memory fix.
+set(_wf_input "${_wf_src}")
+if(WIN32)
+    set(_wf_input "${CMAKE_CURRENT_BINARY_DIR}/RenegadeWickedFix/wiRenderer.cpp")
+    if(NOT EXISTS "${_wf_input}")
+        message(FATAL_ERROR "UMA renderer stage must be generated before wireframe")
+    endif()
+endif()
+file(READ "${_wf_input}" _wf_text)
+if(WIN32)
+    string(FIND "${_wf_text}" "// UPLOAD heaps remain GENERIC_READ and cannot host unordered access." _wf_uma_guard)
+    if(_wf_uma_guard EQUAL -1)
+        message(FATAL_ERROR "Wireframe input lost the coherent-UMA upload fix")
+    endif()
+endif()
 function(_wf_replace old new)
     string(FIND "${_wf_text}" "${old}" _found)
     if(_found EQUAL -1)
@@ -21,7 +37,7 @@ foreach(_suffix IN ITEMS "" "_tessellation" "_mesh_shader")
     _wf_replace("pso = doublesided ? &${_name}_doublesided : &${_name};"
         "pso = doublesided ? (wireframe_overlay ? &${_name}_doublesided_overlay : &${_name}_doublesided) : (wireframe_overlay ? &${_name}_overlay : &${_name});")
 endforeach()
-set(_wf_generated "${CMAKE_CURRENT_BINARY_DIR}/RenegadeWickedFix/wiRenderer.cpp")
+set(_wf_generated "${CMAKE_CURRENT_BINARY_DIR}/RenegadeWickedFix/wiRendererWireframe.cpp")
 set(_wf_previous "")
 if(EXISTS "${_wf_generated}")
     file(READ "${_wf_generated}" _wf_previous)
@@ -29,7 +45,9 @@ endif()
 if(NOT _wf_previous STREQUAL _wf_text)
     file(WRITE "${_wf_generated}" "${_wf_text}")
 endif()
-set_source_files_properties("${_wf_src}" TARGET_DIRECTORY WickedEngine_emb_shaders WickedEngine_ext_shaders PROPERTIES HEADER_FILE_ONLY TRUE)
+set_source_files_properties("${_wf_src}" "${_wf_input}"
+    TARGET_DIRECTORY WickedEngine_emb_shaders WickedEngine_ext_shaders
+    PROPERTIES HEADER_FILE_ONLY TRUE)
 target_sources(WickedEngine_emb_shaders PRIVATE "${_wf_generated}")
 target_sources(WickedEngine_ext_shaders PRIVATE "${_wf_generated}")
 target_include_directories(WickedEngine_emb_shaders PRIVATE "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine")

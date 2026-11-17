@@ -2002,6 +2002,15 @@ if(WIN32)
             "$<TARGET_FILE_DIR:RenegadeGpuUploadBufferTests>")
     add_test(NAME RenegadeGpuUploadBufferTests COMMAND RenegadeGpuUploadBufferTests)
     set_tests_properties(RenegadeGpuUploadBufferTests PROPERTIES RUN_SERIAL TRUE TIMEOUT 180)
+    add_test(NAME RenegadeRendererOverlayComposition
+        COMMAND "${CMAKE_COMMAND}"
+            "-DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
+            "-DTEST_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/renderer-overlay-composition-$<CONFIG>"
+            "-DTEST_GENERATOR=${CMAKE_GENERATOR}"
+            "-DTEST_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/RendererOverlayComposition.cmake")
+    set_tests_properties(RenegadeRendererOverlayComposition
+        PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
 endif()
 
 # Real Win32 zero-client-area and minimize/restore binding regression.
