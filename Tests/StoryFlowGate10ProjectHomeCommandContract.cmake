@@ -3,6 +3,7 @@ if(NOT DEFINED RENEGADE_SOURCE_DIR)
 endif()
 
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowJourneyChrome.h" chrome)
+file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/StudioIcons.h" icon_catalogue)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.cpp" scene_chrome)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowRenderPath.h" render_path)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowWorkspace.cpp" workspace)
@@ -27,11 +28,31 @@ function(require_not_contains haystack needle label)
     endif()
 endfunction()
 
-# Creator-facing project-home commands must be distinct and honestly named.
-require_contains(chrome "TEST GAME" "Test Game label")
-require_contains(chrome "BUILD GAME" "Build Game label")
+# Creator-facing icon commands must remain distinct and discoverable.
+# Journey uses lifecycle tooltips for Test Game and the catalogue title for
+# Build Game. Keep their icon slots and native save-first command routes bound.
+require_contains(chrome "Action::TestPlay" "Test Game action wiring")
+require_contains(chrome [=[testGameRunning_?"stop":"play"]=] "Test Game lifecycle icons")
+require_contains(chrome [=[testGameRunning_?"Stop Test Game":"Test Game"]=] "Test Game lifecycle tooltips")
+require_contains(chrome [=[Action::Select,Action::Arrange,Action::Filter,Action::Search,Action::BuildGame,Action::Validate]=] "Build Game action slot")
+require_contains(chrome [=["select","arrange","filter","search","build-game","validate"]=] "Build Game icon slot")
+require_contains(icon_catalogue [=[{"build-game", "Build Game"}]=] "Build Game title")
+require_contains(icon_catalogue "hover->title.empty()?Title(hover->icon):hover->title" "default icon tooltip")
+require_contains(chrome "interaction_.RenderTooltip(canvas,cmd)" "visible icon tooltip rendering")
 require_contains(chrome "Action::BuildGame" "Build Game action wiring")
+require_contains(render_path "pendingNativeCommand_ = NativeCommand::TestGame;" "Test Game native handoff")
+require_contains(render_path "pendingNativeCommand_ = NativeCommand::BuildGame;" "Build Game native handoff")
 require_not_contains(chrome "\"PREVIEW\"" "duplicate Preview toolbar label")
+
+foreach(command_route IN ITEMS TestPlay:TestGame BuildGame:BuildGame)
+    string(REPLACE ":" ";" route_parts "${command_route}")
+    list(GET route_parts 0 action)
+    list(GET route_parts 1 command)
+    string(REGEX MATCH "case Action::${action}:[ \t\r\n]*pendingNativeCommand_ = NativeCommand::${command};" route "${render_path}")
+    if(route STREQUAL "")
+        message(FATAL_ERROR "Gate 10 project-home command contract mismatched ${action} native route")
+    endif()
+endforeach()
 
 # Test Game and Build Game must remain separate save-first commands.
 require_contains(render_path "NativeCommand::TestGame" "Test Game native command")

@@ -2336,6 +2336,14 @@ namespace renegade::studio
             Rect(width_-28,HeaderHeight+4,28,24,Border,cmd);Label(rightCollapsed_?"<":">",width_-20,HeaderHeight+8,14,Text,cmd);
         }
 
+        // Toolbar icons need their help after every ordinary control,
+        // Inspector and collapse handle, while child pickers remain topmost.
+        for (const auto* button : {&returnButton_, &saveButton_, &undoButton_,
+                &redoButton_, &focusButton_, &fitCanvasButton_})
+        {
+            ApplyScissor(canvas, scissorRect, cmd);
+            button->RenderTooltip(canvas, cmd);
+        }
         ApplyScissor(canvas, scissorRect, cmd);
         screenSettingsPicker_.Render(cmd);
         basicActionPicker_.Render(cmd);
