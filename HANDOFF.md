@@ -823,3 +823,62 @@ ctest --test-dir BUILD/warp -C Release -R 'RenegadeTerrainProp(ResidencyProbe|Sl
 Run Sol's new P2 behaviour tests, the repository Studio/Runtime Debug and Release preflight, and the UMA/wireframe overlay regression checks on that combined tree. Run the normal editor workflow and the separate player with a populated project, inspect the captures, and record frame-time evidence at matched settings. A green local build alone does not demonstrate the authoring workflow. After pushing, verify all four hosted checks belong to the pushed head. Merge requires the owner's approval.
 
 **Build record.** Final NVIDIA Release focused checks passed 6/6. The standalone Runtime captured frame 60 from the project and exited with code 0. Studio and Runtime built in Debug and Release. Debug focused CTest passed 4/4 and the separate Debug native slice exited 0. The fresh WARP Release build passed both native tests (2/2, Microsoft Basic Render Driver). Local logs under BUILD include final-Release-test.log, validated-Debug-test.log, debug-confirm.log, debug-confirm-exit.log, warp-test.log and validated-capture.log. The additional baseline renderer-overlay CTest exceeded its 60-second timeout twice on E:. The same cold/reconfigure fixture completed successfully on the system temporary drive, exit 0 (overlay-confirm.log). Repeat the registered overlay check before pushing. All feature and handover edits are committed on this branch. The configured WickedEngine worktree shows ten generated overlay edits; its pinned gitlink and the imnodes gitlink are unchanged.
+
+## Terrain props P2 authoring handover, 17 November 2026
+
+Implementation head: `01d7c012b8b4ebe6caacac74eaf80d5eaa91b0cb` on `feature/terrain-props-p0-p1`, following P0/P1 handover `2853b55c55f7d7aeee8aaa8e9f69d2bba02ca2b8`. The final documentation/evidence commit is separate; obtain it with `git log -1 --format=%H -- HANDOFF.md`. Owner acceptance and merge approval remain pending.
+
+**Scope delivered.** P2 authoring only: v2 recipes, per-model density, saved layer mixes, stable candidate keys/bindings, clearings/tombstones and overrides; v1 reads; distance-sampled Generate/Paint/Erase and deliberate terrain reprojection/expansion; finite native terrain snapshots; changed-page live projection with rollback; one history command per Apply/stroke; allocation high-water preserved through Undo/Redo/save. The Terrain Props palette uses governed model selection and linked numeric/slider controls. Failure/cancellation retain the old display. Layer-owner deletion/recovery and divergent/stale revisions are guarded.
+
+[P2 contract and format](docs/TERRAIN_PROP_P2.md), [all 34 implementation paths](docs/evidence/terrain-props-p2/implementation-files.txt), and [native evidence and limitations](docs/evidence/terrain-props-p2/README.md). Collision-interest streaming, full asset/texture streaming, budgets/eviction and cooking remain deferred; their proposed interfaces remain in TERRAIN_PROP_P1.md.
+
+**Baseline and concurrency.** Fresh `origin/main` remained `db8d620f75a5219ae5a3906e2837ed2d4165c741` during final source validation. Combined `git diff --check origin/main...HEAD` passed. Wicked remains `82557d439a41d104f559b0d3134d160b7bf6154e`; imnodes remains `eb36902c892548ef94f88f51ad7e7c9c7058a71c`. The documented ten configuration-generated Wicked overlay edits remain uncommitted; neither gitlink changed. Other working trees and the owner's running editor were preserved.
+
+**Source review.** A separate review of the frozen implementation identified and verified closure of four issues: extreme/nonfinite numeric input, cancellation/work accounting inside dense retained-placement scans, changed bounds for legacy placements outside their historical page cell, and repeated owner discovery after an unchanged resolution failure. The final pure authoring test reports 59,752 assertions.
+
+**Native creator workflow.** Final native scripted runs at inspector widths 520 and 280 generated 1,081 placements, erased to 1,062, verified Undo/Redo and that regeneration respects the clearing, painted to 1,076, cancelled staging, then saved and reopened 1,076. Real shared numeric callbacks exercised FLT_MAX, negative FLT_MAX and NaN. Actual full-window captures were inspected after render/layout stabilization; all numeric fields and lower controls are visible. Private test desktops avoided the owner's mouse/keyboard. The enlarged 1600px capture window is separate from the original measured viewport.
+
+The separate player loaded the exact scene bytes from the final editor proof, captured frame 60 and exited normally with code 0. Scene SHA-256: `04F17C9B0C7414A9E921E6573FDB45C5B76F822943E0DD9BFC7300A137B972DC`; Runtime SHA-256: `2152D68025CE50BB46A16C896C5D95C8C2A6851CB5925335B78654F9DA59EB17`. Its Runtime log contained no warning, error or missing-file matches. The disposable player layout staged the existing default-grass fixture support explicitly; this is ordinary project-mode proof, not arbitrary exported-package closure.
+
+**Performance limitation.** The test models are deliberately tiny. Earlier P0/P1 mesh buffers totalled only 3,392 bytes. Roughly 75 FPS / 13ms intervals under the display cap do not establish headroom or performance with detailed assets. No production woodland FPS, geometry/overdraw budget, shadow cost, physical memory saving or real-asset streaming budget is claimed. A representative uncapped benchmark with the owner's actual assets remains necessary before making those claims.
+
+### Final local validation
+
+| Check | Result / receipt |
+| --- | --- |
+| Release complete preflight | PASS, including 341/341 registered tests, package archives, LP05 dependency proof and LC01 init/update/move/reopen registry proof; `BUILD/p2-preflight-Release-confirmed/build-result.json` |
+| Debug complete preflight | PASS, including 326/326 registered tests, package archives and LP05/LC01 subprocess proofs; isolated p2-preflight-Debug-physical/build-result.json |
+| Debug pure authoring | 59,752 assertions, exit 0; `authoring-debug.txt` in evidence |
+| WARP Release | 4/4 PASS in 120.85s: native allocator, registered overlay, texture residency and slice; isolated `p2-final56-warp-test.log` |
+| Release constructor startup smoke | exit 0; `BUILD/p2-startup-smoke-release.json` |
+| Final editor / separate player | PASS as described above; captures in `docs/evidence/terrain-props-p2/` |
+
+The Debug registered suite has 326 cases; fifteen native graphics cases are Release-only by existing registration. The documented direct Debug residency and native slice both exited 0, as did the Debug constructor startup-smoke. Receipt: isolated p2-debug-native-physical/result.json. Debug Studio SHA-256: 65BF18FA0CE13CB152A2690B1CCE4BE4D188519DBB6247377BC768E37073A2F8; probe SHA-256: C47B84EC6CA74FF6E6B73D0EF8BDD6A51857283B6CF3FFC4C4AC5365CA66D7CD.
+
+### Commands and local adaptations
+
+The repository Studio preflight builds both Studio and Runtime, runs the unfiltered registered CTest suite, and assembles/verifies both packages. Its task-local adapter preserved the exact upstream pins and checked the exact ten generated overlay paths and SHA-256 bytes instead of resetting them. No test assertions or deadlines were removed.
+
+```powershell
+git fetch origin main
+git diff --check origin/main...HEAD
+git ls-tree HEAD WickedEngine ThirdParty/imnodes
+cmake -S . -B BUILD/native -G "Visual Studio 18 2026" -A x64
+powershell -ExecutionPolicy Bypass -File BUILD/Build-P2-Preflight-Local.ps1 -Configuration Release -ArtifactRoot BUILD/p2-preflight-Release-confirmed
+ctest --test-dir BUILD/native -C Release -R '^RenegadeAssistantRiverKnowledgeTests$' --output-on-failure
+cmake -S . -B BUILD/warp -G "Visual Studio 18 2026" -A x64 -DRENEGADE_TEST_FORCE_WARP=ON
+cmake --build BUILD/warp --config Release --target RenegadeTerrainPropResidencyProbe RenegadeGpuUploadBufferTests --parallel 2
+ctest --test-dir BUILD/warp -C Release -R 'Renegade(TerrainProp(ResidencyProbe|SliceProof)|GpuUploadBufferTests|RendererOverlayComposition)' --output-on-failure
+```
+
+The registered renderer-overlay fixture now performs only its disposable cold/reconfigure work under system temporary storage, keeping logs at the requested build-tree output root. Its original 60-second timeout and UMA/wireframe assertions remain. The negative control still rejects a missing UMA witness.
+
+Validation originally filled the system drive with this task's generated Debug link maps. Only owned generated outputs were moved and regenerable ILK files removed; source/projects/owner files were preserved. The system drive recovered about 55 GiB. Local Debug linking used `/debug /INCREMENTAL:NO`, retaining Debug CRT/assertions and compiler optimization settings. A one-off MSVC C1001 in an existing Story Flow boundary test recovered with the unchanged source in a serial invocation; its registered test passed 1/1. The task-local extra `/MP3` was removed for the final Debug run; standard upstream settings were retained.
+
+The moved validation build used a C-to-E directory junction. Package tests reproduced a working-directory-dependent failure through that junction; the same unchanged executable passed from the physical build directory. All thirteen affected package/fixture tests passed when CTest used the physical directory. The final Debug adapter changes only that test-directory path; the full registered suite is rerun with all checks enabled.
+
+The first frozen Release full suite retained one assistant-knowledge timeout (340/341). Its unchanged isolated retry passed in 3.26s. A complete subsequent preflight passed 341/341, with that test at 2.37s. Earlier disk-full, compiler, path and screenshot-tool failures remain in ignored raw logs; they are not green receipts.
+
+### Remaining scope and next work
+
+Saved mixes are layer-local. The first palette requires one finite terrain and refuses ambiguous multiple authored layers. Legacy key-zero placements remain manual; erase clearings persist until Undo. Cross-process editing, asset reimport during active projection, arbitrary moved/exported populated projects and representative forest performance still need separate proofs. Proceed to later streaming stages only under a new scoped task. No merge without owner approval.
