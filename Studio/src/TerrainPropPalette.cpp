@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cmath>
 #include <future>
+#include <limits>
 #include <fstream>
 #include <cstdlib>
 #include <stdexcept>
@@ -49,6 +50,7 @@ namespace
         SceneInspectorButton refresh, add, saveMix, generate, paint, erase, reproject, cancel;
         SceneInspectorTextInputField mixName;
         SceneInspectorSlider seed, radius, spacing;
+        float brushRadius=8, minimumSpacing=2;
         wi::gui::Label status;
         std::vector<std::unique_ptr<PropEntryControls>> rows;
         std::vector<std::pair<StableId,std::string>> choices;
@@ -70,6 +72,26 @@ namespace
     };
     std::unique_ptr<PropPalette> palette;
     PropPalette& Props() { if (!palette) palette = std::make_unique<PropPalette>(); return *palette; }
+    float CanonicalSetting(float input,float minimum,float maximum,float previous)
+    {return std::clamp(std::isfinite(input)?input:previous,minimum,maximum);}
+    void SetCanonicalSetting(SceneInspectorSlider& slider,float minimum,float maximum,float value)
+    {slider.SetRange(minimum,maximum);slider.SetValue(value);slider.valueInputField.SetValue(value);}
+    void CommitSeed(float input)
+    {
+        auto& p=Props();const float value=std::floor(CanonicalSetting(input,1,1000000,float(p.draft.authoring.recipe.seed)));
+        p.draft.authoring.recipe.seed=static_cast<std::uint64_t>(value);SetCanonicalSetting(p.seed,1,1000000,value);
+    }
+    void CommitRadius(float input)
+    {
+        auto& p=Props();p.brushRadius=CanonicalSetting(input,1,100,p.brushRadius);
+        SetCanonicalSetting(p.radius,1,100,p.brushRadius);
+    }
+    void CommitSpacing(float input)
+    {
+        auto& p=Props();p.minimumSpacing=CanonicalSetting(input,.25f,20,p.minimumSpacing);
+        for(auto& entry:p.draft.authoring.recipe.mix.entries)entry.minSpacing=p.minimumSpacing;
+        SetCanonicalSetting(p.spacing,.25f,20,p.minimumSpacing);
+    }
     void CommitDensity(size_t index,float maximum,float input)
     {
         auto& p=Props();auto& entries=p.draft.authoring.recipe.mix.entries;if(index>=entries.size())return;
@@ -118,9 +140,9 @@ void StudioRenderPath::CreateTerrainPropControls()
     auto slider=[this](SceneInspectorSlider& s,float min,float max,float value,const char* name,const char* text,auto changed){
         s.Create(min,max,value,10000,name,text);s.OnValuePreview(changed);s.OnValueCommitted(changed);inspectorPanel_.AddWidget(&s);
     };
-    slider(p.seed,1,1000000,1,"Terrain prop seed","SEED",[](float v){Props().draft.authoring.recipe.seed=std::uint64_t(v);});
-    slider(p.radius,1,100,8,"Terrain prop brush radius","BRUSH RADIUS",[](float){});
-    slider(p.spacing,.25f,20,2,"Terrain prop minimum spacing","MINIMUM SPACING",[](float v){for(auto& e:Props().draft.authoring.recipe.mix.entries)e.minSpacing=v;});
+    slider(p.seed,1,1000000,1,"Terrain prop seed","SEED",CommitSeed);
+    slider(p.radius,1,100,8,"Terrain prop brush radius","BRUSH RADIUS",CommitRadius);
+    slider(p.spacing,.25f,20,2,"Terrain prop minimum spacing","MINIMUM SPACING",CommitSpacing);
     button(p.generate,"Generate terrain props","GENERATE APPLY","Deterministically fill current finite terrain. Preserves clearings, overrides and retained IDs.",[](const wi::gui::EventArgs&){Props().pending=int(TerrainPropEditOperation::Generate);});
     auto arm=[this](TerrainPropEditOperation mode){
         auto& s=Props();s.armed=true;s.mode=mode;
@@ -170,7 +192,7 @@ void StudioRenderPath::RebuildTerrainPropRows()
     for(const auto& mix:p.draft.authoring.savedMixes)p.mixes.AddItem(mix.name);
     p.mixes.SetSelectedWithoutCallback(0);
     p.seed.SetValue(float(p.draft.authoring.recipe.seed));
-    if(!entries.empty())p.spacing.SetValue(entries.front().minSpacing);
+    if(!entries.empty()){p.minimumSpacing=entries.front().minSpacing;p.spacing.SetValue(p.minimumSpacing);}
     p.rebuild=false;QueueInspectorRefresh();
 }
 std::vector<wi::gui::Widget*> StudioRenderPath::TerrainPropWidgets()
@@ -505,6 +527,16 @@ void StudioRenderPath::TickTerrainPropProof()
             require(p.draft.authoring.recipe.mix.entries[0].densityPerSquareMetre==.25f && p.rows[0]->density.GetValue()==.25f,
                 "Density handler failed to clamp out-of-range numeric value");
             CommitDensity(0,.25f,.01f);log("DENSITY_HANDLER_CLAMP_PASS input=.5 canonical=.25 step=2 (shared callback handler)");
+            const float huge=std::numeric_limits<float>::max(),nan=std::numeric_limits<float>::quiet_NaN();
+            CommitSeed(huge);require(p.draft.authoring.recipe.seed==1000000 && p.seed.GetValue()==1000000,"Seed maximum clamp failed");
+            CommitSeed(-huge);CommitSeed(nan);require(p.draft.authoring.recipe.seed==1 && p.seed.GetValue()==1,"Seed minimum/nonfinite guard failed");
+            CommitSeed(3926);
+            CommitRadius(huge);require(p.radius.GetValue()==100,"Radius maximum clamp failed");
+            CommitRadius(-huge);CommitRadius(nan);require(p.radius.GetValue()==1,"Radius minimum/nonfinite guard failed");CommitRadius(8);
+            CommitSpacing(huge);require(p.spacing.GetValue()==20,"Spacing maximum clamp failed");
+            CommitSpacing(-huge);CommitSpacing(nan);require(p.spacing.GetValue()==.25f && p.draft.authoring.recipe.mix.entries[0].minSpacing==.25f,
+                "Spacing minimum/nonfinite guard failed");CommitSpacing(2);
+            log("NUMERIC_HANDLER_GUARDS_PASS seed/radius/spacing FLT_MAX -FLT_MAX NaN (shared callback handlers)");
             terrainSectionExpanded_.fill(false);terrainSectionExpanded_[15]=true;
             RefreshInspector();ResizeLayout();QueueTerrainPropEdit(int(TerrainPropEditOperation::Generate));stage=3;return;
         }
