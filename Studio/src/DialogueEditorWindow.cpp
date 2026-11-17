@@ -764,7 +764,7 @@ struct DialogueEditorWindow::Impl
         heading(previewHint, "Try the conversation as your player will see it.", 32, 606, 650);
         heading(workflow, "Select a line to edit. Add replies, then select a reply and Add response.", 32, 118, 800);
         exampleNote.Create("Example voice recordings");
-        exampleNote.SetText("Add your own WAV/OGG voice clips. Lines without a clip display text only.");
+        exampleNote.SetText("Included clips are examples. Add your own WAV/OGG; unvoiced lines display text.");
         Add(exampleNote, 740, 612, 550, 24);
         heading(conversationHeading, "1. Write the conversation", 32, 146, 740);
         heading(textHeading, "Dialogue text", 890, 207, 360);
