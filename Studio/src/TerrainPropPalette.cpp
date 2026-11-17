@@ -445,7 +445,7 @@ void StudioRenderPath::TickTerrainPropProof()
             SetProjectHubVisible(false);SetTerrainWorkspaceActive(true);
             p.mutation=detail::QueueCreatorAssetFrameMutation([this](std::uint64_t){
                 auto& s=session_->Scenes().GetScene();
-                if(!s.weathers.GetCount())CreateEnvironment(s,WeatherState{});
+                if(!s.weathers.GetCount())(void)bridge::CreateEnvironment(s,WeatherState{});
                 if(!s.terrains.GetCount()){
                     TerrainState terrain;terrain.visibleChunkRadius=1;terrain.physicsChunkRadius=2;
                     terrain.minimumHeight=-1;terrain.maximumHeight=2;(void)bridge::CreateTerrain(s,terrain,"P2 Review Terrain");
