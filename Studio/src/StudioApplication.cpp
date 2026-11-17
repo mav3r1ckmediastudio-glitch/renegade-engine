@@ -13699,6 +13699,12 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
     void StudioApplication::UpdateCloudBodySelfTest()
     {
+        // The opt-in terrain controller must keep ticking after Project Home routing.
+        if(std::getenv("RENEGADE_TERRAIN_PROP_PROOF_PROJECT") && std::getenv("RENEGADE_TERRAIN_PROP_PROOF_LOG")){
+            storyFlowIntegration_.RequestLevelEditor();
+            if(GetActivePath()!=&renderer_)ActivatePath(&renderer_);
+            renderer_.SetLevelWorkspaceActive(true);return;
+        }
         if(cloudBodySelfTestOpened_ || !wi::arguments::HasArgument("cloud-body-studio-test") ||
             !wi::arguments::HasArgument("cloud-studio-replay-audit") ||
             !wi::arguments::HasArgument("cloud-studio-replay-audit-exit") ||
