@@ -572,3 +572,7 @@ file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/MoonSurfaceData.inc"
     CONTENT "static const unsigned char MoonSurfaceBytes[] = {\n${_moon_bytes}\n};\n")
 target_sources(RenegadeEngineBridge PRIVATE src/MoonSurface.cpp)
 target_include_directories(RenegadeEngineBridge PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+
+target_sources(RenegadeEngineBridge PRIVATE src/TerrainPropPage.cpp)
+target_sources(RenegadeEngineBridge PRIVATE src/TerrainPropProjection.cpp)
+target_sources(RenegadeEngineBridge PRIVATE src/TerrainPropDocument.cpp)

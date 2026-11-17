@@ -2408,3 +2408,7 @@ from authored render settings and Runtime. Native diagnostic lifecycle resets
 restore that preference; path tracing temporarily suspends it. Dedicated
 coplanar overlay PSOs are compiled through a bounded generated-source overlay,
 with the original renderer and submodule pin preserved. See WIREFRAME_VIEW_MODE.md.
+
+## Terrain prop placement authority
+
+The P0/P1 bridge owns immutable placement revisions and a shared native projection. The archive boundary, wire formats, restore path and proposed P2/streaming interfaces are specified in [Terrain props P0/P1](TERRAIN_PROP_P1.md).

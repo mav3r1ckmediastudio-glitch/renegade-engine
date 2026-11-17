@@ -1,0 +1,105 @@
+--- a/WickedEngine/wiScene_Components.h
++++ b/WickedEngine/wiScene_Components.h
+@@ -2418,6 +2418,7 @@
+ 
+ 	struct alignas(32) MetadataComponent
+ 	{
++		bool runtimeProjectionOnly = false; // Runtime ownership, never read from or written to a file.
+ 		enum FLAGS
+ 		{
+ 			NONE = 0,
+--- a/WickedEngine/wiECS.h
++++ b/WickedEngine/wiECS.h
+@@ -38,6 +38,7 @@
+ 		wi::jobsystem::context ctx; // allow components to spawn serialization subtasks
+ 		wi::unordered_map<uint64_t, Entity> remap;
+ 		bool allow_remap = true;
++		wi::unordered_set<Entity> writeExclusions;
+ 		uint64_t version = 0; // The ComponentLibrary serialization will modify this by the registered component's version number
+ 		wi::unordered_set<std::string> resource_registration; // register for resource manager serialization
+ 		ComponentLibrary* componentlibrary = nullptr;
+@@ -105,7 +106,7 @@
+ #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+ #endif // __GNUC__ && !__SCE__ && ! __clang__
+ 
+-			archive << entity;
++			archive << (seri.writeExclusions.count(entity) ? INVALID_ENTITY : entity);
+ 
+ #if defined(__GNUC__) && !defined(__SCE__) && !defined(__clang__)
+ #pragma GCC diagnostic pop
+@@ -244,6 +245,18 @@
+ 				}
+ 				else
+ 				{
++					if (!seri.writeExclusions.empty())
++					{
++						size_t count = 0;
++						for (Entity entity : entities)
++							if (!seri.writeExclusions.count(entity)) ++count;
++						archive << count;
++						for (size_t i = 0; i < entities.size(); ++i)
++							if (!seri.writeExclusions.count(entities[i])) components[i].Serialize(archive, seri);
++						for (Entity entity : entities)
++							if (!seri.writeExclusions.count(entity)) SerializeEntity(archive, entity, seri);
++						return;
++					}
+ 					archive << components.size();
+ 					for (Component& component : components)
+ 					{
+--- a/WickedEngine/wiScene_Serializers.cpp
++++ b/WickedEngine/wiScene_Serializers.cpp
+@@ -2698,6 +2698,11 @@
+ 
+ 		// With this we will ensure that serialized entities are unique and persistent across the scene:
+ 		EntitySerializer seri;
++		if (!archive.IsReadMode())
++		{
++			for (size_t i = 0; i < metadatas.GetCount(); ++i)
++				if (metadatas[i].runtimeProjectionOnly) seri.writeExclusions.insert(metadatas.GetEntity(i));
++		}
+ 		seri.ctx.priority = wi::jobsystem::Priority::Low; // serialization tasks will be low priority to not block rendering if scene loading is asynchronous
+ 
+ 		if(archive.GetVersion() >= 84)
+@@ -2987,7 +2992,8 @@
+ 						if (hier.parentID == entity)
+ 						{
+ 							Entity child = scene.hierarchy.GetEntity(i);
+-							children.push_back(child);
++							const auto* metadata = scene.metadatas.GetComponent(child);
++							if (!metadata || !metadata->runtimeProjectionOnly) children.push_back(child);
+ 						}
+ 					}
+ 					archive << children.size();
+@@ -3622,7 +3628,8 @@
+ 						if (hier.parentID == entity)
+ 						{
+ 							Entity child = scene.hierarchy.GetEntity(i);
+-							children.push_back(child);
++							const auto* metadata = scene.metadatas.GetComponent(child);
++							if (!metadata || !metadata->runtimeProjectionOnly) children.push_back(child);
+ 						}
+ 					}
+ 					archive << children.size();
+@@ -3645,6 +3652,11 @@
+ 		EntitySerializeFlags flags
+ 	)
+ 	{
++		if (!archive.IsReadMode())
++		{
++			const auto* metadata = metadatas.GetComponent(entity);
++			if (metadata && metadata->runtimeProjectionOnly) return INVALID_ENTITY;
++		}
+ 		// Manage jump position to jump to resource serialization WRITE area:
+ 		size_t jump_before = 0;
+ 		size_t jump_after = 0;
+--- a/WickedEngine/wiScene.cpp
++++ b/WickedEngine/wiScene.cpp
+@@ -1341,6 +1341,8 @@
+ 	}
+ 	Entity Scene::Entity_Duplicate(Entity entity)
+ 	{
++		const auto* metadata = metadatas.GetComponent(entity);
++		if (metadata && metadata->runtimeProjectionOnly) return INVALID_ENTITY;
+ 		wi::Archive archive;
+ 		EntitySerializer seri;
+ 
