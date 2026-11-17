@@ -37,35 +37,12 @@ static bool WriteFixture(const std::filesystem::path& destination)
     return static_cast<bool>(out);
 }
 
-int RunTerrainPropSlice(const std::filesystem::path&, const std::filesystem::path&);
-
-int main(int argc, char** argv)
+int MeasureTerrainPropResidency(const std::filesystem::path& directory, wi::scene::MaterialComponent* material)
 {
-    if (argc != 2 && argc != 3) return 2;
-    const std::filesystem::path directory(argv[1]);
     std::filesystem::create_directories(directory);
     const auto path = directory / "terrain-prop-probe.dds";
     if (!WriteFixture(path)) return 3;
-
-    const HWND window = CreateWindowExW(0, L"STATIC", L"Terrain prop probe",
-        WS_POPUP, 0, 0, 64, 64, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
-    if (!window) return 4;
-    wi::Application application;
-    application.allow_hdr = false;
-    application.SetWindow(window);
     auto* device = wi::graphics::GetDevice();
-    if (!device) return 5;
-    wi::initializer::InitializeComponentsImmediate();
-    struct DrainDeviceWork
-    {
-        ~DrainDeviceWork()
-        {
-            while (wi::renderer::IsPipelineCreationActive()) Sleep(5);
-            wi::jobsystem::ShutDown();
-            wi::graphics::GetDevice()->WaitForGPU();
-        }
-    } drain;
-    if (argc == 3) return RunTerrainPropSlice(directory, argv[2]);
     const auto backingBytes = std::filesystem::file_size(path);
     auto resource = wi::resourcemanager::Load(path.string(), wi::resourcemanager::Flags::STREAMING,
         nullptr, backingBytes);
@@ -73,14 +50,23 @@ int main(int argc, char** argv)
     if (!resource.GetFileData().empty()) return 10;
     std::cout << "adapter=" << device->GetAdapterName() << std::endl;
 
+    using Material = wi::scene::MaterialComponent;
+    if (material)
+    {
+        auto& slot = material->textures[Material::BASECOLORMAP];
+        slot.resource = resource;
+        material->SetDirty();
+    }
     auto report = [&](const char* phase)
     {
-        const auto desc = resource.GetTexture().desc;
+        const auto& observed = material ? material->textures[Material::BASECOLORMAP].resource : resource;
+        const auto desc = observed.GetTexture().desc;
         const auto usage = device->GetMemoryUsage();
         PROCESS_MEMORY_COUNTERS process{};
         if (!GetProcessMemoryInfo(GetCurrentProcess(), &process, sizeof(process)))
             throw std::runtime_error("Could not sample process memory.");
-        std::cout << phase << " process_peak_working_set=" << process.PeakWorkingSetSize
+        std::cout << phase << " source=" << (material ? "shared_prop_material" : "resource")
+            << " process_peak_working_set=" << process.PeakWorkingSetSize
             << " backing_file_bytes=" << backingBytes << " width=" << desc.width << " resident_mips=" << desc.mip_levels
             << " full_mips=" << resource.GetTextureFullMipCount()
             << " resident_payload_bytes=" << wi::graphics::ComputeTextureMemorySizeInBytes(desc)
@@ -120,4 +106,33 @@ int main(int argc, char** argv)
     if (!reach(0, cold)) return 9;
     report("far");
     return 0;
+}
+
+int RunTerrainPropSlice(const std::filesystem::path&, const std::filesystem::path&);
+
+int main(int argc, char** argv)
+{
+    if (argc != 2 && argc != 3) return 2;
+    const std::filesystem::path directory(argv[1]);
+    const HWND window = CreateWindowExW(0, L"STATIC", L"Terrain prop probe",
+        WS_POPUP, 0, 0, 64, 64, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (!window) return 4;
+    wi::Application application;
+    application.allow_hdr = false;
+    application.SetWindow(window);
+    auto* device = wi::graphics::GetDevice();
+    if (!device) return 5;
+    wi::initializer::InitializeComponentsImmediate();
+    struct DrainDeviceWork
+    {
+        ~DrainDeviceWork()
+        {
+            while (wi::renderer::IsPipelineCreationActive()) Sleep(5);
+            wi::jobsystem::ShutDown();
+            wi::graphics::GetDevice()->WaitForGPU();
+        }
+    } drain;
+
+    if (argc == 3) return RunTerrainPropSlice(directory, argv[2]);
+    return MeasureTerrainPropResidency(directory, nullptr);
 }

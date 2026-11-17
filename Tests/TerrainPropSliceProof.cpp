@@ -11,6 +11,8 @@
 #include <set>
 #include <stdexcept>
 
+int MeasureTerrainPropResidency(const std::filesystem::path&, wi::scene::MaterialComponent*);
+
 namespace
 {
     namespace fs = std::filesystem;
@@ -174,6 +176,10 @@ namespace
             << " impostor_atlas_payload_bytes=" << (world.impostorArray.IsValid() ?
                 wi::graphics::ComputeTextureMemorySizeInBytes(world.impostorArray.desc) : 0) << std::endl;
 
+        const auto& firstMesh = *world.meshes.GetComponent(world.objects[0].meshID);
+        auto* sharedMaterial = world.materials.GetComponent(firstMesh.subsets.front().materialID);
+        Check(sharedMaterial && MeasureTerrainPropResidency(run / "native-texture", sharedMaterial) == 0,
+            "residency through shared placement material");
         const auto trunkHit = wi::physics::Intersects(world,
             wi::primitive::Ray(XMFLOAT3(0,1,-3), XMFLOAT3(0,0,1), 0, 6));
         world.Entity_Remove(trunkHit.entity, false);
