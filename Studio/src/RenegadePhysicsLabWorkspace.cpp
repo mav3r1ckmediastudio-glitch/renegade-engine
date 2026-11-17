@@ -180,6 +180,7 @@ namespace renegade::studio
         wi::ecs::Entity selectedEntity = wi::ecs::INVALID_ENTITY;
         Page page = Page::World;
         float scrollY = 0.0f;
+        wi::gui::Widget contentClip;
         float pageContentHeight = 0.0f;
         std::string status;
         bool statusError = false;
@@ -1090,20 +1091,23 @@ namespace renegade::studio
             {
                 pointerConsumed = true;
                 const float tabsY = bounds.y + HeaderHeight;
-                if (pointer.y >= tabsY && pointer.y < tabsY + TabsHeight &&
+                if (pointer.y >= tabsY && pointer.y < tabsY + TabBandHeight() &&
                     wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
                 {
                     const float width = std::max(1.0f, bounds.z - bounds.x - 32.0f);
-                    const float tabWidth = width / static_cast<float>(Page::Count);
-                    const int index = static_cast<int>((pointer.x - bounds.x - 16.0f) / tabWidth);
-                    if (index >= 0 && index < static_cast<int>(Page::Count))
+                    const int columns = TabColumns();
+                    const float tabWidth=width/columns;
+                    const int col=int((pointer.x-bounds.x-16)/tabWidth);
+                    const int row=int((pointer.y-tabsY)/TabsHeight);
+                    const int index=row*columns+col;
+                    if (pointer.x>=bounds.x+16 && col>=0 && col<columns && index < static_cast<int>(Page::Count))
                     {
                         page = static_cast<Page>(index);
                         scrollY = 0.0f;
                         RequestRefresh();
                     }
                 }
-                const float contentTop = bounds.y + HeaderHeight + TabsHeight + ReadoutHeight;
+                const float contentTop = bounds.y + HeaderHeight + TabBandHeight() + ReadoutHeight;
                 if (pointer.y >= contentTop && std::abs(pointer.z) > 0.1f)
                 {
                     scrollY += pointer.z > 0.0f ? -ScrollStep : ScrollStep;
@@ -1150,6 +1154,7 @@ namespace renegade::studio
                     widget->Render(canvas, cmd);
             }
 
+            contentClip.ApplyScissor(canvas,{int32_t(bounds.x),int32_t(bounds.y),int32_t(bounds.z),int32_t(bounds.w)},cmd,false);
             if (!status.empty())
             {
                 DrawBorderedRect(bounds.x + 14.0f, bounds.w - StatusHeight,
@@ -1159,18 +1164,23 @@ namespace renegade::studio
             }
         }
 
+        int TabColumns() const { return bounds.z-bounds.x<600.f?2:bounds.z-bounds.x<1000.f?4:8; }
+        float TabBandHeight() const { return TabsHeight*(8/TabColumns()); }
+
         void RenderTabs(const wi::graphics::CommandList cmd) const
         {
             constexpr std::array<const char*, 8> labels = {
                 "WORLD", "RIGID BODY", "CONSTRAINT", "CHARACTER",
                 "VEHICLE", "RAGDOLL", "SOFT BODY", "SECONDARY COLLIDER"};
             const float available = std::max(1.0f, bounds.z - bounds.x - 32.0f);
-            const float tabWidth = available / static_cast<float>(labels.size());
-            const int textSize = tabWidth < 78.0f ? 8 : 9;
+            const float tabWidth = available / TabColumns();
+            const int textSize = 11;
             float x = bounds.x + 16.0f;
-            const float y = bounds.y + HeaderHeight;
+            float y = bounds.y + HeaderHeight;
             for (std::size_t i = 0; i < labels.size(); ++i)
             {
+                x=bounds.x+16+float(i%TabColumns())*tabWidth;
+                y=bounds.y+HeaderHeight+float(i/TabColumns())*TabsHeight;
                 const bool selected = static_cast<std::size_t>(page) == i;
                 DrawRect(x, y, tabWidth - 4.0f, TabsHeight - 2.0f,
                     selected ? Surface2 : Surface1, cmd);
@@ -1184,7 +1194,7 @@ namespace renegade::studio
 
         void RenderReadout(const wi::graphics::CommandList cmd) const
         {
-            const float top = bounds.y + HeaderHeight + TabsHeight + 7.0f;
+            const float top = bounds.y + HeaderHeight + TabBandHeight() + 7.0f;
             DrawRect(bounds.x + 14.0f, top, bounds.z - bounds.x - 28.0f,
                 bounds.w - top - StatusHeight - 6.0f, Surface1, cmd);
             const float x = bounds.x + 30.0f;
@@ -1687,7 +1697,9 @@ namespace renegade::studio
             HideAll();
             if (!active || bounds.z <= bounds.x || bounds.w <= bounds.y)
                 return;
-            const float contentTop = bounds.y + HeaderHeight + TabsHeight + ReadoutHeight;
+            const float contentTop = bounds.y + HeaderHeight + TabBandHeight() + ReadoutHeight;
+            contentClip.scissorRect={int32_t(bounds.x+14),int32_t(contentTop),int32_t(bounds.z-14),int32_t(bounds.w-StatusHeight-5)};
+            contentClip.active_area=wi::primitive::Hitbox2D({bounds.x+14,contentTop},{bounds.z-bounds.x-28,std::max(0.f,bounds.w-StatusHeight-5-contentTop)});
             const float left = bounds.x + 30.0f;
             const float right = bounds.z - 30.0f;
             const float width = std::max(80.0f, right - left);
@@ -1712,16 +1724,17 @@ namespace renegade::studio
         void ClampScroll()
         {
             const float visible = std::max(100.0f,
-                bounds.w - (bounds.y + HeaderHeight + TabsHeight + ReadoutHeight + StatusHeight + 8.0f));
+                bounds.w - (bounds.y + HeaderHeight + TabBandHeight() + ReadoutHeight + StatusHeight + 8.0f));
             scrollY = std::clamp(scrollY, 0.0f, std::max(0.0f, pageContentHeight - visible));
         }
 
         template <typename Widget>
         void Place(Widget& widget, const float x, const float y, const float width, const float height = RowHeight)
         {
+            widget.AttachTo(&contentClip);
             widget.SetPos(XMFLOAT2(x, y));
             widget.SetSize(XMFLOAT2(width, height));
-            const float visibleTop = bounds.y + HeaderHeight + TabsHeight + ReadoutHeight - 4.0f;
+            const float visibleTop = bounds.y + HeaderHeight + TabBandHeight() + ReadoutHeight - 4.0f;
             const float visibleBottom = bounds.w - StatusHeight - 5.0f;
             widget.SetVisible(y + height >= visibleTop && y <= visibleBottom);
             activeControls.push_back(&widget);

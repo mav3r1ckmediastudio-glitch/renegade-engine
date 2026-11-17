@@ -1,11 +1,12 @@
 #pragma once
 #include <WickedEngine.h>
+#include "StudioModalWindow.h"
 #include "renegade/bridge/LightPresetService.h"
 #include <functional>
 #include <memory>
 namespace renegade::bridge {class StudioSession;}
 namespace renegade::studio {
-class LightPickerWindow final : public wi::gui::Window {
+class LightPickerWindow final : public StudioModalWindow {
 public:
  LightPickerWindow();
  ~LightPickerWindow();

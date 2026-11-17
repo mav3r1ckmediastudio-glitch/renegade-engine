@@ -1,4 +1,5 @@
 #include "RenegadeScreenEditorWorkspace.h"
+#include "StudioTheme.h"
 #include "StoryFlowOverviewPolicy.h"
 #include "ScreenCanvasGrid.h"
 #include "ScreenElementSnap.h"
@@ -24,13 +25,13 @@ namespace
     constexpr float HierarchyRowsTop = HeaderHeight + 160.0f;
     constexpr float ResizeHandleSize = 12.0f;
 
-    constexpr wi::Color Background(4, 7, 10, 255);
-    constexpr wi::Color Surface(8, 13, 17, 255);
-    constexpr wi::Color Raised(13, 21, 26, 255);
-    constexpr wi::Color Border(34, 62, 73, 255);
+    constexpr wi::Color Background=renegade::studio::theme::Canvas;
+    constexpr wi::Color Surface=renegade::studio::theme::Panel;
+    constexpr wi::Color Raised=renegade::studio::theme::Control;
+    constexpr wi::Color Border=renegade::studio::theme::Border;
     constexpr wi::Color Text(244, 244, 244, 255);
     constexpr wi::Color Muted(135, 151, 159, 255);
-    constexpr wi::Color Cyan(39, 183, 222, 255);
+    constexpr wi::Color Cyan=renegade::studio::theme::Accent;
     constexpr wi::Color Orange(222, 91, 29, 255);
 
     void Rect(
@@ -534,6 +535,8 @@ namespace renegade::studio
             ReturnToStoryFlow();
         });
 
+        returnButton_.SetIcon("return");returnButton_.SetTooltip("Back to Story Flow");
+        fitCanvasButton_.SetIcon("fit");focusButton_.SetIcon("focus");
         saveButton_.Create("Screen Editor Save");
         saveButton_.SetText("SAVE");
         saveButton_.SetTooltip("Optional Save Now. Changes autosave after 1.5 seconds idle or before navigation.");
@@ -546,6 +549,8 @@ namespace renegade::studio
         redoButton_.Create("Screen Editor Redo");
         redoButton_.SetText("REDO");
         redoButton_.OnClick([this](const wi::gui::EventArgs&) { RedoScreen(); });
+        saveButton_.SetIcon("save");undoButton_.SetIcon("undo");redoButton_.SetIcon("redo");
+        undoButton_.SetTooltip("Undo");redoButton_.SetTooltip("Redo");
 
         gridVisibleButton_.Create("Screen Grid Visibility");
         gridVisibleButton_.SetText("GRID ON");
@@ -854,10 +859,10 @@ namespace renegade::studio
             widget.SetSize(XMFLOAT2(width, 32.0f));
             x += width + 7.0f;
         };
-        header(returnButton_, 126.0f);
-        header(undoButton_, 64.0f);
-        header(redoButton_, 64.0f);
-        header(saveButton_, 64.0f);
+        header(returnButton_, 32.0f);
+        header(undoButton_, 32.0f);
+        header(redoButton_, 32.0f);
+        header(saveButton_, 32.0f);
 
         // Header actions stay fixed when either side panel is dragged.
         // Align grid controls after Save instead of letting a wide left panel
@@ -2331,6 +2336,14 @@ namespace renegade::studio
             Rect(width_-28,HeaderHeight+4,28,24,Border,cmd);Label(rightCollapsed_?"<":">",width_-20,HeaderHeight+8,14,Text,cmd);
         }
 
+        // Toolbar icons need their help after every ordinary control,
+        // Inspector and collapse handle, while child pickers remain topmost.
+        for (const auto* button : {&returnButton_, &saveButton_, &undoButton_,
+                &redoButton_, &focusButton_, &fitCanvasButton_})
+        {
+            ApplyScissor(canvas, scissorRect, cmd);
+            button->RenderTooltip(canvas, cmd);
+        }
         ApplyScissor(canvas, scissorRect, cmd);
         screenSettingsPicker_.Render(cmd);
         basicActionPicker_.Render(cmd);

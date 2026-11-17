@@ -1,4 +1,5 @@
 #pragma once
+#include "StudioNumericControl.h"
 
 #include <array>
 #include <string>
@@ -8,6 +9,9 @@
 #include <unordered_set>
 
 #include <WickedEngine.h>
+#include "StudioUiPolicy.h"
+#include "StudioButtonVisual.h"
+#include "StudioIcons.h"
 
 #include "renegade/bridge/AssetCatalogueService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
@@ -39,9 +43,13 @@ namespace renegade::studio
         int renderTextSize_ = 10;
     };
 
-    class RenegadeButton : public wi::gui::Button
+    class RenegadeButton : public ReleaseButton
     {
     public:
+        void SetIcon(const std::string& id) { icon_=id; icons::Load(); if(GetTooltip().empty()) SetTooltip(icons::Title(id)); }
+        void SetIconSelected(bool value) noexcept { iconSelected_=value; }
+        void Update(const wi::Canvas& canvas,float dt) override;
+        void RenderTooltip(const wi::Canvas& canvas,wi::graphics::CommandList cmd) const override;
         void SetRenderTextSize(int size) noexcept;
         void SetPrimaryStyle(bool primary) noexcept { primaryStyle_ = primary; }
         void SetAccentOutlineStyle(bool accent) noexcept { accentOutlineStyle_ = accent; }
@@ -49,7 +57,10 @@ namespace renegade::studio
         const char* GetWidgetTypeName() const override { return "RenegadeButton"; }
 
     private:
-        int renderTextSize_ = 10;
+        int renderTextSize_ = 12;
+        std::string icon_;
+        bool iconSelected_=false;
+        icons::Tooltip iconTooltip_;
         bool primaryStyle_ = false;
         bool accentOutlineStyle_ = false;
     };
@@ -62,7 +73,7 @@ namespace renegade::studio
         const char* GetWidgetTypeName() const override { return "RenegadeCheckBox"; }
 
     private:
-        int renderTextSize_ = 10;
+        int renderTextSize_ = 12;
     };
 
     class RenegadeComboBox : public wi::gui::ComboBox
@@ -73,10 +84,10 @@ namespace renegade::studio
         const char* GetWidgetTypeName() const override { return "RenegadeComboBox"; }
 
     private:
-        int renderTextSize_ = 10;
+        int renderTextSize_ = 12;
     };
 
-    class RenegadeSlider : public wi::gui::Slider
+    class RenegadeSlider : public StudioNumericSlider
     {
     public:
         void Create(
@@ -307,12 +318,18 @@ namespace renegade::studio
             CreateEnvironmentProbe,
             ImportStaticGlb,
             CreateProjectile,
+            CreateParticleEffect,
+            CreateNavigationGrid,
             Focus,
             ToggleGrid,
+            ViewShaded,
+            ViewWireframe,
+            ViewWireframeOverlay,
             EnvironmentWorkspace,
             TerrainWorkspace,
             RenderWorkspace,
             SceneWorkspace,
+            PhysicsWorkspace,
             TestLevelPlay,
             TestLevelStop,
             BuildWindowsGame,
@@ -348,6 +365,7 @@ namespace renegade::studio
 
         void Create();
         void SetLayout(float width, float height);
+        void SetPhysicsWorkspaceIndicator(bool active) noexcept { physicsWorkspaceActive_=active; }
         void SetAssistantDockWidth(float width) noexcept;
         [[nodiscard]] float AssistantDockWidth() const noexcept
         {
@@ -367,6 +385,7 @@ namespace renegade::studio
         void SetActiveTool(int toolIndex) noexcept;
         void SetHierarchyFilter(std::string filter);
         void SetGridVisible(bool visible) noexcept;
+        void SetViewportViewMode(int mode) noexcept { viewportViewMode_ = mode; }
         void SetEnvironmentWorkspaceActive(bool active) noexcept;
         void SetTerrainWorkspaceActive(bool active) noexcept;
         void SetRenderWorkspaceActive(bool active) noexcept;
@@ -391,6 +410,8 @@ namespace renegade::studio
         {
             return activeMenu_ >= 0 || activeViewportMenu_ >= 0;
         }
+        virtual void RenderPopups(const wi::Canvas& canvas,
+            wi::graphics::CommandList cmd) const;
         void OnHierarchySelected(std::function<void(std::uint64_t, bool)> callback);
         void OnToolSelected(std::function<void(int)> callback);
         void OnAction(std::function<void(Action)> callback);
@@ -504,6 +525,9 @@ namespace renegade::studio
             float inspectorX,
             wi::graphics::CommandList cmd) const;
 
+        std::vector<icons::Control> ToolbarControls() const;
+        icons::Interaction toolbarInteraction_;
+        bool physicsWorkspaceActive_=false;
         float width_ = 1920.0f;
         float height_ = 1080.0f;
         float hierarchyWidth_ = 320.0f;
@@ -515,9 +539,13 @@ namespace renegade::studio
         int hoveredSplitter_ = 0;
         int activeTool_ = 1;
         int activeBottomTab_ = -1;
+        int HitMenuItem(const XMFLOAT4& pointer) const noexcept;
+        void InvokeMenuItem(int menu,int item);
+        ui::ReleaseAction menuGesture_;
         int activeMenu_ = -1;
         int activeViewportMenu_ = -1;
         bool gridVisible_ = true;
+        int viewportViewMode_ = 0;
         bool environmentWorkspaceActive_ = false;
         bool terrainWorkspaceActive_ = false;
         bool renderWorkspaceActive_ = false;

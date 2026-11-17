@@ -1,0 +1,26 @@
+{
+  "head": "585407a260448de34773ffef5b51a1c8f58526e9",
+  "merge_commit": "46fc00b60b7d8234c5701740485343bdcebc7a03",
+  "debug_job": 133898554082,
+  "release_job": 133898554134,
+  "debug_failures": [
+    "2026-11-17T08:55:59.1220367Z 212/321 Test #212: RenegadeRiverDefaultTerrainRecovery ..................***Failed   10.07 sec",
+    "2026-11-17T08:55:59.1330374Z 213/321 Test #213: RenegadeMaximumTerrainRiver_expanded-first ...........***Failed    1.70 sec",
+    "2026-11-17T08:55:59.1442254Z 214/321 Test #214: RenegadeMaximumTerrainRiver_linked-first .............***Failed    1.77 sec",
+    "2026-11-17T08:55:59.1560855Z 215/321 Test #215: RenegadeMaximumTerrainGPU_source .....................***Not Run   0.00 sec",
+    "2026-11-17T08:55:59.1581244Z 216/321 Test #216: RenegadeMaximumTerrainGPU_preview ....................***Not Run   0.00 sec",
+    "2026-11-17T08:55:59.1594610Z 217/321 Test #217: RenegadeTerrainInitializationRecovery ................***Failed    1.58 sec",
+    "2026-11-17T08:55:59.1704028Z 218/321 Test #218: RenegadeTerrainPreviewRender0Recovery ................***Failed    1.50 sec",
+    "2026-11-17T08:55:59.1814795Z 219/321 Test #219: RenegadeTerrainPreviewRender1Recovery ................***Failed    1.59 sec",
+    "2026-11-17T08:55:59.1926534Z 220/321 Test #220: RenegadeTerrainPreviewRender2Recovery ................***Failed    1.33 sec",
+    "2026-11-17T08:55:59.3206689Z 309/321 Test #309: RenegadeGpuUploadBufferTests .........................***Timeout 180.08 sec"
+  ],
+  "release_failures": [
+    "2026-11-17T09:29:18.5391560Z 320/334 Test #320: RenegadeGpuUploadBufferTests ...................................***Failed    1.24 sec"
+  ],
+  "debug_error_excerpt": "309/321 Test #309: RenegadeGpuUploadBufferTests .........................***Timeout 180.08 sec\r\n2026-11-17T08:55:59.3213459Z WARP_ARCHITECTURE UMA=1 CacheCoherentUMA=1\r\n2026-11-17T08:55:59.3219617Z UPLOAD_UAV_NEGATIVE_HRESULT=0x80070057\r\n2026-11-17T08:55:59.3227310Z NATIVE_DX12_UPLOAD_NEGATIVE_AND_POSITIVE=PASS\r\n2026-11-17T08:55:59.3233993Z ALLOCATOR_ADAPTER Microsoft Basic Render Driver CacheCoherentUMA=1\r\n2026-11-17T08:55:59.3240779Z Assertion failed: (((HRESULT)(hr)) >= 0), file D:\\a\\renegade-engine\\renegade-engine\\WickedEngine\\WickedEngine\\wiGraphicsDevice_DX12.cpp, line 3317\r\n2026-11-17T08:55:59.3247504Z \r\n2026-11-17T08:55:59.3254103Z         ",
+  "release_error_excerpt": "320/334 Test #320: RenegadeGpuUploadBufferTests ...................................***Failed    1.24 sec\r\n2026-11-17T09:29:18.5394893Z WARP_ARCHITECTURE UMA=1 CacheCoherentUMA=1\r\n2026-11-17T09:29:18.5398392Z UPLOAD_UAV_NEGATIVE_HRESULT=0x80070057\r\n2026-11-17T09:29:18.5401506Z NATIVE_DX12_UPLOAD_NEGATIVE_AND_POSITIVE=PASS\r\n2026-11-17T09:29:18.5404428Z ALLOCATOR_ADAPTER Microsoft Basic Render Driver CacheCoherentUMA=1\r\n2026-11-17T09:29:18.5407018Z FAIL: allocator retained an illegal upload UAV or removed DEFAULT UAV support\r\n2026-11-17T09:29:18.5410189Z \r\n2026-11-17T09:29:18.5413869Z         ",
+  "draft": true,
+  "merged": false,
+  "note": "Original hardware-only local pass did not cover production coherent-UMA path. No corrected code push yet."
+}

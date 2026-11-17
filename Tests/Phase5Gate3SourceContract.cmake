@@ -96,8 +96,11 @@ foreach(token IN ITEMS
     "ENVIRONMENT PROBE"
     "Action::CreateDecal"
     "Action::CreateEnvironmentProbe"
-    "5, 9, 10, 4, 1, 4"
-    "activeMenu_ == 2 && item >= 0 && item < 10"
+    "5, 9, 12, 4, 1, 4"
+    "menu == 2 && item >= 0 && item < 12"
+    "std::array<Action, 12>"
+    "Action::CreateParticleEffect"
+    "Action::CreateNavigationGrid"
     "Action::CreateProjectile"
     "Action::OpenDialogue"
     "DIALOGUE EDITOR...")

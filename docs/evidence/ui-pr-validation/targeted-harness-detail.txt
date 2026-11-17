@@ -1,0 +1,226 @@
+Start testing: Nov 17 04:14 GMT Standard Time
+----------------------------------------------------------
+132/321 Testing: RenegadeStoryFlowGate10ProjectHomeCommandContract
+132/321 Test: RenegadeStoryFlowGate10ProjectHomeCommandContract
+Command: "<user>/AppData/Local/Microsoft/WinGet/Packages/Kitware.CMake_Microsoft.Winget.Source_8wekyb3d8bbwe/cmake-4.4.4-windows-x86_64/bin/cmake.exe" "-DRENEGADE_SOURCE_DIR=<preflight>" "-P" "<preflight>/Tests/StoryFlowGate10ProjectHomeCommandContract.cmake"
+Directory: <preflight>/BUILD/renegade
+"RenegadeStoryFlowGate10ProjectHomeCommandContract" start time: Nov 17 04:14 GMT Standard Time
+Output:
+----------------------------------------------------------
+-- Gate 10 Story Flow project-home command contract passed
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"RenegadeStoryFlowGate10ProjectHomeCommandContract" end time: Nov 17 04:14 GMT Standard Time
+"RenegadeStoryFlowGate10ProjectHomeCommandContract" time elapsed: 00:00:00
+----------------------------------------------------------
+
+212/321 Testing: RenegadeRiverDefaultTerrainRecovery
+212/321 Test: RenegadeRiverDefaultTerrainRecovery
+Command: "<user>/AppData/Local/Microsoft/WinGet/Packages/Kitware.CMake_Microsoft.Winget.Source_8wekyb3d8bbwe/cmake-4.4.4-windows-x86_64/bin/cmake.exe" "-DRENEGADE_RIVER_PROOF=<preflight>/BUILD/renegade/Tests/Debug/RenegadeRiverTerrainFollowProof.exe" "-DRENEGADE_RIVER_OUTPUT_ROOT=<preflight>/BUILD/renegade/Tests/river-default-recovery-Debug" "-P" "<preflight>/Tests/RunRiverDefaultRecovery.cmake"
+Directory: <preflight>/BUILD/renegade/Tests/Debug
+"RenegadeRiverDefaultTerrainRecovery" start time: Nov 17 04:14 GMT Standard Time
+Output:
+----------------------------------------------------------
+-- Terrain/river recovery evidence: <preflight>/BUILD/renegade/Tests/river-default-recovery-Debug/20261117T041450Z-a27085bbf67f
+RIVER_PROOF_STAGE device-create elapsed_ms=0.047
+RIVER_PROOF_STAGE device-created elapsed_ms=275.815
+RIVER_PROOF_ADAPTER NVIDIA GeForce RTX 4070 Ti
+RIVER_PROOF_STAGE components-initialised elapsed_ms=398.62
+NATIVE_TERRAIN_MATERIAL_RESOURCES=PASS
+RIVER_PROOF_FRAME_MODE desktop-presentation
+RIVER_PROOF_STAGE terrain-render-warmup elapsed_ms=852.483
+RIVER_PROOF_STAGE terrain-generated elapsed_ms=5539.95
+RIVER_CHUNK_PUBLICATION pending_before=1 pending_after=0 updates=1
+TERRAIN_CHUNKS=361
+RIVER_PROOF_STAGE default-361-ready elapsed_ms=5548.82
+DEFAULT_GROUND=0 bottom=-20
+RIVER_PROOF_STAGE link-start elapsed_ms=6047.92
+DEFAULT_LINK_PASS chunks=361 changed=3 bytes=579021 latency_ms=808.803
+LOCAL_UNDO_REBUILD_CHUNKS=3
+RIVER_PROOF_STAGE history-masks-external-edit-passed elapsed_ms=11196.2
+RIVER_PROOF_STAGE render-readback-passed elapsed_ms=12295.9
+RIVER_PROOF_STAGE save-passed elapsed_ms=18218.2
+RIVER_PROOF_STAGE cold-hydration-recomposition-passed elapsed_ms=20621.4
+DEFAULT_361_LOCALITY_HISTORY_MASKS_EXTERNAL_EDIT_SAVE_REOPEN_PASS
+<end of output>
+Test time =  26.99 sec
+----------------------------------------------------------
+Test Passed.
+"RenegadeRiverDefaultTerrainRecovery" end time: Nov 17 04:15 GMT Standard Time
+"RenegadeRiverDefaultTerrainRecovery" time elapsed: 00:00:26
+----------------------------------------------------------
+
+217/321 Testing: RenegadeTerrainInitializationRecovery
+217/321 Test: RenegadeTerrainInitializationRecovery
+Command: "<user>/AppData/Local/Microsoft/WinGet/Packages/Kitware.CMake_Microsoft.Winget.Source_8wekyb3d8bbwe/cmake-4.4.4-windows-x86_64/bin/cmake.exe" "-DRENEGADE_RIVER_PROOF=<preflight>/BUILD/renegade/Tests/Debug/RenegadeRiverTerrainFollowProof.exe" "-DRENEGADE_RIVER_OUTPUT_ROOT=<preflight>/BUILD/renegade/Tests/terrain-initialization-Debug" "-DRENEGADE_RIVER_MODE=terrain-initialization" "-P" "<preflight>/Tests/RunRiverDefaultRecovery.cmake"
+Directory: <preflight>/BUILD/renegade/Tests/Debug
+"RenegadeTerrainInitializationRecovery" start time: Nov 17 04:15 GMT Standard Time
+Output:
+----------------------------------------------------------
+-- Terrain/river recovery evidence: <preflight>/BUILD/renegade/Tests/terrain-initialization-Debug/20261117T041517Z-68b30b473cf1
+RIVER_PROOF_STAGE device-create elapsed_ms=0.0422
+RIVER_PROOF_STAGE device-created elapsed_ms=276.787
+RIVER_PROOF_ADAPTER NVIDIA GeForce RTX 4070 Ti
+RIVER_PROOF_STAGE components-initialised elapsed_ms=400.877
+NATIVE_TERRAIN_MATERIAL_RESOURCES=PASS
+RIVER_PROOF_FRAME_MODE desktop-presentation
+RIVER_PROOF_STAGE terrain-render-warmup elapsed_ms=836.722
+RIVER_PROOF_STAGE terrain-generated elapsed_ms=6034.29
+RIVER_CHUNK_PUBLICATION pending_before=1 pending_after=0 updates=1
+TERRAIN_CHUNKS=361
+RIVER_PROOF_STAGE default-361-ready elapsed_ms=6041.76
+DEFAULT_GROUND=0 bottom=-20
+OFF_GRID_CONTACT phase=precomputed x=0.25 z=0.25 rendered=0.5 physics=0.500001 error=9.53674e-07
+OFF_GRID_CONTACT phase=precomputed x=0.75 z=0.75 rendered=0.5 physics=0.5 error=0
+OFF_GRID_CONTACT phase=precomputed x=0.25 z=0.75 rendered=1 physics=1 error=0
+OFF_GRID_CONTACT phase=precomputed x=0.75 z=0.25 rendered=1 physics=1 error=0
+OFF_GRID_CONTACT phase=precomputed x=0.2 z=0.3 rendered=0.5 physics=0.500001 error=9.53674e-07
+OFF_GRID_CONTACT phase=precomputed x=0.7 z=0.8 rendered=0.5 physics=0.5 error=0
+OFF_GRID_CONTACT phase=cold x=0.25 z=0.25 rendered=0.5 physics=0.500001 error=9.53674e-07
+OFF_GRID_CONTACT phase=cold x=0.75 z=0.75 rendered=0.5 physics=0.5 error=0
+OFF_GRID_CONTACT phase=cold x=0.25 z=0.75 rendered=1 physics=1 error=0
+OFF_GRID_CONTACT phase=cold x=0.75 z=0.25 rendered=1 physics=1 error=0
+OFF_GRID_CONTACT phase=cold x=0.2 z=0.3 rendered=0.5 physics=0.500001 error=9.53674e-07
+OFF_GRID_CONTACT phase=cold x=0.7 z=0.8 rendered=0.5 physics=0.5 error=0
+OFF_GRID_CONTACT phase=precomputed x=0.25 z=0.25 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=precomputed x=0.75 z=0.75 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=precomputed x=0.25 z=0.75 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=precomputed x=0.75 z=0.25 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=precomputed x=0.2 z=0.3 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=precomputed x=0.7 z=0.8 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=cold x=0.25 z=0.25 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=cold x=0.75 z=0.75 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=cold x=0.25 z=0.75 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=cold x=0.75 z=0.25 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=cold x=0.2 z=0.3 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=cold x=0.7 z=0.8 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=fallback x=0.25 z=0.25 rendered=0.5 physics=0.500001 error=9.53674e-07
+OFF_GRID_CONTACT phase=fallback x=0.75 z=0.75 rendered=0.5 physics=0.5 error=0
+OFF_GRID_CONTACT phase=fallback x=0.25 z=0.75 rendered=1 physics=1 error=0
+OFF_GRID_CONTACT phase=fallback x=0.75 z=0.25 rendered=1 physics=1 error=0
+OFF_GRID_CONTACT phase=fallback x=0.2 z=0.3 rendered=0.5 physics=0.500001 error=9.53674e-07
+OFF_GRID_CONTACT phase=fallback x=0.7 z=0.8 rendered=0.5 physics=0.5 error=0
+OFF_GRID_CONTACT phase=cold x=0.25 z=0.25 rendered=0.5 physics=0.500001 error=9.53674e-07
+OFF_GRID_CONTACT phase=cold x=0.75 z=0.75 rendered=0.5 physics=0.5 error=0
+OFF_GRID_CONTACT phase=cold x=0.25 z=0.75 rendered=1 physics=1 error=0
+OFF_GRID_CONTACT phase=cold x=0.75 z=0.25 rendered=1 physics=1 error=0
+OFF_GRID_CONTACT phase=cold x=0.2 z=0.3 rendered=0.5 physics=0.500001 error=9.53674e-07
+OFF_GRID_CONTACT phase=cold x=0.7 z=0.8 rendered=0.5 physics=0.5 error=0
+OFF_GRID_CONTACT phase=fallback x=0.25 z=0.25 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=fallback x=0.75 z=0.75 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=fallback x=0.25 z=0.75 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=fallback x=0.75 z=0.25 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=fallback x=0.2 z=0.3 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=fallback x=0.7 z=0.8 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=cold x=0.25 z=0.25 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=cold x=0.75 z=0.75 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=cold x=0.25 z=0.75 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=cold x=0.75 z=0.25 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=cold x=0.2 z=0.3 rendered=0 physics=0 error=0
+OFF_GRID_CONTACT phase=cold x=0.7 z=0.8 rendered=0 physics=0 error=0
+OFF_GRID_TERRAIN_COLLISION_PRECOMPUTE_FALLBACK_COLD_PASS
+FRESH_LOWER_CORNER_UNDO_REDO_PASS
+TERRAIN_INIT_STAGE floor-offgrid updates
+TERRAIN_INIT_STAGE floor-offgrid ready
+PRODUCTION_SCULPT_NONPLANAR_CELL x=178.5 z=176.5 diagonal_difference=16.9463
+PRODUCTION_SCULPT_OFFGRID phase=stroke rendered=-1.52685 physics=-1.52708 error=0.000236511
+TERRAIN_INIT_STAGE floor-offgrid-undo updates
+TERRAIN_INIT_STAGE floor-offgrid-undo ready
+PRODUCTION_SCULPT_OFFGRID phase=undo rendered=0 physics=0 error=0
+TERRAIN_INIT_STAGE floor-offgrid-redo updates
+TERRAIN_INIT_STAGE floor-offgrid-redo ready
+PRODUCTION_SCULPT_OFFGRID phase=redo rendered=-1.52685 physics=-1.52708 error=0.000236511
+TERRAIN_INIT_STAGE floor-offgrid-restore updates
+TERRAIN_INIT_STAGE floor-offgrid-restore ready
+PRODUCTION_SCULPT_OFFGRID phase=restore rendered=0 physics=0 error=0
+SCULPT_ENCODING_LIMITS_AND_RESTORE_PASS
+TERRAIN_INIT_STAGE painted-grass updates
+TERRAIN_INIT_STAGE painted-grass ready
+TERRAIN_INIT_STAGE sculpted-physics updates
+TERRAIN_INIT_STAGE sculpted-physics ready
+GENERATED_AND_SCULPTED_JOLT_CONTACT_PASS
+TERRAIN_INIT_STAGE steep-before-expansion updates
+TERRAIN_INIT_STAGE steep-before-expansion ready
+PRODUCTION_SCULPT_OFFGRID phase=before-expansion rendered=-1.52685 physics=-1.52708 error=0.000236511
+TERRAIN_INIT_STAGE expanded-ring updates
+TERRAIN_INIT_STAGE expanded-ring ready
+TERRAIN_INIT_STAGE expansion-undo updates
+TERRAIN_INIT_STAGE expansion-undo ready
+TERRAIN_INIT_STAGE expanded-ring updates
+TERRAIN_INIT_STAGE expanded-ring ready
+FRESH_EXPANSION_NO_CLIFF_INNER_PRESERVED_UNDO_REDO_PASS
+TERRAIN_INIT_STAGE cold-reopen updates
+PRODUCTION_SCULPT_OFFGRID phase=cold-reopen rendered=-1.52685 physics=-1.52708 error=0.000236511
+EXPANDED_COLD_REOPEN_GENERATOR_GRASS_COLLISION_PASS
+PLAYER_PREVIEW_CHECKPOINT=-1
+PLAYER_PREVIEW_STAGE source-before render
+PLAYER_PREVIEW_STAGE rebuild=0 prepare
+PLAYER_PREVIEW_STAGE rebuild=0 draw-update=0
+PLAYER_PREVIEW_STAGE rebuild=0 draw-update=1
+PLAYER_PREVIEW_STAGE rebuild=0 draw-update=2
+PLAYER_PREVIEW_STAGE rebuild=0 draw-update=3
+PLAYER_PREVIEW_STAGE rebuild=0 draw-update=4
+PLAYER_PREVIEW_STAGE rebuild=0 draw-update=5
+PLAYER_PREVIEW_STAGE rebuild=0 draw-update=6
+PLAYER_PREVIEW_STAGE rebuild=0 draw-update=7
+PLAYER_PREVIEW_STAGE rebuild=0 draw-update=8
+PLAYER_PREVIEW_STAGE rebuild=0 draw-update=9
+PLAYER_PREVIEW_STAGE rebuild=0 draw-update=10
+PLAYER_PREVIEW_STAGE rebuild=0 draw-update=11
+PLAYER_PREVIEW_STAGE rebuild=1 prepare
+PLAYER_PREVIEW_STAGE rebuild=1 draw-update=0
+PLAYER_PREVIEW_STAGE rebuild=1 draw-update=1
+PLAYER_PREVIEW_STAGE rebuild=1 draw-update=2
+PLAYER_PREVIEW_STAGE rebuild=1 draw-update=3
+PLAYER_PREVIEW_STAGE rebuild=1 draw-update=4
+PLAYER_PREVIEW_STAGE rebuild=1 draw-update=5
+PLAYER_PREVIEW_STAGE rebuild=1 draw-update=6
+PLAYER_PREVIEW_STAGE rebuild=1 draw-update=7
+PLAYER_PREVIEW_STAGE rebuild=1 draw-update=8
+PLAYER_PREVIEW_STAGE rebuild=1 draw-update=9
+PLAYER_PREVIEW_STAGE rebuild=1 draw-update=10
+PLAYER_PREVIEW_STAGE rebuild=1 draw-update=11
+PLAYER_PREVIEW_STAGE rebuild=2 prepare
+PLAYER_PREVIEW_STAGE rebuild=2 draw-update=0
+PLAYER_PREVIEW_STAGE rebuild=2 draw-update=1
+PLAYER_PREVIEW_STAGE rebuild=2 draw-update=2
+PLAYER_PREVIEW_STAGE rebuild=2 draw-update=3
+PLAYER_PREVIEW_STAGE rebuild=2 draw-update=4
+PLAYER_PREVIEW_STAGE rebuild=2 draw-update=5
+PLAYER_PREVIEW_STAGE rebuild=2 draw-update=6
+PLAYER_PREVIEW_STAGE rebuild=2 draw-update=7
+PLAYER_PREVIEW_STAGE rebuild=2 draw-update=8
+PLAYER_PREVIEW_STAGE rebuild=2 draw-update=9
+PLAYER_PREVIEW_STAGE rebuild=2 draw-update=10
+PLAYER_PREVIEW_STAGE rebuild=2 draw-update=11
+PLAYER_PREVIEW_STAGE source-after render
+PLAYER_PREVIEW_PRIVATE_TERRAIN_ATLAS_PASS bindings=1764 rebuilds=3 authored_terrain_unchanged=1 main_draws=47 preview_draws=24 checkpoint=-1
+<end of output>
+Test time =  46.64 sec
+----------------------------------------------------------
+Test Passed.
+"RenegadeTerrainInitializationRecovery" end time: Nov 17 04:16 GMT Standard Time
+"RenegadeTerrainInitializationRecovery" time elapsed: 00:00:46
+----------------------------------------------------------
+
+287/321 Testing: RenegadeRiverJunctionFoamTransportTests
+287/321 Test: RenegadeRiverJunctionFoamTransportTests
+Command: "<preflight>/BUILD/renegade/Tests/Debug/RenegadeRiverJunctionFoamTransportTests.exe"
+Directory: <preflight>/BUILD/renegade/Tests
+"RenegadeRiverJunctionFoamTransportTests" start time: Nov 17 04:16 GMT Standard Time
+Output:
+----------------------------------------------------------
+ORIGIN=1 OUTLET_PEAK=0.172547 FINAL_MASS=0
+ORIGIN=2 OUTLET_PEAK=0.172072 FINAL_MASS=0
+JUNCTION_FOAM_CPU=PASS fluid=11423 inflow=8.24617 outflow=8.24617 maxDivergence=9.55188e-08 projectionResidual=9.56356e-09 maxSpeed=2.53213 dt=0.0389536
+<end of output>
+Test time =  15.82 sec
+----------------------------------------------------------
+Test Passed.
+"RenegadeRiverJunctionFoamTransportTests" end time: Nov 17 04:16 GMT Standard Time
+"RenegadeRiverJunctionFoamTransportTests" time elapsed: 00:00:15
+----------------------------------------------------------
+
+End testing: Nov 17 04:16 GMT Standard Time

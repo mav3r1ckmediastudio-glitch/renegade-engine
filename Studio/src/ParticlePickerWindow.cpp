@@ -2,6 +2,8 @@
 #include "ParticleTextureBrowser.h"
 #include <unordered_map>
 #include "RenegadeStudioChrome.h"
+#include "StudioButtonVisual.h"
+#include "StudioNumericControl.h"
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/ParticleEffectRuntimeService.h"
 #include "renegade/bridge/CreatorTextureWorkflowService.h"
@@ -11,31 +13,29 @@
 #include <utility>
 namespace renegade::studio {
 namespace {
-constexpr wi::Color Teal(137,225,208,255);
-constexpr wi::Color Grey(46,49,51,255);
+constexpr wi::Color Teal = theme::Accent;
+constexpr wi::Color Grey = theme::Panel;
 void Rect(float x,float y,float w,float h,wi::Color c,wi::graphics::CommandList cmd) {
  wi::image::Params p(x,y,w,h,c);wi::image::Draw(nullptr,p,cmd);
 }
-class PickerButton : public wi::gui::Button {
+class PickerButton : public ReleaseButton {
 public:
  int textSize=12;bool swatch=false,primary=false;wi::Color tone=Grey;
  void SetRenderTextSize(int size){textSize=size;}
  void SetColor(wi::Color colour,int id=-1) override {wi::gui::Button::SetColor(colour,id);tone=colour;}
- void Render(const wi::Canvas&,wi::graphics::CommandList cmd) const override {
+ void Render(const wi::Canvas& canvas,wi::graphics::CommandList cmd) const override {
   if(!IsVisible())return;
-  auto fill=swatch||primary?tone:wi::Color(48,51,53,255);
-  const auto edge=GetState()==wi::gui::FOCUS?Teal:wi::Color(91,96,98,255);
-  Rect(translation.x,translation.y,scale.x,scale.y,edge,cmd);
-  Rect(translation.x+1,translation.y+1,scale.x-2,scale.y-2,fill,cmd);
-  wi::font::Params fp(translation.x+scale.x*.5f,translation.y+scale.y*.5f,textSize,
-   wi::font::WIFALIGN_CENTER,wi::font::WIFALIGN_CENTER,
-   !IsEnabled()?wi::Color(125,130,132,255):primary?wi::Color(18,30,29,255):wi::Color(239,242,242,255));
-  fp.bolden=.12f;wi::font::Draw(GetText(),fp,cmd);
- }
+  ApplyScissor(canvas,scissorRect,cmd);
+  const bool enabled=IsEnabled();
+  theme::DrawButton(translation.x,translation.y,scale.x,scale.y,GetText(),
+    {enabled,enabled&&GetState()==wi::gui::FOCUS,
+     enabled&&(GetState()==wi::gui::ACTIVE||GetState()==wi::gui::DEACTIVATING),primary,false},
+    textSize,cmd,false,swatch,tone);
+    }
 };
 class PickerCheckBox : public wi::gui::CheckBox {
 public:
- void Render(const wi::Canvas&,wi::graphics::CommandList cmd) const override {
+ void Render(const wi::Canvas& canvas,wi::graphics::CommandList cmd) const override {
   if(!IsVisible())return;
   const auto edge=GetState()==wi::gui::FOCUS?Teal:wi::Color(105,112,113,255);
   Rect(translation.x,translation.y,18,18,edge,cmd);
@@ -48,7 +48,7 @@ public:
 };
 
 
-class ParticleControl : public wi::gui::Slider {
+class ParticleControl : public StudioPickerSlider {
 public:
  float minimum=0,maximum=1,increment=.01f;bool integer=false;
  void Configure(float lo,float hi,float stepSize,bool whole=false,int precision=2){
@@ -562,16 +562,17 @@ struct ParticlePickerWindow::Impl {
   size.Configure(10,300,5,true);amount.Configure(0,200,5,true);height.Configure(25,200,5,true);spread.Configure(0,200,5,true);
   red.Configure(0,1,.01f);green.Configure(0,1,.01f);blue.Configure(0,1,.01f);opacity.Configure(0,1,.01f);brightness.Configure(0,5,.05f);
   cols.Configure(1,32,1,true);rows.Configure(1,32,1,true);frames.Configure(1,256,1,true);fps.Configure(0,60,1,true);fps.SetTooltip("Continuous emitters: 0 advances from Frame start over the particle lifetime. Stationary sprites: 0 pauses animation.");
-  Label(status,"Choose a saved effect or configure emitter layers.",18,798,1104,12);Visibility();
+  Label(status,"Choose a saved effect or configure emitter layers.",18,798,1104,12);
+  window.PinFooter(keep,18,12);window.PinFooter(finishHint,176,12);window.PinFooter(cancel,308,8,true);window.PinFooter(apply,174,8,true);window.PinFooter(status,18,44,false,true);Visibility();
  }
  wi::gui::Label previewHeading,globalHeading,help,finishHint,cameraHint;PickerButton restart,fit,blank;
 };
 ParticlePickerWindow::ParticlePickerWindow():impl_(std::make_unique<Impl>(*this)){}
 ParticlePickerWindow::~ParticlePickerWindow(){RemoveWidgets();}
 void ParticlePickerWindow::Create(){
- wi::gui::Window::Create("Particle Picker",WindowControls::CLOSE|WindowControls::MOVE);SetControlSize(28);SetSize({1150,850});
- SetColor(wi::Color(33,35,37,255),wi::gui::WIDGET_ID_WINDOW_BASE);
- SetColor(wi::Color(33,35,37,255),wi::gui::WIDGET_ID_COMBO_DROPDOWN);impl_->textureBrowser.Create();impl_->Build();SetVisible(false);
+ StudioModalWindow::Create("Particle Picker",WindowControls::CLOSE|WindowControls::MOVE);SetControlSize(28);SetSize({1150,850});
+ SetColor(theme::Panel,wi::gui::WIDGET_ID_WINDOW_BASE);
+ SetColor(theme::Panel,wi::gui::WIDGET_ID_COMBO_DROPDOWN);impl_->textureBrowser.Create();impl_->Build();SetVisible(false);
 }
 void ParticlePickerWindow::SetVisible(bool visible){if(!visible&&impl_&&impl_->textureBrowser.IsVisible())impl_->textureBrowser.Close();wi::gui::Window::SetVisible(visible);}
 wi::gui::Widget& ParticlePickerWindow::TextureBrowserWidget(){return impl_->textureBrowser;}
@@ -579,8 +580,8 @@ void ParticlePickerWindow::Open(bridge::StudioSession&s,wi::ecs::Entity target){
  SetVisible(true);
  wi::gui::Theme theme;theme.image.background=false;theme.image.color=wi::Color(40,42,44,255);theme.font.color=wi::Color(235,238,239,255);theme.shadow=0;
  theme.tooltipImage.color=Grey;theme.tooltipFont.color=wi::Color(235,238,239,255);SetTheme(theme);
- SetColor(wi::Color(43,46,48,255),wi::gui::IDLE);SetColor(wi::Color(65,78,77,255),wi::gui::FOCUS);SetColor(wi::Color(60,108,101,255),wi::gui::ACTIVE);SetColor(wi::Color(33,35,37,255),wi::gui::WIDGET_ID_WINDOW_BASE);
- SetColor(wi::Color(33,35,37,255),wi::gui::WIDGET_ID_COMBO_DROPDOWN);
+ SetColor(theme::Idle,wi::gui::IDLE);SetColor(theme::Focus,wi::gui::FOCUS);SetColor(theme::Active,wi::gui::ACTIVE);SetColor(theme::Panel,wi::gui::WIDGET_ID_WINDOW_BASE);
+ SetColor(theme::Panel,wi::gui::WIDGET_ID_COMBO_DROPDOWN);
  auto&i=*impl_;i.apply.SetColor(Teal);i.apply.SetEnabled(true);i.image.SetColor(wi::Color::White());for(auto& sp:i.image.sprites)sp.params.disableBackground();
  for(auto* label:i.captions)for(auto& sp:label->sprites)sp.params.color=wi::Color::Transparent();
  for(auto* heading:{&i.title,&i.previewHeading,&i.layerTitle,&i.globalHeading,&i.settingsTitle}){heading->font.params.size=16;heading->font.params.bolden=.2f;}

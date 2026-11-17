@@ -1,4 +1,6 @@
 #include "RenegadeProjectHub.h"
+#include "StudioButtonVisual.h"
+#include "StudioIcons.h"
 
 #include <algorithm>
 #include <array>
@@ -19,19 +21,11 @@ namespace
     constexpr float DesignWidth = 1672.0f;
     constexpr float DesignHeight = 941.0f;
 
-    constexpr wi::Color Background = wi::Color(4, 8, 12, 255);
-    constexpr wi::Color Panel = wi::Color(7, 14, 20, 246);
-    constexpr wi::Color PanelRaised = wi::Color(9, 19, 27, 250);
-    constexpr wi::Color PanelDeep = wi::Color(5, 11, 16, 252);
-    constexpr wi::Color Border = wi::Color(34, 58, 72, 230);
-    constexpr wi::Color BorderBright = wi::Color(66, 91, 108, 235);
-    constexpr wi::Color Cyan = wi::Color(95, 216, 255, 255);
-    constexpr wi::Color CyanDim = wi::Color(49, 110, 139, 255);
-    constexpr wi::Color Orange = wi::Color(238, 117, 26, 255);
-    constexpr wi::Color Text = wi::Color(219, 230, 238, 255);
-    constexpr wi::Color TextStrong = wi::Color(244, 248, 251, 255);
-    constexpr wi::Color Muted = wi::Color(143, 162, 179, 255);
-    constexpr wi::Color Dim = wi::Color(78, 96, 113, 255);
+    using namespace renegade::studio;
+    constexpr wi::Color Background=theme::Canvas, Panel=theme::Panel, PanelRaised=theme::Focus,
+        PanelDeep=theme::Idle, Border=theme::Border, BorderBright=theme::Border,
+        Cyan=theme::Accent, CyanDim=theme::Active, Orange=theme::Accent,
+        Text=theme::Text, TextStrong=theme::Text, Muted=theme::Muted, Dim=theme::DisabledText;
     constexpr wi::Color Success = wi::Color(79, 224, 160, 255);
     constexpr wi::Color Warning = wi::Color(255, 180, 84, 255);
 
@@ -578,15 +572,19 @@ namespace renegade::studio
         if (!IsVisible())
         {
             hovered_ = HoverTarget::None;
+            actionGesture_.Cancel();
             return;
         }
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
         const XMFLOAT2 basePointer = ToBase(pointer.x, pointer.y);
-        hovered_ = ResolveHover(basePointer);
+        hovered_ = !newProjectMode_ && ContainsBase(basePointer,LeftExit)
+            ? HoverTarget::Exit : ResolveHover(basePointer);
+        if(dt<=0 || !IsEnabled()) { actionGesture_.Cancel(); return; }
 
         if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
         {
+            actionGesture_.Cancel();
             if (newProjectMode_)
             {
                 Invoke(Action::CancelNewProject);
@@ -599,17 +597,18 @@ namespace renegade::studio
             }
         }
 
-        if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
-            return;
-
-        if (!newProjectMode_ && ContainsBase(basePointer, LeftExit))
+        if(wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+            actionGesture_.Begin(hovered_==HoverTarget::None?-1:int(hovered_));
+        if(!wi::input::Release(wi::input::MOUSE_BUTTON_LEFT))
         {
-            Invoke(Action::ExitRenegade);
+            if(!wi::input::Down(wi::input::MOUSE_BUTTON_LEFT)) actionGesture_.Cancel();
             return;
         }
+        if(actionGesture_.Release(int(hovered_))<0) return;
 
         switch (hovered_)
         {
+        case HoverTarget::Exit: Invoke(Action::ExitRenegade); break;
         case HoverTarget::NewProject:
         case HoverTarget::LowerNewProject:
             Invoke(Action::NewProject);
@@ -661,7 +660,7 @@ namespace renegade::studio
         const auto screen = [this](const XMFLOAT4& rect) { return ToScreen(rect); };
         const auto fontSize = [this](const int value)
         {
-            return std::max(8, static_cast<int>(std::round(value * scale_)));
+            return std::max(11, static_cast<int>(std::round(value * scale_)));
         };
         const auto text = [&] (
             const std::string& value,
@@ -681,7 +680,7 @@ namespace renegade::studio
                 color,
                 cmd,
                 align,
-                tracking * scale_,
+                0.15f * scale_,
                 bolden);
         };
         const auto panel = [&](const XMFLOAT4& rect, const wi::Color fill, const wi::Color edge)
@@ -783,8 +782,13 @@ namespace renegade::studio
                 XMFLOAT4(r.x + 16.0f, r.y + 16.0f, r.x + 78.0f, r.w - 16.0f),
                 Panel,
                 hover ? Cyan : BorderBright);
-            text(icon, r.x + 47.0f, r.y + 27.0f, 29, hover ? Cyan : Text, wi::font::WIFALIGN_CENTER, 0.0f, 0.02f);
-            text(labelText, r.x + 98.0f, r.y + 34.0f, 14, TextStrong, wi::font::WIFALIGN_LEFT, 1.0f, 0.11f);
+            const bool held=actionGesture_.Target()==int(target);
+            const auto bounds=screen(rect);
+            theme::DrawButton(bounds.x,bounds.y,bounds.z-bounds.x,bounds.w-bounds.y,"",
+                {true,hover,held},theme::ControlSize,cmd);
+            const char* id=target==HoverTarget::NewProject?"add":"assets";
+            icons::Draw(id,sx(r.x+30),sy(r.y+27+(held?2:0)),sw(32),theme::Text,cmd);
+            text(labelText, r.x + 98.0f, r.y + 34.0f + (actionGesture_.Target()==int(target)?2:0), 14, TextStrong, wi::font::WIFALIGN_LEFT, 1.0f, 0.11f);
             text(">", r.z - 24.0f, r.y + 34.0f, 18, hover ? Orange : Dim, wi::font::WIFALIGN_CENTER, 0.0f, 0.10f);
         };
 

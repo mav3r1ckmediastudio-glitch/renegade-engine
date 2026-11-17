@@ -1,10 +1,11 @@
 #pragma once
 #include <WickedEngine.h>
+#include "StudioModalWindow.h"
 #include "renegade/bridge/ParticleTextureLibraryService.h"
 #include <functional>
 #include <memory>
 namespace renegade::studio {
-class ParticleTextureBrowser final:public wi::gui::Window {
+class ParticleTextureBrowser final:public StudioModalWindow {
 public:
  ParticleTextureBrowser();~ParticleTextureBrowser();
  void Create();

@@ -70,7 +70,7 @@ endforeach()
 
 foreach(token IN ITEMS
     "!HasOpenMenuPopup()"
-    "if (HasOpenMenuPopup())"
+    "CreatorAssetStudioChrome::RenderPopups(canvas, cmd);"
     "ResetDisclosureState();")
     string(FIND "${audio_text}" "${token}" found)
     if(found EQUAL -1)
@@ -84,3 +84,12 @@ foreach(forbidden IN ITEMS "lua_State" "renegade.events" "GLOBAL SCRIPT")
         message(FATAL_ERROR "Studio UI consistency gate must not introduce scripting/runtime work: ${forbidden}")
     endif()
 endforeach()
+
+# Audio stays visible while a viewport dropdown owns input. Popup composition,
+# rather than hiding persistent toolbar controls, keeps the menu in front.
+string(FIND "${audio_text}"
+    "RenderAudioViewportTool(\n        const wi::graphics::CommandList cmd) const\n    {\n        if (HasOpenMenuPopup())"
+    hidden_audio)
+if(NOT hidden_audio EQUAL -1)
+    message(FATAL_ERROR "Viewport menus must not hide the Audio toolbar button")
+endif()

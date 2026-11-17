@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <cstdlib>
+#include <filesystem>
+#include "StudioTheme.h"
 
 #include <wiShaderCompiler.h>
 
@@ -179,6 +182,12 @@ namespace renegade::studio
         io.LogFilename = nullptr;
         io.BackendRendererName = "Renegade-Wicked";
         io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+        if(const char* windows=std::getenv("WINDIR"))
+        {
+            auto font=std::filesystem::path(windows)/"Fonts"/"seguisb.ttf";
+            if(!std::filesystem::is_regular_file(font))font=std::filesystem::path(windows)/"Fonts"/"segoeui.ttf";
+            if(std::filesystem::is_regular_file(font))io.Fonts->AddFontFromFileTTF(font.string().c_str(),float(theme::ControlSize));
+        }
         ImGui::StyleColorsDark();
 
         if (!CreateDeviceObjects(error))

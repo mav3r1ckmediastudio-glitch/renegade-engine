@@ -1,5 +1,7 @@
-﻿#include "LightPickerWindow.h"
+#include "LightPickerWindow.h"
 #include "RenegadeStudioChrome.h"
+#include "StudioButtonVisual.h"
+#include "StudioNumericControl.h"
 #include "renegade/bridge/StudioSession.h"
 #include "../../Runtime/src/RuntimeScriptRuntime.h"
 #include <algorithm>
@@ -12,31 +14,29 @@
 namespace renegade::studio {
 namespace {
 using Behaviour=bridge::LightBehaviour;
-constexpr wi::Color Teal(137,225,208,255);
-constexpr wi::Color Grey(46,49,51,255);
+constexpr wi::Color Teal = theme::Accent;
+constexpr wi::Color Grey = theme::Panel;
 void Rect(float x,float y,float w,float h,wi::Color c,wi::graphics::CommandList cmd) {
  wi::image::Params p(x,y,w,h,c);wi::image::Draw(nullptr,p,cmd);
 }
-class PickerButton : public wi::gui::Button {
+class PickerButton : public ReleaseButton {
 public:
  int textSize=12;bool swatch=false,primary=false;wi::Color tone=Grey;
  void SetRenderTextSize(int size){textSize=size;}
  void SetColor(wi::Color colour,int id=-1) override {wi::gui::Button::SetColor(colour,id);tone=colour;}
- void Render(const wi::Canvas&,wi::graphics::CommandList cmd) const override {
+ void Render(const wi::Canvas& canvas,wi::graphics::CommandList cmd) const override {
   if(!IsVisible())return;
-  auto fill=swatch||primary?tone:wi::Color(48,51,53,255);
-  const auto edge=GetState()==wi::gui::FOCUS?Teal:wi::Color(91,96,98,255);
-  Rect(translation.x,translation.y,scale.x,scale.y,edge,cmd);
-  Rect(translation.x+1,translation.y+1,scale.x-2,scale.y-2,fill,cmd);
-  wi::font::Params fp(translation.x+scale.x*.5f,translation.y+scale.y*.5f,textSize,
-   wi::font::WIFALIGN_CENTER,wi::font::WIFALIGN_CENTER,
-   !IsEnabled()?wi::Color(125,130,132,255):primary?wi::Color(18,30,29,255):wi::Color(239,242,242,255));
-  fp.bolden=.12f;wi::font::Draw(GetText(),fp,cmd);
- }
+  ApplyScissor(canvas,scissorRect,cmd);
+  const bool enabled=IsEnabled();
+  theme::DrawButton(translation.x,translation.y,scale.x,scale.y,GetText(),
+    {enabled,enabled&&GetState()==wi::gui::FOCUS,
+     enabled&&(GetState()==wi::gui::ACTIVE||GetState()==wi::gui::DEACTIVATING),primary,false},
+    textSize,cmd,false,swatch,tone);
+    }
 };
 class PickerCheckBox : public wi::gui::CheckBox {
 public:
- void Render(const wi::Canvas&,wi::graphics::CommandList cmd) const override {
+ void Render(const wi::Canvas& canvas,wi::graphics::CommandList cmd) const override {
   if(!IsVisible())return;
   const auto edge=GetState()==wi::gui::FOCUS?Teal:wi::Color(105,112,113,255);
   Rect(translation.x,translation.y,18,18,edge,cmd);
@@ -60,7 +60,9 @@ public:
  void Render(const wi::Canvas& canvas,wi::graphics::CommandList cmd) const override {
   PickerButton::Render(canvas,cmd);if(!IsVisible())return;
   const XMFLOAT2 p={translation.x,translation.y},sz={scale.x,scale.y};
-  const float cx=p.x+sz.x*.5f,cy=p.y+sz.y*.5f,k=std::min(sz.x,sz.y)*.28f;
+  const float down=ui::ButtonVisual{IsEnabled(),false,
+   GetState()==wi::gui::ACTIVE || GetState()==wi::gui::DEACTIVATING}.Depression();
+  const float cx=p.x+sz.x*.5f,cy=p.y+sz.y*.5f+down,k=std::min(sz.x,sz.y)*.28f;
   auto line=[&](float ax,float ay,float bx,float by) {
    const float dx=(bx-ax)*k,dy=(by-ay)*k;
    wi::image::Params a; a.pos={cx+(ax+bx)*k*.5f,cy+(ay+by)*k*.5f,0};
@@ -170,7 +172,7 @@ struct LightPickerWindow::Impl {
  wi::gui::Label savedTitle,typeTitle,colourTitle,behaviourTitle,settingsTitle,previewTitle,status,help,nameLabel;
  wi::gui::Label previewImage;
  PickerButton saveColour,saveNew,update,place,cancel,advanced;
- wi::gui::Slider brightness,range,strength,speed,movement,outerCone,innerCone,radius,length,height,boost;
+ StudioPickerSlider brightness,range,strength,speed,movement,outerCone,innerCone,radius,length,height,boost;
  PickerCheckBox shadows,keep,randomise,animate,volumetrics;
  bool expanded=false;
  std::vector<wi::gui::Label*> captions;
@@ -184,7 +186,7 @@ struct LightPickerWindow::Impl {
  void Button(PickerButton& b,const char* text,float x,float y,float width) {
   b.Create(text);b.SetText(text);b.SetRenderTextSize(12);Add(b,x,y,width,30);
  }
- void Slider(wi::gui::Slider& s,const char* label,float lo,float hi,float value,float x,float y,float width) {
+ void Slider(StudioPickerSlider& s,const char* label,float lo,float hi,float value,float x,float y,float width) {
   s.Create(lo,hi,value,1000,label);s.SetText(label);s.SetSize({width,22});Add(s,x,y,width,22);
   s.OnSlide([this](const wi::gui::EventArgs&){dirtyPreview=true;});
  }
@@ -349,6 +351,8 @@ struct LightPickerWindow::Impl {
   cancel.OnClick([this](const wi::gui::EventArgs&){window.SetVisible(false);});
   place.OnClick([this](const wi::gui::EventArgs&){if(target==wi::ecs::INVALID_ENTITY)placeRequest=true;else applyRequest=true;});
   Label(status,"Choose a light or saved preset, then Place Light.",18,784,970,12);
+  window.PinFooter(keep,18,12);window.PinFooter(previewTitleHint_,174,12);
+  window.PinFooter(cancel,300,8,true);window.PinFooter(place,170,8,true);window.PinFooter(status,18,44,false,true);
   Advanced();
  }
  wi::gui::Label previewTitleHint_;
@@ -363,9 +367,9 @@ struct LightPickerWindow::Impl {
 LightPickerWindow::LightPickerWindow():impl_(std::make_unique<Impl>(*this)){}
 LightPickerWindow::~LightPickerWindow(){RemoveWidgets();}
 void LightPickerWindow::Create() {
- wi::gui::Window::Create("Light Picker",WindowControls::CLOSE|WindowControls::MOVE);
- SetSize({1020,840});SetControlSize(28);SetColor(wi::Color(33,35,37,255),wi::gui::WIDGET_ID_WINDOW_BASE);
- SetColor(wi::Color(33,35,37,255),wi::gui::WIDGET_ID_COMBO_DROPDOWN);
+ StudioModalWindow::Create("Light Picker",WindowControls::CLOSE|WindowControls::MOVE);
+ SetSize({1020,840});SetControlSize(28);SetColor(theme::Panel,wi::gui::WIDGET_ID_WINDOW_BASE);
+ SetColor(theme::Panel,wi::gui::WIDGET_ID_COMBO_DROPDOWN);
  impl_->Build();SetVisible(false);
 }
 void LightPickerWindow::Open(bridge::StudioSession& session,wi::scene::LightComponent::LightType type,wi::ecs::Entity target) {
@@ -373,10 +377,10 @@ void LightPickerWindow::Open(bridge::StudioSession& session,wi::scene::LightComp
  wi::gui::Theme theme;theme.image.background=false;theme.image.color=wi::Color(40,42,44,255);
  theme.font.color=wi::Color(235,238,239,255);theme.shadow=0;
  theme.tooltipImage.color=Grey;theme.tooltipFont.color=wi::Color(235,238,239,255);
- SetTheme(theme);SetColor(wi::Color(43,46,48,255),wi::gui::IDLE);
- SetColor(wi::Color(65,78,77,255),wi::gui::FOCUS);SetColor(wi::Color(60,108,101,255),wi::gui::ACTIVE);
- SetColor(wi::Color(33,35,37,255),wi::gui::WIDGET_ID_WINDOW_BASE);
- SetColor(wi::Color(33,35,37,255),wi::gui::WIDGET_ID_COMBO_DROPDOWN);
+ SetTheme(theme);SetColor(theme::Idle,wi::gui::IDLE);
+ SetColor(theme::Focus,wi::gui::FOCUS);SetColor(theme::Active,wi::gui::ACTIVE);
+ SetColor(theme::Panel,wi::gui::WIDGET_ID_WINDOW_BASE);
+ SetColor(theme::Panel,wi::gui::WIDGET_ID_COMBO_DROPDOWN);
  auto& i=*impl_;
  for(auto* heading:std::array<wi::gui::Label*,6>{&i.savedTitle,&i.typeTitle,&i.colourTitle,&i.behaviourTitle,&i.settingsTitle,&i.previewTitle}){heading->font.params.size=16;heading->font.params.bolden=.2f;}
  i.previewImage.SetColor(wi::Color::White());for(auto& sprite:i.previewImage.sprites)sprite.params.disableBackground();

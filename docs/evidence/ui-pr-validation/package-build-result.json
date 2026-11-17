@@ -1,0 +1,282 @@
+{
+  "schemaVersion": 1,
+  "status": "PASS",
+  "startedUtc": "2026-11-17T07:09:12.9493817Z",
+  "completedUtc": "2026-11-17T07:47:26.5262790Z",
+  "renegadeCommit": "c2eccc33fa1c2e13c06bc50b94f16ffa308d12a5",
+  "wickedCommit": "82557d439a41d104f559b0d3134d160b7bf6154e",
+  "configurations": [
+    "Debug",
+    "Release"
+  ],
+  "platform": "x64",
+  "targets": [
+    "RenegadeStudio",
+    "RenegadeEquipmentAssetTests",
+    "RenegadeHudReferencePersistenceTests",
+    "RenegadeRiverFlowFieldTests",
+    "RenegadeRiverFoamTests",
+    "RenegadeStoryFlowGate5ScreenLifecycleTests"
+  ],
+  "embeddedShaders": true,
+  "outputs": [
+    {
+      "configuration": "Debug",
+      "studio": {
+        "path": "<preflight>\\BUILD\\renegade\\Studio\\Debug\\RenegadeStudio.exe",
+        "bytes": 83049984,
+        "sha256": "e046320a43037412a3740b10b283ecc24e99d74c76f7de55731522df5457f779"
+      },
+      "dxcompiler": {
+        "path": "<preflight>\\BUILD\\renegade\\Studio\\Debug\\dxcompiler.dll",
+        "bytes": 17987384,
+        "sha256": "9b5e10ed756c461b4ec2c83a99f1d6ace20e97826e9c0b0e966b7b1cd6f2aec6"
+      },
+      "fixtureScene": {
+        "path": "<preflight>\\BUILD\\renegade\\Studio\\Debug\\Content\\cube.wiscene",
+        "bytes": 12887,
+        "sha256": "ff100b9ed73f136818425482537e8f380a4ae52bfa5cae94b166d4f8f16a4013"
+      },
+      "studioPackage": {
+        "path": "<preflight>\\artifacts\\ui-preflight-tooltip-final\\RenegadeStudio-Debug.zip",
+        "bytes": 304586418,
+        "sha256": "008048b2c423f0f6067d5e7b9c5d731be8a3e1345929d685ab338cf89a320eb6"
+      },
+      "runtime": {
+        "path": "<preflight>\\BUILD\\renegade\\Runtime\\Debug\\RenegadeRuntime.exe",
+        "bytes": 110598144,
+        "sha256": "bd09ce40fe31db1baef6c528a25d2e2ba1ff53b982f1a182b7f499dbcbeb90b1"
+      },
+      "runtimeDxcompiler": {
+        "path": "<preflight>\\BUILD\\renegade\\Runtime\\Debug\\dxcompiler.dll",
+        "bytes": 17987384,
+        "sha256": "9b5e10ed756c461b4ec2c83a99f1d6ace20e97826e9c0b0e966b7b1cd6f2aec6"
+      },
+      "runtimeFixtureScene": {
+        "path": "<preflight>\\BUILD\\renegade\\Runtime\\Debug\\Content\\cube.wiscene",
+        "bytes": 12887,
+        "sha256": "ff100b9ed73f136818425482537e8f380a4ae52bfa5cae94b166d4f8f16a4013"
+      },
+      "runtimePackage": {
+        "path": "<preflight>\\artifacts\\ui-preflight-tooltip-final\\RenegadeRuntime-Debug.zip",
+        "bytes": 124160895,
+        "sha256": "af50fae84b9f9ccadc76ff47408dd74096d7aaed1bf74fc2c1bd7496494bab0e"
+      },
+      "bridgeTests": "PASS",
+      "dependencyProof": {
+        "status": "PASS",
+        "processRuns": 2,
+        "executable": {
+          "path": "<preflight>\\artifacts\\ui-preflight-tooltip-final\\packages\\RenegadeStudio-Debug\\Tools\\RenegadeDependencyProcessFixture.exe",
+          "bytes": 53444608,
+          "sha256": "81379d85840d36dc2408d72fc3cfe24aca7f5b2a1f8e0006fee90bf423f52aef"
+        },
+        "graph": {
+          "path": "<preflight>\\artifacts\\ui-preflight-tooltip-final\\proof\\Debug\\dependency-graph-1.json",
+          "bytes": 4681,
+          "sha256": "23b67f63099293d79a239997730b287f157fb38e5421aecb5505e0ca42c84384"
+        },
+        "projectFileCount": 7,
+        "projectFiles": [
+          {
+            "path": "Content/Flow/Main.renegade-flow",
+            "bytes": 20,
+            "sha256": "09ee07c488d51c77eb5fa1ae7002accb36e45619985d04db32c83970a687fb18"
+          },
+          {
+            "path": "Content/Scenes/Secondary.wiscene",
+            "bytes": 25,
+            "sha256": "0d6d46bfaffa82dae7994348d7683e4e989c9cb41df8042d3ddf4eb78619a617"
+          },
+          {
+            "path": "Content/Scenes/Startup.wiscene",
+            "bytes": 23,
+            "sha256": "6f1fff1898a761582f7d17d65f841060917381e7289cc9055ed1d1cd45ae3c79"
+          },
+          {
+            "path": "Content/Scripts/main.lua",
+            "bytes": 84,
+            "sha256": "07b3ffee29eb6c717cefab813c96c5fd7d74d848bb5e9af7047c707ece05f12e"
+          },
+          {
+            "path": "Content/Scripts/shared.lua",
+            "bytes": 13,
+            "sha256": "e9f85a2809c742d84d6a8b57e28cf0cb5b657ba5b923797ad0041567700bb75d"
+          },
+          {
+            "path": "Content/Textures/albedo.png",
+            "bytes": 23,
+            "sha256": "924a8feea1501d197e18e3c8dde8411e6938e7e2ea88bb00879c8c0642f7a38d"
+          },
+          {
+            "path": "representative.renegade",
+            "bytes": 27,
+            "sha256": "77d11cd3abe892360b26cf5078b97312898f991d2cd1f3a3066cd2b347113e79"
+          }
+        ]
+      },
+      "assetRegistryProof": {
+        "status": "PASS",
+        "processRuns": 4,
+        "executable": {
+          "path": "<preflight>\\artifacts\\ui-preflight-tooltip-final\\packages\\RenegadeStudio-Debug\\Tools\\RenegadeAssetRegistryProcessFixture.exe",
+          "bytes": 53481472,
+          "sha256": "365ffe8e4950b7703359d09cf5129a6b8b2e160ed05a96d896ba7beb886c3aa3"
+        },
+        "finalRegistry": {
+          "path": "<preflight>\\artifacts\\ui-preflight-tooltip-final\\proof\\Debug\\lc01\\registry-verify-reopen.json",
+          "bytes": 2180,
+          "sha256": "547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e"
+        },
+        "packagedFixtureFileCount": 3,
+        "packagedFixtureFiles": [
+          {
+            "path": "Content/Scenes/Main.wiscene",
+            "bytes": 40,
+            "sha256": "252731fbacbce94b280ac05b8ede5d8dca03eb51d5cb54968d0f287ef78df95c"
+          },
+          {
+            "path": "Content/Source/source.asset",
+            "bytes": 26,
+            "sha256": "f020051ef8da1ad5570d3557ec231041963a765887962b7cbf8313d5ad4e73dc"
+          },
+          {
+            "path": "LC01Proof.renegade",
+            "bytes": 167,
+            "sha256": "edead8f3426ac8d59397ff98de32eb843705ddcb7a2bdc0c0b71b77eeae19b13"
+          }
+        ]
+      }
+    },
+    {
+      "configuration": "Release",
+      "studio": {
+        "path": "<preflight>\\BUILD\\renegade\\Studio\\Release\\RenegadeStudio.exe",
+        "bytes": 35267072,
+        "sha256": "b5aa67b58e9c850909b89d6a6eaec473770e9c0b6d3940c95f477c1233847f63"
+      },
+      "dxcompiler": {
+        "path": "<preflight>\\BUILD\\renegade\\Studio\\Release\\dxcompiler.dll",
+        "bytes": 17987384,
+        "sha256": "9b5e10ed756c461b4ec2c83a99f1d6ace20e97826e9c0b0e966b7b1cd6f2aec6"
+      },
+      "fixtureScene": {
+        "path": "<preflight>\\BUILD\\renegade\\Studio\\Release\\Content\\cube.wiscene",
+        "bytes": 12887,
+        "sha256": "ff100b9ed73f136818425482537e8f380a4ae52bfa5cae94b166d4f8f16a4013"
+      },
+      "studioPackage": {
+        "path": "<preflight>\\artifacts\\ui-preflight-tooltip-final\\RenegadeStudio-Release.zip",
+        "bytes": 281899510,
+        "sha256": "f3e976baf092e7272e6e6bdd142a13d208bc7012babece9c56452a7f692eb47e"
+      },
+      "runtime": {
+        "path": "<preflight>\\BUILD\\renegade\\Runtime\\Release\\RenegadeRuntime.exe",
+        "bytes": 64818688,
+        "sha256": "2821832fcd60940e85d8ce52bd14d8edd509c8b0433f93099c4846c04719cdd0"
+      },
+      "runtimeDxcompiler": {
+        "path": "<preflight>\\BUILD\\renegade\\Runtime\\Release\\dxcompiler.dll",
+        "bytes": 17987384,
+        "sha256": "9b5e10ed756c461b4ec2c83a99f1d6ace20e97826e9c0b0e966b7b1cd6f2aec6"
+      },
+      "runtimeFixtureScene": {
+        "path": "<preflight>\\BUILD\\renegade\\Runtime\\Release\\Content\\cube.wiscene",
+        "bytes": 12887,
+        "sha256": "ff100b9ed73f136818425482537e8f380a4ae52bfa5cae94b166d4f8f16a4013"
+      },
+      "runtimePackage": {
+        "path": "<preflight>\\artifacts\\ui-preflight-tooltip-final\\RenegadeRuntime-Release.zip",
+        "bytes": 118441501,
+        "sha256": "b16598a121363bced756aa2402ac3b81cc66f6d919afe87ed38b7a0a2bf0e09e"
+      },
+      "bridgeTests": "PASS",
+      "dependencyProof": {
+        "status": "PASS",
+        "processRuns": 2,
+        "executable": {
+          "path": "<preflight>\\artifacts\\ui-preflight-tooltip-final\\packages\\RenegadeStudio-Release\\Tools\\RenegadeDependencyProcessFixture.exe",
+          "bytes": 20970496,
+          "sha256": "bc3a6f6796eaa48c9d189de3061917251302dc0b2d78932f3cb8694ef2d9362f"
+        },
+        "graph": {
+          "path": "<preflight>\\artifacts\\ui-preflight-tooltip-final\\proof\\Release\\dependency-graph-1.json",
+          "bytes": 4681,
+          "sha256": "23b67f63099293d79a239997730b287f157fb38e5421aecb5505e0ca42c84384"
+        },
+        "projectFileCount": 7,
+        "projectFiles": [
+          {
+            "path": "Content/Flow/Main.renegade-flow",
+            "bytes": 20,
+            "sha256": "09ee07c488d51c77eb5fa1ae7002accb36e45619985d04db32c83970a687fb18"
+          },
+          {
+            "path": "Content/Scenes/Secondary.wiscene",
+            "bytes": 25,
+            "sha256": "0d6d46bfaffa82dae7994348d7683e4e989c9cb41df8042d3ddf4eb78619a617"
+          },
+          {
+            "path": "Content/Scenes/Startup.wiscene",
+            "bytes": 23,
+            "sha256": "6f1fff1898a761582f7d17d65f841060917381e7289cc9055ed1d1cd45ae3c79"
+          },
+          {
+            "path": "Content/Scripts/main.lua",
+            "bytes": 84,
+            "sha256": "07b3ffee29eb6c717cefab813c96c5fd7d74d848bb5e9af7047c707ece05f12e"
+          },
+          {
+            "path": "Content/Scripts/shared.lua",
+            "bytes": 13,
+            "sha256": "e9f85a2809c742d84d6a8b57e28cf0cb5b657ba5b923797ad0041567700bb75d"
+          },
+          {
+            "path": "Content/Textures/albedo.png",
+            "bytes": 23,
+            "sha256": "924a8feea1501d197e18e3c8dde8411e6938e7e2ea88bb00879c8c0642f7a38d"
+          },
+          {
+            "path": "representative.renegade",
+            "bytes": 27,
+            "sha256": "77d11cd3abe892360b26cf5078b97312898f991d2cd1f3a3066cd2b347113e79"
+          }
+        ]
+      },
+      "assetRegistryProof": {
+        "status": "PASS",
+        "processRuns": 4,
+        "executable": {
+          "path": "<preflight>\\artifacts\\ui-preflight-tooltip-final\\packages\\RenegadeStudio-Release\\Tools\\RenegadeAssetRegistryProcessFixture.exe",
+          "bytes": 21458432,
+          "sha256": "13cff7d89927453f239fda3898099ee830c450d8b85fd82f1bc1696d6541c8e4"
+        },
+        "finalRegistry": {
+          "path": "<preflight>\\artifacts\\ui-preflight-tooltip-final\\proof\\Release\\lc01\\registry-verify-reopen.json",
+          "bytes": 2180,
+          "sha256": "547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e"
+        },
+        "packagedFixtureFileCount": 3,
+        "packagedFixtureFiles": [
+          {
+            "path": "Content/Scenes/Main.wiscene",
+            "bytes": 40,
+            "sha256": "252731fbacbce94b280ac05b8ede5d8dca03eb51d5cb54968d0f287ef78df95c"
+          },
+          {
+            "path": "Content/Source/source.asset",
+            "bytes": 26,
+            "sha256": "f020051ef8da1ad5570d3557ec231041963a765887962b7cbf8313d5ad4e73dc"
+          },
+          {
+            "path": "LC01Proof.renegade",
+            "bytes": 167,
+            "sha256": "edead8f3426ac8d59397ff98de32eb843705ddcb7a2bdc0c0b71b77eeae19b13"
+          }
+        ]
+      }
+    }
+  ],
+  "error": null,
+  "durationSeconds": 2293.573
+}

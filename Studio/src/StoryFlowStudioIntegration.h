@@ -731,8 +731,9 @@ namespace renegade::studio
                 QueueOpenDestination(nodeId);
             });
 
-            returnToStoryFlowButton_.Create("Return to Story Flow");
+            returnToStoryFlowButton_.Create("StoryFlow — Return to Story Flow");
             returnToStoryFlowButton_.SetText("< STORY FLOW");
+            returnToStoryFlowButton_.SetIcon("storyflow");
             returnToStoryFlowButton_.SetTooltip(
                 "Save this Level normally, then return to the same Story Flow authoring session.");
             returnToStoryFlowButton_.SetShadowRadius(0.0f);
@@ -762,15 +763,15 @@ namespace renegade::studio
             // collide with the viewport's PERSPECTIVE/LIT/SHOW chips. The
             // registration helper also keeps it above the chrome in Wicked's
             // reverse top-level render order.
-            constexpr float ReturnButtonWidth = 132.0f;
-            constexpr float ReturnButtonHeight = 28.0f;
+            constexpr float ReturnButtonWidth = 32.0f;
+            constexpr float ReturnButtonHeight = 32.0f;
             constexpr float SceneTabSafeOffset = 242.0f;
             const float rightAlignedX =
                 bounds.z - ReturnButtonWidth - 12.0f;
             const float x = std::max(
                 bounds.x + SceneTabSafeOffset,
                 rightAlignedX);
-            const float y = std::max(0.0f, bounds.y - 31.0f);
+            const float y = std::max(0.0f, bounds.y - 33.0f);
             returnToStoryFlowButton_.SetPos(XMFLOAT2(x, y));
             returnToStoryFlowButton_.SetSize(XMFLOAT2(
                 ReturnButtonWidth,

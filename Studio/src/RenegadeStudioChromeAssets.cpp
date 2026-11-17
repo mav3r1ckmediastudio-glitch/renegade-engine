@@ -322,6 +322,7 @@ namespace renegade::studio
 
     void CreatorAssetStudioChrome::Update(const wi::Canvas& canvas, const float dt)
     {
+        const bool menuWasOpen=HasOpenMenuPopup();
         // The move dialog owns input while open. Base chrome otherwise
         // collapses the drawer on a click outside its body, hiding this dialog.
         const bool moving = creatorMovePanel_.IsVisible();
@@ -338,7 +339,8 @@ namespace renegade::studio
              popupOwnsInput(creatorAssetRigCombo_));
         if (!moving && !filtering)
             RenegadeStudioChrome::Update(canvas, dt);
-        UpdateCreatorAssetControls(canvas, dt);
+        if (!menuWasOpen && !HasOpenMenuPopup())
+            UpdateCreatorAssetControls(canvas, dt);
         if (moving || filtering)
             creatorAssetControlConsumed_ = true;
     }

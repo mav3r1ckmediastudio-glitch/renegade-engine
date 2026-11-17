@@ -1,0 +1,24 @@
+{
+  "status": "PASS",
+  "studio_sha256": "8bbd82eb2512c486f4be3f787eda89d1ddd95fc33d56a213434c9eb66c96c3b6",
+  "test_warp_option": "OFF",
+  "adapter": "NVIDIA GeForce RTX 4070 Ti",
+  "captures_visually_reviewed": [
+    "uma-fixed-storyflow",
+    "uma-fixed-scene",
+    "uma-fixed-wireframe",
+    "uma-fixed-overlay",
+    "uma-fixed-overlay-light-modal",
+    "uma-fixed-shaded-restored"
+  ],
+  "checks": [
+    "Fresh startup and isolated Story Flow",
+    "Shaded, whole-scene Wireframe and coplanar overlay",
+    "Light Picker opaque modal and shaded private preview over scene overlay",
+    "Return to Shaded; scene Main.WISCENE clean; Undo 0; Redo 0"
+  ],
+  "candidate_pid": 69252,
+  "candidate_closed_cleanly": true,
+  "owner_projects_modified": false,
+  "owner_process_closed_by_this_work": false
+}

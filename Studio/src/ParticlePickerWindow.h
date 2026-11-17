@@ -1,10 +1,11 @@
 #pragma once
 #include <WickedEngine.h>
+#include "StudioModalWindow.h"
 #include "renegade/bridge/ParticleEffectService.h"
 #include <memory>
 namespace renegade::bridge {class StudioSession;}
 namespace renegade::studio {
-class ParticlePickerWindow final:public wi::gui::Window {
+class ParticlePickerWindow final:public StudioModalWindow {
 public:
  ParticlePickerWindow();~ParticlePickerWindow();
  void SetVisible(bool) override;

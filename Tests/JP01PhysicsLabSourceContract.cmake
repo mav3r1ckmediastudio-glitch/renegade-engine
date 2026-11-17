@@ -192,8 +192,8 @@ require_text(studio_header
     "wi::RenderPath3D::Render();"
     "Physics Lab selection-mask suppression")
 require_text(studio_header
-    "wi::RenderPath3D::Compose(cmd);"
-    "Physics Lab gizmo/outline composition suppression")
+    "StudioRenderPath::Compose(cmd);"
+    "Physics Lab shared overlay/foreground composition policy")
 require_text(studio_header
     "PhysicsLabStudioRenderPath renderer_;"
     "Physics-aware renderer ownership")

@@ -1,0 +1,8 @@
+{
+  "CMakeLists.txt": "d4596480073ca6920a52077830ab1398a1b0ecef8e0bda7b18d26bb074f782e5",
+  "cmake/WickedWireframeOverlayFix.cmake": "de9d67930278ca8fbb5dfbc3b1bb94452c85d24df3b09c55d080f00902eba01e",
+  "cmake/RenegadeWarpTestDevice.cmake": "041c60e78b753a73159b9ce978cc8a21982542ff6816760187f6b5eb08bf41b8",
+  "Tests/CMakeLists.txt": "ba7c2930d9386376951d424857b0ea0cb1a62335f8a056c8d9f036dbb7103658",
+  "Tests/RendererOverlayComposition.cmake": "f6f364821c9f677ca6a9a6b652c62e70eaba190d93f5181931cbcc86adfa7982",
+  "Tests/RendererOverlayCompositionFixture.cmake": "06a9c2baf93a639ecc1ad87923817c0b21a02bd0eab3ffa290a09ccf63d45fed"
+}

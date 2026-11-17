@@ -10,6 +10,8 @@
 #include "shaders/ShaderInterop_Renderer.h"
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
+#include "StudioTheme.h"
+#include "MarkerIconOverlay.h"
 #include "CreatorAssetFrameBoundary.h"
 #include "PlayerStartFrameCache.h"
 #include "TerrainInspectorEntity.h"
@@ -69,14 +71,14 @@ namespace
     }
 
     constexpr std::uint8_t SelectionStencilReference = 0x0F;
-    constexpr wi::Color HologramIdle = wi::Color(12, 16, 19, 255);
-    constexpr wi::Color HologramFocus = wi::Color(26, 31, 35, 255);
-    constexpr wi::Color HologramActive = wi::Color(38, 43, 47, 255);
-    constexpr wi::Color HologramText = wi::Color(244, 244, 244, 255);
-    constexpr wi::Color HologramMuted = wi::Color(178, 178, 176, 255);
-    constexpr wi::Color HologramBorder = wi::Color(38, 52, 61, 255);
-    constexpr wi::Color HologramPanel = wi::Color(8, 12, 16, 255);
-    constexpr wi::Color HologramSelected = wi::Color(44, 35, 29, 255);
+    constexpr wi::Color HologramIdle = renegade::studio::theme::Idle;
+    constexpr wi::Color HologramFocus = renegade::studio::theme::Focus;
+    constexpr wi::Color HologramActive = renegade::studio::theme::Active;
+    constexpr wi::Color HologramText = renegade::studio::theme::Text;
+    constexpr wi::Color HologramMuted = renegade::studio::theme::Muted;
+    constexpr wi::Color HologramBorder = renegade::studio::theme::Border;
+    constexpr wi::Color HologramPanel = renegade::studio::theme::Panel;
+    constexpr wi::Color HologramSelected = renegade::studio::theme::Selected;
     constexpr wi::Color HubBackground = wi::Color(4, 7, 10, 255);
     constexpr wi::Color HubSurface = wi::Color(8, 14, 18, 255);
     constexpr wi::Color HubSurfaceRaised = wi::Color(11, 20, 25, 255);
@@ -810,6 +812,34 @@ namespace renegade::studio
         device->Draw(static_cast<uint32_t>(vertices.size()),0,cmd);
     }
 
+    void StudioRenderPath::SetEditorViewMode(int mode)
+    {
+        if (pathTracePreviewActive_) return;
+        // Negative requests restore the saved editor preference without writing
+        // or recursively refreshing diagnostics. No scene/runtime state changes.
+        const bool restore = mode < 0;
+        if (restore)
+        {
+            mode = 0;
+            if (session_ != nullptr)
+            {
+                auto& prefs = session_->Projects();
+                mode = prefs.GetEditorPreference("viewport_wireframe_only", false) ? 1 :
+                    (prefs.GetEditorPreference("viewport_wireframe_overlay", false) ? 2 : 0);
+            }
+        }
+        mode = std::clamp(mode, 0, 2);
+        wi::renderer::SetWireframeMode(static_cast<wi::renderer::WIREFRAME_MODE>(mode));
+        studioChrome_.SetViewportViewMode(mode);
+        if (!restore && session_ != nullptr)
+        {
+            auto& prefs = session_->Projects();
+            prefs.SetEditorPreference("viewport_wireframe_only", mode == 1);
+            prefs.SetEditorPreference("viewport_wireframe_overlay", mode == 2);
+        }
+        if (!restore) RefreshGate9DiagnosticsControls();
+    }
+
     void StudioRenderPath::SetGridVisible(const bool visible)
     {
         gridVisible_ = visible;
@@ -889,7 +919,11 @@ namespace renegade::studio
     void StudioRenderPath::PreRender()
     {
         if(lightPickerFrameSuspended_) {
+            // Private previews stay shaded; restore the scene preference immediately.
+            const auto savedMode=wi::renderer::GetWireframeMode();
+            wi::renderer::SetWireframeMode(static_cast<wi::renderer::WIREFRAME_MODE>(0));
             lightPicker_.PreRenderPreview();particlePicker_.PreRenderPreview();
+            wi::renderer::SetWireframeMode(savedMode);
             wi::RenderPath2D::PreRender();
             return;
         }
@@ -919,7 +953,11 @@ namespace renegade::studio
     void StudioRenderPath::Render() const
     {
         if(lightPickerFrameSuspended_) {
+            // Private previews stay shaded; restore the scene preference immediately.
+            const auto savedMode=wi::renderer::GetWireframeMode();
+            wi::renderer::SetWireframeMode(static_cast<wi::renderer::WIREFRAME_MODE>(0));
             lightPicker_.RenderPreview();particlePicker_.RenderPreview();
+            wi::renderer::SetWireframeMode(savedMode);
             wi::RenderPath2D::Render();
             return;
         }
@@ -1129,13 +1167,14 @@ namespace renegade::studio
             SetEnvironmentWorkspaceActive(false);
             SetTerrainWorkspaceActive(false);
             SetRenderWorkspaceActive(false);
+            studioChrome_.OnSceneSelectionChanged();
             RefreshInspector();
             RefreshStatus();
         });
         hierarchyPanel_.AddWidget(&hierarchyTree_);
 
         hierarchySearch_.Create("Hierarchy Search");
-        hierarchySearch_.SetDescription("⌕  ");
+        hierarchySearch_.SetDescription("");
         hierarchySearch_.SetValue("");
         hierarchySearch_.SetPlaceholder("SEARCH SCENE...");
         hierarchySearch_.SetTooltip("Filter the visible scene hierarchy");
@@ -1155,14 +1194,14 @@ namespace renegade::studio
             "Inspector",
             wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
         inspectorPanel_.SetShadowRadius(0.0f);
-        inspectorPanel_.SetColor(wi::Color::Transparent());
+        inspectorPanel_.wi::gui::Widget::SetColor(wi::Color::Transparent());
         inspectorPanel_.SetColor(
             HologramPanel,
             wi::gui::WIDGET_ID_WINDOW_BASE);
         GetGUI().AddWidget(&inspectorPanel_);
 
         inspectorLabel_.Create("Transform Inspector");
-        inspectorLabel_.SetText("TRANSFORM // SELECT AN ENTITY");
+        SetInspectorHeading("TRANSFORM // SELECT AN ENTITY");
         inspectorLabel_.font.params.size = 16;
         inspectorLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         inspectorLabel_.SetColor(wi::Color::Transparent());
@@ -1175,7 +1214,7 @@ namespace renegade::studio
         {
             label.Create(name);
             label.SetText(text);
-            label.font.params.size = 13;
+            label.font.params.size = 12;
             label.font.params.color = HologramMuted;
             label.font.params.h_align = wi::font::WIFALIGN_LEFT;
             label.SetColor(wi::Color::Transparent());
@@ -3204,6 +3243,8 @@ namespace renegade::studio
                 editingSceneRevision_==session_->Scenes().Revision()?editingAssembly_:wi::ecs::INVALID_ENTITY);
             SetEnvironmentWorkspaceActive(false);
             SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
+            studioChrome_.OnSceneSelectionChanged();
             RefreshHierarchy();
             RefreshInspector();
             RefreshStatus();
@@ -3305,6 +3346,12 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::Focus:
                 RequestDiagnosticAction(EditorAction::FocusSelection);
                 break;
+            case RenegadeStudioChrome::Action::ViewShaded:
+                SetEditorViewMode(0); break;
+            case RenegadeStudioChrome::Action::ViewWireframe:
+                SetEditorViewMode(1); break;
+            case RenegadeStudioChrome::Action::ViewWireframeOverlay:
+                SetEditorViewMode(2); break;
             case RenegadeStudioChrome::Action::ToggleGrid:
                 RequestDiagnosticAction(EditorAction::ToggleGrid);
                 break;
@@ -3867,7 +3914,7 @@ namespace renegade::studio
     void StudioRenderPath::ApplyRenegadeTheme()
     {
         wi::gui::Theme theme;
-        theme.image.background = true;
+        theme.image.background = false;
         theme.image.blendFlag = wi::enums::BLENDMODE_ALPHA;
         theme.image.corner_rounding = true;
         for (auto& corner : theme.image.corners_rounding)
@@ -3875,10 +3922,11 @@ namespace renegade::studio
             corner.radius = 7.0f;
         }
         theme.font.color = HologramText;
-        theme.font.shadow_color = wi::Color(0, 0, 0, 220);
-        theme.shadow = 3.0f;
+        theme.font.bolden = .12f;
+        theme.font.shadow_color = wi::Color::Transparent();
+        theme.shadow = 0.0f;
         theme.shadow_color = HologramBorder;
-        theme.shadow_highlight = true;
+        theme.shadow_highlight = false;
         theme.shadow_highlight_color = XMFLOAT3(0.28f, 0.30f, 0.32f);
         theme.shadow_highlight_spread = 0.18f;
         theme.tooltipImage = theme.image;
@@ -3936,7 +3984,7 @@ namespace renegade::studio
         // The global Project Hub theme is intentionally not the workspace
         // theme. Reassert the owned Inspector host after the global pass so
         // Wicked cannot repaint its rounded cyan window or section pills.
-        inspectorPanel_.SetColor(wi::Color::Transparent());
+        inspectorPanel_.wi::gui::Widget::SetColor(wi::Color::Transparent());
         inspectorPanel_.SetColor(
             wi::Color(8, 11, 13, 255),
             wi::gui::WIDGET_ID_WINDOW_BASE);
@@ -4088,6 +4136,7 @@ namespace renegade::studio
 
     void StudioRenderPath::Update(const float dt)
     {
+        scenePopupInputCaptured_ = studioChrome_.HasOpenMenuPopup();
         CaptureCloudBodyReplay();
         DiagnosticInputFrame diagnosticInput(diagnosticService_,
             wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
@@ -4162,6 +4211,22 @@ namespace renegade::studio
             return;
         }
 
+        if (projectLoadingOverlay_.IsVisible())
+        {
+            // Only the loader receives input while its Ready/Idle handoff cover is visible.
+            const bool wasVisible = GetGUI().IsVisible();
+            GetGUI().SetVisible(false);
+            RenderPath3D::Update(dt);
+            GetGUI().SetVisible(wasVisible);
+            projectLoadingOverlay_.Update(*this,dt);
+            playerCameraPreviewVisible_ = false;
+            selectionGesture_ = selectionBox_ = false;
+            pendingAction_ = EditorAction::None;
+            detail::ClearCreatorAssetDragPreview();
+            diagnosticInput.StopAt("project_loading");
+            return;
+        }
+
         if(dialogueFrameSuspended_){
             // A separate native GUI owns the modal. Background chrome never
             // receives clicks or shortcuts while a conversation is being edited.
@@ -4179,6 +4244,12 @@ namespace renegade::studio
             // frame just to edit one light. Retain this boundary through a
             // close/apply gesture until a fresh main Scene::Update next frame.
             wi::RenderPath2D::Update(dt);
+            // Resize invalidates the background inspector layout even while the
+            // main scene is paused. Reconcile once after the native window update.
+            if(inspectorRefreshPending_) {
+                inspectorRefreshPending_=false;
+                RefreshInspector();
+            }
             if(lightPicker_.IsVisible())UpdateLightPicker(dt);
             if(particlePicker_.IsVisible())UpdateParticlePicker(dt);
             pendingAction_=EditorAction::None;
@@ -4234,7 +4305,22 @@ namespace renegade::studio
                 studioForkLightning_.Update(lightningScene,revision,camera->Eye,camera->At,dt);
                 renegade::runtime::ThunderAudio().Update(dt,camera->Eye,camera->At);
             }
-            {ScopedCPUProfiling("Studio native 3D update");auto riverBindings=riverFlow_.Bind();bridge::UpdateParticleEffectSprites(*scene,dt);RenderPath3D::Update(dt);}
+            {
+                ScopedCPUProfiling("Studio native 3D update");
+                auto riverBindings=riverFlow_.Bind();
+                bridge::UpdateParticleEffectSprites(*scene,dt);
+                // Popup input is exclusive without promoting the chrome's
+                // opaque panel backgrounds above native Inspector controls.
+                const bool popupInput = studioChrome_.HasOpenMenuPopup();
+                const bool guiVisible = GetGUI().IsVisible();
+                if (popupInput) GetGUI().SetVisible(false);
+                RenderPath3D::Update(dt);
+                if (popupInput)
+                {
+                    GetGUI().SetVisible(guiVisible);
+                    studioChrome_.Update(*this,dt);
+                }
+            }
         }
 
         TickWaterfallStudioProof();
@@ -4376,19 +4462,25 @@ namespace renegade::studio
             if(wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))scenePrefabSavePanel_.SetVisible(false);
             return;
         }
-        if(selectionGesture_ && HandleViewportSelection(pointer))return;
-        if(HandleAssemblyToolbar(pointer))return;
+        const bool sceneOverlayAvailable = SceneOverlaysVisible();
+        if (selectionGesture_)
+        {
+            if (!sceneOverlayAvailable || scenePopupInputCaptured_ || studioChrome_.HasOpenMenuPopup())
+                selectionGesture_ = selectionBox_ = false;
+            else if (HandleViewportSelection(pointer)) return; // Also finish a drag released over a panel.
+        }
+        if(SceneOverlayInputAllowed(pointer) && HandleAssemblyToolbar(pointer))return;
         // An anchored drawing gesture owns viewport input before icon picking
         // or the selected node's gizmo can capture the same press.
         const bool drawingTributary = !riverDrawingReceiver_.empty();
-        const bool playerStartCapsuleConsumed = !drawingTributary && HandlePlayerStartCapsule(pointer);
-        const bool cameraIconConsumed = !drawingTributary && HandleCameraSceneIcons(pointer);
-        const bool audioIconConsumed = !drawingTributary && HandleAudioSceneIcons(pointer);
+        const bool playerStartCapsuleConsumed = sceneOverlayAvailable && !drawingTributary && HandlePlayerStartCapsule(pointer);
+        const bool cameraIconConsumed = sceneOverlayAvailable && !drawingTributary && HandleCameraSceneIcons(pointer);
+        const bool audioIconConsumed = sceneOverlayAvailable && !drawingTributary && HandleAudioSceneIcons(pointer);
         bool riverPointConsumed=false;
         {ScopedCPUProfiling("Studio river point handles");
-        riverPointConsumed = !drawingTributary && HandleRiverSplineControlPoints(pointer);}
-        const bool decalProbeIconConsumed = !drawingTributary && HandleDecalProbeSceneIcons(pointer);
-        const bool lightIconConsumed = !drawingTributary && HandleLightSceneIcons(pointer);
+        riverPointConsumed = sceneOverlayAvailable && !drawingTributary && HandleRiverSplineControlPoints(pointer);}
+        const bool decalProbeIconConsumed = sceneOverlayAvailable && !drawingTributary && HandleDecalProbeSceneIcons(pointer);
+        const bool lightIconConsumed = sceneOverlayAvailable && !drawingTributary && HandleLightSceneIcons(pointer);
 
         // A vegetation stroke can be released after the pointer has crossed
         // from the viewport onto native GUI or Renegade chrome. Finalize that
@@ -4669,33 +4761,48 @@ namespace renegade::studio
 
     void StudioRenderPath::Compose(const wi::graphics::CommandList cmd) const
     {
-        if(dialogueFrameSuspended_){
-            // A resize can replace the suspended scene's render targets before
-            // another 3D frame is produced. Never sample those unwritten buffers.
+        if(lightPickerFrameSuspended_) {
+            // Every suspended-scene modal uses the same 2D composition boundary.
+            // Resize can replace the main 3D targets while only a private preview
+            // is rendering, so no modal may sample the main scene's unwritten image.
             wi::image::Params backdrop(0,0,float(GetLogicalWidth()),float(GetLogicalHeight()),HologramPanel);
             wi::image::Draw(nullptr,backdrop,cmd);
             wi::RenderPath2D::Compose(cmd);
-            dialogueGui_.Render(*this,cmd);
-            return;
-        }
-        if(lightPickerFrameSuspended_) {
-            if(pathTracePreviewActive_)RenderPath3D_PathTracing::Compose(cmd);
-            else wi::RenderPath3D::Compose(cmd);
+            if(dialogueFrameSuspended_)dialogueGui_.Render(*this,cmd);
+            ComposeUiForeground(cmd);
             return;
         }
         if (testLevelFrameSuspended_ || testLevelRuntime_.IsActive())
         {
             wi::RenderPath2D::Compose(cmd);
+            ComposeUiForeground(cmd);
             return;
         }
         if (pathTracePreviewActive_)
         {
             RenderPath3D_PathTracing::Compose(cmd);
+            ComposeUiForeground(cmd);
             return;
         }
-        RenderPath3D::Compose(cmd);
-
         auto* device = wi::graphics::GetDevice();
+        wi::image::Params sceneImage;
+        sceneImage.blendFlag = wi::enums::BLENDMODE_OPAQUE;
+        sceneImage.quality = wi::image::QUALITY_LINEAR;
+        sceneImage.enableFullScreen();
+        wi::image::Draw(&GetRenderResult3D(),sceneImage,cmd);
+        if (wi::renderer::GetDebugLightCulling() ||
+            wi::renderer::GetVariableRateShadingClassificationDebug() ||
+            wi::renderer::GetSurfelGIDebugEnabled())
+        {
+            sceneImage.blendFlag = wi::enums::BLENDMODE_PREMULTIPLIED;
+            wi::image::Draw(&debugUAV,sceneImage,cmd);
+        }
+        if (!SceneOverlaysVisible())
+        {
+            wi::RenderPath2D::Compose(cmd);
+            ComposeUiForeground(cmd);
+            return;
+        }
         const wi::graphics::Rect viewportScissor = {
             static_cast<std::int32_t>(
                 LogicalToPhysical(viewportBounds_.x)),
@@ -4708,7 +4815,9 @@ namespace renegade::studio
         };
         device->BindScissorRects(1, &viewportScissor, cmd);
 
-        // Draw the capsule after temporal postprocessing, alongside the gizmo.
+        DrawMarkerIconOverlay(*this,*this,cmd);
+
+        // Draw the capsule after temporal postprocessing, before GUI, alongside the gizmo.
         // Project its connected 3D edges using one camera matrix for this frame.
         if (!projectHubVisible_ && !assemblyPanel_.IsVisible() &&
             !handGripPanel_.IsVisible() && !modelImportPanel_.IsVisible() &&
@@ -4846,6 +4955,25 @@ namespace renegade::studio
             static_cast<std::int32_t>(GetPhysicalHeight()),
         };
         device->BindScissorRects(1, &fullScissor, cmd);
+        wi::RenderPath2D::Compose(cmd);
+        ComposeUiForeground(cmd);
+    }
+
+    void StudioRenderPath::ComposeUiForeground(const wi::graphics::CommandList cmd) const
+    {
+        const wi::graphics::Rect full = {0,0,
+            static_cast<std::int32_t>(GetPhysicalWidth()),
+            static_cast<std::int32_t>(GetPhysicalHeight())};
+        wi::graphics::GetDevice()->BindScissorRects(1,&full,cmd);
+        if (projectLoadingOverlay_.IsVisible())
+        {
+            // Final opaque owner: independent of wiGUI activation/registration order.
+            projectLoadingOverlay_.Render(*this,cmd);
+            return;
+        }
+        if (!dialogueFrameSuspended_ && !lightPickerFrameSuspended_ &&
+            !testLevelRuntime_.IsActive() && GetGUI().IsVisible())
+            studioChrome_.RenderPopups(*this,cmd);
     }
 
     void StudioRenderPath::ResizeLayout()
@@ -4949,10 +5077,11 @@ namespace renegade::studio
             projectHubVisible_
                 ? height - toolbarHeight - 24.0f
                 : height - 64.0f - 28.0f));
+        const float inspectorContentPanelWidth = rightWidth - inspectorPanel_.GetControlSize();
         inspectorLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
-        inspectorLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 28.0f));
+        inspectorLabel_.SetSize(XMFLOAT2(inspectorContentPanelWidth - 24.0f, 28.0f));
         const float fieldGap = 8.0f;
-        const float fieldWidth = (rightWidth - 40.0f) / 3.0f;
+        const float fieldWidth = (inspectorContentPanelWidth - 40.0f) / 3.0f;
         const auto positionInputRow = [&](
             wi::gui::TextInputField& x,
             wi::gui::TextInputField& y,
@@ -4969,20 +5098,20 @@ namespace renegade::studio
             z.SetSize(XMFLOAT2(fieldWidth, 28.0f));
         };
         positionLabel_.SetPos(XMFLOAT2(12.0f, 44.0f));
-        positionLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
+        positionLabel_.SetSize(XMFLOAT2(inspectorContentPanelWidth - 24.0f, 20.0f));
         positionInputRow(
             translationX_,
             translationY_,
             translationZ_,
             64.0f);
         rotationLabel_.SetPos(XMFLOAT2(12.0f, 104.0f));
-        rotationLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
+        rotationLabel_.SetSize(XMFLOAT2(inspectorContentPanelWidth - 24.0f, 20.0f));
         positionInputRow(rotationX_, rotationY_, rotationZ_, 124.0f);
         scaleLabel_.SetPos(XMFLOAT2(12.0f, 164.0f));
-        scaleLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
+        scaleLabel_.SetSize(XMFLOAT2(inspectorContentPanelWidth - 24.0f, 20.0f));
         positionInputRow(scaleX_, scaleY_, scaleZ_, 184.0f);
 
-        const float environmentFieldWidth = rightWidth - 24.0f;
+        const float environmentFieldWidth = inspectorContentPanelWidth - 24.0f;
         const auto positionEnvironmentWidget =
             [environmentFieldWidth](
                 wi::gui::Widget& widget,
@@ -5252,6 +5381,9 @@ namespace renegade::studio
             diagnostics_->rect.bottom = static_cast<std::int32_t>(
                 LogicalToPhysical(viewportBounds_.w));
         }
+        // Native Window layout and the section registry both own child geometry.
+        // A resize must finish with the current selection's complete layout.
+        QueueInspectorRefresh();
     }
 
     void StudioRenderPath::RefreshStatus()
@@ -6061,7 +6193,7 @@ namespace renegade::studio
         {
             const auto* name =
                 session_->Scenes().GetScene().names.GetComponent(entity);
-            inspectorLabel_.SetText(
+            SetInspectorHeading(
                 environmentWorkspaceActive_
                     ? "ENVIRONMENT // SCENE WEATHER"
                     : "ENVIRONMENT // " +
@@ -6203,7 +6335,7 @@ namespace renegade::studio
         {
             const auto* name =
                 session_->Scenes().GetScene().names.GetComponent(entity);
-            inspectorLabel_.SetText(
+            SetInspectorHeading(
                 "TERRAIN // " +
                 (multiple ? std::to_string(session_->Selection().Entities().size())+" OBJECTS" :
                     name != nullptr && !name->name.empty()
@@ -6260,7 +6392,7 @@ namespace renegade::studio
         {
             const auto* name =
                 session_->Scenes().GetScene().names.GetComponent(entity);
-            inspectorLabel_.SetText(
+            SetInspectorHeading(
                 "LIGHT // " +
                 (multiple ? std::to_string(session_->Selection().Entities().size())+" OBJECTS" :
                     name != nullptr && !name->name.empty()
@@ -6304,7 +6436,7 @@ namespace renegade::studio
         {
             if (!hasLight)
             {
-                inspectorLabel_.SetText(terrainWorkspaceActive_
+                SetInspectorHeading(terrainWorkspaceActive_
                     ? "TERRAIN // CREATE OR EDIT LANDSCAPE"
                     : "TRANSFORM // SELECT AN ENTITY");
             }
@@ -6325,11 +6457,11 @@ namespace renegade::studio
             session_->Scenes().GetScene().names.GetComponent(entity);
         if (hasPlayerStart)
         {
-            inspectorLabel_.SetText("PLAYER START // SPAWN + CONTROLLER");
+            SetInspectorHeading("PLAYER START // SPAWN + CONTROLLER");
         }
         else if (!hasLight)
         {
-            inspectorLabel_.SetText(
+            SetInspectorHeading(
                 std::string(multiple ? "SELECTION PIVOT // " : hasSelectedRiver ? "RIVER // " : "TRANSFORM // ") +
                 (multiple ? std::to_string(session_->Selection().Entities().size())+" OBJECTS" :
                     name != nullptr && !name->name.empty()
@@ -7673,7 +7805,14 @@ namespace renegade::studio
         if(editSelected&&!session_->Scenes().GetScene().lights.Contains(target))return;
         lightPicker_.SetPos({std::max(8.0f,(GetLogicalWidth()-1020.0f)*.5f),40});
         studioChrome_.PrepareViewportPlacement();
-        if(target==wi::ecs::INVALID_ENTITY)session_->Selection().Clear();
+        if(target==wi::ecs::INVALID_ENTITY) {
+            session_->Selection().Clear();
+            // Creation clears the selection before the modal pauses Studio.
+            // Keep hierarchy and section visibility consistent with that state.
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+        }
         lightPicker_.Open(*session_,type,target);
     }
     void StudioRenderPath::UpdateLightPicker(float dt)
@@ -9105,7 +9244,8 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     bool StudioRenderPath::IsPointerOverViewport(
         const XMFLOAT4& pointer) const noexcept
     {
-        if (playerCameraPreviewHeaderPressed_) return false;
+        if (!SceneOverlaysVisible() || scenePopupInputCaptured_ ||
+            studioChrome_.HasOpenMenuPopup() || playerCameraPreviewHeaderPressed_) return false;
         const auto inset = PlayerCameraPreviewBounds();
         if (playerCameraPreviewVisible_ && pointer.x >= inset.x && pointer.x < inset.z &&
             pointer.y >= inset.y && pointer.y < inset.w) return false;
@@ -9574,6 +9714,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         if(editingAssembly_!=wi::ecs::INVALID_ENTITY && entity!=editingAssembly_ &&
             !scene.Entity_IsDescendant(entity,editingAssembly_))editingAssembly_=wi::ecs::INVALID_ENTITY;
         entity=bridge::ResolveAssemblySelection(scene,entity,editingAssembly_);
+        // A deliberate viewport selection owns the Inspector just like a
+        // hierarchy selection, even when Environment or Render was active.
+        SetEnvironmentWorkspaceActive(false);
+        SetTerrainWorkspaceActive(false);
+        SetRenderWorkspaceActive(false);
         const auto authoringTool=[&](wi::ecs::Entity e) {
             return scene.terrains.Contains(e) ||
                 bridge::RiverTransformNeedsTerrainTransaction(scene,e) ||
@@ -9585,6 +9730,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         for(auto existing:session_->Selection().Entities())if(authoringTool(existing))toggle=false;
         if(toggle)session_->Selection().Toggle(entity);else session_->Selection().Select(entity);
         SyncGizmoSelection();
+        studioChrome_.OnSceneSelectionChanged();
     }
 
     bool StudioRenderPath::HandleViewportSelection(const XMFLOAT4& pointer)
@@ -9637,6 +9783,12 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 session_->Selection().Set(std::move(selected));SyncGizmoSelection();
             } else if(!selectionGestureAdd_)session_->Selection().Clear();
             selectionBox_=false;
+            if(session_->Selection().HasSelection()) {
+                SetEnvironmentWorkspaceActive(false);
+                SetTerrainWorkspaceActive(false);
+                SetRenderWorkspaceActive(false);
+                studioChrome_.OnSceneSelectionChanged();
+            }
             RefreshHierarchy();RefreshInspector();RefreshStatus();return true;
         }
         if(GetGUI().HasFocus() || !IsPointerOverViewport(pointer) ||
@@ -9660,6 +9812,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
     bool StudioRenderPath::HandleAssemblyToolbar(const XMFLOAT4& pointer)
     {
+        // Specialist inspectors do not own scene/prefab action hit targets.
+        if(studioChrome_.IsAudioWorkspaceActive() || studioChrome_.IsPhysicsLabActive())
+            return false;
         if(pendingAction_!=EditorAction::None || studioChrome_.HasOpenMenuPopup() ||
             scenePrefabSavePanel_.IsVisible() || lightPicker_.IsVisible() || particlePicker_.IsVisible())return false;
         if(!session_ || projectHubVisible_ || environmentWorkspaceActive_ || terrainWorkspaceActive_ || renderWorkspaceActive_ ||
@@ -9684,10 +9839,14 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
     void StudioRenderPath::DrawSelectionGesture(wi::graphics::CommandList cmd) const
     {
+        const bool showSceneSelectionTools =
+            !studioChrome_.IsAudioWorkspaceActive() && !studioChrome_.IsPhysicsLabActive();
+        // Keep box-selection feedback available in the viewport, while the
+        // prefab toolbar and scene-editing hints belong only to scene editing.
         // Native menus and modal pickers own this screen space and gesture.
         if(scenePrefabSavePanel_.IsVisible() || studioChrome_.HasOpenMenuPopup() ||
             lightPicker_.IsVisible() || particlePicker_.IsVisible())return;
-        if(session_ && !projectHubVisible_ && !environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
+        if(showSceneSelectionTools && session_ && !projectHubVisible_ && !environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
             !modelImportPanel_.IsVisible() && !assemblyPanel_.IsVisible() && !handGripPanel_.IsVisible() &&
             session_->Selection().HasSelection()) {
             const float x=viewportBounds_.x+16,y=viewportBounds_.y+54;
@@ -9705,7 +9864,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 wi::font::Draw(labels[i],text,cmd);
             }
         }
-        if(session_ && !projectHubVisible_ && !environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
+        if(showSceneSelectionTools && session_ && !projectHubVisible_ && !environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
             !modelImportPanel_.IsVisible() && !assemblyPanel_.IsVisible() && !handGripPanel_.IsVisible() &&
             editingAssembly_==wi::ecs::INVALID_ENTITY) {
             wi::font::Params help;help.posX=viewportBounds_.x+16;
@@ -9731,7 +9890,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             const wi::Color edge(100,230,210,230);
             rect(x,y,w,1,edge);rect(x,y+h,w,1,edge);rect(x,y,1,h,edge);rect(x+w,y,1,h,edge);
         }
-        if(editingAssembly_!=wi::ecs::INVALID_ENTITY && session_ &&
+        if(showSceneSelectionTools && editingAssembly_!=wi::ecs::INVALID_ENTITY && session_ &&
             editingSceneRevision_==session_->Scenes().Revision() &&
             session_->Scenes().GetScene().transforms.Contains(editingAssembly_)) {
             auto* n=session_->Scenes().GetScene().names.GetComponent(editingAssembly_);

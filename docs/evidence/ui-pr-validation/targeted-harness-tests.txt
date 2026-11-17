@@ -1,0 +1,13 @@
+Test project <preflight>/BUILD/renegade
+    Start 132: RenegadeStoryFlowGate10ProjectHomeCommandContract
+1/4 Test #132: RenegadeStoryFlowGate10ProjectHomeCommandContract ...   Passed    0.04 sec
+    Start 212: RenegadeRiverDefaultTerrainRecovery
+2/4 Test #212: RenegadeRiverDefaultTerrainRecovery .................   Passed   26.99 sec
+    Start 217: RenegadeTerrainInitializationRecovery
+3/4 Test #217: RenegadeTerrainInitializationRecovery ...............   Passed   46.64 sec
+    Start 287: RenegadeRiverJunctionFoamTransportTests
+4/4 Test #287: RenegadeRiverJunctionFoamTransportTests .............   Passed   15.82 sec
+
+100% tests passed out of 4
+
+Total Test time (real) =  89.57 sec

@@ -1,0 +1,27 @@
+Test project E:/RenegadeUIPreflight-20261117/BUILD/renegade
+      Start 212: RenegadeRiverDefaultTerrainRecovery
+ 1/11 Test #212: RenegadeRiverDefaultTerrainRecovery ..........   Passed  110.21 sec
+      Start 213: RenegadeMaximumTerrainRiver_expanded-first
+ 2/11 Test #213: RenegadeMaximumTerrainRiver_expanded-first ...   Passed  142.50 sec
+      Start 214: RenegadeMaximumTerrainRiver_linked-first
+ 3/11 Test #214: RenegadeMaximumTerrainRiver_linked-first .....   Passed  152.69 sec
+      Start 215: RenegadeMaximumTerrainGPU_source
+ 4/11 Test #215: RenegadeMaximumTerrainGPU_source .............   Passed  100.53 sec
+      Start 216: RenegadeMaximumTerrainGPU_preview
+ 5/11 Test #216: RenegadeMaximumTerrainGPU_preview ............   Passed  100.69 sec
+      Start 217: RenegadeTerrainInitializationRecovery
+ 6/11 Test #217: RenegadeTerrainInitializationRecovery ........   Passed   77.27 sec
+      Start 218: RenegadeTerrainPreviewRender0Recovery
+ 7/11 Test #218: RenegadeTerrainPreviewRender0Recovery ........   Passed   69.29 sec
+      Start 219: RenegadeTerrainPreviewRender1Recovery
+ 8/11 Test #219: RenegadeTerrainPreviewRender1Recovery ........   Passed   68.67 sec
+      Start 220: RenegadeTerrainPreviewRender2Recovery
+ 9/11 Test #220: RenegadeTerrainPreviewRender2Recovery ........   Passed   69.78 sec
+      Start 309: RenegadeGpuUploadBufferTests
+10/11 Test #309: RenegadeGpuUploadBufferTests .................   Passed    0.73 sec
+      Start 310: RenegadeRendererOverlayComposition
+11/11 Test #310: RenegadeRendererOverlayComposition ...........   Passed   20.31 sec
+
+100% tests passed out of 11
+
+Total Test time (real) = 912.82 sec

@@ -1,5 +1,6 @@
 #pragma once
 #include "DialogueEditorWindow.h"
+#include "StudioUiPolicy.h"
 #include "renegade/bridge/SceneAssemblyService.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/RiverFlowRenderer.h"
@@ -72,6 +73,28 @@ namespace renegade::studio
         { dialogueDisplayEditor_ = std::move(callback); }
         void OpenDialogueEditor()
         { if(session_) dialogueEditor_.Open(*session_,*this); }
+        void SetLevelWorkspaceActive(bool active) noexcept { levelWorkspaceActive_ = active; }
+        [[nodiscard]] bool SceneOverlaysVisible() const noexcept
+        {
+            const bool tool = dialogueEditor_.IsVisible() || dialogueFrameSuspended_ ||
+                lightPicker_.IsVisible() || particlePicker_.IsVisible() || lightPickerFrameSuspended_ ||
+                modelImportPanel_.IsVisible() || assemblyPanel_.IsVisible() ||
+                assemblyHandPanel_.IsVisible() || assemblyFirearmPanel_.IsVisible() ||
+                handGripPanel_.IsVisible() || equipmentPanel_.IsVisible() ||
+                weaponProjectilePanel_.IsVisible() || projectileCreatePanel_.IsVisible() ||
+                projectileTimingPanel_.IsVisible() || launchSocketPanel_.IsVisible() ||
+                pickupPanel_.IsVisible() || scenePrefabSavePanel_.IsVisible();
+            return ui::SceneOverlayState{levelWorkspaceActive_,projectHubVisible_,
+                projectLoadingOverlay_.IsVisible(),testLevelRuntime_.IsActive() || testLevelFrameSuspended_,
+                studioChrome_.IsPhysicsLabActive(),tool}.Visible();
+        }
+        [[nodiscard]] bool SceneOverlayInputAllowed(const XMFLOAT4& pointer) const noexcept
+        {
+            return SceneOverlaysVisible() && !scenePopupInputCaptured_ &&
+                !studioChrome_.HasOpenMenuPopup() && !GetGUI().IsTyping() &&
+                IsPointerOverViewport(pointer);
+        }
+        void ComposeUiForeground(wi::graphics::CommandList cmd) const;
         void SelectViewportObject(wi::ecs::Entity entity,bool toggle) {
             SelectSceneObject(entity,toggle);
             RefreshHierarchy();QueueInspectorRefresh();
@@ -98,6 +121,12 @@ namespace renegade::studio
         void RefreshStatus();
         void RefreshHierarchy();
         void RefreshInspector();
+        void SetInspectorHeading(const std::string& text)
+        {
+            // Keep the full title independent of the fitted display string.
+            inspectorLabel_.SetTooltip(text);
+            inspectorLabel_.SetText(text);
+        }
         void QueueInspectorRefresh() noexcept;
         void RefreshProjectHub();
         void RefreshAssetBrowser();
@@ -793,6 +822,7 @@ namespace renegade::studio
             bool playerStart = false);
         void DrawEditorGrid(wi::graphics::CommandList cmd) const;
         void SetGridVisible(bool visible);
+        void SetEditorViewMode(int mode);
         void CreateProjectHub();
         void CreateWorkspaceShell();
         void SelectAssetBrowserFolder(const std::string& relativePath);
@@ -888,10 +918,10 @@ namespace renegade::studio
         wi::Application::InfoDisplayer* diagnostics_ = nullptr;
         wi::gui::Window toolbarPanel_;
         wi::gui::Label workspaceTitle_;
-        wi::gui::Button translateToolButton_;
-        wi::gui::Button rotateToolButton_;
-        wi::gui::Button scaleToolButton_;
-        wi::gui::Button projectHubButton_;
+        RenegadeButton translateToolButton_;
+        RenegadeButton rotateToolButton_;
+        RenegadeButton scaleToolButton_;
+        RenegadeButton projectHubButton_;
         wi::gui::Window hierarchyPanel_;
         wi::gui::Label statusLabel_;
         wi::gui::Label hierarchyLabel_;
@@ -903,6 +933,7 @@ namespace renegade::studio
         std::uint64_t inspectorDisclosureSelectionRevision_ =
             static_cast<std::uint64_t>(-1);
         int inspectorDisclosureViewToken_ = -1;
+        SceneInspectorButton inspectorMetadataHeader_;
         SceneInspectorButton transformSectionHeader_;
         SceneInspectorButton renderingSectionHeader_;
         SceneInspectorButton materialsSectionHeader_;
@@ -1108,7 +1139,7 @@ namespace renegade::studio
         void CreateNightColourEditor();
         wi::gui::ColorPicker nightColourPicker_;
         SceneInspectorButton nightZenithColour_, nightHorizonColour_;
-        wi::gui::Button nightColourApply_, nightColourCancel_;
+        RenegadeButton nightColourApply_, nightColourCancel_;
         bool nightColourOpen_ = false, nightColourIsHorizon_ = false;
         wi::ecs::Entity nightColourEntity_ = wi::ecs::INVALID_ENTITY;
         XMFLOAT3 nightColourValue_;
@@ -1163,7 +1194,7 @@ namespace renegade::studio
         void CaptureCloudBodyReplay();
         uint32_t cloudBodyReplayFrames_=0;
         bool cloudBodyReplayCaptured_=false;
-        wi::gui::ComboBox cloudFormation_;
+        RenegadeComboBox cloudFormation_;
         SceneInspectorSlider cloudCoverage_;
         SceneInspectorSlider cloudMovementSpeed_;
         SceneInspectorSlider cloudStartHeight_;
@@ -1371,32 +1402,32 @@ namespace renegade::studio
         wi::gui::Label hubTitleLabel_;
         wi::gui::Label hubSubtitleLabel_;
         wi::gui::TextInputField projectNameInput_;
-        wi::gui::Button createProjectButton_;
-        wi::gui::Button openProjectButton_;
-        wi::gui::Button openSceneButton_;
+        RenegadeButton createProjectButton_;
+        RenegadeButton openProjectButton_;
+        RenegadeButton openSceneButton_;
         wi::gui::Label recentProjectsLabel_;
         std::array<
-            wi::gui::Button,
+            RenegadeButton,
             bridge::ProjectService::MaximumRecentProjects> recentProjectButtons_;
         wi::gui::Label selectedProjectLabel_;
-        wi::gui::Button launchProjectButton_;
-        wi::gui::Button continueProjectButton_;
+        RenegadeButton launchProjectButton_;
+        RenegadeButton continueProjectButton_;
         wi::gui::Label hubMessageLabel_;
         RenegadeTextInputField hubNewProjectNameInput_;
         RenegadeButton hubNewProjectConfirmButton_;
         RenegadeButton hubNewProjectCancelButton_;
-        wi::gui::Button gridToggleButton_;
+        RenegadeButton gridToggleButton_;
         RenegadePhysicsLabStudioChrome studioChrome_;
         RenegadeAssistantDock assistantDock_;
         std::vector<std::string> playerPrefabChoices_;
-        wi::gui::ComboBox playerPrefab_;
-        wi::gui::Button playerPrefabSave_, playerPrefabReset_;
+        RenegadeComboBox playerPrefab_;
+        RenegadeButton playerPrefabSave_, playerPrefabReset_;
         wi::gui::Label playerPrefabStatus_;
         void SaveSelectedPlayerPrefab();
         void ApplySelectedPlayerPrefab(std::string assetId);
         void ResetSelectedPlayerPrefab();
         void RefreshPlayerPrefabInspector();
-        wi::gui::Button playerAssembly_, playerEquipment_;
+        RenegadeButton playerAssembly_, playerEquipment_;
         void CreateProjectileEditor();
         void OpenWeaponProjectileEditor();
         void OpenProjectileAssetEditor();
@@ -1407,10 +1438,10 @@ namespace renegade::studio
         void RefreshProjectileEditorLayout();
         void RefreshWeaponProjectileLayout();
         wi::gui::Window weaponProjectilePanel_, projectileCreatePanel_;
-        wi::gui::ComboBox projectileWeapon_, projectileAction_, projectileFireMode_, projectileChoice_, projectilePreset_;
+        RenegadeComboBox projectileWeapon_, projectileAction_, projectileFireMode_, projectileChoice_, projectilePreset_;
         wi::gui::TextInputField projectileSearch_, projectileName_;
         wi::gui::Slider projectileSpeed_, projectileGravity_, projectileLifetime_;
-        wi::gui::Button equipmentProjectile_, projectileAssign_, projectileNew_, projectileEditCopy_,
+        RenegadeButton equipmentProjectile_, projectileAssign_, projectileNew_, projectileEditCopy_,
             projectileClose_, projectileSave_, projectileCancel_;
         wi::gui::Label projectileSummary_, projectileCreateHelp_;
         std::vector<bridge::StableId> projectileChoices_;
@@ -1419,16 +1450,16 @@ namespace renegade::studio
         float projectileDraftDamage_=10;
         bridge::StableId projectileDraftMesh_, projectileEditorProject_;
         std::vector<bridge::StableId> projectileMeshChoices_;
-        wi::gui::ComboBox projectileMesh_;
+        RenegadeComboBox projectileMesh_;
         wi::gui::Slider projectileVisualScale_, projectileRotationX_, projectileRotationY_, projectileRotationZ_;
-        wi::gui::Button projectileImportMesh_, projectileSocketEdit_;
-        wi::gui::ComboBox projectileSocket_, projectileSecondSocket_, projectileSocketPolicy_;
+        RenegadeButton projectileImportMesh_, projectileSocketEdit_;
+        RenegadeComboBox projectileSocket_, projectileSecondSocket_, projectileSocketPolicy_;
         wi::gui::Slider projectileReleaseTime_, projectileHitscanRange_, projectileHitscanDamage_;
         wi::gui::Slider projectileStormRadius_,projectileStormDuration_,projectileStormCount_,projectileStormDamage_;
-        wi::gui::ComboBox projectileReleaseMode_;
-        wi::gui::Button projectileAdvanced_;
+        RenegadeComboBox projectileReleaseMode_;
+        RenegadeButton projectileAdvanced_;
         wi::gui::Window projectileTimingPanel_;
-        wi::gui::Button projectileTimingOpen_, projectileTimingPlay_, projectileTimingMark_, projectileTimingUse_, projectileTimingClose_;
+        RenegadeButton projectileTimingOpen_, projectileTimingPlay_, projectileTimingMark_, projectileTimingUse_, projectileTimingClose_;
         wi::gui::Slider projectileTimingCursor_, projectileTimingMarker_;
         wi::gui::Label projectileTimingImage_, projectileTimingInfo_;
         std::unique_ptr<ModelImportPreview> projectileTimingPreview_;
@@ -1438,16 +1469,16 @@ namespace renegade::studio
         bool projectileAdvancedVisible_=false;
         size_t projectileAvailableSocketCount_=0;
         int projectileEditorLayout_=-1, projectileWeaponLayout_=-1;
-        wi::gui::ComboBox projectileEffectA_, projectileEffectB_, projectileImpactEffect_, projectileImpactMode_;
+        RenegadeComboBox projectileEffectA_, projectileEffectB_, projectileImpactEffect_, projectileImpactMode_;
         wi::gui::Slider projectileEffectSize_, projectileEffectRate_, projectileEffectLife_, projectileEffectOffset_,
             projectileDamage_, projectileStuckLife_, projectileEmbedDepth_;
         void SetProjectileEffectControls(const bridge::ProjectileAssetDocument&);
         std::vector<bridge::ProjectileEffectLayer> ProjectileEffectControls() const;
         std::vector<std::string> projectileSocketNames_;
         wi::gui::Window launchSocketPanel_;
-        wi::gui::ComboBox launchSocketChoice_, launchSocketPart_, launchSocketParent_;
+        RenegadeComboBox launchSocketChoice_, launchSocketPart_, launchSocketParent_;
         wi::gui::TextInputField launchSocketName_;
-        wi::gui::Button launchSocketNew_, launchSocketRemove_, launchSocketPlace_,
+        RenegadeButton launchSocketNew_, launchSocketRemove_, launchSocketPlace_,
             launchSocketFireSpot_, launchSocketApply_, launchSocketClose_, launchSocketFit_;
         std::array<SceneInspectorSlider,6> launchSocketValues_;
         wi::gui::Label launchSocketImage_, launchSocketHelp_;
@@ -1460,7 +1491,7 @@ namespace renegade::studio
         XMFLOAT2 launchSocketPointer_ = {};
         std::unique_ptr<ModelImportPreview> projectilePreview_;
         wi::gui::Label projectilePreviewImage_, projectilePreviewInfo_;
-        wi::gui::Button projectilePreviewFit_;
+        RenegadeButton projectilePreviewFit_;
         int projectilePreviewDrag_ = 0;
         XMFLOAT2 projectilePreviewPointer_ = {};
         bridge::StableId projectilePreviewMesh_, projectilePreviewProject_;
@@ -1469,34 +1500,34 @@ namespace renegade::studio
         bool projectileStandaloneEditor_=false;
         bool modelImportFromProjectile_=false;
         wi::gui::Window equipmentPanel_;
-        wi::gui::ComboBox equipmentPrimary_, equipmentOffHand_, equipmentHandUse_;
+        RenegadeComboBox equipmentPrimary_, equipmentOffHand_, equipmentHandUse_;
         wi::gui::TextInputField equipmentName_;
-        wi::gui::Button equipmentCreate_, equipmentApply_, equipmentClose_;
+        RenegadeButton equipmentCreate_, equipmentApply_, equipmentClose_;
         wi::gui::Label equipmentHelp_, equipmentStatus_;
         std::vector<bridge::StableId> equipmentChoices_;
         bridge::StableId equipmentProject_;
         wi::ecs::Entity equipmentPlayer_=wi::ecs::INVALID_ENTITY;
         wi::gui::Window assemblyPanel_, assemblyFirearmPanel_;
-        wi::gui::Button assemblyFirearmButton_, assemblyHandButton_;
+        RenegadeButton assemblyFirearmButton_, assemblyHandButton_;
         wi::gui::Window assemblyHandPanel_;
-        wi::gui::ComboBox assemblyHandPage_, assemblyOffWeapon_;
+        RenegadeComboBox assemblyHandPage_, assemblyOffWeapon_;
         std::array<wi::gui::ComboBox,3> assemblyHandBones_, assemblyBlockClips_;
         std::array<wi::gui::ComboBox,12> assemblyDirectionalClips_;
         std::array<wi::gui::ComboBox,4> assemblyAttackVariants_;
         std::array<SceneInspectorSlider,25> assemblyHandValues_;
-        wi::gui::CheckBox assemblyAvoidance_, assemblyPreviewShield_;
+        RenegadeCheckBox assemblyAvoidance_, assemblyPreviewShield_;
         std::vector<std::string> assemblyPreviewActions_;
         wi::gui::Label assemblyHandHelp_;
         wi::gui::Label assemblyFirearmHelp_;
         SceneInspectorSlider assemblyCapacity_, assemblyShotInterval_;
-        wi::gui::CheckBox assemblyPartialReload_;
+        RenegadeCheckBox assemblyPartialReload_;
         wi::gui::Label assemblyImage_, assemblyStatus_;
-        wi::gui::ComboBox assemblyArms_, assemblyWeapon_, assemblyBone_, assemblyAction_, assemblyActionPage_;
+        RenegadeComboBox assemblyArms_, assemblyWeapon_, assemblyBone_, assemblyAction_, assemblyActionPage_;
         std::array<wi::gui::ComboBox, bridge::FirstPersonAssemblyActions.size()> assemblyArmsClips_, assemblyWeaponClips_;
         std::array<SceneInspectorSlider, 12> assemblyValues_;
         wi::gui::Slider assemblyTime_;
         wi::gui::TextInputField assemblyName_;
-        wi::gui::Button assemblyLoad_, assemblyPreviewButton_, assemblyPlay_, assemblySave_, assemblySaveNew_, assemblyUndo_, assemblyRedo_, assemblyClose_;
+        RenegadeButton assemblyLoad_, assemblyPreviewButton_, assemblyPlay_, assemblySave_, assemblySaveNew_, assemblyUndo_, assemblyRedo_, assemblyClose_;
         bridge::CommandService assemblyCommands_;
         bridge::StableId assemblyAssetId_;
         std::string assemblyOriginalHash_;
@@ -1707,6 +1738,8 @@ namespace renegade::studio
         wi::jobsystem::context materialTextureImportWorkload_;
         std::string openingScenePath_;
         bool sceneOpenInProgress_ = false;
+        bool levelWorkspaceActive_ = true;
+        bool scenePopupInputCaptured_ = false;
     };
 
     // The Physics Lab is a GUI workspace over the authoritative Scene render
@@ -1741,16 +1774,8 @@ namespace renegade::studio
 
         void Compose(wi::graphics::CommandList cmd) const override
         {
-            if (IsTestLevelRuntimeActive())
-            {
-                StudioRenderPath::Compose(cmd);
-                return;
-            }
-            if (IsPhysicsLabActive())
-            {
-                wi::RenderPath3D::Compose(cmd);
-                return;
-            }
+            // Shared composition suppresses world overlays in Physics Lab and
+            // retains final foreground menus and loading covers.
             StudioRenderPath::Compose(cmd);
         }
     };
@@ -1775,6 +1800,7 @@ namespace renegade::studio
                 storyFlowRenderer_,
                 screenEditorRenderer_,
                 session_);
+            renderer_.SetLevelWorkspaceActive(GetActivePath() == &renderer_);
             UpdateCloudBodySelfTest();
             renderer_.UpdateLiveDiagnostics(GetActivePath() == &storyFlowRenderer_ ? "story_flow" :
                 GetActivePath() == &screenEditorRenderer_ ? "screen_editor" : "level_editor");

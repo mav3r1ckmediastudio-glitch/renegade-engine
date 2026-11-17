@@ -4,6 +4,8 @@
 
 namespace renegade::studio
 {
+    inline constexpr float JourneyWorkspaceHeaderHeight = 192.0f;
+
     struct JourneyUiRect
     {
         float x = 0.0f;
@@ -38,7 +40,7 @@ namespace renegade::studio
         const float height = std::max(1.0f, requestedHeight);
         constexpr float topBarHeight = 70.0f;
         constexpr float railWidth = 96.0f;
-        constexpr float titleHeight = 112.0f;
+        constexpr float titleHeight = JourneyWorkspaceHeaderHeight - topBarHeight;
 
         const float inspectorWidth = std::clamp(
             width * 0.185f, 280.0f, 336.0f);

@@ -1,0 +1,6 @@
+MSBuild version 18.6.3+84d3e95b4 for .NET Framework
+
+  Building Custom Rule <repo>/Studio/CMakeLists.txt
+  S1BInspectorSectionMigration.cpp
+  RenegadeStudio.vcxproj -> <repo>\BUILD\native\Studio\Release\RenegadeStudio-UIFinish7.exe
+                            Install nine Renegade thunder SFX with 3D variants in Studio

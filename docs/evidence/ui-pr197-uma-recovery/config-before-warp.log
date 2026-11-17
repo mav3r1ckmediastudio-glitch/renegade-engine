@@ -1,0 +1,66 @@
+-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26200.
+-- Renegade shared allocator has one registry entry per type across translation units
+-- Renegade particle overlay ready; Wicked pin unchanged
+-- Renegade Night Sky overlay ready (pinned WickedEngine)
+-- Building WickedEngine as a static library
+-- Renegade Wicked backlog shutdown fix enabled (submodule unchanged)
+-- Renegade missing-audio-endpoint recovery enabled (Wicked pin unchanged)
+-- Renegade coherent-UMA upload-buffer recovery enabled (Wicked pin unchanged)
+-- Renegade coplanar wireframe overlay fix enabled (submodule unchanged)
+-- TEST-ONLY: native DX12 fixtures use real WARP; not a distributable configuration
+-- Renegade physics: reusable-buffer wrapper generated without editing WickedEngine
+G8C_GRAPHICS_HARNESS_STAGED
+G8C_GRAPHICS_HARNESS_STAGED
+G8D_SURFACE_HARNESS_STAGED
+G8C_GRAPHICS_HARNESS_STAGED
+G8D_SURFACE_HARNESS_STAGED
+G8E_STRANDS_HARNESS_STAGED
+G8C_GRAPHICS_HARNESS_STAGED
+G8D_SURFACE_HARNESS_STAGED
+G8E_STRANDS_HARNESS_STAGED
+G8F_LABELLED_WEB_HARNESS_STAGED
+G8C_GRAPHICS_HARNESS_STAGED
+G8D_SURFACE_HARNESS_STAGED
+G8E_STRANDS_HARNESS_STAGED
+G8G_ORIGINAL_ARTWORK_HARNESS_STAGED
+G8C_GRAPHICS_HARNESS_STAGED
+G8D_SURFACE_HARNESS_STAGED
+G8E_STRANDS_HARNESS_STAGED
+G8G_ORIGINAL_ARTWORK_HARNESS_STAGED
+G8H_REFINED_FOAM_HARNESS_STAGED
+G8C_GRAPHICS_HARNESS_STAGED
+G8D_SURFACE_HARNESS_STAGED
+G8E_STRANDS_HARNESS_STAGED
+G8G_ORIGINAL_ARTWORK_HARNESS_STAGED
+G8H_REFINED_FOAM_HARNESS_STAGED
+G10A_NATIVE_GRADED_HARNESS_STAGED
+G8C_GRAPHICS_HARNESS_STAGED
+G8D_SURFACE_HARNESS_STAGED
+G8E_STRANDS_HARNESS_STAGED
+G8G_ORIGINAL_ARTWORK_HARNESS_STAGED
+G8H_REFINED_FOAM_HARNESS_STAGED
+G10A_NATIVE_GRADED_HARNESS_STAGED
+CASCADE_NATIVE_HARNESS_STAGED
+G8C_GRAPHICS_HARNESS_STAGED
+G8D_SURFACE_HARNESS_STAGED
+G8E_STRANDS_HARNESS_STAGED
+G8G_ORIGINAL_ARTWORK_HARNESS_STAGED
+G8H_REFINED_FOAM_HARNESS_STAGED
+G10A_NATIVE_GRADED_HARNESS_STAGED
+CASCADE_NATIVE_HARNESS_STAGED
+SMOOTH_CONNECTED_NATIVE_HARNESS_STAGED
+G8C_GRAPHICS_HARNESS_STAGED
+G8D_SURFACE_HARNESS_STAGED
+G8E_STRANDS_HARNESS_STAGED
+G8G_ORIGINAL_ARTWORK_HARNESS_STAGED
+G8H_REFINED_FOAM_HARNESS_STAGED
+G10A_NATIVE_GRADED_HARNESS_STAGED
+CASCADE_NATIVE_HARNESS_STAGED
+SMOOTH_CONNECTED_NATIVE_HARNESS_STAGED
+OPENING_FOAM_PROOF_STAGED
+-- LP07 Gate 3 legacy import transactions retired; current importer proof is ModelImporterRebuild.
+-- LP07 Gate 6 legacy importer package acceptance retired; reusable instance/runtime proofs retained.
+-- LP08 Gate 5 legacy LP07-coupled package acceptance retired; resource runtime/cache proofs retained.
+-- Configuring done (11.5s)
+-- Generating done (47.1s)
+-- Build files have been written to: E:/RenegadeUIPreflight-20261117/BUILD/renegade

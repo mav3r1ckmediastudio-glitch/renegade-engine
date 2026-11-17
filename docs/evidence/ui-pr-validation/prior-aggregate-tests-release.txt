@@ -1,0 +1,687 @@
+Started: 2026-11-17T05:12:16.0132430Z
+Working directory: <preflight>
+Command: <user>\AppData\Local\Microsoft\WinGet\Links\ctest.exe --test-dir <preflight>\BUILD\renegade -C Release --timeout 180 --output-on-failure
+
+Test project <preflight>/BUILD/renegade
+        Start   1: RenegadeMarkerIconsSourceContract
+  1/334 Test   #1: RenegadeMarkerIconsSourceContract ..............................   Passed    0.03 sec
+        Start   2: RenegadeParticleEmitterTests
+  2/334 Test   #2: RenegadeParticleEmitterTests ...................................   Passed    0.04 sec
+        Start   3: RenegadeParticleEmitterSourceContract
+  3/334 Test   #3: RenegadeParticleEmitterSourceContract ..........................   Passed    0.03 sec
+        Start   4: RenegadeParticleEmitterOwnerFeedbackSourceContract
+  4/334 Test   #4: RenegadeParticleEmitterOwnerFeedbackSourceContract .............   Passed    0.03 sec
+        Start   5: RenegadeConstraintTests
+  5/334 Test   #5: RenegadeConstraintTests ........................................   Passed    0.03 sec
+        Start   6: RenegadeCharacterPhysicsTests
+  6/334 Test   #6: RenegadeCharacterPhysicsTests ..................................   Passed    0.05 sec
+        Start   7: RenegadeVehiclePhysicsTests
+  7/334 Test   #7: RenegadeVehiclePhysicsTests ....................................   Passed    0.04 sec
+        Start   8: RenegadeRagdollPhysicsTests
+  8/334 Test   #8: RenegadeRagdollPhysicsTests ....................................   Passed    0.04 sec
+        Start   9: RenegadeSoftBodyPhysicsTests
+  9/334 Test   #9: RenegadeSoftBodyPhysicsTests ...................................   Passed    0.05 sec
+        Start  10: RenegadePhysicsLuaTests
+ 10/334 Test  #10: RenegadePhysicsLuaTests ........................................   Passed    0.03 sec
+        Start  11: RenegadeWickedColliderTests
+ 11/334 Test  #11: RenegadeWickedColliderTests ....................................   Passed    0.03 sec
+        Start  12: RenegadeJP01ReusableAssetPhysicsTests
+ 12/334 Test  #12: RenegadeJP01ReusableAssetPhysicsTests ..........................   Passed    0.04 sec
+        Start  13: RenegadeJP01TransformScaleCommitTests
+ 13/334 Test  #13: RenegadeJP01TransformScaleCommitTests ..........................   Passed    0.04 sec
+        Start  14: RenegadeJP01HardeningSourceContract
+ 14/334 Test  #14: RenegadeJP01HardeningSourceContract ............................   Passed    0.03 sec
+        Start  15: RenegadePhase5Gate1SceneComponentTests
+ 15/334 Test  #15: RenegadePhase5Gate1SceneComponentTests .........................   Passed    0.03 sec
+        Start  16: RenegadePhase5Gate1SourceContract
+ 16/334 Test  #16: RenegadePhase5Gate1SourceContract ..............................   Passed    0.03 sec
+        Start  17: RenegadePhase5Gate2CameraTests
+ 17/334 Test  #17: RenegadePhase5Gate2CameraTests .................................   Passed    0.04 sec
+        Start  18: RenegadePhase5Gate2SourceContract
+ 18/334 Test  #18: RenegadePhase5Gate2SourceContract ..............................   Passed    0.03 sec
+        Start  19: RenegadePhase5Gate3DecalProbeTests
+ 19/334 Test  #19: RenegadePhase5Gate3DecalProbeTests .............................   Passed    0.05 sec
+        Start  20: RenegadePhase5Gate3SourceContract
+ 20/334 Test  #20: RenegadePhase5Gate3SourceContract ..............................   Passed    0.04 sec
+        Start  21: RenegadePhase5Gate4MaterialTests
+ 21/334 Test  #21: RenegadePhase5Gate4MaterialTests ...............................   Passed    0.04 sec
+        Start  22: RenegadePhase5Gate4SourceContract
+ 22/334 Test  #22: RenegadePhase5Gate4SourceContract ..............................   Passed    0.03 sec
+        Start  23: RenegadePhase5Gate5RenderSettingsTests
+ 23/334 Test  #23: RenegadePhase5Gate5RenderSettingsTests .........................   Passed    0.04 sec
+        Start  24: RenegadePhase5Gate5LutTests
+ 24/334 Test  #24: RenegadePhase5Gate5LutTests ....................................   Passed    0.07 sec
+        Start  25: RenegadePhase5Gate5SourceContract
+ 25/334 Test  #25: RenegadePhase5Gate5SourceContract ..............................   Passed    0.03 sec
+        Start  26: RenegadePhase5Gate6RenderSettingsTests
+ 26/334 Test  #26: RenegadePhase5Gate6RenderSettingsTests .........................   Passed    0.04 sec
+        Start  27: RenegadePhase5Gate6SourceContract
+ 27/334 Test  #27: RenegadePhase5Gate6SourceContract ..............................   Passed    0.02 sec
+        Start  28: RenegadePhase5Gate7RenderSettingsTests
+ 28/334 Test  #28: RenegadePhase5Gate7RenderSettingsTests .........................   Passed    0.04 sec
+        Start  29: RenegadePhase5Gate7SourceContract
+ 29/334 Test  #29: RenegadePhase5Gate7SourceContract ..............................   Passed    0.04 sec
+        Start  30: RenegadePhase5Gate8LightmapBakeTests
+ 30/334 Test  #30: RenegadePhase5Gate8LightmapBakeTests ...........................   Passed    0.03 sec
+        Start  31: RenegadePhase5Gate8SourceContract
+ 31/334 Test  #31: RenegadePhase5Gate8SourceContract ..............................   Passed    0.04 sec
+        Start  32: RenegadePhase5Gate9SourceContract
+ 32/334 Test  #32: RenegadePhase5Gate9SourceContract ..............................   Passed    0.04 sec
+        Start  33: RenegadeWD01VegetationSourceContract
+ 33/334 Test  #33: RenegadeWD01VegetationSourceContract ...........................   Passed    0.03 sec
+        Start  34: RenegadeEditorFrameLoopRecoverySourceContract
+ 34/334 Test  #34: RenegadeEditorFrameLoopRecoverySourceContract ..................   Passed    0.04 sec
+        Start  35: RenegadePhase6Gate1PlayerTests
+ 35/334 Test  #35: RenegadePhase6Gate1PlayerTests .................................   Passed    0.04 sec
+        Start  36: RenegadePhase6Gate1SourceContract
+ 36/334 Test  #36: RenegadePhase6Gate1SourceContract ..............................   Passed    0.04 sec
+        Start  37: RenegadePhase6Gate2InputTests
+ 37/334 Test  #37: RenegadePhase6Gate2InputTests ..................................   Passed    0.32 sec
+        Start  38: RenegadePhase6Gate2SourceContract
+ 38/334 Test  #38: RenegadePhase6Gate2SourceContract ..............................   Passed    0.03 sec
+        Start  39: RenegadePhase6Gate3AudioTests
+ 39/334 Test  #39: RenegadePhase6Gate3AudioTests ..................................   Passed    0.05 sec
+        Start  40: RenegadePhase6Gate3SourceContract
+ 40/334 Test  #40: RenegadePhase6Gate3SourceContract ..............................   Passed    0.08 sec
+        Start  41: RenegadePhase7Gate7BHumanoidRetargetTests
+ 41/334 Test  #41: RenegadePhase7Gate7BHumanoidRetargetTests ......................   Passed    0.06 sec
+        Start  42: RenegadePhase7Gate7BSourceContract
+ 42/334 Test  #42: RenegadePhase7Gate7BSourceContract .............................   Passed    0.03 sec
+        Start  43: RenegadePhase7Gate7CCharacterControlsTests
+ 43/334 Test  #43: RenegadePhase7Gate7CCharacterControlsTests .....................   Passed    0.04 sec
+        Start  44: RenegadePhase7Gate7CSourceContract
+ 44/334 Test  #44: RenegadePhase7Gate7CSourceContract .............................   Passed    0.03 sec
+        Start  45: RenegadePhase7Gate7DNativeTimelineTests
+ 45/334 Test  #45: RenegadePhase7Gate7DNativeTimelineTests ........................   Passed    0.04 sec
+        Start  46: RenegadePhase7Gate7DSourceContract
+ 46/334 Test  #46: RenegadePhase7Gate7DSourceContract .............................   Passed    0.03 sec
+        Start  47: RenegadePhase7Gate7ESpecialistTests
+ 47/334 Test  #47: RenegadePhase7Gate7ESpecialistTests ............................   Passed    0.05 sec
+        Start  48: RenegadePhase7Gate7ESourceContract
+ 48/334 Test  #48: RenegadePhase7Gate7ESourceContract .............................   Passed    0.04 sec
+        Start  49: RenegadePhase7Gate7FMeshBlendTests
+ 49/334 Test  #49: RenegadePhase7Gate7FMeshBlendTests .............................   Passed    0.05 sec
+        Start  50: RenegadePhase7Gate7FSourceContract
+ 50/334 Test  #50: RenegadePhase7Gate7FSourceContract .............................   Passed    0.03 sec
+        Start  51: RenegadeCharacterAiFoundationTests
+ 51/334 Test  #51: RenegadeCharacterAiFoundationTests .............................   Passed    0.04 sec
+        Start  52: RenegadeCharacterAiSourceContract
+ 52/334 Test  #52: RenegadeCharacterAiSourceContract ..............................   Passed    0.02 sec
+        Start  53: RenegadeCharacterAiProfilesTests
+ 53/334 Test  #53: RenegadeCharacterAiProfilesTests ...............................   Passed    0.06 sec
+        Start  54: RenegadeCharacterAiProfilesAuditTests
+ 54/334 Test  #54: RenegadeCharacterAiProfilesAuditTests ..........................   Passed    0.05 sec
+        Start  55: RenegadeCharacterAiProfilesSourceContract
+ 55/334 Test  #55: RenegadeCharacterAiProfilesSourceContract ......................   Passed    0.03 sec
+        Start  56: RenegadeCharacterAiPerceptionTests
+ 56/334 Test  #56: RenegadeCharacterAiPerceptionTests .............................   Passed    0.04 sec
+        Start  57: RenegadeCharacterAiPerceptionSourceContract
+ 57/334 Test  #57: RenegadeCharacterAiPerceptionSourceContract ....................   Passed    0.03 sec
+        Start  58: RenegadeCharacterAiDecisionTests
+ 58/334 Test  #58: RenegadeCharacterAiDecisionTests ...............................   Passed    0.05 sec
+        Start  59: RenegadeCharacterAiDecisionSourceContract
+ 59/334 Test  #59: RenegadeCharacterAiDecisionSourceContract ......................   Passed    0.03 sec
+        Start  60: RenegadeCharacterAiCombatTests
+ 60/334 Test  #60: RenegadeCharacterAiCombatTests .................................   Passed    0.05 sec
+        Start  61: RenegadeCharacterAiCombatSourceContract
+ 61/334 Test  #61: RenegadeCharacterAiCombatSourceContract ........................   Passed    0.04 sec
+        Start  62: RenegadeProjectileSimulationTests
+ 62/334 Test  #62: RenegadeProjectileSimulationTests ..............................   Passed    0.06 sec
+        Start  63: RenegadeProjectileWorldTests
+ 63/334 Test  #63: RenegadeProjectileWorldTests ...................................   Passed    0.06 sec
+        Start  64: RenegadeProjectileAssetTests
+ 64/334 Test  #64: RenegadeProjectileAssetTests ...................................   Passed    0.63 sec
+        Start  65: RenegadeImpactAudioTests
+ 65/334 Test  #65: RenegadeImpactAudioTests .......................................   Passed    0.40 sec
+        Start  66: RenegadeImpactAudioNativeVoiceTests
+ 66/334 Test  #66: RenegadeImpactAudioNativeVoiceTests ............................   Passed    0.44 sec
+        Start  67: RenegadeRuntimeProjectileSessionTests
+ 67/334 Test  #67: RenegadeRuntimeProjectileSessionTests ..........................   Passed    0.20 sec
+        Start  68: RenegadeOriginalImpactArtContract
+ 68/334 Test  #68: RenegadeOriginalImpactArtContract ..............................   Passed    0.07 sec
+        Start  69: RenegadeOriginalImpactAudioContract
+ 69/334 Test  #69: RenegadeOriginalImpactAudioContract ............................   Passed    0.06 sec
+        Start  70: RenegadeS1AInspectorSectionFrameworkTests
+ 70/334 Test  #70: RenegadeS1AInspectorSectionFrameworkTests ......................   Passed    0.05 sec
+        Start  71: RenegadeS1AInspectorSectionSourceContract
+ 71/334 Test  #71: RenegadeS1AInspectorSectionSourceContract ......................   Passed    0.03 sec
+        Start  72: RenegadeS1BInspectorMigrationSourceContract
+ 72/334 Test  #72: RenegadeS1BInspectorMigrationSourceContract ....................   Passed    0.03 sec
+        Start  73: RenegadeS2ScriptDocumentTests
+ 73/334 Test  #73: RenegadeS2ScriptDocumentTests ..................................   Passed    0.21 sec
+        Start  74: RenegadeS2ScriptDocumentSourceContract
+ 74/334 Test  #74: RenegadeS2ScriptDocumentSourceContract .........................   Passed    0.03 sec
+        Start  75: RenegadeS3GovernedLuaRuntimeTests
+ 75/334 Test  #75: RenegadeS3GovernedLuaRuntimeTests ..............................   Passed    0.15 sec
+        Start  76: RenegadeDialogueScriptingTests
+ 76/334 Test  #76: RenegadeDialogueScriptingTests .................................   Passed    0.18 sec
+        Start  77: RenegadeS3GovernedLuaRuntimeSourceContract
+ 77/334 Test  #77: RenegadeS3GovernedLuaRuntimeSourceContract .....................   Passed    0.05 sec
+        Start  78: RenegadeS4AScriptMetadataTests
+ 78/334 Test  #78: RenegadeS4AScriptMetadataTests .................................   Passed    0.10 sec
+        Start  79: RenegadeS4AScriptMetadataSourceContract
+ 79/334 Test  #79: RenegadeS4AScriptMetadataSourceContract ........................   Passed    0.03 sec
+        Start  80: RenegadeS4BScriptAuthoringTests
+ 80/334 Test  #80: RenegadeS4BScriptAuthoringTests ................................   Passed    0.91 sec
+        Start  81: RenegadeS4BScriptAuthoringSourceContract
+ 81/334 Test  #81: RenegadeS4BScriptAuthoringSourceContract .......................   Passed    0.04 sec
+        Start  82: RenegadeS4CScriptPropertyAuthoringTests
+ 82/334 Test  #82: RenegadeS4CScriptPropertyAuthoringTests ........................   Passed    0.05 sec
+        Start  83: RenegadeS4CScriptPropertyAuthoringSourceContract
+ 83/334 Test  #83: RenegadeS4CScriptPropertyAuthoringSourceContract ...............   Passed    0.04 sec
+        Start  84: RenegadeS4DScriptReferenceAuthoringTests
+ 84/334 Test  #84: RenegadeS4DScriptReferenceAuthoringTests .......................   Passed    0.05 sec
+        Start  85: RenegadeS4DGlobalScriptAuthoringTests
+ 85/334 Test  #85: RenegadeS4DGlobalScriptAuthoringTests ..........................   Passed    0.42 sec
+        Start  86: RenegadeS4DScriptReferenceAuthoringSourceContract
+ 86/334 Test  #86: RenegadeS4DScriptReferenceAuthoringSourceContract ..............   Passed    0.03 sec
+        Start  87: RenegadeS5CoreGameplayApiTests
+ 87/334 Test  #87: RenegadeS5CoreGameplayApiTests .................................   Passed    0.05 sec
+        Start  88: RenegadeS5CoreGameplayLuaTests
+ 88/334 Test  #88: RenegadeS5CoreGameplayLuaTests .................................   Passed    0.46 sec
+        Start  89: RenegadeS5CoreGameplayLuaTestsReusableOwner
+ 89/334 Test  #89: RenegadeS5CoreGameplayLuaTestsReusableOwner ....................   Passed    0.47 sec
+        Start  90: RenegadeS5CoreGameplayApiSourceContract
+ 90/334 Test  #90: RenegadeS5CoreGameplayApiSourceContract ........................   Passed    0.04 sec
+        Start  91: RenegadeS5BGameplayLifecycleTests
+ 91/334 Test  #91: RenegadeS5BGameplayLifecycleTests ..............................   Passed    0.06 sec
+        Start  92: RenegadeS5CGameplayEventRuntimeTests
+ 92/334 Test  #92: RenegadeS5CGameplayEventRuntimeTests ...........................   Passed    0.06 sec
+        Start  93: RenegadeS5DClosureSourceContract
+ 93/334 Test  #93: RenegadeS5DClosureSourceContract ...............................   Passed    0.04 sec
+        Start  94: RenegadeS6ScriptLibraryTests
+ 94/334 Test  #94: RenegadeS6ScriptLibraryTests ...................................   Passed    0.49 sec
+        Start  95: RenegadeS6ScriptLibrarySourceContract
+ 95/334 Test  #95: RenegadeS6ScriptLibrarySourceContract ..........................   Passed    0.04 sec
+        Start  96: RenegadeS7StockActionsRuntimeTests
+ 96/334 Test  #96: RenegadeS7StockActionsRuntimeTests .............................   Passed    0.08 sec
+        Start  97: RenegadeS7StockLibraryRootsTests
+ 97/334 Test  #97: RenegadeS7StockLibraryRootsTests ...............................   Passed    0.11 sec
+        Start  98: RenegadeS7StockActionsSourceContract
+ 98/334 Test  #98: RenegadeS7StockActionsSourceContract ...........................   Passed    0.05 sec
+        Start  99: RenegadePhase6ObjectiveSliceRuntimeTests
+ 99/334 Test  #99: RenegadePhase6ObjectiveSliceRuntimeTests .......................   Passed    0.08 sec
+        Start 100: RenegadePhase6NativeNavigationTests
+100/334 Test #100: RenegadePhase6NativeNavigationTests ............................   Passed    0.08 sec
+        Start 101: RenegadePhase6NativeNavigationSourceContract
+101/334 Test #101: RenegadePhase6NativeNavigationSourceContract ...................   Passed    0.04 sec
+        Start 102: RenegadeStudioDisclosurePolicySourceContract
+102/334 Test #102: RenegadeStudioDisclosurePolicySourceContract ...................   Passed    0.03 sec
+        Start 103: RenegadeTestLevelRuntimeHandoffSourceContract
+103/334 Test #103: RenegadeTestLevelRuntimeHandoffSourceContract ..................   Passed    0.03 sec
+        Start 104: RenegadeCharacterWorkflowSourceContract
+104/334 Test #104: RenegadeCharacterWorkflowSourceContract ........................   Passed    0.03 sec
+        Start 105: RenegadeCW04CharacterPlacementTests
+105/334 Test #105: RenegadeCW04CharacterPlacementTests ............................   Passed    0.07 sec
+        Start 106: RenegadeCW04CharacterPlacementSourceContract
+106/334 Test #106: RenegadeCW04CharacterPlacementSourceContract ...................   Passed    0.03 sec
+        Start 107: RenegadeCW05CharacterPrefabTests
+107/334 Test #107: RenegadeCW05CharacterPrefabTests ...............................   Passed    0.05 sec
+        Start 108: RenegadeCW05CommandCompanionTests
+108/334 Test #108: RenegadeCW05CommandCompanionTests ..............................   Passed    0.05 sec
+        Start 109: RenegadeCW05CharacterPrefabSourceContract
+109/334 Test #109: RenegadeCW05CharacterPrefabSourceContract ......................   Passed    0.04 sec
+        Start 110: RenegadeSceneUiGate2SourceContract
+110/334 Test #110: RenegadeSceneUiGate2SourceContract .............................   Passed    0.05 sec
+        Start 111: RenegadeSceneUiGate3SourceContract
+111/334 Test #111: RenegadeSceneUiGate3SourceContract .............................   Passed    0.04 sec
+        Start 112: RenegadeSceneUiGate4SourceContract
+112/334 Test #112: RenegadeSceneUiGate4SourceContract .............................   Passed    0.04 sec
+        Start 113: RenegadeAssetBrowserTombstoneRecoveryTests
+113/334 Test #113: RenegadeAssetBrowserTombstoneRecoveryTests .....................   Passed    0.15 sec
+        Start 114: RenegadeSceneUiGate5SourceContract
+114/334 Test #114: RenegadeSceneUiGate5SourceContract .............................   Passed    0.03 sec
+        Start 115: RenegadeSceneUiGate6SourceContract
+115/334 Test #115: RenegadeSceneUiGate6SourceContract .............................   Passed    0.06 sec
+        Start 116: RenegadeStoryFlowScreenSemanticsTests
+116/334 Test #116: RenegadeStoryFlowScreenSemanticsTests ..........................   Passed    0.17 sec
+        Start 117: RenegadeStoryFlowAuthoringSessionTests
+117/334 Test #117: RenegadeStoryFlowAuthoringSessionTests .........................   Passed    0.22 sec
+        Start 118: RenegadeStoryFlowGate4LevelLifecycleTests
+118/334 Test #118: RenegadeStoryFlowGate4LevelLifecycleTests ......................   Passed    0.42 sec
+        Start 119: RenegadeStoryFlowGate4BLevelReferenceTests
+119/334 Test #119: RenegadeStoryFlowGate4BLevelReferenceTests .....................   Passed    0.30 sec
+        Start 120: RenegadeStoryFlowGate4CLevelEditorLifecycleTests
+120/334 Test #120: RenegadeStoryFlowGate4CLevelEditorLifecycleTests ...............   Passed    0.13 sec
+        Start 121: RenegadeStoryFlowGate4DAcceptanceTests
+121/334 Test #121: RenegadeStoryFlowGate4DAcceptanceTests .........................   Passed    0.27 sec
+        Start 122: RenegadeStoryFlowGate5ScreenLifecycleTests
+122/334 Test #122: RenegadeStoryFlowGate5ScreenLifecycleTests .....................   Passed    1.43 sec
+        Start 123: RenegadeStoryFlowGate5ScreenReferenceTests
+123/334 Test #123: RenegadeStoryFlowGate5ScreenReferenceTests .....................   Passed    0.49 sec
+        Start 124: RenegadeStoryFlowGate5ScreenStudioBoundaryTests
+124/334 Test #124: RenegadeStoryFlowGate5ScreenStudioBoundaryTests ................   Passed    0.24 sec
+        Start 125: RenegadeStoryFlowGate5ProjectHomeRecoveryTests
+125/334 Test #125: RenegadeStoryFlowGate5ProjectHomeRecoveryTests .................   Passed    1.17 sec
+        Start 126: RenegadeStoryFlowGate8EOutcomeParityTests
+126/334 Test #126: RenegadeStoryFlowGate8EOutcomeParityTests ......................   Passed    1.94 sec
+        Start 127: RenegadeStoryFlowGate9BJourneyThumbnailTests
+127/334 Test #127: RenegadeStoryFlowGate9BJourneyThumbnailTests ...................   Passed    0.06 sec
+        Start 128: RenegadeStoryFlowGate9CVisualRoutingTests
+128/334 Test #128: RenegadeStoryFlowGate9CVisualRoutingTests ......................   Passed    0.09 sec
+        Start 129: RenegadeStoryFlowGate9DSourceContract
+129/334 Test #129: RenegadeStoryFlowGate9DSourceContract ..........................   Passed    0.03 sec
+        Start 130: RenegadeStoryFlowGate9ENonlinearAuthoringTests
+130/334 Test #130: RenegadeStoryFlowGate9ENonlinearAuthoringTests .................   Passed    0.15 sec
+        Start 131: RenegadeStoryFlowJourneyRecovery9ASourceContract
+131/334 Test #131: RenegadeStoryFlowJourneyRecovery9ASourceContract ...............   Passed    0.03 sec
+        Start 132: RenegadeStoryFlowGate10ProjectHomeCommandContract
+132/334 Test #132: RenegadeStoryFlowGate10ProjectHomeCommandContract ..............   Passed    0.04 sec
+        Start 133: RenegadeStoryFlowJourneyUiLayoutTests
+133/334 Test #133: RenegadeStoryFlowJourneyUiLayoutTests ..........................   Passed    0.25 sec
+        Start 134: RenegadeBuildPlanTests
+134/334 Test #134: RenegadeBuildPlanTests .........................................   Passed    0.05 sec
+        Start 135: RenegadeBuildStageTests
+135/334 Test #135: RenegadeBuildStageTests ........................................   Passed    0.45 sec
+        Start 136: RenegadeBuildExecutableTests
+136/334 Test #136: RenegadeBuildExecutableTests ...................................   Passed    1.38 sec
+        Start 137: RenegadeBuildExecutableRollbackTests
+137/334 Test #137: RenegadeBuildExecutableRollbackTests ...........................   Passed    0.11 sec
+        Start 138: RenegadePackageBootstrapTests
+138/334 Test #138: RenegadePackageBootstrapTests ..................................   Passed    0.14 sec
+        Start 139: RenegadePackageIntegrityTests
+139/334 Test #139: RenegadePackageIntegrityTests ..................................   Passed    0.08 sec
+        Start 140: RenegadeGate4SceneFixtureTests
+140/334 Test #140: RenegadeGate4SceneFixtureTests .................................   Passed    0.06 sec
+        Start 141: RenegadeStandalonePackageTests
+141/334 Test #141: RenegadeStandalonePackageTests .................................   Passed    4.84 sec
+        Start 142: RenegadeBuildPromotion_first
+142/334 Test #142: RenegadeBuildPromotion_first ...................................   Passed    0.13 sec
+        Start 143: RenegadeBuildPromotion_replace
+143/334 Test #143: RenegadeBuildPromotion_replace .................................   Passed    0.14 sec
+        Start 144: RenegadeBuildPromotion_incomplete
+144/334 Test #144: RenegadeBuildPromotion_incomplete ..............................   Passed    0.08 sec
+        Start 145: RenegadeBuildPromotion_failed_smoke
+145/334 Test #145: RenegadeBuildPromotion_failed_smoke ............................   Passed    0.09 sec
+        Start 146: RenegadeBuildPromotion_locked
+146/334 Test #146: RenegadeBuildPromotion_locked ..................................   Passed    5.45 sec
+        Start 147: RenegadeBuildPromotion_transient_lock
+147/334 Test #147: RenegadeBuildPromotion_transient_lock ..........................   Passed    0.47 sec
+        Start 148: RenegadeBuildPromotion_interrupted
+148/334 Test #148: RenegadeBuildPromotion_interrupted .............................   Passed    0.10 sec
+        Start 149: RenegadeBuildPromotion_post_move_validation
+149/334 Test #149: RenegadeBuildPromotion_post_move_validation ....................   Passed    0.11 sec
+        Start 150: RenegadeBuildPromotion_stale_recovery
+150/334 Test #150: RenegadeBuildPromotion_stale_recovery ..........................   Passed    0.09 sec
+        Start 151: RenegadeWindowsGameBuildProjectTests
+151/334 Test #151: RenegadeWindowsGameBuildProjectTests ...........................   Passed    0.83 sec
+        Start 152: RenegadeAssetCatalogueTests
+152/334 Test #152: RenegadeAssetCatalogueTests ....................................   Passed    0.10 sec
+        Start 153: RenegadeReusableAssetTests
+153/334 Test #153: RenegadeReusableAssetTests .....................................   Passed    0.06 sec
+        Start 154: RenegadeModelImporterFailureAdapterTests
+154/334 Test #154: RenegadeModelImporterFailureAdapterTests .......................   Passed    0.18 sec
+        Start 155: RenegadeModelImporterRebuildGraphicsProof
+155/334 Test #155: RenegadeModelImporterRebuildGraphicsProof ......................   Passed    4.40 sec
+        Start 156: RenegadeModelImporterRebuild_static_textured_cube
+156/334 Test #156: RenegadeModelImporterRebuild_static_textured_cube ..............   Passed    3.77 sec
+        Start 157: RenegadeModelImporterRebuild_static_textured_cube_ColdReopen
+157/334 Test #157: RenegadeModelImporterRebuild_static_textured_cube_ColdReopen ...   Passed    1.74 sec
+        Start 158: RenegadeModelImporterRebuild_static_embedded_cube
+158/334 Test #158: RenegadeModelImporterRebuild_static_embedded_cube ..............   Passed    3.81 sec
+        Start 159: RenegadeModelImporterRebuild_static_embedded_cube_ColdReopen
+159/334 Test #159: RenegadeModelImporterRebuild_static_embedded_cube_ColdReopen ...   Passed    1.67 sec
+        Start 160: RenegadeModelImporterRebuild_animated_character
+160/334 Test #160: RenegadeModelImporterRebuild_animated_character ................   Passed    4.57 sec
+        Start 161: RenegadeModelImporterRebuild_animated_character_ColdReopen
+161/334 Test #161: RenegadeModelImporterRebuild_animated_character_ColdReopen .....   Passed    1.62 sec
+        Start 162: RenegadeModelImportReliability
+162/334 Test #162: RenegadeModelImportReliability .................................   Passed   16.75 sec
+        Start 163: RenegadeModelImportReliabilityColdReopen
+163/334 Test #163: RenegadeModelImportReliabilityColdReopen .......................   Passed    2.35 sec
+        Start 164: RenegadeModelImportSnapshotColdReopen
+164/334 Test #164: RenegadeModelImportSnapshotColdReopen ..........................   Passed    1.53 sec
+        Start 165: RenegadeReusableAssetInstanceTests
+165/334 Test #165: RenegadeReusableAssetInstanceTests .............................   Passed    0.25 sec
+        Start 166: RenegadeReusableAssetRuntimeTests
+166/334 Test #166: RenegadeReusableAssetRuntimeTests ..............................   Passed    0.93 sec
+        Start 167: RenegadeResourceImportTests
+167/334 Test #167: RenegadeResourceImportTests ....................................   Passed    0.21 sec
+        Start 168: RenegadeResourceAssetTests
+168/334 Test #168: RenegadeResourceAssetTests .....................................   Passed    0.57 sec
+        Start 169: RenegadeResourceAssetRollbackTests
+169/334 Test #169: RenegadeResourceAssetRollbackTests .............................   Passed    0.14 sec
+        Start 170: RenegadeMaterialTextureAssetTests
+170/334 Test #170: RenegadeMaterialTextureAssetTests ..............................   Passed    0.17 sec
+        Start 171: RenegadeMaterialTextureGraphicsProof
+171/334 Test #171: RenegadeMaterialTextureGraphicsProof ...........................   Passed    2.22 sec
+        Start 172: RenegadeResourceAssetReimportTests
+172/334 Test #172: RenegadeResourceAssetReimportTests .............................   Passed    1.81 sec
+        Start 173: RenegadeResourceAssetPackageRuntimeTests
+173/334 Test #173: RenegadeResourceAssetPackageRuntimeTests .......................   Passed    4.63 sec
+        Start 174: RenegadeResourceAssetCacheIdentityTests
+174/334 Test #174: RenegadeResourceAssetCacheIdentityTests ........................   Passed    0.05 sec
+        Start 175: StudioUiPolicy
+175/334 Test #175: StudioUiPolicy .................................................   Passed    0.03 sec
+        Start 176: RenegadeRA02AssistantSourceContract
+176/334 Test #176: RenegadeRA02AssistantSourceContract ............................   Passed    0.03 sec
+        Start 177: RenegadeJP01PhysicsLabSourceContract
+177/334 Test #177: RenegadeJP01PhysicsLabSourceContract ...........................   Passed    0.04 sec
+        Start 178: RenegadeDialogueSavePolicyTests
+178/334 Test #178: RenegadeDialogueSavePolicyTests ................................   Passed    0.05 sec
+        Start 179: RenegadeDialogueAssetTests
+179/334 Test #179: RenegadeDialogueAssetTests .....................................   Passed    0.26 sec
+        Start 180: RenegadeDialogueTests
+180/334 Test #180: RenegadeDialogueTests ..........................................   Passed    0.06 sec
+        Start 181: RenegadeInventoryCoreTests
+181/334 Test #181: RenegadeInventoryCoreTests .....................................   Passed    0.05 sec
+        Start 182: RenegadeInventoryItemCatalogueTests
+182/334 Test #182: RenegadeInventoryItemCatalogueTests ............................   Passed    0.19 sec
+        Start 183: RenegadeInventoryPickupAuthoringTests
+183/334 Test #183: RenegadeInventoryPickupAuthoringTests ..........................   Passed    0.05 sec
+        Start 184: RenegadeWorldPickupControllerTests
+184/334 Test #184: RenegadeWorldPickupControllerTests .............................   Passed    0.05 sec
+        Start 185: RenegadeRuntimeInventoryItemUseTests
+185/334 Test #185: RenegadeRuntimeInventoryItemUseTests ...........................   Passed    0.05 sec
+        Start 186: RenegadeInventoryOverlayViewTests
+186/334 Test #186: RenegadeInventoryOverlayViewTests ..............................   Passed    0.04 sec
+        Start 187: RenegadeInventorySelectionControllerTests
+187/334 Test #187: RenegadeInventorySelectionControllerTests ......................   Passed    0.05 sec
+        Start 188: RenegadeInventoryUiInputPolicyTests
+188/334 Test #188: RenegadeInventoryUiInputPolicyTests ............................   Passed    0.04 sec
+        Start 189: RenegadeInventoryPointerGestureTests
+189/334 Test #189: RenegadeInventoryPointerGestureTests ...........................   Passed    0.05 sec
+        Start 190: RenegadeInventoryScreenAdapterTests
+190/334 Test #190: RenegadeInventoryScreenAdapterTests ............................   Passed    0.22 sec
+        Start 191: RenegadeInventoryDragTransferTests
+191/334 Test #191: RenegadeInventoryDragTransferTests .............................   Passed    0.03 sec
+        Start 192: RenegadeInventoryGridViewportTests
+192/334 Test #192: RenegadeInventoryGridViewportTests .............................   Passed    0.35 sec
+        Start 193: RenegadeInventoryGridPageTests
+193/334 Test #193: RenegadeInventoryGridPageTests .................................   Passed    0.04 sec
+        Start 194: RenegadeInventoryPagedScreenAdapterTests
+194/334 Test #194: RenegadeInventoryPagedScreenAdapterTests .......................   Passed    0.16 sec
+        Start 195: RenegadeInventoryAccessPolicyTests
+195/334 Test #195: RenegadeInventoryAccessPolicyTests .............................   Passed    0.03 sec
+        Start 196: RenegadeInventoryTestLevelProjectionTests
+196/334 Test #196: RenegadeInventoryTestLevelProjectionTests ......................   Passed    0.08 sec
+        Start 197: RenegadeInventoryDependencyProviderTests
+197/334 Test #197: RenegadeInventoryDependencyProviderTests .......................   Passed    0.29 sec
+        Start 198: RenegadeInventoryGatewayTests
+198/334 Test #198: RenegadeInventoryGatewayTests ..................................   Passed    0.28 sec
+        Start 199: RenegadeRuntimeInventorySessionTests
+199/334 Test #199: RenegadeRuntimeInventorySessionTests ...........................   Passed    0.08 sec
+        Start 200: RenegadeBridgeTests
+200/334 Test #200: RenegadeBridgeTests ............................................   Passed    0.43 sec
+        Start 201: RenegadeEditorPointLookupSourceContract
+201/334 Test #201: RenegadeEditorPointLookupSourceContract ........................   Passed    0.03 sec
+        Start 202: RenegadeWeatherTransitionTests
+202/334 Test #202: RenegadeWeatherTransitionTests .................................   Passed    0.05 sec
+        Start 203: RenegadeWeatherEffectsTransitionTests
+203/334 Test #203: RenegadeWeatherEffectsTransitionTests ..........................   Passed    0.04 sec
+        Start 204: RenegadeSheetLightningTests
+204/334 Test #204: RenegadeSheetLightningTests ....................................   Passed    0.04 sec
+        Start 205: RenegadeForkLightningTests
+205/334 Test #205: RenegadeForkLightningTests .....................................   Passed    0.04 sec
+        Start 206: RenegadeWeatherLuaRuntimeTests
+206/334 Test #206: RenegadeWeatherLuaRuntimeTests .................................   Passed    0.09 sec
+        Start 207: RenegadeDiagnosticServiceTests
+207/334 Test #207: RenegadeDiagnosticServiceTests .................................   Passed    0.48 sec
+        Start 208: RenegadeProtectedImporterSourceContract
+208/334 Test #208: RenegadeProtectedImporterSourceContract ........................   Passed    0.08 sec
+        Start 209: RenegadeAssistantRiverKnowledgeTests
+209/334 Test #209: RenegadeAssistantRiverKnowledgeTests ...........................   Passed    2.24 sec
+        Start 210: RenegadeAssistantPackagedKnowledgeTests
+210/334 Test #210: RenegadeAssistantPackagedKnowledgeTests ........................   Passed    8.17 sec
+        Start 211: RenegadeRecoveryAlphaPackageTests
+211/334 Test #211: RenegadeRecoveryAlphaPackageTests ..............................   Passed    0.26 sec
+        Start 212: RenegadeAssistantWorkflowSuite
+212/334 Test #212: RenegadeAssistantWorkflowSuite .................................   Passed   19.99 sec
+        Start 213: RenegadeAssistantClientRecoveryRouting
+213/334 Test #213: RenegadeAssistantClientRecoveryRouting .........................   Passed    0.08 sec
+        Start 214: RenegadeDiagnosticReaderTests
+214/334 Test #214: RenegadeDiagnosticReaderTests ..................................   Passed    6.77 sec
+        Start 215: RenegadeDependencyTests
+215/334 Test #215: RenegadeDependencyTests ........................................   Passed    0.13 sec
+        Start 216: RenegadeAssetRegistryTests
+216/334 Test #216: RenegadeAssetRegistryTests .....................................   Passed    0.05 sec
+        Start 217: RenegadeAssetRegistryPersistenceTests
+217/334 Test #217: RenegadeAssetRegistryPersistenceTests ..........................   Passed    0.36 sec
+        Start 218: RenegadePrecipitationTests
+218/334 Test #218: RenegadePrecipitationTests .....................................   Passed    0.06 sec
+        Start 219: RenegadeSunTests
+219/334 Test #219: RenegadeSunTests ...............................................   Passed    0.04 sec
+        Start 220: RenegadeOceanTests
+220/334 Test #220: RenegadeOceanTests .............................................   Passed    0.05 sec
+        Start 221: RenegadeTerrainTests
+221/334 Test #221: RenegadeTerrainTests ...........................................   Passed    0.33 sec
+        Start 222: RenegadeRiverSplineTests
+222/334 Test #222: RenegadeRiverSplineTests .......................................   Passed    0.06 sec
+        Start 223: RenegadeRiverDefaultTerrainRecovery
+223/334 Test #223: RenegadeRiverDefaultTerrainRecovery ............................   Passed   18.42 sec
+        Start 224: RenegadeMaximumTerrainRiver_expanded-first
+224/334 Test #224: RenegadeMaximumTerrainRiver_expanded-first .....................   Passed   62.50 sec
+        Start 225: RenegadeMaximumTerrainRiver_linked-first
+225/334 Test #225: RenegadeMaximumTerrainRiver_linked-first .......................   Passed   61.91 sec
+        Start 226: RenegadeMaximumTerrainGPU_source
+226/334 Test #226: RenegadeMaximumTerrainGPU_source ...............................   Passed   12.36 sec
+        Start 227: RenegadeMaximumTerrainGPU_preview
+227/334 Test #227: RenegadeMaximumTerrainGPU_preview ..............................   Passed   12.13 sec
+        Start 228: RenegadeTerrainInitializationRecovery
+228/334 Test #228: RenegadeTerrainInitializationRecovery ..........................   Passed   23.21 sec
+        Start 229: RenegadeTerrainPreviewRender0Recovery
+229/334 Test #229: RenegadeTerrainPreviewRender0Recovery ..........................   Passed   23.23 sec
+        Start 230: RenegadeTerrainPreviewRender1Recovery
+230/334 Test #230: RenegadeTerrainPreviewRender1Recovery ..........................   Passed   24.28 sec
+        Start 231: RenegadeTerrainPreviewRender2Recovery
+231/334 Test #231: RenegadeTerrainPreviewRender2Recovery ..........................   Passed   23.68 sec
+        Start 232: RenegadeLightTests
+232/334 Test #232: RenegadeLightTests .............................................   Passed    0.07 sec
+        Start 233: RenegadeMaterialTests
+233/334 Test #233: RenegadeMaterialTests ..........................................   Passed    0.04 sec
+        Start 234: RenegadeImportTests
+234/334 Test #234: RenegadeImportTests ............................................   Passed    0.04 sec
+        Start 235: RenegadeCollisionTests
+235/334 Test #235: RenegadeCollisionTests .........................................   Passed    0.05 sec
+        Start 236: RenegadeAssetBrowserTests
+236/334 Test #236: RenegadeAssetBrowserTests ......................................   Passed    0.05 sec
+        Start 237: RenegadeProjectStructureTests
+237/334 Test #237: RenegadeProjectStructureTests ..................................   Passed    0.92 sec
+        Start 238: RenegadeIdentityTests
+238/334 Test #238: RenegadeIdentityTests ..........................................   Passed    0.30 sec
+        Start 239: RenegadeRuntimeBootstrapTests
+239/334 Test #239: RenegadeRuntimeBootstrapTests ..................................   Passed    0.10 sec
+        Start 240: RenegadeStoryFlowGate7ProjectHomeLifecycleTests
+240/334 Test #240: RenegadeStoryFlowGate7ProjectHomeLifecycleTests ................   Passed    0.48 sec
+        Start 241: RenegadeFlowTests
+241/334 Test #241: RenegadeFlowTests ..............................................   Passed    0.21 sec
+        Start 242: RenegadeStoryFlowPresentationTests
+242/334 Test #242: RenegadeStoryFlowPresentationTests .............................   Passed    0.11 sec
+        Start 243: RenegadeRuntimeFlowTests
+243/334 Test #243: RenegadeRuntimeFlowTests .......................................   Passed    0.33 sec
+        Start 244: RenegadeScreenTests
+244/334 Test #244: RenegadeScreenTests ............................................   Passed    0.29 sec
+        Start 245: RenegadeRuntimeScreenTests
+245/334 Test #245: RenegadeRuntimeScreenTests .....................................   Passed    0.07 sec
+        Start 246: RenegadeScreenRendererTests
+246/334 Test #246: RenegadeScreenRendererTests ....................................   Passed    0.07 sec
+        Start 247: RenegadeInventoryGridAuthoringTests
+247/334 Test #247: RenegadeInventoryGridAuthoringTests ............................   Passed    0.67 sec
+        Start 248: RenegadeScreenAuthoringSessionTests
+248/334 Test #248: RenegadeScreenAuthoringSessionTests ............................   Passed    2.87 sec
+        Start 249: RenegadeProjectDocumentTransactionTests
+249/334 Test #249: RenegadeProjectDocumentTransactionTests ........................   Passed    0.48 sec
+        Start 250: RenegadeProjectServiceTransactionTests
+250/334 Test #250: RenegadeProjectServiceTransactionTests .........................   Passed    0.62 sec
+        Start 251: RenegadeTestLevelSnapshotTests
+251/334 Test #251: RenegadeTestLevelSnapshotTests .................................   Passed    0.09 sec
+        Start 252: RenegadeTestLevelSnapshotRuntimeTests
+252/334 Test #252: RenegadeTestLevelSnapshotRuntimeTests ..........................   Passed    1.81 sec
+        Start 253: RenegadeTestLevelRuntimeProcessTests
+253/334 Test #253: RenegadeTestLevelRuntimeProcessTests ...........................   Passed    1.27 sec
+        Start 254: RenegadeCharacterAiAnimationTests
+254/334 Test #254: RenegadeCharacterAiAnimationTests ..............................   Passed    0.04 sec
+        Start 255: RenegadePlayerViewRigTests
+255/334 Test #255: RenegadePlayerViewRigTests .....................................   Passed    0.30 sec
+        Start 256: RenegadePlayerViewRigSourceContract
+256/334 Test #256: RenegadePlayerViewRigSourceContract ............................   Passed    0.04 sec
+        Start 257: MatchingRigAnimation
+257/334 Test #257: MatchingRigAnimation ...........................................   Passed    0.06 sec
+        Start 258: FirstPersonAssemblySettings
+258/334 Test #258: FirstPersonAssemblySettings ....................................   Passed    0.05 sec
+        Start 259: RenegadeGameplayInputTests
+259/334 Test #259: RenegadeGameplayInputTests .....................................   Passed    0.35 sec
+        Start 260: RenegadePlayerPrefabTests
+260/334 Test #260: RenegadePlayerPrefabTests ......................................   Passed    0.28 sec
+        Start 261: EquipmentActionState
+261/334 Test #261: EquipmentActionState ...........................................   Passed    0.27 sec
+        Start 262: EquipmentAsset
+262/334 Test #262: EquipmentAsset .................................................   Passed    0.57 sec
+        Start 263: LaunchSocket
+263/334 Test #263: LaunchSocket ...................................................   Passed    0.08 sec
+        Start 264: RenegadeNightSkyTests
+264/334 Test #264: RenegadeNightSkyTests ..........................................   Passed    0.07 sec
+        Start 265: RenegadeNightSkySourceContract
+265/334 Test #265: RenegadeNightSkySourceContract .................................   Passed    0.04 sec
+        Start 266: RenegadeScreenEditorCanvasCameraTests
+266/334 Test #266: RenegadeScreenEditorCanvasCameraTests ..........................   Passed    0.05 sec
+        Start 267: RenegadeScreenUsageTests
+267/334 Test #267: RenegadeScreenUsageTests .......................................   Passed    0.43 sec
+        Start 268: RenegadeGameplayAttributeProfileTests
+268/334 Test #268: RenegadeGameplayAttributeProfileTests ..........................   Passed    0.04 sec
+        Start 269: RenegadeScreenBindingTests
+269/334 Test #269: RenegadeScreenBindingTests .....................................   Passed    0.21 sec
+        Start 270: RenegadeScreenProgressTests
+270/334 Test #270: RenegadeScreenProgressTests ....................................   Passed    0.21 sec
+        Start 271: RenegadeScreenBindingFrameTests
+271/334 Test #271: RenegadeScreenBindingFrameTests ................................   Passed    0.06 sec
+        Start 272: RenegadeRuntimeUiGameplaySnapshotTests
+272/334 Test #272: RenegadeRuntimeUiGameplaySnapshotTests .........................   Passed    0.05 sec
+        Start 273: RenegadeRuntimeScreenBindingTests
+273/334 Test #273: RenegadeRuntimeScreenBindingTests ..............................   Passed    0.04 sec
+        Start 274: RenegadeScreenCompositionTests
+274/334 Test #274: RenegadeScreenCompositionTests .................................   Passed    0.05 sec
+        Start 275: RenegadeRuntimeUiCompositionTests
+275/334 Test #275: RenegadeRuntimeUiCompositionTests ..............................   Passed    0.05 sec
+        Start 276: RenegadeScreenCompositionPersistenceTests
+276/334 Test #276: RenegadeScreenCompositionPersistenceTests ......................   Passed    0.27 sec
+        Start 277: RenegadeHudSelectionTests
+277/334 Test #277: RenegadeHudSelectionTests ......................................   Passed    0.05 sec
+        Start 278: RenegadeScreenBindingTargetTests
+278/334 Test #278: RenegadeScreenBindingTargetTests ...............................   Passed    0.05 sec
+        Start 279: RenegadeHudReferencePersistenceTests
+279/334 Test #279: RenegadeHudReferencePersistenceTests ...........................   Passed    0.99 sec
+        Start 280: RenegadeScreenLibraryTests
+280/334 Test #280: RenegadeScreenLibraryTests .....................................   Passed    1.15 sec
+        Start 281: RenegadeGameplayAttributeDocumentTests
+281/334 Test #281: RenegadeGameplayAttributeDocumentTests .........................   Passed    0.40 sec
+        Start 282: RenegadeProjectUiScaffoldTests
+282/334 Test #282: RenegadeProjectUiScaffoldTests .................................   Passed    2.90 sec
+        Start 283: RenegadeScreenPerformanceBudgetTests
+283/334 Test #283: RenegadeScreenPerformanceBudgetTests ...........................   Passed    0.28 sec
+        Start 284: RenegadeScreenAuthoringCompletionTests
+284/334 Test #284: RenegadeScreenAuthoringCompletionTests .........................   Passed    0.71 sec
+        Start 285: RenegadeInventoryItemContextActionsTests
+285/334 Test #285: RenegadeInventoryItemContextActionsTests .......................   Passed    0.06 sec
+        Start 286: RenegadeInventoryScreenAssignmentTests
+286/334 Test #286: RenegadeInventoryScreenAssignmentTests .........................   Passed    0.38 sec
+        Start 287: RenegadeRuntimeGameSaveSlotTests
+287/334 Test #287: RenegadeRuntimeGameSaveSlotTests ...............................   Passed    0.07 sec
+        Start 288: RenegadeRiverUnderwaterTests
+288/334 Test #288: RenegadeRiverUnderwaterTests ...................................   Passed    0.06 sec
+        Start 289: RenegadePlayerSwimmingTests
+289/334 Test #289: RenegadePlayerSwimmingTests ....................................   Passed    0.05 sec
+        Start 290: RenegadeRiverFoamTests
+290/334 Test #290: RenegadeRiverFoamTests .........................................   Passed    0.06 sec
+        Start 291: RenegadeRiverFlowFieldTests
+291/334 Test #291: RenegadeRiverFlowFieldTests ....................................   Passed    0.07 sec
+        Start 292: RenegadeRiverWaterlineTests
+292/334 Test #292: RenegadeRiverWaterlineTests ....................................   Passed    0.24 sec
+        Start 293: RenegadeRiverFoamTransportTests
+293/334 Test #293: RenegadeRiverFoamTransportTests ................................   Passed    0.41 sec
+        Start 294: RenegadeRiverFlowProfileTests
+294/334 Test #294: RenegadeRiverFlowProfileTests ..................................   Passed    0.06 sec
+        Start 295: RenegadeRiverFlowSourceSelectionTests
+295/334 Test #295: RenegadeRiverFlowSourceSelectionTests ..........................   Passed    0.04 sec
+        Start 296: RenegadeRiverFlowNetworkTests
+296/334 Test #296: RenegadeRiverFlowNetworkTests ..................................   Passed    0.06 sec
+        Start 297: RenegadeRiverJunctionSurfaceTests
+297/334 Test #297: RenegadeRiverJunctionSurfaceTests ..............................   Passed    0.37 sec
+        Start 298: RenegadeRiverJunctionFoamTransportTests
+298/334 Test #298: RenegadeRiverJunctionFoamTransportTests ........................   Passed    1.33 sec
+        Start 299: RenegadeRiverWaterwayTests
+299/334 Test #299: RenegadeRiverWaterwayTests .....................................   Passed    0.40 sec
+        Start 300: RenegadeRiverWaterwayTransportTests
+300/334 Test #300: RenegadeRiverWaterwayTransportTests ............................   Passed    1.35 sec
+        Start 301: RenegadeRiverRapidsTests
+301/334 Test #301: RenegadeRiverRapidsTests .......................................   Passed    1.94 sec
+        Start 302: RenegadeRiverSurfaceMotionTests
+302/334 Test #302: RenegadeRiverSurfaceMotionTests ................................   Passed    0.49 sec
+        Start 303: RenegadeRiverGradedTests
+303/334 Test #303: RenegadeRiverGradedTests .......................................   Passed    1.31 sec
+        Start 304: RenegadeRiverCascadeTests
+304/334 Test #304: RenegadeRiverCascadeTests ......................................   Passed    0.05 sec
+        Start 305: RenegadeRiverSmoothDropTests
+305/334 Test #305: RenegadeRiverSmoothDropTests ...................................   Passed    0.04 sec
+        Start 306: RenegadeRiverCourseTests
+306/334 Test #306: RenegadeRiverCourseTests .......................................   Passed    0.19 sec
+        Start 307: RenegadePlaceableWaterfallAuthoringTests
+307/334 Test #307: RenegadePlaceableWaterfallAuthoringTests .......................   Passed    0.07 sec
+        Start 308: RenegadePlaceableWaterfallTests
+308/334 Test #308: RenegadePlaceableWaterfallTests ................................   Passed    0.10 sec
+        Start 309: RenegadeRiverWaterfallFlightTests
+309/334 Test #309: RenegadeRiverWaterfallFlightTests ..............................   Passed    0.08 sec
+        Start 310: RenegadeMoonTests
+310/334 Test #310: RenegadeMoonTests ..............................................   Passed    0.05 sec
+        Start 311: RenegadeShootingStarsTests
+311/334 Test #311: RenegadeShootingStarsTests .....................................   Passed    0.05 sec
+        Start 312: RenegadeMoonlitCloudSourceContract
+312/334 Test #312: RenegadeMoonlitCloudSourceContract .............................   Passed    0.03 sec
+        Start 313: RenegadeCloudsV2VolumetricContract
+313/334 Test #313: RenegadeCloudsV2VolumetricContract .............................   Passed    0.03 sec
+        Start 314: RenegadeCloudFormationTests
+314/334 Test #314: RenegadeCloudFormationTests ....................................   Passed    0.10 sec
+        Start 315: RenegadeStudioPlayerStartCacheTests
+315/334 Test #315: RenegadeStudioPlayerStartCacheTests ............................   Passed    0.05 sec
+        Start 316: RenegadeAudioMissingEndpointRecovery
+316/334 Test #316: RenegadeAudioMissingEndpointRecovery ...........................   Passed    0.08 sec
+        Start 317: RenegadeAudioUnexpectedEndpointFailure
+317/334 Test #317: RenegadeAudioUnexpectedEndpointFailure .........................   Passed    0.16 sec
+        Start 318: RenegadeRuntimeSceneTransitionTests
+318/334 Test #318: RenegadeRuntimeSceneTransitionTests ............................   Passed    1.69 sec
+        Start 319: RenegadeAssistantPortOwnership
+319/334 Test #319: RenegadeAssistantPortOwnership .................................   Passed    8.28 sec
+        Start 320: RenegadeGpuUploadBufferTests
+320/334 Test #320: RenegadeGpuUploadBufferTests ...................................   Passed    1.50 sec
+        Start 321: RenegadeNativeWindowSurfaceTests
+321/334 Test #321: RenegadeNativeWindowSurfaceTests ...............................   Passed    0.06 sec
+        Start 322: RenegadeRockyRiverbedDeployment
+322/334 Test #322: RenegadeRockyRiverbedDeployment ................................   Passed    0.39 sec
+        Start 323: RenegadeCreatorAssetFrameBoundaryTests
+323/334 Test #323: RenegadeCreatorAssetFrameBoundaryTests .........................   Passed    1.58 sec
+        Start 324: RenegadeSceneAssemblyCore
+324/334 Test #324: RenegadeSceneAssemblyCore ......................................   Passed    0.04 sec
+        Start 325: RenegadeSharedAllocatorRegistryTests
+325/334 Test #325: RenegadeSharedAllocatorRegistryTests ...........................   Passed    0.03 sec
+        Start 326: RenegadeParticleDuplicateGraphicsProof
+326/334 Test #326: RenegadeParticleDuplicateGraphicsProof .........................   Passed   12.84 sec
+        Start 327: RenegadeLightPickerTests
+327/334 Test #327: RenegadeLightPickerTests .......................................   Passed    0.27 sec
+        Start 328: RenegadeParticleEffectTests
+328/334 Test #328: RenegadeParticleEffectTests ....................................   Passed    0.25 sec
+        Start 329: RenegadeEditorPointLookupFocusedTests
+329/334 Test #329: RenegadeEditorPointLookupFocusedTests ..........................   Passed    0.05 sec
+        Start 330: RenegadeParticleTextureLibraryTests
+330/334 Test #330: RenegadeParticleTextureLibraryTests ............................   Passed    0.28 sec
+        Start 331: RenegadeParticleLuaTests
+331/334 Test #331: RenegadeParticleLuaTests .......................................   Passed    0.53 sec
+        Start 332: RenegadeParticleLifetimeTests
+332/334 Test #332: RenegadeParticleLifetimeTests ..................................   Passed    0.10 sec
+        Start 333: RenegadeScenePrefabScriptTests
+333/334 Test #333: RenegadeScenePrefabScriptTests .................................   Passed    0.05 sec
+        Start 334: RenegadeDialogueDisplayTests
+334/334 Test #334: RenegadeDialogueDisplayTests ...................................   Passed    0.26 sec
+
+100% tests passed out of 334
+
+Label Time Summary:
+AudioHardware     =   0.44 sec*proc (1 test)
+Navigation        =   0.12 sec*proc (2 tests)
+ObjectiveSlice    =   0.08 sec*proc (1 test)
+Packaging         =   0.39 sec*proc (1 test)
+Phase6            =   0.20 sec*proc (3 tests)
+S5D               =   0.04 sec*proc (1 test)
+S7                =   0.24 sec*proc (3 tests)
+SourceContract    =   0.04 sec*proc (1 test)
+
+Total Test time (real) = 466.25 sec

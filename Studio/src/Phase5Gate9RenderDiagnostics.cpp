@@ -117,6 +117,7 @@ namespace
         renegade::studio::SceneInspectorButton reset;
 
         bool identityCaptured = false;
+        bool viewModeSuspended = false;
         std::string projectIdentity;
         std::string sceneIdentity;
 
@@ -200,9 +201,7 @@ namespace renegade::studio
             "Studio-only native Wicked wireframe diagnostic. Never serialized or used by Runtime.");
         controls.viewMode.OnSelect([this](const wi::gui::EventArgs& args)
         {
-            wi::renderer::SetWireframeMode(
-                static_cast<wi::renderer::WIREFRAME_MODE>(args.userdata));
-            RefreshGate9DiagnosticsControls();
+            SetEditorViewMode(static_cast<int>(args.userdata));
         });
         renderWorkspacePanel_.AddWidget(&controls.viewMode);
 
@@ -474,7 +473,16 @@ namespace renegade::studio
         }
 
         if (pathTracePreviewActive_)
+        {
             ResetGate9Diagnostics();
+            wi::renderer::SetWireframeMode(wi::renderer::WIREFRAME_DISABLED);
+            controls.viewModeSuspended = true;
+        }
+        else if (controls.viewModeSuspended)
+        {
+            SetEditorViewMode(-1);
+            controls.viewModeSuspended = false;
+        }
 
         const bool interactive = renderWorkspaceActive_ && !pathTracePreviewActive_;
         controls.viewMode.SetEnabled(interactive);
@@ -505,6 +513,7 @@ namespace renegade::studio
         controls.profilerOverlay.SetVisible(interactive && profiler);
         LayoutProfilerOverlay(controls.profilerOverlay, viewportBounds_);
 
+        studioChrome_.SetViewportViewMode(static_cast<int>(wi::renderer::GetWireframeMode()));
         controls.viewMode.SetSelectedByUserdataWithoutCallback(
             static_cast<std::uint64_t>(wi::renderer::GetWireframeMode()));
         controls.shadingMode.SetSelectedByUserdataWithoutCallback(
@@ -540,6 +549,7 @@ namespace renegade::studio
     void StudioRenderPath::ResetGate9Diagnostics()
     {
         ResetNativeDiagnostics();
+        SetEditorViewMode(-1);
         // Captured probe spheres are an authoring aid, as in Wicked Editor.
         wi::renderer::SetToDrawDebugEnvProbes(true);
         if (gate9)

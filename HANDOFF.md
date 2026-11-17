@@ -1,3 +1,376 @@
+# PR #197 UMA/wireframe recovery — 17 November 2026
+
+PR #197 remains draft. Original tip 585407a: both baseline jobs passed;
+Studio Debug and Release failed. No merge or release occurred.
+Correction: affe8d14ecde5e92302658368dc841b45c3f09e8 composes wireframe on the existing UMA stage into
+a distinct final renderer. Both shader targets compile exactly one composed
+source. A cold/reconfigure regression rejects the original generator.
+
+Actual WARP: same allocator failure reproduced before correction; corrected
+Debug 11/11 and Release 11/11 affected checks pass. Source/help/policy 66/66
+pass. Normal NVIDIA allocator and native Release Studio viewport/modal
+review pass with test-WARP OFF. Test assertions/deadlines are unchanged.
+This is scoped recovery validation, not a new full local 322/335 run.
+
+Read docs/UI_PR197_UMA_RECOVERY_20261117.md and its evidence index.
+Next: one corrective push to the existing branch, retain draft, and verify
+all four hosted checks SUCCESS at the exact corrected PR head. Do not
+recommend merge based on mergeable status or historical local results.
+No merge or release is authorized. Existing Wicked overlays are preserved.
+
+---
+
+# Combined UI/wireframe ready for PR — 17 November 2026
+
+Application implementation: 7fd95b5b3607974e7275673fa0bcc3e1b1c6af2a.
+Configure/diagnostic stamp: c2eccc33fa1c2e13c06bc50b94f16ffa308d12a5.
+Base main fceda08 integrated. The implementation commit adds one final
+Screen Editor tooltip render pass and three reviewed test-harness corrections
+to the configure checkpoint. The documentation/evidence commit changes no
+application inputs. All four tested file hashes are recorded. See
+docs/UI_COMBINED_PR_VALIDATION_20261117.md and
+docs/evidence/ui-pr-validation/README.md for commands hashes and scope.
+
+Earlier complete CI aggregate builds pass in Debug and Release. The final
+Screen tooltip change is rebuilt in Studio, along with five interrupted-link
+recovery targets. Complete unfiltered CTest is rerun after that final build:
+Debug 321/321; Release 334/334.
+Studio/Runtime packages and dependency/registry reopen proofs pass for both.
+Both Studio startup-smoke runs exit 0; packaged atlas/manifest hashes match
+source and all 65 approved SVGs are present. Final source/help/policy pass:
+66/66 including packaged help and the 84-case workflow suite.
+
+Preflight fixed reviewed help fingerprints; kept the example-audio notice;
+corrected literal-ellipsis inspector title caching and retained detailed
+action help during icon assignment. Final Screen Editor toolbar hints render
+after ordinary controls and before child pickers. Native before/after and final-candidate
+receipts are indexed above. Owner acceptance of UIFinish7 remains scoped.
+The original owner application/project and configured Wicked overlays remain
+preserved; Wicked pin unchanged.
+
+Local exFAT validation required explicit CMake configuration with auto-
+regeneration suppressed and bounded build workers. The task-local canonical
+flow adapter retained all tests and package proofs. No hosted workflow change.
+The three reviewed test-only corrections preserve all assertions and deadlines;
+full details and initial failures are retained in the receipt. No partial or
+aborted run is counted as PASS.
+
+Next: verify final documentation-only diff and current main; push this branch
+once and open one combined UI/wireframe PR. Confirm all four hosted jobs are
+queued for the exact PR tip. No merge or release is authorized. Avoid an extra
+documentation push after opening the PR because CI takes over two hours.
+
+---
+
+# Remaining UI audit corrections completed — 16 November 2026
+
+Implementation/evidence commit: d55b61ac28266c11550e338faa72312175da0b72
+on fix/ui-cohesion-pass1-20261116. This follows the already-local whole-scene
+wireframe commits fada1d6 / 2ddc4ca. All seven U01-U07 findings have implemented
+corrections and scoped native receipts. Read
+docs/UI_USABILITY_COMPLETION_20261116.md and its evidence index; the historical
+re-audit now links to that follow-up and retains its original findings.
+
+Changed StudioModalWindow and StudioNumericControl (new header/source pairs),
+LightPickerWindow, ParticlePickerWindow, ParticleTextureBrowser and
+DialogueEditorWindow header/source, S1BInspectorSectionMigration,
+StudioApplication header/source, RenegadeProjectHub header/source,
+RenegadePhysicsLabWorkspace, RenegadeImGuiBridge,
+RenegadeScreenEditorWorkspace, RenegadeStudioChrome header/source,
+Studio/CMakeLists and ScreenRenderer/src/ScreenRenderer.cpp.
+Architecture and the cohesion/icon feature rows were updated.
+
+Key behavior: readable scrollable modal body with pinned footer; one topmost
+Escape per physical press; Dialogue dirty guard retained; embedded Screen host
+clip for both input and rendering; Physics matching clip and wrapped tabs;
+Hub release gestures; primary-first inspectors with fresh selection scroll;
+shared numeric rails/bounded help; approved common-action icons and UI font.
+Private picker previews render shaded, then restore main scene wireframe mode.
+Authored Screen appearance and native document transactions are preserved.
+
+Final native review app remains open on DESIGN:
+BUILD/native/Studio/Release/RenegadeStudio-UIFinish7.exe
+SHA256 DB13A9DAA42D17206D7ACCEAE826C4B5BCD8A9F8A274EC7432E07182D2447C5F.
+It was built before commit and has configure-time Git stamp 2ddc4ca; identify
+it by hash and this implementation commit, not its older UI stamp.
+Native review used a disposable seven-entity DialogueReview project and
+isolated preferences. No owner project, authored dialogue or Screen saved.
+Temporary dirty-name guard test was discarded to the saved conversation.
+
+Release build passed (69.30 s); current four Screen suites were rebuilt and
+passed separately; final 71 selected CTests passed (11.96 s); diff check passes.
+Exact commands, hashes and binary-specific screenshots are in the completion
+receipt. Broad resize/Screen/dirty-guard proof uses UIFinish5; final UIFinish7
+adds only note spacing and inspector scroll reset, then separately verifies
+those changes, Graph/Hub, numeric help, Physics and all four asset handoffs.
+Do not attribute all prototype screenshots to the final binary.
+
+No Debug, hosted CI, push, PR, merge, distribution or release-gate closure.
+Narrow modal content intentionally scrolls instead of shrinking all text.
+OS DPI 125/150%, all Physics pages at 1024, path-traced transitions and
+independent exact-commit verification remain outside these receipts.
+Existing configured Wicked overlays remain dirty/unstaged and the gitlink
+was not changed. No owner work was removed.
+Next: owner review of the open candidate; prepare one combined UI/wireframe PR
+only when requested, with the required broader build validation before pushing.
+
+---
+
+# SHOW whole-scene wireframe modes — 16 November 2026
+
+Implementation commit: fada1d6353691a14508b9b748ec8335631984cfb,
+on fix/ui-cohesion-pass1-20261116. Owner requested whole-scene modes only
+and gave positive feedback during native review.
+
+Changed CMakeLists, cmake/WickedWireframeOverlayFix.cmake, StudioApplication
+header/source, RenegadeStudioChrome header/source, Phase5Gate9RenderDiagnostics,
+and Tests/Phase5Gate9SourceContract. Documentation: WIREFRAME_VIEW_MODE,
+FEATURE_MATRIX, ARCHITECTURE, UPSTREAM_SYNC and evidence/wireframe-show.
+
+SHOW exposes Shaded / Wireframe / Shaded + Wireframe beside independent Grid.
+One setter shares native state with diagnostics and persists only editor prefs.
+Fixes native overlay edges failing the strict depth test using six dedicated
+read-only coplanar PSOs in a generated renderer. Original PSOs remain unchanged.
+Do not add the renderer to WickedEngine_common: embedded/external targets compile
+it individually. Build common and embedded library before relinking Studio.
+
+Exact commands and hashes are in docs/WIREFRAME_VIEW_MODE.md. Release builds pass;
+67/67 focused checks pass (2.58 s); diff check passes. Native Wireframe4 checks
+cover all three modes, clean scene/history, SHOW indication and fresh-process
+restoration. Final Wireframe5 differs only in ASCII active-state markers.
+No hosted CI, push, PR, merge, Runtime distribution or Debug proof.
+
+Existing owner Studio windows, project data and dirty configured Wicked overlays
+are preserved. No gitlink change. Complex terrain, transparent overlay parity,
+MSAA and path-trace transition native checks remain scoped limitations.
+Next: owner review of final candidate; broader checks before any requested PR.
+
+---
+
+# UI usability re-audit and modal lifecycle corrections — 16 November 2026
+
+This supersedes the native-coverage limits in the Audio handoff below where
+explicit new checks are recorded. Owner subsequently confirmed Audio-to-asset
+switching. Native review now also covers model-row, same-asset and Physics
+authoring-target selection. No additional feature duplication was proposed.
+
+Local implementation/evidence commits:
+- 6a61ab7b97b9438cbcaddb34c2465e33ee05affe: shared suspended-modal composition,
+  immediate cleared-selection presentation, one-time resize inspector refresh.
+- d04da64e42880521bed707dc0750de757b20b04e: show Dialogue parent before restoring
+  conditional child visibility on return from Edit display.
+- 57b58f51361535422db3278cb0f8a04b92f365df: audit, coverage, pinned source inventory
+  and screenshots. Read docs/UI_USABILITY_REAUDIT_20261116.md and the coverage CSV.
+
+Latest reviewed executable:
+BUILD/native/Studio/Release/RenegadeStudio-Icons9.exe
+SHA-256 43D1C97E707BEF733EDCED29EB14FC3A1A2EA45D9B4BBB08C1A50C91B5101C01.
+Source is pinned to d04da64 for this receipt; the build predates that commit and
+its configure-time Git stamp is not the review identity. Modal GPU before/after
+proof is explicitly Icons6/Icons8; Icons9 adds the Dialogue return correction.
+See docs/evidence/ui-modal-resize and docs/evidence/ui-dialogue-resume.
+
+Release Build target Icons9 completed exit 0 (CL=/MP6):
+MSBuild BUILD/native/Studio/RenegadeStudio.vcxproj /t:Build
+/p:BuildProjectReferences=false /p:Configuration=Release /p:Platform=x64
+/p:TargetName=RenegadeStudio-Icons9 /v:minimal.
+ctest --test-dir BUILD/native -C Release
+-R 'SourceContract|StudioUiPolicy|RenegadeDialogue|^RenegadeStoryFlowJourneyUiLayoutTests$'
+--output-on-failure: 67/67 pass, 5.70 s. Existing C4834 warning remains.
+Native Basic/Advanced/Edit display/resize/Back cases pass on exact Icons9.
+Native Icons8 Light/Particle/Dialogue resize and close cases are documented.
+Docs staged whitespace check passes. These are selected checks, not hosted CI.
+
+All 65 original UI families are inventoried; 30 have scoped fresh native
+observations. Remaining asset states and Runtime/DPI scenarios are explicit in
+the CSV. Seven open findings: small-window modal footers/readability (P1);
+Physics scroll clipping/tabs; Hub press-time commands; inspector ordering;
+remaining visual-role adapters; numeric tooltip overflow; stale Window wording.
+Do not claim these remaining findings are fixed or every family native-tested.
+
+Review used copied DialogueReview project and isolated preferences. Disposable
+numeric/navigation edits were undone. No owner project, authored dialogue,
+authored Screen, Runtime gameplay or save schema changed. The Icons9 review app
+was left open. No push, PR, hosted CI, merge or release was performed.
+
+Concurrent wireframe/view-mode work appeared after the reviewed build in
+CMakeLists.txt, Studio application/chrome/diagnostics files, source contracts,
+a new cmake overlay and docs/WIREFRAME_VIEW_MODE.md. Preserved without staging
+in these audit commits. That evolving tree is outside this receipt. Wicked
+overlays remain dirty and unstaged; no gitlink update was made by this audit.
+Do not rebuild mixed concurrent source and reuse the Icons9 test identity.
+
+---
+
+# Audio-to-asset inspector handoff — 16 November 2026
+
+Implementation/evidence commit: 1663001dd76a2f5962d557182dd149f55e262544
+on fix/ui-cohesion-pass1-20261116. This supersedes the toolbar-only correction
+below for the new report that Audio stays active after an asset click.
+
+Explicit viewport, legacy/modern hierarchy and completed box selection now
+release specialist inspector ownership after updating the existing selection.
+Sound/legacy particle/navigation entities retain their typed specialist;
+ordinary assets immediately use the Scene inspector. Opening global Audio with
+an old ordinary selection remains possible. Physics Lab keeps hierarchy targets.
+
+Release build command (CL=/MP6):
+MSBuild BUILD/native/Studio/RenegadeStudio.vcxproj /t:Build
+/p:BuildProjectReferences=false /p:Configuration=Release /p:Platform=x64
+/p:TargetName=RenegadeStudio-Icons6 /v:minimal
+Completed with exit 0, including a final incremental confirmation.
+BUILD/native/Studio/Release/RenegadeStudio-Icons6.exe SHA-256:
+83FC83470A2798ACA3E5398C7A17DE1C4DA4CD477435583C0509C9BA165EF6ED.
+Built before commit; its configure-time Git stamp is not a release identity.
+
+ctest --test-dir BUILD/native -C Release
+-R 'SourceContract|StudioUiPolicy|RenegadeDialogue|^RenegadeStoryFlowJourneyUiLayoutTests$'
+--output-on-failure
+All 67 pass in 12.06 s. git diff --check passes.
+
+Native exact-binary screenshots verify Player selection, opening Audio with
+retained selection, and clicking Point Light in the viewport immediately showing
+LIGHT // Point Light without a panel click. Reopening Audio and expanding a
+hierarchy category also preserve mix ownership until an asset is picked.
+The review process closed before model-row, same-asset and Physics native checks;
+those are not claimed as passes. Exit cause was not established (no matching
+Application Error/WER event found). See docs/evidence/ui-icon-integration.
+OS DPI 125/150 percent and owner acceptance remain pending.
+
+The existing Icons5 instance was preserved; it is the previous toolbar-only
+build and does not contain this fix. The native check used a separate copied
+project/preferences in BUILD/ui-audio-selection-review. No owner project edits,
+push, PR, hosted CI, merge or release. Dirty Wicked overlays remain unstaged.
+
+---
+
+# Audio/prefab context correction — owner confirmed 16 November 2026
+
+Implementation commit: 239be816e821e7040a59ffb4d3997f927c93ba37.
+StudioApplication.cpp now excludes Audio/particle/navigation and Physics from
+the selected-object prefab toolbar and its pointer hit targets. The scene editing
+guide/footer follows that context; viewport box-selection feedback is preserved.
+Audio had reused Scene mode internally, exposing the toolbar for a retained asset
+selection. The owner subsequently confirmed the reported issue was fixed.
+
+Release build BUILD/native/Studio/Release/RenegadeStudio-Icons5.exe passed:
+ACFD66371311AC6096A27BBB8DBD75AE406840E248A44946BCE4ED6CD5562EF3.
+Same MSBuild configuration as below, TargetName=RenegadeStudio-Icons5.
+The same 67-test CTest filter passed in 2.75 s. git diff --check passed.
+No new screenshot receipt is claimed for this small owner-confirmed correction.
+Docs: UI_ICON_INTEGRATION, ARCHITECTURE and FEATURE_MATRIX.
+
+The owner's Icons4 window had unsaved scene edits: do not close or discard it.
+Icons5 uses BUILD/ui-audio-context-review and separate preferences. No owner
+project or existing window was closed. No push, PR, hosted CI, merge or release.
+The existing dirty Wicked overlays remain unstaged. Remaining UI/DPI scope below
+is unchanged; owner confirmation applies to this reported context issue.
+
+---
+
+# Approved icon integration and owner corrections — 16 November 2026
+
+Implementation/evidence commit:
+5bfe2d4e2ea2f2412d539d91eae8df4d2baac4f0
+on fix/ui-cohesion-pass1-20261116, following UI checkpoint 9eb8410.
+Source and asset files are unchanged after that commit. This handoff update is
+documentation only. No push, PR, hosted CI, merge or release was performed.
+
+Integrated the owner-approved 65-icon SVG catalogue and one padded atlas,
+shared square icon rendering, matching-release input, delayed title tooltips,
+keyboard focus and compact native controls across Studio and Story Flow.
+Changed StudioIcons, Studio chrome/header, Physics chrome, Story Flow chrome/
+layout/render path/workspace and return control, Studio asset installation,
+four obsolete source-contract expectations, feature matrix and architecture.
+Full detail and binary-specific screenshots: docs/UI_ICON_INTEGRATION.md and
+docs/evidence/ui-icon-integration/README.md.
+
+Owner review then requested clear space below Fit and reported Audio disappearing
+when a viewport menu opens. A shared 192 logical px Journey header now gives Fit
+a 9 px gap above the lower row and keeps canvas hit/scissor bounds aligned.
+Audio stays rendered during Perspective/Lit/Show menus; popup input ownership
+and foreground composition remain. All three dropdown cases and the row gap
+were visually verified in the latest native build.
+
+Latest live review executable:
+BUILD/native/Studio/Release/RenegadeStudio-Icons4.exe
+SHA-256 E6596CA2670F860C0F05B02AB7AA353BA1EF21034E4374D3AE32C7F491A8E2DC.
+It uses BUILD/ui-icon-owner-review/DialogueReview.renegade and separate review
+preferences. Existing owner-operated Studio windows were preserved. Do not
+close them or discard edits. The reviewed project retains seven entities/two
+lights. Previous native receipts also cover hold/cancel/release, tooltips,
+keyboard Tab/Enter, narrow 1280/1024 layouts and save/reopen. The binary was
+built before commit, so its embedded configure-time Git stamp is not the new
+implementation hash; do not treat it as a release/package identity receipt.
+
+Configure: cmake -S . -B BUILD/native -DRENEGADE_EMBED_SHADERS=ON.
+Build: MSBuild BUILD/native/Studio/RenegadeStudio.vcxproj /t:Build
+/p:BuildProjectReferences=false /p:Configuration=Release /p:Platform=x64
+/p:TargetName=RenegadeStudio-Icons4 /v:minimal, with CL=/MP6. Exit 0.
+Also built RenegadeStoryFlowJourneyUiLayoutTests; its existing tests pass unchanged.
+Combined validation:
+ctest --test-dir BUILD/native -C Release -R
+'SourceContract|StudioUiPolicy|RenegadeDialogue|^RenegadeStoryFlowJourneyUiLayoutTests$'
+--output-on-failure
+67/67 pass in 9.73 seconds. This is 60 source contracts, UI policy, five dialogue
+suites and Journey UI layout. All 65 atlas crops exactly match the approved PNG
+artwork. Source and installed atlas hashes match. git diff --check passes.
+
+Remaining: owner acceptance of the latest live UI, real Windows OS DPI checks at
+125%/150%, remaining specialist UI audit families, and hosted Debug/Release CI
+only when requested. No universal UI/release gate is certified. The six existing
+Wicked overlays and gitlink were not staged or modified by icon integration.
+Preserve original dialogue and concurrent arms work.
+
+---
+
+# Studio UI cohesion first pass — 16 November 2026
+
+Isolated checkout `E:\RenegadeUI-20261116`, branch
+`fix/ui-cohesion-pass1-20261116`, based on dialogue checkpoint `7d4839a`.
+The original dialogue checkout and concurrent arms work were not modified.
+No push, PR, merge or release is authorized/performed by this UI pass.
+
+The owner requested fixing the audited UI before toolbar icon integration.
+Changes: shared opaque charcoal/orange action faces and release-only callbacks;
+one twelve-row Add menu; world overlays before GUI; final foreground popups and
+loading cover; Physics Lab marker suppression; flow-owned Pickup/metadata row;
+reserved Audio heading; bounded heading/Character text; scrollbar-safe content
+width across Scene/Player, Environment, Terrain/River, Material, Render and
+Waterfall. The protected importer keeps its accepted native control types.
+
+Native owner review found an inspector occlusion regression caused by promoting
+the whole chrome for popup input. This is corrected by exclusive popup updates
+without chrome promotion. The owner also exposed separate Environment/Render
+sizing paths; all discovered inspector width paths now use the shared policy.
+
+Release Studio and five dialogue regression targets built successfully. Six
+CTest suites pass (UI policy plus dialogue core/assets/save policy/display/
+scripting). All 60 source contracts pass after preserving importer types and
+updating obsolete menu-count/typography expectations. Existing JP01 Physics Lab,
+Marker Icons, S1B and protected importer source contracts pass. Pure policy tests
+also pass with g++ C++17; width tests cover 280/360/480 px and tiny bounds.
+
+Latest native binary SHA-256:
+`9E7E371B96B0EDBF769535D210DB09F2E9E86780E7862499197072A0F1F221AD`.
+It is staged as canonical `BUILD/native/Studio/Release/RenegadeStudio.exe`.
+The owner closed the preceding session and authorized reopening. Final review
+uses `BUILD/ui-correction-review/DialogueReview.renegade` and isolated local
+preferences. Do not close an owner-operated Studio session or discard edits.
+Native review confirms complete numeric fields in Environment/Render/Player,
+immediate newly placed light inspection, and single-click light selection from
+both Environment and Render. The saved review scene reopened with seven entities
+and two lights. Narrow layer bits wrap into four columns. Evidence records each
+binary separately; earlier menu/Physics screenshots are scoped to their capture.
+See `docs/UI_COHESION_PASS1.md` for current scope and acceptance targets.
+
+The six pre-existing Wicked working-tree overlays were copied unchanged into
+this independent dependency worktree. Do not stage the Wicked gitlink or its
+dirty overlay, change pins, or include unrelated arms work. The old dialogue PR
+instructions below remain historical and belong to its separate checkout.
+
+---
+
 # PR #196 CI failure correction - 16 November 2026
 
 Failed head: `7d4839ab1b048a8c423dbed76654b3d86d0eeac5`; Studio run
@@ -390,3 +763,7 @@ The [complete pre-reconciliation handoff](https://github.com/mav3r1ckmediastudio
 the earlier commands, failures, snapshots and checkpoints. Dated evidence remains
 in the repository. Historical “no merge”, “CI pending” and machine observations
 apply to their original checkpoint, not automatically to today's main.
+
+Final follow-up: Wireframe5 fresh-process mode restoration, readable ASCII
+markers and corrected shaded overlay were visually verified. Its review window
+is left open. Source implementation remains fada1d6353691a14508b9b748ec8335631984cfb.

@@ -681,6 +681,38 @@ int main(int argc, char** argv)
         }
         if(defaultRecovery) progress("terrain-generated");
         terrain->Generation_Cancel();
+        if(defaultRecovery)
+        {
+            // Chunk entries are reserved on the generation worker before its
+            // private scene is published by the next native terrain update.
+            // Cancellation joins the worker; it does not perform that publish.
+            // The offscreen path already drains normal updates before capture.
+            // Give desktop presentation the same explicit completion boundary.
+            Require(terrain->chunks.size()==361,
+                "Creator-default 19x19 terrain was not generated");
+            const auto pendingMeshes = [&]() {
+                std::size_t pending = 0;
+                for(const auto& entry : terrain->chunks)
+                {
+                    const auto* mesh = scene.meshes.GetComponent(entry.second.entity);
+                    if(!mesh || mesh->vertex_positions.empty()) ++pending;
+                }
+                return pending;
+            };
+            const auto pendingBefore = pendingMeshes();
+            int publicationUpdates = 0;
+            while(pendingMeshes()!=0 && publicationUpdates<8)
+            {
+                proofUpdate();
+                terrain->Generation_Cancel();
+                ++publicationUpdates;
+            }
+            Require(pendingMeshes()==0,
+                "Generated terrain meshes did not publish after bounded native updates");
+            std::cout<<"RIVER_CHUNK_PUBLICATION pending_before="<<pendingBefore
+                <<" pending_after="<<pendingMeshes()
+                <<" updates="<<publicationUpdates<<std::endl;
+        }
         // Never rewrite source chunk buffers while a previous submitted GPU
         // frame or the generator can still own them.
         gpu->WaitForGPU();

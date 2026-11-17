@@ -1,4 +1,5 @@
 #pragma once
+#include "StudioUiPolicy.h"
 
 #include <cstdint>
 #include <functional>
@@ -62,6 +63,7 @@ namespace renegade::studio
         enum class HoverTarget
         {
             None,
+            Exit,
             NewProject,
             OpenProject,
             ImportProject,
@@ -101,6 +103,7 @@ namespace renegade::studio
         bool currentProjectActive_ = false;
         bool newProjectMode_ = false;
         int selectedIndex_ = -1;
+        ui::ReleaseAction actionGesture_;
         HoverTarget hovered_ = HoverTarget::None;
         wi::Resource brandLogo_;
         wi::Resource projectArtwork_;

@@ -1,0 +1,37 @@
+{
+  "implementation_commit": "affe8d14ecde5e92302658368dc841b45c3f09e8",
+  "local_configure_stamp": "585407a260448de34773ffef5b51a1c8f58526e9",
+  "software_before": {
+    "result": "EXPECTED_FAILURE",
+    "allocator_exit": 1,
+    "adapter": "Microsoft Basic Render Driver",
+    "coherent_uma": true
+  },
+  "software_after": {
+    "Debug": {
+      "tests": 11,
+      "passed": 11,
+      "seconds": 912.82
+    },
+    "Release": {
+      "tests": 11,
+      "passed": 11,
+      "seconds": 666.77
+    }
+  },
+  "source_help_policy": {
+    "tests": 66,
+    "passed": 66,
+    "seconds": 137.25
+  },
+  "composition": {
+    "old_generator": "EXPECTED_FAILURE",
+    "corrected_cold_reconfigure": "PASS"
+  },
+  "normal_hardware_allocator": "PASS",
+  "native_review": "PASS",
+  "full_new_local_aggregate_run": false,
+  "hosted_checks": "PENDING_CORRECTIVE_PUSH",
+  "merge_authorized": false,
+  "wicked_pin": "82557d439a41d104f559b0d3134d160b7bf6154e"
+}

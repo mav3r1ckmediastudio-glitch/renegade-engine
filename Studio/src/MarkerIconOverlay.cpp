@@ -197,6 +197,13 @@ namespace renegade::studio
                 }
 
                 Widget::Update(canvas, dt);
+                if (!IsEnabled() || dt <= 0 ||
+                    !owner_->SceneOverlayInputAllowed(wi::input::GetPointer()))
+                {
+                    hoveredEntity_ = wi::ecs::INVALID_ENTITY;
+                    state = wi::gui::IDLE;
+                    return;
+                }
                 auto* session = bridge::StudioSession::Current();
                 if (session == nullptr)
                     return;
@@ -264,9 +271,12 @@ namespace renegade::studio
                 }
             }
 
-            void Render(
+            void Render(const wi::Canvas&,wi::graphics::CommandList) const override {}
+
+            bool IsBoundTo(const StudioRenderPath& owner) const noexcept { return owner_ == &owner; }
+            void RenderMarkers(
                 const wi::Canvas& canvas,
-                const wi::graphics::CommandList cmd) const override
+                const wi::graphics::CommandList cmd) const
             {
                 if (!CanUseMarkers())
                     return;
@@ -294,8 +304,8 @@ namespace renegade::studio
 
                         const float dx = pointer.x - center.x;
                         const float dy = pointer.y - center.y;
-                        const bool hovered = entity == hoveredEntity_ ||
-                            dx * dx + dy * dy <= HoverRadius * HoverRadius;
+                        const bool hovered = owner_->SceneOverlayInputAllowed(pointer) &&
+                            (entity == hoveredEntity_ || dx * dx + dy * dy <= HoverRadius * HoverRadius);
                         const bool isSelected = session->Selection().Contains(entity);
                         const float size = MarkerSize +
                             (isSelected ? SelectedExtraSize : hovered ? HoverExtraSize : 0.0f);
@@ -383,7 +393,7 @@ namespace renegade::studio
         private:
             [[nodiscard]] bool CanUseMarkers() const noexcept
             {
-                return IsVisible() && owner_ != nullptr &&
+                return IsVisible() && owner_ != nullptr && owner_->SceneOverlaysVisible() &&
                     !owner_->IsProjectHubVisible() &&
                     !owner_->IsTestLevelRuntimeActive() &&
                     !owner_->IsLightAuthoringInputActive();
@@ -479,9 +489,26 @@ namespace renegade::studio
         };
     }
 
+    namespace { MarkerIconOverlay& MarkerOverlayInstance() { static MarkerIconOverlay overlay; return overlay; } }
+
+    void DrawMarkerIconOverlay(const StudioRenderPath& owner,const wi::Canvas& canvas,
+        wi::graphics::CommandList cmd)
+    {
+        auto& overlay=MarkerOverlayInstance();
+        if (!overlay.IsBoundTo(owner) || !owner.SceneOverlaysVisible()) return;
+        const auto viewport=owner.StoryFlowWorkspaceBounds();
+        const wi::graphics::Rect clip = {
+            static_cast<std::int32_t>(canvas.LogicalToPhysical(viewport.x)),
+            static_cast<std::int32_t>(canvas.LogicalToPhysical(viewport.y)),
+            static_cast<std::int32_t>(canvas.LogicalToPhysical(viewport.z)),
+            static_cast<std::int32_t>(canvas.LogicalToPhysical(viewport.w))};
+        wi::graphics::GetDevice()->BindScissorRects(1,&clip,cmd);
+        overlay.RenderMarkers(canvas,cmd);
+    }
+
     void EnsureMarkerIconOverlay(StudioRenderPath& owner)
     {
-        static MarkerIconOverlay overlay;
+        auto& overlay=MarkerOverlayInstance();
         static StudioRenderPath* registeredOwner = nullptr;
         if (registeredOwner != &owner)
         {

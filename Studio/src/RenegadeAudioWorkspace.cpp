@@ -173,6 +173,7 @@ namespace renegade::studio
         SceneInspectorSlider sourceVolume;
         SceneInspectorComboBox sourceBus;
 
+        float mixHeadingY = 0;
         SceneInspectorSlider masterVolume;
         SceneInspectorSlider sfxVolume;
         SceneInspectorSlider musicVolume;
@@ -702,12 +703,14 @@ namespace renegade::studio
             float y = bounds.y + HeaderHeight;
             const auto full = [&](wi::gui::Widget& widget)
             {
+                if (!widget.IsVisible()) return;
                 widget.SetPos(XMFLOAT2(x, y));
                 widget.SetSize(XMFLOAT2(width, RowHeight));
                 y += RowHeight + RowGap;
             };
             const auto two = [&](wi::gui::Widget& left, wi::gui::Widget& right)
             {
+                if (!left.IsVisible() && !right.IsVisible()) return;
                 const float half = (width - RowGap) * 0.5f;
                 left.SetPos(XMFLOAT2(x, y));
                 right.SetPos(XMFLOAT2(x + half + RowGap, y));
@@ -725,7 +728,9 @@ namespace renegade::studio
             full(reverb);
             full(sourceVolume);
             full(sourceBus);
-            y += SectionGap + 18.0f;
+            y += SectionGap;
+            mixHeadingY = y;
+            y += 28.0f;
             full(masterVolume);
             full(sfxVolume);
             full(musicVolume);
@@ -869,12 +874,8 @@ namespace renegade::studio
             b.x + 12.0f, b.y + 32.0f, 10,
             impl_->SelectedIsSource() ? TextSecondary : Muted, cmd, 0.08f);
 
-        const float mixLabelY =
-            b.y + HeaderHeight +
-            (8.0f * (RowHeight + RowGap)) +
-            (2.0f * SectionGap) + 20.0f;
         DrawText("SCENE MIX // WICKED SUBMIX + REVERB",
-            b.x + 12.0f, mixLabelY, 11, Forge, cmd);
+            b.x + 12.0f, impl_->mixHeadingY, 11, Forge, cmd);
 
         for (auto* control : impl_->controls)
         {

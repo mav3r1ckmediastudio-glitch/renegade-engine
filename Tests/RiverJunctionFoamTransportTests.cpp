@@ -1,6 +1,11 @@
 #include "RiverJunctionFoamTransport.h"
 #include <iostream>
 using namespace junction_proof;using namespace junction_foam;
+// Keep every cell assertion without constructing a std::string on each
+// successful hot-loop check. The shared fixture helper accepts std::string.
+static void CheckCell(bool ok,const char* why) {
+    if(!ok)throw std::runtime_error(why);
+}
 static Surface Box(float x,float z) {
     Surface s;const XMFLOAT3 v[]={{x-.45f,-1,z-.45f},{x+.45f,-1,z-.45f},{x+.45f,-1,z+.45f},{x-.45f,-1,z+.45f},
         {x-.45f,1,z-.45f},{x+.45f,1,z-.45f},{x+.45f,1,z+.45f},{x-.45f,1,z+.45f}};
@@ -38,8 +43,8 @@ int main(){try{
             state=Step(d,state,dt,t,6,t<8?origin:0);
             peakOutlet=std::max(peakOutlet,Mass(d,state,5));
             for(std::size_t k=0;k<state.size();++k){
-                Check(std::isfinite(state[k].x)&&state[k].x>=-1e-7f,"Finite nonnegative density");
-                Check(d.index[k]>=0||state[k].x==0,"No foam inside rock/bank/outside native union");
+                CheckCell(std::isfinite(state[k].x)&&state[k].x>=-1e-7f,"Finite nonnegative density");
+                CheckCell(d.index[k]>=0||state[k].x==0,"No foam inside rock/bank/outside native union");
             }
         }
         Check(peakOutlet>.00001,"Tributary source reaches common downstream outlet");

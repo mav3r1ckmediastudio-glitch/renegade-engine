@@ -124,6 +124,22 @@ namespace renegade::studio
         CreatorAssetStudioChrome::OnAction(
             [this](const Action action)
             {
+                if(action==Action::PhysicsWorkspace) {
+                    if(studioAction_)studioAction_(Action::SceneWorkspace);
+                    SetPhysicsLabActive(true); return;
+                }
+                if(action==Action::CreateParticleEffect || action==Action::CreateNavigationGrid)
+                {
+                    PrepareViewportPlacement();ResetDisclosureState();SetActiveBottomTab(-1,true);
+                    if(studioAction_)studioAction_(Action::SceneWorkspace);
+                    if(action==Action::CreateParticleEffect)
+                    {
+                        if(particlePickerAction_)particlePickerAction_(false);
+                        else {SetParticleWorkspaceActive(true);particleWorkspace_.CreateEmitterInFrontOfCamera();}
+                    }
+                    else {SetNavigationWorkspaceActive(true);navigationWorkspace_.CreateNavigationGridForScene();}
+                    return;
+                }
                 if (action == Action::ProjectHub ||
                     action == Action::SceneWorkspace ||
                     action == Action::EnvironmentWorkspace ||
@@ -154,6 +170,31 @@ namespace renegade::studio
         SetNavigationWorkspaceActive(false);
     }
 
+    void RenegadePhysicsLabStudioChrome::OnSceneSelectionChanged()
+    {
+        // Physics Lab keeps hierarchy selection as its authoring target.
+        if (physicsLab_.IsActive())
+            return;
+
+        workspaceTransitionRequested_ = true;
+        particleAddMenuOpen_ = false;
+        SetAudioWorkspaceActive(false);
+        SetParticleWorkspaceActive(false);
+        SetNavigationWorkspaceActive(false);
+
+        auto* session = bridge::StudioSession::Current();
+        if (!session || !session->Selection().HasSelection())
+            return;
+        auto& scene = session->Scenes().GetScene();
+        const auto selected = session->Selection().SelectedEntity();
+        if (!particlePickerAction_ && bridge::IsParticleEmitter(scene, selected))
+            SetParticleWorkspaceActive(true);
+        else if (bridge::IsRenegadeNavigationEntity(scene, selected))
+            SetNavigationWorkspaceActive(true);
+        else if (bridge::IsRenegadeSoundSource(scene, selected))
+            SetAudioWorkspaceActive(true);
+    }
+
     void RenegadePhysicsLabStudioChrome::RequestCurrentWorkspaceReconcile()
     {
         if (!physicsLab_.IsActive() && !audioWorkspace_.IsActive() &&
@@ -174,6 +215,7 @@ namespace renegade::studio
     void RenegadePhysicsLabStudioChrome::SetPhysicsLabActive(const bool active)
     {
         physicsLab_.SetActive(active);
+        SetPhysicsWorkspaceIndicator(active);
         physicsLab_.SetBounds(ViewportBounds());
         if (active)
         {
@@ -376,77 +418,11 @@ namespace renegade::studio
         navigationMenuConsumed_ = false;
         workspaceTransitionRequested_ = false;
 
-        const XMFLOAT4 pointerBeforeBase = wi::input::GetPointer();
-        const bool leftPressed = wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
-        const bool addMenuPressed = leftPressed && AddMenuLabelHit(pointerBeforeBase);
-        if (addMenuPressed)
-        {
-            particleAddMenuOpen_ = !particleAddMenuOpen_;
-        }
-        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
-        {
-            particleAddMenuOpen_ = false;
-        }
-
-        bool skipBaseUpdate = false;
-        if (leftPressed && ParticleAddMenuItemHit(pointerBeforeBase))
-        {
-            // The native ADD popup owns ten rows. This eleventh row is drawn and
-            // handled by the bounded particle wrapper. Close the base popup and
-            // skip its update for this one frame so the click cannot leak into
-            // the viewport beneath the extended popup.
-            particleMenuConsumed_ = true;
-            particleAddMenuOpen_ = false;
-            ResetDisclosureState();
-            SetActiveBottomTab(-1, true);
-            SetPhysicsLabActive(false);
-            SetAudioWorkspaceActive(false);
-            SetNavigationWorkspaceActive(false);
-            if (studioAction_)
-                studioAction_(Action::SceneWorkspace);
-            if(particlePickerAction_)particlePickerAction_(false);
-            else {SetParticleWorkspaceActive(true);particleWorkspace_.CreateEmitterInFrontOfCamera();}
-            skipBaseUpdate = true;
-        }
-        else if (leftPressed && NavigationAddMenuItemHit(pointerBeforeBase))
-        {
-            // Navigation extends the same ADD popup with a twelfth row. The
-            // grid itself is a persistent native Wicked VoxelGrid entity.
-            navigationMenuConsumed_ = true;
-            particleAddMenuOpen_ = false;
-            ResetDisclosureState();
-            SetActiveBottomTab(-1, true);
-            SetPhysicsLabActive(false);
-            SetAudioWorkspaceActive(false);
-            SetParticleWorkspaceActive(false);
-            if (studioAction_)
-                studioAction_(Action::SceneWorkspace);
-            SetNavigationWorkspaceActive(true);
-            navigationWorkspace_.CreateNavigationGridForScene();
-            skipBaseUpdate = true;
-        }
-        else if (leftPressed && particleAddMenuOpen_ && !addMenuPressed)
-        {
-            // Native ADD rows or any click outside the ADD label close the
-            // mirrored specialist-row state while the base chrome handles its
-            // own popup selection normally.
-            particleAddMenuOpen_ = false;
-        }
-
-        if (!skipBaseUpdate)
-            CreatorAssetStudioChrome::Update(canvas, dt);
+        const bool menuWasOpen=HasOpenMenuPopup();
+        CreatorAssetStudioChrome::Update(canvas,dt);
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
-        if (PhysicsTabHit(pointer) &&
-            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
-        {
-            physicsTabConsumed_ = true;
-            particleAddMenuOpen_ = false;
-            if (studioAction_)
-                studioAction_(Action::SceneWorkspace);
-            SetPhysicsLabActive(true);
-        }
-        else if (!HasOpenMenuPopup() &&
+        if (!CreatorAssetStudioChrome::ConsumedPointerThisFrame() && !HasOpenMenuPopup() &&
             AudioViewportToolHit(pointer) &&
             wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
         {
@@ -515,9 +491,12 @@ namespace renegade::studio
 
         // Do not call SetBounds here. Specialist workspaces own stateful
         // widgets; relayout during Update can cancel click/slider state.
-        physicsLab_.Update(canvas, dt);
-        particleWorkspace_.Update(canvas, dt);
-        navigationWorkspace_.Update(canvas, dt);
+        if (!menuWasOpen && !HasOpenMenuPopup())
+        {
+            physicsLab_.Update(canvas, dt);
+            particleWorkspace_.Update(canvas, dt);
+            navigationWorkspace_.Update(canvas, dt);
+        }
     }
 
     void RenegadePhysicsLabStudioChrome::Render(
@@ -530,12 +509,18 @@ namespace renegade::studio
             return;
         CreatorAssetStudioChrome::Render(canvas, cmd);
         RenderAudioViewportTool(cmd);
-        RenderPhysicsTab(cmd);
-        RenderParticleAddMenuItem(cmd);
-        RenderNavigationAddMenuItem(cmd);
+        // Physics uses the shared compact workspace control.
+
         physicsLab_.Render(canvas, cmd);
         particleWorkspace_.Render(canvas, cmd);
         navigationWorkspace_.Render(canvas, cmd);
+    }
+
+    void RenegadePhysicsLabStudioChrome::RenderPopups(
+        const wi::Canvas& canvas, const wi::graphics::CommandList cmd) const
+    {
+        CreatorAssetStudioChrome::RenderPopups(canvas, cmd);
+
     }
 
     void RenegadePhysicsLabStudioChrome::RenderParticleAddMenuItem(
@@ -610,8 +595,8 @@ namespace renegade::studio
     void RenegadePhysicsLabStudioChrome::RenderAudioViewportTool(
         const wi::graphics::CommandList cmd) const
     {
-        if (HasOpenMenuPopup())
-            return;
+        // Popup ownership blocks input, not persistent toolbar presentation.
+        // The shared foreground popup pass already draws above this button.
         const XMFLOAT4 bounds = AudioViewportToolBounds();
         const bool active = audioWorkspace_.IsActive();
         DrawBorderedRect(

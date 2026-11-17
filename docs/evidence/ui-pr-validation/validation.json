@@ -1,0 +1,123 @@
+{
+  "source": "7fd95b5b3607974e7275673fa0bcc3e1b1c6af2a",
+  "configure_stamp": "c2eccc33fa1c2e13c06bc50b94f16ffa308d12a5",
+  "base": "fceda089336f6f05047846bcc4053e2868b708d0",
+  "local_build_status": "PASS",
+  "tests": {
+    "Debug": 321,
+    "Release": 334
+  },
+  "binaries": [
+    {
+      "configuration": "Debug",
+      "studio_sha256": "e046320a43037412a3740b10b283ecc24e99d74c76f7de55731522df5457f779",
+      "runtime_sha256": "bd09ce40fe31db1baef6c528a25d2e2ba1ff53b982f1a182b7f499dbcbeb90b1",
+      "startup_smoke_exit": 0,
+      "approved_svg_count": 65,
+      "atlas_manifest_match": true
+    },
+    {
+      "configuration": "Release",
+      "studio_sha256": "b5aa67b58e9c850909b89d6a6eaec473770e9c0b6d3940c95f477c1233847f63",
+      "runtime_sha256": "2821832fcd60940e85d8ce52bd14d8edd509c8b0433f93099c4846c04719cdd0",
+      "startup_smoke_exit": 0,
+      "approved_svg_count": 65,
+      "atlas_manifest_match": true
+    }
+  ],
+  "native": {
+    "source": "c2eccc33fa1c2e13c06bc50b94f16ffa308d12a5",
+    "status": "PASS",
+    "broad_native_candidate_sha256": "d91bd0e6fa9567032f14010ff32371c989339089943d8bbd058619b7987dc7c0",
+    "final_native_candidate_sha256": "b5aa67b58e9c850909b89d6a6eaec473770e9c0b6d3940c95f477c1233847f63",
+    "final_application_delta": {
+      "Studio/src/RenegadeScreenEditorWorkspace.cpp": "93817e582c8a37cd9a20d32cc5d21ac594517921b33f1e3254ae21d1d20903e3"
+    },
+    "captures": [
+      "before-heading-stale.png",
+      "after-heading-correct.png",
+      "after-heading-undo.png",
+      "final-storyflow.png",
+      "final-testgame-help.png",
+      "final-build-help.png",
+      "final-runtime-ready.png",
+      "final-stop-help.png",
+      "final-testgame-stopped.png",
+      "final-light-immediate.png",
+      "final-audio-inspector.png",
+      "final-audio-to-same-light.png",
+      "final-show-menu.png",
+      "final-wireframe.png",
+      "final-overlay.png",
+      "final-shaded-restored.png",
+      "final-light-modal-overlay.png",
+      "final-light-modal-1024.png",
+      "final-modal-closed-overlay.png",
+      "final-environment-numeric.png",
+      "final-render-numeric.png",
+      "final-player-lower-numeric.png",
+      "final-model-scroll-reset.png",
+      "final-add-menu.png",
+      "final-dialogue.png",
+      "final-screen-editor.png",
+      "verified-fit-help.png",
+      "verified-save-help.png",
+      "verified-clean-scene.png",
+      "verified-audio.png",
+      "verified-audio-handoff.png"
+    ],
+    "receipt": "Two explicitly scoped native candidates were used:\n\n- Broad candidate `D91BD0E6FA9567032F14010FF32371C989339089943D8BBD058619B7987DC7C0` (configure checkpoint plus the three test corrections): checked Story Flow toolbar spacing and tooltips; launched the actual Runtime from Test Game and returned via Stop; immediate selection/Audio handoff; literal-ellipsis rename and Undo; Environment, Render and lower Player numeric fields; primary-first model inspector and selection scroll reset; all twelve Add rows; Shaded/Wireframe/Overlay switching; opaque Light modal and private preview over overlay; reachable modal footer at 1024 width; Dialogue/Screen/Back/Escape navigation. The old UIFinish7 executable reproduced the stale-name heading before the corrected candidate. Scene rename changes were undone.\n- Final candidate `B5AA67B58E9C850909B89D6A6EAEC473770E9C0B6D3940C95F477C1233847F63` adds only the eight-line Screen Editor toolbar tooltip render pass (file hash recorded in validation.json). Verified the complete Fit View hint above the collapse handle, disabled Save's autosave guidance, clean Back/Dialogue/Escape navigation, immediate light inspector and Audio-to-same-light handoff. Both disposable native applications closed cleanly before packaging; the owner's original application was left open.\n\nThe runtime capture shows the DialogueReview conversation and its three authored choices. Native 75 FPS readings are observations, not a performance benchmark. The 1024-width modal uses bounded horizontal/vertical scrolling; this does not claim that every body column fits simultaneously.",
+    "evidence_index": "| Native receipt | Evidence |\n|---|---|\n| Literal-ellipsis title, before / corrected / Undo | [Before](before-heading-stale.png), [corrected](after-heading-correct.png), [Undo](after-heading-undo.png) |\n| Story Flow spacing and distinct commands | [Story Flow](final-storyflow.png), [Test Game help](final-testgame-help.png), [Build Game help](final-build-help.png) |\n| Real Runtime launch and Stop | [Runtime ready](final-runtime-ready.png), [Stop help](final-stop-help.png), [stopped](final-testgame-stopped.png) |\n| Immediate selection and Audio routing | [Light](final-light-immediate.png), [Audio](final-audio-inspector.png), [same light](final-audio-to-same-light.png) |\n| All three viewport modes | [Menu](final-show-menu.png), [wireframe](final-wireframe.png), [overlay](final-overlay.png), [shaded restored](final-shaded-restored.png) |\n| Modal layering, preview and narrow footer | [Light modal over overlay](final-light-modal-overlay.png), [1024 width](final-light-modal-1024.png), [closed](final-modal-closed-overlay.png) |\n| Numeric inputs and selection scroll | [Environment](final-environment-numeric.png), [Render](final-render-numeric.png), [Player lower inputs](final-player-lower-numeric.png), [model reset](final-model-scroll-reset.png) |\n| Consistent Add and Dialogue/Screen | [Add](final-add-menu.png), [Dialogue](final-dialogue.png), [Screen Editor](final-screen-editor.png) |\n| Final B5AA Screen tooltip correction | [Full Fit View hint](verified-fit-help.png), [Save autosave guidance](verified-save-help.png), [clean scene](verified-clean-scene.png) |\n| Final B5AA Audio handoff | [Audio](verified-audio.png), [selected light inspector](verified-audio-handoff.png) |"
+  },
+  "local_environment": "Earlier complete CI aggregate; final Studio plus five interrupted-link recovery builds; explicit configure with regeneration suppressed; parallel 1; CL=/MP2; complete unfiltered tests and package proofs",
+  "test_corrections": {
+    "Tests/RiverTerrainFollowProof.cpp": "eb2aa7e94448cbeb0f5a838c667f693660a9e14c58feb35aa2dd0e4e1c9a5f0b",
+    "Tests/RiverJunctionFoamTransportTests.cpp": "3dda10c698a9cf0c37c268cab337edc3cdce720e6fa7452e597556c357bf558c",
+    "Tests/StoryFlowGate10ProjectHomeCommandContract.cmake": "5c224168536e9bb516ff8bfc2f3def04ea7baab2ddfbfe1a4f6e2e6cb6234ad7"
+  },
+  "application_corrections": {
+    "Studio/src/RenegadeScreenEditorWorkspace.cpp": "93817e582c8a37cd9a20d32cc5d21ac594517921b33f1e3254ae21d1d20903e3"
+  },
+  "contract_controls": {
+    "contract_sha256": "5c224168536e9bb516ff8bfc2f3def04ea7baab2ddfbfe1a4f6e2e6cb6234ad7",
+    "application_source": "c2eccc33fa1c2e13c06bc50b94f16ffa308d12a5",
+    "controls": [
+      {
+        "case": "current icon commands",
+        "expected": "PASS",
+        "exit": 0
+      },
+      {
+        "case": "Test Game lifecycle tooltips negative control",
+        "expected": "REJECT",
+        "exit": 1,
+        "diagnostic": "Test Game lifecycle tooltips"
+      },
+      {
+        "case": "Build Game title negative control",
+        "expected": "REJECT",
+        "exit": 1,
+        "diagnostic": "Build Game title"
+      },
+      {
+        "case": "Test Game native handoff negative control",
+        "expected": "REJECT",
+        "exit": 1,
+        "diagnostic": "Test Game native handoff"
+      }
+    ]
+  },
+  "prior_complete_aggregate": {
+    "configure_stamp": "c2eccc33fa1c2e13c06bc50b94f16ffa308d12a5",
+    "test_corrections": {
+      "Tests/RiverTerrainFollowProof.cpp": "eb2aa7e94448cbeb0f5a838c667f693660a9e14c58feb35aa2dd0e4e1c9a5f0b",
+      "Tests/RiverJunctionFoamTransportTests.cpp": "3dda10c698a9cf0c37c268cab337edc3cdce720e6fa7452e597556c357bf558c",
+      "Tests/StoryFlowGate10ProjectHomeCommandContract.cmake": "5c224168536e9bb516ff8bfc2f3def04ea7baab2ddfbfe1a4f6e2e6cb6234ad7"
+    },
+    "tests": {
+      "Debug": 321,
+      "Release": 334
+    },
+    "status": "PASS"
+  }
+}

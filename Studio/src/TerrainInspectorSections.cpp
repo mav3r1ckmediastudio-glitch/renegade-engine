@@ -43,7 +43,7 @@ void StudioRenderPath::LayoutTerrainSections()
         !terrainWorkspaceActive_ && !environmentWorkspaceActive_ &&
         !renderWorkspaceActive_ && !projectHubVisible_;
     selectedRiverInspectorActive_=selectedMode;
-    const float width=std::max(1.f,inspectorPanel_.GetSize().x-24.f);
+    const float width=ui::InspectorContentWidth(inspectorPanel_.GetSize().x,inspectorPanel_.GetControlSize());
     std::array<std::vector<wi::gui::Widget*>,15> rows;
     rows[1]={&terrainSizeReadout_,&expandTerrainButton_,&terrainChunkScale_,&terrainMinimumHeight_,&terrainMaximumHeight_,&terrainLodBias_};
     rows[2]={&terrainSculptMode_,&terrainBrushRadius_,&terrainBrushStrength_,&terrainBrushFalloff_,&terrainBrushReadout_,&terrainStrokeDiagnostic_};

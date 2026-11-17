@@ -1,5 +1,7 @@
 #include "ParticleTextureBrowser.h"
 #include "RenegadeStudioChrome.h"
+#include "StudioButtonVisual.h"
+#include "StudioNumericControl.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -7,32 +9,35 @@
 
 namespace renegade::studio {
 namespace {
-constexpr wi::Color Teal(137,225,208,255),Panel(33,35,37,255),Text(235,238,239,255);
+constexpr wi::Color Teal=theme::Accent,Panel=theme::Panel,Text=theme::Text;
 void Rect(float x,float y,float w,float h,wi::Color c,wi::graphics::CommandList cmd){wi::image::Draw(nullptr,wi::image::Params(x,y,w,h,c),cmd);}
 void Caption(const std::string& text,float x,float y,int size,wi::graphics::CommandList cmd,wi::Color color=Text){wi::font::Draw(text,wi::font::Params(x,y,size,wi::font::WIFALIGN_LEFT,wi::font::WIFALIGN_TOP,color),cmd);}
 void Backdrop(float x,float y,float w,float h,bool checker,wi::graphics::CommandList cmd){
  Rect(x,y,w,h,wi::Color(19,21,23,255),cmd);if(!checker)return;
  const int n=6;for(int j=0;j<n;++j)for(int i=0;i<n;++i)if((i+j)%2)Rect(x+i*w/n,y+j*h/n,w/n+.5f,h/n+.5f,wi::Color(37,40,42,255),cmd);
 }
-class BrowserButton:public wi::gui::Button {
+class BrowserButton:public ReleaseButton {
 public:bool chosen=false,primary=false;
  void Render(const wi::Canvas& canvas,wi::graphics::CommandList cmd)const override{
-  if(!IsVisible())return;ApplyScissor(canvas,scissorRect,cmd);auto edge=chosen||GetState()==wi::gui::FOCUS?Teal:wi::Color(85,91,94,255);
-  Rect(translation.x,translation.y,scale.x,scale.y,edge,cmd);Rect(translation.x+1,translation.y+1,scale.x-2,scale.y-2,primary||chosen?Teal:wi::Color(45,49,51,255),cmd);
-  auto color=!IsEnabled()?wi::Color(115,122,124,255):primary||chosen?wi::Color(15,28,27,255):Text;
-  wi::font::Draw(GetText(),wi::font::Params(translation.x+scale.x*.5f,translation.y+scale.y*.5f,12,wi::font::WIFALIGN_CENTER,wi::font::WIFALIGN_CENTER,color),cmd);
- }
+  if(!IsVisible())return;
+  ApplyScissor(canvas,scissorRect,cmd);
+  const bool enabled=IsEnabled();
+  theme::DrawButton(translation.x,translation.y,scale.x,scale.y,GetText(),
+    {enabled,enabled&&GetState()==wi::gui::FOCUS,
+     enabled&&(GetState()==wi::gui::ACTIVE||GetState()==wi::gui::DEACTIVATING),primary,chosen},
+    12,cmd);
+    }
 };
 class TextureTile:public wi::gui::Button {
 public:
- const wi::gui::Window* clipWindow=nullptr;
+ const StudioModalWindow* clipWindow=nullptr;
  bridge::ParticleTextureEntry entry;wi::Resource texture;bool chosen=false,checker=true,large=false;float clock=0;
  void Render(const wi::Canvas& canvas,wi::graphics::CommandList cmd)const override{
   if(!IsVisible())return;
   auto clip=scissorRect;
   if(clipWindow){
-   const auto origin=clipWindow->GetPos();
-   const float top=origin.y+clipWindow->GetControlSize()+1+110;
+   const auto origin=clipWindow->ContentOrigin();
+   const float top=origin.y+1+110;
    clip.left=std::max(clip.left,int32_t(std::ceil(origin.x+200)));
    clip.right=std::min(clip.right,int32_t(std::floor(origin.x+770)));
    clip.top=std::max(clip.top,int32_t(std::ceil(top)));
@@ -57,7 +62,7 @@ struct ParticleTextureBrowser::Impl {
  std::function<bool()> current;std::function<void(const bridge::ParticleTextureEntry&,bool)> apply;std::function<void()> closed;
  std::shared_ptr<int> lifetime=std::make_shared<int>(0);unsigned generation=0;
  RenegadeTextInputField search;std::array<BrowserButton,2> sources;std::array<BrowserButton,3> kinds;std::array<BrowserButton,11> categories;std::array<TextureTile,35> tiles;TextureTile preview;
- BrowserButton previous,next,import,use,cancel,allFrames;wi::gui::Slider thumbnailSize;wi::gui::CheckBox checker,recommended;
+ BrowserButton previous,next,import,use,cancel,allFrames;StudioPickerSlider thumbnailSize;wi::gui::CheckBox checker,recommended;
  wi::gui::ComboBox textureKind;std::array<wi::gui::TextInputField,5> layout;std::array<wi::gui::Label,5> layoutLabels;
  wi::gui::Label selectedTitle,name,metadata,target,status,range,hint,checkerLabel,recommendedLabel;std::vector<wi::gui::Label*> labels;
  bridge::MaterialTextureSlot slot=bridge::MaterialTextureSlot::BaseColor;
@@ -86,6 +91,7 @@ struct ParticleTextureBrowser::Impl {
   Button(previous,"Previous",200,612,100);Button(next,"Next",670,612,100);previous.OnClick([this](auto&){if(page>0){--page;RefreshTiles();}});next.OnClick([this](auto&){if((page+1)*capacity<int(filtered.size())){++page;RefreshTiles();}});Label(range,"",310,615,350,12);
   thumbnailSize.Create(72,136,96,64,"Thumbnail size");Add(thumbnailSize,330,665,260,22);thumbnailSize.OnSlide([this](auto&){page=0;RefreshTiles();});
   Label(status,"Choose an image for the selected particle layer.",18,730,765,12);Button(cancel,"Cancel",830,730,130);Button(use,"Use texture",980,730,170);use.primary=true;cancel.OnClick([this](auto&){window.Close();});use.OnClick([this](auto&){Use();});
+  window.PinFooter(cancel,350,8,true);window.PinFooter(use,200,8,true);window.PinFooter(status,18,44,false,true);
  }
  void Ensure(size_t n){if(n>=entries->size()||attempted[n])return;attempted[n]=true;std::string error;previews[n]=bridge::LoadParticleTexturePreview(root,project,(*entries)[n],error);if(!error.empty())status.SetText(error);if(previews[n].IsValid()&&previews[n].GetTexture().IsValid()){auto d=previews[n].GetTexture().GetDesc();(*entries)[n].width=d.width;(*entries)[n].height=d.height;}}
  void Switch(int tab){source=tab;entries=source?&owned:&included;previews.assign(entries->size(),{});attempted.assign(entries->size(),false);selected=0;page=0;category="All textures";Filter();}
@@ -122,7 +128,7 @@ struct ParticleTextureBrowser::Impl {
 };
 ParticleTextureBrowser::ParticleTextureBrowser():impl_(std::make_unique<Impl>(*this)){}
 ParticleTextureBrowser::~ParticleTextureBrowser(){impl_->lifetime.reset();RemoveWidgets();}
-void ParticleTextureBrowser::Create(){wi::gui::Window::Create("Particle Texture Library",WindowControls::CLOSE|WindowControls::MOVE);SetControlSize(28);SetSize({1180,810});impl_->Build();impl_->Theme();SetVisible(false);}
+void ParticleTextureBrowser::Create(){StudioModalWindow::Create("Particle Texture Library",WindowControls::CLOSE|WindowControls::MOVE);SetControlSize(28);SetSize({1180,840});impl_->Build();impl_->Theme();SetVisible(false);}
 void ParticleTextureBrowser::Open(const std::string& root,const bridge::StableId& project,const std::string& layer,bridge::MaterialTextureSlot slot,std::function<bool()> current,std::function<void(const bridge::ParticleTextureEntry&,bool)> apply,std::function<void()> closed){
  auto& i=*impl_;++i.generation;i.root=root;i.project=project;i.slot=slot;i.current=std::move(current);i.apply=std::move(apply);i.closed=std::move(closed);i.importing=false;i.clock=0;i.kind=0;i.search.SetText("");i.recommended.SetCheck(true);std::string error,warning;
  if(!bridge::ReadIncludedParticleTextures(bridge::InstalledParticleTextureDirectory(),i.included,error))warning=error;if(!bridge::ReadProjectParticleTextures(root,project,i.owned,error))warning=error;
@@ -134,13 +140,13 @@ void ParticleTextureBrowser::Update(const wi::Canvas& c,float dt){
  // Change the page before native child transforms/scissors update. Revealing
  // a previously hidden tile afterwards draws its stale transform for one frame.
  if(IsVisible()){
-  const auto p=wi::input::GetPointer();const auto pos=GetPos();
-  const float top=pos.y+GetControlSize()+1+110;
-  if(p.z&&p.x>=pos.x+200&&p.x<pos.x+770&&p.y>=top&&p.y<top+486){
+  const auto p=wi::input::GetPointer();const auto pos=ContentOrigin();
+  const float top=pos.y+110;
+  if(GetSize().y>=840 && p.z&&p.x>=pos.x+200&&p.x<pos.x+770&&p.y>=top&&p.y<top+486){
    i.page+=p.z>0?-1:1;i.RefreshTiles();
   }
  }
- bool was=IsVisible();wi::gui::Window::Update(c,dt);if(was&&!IsVisible()){Close();return;}if(!IsVisible())return;if(!i.current||!i.current()){Close();return;}
+ bool was=IsVisible();StudioModalWindow::Update(c,dt);if(was&&!IsVisible()){Close();return;}if(!IsVisible())return;if(!i.current||!i.current()){Close();return;}
  i.clock+=std::clamp(dt,0.f,.1f);for(auto& t:i.tiles)t.clock=i.clock;i.preview.clock=i.clock;i.preview.checker=i.checker.GetCheck();
 }
 }

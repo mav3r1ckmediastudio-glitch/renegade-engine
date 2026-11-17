@@ -622,6 +622,27 @@ plan, manifest, integrity and safe-promotion services govern the staged bytes.
 
 ## UI foundation
 
+### Shared Studio modal and numeric boundaries (16 November 2026)
+
+Light, Particle, Texture Library and Dialogue derive from StudioModalWindow.
+The outer canvas-bounded native Window retains its title and pinned footer;
+a native scroll-body owns content drawing and input clipping. Pixel geometry
+is established before attaching widgets to the scaled native parent transform.
+An Escape press is claimed once across enabled modal instances; existing
+document dirty guards remain authoritative. Embedded ScreenInstanceRoot hosts
+inherit their parent scissor and reject pointer input outside that host.
+Parentless Runtime Screens retain their existing behavior.
+
+StudioNumericControl supplies shared rail/label states and bounded wrapped help
+while retaining native text-entry parsing. Physics uses a matching content
+drawing/input clip and responsive tab rows. Hub commands use the shared release
+gesture. Inspector selection/view changes reset disclosure and scroll state;
+primary component controls precede optional generic conversion and collapsed
+layers/metadata. Private picker previews temporarily render shaded and restore
+the scene view mode. Authored Screen styling remains document-owned.
+See UI_USABILITY_COMPLETION_20261116.md for validation and explicit limits.
+
+
 ADR 0002 accepts Wicked's native `wiGUI` as Renegade's production integration
 and rendering foundation after the Phase 2 HDR-source, DPI, input, persistence,
 DX12, and Vulkan gate.
@@ -2293,3 +2314,97 @@ Project display selection registers the setting plus the typed Screen dependency
 root. The existing Screen provider follows artwork, fonts and theme/component
 Screens. Test Level snapshots copy the same explicit dependency closure.
 See DIALOGUE_DISPLAYS.md for the creator workflow and supported roles.
+
+
+### Studio UI composition and shared button presentation (16 November 2026; first pass)
+
+StudioUiPolicy owns the pure visibility and release-gesture rules. The active
+level workspace is the only surface allowed to show scene editor markers;
+loading, Physics Lab and modal tools suppress them. MarkerIconOverlay keeps
+its native GUI input registration but emits pixels only from Studio's clipped
+world-overlay pass. Studio composes the pinned upstream scene image and debug
+image, then world overlays, then the native 2D GUI. Loading covers or chrome
+popups compose last, independent of GUI widget activation order. Physics Lab
+routes through this composition path while retaining its native scene Render.
+
+StudioButtonVisual and StudioTheme own shared action-button drawing and opaque
+palette tokens. Native Wicked button update/callback semantics remain intact;
+custom menu rows use ReleaseAction for matching-release invocation. All twelve
+Add options belong to the base menu model, including particle and navigation
+commands routed through the specialist chrome callback. No new authoritative
+scene, project UI asset or gameplay presentation format is introduced. The
+runtime authored Screen remains separate. See UI_COHESION_PASS1.md for scope
+and acceptance status.
+
+Popup exclusivity pauses ordinary GUI input and specialist manual controls,
+without calling Activate on the entire chrome backdrop. This preserves native
+Inspector drawing order. Viewport selection uses the same Environment/Terrain/
+Render workspace exit as hierarchy selection, so a newly selected asset owns
+its Inspector even when a different property tab was previously active. Shared
+InspectorContentWidth reserves Window::GetControlSize for the scrollbar before
+it appears, and narrow layer masks wrap to four columns with measured row space.
+
+
+### Approved Studio icon catalogue and toolbar input (16 November 2026)
+
+Studio owns the 65-icon SVG catalogue, title manifest and one padded 48 px atlas.
+The existing Wicked Canvas supplies logical/physical scaling; StudioIcons draws
+atlas source rectangles and shared opaque button faces. Loading happens once
+per texture rather than per button/frame. The editor logo and creator-authored
+runtime Screen resources remain separate.
+
+Custom Studio and Story Flow chrome use common control descriptors for pixels,
+bounds, enablement and action identity. Interaction owns one matching-release
+gesture and transient tooltip state; native buttons reuse their existing
+callback authority. Keyboard focus is separate from hover/held/selected states.
+An exclusive GUI owner cancels held input and tips while temporarily retaining
+keyboard focus; clicking elsewhere releases it. No new scene inventory,
+authoritative selection, graph model, history or serialization format is added.
+See UI_ICON_INTEGRATION.md and its scoped native evidence.
+
+JourneyWorkspaceHeaderHeight now keeps the Story Flow shell, native workspace,
+canvas hit region and scissor boundary in agreement. The 192 logical px header
+reserves clear row spacing around Fit. Persistent viewport controls such as Audio
+continue to render during popups; exclusive input and the foreground popup pass
+provide ownership instead of hiding the control.
+
+Selected-object prefab toolbar presentation and pointer hit targets share the
+specialist-context exclusion: Audio (including particle/navigation ownership)
+and Physics do not expose scene assembly controls. Scene viewport selection
+feedback remains independent, so suppressing this contextual toolbar does not
+remove box-selection feedback.
+
+Explicit viewport and hierarchy selection events reconcile specialist inspector
+ownership after changing StudioSession selection. OnSceneSelectionChanged
+releases Audio/legacy particle/navigation, chooses the selected entity's typed
+specialist if appropriate, and otherwise restores the Scene inspector. This is
+event driven: opening the global Audio mix with a retained ordinary selection
+does not immediately close it. Physics Lab retains its authoring target flow.
+
+### Suspended-scene preview composition (16 November 2026)
+
+Light, Particle and Dialogue share one opaque 2D modal composition boundary.
+Only their private preview may render while the main scene is suspended; the
+main 3D render result must not be sampled because resizing can replace it before
+another scene frame writes it. The close frame retains that ownership until the
+next normal scene Update. See evidence/ui-modal-resize for the native regression.
+
+Light creation reconciles hierarchy and inspector immediately when clearing
+selection. Native resize queues a one-time inspector refresh, including after
+the modal's 2D Window update; background layout cannot retain controls for an old
+selection or fixed legacy geometry. No second selection or render graph is added.
+
+Dialogue display-editor resume follows native Window visibility semantics:
+fit, show the parent, then restore the selected row's basic/Advanced field
+visibility and NPC targets. Showing the parent after hiding individual fields
+would re-enable every child. The normal Open and resume paths must preserve this
+ordering. See evidence/ui-dialogue-resume for the full native round trip.
+
+## Whole-scene viewport view modes — 16 November 2026
+
+SHOW uses the existing native renderer through one Studio setter shared with
+Render diagnostics. View mode is a ProjectService editor preference, separate
+from authored render settings and Runtime. Native diagnostic lifecycle resets
+restore that preference; path tracing temporarily suspends it. Dedicated
+coplanar overlay PSOs are compiled through a bounded generated-source overlay,
+with the original renderer and submodule pin preserved. See WIREFRAME_VIEW_MODE.md.

@@ -288,9 +288,23 @@ namespace renegade::studio
                 return isCharacter_;
             }
 
-            [[nodiscard]] float Measure() const noexcept
+            [[nodiscard]] static float LabelHeight(const wi::gui::Label& label, float width, float minimum)
             {
-                return isCharacter_ ? 468.0f : 164.0f;
+                auto metrics=label.font.params;
+                metrics.size=12;
+                metrics.bolden=.12f;
+                metrics.h_wrap=std::max(1.f,width-4.f);
+                return std::max(minimum,wi::font::TextHeight(label.GetText(),metrics)+4.f);
+            }
+
+            [[nodiscard]] float Measure(float width) const
+            {
+                float height=LabelHeight(status_,width,22.f)+4.f+
+                    LabelHeight(setup_,width,42.f)+4.f+34.f;
+                if (isCharacter_)
+                    height+=6*34.f+LabelHeight(effective_,width,22.f)+4.f+
+                        LabelHeight(animationSetLabel_,width,20.f)+4.f+2*34.f;
+                return height;
             }
 
             [[nodiscard]] float MeasureAdvanced() const noexcept
@@ -423,8 +437,12 @@ namespace renegade::studio
                     widget.SetSize(XMFLOAT2(width, height));
                     y += height + 6.0f;
                 };
-                const auto label = [&](wi::gui::Widget& widget, const float height = 22.0f)
+                const auto label = [&](wi::gui::Label& widget, const float minimum = 22.0f)
                 {
+                    widget.font.params.size=12;
+                    widget.font.params.bolden=.12f;
+                    widget.SetFitTextEnabled(false);
+                    const float height=LabelHeight(widget,width,minimum);
                     widget.SetVisible(true);
                     widget.SetPos(XMFLOAT2(x, y));
                     widget.SetSize(XMFLOAT2(width, height));
@@ -638,7 +656,9 @@ namespace renegade::studio
             {
                 label.Create(name);
                 label.SetColor(wi::Color::Transparent());
-                label.SetFitTextEnabled(true);
+                label.SetFitTextEnabled(false);
+                label.font.params.size=12;
+                label.font.params.bolden=.12f;
                 panel_->AddWidget(&label);
             }
 
@@ -1000,9 +1020,9 @@ namespace renegade::studio
 
         float CharacterSectionProvider::MeasureContentHeight(
             const InspectorSectionContext&,
-            float) const
+            float width) const
         {
-            return owner_ != nullptr ? owner_->Measure() : 0.0f;
+            return owner_ != nullptr ? owner_->Measure(width) : 0.0f;
         }
 
         void CharacterSectionProvider::Refresh(const InspectorSectionContext&)

@@ -151,6 +151,13 @@ set_target_properties(RenegadeTerrainSurfacePacker PROPERTIES
     FOLDER "Renegade/Tools"
 )
 add_dependencies(RenegadeStudio RenegadeTerrainSurfacePacker)
+
+# Pure interaction policy runs without a GPU or editor window.
+add_executable(RenegadeStudioUiPolicyTests ../Tests/StudioUiPolicyTests.cpp)
+target_compile_features(RenegadeStudioUiPolicyTests PRIVATE cxx_std_17)
+add_dependencies(RenegadeStudio RenegadeStudioUiPolicyTests)
+add_test(NAME StudioUiPolicy COMMAND RenegadeStudioUiPolicyTests)
+
 # Use the canonical RenegadeStudio.exe output required by Studio/Runtime CI.
 # The separately built V4 inventory review candidate remains in BUILD for QA.
 
@@ -435,3 +442,13 @@ add_custom_target(RenegadeParticleTextureLibraryAssets
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/Particles/TextureLibrary"
 )
 add_dependencies(RenegadeStudio RenegadeParticleTextureLibraryAssets)
+
+# Renegade-owned approved icon artwork. Studio-only; never adopted into projects.
+add_custom_command(TARGET RenegadeStudio POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/icons"
+    VERBATIM)
+
+# Shared readable modal viewport and pinned action footer.
+target_sources(RenegadeStudio PRIVATE src/StudioModalWindow.cpp src/StudioModalWindow.h src/StudioNumericControl.h src/StudioNumericControl.cpp)
