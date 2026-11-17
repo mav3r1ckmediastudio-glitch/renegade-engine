@@ -1,0 +1,144 @@
+Test project <repo>/BUILD/native
+      Start   1: RenegadeMarkerIconsSourceContract
+ 1/66 Test   #1: RenegadeMarkerIconsSourceContract ....................   Passed    0.03 sec
+      Start   3: RenegadeParticleEmitterSourceContract
+ 2/66 Test   #3: RenegadeParticleEmitterSourceContract ................   Passed    0.03 sec
+      Start   4: RenegadeParticleEmitterOwnerFeedbackSourceContract
+ 3/66 Test   #4: RenegadeParticleEmitterOwnerFeedbackSourceContract ...   Passed    0.02 sec
+      Start  14: RenegadeJP01HardeningSourceContract
+ 4/66 Test  #14: RenegadeJP01HardeningSourceContract ..................   Passed    0.03 sec
+      Start  16: RenegadePhase5Gate1SourceContract
+ 5/66 Test  #16: RenegadePhase5Gate1SourceContract ....................   Passed    0.04 sec
+      Start  18: RenegadePhase5Gate2SourceContract
+ 6/66 Test  #18: RenegadePhase5Gate2SourceContract ....................   Passed    0.06 sec
+      Start  20: RenegadePhase5Gate3SourceContract
+ 7/66 Test  #20: RenegadePhase5Gate3SourceContract ....................   Passed    0.05 sec
+      Start  22: RenegadePhase5Gate4SourceContract
+ 8/66 Test  #22: RenegadePhase5Gate4SourceContract ....................   Passed    0.03 sec
+      Start  25: RenegadePhase5Gate5SourceContract
+ 9/66 Test  #25: RenegadePhase5Gate5SourceContract ....................   Passed    0.04 sec
+      Start  27: RenegadePhase5Gate6SourceContract
+10/66 Test  #27: RenegadePhase5Gate6SourceContract ....................   Passed    0.03 sec
+      Start  29: RenegadePhase5Gate7SourceContract
+11/66 Test  #29: RenegadePhase5Gate7SourceContract ....................   Passed    0.03 sec
+      Start  31: RenegadePhase5Gate8SourceContract
+12/66 Test  #31: RenegadePhase5Gate8SourceContract ....................   Passed    0.04 sec
+      Start  32: RenegadePhase5Gate9SourceContract
+13/66 Test  #32: RenegadePhase5Gate9SourceContract ....................   Passed    0.04 sec
+      Start  33: RenegadeWD01VegetationSourceContract
+14/66 Test  #33: RenegadeWD01VegetationSourceContract .................   Passed    0.04 sec
+      Start  34: RenegadeEditorFrameLoopRecoverySourceContract
+15/66 Test  #34: RenegadeEditorFrameLoopRecoverySourceContract ........   Passed    0.04 sec
+      Start  36: RenegadePhase6Gate1SourceContract
+16/66 Test  #36: RenegadePhase6Gate1SourceContract ....................   Passed    0.05 sec
+      Start  38: RenegadePhase6Gate2SourceContract
+17/66 Test  #38: RenegadePhase6Gate2SourceContract ....................   Passed    0.03 sec
+      Start  40: RenegadePhase6Gate3SourceContract
+18/66 Test  #40: RenegadePhase6Gate3SourceContract ....................   Passed    0.10 sec
+      Start  42: RenegadePhase7Gate7BSourceContract
+19/66 Test  #42: RenegadePhase7Gate7BSourceContract ...................   Passed    0.02 sec
+      Start  44: RenegadePhase7Gate7CSourceContract
+20/66 Test  #44: RenegadePhase7Gate7CSourceContract ...................   Passed    0.02 sec
+      Start  46: RenegadePhase7Gate7DSourceContract
+21/66 Test  #46: RenegadePhase7Gate7DSourceContract ...................   Passed    0.02 sec
+      Start  48: RenegadePhase7Gate7ESourceContract
+22/66 Test  #48: RenegadePhase7Gate7ESourceContract ...................   Passed    0.03 sec
+      Start  50: RenegadePhase7Gate7FSourceContract
+23/66 Test  #50: RenegadePhase7Gate7FSourceContract ...................   Passed    0.02 sec
+      Start  52: RenegadeCharacterAiSourceContract
+24/66 Test  #52: RenegadeCharacterAiSourceContract ....................   Passed    0.03 sec
+      Start  55: RenegadeCharacterAiProfilesSourceContract
+25/66 Test  #55: RenegadeCharacterAiProfilesSourceContract ............   Passed    0.03 sec
+      Start  57: RenegadeCharacterAiPerceptionSourceContract
+26/66 Test  #57: RenegadeCharacterAiPerceptionSourceContract ..........   Passed    0.03 sec
+      Start  59: RenegadeCharacterAiDecisionSourceContract
+27/66 Test  #59: RenegadeCharacterAiDecisionSourceContract ............   Passed    0.03 sec
+      Start  61: RenegadeCharacterAiCombatSourceContract
+28/66 Test  #61: RenegadeCharacterAiCombatSourceContract ..............   Passed    0.04 sec
+      Start  71: RenegadeS1AInspectorSectionSourceContract
+29/66 Test  #71: RenegadeS1AInspectorSectionSourceContract ............   Passed    0.02 sec
+      Start  72: RenegadeS1BInspectorMigrationSourceContract
+30/66 Test  #72: RenegadeS1BInspectorMigrationSourceContract ..........   Passed    0.04 sec
+      Start  74: RenegadeS2ScriptDocumentSourceContract
+31/66 Test  #74: RenegadeS2ScriptDocumentSourceContract ...............   Passed    0.03 sec
+      Start  77: RenegadeS3GovernedLuaRuntimeSourceContract
+32/66 Test  #77: RenegadeS3GovernedLuaRuntimeSourceContract ...........   Passed    0.04 sec
+      Start  79: RenegadeS4AScriptMetadataSourceContract
+33/66 Test  #79: RenegadeS4AScriptMetadataSourceContract ..............   Passed    0.02 sec
+      Start  81: RenegadeS4BScriptAuthoringSourceContract
+34/66 Test  #81: RenegadeS4BScriptAuthoringSourceContract .............   Passed    0.03 sec
+      Start  83: RenegadeS4CScriptPropertyAuthoringSourceContract
+35/66 Test  #83: RenegadeS4CScriptPropertyAuthoringSourceContract .....   Passed    0.02 sec
+      Start  86: RenegadeS4DScriptReferenceAuthoringSourceContract
+36/66 Test  #86: RenegadeS4DScriptReferenceAuthoringSourceContract ....   Passed    0.02 sec
+      Start  90: RenegadeS5CoreGameplayApiSourceContract
+37/66 Test  #90: RenegadeS5CoreGameplayApiSourceContract ..............   Passed    0.03 sec
+      Start  93: RenegadeS5DClosureSourceContract
+38/66 Test  #93: RenegadeS5DClosureSourceContract .....................   Passed    0.04 sec
+      Start  95: RenegadeS6ScriptLibrarySourceContract
+39/66 Test  #95: RenegadeS6ScriptLibrarySourceContract ................   Passed    0.03 sec
+      Start  98: RenegadeS7StockActionsSourceContract
+40/66 Test  #98: RenegadeS7StockActionsSourceContract .................   Passed    0.03 sec
+      Start 101: RenegadePhase6NativeNavigationSourceContract
+41/66 Test #101: RenegadePhase6NativeNavigationSourceContract .........   Passed    0.03 sec
+      Start 102: RenegadeStudioDisclosurePolicySourceContract
+42/66 Test #102: RenegadeStudioDisclosurePolicySourceContract .........   Passed    0.03 sec
+      Start 103: RenegadeTestLevelRuntimeHandoffSourceContract
+43/66 Test #103: RenegadeTestLevelRuntimeHandoffSourceContract ........   Passed    0.03 sec
+      Start 104: RenegadeCharacterWorkflowSourceContract
+44/66 Test #104: RenegadeCharacterWorkflowSourceContract ..............   Passed    0.04 sec
+      Start 106: RenegadeCW04CharacterPlacementSourceContract
+45/66 Test #106: RenegadeCW04CharacterPlacementSourceContract .........   Passed    0.03 sec
+      Start 109: RenegadeCW05CharacterPrefabSourceContract
+46/66 Test #109: RenegadeCW05CharacterPrefabSourceContract ............   Passed    0.02 sec
+      Start 110: RenegadeSceneUiGate2SourceContract
+47/66 Test #110: RenegadeSceneUiGate2SourceContract ...................   Passed    0.04 sec
+      Start 111: RenegadeSceneUiGate3SourceContract
+48/66 Test #111: RenegadeSceneUiGate3SourceContract ...................   Passed    0.04 sec
+      Start 112: RenegadeSceneUiGate4SourceContract
+49/66 Test #112: RenegadeSceneUiGate4SourceContract ...................   Passed    0.03 sec
+      Start 114: RenegadeSceneUiGate5SourceContract
+50/66 Test #114: RenegadeSceneUiGate5SourceContract ...................   Passed    0.03 sec
+      Start 115: RenegadeSceneUiGate6SourceContract
+51/66 Test #115: RenegadeSceneUiGate6SourceContract ...................   Passed    0.04 sec
+      Start 129: RenegadeStoryFlowGate9DSourceContract
+52/66 Test #129: RenegadeStoryFlowGate9DSourceContract ................   Passed    0.04 sec
+      Start 131: RenegadeStoryFlowJourneyRecovery9ASourceContract
+53/66 Test #131: RenegadeStoryFlowJourneyRecovery9ASourceContract .....   Passed    0.04 sec
+      Start 175: StudioUiPolicy
+54/66 Test #175: StudioUiPolicy .......................................   Passed    0.02 sec
+      Start 176: RenegadeRA02AssistantSourceContract
+55/66 Test #176: RenegadeRA02AssistantSourceContract ..................   Passed    0.03 sec
+      Start 177: RenegadeJP01PhysicsLabSourceContract
+56/66 Test #177: RenegadeJP01PhysicsLabSourceContract .................   Passed    0.04 sec
+      Start 201: RenegadeEditorPointLookupSourceContract
+57/66 Test #201: RenegadeEditorPointLookupSourceContract ..............   Passed    0.03 sec
+      Start 208: RenegadeProtectedImporterSourceContract
+58/66 Test #208: RenegadeProtectedImporterSourceContract ..............   Passed    0.08 sec
+      Start 209: RenegadeAssistantRiverKnowledgeTests
+59/66 Test #209: RenegadeAssistantRiverKnowledgeTests .................   Passed    2.64 sec
+      Start 210: RenegadeAssistantPackagedKnowledgeTests
+60/66 Test #210: RenegadeAssistantPackagedKnowledgeTests ..............   Passed   21.58 sec
+      Start 212: RenegadeAssistantWorkflowSuite
+61/66 Test #212: RenegadeAssistantWorkflowSuite .......................   Passed   61.62 sec
+      Start 213: RenegadeAssistantClientRecoveryRouting
+62/66 Test #213: RenegadeAssistantClientRecoveryRouting ...............   Passed    0.09 sec
+      Start 256: RenegadePlayerViewRigSourceContract
+63/66 Test #256: RenegadePlayerViewRigSourceContract ..................   Passed    0.07 sec
+      Start 265: RenegadeNightSkySourceContract
+64/66 Test #265: RenegadeNightSkySourceContract .......................   Passed    0.06 sec
+      Start 312: RenegadeMoonlitCloudSourceContract
+65/66 Test #312: RenegadeMoonlitCloudSourceContract ...................   Passed    0.03 sec
+      Start 319: RenegadeAssistantPortOwnership
+66/66 Test #319: RenegadeAssistantPortOwnership .......................   Passed    8.26 sec
+
+100% tests passed out of 66
+
+Label Time Summary:
+Navigation        =   0.03 sec*proc (1 test)
+Phase6            =   0.03 sec*proc (1 test)
+S5D               =   0.04 sec*proc (1 test)
+S7                =   0.03 sec*proc (1 test)
+SourceContract    =   0.03 sec*proc (1 test)
+
+Total Test time (real) = 100.17 sec

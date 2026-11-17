@@ -1,0 +1,83 @@
+Started: 2026-11-17T07:36:40.0460911Z
+Working directory: <preflight>
+Command: <user>\AppData\Local\Microsoft\WinGet\Links\cmake.exe --build <preflight>\BUILD\renegade --config Release --target RenegadeStudio RenegadeEquipmentAssetTests RenegadeHudReferencePersistenceTests RenegadeRiverFlowFieldTests RenegadeRiverFoamTests RenegadeStoryFlowGate5ScreenLifecycleTests --parallel 1
+
+MSBuild version 18.6.3+84d3e95b4 for .NET Framework
+
+  Jolt.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\Jolt.lib
+  LUA.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\LUA\Release\LUA.lib
+  Utility.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Utility\Release\Utility.lib
+  WickedEngine_common.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_common.dir\Release\WickedEngine_common.lib
+  WickedEngine_ext_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine_ext_shaders.lib
+  offlineshadercompiler.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\offlineshadercompiler.exe
+  WickedEngine_emb_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine.lib
+  RenegadeEngineBridge.vcxproj -> <preflight>\BUILD\renegade\EngineBridge\Release\RenegadeEngineBridge.lib
+  RenegadeInspectorSectionFramework.vcxproj -> <preflight>\BUILD\renegade\Release\RenegadeInspectorSectionFramework.lib
+  RenegadeParticleEmitterTests.vcxproj -> <preflight>\BUILD\renegade\Release\RenegadeParticleEmitterTests.exe
+  RenegadeScreenRenderer.vcxproj -> <preflight>\BUILD\renegade\ScreenRenderer\Release\RenegadeScreenRenderer.lib
+  RenegadeRuntimeBootstrap.vcxproj -> <preflight>\BUILD\renegade\Runtime\Release\RenegadeRuntimeBootstrap.lib
+  RenegadeStudioUiPolicyTests.vcxproj -> <preflight>\BUILD\renegade\Studio\Release\RenegadeStudioUiPolicyTests.exe
+  RenegadeTerrainSurfacePacker.vcxproj -> <preflight>\BUILD\renegade\Studio\Release\RenegadeTerrainSurfacePacker.exe
+  RenegadeTestLevelRuntimeProcess.vcxproj -> <preflight>\BUILD\renegade\Studio\Release\RenegadeTestLevelRuntimeProcess.lib
+  RenegadeParticleFieldShaderCompiler.vcxproj -> <preflight>\BUILD\renegade\Release\RenegadeParticleFieldShaderCompiler.exe
+  RenegadeRiverShaderCompiler.vcxproj -> <preflight>\BUILD\renegade\EngineBridge\Release\RenegadeRiverShaderCompiler.exe
+  G13_STANDALONE_SHADER_STAGE_READY <preflight>\BUILD\renegade\waterfall-studio-shaders
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=47668
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=32572
+  RenegadeStudio.vcxproj -> <preflight>\BUILD\renegade\Studio\Release\RenegadeStudio.exe
+                            Install nine Renegade thunder SFX with 3D variants in Studio
+MSBuild version 18.6.3+84d3e95b4 for .NET Framework
+
+  Jolt.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\Jolt.lib
+  LUA.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\LUA\Release\LUA.lib
+  Utility.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Utility\Release\Utility.lib
+  WickedEngine_common.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_common.dir\Release\WickedEngine_common.lib
+  WickedEngine_ext_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine_ext_shaders.lib
+  offlineshadercompiler.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\offlineshadercompiler.exe
+  WickedEngine_emb_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine.lib
+  RenegadeEngineBridge.vcxproj -> <preflight>\BUILD\renegade\EngineBridge\Release\RenegadeEngineBridge.lib
+  RenegadeEquipmentAssetTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Release\RenegadeEquipmentAssetTests.exe
+MSBuild version 18.6.3+84d3e95b4 for .NET Framework
+
+  Jolt.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\Jolt.lib
+  LUA.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\LUA\Release\LUA.lib
+  Utility.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Utility\Release\Utility.lib
+  WickedEngine_common.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_common.dir\Release\WickedEngine_common.lib
+  WickedEngine_ext_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine_ext_shaders.lib
+  offlineshadercompiler.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\offlineshadercompiler.exe
+  WickedEngine_emb_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine.lib
+  RenegadeEngineBridge.vcxproj -> <preflight>\BUILD\renegade\EngineBridge\Release\RenegadeEngineBridge.lib
+  RenegadeHudReferencePersistenceTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Release\RenegadeHudReferencePersistenceTests.exe
+MSBuild version 18.6.3+84d3e95b4 for .NET Framework
+
+  Jolt.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\Jolt.lib
+  LUA.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\LUA\Release\LUA.lib
+  Utility.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Utility\Release\Utility.lib
+  WickedEngine_common.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_common.dir\Release\WickedEngine_common.lib
+  WickedEngine_ext_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine_ext_shaders.lib
+  offlineshadercompiler.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\offlineshadercompiler.exe
+  WickedEngine_emb_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine.lib
+  RenegadeEngineBridge.vcxproj -> <preflight>\BUILD\renegade\EngineBridge\Release\RenegadeEngineBridge.lib
+  RenegadeRiverFlowFieldTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Release\RenegadeRiverFlowFieldTests.exe
+MSBuild version 18.6.3+84d3e95b4 for .NET Framework
+
+  Jolt.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\Jolt.lib
+  LUA.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\LUA\Release\LUA.lib
+  Utility.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Utility\Release\Utility.lib
+  WickedEngine_common.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_common.dir\Release\WickedEngine_common.lib
+  WickedEngine_ext_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine_ext_shaders.lib
+  offlineshadercompiler.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\offlineshadercompiler.exe
+  WickedEngine_emb_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine.lib
+  RenegadeEngineBridge.vcxproj -> <preflight>\BUILD\renegade\EngineBridge\Release\RenegadeEngineBridge.lib
+  RenegadeRiverFoamTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Release\RenegadeRiverFoamTests.exe
+MSBuild version 18.6.3+84d3e95b4 for .NET Framework
+
+  Jolt.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\Jolt.lib
+  LUA.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\LUA\Release\LUA.lib
+  Utility.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Utility\Release\Utility.lib
+  WickedEngine_common.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_common.dir\Release\WickedEngine_common.lib
+  WickedEngine_ext_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine_ext_shaders.lib
+  offlineshadercompiler.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\offlineshadercompiler.exe
+  WickedEngine_emb_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Release\WickedEngine.lib
+  RenegadeEngineBridge.vcxproj -> <preflight>\BUILD\renegade\EngineBridge\Release\RenegadeEngineBridge.lib
+  RenegadeStoryFlowGate5ScreenLifecycleTests.vcxproj -> <preflight>\BUILD\renegade\Release\RenegadeStoryFlowGate5ScreenLifecycleTests.exe

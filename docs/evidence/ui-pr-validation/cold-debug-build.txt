@@ -1,0 +1,595 @@
+Started: 2026-11-17T01:50:49.1979987Z
+Working directory: <preflight>
+Command: <user>\AppData\Local\Microsoft\WinGet\Links\cmake.exe --build <preflight>\BUILD\renegade --config Debug --target RenegadeStudioCI --parallel 4
+
+MSBuild version 18.6.3+84d3e95b4 for .NET Framework
+
+  LUA.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\LUA\Debug\LUA.lib
+  Jolt.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Debug\Jolt.lib
+  Utility.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Utility\Debug\Utility.lib
+  RenegadeEquipmentActionStateTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeEquipmentActionStateTests.exe
+  RenegadeGate4AudioProbe.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeGate4AudioProbe.exe
+  WickedEngine_common.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_common.dir\Debug\WickedEngine_common.lib
+  Copying PDB for PCH reuse from WickedEngine_common for WickedEngine_ext_shaders
+  RenegadeProjectileSimulationTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeProjectileSimulationTests.exe
+cl : command line  warning D9025: overriding '/EHc' with '/EHc-' [<preflight>\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_ext_shaders.vcxproj]
+  wiRenderer.cpp
+  RenegadeSharedAllocatorRegistryTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeSharedAllocatorRegistryTests.exe
+  RenegadeTerrainSurfacePacker.vcxproj -> <preflight>\BUILD\renegade\Studio\Debug\RenegadeTerrainSurfacePacker.exe
+  RenegadeTestLevelProcessFixture.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeTestLevelProcessFixture.exe
+  RenegadeStoryFlowJourneyUiLayoutTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowJourneyUiLayoutTests.exe
+  RenegadeDialogueTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeDialogueTests.exe
+  RenegadeInventoryAccessPolicyTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryAccessPolicyTests.exe
+  RenegadeInventoryCoreTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryCoreTests.exe
+  RenegadeInventoryGatewayTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryGatewayTests.exe
+  RenegadeInventoryPointerGestureTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryPointerGestureTests.exe
+  RenegadeInventoryOverlayViewTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryOverlayViewTests.exe
+  RenegadeInventorySelectionControllerTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventorySelectionControllerTests.exe
+  RenegadeInventoryUiInputPolicyTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryUiInputPolicyTests.exe
+  RenegadeInventoryTestLevelProjectionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryTestLevelProjectionTests.exe
+  RenegadeNativeWindowSurfaceTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeNativeWindowSurfaceTests.exe
+  RenegadeRuntimeInventorySessionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRuntimeInventorySessionTests.exe
+  RenegadeScreenEditorCanvasCameraTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenEditorCanvasCameraTests.exe
+  RenegadeScreenCompositionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenCompositionTests.exe
+  RenegadeStudioUiPolicyTests.vcxproj -> <preflight>\BUILD\renegade\Studio\Debug\RenegadeStudioUiPolicyTests.exe
+  WickedEngine_ext_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Debug\WickedEngine_ext_shaders.lib
+  offlineshadercompiler.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Debug\offlineshadercompiler.exe
+  Copying PDB for PCH reuse from WickedEngine_common for WickedEngine_emb_shaders
+  Generating wiShaderDump.h
+cl : command line  warning D9025: overriding '/EHc' with '/EHc-' [<preflight>\BUILD\renegade\WickedEngine\WickedEngine\WickedEngine_emb_shaders.vcxproj]
+  wiRenderer.cpp
+  WickedEngine_emb_shaders.vcxproj -> <preflight>\BUILD\renegade\WickedEngine\WickedEngine\Debug\WickedEngine.lib
+  DiagnosticService.cpp
+  RenegadeEngineBridge.vcxproj -> <preflight>\BUILD\renegade\EngineBridge\Debug\RenegadeEngineBridge.lib
+  BuildExecutableTests.cpp
+  RenegadeRiverGradedTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverGradedTests.exe
+  RenegadeRiverShaderCompiler.vcxproj -> <preflight>\BUILD\renegade\EngineBridge\Debug\RenegadeRiverShaderCompiler.exe
+  RenegadeCloudFormationTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeCloudFormationTests.exe
+  RenegadeCharacterAiProfilesAuditTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeCharacterAiProfilesAuditTests.exe
+  RenegadeBuildExecutableTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeBuildExecutableTests.exe
+  RenegadeWeatherEffectsTransitionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeWeatherEffectsTransitionTests.exe
+  RenegadeAssetRegistryProcessFixture.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeAssetRegistryProcessFixture.exe
+  RenegadeWeatherTransitionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeWeatherTransitionTests.exe
+  RenegadeCharacterAiCombatTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeCharacterAiCombatTests.exe
+  CharacterAiPerceptionTests.cpp
+  CharacterPhysicsTests.cpp
+  DependencyTests.cpp
+  RenegadeWorldPickupControllerTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeWorldPickupControllerTests.exe
+  RenegadeCharacterAiPerceptionTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeCharacterAiPerceptionTests.exe
+  RenegadeParticleEmitterTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeParticleEmitterTests.exe
+  RenegadeDependencyTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeDependencyTests.exe
+  RenegadeScreenBindingTargetTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenBindingTargetTests.exe
+  RenegadeScreenBindingTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenBindingTests.exe
+  RenegadeCharacterPhysicsTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeCharacterPhysicsTests.exe
+  RenegadeSheetLightningTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeSheetLightningTests.exe
+  RenegadeScreenCompositionPersistenceTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenCompositionPersistenceTests.exe
+  RenegadeRuntimeUiGameplaySnapshotTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRuntimeUiGameplaySnapshotTests.exe
+  RenegadeScreenAuthoringCompletionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenAuthoringCompletionTests.exe
+  RiverWaterwayTransportTests.cpp
+  RenegadeScreenBindingFrameTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenBindingFrameTests.exe
+  RenegadeRiverWaterfallFlightTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverWaterfallFlightTests.exe
+  RenegadeEquipmentAssetTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeEquipmentAssetTests.exe
+  FlowTests.cpp
+  MaterialTextureAssetTests.cpp
+  ModelImporterRebuildGraphicsProof.cpp
+  ModelImportPreview.cpp
+  RenegadeRiverUnderwaterTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverUnderwaterTests.exe
+  RenegadeFlowTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeFlowTests.exe
+  RenegadeRuntimeUiCompositionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRuntimeUiCompositionTests.exe
+  RenegadeRiverSmoothDropTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverSmoothDropTests.exe
+  RiverJunctionFoamTransportTests.cpp
+  RenegadeRiverWaterwayTransportTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverWaterwayTransportTests.exe
+  RenegadeModelImporterRebuildGraphicsProof.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeModelImporterRebuildGraphicsProof.exe
+  RenegadeRiverWaterlineTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverWaterlineTests.exe
+  RenegadeMaterialTextureAssetTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeMaterialTextureAssetTests.exe
+  PackageIntegrityTests.cpp
+  ParticleLifetimeTests.cpp
+  Phase5Gate1SceneComponentTests.cpp
+  RenegadePackageIntegrityTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePackageIntegrityTests.exe
+  RenegadeRiverFlowProfileTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverFlowProfileTests.exe
+  RenegadePhase5Gate1SceneComponentTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase5Gate1SceneComponentTests.exe
+  RenegadeRiverSurfaceMotionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverSurfaceMotionTests.exe
+  RenegadeRiverSplineTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverSplineTests.exe
+  RenegadeParticleLifetimeTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeParticleLifetimeTests.exe
+  Phase5Gate4MaterialTests.cpp
+  Phase5Gate6RenderSettingsTests.cpp
+  Phase5Gate8LightmapBakeTests.cpp
+  RenegadeRiverJunctionFoamTransportTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverJunctionFoamTransportTests.exe
+  RenegadeRiverJunctionSurfaceTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverJunctionSurfaceTests.exe
+  RenegadePhase5Gate6RenderSettingsTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase5Gate6RenderSettingsTests.exe
+  RenegadeRiverFoamTransportTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverFoamTransportTests.exe
+  RenegadePhase5Gate8LightmapBakeTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase5Gate8LightmapBakeTests.exe
+  RenegadeRiverFlowSourceSelectionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverFlowSourceSelectionTests.exe
+  RenegadePhase5Gate4MaterialTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase5Gate4MaterialTests.exe
+  Phase6NativeNavigationTests.cpp
+  Phase7Gate7CCharacterControlsTests.cpp
+  Phase7Gate7FMeshBlendTests.cpp
+  RenegadeRiverFlowFieldTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverFlowFieldTests.exe
+  PlayerSwimmingTests.cpp
+  RenegadeRiverFoamTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverFoamTests.exe
+  RenegadePhase7Gate7FTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase7Gate7FTests.exe
+  RenegadePlaceableWaterfallTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadePlaceableWaterfallTests.exe
+  RenegadePlayerSwimmingTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadePlayerSwimmingTests.exe
+  RenegadePhase7Gate7CTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase7Gate7CTests.exe
+  RenegadeInventoryPagedScreenAdapterTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryPagedScreenAdapterTests.exe
+  InventoryItemCatalogueTests.cpp
+  RenegadePlaceableWaterfallAuthoringTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadePlaceableWaterfallAuthoringTests.exe
+  RenegadeRiverCourseTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverCourseTests.exe
+  RenegadePhase6NativeNavigationTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase6NativeNavigationTests.exe
+  ProjectDocumentTransactionTests.cpp
+  ProjectileWorldTests.cpp
+  ResourceAssetCacheIdentityTests.cpp
+  RenegadeProjectDocumentTransactionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeProjectDocumentTransactionTests.exe
+  RenegadeProjectileWorldTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeProjectileWorldTests.exe
+  RenegadeResourceAssetCacheIdentityTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeResourceAssetCacheIdentityTests.exe
+  ResourceAssetRollbackTests.cpp
+  ResourceAssetTests.cpp
+  ReusableAssetInstanceTests.cpp
+  RenegadeNightSkyTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeNightSkyTests.exe
+  RenegadeInventoryGridAuthoringTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryGridAuthoringTests.exe
+  RenegadeMoonTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeMoonTests.exe
+  RenegadeInventoryGridViewportTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryGridViewportTests.exe
+  RenegadeInventoryItemCatalogueTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryItemCatalogueTests.exe
+  RenegadeResourceAssetTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeResourceAssetTests.exe
+  RenegadeInventoryDragTransferTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryDragTransferTests.exe
+  RenegadeReusableAssetInstanceTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeReusableAssetInstanceTests.exe
+  RenegadeResourceAssetRollbackTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeResourceAssetRollbackTests.exe
+  ReusableAssetTests.cpp
+  RuntimeProjectileSessionTests.cpp
+  RuntimeImpactDustResource.cpp
+  S4BScriptAuthoringTests.cpp
+  RenegadeHudReferencePersistenceTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeHudReferencePersistenceTests.exe
+  RenegadeInventoryDependencyProviderTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryDependencyProviderTests.exe
+  RenegadeStoryFlowGate9ENonlinearAuthoringTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowGate9ENonlinearAuthoringTests.exe
+  StoryFlowGate5ScreenReferenceTests.cpp
+  StoryFlowGate5ProjectHomeRecoveryTests.cpp
+  StoryFlowGate4DAcceptanceTests.cpp
+  RenegadeReusableAssetTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeReusableAssetTests.exe
+  RenegadeStoryFlowGate5ScreenReferenceTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowGate5ScreenReferenceTests.exe
+  RenegadeHudSelectionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeHudSelectionTests.exe
+  RenegadeRuntimeProjectileSessionTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeRuntimeProjectileSessionTests.exe
+  RenegadeStoryFlowGate4DAcceptanceTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowGate4DAcceptanceTests.exe
+  RenegadeS4BScriptAuthoringTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS4BScriptAuthoringTests.exe
+  RenegadeStoryFlowGate5ProjectHomeRecoveryTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowGate5ProjectHomeRecoveryTests.exe
+  RenegadeGameplayAttributeDocumentTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeGameplayAttributeDocumentTests.exe
+  StoryFlowGate4BLevelReferenceTests.cpp
+  SoftBodyPhysicsTests.cpp
+  ScreenPerformanceBudgetTests.cpp
+  DialogueDisplayTests.cpp
+  RenegadeGameplayAttributeProfileTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeGameplayAttributeProfileTests.exe
+  StoryFlowGate9BJourneyThumbnailTests.cpp
+  StoryFlowGate5ScreenStudioBoundaryTests.cpp
+  RenegadeDialogueDisplayTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeDialogueDisplayTests.exe
+  RenegadeStoryFlowGate4BLevelReferenceTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowGate4BLevelReferenceTests.exe
+  RenegadeDiagnosticServiceTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeDiagnosticServiceTests.exe
+  RenegadeSoftBodyPhysicsTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeSoftBodyPhysicsTests.exe
+  RenegadeScreenAuthoringSessionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenAuthoringSessionTests.exe
+  RenegadeScreenPerformanceBudgetTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenPerformanceBudgetTests.exe
+  SceneAssemblyWorkflowTests.cpp
+  CharacterPrefabStudioIntegration.cpp
+<preflight>\Tests\SceneAssemblyWorkflowTests.cpp(359,22): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Tests\RenegadeSceneAssemblyWorkflowProof.vcxproj]
+  RenegadeStoryFlowGate5ScreenLifecycleTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowGate5ScreenLifecycleTests.exe
+  RenegadeWickedColliderTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeWickedColliderTests.exe
+  RenegadeTestLevelRuntimeProcess.vcxproj -> <preflight>\BUILD\renegade\Studio\Debug\RenegadeTestLevelRuntimeProcess.lib
+  RenegadeStoryFlowGate5ScreenStudioBoundaryTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowGate5ScreenStudioBoundaryTests.exe
+  RenegadeStoryFlowGate9BJourneyThumbnailTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowGate9BJourneyThumbnailTests.exe
+  RenegadeStoryFlowGate9CVisualRoutingTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowGate9CVisualRoutingTests.exe
+  StoryFlowPresentationTests.cpp
+  TerrainTests.cpp
+  TestLevelSnapshotTests.cpp
+  RenegadeS4DScriptReferenceAuthoringTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS4DScriptReferenceAuthoringTests.exe
+  RenegadeStoryFlowPresentationTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeStoryFlowPresentationTests.exe
+  RenegadeSceneAssemblyWorkflowProof.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeSceneAssemblyWorkflowProof.exe
+  S4AScriptMetadataTests.cpp
+  ReusableAssetRuntimeTests.cpp
+  ResourceImportTests.cpp
+  RenegadeSunTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeSunTests.exe
+  S6ScriptLibraryTests.cpp
+  S4CScriptPropertyAuthoringTests.cpp
+  S2ScriptDocumentTests.cpp
+  RenegadeTestLevelSnapshotTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeTestLevelSnapshotTests.exe
+  RenegadeS4AScriptMetadataTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS4AScriptMetadataTests.exe
+  RenegadeStoryFlowGate4LevelLifecycleTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowGate4LevelLifecycleTests.exe
+  RenegadeS4CScriptPropertyAuthoringTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS4CScriptPropertyAuthoringTests.exe
+  RenegadeStoryFlowGate4CLevelEditorLifecycleTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowGate4CLevelEditorLifecycleTests.exe
+  RenegadeTerrainTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeTerrainTests.exe
+  StoryFlowAuthoringSessionTests.cpp
+  ScreenTests.cpp
+  VehiclePhysicsTests.cpp
+  ScenePrefabScriptTests.cpp
+  RenegadeS2ScriptDocumentTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS2ScriptDocumentTests.exe
+  RenegadeReusableAssetRuntimeTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeReusableAssetRuntimeTests.exe
+  RenegadeStoryFlowAuthoringSessionTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowAuthoringSessionTests.exe
+  RenegadeS6ScriptLibraryTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS6ScriptLibraryTests.exe
+  ProjectStructureTests.cpp
+  PrecipitationTests.cpp
+  PlayerPrefabTests.cpp
+  RenegadeResourceImportTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeResourceImportTests.exe
+  ResourceAssetReimportTests.cpp
+  ResourceAssetPackageRuntimeTests.cpp
+  RagdollPhysicsTests.cpp
+  RenegadeScenePrefabScriptTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScenePrefabScriptTests.exe
+  RenegadeResourceAssetReimportTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeResourceAssetReimportTests.exe
+  RenegadeScreenTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenTests.exe
+  RenegadeWindowsGameBuildProjectTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeWindowsGameBuildProjectTests.exe
+  RenegadeRagdollPhysicsTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeRagdollPhysicsTests.exe
+  RenegadeVehiclePhysicsTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeVehiclePhysicsTests.exe
+  RenegadePhase7Gate7ETests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase7Gate7ETests.exe
+  RenegadeResourceAssetPackageRuntimeTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeResourceAssetPackageRuntimeTests.exe
+  ProjectileAssetTests.cpp
+  ProjectServiceTransactionTests.cpp
+  PlayerViewRigTests.cpp
+  RenegadeS7StockLibraryRootsTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS7StockLibraryRootsTests.exe
+  S4DGlobalScriptAuthoringTests.cpp
+  InspectorSectionFramework.cpp
+  RenegadeInspectorSectionFramework.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeInspectorSectionFramework.lib
+  RenegadePrecipitationTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadePrecipitationTests.exe
+  RenegadeProjectServiceTransactionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeProjectServiceTransactionTests.exe
+  RenegadeS4DGlobalScriptAuthoringTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS4DGlobalScriptAuthoringTests.exe
+  Phase6Gate2InputTests.cpp
+  MaterialTests.cpp
+  DialoguePanel.cpp
+  ScreenRenderer.cpp
+  RenegadePlayerPrefabTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadePlayerPrefabTests.exe
+  RenegadeDialogueAssetTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeDialogueAssetTests.exe
+  DialogueSavePolicyTests.cpp
+  ForkLightningTests.cpp
+  RenegadeProjectileAssetTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeProjectileAssetTests.exe
+  RenegadeMaterialTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeMaterialTests.exe
+  RenegadeScreenRenderer.vcxproj -> <preflight>\BUILD\renegade\ScreenRenderer\Debug\RenegadeScreenRenderer.lib
+  RenegadeProjectStructureTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeProjectStructureTests.exe
+  Phase7Gate7BHumanoidRetargetTests.cpp
+  Phase6Gate1PlayerTests.cpp
+  Phase5Gate5LutTests.cpp
+  RenegadePlayerViewRigTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadePlayerViewRigTests.exe
+  PhysicsLuaTests.cpp
+  Phase7Gate7DNativeTimelineTests.cpp
+  Phase6Gate3AudioTests.cpp
+  RenegadePhase6Gate2InputTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase6Gate2InputTests.exe
+  LightTests.cpp
+  LaunchSocketTests.cpp
+  JP01ReusableAssetPhysicsTests.cpp
+  RenegadeGpuUploadBufferTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeGpuUploadBufferTests.exe
+  RenegadePhase6Gate1PlayerTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase6Gate1PlayerTests.exe
+  RenegadeForkLightningTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeForkLightningTests.exe
+  RenegadePhase7Gate7DTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase7Gate7DTests.exe
+  RenegadeJP01ReusableAssetPhysicsTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeJP01ReusableAssetPhysicsTests.exe
+  RenegadeDialogueSavePolicyTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeDialogueSavePolicyTests.exe
+  RenegadePhase5Gate5LutTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase5Gate5LutTests.exe
+  RenegadeInventoryGridPageTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryGridPageTests.exe
+  RenegadePhysicsLuaTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhysicsLuaTests.exe
+  RenegadeLaunchSocketTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeLaunchSocketTests.exe
+  RenegadePhase7Gate7BTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase7Gate7BTests.exe
+  Phase5Gate3DecalProbeTests.cpp
+  ParticleEffectTests.cpp
+  ModelImporterFailureAdapterTests.cpp
+  RenegadePhase6Gate3AudioTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase6Gate3AudioTests.exe
+  Phase5Gate7RenderSettingsTests.cpp
+  Phase5Gate5RenderSettingsTests.cpp
+  Phase5Gate2CameraTests.cpp
+  RenegadeLightTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeLightTests.exe
+  ImpactAudioTests.cpp
+  RuntimeImpactDustResource.cpp
+  RenegadeInventoryItemContextActionsTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryItemContextActionsTests.exe
+  RenegadeModelImporterFailureAdapterTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeModelImporterFailureAdapterTests.exe
+  RenegadePhase5Gate2CameraTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase5Gate2CameraTests.exe
+  RenegadeParticleEffectTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeParticleEffectTests.exe
+  RenegadePhase5Gate5RenderSettingsTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase5Gate5RenderSettingsTests.exe
+  RenegadeCreatorAssetFrameBoundaryTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeCreatorAssetFrameBoundaryTests.exe
+  RenegadePhase5Gate3DecalProbeTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase5Gate3DecalProbeTests.exe
+  MatchingRigAnimationTests.cpp
+  JP01TransformScaleCommitTests.cpp
+  ImportTests.cpp
+  RenegadePhase5Gate7RenderSettingsTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase5Gate7RenderSettingsTests.exe
+  ParticleTextureLibraryTests.cpp
+  ParticleDuplicateGraphicsProof.cpp
+  OceanTests.cpp
+  RenegadeImpactAudioTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeImpactAudioTests.exe
+  CharacterAiDecisionTests.cpp
+  CW05CommandCompanionTests.cpp
+  BuildStageTests.cpp
+  RenegadeJP01TransformScaleCommitTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeJP01TransformScaleCommitTests.exe
+  RenegadeInventoryPickupAuthoringTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryPickupAuthoringTests.exe
+  RenegadeParticleDuplicateGraphicsProof.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeParticleDuplicateGraphicsProof.exe
+  RenegadeCharacterAiDecisionTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeCharacterAiDecisionTests.exe
+  RenegadeImportTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeImportTests.exe
+  RenegadeOceanTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeOceanTests.exe
+  RenegadeCW05CommandCompanionTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeCW05CommandCompanionTests.exe
+  RenegadeMatchingRigAnimationTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeMatchingRigAnimationTests.exe
+  IdentityTests.cpp
+  RenegadeInventoryScreenAdapterTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryScreenAdapterTests.exe
+  Gate4SceneFixture.cpp
+  Phase6Gate2InputTests.cpp
+  RenegadeParticleTextureLibraryTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeParticleTextureLibraryTests.exe
+  MaterialTextureGraphicsProof.cpp
+  CollisionTests.cpp
+  CharacterAiAnimationTests.cpp
+  RenegadeBuildStageTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeBuildStageTests.exe
+  BuildPlanTests.cpp
+  BuildExecutableRollbackTests.cpp
+  BuildIdentityServiceFaultInjected.cpp
+  AudioEndpointRecoveryProof.cpp
+  wiAudio-test.cpp
+  RenegadeGameplayInputTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeGameplayInputTests.exe
+  RenegadeCollisionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeCollisionTests.exe
+  RenegadeInventoryScreenAssignmentTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeInventoryScreenAssignmentTests.exe
+  RenegadeAudioEndpointRecoveryProof.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeAudioEndpointRecoveryProof.exe
+  RenegadeIdentityTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeIdentityTests.exe
+  RenegadeMaterialTextureGraphicsProof.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeMaterialTextureGraphicsProof.exe
+  RenegadeBuildExecutableRollbackTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeBuildExecutableRollbackTests.exe
+  RenegadeGate4SceneFixture.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeGate4SceneFixture.exe
+  FirstPersonAssemblySettingsTests.cpp
+  EditorPointLookupFocusedTests.cpp
+  RenegadeCharacterAiAnimationTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeCharacterAiAnimationTests.exe
+  CW05CharacterPrefabTests.cpp
+  RenegadeRiverCascadeTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverCascadeTests.exe
+  RenegadeBuildPlanTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeBuildPlanTests.exe
+  AssetRegistryPersistenceTests.cpp
+  AssetCatalogueTests.cpp
+  AssetBrowserTombstoneRecoveryTests.cpp
+  RenegadeRiverFlowNetworkTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverFlowNetworkTests.exe
+  RenegadeAssetCatalogueTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeAssetCatalogueTests.exe
+  RenegadeConstraintTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeConstraintTests.exe
+  RenegadeAssetRegistryPersistenceTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeAssetRegistryPersistenceTests.exe
+  RenegadeCW04CharacterPlacementTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeCW04CharacterPlacementTests.exe
+  RenegadeRiverRapidsTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverRapidsTests.exe
+  RenegadeEditorPointLookupFocusedTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeEditorPointLookupFocusedTests.exe
+  RenegadeAssetBrowserTombstoneRecoveryTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeAssetBrowserTombstoneRecoveryTests.exe
+  AssetBrowserTests.cpp
+  Generating ../river-shaders/RenegadeRiverUnderwaterCS.cso
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=24472
+  RenegadeCW05CharacterPrefabTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeCW05CharacterPrefabTests.exe
+  BuildPromotionTests.cpp
+  AssetRegistryTests.cpp
+  RenegadeAssetBrowserTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeAssetBrowserTests.exe
+  RenegadeFirstPersonAssemblySettingsTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeFirstPersonAssemblySettingsTests.exe
+  CharacterAiProfilesTests.cpp
+  CharacterAiFoundationTests.cpp
+  RenegadeCharacterAiProfilesTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeCharacterAiProfilesTests.exe
+  RenegadeRiverWaterwayTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverWaterwayTests.exe
+  RenegadeDependencyProcessFixture.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeDependencyProcessFixture.exe
+  RenegadeBuildPromotionTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeBuildPromotionTests.exe
+  RenegadeCharacterAiFoundationTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeCharacterAiFoundationTests.exe
+  S1AInspectorSectionFrameworkTests.cpp
+  RenegadeAssetRegistryTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeAssetRegistryTests.exe
+  ScreenRendererTests.cpp
+  RuntimeActions.cpp
+  RuntimeBootstrap.cpp
+  RuntimeFlow.cpp
+  TestLevelRuntimeProcessTests.cpp
+<preflight>\Tests\TestLevelRuntimeProcessTests.cpp(311,21): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Tests\RenegadeTestLevelRuntimeProcessTests.vcxproj]
+<preflight>\Tests\TestLevelRuntimeProcessTests.cpp(336,25): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Tests\RenegadeTestLevelRuntimeProcessTests.vcxproj]
+<preflight>\Tests\TestLevelRuntimeProcessTests.cpp(422,69): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Tests\RenegadeTestLevelRuntimeProcessTests.vcxproj]
+<preflight>\Tests\TestLevelRuntimeProcessTests.cpp(467,17): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Tests\RenegadeTestLevelRuntimeProcessTests.vcxproj]
+  RuntimeReusableAssets.cpp
+  RuntimeScreen.cpp
+  RuntimeInventorySession.cpp
+  RuntimeGameSaveSlot.cpp
+  RuntimeScriptRuntime.cpp
+  InventoryLuaBridge.cpp
+  RuntimeScriptEntityApi.cpp
+  RuntimePackageBootstrap.cpp
+  RenegadeS1AInspectorSectionFrameworkTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS1AInspectorSectionFrameworkTests.exe
+  RenegadeScreenRendererTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenRendererTests.exe
+  RenegadeRuntimeBootstrap.vcxproj -> <preflight>\BUILD\renegade\Runtime\Debug\RenegadeRuntimeBootstrap.lib
+  RenegadeTestLevelRuntimeProcessTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeTestLevelRuntimeProcessTests.exe
+  RenegadeScreenLibraryTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenLibraryTests.exe
+  S7StockActionsRuntimeTests.cpp
+  LightPickerTests.cpp
+  ProjectUiScaffoldTests.cpp
+  RuntimeBootstrapTests.cpp
+  ScreenProgressTests.cpp
+  S3GovernedLuaRuntimeTests.cpp
+  RuntimeInventoryItemUseTests.cpp
+  RuntimeScreenTests.cpp
+  S5CoreGameplayApiTests.cpp
+  Phase6ObjectiveSliceRuntimeTests.cpp
+  S5ReusableScriptOwnerRegression.cpp
+  RuntimeGameSaveSlotTests.cpp
+  RenegadeS3GovernedLuaRuntimeTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS3GovernedLuaRuntimeTests.exe
+  RenegadeS5CoreGameplayApiTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS5CoreGameplayApiTests.exe
+  RenegadeScreenProgressTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenProgressTests.exe
+  RenegadeS7StockActionsRuntimeTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS7StockActionsRuntimeTests.exe
+  RenegadeS5ReusableScriptOwnerTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS5ReusableScriptOwnerTests.exe
+  RenegadeRuntimeScreenTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRuntimeScreenTests.exe
+  StoryFlowGate8EOutcomeParityTests.cpp
+  StoryFlowScreenSemanticsTests.cpp
+  RuntimeScreenBindingTests.cpp
+  RenegadeRuntimeInventoryItemUseTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRuntimeInventoryItemUseTests.exe
+  RenegadeRuntimeGameSaveSlotTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRuntimeGameSaveSlotTests.exe
+  RenegadeProjectUiScaffoldTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeProjectUiScaffoldTests.exe
+  S5BGameplayLifecycleTests.cpp
+  StoryFlowGate7ProjectHomeLifecycleTests.cpp
+  RenegadeLightPickerTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeLightPickerTests.exe
+  RenegadeRuntimeScreenBindingTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRuntimeScreenBindingTests.exe
+  ScreenUsageTests.cpp
+  DialogueScriptingTests.cpp
+  RuntimeDialogue.cpp
+  TestLevelSnapshotRuntimeTests.cpp
+  ScenePrefabFunctionalProof.cpp
+  CharacterPrefabStudioIntegration.cpp
+  S5CGameplayEventRuntimeTests.cpp
+  RenegadePhase6ObjectiveSliceRuntimeTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePhase6ObjectiveSliceRuntimeTests.exe
+  RuntimeSceneTransitionTests.cpp
+  RuntimeApplication.cpp
+  ParticleFieldShaderCompiler.cpp
+  Generating ../river-appearance-stage/RiverRefinedFoamPS.cso, ../river-appearance-stage/RiverFoamDetailCS.cso, ../river-appearance-stage/RiverSurfaceVS.cso, ../river-appearance-stage/RiverSurfaceShadowVS.cso, ../river-appearance-stage/OriginalFoamCoverage.png
+  G7C_LIT_FOAM_SHADER_STAGED
+  G8C_BUBBLY_FOAM_STAGED
+  G8D_SURFACE_SHADERS_STAGED
+  G8E_STRAND_SHADING_STAGED
+  G8G_ORIGINAL_FOAM_SHADERS_STAGED
+  G8H_REFINED_FOAM_SHADERS_STAGED
+  SHARED_RIVER_APPEARANCE_STAGED
+  RuntimeDialogue.cpp
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=121464
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=8612
+  RuntimeLiveDiagnostics.cpp
+  RenegadeDialogueScriptingTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeDialogueScriptingTests.exe
+  RuntimeImpactDustResource.cpp
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=33928
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=28100
+  WaterfallTransparentRuntime.cpp
+  RenegadeShootingStarsTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeShootingStarsTests.exe
+  RenegadeStoryFlowScreenSemanticsTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowScreenSemanticsTests.exe
+  RenegadeParticleFieldShaderCompiler.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeParticleFieldShaderCompiler.exe
+  RenegadeTestLevelSnapshotRuntimeTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeTestLevelSnapshotRuntimeTests.exe
+  RenegadeStoryFlowGate7ProjectHomeLifecycleTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeStoryFlowGate7ProjectHomeLifecycleTests.exe
+  RenegadeStoryFlowGate8EOutcomeParityTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStoryFlowGate8EOutcomeParityTests.exe
+  WeatherLuaRuntimeTests.cpp
+  RenegadeRuntimeSceneTransitionTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRuntimeSceneTransitionTests.exe
+  RenegadeScenePrefabFunctionalProof.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScenePrefabFunctionalProof.exe
+  RenegadeS5BGameplayLifecycleTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS5BGameplayLifecycleTests.exe
+  Generating particle-field-shaders/MovementField0.cso, particle-field-shaders/MovementField1.cso, particle-field-shaders/MovementField2.cso, particle-field-shaders/MovementField3.cso, particle-field-shaders/MovementField4.cso, particle-field-shaders/MovementField5.cso, particle-field-shaders/MovementField6.cso
+  FIELD_SHADER 0 bytes=32348
+  FIELD_SHADER 1 bytes=32532
+  FIELD_SHADER 2 bytes=34132
+  FIELD_SHADER 3 bytes=34320
+  FIELD_SHADER 4 bytes=25568
+  FIELD_SHADER 5 bytes=25736
+  FIELD_SHADER 6 bytes=30056
+  Generating ../river-course-stage/RiverCoursePS.cso, ../river-course-stage/RiverCourseVS.cso, ../river-course-stage/RiverCourseShadowVS.cso
+  G7C_LIT_FOAM_SHADER_STAGED
+  G8C_BUBBLY_FOAM_STAGED
+  G8D_SURFACE_SHADERS_STAGED
+  G8E_STRAND_SHADING_STAGED
+  G8G_ORIGINAL_FOAM_SHADERS_STAGED
+  G8H_REFINED_FOAM_SHADERS_STAGED
+  GRADED_LOCAL_WATER_OPTICS_STAGED
+  SMOOTH_CONTINUOUS_WATER_SHADING_STAGED
+  RenegadeScreenUsageTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeScreenUsageTests.exe
+  OPENING_FOAM_SHADER_STAGED
+  GENERAL_NATIVE_COURSE_SHADERS_STAGED
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=123888
+  RenegadeRuntimeBootstrapTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRuntimeBootstrapTests.exe
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=33920
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=28100
+  RenegadeS5CGameplayEventRuntimeTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS5CGameplayEventRuntimeTests.exe
+  RuntimeFlowTests.cpp
+  ParticleLuaTests.cpp
+  PackageBootstrapTests.cpp
+  Generating ../river-flow-stage/RiverContactFoamPS.cso, ../river-flow-stage/RiverFoamTransportCS.cso
+  G5_SHADER_STAGED
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=96128
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=8912
+  Generating ../river-rapids-stage/RiverRapidsPS.cso, ../river-rapids-stage/RiverRapidsCS.cso
+  G7C_LIT_FOAM_SHADER_STAGED
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=126348
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=7056
+  RenegadeWeatherLuaRuntimeTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeWeatherLuaRuntimeTests.exe
+  Generating ../river-waterway-stage/RiverWaterwayFoamPS.cso, ../river-waterway-stage/RiverWaterwayFoamCS.cso
+  G7C_LIT_FOAM_SHADER_STAGED
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=126212
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=7036
+  RenegadePackageBootstrapTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadePackageBootstrapTests.exe
+  RenegadeRuntimeFlowTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRuntimeFlowTests.exe
+  RenegadeParticleLuaTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeParticleLuaTests.exe
+  G13_STANDALONE_SHADER_STAGE_READY <preflight>\BUILD\renegade\waterfall-studio-shaders
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=47668
+  RIVER_UNDERWATER_SHADER_COMPILED bytes=32572
+  RenegadeStudioPlayerStartCacheTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeStudioPlayerStartCacheTests.exe
+  RiverTerrainFollowProof.cpp
+  S5CoreGameplayLuaTests.cpp
+  WaterfallTransparentRuntime.cpp
+  RuntimeApplication.cpp
+  DialogueEditorWindow.cpp
+  WaterfallStudioIntegration.cpp
+  WaterfallTransparentStudio.cpp
+  RuntimeDialogue.cpp
+  RiverFlowStudioIntegration.cpp
+  RuntimeLiveDiagnostics.cpp
+  RuntimeImpactDustResource.cpp
+  DummyVisualizer.cpp
+  main_Windows.cpp
+  Translator.cpp
+  imgui.cpp
+  imgui_draw.cpp
+  imgui_tables.cpp
+  imgui_widgets.cpp
+  imnodes.cpp
+  CreatorAssetDragPreview.cpp
+  LaunchSocketEditor.cpp
+  RenegadeRiverTerrainFollowProof.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeRiverTerrainFollowProof.exe
+  ModelImportPreview.cpp
+  RenegadeImGuiBridge.cpp
+  RenegadeStudioChrome.cpp
+  RenegadeAssistantDock.cpp
+  RenegadeStudioChromeAssets.cpp
+  RenegadeStudioAssetBrowserReadability.cpp
+  RenegadePhysicsLabWorkspace.cpp
+  RenegadePhysicsLabStudioChrome.cpp
+  RenegadeStoryFlowGraphEditor.cpp
+  RenegadeStoryFlowGate9COwnerRecovery.cpp
+  RenegadeS5CoreGameplayLuaTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeS5CoreGameplayLuaTests.exe
+  RenegadeStoryFlowWorkspace.cpp
+  RenegadeScreenEditorWorkspace.cpp
+  RenegadeRuntime.vcxproj -> <preflight>\BUILD\renegade\Runtime\Debug\RenegadeRuntime.exe
+            Install owner-created thunder audio in Runtime
+<preflight>\Studio\src\RenegadeStoryFlowWorkspace.cpp(2054,47): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Studio\RenegadeStudio.vcxproj]
+<preflight>\Studio\src\RenegadeStoryFlowWorkspace.cpp(2141,47): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Studio\RenegadeStudio.vcxproj]
+<preflight>\Studio\src\RenegadeStoryFlowWorkspace.cpp(2195,47): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Studio\RenegadeStudio.vcxproj]
+<preflight>\Studio\src\RenegadeStoryFlowWorkspace.cpp(2208,47): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Studio\RenegadeStudio.vcxproj]
+<preflight>\Studio\src\RenegadeStoryFlowWorkspace.cpp(2224,47): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Studio\RenegadeStudio.vcxproj]
+<preflight>\Studio\src\RenegadeStoryFlowWorkspace.cpp(2240,47): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Studio\RenegadeStudio.vcxproj]
+<preflight>\Studio\src\RenegadeStoryFlowWorkspace.cpp(2341,47): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Studio\RenegadeStudio.vcxproj]
+<preflight>\Studio\src\RenegadeStoryFlowWorkspace.cpp(2356,47): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Studio\RenegadeStudio.vcxproj]
+<preflight>\Studio\src\RenegadeStoryFlowWorkspace.cpp(2382,47): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Studio\RenegadeStudio.vcxproj]
+  RenegadeProjectLoadingOverlay.cpp
+  StartupIdentityPrompt.cpp
+  StartupMediaFoundationPlayer.cpp
+  Phase5Gate4MaterialInspector.cpp
+  Phase5Gate5RenderWorkspace.cpp
+  Phase5Gate7RayPathTracing.cpp
+  WD01Vegetation.cpp
+  NightSkyStudioIntegration.cpp
+  TerrainInspectorSections.cpp
+  MoonStudioIntegration.cpp
+  ShootingStarsStudioIntegration.cpp
+  StudioApplication.cpp
+  RenegadePickupEditor.cpp
+<preflight>\Studio\src\StudioApplication.cpp(12344,36): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Studio\RenegadeStudio.vcxproj]
+  FirstPersonAssemblyEditor.cpp
+  PlayerPrefabEditor.cpp
+  PlayerEquipmentEditor.cpp
+  StandalonePackageTests.cpp
+  LightPickerWindow.cpp
+<preflight>\Studio\src\LightPickerWindow.cpp(120,43): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Studio\RenegadeStudio.vcxproj]
+<preflight>\Studio\src\LightPickerWindow.cpp(141,22): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Studio\RenegadeStudio.vcxproj]
+<preflight>\Studio\src\LightPickerWindow.cpp(391,51): warning C4834: discarding return value of function with [[nodiscard]] attribute [<preflight>\BUILD\renegade\Studio\RenegadeStudio.vcxproj]
+  ParticlePickerWindow.cpp
+  ParticleTextureBrowser.cpp
+  PlayerProjectileEditor.cpp
+  StudioLiveDiagnostics.cpp
+  RenegadeStandalonePackageTests.vcxproj -> <preflight>\BUILD\renegade\Debug\RenegadeStandalonePackageTests.exe
+  StudioUserPreferences.cpp
+  BridgeCommandTests.cpp
+  main_Windows.cpp
+  StudioModalWindow.cpp
+  StudioNumericControl.cpp
+  AICombatInspector.cpp
+  AIPatrolRouteInspector.cpp
+  CharacterPrefabInspectorExtension.cpp
+  CharacterPrefabStudioIntegration.cpp
+  Phase7Gate7BHumanoidRetargetInspector.cpp
+  Phase7Gate7CCharacterControlsInspector.cpp
+  Phase7Gate7DNativeTimelineInspector.cpp
+  Phase7Gate7ESpecialistInspector.cpp
+  RenegadeBridgeTests.vcxproj -> <preflight>\BUILD\renegade\Tests\Debug\RenegadeBridgeTests.exe
+  Phase7HairMaterialInspector.cpp
+  Phase7Gate7FMeshBlendInspector.cpp
+  MarkerIconOverlay.cpp
+  S1BInspectorSectionMigration.cpp
+  S4BScriptAttachmentInspector.cpp
+  S4CScriptPropertyControls.cpp
+  S4DGlobalScriptInspector.cpp
+  Phase5Gate8LightmapBaking.cpp
+  Phase5Gate9RenderDiagnostics.cpp
+  RenegadeAudioWorkspace.cpp
+  RenegadeParticleEmitterWorkspaceV3.cpp
+  RenegadeNavigationWorkspace.cpp
+  RenegadeProjectHub.cpp
+  WindowsGameBuildController.cpp
+  Phase7Gate7AAnimationInspector.cpp
+  AICharacterInspector.cpp
+  RenegadeStudio.vcxproj -> <preflight>\BUILD\renegade\Studio\Debug\RenegadeStudio.exe
+                            Install nine Renegade thunder SFX with 3D variants in Studio

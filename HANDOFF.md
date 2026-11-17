@@ -1,3 +1,45 @@
+# Combined UI/wireframe ready for PR — 17 November 2026
+
+Application implementation: 7fd95b5b3607974e7275673fa0bcc3e1b1c6af2a.
+Configure/diagnostic stamp: c2eccc33fa1c2e13c06bc50b94f16ffa308d12a5.
+Base main fceda08 integrated. The implementation commit adds one final
+Screen Editor tooltip render pass and three reviewed test-harness corrections
+to the configure checkpoint. The documentation/evidence commit changes no
+application inputs. All four tested file hashes are recorded. See
+docs/UI_COMBINED_PR_VALIDATION_20261117.md and
+docs/evidence/ui-pr-validation/README.md for commands hashes and scope.
+
+Earlier complete CI aggregate builds pass in Debug and Release. The final
+Screen tooltip change is rebuilt in Studio, along with five interrupted-link
+recovery targets. Complete unfiltered CTest is rerun after that final build:
+Debug 321/321; Release 334/334.
+Studio/Runtime packages and dependency/registry reopen proofs pass for both.
+Both Studio startup-smoke runs exit 0; packaged atlas/manifest hashes match
+source and all 65 approved SVGs are present. Final source/help/policy pass:
+66/66 including packaged help and the 84-case workflow suite.
+
+Preflight fixed reviewed help fingerprints; kept the example-audio notice;
+corrected literal-ellipsis inspector title caching and retained detailed
+action help during icon assignment. Final Screen Editor toolbar hints render
+after ordinary controls and before child pickers. Native before/after and final-candidate
+receipts are indexed above. Owner acceptance of UIFinish7 remains scoped.
+The original owner application/project and configured Wicked overlays remain
+preserved; Wicked pin unchanged.
+
+Local exFAT validation required explicit CMake configuration with auto-
+regeneration suppressed and bounded build workers. The task-local canonical
+flow adapter retained all tests and package proofs. No hosted workflow change.
+The three reviewed test-only corrections preserve all assertions and deadlines;
+full details and initial failures are retained in the receipt. No partial or
+aborted run is counted as PASS.
+
+Next: verify final documentation-only diff and current main; push this branch
+once and open one combined UI/wireframe PR. Confirm all four hosted jobs are
+queued for the exact PR tip. No merge or release is authorized. Avoid an extra
+documentation push after opening the PR because CI takes over two hours.
+
+---
+
 # Remaining UI audit corrections completed — 16 November 2026
 
 Implementation/evidence commit: d55b61ac28266c11550e338faa72312175da0b72

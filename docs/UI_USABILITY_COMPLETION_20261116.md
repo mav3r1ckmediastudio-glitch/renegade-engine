@@ -1,4 +1,6 @@
 # UI usability correction pass — 16 November 2026
+Later combined pre-PR validation: [17 November receipt](UI_COMBINED_PR_VALIDATION_20261117.md). The results and submission state below describe the historical UIFinish7 checkpoint.
+
 
 The seven findings U01–U07 from [the re-audit](UI_USABILITY_REAUDIT_20261116.md) are implemented. This closes that bounded correction list; it does not certify every state of the 65-family inventory or mark an independent release gate complete.
 
