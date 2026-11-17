@@ -70,6 +70,15 @@ namespace
     };
     std::unique_ptr<PropPalette> palette;
     PropPalette& Props() { if (!palette) palette = std::make_unique<PropPalette>(); return *palette; }
+    void CommitDensity(size_t index,float maximum,float input)
+    {
+        auto& p=Props();auto& entries=p.draft.authoring.recipe.mix.entries;if(index>=entries.size())return;
+        const float value=std::isfinite(input)?std::clamp(input,0.f,maximum):entries[index].densityPerSquareMetre;
+        entries[index].densityPerSquareMetre=value;
+        if(index<p.rows.size()){
+            auto& slider=p.rows[index]->density;slider.SetRange(0,maximum);slider.SetValue(value);slider.valueInputField.SetValue(value);
+        }
+    }
     TerrainPropProfileId ProfileId(const StableId& id)
     {
         std::string hex;
@@ -145,9 +154,10 @@ void StudioRenderPath::RebuildTerrainPropRows()
             for(const auto& choice:p.choices)if(choice.first==profile.modelAssetId)name=choice.second;
         row->label.Create("Terrain prop entry "+std::to_string(i));row->label.SetText(name);StyleLabel(row->label);
         const float step=p.draft.authoring.recipe.candidateStep;
-        row->density.Create(0,std::min(.5f,1.f/(step*step)),entries[i].densityPerSquareMetre,10000,"Terrain prop density "+std::to_string(i),"DENSITY / m2");
+        const float maximum=1.f/(step*step);
+        row->density.Create(0,maximum,entries[i].densityPerSquareMetre,10000,"Terrain prop density "+std::to_string(i),"DENSITY / m2");
         row->density.SetTooltip("Linked slider and numeric entry. Density is independent for each model.");
-        auto density=[i](float v){auto& e=Props().draft.authoring.recipe.mix.entries;if(i<e.size())e[i].densityPerSquareMetre=v;};
+        auto density=[i,maximum](float v){CommitDensity(i,maximum,v);};
         row->density.OnValuePreview(density);row->density.OnValueCommitted(density);
         row->remove.Create("Remove terrain prop entry "+std::to_string(i));row->remove.SetText("REMOVE FROM MIX");
         row->remove.OnClick([i](const wi::gui::EventArgs&){
@@ -490,6 +500,11 @@ void StudioRenderPath::TickTerrainPropProof()
                 p.draft.authoring.recipe.mix.entries.push_back(entry);
             }
             p.draft.authoring.savedMixes.push_back(p.draft.authoring.recipe.mix);p.rebuild=true;
+            RebuildTerrainPropRows();
+            CommitDensity(0,.25f,.5f);
+            require(p.draft.authoring.recipe.mix.entries[0].densityPerSquareMetre==.25f && p.rows[0]->density.GetValue()==.25f,
+                "Density handler failed to clamp out-of-range numeric value");
+            CommitDensity(0,.25f,.01f);log("DENSITY_HANDLER_CLAMP_PASS input=.5 canonical=.25 step=2 (shared callback handler)");
             terrainSectionExpanded_.fill(false);terrainSectionExpanded_[15]=true;
             RefreshInspector();ResizeLayout();QueueTerrainPropEdit(int(TerrainPropEditOperation::Generate));stage=3;return;
         }
@@ -553,6 +568,13 @@ void StudioRenderPath::TickTerrainPropProof()
         {
             SyncTerrainPropPalette();require(count(p.draft)>0,"Reopen lost population");
             require(!p.draft.authoring.clearings.empty(),"Reopen lost clearings");
+            SetProjectHubVisible(false);SetTerrainWorkspaceActive(true);terrainSectionExpanded_[15]=true;
+            editorCameraTransform_.ClearTransform();
+            auto view=DirectX::XMMatrixLookAtLH(DirectX::XMVectorSet(18,22,-32,1),
+                DirectX::XMVectorSet(0,0,0,1),DirectX::XMVectorSet(0,1,0,0));
+            editorCameraTransform_.MatrixTransform(DirectX::XMMatrixInverse(nullptr,view));
+            editorCameraTransform_.UpdateTransform();camera->TransformCamera(editorCameraTransform_);camera->UpdateCamera();
+            RefreshInspector();RefreshStatus();ResizeLayout();
             log("SCRIPTED_STUDIO_PROOF_PASS placements="+std::to_string(count(p.draft))+" project="+project.descriptorPath);
             stage=20;
         }
