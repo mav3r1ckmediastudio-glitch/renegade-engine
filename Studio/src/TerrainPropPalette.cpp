@@ -23,8 +23,10 @@ namespace
     using namespace bridge;
     void StyleLabel(wi::gui::Label& label)
     {
-        label.SetColor(wi::Color::Transparent());label.font.params.size=12;
-        label.font.params.color=wi::Color(178,178,176,255);label.font.params.h_align=wi::font::WIFALIGN_LEFT;
+        label.SetColor(wi::Color(24,28,29,255));label.SetShadowRadius(0);
+        label.font.params.size=12;label.font.params.bolden=.18f;
+        label.font.params.color=wi::Color(236,238,239,255);label.font.params.h_align=wi::font::WIFALIGN_LEFT;
+        label.font.params.shadowColor=wi::Color::Transparent();
     }
     struct PropEntryControls
     {
@@ -176,6 +178,9 @@ void StudioRenderPath::RefreshTerrainPropControls()
     const bool busy=p.staging || p.mutation.IsPending();
     for(auto* w:TerrainPropWidgets())w->SetEnabled(enabled&&!busy);
     p.status.SetEnabled(true);p.cancel.SetEnabled(enabled);
+    // Native AddWidget/global theme can repaint stock labels. Reassert the
+    // owned Inspector treatment after those passes, including dynamic rows.
+    StyleLabel(p.status);for(auto& row:p.rows)StyleLabel(row->label);
 }
 void StudioRenderPath::SyncTerrainPropPalette(bool force)
 {
@@ -443,6 +448,13 @@ void StudioRenderPath::TickTerrainPropProof()
             require(std::filesystem::path(project.rootPath).filename().u8string().find("TerrainProof")!=std::string::npos,
                 "Use a disposable TerrainProof project for this destructive QA fixture");
             SetProjectHubVisible(false);SetTerrainWorkspaceActive(true);
+            if(const char* text=std::getenv("RENEGADE_TERRAIN_PROP_PROOF_INSPECTOR_WIDTH")){
+                char* end=nullptr;const float width=std::strtof(text,&end);
+                require(end!=text && *end==0 && std::isfinite(width) && width>=280 && width<=520,
+                    "Proof inspector width must be a finite number from 280 to 520");
+                studioChrome_.SetPanelSizes(studioChrome_.HierarchyWidth(),width,studioChrome_.DrawerHeight());
+                ResizeLayout();log("PROOF_INSPECTOR_WIDTH "+std::to_string(studioChrome_.InspectorWidth()));
+            }
             p.mutation=detail::QueueCreatorAssetFrameMutation([this](std::uint64_t){
                 auto& s=session_->Scenes().GetScene();
                 if(!s.weathers.GetCount())(void)bridge::CreateEnvironment(s,WeatherState{});
@@ -532,6 +544,7 @@ void StudioRenderPath::TickTerrainPropProof()
                 log("SAVE_AS_PASS path="+path);
                 auto prepared=session_->Documents().PrepareOpen(path);
                 require(session_->Documents().CommitPreparedOpen(std::move(prepared)),"Reopen failed");
+                RefreshHierarchy();RefreshInspector();RefreshStatus();SyncGizmoSelection();
                 log("REOPEN_PASS");
                 }catch(const std::exception& e){log(std::string("SCRIPTED_STUDIO_PROOF_FAIL ")+e.what());stage=-1;}
             });stage=9;return;

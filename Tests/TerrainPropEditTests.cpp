@@ -76,10 +76,11 @@ namespace
         Check(ComputeTerrainPropDocumentContentDigest(recipeOnly,changedHash,error) &&
             changedHash!=originalHash,"content token ignored changed recipe");
         ProjectDocumentTransactionOptions options;
-        options.operationHook=[](auto stage,size_t,const std::string&,std::string& message)
+        size_t injectedReplacements=0;
+        options.operationHook=[&](auto stage,size_t,const std::string&,std::string& message)
         {
             if(stage==ProjectDocumentTransactionStage::Replace)
-            {message="injected P2 failure";return ProjectDocumentTransactionHookAction::Fail;}
+            {++injectedReplacements;message="injected P2 failure";return ProjectDocumentTransactionHookAction::Fail;}
             return ProjectDocumentTransactionHookAction::Continue;
         };
         edit->SetTransactionOptions(options);
@@ -108,7 +109,19 @@ namespace
             undone.pages[0].placements[0].scale==1,"Undo high-water/stable identity");
         edit->SetTransactionOptions(options);
         auto undoObjects=Objects(scene);
-        Check(!commands.Redo(),"failed Redo accepted");
+        // Redo normally reuses its already published immutable products, so
+        // Publish correctly takes the no-op transaction path. Withhold only
+        // the unselected redo manifest to force a real replacement attempt.
+        const auto redoManifest=fs::u8path(project.rootPath)/"Content/TerrainProps/Revisions"/
+            (changedRevision+".rprops");
+        const auto heldRedoManifest=redoManifest.string()+".redo-withheld";
+        Check(fs::is_regular_file(redoManifest),"missing redo fixture manifest");
+        fs::rename(redoManifest,heldRedoManifest);
+        const auto priorInjections=injectedReplacements;
+        const bool redoSucceeded=commands.Redo();
+        fs::rename(heldRedoManifest,redoManifest);
+        Check(!redoSucceeded && injectedReplacements==priorInjections+1,
+            "failed Redo did not exercise actual publication replacement failure");
         Check(commands.UndoCount()==1 && commands.RedoCount()==1 && Objects(scene)==undoObjects,
             "failed Redo changed history/display");
         edit->SetTransactionOptions({});
