@@ -239,4 +239,3 @@ int main(int argc,char** argv)
     try {Run(fs::u8path(argv[1])/GenerateStableId(),fs::u8path(argv[2]));return 0;}
     catch(const std::exception& e){std::cerr<<e.what()<<std::endl;return 1;}
 }
-

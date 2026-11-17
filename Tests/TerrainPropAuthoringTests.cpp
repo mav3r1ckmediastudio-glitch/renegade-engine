@@ -212,6 +212,69 @@ int main()
         auto preserved=first;
         Check(!BuildTerrainPropEdit({},indexedState,1,indexedRequest,ground,preserved,error) &&
             Bytes(preserved)==Bytes(first),"index construction cancellation preserves output");
+        // A legacy/manual dense bucket is valid even with zero spacing. The
+        // inner retained-item scan must poll cancellation before final Apply.
+        TerrainPropAuthoringState denseState;
+        denseState.recipe.mix.entries={{{{1}},1,0,1,1}};
+        TerrainPropEditRequest denseRequest;denseRequest.bounds={0,0,1,1};
+        TerrainPropEdit singleCandidate;
+        Check(BuildTerrainPropEdit({},denseState,1,denseRequest,ground,singleCandidate,error),error.c_str());
+        Check(Placements(singleCandidate).size()==1,"dense-bucket fixture has one candidate");
+        TerrainPropPage densePage;densePage.profiles={{{1}}};
+        auto manual=singleCandidate.pages.front().placements.front();
+        manual.candidateKey=0;
+        for(std::uint64_t id=1;id<=10000;++id){manual.id=id;densePage.placements.push_back(manual);}
+        int retainedPolls=0;float retainedCancelFraction=1;
+        denseRequest.progress=[&](float fraction){
+            retainedCancelFraction=fraction;return ++retainedPolls<2;
+        };
+        preserved=first;
+        Check(!BuildTerrainPropEdit({densePage},denseState,10001,denseRequest,ground,preserved,error) &&
+            retainedPolls==2 && retainedCancelFraction<1 && error.find("cancelled")!=std::string::npos,
+            "dense retained-item scan polls cancellation before final progress");
+        Check(Bytes(preserved)==Bytes(first) && preserved.nextPlacementId==first.nextPlacementId,
+            "dense retained cancellation preserves output and ID high-water mark");
+        denseRequest.progress={};
+        TerrainPropEdit denseResult;
+        Check(BuildTerrainPropEdit({densePage},denseState,10001,denseRequest,ground,denseResult,error),error.c_str());
+        std::size_t denseCount=0;
+        for(const auto& page:denseResult.pages)denseCount+=page.placements.size();
+        Check(denseCount==10001 && denseResult.nextPlacementId==10002,
+            "uncancelled dense legacy bucket retains every manual placement and adds candidate");
+        // A v1 page may retain arbitrary historical cell keys. Its last
+        // placement is far outside cell zero under the current 32m recipe.
+        TerrainPropPage misbucket;
+        misbucket.profiles={{{1}}};misbucket.placements={{1,0,{248,2,-91},0,1}};
+        std::vector<std::uint8_t> legacyBytes;
+        Check(EncodeTerrainPropPage(misbucket,legacyBytes,error),error.c_str());
+        legacyBytes[4]=1;legacyBytes.resize(legacyBytes.size()-8);
+        TerrainPropPage legacyPage;
+        Check(DecodeTerrainPropPage(legacyBytes,legacyPage,error) &&
+            legacyPage.placements.front().candidateKey==0,"misbucket fixture decodes genuine v1 layout");
+        TerrainPropAuthoringState legacyState;
+        TerrainPropEditRequest legacyErase;
+        legacyErase.operation=TerrainPropEditOperation::Erase;
+        legacyErase.bounds={240,-100,256,-80};legacyErase.path={{248,2,-91}};legacyErase.radius=1;
+        TerrainPropEdit removedLegacy;
+        Check(BuildTerrainPropEdit({legacyPage},legacyState,2,legacyErase,ground,removedLegacy,error),error.c_str());
+        Check(removedLegacy.pages.empty() && removedLegacy.changedPages.size()==1 &&
+            removedLegacy.changedPages.front().hadBefore && !removedLegacy.changedPages.front().hasAfter,
+            "legacy final placement erase removes historical page");
+        Check(removedLegacy.changedBounds.maxX>=248 && removedLegacy.changedBounds.minZ<=-91 &&
+            removedLegacy.changedBounds.minX<=0 && removedLegacy.changedBounds.maxZ>=32,
+            "deleted legacy anchor and conservative old page extents remain in changed bounds");
+        auto legacyProject=legacyErase;legacyProject.operation=TerrainPropEditOperation::Reproject;
+        TerrainPropEdit projectedLegacy;
+        Check(BuildTerrainPropEdit({legacyPage},legacyState,2,legacyProject,
+            [](float,float,float& y){y=12;return true;},projectedLegacy,error),error.c_str());
+        Check(projectedLegacy.pages.size()==1 && projectedLegacy.pages.front().cellX==7 &&
+            projectedLegacy.pages.front().cellZ==-3 &&
+            projectedLegacy.pages.front().placements.front().id==1 &&
+            projectedLegacy.pages.front().placements.front().position[1]==12,
+            "legacy reprojection retains ID and moves placement to current grid");
+        Check(projectedLegacy.changedPages.size()==2 && projectedLegacy.changedBounds.maxX>=248 &&
+            projectedLegacy.changedBounds.minZ<=-91 && projectedLegacy.changedBounds.minX<=0 &&
+            projectedLegacy.changedBounds.maxZ>=32,"legacy reprojection bounds contain old and new page anchors");
         std::cout<<checks<<" terrain prop authoring checks passed\n";
         return 0;
     }

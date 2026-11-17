@@ -351,7 +351,12 @@ bool BuildTerrainPropEdit(const std::vector<TerrainPropPage>& pages,
         const double count=emptyScan?0:double(x1-x0+1)*double(z1-z0+1)*recipe.mix.entries.size();
         if (count>Limit) { error="Terrain edit exceeds one million candidates; use a smaller region."; return false; }
         float largestSpacing=0;
-        for (const auto& entry:recipe.mix.entries) largestSpacing=std::max(largestSpacing,entry.minSpacing);
+        std::map<Profile,float> profileSpacing;
+        for (const auto& entry:recipe.mix.entries)
+        {
+            largestSpacing=std::max(largestSpacing,entry.minSpacing);
+            profileSpacing.emplace(entry.profileId,entry.minSpacing);
+        }
         const double bucketSize=std::max(.25f,largestSpacing);
         using Bucket=std::pair<std::int64_t,std::int64_t>;
         std::map<Bucket,std::vector<const Item*>> retained;
@@ -370,6 +375,11 @@ bool BuildTerrainPropEdit(const std::vector<TerrainPropPage>& pages,
             return true;
         };
         std::size_t completed=0,work=0;
+        const auto spacingGuard=[&] {
+            if(++work>50000000)
+            {error="Terrain spacing work budget exceeded; increase candidate spacing.";return false;}
+            return (work%4096)!=0 || progress(currentProgress);
+        };
         for (auto z=z0;z<=z1;++z)
         for (auto x=x0;x<=x1;++x)
         for (const auto& entry:recipe.mix.entries)
@@ -390,7 +400,7 @@ bool BuildTerrainPropEdit(const std::vector<TerrainPropPage>& pages,
             for (auto nx=x-range;nx<=x+range && !blocked;++nx)
             for (const auto& other:recipe.mix.entries)
             {
-                if (++work>50000000) { error="Terrain spacing work budget exceeded; increase candidate spacing."; return false; }
+                if(!spacingGuard())return false;
                 Candidate n;
                 if (!candidate(nx,nz,other,n) || n.key>=c.key) continue;
                 const float spacing=std::max(entry.minSpacing,other.minSpacing);
@@ -407,11 +417,14 @@ bool BuildTerrainPropEdit(const std::vector<TerrainPropPage>& pages,
                 if (bucket==retained.end()) continue;
                 for (const auto* item:bucket->second)
                 {
+                    // Dense legacy/manual placements may share one bucket.
+                    // Charge each visited item, including same-key skips.
+                    if(!spacingGuard())return false;
                     const auto& p=item->placement;
                     if (p.candidateKey==c.key) continue;
                     float spacing=entry.minSpacing;
-                    for (const auto& other:recipe.mix.entries)
-                        if (item->profile==other.profileId) spacing=std::max(spacing,other.minSpacing);
+                    const auto retainedSpacing=profileSpacing.find(item->profile);
+                    if(retainedSpacing!=profileSpacing.end())spacing=std::max(spacing,retainedSpacing->second);
                     if (spacing>0 && InDisc(c.x,c.z,p.position[0],p.position[2],spacing)) { blocked=true; break; }
                 }
             }
@@ -489,6 +502,17 @@ bool BuildTerrainPropEdit(const std::vector<TerrainPropPage>& pages,
             edit.changedBounds.maxX=std::max(edit.changedBounds.maxX,cb.maxX);
             edit.changedBounds.maxZ=std::max(edit.changedBounds.maxZ,cb.maxZ);
         }
+        // Legacy pages and a changed cell size need not match today's grid.
+        // Include real anchors from both revisions, especially deleted last
+        // placements whose old page is the only remaining spatial evidence.
+        for(const auto* page:{&delta.before,&delta.after})
+            for(const auto& placement:page->placements)
+            {
+                edit.changedBounds.minX=std::min(edit.changedBounds.minX,placement.position[0]);
+                edit.changedBounds.minZ=std::min(edit.changedBounds.minZ,placement.position[2]);
+                edit.changedBounds.maxX=std::max(edit.changedBounds.maxX,placement.position[0]);
+                edit.changedBounds.maxZ=std::max(edit.changedBounds.maxZ,placement.position[2]);
+            }
         edit.changedPages.push_back(std::move(delta));
     }
     for (auto& pair:after) edit.pages.push_back(std::move(pair.second));
