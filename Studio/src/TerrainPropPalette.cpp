@@ -59,6 +59,10 @@ namespace
         std::unordered_map<wi::ecs::Entity,std::shared_ptr<TerrainPropEditService>> services;
         wi::ecs::Entity owner = wi::ecs::INVALID_ENTITY, terrain = wi::ecs::INVALID_ENTITY;
         std::uint64_t reconcileRevision = UINT64_MAX;
+        bool resolutionFailed=false;
+        StableId failedResolutionProject;
+        std::uint64_t failedResolutionLifecycle=UINT64_MAX,failedResolutionHistory=UINT64_MAX;
+        wi::ecs::Entity failedResolutionTerrain=wi::ecs::INVALID_ENTITY;
         bool ownerPresentLast = true;
         std::string projectId, revision;
         std::uint64_t lifecycleRevision = UINT64_MAX;
@@ -210,6 +214,7 @@ void StudioRenderPath::RefreshTerrainPropControls()
     const bool busy=p.staging || p.mutation.IsPending();
     for(auto* w:TerrainPropWidgets())w->SetEnabled(enabled&&!busy);
     p.status.SetEnabled(true);p.cancel.SetEnabled(enabled);
+    p.refresh.SetEnabled(session_ && session_->Projects().HasProject() && session_->Scenes().GetScene().terrains.GetCount()==1 && !busy);
     // Native AddWidget/global theme can repaint stock labels. Reassert the
     // owned Inspector treatment after those passes, including dynamic rows.
     StyleLabel(p.status);for(auto& row:p.rows)StyleLabel(row->label);
@@ -250,8 +255,15 @@ void StudioRenderPath::SyncTerrainPropPalette(bool force)
     }
     auto terrain=scene.terrains.GetEntity(0);
     if(!p.service){
+        const auto lifecycle=session_->Scenes().Revision(),history=session_->Commands().Revision();
+        if(p.resolutionFailed && p.failedResolutionProject==project.projectId && p.failedResolutionLifecycle==lifecycle &&
+            p.failedResolutionHistory==history && p.failedResolutionTerrain==terrain && !force && !p.reload)return;
         wi::ecs::Entity owner=wi::ecs::INVALID_ENTITY;std::string error;
-        if(!ResolveTerrainPropAuthoringOwner(scene,project.projectId,terrain,owner,error)){p.status.SetText(error);return;}
+        if(!ResolveTerrainPropAuthoringOwner(scene,project.projectId,terrain,owner,error)){
+            p.resolutionFailed=true;p.failedResolutionProject=project.projectId;p.failedResolutionLifecycle=lifecycle;
+            p.failedResolutionHistory=history;p.failedResolutionTerrain=terrain;p.reload=false;p.status.SetText(error);return;
+        }
+        p.resolutionFailed=false;
         auto known=p.services.find(owner);
         if(known!=p.services.end())p.service=known->second;
         else {p.service=std::make_shared<TerrainPropEditService>(scene,project.rootPath,project.projectId,owner);p.services.emplace(owner,p.service);}
