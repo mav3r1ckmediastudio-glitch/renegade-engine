@@ -2431,3 +2431,7 @@ that same persisted population; transient native resources remain excluded from
 authored scene archives. Collision, asset and texture streaming interfaces remain
 proposals for later stages. See [P2 authoring](TERRAIN_PROP_P2.md) and the latest
 HANDOFF.md receipts for validation and limits.
+
+### Transaction recovery artifact paths
+
+Project document journals write schema version 2. Same-directory staging, backup and restore basenames use the transaction token and the sorted changed-document index, rather than appending those tokens to an authored filename. This keeps digest-named terrain revision products from exceeding Windows path limits solely because of transaction suffixes. Atomic replacement, protected prior bytes and project-root containment are unchanged. Recovery accepts version 1 journals with their original filenames and preserves that version if recovery is itself interrupted; version 2 recovery validates the exact indexed sibling paths. This is bounded artifact naming, not unrestricted long-path support for arbitrary project roots.

@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -616,6 +618,111 @@ namespace
             "escaped journal rejection committed project content");
     }
 
+    void TestLongRevisionNames(const fs::path& root)
+    {
+        fs::create_directories(root);
+        const auto length = fs::absolute(root).generic_u8string().size();
+        Check(length < 179, "long-path regression root unexpectedly long");
+        if (length >= 179) return;
+        const auto parent = fs::absolute(root) / std::string(179 - length, 'p');
+        const auto a = parent / (std::string(64, 'a') + ".rppg");
+        const auto b = parent / (std::string(64, 'b') + ".rprops");
+        WriteText(a, "old-a"); WriteText(b, "old-b");
+        auto options = Options(root, "");
+        options.allowedRoot = fs::absolute(root).generic_u8string();
+        std::size_t staged = 0;
+        options.operationHook = [&](auto stage, std::size_t index, const std::string& path, std::string&)
+        {
+            if (stage == ProjectDocumentTransactionStage::StageWrite)
+            {
+                ++staged;
+                Check(index == 0, "unchanged document was included in compact artifact index");
+                Check(fs::u8path(path).parent_path() == parent, "staging left destination volume");
+                Check(path.size() < b.generic_u8string().size(), "digest basename still lengthens staging path");
+            }
+            return ProjectDocumentTransactionHookAction::Continue;
+        };
+        ProjectDocumentTransaction transaction;
+        auto result = transaction.Execute({TextDocument(b,"new-b"), TextDocument(a,"old-a")}, options);
+        Check(result.success && staged == 1 && ReadText(a) == "old-a" && ReadText(b) == "new-b",
+            "long revision commit or unchanged-document filtering failed");
+        Check(!HasTransactionArtifacts(root), "long revision commit left artifacts");
+
+        options.operationHook = [](auto stage, std::size_t, const std::string&, std::string&)
+        {
+            return stage == ProjectDocumentTransactionStage::AfterReplace
+                ? ProjectDocumentTransactionHookAction::Fail : ProjectDocumentTransactionHookAction::Continue;
+        };
+        result = transaction.Execute({TextDocument(a,"new-a"),TextDocument(b,"newer-b")}, options);
+        Check(!result.success && result.rolledBack && ReadText(a) == "old-a" && ReadText(b) == "new-b",
+            "long revision rollback lost prior bytes");
+
+        options.operationHook = [](auto stage, std::size_t, const std::string&, std::string&)
+        {
+            return stage == ProjectDocumentTransactionStage::AfterReplace
+                ? ProjectDocumentTransactionHookAction::Interrupt : ProjectDocumentTransactionHookAction::Continue;
+        };
+        result = transaction.Execute({TextDocument(b,"newer-b"),TextDocument(a,"old-a")}, options);
+        Check(!result.success && result.recoveryRequired, "long revision interrupt did not retain journal");
+        if (!result.recoveryRequired) return;
+        const auto journalPath = fs::u8path(result.journalPath);
+        const auto original = ReadText(journalPath);
+        Check(original.rfind("renegade-project-document-transaction 2\n",0) == 0,
+            "compact artifacts did not use versioned journal");
+        auto corrupted = original;
+        const std::string expected = "0.renegade-backup-" + result.transactionId;
+        auto at = corrupted.find(expected);
+        Check(at != std::string::npos, "compact recovery artifact missing");
+        if (at != std::string::npos)
+        {
+            corrupted.replace(at,1,"1");
+            WriteText(journalPath,corrupted);
+            auto rejected = transaction.Recover(result.journalPath);
+            Check(!rejected.success && rejected.code == "invalid_journal" && ReadText(b) == "newer-b",
+                "recovery accepted another document's artifact index");
+            WriteText(journalPath,original);
+        }
+        auto recovered = transaction.Recover(result.journalPath);
+        Check(recovered.success && recovered.rolledBack && ReadText(a) == "old-a" && ReadText(b) == "new-b",
+            "long revision interrupted recovery lost prior bytes");
+        Check(!HasTransactionArtifacts(root), "long revision recovery left artifacts");
+    }
+
+    void TestLegacyJournalRecovery(const fs::path& root)
+    {
+        const std::string id = "legacy-v1";
+        const auto target = fs::absolute(root / "Protected.document");
+        const auto stage = fs::u8path(target.generic_u8string() + ".renegade-stage-" + id);
+        const auto backup = fs::u8path(target.generic_u8string() + ".renegade-backup-" + id);
+        const auto restore = fs::u8path(target.generic_u8string() + ".renegade-restore-" + id);
+        const auto journal = fs::absolute(root / "legacy.journal");
+        WriteText(target,"new"); WriteText(stage,"staged"); WriteText(backup,"old");
+        std::ostringstream text;
+        text << "renegade-project-document-transaction 1\ntransaction_id " << std::quoted(id)
+            << "\nphase \"committing\"\ncommit_count 1\nactive_index -1\ndocument_count 1\ndocument "
+            << std::quoted(target.generic_u8string()) << ' ' << std::quoted(stage.generic_u8string()) << ' '
+            << std::quoted(backup.generic_u8string()) << ' ' << std::quoted(restore.generic_u8string()) << " 1\n";
+        WriteText(journal,text.str());
+        ProjectDocumentTransactionOptions options;
+        options.allowedRoot = fs::absolute(root).generic_u8string();
+        options.operationHook = [](auto stage, std::size_t, const std::string&, std::string&)
+        {
+            return stage == ProjectDocumentTransactionStage::Rollback
+                ? ProjectDocumentTransactionHookAction::Interrupt : ProjectDocumentTransactionHookAction::Continue;
+        };
+        ProjectDocumentTransaction transaction;
+        auto interrupted = transaction.Recover(journal.generic_u8string(),options);
+        Check(!interrupted.success && interrupted.recoveryRequired && ReadText(target) == "new",
+            "legacy recovery interruption lost protected state");
+        Check(ReadText(journal).rfind("renegade-project-document-transaction 1\n",0) == 0,
+            "legacy journal was rewritten with incompatible artifact version");
+        options.operationHook = {};
+        auto recovered = transaction.Recover(journal.generic_u8string(),options);
+        Check(recovered.success && recovered.rolledBack && ReadText(target) == "old",
+            "version-one journal no longer recovers");
+        Check(!HasTransactionArtifacts(root), "legacy recovery left artifacts");
+    }
+
     void TestMalformedJournalRejected(const fs::path& root)
     {
         const fs::path target = root / "Protected.document";
@@ -684,6 +791,8 @@ int main()
     TestCommittedCleanupRecovery(root / "14-cleanup");
     TestAllowedRootContainment(root / "15-containment");
     TestMalformedJournalRejected(root / "16-malformed");
+    TestLongRevisionNames(root / "18-long-revision");
+    TestLegacyJournalRecovery(root / "19-legacy-journal");
 
     std::error_code ignored;
     fs::remove_all(root, ignored);

@@ -29,7 +29,7 @@ namespace
 
     constexpr const char* JournalMagic =
         "renegade-project-document-transaction";
-    constexpr std::uint32_t JournalVersion = 1;
+    constexpr std::uint32_t JournalVersion = 2;
     std::atomic<std::uint64_t> transactionSequence{0};
 
     enum class JournalPhase
@@ -57,6 +57,7 @@ namespace
 
     struct Journal
     {
+        std::uint32_t version = JournalVersion;
         std::string transactionId;
         JournalPhase phase = JournalPhase::Preparing;
         std::size_t commitCount = 0;
@@ -520,7 +521,7 @@ namespace
         std::string& error)
     {
         std::ostringstream output;
-        output << JournalMagic << ' ' << JournalVersion << '\n';
+        output << JournalMagic << ' ' << journal.version << '\n';
         output << "transaction_id " << std::quoted(journal.transactionId) << '\n';
         output << "phase " << std::quoted(PhaseName(journal.phase)) << '\n';
         output << "commit_count " << journal.commitCount << '\n';
@@ -583,9 +584,22 @@ namespace
         return true;
     }
 
+    // Keep same-volume artifacts independent of potentially long destination
+    // basenames. The index is the sorted, changed-document journal position.
+    fs::path ArtifactPath(const fs::path& destination,
+        const std::string& transactionId, const std::size_t index,
+        const char* kind, const std::uint32_t version)
+    {
+        const std::string prefix = version == 1
+            ? destination.filename().generic_u8string() : std::to_string(index);
+        return destination.parent_path() /
+            fs::u8path(prefix + ".renegade-" + kind + "-" + transactionId);
+    }
     bool IsSafeJournalDocument(
         const DocumentPlan& document,
         const std::string& transactionId,
+        const std::size_t index,
+        const std::uint32_t version,
         std::string& error)
     {
         if (!document.destination.is_absolute() ||
@@ -606,14 +620,12 @@ namespace
             return false;
         }
 
-        const std::string filename =
-            document.destination.filename().generic_u8string();
-        if (document.staged.filename() !=
-                fs::u8path(filename + ".renegade-stage-" + transactionId) ||
-            document.backup.filename() !=
-                fs::u8path(filename + ".renegade-backup-" + transactionId) ||
-            document.restore.filename() !=
-                fs::u8path(filename + ".renegade-restore-" + transactionId))
+        if (document.staged !=
+                ArtifactPath(document.destination, transactionId, index, "stage", version) ||
+            document.backup !=
+                ArtifactPath(document.destination, transactionId, index, "backup", version) ||
+            document.restore !=
+                ArtifactPath(document.destination, transactionId, index, "restore", version))
         {
             error = "Transaction journal contains unexpected recovery paths.";
             return false;
@@ -638,12 +650,13 @@ namespace
         std::string magic;
         std::uint32_t version = 0;
         if (!(input >> magic >> version) || magic != JournalMagic ||
-            version != JournalVersion)
+            (version != 1 && version != JournalVersion))
         {
             error = "The project transaction journal header is invalid.";
             return false;
         }
 
+        journal.version = version;
         std::string label;
         std::string phaseText;
         long long activeIndex = -1;
@@ -719,7 +732,7 @@ namespace
             document.backup = fs::u8path(backup).lexically_normal();
             document.restore = fs::u8path(restore).lexically_normal();
             document.existed = existed != 0;
-            if (!IsSafeJournalDocument(document, journal.transactionId, error))
+            if (!IsSafeJournalDocument(document, journal.transactionId, index, journal.version, error))
             {
                 return false;
             }
@@ -1137,13 +1150,7 @@ namespace renegade::bridge
 
             DocumentPlan plan;
             plan.destination = destination;
-            const std::string filename = destination.filename().generic_u8string();
-            plan.staged = parent / fs::u8path(
-                filename + ".renegade-stage-" + result.transactionId);
-            plan.backup = parent / fs::u8path(
-                filename + ".renegade-backup-" + result.transactionId);
-            plan.restore = parent / fs::u8path(
-                filename + ".renegade-restore-" + result.transactionId);
+
             plan.content = std::move(document.content);
             plan.validator = std::move(document.validator);
             plan.existed = exists;
@@ -1153,20 +1160,6 @@ namespace renegade::bridge
                     sourceIndex, "invalid_delete", "Deletion cannot contain new bytes or a staged validator.");
             if (plan.remove) plan.changed = exists;
 
-            for (const fs::path* artifact :
-                {&plan.staged, &plan.backup, &plan.restore})
-            {
-                if (fs::exists(*artifact, pathError) || pathError)
-                {
-                    return FailureResult(
-                        std::move(result),
-                        ProjectDocumentTransactionStage::Prepare,
-                        sourceIndex,
-                        "transaction_artifact_collision",
-                        "A transaction artifact already exists: " +
-                            artifact->generic_u8string());
-                }
-            }
 
             if (exists && !plan.remove)
             {
@@ -1250,6 +1243,27 @@ namespace renegade::bridge
             }
         }
         journal.documents = std::move(changedDocuments);
+        // Assign after sorting/filtering so recovery can validate each index
+        // without accepting arbitrary sibling filenames from the journal.
+        for (std::size_t index = 0; index < journal.documents.size(); ++index)
+        {
+            auto& plan = journal.documents[index];
+            plan.staged = ArtifactPath(plan.destination, result.transactionId, index, "stage", journal.version);
+            plan.backup = ArtifactPath(plan.destination, result.transactionId, index, "backup", journal.version);
+            plan.restore = ArtifactPath(plan.destination, result.transactionId, index, "restore", journal.version);
+            for (const fs::path* artifact : {&plan.staged, &plan.backup, &plan.restore})
+            {
+                std::error_code pathError;
+                if (destinations.count(PathKey(*artifact)) ||
+                    fs::exists(*artifact, pathError) || pathError)
+                {
+                    return FailureResult(std::move(result),
+                        ProjectDocumentTransactionStage::Prepare, index,
+                        "transaction_artifact_collision",
+                        "A transaction artifact is occupied: " + artifact->generic_u8string());
+                }
+            }
+        }
 
         if (journal.documents.empty())
         {
