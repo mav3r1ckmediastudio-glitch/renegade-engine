@@ -46,7 +46,7 @@ namespace renegade::studio
     class RenegadeButton : public ReleaseButton
     {
     public:
-        void SetIcon(const std::string& id) { icon_=id; icons::Load(); SetTooltip(icons::Title(id)); }
+        void SetIcon(const std::string& id) { icon_=id; icons::Load(); if(GetTooltip().empty()) SetTooltip(icons::Title(id)); }
         void SetIconSelected(bool value) noexcept { iconSelected_=value; }
         void Update(const wi::Canvas& canvas,float dt) override;
         void RenderTooltip(const wi::Canvas& canvas,wi::graphics::CommandList cmd) const override;
