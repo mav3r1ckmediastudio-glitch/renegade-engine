@@ -80,7 +80,11 @@ bool ReadDialogueDisplayAssignment(const std::string& root,const StableId& proje
         ScreenDocument d;std::string path;
         if(!IsValidStableId(selected.screenId)||!ResolveRuntimeScreenDocumentPath(root,project,selected.screenId,selected.path,path,error)||
            !ReadScreenDocument(path,project,d,error))return false;
-        selected.path=fs::u8path(path).lexically_relative(fs::u8path(root)).generic_u8string();
+        // Resolve both spellings before making the hint relative. Windows temp
+        // roots may use a short-name alias, and callers may supply dot segments.
+        const auto relative=fs::relative(fs::u8path(path),fs::u8path(root),ec);
+        if(ec||relative.empty()){error="Could not make the dialogue display path project-relative.";return false;}
+        selected.path=relative.generic_u8string();
     }
     out=std::move(selected);return true;
 }

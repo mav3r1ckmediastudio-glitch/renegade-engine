@@ -101,7 +101,9 @@ foreach(token IN ITEMS
     "std::array<Action, 12>"
     "Action::CreateParticleEffect"
     "Action::CreateNavigationGrid"
-    "Action::CreateProjectile")
+    "Action::CreateProjectile"
+    "Action::OpenDialogue"
+    "DIALOGUE EDITOR...")
     string(FIND "${chrome_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Gate 3 ADD menu missing ${token}")

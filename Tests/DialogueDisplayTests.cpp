@@ -47,6 +47,8 @@ int main(int argc,char** argv){
  CHECK(find(reopened,"text").name==body.name&&find(reopened,"text").style.text.fontSize==31);
  CHECK(SetDialogueDisplayAssignment(root.generic_u8string(),project,{source.envelope.documentId,"Content/UI/Dialogue.renegade-screen"},error));
  ScreenDocument loaded;CHECK(LoadDialogueDisplay(root.generic_u8string(),project,loaded,error));
+ // A project root can be supplied through a noncanonical spelling (or a Windows short path).
+ CHECK(LoadDialogueDisplay((root/"Content"/"..").generic_u8string(),project,loaded,error));
  CHECK(find(loaded,"text").style.text.fontResource==body.style.text.fontResource);
  DialogueView view;view.active=true;view.speaker="Guard";view.text="What business have you here?";
  for(int n=0;n<6;++n)view.replies.push_back({"r"+std::to_string(n),"Reply "+std::to_string(n)});
