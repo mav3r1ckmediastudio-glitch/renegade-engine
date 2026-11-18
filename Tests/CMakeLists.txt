@@ -1961,6 +1961,7 @@ if(WIN32)
     add_executable(RenegadeRuntimeSceneTransitionTests
         RuntimeSceneTransitionTests.cpp
         ../Runtime/src/RuntimeApplication.cpp
+        ../Runtime/src/TerrainPropRuntimeProof.cpp
         ../Runtime/src/RuntimeDialogue.cpp
         ../Runtime/src/RuntimeLiveDiagnostics.cpp
         ../Runtime/src/RuntimeImpactDustResource.cpp
