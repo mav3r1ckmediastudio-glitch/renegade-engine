@@ -92,6 +92,8 @@ namespace renegade::bridge
         std::string container;
         std::string scope;
         std::map<std::string, std::shared_ptr<TextureSpan>> variants;
+        mutable std::mutex loadMutex;
+        mutable std::map<std::string, wi::Resource> loaded;
     };
 #endif
 
@@ -174,6 +176,13 @@ namespace renegade::bridge
             auto found = prepared.backing->variants.find(semantic);
             if (found != prepared.backing->variants.end())
             {
+                std::lock_guard<std::mutex> guard(prepared.backing->loadMutex);
+                const auto existing = prepared.backing->loaded.find(semantic);
+                if (existing != prepared.backing->loaded.end())
+                {
+                    error.clear();
+                    return existing->second;
+                }
                 const auto& span = found->second;
                 std::vector<uint8_t> initial(span->length);
                 if (!span->generation->Read(span->offset, span->length, initial.data()))
@@ -202,6 +211,7 @@ namespace renegade::bridge
                     error = "Wicked could not load the governed DDS span.";
                     return {};
                 }
+                prepared.backing->loaded.emplace(semantic, resource);
                 error.clear();
                 return resource;
             }

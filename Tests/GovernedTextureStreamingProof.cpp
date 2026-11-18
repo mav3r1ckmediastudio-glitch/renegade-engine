@@ -95,7 +95,10 @@ int RunGovernedTextureProof(const std::filesystem::path& directory, const std::f
         registry.schemaVersion = AssetRegistry::CurrentSchemaVersion;
         std::string json, error;
         Check(SerializeAssetRegistry(registry, json, error), error);
-        std::ofstream(root / AssetRegistryDocumentName) << json;
+        std::ofstream registryFile(root / AssetRegistryDocumentName, std::ios::binary);
+        registryFile << json;
+        registryFile.close();
+        Check(static_cast<bool>(registryFile), "write canonical project registry");
         WriteImage(root / Source, 192);
         ResourceAssetImportRequest request;
         request.projectId = Project;
@@ -106,93 +109,129 @@ int RunGovernedTextureProof(const std::filesystem::path& directory, const std::f
         request.materialTextureSemantic = "color";
         auto imported = ResourceAssetService().ImportResourceAsset(request);
         Check(imported.succeeded, imported.error);
-        PreparedMaterialTextureAsset old;
-        Check(PrepareMaterialTextureAsset(request.projectRoot, Project, imported.assetId, old, error), error);
-        wi::scene::Scene scene;
-        const auto entity = scene.Entity_CreateMaterial("Boulder surface");
-        Check(ApplyPreparedMaterialTextureAsset(scene, entity, MaterialTextureSlot::BaseColor, old, {}, error), error);
-        auto& slot = scene.materials.GetComponent(entity)->textures[wi::scene::MaterialComponent::BASECOLORMAP];
-        wi::Resource original = slot.resource;
-        auto candidate = ModelImportCandidateService().PrepareModel(boulder.generic_u8string());
-        Check(candidate.IsReady(), "prepare boulder model");
-        auto& candidateScene = *candidate.PeekMutableScene();
-        Check(candidateScene.materials.GetCount() == 1, "expected one boulder material");
-        candidateScene.materials[0].SetAlphaRef(1.0f);
-        Check(ApplyPreparedMaterialTextureAsset(candidateScene, candidateScene.materials.GetEntity(0),
-            MaterialTextureSlot::BaseColor, old, {}, error), error);
-        ModelImportCommitRequest modelRequest;
-        modelRequest.projectRoot = request.projectRoot;
-        modelRequest.projectId = Project;
-        modelRequest.assetName = "StreamedBoulder";
-        auto committed = ModelImportCommitService().CommitStaticModel(modelRequest, candidate);
-        Check(committed.succeeded, committed.error);
-        auto model = ReusableAssetService().PrepareModelAssetPlacement(
-            {request.projectRoot, Project, committed.assetId});
-        Check(model.IsReady(), model.Result().error);
-        wi::scene::Scene terrain;
-        TerrainPropProjection projection(terrain, false);
-        TerrainPropProfileId profile{};
-        profile.back() = 1;
-        Check(projection.Register(profile, *model.PeekScene(), {}, error), error);
-        TerrainPropPage page;
-        page.profiles.push_back(profile);
-        for (unsigned j = 0; j < 32; ++j)
-            page.placements.push_back({j + 1, 0, {float(j), 0, 0}, 0, 1.f + float(j % 4)});
-        Check(projection.Place(page, error), error);
-        Check(terrain.objects.GetCount() == 32 && terrain.materials.GetCount() == 1 &&
-            terrain.meshes.GetCount() == 1, "boulder placements duplicated shared resources");
-        const auto& projected = terrain.materials[0].textures[wi::scene::MaterialComponent::BASECOLORMAP];
-        Check(projected.resource.internal_state.get() == original.internal_state.get(),
-            "boulder placement lost governed texture binding");
-        const unsigned cold = original.GetTexture().desc.width;
-        Check(cold < Size && original.GetTextureFullMipCount() == 10 && original.GetFileData().empty(), "cold DDS contract");
-        Report("T1_cold", original, old);
-        Reach(original, Size, Size);
-        Report("T1_near", original, old);
-        const auto originalPixels = Readback(original);
-        Reach(original, 0, cold);
-        Report("T1_far", original, old);
-        Check(CaptureMaterialTextureReads(old, "color").mipReads >= 2, "no observed backing reads");
+        std::vector<uint8_t> newPixels;
+        {
+            PROCESS_MEMORY_COUNTERS beforeBind{};
+            Check(GetProcessMemoryInfo(GetCurrentProcess(), &beforeBind, sizeof(beforeBind)) != 0, "pre-bind memory");
+            const auto bindStarted = std::chrono::steady_clock::now();
+            PreparedMaterialTextureAsset old;
+            Check(PrepareMaterialTextureAsset(request.projectRoot, Project, imported.assetId, old, error), error);
+            wi::scene::Scene scene;
+            const auto entity = scene.Entity_CreateMaterial("Boulder surface");
+            Check(ApplyPreparedMaterialTextureAsset(scene, entity, MaterialTextureSlot::BaseColor, old, {}, error), error);
+            auto& slot = scene.materials.GetComponent(entity)->textures[wi::scene::MaterialComponent::BASECOLORMAP];
+            wi::Resource original = slot.resource;
+            const auto loadTime = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - bindStarted);
+            std::cout << "T1_first_bind adapter=" << wi::graphics::GetDevice()->GetAdapterName()
+                << " elapsed_ms=" << loadTime.count() << " source_bytes=" << old.payload.size()
+                << " prior_working_set=" << beforeBind.WorkingSetSize
+                << " prior_peak_working_set=" << beforeBind.PeakWorkingSetSize << std::endl;
+            Report("T1_after_bind", original, old);
+            const auto firstRead = CaptureMaterialTextureReads(old, "color").initialBytes;
+            auto candidate = ModelImportCandidateService().PrepareModel(boulder.generic_u8string());
+            Check(candidate.IsReady(), "prepare boulder model");
+            auto& candidateScene = *candidate.PeekMutableScene();
+            Check(candidateScene.materials.GetCount() == 1, "expected one boulder material");
+            candidateScene.materials[0].SetAlphaRef(1.0f);
+            Check(ApplyPreparedMaterialTextureAsset(candidateScene, candidateScene.materials.GetEntity(0),
+                MaterialTextureSlot::BaseColor, old, {}, error), error);
+            Check(CaptureMaterialTextureReads(old, "color").initialBytes == firstRead, "repeated material bind reread DDS");
+            ModelImportCommitRequest modelRequest;
+            modelRequest.projectRoot = request.projectRoot;
+            modelRequest.projectId = Project;
+            modelRequest.assetName = "StreamedBoulder";
+            auto committed = ModelImportCommitService().CommitStaticModel(modelRequest, candidate);
+            Check(committed.succeeded, committed.error);
+            auto model = ReusableAssetService().PrepareModelAssetPlacement(
+                {request.projectRoot, Project, committed.assetId});
+            Check(model.IsReady(), model.Result().error);
+            wi::scene::Scene terrain;
+            TerrainPropProjection projection(terrain, false);
+            TerrainPropProfileId profile{};
+            profile.back() = 1;
+            Check(projection.Register(profile, *model.PeekScene(), {}, error), error);
+            TerrainPropPage page;
+            page.profiles.push_back(profile);
+            for (unsigned j = 0; j < 32; ++j)
+                page.placements.push_back({j + 1, 0, {float(j), 0, 0}, 0, 1.f + float(j % 4)});
+            Check(projection.Place(page, error), error);
+            Check(terrain.objects.GetCount() == 32 && terrain.materials.GetCount() == 1 &&
+                terrain.meshes.GetCount() == 1, "boulder placements duplicated shared resources");
+            const auto& projected = terrain.materials[0].textures[wi::scene::MaterialComponent::BASECOLORMAP];
+            Check(projected.resource.internal_state.get() == original.internal_state.get(),
+                "boulder placement lost governed texture binding");
+            const unsigned cold = original.GetTexture().desc.width;
+            Check(cold < Size && original.GetTextureFullMipCount() == 10 && original.GetFileData().empty(), "cold DDS contract");
+            Report("T1_cold", original, old);
+            Reach(original, Size, Size);
+            Report("T1_near", original, old);
+            const auto originalPixels = Readback(original);
+            Reach(original, 0, cold);
+            Report("T1_far", original, old);
+            Check(CaptureMaterialTextureReads(old, "color").mipReads >= 2, "no observed backing reads");
 
-        WriteImage(root / Source, 24);
-        AssetCatalogue catalogue;
-        Check(CreatorAssetWorkflowService().BuildCatalogue(request.projectRoot, Project, catalogue, error), error);
-        auto replay = ResourceAssetService().ReimportResourceAsset({request.projectRoot, Project, imported.assetId});
-        Check(replay.succeeded, replay.error);
-        PreparedMaterialTextureAsset replacement;
-        Check(PrepareMaterialTextureAsset(request.projectRoot, Project, imported.assetId, replacement, error), error);
-        auto current = LoadMaterialTextureForSemantic(replacement, "color", error);
-        Check(current.IsValid() && current.internal_state.get() != original.internal_state.get(), "new texture generation");
-        Reach(current, Size, Size);
-        const auto newPixels = Readback(current);
-        Check(newPixels != originalPixels, "reimport did not replace visual content");
-        Reach(original, Size, Size);
-        Check(Readback(original) == originalPixels, "old generation read replacement bytes");
+            const fs::path moved = root.parent_path() / fs::u8path(GenerateStableId());
+            fs::copy(root, moved, fs::copy_options::recursive);
+            PreparedMaterialTextureAsset movedTexture;
+            Check(PrepareMaterialTextureAsset(moved.generic_u8string(), Project, imported.assetId, movedTexture, error), error);
+            auto movedResource = LoadMaterialTextureForSemantic(movedTexture, "color", error);
+            Check(movedResource.IsValid() && movedResource.internal_state.get() != original.internal_state.get(),
+                "relocated project reused its original backing");
+            Reach(movedResource, Size, Size);
+            Check(Readback(movedResource) == originalPixels, "copied project mismatch");
 
-        const fs::path moved = root.parent_path() / fs::u8path(GenerateStableId());
-        fs::copy(root, moved, fs::copy_options::recursive);
-        PreparedMaterialTextureAsset movedTexture;
-        Check(PrepareMaterialTextureAsset(moved.generic_u8string(), Project, imported.assetId, movedTexture, error), error);
-        auto movedResource = LoadMaterialTextureForSemantic(movedTexture, "color", error);
-        Check(movedResource.IsValid() && movedResource.internal_state.get() != current.internal_state.get(),
-            "relocated project reused its original backing");
-        Reach(movedResource, Size, Size);
-        Check(Readback(movedResource) == newPixels, "relocated project mismatch");
+            WriteImage(root / Source, 24);
+            AssetCatalogue catalogue;
+            Check(CreatorAssetWorkflowService().BuildCatalogue(request.projectRoot, Project, catalogue, error), error);
+            auto replay = ResourceAssetService().ReimportResourceAsset({request.projectRoot, Project, imported.assetId});
+            Check(replay.succeeded, replay.error);
+            PreparedMaterialTextureAsset replacement;
+            Check(PrepareMaterialTextureAsset(request.projectRoot, Project, imported.assetId, replacement, error), error);
+            auto current = LoadMaterialTextureForSemantic(replacement, "color", error);
+            Check(current.IsValid() && current.internal_state.get() != original.internal_state.get(), "new texture generation");
+            Reach(current, Size, Size);
+            newPixels = Readback(current);
+            Check(newPixels != originalPixels, "reimport did not replace visual content");
+            Reach(original, Size, Size);
+            Check(Readback(original) == originalPixels, "old generation read replacement bytes");
 
-        const fs::path package = root.parent_path() / fs::u8path(GenerateStableId());
-        const fs::path file = package / "GameData/Content/Textures/wood.rasset";
-        fs::create_directories(file.parent_path());
-        fs::copy_file(root / Product, file);
-        std::ofstream(package / "GameData/content-manifest.json")
-            << "{\"format\":\"renegade-content-manifest\",\"schema_version\":1,\"project_id\":\"" << Project
-            << "\",\"files\":[{\"asset_id\":\"" << imported.assetId
-            << "\",\"path\":\"GameData/Content/Textures/wood.rasset\",\"source_hash\":\"" << replay.productHash << "\"}]}";
-        PackagedMaterialTextureRefreshResult packaged;
-        Check(RefreshPackagedMaterialTextureAssets(scene, package.generic_u8string(), Project, packaged, error), error);
-        Check(packaged.refreshedBindingCount == 1 && slot.resource.internal_state.get() != current.internal_state.get(),
-            "standalone package resolver did not acquire its own backing");
-        Reach(slot.resource, Size, Size);
-        Check(Readback(slot.resource) == newPixels, "packaged DDS readback mismatch");
+            const fs::path package = root.parent_path() / fs::u8path(GenerateStableId());
+            const fs::path file = package / "GameData/Content/Textures/wood.rasset";
+            fs::create_directories(file.parent_path());
+            fs::copy_file(root / Product, file);
+            std::ofstream(package / "GameData/content-manifest.json")
+                << "{\"format\":\"renegade-content-manifest\",\"schema_version\":1,\"project_id\":\"" << Project
+                << "\",\"files\":[{\"asset_id\":\"" << imported.assetId
+                << "\",\"path\":\"GameData/Content/Textures/wood.rasset\",\"source_hash\":\"" << replay.productHash << "\"}]}";
+            PackagedMaterialTextureRefreshResult packaged;
+            Check(RefreshPackagedMaterialTextureAssets(scene, package.generic_u8string(), Project, packaged, error), error);
+            Check(packaged.refreshedBindingCount == 1 && slot.resource.internal_state.get() != current.internal_state.get(),
+                "standalone package resolver did not acquire its own backing");
+            Reach(slot.resource, Size, Size);
+            Check(Readback(slot.resource) == newPixels, "packaged DDS readback mismatch");
+        }
+        // Move the complete closed project, then reopen with the original path absent.
+        const fs::path relocated = root.parent_path() / fs::u8path(GenerateStableId());
+        // Wicked's job vector keeps its strong references until the next
+        // normal streaming update after the outstanding worker finishes.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        std::error_code moveError;
+        do
+        {
+            wi::resourcemanager::UpdateStreamingResources(1.f / 60);
+            fs::rename(root, relocated, moveError);
+            if (!moveError) break;
+            if (moveError.value() != ERROR_ACCESS_DENIED && moveError.value() != ERROR_SHARING_VIOLATION)
+                break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        } while (std::chrono::steady_clock::now() < deadline);
+        Check(!moveError, "moving closed project after native job release: " + moveError.message());
+        PreparedMaterialTextureAsset reopened;
+        Check(PrepareMaterialTextureAsset(relocated.generic_u8string(), Project, imported.assetId, reopened, error), error);
+        auto reopenedResource = LoadMaterialTextureForSemantic(reopened, "color", error);
+        Check(reopenedResource.IsValid(), "reopen relocated product");
+        Reach(reopenedResource, Size, Size);
+        Check(Readback(reopenedResource) == newPixels, "relocated reimported texture pixels");
         std::cout << "T1_NATIVE_PASS" << std::endl;
         return 0;
     }
