@@ -5,3 +5,5 @@ Library/Scripts/**/*.lua text eol=lf
 
 # Unified patch payloads intentionally preserve upstream context whitespace.
 EngineBridge/patches/*.patch -whitespace
+
+EngineBridge/patches/TerrainPropArchive.patch text eol=lf

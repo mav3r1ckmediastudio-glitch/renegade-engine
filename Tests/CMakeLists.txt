@@ -2166,3 +2166,49 @@ target_link_libraries(RenegadeDialogueDisplayTests PRIVATE Renegade::EngineBridg
 target_compile_options(RenegadeDialogueDisplayTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 set_target_properties(RenegadeDialogueDisplayTests PROPERTIES FOLDER "Renegade/Tests")
 add_test(NAME RenegadeDialogueDisplayTests COMMAND RenegadeDialogueDisplayTests)
+
+add_executable(RenegadeTerrainPropResidencyProbe TerrainPropResidencyProbe.cpp TerrainPropSliceProof.cpp)
+target_link_libraries(RenegadeTerrainPropResidencyProbe PRIVATE Renegade::EngineBridge)
+target_compile_definitions(RenegadeTerrainPropResidencyProbe PRIVATE UNICODE _UNICODE)
+add_custom_command(TARGET RenegadeTerrainPropResidencyProbe POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+        "$<TARGET_FILE_DIR:RenegadeTerrainPropResidencyProbe>")
+add_test(NAME RenegadeTerrainPropResidencyProbe COMMAND RenegadeTerrainPropResidencyProbe
+    "${CMAKE_CURRENT_BINARY_DIR}/terrain-prop-residency" CONFIGURATIONS Release)
+set_tests_properties(RenegadeTerrainPropResidencyProbe PROPERTIES TIMEOUT 90
+    WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeTerrainPropResidencyProbe>")
+
+add_executable(RenegadeTerrainPropPageTests TerrainPropPageTests.cpp)
+target_link_libraries(RenegadeTerrainPropPageTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeTerrainPropPageTests COMMAND RenegadeTerrainPropPageTests)
+add_dependencies(RenegadeBridgeTests RenegadeTerrainPropPageTests RenegadeTerrainPropResidencyProbe)
+
+add_test(NAME RenegadeTerrainPropSliceProof COMMAND RenegadeTerrainPropResidencyProbe
+    "${CMAKE_CURRENT_BINARY_DIR}/terrain-prop-slice" "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/terrain-props"
+    CONFIGURATIONS Release)
+set_tests_properties(RenegadeTerrainPropSliceProof PROPERTIES TIMEOUT 180
+    WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeTerrainPropResidencyProbe>")
+
+add_executable(RenegadeTerrainPropAuthoringTests TerrainPropAuthoringTests.cpp
+    ../EngineBridge/src/TerrainPropAuthoring.cpp ../EngineBridge/src/TerrainPropPage.cpp)
+target_include_directories(RenegadeTerrainPropAuthoringTests PRIVATE ../EngineBridge/include)
+add_test(NAME RenegadeTerrainPropAuthoringTests COMMAND RenegadeTerrainPropAuthoringTests)
+add_executable(RenegadeTerrainPropTerrainTests TerrainPropTerrainTests.cpp)
+target_link_libraries(RenegadeTerrainPropTerrainTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeTerrainPropTerrainTests COMMAND RenegadeTerrainPropTerrainTests)
+add_dependencies(RenegadeBridgeTests RenegadeTerrainPropAuthoringTests RenegadeTerrainPropTerrainTests)
+
+add_executable(RenegadeTerrainPropEditTests TerrainPropEditTests.cpp)
+target_link_libraries(RenegadeTerrainPropEditTests PRIVATE Renegade::EngineBridge)
+target_compile_definitions(RenegadeTerrainPropEditTests PRIVATE UNICODE _UNICODE)
+add_custom_command(TARGET RenegadeTerrainPropEditTests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
+        "$<TARGET_FILE_DIR:RenegadeTerrainPropEditTests>")
+add_test(NAME RenegadeTerrainPropEditTests COMMAND RenegadeTerrainPropEditTests
+    "${CMAKE_CURRENT_BINARY_DIR}/terrain-prop-edit"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/terrain-props/tree.glb")
+set_tests_properties(RenegadeTerrainPropEditTests PROPERTIES TIMEOUT 180
+    WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeTerrainPropEditTests>")
+add_dependencies(RenegadeBridgeTests RenegadeTerrainPropEditTests)

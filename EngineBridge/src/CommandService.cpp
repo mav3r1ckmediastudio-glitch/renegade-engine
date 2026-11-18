@@ -514,9 +514,9 @@ namespace renegade::bridge
             return false;
         }
 
+        if (!undoStack_.back()->TryUndo()) return false;
         auto command = std::move(undoStack_.back());
         undoStack_.pop_back();
-        command->Undo();
         redoStack_.push_back(std::move(command));
         ++revision_;
         return true;

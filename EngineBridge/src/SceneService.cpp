@@ -1,3 +1,4 @@
+#include "renegade/bridge/TerrainPropDocument.h"
 #include "renegade/bridge/SceneService.h"
 
 #include "renegade/bridge/SceneDocumentService.h"
@@ -32,6 +33,9 @@ namespace
         const wi::scene::Scene& scene,
         const wi::ecs::Entity entity)
     {
+        const auto* projectionMetadata = scene.metadatas.GetComponent(entity);
+        if (projectionMetadata && projectionMetadata->runtimeProjectionOnly) return false;
+
         const auto* name = scene.names.GetComponent(entity);
         if (name != nullptr && name->name.rfind(InternalEntityPrefix, 0) == 0)
             return false;
@@ -707,6 +711,9 @@ namespace renegade::bridge
             lastError_ = prepared.Error();
             return false;
         }
+
+        if (!RestoreTerrainPropRevisions(*prepared.scene_, prepared.Path(), lastError_))
+            return false;
 
         std::string riverNormalError;
         if (!RestoreBundledRiverWaterNormals(*prepared.scene_, riverNormalError))

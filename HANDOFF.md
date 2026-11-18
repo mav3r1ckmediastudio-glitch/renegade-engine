@@ -767,3 +767,140 @@ apply to their original checkpoint, not automatically to today's main.
 Final follow-up: Wireframe5 fresh-process mode restoration, readable ASCII
 markers and corrected shaded overlay were visually verified. Its review window
 is left open. Source implementation remains fada1d6353691a14508b9b748ec8335631984cfb.
+
+## Terrain props P0/P1 handover, 17 November 2026
+
+**Branch** `feature/terrain-props-p0-p1`. Implementation head `e4cec253360b94edf3a0bce6c3931e1c2cf841b6`, based on `db8d620f75a5219ae5a3906e2837ed2d4165c741`. The handover commit adds documentation and the verified player capture. Run `git log -1 --format=%H -- HANDOFF.md` on this branch for its separate commit. No push, PR or merge was made.
+
+The isolated checkout retains configured Wicked edits to the two particle shader files, particle shader interop header, emitted-particle source/header, allocator header and four archive-overlay files (`wiECS.h`, `wiScene.cpp`, `wiScene_Components.h`, `wiScene_Serializers.cpp`). They are recreated by configuration. There is no uncommitted parent-repository implementation and neither submodule pointer changed. Other working trees were not reset or reused. Build products and raw logs live under ignored `BUILD/`.
+
+[Data formats, archive decision and service contracts](docs/TERRAIN_PROP_P1.md) · [Actual standalone player capture](docs/evidence/terrain-props/runtime-slice.png). The complete source, test, fixture and contract file list is available with `git diff --name-status db8d620 e4cec25`.
+
+**Local evidence.** Windows x64, Intel i9-13900K, 128 GB installed RAM, RTX 4070 Ti, DX12, MSVC 19.51, CMake 4.4.4. A deterministic technical scene imported the original two-part tree, bush and boulder through the normal static-model committer. The 96 placements produced 128 native objects referencing four distinct mesh IDs and four distinct material IDs. Each mesh was reused 32 times. The four native mesh buffers totalled 3,392 bytes for these deliberately small fixtures. The unmodified scene had one LOD per mesh and no impostor atlas. Adding a tiny second subset to a mesh in the disposable benchmark kept its aligned geometry buffer at 608 bytes. Enabling one native impostor allocated an 864-slice atlas with 14,155,776 bytes of texel payload.
+
+The scene had 64 static bodies. Jolt rays hit trunk and boulder, missed crown and bush, and missed a removed trunk while still hitting the boulder. Regular selection, hierarchy queries and duplicate refused a live projected object. Saving while the projections were live produced a raw WISCENE with both authored witnesses and zero projected objects, meshes, materials or rigid bodies. Studio's document service and the Runtime scene loader rebuilt the same population. Save As retained distinct old and new revisions and preserved placement ID 1 through a scale change. The reopened allocation counter returned 97. A withheld page made both save and open fail with the live scene intact. An injected replacement failure retained the previous revision. A separately interrupted replacement recovered both old files from its journal, then retry committed the new page.
+
+The DDS probe observed a 5,592,552-byte backed texture through native resource state. The shared material test reads the current base-colour slot rather than inferring resolution from the request. An exclusive handle held the texture at its cold size, and unlocking the file allowed promotion.
+
+| Native measurement | Cold | Requested 1024 | Released request |
+| --- | ---: | ---: | ---: |
+| Resident width | 64 | 1,024 | 64 |
+| Actual resident / full mips | 7 / 11 | 11 / 11 | 7 / 11 |
+| Resident mip payload, bytes | 21,844 | 5,592,404 | 21,844 |
+| DXGI device usage in the shared-material run, bytes | 276,824,064 | 293,601,280 | 293,601,280 |
+| Process peak working set in that run, bytes | 565,514,240 | 582,778,880 | 582,778,880 |
+
+The DXGI device-usage counter includes pooled allocations and can stay at its high value after the native mip chain shrinks. These are per-texture mip payloads. Physical memory savings, transient peaks attributable solely to streaming, per-frame disk bandwidth and a representative woodland frame-time budget remain unestablished. The original Release probe captured the three states then faulted during process teardown. The final harness drains renderer pipeline work, joins the jobs and waits for the GPU while the device still exists. The accepted test requires normal process exit as well as the descriptor transitions.
+
+**Remaining limits.** Only the project workflow and minimal resident projection have been exercised. A moved or exported standalone package without its project asset registry, a detached Test Game snapshot outside the project, cross-process edits to the same layer, asset reimport during an active projection, older backup retention under garbage collection and large forest performance need separate proofs. The slice's colours and deliberately low-poly meshes are test content. No streaming budget, impostor content bake, automatic texture cooker, collision-interest radius or creator UI ships in this change. The 60 FPS / 16.67 ms target remains a proposed performance target. Independent review of the exact commit is outstanding.
+
+**Sol's next change is P2 only.**
+
+1. Add layer recipe and mix persistence, seed, stable candidate keys, clearing/tombstone and override records with v1 read compatibility. Add delta-based bridge editing against the current revision. Preserve the placement ID high-water mark across undo, redo and save.
+2. Implement a scene-safe live projection update for changed pages. Commit authoring changes as one logical operation, keep the old display on failure and discard cancelled staging. Verify changed bounds and IDs across adjacent cells and edits at terrain edges.
+3. Add the Terrain Props palette using the existing asset picker, linked density slider/numeric input per entry, saved mixes, Generate, Paint, Erase, progress and cancellation. Sample by distance and keep one Undo entry per stroke or Generate Apply.
+4. Test deterministic output, cross-cell spacing, manual clearings, retained IDs, terrain expansion/reprojection, narrow-panel layout, Save As and reopen. Leave the proposed collision, asset and texture streaming services at the interface stage.
+
+**Before Sol pushes** refresh `origin/main`, check the combined diff and configuration against the new accepted baseline, verify both gitlinks, and review any local dirt in the correct worktree. From a fresh isolated checkout run:
+
+```powershell
+git submodule update --init --recursive
+git diff --check origin/main...HEAD
+git ls-tree HEAD WickedEngine ThirdParty/imnodes
+cmake -S . -B BUILD/native -G "Visual Studio 18 2026" -A x64
+$targets = @('RenegadeStudio','RenegadeRuntime','RenegadeTerrainPropPageTests','RenegadeTerrainPropResidencyProbe','RenegadeEditorPointLookupFocusedTests','RenegadeProjectDocumentTransactionTests')
+foreach ($cfg in 'Debug','Release') {
+    cmake --build BUILD/native --config $cfg --target $targets --parallel 3
+    if ($LASTEXITCODE) { throw "Build failed in $cfg" }
+    ctest --test-dir BUILD/native -C $cfg -R 'Renegade(TerrainProp|EditorPointLookup|ProjectDocumentTransaction)' --output-on-failure
+    if ($LASTEXITCODE) { throw "Focused checks failed in $cfg" }
+}
+cmake -S . -B BUILD/warp -G "Visual Studio 18 2026" -A x64 -DRENEGADE_TEST_FORCE_WARP=ON
+cmake --build BUILD/warp --config Release --target RenegadeTerrainPropResidencyProbe --parallel 2
+ctest --test-dir BUILD/warp -C Release -R 'RenegadeTerrainProp(ResidencyProbe|SliceProof)' --output-on-failure
+```
+
+Run Sol's new P2 behaviour tests, the repository Studio/Runtime Debug and Release preflight, and the UMA/wireframe overlay regression checks on that combined tree. Run the normal editor workflow and the separate player with a populated project, inspect the captures, and record frame-time evidence at matched settings. A green local build alone does not demonstrate the authoring workflow. After pushing, verify all four hosted checks belong to the pushed head. Merge requires the owner's approval.
+
+**Build record.** Final NVIDIA Release focused checks passed 6/6. The standalone Runtime captured frame 60 from the project and exited with code 0. Studio and Runtime built in Debug and Release. Debug focused CTest passed 4/4 and the separate Debug native slice exited 0. The fresh WARP Release build passed both native tests (2/2, Microsoft Basic Render Driver). Local logs under BUILD include final-Release-test.log, validated-Debug-test.log, debug-confirm.log, debug-confirm-exit.log, warp-test.log and validated-capture.log. The additional baseline renderer-overlay CTest exceeded its 60-second timeout twice on E:. The same cold/reconfigure fixture completed successfully on the system temporary drive, exit 0 (overlay-confirm.log). Repeat the registered overlay check before pushing. All feature and handover edits are committed on this branch. The configured WickedEngine worktree shows ten generated overlay edits; its pinned gitlink and the imnodes gitlink are unchanged.
+
+## Terrain props P2 authoring handover, 17 November 2026
+
+Implementation head: `01d7c012b8b4ebe6caacac74eaf80d5eaa91b0cb` on `feature/terrain-props-p0-p1`, following P0/P1 handover `2853b55c55f7d7aeee8aaa8e9f69d2bba02ca2b8`. The final documentation/evidence commit is separate; obtain it with `git log -1 --format=%H -- HANDOFF.md`. Owner acceptance and merge approval remain pending.
+
+**Scope delivered.** P2 authoring only: v2 recipes, per-model density, saved layer mixes, stable candidate keys/bindings, clearings/tombstones and overrides; v1 reads; distance-sampled Generate/Paint/Erase and deliberate terrain reprojection/expansion; finite native terrain snapshots; changed-page live projection with rollback; one history command per Apply/stroke; allocation high-water preserved through Undo/Redo/save. The Terrain Props palette uses governed model selection and linked numeric/slider controls. Failure/cancellation retain the old display. Layer-owner deletion/recovery and divergent/stale revisions are guarded.
+
+[P2 contract and format](docs/TERRAIN_PROP_P2.md), [all 34 implementation paths](docs/evidence/terrain-props-p2/implementation-files.txt), and [native evidence and limitations](docs/evidence/terrain-props-p2/README.md). Collision-interest streaming, full asset/texture streaming, budgets/eviction and cooking remain deferred; their proposed interfaces remain in TERRAIN_PROP_P1.md.
+
+**Baseline and concurrency.** Fresh `origin/main` remained `db8d620f75a5219ae5a3906e2837ed2d4165c741` during final source validation. Combined `git diff --check origin/main...HEAD` passed. Wicked remains `82557d439a41d104f559b0d3134d160b7bf6154e`; imnodes remains `eb36902c892548ef94f88f51ad7e7c9c7058a71c`. The documented ten configuration-generated Wicked overlay edits remain uncommitted; neither gitlink changed. Other working trees and the owner's running editor were preserved.
+
+**Source review.** A separate review of the frozen implementation identified and verified closure of four issues: extreme/nonfinite numeric input, cancellation/work accounting inside dense retained-placement scans, changed bounds for legacy placements outside their historical page cell, and repeated owner discovery after an unchanged resolution failure. The final pure authoring test reports 59,752 assertions.
+
+**Native creator workflow.** Final native scripted runs at inspector widths 520 and 280 generated 1,081 placements, erased to 1,062, verified Undo/Redo and that regeneration respects the clearing, painted to 1,076, cancelled staging, then saved and reopened 1,076. Real shared numeric callbacks exercised FLT_MAX, negative FLT_MAX and NaN. Actual full-window captures were inspected after render/layout stabilization; all numeric fields and lower controls are visible. Private test desktops avoided the owner's mouse/keyboard. The enlarged 1600px capture window is separate from the original measured viewport.
+
+The separate player loaded the exact scene bytes from the final editor proof, captured frame 60 and exited normally with code 0. Scene SHA-256: `04F17C9B0C7414A9E921E6573FDB45C5B76F822943E0DD9BFC7300A137B972DC`; Runtime SHA-256: `2152D68025CE50BB46A16C896C5D95C8C2A6851CB5925335B78654F9DA59EB17`. Its Runtime log contained no warning, error or missing-file matches. The disposable player layout staged the existing default-grass fixture support explicitly; this is ordinary project-mode proof, not arbitrary exported-package closure.
+
+**Performance limitation.** The test models are deliberately tiny. Earlier P0/P1 mesh buffers totalled only 3,392 bytes. Roughly 75 FPS / 13ms intervals under the display cap do not establish headroom or performance with detailed assets. No production woodland FPS, geometry/overdraw budget, shadow cost, physical memory saving or real-asset streaming budget is claimed. A representative uncapped benchmark with the owner's actual assets remains necessary before making those claims.
+
+### Final local validation
+
+| Check | Result / receipt |
+| --- | --- |
+| Release complete preflight | PASS, including 341/341 registered tests, package archives, LP05 dependency proof and LC01 init/update/move/reopen registry proof; `BUILD/p2-preflight-Release-confirmed/build-result.json` |
+| Debug complete preflight | PASS, including 326/326 registered tests, package archives and LP05/LC01 subprocess proofs; isolated p2-preflight-Debug-physical/build-result.json |
+| Debug pure authoring | 59,752 assertions, exit 0; `authoring-debug.txt` in evidence |
+| WARP Release | 4/4 PASS in 120.85s: native allocator, registered overlay, texture residency and slice; isolated `p2-final56-warp-test.log` |
+| Release constructor startup smoke | exit 0; `BUILD/p2-startup-smoke-release.json` |
+| Final editor / separate player | PASS as described above; captures in `docs/evidence/terrain-props-p2/` |
+
+The Debug registered suite has 326 cases; fifteen native graphics cases are Release-only by existing registration. The documented direct Debug residency and native slice both exited 0, as did the Debug constructor startup-smoke. Receipt: isolated p2-debug-native-physical/result.json. Debug Studio SHA-256: 65BF18FA0CE13CB152A2690B1CCE4BE4D188519DBB6247377BC768E37073A2F8; probe SHA-256: C47B84EC6CA74FF6E6B73D0EF8BDD6A51857283B6CF3FFC4C4AC5365CA66D7CD.
+
+### Commands and local adaptations
+
+The repository Studio preflight builds both Studio and Runtime, runs the unfiltered registered CTest suite, and assembles/verifies both packages. Its task-local adapter preserved the exact upstream pins and checked the exact ten generated overlay paths and SHA-256 bytes instead of resetting them. No test assertions or deadlines were removed.
+
+```powershell
+git fetch origin main
+git diff --check origin/main...HEAD
+git ls-tree HEAD WickedEngine ThirdParty/imnodes
+cmake -S . -B BUILD/native -G "Visual Studio 18 2026" -A x64
+powershell -ExecutionPolicy Bypass -File BUILD/Build-P2-Preflight-Local.ps1 -Configuration Release -ArtifactRoot BUILD/p2-preflight-Release-confirmed
+ctest --test-dir BUILD/native -C Release -R '^RenegadeAssistantRiverKnowledgeTests$' --output-on-failure
+cmake -S . -B BUILD/warp -G "Visual Studio 18 2026" -A x64 -DRENEGADE_TEST_FORCE_WARP=ON
+cmake --build BUILD/warp --config Release --target RenegadeTerrainPropResidencyProbe RenegadeGpuUploadBufferTests --parallel 2
+ctest --test-dir BUILD/warp -C Release -R 'Renegade(TerrainProp(ResidencyProbe|SliceProof)|GpuUploadBufferTests|RendererOverlayComposition)' --output-on-failure
+```
+
+The registered renderer-overlay fixture now performs only its disposable cold/reconfigure work under system temporary storage, keeping logs at the requested build-tree output root. Its original 60-second timeout and UMA/wireframe assertions remain. The negative control still rejects a missing UMA witness.
+
+Validation originally filled the system drive with this task's generated Debug link maps. Only owned generated outputs were moved and regenerable ILK files removed; source/projects/owner files were preserved. The system drive recovered about 55 GiB. Local Debug linking used `/debug /INCREMENTAL:NO`, retaining Debug CRT/assertions and compiler optimization settings. A one-off MSVC C1001 in an existing Story Flow boundary test recovered with the unchanged source in a serial invocation; its registered test passed 1/1. The task-local extra `/MP3` was removed for the final Debug run; standard upstream settings were retained.
+
+The moved validation build used a C-to-E directory junction. Package tests reproduced a working-directory-dependent failure through that junction; the same unchanged executable passed from the physical build directory. All thirteen affected package/fixture tests passed when CTest used the physical directory. The final Debug adapter changes only that test-directory path; the full registered suite is rerun with all checks enabled.
+
+The first frozen Release full suite retained one assistant-knowledge timeout (340/341). Its unchanged isolated retry passed in 3.26s. A complete subsequent preflight passed 341/341, with that test at 2.37s. Earlier disk-full, compiler, path and screenshot-tool failures remain in ignored raw logs; they are not green receipts.
+
+### Remaining scope and next work
+
+Saved mixes are layer-local. The first palette requires one finite terrain and refuses ambiguous multiple authored layers. Legacy key-zero placements remain manual; erase clearings persist until Undo. Cross-process editing, asset reimport during active projection, arbitrary moved/exported populated projects and representative forest performance still need separate proofs. Proceed to later streaming stages only under a new scoped task. No merge without owner approval.
+
+
+## Terrain props P2 hosted-path correction, 18 November 2026
+
+Native implementation: `59c4e926b4a34e9d1523474e8e06b440ff691867`, following failed hosted PR head `a2522190ff920be4dd48be807b6d10b8f9d7bd56`. The final evidence commit also contains a reviewed architecture-document fingerprint refresh in `Tools/assistant_knowledge/workflows.json`; that exact metadata change was present in both full-preflight working trees. The C++ sources match the implementation commit. Obtain the final documentation/evidence head with `git log -1 --format=%H -- HANDOFF.md`.
+
+**Hosted failure.** Studio compiled in both configurations. The longer hosted checkout path made terrain revision transaction artifacts exceed ordinary Windows file-open limits. Release failed TerrainPropSliceProof and TerrainPropEditTests; Debug failed TerrainPropEditTests. The registered overlay passed in both hosted configurations. The original native edit binary reproduced the hosted staging failure at matched checkout depth.
+
+**Correction and source files.** `EngineBridge/src/ProjectDocumentTransaction.cpp` now uses compact indexed sibling artifacts with journal schema 2, while retaining version-one recovery and its version across an interrupted retry. `Tests/ProjectDocumentTransactionTests.cpp` exercises long digest filenames, unchanged-document filtering, validation, commit, rollback, interrupted recovery, invalid artifact indexes and legacy recovery. `docs/ARCHITECTURE.md` records this choice. The assistant's existing UTF-8/LF fingerprint for that document is refreshed without changing its Surface Type instructions or stale-evidence checks. The original transaction implementation fails the new regression; the correction passes.
+
+| Correction check | Result |
+| --- | --- |
+| Complete Release preflight | PASS; 341/341 tests, both packages and LP05/LC01 process proofs |
+| Complete Debug preflight | PASS; 326/326 tests, both packages and LP05/LC01 process proofs |
+| Matched hosted-depth native repro | Original Release edit fails; corrected Release edit/slice and Debug edit exit 0 |
+| Long-filename regression negative control | Original code fails four checks; correction passes |
+| WARP corrected C++ snapshot | 4/4 PASS in 126.62s; allocator, overlay, residency and slice |
+| Fresh editor and separate player | PASS; 1,076 placements retained, exact saved scene bytes, frame 60, exit 0; captures inspected |
+
+**Evidence and commands.** [Correction record, commands and limitations](docs/evidence/terrain-props-p2/ci-path-correction.md). All full-suite assertions and original timeouts remain. The first local correction Release attempt retained three assistant scratch-I/O timeouts; the complete subsequent run uses system-volume scratch database/output arguments for those three knowledge cases. The stale architecture evidence failure discovered on retry is retained separately; the refreshed complete 84-case workflow suite passes. Stock terrain packing used unchanged executables and hash-verified, byte-identical generated products as described in the evidence. No original packer was stopped. The Debug preflight retained the established physical-directory test adapter and nonincremental Debug linking.
+
+**Baseline and scope.** Fresh main is `db8d620f75a5219ae5a3906e2837ed2d4165c741`; Wicked remains `82557d439a41d104f559b0d3134d160b7bf6154e`, imnodes `eb36902c892548ef94f88f51ad7e7c9c7058a71c`. The ten governed configuration overlays remain uncommitted. Collision-interest, full asset/texture streaming and representative full-game forest acceptance remain deferred. Compact artifacts remove avoidable suffix growth from otherwise valid destinations; arbitrary overlong project roots are not newly supported. Hosted validation of the corrected pushed head, independent/owner acceptance and merge approval remain required. No merge is authorized.

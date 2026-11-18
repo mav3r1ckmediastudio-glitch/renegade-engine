@@ -7,6 +7,9 @@
 
 namespace renegade::bridge
 {
+    bool ComputePayloadSha256(const std::vector<std::uint8_t>& payload,
+        std::string& digest, std::string& error);
+
     // Builds the transient Wicked resource-manager logical name from the actual
     // governed payload rather than the durable LP08 v1 FNV freshness token.
     // Windows uses SHA-256 through BCrypt. Non-Windows builds use a fresh stable

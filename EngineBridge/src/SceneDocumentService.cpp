@@ -1,3 +1,4 @@
+#include "renegade/bridge/TerrainPropDocument.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/SceneDocumentService.h"
 
@@ -312,6 +313,9 @@ namespace renegade::bridge
         // does not reconstruct ObjectComponent::lightmap. Hydrate the prepared
         // candidate here, at Studio's thread-safe adoption point, so a failure
         // leaves the active document untouched.
+        if (!RestoreTerrainPropRevisions(*prepared.scene_, prepared.Path(), scenes_.lastError_))
+            return false;
+
         std::string riverNormalError;
         if (!RestoreBundledRiverWaterNormals(*prepared.scene_, riverNormalError))
         {
@@ -431,6 +435,9 @@ namespace renegade::bridge
                 fileError.message();
             return false;
         }
+
+        if (!ValidateTerrainPropRevisionLinks(scenes_.scene_, destination, scenes_.lastError_))
+            return false;
 
         const bool replacingExisting = fs::exists(destination, fileError);
         if (fileError)

@@ -1119,12 +1119,24 @@ namespace renegade::studio
         SceneInspectorCheckBox lightVolumetrics_;
         SceneInspectorSlider lightVolumetricBoost_;
         void LayoutEnvironmentSections();
+        void CreateTerrainPropControls();
+        void TickTerrainProps();
+        void TickTerrainPropProof();
+        void DisableTerrainPropBrush();
+        void RefreshTerrainPropControls();
+        std::vector<wi::gui::Widget*> TerrainPropWidgets();
+        bool HandleTerrainProps(const XMFLOAT4& pointer);
+        bool IsTerrainPropBrushActive() const;
+
+        void QueueTerrainPropEdit(int operation);
+        void SyncTerrainPropPalette(bool force = false);
+        void RebuildTerrainPropRows();
         void LayoutTerrainSections();
         void QueueSelectedRiverAppearance(int channel, float value);
         float LayoutOceanSubsections(float top, float width, bool visible);
         std::vector<wi::gui::Widget*> TerrainVegetationWidgets(int group);
-        std::array<SceneInspectorButton, 15> terrainSectionHeaders_;
-        std::array<bool, 15> terrainSectionExpanded_ = {};
+        std::array<SceneInspectorButton, 16> terrainSectionHeaders_;
+        std::array<bool, 16> terrainSectionExpanded_ = {};
         bool terrainSectionsCreated_ = false;
         // The selected-river Inspector has its own disclosure state; the Terrain
         // workspace's persisted tool layout must not silently collapse it.

@@ -114,6 +114,17 @@ namespace renegade::bridge
 #endif
     }
 
+    bool ComputePayloadSha256(const std::vector<std::uint8_t>& payload,
+        std::string& digest, std::string& error)
+    {
+#ifdef _WIN32
+        return Sha256(payload, digest, error);
+#else
+        error = "Terrain prop content addressing requires Windows SHA-256 support.";
+        return false;
+#endif
+    }
+
     bool BuildResourcePayloadCacheName(
         const std::string& prefix,
         const StableId& assetId,

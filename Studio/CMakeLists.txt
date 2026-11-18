@@ -452,3 +452,5 @@ add_custom_command(TARGET RenegadeStudio POST_BUILD
 
 # Shared readable modal viewport and pinned action footer.
 target_sources(RenegadeStudio PRIVATE src/StudioModalWindow.cpp src/StudioModalWindow.h src/StudioNumericControl.h src/StudioNumericControl.cpp)
+
+target_sources(RenegadeStudio PRIVATE src/TerrainPropPalette.cpp)

@@ -3,6 +3,8 @@
 #include <algorithm>
 namespace renegade::bridge {
 wi::ecs::Entity SelectionService::Resolve(wi::ecs::Entity e) const noexcept {
+    const auto* metadata = scene_ ? scene_->metadatas.GetComponent(e) : nullptr;
+    if (metadata && metadata->runtimeProjectionOnly) return wi::ecs::INVALID_ENTITY;
     const auto root=scene_?ParticleEffectRoot(*scene_,e):wi::ecs::INVALID_ENTITY;
     return root==wi::ecs::INVALID_ENTITY?e:root;
 }

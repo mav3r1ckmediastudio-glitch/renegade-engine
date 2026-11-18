@@ -79,6 +79,8 @@ namespace renegade::bridge
         virtual ~ICommand() = default;
         virtual bool Execute() = 0;
         virtual void Undo() = 0;
+        // External authoring transactions can fail without advancing history.
+        virtual bool TryUndo() { Undo(); return true; }
     };
 
     // Some creator-owned authoring state deliberately lives outside WISCENE.

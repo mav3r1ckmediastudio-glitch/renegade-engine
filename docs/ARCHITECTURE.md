@@ -2408,3 +2408,30 @@ from authored render settings and Runtime. Native diagnostic lifecycle resets
 restore that preference; path tracing temporarily suspends it. Dedicated
 coplanar overlay PSOs are compiled through a bounded generated-source overlay,
 with the original renderer and submodule pin preserved. See WIREFRAME_VIEW_MODE.md.
+
+## Terrain prop placement authority
+
+The P0/P1 bridge owns immutable placement revisions and a shared native projection. The archive boundary, wire formats, restore path and proposed P2/streaming interfaces are specified in [Terrain props P0/P1](TERRAIN_PROP_P1.md).
+
+
+### Terrain prop P2 authoring authority
+
+TerrainPropAuthoring owns deterministic world-lattice candidates, distance-sampled
+strokes, saved recipes/mixes, clearings/tombstones and stable override identities.
+TerrainPropTerrain captures finite native terrain grids once per explicit operation;
+workers sample copied data and do not access live scene components.
+TerrainPropEditService publishes one authoring command at the existing scene-safe
+point and updates changed projection pages with rollback. Undo/Redo retain the
+placement allocation high-water mark; content comparison permits ordinary chained
+history without accepting divergent authored state.
+
+Digest-addressed manifests/pages use schema 2 and retain v1 reads. The normal
+WISCENE layer reference remains the selected revision authority. Runtime restores
+that same persisted population; transient native resources remain excluded from
+authored scene archives. Collision, asset and texture streaming interfaces remain
+proposals for later stages. See [P2 authoring](TERRAIN_PROP_P2.md) and the latest
+HANDOFF.md receipts for validation and limits.
+
+### Transaction recovery artifact paths
+
+Project document journals write schema version 2. Same-directory staging, backup and restore basenames use the transaction token and the sorted changed-document index, rather than appending those tokens to an authored filename. This keeps digest-named terrain revision products from exceeding Windows path limits solely because of transaction suffixes. Atomic replacement, protected prior bytes and project-root containment are unchanged. Recovery accepts version 1 journals with their original filenames and preserves that version if recovery is itself interrupted; version 2 recovery validates the exact indexed sibling paths. This is bounded artifact naming, not unrestricted long-path support for arbitrary project roots.
