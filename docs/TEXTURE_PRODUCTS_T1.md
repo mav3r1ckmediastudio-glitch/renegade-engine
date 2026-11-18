@@ -60,5 +60,36 @@ DDS passthrough, rejection of truncation and resident fallback.
 `RenegadeGovernedTextureStreamingProof` imports and reopens the governed model,
 checks resource sharing across 32 boulders, measures mip I/O and GPU residency,
 and compares GPU readbacks across reimport, relocation and package binding.
+It also saves and reopens an authored prop revision with Save As, and checks
+that dependency discovery follows the revision to the model and its texture.
 The proof requests resolutions directly and measures residency and byte
 identity. Forest performance requires representative production assets.
+
+## Measured hardware run
+
+On an RTX 4070 Ti with D3D12, 32 placements of the test boulder (scale 1–4)
+shared one mesh, material and governed texture. The test imported a 512 × 512
+TGA with known pixel values, requested a resolution and measured the resulting
+native texture. The following sample came from commit `adcab60`.
+
+| Resolution request | Native width | Resident mips | Resident mip bytes | Cumulative native worker reads |
+| --- | ---: | ---: | ---: | ---: |
+| Initial bind | 128 | 8 | 21,872 | 0 |
+| Near | 512 | 10 | 349,552 | 2 reads, 436,960 bytes |
+| Far | 128 | 8 | 21,872 | 3 reads, 458,832 bytes |
+
+Wicked uploads a replacement mip chain during each transition. The worker byte
+count therefore includes overlapping levels. The first prepare/bind took 3.05 ms
+in this warm-process sample. It read the entire 349,700-byte DDS during initial
+validation and processed the retained 1,048,594-byte source. The process working
+set rose from 565,633,024 to 566,788,096 bytes across that bind. Renderer memory
+allocation covers the scene and upload heaps, so use the native mip sizes above
+when comparing texture residency. GPU readbacks matched across project copy,
+closed-project move and package binding. Reimport changed the new texture while
+the old live binding still read its original pixels.
+
+Build Game follows each authored prop layer to its revision, placement pages and
+reusable model products. It also discovers stable material texture references in
+those models. Old scenes can contain relative paths to the Studio copy of stock
+grass. When a reserved stock path is missing, Runtime resolves the same filename
+under its own bundled Content directory.
