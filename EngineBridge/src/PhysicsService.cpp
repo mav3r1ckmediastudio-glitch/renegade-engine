@@ -1,5 +1,7 @@
+#include "renegade/bridge/TerrainPropTerrainPhysics.h"
 #include "renegade/bridge/PhysicsService.h"
 
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
 #include <algorithm>
 #include <cmath>
 
@@ -135,6 +137,8 @@ namespace renegade::bridge
         {
             return false;
         }
+        std::string collisionError;
+        if(!RequireTerrainPropDestination(scene,entity,position,1,collisionError))return false;
         wi::physics::SetPosition(*body, position);
         return true;
     }
@@ -150,6 +154,8 @@ namespace renegade::bridge
         {
             return false;
         }
+        std::string collisionError;
+        if(!RequireTerrainPropDestination(scene,entity,position,1,collisionError))return false;
         wi::physics::SetPositionAndRotation(*body, position, rotation);
         return true;
     }
@@ -366,16 +372,71 @@ namespace renegade::bridge
 
     PhysicsRayHit Raycast(
         const wi::scene::Scene& scene,
-        const wi::primitive::Ray& ray) noexcept
+        const wi::primitive::Ray& inputRay) noexcept
     {
-        const auto hit = wi::physics::Intersects(scene, ray);
+        auto ray=inputRay;
         PhysicsRayHit result;
+        const auto directionLength=std::hypot(double(ray.direction.x),
+            double(ray.direction.y),double(ray.direction.z));
+        if(!std::isfinite(directionLength)||directionLength<=0)
+        {result.queryReady=false;return result;}
+        ray.direction={float(ray.direction.x/directionLength),
+            float(ray.direction.y/directionLength),float(ray.direction.z/directionLength)};
+        TerrainPropCollisionHit prop;
+        const auto world=TerrainPropCollisionWorld::Find(scene);
+        if(!world&&TerrainPropCollisionWorld::IsRegistered(scene))
+        {result.queryReady=false;return result;}
+        if(!wi::physics::terrain_props::AreTerrainRequestsReady(scene))
+        {result.queryReady=false;return result;}
+        const auto finite=[](const XMFLOAT3& p)
+        {return std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z);};
+        if(!finite(ray.origin)||!finite(ray.direction)||!std::isfinite(ray.TMin)||
+            !std::isfinite(ray.TMax)||ray.TMin<0||ray.TMax<ray.TMin)
+        {result.queryReady=false;return result;}
+        const XMFLOAT3 from{
+            float(double(ray.origin.x)+double(ray.direction.x)*ray.TMin),
+            float(double(ray.origin.y)+double(ray.direction.y)*ray.TMin),
+            float(double(ray.origin.z)+double(ray.direction.z)*ray.TMin)};
+        const XMFLOAT3 to{
+            float(double(ray.origin.x)+double(ray.direction.x)*ray.TMax),
+            float(double(ray.origin.y)+double(ray.direction.y)*ray.TMax),
+            float(double(ray.origin.z)+double(ray.direction.z)*ray.TMax)};
+        std::string error;
+        if(world&&!world->Index()->Cast(from,to,0,prop,error))
+        {result.queryReady=false;return result;}
+        const double propDistance=prop.hit?
+            (double(prop.position.x)-ray.origin.x)*ray.direction.x+
+            (double(prop.position.y)-ray.origin.y)*ray.direction.y+
+            (double(prop.position.z)-ray.origin.z)*ray.direction.z:double(ray.TMax);
+        const auto hit = wi::physics::Intersects(scene,
+            wi::primitive::Ray(ray.origin,ray.direction,ray.TMin,
+                float(std::min(double(ray.TMax),propDistance))));
         result.entity = hit.entity;
         result.position = hit.position;
         result.localPosition = hit.position_local;
         result.normal = hit.normal;
         result.ragdollEntity = hit.humanoid_ragdoll_entity;
         result.softBodyTriangle = hit.softbody_triangleID;
+        if(prop.hit)
+        {
+            const double nx=double(hit.position.x)-ray.origin.x,
+                ny=double(hit.position.y)-ray.origin.y,nz=double(hit.position.z)-ray.origin.z;
+            const double px=double(prop.position.x)-ray.origin.x,
+                py=double(prop.position.y)-ray.origin.y,pz=double(prop.position.z)-ray.origin.z;
+            if(hit.entity==wi::ecs::INVALID_ENTITY||IsTerrainPropProjection(scene,hit.entity)||
+                px*px+py*py+pz*pz<=nx*nx+ny*ny+nz*nz)
+            {
+                result={};result.entity=world->HitAnchor(prop);
+                result.terrainPropLayer=prop.layer;result.terrainPropPlacement=prop.placement;
+                result.terrainPropProfile=prop.profile;
+                result.surface=prop.surface;result.friction=prop.friction;
+                result.position=prop.position;result.normal=prop.normal;
+                if(const auto* transform=scene.transforms.GetComponent(result.entity))
+                    XMStoreFloat3(&result.localPosition,XMVector3TransformCoord(XMLoadFloat3(&prop.position),
+                        XMMatrixInverse(nullptr,XMLoadFloat4x4(&transform->world))));
+
+            }
+        }
         return result;
     }
 }

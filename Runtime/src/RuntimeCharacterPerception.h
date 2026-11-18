@@ -1,4 +1,6 @@
+#include "renegade/bridge/TerrainPropTerrainPhysics.h"
 #pragma once
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
 
 #include "RuntimeCharacterSystem.h"
 #include "renegade/bridge/PhysicsService.h"
@@ -450,38 +452,43 @@ namespace renegade::runtime
         }
 
         inline bool LineOfSightBlocked(
-            const wi::scene::Scene& scene,
-            const wi::ecs::Entity observerRoot,
-            const XMFLOAT3& origin,
-            const XMFLOAT3& direction,
-            const float maxDistance) noexcept
+            const wi::scene::Scene& scene,const wi::ecs::Entity observerRoot,
+            const XMFLOAT3& origin,const XMFLOAT3& direction,const float maxDistance,
+            const wi::ecs::Entity targetRoot=wi::ecs::INVALID_ENTITY) noexcept
         {
-            constexpr std::uint32_t filter =
-                wi::enums::FILTER_OPAQUE |
-                wi::enums::FILTER_TRANSPARENT |
-                wi::enums::FILTER_WATER |
-                wi::enums::FILTER_TERRAIN |
-                wi::enums::FILTER_COLLIDER;
-            XMFLOAT3 rayOrigin = origin;
-            float remaining = maxDistance;
-            for (int selfSkip = 0; selfSkip < 6 && remaining > 0.05f; ++selfSkip)
+            if(!std::isfinite(maxDistance)||maxDistance<0)return true;
+            if(maxDistance<=.05f)return false;
+            const auto magnitude=std::hypot(double(direction.x),double(direction.y),double(direction.z));
+            if(!std::isfinite(magnitude)||magnitude<=0)return true;
+            const auto from=AddScaled(origin,direction,.05f),to=AddScaled(origin,direction,maxDistance);
+            std::string error;
+            if(!wi::physics::terrain_props::AreTerrainRequestsReady(scene))return true;
+            const auto world=bridge::TerrainPropCollisionWorld::Find(scene);
+            if(!world&&bridge::TerrainPropCollisionWorld::IsRegistered(scene))return true;
+            if(world)
             {
-                const wi::primitive::Ray ray(rayOrigin, direction, 0.05f, remaining);
-                const auto hit = scene.Intersects(ray, filter);
-                if (hit.entity == wi::ecs::INVALID_ENTITY)
-                    return false;
-                if (!EntityBelongsToRoot(scene, hit.entity, observerRoot))
-                    return true;
-
-                const float advance = Length(Subtract(hit.position, rayOrigin)) + 0.08f;
-                if (!(advance > 0.0f) || advance >= remaining)
-                    return false;
-                rayOrigin = AddScaled(hit.position, direction, 0.08f);
-                remaining -= advance;
+                bridge::TerrainPropCollisionHit hit;
+                if(!world->Index()->Cast(from,to,0,hit,error)||hit.hit)return true;
             }
-            // More than six self-hierarchy hits is abnormal. Fail closed rather
-            // than seeing through malformed imported geometry.
-            return remaining > 0.05f;
+            std::vector<wi::ecs::Entity> excluded{observerRoot};
+            if(targetRoot!=wi::ecs::INVALID_ENTITY)excluded.push_back(targetRoot);
+            wi::physics::terrain_props::NativeHit native;
+            if(!wi::physics::terrain_props::CastNativeScene(scene,from,to,0,~0u,excluded,false,native,error)||
+                native.entity!=wi::ecs::INVALID_ENTITY)return true;
+            constexpr std::uint32_t filter=wi::enums::FILTER_OPAQUE|wi::enums::FILTER_TRANSPARENT|
+                wi::enums::FILTER_WATER|wi::enums::FILTER_TERRAIN|wi::enums::FILTER_COLLIDER;
+            wi::vector<wi::scene::Scene::RayIntersectionResult> hits;
+            scene.IntersectsAll(hits,wi::primitive::Ray(origin,direction,.05f,maxDistance),filter);
+            for(const auto& hit:hits)
+            {
+                if(hit.entity==wi::ecs::INVALID_ENTITY||
+                    bridge::IsTerrainPropProjection(scene,hit.entity)||
+                    EntityBelongsToRoot(scene,hit.entity,observerRoot)||
+                    (targetRoot!=wi::ecs::INVALID_ENTITY&&EntityBelongsToRoot(scene,hit.entity,targetRoot)))
+                    continue;
+                if(!std::isfinite(hit.distance)||hit.distance>=.05f&&hit.distance<=maxDistance)return true;
+            }
+            return false;
         }
     }
 
@@ -838,7 +845,7 @@ namespace renegade::runtime
                 observer.entity,
                 observerEye,
                 direction,
-                rayMax))
+                rayMax,player.entity))
         {
             return false;
         }

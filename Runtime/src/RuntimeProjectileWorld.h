@@ -1,3 +1,4 @@
+#include "renegade/bridge/TerrainPropTerrainPhysics.h"
 #pragma once
 
 #include "RuntimeCombatDamage.h"
@@ -5,6 +6,7 @@
 #include "renegade/bridge/ProjectileSimulation.h"
 
 #include <limits>
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
 
 namespace renegade::runtime
 {
@@ -68,7 +70,7 @@ namespace renegade::runtime
     }
 
     // Scene-query slice: mesh instances (including native skinning), terrain
-    // objects and CPU scene colliders. Physics-only Jolt bodies are not covered.
+    // objects and CPU scene colliders. Native Jolt bodies and authoritative prop shapes are merged below.
     inline bridge::ProjectileQueryResult QueryProjectileSceneSegment(
         const wi::scene::Scene& scene,
         const RuntimeCharacterSystemState& characters,
@@ -90,6 +92,9 @@ namespace renegade::runtime
             return result;
         }
         const auto excluded = [&](wi::ecs::Entity entity) {
+            // Rendered foliage is visual. Gameplay collision comes from the
+            // authored capsule/convex profile, including nonresident placements.
+            if(bridge::IsTerrainPropProjection(scene,entity))return true;
             if (perception_detail::EntityBelongsToRoot(scene,entity,owner.root)) return true;
             if(owner.excludedVisualRoots)
                 for(const auto root:*owner.excludedVisualRoots)
@@ -106,6 +111,60 @@ namespace renegade::runtime
         if (length <= 0.000001f)
             return result;
         const XMFLOAT3 direction{delta.x / length, delta.y / length, delta.z / length};
+        bridge::TerrainPropCollisionHit prop;
+        const auto propWorld=bridge::TerrainPropCollisionWorld::Find(scene);
+        std::string queryError;
+        if(!wi::physics::terrain_props::AreTerrainRequestsReady(scene))
+        {result.status=ProjectileQueryStatus::Blocked;return result;}
+        if(!propWorld&&bridge::TerrainPropCollisionWorld::IsRegistered(scene))
+        {result.status=ProjectileQueryStatus::Blocked;return result;}
+        const float radius=projectile.launch.definition.grenade.enabled?
+            projectile.launch.definition.grenade.radius:0.f;
+        if(layerMask!=0&&propWorld&&!propWorld->Index()->Cast(
+            ProjectileNativeVector(from),ProjectileNativeVector(to),radius,prop,queryError))
+        {result.status=ProjectileQueryStatus::Blocked;return result;}
+        std::vector<wi::ecs::Entity> nativeExcluded{owner.root};
+        if(owner.excludedVisualRoots)nativeExcluded.insert(nativeExcluded.end(),
+            owner.excludedVisualRoots->begin(),owner.excludedVisualRoots->end());
+        wi::physics::terrain_props::NativeHit native;
+        if(!wi::physics::terrain_props::CastNativeScene(scene,
+            ProjectileNativeVector(from),ProjectileNativeVector(to),radius,
+            layerMask,nativeExcluded,false,native,queryError))
+        {result.status=ProjectileQueryStatus::Blocked;return result;}
+        const auto finish=[&](bridge::ProjectileQueryResult ordinary,wi::ecs::Entity entity)
+        {
+            if(native.entity!=wi::ecs::INVALID_ENTITY&&
+                (ordinary.status!=ProjectileQueryStatus::Hit||native.fraction<ordinary.contact.fraction))
+            {
+                ordinary={};ordinary.status=ProjectileQueryStatus::Hit;
+                ordinary.contact.fraction=native.fraction;
+                ordinary.contact.position=ProjectileBridgeVector(native.position);
+                ordinary.contact.normal=ProjectileBridgeVector(native.normal);
+                ordinary.contact.targetSubjectId=ProjectileContactSubject(scene,characters,native.entity);
+                wi::scene::Scene::RayIntersectionResult surfaceHit;surfaceHit.entity=native.entity;
+                ordinary.contact.surfaceType=ProjectileContactSurfaceType(
+                    scene,characters,surfaceHit,ordinary.contact.targetSubjectId);
+                entity=native.entity;
+            }
+            if(prop.hit&&(ordinary.status!=ProjectileQueryStatus::Hit||
+                prop.fraction<=ordinary.contact.fraction))
+            {
+                ordinary={};ordinary.status=ProjectileQueryStatus::Hit;
+                ordinary.contact.fraction=prop.fraction;
+                ordinary.contact.position=ProjectileBridgeVector(prop.position);
+                ordinary.contact.normal=ProjectileBridgeVector(prop.normal);
+                ordinary.contact.surfaceType=prop.surface;
+                ordinary.contact.terrainPropLayer=prop.layer;
+                ordinary.contact.terrainPropPlacement=prop.placement;
+                ordinary.contact.terrainPropProfile=prop.profile;
+                constexpr char hex[]="0123456789abcdef";
+                for(auto byte:prop.profile)
+                {ordinary.contact.surfaceId+=hex[byte>>4];ordinary.contact.surfaceId+=hex[byte&15];}
+                entity=propWorld->HitAnchor(prop);
+            }
+            if(hitEntity)*hitEntity=entity;
+            return ordinary;
+        };
         const wi::primitive::Ray ray(ProjectileNativeVector(from), direction, 0, length);
         constexpr std::uint32_t filter =
             wi::enums::FILTER_OPAQUE | wi::enums::FILTER_TRANSPARENT |
@@ -136,8 +195,7 @@ namespace renegade::runtime
             result.contact.surfaceId = ProjectileContactSurface(scene, surfaceHit);
             result.contact.surfaceType = ProjectileContactSurfaceType(
                 scene, characters, surfaceHit, result.contact.targetSubjectId);
-            if(hitEntity)*hitEntity=overlap.entity;
-            return result;
+            return finish(std::move(result),overlap.entity);
         }
 
         wi::vector<wi::scene::Scene::RayIntersectionResult> hits;
@@ -164,7 +222,7 @@ namespace renegade::runtime
                 nearest = &hit;
         }
         if (nearest == nullptr)
-            return result;
+            return finish(std::move(result),wi::ecs::INVALID_ENTITY);
         result.status = ProjectileQueryStatus::Hit;
         result.contact.fraction = std::clamp(nearest->distance / length, 0.0f, 1.0f);
         result.contact.position = ProjectileBridgeVector(nearest->position);
@@ -173,8 +231,7 @@ namespace renegade::runtime
         result.contact.surfaceId = ProjectileContactSurface(scene, *nearest);
         result.contact.surfaceType = ProjectileContactSurfaceType(
             scene, characters, *nearest, result.contact.targetSubjectId);
-        if(hitEntity)*hitEntity=nearest->entity;
-        return result;
+        return finish(std::move(result),nearest->entity);
     }
 
     struct ProjectileDamageResult

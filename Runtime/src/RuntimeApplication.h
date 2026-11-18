@@ -195,6 +195,7 @@ namespace renegade::runtime
         bool LoadPrimaryScreenDocument(const bridge::ScreenDocument& document,std::string& error);
         void RecordAction(const RuntimeActionResult& result);
         void SyncPlayerForScene();
+        void TickTerrainPropCollisionProof();
         void UpdatePlayerProjectiles(float dt);
         void SyncAudioForScene();
         void SyncCreatorScriptsForScene();
@@ -343,6 +344,7 @@ namespace renegade::runtime
         bool smokeExitOnComplete_ = false;
         bool paused_ = false;
         bool physicsSimulationBeforePause_ = true;
+        std::string terrainCollisionDiagnostic_;
         int exitCode_ = 0;
         std::uint64_t evidenceRevision_ = 0;
         std::uint64_t playerSceneRevision_ = 0;

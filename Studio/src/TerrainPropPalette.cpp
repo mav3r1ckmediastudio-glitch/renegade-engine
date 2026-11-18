@@ -6,6 +6,7 @@
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/ReusableAssetService.h"
 #include <algorithm>
+#include <optional>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -33,7 +34,7 @@ namespace
     {
         wi::gui::Label label;
         SceneInspectorSlider density;
-        SceneInspectorButton remove;
+        SceneInspectorButton remove, collision;
     };
     struct PropStaging
     {
@@ -50,6 +51,13 @@ namespace
         SceneInspectorButton refresh, add, saveMix, generate, paint, erase, reproject, cancel;
         SceneInspectorTextInputField mixName;
         SceneInspectorSlider seed, radius, spacing;
+        SceneInspectorComboBox collisionShape, collisionSurface;
+        std::array<SceneInspectorSlider,3> collisionCenter, collisionExtent;
+        SceneInspectorSlider collisionFriction, minScale, maxScale;
+        SceneInspectorButton collisionApply, collisionClose, collisionFocus;
+        int collisionEntry=-1;
+        std::optional<TerrainPropPlacement> collisionPreview;
+        std::function<void()> focusCollisionPreview;
         float brushRadius=8, minimumSpacing=2;
         wi::gui::Label status;
         std::vector<std::unique_ptr<PropEntryControls>> rows;
@@ -104,6 +112,38 @@ namespace
         if(index<p.rows.size()){
             auto& slider=p.rows[index]->density;slider.SetRange(0,maximum);slider.SetValue(value);slider.valueInputField.SetValue(value);
         }
+    }
+    TerrainPropCollision* SelectedCollision()
+    {
+        auto& p=Props();const auto& entries=p.draft.authoring.recipe.mix.entries;
+        if(p.collisionEntry<0||size_t(p.collisionEntry)>=entries.size())return nullptr;
+        const auto id=entries[p.collisionEntry].profileId;
+        for(auto& profile:p.draft.profiles)if(profile.id==id)return &profile.collision;
+        return nullptr;
+    }
+    std::vector<wi::gui::Widget*> CollisionWidgets()
+    {
+        auto& p=Props();
+        return {&p.collisionShape,&p.collisionCenter[0],&p.collisionCenter[1],&p.collisionCenter[2],
+            &p.collisionExtent[0],&p.collisionExtent[1],&p.collisionExtent[2],&p.collisionFriction,
+            &p.collisionSurface,&p.minScale,&p.maxScale,&p.collisionFocus,&p.collisionApply,&p.collisionClose};
+    }
+    void SyncCollisionControls()
+    {
+        auto& p=Props();const auto* collision=SelectedCollision();if(!collision)return;
+        p.collisionShape.SetSelectedWithoutCallback(int(collision->shape));
+        p.collisionSurface.SetSelectedWithoutCallback(int(collision->surface));
+        const std::array<float,3> center{collision->center.x,collision->center.y,collision->center.z};
+        const std::array<float,3> extent{collision->halfExtents.x,collision->halfExtents.y,collision->halfExtents.z};
+        for(size_t i=0;i<3;++i)
+        {
+            SetCanonicalSetting(p.collisionCenter[i],-100,100,center[i]);
+            SetCanonicalSetting(p.collisionExtent[i],.01f,100,extent[i]);
+        }
+        SetCanonicalSetting(p.collisionFriction,0,1,collision->friction);
+        const auto& entry=p.draft.authoring.recipe.mix.entries[p.collisionEntry];
+        SetCanonicalSetting(p.minScale,.01f,20,entry.minScale);
+        SetCanonicalSetting(p.maxScale,.01f,20,entry.maxScale);
     }
     TerrainPropProfileId ProfileId(const StableId& id)
     {
@@ -163,13 +203,101 @@ void StudioRenderPath::CreateTerrainPropControls()
         auto& s=Props();if(s.staging)s.staging->cancelled=true;s.mutation.Cancel();s.armed=s.stroke=false;s.path.clear();s.pending=-2;
         s.paint.SetText("PAINT");s.erase.SetText("ERASE");s.status.SetText("Cancelled. Previous display retained.");
     });
+    p.collisionShape.Create("Terrain prop collision shape");
+    p.collisionShape.AddItem("NONE // BUSHES / PEBBLES");
+    p.collisionShape.AddItem("TRUNK CAPSULE // NO CANOPY");
+    p.collisionShape.AddItem("ROCK / BOULDER // CONVEX BOX");
+    p.collisionShape.SetTooltip("Choose collision deliberately. Shape dimensions are local metres before placement scale.");
+    p.collisionShape.OnSelect([](const wi::gui::EventArgs& a){
+        auto* c=SelectedCollision();if(!c||a.iValue<0||a.iValue>2)return;
+        const auto shape=TerrainPropShape(a.iValue);
+        if(c->shape!=shape)
+        {
+            c->shape=shape;
+            if(shape==TerrainPropShape::TrunkCapsule)
+            {c->center={0,1.75f,0};c->halfExtents={.25f,1.5f,.25f};}
+            if(shape==TerrainPropShape::BoulderBox)
+            {c->center={0,.5f,0};c->halfExtents={.5f,.5f,.5f};}
+        }
+        SyncCollisionControls();
+    });inspectorPanel_.AddWidget(&p.collisionShape);
+    for(size_t axis=0;axis<3;++axis)
+    {
+        const std::string letter(1,"XYZ"[axis]);
+        auto center=[axis](float value){
+            auto* c=SelectedCollision();if(!c)return;
+            const float old=axis==0?c->center.x:axis==1?c->center.y:c->center.z;
+            value=CanonicalSetting(value,-100,100,old);
+            if(axis==0)c->center.x=value;else if(axis==1)c->center.y=value;else c->center.z=value;
+            SetCanonicalSetting(Props().collisionCenter[axis],-100,100,value);
+        };
+        auto extent=[axis](float value){
+            auto* c=SelectedCollision();if(!c)return;
+            const float old=axis==0?c->halfExtents.x:axis==1?c->halfExtents.y:c->halfExtents.z;
+            value=CanonicalSetting(value,.01f,100,old);
+            if(axis==0)c->halfExtents.x=value;else if(axis==1)c->halfExtents.y=value;else c->halfExtents.z=value;
+            SetCanonicalSetting(Props().collisionExtent[axis],.01f,100,value);
+        };
+        slider(p.collisionCenter[axis],-100,100,0,("Prop collision center "+letter).c_str(),
+            ("CENTER "+letter+" (m)").c_str(),center);
+        slider(p.collisionExtent[axis],.01f,100,1,("Prop collision extent "+letter).c_str(),
+            ("HALF EXTENT "+letter+" (m)").c_str(),extent);
+        p.collisionExtent[axis].SetTooltip("Capsule: X = trunk radius, Y = half straight height; Z ignored. Box: local half extents. Placement scale applies uniformly.");
+    }
+    slider(p.collisionFriction,0,1,.5f,"Terrain prop friction","FRICTION",[](float value){
+        auto* c=SelectedCollision();if(!c)return;
+        c->friction=CanonicalSetting(value,0,1,c->friction);
+        SetCanonicalSetting(Props().collisionFriction,0,1,c->friction);
+    });
+    p.collisionSurface.Create("Terrain prop impact surface");
+    p.collisionSurface.AddItem("AUTO // TRUNK WOOD / ROCK STONE");
+    for(int i=1;i<=int(ImpactSurfaceType::Character);++i)p.collisionSurface.AddItem(ImpactSurfaceTypeName(ImpactSurfaceType(i)));
+    p.collisionSurface.OnSelect([](const wi::gui::EventArgs& a){
+        if(auto* c=SelectedCollision();c&&a.iValue>=0&&a.iValue<=int(ImpactSurfaceType::Character))
+            c->surface=ImpactSurfaceType(a.iValue);
+    });inspectorPanel_.AddWidget(&p.collisionSurface);
+    auto scale=[](bool minimum,float value){
+        auto& p=Props();if(!SelectedCollision())return;
+        auto& entry=p.draft.authoring.recipe.mix.entries[p.collisionEntry];
+        value=CanonicalSetting(value,.01f,20,minimum?entry.minScale:entry.maxScale);
+        if(minimum){entry.minScale=value;entry.maxScale=std::max(entry.maxScale,value);}
+        else{entry.maxScale=value;entry.minScale=std::min(entry.minScale,value);}
+        SetCanonicalSetting(p.minScale,.01f,20,entry.minScale);
+        SetCanonicalSetting(p.maxScale,.01f,20,entry.maxScale);
+    };
+    slider(p.minScale,.01f,20,1,"Terrain prop minimum scale","MINIMUM SCALE",[scale](float v){scale(true,v);});
+    slider(p.maxScale,.01f,20,1,"Terrain prop maximum scale","MAXIMUM SCALE",[scale](float v){scale(false,v);});
+    p.maxScale.SetTooltip("Uniform scale affects visual geometry and collision together. Generate or paint applies this range to new/regenerated candidates.");
+    p.focusCollisionPreview=[this]{
+            auto& p=Props();const auto* c=SelectedCollision();
+            if(!c||!p.collisionPreview||!camera){p.status.SetText("Paint or generate a placement to preview this profile.");return;}
+            const auto& placement=*p.collisionPreview;
+            const auto world=XMMatrixScaling(placement.scale,placement.scale,placement.scale)*
+                XMMatrixRotationY(placement.yawRadians)*XMMatrixTranslation(
+                    placement.position[0],placement.position[1],placement.position[2]);
+            XMFLOAT3 center;XMStoreFloat3(&center,XMVector3TransformCoord(XMLoadFloat3(&c->center),world));
+            const float distance=std::max(3.f,placement.scale*std::max({
+                c->halfExtents.x,c->halfExtents.y,c->halfExtents.z})*3.f);
+            const auto view=XMMatrixLookAtLH(XMLoadFloat3(&center)+XMVectorSet(distance,distance*.5f,-distance,0),
+                XMLoadFloat3(&center),XMVectorSet(0,1,0,0));
+            editorCameraTransform_.ClearTransform();editorCameraTransform_.MatrixTransform(XMMatrixInverse(nullptr,view));
+            editorCameraTransform_.UpdateTransform();camera->TransformCamera(editorCameraTransform_);camera->UpdateCamera();
+    };
+    button(p.collisionFocus,"Focus terrain collision preview","FOCUS COLLISION PREVIEW",
+        "Frame the first placement of this model. Orange wireframe shows the staged collision shape.",
+        [](const wi::gui::EventArgs&){auto& p=Props();if(p.focusCollisionPreview)p.focusCollisionPreview();});
+    button(p.collisionApply,"Apply terrain prop collision","APPLY COLLISION SETTINGS","Update collision on existing placements as one Undo operation. Generate applies the scale range.",
+        [](const wi::gui::EventArgs&){Props().pending=-3;});
+    button(p.collisionClose,"Close terrain prop collision","CLOSE COLLISION SETTINGS","Close these advanced settings. Draft settings remain staged until an Apply.",
+        [](const wi::gui::EventArgs&){Props().collisionEntry=-1;Props().rebuild=true;});
+    for(auto* widget:CollisionWidgets())widget->SetVisible(false);
     p.status.Create("Terrain props progress");p.status.SetText("Add models, set density, then Generate Apply or Paint.");
     p.status.SetWrapEnabled(true);StyleLabel(p.status);inspectorPanel_.AddWidget(&p.status);
 }
 void StudioRenderPath::RebuildTerrainPropRows()
 {
     auto& p=Props();
-    for(auto& row:p.rows){inspectorPanel_.RemoveWidget(&row->label);inspectorPanel_.RemoveWidget(&row->density);inspectorPanel_.RemoveWidget(&row->remove);}
+    for(auto& row:p.rows){inspectorPanel_.RemoveWidget(&row->label);inspectorPanel_.RemoveWidget(&row->density);inspectorPanel_.RemoveWidget(&row->remove);inspectorPanel_.RemoveWidget(&row->collision);}
     p.rows.clear();
     const auto& entries=p.draft.authoring.recipe.mix.entries;
     for(size_t i=0;i<entries.size();++i)
@@ -185,11 +313,17 @@ void StudioRenderPath::RebuildTerrainPropRows()
         row->density.SetTooltip("Linked slider and numeric entry. Density is independent for each model.");
         auto density=[i,maximum](float v){CommitDensity(i,maximum,v);};
         row->density.OnValuePreview(density);row->density.OnValueCommitted(density);
+        row->collision.Create("Terrain prop collision settings "+std::to_string(i));
+        row->collision.SetText(p.collisionEntry==int(i)?"COLLISION SETTINGS [OPEN]":"COLLISION / SCALE...");
+        row->collision.SetTooltip("Advanced per-model collision profile and uniform scale range.");
+        row->collision.OnClick([i](const wi::gui::EventArgs&){
+            auto& p=Props();p.collisionEntry=p.collisionEntry==int(i)?-1:int(i);p.rebuild=true;
+        });
         row->remove.Create("Remove terrain prop entry "+std::to_string(i));row->remove.SetText("REMOVE FROM MIX");
         row->remove.OnClick([i](const wi::gui::EventArgs&){
-            auto& s=Props();auto& e=s.draft.authoring.recipe.mix.entries;if(i<e.size()){e.erase(e.begin()+i);s.rebuild=true;}
+            auto& s=Props();auto& e=s.draft.authoring.recipe.mix.entries;if(i<e.size()){e.erase(e.begin()+i);s.collisionEntry=-1;s.rebuild=true;}
         });
-        inspectorPanel_.AddWidget(&row->label);inspectorPanel_.AddWidget(&row->density);inspectorPanel_.AddWidget(&row->remove);
+        inspectorPanel_.AddWidget(&row->label);inspectorPanel_.AddWidget(&row->density);inspectorPanel_.AddWidget(&row->remove);inspectorPanel_.AddWidget(&row->collision);
         p.rows.push_back(std::move(row));
     }
     p.mixes.ClearItems();p.mixes.AddItem("SAVED MIX...");
@@ -197,13 +331,29 @@ void StudioRenderPath::RebuildTerrainPropRows()
     p.mixes.SetSelectedWithoutCallback(0);
     p.seed.SetValue(float(p.draft.authoring.recipe.seed));
     if(!entries.empty()){p.minimumSpacing=entries.front().minSpacing;p.spacing.SetValue(p.minimumSpacing);}
+    p.collisionPreview.reset();
+    if(SelectedCollision())
+    {
+        const auto profile=p.draft.authoring.recipe.mix.entries[p.collisionEntry].profileId;
+        for(const auto& page:p.draft.pages)
+        {
+            for(const auto& placement:page.placements)
+                if(page.profiles[placement.profileIndex]==profile){p.collisionPreview=placement;break;}
+            if(p.collisionPreview)break;
+        }
+    }
+    SyncCollisionControls();
     p.rebuild=false;QueueInspectorRefresh();
 }
 std::vector<wi::gui::Widget*> StudioRenderPath::TerrainPropWidgets()
 {
     auto& p=Props();if(!p.created)return {};
     std::vector<wi::gui::Widget*> rows{&p.picker,&p.refresh,&p.add,&p.mixes,&p.mixName,&p.saveMix,&p.seed,&p.spacing};
-    for(auto& e:p.rows)rows.insert(rows.end(),{&e->label,&e->density,&e->remove});
+    for(auto& e:p.rows)rows.insert(rows.end(),{&e->label,&e->density,&e->collision,&e->remove});
+    if(SelectedCollision())
+    {
+        const auto widgets=CollisionWidgets();rows.insert(rows.end(),widgets.begin(),widgets.end());
+    }
     rows.insert(rows.end(),{&p.radius,&p.generate,&p.paint,&p.erase,&p.reproject,&p.cancel,&p.status});return rows;
 }
 void StudioRenderPath::RefreshTerrainPropControls()
@@ -212,6 +362,7 @@ void StudioRenderPath::RefreshTerrainPropControls()
     bool enabled=session_ && session_->Projects().HasProject() && session_->Scenes().GetScene().terrains.GetCount()==1 &&
         p.service && session_->Scenes().GetScene().transforms.Contains(p.owner);
     const bool busy=p.staging || p.mutation.IsPending();
+    if(!SelectedCollision())for(auto* widget:CollisionWidgets())widget->SetVisible(false);
     for(auto* w:TerrainPropWidgets())w->SetEnabled(enabled&&!busy);
     p.status.SetEnabled(true);p.cancel.SetEnabled(enabled);
     p.refresh.SetEnabled(session_ && session_->Projects().HasProject() && session_->Scenes().GetScene().terrains.GetCount()==1 && !busy);
@@ -227,7 +378,7 @@ void StudioRenderPath::SyncTerrainPropPalette(bool force)
         p.lifecycleRevision==session_->Scenes().Revision();
     if(!sameDocument && (p.service || !p.services.empty())){
         if(p.staging)p.staging->cancelled=true;p.mutation.Cancel();p.armed=p.stroke=false;p.pending=-2;p.path.clear();
-        p.service.reset();p.services.clear();p.owner=wi::ecs::INVALID_ENTITY;p.revision.clear();p.reconcileRevision=UINT64_MAX;p.ownerPresentLast=true;
+        p.service.reset();p.services.clear();p.owner=wi::ecs::INVALID_ENTITY;p.revision.clear();p.collisionEntry=-1;p.reconcileRevision=UINT64_MAX;p.ownerPresentLast=true;
     }
     if(!hasProject)return;
     auto& scene=session_->Scenes().GetScene();const auto& project=session_->Projects().CurrentProject();
@@ -406,6 +557,26 @@ void StudioRenderPath::TickTerrainProps()
     }
     if(!terrainWorkspaceActive_){p.armed=false;if(p.stroke){p.stroke=false;p.path.clear();}}
     RefreshTerrainPropControls();
+    if(terrainWorkspaceActive_&&terrainSectionExpanded_[15]&&p.collisionPreview)
+        if(const auto* c=SelectedCollision();c&&c->shape!=TerrainPropShape::None)
+        {
+            const auto& placement=*p.collisionPreview;
+            const auto world=XMMatrixScaling(placement.scale,placement.scale,placement.scale)*
+                XMMatrixRotationY(placement.yawRadians)*XMMatrixTranslation(
+                    placement.position[0],placement.position[1],placement.position[2]);
+            const XMFLOAT4 orange{1,.42f,.06f,1};
+            if(c->shape==TerrainPropShape::TrunkCapsule)
+            {
+                XMFLOAT3 center;XMStoreFloat3(&center,XMVector3TransformCoord(XMLoadFloat3(&c->center),world));
+                const float radius=c->halfExtents.x*placement.scale;
+                const float height=(c->halfExtents.y+c->halfExtents.x)*placement.scale;
+                wi::renderer::DrawCapsule(wi::primitive::Capsule(
+                    XMFLOAT3{center.x,center.y-height,center.z},
+                    XMFLOAT3{center.x,center.y+height,center.z},radius),orange,false);
+            }
+            else wi::renderer::DrawBox(XMMatrixScaling(c->halfExtents.x,c->halfExtents.y,c->halfExtents.z)*
+                XMMatrixTranslation(c->center.x,c->center.y,c->center.z)*world,orange,false);
+        }
 }
 bool StudioRenderPath::HandleTerrainProps(const XMFLOAT4& pointer)
 {
@@ -503,8 +674,15 @@ void StudioRenderPath::TickTerrainPropProof()
                 auto& s=session_->Scenes().GetScene();
                 if(!s.weathers.GetCount())(void)bridge::CreateEnvironment(s,WeatherState{});
                 if(!s.terrains.GetCount()){
-                    TerrainState terrain;terrain.visibleChunkRadius=1;terrain.physicsChunkRadius=2;
+                    TerrainState terrain;terrain.visibleChunkRadius=std::getenv("RENEGADE_P3_AUTHORING_PROOF")?4:1;terrain.physicsChunkRadius=2;
                     terrain.minimumHeight=-1;terrain.maximumHeight=2;(void)bridge::CreateTerrain(s,terrain,"P2 Review Terrain");
+                }
+                if(std::getenv("RENEGADE_P3_AUTHORING_PROOF")&&
+                    bridge::ResolvePlayerStart(s).resolution==bridge::PlayerStartResolution::Missing)
+                {
+                    bridge::TransformState start;start.translation={0,30,0};
+                    bridge::CreatePlayerStartCommand player(s,start);
+                    if(!player.Execute())throw std::runtime_error("P3 Player Start fixture creation failed");
                 }
                 auto& light=s.lights.Create(wi::ecs::CreateEntity());light.SetType(wi::scene::LightComponent::DIRECTIONAL);light.intensity=3;
                 editorCameraTransform_.ClearTransform();
@@ -523,6 +701,8 @@ void StudioRenderPath::TickTerrainPropProof()
             if(baselineIntervals.size()<120){baselineIntervals.push_back(intervalMs);return;}
             reportFrames(baselineIntervals,"baseline");
             require(p.choices.size()>=3,"Fixture needs tree, bush, boulder registered by P1 SliceProof");
+            if(std::getenv("RENEGADE_P3_AUTHORING_PROOF"))
+            {p.draft.pages.clear();p.draft.authoring={};}
             p.draft.authoring.recipe.candidateStep=2;p.draft.authoring.recipe.seed=3926;
             p.draft.authoring.recipe.mix.name="P2 woodland";p.draft.authoring.recipe.mix.entries.clear();
             for(size_t i=0;i<3;++i){
@@ -530,7 +710,9 @@ void StudioRenderPath::TickTerrainPropProof()
                 auto existing=std::find_if(p.draft.profiles.begin(),p.draft.profiles.end(),[&](const auto& p){return p.modelAssetId==choice.first;});
                 if(existing!=p.draft.profiles.end())profile=*existing;
                 if(std::none_of(p.draft.profiles.begin(),p.draft.profiles.end(),[&](const auto& p){return p.id==profile.id;}))p.draft.profiles.push_back(profile);
-                TerrainPropMixEntry entry;entry.profileId=profile.id;entry.densityPerSquareMetre=.01f;entry.minSpacing=2;
+                TerrainPropMixEntry entry;entry.profileId=profile.id;entry.densityPerSquareMetre=std::getenv("RENEGADE_P3_AUTHORING_PROOF")?.001f:.01f;entry.minSpacing=2;
+                if(std::getenv("RENEGADE_P3_AUTHORING_PROOF")&&profile.collision.shape==TerrainPropShape::BoulderBox)
+                {entry.minScale=1;entry.maxScale=4;}
                 p.draft.authoring.recipe.mix.entries.push_back(entry);
             }
             p.draft.authoring.savedMixes.push_back(p.draft.authoring.recipe.mix);p.rebuild=true;
@@ -618,6 +800,20 @@ void StudioRenderPath::TickTerrainPropProof()
                 DirectX::XMVectorSet(0,0,0,1),DirectX::XMVectorSet(0,1,0,0));
             editorCameraTransform_.MatrixTransform(DirectX::XMMatrixInverse(nullptr,view));
             editorCameraTransform_.UpdateTransform();camera->TransformCamera(editorCameraTransform_);camera->UpdateCamera();
+            if(std::getenv("RENEGADE_P3_AUTHORING_PROOF"))
+            {
+                for(size_t i=0;i<p.draft.authoring.recipe.mix.entries.size();++i)
+                {
+                    const auto id=p.draft.authoring.recipe.mix.entries[i].profileId;
+                    const auto profile=std::find_if(p.draft.profiles.begin(),p.draft.profiles.end(),
+                        [&](const auto& value){return value.id==id;});
+                    if(profile!=p.draft.profiles.end()&&profile->collision.shape==TerrainPropShape::BoulderBox)
+                    {p.collisionEntry=int(i);p.rebuild=true;break;}
+                }
+                RebuildTerrainPropRows();
+                if(p.focusCollisionPreview)p.focusCollisionPreview();
+                log("COLLISION_PREVIEW_FOCUS_PASS");
+            }
             RefreshInspector();RefreshStatus();ResizeLayout();
             log("SCRIPTED_STUDIO_PROOF_PASS placements="+std::to_string(count(p.draft))+" project="+project.descriptorPath);
             stage=20;

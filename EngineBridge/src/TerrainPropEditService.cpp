@@ -1,5 +1,6 @@
 #include "renegade/bridge/TerrainPropEditService.h"
 #include "renegade/bridge/ReusableAssetService.h"
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
 #include <algorithm>
 #include <map>
 
@@ -101,6 +102,14 @@ namespace renegade::bridge
         error_.clear();
         if(!scene_.transforms.Contains(owner_))
         {
+            if (!knownLayer_.empty() && (projection_ || !projectionRevision_.empty()))
+                if (auto world=TerrainPropCollisionWorld::Find(scene_))
+                {
+                    TerrainPropDocument empty;empty.layerId=knownLayer_;
+                    auto pending=world->Stage(empty,error);
+                    if (!pending) return false;
+                    world->Commit(*pending);
+                }
             // The UI retains this service through same-document deletion so
             // Undo can restore its authored owner and immutable revision.
             projection_.reset();
@@ -140,7 +149,11 @@ namespace renegade::bridge
                 m.string_values.get(LayerKey)==doc.layerId)
                 old.push_back(scene_.metadatas.GetEntity(i));
         }
-        auto replacement=std::make_unique<TerrainPropProjection>(scene_);
+        auto collisionWorld=TerrainPropCollisionWorld::Find(scene_);
+        auto collisionEdit=collisionWorld?collisionWorld->Stage(doc,error):nullptr;
+        if(collisionWorld&&!collisionEdit)return false;
+        auto replacement=std::make_unique<TerrainPropProjection>(scene_,
+            !collisionWorld);
         replacement->SetLayerIdentity(doc.layerId);
         for (const auto& profile:doc.profiles)
         {
@@ -153,6 +166,7 @@ namespace renegade::bridge
         projection_.reset();
         for (auto entity:old) scene_.Entity_Remove(entity,false);
         projection_=std::move(replacement);
+        if(collisionWorld)collisionWorld->Commit(*collisionEdit);
         displayed_=doc;
         projectionRevision_=Revision();
         return true;
@@ -171,6 +185,47 @@ namespace renegade::bridge
         // Validate every page before touching native projection state.
         for (const auto& page:doc.pages) if (!ValidateTerrainPropPage(page,error_)) return false;
         if (!PrepareProjection(before,error_)) return false;
+        auto collisionWorld=TerrainPropCollisionWorld::Find(scene_);
+        auto collisionEdit=collisionWorld?collisionWorld->Stage(doc,error_):nullptr;
+        if(collisionWorld&&!collisionEdit)return false;
+        bool changedCollision=false;
+        for(const auto& profile:doc.profiles)
+        {
+            const auto existing=std::find_if(before.profiles.begin(),before.profiles.end(),
+                [&](const auto& old){return old.id==profile.id;});
+            if(existing==before.profiles.end())continue;
+            if(existing->modelAssetId!=profile.modelAssetId)
+            {error_="Replace a model with a new profile identity.";return false;}
+            const auto& a=existing->collision;const auto& b=profile.collision;
+            changedCollision=changedCollision||a.shape!=b.shape||a.friction!=b.friction||a.surface!=b.surface||
+                a.center.x!=b.center.x||a.center.y!=b.center.y||a.center.z!=b.center.z||
+                a.halfExtents.x!=b.halfExtents.x||a.halfExtents.y!=b.halfExtents.y||a.halfExtents.z!=b.halfExtents.z;
+        }
+        if(changedCollision)
+        {
+            // Profile edits preserve every placement/candidate identity. Stage
+            // complete replacement objects at this same native safe point;
+            // RAII destroys only that replacement if publication fails.
+            auto replacement=std::make_unique<TerrainPropProjection>(scene_,
+                !collisionWorld);
+            replacement->SetLayerIdentity(doc.layerId);
+            for(const auto& profile:doc.profiles)
+            {
+                auto model=ReusableAssetService().PrepareModelAssetPlacement(
+                    {root_.generic_u8string(),project_,profile.modelAssetId});
+                if(!model.IsReady()){error_=model.Result().error;return false;}
+                if(!replacement->Register(profile.id,*model.PeekScene(),profile.collision,error_))return false;
+            }
+            for(const auto& page:doc.pages)if(!replacement->Place(page,error_))return false;
+            if((cancelled&&cancelled())||Revision()!=expected||
+                (collisionWorld&&!collisionWorld->CanCommit(*collisionEdit)))
+            {error_="Collision edit cancelled or stale; previous display retained.";return false;}
+            if(!PublishTerrainPropRevision(root_,project_,doc,scene_,owner_,error_,options_))return false;
+            projection_=std::move(replacement);
+            if(collisionWorld)collisionWorld->Commit(*collisionEdit);
+            highWater_=doc.nextPlacementId;displayed_=doc;projectionRevision_=Revision();
+            return true;
+        }
         bool committed=false;
         std::vector<TerrainPropProfileId> newProfiles;
         auto registrationRollback=std::shared_ptr<void>(nullptr,[&](void*)
@@ -196,7 +251,8 @@ namespace renegade::bridge
                     existing->collision.center.z!=p.collision.center.z ||
                     existing->collision.halfExtents.x!=p.collision.halfExtents.x ||
                     existing->collision.halfExtents.y!=p.collision.halfExtents.y ||
-                    existing->collision.halfExtents.z!=p.collision.halfExtents.z)
+                    existing->collision.halfExtents.z!=p.collision.halfExtents.z ||
+                    existing->collision.friction!=p.collision.friction || existing->collision.surface!=p.collision.surface)
                 {error_="Replace a model with a new profile identity.";return false;}
                 continue;
             }
@@ -214,8 +270,11 @@ namespace renegade::bridge
         // This entire method is one scene-safe operation. The staged objects
         // cannot render or enter physics before either commit or RAII rollback.
         if (!projection_->InstallPages(*pending,error_)) return false;
+        if(Revision()!=expected||(collisionWorld&&!collisionWorld->CanCommit(*collisionEdit)))
+        {error_="Collision edit became stale; restage the operation.";return false;}
         if (!PublishTerrainPropRevision(root_,project_,doc,scene_,owner_,error_,options_)) return false;
         projection_->CommitPages(*pending);
+        if(collisionWorld)collisionWorld->Commit(*collisionEdit);
         committed=true;
         highWater_=doc.nextPlacementId;
         displayed_.pages=doc.pages;

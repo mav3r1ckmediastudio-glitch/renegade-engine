@@ -1,4 +1,6 @@
 #include "renegade/bridge/TerrainPropDocument.h"
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
+#include "renegade/bridge/PhysicsService.h"
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/ModelImportCommitService.h"
 #include "renegade/bridge/ProjectService.h"
@@ -11,6 +13,7 @@
 #include <fstream>
 #include <iostream>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 
 int MeasureTerrainPropResidency(const std::filesystem::path&, wi::scene::MaterialComponent*);
@@ -27,7 +30,10 @@ namespace
     void CheckPopulation(const wi::scene::Scene& scene)
     {
         Check(scene.meshes.GetCount() == 4 && scene.materials.GetCount() == 4, "prototype resource counts");
-        Check(scene.objects.GetCount() == 128 && scene.rigidbodies.GetCount() == 64, "placement counts");
+        const auto collision=TerrainPropCollisionWorld::Find(scene);
+        Check(scene.objects.GetCount()==128&&scene.rigidbodies.GetCount()==(collision?0:64),"placement counts");
+        if(collision)Check(collision->Index()->Count()==64&&collision->Index()->ShapeCount()==2,
+            "complete authored collision index with shared shapes and no eager map-wide bodies");
         std::map<wi::ecs::Entity, size_t> uses;
         std::set<wi::ecs::Entity> materials;
         for (size_t i = 0; i < scene.objects.GetCount(); ++i)
@@ -167,8 +173,29 @@ namespace
         overflowingSeed.replace(overflowingSeed.find("987654321"), 9, "18446744073709551616");
         rejectManifest(overflowingSeed);
         rejectManifest(manifestText + "unexpected trailing data");
-        auto legacyText = manifestText.substr(0, manifestText.find("AUTHORING 1 "));
-        legacyText[7] = '1';
+        // Construct actual v1 profile rows, rather than merely relabelling
+        // v3 friction/surface fields as the older format.
+        std::istringstream currentManifest(manifestText);
+        std::string manifestLine, legacyText;
+        Check(bool(std::getline(currentManifest, manifestLine)), "legacy manifest header");
+        manifestLine[7]='1';legacyText=manifestLine+'\n';
+        for(size_t i=0;i<doc.profiles.size();++i)
+        {
+            Check(bool(std::getline(currentManifest,manifestLine)), "legacy profile row");
+            std::istringstream row(manifestLine);std::string field;
+            for(int column=0;column<9;++column)
+            {
+                Check(bool(row>>field),"legacy profile field");
+                if(column)legacyText+=' ';
+                legacyText+=field;
+            }
+            legacyText+='\n';
+        }
+        for(size_t i=0;i<doc.pages.size();++i)
+        {
+            Check(bool(std::getline(currentManifest,manifestLine)),"legacy page digest");
+            legacyText+=manifestLine+'\n';
+        }
         std::vector<std::uint8_t> legacyPageBytes;
         auto legacyPage = doc.pages[0];
         legacyPage.placements[0].candidateKey = 0;
@@ -250,7 +277,15 @@ namespace
         auto& world = runtime.GetScene();
         CheckPopulation(world);
         wi::physics::SetEnabled(true);
+        const auto collision=runtime.TerrainPropCollisions();
+        Check(collision&&collision->Update(1.f/60,{{{8,1,0},{0,0,0},1}}),
+            "runtime near collision admission");
         for (int i=0; i<3; ++i) world.Update(1.f/60);
+        Check(collision->Stats().resident<collision->Index()->Count(),
+            "distant placement bodies were eagerly allocated");
+        const auto distant=Raycast(world,wi::primitive::Ray(XMFLOAT3{16,.5f,245},XMFLOAT3{0,0,1},0,6));
+        Check(distant.IsValid()&&distant.terrainPropPlacement!=0&&
+            distant.surface==ImpactSurfaceType::Stone,"nonresident all-map gameplay ray");
         auto hit = [&](float x, float y)
         {
             wi::primitive::Ray ray(XMFLOAT3(x,y,-3), XMFLOAT3(0,0,1), 0, 6);
@@ -279,6 +314,9 @@ namespace
         world.Entity_Remove(trunkHit.entity, false);
         world.Update(1.f/60);
         Check(!hit(0,1) && hit(16,.5f), "removed trunk still collides or removal affected boulder");
+        Check(collision->Update(1.f/60,{{{8,1,0},{0,0,0},1}}),"restore authored native collision");
+        world.Update(1.f/60);
+        Check(hit(0,1),"authored collision did not recover a removed transient native body");
 
         // Exercise the pinned native LOD and impostor allocation paths in this
         // disposable runtime scene only. The authored project keeps its original models.
@@ -320,8 +358,8 @@ namespace
         Check(createStart.Execute(), "player start");
         Check(documents.Save(projects.StartupScenePath()), scenes.LastError());
         std::cout << "runtime_project=" << project.descriptorPath << std::endl;
-        std::cout << "PASS 96 placements, 128 objects, 4 mesh IDs, 4 material IDs, 64 static bodies; "
-            << "authored-only WISCENE, rollback, Studio reopen, runtime load and four Jolt rays.\n"
+        std::cout << "PASS 96 placements, 128 objects, 4 mesh IDs, 4 material IDs, 64 indexed collision placements; "
+            << "authored-only WISCENE, rollback, Studio reopen, bounded Runtime bodies and all-map/native rays.\n"
             << destination << std::endl;
     }
 }

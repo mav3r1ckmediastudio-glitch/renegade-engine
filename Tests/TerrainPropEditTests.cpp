@@ -5,6 +5,11 @@
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
 #include <Windows.h>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
+#include "renegade/bridge/ResourceAssetCacheIdentityService.h"
 #include <iostream>
 #include <set>
 #include <stdexcept>
@@ -93,6 +98,16 @@ namespace
             "late cancellation accepted");
         Check(Objects(scene)==stable && edit->Revision()==revision && commands.UndoCount()==1,
             "cancelled staging leaked");
+        int stalePolls=0;
+        const auto externallyChanged=std::string(64,'0');
+        Check(!commands.Execute(edit->MakeCommand(changed,revision,[&]{
+            if(++stalePolls==2)scene.metadatas.GetComponent(owner)->string_values.set(
+                "renegade.terrain_props.revision",externallyChanged);
+            return false;
+        })),"late authoritative revision change accepted");
+        Check(edit->Revision()==externallyChanged&&Objects(scene)==stable&&commands.UndoCount()==1,
+            "stale operation overwrote another revision or changed display/history");
+        scene.metadatas.GetComponent(owner)->string_values.set("renegade.terrain_props.revision",revision);
         Check(commands.Execute(edit->MakeCommand(changed,revision)),edit->LastError());
         Check(scene.objects.GetCount()==6 && commands.UndoCount()==2,"adjacent-cell delta");
         auto changedObjects=Objects(scene);
@@ -214,6 +229,92 @@ namespace
         scene.metadatas.GetComponent(lifecycleOwner)->string_values.set(
             "renegade.terrain_props.revision",beforeDeleteRevision);
         Check(lifecycle->Reconcile(error),error);
+        // P3 profile fitting changes collision, never placement identity.
+        Check(lifecycle->Read(current,error),error);
+        auto collisionEdit=current;
+        collisionEdit.profiles[0].collision={TerrainPropShape::BoulderBox,{0,.5f,0},{1,.5f,1},.73f,ImpactSurfaceType::Wood};
+        const auto idsBefore=current.pages;
+        const auto oldCollisionRevision=lifecycle->Revision();
+        const auto oldCollisionObjects=Objects(scene);
+        const auto collisionWorld=scenes.TerrainPropCollisions();
+        Check(collisionWorld!=nullptr,"scene-owned collision index");
+        const auto oldIndex=collisionWorld->Index();
+        lifecycle->SetTransactionOptions(options);
+        Check(!commands.Execute(lifecycle->MakeCommand(collisionEdit,oldCollisionRevision))&&
+            Objects(scene)==oldCollisionObjects&&collisionWorld->Index()==oldIndex&&
+            lifecycle->Revision()==oldCollisionRevision,"failed collision fit changed display/index/revision");
+        lifecycle->SetTransactionOptions({});
+        Check(commands.Execute(lifecycle->MakeCommand(collisionEdit,oldCollisionRevision)),lifecycle->LastError());
+        Check(scene.rigidbodies.GetCount()==0&&collisionWorld->Index()->Count()==4,
+            "Studio collision fitting allocated map-wide bodies or lost indexed shapes");
+        TerrainPropDocument fitted;
+        Check(lifecycle->Read(fitted,error)&&fitted.pages.size()==idsBefore.size()&&
+            fitted.pages[0].placements[0].id==idsBefore[0].placements[0].id&&
+            fitted.pages[0].placements[0].scale==idsBefore[0].placements[0].scale&&
+            fitted.profiles[0].id==current.profiles[0].id&&
+            fitted.profiles[0].collision.friction==.73f&&
+            fitted.profiles[0].collision.surface==ImpactSurfaceType::Wood,
+            "v3 collision fit changed placement/profile identity or lost surface settings");
+        Check(commands.Undo()&&collisionWorld->Index()->Count()==0,"collision fit Undo");
+        Check(commands.Redo()&&collisionWorld->Index()->Count()==4,"collision fit Redo");
+        auto p3Scene=fs::u8path(project.rootPath)/"Content/Scenes/P3Collision.wiscene";
+        Check(documents.Save(p3Scene.string())&&documents.Open(p3Scene.string()),scenes.LastError());
+        Check(scene.rigidbodies.GetCount()==0&&scenes.TerrainPropCollisions()->Index()->Count()==4,
+            "Studio reopen changed collision policy");
+        auto p3Runtime=std::make_unique<SceneService>();
+        Check(p3Runtime->LoadScene(p3Scene.string()),p3Runtime->LastError());
+        Check(p3Runtime->GetScene().rigidbodies.GetCount()==0&&
+            p3Runtime->TerrainPropCollisions()->Index()->Count()==4&&
+            p3Runtime->TerrainPropCollisions()->ResidentEnabled(),
+            "Runtime reopen eagerly allocated prop bodies");
+        Check(p3Runtime->TerrainPropCollisions()->Update(.016f,{{{2,1,2},{0,0,0},1}})&&
+            p3Runtime->TerrainPropCollisions()->Stats().resident==4,
+            "Runtime reopened collision did not become ready at interest");
+        p3Runtime.reset();
+
+        // Explicit legacy manifest readers retain v1/v2 defaults; v3 retains
+        // governed friction/surface without changing the placement-page schema.
+        TerrainPropDocument legacy;
+        legacy.layerId=GenerateStableId();legacy.nextPlacementId=2;
+        legacy.profiles={profile};
+        TerrainPropPage legacyPage;legacyPage.profiles={profile.id};
+        legacyPage.placements={{1,0,{0,0,0},0,1}};legacy.pages={legacyPage};
+        const auto legacyOwner=scene.Entity_CreateTransform("Legacy collision fixture");
+        Check(PublishTerrainPropRevision(fs::u8path(project.rootPath),project.projectId,
+            legacy,scene,legacyOwner,error),error);
+        const auto legacyRevision=scene.metadatas.GetComponent(legacyOwner)->string_values.get(
+            "renegade.terrain_props.revision");
+        const auto store=fs::u8path(project.rootPath)/"Content/TerrainProps/Revisions";
+        std::ifstream input(store/(legacyRevision+".rprops"));
+        std::vector<std::string> lines;std::string line;
+        while(std::getline(input,line))lines.push_back(line);
+        Check(lines.size()>=5,"legacy migration fixture");
+        for(int version:{1,2})
+        {
+            auto old=lines;
+            old[0].replace(0,8,"RPROPS "+std::to_string(version));
+            std::istringstream values(old[1]);
+            std::vector<std::string> fields;std::string value;
+            while(values>>value)fields.push_back(value);
+            Check(fields.size()==11,"v3 profile field count");
+            std::ostringstream profileText;
+            for(size_t i=0;i<9;++i)profileText<<(i?" ":"")<<fields[i];
+            old[1]=profileText.str();
+            if(version==1)old.resize(3); // header, profile, page; no AUTHORING
+            std::ostringstream content;
+            for(const auto& item:old)content<<item<<'\n';
+            const auto text=content.str();
+            std::vector<std::uint8_t> bytes(text.begin(),text.end());std::string digest;
+            Check(ComputePayloadSha256(bytes,digest,error),error);
+            {std::ofstream out(store/(digest+".rprops"),std::ios::binary);
+                out.write(text.data(),text.size());}
+            TerrainPropDocument restored;
+            Check(ReadTerrainPropRevision(fs::u8path(project.rootPath),project.projectId,digest,restored,error)&&
+                restored.profiles[0].collision.friction==.5f&&
+                restored.profiles[0].collision.surface==ImpactSurfaceType::Default&&
+                restored.pages[0].placements[0].id==1,"legacy collision defaults or placement identity");
+        }
+        std::cout<<"PASS P3 collision profile fit/rollback/Undo/Redo/save/reopen, lazy Runtime admission and v1/v2 migration\n";
         std::cout<<"PASS P2 native changed-cell projection, cancellation, failed Execute/Undo/Redo, "
             "stable IDs, high-water, stale revision, Save As/reopen\n";
     }

@@ -3,6 +3,7 @@
 #include "renegade/bridge/ImpactSurface.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -89,6 +90,10 @@ namespace renegade::bridge
         std::string targetSubjectId; // Empty for ungoverned static world geometry.
         std::string surfaceId;       // Stable material identity when available.
         ImpactSurfaceType surfaceType = ImpactSurfaceType::Default;
+        // Collision identity persists independently of transient render/body IDs.
+        std::string terrainPropLayer;
+        std::uint64_t terrainPropPlacement = 0;
+        std::array<std::uint8_t,16> terrainPropProfile{};
     };
 
     struct ProjectileQueryResult

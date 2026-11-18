@@ -2435,3 +2435,50 @@ HANDOFF.md receipts for validation and limits.
 ### Transaction recovery artifact paths
 
 Project document journals write schema version 2. Same-directory staging, backup and restore basenames use the transaction token and the sorted changed-document index, rather than appending those tokens to an authored filename. This keeps digest-named terrain revision products from exceeding Windows path limits solely because of transaction suffixes. Atomic replacement, protected prior bytes and project-root containment are unchanged. Recovery accepts version 1 journals with their original filenames and preserves that version if recovery is itself interrupted; version 2 recovery validates the exact indexed sibling paths. This is bounded artifact naming, not unrestricted long-path support for arbitrary project roots.
+
+### Terrain prop P3 collision authority
+
+TerrainPropCollisionWorld belongs to SceneService and its owner thread. Its
+immutable all-map BVH derives from authored collision profiles and placements;
+native residency is a bounded projection of that authority. Worker queries use
+captured immutable indexes. Scene replacement detaches native ownership before
+Clear. Equivalent collision revisions retain shapes and native IDs while actual
+document commits reconcile visual hit anchors.
+
+Capsules and boxes share opaque immutable Jolt shapes between indexed segment /
+swept-sphere queries and resident static bodies. Cold eviction destroys native
+IDs. Admission checks actual native capacity and live bodies, preserves an
+ordinary-body reserve and holds simulation while required collision is missing.
+Player, NPC, vehicle, sleeping support, scripted and pending-destination interests
+are independent of the rendering camera. Teleport retains source support until
+target terrain and props are ready.
+
+Build-tree generated physics, Scene and terrain adapters compose with the existing
+accepted native overlays. They reuse the pinned body lifecycle, native Character
+queries and existing terrain generation queue. The terrain pump may prepare
+requested chunks at zero simulation time; its owner-stage publication and final
+pre-physics readiness check prevent a gap from admitting movement. No second
+scene update, physics world/step or terrain generator is added. Guarded native
+anchors and opaque Renegade headers contain the upstream integration seam; neither
+gitlink nor preexisting Wicked overlay bytes change.
+
+Gameplay rays, projectiles and perception merge nearest authored prop and ordinary
+world hits, carrying stable placement/profile/layer and impact surface identity.
+Unknown state blocks. Navigation uses authored geometry with a canonical digest,
+independent of camera/residency; real geometry edits require explicit rebake.
+Yawed rock boxes use conservative AABB voxel occupancy while physical queries use
+their exact oriented shape.
+
+Manifest schema 3 adds friction and surface; v1/v2 readers retain defaults and
+placement pages remain schema 2. Collision edits participate in the existing
+publication/projection/history transaction. Asset, geometry and texture streaming
+remain later stages. See [P3 collision and queries](TERRAIN_PROP_P3.md) for native
+seams, bounds, creator workflow, Lua additions and acceptance limits.
+
+The weak scene registry and terrain-request bookkeeping have process lifetime.
+A global Runtime SceneService is destroyed after function-local statics created
+during initialization; ordinary static maps would therefore be dead when its
+controller detaches. Only the small registry storage and mutex survive process
+teardown. Detach still erases scene entries, destroys native bodies and releases
+shared shapes deterministically. A late-global native scene regression checks
+the executable exit as well as ordinary scene-unload assertions.

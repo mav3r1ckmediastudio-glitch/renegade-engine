@@ -1,3 +1,4 @@
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
 #include "renegade/bridge/TerrainPropDocument.h"
 #include "renegade/bridge/SceneService.h"
 
@@ -578,9 +579,24 @@ namespace renegade::bridge
         return props;
     }
 
+    SceneService::~SceneService()
+    {
+        ResetTerrainPropCollisions();
+        UnbindPhysicsLua(&scene_);
+    }
+
+    void SceneService::ResetTerrainPropCollisions()
+    {
+        if (terrainPropCollisions_) terrainPropCollisions_->Detach();
+        terrainPropCollisions_.reset();
+    }
+
     void SceneService::NewScene()
     {
+        ResetTerrainPropCollisions();
         scene_.Clear();
+        std::string collisionError;
+        terrainPropCollisions_ = TerrainPropCollisionWorld::Create(scene_, {}, false, collisionError);
         currentPath_.clear();
         lastError_.clear();
         ++revision_;
@@ -712,7 +728,8 @@ namespace renegade::bridge
             return false;
         }
 
-        if (!RestoreTerrainPropRevisions(*prepared.scene_, prepared.Path(), lastError_))
+        std::vector<TerrainPropDocument> collisionDocuments;
+        if (!RestoreTerrainPropRevisions(*prepared.scene_, prepared.Path(), lastError_, &collisionDocuments, false))
             return false;
 
         std::string riverNormalError;
@@ -730,8 +747,15 @@ namespace renegade::bridge
             return false;
         }
 
+        // Build the immutable collision product before replacing the live scene.
+        auto collisionWorld = TerrainPropCollisionWorld::Create(
+            scene_, std::move(collisionDocuments), true, lastError_);
+        if (!collisionWorld) return false;
+        ResetTerrainPropCollisions();
         scene_.Clear();
         scene_.Merge(*prepared.scene_);
+        terrainPropCollisions_ = std::move(collisionWorld);
+        terrainPropCollisions_->RefreshAnchors();
         for (std::size_t index = 0; index < scene_.terrains.GetCount(); ++index)
         {
             auto& terrain = scene_.terrains[index];

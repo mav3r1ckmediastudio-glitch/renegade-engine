@@ -13,6 +13,7 @@
 namespace renegade::bridge
 {
     class SceneDocumentService;
+    class TerrainPropCollisionWorld;
 
     enum class SceneEntityCategory
     {
@@ -109,10 +110,7 @@ namespace renegade::bridge
         // Application/initializer owns Lua startup order; JP01 binds scripting
         // explicitly only after that VM exists.
         SceneService() = default;
-        ~SceneService()
-        {
-            UnbindPhysicsLua(&scene_);
-        }
+        ~SceneService();
         SceneService(const SceneService&) = delete;
         SceneService& operator=(const SceneService&) = delete;
 
@@ -125,6 +123,8 @@ namespace renegade::bridge
         [[nodiscard]] wi::scene::Scene& GetScene() noexcept;
         [[nodiscard]] const wi::scene::Scene& GetScene() const noexcept;
         [[nodiscard]] std::size_t EntityCount() const;
+        [[nodiscard]] const std::shared_ptr<TerrainPropCollisionWorld>& TerrainPropCollisions() const noexcept
+        { return terrainPropCollisions_; }
         [[nodiscard]] std::vector<SceneEntity> ListEntities() const;
         [[nodiscard]] bool ContainsEntity(wi::ecs::Entity entity) const;
         // The entity carrying the scene's WeatherComponent, or INVALID_ENTITY.
@@ -151,7 +151,9 @@ namespace renegade::bridge
     private:
         friend class SceneDocumentService;
 
+        void ResetTerrainPropCollisions();
         wi::scene::Scene scene_;
+        std::shared_ptr<TerrainPropCollisionWorld> terrainPropCollisions_;
         std::string currentPath_;
         std::string lastError_;
         std::uint64_t revision_ = 0;

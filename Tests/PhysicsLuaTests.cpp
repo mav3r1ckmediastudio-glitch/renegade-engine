@@ -6,6 +6,7 @@
 
 #include "renegade/bridge/PhysicsLuaService.h"
 #include "renegade/bridge/PhysicsService.h"
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
 
 namespace
 {
@@ -126,6 +127,20 @@ int main()
         lua_close(L);
         return Fail("Lua gravity did not update Wicked serialized scene state");
     }
+
+    std::string collisionError;
+    auto collisions=renegade::bridge::TerrainPropCollisionWorld::Create(scene,{},false,collisionError);
+    if(!collisions||!RunScript(L,
+        "local ok=renegade.physics.set_terrain_interest(7,1,2,3,2)\n"
+        "jp03_interest=ok and renegade.physics.terrain_collision_state().native_capacity==65536\n"
+        "jp03_clear=renegade.physics.clear_terrain_interest(7)\n"
+        "jp03_cancel=renegade.physics.cancel_terrain_destination("+entityText+")\n")||
+        !GlobalBool(L,"jp03_interest")||!GlobalBool(L,"jp03_clear")||!GlobalBool(L,"jp03_cancel"))
+    {
+        renegade::bridge::UnbindPhysicsLua(&scene);lua_close(L);
+        return Fail("P3 isolated scripted collision interest/cancellation contract");
+    }
+    collisions->Detach();
 
     renegade::bridge::UnbindPhysicsLua(&scene);
     if (renegade::bridge::IsPhysicsLuaBound())

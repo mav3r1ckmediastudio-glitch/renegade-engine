@@ -1,6 +1,8 @@
 #pragma once
 
 #include <WickedEngine.h>
+#include <array>
+#include "renegade/bridge/ImpactSurface.h"
 
 #include "renegade/bridge/ConstraintService.h"
 #include "renegade/bridge/CharacterPhysicsService.h"
@@ -138,10 +140,16 @@ namespace renegade::bridge
         XMFLOAT3 normal = XMFLOAT3(0, 0, 0);
         wi::ecs::Entity ragdollEntity = wi::ecs::INVALID_ENTITY;
         int softBodyTriangle = -1;
+        bool queryReady = true;
+        ImpactSurfaceType surface = ImpactSurfaceType::Default;
+        float friction = 0.5f;
+        std::string terrainPropLayer;
+        std::uint64_t terrainPropPlacement = 0;
+        std::array<std::uint8_t,16> terrainPropProfile{};
 
-        [[nodiscard]] constexpr bool IsValid() const noexcept
+        [[nodiscard]] bool IsValid() const noexcept
         {
-            return entity != wi::ecs::INVALID_ENTITY;
+            return queryReady && (entity != wi::ecs::INVALID_ENTITY || terrainPropPlacement != 0);
         }
     };
 
