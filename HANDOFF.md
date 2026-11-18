@@ -923,3 +923,29 @@ Native integration composes guarded build-tree physics, Scene and terrain adapte
 - Earlier native attempts retain an incorrect capsule-centre proof assertion, pointer-valued support userdata handling, excessive proof-NPC acceleration and the shutdown crash. The fixed proof uses the pinned foot-origin convention, locked native support identity and the normal acceleration/friction convention. Failures are not green receipts.
 
 Raw attempt logs and local launch/capture/build adapters remain ignored under BUILD. Final full Debug/Release suites, both packages/process proofs, WARP, isolated renderer-overlay checks, deeper Windows-path reproduction, frozen-commit review and final creator/player capture receipts remain outstanding. These technical fixtures establish no production-asset forest performance claim. Asset, geometry and texture streaming remain later stages.
+
+
+## Terrain props P3 local validation and review candidate, 18 November 2026
+
+Product implementation is `9989b3f1599781c26d7ee5c62287919348976295`, with independent Runtime scene-transition fixture link correction `ed959f9f1aeea98e2311ffd4cd8e8183e367f089`. Final native Studio/Runtime and bridge product hashes match that validation snapshot. The publication also contains four updated source contracts, test-only native crash diagnostics and a Studio CI environment setting; exact tested working-tree source hashes are in the evidence. Obtain the final publication identity with `git log -1 --format=%H -- HANDOFF.md`. Main remains the accepted P2 merge `38196e9869fabd36c9255c64cd248d1000b68285` at final local validation.
+
+**P3 implementation candidate, not an accepted release gate.** Collision fit/friction/surface/scale authoring, bounded native collision residency, actor/destination terrain readiness, all-map queries, swept projectiles, perception and authored navigation are implemented. Asset/geometry/texture streaming and arbitrary hull cooking remain deferred. [Implementation and boundaries](docs/TERRAIN_PROP_P3.md); [validation commands, captures and limitations](docs/evidence/terrain-props-p3/README.md); [changed implementation paths](docs/evidence/terrain-props-p3/implementation-files.txt).
+
+| Local check | Observed result |
+| --- | --- |
+| Release complete unfiltered CTest | 344/344 PASS in 559.28 seconds |
+| Debug registered test set | 328/329 in the initial full run; sole unchanged 250 ms deferred-launch case passed 10/10 targeted rechecks with hash-identical fixtures on fast scratch; all 329 unique cases verified |
+| Studio and Runtime packages | Both configurations PASS; LP05 dependency and LC01 init/update/move/reopen process proofs PASS |
+| Constructor startup smoke | Debug and Release exit 0 |
+| WARP and renderer overlay | 4/4 PASS in 63.91 seconds; overlay 5.35 seconds under its unchanged 60-second timeout; final native Release registered overlay also PASS |
+| Hosted-depth native checks | Debug and Release Edit plus Release Slice exit 0 at matched checkout depth |
+| Source-contract controls | Four positives and eleven deliberately broken-source negative controls PASS |
+| Fresh native editor/player | Both inspector widths and separate exact-scene player PASS; captures inspected; normal close exits 0 |
+
+The editor proof generated 3,933 placements, erased to 3,925, verified history and persistent clearings, painted to 3,950, cancelled staging, saved/reopened 3,950 and focused the collision preview. Inspector widths 280 and 520 were inspected. The enlarged capture window is separate from the measured viewport. The player loaded the exact wide-editor scene, SHA-256 `BB2021057EF1A3C3725CA74AE91C4B561D4F0E95C7F0EDEAAB55597914EAAEC7`. Runtime SHA-256 `1FCF09EC09D9009B81DC68EE67DF6011C1990C12B2C21DB16AFDFFC12B2DB8F5`. It passed native boulder support, NPC wall contact, four pending teleport updates with source support held, destination admission and landing with 8/8 terrain chunks ready. Counts: 3,597 indexed colliding placements; 834 resident props; 917 total native allocations. No unexpected warning/error/missing-file matches; four expected collision-preparation warnings are separate.
+
+**Failure disposition.** The earlier intermittent Debug maximum-terrain access violation remains unexplained. It also occurred in an isolated run after overlapping suites had ended, so concurrency alone is not an established cause. It did not recur in the final full Debug/Release native terrain checks, registered repeat or debugger runs. Those passes are not a root-cause fix. Opt-in first-chance dump capture is verified by an intentional failing process and enabled for Studio CI; normal exception propagation/assertions/timeouts remain. Keep this risk explicit in review. The earlier editor driver's 150-second timeout did not recur in the fresh complete proofs.
+
+Earlier local harness failures from shared fixed temporary directories and overlong replacement scratch roots are retained in ignored raw logs. Current runs use separate short roots and serial configurations. The Debug receipt explicitly preserves its initial failed full run and successful targeted recheck; it does not claim a single 329/329 invocation. Native aggregate build logs/product hashes and separate test-diagnostic rebuild witnesses guard reuse of already compiled products. Three knowledge scratch arguments and the process fixture's hash-identical local execution copies are the documented environment adaptations; no test threshold was raised.
+
+Wicked remains `82557d439a41d104f559b0d3134d160b7bf6154e`; imnodes remains `eb36902c892548ef94f88f51ad7e7c9c7058a71c`. All ten preexisting generated Wicked overlay paths/bytes remain uncommitted and preserved. Technical fixtures establish no performance headroom with production woodland assets. Hosted validation and independent exact-publication/owner acceptance remain pending. No merge without owner approval.

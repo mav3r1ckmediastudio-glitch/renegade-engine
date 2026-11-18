@@ -58,6 +58,11 @@ if(RENEGADE_RIVER_MODE STREQUAL "maximum-render")
     list(APPEND PREVIEW_ARGUMENTS "${FIXTURE_SCENE}" "${RENEGADE_TERRAIN_PREVIEW_CHECKPOINT}")
 endif()
 message(STATUS "Terrain/river recovery evidence: ${RUN_OUTPUT}")
+# Optional failure diagnostics keep each disposable run separate.
+if(DEFINED ENV{RENEGADE_NATIVE_PROOF_CRASH_DUMP})
+    set(ENV{RENEGADE_NATIVE_PROOF_CRASH_DUMP}
+        "$ENV{RENEGADE_NATIVE_PROOF_CRASH_DUMP}.${RUN_NONCE}.dmp")
+endif()
 execute_process(
     COMMAND "${RENEGADE_RIVER_PROOF}" "${RUN_OUTPUT}" "${RENEGADE_RIVER_MODE}" ${PREVIEW_ARGUMENTS}
     RESULT_VARIABLE RIVER_RESULT)

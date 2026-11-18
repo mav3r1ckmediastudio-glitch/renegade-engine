@@ -49,8 +49,9 @@ require_text("${navigation_header}"
 require_text("${navigation_source}"
     "PrepareRigidBodyNavigationGeometry(scene)"
     "Jolt rigid-body navigation participation before voxelization")
-require_text("${navigation_source}"
-    "object.filterMask |= wi::enums::FILTER_NAVIGATION_MESH"
+string(REGEX REPLACE "[ \t\r\n]" "" navigation_compact "${navigation_source}")
+require_text("${navigation_compact}"
+    "object.filterMask|=wi::enums::FILTER_NAVIGATION_MESH"
     "rigid-body render geometry admitted to Wicked navigation")
 require_text("${navigation_source}"
     "mesh->BuildBVH()"
@@ -67,6 +68,12 @@ require_text("${navigation_source}"
 require_text("${navigation_source}"
     "character->Move(XMFLOAT3("
     "native Wicked character movement")
+require_text("${navigation_source}" "if(IsTerrainPropProjection(scene,entity))continue;" "prop visual meshes excluded from ordinary rigid-body discovery")
+require_text("${navigation_source}" "grid->inject_capsule(" "authored trunk footprint")
+require_text("${navigation_source}" "grid->inject_aabb(" "authored conservative rock footprint")
+require_text("${navigation_source}" "propIndex->NavigationDigest()" "geometry-based bake revision")
+require_text("${navigation_source}" "IsNavigationGridCurrent(scene," "stale authored-geometry query rejection")
+
 require_text("${navigation_workspace}"
     "CREATE TEST AGENT + TARGET"
     "creator navigation proof controls")

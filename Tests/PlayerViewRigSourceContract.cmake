@@ -72,7 +72,7 @@ file(READ "${runtime}" runtime_text)
 string(FIND "${runtime_text}" "PoseRuntimePlayerViewRig" rig_pose_pos)
 string(FIND "${runtime_text}" "UpdateRuntimePlayerViewRigPresentation" rig_presentation_pos)
 string(FIND "${runtime_text}" "UpdateRuntimePlayerViewAnimations" rig_animation_pos)
-string(FIND "${runtime_text}" "wi::Application::Update(paused_ ? 0.0f : dt);" scene_update_pos)
+string(FIND "${runtime_text}" "wi::Application::Update((paused_||!collisionReady) ? 0.0f : dt);" scene_update_pos)
 # Projectile aiming also samples the camera before physics. The rendered camera
 # must still sample the post-physics position; inspect that part of Update.
 set(camera_pos -1)

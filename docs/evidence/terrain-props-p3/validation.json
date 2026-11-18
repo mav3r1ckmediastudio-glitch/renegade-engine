@@ -1,0 +1,279 @@
+{
+  "schemaVersion": 2,
+  "status": "REVIEW_CANDIDATE",
+  "implementationCommit": "9989b3f1599781c26d7ee5c62287919348976295",
+  "validationCommit": "ed959f9f1aeea98e2311ffd4cd8e8183e367f089",
+  "baseline": "38196e9869fabd36c9255c64cd248d1000b68285",
+  "wickedCommit": "82557d439a41d104f559b0d3134d160b7bf6154e",
+  "imnodesCommit": "eb36902c892548ef94f88f51ad7e7c9c7058a71c",
+  "testedWorkingTreeInputs": {
+    "Tests/Phase6Gate2SourceContract.cmake": "e233711ac2dc66df3596014b7eb6557cfed2c18f1de627fb435ca749badca92d",
+    "Tests/CharacterAiPerceptionSourceContract.cmake": "bfab66ac23c1f1c3a407c3b2bb5e5df583f73829bfcfab9515b12844ecf4118a",
+    "Tests/Phase6NativeNavigationSourceContract.cmake": "89f27acf9744da092bbef5570e9de3eafa7e4db03cd03b25d8366cc89f9eb692",
+    "Tests/PlayerViewRigSourceContract.cmake": "cee1a700d248cad2017b3999a46e0e3decff0e43640b477ba8934f238072c37a",
+    "Tests/RiverTerrainFollowProof.cpp": "ac3f0e14753b6ea605b1f4ef4e7daf2ae764d61de36f6506d420caf3cc2f7ecd",
+    "Tests/NativeCrashCapture.h": "cdd031781ab15135eb0755fc2e26d6b833f162334dc2ca58cedbe24c1c65cd65",
+    "Tests/RunRiverDefaultRecovery.cmake": "425495c9ad98281a2ab97fabccf5a26b45594e5df70e7707637ddd79909b76d0"
+  },
+  "fullPreflight": {
+    "Debug": {
+      "status": "PASS",
+      "uniqueTestsVerified": 329,
+      "testsRegistered": 329,
+      "initialFullRunPassed": 328,
+      "initialFullRunFailed": 1,
+      "startedUtc": "2026-11-18T17:56:54.0704555Z",
+      "completedUtc": "2026-11-18T17:59:30.0480654Z",
+      "nativeAggregateBuildReused": true,
+      "testLogSha256": "1378824bef284228062cf4ee22e0d50c98a6413c39a0fd95e5058557c8f30355",
+      "testCoverage": {
+        "strategy": "unfiltered_328_passed_then_failed_case_10_passed",
+        "registeredTests": 329,
+        "initialPassed": 328,
+        "initialFailed": 1,
+        "recheckedTest": "RenegadeTestLevelRuntimeProcessTests",
+        "recheckPasses": 10,
+        "uniqueTestsVerified": 329,
+        "thresholdMilliseconds": 250,
+        "testCodeUnchanged": true,
+        "fixtureBinaryUnchanged": true,
+        "initialFullLogSha256": "1378824bef284228062cf4ee22e0d50c98a6413c39a0fd95e5058557c8f30355",
+        "recheckLogSha256": "bc486bc9c281113f2543093df45c77cbd0c36ad134c7b430c05dc01ff9268177"
+      },
+      "studio": {
+        "file": "RenegadeStudio.exe",
+        "bytes": 68647424,
+        "sha256": "ec29aaf85733e80bdfd07e18b9193af108d2a48e53a62774608ac4e956440d29"
+      },
+      "runtime": {
+        "file": "RenegadeRuntime.exe",
+        "bytes": 91452416,
+        "sha256": "5a4d05c55dead8b00ec03735204c7ae3425b7c15cb58b14154899dc429b52760"
+      },
+      "studioPackage": {
+        "file": "RenegadeStudio-Debug.zip",
+        "bytes": 304580844,
+        "sha256": "bcde97d54cb5cf8cc43c6d0f3ba802169bd2323e6a19d580011ed06507c920b8"
+      },
+      "runtimePackage": {
+        "file": "RenegadeRuntime-Debug.zip",
+        "bytes": 123560951,
+        "sha256": "cdc8fa0c534471fb611d7910148d5149030b2fb5ed0bdd791dc680b8b431a2fc"
+      },
+      "dependencyProcessRuns": 2,
+      "registryProcessRuns": 4
+    },
+    "Release": {
+      "status": "PASS",
+      "uniqueTestsVerified": 344,
+      "testsRegistered": 344,
+      "initialFullRunPassed": 344,
+      "initialFullRunFailed": 0,
+      "startedUtc": "2026-11-18T17:59:30.7447105Z",
+      "completedUtc": "2026-11-18T18:11:23.5618026Z",
+      "nativeAggregateBuildReused": true,
+      "testLogSha256": "aa763f72be1c75508e130ea1402443b890cea96e80b2a252b685c95a83e15fa4",
+      "testCoverage": {
+        "strategy": "single_unfiltered_run",
+        "passed": 344,
+        "failed": 0
+      },
+      "studio": {
+        "file": "RenegadeStudio.exe",
+        "bytes": 35708928,
+        "sha256": "1aa3a71a00fa3eab51400735751e90391c6905adc0000c4ebaf03f3c883e29b3"
+      },
+      "runtime": {
+        "file": "RenegadeRuntime.exe",
+        "bytes": 65072128,
+        "sha256": "1fcf09ec09d9009b81dc68ee67df6011c1990c12b2c21db16afdffc12b2db8f5"
+      },
+      "studioPackage": {
+        "file": "RenegadeStudio-Release.zip",
+        "bytes": 282283831,
+        "sha256": "ddec5bb6b8d95fc5eb0b44159f226b5c250ff08ccbfdc8241e0ac1ad1cf92427"
+      },
+      "runtimePackage": {
+        "file": "RenegadeRuntime-Release.zip",
+        "bytes": 118552525,
+        "sha256": "94e41be9fdcf04c78232af7b01a6c2ffce1e6a3ee636b7e16db6d77d66102f92"
+      },
+      "dependencyProcessRuns": 2,
+      "registryProcessRuns": 4
+    }
+  },
+  "startupSmoke": [
+    {
+      "configuration": "Debug",
+      "sha256": "EC29AAF85733E80BDFD07E18B9193AF108D2A48E53A62774608AC4E956440D29",
+      "source": "ed959f9f1aeea98e2311ffd4cd8e8183e367f089",
+      "noGraphicsWindowCreated": true,
+      "exit": 0
+    },
+    {
+      "configuration": "Release",
+      "sha256": "1AA3A71A00FA3EAB51400735751E90391C6905ADC0000C4EBAF03F3C883E29B3",
+      "source": "ed959f9f1aeea98e2311ffd4cd8e8183e367f089",
+      "noGraphicsWindowCreated": true,
+      "exit": 0
+    }
+  ],
+  "fastProcessFixtures": [
+    {
+      "configuration": "Debug",
+      "files": [
+        {
+          "file": "RenegadeTestLevelRuntimeProcessTests.exe",
+          "sha256": "228cd0aeeb5bec88bfbbe61d877dcc2d04ca03ae0e5ef1d1517a4805d1718dc3",
+          "bytes": 49364480
+        },
+        {
+          "file": "RenegadeTestLevelProcessFixture.exe",
+          "sha256": "2675afd0dc8ff54e1e45077d8233f1ab4a83a7e896653749205689b99d448929",
+          "bytes": 584192
+        },
+        {
+          "file": "dxcompiler.dll",
+          "sha256": "9b5e10ed756c461b4ec2c83a99f1d6ace20e97826e9c0b0e966b7b1cd6f2aec6",
+          "bytes": 17987384
+        }
+      ],
+      "assertionsUnchanged": true,
+      "launchLimitMilliseconds": 250
+    },
+    {
+      "configuration": "Release",
+      "files": [
+        {
+          "file": "RenegadeTestLevelRuntimeProcessTests.exe",
+          "sha256": "4aefa1608902ec0c64d5a7dd083fc3ca49eff58e34c2ea3e04e612a031be448d",
+          "bytes": 21244928
+        },
+        {
+          "file": "RenegadeTestLevelProcessFixture.exe",
+          "sha256": "550a24d25206c3d3d30da540be1c63687eb8c3a9233d499e222384432c5d7a7e",
+          "bytes": 28160
+        },
+        {
+          "file": "dxcompiler.dll",
+          "sha256": "9b5e10ed756c461b4ec2c83a99f1d6ace20e97826e9c0b0e966b7b1cd6f2aec6",
+          "bytes": 17987384
+        }
+      ],
+      "assertionsUnchanged": true,
+      "launchLimitMilliseconds": 250
+    }
+  ],
+  "priorIntermittentDebugFailure": {
+    "status": "UNEXPLAINED_NOT_REPRODUCED_IN_FINAL_NATIVE_RUNS",
+    "rootCauseFixed": false
+  },
+  "warp": {
+    "passed": 4,
+    "registered": 4,
+    "seconds": 63.91,
+    "overlaySeconds": 5.35,
+    "originalOverlayTimeoutSeconds": 60
+  },
+  "hostedDepth": [
+    {
+      "configuration": "Release",
+      "executable": "RenegadeTerrainPropEditTests.exe",
+      "sha256": "6F340039B41C043CF323F1C4D8D90DC7484EACEFD782EF4C01CC8045FD150EBF",
+      "rootCharacters": 75,
+      "exit": 0
+    },
+    {
+      "configuration": "Release",
+      "executable": "RenegadeTerrainPropResidencyProbe.exe",
+      "sha256": "C81FF8A7F1191138FD833F57A5F205A7EF29E7FF36D57DF6DD3A0E8B6751283E",
+      "rootCharacters": 76,
+      "exit": 0
+    },
+    {
+      "configuration": "Debug",
+      "executable": "RenegadeTerrainPropEditTests.exe",
+      "sha256": "33ABA7F3B53D0EB788FC00DE4A2FA45ED372D6D4AE5496EB92BE8572D694AAA0",
+      "rootCharacters": 75,
+      "exit": 0
+    }
+  ],
+  "captures": [
+    {
+      "file": "studio-280.png",
+      "bytes": 1702806,
+      "sha256": "d7e2a1a69573a25106c2cc3cc1cae935389e06601784ab880d8be333501e4746",
+      "visualInspection": "PASS"
+    },
+    {
+      "file": "studio-520.png",
+      "bytes": 1432159,
+      "sha256": "9b92835569ad6137333519bdc6b9134e81a38eb826276039628693b1ece19d34",
+      "visualInspection": "PASS"
+    },
+    {
+      "file": "runtime-boulder-npc.png",
+      "bytes": 514796,
+      "sha256": "1e10ad2828ec80c04c4b7bffb38fc0c0fbfcfbaacaa8604430cbe49ca719d63e",
+      "visualInspection": "PASS"
+    },
+    {
+      "file": "runtime-teleport.png",
+      "bytes": 766220,
+      "sha256": "33b833e9970fedf0517017ee0bce689bf5691eda65a77e8e9cb75377aa225897",
+      "visualInspection": "PASS"
+    }
+  ],
+  "runtime": {
+    "source": "ed959f9f1aeea98e2311ffd4cd8e8183e367f089",
+    "sceneSha256": "BB2021057EF1A3C3725CA74AE91C4B561D4F0E95C7F0EDEAAB55597914EAAEC7",
+    "placements": 3950,
+    "executableSha256": "1FCF09EC09D9009B81DC68EE67DF6011C1990C12B2C21DB16AFDFFC12B2DB8F5",
+    "exit": 0,
+    "runtimeWarningMatches": 0,
+    "expectedReadinessWarnings": 4
+  },
+  "studio": [
+    {
+      "width": 280,
+      "executableSha256": "1AA3A71A00FA3EAB51400735751E90391C6905ADC0000C4EBAF03F3C883E29B3",
+      "sceneSha256": "9E79E403174BF7EB546F1F2928F1453BF6FD11843F64C190E7D0FF7E1DDD45A7",
+      "placements": 3950,
+      "source": "ed959f9f1aeea98e2311ffd4cd8e8183e367f089",
+      "exit": 0
+    },
+    {
+      "width": 520,
+      "executableSha256": "1AA3A71A00FA3EAB51400735751E90391C6905ADC0000C4EBAF03F3C883E29B3",
+      "sceneSha256": "BB2021057EF1A3C3725CA74AE91C4B561D4F0E95C7F0EDEAAB55597914EAAEC7",
+      "placements": 3950,
+      "source": "ed959f9f1aeea98e2311ffd4cd8e8183e367f089",
+      "exit": 0
+    }
+  ],
+  "limits": [
+    "Technical fixtures establish no production-asset forest performance claim.",
+    "Navigation rock boxes use conservative AABB voxels.",
+    "Arbitrary hull cooking and asset/geometry/texture streaming remain deferred.",
+    "Earlier intermittent Debug terrain access violation requires an explicit disposition in README.",
+    "Hosted CI and independent exact-commit/owner acceptance remain pending."
+  ],
+  "ciDiagnosticMetadata": {
+    ".github/workflows/studio.yml": "aa81a62743c4ff1e252ea2237584fc846a31ff66dba1a68fafecf9be45d444b6"
+  },
+  "ciDiagnosticYamlParsed": true,
+  "crashCaptureSelfCheck": {
+    "status": "PASS",
+    "expectedExit": -1073741819,
+    "actualExit": -1073741819,
+    "dumpBytes": 40511
+  },
+  "runtimeObserved": {
+    "indexedCollisionPlacements": 3597,
+    "residentPropBodies": 834,
+    "totalNativeAllocations": 917,
+    "requiredTerrainChunks": 8,
+    "readyTerrainChunks": 8,
+    "waitingUpdates": 4
+  }
+}

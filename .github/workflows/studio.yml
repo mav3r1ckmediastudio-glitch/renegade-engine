@@ -48,6 +48,8 @@ jobs:
       # importer preview proof. Keep import/commit/reopen and PNG readback in CI;
       # retain pixel-visibility/pose-difference assertions on real owner hardware.
       RENEGADE_HOSTED_HEADLESS_GRAPHICS: "1"
+      # Test-only fault dumps travel with the existing evidence artifact.
+      RENEGADE_NATIVE_PROOF_CRASH_DUMP: "${{ github.workspace }}/artifacts/studio/ci-${{ matrix.configuration }}/native-crash"
     strategy:
       fail-fast: false
       matrix:
