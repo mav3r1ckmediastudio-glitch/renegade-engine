@@ -36,12 +36,12 @@
         {
           "path": "Studio/src/Phase5Gate4MaterialInspector.cpp",
           "needle": "objectSurfaceLabel_.SetText(\"SURFACE TYPE\");",
-          "sha256": "47b8acc6100027ddc4b5b0bdebef78b65dcaadea32a3162ec25cfb1ad08d09f3"
+          "sha256": "3af43ae1e004c60971c761ffe80d5df60d665a9c08f4de54cc6bc09a4034103f"
         },
         {
           "path": "Studio/src/Phase5Gate4MaterialInspector.cpp",
           "needle": "std::make_unique<bridge::SetObjectImpactSurfaceCommand>",
-          "sha256": "47b8acc6100027ddc4b5b0bdebef78b65dcaadea32a3162ec25cfb1ad08d09f3"
+          "sha256": "3af43ae1e004c60971c761ffe80d5df60d665a9c08f4de54cc6bc09a4034103f"
         },
         {
           "path": "docs/ARCHITECTURE.md",
