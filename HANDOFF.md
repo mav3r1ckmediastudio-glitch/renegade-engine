@@ -882,3 +882,25 @@ The first frozen Release full suite retained one assistant-knowledge timeout (34
 ### Remaining scope and next work
 
 Saved mixes are layer-local. The first palette requires one finite terrain and refuses ambiguous multiple authored layers. Legacy key-zero placements remain manual; erase clearings persist until Undo. Cross-process editing, asset reimport during active projection, arbitrary moved/exported populated projects and representative forest performance still need separate proofs. Proceed to later streaming stages only under a new scoped task. No merge without owner approval.
+
+
+## Terrain props P2 hosted-path correction, 18 November 2026
+
+Native implementation: `59c4e926b4a34e9d1523474e8e06b440ff691867`, following failed hosted PR head `a2522190ff920be4dd48be807b6d10b8f9d7bd56`. The final evidence commit also contains a reviewed architecture-document fingerprint refresh in `Tools/assistant_knowledge/workflows.json`; that exact metadata change was present in both full-preflight working trees. The C++ sources match the implementation commit. Obtain the final documentation/evidence head with `git log -1 --format=%H -- HANDOFF.md`.
+
+**Hosted failure.** Studio compiled in both configurations. The longer hosted checkout path made terrain revision transaction artifacts exceed ordinary Windows file-open limits. Release failed TerrainPropSliceProof and TerrainPropEditTests; Debug failed TerrainPropEditTests. The registered overlay passed in both hosted configurations. The original native edit binary reproduced the hosted staging failure at matched checkout depth.
+
+**Correction and source files.** `EngineBridge/src/ProjectDocumentTransaction.cpp` now uses compact indexed sibling artifacts with journal schema 2, while retaining version-one recovery and its version across an interrupted retry. `Tests/ProjectDocumentTransactionTests.cpp` exercises long digest filenames, unchanged-document filtering, validation, commit, rollback, interrupted recovery, invalid artifact indexes and legacy recovery. `docs/ARCHITECTURE.md` records this choice. The assistant's existing UTF-8/LF fingerprint for that document is refreshed without changing its Surface Type instructions or stale-evidence checks. The original transaction implementation fails the new regression; the correction passes.
+
+| Correction check | Result |
+| --- | --- |
+| Complete Release preflight | PASS; 341/341 tests, both packages and LP05/LC01 process proofs |
+| Complete Debug preflight | PASS; 326/326 tests, both packages and LP05/LC01 process proofs |
+| Matched hosted-depth native repro | Original Release edit fails; corrected Release edit/slice and Debug edit exit 0 |
+| Long-filename regression negative control | Original code fails four checks; correction passes |
+| WARP corrected C++ snapshot | 4/4 PASS in 126.62s; allocator, overlay, residency and slice |
+| Fresh editor and separate player | PASS; 1,076 placements retained, exact saved scene bytes, frame 60, exit 0; captures inspected |
+
+**Evidence and commands.** [Correction record, commands and limitations](docs/evidence/terrain-props-p2/ci-path-correction.md). All full-suite assertions and original timeouts remain. The first local correction Release attempt retained three assistant scratch-I/O timeouts; the complete subsequent run uses system-volume scratch database/output arguments for those three knowledge cases. The stale architecture evidence failure discovered on retry is retained separately; the refreshed complete 84-case workflow suite passes. Stock terrain packing used unchanged executables and hash-verified, byte-identical generated products as described in the evidence. No original packer was stopped. The Debug preflight retained the established physical-directory test adapter and nonincremental Debug linking.
+
+**Baseline and scope.** Fresh main is `db8d620f75a5219ae5a3906e2837ed2d4165c741`; Wicked remains `82557d439a41d104f559b0d3134d160b7bf6154e`, imnodes `eb36902c892548ef94f88f51ad7e7c9c7058a71c`. The ten governed configuration overlays remain uncommitted. Collision-interest, full asset/texture streaming and representative full-game forest acceptance remain deferred. Compact artifacts remove avoidable suffix growth from otherwise valid destinations; arbitrary overlong project roots are not newly supported. Hosted validation of the corrected pushed head, independent/owner acceptance and merge approval remain required. No merge is authorized.

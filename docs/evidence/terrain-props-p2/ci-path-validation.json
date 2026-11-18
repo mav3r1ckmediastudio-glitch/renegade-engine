@@ -1,0 +1,53 @@
+﻿{
+    "nativeCppImplementation":  "59c4e926b4a34e9d1523474e8e06b440ff691867",
+    "workflowEvidenceMetadata":  {
+                                     "path":  "Tools/assistant_knowledge/workflows.json",
+                                     "sha256":  "0DEB1C613A11B0FFC3869B6621472A87E13AAF989FF4CDE3E0CF09CCBBF2E9BD",
+                                     "reviewedArchitectureUtf8LfSha256":  "d05bf0c568a48c8af07dfd8d043db72c4cf0cf4f9c63fc22f95620833fb642ec"
+                                 },
+    "preflights":  [
+                       {
+                           "configuration":  "Release",
+                           "preflightSeconds":  2128.994,
+                           "studioPackageSha256":  "79c464bf382f8e31c4799feb45241e95249c6365340de820a8a0bf55b9f1afe3",
+                           "dependencyProof":  "PASS",
+                           "studioSha256":  "a56c10bffec418d44cfc9b9048099bbdeea1056291b2e0f1ab40b605e89c0e60",
+                           "assetRegistryProcessRuns":  4,
+                           "completedUtc":  "2026-11-18T00:36:56.6142389Z",
+                           "suiteSeconds":  900.32,
+                           "status":  "PASS",
+                           "runtimeSha256":  "2330a8a95564f83a660f3d7ee4961fad93be4d14b96bfbf8c2e8b6d5041c6672",
+                           "runtimePackageSha256":  "03bc5350c20f52a1643386f29d933392476afda799247a9d9f9c1dc1aec76899",
+                           "registeredTests":  341,
+                           "dependencyProcessRuns":  2,
+                           "assetRegistryProof":  "PASS"
+                       },
+                       {
+                           "configuration":  "Debug",
+                           "preflightSeconds":  7615.151,
+                           "studioPackageSha256":  "754f4ef050d4f7cf82c5dbbae129263397ee4a765eee250b67238eebe04286fe",
+                           "dependencyProof":  "PASS",
+                           "studioSha256":  "45d1453d0d41cf406b0a3d96e14b343f5e9e1a4b74de26cbffea1db0c2287696",
+                           "assetRegistryProcessRuns":  4,
+                           "completedUtc":  "2026-11-18T00:40:42.5708492Z",
+                           "suiteSeconds":  1847.07,
+                           "status":  "PASS",
+                           "runtimeSha256":  "093626d8db71884f57899bafbcc1548cbce090be6121fd9e8024f8bdfc3fed83",
+                           "runtimePackageSha256":  "8f17b498fb8c116ab12d58e7174d45e25ea9a40f4e3d9443ffc243b8e1e9afb3",
+                           "registeredTests":  326,
+                           "dependencyProcessRuns":  2,
+                           "assetRegistryProof":  "PASS"
+                       }
+                   ],
+    "nativeWorkflow":  {
+                           "playerCaptureSha256":  "6F41460E521820F697F2EFE932929D48BEAB9D0E713F34C1EB2B885B20E27302",
+                           "sceneSha256":  "9B8E8E6CA8347F2D8ABD94981E066FB1197B15357F1B1E5339B1CB12EF31A255",
+                           "editorCaptureSha256":  "6706D61CBC81F03497A2770FE703DE1FBF2606E8FB86CC696C776E55A93E03DF",
+                           "playerExit":  0,
+                           "studioSha256":  "A56C10BFFEC418D44CFC9B9048099BBDEEA1056291B2E0F1AB40B605E89C0E60",
+                           "status":  "PASS",
+                           "runtimeSha256":  "2330A8A95564F83A660F3D7EE4961FAD93BE4D14B96BFBF8C2E8B6D5041C6672",
+                           "capturesVisuallyInspected":  true,
+                           "runtimeWarningErrorMissingMatches":  0
+                       }
+}

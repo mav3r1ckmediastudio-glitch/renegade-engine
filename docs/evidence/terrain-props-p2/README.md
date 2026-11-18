@@ -25,3 +25,7 @@ A representative forest still needs actual asset triangle/material/texture count
 The latest P2 section in [HANDOFF](../../../HANDOFF.md) is the acceptance record. Raw machine logs remain under ignored build directories. `authoring-debug.txt` records the final 59,752 pure authoring assertions; it is not a substitute for native integration or full preflight.
 
 Capture tooling and validation-directory workarounds were task-local. No streaming service, collision-interest radius, automatic cooking, eviction policy or impostor bake was added by P2.
+
+## Hosted-path correction
+
+The [18 November correction record](ci-path-correction.md) supersedes the original validation record for the Windows staging-path failure. Corrected native C++ implementation: `59c4e926b4a34e9d1523474e8e06b440ff691867`. It includes fresh complete Debug/Release preflights, hosted-depth native reproduction, legacy-journal recovery regression, refreshed assistant evidence metadata, inspected current editor/player captures and [artifact hashes](ci-path-validation.json). Hosted checks and owner merge approval remain pending.
