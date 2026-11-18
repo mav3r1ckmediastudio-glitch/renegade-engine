@@ -75,7 +75,7 @@ endforeach()
 
 foreach(token IN ITEMS
     "CaptureGameplayInput(inputMap_, dt)"
-    "wi::Application::Update(paused_ ? 0.0f : dt)"
+    "wi::Application::Update((paused_||!collisionReady) ? 0.0f : dt)"
     "wi::physics::SetSimulationEnabled(false)"
     "LoadRuntimeProjectScene"
     "LoadRuntimeProjectFlow"
@@ -86,6 +86,22 @@ foreach(token IN ITEMS
         message(FATAL_ERROR "Phase 6 Gate 2 Runtime lifecycle missing ${token}")
     endif()
 endforeach()
+
+# Pause and collision preparation share the single native frame boundary.
+string(REGEX MATCHALL "wi::Application::Update\\(" native_updates "${runtime_text}")
+list(LENGTH native_updates native_update_count)
+if(NOT native_update_count EQUAL 1)
+    message(FATAL_ERROR "Runtime must retain exactly one native Application update")
+endif()
+string(FIND "${runtime_text}" "collisionReady=!activeCollision||activeCollision->UpdateSceneInterests(" admission)
+string(FIND "${runtime_text}" "wi::Application::Update(" native_update)
+if(admission EQUAL -1 OR admission GREATER native_update)
+    message(FATAL_ERROR "Collision admission must precede the single native step")
+endif()
+string(FIND "${runtime_text}" "if (!paused_&&collisionReady)" scripts_gate)
+if(scripts_gate EQUAL -1)
+    message(FATAL_ERROR "Runtime scripts must respect pause and collision readiness")
+endif()
 
 string(FIND "${runtime_text}" "CapturePlayerInput" stale_raw_input)
 if(NOT stale_raw_input EQUAL -1)

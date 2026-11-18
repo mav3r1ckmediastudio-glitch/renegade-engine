@@ -54,6 +54,27 @@ renegade_physics_replace_once(
     "mesh->GetLODSubsetRange(physicscomponent.mesh_lod, first_subset, last_subset);"
     "mesh->GetLODSubsetRange(renegade_exact_heightfield_mesh ? 0 : physicscomponent.mesh_lod, first_subset, last_subset);")
 
+# P3 composes owner-thread static-body/query hooks with the existing wrapper.
+# The upstream source and public headers are not edited.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/EngineBridge/include/renegade/bridge/TerrainPropPhysicsAdapter.h"
+    "${CMAKE_CURRENT_LIST_DIR}/RenegadeTerrainPropPhysics.inc"
+    "${CMAKE_CURRENT_LIST_DIR}/RenegadeTerrainPropQueries.inc"
+    "${PROJECT_SOURCE_DIR}/EngineBridge/include/renegade/bridge/TerrainPropTerrainPhysics.h"
+    "${CMAKE_CURRENT_LIST_DIR}/RenegadeTerrainPropTerrainPhysics.inc")
+foreach(_p3_anchor "struct PhysicsScene" "void AddRigidBody(" "void CreateRigidBodyShape(" "cMaxBodies = 65536")
+    string(FIND "${_renegade_physics_original}" "${_p3_anchor}" _p3_found)
+    if(_p3_found EQUAL -1)
+        message(FATAL_ERROR "Pinned terrain-prop physics anchor changed: ${_p3_anchor}")
+    endif()
+endforeach()
+string(APPEND _renegade_physics_patched
+    "\n#include \"${PROJECT_SOURCE_DIR}/EngineBridge/include/renegade/bridge/TerrainPropPhysicsAdapter.h\"\n"
+    "#include \"${CMAKE_CURRENT_LIST_DIR}/RenegadeTerrainPropPhysics.inc\"\n"
+    "#include \"${CMAKE_CURRENT_LIST_DIR}/RenegadeTerrainPropQueries.inc\"\n"
+    "#include \"${PROJECT_SOURCE_DIR}/EngineBridge/include/renegade/bridge/TerrainPropTerrainPhysics.h\"\n"
+    "#include \"${CMAKE_CURRENT_LIST_DIR}/RenegadeTerrainPropTerrainPhysics.inc\"\n")
+
 set(_renegade_physics_output "${CMAKE_CURRENT_BINARY_DIR}/renegade_physics_override/wiPhysics_Jolt.cpp")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/renegade_physics_override")
 set(_renegade_physics_existing "")

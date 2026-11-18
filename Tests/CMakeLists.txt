@@ -1961,6 +1961,7 @@ if(WIN32)
     add_executable(RenegadeRuntimeSceneTransitionTests
         RuntimeSceneTransitionTests.cpp
         ../Runtime/src/RuntimeApplication.cpp
+        ../Runtime/src/TerrainPropRuntimeProof.cpp
         ../Runtime/src/RuntimeDialogue.cpp
         ../Runtime/src/RuntimeLiveDiagnostics.cpp
         ../Runtime/src/RuntimeImpactDustResource.cpp
@@ -2212,3 +2213,21 @@ add_test(NAME RenegadeTerrainPropEditTests COMMAND RenegadeTerrainPropEditTests
 set_tests_properties(RenegadeTerrainPropEditTests PROPERTIES TIMEOUT 180
     WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeTerrainPropEditTests>")
 add_dependencies(RenegadeBridgeTests RenegadeTerrainPropEditTests)
+
+add_executable(RenegadeTerrainPropPhysicsTests TerrainPropPhysicsTests.cpp)
+target_link_libraries(RenegadeTerrainPropPhysicsTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeTerrainPropPhysicsTests COMMAND RenegadeTerrainPropPhysicsTests)
+set_tests_properties(RenegadeTerrainPropPhysicsTests PROPERTIES TIMEOUT 90)
+add_dependencies(RenegadeBridgeTests RenegadeTerrainPropPhysicsTests)
+
+add_executable(RenegadeTerrainPropCollisionIndexTests TerrainPropCollisionIndexTests.cpp)
+target_link_libraries(RenegadeTerrainPropCollisionIndexTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeTerrainPropCollisionIndexTests COMMAND RenegadeTerrainPropCollisionIndexTests)
+set_tests_properties(RenegadeTerrainPropCollisionIndexTests PROPERTIES TIMEOUT 90)
+add_dependencies(RenegadeBridgeTests RenegadeTerrainPropCollisionIndexTests)
+
+add_executable(RenegadeTerrainPropCollisionWorldTests TerrainPropCollisionWorldTests.cpp)
+target_link_libraries(RenegadeTerrainPropCollisionWorldTests PRIVATE Renegade::EngineBridge)
+add_test(NAME RenegadeTerrainPropCollisionWorldTests COMMAND RenegadeTerrainPropCollisionWorldTests)
+set_tests_properties(RenegadeTerrainPropCollisionWorldTests PROPERTIES TIMEOUT 90)
+add_dependencies(RenegadeBridgeTests RenegadeTerrainPropCollisionWorldTests)

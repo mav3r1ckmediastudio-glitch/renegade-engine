@@ -1,0 +1,92 @@
+[
+  {
+    "case": "positive-Phase6Gate2SourceContract.cmake",
+    "expected": "PASS",
+    "exit": 0,
+    "result": "PASS"
+  },
+  {
+    "case": "positive-CharacterAiPerceptionSourceContract.cmake",
+    "expected": "PASS",
+    "exit": 0,
+    "result": "PASS"
+  },
+  {
+    "case": "positive-Phase6NativeNavigationSourceContract.cmake",
+    "expected": "PASS",
+    "exit": 0,
+    "result": "PASS"
+  },
+  {
+    "case": "positive-PlayerViewRigSourceContract.cmake",
+    "expected": "PASS",
+    "exit": 0,
+    "result": "PASS"
+  },
+  {
+    "case": "pause-bypass",
+    "expected": "REJECT",
+    "exit": 1,
+    "result": "PASS"
+  },
+  {
+    "case": "duplicate-native-step",
+    "expected": "REJECT",
+    "exit": 1,
+    "result": "PASS"
+  },
+  {
+    "case": "admission-unwired",
+    "expected": "REJECT",
+    "exit": 1,
+    "result": "PASS"
+  },
+  {
+    "case": "ordinary-los-unwired",
+    "expected": "REJECT",
+    "exit": 1,
+    "result": "PASS"
+  },
+  {
+    "case": "nonresident-los-unwired",
+    "expected": "REJECT",
+    "exit": 1,
+    "result": "PASS"
+  },
+  {
+    "case": "target-exclusion-removed",
+    "expected": "REJECT",
+    "exit": 1,
+    "result": "PASS"
+  },
+  {
+    "case": "body-navigation-unwired",
+    "expected": "REJECT",
+    "exit": 1,
+    "result": "PASS"
+  },
+  {
+    "case": "trunk-navigation-unwired",
+    "expected": "REJECT",
+    "exit": 1,
+    "result": "PASS"
+  },
+  {
+    "case": "stale-navigation-admitted",
+    "expected": "REJECT",
+    "exit": 1,
+    "result": "PASS"
+  },
+  {
+    "case": "view-rig-native-pause-bypass",
+    "expected": "REJECT",
+    "exit": 1,
+    "result": "PASS"
+  },
+  {
+    "case": "view-rig-pose-order-broken",
+    "expected": "REJECT",
+    "exit": 1,
+    "result": "PASS"
+  }
+]

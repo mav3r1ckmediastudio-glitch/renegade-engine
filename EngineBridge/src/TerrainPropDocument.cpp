@@ -153,7 +153,9 @@ namespace renegade::bridge
                     !ids.insert(profile.id).second || static_cast<unsigned>(c.shape) > 2 ||
                     !std::isfinite(c.center.x) || !std::isfinite(c.center.y) || !std::isfinite(c.center.z) ||
                     !std::isfinite(c.halfExtents.x) || !std::isfinite(c.halfExtents.y) || !std::isfinite(c.halfExtents.z) ||
-                    c.halfExtents.x <= 0 || c.halfExtents.y <= 0 || c.halfExtents.z <= 0)
+                    c.halfExtents.x <= 0 || c.halfExtents.y <= 0 || c.halfExtents.z <= 0 ||
+                    !std::isfinite(c.friction) || c.friction<0 || c.friction>1 ||
+                    static_cast<unsigned>(c.surface)>static_cast<unsigned>(ImpactSurfaceType::Character))
                 { error = "Invalid terrain prop profile."; return false; }
             }
 
@@ -218,7 +220,8 @@ namespace renegade::bridge
             const auto& c = profile.collision;
             content << Hex(profile.id) << ' ' << profile.modelAssetId << ' ' << static_cast<unsigned>(c.shape)
                 << ' ' << c.center.x << ' ' << c.center.y << ' ' << c.center.z
-                << ' ' << c.halfExtents.x << ' ' << c.halfExtents.y << ' ' << c.halfExtents.z << '\n';
+                << ' ' << c.halfExtents.x << ' ' << c.halfExtents.y << ' ' << c.halfExtents.z
+                << ' ' << c.friction << ' ' << static_cast<unsigned>(c.surface) << '\n';
         }
         WriteAuthoring(content, doc.authoring);
         for (const auto& page : doc.pages)
@@ -242,7 +245,8 @@ namespace renegade::bridge
             if (x.id != y.id || x.modelAssetId != y.modelAssetId || x.collision.shape != y.collision.shape ||
                 x.collision.center.x != y.collision.center.x || x.collision.center.y != y.collision.center.y ||
                 x.collision.center.z != y.collision.center.z || x.collision.halfExtents.x != y.collision.halfExtents.x ||
-                x.collision.halfExtents.y != y.collision.halfExtents.y || x.collision.halfExtents.z != y.collision.halfExtents.z) return false;
+                x.collision.halfExtents.y != y.collision.halfExtents.y || x.collision.halfExtents.z != y.collision.halfExtents.z ||
+                x.collision.friction != y.collision.friction || x.collision.surface != y.collision.surface) return false;
         }
         std::ostringstream x, y;
         x.imbue(std::locale::classic()); y.imbue(std::locale::classic());
@@ -291,13 +295,14 @@ namespace renegade::bridge
         std::ostringstream manifest;
         manifest.imbue(std::locale::classic());
         manifest << std::setprecision(std::numeric_limits<float>::max_digits10)
-            << "RPROPS 2 " << projectId << ' ' << doc.layerId << ' ' << doc.nextPlacementId << ' ' << doc.profiles.size() << ' ' << doc.pages.size() << '\n';
+            << "RPROPS 3 " << projectId << ' ' << doc.layerId << ' ' << doc.nextPlacementId << ' ' << doc.profiles.size() << ' ' << doc.pages.size() << '\n';
         for (const auto& profile : doc.profiles)
         {
             const auto& c = profile.collision;
             manifest << Hex(profile.id) << ' ' << profile.modelAssetId << ' ' << static_cast<unsigned>(c.shape)
                 << ' ' << c.center.x << ' ' << c.center.y << ' ' << c.center.z
-                << ' ' << c.halfExtents.x << ' ' << c.halfExtents.y << ' ' << c.halfExtents.z << '\n';
+                << ' ' << c.halfExtents.x << ' ' << c.halfExtents.y << ' ' << c.halfExtents.z
+                << ' ' << c.friction << ' ' << static_cast<unsigned>(c.surface) << '\n';
         }
         size_t encodedBytes = 0;
         for (const auto& page : doc.pages)
@@ -340,7 +345,7 @@ namespace renegade::bridge
         std::string magic, project;
         if (!(manifest >> magic >> version >> project >> doc.layerId) || !ReadUnsigned(manifest, doc.nextPlacementId) ||
             !(manifest >> profiles >> pages) ||
-            magic != "RPROPS" || (version != 1 && version != 2) || project != projectId || profiles > 4096 || pages > 32768)
+            magic != "RPROPS" || (version != 1 && version != 2 && version != 3) || project != projectId || profiles > 4096 || pages > 32768)
         { error = "Invalid terrain prop manifest header."; return false; }
         for (unsigned i = 0; i < profiles; ++i)
         {
@@ -351,6 +356,14 @@ namespace renegade::bridge
             if (!(manifest >> id >> profile.modelAssetId >> shape >> c.center.x >> c.center.y >> c.center.z >>
                 c.halfExtents.x >> c.halfExtents.y >> c.halfExtents.z) || shape > 2 || !IsHex(id, 32))
             { error = "Invalid terrain prop profile record."; return false; }
+            if(version>=3)
+            {
+                unsigned surface;
+                if(!(manifest>>c.friction>>surface) ||
+                    surface>static_cast<unsigned>(ImpactSurfaceType::Character))
+                {error="Invalid terrain collision surface record.";return false;}
+                c.surface=static_cast<ImpactSurfaceType>(surface);
+            }
             c.shape = static_cast<TerrainPropShape>(shape);
             for (size_t n = 0; n < profile.id.size(); ++n)
                 profile.id[n] = static_cast<std::uint8_t>(std::stoul(id.substr(n * 2, 2), nullptr, 16));
@@ -371,7 +384,7 @@ namespace renegade::bridge
             { error = "Terrain prop layer exceeds decoded page budget."; return false; }
             doc.pages.push_back(std::move(page));
         }
-        if (version == 2 && !ReadAuthoring(manifest, doc.authoring))
+        if (version >= 2 && !ReadAuthoring(manifest, doc.authoring))
         { error = "Invalid terrain prop authoring records."; return false; }
         std::string extra;
         if (manifest >> extra) { error = "Trailing terrain prop manifest data."; return false; }
@@ -407,8 +420,10 @@ namespace renegade::bridge
         return true;
     }
 
-    bool RestoreTerrainPropRevisions(wi::scene::Scene& scene, const fs::path& scenePath, std::string& error)
+    bool RestoreTerrainPropRevisions(wi::scene::Scene& scene, const fs::path& scenePath, std::string& error,
+        std::vector<TerrainPropDocument>* documents, bool createCollision)
     {
+        std::vector<TerrainPropDocument> collected;
         std::unique_ptr<wi::scene::Scene> staged;
         std::set<StableId> layers;
         for (size_t i = 0; i < scene.metadatas.GetCount(); ++i)
@@ -421,7 +436,7 @@ namespace renegade::bridge
             if (!ReadTerrainPropRevision(root, project, properties.get(RevisionKey), doc, error)) return false;
             if (!layers.insert(doc.layerId).second) { error = "Duplicate terrain prop layer identity."; return false; }
             wi::scene::Scene layer;
-            TerrainPropProjection projection(layer);
+            TerrainPropProjection projection(layer, createCollision);
             projection.SetLayerIdentity(doc.layerId);
             for (const auto& p : doc.profiles)
             {
@@ -433,8 +448,10 @@ namespace renegade::bridge
                 if (!projection.Place(page, error)) return false;
             if (!staged) staged = std::make_unique<wi::scene::Scene>();
             staged->Merge(layer);
+            collected.push_back(std::move(doc));
         }
         if (staged) scene.Merge(*staged);
+        if (documents) *documents = std::move(collected);
         return true;
     }
 }

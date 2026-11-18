@@ -1,3 +1,4 @@
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
 #include "RuntimeApplication.h"
 #include "RuntimeCharacterCollision.h"
 
@@ -211,7 +212,8 @@ namespace renegade::runtime
             }
         }
 
-        if (hasLevel && !paused_ && !characterSceneSyncFailed_ &&
+        const auto collisionWorld=scenes_.TerrainPropCollisions();
+        if (hasLevel && !paused_ && (!collisionWorld||collisionWorld->Ready()) && !characterSceneSyncFailed_ &&
             characterSceneRevision_ == sceneRevision &&
             playerSceneRevision_ == sceneRevision &&
             characterPerceptionState_.characters.size() == characterAiState_.characters.size() &&

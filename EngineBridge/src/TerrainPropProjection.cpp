@@ -117,20 +117,28 @@ namespace renegade::bridge
             for (const auto& part : prototype.parts)
             {
                 const Entity entity = NewTransient();
+                scene_.metadatas.GetComponent(entity)->string_values.set(
+                    "renegade.terrain_props.placement", std::to_string(p.id));
+                scene_.metadatas.GetComponent(entity)->string_values.set(ImpactSurfaceMetadataKey,
+                    ImpactSurfaceTypeToken(TerrainPropSurface(prototype.collision)));
                 scene_.objects.Create(entity).meshID = part.mesh;
                 auto& transform = scene_.transforms.Create(entity);
                 transform.MatrixTransform(XMLoadFloat4x4(&part.local) * world);
                 transform.UpdateTransform();
             }
             const auto& profile = prototype.collision;
-            if (profile.shape != TerrainPropShape::None)
+            if (createCollision_ && profile.shape != TerrainPropShape::None)
             {
                 const Entity entity = NewTransient();
+                auto& metadata = *scene_.metadatas.GetComponent(entity);
+                metadata.string_values.set("renegade.terrain_props.placement", std::to_string(p.id));
+                metadata.string_values.set("renegade.terrain_props.collision", "1");
                 auto& transform = scene_.transforms.Create(entity);
                 transform.MatrixTransform(XMMatrixTranslation(profile.center.x, profile.center.y, profile.center.z) * world);
                 transform.UpdateTransform();
                 auto& body = scene_.rigidbodies.Create(entity);
                 body.mass = 0;
+                body.friction = profile.friction;
                 if (profile.shape == TerrainPropShape::TrunkCapsule)
                 {
                     body.shape = body.CAPSULE;
@@ -183,7 +191,7 @@ namespace renegade::bridge
         auto pending = std::unique_ptr<PendingPages>(new PendingPages);
         pending->owner = this;
         pending->scene = std::make_unique<wi::scene::Scene>();
-        TerrainPropProjection staging(*pending->scene);
+        TerrainPropProjection staging(*pending->scene, createCollision_);
         staging.profiles_ = profiles_;
         staging.layerIdentity_ = layerIdentity_;
         std::unordered_set<std::uint64_t> replaced;

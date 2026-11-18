@@ -378,6 +378,59 @@ int main()
     // Destroy it while those fixture buffers are still alive, rather than
     // relying on reverse-order local teardown after the buffers are freed.
     scene.reset();
+    {
+        wi::physics::Initialize();
+        wi::scene::Scene props;
+        const auto shooter=props.Entity_CreateTransform("Prop query shooter");
+        bridge::TerrainPropDocument document;
+        document.layerId=bridge::GenerateStableId();document.nextPlacementId=2;
+        bridge::TerrainPropProfile profile;
+        profile.id[0]=1;profile.modelAssetId=bridge::GenerateStableId();
+        profile.collision={bridge::TerrainPropShape::BoulderBox,{0,0,0},{.5f,.5f,.5f}};
+        document.profiles={profile};
+        bridge::TerrainPropPage page;page.profiles={profile.id};
+        page.placements={{1,0,{10,0,0},0,8}};document.pages={page};
+        auto world=bridge::TerrainPropCollisionWorld::Create(props,{document},false,error);
+        if(!world)return fail("nonresident prop query fixture");
+        bridge::ProjectileRecord record;
+        record.launch.source.ownerSubjectId=runtime::RuntimePlayerKnowledgeId;
+        const runtime::ProjectileOwnerBinding source{runtime::RuntimePlayerKnowledgeId,shooter};
+        runtime::RuntimeCharacterSystemState noCharacters;
+        const auto queryProp=[&](const auto& value){
+            return runtime::QueryProjectileSceneSegment(props,noCharacters,source,value,{0,0,0},{20,0,0});
+        };
+        auto contact=queryProp(record);
+        if(contact.status!=bridge::ProjectileQueryStatus::Hit||
+            contact.contact.terrainPropPlacement!=1||contact.contact.terrainPropLayer!=document.layerId||
+            contact.contact.surfaceType!=bridge::ImpactSurfaceType::Stone||
+            std::abs(contact.contact.position.x-6)>.001f||world->Stats().resident!=0)
+            return fail("scaled nonresident prop hit needs stable identity and surface");
+        namespace native=wi::physics::terrain_props;
+        native::Shape shape;
+        if(!native::CreateShape(native::ShapeKind::Box,{.5f,.5f,.5f},shape,error))
+            return fail("ordinary native shape");
+        const auto blocker=props.Entity_CreateTransform("Native blocker");
+        props.transforms.GetComponent(blocker)->Translate(XMFLOAT3{4,0,0});
+        props.transforms.GetComponent(blocker)->UpdateTransform();
+        auto& body=props.rigidbodies.Create(blocker);body.mass=0;body.shape=body.BOX;
+        if(!native::PrepareStaticBody(props,blocker,shape,1,4096,error))
+            return fail("ordinary native blocker");
+        // A native owner body must not hide a subsequent ordinary-world hit.
+        auto& sourceBody=props.rigidbodies.Create(shooter);sourceBody.mass=0;sourceBody.shape=sourceBody.BOX;
+        if(!native::PrepareStaticBody(props,shooter,shape,1,4096,error))
+            return fail("native owner exclusion fixture");
+        contact=queryProp(record);
+        if(contact.status!=bridge::ProjectileQueryStatus::Hit||
+            contact.contact.terrainPropPlacement!=0||std::abs(contact.contact.position.x-3.5f)>.001f)
+            return fail("ordinary native hit must beat distant prop and exclude owner");
+        props.Entity_Remove(blocker,false);
+        record.launch.definition.grenade.enabled=true;record.launch.definition.grenade.radius=.2f;
+        contact=queryProp(record);
+        if(contact.status!=bridge::ProjectileQueryStatus::Hit||
+            contact.contact.terrainPropPlacement!=1||std::abs(contact.contact.fraction-.29f)>.001f)
+            return fail("finite-radius projectile must sweep against nonresident prop");
+        world->Detach();
+    }
     std::cout << "ProjectileWorldTests passed\n";
     return 0;
 }

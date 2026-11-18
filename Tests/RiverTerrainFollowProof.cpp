@@ -17,6 +17,7 @@
 #include "TerrainInitializationProof.h"
 #include "TerrainPlayerPreviewProof.h"
 #include "MaximumTerrainRiverProof.h"
+#include "NativeCrashCapture.h"
 
 #include "../WickedEngine/Editor/json.hpp"
 #include "renegade/bridge/RiverUnderwaterService.h"
@@ -115,6 +116,7 @@ static std::uint64_t GrassAndPaintDigest(const wi::terrain::Terrain& terrain)
 
 int main(int argc, char** argv)
 {
+    native_crash_capture::Enable();
 
     if (argc != 2 && argc != 3 && argc != 4 && argc != 5) return 2;
     const auto out = fs::u8path(argv[1]);

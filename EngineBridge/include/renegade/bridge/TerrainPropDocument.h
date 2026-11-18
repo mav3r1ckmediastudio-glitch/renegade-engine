@@ -49,5 +49,6 @@ namespace renegade::bridge
 
     // Called on detached candidate scenes before Studio or Runtime adopts them.
     bool RestoreTerrainPropRevisions(wi::scene::Scene& candidate,
-        const std::filesystem::path& scenePath, std::string& error);
+        const std::filesystem::path& scenePath, std::string& error,
+        std::vector<TerrainPropDocument>* documents = nullptr, bool createCollision = true);
 }

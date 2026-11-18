@@ -42,6 +42,7 @@ configure_file(RuntimeImpactTextures.rc.in "${CMAKE_CURRENT_BINARY_DIR}/RuntimeI
 add_executable(RenegadeRuntime WIN32
     src/WaterfallTransparentRuntime.cpp
     src/RuntimeApplication.cpp
+    src/TerrainPropRuntimeProof.cpp
         src/RuntimeDialogue.cpp
     src/RuntimeLiveDiagnostics.cpp
     src/RuntimeApplication.h

@@ -159,6 +159,8 @@ namespace renegade::bridge
 
     // Direct synchronous query over Wicked's native PathQuery. Returned
     // waypoints are ordered from start toward goal.
+    [[nodiscard]] bool IsNavigationGridCurrent(const wi::scene::Scene&,wi::ecs::Entity);
+
     [[nodiscard]] bool QueryNavigationPath(
         const wi::scene::Scene& scene,
         wi::ecs::Entity navigationGridEntity,
@@ -249,13 +251,14 @@ namespace renegade::bridge
         void Undo() override;
 
     private:
-        bool Apply(const wi::VoxelGrid& grid) noexcept;
+        bool Apply(const wi::VoxelGrid& grid,const std::string& propStamp) noexcept;
 
         wi::scene::Scene* scene_ = nullptr;
         wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
         NavigationGridSettings settings_;
         wi::VoxelGrid before_;
         wi::VoxelGrid after_;
+        std::string beforePropStamp_,afterPropStamp_;
         bool captured_ = false;
     };
 

@@ -578,3 +578,5 @@ target_sources(RenegadeEngineBridge PRIVATE src/TerrainPropProjection.cpp)
 target_sources(RenegadeEngineBridge PRIVATE src/TerrainPropDocument.cpp)
 
 target_sources(RenegadeEngineBridge PRIVATE src/TerrainPropAuthoring.cpp src/TerrainPropTerrain.cpp src/TerrainPropEditService.cpp)
+target_sources(RenegadeEngineBridge PRIVATE src/TerrainPropCollisionIndex.cpp)
+target_sources(RenegadeEngineBridge PRIVATE src/TerrainPropCollisionWorld.cpp)

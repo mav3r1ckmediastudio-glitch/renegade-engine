@@ -1,3 +1,4 @@
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
 #include "renegade/bridge/ParticleEffectService.h"
 #include "../../EngineBridge/src/PlaceableWaterfallAuthoring.h"
 #include <cstdlib>
@@ -786,6 +787,10 @@ namespace renegade::runtime
 
     void RuntimeApplication::Update(const float dt)
     {
+        SyncPlayerForScene();
+        TickTerrainPropCollisionProof();
+        const auto collisionWorld=scenes_.TerrainPropCollisions();
+        bool collisionReady=!collisionWorld||collisionWorld->Ready();
         SyncLevelHud();
         RefreshUiComposition();
         UpdateLiveDiagnostics();
@@ -794,7 +799,7 @@ namespace renegade::runtime
 
         const bool typingInOtherUi=renderer_.GetGUI().IsTyping();
         const bool gameplayInputAllowed =
-            !uiComposition_.Resolve().gameplayInputBlocked && !typingInOtherUi && !dialogue_.Active();
+            !uiComposition_.Resolve().gameplayInputBlocked && !typingInOtherUi && !dialogue_.Active() && collisionReady;
         const bool gameplayFrame = !scenes_.CurrentPath().empty();
         // G13E14 one-level verification uses the exact regular controller and
         // Jolt/scene movement path; synthetic input is gated to the developer
@@ -900,7 +905,7 @@ namespace renegade::runtime
                 {
                     if (!paused_)
                     {
-                        auto playerInput=gameplayInput.player;
+                        auto playerInput=collisionReady?gameplayInput.player:bridge::PlayerInputFrame{};
                         if(g13e14Trace){
                             const auto phase=g13e14Frame%960;
                             playerInput.moveForward=phase<320?0.75f:(phase<640?-0.65f:0.25f);
@@ -926,7 +931,7 @@ namespace renegade::runtime
                         scenes_.GetScene(),
                         playerViewRig_,
                         gameplayInput.player,
-                        paused_ ? 0.0f : dt);
+                        (paused_||!collisionReady) ? 0.0f : dt);
                     auto* body = scenes_.GetScene().rigidbodies.GetComponent(player_.entity);
                     const bool grounded = body == nullptr || wi::physics::IsCharacterGroundSupported(*body);
                     const bool presentationBusy = playerViewAnimation_.oneShotPlaying ||
@@ -939,7 +944,7 @@ namespace renegade::runtime
                         strike->end-strike->start-melee.rightTime<=melee.chainWindowSeconds;
                     const auto equipmentInput =
                         playerEquipment_.RouteStaged(gameplayInput, playerViewAnimation_.equipped,
-                            presentationBusy, paused_ ? 0.0f : dt, playerViewAnimation_.aiming,
+                            presentationBusy, (paused_||!collisionReady) ? 0.0f : dt, playerViewAnimation_.aiming,
                             !playerViewAnimation_.clips[PlayerViewActionIndex(PlayerViewAction::Charge)].empty() &&
                             !playerViewAnimation_.clips[PlayerViewActionIndex(PlayerViewAction::Release)].empty(),
                             playerViewAnimation_.handLayers.enabled &&
@@ -967,7 +972,7 @@ namespace renegade::runtime
                         scenes_.GetScene(),
                         playerViewAnimation_,
                         playerViewRig_.action,
-                        paused_ ? 0.0f : dt,
+                        (paused_||!collisionReady) ? 0.0f : dt,
                         !paused_ && equipmentInput.firePressed,
                         !paused_ && equipmentInput.reloadPressed,
                         equipmentInput.aimDown,
@@ -1019,8 +1024,8 @@ namespace renegade::runtime
                 diagnosticService_.Record(bridge::DiagnosticSeverity::Info,"runtime.combat",event.name,event.payload);
                 return creatorScripts_.EnqueueGameplayEvent(std::move(event),error);
             };
-            burning_.Update(scenes_.GetScene(),characterAiState_,characterPerceptionState_,combatState_,paused_?0.f:dt,burnEvents);
-            UpdatePlayerProjectiles(paused_ ? 0.0f : dt);
+            burning_.Update(scenes_.GetScene(),characterAiState_,characterPerceptionState_,combatState_,(paused_||!collisionReady)?0.f:dt,burnEvents);
+            UpdatePlayerProjectiles((paused_||!collisionReady) ? 0.0f : dt);
         }
 
         // Wicked owns the actual Jolt step, hierarchy propagation and GPU
@@ -1058,11 +1063,24 @@ namespace renegade::runtime
         if (gameplayFrame)
         {
             SyncCreatorScriptsForScene();
-            if (!paused_)
+            if (!paused_&&collisionReady)
                 creatorScripts_.Update(dt);
         }
         renderer_.SetInterfaceDeltaTime(dt);
-        wi::Application::Update(paused_ ? 0.0f : dt);
+        // Recheck script-spawned/moved interests before Wicked's single step.
+        // A saturated/pending collision set holds simulation at its completed pose.
+        const auto activeCollision=scenes_.TerrainPropCollisions();
+        collisionReady=!activeCollision||activeCollision->UpdateSceneInterests(
+            paused_?0.f:std::clamp(dt,0.f,1.f));
+        if(!collisionReady)
+        {
+            const auto diagnostic=activeCollision->Stats().diagnostic;
+            if(diagnostic!=terrainCollisionDiagnostic_)
+                wi::backlog::post("Terrain props: "+diagnostic,wi::backlog::LogLevel::Warning);
+            terrainCollisionDiagnostic_=diagnostic;
+        }
+        else terrainCollisionDiagnostic_.clear();
+        wi::Application::Update((paused_||!collisionReady) ? 0.0f : dt);
         // Current-pose marks must reach decal visibility/render upload after
         // native skinning, while transient entity mutation remains before it.
         if (gameplayFrame && g13e14Trace && player_.IsSpawned()) {
@@ -3801,6 +3819,8 @@ namespace renegade::runtime
         auto* transform=scenes_.GetScene().transforms.GetComponent(player_.entity);
         if(!transform) {error="Restored Player transform is unavailable.";return false;}
         const XMFLOAT3 position(state.playerX,state.playerY,state.playerZ);
+        if(!bridge::RequireTerrainPropDestination(scenes_.GetScene(),player_.entity,position,1,error))
+            return false;
         transform->ClearTransform();
         transform->Translate(position);
         transform->UpdateTransform();

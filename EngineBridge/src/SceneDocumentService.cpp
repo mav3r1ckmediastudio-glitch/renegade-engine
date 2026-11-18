@@ -1,3 +1,4 @@
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
 #include "renegade/bridge/TerrainPropDocument.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/SceneDocumentService.h"
@@ -313,7 +314,8 @@ namespace renegade::bridge
         // does not reconstruct ObjectComponent::lightmap. Hydrate the prepared
         // candidate here, at Studio's thread-safe adoption point, so a failure
         // leaves the active document untouched.
-        if (!RestoreTerrainPropRevisions(*prepared.scene_, prepared.Path(), scenes_.lastError_))
+        std::vector<TerrainPropDocument> collisionDocuments;
+        if (!RestoreTerrainPropRevisions(*prepared.scene_, prepared.Path(), scenes_.lastError_, &collisionDocuments, false))
             return false;
 
         std::string riverNormalError;
@@ -331,11 +333,18 @@ namespace renegade::bridge
             return false;
         }
 
+        auto collisionWorld = TerrainPropCollisionWorld::Create(
+            scenes_.scene_, std::move(collisionDocuments), false, scenes_.lastError_);
+        if (!collisionWorld) return false;
+
         // This is the one replacement point. Preparation has already
         // completed, so the active document remains intact on every failure
         // path above. Studio invokes this at EVENT_THREAD_SAFE_POINT.
+        scenes_.ResetTerrainPropCollisions();
         scenes_.scene_.Clear();
         scenes_.scene_.Merge(*prepared.scene_);
+        scenes_.terrainPropCollisions_ = std::move(collisionWorld);
+        scenes_.terrainPropCollisions_->RefreshAnchors();
         for (std::size_t index = 0;
             index < scenes_.scene_.terrains.GetCount(); ++index)
         {

@@ -1,3 +1,4 @@
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
 #include "renegade/bridge/NavigationService.h"
 
 #include "renegade/bridge/IdentityService.h"
@@ -130,45 +131,39 @@ namespace renegade::bridge
         return settings;
     }
 
-    std::size_t PrepareRigidBodyNavigationGeometry(
-        wi::scene::Scene& scene) noexcept
+    std::size_t PrepareRigidBodyNavigationGeometry(wi::scene::Scene& scene) noexcept
     {
-        std::size_t changed = 0;
-        for (std::size_t bodyIndex = 0;
-            bodyIndex < scene.rigidbodies.GetCount(); ++bodyIndex)
+        std::size_t changed=0;
+        for(std::size_t i=0;i<scene.objects.GetCount();++i)
         {
-            const wi::ecs::Entity bodyEntity =
-                scene.rigidbodies.GetEntity(bodyIndex);
-            for (std::size_t objectIndex = 0;
-                objectIndex < scene.objects.GetCount(); ++objectIndex)
+            auto entity=scene.objects.GetEntity(i);
+            if(IsTerrainPropProjection(scene,entity))continue;
+            bool bodyBacked=false;
+            for(std::size_t depth=0;entity!=wi::ecs::INVALID_ENTITY&&depth<1024;++depth)
             {
-                const wi::ecs::Entity objectEntity =
-                    scene.objects.GetEntity(objectIndex);
-                if (objectEntity != bodyEntity &&
-                    !scene.Entity_IsDescendant(objectEntity, bodyEntity))
-                {
-                    continue;
-                }
-
-                auto& object = scene.objects[objectIndex];
-                if ((object.filterMask & wi::enums::FILTER_NAVIGATION_MESH) == 0u)
-                {
-                    object.filterMask |= wi::enums::FILTER_NAVIGATION_MESH;
-                    ++changed;
-                }
-
-                if (object.meshID != wi::ecs::INVALID_ENTITY)
-                {
-                    if (auto* mesh = scene.meshes.GetComponent(object.meshID);
-                        mesh != nullptr && !mesh->bvh.IsValid() &&
-                        !mesh->vertex_positions.empty())
-                    {
-                        mesh->BuildBVH();
-                    }
-                }
+                if(scene.rigidbodies.Contains(entity)){bodyBacked=true;break;}
+                const auto* parent=scene.hierarchy.GetComponent(entity);
+                entity=parent?parent->parentID:wi::ecs::INVALID_ENTITY;
             }
+            if(!bodyBacked)continue;
+            auto& object=scene.objects[i];
+            if(!(object.filterMask&wi::enums::FILTER_NAVIGATION_MESH))
+            {object.filterMask|=wi::enums::FILTER_NAVIGATION_MESH;++changed;}
+            if(auto* mesh=scene.meshes.GetComponent(object.meshID);
+                mesh&&!mesh->bvh.IsValid()&&!mesh->vertex_positions.empty())mesh->BuildBVH();
         }
         return changed;
+    }
+
+    bool IsNavigationGridCurrent(const wi::scene::Scene& scene,wi::ecs::Entity entity)
+    {
+        const auto world=TerrainPropCollisionWorld::Find(scene);
+        if(!world)return !TerrainPropCollisionWorld::IsRegistered(scene);
+        const auto* metadata=scene.metadatas.GetComponent(entity);
+        constexpr const char* key="renegade.navigation.terrain_prop_geometry";
+        const bool stamped=metadata&&metadata->string_values.has(key)&&!metadata->string_values.get(key).empty();
+        if(!stamped)return world->Index()->Count()==0;
+        return metadata->string_values.get(key)==world->Index()->NavigationDigest();
     }
 
     bool ValidateNavigationGridSettings(
@@ -337,6 +332,11 @@ namespace renegade::bridge
             return false;
         }
 
+        // Prepare a complete replacement so a query/index budget failure
+        // preserves the prior native navigation grid and its authored pose.
+        auto* publishedGrid=grid;
+        wi::VoxelGrid candidate;
+        grid=&candidate;
         grid->init(
             settings.resolutionX,
             settings.resolutionY,
@@ -359,6 +359,42 @@ namespace renegade::bridge
         // Wicked CharacterComponent surface collision.
         (void)PrepareRigidBodyNavigationGeometry(scene);
 
+        std::vector<std::uint32_t> propRecords;
+        const auto propWorld=TerrainPropCollisionWorld::Find(scene);
+        const auto propIndex=propWorld?propWorld->Index():nullptr;
+        if(propIndex&&settings.layerMask!=0)
+        {
+            const auto bounds=grid->get_aabb();
+            if(!propIndex->Select({bounds._min,bounds._max},propIndex->Count(),propRecords,error))
+                return false;
+        }
+        // Visual foliage is never a navigation obstacle. This temporary filter
+        // inventory exists only for an explicit bake/content change, and is
+        // restored after the native voxelizer has joined its jobs.
+        struct PropFilters
+        {
+            wi::scene::Scene& scene;
+            struct Saved{std::size_t index;std::uint32_t fixed,dynamic;};
+            std::vector<Saved> saved;
+            explicit PropFilters(wi::scene::Scene& s):scene(s)
+            {
+                for(std::size_t i=0;i<scene.objects.GetCount();++i)
+                    if(IsTerrainPropProjection(scene,scene.objects.GetEntity(i)))
+                    {
+                        auto& object=scene.objects[i];
+                        saved.push_back({i,object.filterMask,object.filterMaskDynamic});
+                        object.filterMask=object.filterMaskDynamic=0;
+                    }
+            }
+            ~PropFilters()
+            {
+                for(const auto& value:saved)
+                {
+                    auto& object=scene.objects[value.index];
+                    object.filterMask=value.fixed;object.filterMaskDynamic=value.dynamic;
+                }
+            }
+        } filters(scene);
         grid->cleardata();
         scene.VoxelizeScene(
             *grid,
@@ -366,13 +402,38 @@ namespace renegade::bridge
             settings.filterMask,
             settings.layerMask,
             settings.lod);
-        SyncGridTransform(scene, navigationGridEntity, *grid);
+        // The authoritative simple collision footprint is independent of
+        // camera position, native body residency and visual mesh topology.
+        for(const auto recordIndex:propRecords)
+        {
+            const auto& record=propIndex->Placement(recordIndex);
+            const auto& collision=propIndex->GetProfile(record.profile).source.collision;
+            if(collision.shape==TerrainPropShape::TrunkCapsule)
+            {
+                const float radius=collision.halfExtents.x*record.scale;
+                const float height=(collision.halfExtents.y+collision.halfExtents.x)*record.scale;
+                grid->inject_capsule(wi::primitive::Capsule(
+                    XMFLOAT3{record.center.x,record.center.y-height,record.center.z},
+                    XMFLOAT3{record.center.x,record.center.y+height,record.center.z},radius));
+            }
+            else
+            {
+                // Conservative voxel occupancy for yawed convex boxes. Jolt
+                // movement and gameplay rays retain the exact oriented box.
+                const auto bounds=propIndex->Bounds(recordIndex);
+                grid->inject_aabb(wi::primitive::AABB(bounds.minimum,bounds.maximum));
+            }
+        }
 
         if (!grid->IsValid())
         {
             error = "Wicked produced an invalid navigation VoxelGrid.";
             return false;
         }
+        *publishedGrid=std::move(candidate);
+        if(propIndex)scene.metadatas.GetComponent(navigationGridEntity)->string_values.set(
+            "renegade.navigation.terrain_prop_geometry",propIndex->NavigationDigest());
+        SyncGridTransform(scene,navigationGridEntity,*publishedGrid);
 
         error.clear();
         return true;
@@ -416,6 +477,8 @@ namespace renegade::bridge
         }
         if (!ValidateQuerySettings(settings, error))
             return false;
+        if(!IsNavigationGridCurrent(scene,navigationGridEntity))
+        {error="Terrain prop collision changed; rebuild this navigation grid.";return false;}
 
         const auto* grid = scene.voxel_grids.GetComponent(navigationGridEntity);
         if (grid == nullptr || !grid->IsValid())
@@ -459,6 +522,8 @@ namespace renegade::bridge
         }
         if (!ValidateQuerySettings(settings, error))
             return false;
+        if(!IsNavigationGridCurrent(scene,navigationGridEntity))
+        {error="Terrain prop collision changed; rebuild this navigation grid.";return false;}
 
         auto* character = scene.characters.GetComponent(characterEntity);
         const auto* grid = scene.voxel_grids.GetComponent(navigationGridEntity);
@@ -922,7 +987,7 @@ namespace renegade::bridge
     }
 
     bool RebuildNavigationGridCommand::Apply(
-        const wi::VoxelGrid& grid) noexcept
+        const wi::VoxelGrid& grid,const std::string& propStamp) noexcept
     {
         if (scene_ == nullptr || !IsRenegadeNavigationGrid(*scene_, entity_))
             return false;
@@ -930,6 +995,8 @@ namespace renegade::bridge
         if (target == nullptr)
             return false;
         *target = grid;
+        auto& metadata=*scene_->metadatas.GetComponent(entity_);
+        metadata.string_values.set("renegade.navigation.terrain_prop_geometry",propStamp);
         SyncGridTransform(*scene_, entity_, *target);
         return true;
     }
@@ -940,12 +1007,16 @@ namespace renegade::bridge
             return false;
 
         if (captured_)
-            return Apply(after_);
+            return Apply(after_,afterPropStamp_);
 
         auto* grid = scene_->voxel_grids.GetComponent(entity_);
         if (grid == nullptr)
             return false;
         before_ = *grid;
+        const auto* metadata=scene_->metadatas.GetComponent(entity_);
+        constexpr const char* stampKey="renegade.navigation.terrain_prop_geometry";
+        beforePropStamp_=metadata&&metadata->string_values.has(stampKey)?
+            metadata->string_values.get(stampKey):std::string{};
 
         std::string error;
         if (!RebuildNavigationGrid(*scene_, entity_, settings_, error))
@@ -955,6 +1026,9 @@ namespace renegade::bridge
         if (grid == nullptr)
             return false;
         after_ = *grid;
+        metadata=scene_->metadatas.GetComponent(entity_);
+        afterPropStamp_=metadata&&metadata->string_values.has(stampKey)?
+            metadata->string_values.get(stampKey):std::string{};
         captured_ = true;
         return true;
     }
@@ -962,7 +1036,7 @@ namespace renegade::bridge
     void RebuildNavigationGridCommand::Undo()
     {
         if (captured_)
-            (void)Apply(before_);
+            (void)Apply(before_,beforePropStamp_);
     }
 
     CreateNavigationAgentPairCommand::CreateNavigationAgentPairCommand(

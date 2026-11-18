@@ -1,6 +1,7 @@
 #pragma once
 #include "renegade/bridge/TerrainPropPage.h"
 #include <WickedEngine.h>
+#include "renegade/bridge/ImpactSurface.h"
 #include <map>
 #include <memory>
 #include <unordered_set>
@@ -14,7 +15,15 @@ namespace renegade::bridge
         TerrainPropShape shape = TerrainPropShape::None;
         XMFLOAT3 center{0, 0, 0};
         XMFLOAT3 halfExtents{1, 1, 1};
+        float friction = 0.5f;
+        ImpactSurfaceType surface = ImpactSurfaceType::Default;
     };
+    inline ImpactSurfaceType TerrainPropSurface(const TerrainPropCollision& c) noexcept
+    {
+        if(c.surface!=ImpactSurfaceType::Default)return c.surface;
+        return c.shape==TerrainPropShape::TrunkCapsule?ImpactSurfaceType::Wood:
+            c.shape==TerrainPropShape::BoulderBox?ImpactSurfaceType::Stone:ImpactSurfaceType::Default;
+    }
     // All mutation runs at the caller's scene/physics-safe point.
     class TerrainPropProjection
     {
@@ -32,7 +41,8 @@ namespace renegade::bridge
             std::vector<wi::ecs::Entity> installed;
             bool committed = false, installedDone = false;
         };
-        explicit TerrainPropProjection(wi::scene::Scene& scene) : scene_(scene) {}
+        explicit TerrainPropProjection(wi::scene::Scene& scene, bool createCollision = true)
+            : scene_(scene), createCollision_(createCollision) {}
         ~TerrainPropProjection();
         TerrainPropProjection(const TerrainPropProjection&) = delete;
         TerrainPropProjection& operator=(const TerrainPropProjection&) = delete;
@@ -51,6 +61,7 @@ namespace renegade::bridge
         struct Prototype { std::vector<Part> parts; TerrainPropCollision collision; std::vector<wi::ecs::Entity> resources; };
         wi::ecs::Entity NewTransient();
         wi::scene::Scene& scene_;
+        bool createCollision_ = true;
         std::string layerIdentity_;
         std::vector<wi::ecs::Entity> entities_;
         std::map<TerrainPropProfileId, Prototype> profiles_;

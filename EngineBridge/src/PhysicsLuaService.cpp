@@ -1,6 +1,7 @@
 #include "renegade/bridge/PhysicsLuaService.h"
 
 #include "renegade/bridge/PhysicsService.h"
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
 
 #include <wiLua.h>
 
@@ -345,6 +346,54 @@ namespace
         return 1;
     }
 
+    int LuaTerrainInterest(lua_State* L)
+    {
+        const auto id=luaL_checkinteger(L,1);
+        const auto position=Vector3Arg(L,2);
+        const float radius=static_cast<float>(luaL_optnumber(L,5,1));
+        const auto velocity=lua_gettop(L)>=8?Vector3Arg(L,6):XMFLOAT3{0,0,0};
+        auto* scene=Scene();
+        const auto world=scene?renegade::bridge::TerrainPropCollisionWorld::Find(*scene):nullptr;
+        std::string error;
+        const bool success=world&&id>0&&world->SetInterest(static_cast<std::uint64_t>(id),
+            {position,velocity,radius},error);
+        if(!success&&error.empty())error="Terrain collision interest requires a positive ID and active scene owner.";
+        PushBool(L,success);lua_pushlstring(L,error.data(),error.size());return 2;
+    }
+    int LuaClearTerrainInterest(lua_State* L)
+    {
+        const auto id=luaL_checkinteger(L,1);
+        auto* scene=Scene();
+        const auto world=scene?renegade::bridge::TerrainPropCollisionWorld::Find(*scene):nullptr;
+        if(world&&id>0)world->RemoveInterest(static_cast<std::uint64_t>(id));
+        PushBool(L,world&&id>0);return 1;
+    }
+    int LuaCancelTerrainDestination(lua_State* L)
+    {
+        const auto actor=EntityArg(L,1);auto* scene=Scene();
+        const auto world=scene?renegade::bridge::TerrainPropCollisionWorld::Find(*scene):nullptr;
+        if(world)world->CancelDestination(actor);
+        PushBool(L,world!=nullptr);return 1;
+    }
+    int LuaTerrainCollisionState(lua_State* L)
+    {
+        auto* scene=Scene();
+        const auto world=scene?renegade::bridge::TerrainPropCollisionWorld::Find(*scene):nullptr;
+        if(!world){lua_pushnil(L);return 1;}
+        const auto state=world->Stats();
+        lua_createtable(L,0,10);
+        PushBool(L,state.ready);lua_setfield(L,-2,"ready");
+        const auto number=[&](const char* name,std::size_t value){
+            lua_pushinteger(L,static_cast<lua_Integer>(value));lua_setfield(L,-2,name);
+        };
+        number("indexed",state.indexed);number("resident",state.resident);number("required",state.required);
+        number("native_allocated",state.nativeAllocated);number("native_capacity",state.nativeCapacity);
+        number("terrain_required",state.terrainRequired);number("terrain_ready",state.terrainReady);
+        number("query_work",state.queryNodes);
+        lua_pushlstring(L,state.diagnostic.data(),state.diagnostic.size());lua_setfield(L,-2,"diagnostic");
+        return 1;
+    }
+
     int LuaRaycast(lua_State* L)
     {
         auto* scene = Scene();
@@ -356,12 +405,21 @@ namespace
         const auto hit = renegade::bridge::Raycast(
             *scene,
             wi::primitive::Ray(Vector3Arg(L, 1), Vector3Arg(L, 4)));
+        if (!hit.queryReady)
+            return luaL_error(L, "Terrain collision query is unavailable; query blocked.");
         if (!hit.IsValid())
         {
             lua_pushnil(L);
             return 1;
         }
-        lua_createtable(L, 0, 6);
+        lua_createtable(L, 0, 8);
+        lua_pushlstring(L,hit.terrainPropLayer.data(),hit.terrainPropLayer.size());
+        lua_setfield(L,-2,"terrain_prop_layer");
+        const auto placement=std::to_string(hit.terrainPropPlacement);
+        lua_pushlstring(L,placement.data(),placement.size());
+        lua_setfield(L,-2,"terrain_prop_placement");
+        lua_pushstring(L,renegade::bridge::ImpactSurfaceTypeToken(hit.surface));lua_setfield(L,-2,"surface");
+        lua_pushnumber(L,hit.friction);lua_setfield(L,-2,"friction");
         lua_pushinteger(L, static_cast<lua_Integer>(hit.entity));
         lua_setfield(L, -2, "entity");
         PushVector(L, hit.position); lua_setfield(L, -2, "position");
@@ -700,6 +758,10 @@ namespace
         SetFunction(L, "reset_all", LuaResetAll);
         SetFunction(L, "optimize_broadphase", LuaOptimizeBroadphase);
         SetFunction(L, "raycast", LuaRaycast);
+        SetFunction(L, "set_terrain_interest", LuaTerrainInterest);
+        SetFunction(L, "clear_terrain_interest", LuaClearTerrainInterest);
+        SetFunction(L, "cancel_terrain_destination", LuaCancelTerrainDestination);
+        SetFunction(L, "terrain_collision_state", LuaTerrainCollisionState);
 
         SetFunction(L, "has_character", LuaHasCharacter);
         SetFunction(L, "character_move", LuaCharacterMove);
