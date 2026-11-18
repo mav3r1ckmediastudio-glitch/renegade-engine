@@ -195,8 +195,9 @@ namespace renegade::bridge
         }
 
         ResourceAssetDocument document;
+        ResourceAssetPayloadSpan span;
         if (!ReadResourceAssetDocument(
-                assetPath.generic_u8string(), document, error))
+                assetPath.generic_u8string(), document, error, &span))
         {
             error = "Packaged governed resource product was rejected: " + error;
             return false;
@@ -212,6 +213,8 @@ namespace renegade::bridge
             return false;
         }
 
+        if (!PrepareTextureBacking(assetPath.generic_u8string(), span, document, prepared.backing, error))
+            return false;
         prepared.projectId = projectId;
         prepared.assetId = assetId;
         prepared.sourceAssetId = document.manifest.sourceAssetId;
@@ -245,14 +248,12 @@ namespace renegade::bridge
         result.discoveredBindingCount = bindings.size();
         if (bindings.empty())
             return true;
-        if (!loader)
-            loader = LoadPreparedMaterialTextureAsset;
 
         struct LoadedTexture
         {
             PreparedMaterialTextureAsset prepared;
             std::string packagedPath;
-            wi::Resource resource;
+            std::map<std::string, wi::Resource> resources;
         };
         std::map<StableId, LoadedTexture> loadedById;
 
@@ -289,6 +290,7 @@ namespace renegade::bridge
             loaded.prepared.sourceFormat = packaged.sourceFormat;
             loaded.prepared.payloadHash = packaged.payloadHash;
             loaded.prepared.payload = std::move(packaged.payload);
+            loaded.prepared.backing = std::move(packaged.backing);
             if (!BuildResourcePayloadCacheName(
                     "renegade_runtime_",
                     loaded.prepared.assetId,
@@ -299,20 +301,41 @@ namespace renegade::bridge
             {
                 return false;
             }
-            loaded.resource = loader(loaded.prepared, error);
-            if (!loaded.resource.IsValid())
-            {
-                if (error.empty())
-                    error =
-                        "Wicked did not create a valid resource from the packaged governed texture.";
-                return false;
-            }
             loadedById.emplace(
                 binding.textureAssetId, std::move(loaded));
         }
 
+        std::vector<wi::Resource> resolved;
+        resolved.reserve(bindings.size());
         for (const auto& binding : bindings)
         {
+            const auto* material = scene.materials.GetComponent(binding.materialEntity);
+            if (!material)
+            {
+                error = "Packaged texture target disappeared before binding.";
+                return false;
+            }
+            auto& loaded = loadedById.at(binding.textureAssetId);
+            const std::string semantic = !loader && loaded.prepared.backing ?
+                MaterialTextureSemantic(binding.slot, *material) : std::string{};
+            auto [it, fresh] = loaded.resources.try_emplace(semantic);
+            if (fresh)
+            {
+                it->second = loader ? loader(loaded.prepared, error) :
+                    LoadMaterialTextureForSemantic(loaded.prepared, semantic, error);
+                if (!it->second.IsValid())
+                {
+                    if (error.empty())
+                        error = "Wicked could not load the packaged material texture.";
+                    return false;
+                }
+            }
+            resolved.push_back(it->second);
+        }
+
+        for (std::size_t index = 0; index < bindings.size(); ++index)
+        {
+            const auto& binding = bindings[index];
             auto* material = scene.materials.GetComponent(binding.materialEntity);
             const auto loaded = loadedById.find(binding.textureAssetId);
             if (material == nullptr || loaded == loadedById.end())
@@ -324,7 +347,7 @@ namespace renegade::bridge
 
             auto& texture = material->textures[WickedTextureSlot(binding.slot)];
             texture.name.clear();
-            texture.resource = loaded->second.resource;
+            texture.resource = resolved[index];
             material->SetDirty();
 
             PackagedMaterialTextureRefreshRecord record;

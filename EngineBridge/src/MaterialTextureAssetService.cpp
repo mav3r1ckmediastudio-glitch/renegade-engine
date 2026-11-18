@@ -176,7 +176,8 @@ namespace renegade::bridge
         }
 
         ResourceAssetDocument document;
-        if (!ReadResourceAssetDocument(product.generic_u8string(), document, error))
+        ResourceAssetPayloadSpan span;
+        if (!ReadResourceAssetDocument(product.generic_u8string(), document, error, &span))
             return false;
         if (document.manifest.projectId != projectId ||
             document.manifest.assetId != textureAssetId ||
@@ -187,6 +188,8 @@ namespace renegade::bridge
             return false;
         }
 
+        if (!PrepareTextureBacking(product.generic_u8string(), span, document, prepared.backing, error))
+            return false;
         prepared.projectId = projectId;
         prepared.assetId = textureAssetId;
         prepared.productProjectRelativePath = record->projectRelativePath;
@@ -253,9 +256,8 @@ namespace renegade::bridge
             return false;
         }
 
-        if (!loader)
-            loader = LoadPreparedMaterialTextureAsset;
-        wi::Resource resource = loader(prepared, error);
+        wi::Resource resource = loader ? loader(prepared, error) :
+            LoadMaterialTextureForSemantic(prepared, MaterialTextureSemantic(slot, *material), error);
         if (!resource.IsValid())
         {
             if (error.empty())
@@ -358,9 +360,6 @@ namespace renegade::bridge
         const double inspectMilliseconds =
             diagnostics::MillisecondsSince(inspectStarted);
         result.discovered = bindings.size();
-        if (!loader)
-            loader = LoadPreparedMaterialTextureAsset;
-
         std::set<StableId> uniqueTextureAssetIds;
         for (const auto& binding : bindings)
             uniqueTextureAssetIds.insert(binding.textureAssetId);
@@ -373,10 +372,8 @@ namespace renegade::bridge
         {
             bool prepareAttempted = false;
             bool preparedSuccessfully = false;
-            bool loadAttempted = false;
-            bool loadedSuccessfully = false;
+            std::map<std::string, wi::Resource> resources;
             PreparedMaterialTextureAsset prepared;
-            wi::Resource resource;
             std::string error;
         };
         std::map<StableId, CachedRestoreAsset> cache;
@@ -422,21 +419,20 @@ namespace renegade::bridge
                     progress(progressedUnique, result.uniqueAssetIds);
             }
 
-            if (cached.preparedSuccessfully && !cached.loadAttempted)
+            const std::string semantic = !loader && cached.prepared.backing ?
+                MaterialTextureSemantic(binding.slot, *material) : std::string{};
+            auto [entry, firstLoad] = cached.resources.try_emplace(semantic);
+            if (cached.preparedSuccessfully && firstLoad)
             {
-                cached.loadAttempted = true;
                 const auto loadStarted = diagnostics::LifecycleClock::now();
-                cached.resource = loader(cached.prepared, cached.error);
+                entry->second = loader ? loader(cached.prepared, cached.error) :
+                    LoadMaterialTextureForSemantic(cached.prepared, semantic, cached.error);
                 loadMilliseconds += diagnostics::MillisecondsSince(loadStarted);
-                cached.loadedSuccessfully = cached.resource.IsValid();
-                if (cached.loadedSuccessfully)
+                if (entry->second.IsValid())
                     ++result.loadedUnique;
-                else if (cached.error.empty())
-                    cached.error =
-                        "Wicked did not create a valid resource from the governed texture payload.";
             }
 
-            if (!cached.preparedSuccessfully || !cached.loadedSuccessfully)
+            if (!cached.preparedSuccessfully || !entry->second.IsValid())
             {
                 ++failureCount;
                 if (firstFailure.empty())
@@ -446,7 +442,7 @@ namespace renegade::bridge
 
             const auto applyStarted = diagnostics::LifecycleClock::now();
             texture.name.clear();
-            texture.resource = cached.resource;
+            texture.resource = entry->second;
             material->SetDirty();
             auto* metadata = scene.metadatas.GetComponent(binding.materialEntity);
             if (metadata == nullptr)

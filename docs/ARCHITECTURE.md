@@ -2482,3 +2482,22 @@ controller detaches. Only the small registry storage and mutex survive process
 teardown. Detach still erases scene entries, destroys native bodies and releases
 shared shapes deterministically. A late-global native scene regression checks
 the executable exit as well as ordinary scene-unload assertions.
+
+### T1 material texture backing and reimport
+
+The material importer records the slot semantic and cook recipe alongside the
+original source in the governed texture product. The project/package resolver
+checks the DDS span against the manifest, then loads it through Wicked's resource
+manager. Native resolution feedback, mip scheduling, transfers and eviction keep
+their existing owner. Critical textures and products with an unsupported layout
+continue through the resident loader.
+
+An asynchronous mip request can outlive reimport. The pinned resource manager
+reopens the resource pathname for later reads, and an atomic replacement can
+put a different generation at that name. The generated resource-manager overlay
+accepts a shared read-only backing for governed loads. A Windows handle opened
+with delete sharing identifies one file generation. Reads stay within its DDS
+span, including when an archive embeds it. The native resource and queued work
+keep that handle alive. Project and package paths, product identity, semantic
+and content digest distinguish cache entries across relocation and reimport.
+The overlay checks its upstream anchors during configuration.

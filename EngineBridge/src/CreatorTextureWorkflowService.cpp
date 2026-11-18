@@ -86,7 +86,8 @@ namespace renegade::bridge
     CreatorTextureImportResult CreatorTextureWorkflowService::ImportTexture(
         const std::string& projectRoot,
         const StableId& projectId,
-        const std::string& externalSourcePath) const
+        const std::string& externalSourcePath,
+        const std::string& materialSemantic) const
     {
         if (projectRoot.empty() || !IsValidStableId(projectId))
             return Failure("Texture import requires an active Renegade project.");
@@ -199,6 +200,7 @@ namespace renegade::bridge
         request.sourceProjectRelativePath = result.sourceProjectRelativePath;
         request.assetProjectRelativePath = result.assetProjectRelativePath;
         request.expectedFormat = format;
+        request.materialTextureSemantic = materialSemantic;
 
         ResourceAssetService assets;
         result.asset = assets.ImportResourceAsset(request);

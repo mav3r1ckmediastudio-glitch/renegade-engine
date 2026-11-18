@@ -108,11 +108,12 @@ int MeasureTerrainPropResidency(const std::filesystem::path& directory, wi::scen
     return 0;
 }
 
+int RunGovernedTextureProof(const std::filesystem::path&, const std::filesystem::path&);
 int RunTerrainPropSlice(const std::filesystem::path&, const std::filesystem::path&);
 
 int main(int argc, char** argv)
 {
-    if (argc != 2 && argc != 3) return 2;
+    if (argc < 2 || argc > 4 || (argc == 4 && std::string(argv[2]) != "--governed-texture")) return 2;
     const std::filesystem::path directory(argv[1]);
     const HWND window = CreateWindowExW(0, L"STATIC", L"Terrain prop probe",
         WS_POPUP, 0, 0, 64, 64, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -133,6 +134,7 @@ int main(int argc, char** argv)
         }
     } drain;
 
+    if (argc == 4) return RunGovernedTextureProof(directory, argv[3]);
     if (argc == 3) return RunTerrainPropSlice(directory, argv[2]);
     return MeasureTerrainPropResidency(directory, nullptr);
 }

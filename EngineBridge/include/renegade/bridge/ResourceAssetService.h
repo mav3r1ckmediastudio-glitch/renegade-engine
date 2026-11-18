@@ -47,12 +47,20 @@ namespace renegade::bridge
         }
     };
 
+    struct ResourceTextureVariant
+    {
+        std::string semantic;
+        std::string hash;
+        std::uint64_t length = 0;
+    };
+
     struct ResourceAssetManifest
     {
-        static constexpr std::uint32_t CurrentSchemaVersion = 1;
+        static constexpr std::uint32_t ResidentSchemaVersion = 1;
+        static constexpr std::uint32_t CurrentSchemaVersion = 2;
 
         std::string formatIdentifier = ResourceAssetFormat;
-        std::uint32_t schemaVersion = CurrentSchemaVersion;
+        std::uint32_t schemaVersion = ResidentSchemaVersion;
         StableId projectId;
         StableId assetId;
         StableId sourceAssetId;
@@ -66,13 +74,20 @@ namespace renegade::bridge
         std::string payloadFormat = ResourceAssetPayloadFormat;
         std::string payloadHash;
         ResourceAssetDerivedMetadata derived;
+        std::vector<ResourceTextureVariant> textureVariants;
     };
 
     struct ResourceAssetDocument
     {
         ResourceAssetManifest manifest;
         std::vector<std::uint8_t> payload;
+        std::vector<std::vector<std::uint8_t>> cookedTextures;
     };
+
+    bool ReadTextureCookSemantic(const std::string& recipeJson, std::string& semantic,
+        std::string& error);
+
+    bool CookResourceTextureVariants(ResourceAssetDocument& document, std::string& error);
 
     struct ResourceAssetMetadataRecord
     {
@@ -103,10 +118,17 @@ namespace renegade::bridge
         const std::vector<std::uint8_t>& bytes,
         ResourceAssetDocument& document,
         std::string& error);
+    struct ResourceAssetPayloadSpan
+    {
+        std::uint64_t offset = 0;
+        std::uint64_t length = 0;
+    };
+
     [[nodiscard]] bool ReadResourceAssetDocument(
         const std::string& path,
         ResourceAssetDocument& document,
-        std::string& error);
+        std::string& error,
+        ResourceAssetPayloadSpan* span = nullptr);
 
     [[nodiscard]] bool ValidateResourceAssetMetadata(
         const ResourceAssetMetadataDocument& document,
@@ -133,10 +155,10 @@ namespace renegade::bridge
         std::string assetProjectRelativePath;
         ResourceSourceFormat expectedFormat = ResourceSourceFormat::Unknown;
 
-        // Version 1 intentionally has no creator-tunable resource processing
-        // options. The canonical recipe is persisted now so Gate 4 reimport can
-        // replay an accepted recipe rather than infer behavior from file paths.
+        // Import persists the canonical settings so reimport can replay the accepted recipe.
         std::string settingsJson = "{}";
+        // Empty for resident-only consumers. Material import supplies the selected slot.
+        std::string materialTextureSemantic;
     };
 
     struct ResourceAssetImportOptions
