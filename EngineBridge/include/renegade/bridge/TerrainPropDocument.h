@@ -44,6 +44,10 @@ namespace renegade::bridge
         const StableId& projectId, const std::string& digest,
         TerrainPropDocument& document, std::string& error);
 
+    bool CollectTerrainPropDependencies(const wi::scene::Scene& scene, const std::filesystem::path& root,
+        const StableId& projectId, std::vector<std::string>& files, std::vector<StableId>& models,
+        std::string& error);
+
     bool ValidateTerrainPropRevisionLinks(const wi::scene::Scene& scene,
         const std::filesystem::path& scenePath, std::string& error);
 

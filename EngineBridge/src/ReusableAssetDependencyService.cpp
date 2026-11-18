@@ -3,6 +3,7 @@
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/ReusableAssetService.h"
+#include "renegade/bridge/TerrainPropDocument.h"
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/PlayerPrefabService.h"
 #include "renegade/bridge/EquipmentAssetService.h"
@@ -205,7 +206,20 @@ namespace renegade::bridge
 
             const StableId prefabId = playerStart.resolution == PlayerStartResolution::Success
                 ? CapturePlayerPrefabOrigin(inspectedScene, playerStart.start.entity) : StableId{};
-            if (instances.empty() && firstPersonArmsAssetId.empty() && prefabId.empty() &&
+            std::vector<std::string> terrainFiles;
+            std::vector<StableId> terrainModels;
+            if (!CollectTerrainPropDependencies(inspectedScene, fs::u8path(context.projectRoot), projectId_,
+                    terrainFiles, terrainModels, error)) return false;
+            for (const auto& path : terrainFiles)
+            {
+                DependencyCandidate candidate;
+                candidate.declaredPath = path;
+                candidate.dependencyClass = DependencyClass::Data;
+                candidate.requirement = DependencyRequirement::Required;
+                candidate.provenance = "terrain_props.revision";
+                emit(candidate);
+            }
+            if (instances.empty() && terrainModels.empty() && firstPersonArmsAssetId.empty() && prefabId.empty() &&
                 playerStart.start.settings.primaryEquipmentAssetId.empty() &&
                 playerStart.start.settings.offHandEquipmentAssetId.empty())
             {
@@ -255,6 +269,9 @@ namespace renegade::bridge
                     emit(candidate);
                     return true;
                 };
+
+            for (const auto& id : terrainModels)
+                if (!emitGovernedProduct(id, "terrain_props.model:", "Terrain prop profile")) return false;
 
             for (const auto& instance : instances)
             {

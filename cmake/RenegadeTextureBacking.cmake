@@ -12,7 +12,7 @@ function(renegade_texture_replace before after)
     set(_rm "${result}" PARENT_SCOPE)
 endfunction()
 renegade_texture_replace([=[#include "wiResourceManager.h"]=]
-    "#include \"${CMAKE_SOURCE_DIR}/cmake/RenegadeTextureBacking.h\"")
+    "#include \"${CMAKE_SOURCE_DIR}/cmake/RenegadeTextureBacking.h\"\n#include \"${CMAKE_SOURCE_DIR}/cmake/RenegadeBundledTerrainTexture.h\"")
 renegade_texture_replace([=[std::string container_filename;]=]
     [=[std::string container_filename;
         std::shared_ptr<const resourcemanager::GovernedTextureBacking> governed_backing;]=])
@@ -25,6 +25,11 @@ renegade_texture_replace("resource->container_fileoffset = container_fileoffset;
 renegade_texture_replace("bool Contains(const std::string& name)" [=[Resource Load(const std::string& name, Flags flags, const uint8_t* data,
             size_t length, const std::string& container, size_t offset)
         {
+            if (!data && container.empty() && wi::graphics::GetDevice() != nullptr)
+            {
+                const auto local = renegade::terrain::MissingStockGrassReplacement(name);
+                if (!local.empty()) return LoadInternal(local, flags, nullptr, length, {}, offset, {});
+            }
             return LoadInternal(name, flags, data, length, container, offset, {});
         }
 

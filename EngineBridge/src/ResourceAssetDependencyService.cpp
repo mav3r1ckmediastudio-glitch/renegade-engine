@@ -3,6 +3,7 @@
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ResourceAssetService.h"
+#include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/VideoAssetService.h"
 
@@ -90,8 +91,11 @@ namespace renegade::bridge
     bool ResourceAssetDependencyProvider::Supports(
         const DependencyClass dependencyClass) const noexcept
     {
-        return dependencyClass == DependencyClass::Scene;
+        return dependencyClass == DependencyClass::Scene || dependencyClass == DependencyClass::ImportedContent;
     }
+
+    static bool DiscoverSceneResourceBindings(const wi::scene::Scene& scene, const std::string& projectRoot,
+        const StableId& projectId, const DependencyCandidateSink& emit, std::string& error);
 
     bool ResourceAssetDependencyProvider::Discover(
         const DependencyProviderContext& context,
@@ -105,6 +109,31 @@ namespace renegade::bridge
             error =
                 "Resource asset dependency provider requires a scene source, project root and valid project ID.";
             return false;
+        }
+
+        if (context.source->dependencyClass == DependencyClass::ImportedContent)
+        {
+            const auto path = fs::u8path(context.source->projectRelativePath).lexically_normal();
+            if (path.extension() != ReusableAssetExtension) return true;
+            AssetRegistry registry;
+            if (!ReadAssetRegistry(context.projectRoot, projectId_, registry, error)) return false;
+            const auto record = std::find_if(registry.records.begin(), registry.records.end(),
+                [&](const AssetRecord& asset) {
+                    return fs::u8path(asset.projectRelativePath).lexically_normal() == path;
+                });
+            if (record == registry.records.end() || record->dependencyClass != DependencyClass::ImportedContent)
+            {
+                error = "Could not resolve reusable model for material dependency discovery.";
+                return false;
+            }
+            auto model = ReusableAssetService().PrepareModelAssetPlacement(
+                {context.projectRoot, projectId_, record->assetId});
+            if (!model.IsReady() || !model.PeekScene())
+            {
+                error = model.Result().error;
+                return false;
+            }
+            return DiscoverSceneResourceBindings(*model.PeekScene(), context.projectRoot, projectId_, emit, error);
         }
 
         const auto resolved = ResolveDependencyPath(
@@ -126,9 +155,15 @@ namespace renegade::bridge
             return false;
         }
 
+        return DiscoverSceneResourceBindings(*prepared.ReadOnlyScene(), context.projectRoot, projectId_, emit, error);
+    }
+
+    static bool DiscoverSceneResourceBindings(const wi::scene::Scene& scene, const std::string& projectRoot,
+        const StableId& projectId, const DependencyCandidateSink& emit, std::string& error)
+    {
         std::vector<MaterialTextureBindingRecord> textureBindings;
         if (!InspectMaterialTextureBindings(
-                *prepared.ReadOnlyScene(), textureBindings, error))
+                scene, textureBindings, error))
         {
             error =
                 "Resource asset dependency scene material metadata is invalid: " + error;
@@ -137,7 +172,7 @@ namespace renegade::bridge
 
         std::vector<VideoAssetBindingRecord> videoBindings;
         if (!InspectVideoAssetBindings(
-                *prepared.ReadOnlyScene(), videoBindings, error))
+                scene, videoBindings, error))
         {
             error =
                 "Resource asset dependency scene video metadata is invalid: " + error;
@@ -152,7 +187,7 @@ namespace renegade::bridge
 
         AssetRegistry registry;
         if (!ReadAssetRegistry(
-                context.projectRoot, projectId_, registry, error))
+                projectRoot, projectId, registry, error))
         {
             error =
                 "Resource asset dependency provider could not read LC01: " + error;

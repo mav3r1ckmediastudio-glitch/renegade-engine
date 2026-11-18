@@ -5,6 +5,17 @@
 #include "renegade/bridge/TerrainPropProjection.h"
 #include "renegade/bridge/ResourceAssetRuntimeService.h"
 
+#include "renegade/bridge/CreatorTextureWorkflowService.h"
+#include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/PlayerService.h"
+#include "renegade/bridge/ProjectService.h"
+#include "renegade/bridge/ReusableAssetDependencyService.h"
+#include "renegade/bridge/ResourceAssetDependencyService.h"
+#include "renegade/bridge/SceneDocumentService.h"
+#include "renegade/bridge/SceneService.h"
+#include "renegade/bridge/SelectionService.h"
+#include "renegade/bridge/TerrainPropDocument.h"
+
 #include <WickedEngine.h>
 #include <Windows.h>
 #include <Psapi.h>
@@ -12,6 +23,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <stdexcept>
 #include <thread>
 
@@ -19,7 +31,6 @@ namespace
 {
     using namespace renegade::bridge;
     namespace fs = std::filesystem;
-    constexpr const char* Project = "71111111-1111-4111-8111-111111111111";
     constexpr const char* Source = "SourceAssets/Textures/wood.tga";
     constexpr const char* Product = "Content/Textures/wood.rasset";
     constexpr unsigned Size = 512;
@@ -86,28 +97,25 @@ int RunGovernedTextureProof(const std::filesystem::path& directory, const std::f
     using namespace renegade::bridge;
     try
     {
-        const fs::path root = directory / fs::u8path(GenerateStableId());
-        fs::create_directories((root / Source).parent_path());
-        fs::create_directories((root / Product).parent_path());
-        fs::create_directories(root / "Intermediate/Transactions");
-        AssetRegistry registry;
-        registry.projectId = Project;
-        registry.schemaVersion = AssetRegistry::CurrentSchemaVersion;
-        std::string json, error;
-        Check(SerializeAssetRegistry(registry, json, error), error);
-        std::ofstream registryFile(root / AssetRegistryDocumentName, std::ios::binary);
-        registryFile << json;
-        registryFile.close();
-        Check(static_cast<bool>(registryFile), "write canonical project registry");
-        WriteImage(root / Source, 192);
-        ResourceAssetImportRequest request;
-        request.projectId = Project;
-        request.projectRoot = root.generic_u8string();
-        request.sourceProjectRelativePath = Source;
-        request.assetProjectRelativePath = Product;
-        request.expectedFormat = ResourceSourceFormat::Tga;
-        request.materialTextureSemantic = "color";
-        auto imported = ResourceAssetService().ImportResourceAsset(request);
+        const fs::path run = fs::absolute(directory) / fs::u8path(GenerateStableId());
+        fs::create_directories(run);
+        const auto starter = (run / "starter.wiscene").generic_u8string();
+        {
+            wi::scene::Scene blank;
+            wi::Archive archive;
+            blank.Serialize(archive);
+            Check(archive.SaveFile(starter), "write starter scene");
+        }
+        ProjectService projects;
+        projects.Initialize((run / "recents.ini").string());
+        Check(projects.CreateProject(run.string(), "TerrainProof", starter), projects.LastError());
+        const auto project = projects.CurrentProject();
+        const fs::path root = fs::u8path(project.rootPath);
+        const auto source = run / "wood.tga";
+        std::string error;
+        WriteImage(source, 192);
+        auto imported = CreatorTextureWorkflowService().ImportTexture(project.rootPath, project.projectId,
+            source.generic_u8string(), "color");
         Check(imported.succeeded, imported.error);
         std::vector<uint8_t> newPixels;
         {
@@ -115,7 +123,7 @@ int RunGovernedTextureProof(const std::filesystem::path& directory, const std::f
             Check(GetProcessMemoryInfo(GetCurrentProcess(), &beforeBind, sizeof(beforeBind)) != 0, "pre-bind memory");
             const auto bindStarted = std::chrono::steady_clock::now();
             PreparedMaterialTextureAsset old;
-            Check(PrepareMaterialTextureAsset(request.projectRoot, Project, imported.assetId, old, error), error);
+            Check(PrepareMaterialTextureAsset(project.rootPath, project.projectId, imported.assetId, old, error), error);
             wi::scene::Scene scene;
             const auto entity = scene.Entity_CreateMaterial("Boulder surface");
             Check(ApplyPreparedMaterialTextureAsset(scene, entity, MaterialTextureSlot::BaseColor, old, {}, error), error);
@@ -137,13 +145,13 @@ int RunGovernedTextureProof(const std::filesystem::path& directory, const std::f
                 MaterialTextureSlot::BaseColor, old, {}, error), error);
             Check(CaptureMaterialTextureReads(old, "color").initialBytes == firstRead, "repeated material bind reread DDS");
             ModelImportCommitRequest modelRequest;
-            modelRequest.projectRoot = request.projectRoot;
-            modelRequest.projectId = Project;
+            modelRequest.projectRoot = project.rootPath;
+            modelRequest.projectId = project.projectId;
             modelRequest.assetName = "StreamedBoulder";
             auto committed = ModelImportCommitService().CommitStaticModel(modelRequest, candidate);
             Check(committed.succeeded, committed.error);
             auto model = ReusableAssetService().PrepareModelAssetPlacement(
-                {request.projectRoot, Project, committed.assetId});
+                {project.rootPath, project.projectId, committed.assetId});
             Check(model.IsReady(), model.Result().error);
             wi::scene::Scene terrain;
             TerrainPropProjection projection(terrain, false);
@@ -160,6 +168,47 @@ int RunGovernedTextureProof(const std::filesystem::path& directory, const std::f
             const auto& projected = terrain.materials[0].textures[wi::scene::MaterialComponent::BASECOLORMAP];
             Check(projected.resource.internal_state.get() == original.internal_state.get(),
                 "boulder placement lost governed texture binding");
+            {
+                SceneService authored;
+                CommandService history;
+                SelectionService selection;
+                SceneDocumentService documents(authored, selection, history, projects);
+                auto& native = authored.GetScene();
+                TerrainPropDocument layer;
+                layer.layerId = GenerateStableId();
+                layer.nextPlacementId = 33;
+                layer.profiles.push_back({profile, committed.assetId, {}});
+                layer.pages.push_back(page);
+                const auto owner = native.Entity_CreateTransform("T1 boulder layer");
+                Check(PublishTerrainPropRevision(root, project.projectId, layer, native, owner, error), error);
+                TransformState spawn;
+                spawn.translation = {0, 1, -3};
+                CreatePlayerStartCommand player(native, spawn);
+                Check(player.Execute(), "author player start");
+                Check(documents.Save(projects.StartupScenePath()), authored.LastError());
+                const auto saveAs = (root / "Content/Scenes/Boulders.wiscene").generic_u8string();
+                Check(documents.Save(saveAs), authored.LastError());
+                Check(documents.Open(saveAs), authored.LastError());
+                Check(native.objects.GetCount() == 32 && native.materials.GetCount() == 1 &&
+                    native.materials[0].textures[wi::scene::MaterialComponent::BASECOLORMAP].resource.internal_state.get() ==
+                        original.internal_state.get(), "Save As lost shared governed prop material");
+
+                ReusableAssetDependencyProvider provider(project.projectId);
+                DependencyNode sceneNode;
+                sceneNode.dependencyClass = DependencyClass::Scene;
+                sceneNode.projectRelativePath = "Content/Scenes/Boulders.wiscene";
+                std::set<std::string> files;
+                const auto emit = [&](const DependencyCandidate& c) { files.insert(c.declaredPath); };
+                Check(provider.Discover({project.rootPath, &sceneNode}, emit, {}, error), error);
+                Check(files.count(committed.assetProjectRelativePath) == 1 && files.size() == 3,
+                    "export must discover exactly the referenced prop revision, page and model");
+                DependencyNode modelNode;
+                modelNode.dependencyClass = DependencyClass::ImportedContent;
+                modelNode.projectRelativePath = committed.assetProjectRelativePath;
+                ResourceAssetDependencyProvider textures(project.projectId);
+                Check(textures.Discover({project.rootPath, &modelNode}, emit, {}, error), error);
+                Check(files.count(imported.assetProjectRelativePath) == 1, "export omitted nested governed texture");
+            }
             const unsigned cold = original.GetTexture().desc.width;
             Check(cold < Size && original.GetTextureFullMipCount() == 10 && original.GetFileData().empty(), "cold DDS contract");
             Report("T1_cold", original, old);
@@ -173,7 +222,7 @@ int RunGovernedTextureProof(const std::filesystem::path& directory, const std::f
             const fs::path moved = root.parent_path() / fs::u8path(GenerateStableId());
             fs::copy(root, moved, fs::copy_options::recursive);
             PreparedMaterialTextureAsset movedTexture;
-            Check(PrepareMaterialTextureAsset(moved.generic_u8string(), Project, imported.assetId, movedTexture, error), error);
+            Check(PrepareMaterialTextureAsset(moved.generic_u8string(), project.projectId, imported.assetId, movedTexture, error), error);
             auto movedResource = LoadMaterialTextureForSemantic(movedTexture, "color", error);
             Check(movedResource.IsValid() && movedResource.internal_state.get() != original.internal_state.get(),
                 "relocated project reused its original backing");
@@ -182,11 +231,11 @@ int RunGovernedTextureProof(const std::filesystem::path& directory, const std::f
 
             WriteImage(root / Source, 24);
             AssetCatalogue catalogue;
-            Check(CreatorAssetWorkflowService().BuildCatalogue(request.projectRoot, Project, catalogue, error), error);
-            auto replay = ResourceAssetService().ReimportResourceAsset({request.projectRoot, Project, imported.assetId});
+            Check(CreatorAssetWorkflowService().BuildCatalogue(project.rootPath, project.projectId, catalogue, error), error);
+            auto replay = ResourceAssetService().ReimportResourceAsset({project.rootPath, project.projectId, imported.assetId});
             Check(replay.succeeded, replay.error);
             PreparedMaterialTextureAsset replacement;
-            Check(PrepareMaterialTextureAsset(request.projectRoot, Project, imported.assetId, replacement, error), error);
+            Check(PrepareMaterialTextureAsset(project.rootPath, project.projectId, imported.assetId, replacement, error), error);
             auto current = LoadMaterialTextureForSemantic(replacement, "color", error);
             Check(current.IsValid() && current.internal_state.get() != original.internal_state.get(), "new texture generation");
             Reach(current, Size, Size);
@@ -200,11 +249,11 @@ int RunGovernedTextureProof(const std::filesystem::path& directory, const std::f
             fs::create_directories(file.parent_path());
             fs::copy_file(root / Product, file);
             std::ofstream(package / "GameData/content-manifest.json")
-                << "{\"format\":\"renegade-content-manifest\",\"schema_version\":1,\"project_id\":\"" << Project
+                << "{\"format\":\"renegade-content-manifest\",\"schema_version\":1,\"project_id\":\"" << project.projectId
                 << "\",\"files\":[{\"asset_id\":\"" << imported.assetId
                 << "\",\"path\":\"GameData/Content/Textures/wood.rasset\",\"source_hash\":\"" << replay.productHash << "\"}]}";
             PackagedMaterialTextureRefreshResult packaged;
-            Check(RefreshPackagedMaterialTextureAssets(scene, package.generic_u8string(), Project, packaged, error), error);
+            Check(RefreshPackagedMaterialTextureAssets(scene, package.generic_u8string(), project.projectId, packaged, error), error);
             Check(packaged.refreshedBindingCount == 1 && slot.resource.internal_state.get() != current.internal_state.get(),
                 "standalone package resolver did not acquire its own backing");
             Reach(slot.resource, Size, Size);
@@ -227,11 +276,13 @@ int RunGovernedTextureProof(const std::filesystem::path& directory, const std::f
         } while (std::chrono::steady_clock::now() < deadline);
         Check(!moveError, "moving closed project after native job release: " + moveError.message());
         PreparedMaterialTextureAsset reopened;
-        Check(PrepareMaterialTextureAsset(relocated.generic_u8string(), Project, imported.assetId, reopened, error), error);
+        Check(PrepareMaterialTextureAsset(relocated.generic_u8string(), project.projectId, imported.assetId, reopened, error), error);
         auto reopenedResource = LoadMaterialTextureForSemantic(reopened, "color", error);
         Check(reopenedResource.IsValid(), "reopen relocated product");
         Reach(reopenedResource, Size, Size);
         Check(Readback(reopenedResource) == newPixels, "relocated reimported texture pixels");
+        std::cout << "T1_project=" << (relocated / fs::u8path(project.descriptorPath).filename()).generic_u8string()
+            << " texture=" << imported.assetId << std::endl;
         std::cout << "T1_NATIVE_PASS" << std::endl;
         return 0;
     }

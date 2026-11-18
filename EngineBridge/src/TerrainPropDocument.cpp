@@ -333,8 +333,8 @@ namespace renegade::bridge
         return true;
     }
 
-    bool ReadTerrainPropRevision(const fs::path& root, const StableId& projectId, const std::string& digest,
-        TerrainPropDocument& output, std::string& error)
+    static bool ReadRevision(const fs::path& root, const StableId& projectId, const std::string& digest,
+        TerrainPropDocument& output, std::string& error, std::set<std::string>* files)
     {
         std::vector<std::uint8_t> bytes;
         if (!ReadProduct(root, digest, ".rprops", MaxManifestBytes, bytes, error)) return false;
@@ -378,6 +378,7 @@ namespace renegade::bridge
             if (!(manifest >> hash)) { error = "Missing terrain prop page digest."; return false; }
             if (!ReadProduct(root, hash, ".rppg", MaxPageBytes, bytes, error) ||
                 !DecodeTerrainPropPage(bytes, page, error)) return false;
+            if (files) files->insert((Store({}) / (hash + ".rppg")).generic_u8string());
             placements += page.placements.size();
             decodedBytes += bytes.size();
             if (placements > MaxLayerPlacements || decodedBytes > 128ull * 1024 * 1024)
@@ -390,6 +391,43 @@ namespace renegade::bridge
         if (manifest >> extra) { error = "Trailing terrain prop manifest data."; return false; }
         if (!Validate(doc, error)) return false;
         output = std::move(doc);
+        if (files) files->insert((Store({}) / (digest + ".rprops")).generic_u8string());
+        return true;
+    }
+
+    bool ReadTerrainPropRevision(const fs::path& root, const StableId& projectId, const std::string& digest,
+        TerrainPropDocument& output, std::string& error)
+    {
+        return ReadRevision(root, projectId, digest, output, error, nullptr);
+    }
+
+    bool CollectTerrainPropDependencies(const wi::scene::Scene& scene, const fs::path& root,
+        const StableId& projectId, std::vector<std::string>& files, std::vector<StableId>& models,
+        std::string& error)
+    {
+        std::set<std::string> paths;
+        std::set<StableId> modelIds, layers;
+        for (size_t i = 0; i < scene.metadatas.GetCount(); ++i)
+        {
+            const auto& metadata = scene.metadatas[i];
+            const auto& properties = metadata.string_values;
+            if (metadata.runtimeProjectionOnly || !properties.has(RevisionKey)) continue;
+            if (!properties.has(ProjectKey) || properties.get(ProjectKey) != projectId)
+            {
+                error = "Terrain prop dependency belongs to a different project.";
+                return false;
+            }
+            TerrainPropDocument document;
+            if (!ReadRevision(root, projectId, properties.get(RevisionKey), document, error, &paths)) return false;
+            if (!layers.insert(document.layerId).second)
+            {
+                error = "Duplicate terrain prop layer identity.";
+                return false;
+            }
+            for (const auto& profile : document.profiles) modelIds.insert(profile.modelAssetId);
+        }
+        files.assign(paths.begin(), paths.end());
+        models.assign(modelIds.begin(), modelIds.end());
         return true;
     }
 
