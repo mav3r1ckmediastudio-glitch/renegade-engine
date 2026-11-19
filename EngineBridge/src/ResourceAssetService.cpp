@@ -1,6 +1,8 @@
 #include "renegade/bridge/ResourceAssetService.h"
 
 #include "renegade/bridge/AssetBrowserService.h"
+#include "renegade/bridge/MaterialTextureCook.h"
+#include "renegade/bridge/ResourceAssetCacheIdentityService.h"
 
 #include <algorithm>
 #include <array>
@@ -260,11 +262,14 @@ namespace
     }
 
     std::string CanonicalRecipe(
-        const ResourceClass resourceClass,
-        const ResourceSourceFormat format)
+        const ResourceClass resourceClass, const ResourceSourceFormat format,
+        const std::string& semantic = {})
     {
         nlohmann::json recipe;
         recipe["options"] = nlohmann::json::object();
+        if (!semantic.empty())
+            recipe["options"] = {{"material_texture_recipe", MaterialTextureRecipe::Version},
+                {"semantic", semantic}};
         recipe["resource_class"] = ResourceClassToken(resourceClass);
         recipe["source_format"] = ResourceFormatToken(format);
         return recipe.dump();
@@ -415,6 +420,72 @@ namespace
         return value;
     }
 
+    struct ResourceContainerLayout
+    {
+        std::uint32_t manifestBytes = 0;
+        std::size_t payloadOffset = 0;
+        std::size_t payloadBytes = 0;
+    };
+
+    bool ParseContainerLayout(const std::vector<std::uint8_t>& header,
+        const std::size_t fileBytes, ResourceContainerLayout& layout, std::string& error)
+    {
+        if (header.size() < RAssetHeaderBytes || fileBytes < RAssetHeaderBytes ||
+            !std::equal(RAssetMagic.begin(), RAssetMagic.end(), header.begin()))
+        {
+            error = "File is not a version-1 Renegade RAsset container.";
+            return false;
+        }
+        layout.manifestBytes = ReadU32(header, 8u);
+        if (layout.manifestBytes == 0 || layout.manifestBytes > MaximumManifestBytes ||
+            layout.manifestBytes > fileBytes - RAssetHeaderBytes)
+        {
+            error = "Resource RAsset declares invalid manifest or payload lengths.";
+            return false;
+        }
+        layout.payloadOffset = RAssetHeaderBytes + layout.manifestBytes;
+        layout.payloadBytes = fileBytes - layout.payloadOffset;
+        if (layout.payloadBytes == 0 || layout.payloadBytes != ReadU64(header, 12u))
+        {
+            error = "Resource RAsset container length does not match its header.";
+            return false;
+        }
+        return true;
+    }
+
+    template<typename Read>
+    bool ReadResourceBody(ResourceAssetDocument& document, std::size_t available,
+        Read read, std::string& error)
+    {
+        auto take = [&](std::uint64_t count, std::vector<std::uint8_t>& out)
+        {
+            if (!count || count > available)
+                return false;
+            out.resize(static_cast<std::size_t>(count));
+            available -= out.size();
+            return read(out);
+        };
+        if (!take(document.manifest.derived.byteCount, document.payload))
+        {
+            error = "Invalid or incomplete source payload in resource container.";
+            return false;
+        }
+        for (const auto& variant : document.manifest.textureVariants)
+        {
+            if (!take(variant.length, document.cookedTextures.emplace_back()))
+            {
+                error = "Invalid or incomplete DDS span in resource container.";
+                return false;
+            }
+        }
+        if (available)
+        {
+            error = "Resource container has unclaimed payload bytes.";
+            return false;
+        }
+        return true;
+    }
+
     template<typename T>
     bool RequiredField(
         const nlohmann::json& object,
@@ -487,6 +558,13 @@ namespace
         root["settings_version"] = manifest.settingsVersion;
         root["source_asset_id"] = manifest.sourceAssetId;
         root["source_format"] = ResourceFormatToken(manifest.sourceFormat);
+        if (manifest.schemaVersion == 2)
+        {
+            root["texture_recipe_version"] = MaterialTextureRecipe::Version;
+            for (const auto& variant : manifest.textureVariants)
+                root["texture_variants"].push_back({
+                    {"semantic", variant.semantic}, {"hash", variant.hash}, {"length", variant.length}});
+        }
         return root.dump();
     }
 
@@ -514,6 +592,19 @@ namespace
             manifest.projectId = root.at("project_id").get<std::string>();
             const std::string resourceClass = root.at("resource_class").get<std::string>();
             manifest.schemaVersion = root.at("schema_version").get<std::uint32_t>();
+            if (manifest.schemaVersion == 2)
+            {
+                const auto& variants = root.at("texture_variants");
+                if (root.at("texture_recipe_version") != MaterialTextureRecipe::Version ||
+                    !variants.is_array() || variants.empty() || variants.size() > 4)
+                {
+                    error = "Invalid governed texture recipe or variant table.";
+                    return false;
+                }
+                for (const auto& item : variants)
+                    manifest.textureVariants.push_back({item.at("semantic").get<std::string>(),
+                        item.at("hash").get<std::string>(), item.at("length").get<std::uint64_t>()});
+            }
             manifest.settingsJson = root.at("settings").dump();
             manifest.settingsSchema = root.at("settings_schema").get<std::string>();
             manifest.settingsVersion = root.at("settings_version").get<std::uint32_t>();
@@ -622,13 +713,80 @@ namespace
 
 namespace renegade::bridge
 {
-    bool ValidateResourceAssetDocument(
-        const ResourceAssetDocument& document,
-        std::string& error)
+    bool ReadTextureCookSemantic(const std::string& recipeJson, std::string& semantic, std::string& error)
+    {
+        semantic.clear();
+        const auto recipe = nlohmann::json::parse(recipeJson, nullptr, false);
+        if (recipe.is_object() && recipe.contains("options") && recipe["options"].is_object())
+        {
+            const auto& options = recipe["options"];
+            if (options.empty())
+                return true;
+            if (recipe.contains("resource_class") && recipe["resource_class"] == "texture" && options.size() == 2 &&
+                options.contains("material_texture_recipe") &&
+                options["material_texture_recipe"] == MaterialTextureRecipe::Version &&
+                options.contains("semantic") && options["semantic"].is_string())
+            {
+                const auto value = options["semantic"].get<std::string>();
+                MaterialTextureRecipe parsed;
+                if (ParseTextureRecipe(value, parsed))
+                {
+                    semantic = value;
+                    return true;
+                }
+            }
+        }
+        error = "Unsupported material texture cook recipe.";
+        return false;
+    }
+
+    bool CookResourceTextureVariants(ResourceAssetDocument& document, std::string& error)
+    {
+        auto& manifest = document.manifest;
+        manifest.schemaVersion = ResourceAssetManifest::ResidentSchemaVersion;
+        manifest.textureVariants.clear();
+        document.cookedTextures.clear();
+        std::string requested;
+        if (!ReadTextureCookSemantic(manifest.settingsJson, requested, error))
+            return false;
+        if (requested.empty())
+            return true;
+        const auto& derived = manifest.derived;
+        if (manifest.resourceClass != ResourceClass::Texture ||
+            (derived.dimensionsKnown &&
+                std::uint64_t(derived.width) * derived.height <= 48u * 1024u))
+            return true;
+#ifdef _WIN32
+        MaterialTextureRecipe parsed;
+        if (!ParseTextureRecipe(requested, parsed))
+        {
+            error = "Cannot cook unknown texture recipe " + requested;
+            return false;
+        }
+        std::vector<std::uint8_t> cooked;
+        const auto status = CookMaterialTexture(document.payload, manifest.sourceFormat, parsed, cooked, error);
+        if (status == TextureCookResult::Failed)
+            return false;
+        if (status == TextureCookResult::Cooked)
+        {
+            std::string digest;
+            if (!ComputePayloadSha256(cooked, digest, error))
+                return false;
+            manifest.textureVariants.push_back({requested, std::move(digest), cooked.size()});
+            document.cookedTextures.push_back(std::move(cooked));
+            manifest.schemaVersion = ResourceAssetManifest::CurrentSchemaVersion;
+        }
+#endif
+        error.clear();
+        return true;
+    }
+
+    static bool ValidateResourceDocument(const ResourceAssetDocument& document,
+        bool validateCookedBytes, std::string& error)
     {
         const auto& manifest = document.manifest;
         if (manifest.formatIdentifier != ResourceAssetFormat ||
-            manifest.schemaVersion != ResourceAssetManifest::CurrentSchemaVersion)
+            (manifest.schemaVersion != 1 && manifest.schemaVersion != 2))
         {
             error = "Unsupported resource .rasset schema.";
             return false;
@@ -657,10 +815,42 @@ namespace renegade::bridge
             error = "Resource .rasset contains an unsupported version-1 import contract.";
             return false;
         }
-        if (manifest.settingsJson != CanonicalRecipe(manifest.resourceClass, manifest.sourceFormat))
+        std::string requested;
+        if (!ReadTextureCookSemantic(manifest.settingsJson, requested, error) ||
+            manifest.settingsJson != CanonicalRecipe(manifest.resourceClass, manifest.sourceFormat, requested))
         {
             error = "Resource .rasset import recipe is not the canonical version-1 recipe.";
             return false;
+        }
+        if ((manifest.schemaVersion == 2) != !manifest.textureVariants.empty() ||
+            (validateCookedBytes && manifest.textureVariants.size() != document.cookedTextures.size()) ||
+            (!manifest.textureVariants.empty() && manifest.resourceClass != ResourceClass::Texture))
+        {
+            error = "Resource product has inconsistent cooked texture metadata.";
+            return false;
+        }
+        std::set<std::string> used;
+        for (std::size_t i = 0; i < manifest.textureVariants.size(); ++i)
+        {
+            const auto& variant = manifest.textureVariants[i];
+            if (variant.semantic != requested ||
+                !used.insert(variant.semantic).second || variant.length == 0 ||
+                variant.hash.size() != 64 ||
+                variant.hash.find_first_not_of("0123456789abcdef") != std::string::npos)
+            {
+                error = "Invalid governed texture variant, length or content hash.";
+                return false;
+            }
+            if (validateCookedBytes)
+            {
+                std::string digest;
+                if (document.cookedTextures[i].size() != variant.length ||
+                    !ComputePayloadSha256(document.cookedTextures[i], digest, error) || digest != variant.hash)
+                {
+                    error = "Cooked texture bytes differ from their recorded SHA-256.";
+                    return false;
+                }
+            }
         }
         if (document.payload.empty() || manifest.payloadHash != HashBytes(document.payload))
         {
@@ -676,6 +866,11 @@ namespace renegade::bridge
         }
         error.clear();
         return true;
+    }
+
+    bool ValidateResourceAssetDocument(const ResourceAssetDocument& document, std::string& error)
+    {
+        return ValidateResourceDocument(document, true, error);
     }
 
     bool SerializeResourceAssetDocument(
@@ -702,8 +897,10 @@ namespace renegade::bridge
             error = "Resource .rasset manifest is too large.";
             return false;
         }
-        const std::uint64_t total = static_cast<std::uint64_t>(RAssetHeaderBytes) +
-            manifest.size() + document.payload.size();
+        std::uint64_t bodyBytes = document.payload.size();
+        for (const auto& variant : document.manifest.textureVariants)
+            bodyBytes += variant.length;
+        const std::uint64_t total = RAssetHeaderBytes + manifest.size() + bodyBytes;
         if (total > (std::numeric_limits<std::size_t>::max)())
         {
             error = "Resource .rasset container is too large for this platform.";
@@ -712,9 +909,11 @@ namespace renegade::bridge
         bytes.reserve(static_cast<std::size_t>(total));
         bytes.insert(bytes.end(), RAssetMagic.begin(), RAssetMagic.end());
         AppendU32(bytes, static_cast<std::uint32_t>(manifest.size()));
-        AppendU64(bytes, static_cast<std::uint64_t>(document.payload.size()));
+        AppendU64(bytes, bodyBytes);
         bytes.insert(bytes.end(), manifest.begin(), manifest.end());
         bytes.insert(bytes.end(), document.payload.begin(), document.payload.end());
+        for (const auto& cooked : document.cookedTextures)
+            bytes.insert(bytes.end(), cooked.begin(), cooked.end());
         error.clear();
         return true;
     }
@@ -725,34 +924,24 @@ namespace renegade::bridge
         std::string& error)
     {
         document = {};
-        if (bytes.size() < RAssetHeaderBytes ||
-            !std::equal(RAssetMagic.begin(), RAssetMagic.end(), bytes.begin()))
-        {
-            error = "File is not a version-1 Renegade RAsset container.";
+        ResourceContainerLayout layout;
+        if (!ParseContainerLayout(bytes, bytes.size(), layout, error))
             return false;
-        }
-        const std::uint32_t manifestBytes = ReadU32(bytes, 8u);
-        const std::uint64_t payloadBytes = ReadU64(bytes, 12u);
-        if (manifestBytes == 0 || manifestBytes > MaximumManifestBytes || payloadBytes == 0)
-        {
-            error = "Resource RAsset declares invalid manifest or payload lengths.";
-            return false;
-        }
-        const std::uint64_t expected = static_cast<std::uint64_t>(RAssetHeaderBytes) +
-            manifestBytes + payloadBytes;
-        if (expected != bytes.size())
-        {
-            error = "Resource RAsset container length does not match its header.";
-            return false;
-        }
         const auto manifestStart = bytes.begin() +
             static_cast<std::ptrdiff_t>(RAssetHeaderBytes);
-        const auto payloadStart = manifestStart + manifestBytes;
+        const auto payloadStart = manifestStart + layout.manifestBytes;
         const std::string manifestText(manifestStart, payloadStart);
         if (!ParseManifest(manifestText, document.manifest, error))
             return false;
-        document.payload.assign(payloadStart, bytes.end());
-        if (!ValidateResourceAssetDocument(document, error))
+        auto cursor = payloadStart;
+        auto copy = [&](std::vector<std::uint8_t>& out)
+        {
+            std::copy_n(cursor, out.size(), out.begin());
+            cursor += static_cast<std::ptrdiff_t>(out.size());
+            return true;
+        };
+        if (!ReadResourceBody(document, layout.payloadBytes, copy, error) ||
+            !ValidateResourceAssetDocument(document, error))
         {
             document = {};
             return false;
@@ -764,15 +953,74 @@ namespace renegade::bridge
     bool ReadResourceAssetDocument(
         const std::string& path,
         ResourceAssetDocument& document,
-        std::string& error)
+        std::string& error,
+        ResourceAssetPayloadSpan* span)
     {
-        std::vector<std::uint8_t> bytes;
-        if (!ReadFileBytes(fs::u8path(path), bytes, error))
+        document = {};
+        if (span)
+            *span = {};
+        std::ifstream stream(fs::u8path(path), std::ios::binary | std::ios::ate);
+        const std::streamoff fileBytes = stream.tellg();
+        if (fileBytes < 0 ||
+            static_cast<std::uintmax_t>(fileBytes) > (std::numeric_limits<std::size_t>::max)())
         {
-            document = {};
+            error = "Could not measure resource asset: " + path;
             return false;
         }
-        return DeserializeResourceAssetDocument(bytes, document, error);
+        stream.seekg(0);
+        std::vector<std::uint8_t> header(RAssetHeaderBytes);
+        if (!stream.read(reinterpret_cast<char*>(header.data()), header.size()))
+        {
+            error = "Could not read resource asset header: " + path;
+            return false;
+        }
+        ResourceContainerLayout layout;
+        if (!ParseContainerLayout(header, static_cast<std::size_t>(fileBytes), layout, error))
+            return false;
+
+        std::string manifest(layout.manifestBytes, '\0');
+        ResourceAssetDocument candidate;
+        if (!stream.read(manifest.data(), layout.manifestBytes))
+        {
+            error = "Could not read resource asset manifest: " + path;
+            return false;
+        }
+        if (!ParseManifest(manifest, candidate.manifest, error))
+            return false;
+        auto read = [&](std::vector<std::uint8_t>& out)
+        {
+            return static_cast<bool>(stream.read(reinterpret_cast<char*>(out.data()), out.size()));
+        };
+        if (span)
+        {
+            // Binding loads verify only the selected DDS against its digest on
+            // the held file generation. Never allocate unselected variants.
+            auto remaining = layout.payloadBytes;
+            for (const auto& variant : candidate.manifest.textureVariants)
+            {
+                if (!variant.length || variant.length > remaining)
+                {
+                    error = "Cooked texture span lies outside its resource container.";
+                    return false;
+                }
+                remaining -= static_cast<std::size_t>(variant.length);
+            }
+            if (remaining != candidate.manifest.derived.byteCount)
+            {
+                error = "Texture spans do not match resource container length.";
+                return false;
+            }
+            candidate.payload.resize(remaining);
+            if (!read(candidate.payload) || !ValidateResourceDocument(candidate, false, error))
+                return false;
+        }
+        else if (!ReadResourceBody(candidate, layout.payloadBytes, read, error) ||
+            !ValidateResourceAssetDocument(candidate, error))
+            return false;
+        document = std::move(candidate);
+        if (span)
+            *span = {layout.payloadOffset, document.manifest.derived.byteCount};
+        return true;
     }
 
     bool ValidateResourceAssetMetadata(
@@ -1082,10 +1330,13 @@ namespace renegade::bridge
         product.manifest.sourceAssetId = result.sourceAssetId;
         product.manifest.resourceClass = result.resourceClass;
         product.manifest.sourceFormat = result.sourceFormat;
-        product.manifest.settingsJson = CanonicalRecipe(result.resourceClass, result.sourceFormat);
+        product.manifest.settingsJson = CanonicalRecipe(result.resourceClass, result.sourceFormat,
+            request.materialTextureSemantic);
         product.manifest.payloadHash = result.sourceHash;
         product.manifest.derived = result.derived;
         product.payload = payload;
+        if (!CookResourceTextureVariants(product, error))
+            return ImportFailure(std::move(result), std::move(error));
 
         std::vector<std::uint8_t> productBytes;
         if (!SerializeResourceAssetDocument(product, productBytes, error))

@@ -981,6 +981,7 @@ namespace renegade::studio
                             wi::ecs::Entity materialEntity = wi::ecs::INVALID_ENTITY;
                             bridge::MaterialTextureSlot slot = bridge::MaterialTextureSlot::BaseColor;
                             std::string sourcePath;
+                            std::string semantic;
                             bridge::CreatorTextureImportResult imported;
                         };
                         auto state = std::make_shared<ImportState>();
@@ -990,6 +991,8 @@ namespace renegade::studio
                         state->materialEntity = materialEntity;
                         state->slot = slot;
                         state->sourcePath = sourcePath;
+                        state->semantic = bridge::MaterialTextureSemantic(slot,
+                            *scene.materials.GetComponent(materialEntity));
                         studioChrome_.SetStatusText(
                             std::string("MATERIAL TEXTURE // ") + TextureSlotUiName(slot) +
                             " // IMPORTING + REGISTERING // " +
@@ -1000,7 +1003,7 @@ namespace renegade::studio
                             {
                                 bridge::CreatorTextureWorkflowService workflow;
                                 state->imported = workflow.ImportTexture(
-                                    state->projectRoot, state->projectId, state->sourcePath);
+                                    state->projectRoot, state->projectId, state->sourcePath, state->semantic);
                                 wi::eventhandler::Subscribe_Once(
                                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                                     [this, state](std::uint64_t)

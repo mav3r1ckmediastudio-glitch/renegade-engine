@@ -42,6 +42,13 @@ namespace renegade::bridge
     [[nodiscard]] const char* MaterialTextureSlotLabel(
         MaterialTextureSlot slot) noexcept;
 
+    struct PreparedTextureBacking;
+
+    // Opens one file generation and validates the manifest's product spans.
+    bool PrepareTextureBacking(const std::string& container, const ResourceAssetPayloadSpan& source,
+        const ResourceAssetDocument& document, std::shared_ptr<const PreparedTextureBacking>& backing,
+        std::string& error);
+
     struct PreparedMaterialTextureAsset
     {
         StableId projectId;
@@ -51,7 +58,18 @@ namespace renegade::bridge
         std::string payloadHash;
         std::string logicalResourceName;
         std::vector<std::uint8_t> payload;
+        std::shared_ptr<const PreparedTextureBacking> backing;
     };
+
+    struct MaterialTextureReadStats
+    {
+        std::uint64_t initialBytes = 0;
+        std::uint64_t mipBytes = 0;
+        std::uint64_t mipReads = 0;
+    };
+
+    [[nodiscard]] MaterialTextureReadStats CaptureMaterialTextureReads(
+        const PreparedMaterialTextureAsset& prepared, const std::string& semantic);
 
     using MaterialTextureResourceLoader = std::function<wi::Resource(
         const PreparedMaterialTextureAsset& prepared,
@@ -89,6 +107,13 @@ namespace renegade::bridge
 
     [[nodiscard]] wi::Resource LoadPreparedMaterialTextureAsset(
         const PreparedMaterialTextureAsset& prepared,
+        std::string& error);
+
+    [[nodiscard]] std::string MaterialTextureSemantic(MaterialTextureSlot slot,
+        const wi::scene::MaterialComponent& material);
+
+    [[nodiscard]] wi::Resource LoadMaterialTextureForSemantic(
+        const PreparedMaterialTextureAsset& prepared, const std::string& semantic,
         std::string& error);
 
     [[nodiscard]] bool ApplyPreparedMaterialTextureAsset(

@@ -42,8 +42,6 @@ namespace renegade::bridge
         if (!PrepareMaterialTextureAsset(
                 projectRoot, projectId, textureAssetId, prepared, result.error))
             return result;
-        if (!loader)
-            loader = LoadPreparedMaterialTextureAsset;
 
         std::size_t failures = 0;
         std::string firstFailure;

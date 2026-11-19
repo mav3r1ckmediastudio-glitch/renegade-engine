@@ -8,7 +8,7 @@ baseline. [UPSTREAM_SYNC](UPSTREAM_SYNC.md) records pin/overlay ownership.
 ## Prerequisites and checkout
 
 Use Windows x64, Git/submodules, Visual Studio or Build Tools with Desktop
-development with C++, a Windows SDK, CMake 3.19+ and CTest. The checked-in Wicked
+development with C++, a Windows SDK, CMake 3.20+ and CTest. The checked-in Wicked
 native solution requires its declared v145 toolset. CMake selects an installed
 supported generator/toolset; local v143 Release receipts do not replace the hosted
 native-solution baseline. Do not link objects/libraries built with incompatible

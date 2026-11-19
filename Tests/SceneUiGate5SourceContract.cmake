@@ -77,7 +77,7 @@ foreach(map IN ITEMS basecolor normal surface)
 endforeach()
 reject_text(terrain_source "default_grass_basecolor.dds" "truncated DDS default runtime binding")
 require_text(studio_cmake "RenegadeTerrainSurfacePacker" "Studio terrain surface packer")
-require_text(runtime_cmake "RenegadeTerrainSurfacePacker" "Runtime terrain surface packer")
+require_text(runtime_cmake "renegade_stage_default_grass(RenegadeRuntime)" "Runtime stages governed grass products")
 
 require_text(precipitation_source "snowflake.dds" "dedicated snow visual")
 require_text(studio_cmake "assets/weather/snowflake.dds" "Studio snow packaging")

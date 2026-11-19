@@ -57,7 +57,7 @@ add_executable(RenegadeRuntime WIN32
     src/RuntimeEquipmentLoadout.h
     src/main_Windows.cpp
 )
-add_dependencies(RenegadeRuntime RenegadeTerrainSurfacePacker)
+renegade_stage_default_grass(RenegadeRuntime)
 
 target_link_libraries(RenegadeRuntime
     PRIVATE
@@ -192,15 +192,6 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/package/Run-LP03-Screen-Proof.cmd"
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Run-LP03-Screen-Proof.cmd"
-    COMMAND $<TARGET_FILE:RenegadeTerrainSurfacePacker>
-        "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_ao.tga"
-        "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_roughness.tga"
-        "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_basecolor.tga"
-        "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_normal.tga"
-        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/default_grass/default_grass_basecolor.tga"
-        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/default_grass/default_grass_normal.tga"
-        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/default_grass/default_grass_surface.tga"
-        "32"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grass.wiscene"
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/grass.wiscene"
@@ -221,6 +212,9 @@ renegade_deploy_river_course_shaders(RenegadeRuntime)
 renegade_deploy_waterfall_resources(RenegadeRuntime)
 add_custom_command(TARGET RenegadeRuntime POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/Licenses"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/ThirdParty/DirectXTex/LICENSE"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/Licenses/DirectXTex-MIT.txt"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/EngineBridge/assets/moon/README.md"
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/Licenses/MoonTexture-Credit.txt"

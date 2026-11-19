@@ -8,7 +8,7 @@
 | Visual Studio | Current release supporting the pinned solution | Pending first Windows run |
 | MSVC toolset | `v145`, C++17 | Declared by pinned `.vcxproj` files; observation pending |
 | Windows SDK | Windows 10 or 11 SDK | Pending first Windows run |
-| CMake | 3.19 or newer | Pending first Windows run; not used by the solution baseline |
+| CMake | 3.20 or newer on Windows | Required by the pinned DirectXTex texture encoder |
 | Git | Submodule-capable current release | Pending first Windows run |
 | GPU | DX12-capable | Pending local graphics smoke |
 | GPU driver | Current stable driver | Pending local graphics smoke |

@@ -40,7 +40,8 @@ namespace renegade::bridge
         [[nodiscard]] CreatorTextureImportResult ImportTexture(
             const std::string& projectRoot,
             const StableId& projectId,
-            const std::string& externalSourcePath) const;
+            const std::string& externalSourcePath,
+            const std::string& materialSemantic = {}) const;
 
         // Gate 3 keeps the generic LP07 catalogue contract unchanged, but the
         // creator Assets drawer needs resource-derived format truth for texture

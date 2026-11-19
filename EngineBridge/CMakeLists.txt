@@ -240,6 +240,7 @@ add_library(RenegadeEngineBridge STATIC
     src/CharacterPrefabPlacementTemplate.cpp
     src/MaterialService.cpp
     src/MaterialTextureAssetService.cpp
+    src/MaterialTextureBacking.cpp
     src/MaterialTextureClearCommand.cpp
     src/MaterialTextureReimportRefreshService.cpp
     src/CollisionService.cpp
@@ -339,7 +340,24 @@ target_compile_options(RenegadeEngineBridge
 )
 
 if(WIN32)
-    target_link_libraries(RenegadeEngineBridge PRIVATE ws2_32)
+    if(CMAKE_VERSION VERSION_LESS 3.20)
+        message(FATAL_ERROR "Renegade's Windows texture encoder requires CMake 3.20 or newer.")
+    endif()
+    # Use only the pinned CPU image library. Keep its option names local to this function.
+    function(renegade_add_texture_encoder)
+        set(BUILD_TOOLS OFF)
+        set(BUILD_SAMPLE OFF)
+        set(BUILD_DX11 OFF)
+        set(BUILD_DX12 OFF)
+        set(BC_USE_OPENMP OFF)
+        add_subdirectory("${CMAKE_SOURCE_DIR}/ThirdParty/DirectXTex"
+            "${CMAKE_BINARY_DIR}/DirectXTex" EXCLUDE_FROM_ALL)
+    endfunction()
+    renegade_add_texture_encoder()
+    add_library(RenegadeTextureCook STATIC src/MaterialTextureCook.cpp)
+    target_include_directories(RenegadeTextureCook PRIVATE include)
+    target_link_libraries(RenegadeTextureCook PRIVATE DirectXTex windowscodecs ole32)
+    target_link_libraries(RenegadeEngineBridge PRIVATE ws2_32 RenegadeTextureCook)
     # LP06 packaging is Windows-first. Keep its Win32/BCrypt implementation out
     # of non-Windows EngineBridge configuration while retaining shared public
     # contracts for the Windows Runtime and build pipeline.

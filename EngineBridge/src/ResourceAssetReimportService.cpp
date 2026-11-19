@@ -286,10 +286,11 @@ namespace
         try
         {
             const auto recipe = nlohmann::json::parse(provenance.settingsJson);
+            std::string formatSemantic;
             if (!recipe.is_object() || recipe.dump() != provenance.settingsJson ||
                 recipe.size() != 3 ||
                 !recipe.contains("options") || !recipe.at("options").is_object() ||
-                !recipe.at("options").empty() ||
+                !ReadTextureCookSemantic(provenance.settingsJson, formatSemantic, error) ||
                 !recipe.contains("resource_class") ||
                 !recipe.at("resource_class").is_string() ||
                 !recipe.contains("source_format") ||
@@ -780,6 +781,8 @@ namespace renegade::bridge
         replacement.payload = payload;
         replacement.manifest.payloadHash = result.sourceHash;
         replacement.manifest.derived = result.derived;
+        if (!CookResourceTextureVariants(replacement, result.error))
+            return result;
         std::vector<std::uint8_t> replacementBytes;
         if (!SerializeResourceAssetDocument(
                 replacement, replacementBytes, result.error))

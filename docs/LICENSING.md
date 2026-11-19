@@ -9,6 +9,13 @@ available at `WickedEngine/LICENSE.txt` after submodule checkout.
 Wicked also maintains `WickedEngine/third_party_software.txt`. Release packaging
 must include all notices relevant to the components and assets actually shipped.
 
+## DirectXTex
+
+Windows builds use the CPU encoder from Microsoft DirectXTex, pinned at
+`9260384a375e0b39e7b22c8c67fd0d060f0c948a` in `ThirdParty/DirectXTex`.
+Studio and Runtime distribute its MIT licence in `Content/Licenses`.
+Build Game includes the same licence in the exported notice bundle.
+
 ## Renegade-authored code and assets
 
 A project-wide licence has not yet been selected. Public visibility does not by

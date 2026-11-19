@@ -150,7 +150,21 @@ add_executable(RenegadeTerrainSurfacePacker
 set_target_properties(RenegadeTerrainSurfacePacker PROPERTIES
     FOLDER "Renegade/Tools"
 )
-add_dependencies(RenegadeStudio RenegadeTerrainSurfacePacker)
+# Stage the same verified stock products for direct, incremental and CI builds.
+function(renegade_stage_default_grass target)
+    add_custom_target(${target}DefaultGrass
+        COMMAND "${CMAKE_COMMAND}"
+            "-DPACKER=$<TARGET_FILE:RenegadeTerrainSurfacePacker>"
+            "-DSOURCE_DIR=${CMAKE_SOURCE_DIR}"
+            "-DCACHE_DIR=${CMAKE_BINARY_DIR}/cooked/default_grass"
+            "-DDESTINATION=$<TARGET_FILE_DIR:${target}>/Content/terrain/default_grass"
+            -P "${CMAKE_SOURCE_DIR}/Tools/CookDefaultGrass.cmake"
+        VERBATIM)
+    add_dependencies(${target}DefaultGrass RenegadeTerrainSurfacePacker)
+    add_dependencies(${target} ${target}DefaultGrass)
+endfunction()
+
+renegade_stage_default_grass(RenegadeStudio)
 
 # Pure interaction policy runs without a GPU or editor window.
 add_executable(RenegadeStudioUiPolicyTests ../Tests/StudioUiPolicyTests.cpp)
@@ -286,15 +300,6 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/ThirdParty/imnodes/LICENSE.md"
         "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs/ImNodes-LICENSE.md"
-    COMMAND $<TARGET_FILE:RenegadeTerrainSurfacePacker>
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_ao.tga"
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_roughness.tga"
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_basecolor.tga"
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_normal.tga"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/default_grass/default_grass_basecolor.tga"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/default_grass/default_grass_normal.tga"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/default_grass/default_grass_surface.tga"
-        "32"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grass.wiscene"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/grass.wiscene"
@@ -410,6 +415,9 @@ renegade_deploy_river_course_shaders(RenegadeStudio)
 renegade_deploy_waterfall_resources(RenegadeStudio)
 add_custom_command(TARGET RenegadeStudio POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeStudio>/Content/Licenses"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/ThirdParty/DirectXTex/LICENSE"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/Licenses/DirectXTex-MIT.txt"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/EngineBridge/assets/moon/README.md"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/Licenses/MoonTexture-Credit.txt"

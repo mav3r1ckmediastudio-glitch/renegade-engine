@@ -443,20 +443,20 @@ if(WIN32)
                 "$<TARGET_FILE_DIR:${river_gpu_proof}>/Content/river/waterNormalMap.jpg"
             VERBATIM)
     endforeach()
+    if(TARGET DirectXTex)
+        add_executable(RenegadeMaterialTextureCookTests MaterialTextureCookTests.cpp)
+        target_include_directories(RenegadeMaterialTextureCookTests PRIVATE
+            "${CMAKE_SOURCE_DIR}/EngineBridge/include")
+        target_link_libraries(RenegadeMaterialTextureCookTests PRIVATE RenegadeTextureCook DirectXTex)
+        add_test(NAME RenegadeMaterialTextureCookTests COMMAND RenegadeMaterialTextureCookTests)
+        add_dependencies(RenegadeBridgeTests RenegadeMaterialTextureCookTests)
+    endif()
+
     if(TARGET RenegadeTerrainSurfacePacker)
-        add_dependencies(RenegadeRiverTerrainFollowProof RenegadeTerrainSurfacePacker)
+        renegade_stage_default_grass(RenegadeRiverTerrainFollowProof)
         add_custom_command(TARGET RenegadeRiverTerrainFollowProof POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory
                 "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/default_grass"
-            COMMAND $<TARGET_FILE:RenegadeTerrainSurfacePacker>
-                "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_ao.tga"
-                "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_roughness.tga"
-                "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_basecolor.tga"
-                "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_normal.tga"
-                "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/default_grass/default_grass_basecolor.tga"
-                "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/default_grass/default_grass_normal.tga"
-                "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/default_grass/default_grass_surface.tga"
-                "32"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grass.wiscene"
                 "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/grass.wiscene"
@@ -2168,7 +2168,13 @@ target_compile_options(RenegadeDialogueDisplayTests PRIVATE "$<$<CXX_COMPILER_ID
 set_target_properties(RenegadeDialogueDisplayTests PROPERTIES FOLDER "Renegade/Tests")
 add_test(NAME RenegadeDialogueDisplayTests COMMAND RenegadeDialogueDisplayTests)
 
-add_executable(RenegadeTerrainPropResidencyProbe TerrainPropResidencyProbe.cpp TerrainPropSliceProof.cpp)
+add_executable(RenegadeTerrainPropResidencyProbe TerrainPropResidencyProbe.cpp
+    TerrainPropSliceProof.cpp GovernedTextureStreamingProof.cpp)
+add_test(NAME RenegadeGovernedTextureStreamingProof COMMAND RenegadeTerrainPropResidencyProbe
+    "${CMAKE_CURRENT_BINARY_DIR}/governed-texture-proof" --governed-texture
+    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/terrain-props/Boulder.glb" CONFIGURATIONS Release)
+set_tests_properties(RenegadeGovernedTextureStreamingProof PROPERTIES TIMEOUT 120
+    WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeTerrainPropResidencyProbe>")
 target_link_libraries(RenegadeTerrainPropResidencyProbe PRIVATE Renegade::EngineBridge)
 target_compile_definitions(RenegadeTerrainPropResidencyProbe PRIVATE UNICODE _UNICODE)
 add_custom_command(TARGET RenegadeTerrainPropResidencyProbe POST_BUILD

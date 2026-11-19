@@ -19,6 +19,7 @@ namespace renegade::bridge
         ResourceSourceFormat sourceFormat = ResourceSourceFormat::Unknown;
         std::string payloadHash;
         std::vector<std::uint8_t> payload;
+        std::shared_ptr<const PreparedTextureBacking> backing;
     };
 
     struct PackagedMaterialTextureRefreshRecord

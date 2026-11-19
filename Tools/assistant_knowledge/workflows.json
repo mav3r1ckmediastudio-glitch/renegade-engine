@@ -36,17 +36,17 @@
         {
           "path": "Studio/src/Phase5Gate4MaterialInspector.cpp",
           "needle": "objectSurfaceLabel_.SetText(\"SURFACE TYPE\");",
-          "sha256": "47b8acc6100027ddc4b5b0bdebef78b65dcaadea32a3162ec25cfb1ad08d09f3"
+          "sha256": "3af43ae1e004c60971c761ffe80d5df60d665a9c08f4de54cc6bc09a4034103f"
         },
         {
           "path": "Studio/src/Phase5Gate4MaterialInspector.cpp",
           "needle": "std::make_unique<bridge::SetObjectImpactSurfaceCommand>",
-          "sha256": "47b8acc6100027ddc4b5b0bdebef78b65dcaadea32a3162ec25cfb1ad08d09f3"
+          "sha256": "3af43ae1e004c60971c761ffe80d5df60d665a9c08f4de54cc6bc09a4034103f"
         },
         {
           "path": "docs/ARCHITECTURE.md",
           "needle": "Creator steps: select an object; choose Surface Type directly in its Inspector.",
-          "sha256": "587dc83020d31d93ed0efa65ebc4372b4aa79e8d9b5639c8b562f1db41a175e2"
+          "sha256": "f15ccf53fc9f0898ea645dfd1c13d4e10b11e029d8351521693b7af66ba5c7f1"
         },
         {
           "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
