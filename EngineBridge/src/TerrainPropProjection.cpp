@@ -10,10 +10,10 @@ namespace renegade::bridge
     using wi::ecs::Entity;
     using namespace DirectX;
 
-    Entity TerrainPropProjection::NewTransient()
+    Entity TerrainPropProjection::NewTransient(std::vector<Entity>& owner)
     {
         const Entity entity = wi::ecs::CreateEntity();
-        entities_.push_back(entity);
+        owner.push_back(entity);
         auto& metadata = scene_.metadatas.Create(entity);
         metadata.runtimeProjectionOnly = true;
         if (!layerIdentity_.empty()) metadata.string_values.set("renegade.terrain_props.layer", layerIdentity_);
@@ -22,7 +22,9 @@ namespace renegade::bridge
 
     TerrainPropProjection::~TerrainPropProjection()
     {
-        for (auto it = entities_.rbegin(); it != entities_.rend(); ++it)
+        for (const auto& page : pageEntities_)
+            for (auto entity : page.second) scene_.Entity_Remove(entity, false);
+        for (auto it = resources_.rbegin(); it != resources_.rend(); ++it)
             scene_.Entity_Remove(*it, false);
     }
 
@@ -62,7 +64,7 @@ namespace renegade::bridge
                 }
         }
         Prototype prototype;
-        const auto firstResource = entities_.size();
+        const auto firstResource = resources_.size();
         prototype.collision = collision;
         std::unordered_map<Entity, Entity> meshes, materials;
         for (size_t i = 0; i < source.objects.GetCount(); ++i)
@@ -70,7 +72,7 @@ namespace renegade::bridge
             Entity modelMesh = source.objects[i].meshID;
             if (!meshes.count(modelMesh))
             {
-                Entity target = NewTransient();
+                Entity target = NewTransient(resources_);
                 meshes.emplace(modelMesh, target);
                 auto& mesh = scene_.meshes.Create(target);
                 mesh = *source.meshes.GetComponent(modelMesh);
@@ -79,7 +81,7 @@ namespace renegade::bridge
                     Entity material = subset.materialID;
                     if (!materials.count(material))
                     {
-                        Entity targetMaterial = NewTransient();
+                        Entity targetMaterial = NewTransient(resources_);
                         scene_.materials.Create(targetMaterial) = *source.materials.GetComponent(material);
                         materials.emplace(material, targetMaterial);
                     }
@@ -92,7 +94,7 @@ namespace renegade::bridge
                 source.ComputeParentMatrixRecursive(node));
             prototype.parts.push_back(part);
         }
-        prototype.resources.assign(entities_.begin() + firstResource,entities_.end());
+        prototype.resources.assign(resources_.begin() + firstResource,resources_.end());
         profiles_.emplace(id, std::move(prototype));
         return true;
     }
@@ -108,7 +110,7 @@ namespace renegade::bridge
             }
 
         const Cell cell{page.cellX, page.cellZ};
-        const auto firstEntity = entities_.size();
+        auto& owned = pageEntities_[cell];
         for (const auto& p : page.placements)
         {
             const auto& prototype = profiles_.at(page.profiles[p.profileIndex]);
@@ -116,7 +118,7 @@ namespace renegade::bridge
                 XMMatrixRotationY(p.yawRadians) * XMMatrixTranslation(p.position[0], p.position[1], p.position[2]);
             for (const auto& part : prototype.parts)
             {
-                const Entity entity = NewTransient();
+                const Entity entity = NewTransient(owned);
                 scene_.metadatas.GetComponent(entity)->string_values.set(
                     "renegade.terrain_props.placement", std::to_string(p.id));
                 scene_.metadatas.GetComponent(entity)->string_values.set(ImpactSurfaceMetadataKey,
@@ -129,7 +131,7 @@ namespace renegade::bridge
             const auto& profile = prototype.collision;
             if (createCollision_ && profile.shape != TerrainPropShape::None)
             {
-                const Entity entity = NewTransient();
+                const Entity entity = NewTransient(owned);
                 auto& metadata = *scene_.metadatas.GetComponent(entity);
                 metadata.string_values.set("renegade.terrain_props.placement", std::to_string(p.id));
                 metadata.string_values.set("renegade.terrain_props.collision", "1");
@@ -154,8 +156,6 @@ namespace renegade::bridge
             placementIds_.insert(p.id);
             pageIds_[cell].push_back(p.id);
         }
-        auto& owned = pageEntities_[cell];
-        owned.insert(owned.end(), entities_.begin() + firstEntity, entities_.end());
         return true;
     }
 }
@@ -166,14 +166,18 @@ namespace renegade::bridge
     void TerrainPropProjection::SetLayerIdentity(const std::string& id)
     {
         layerIdentity_ = id;
-        for (auto entity : entities_)
+        const auto setIdentity = [&](Entity entity) {
             if (auto* metadata = scene_.metadatas.GetComponent(entity))
                 metadata->string_values.set("renegade.terrain_props.layer", id);
+        };
+        for (auto entity : resources_) setIdentity(entity);
+        for (const auto& page : pageEntities_)
+            for (auto entity : page.second) setIdentity(entity);
     }
 
     void TerrainPropProjection::ReleaseOwnership() noexcept
     {
-        entities_.clear();
+        resources_.clear();
         pageEntities_.clear();
         pageIds_.clear();
         placementIds_.clear();
@@ -230,29 +234,31 @@ namespace renegade::bridge
         return true;
     }
 
+    void TerrainPropProjection::EvictPage(Cell cell)
+    {
+        const auto found = pageEntities_.find(cell);
+        if (found == pageEntities_.end()) return;
+        for (auto entity : found->second) scene_.Entity_Remove(entity, false);
+        pageEntities_.erase(found);
+        const auto ids = pageIds_.find(cell);
+        if (ids != pageIds_.end())
+        {
+            for (auto id : ids->second) placementIds_.erase(id);
+            pageIds_.erase(ids);
+        }
+    }
+
     void TerrainPropProjection::CommitPages(PendingPages& pending)
     {
-        std::unordered_set<Entity> removed;
-        // Remove old IDs in every changed cell before inserting moved IDs.
-        for (const auto& pair : pending.entities)
-        {
-            const auto cell = pair.first;
-            for (auto id : pageIds_[cell]) placementIds_.erase(id);
-            for (auto entity : pageEntities_[cell])
-            {
-                scene_.Entity_Remove(entity, false);
-                removed.insert(entity);
-            }
-        }
-        entities_.erase(std::remove_if(entities_.begin(),entities_.end(),
-            [&](Entity entity) { return removed.count(entity)!=0; }),entities_.end());
+        // Release all old IDs before installing placements that moved between cells.
+        for (const auto& page : pending.entities) EvictPage(page.first);
         for (const auto& pair : pending.entities)
         {
             const auto cell = pair.first;
             pageEntities_[cell] = pair.second;
             pageIds_[cell] = pending.ids.at(cell);
             for (auto id : pageIds_[cell]) placementIds_.insert(id);
-            entities_.insert(entities_.end(), pair.second.begin(), pair.second.end());
+
         }
         pending.committed = true;
     }
@@ -266,8 +272,8 @@ namespace renegade::bridge
         const std::unordered_set<wi::ecs::Entity> resources(found->second.resources.begin(),
             found->second.resources.end());
         for(auto entity:resources) scene_.Entity_Remove(entity,false);
-        entities_.erase(std::remove_if(entities_.begin(),entities_.end(),
-            [&](wi::ecs::Entity entity){return resources.count(entity)!=0;}),entities_.end());
+        resources_.erase(std::remove_if(resources_.begin(),resources_.end(),
+            [&](wi::ecs::Entity entity){return resources.count(entity)!=0;}),resources_.end());
         profiles_.erase(found);
     }
 }

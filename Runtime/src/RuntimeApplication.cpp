@@ -788,6 +788,12 @@ namespace renegade::runtime
     void RuntimeApplication::Update(const float dt)
     {
         SyncPlayerForScene();
+        static const bool usePropCells = std::getenv("RENEGADE_P4_CELL_RESIDENCY") != nullptr;
+        if (usePropCells && player_.IsSpawned()) {
+            XMFLOAT3 position;
+            if (bridge::GetPhysicsPosition(scenes_.GetScene(), player_.entity, position))
+                propVisuals_.Update(scenes_.GetScene(), scenes_.Revision(), position);
+        }
         TickTerrainPropCollisionProof();
         const auto collisionWorld=scenes_.TerrainPropCollisions();
         bool collisionReady=!collisionWorld||collisionWorld->Ready();
@@ -906,6 +912,11 @@ namespace renegade::runtime
                     if (!paused_)
                     {
                         auto playerInput=collisionReady?gameplayInput.player:bridge::PlayerInputFrame{};
+                        if (proofWalkForward_ && collisionReady) {
+                            playerInput.moveForward = 1; playerInput.moveRight = 0;
+                            playerInput.lookYaw = playerInput.lookPitch = 0;
+                            playerInput.sprintDown = true;
+                        }
                         if(g13e14Trace){
                             const auto phase=g13e14Frame%960;
                             playerInput.moveForward=phase<320?0.75f:(phase<640?-0.65f:0.25f);

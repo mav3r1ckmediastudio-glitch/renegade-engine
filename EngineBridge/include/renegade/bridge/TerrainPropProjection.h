@@ -50,6 +50,7 @@ namespace renegade::bridge
         bool Register(const TerrainPropProfileId&, const wi::scene::Scene& prepared,
             TerrainPropCollision, std::string& error);
         bool Place(const TerrainPropPage&, std::string& error);
+        void EvictPage(Cell cell);
         void UnregisterUnused(const TerrainPropProfileId&);
         std::unique_ptr<PendingPages> PreparePages(const std::vector<TerrainPropPage>&,
             std::string& error);
@@ -59,11 +60,11 @@ namespace renegade::bridge
     private:
         struct Part { wi::ecs::Entity mesh; XMFLOAT4X4 local; };
         struct Prototype { std::vector<Part> parts; TerrainPropCollision collision; std::vector<wi::ecs::Entity> resources; };
-        wi::ecs::Entity NewTransient();
+        wi::ecs::Entity NewTransient(std::vector<wi::ecs::Entity>& owner);
         wi::scene::Scene& scene_;
         bool createCollision_ = true;
         std::string layerIdentity_;
-        std::vector<wi::ecs::Entity> entities_;
+        std::vector<wi::ecs::Entity> resources_;
         std::map<TerrainPropProfileId, Prototype> profiles_;
         std::unordered_set<std::uint64_t> placementIds_;
         std::map<Cell, std::vector<wi::ecs::Entity>> pageEntities_;

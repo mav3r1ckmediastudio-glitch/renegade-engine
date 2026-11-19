@@ -1,6 +1,7 @@
 #include "RuntimeGameplayAttributeWorld.h"
 #pragma once
 #include "RuntimeDialogue.h"
+#include "RuntimePropCellResidency.h"
 #include "renegade/bridge/RiverFlowRenderer.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 
@@ -195,6 +196,8 @@ namespace renegade::runtime
         bool LoadPrimaryScreenDocument(const bridge::ScreenDocument& document,std::string& error);
         void RecordAction(const RuntimeActionResult& result);
         void SyncPlayerForScene();
+        RuntimePropCellResidency propVisuals_;
+        bool proofWalkForward_ = false;
         void TickTerrainPropCollisionProof();
         void UpdatePlayerProjectiles(float dt);
         void SyncAudioForScene();
