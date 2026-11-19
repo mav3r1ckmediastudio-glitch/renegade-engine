@@ -728,8 +728,9 @@ namespace renegade::bridge
             return false;
         }
 
+        std::vector<TerrainPropRangePart> rangeParts;
         std::vector<TerrainPropDocument> collisionDocuments;
-        if (!RestoreTerrainPropRevisions(*prepared.scene_, prepared.Path(), lastError_, &collisionDocuments, false, coarseTerrainPropModels_))
+        if (!RestoreTerrainPropRevisions(*prepared.scene_, prepared.Path(), lastError_, &collisionDocuments, false, coarseTerrainPropModels_, &rangeParts))
             return false;
 
         std::string riverNormalError;
@@ -754,6 +755,7 @@ namespace renegade::bridge
         ResetTerrainPropCollisions();
         scene_.Clear();
         scene_.Merge(*prepared.scene_);
+        collisionWorld->SetRangeParts(std::move(rangeParts));
         terrainPropCollisions_ = std::move(collisionWorld);
         terrainPropCollisions_->RefreshAnchors();
         for (std::size_t index = 0; index < scene_.terrains.GetCount(); ++index)

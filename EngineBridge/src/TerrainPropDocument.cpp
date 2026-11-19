@@ -489,8 +489,9 @@ namespace renegade::bridge
     }
 
     bool RestoreTerrainPropRevisions(wi::scene::Scene& scene, const fs::path& scenePath, std::string& error,
-        std::vector<TerrainPropDocument>* documents, bool createCollision, bool useCoarse)
+        std::vector<TerrainPropDocument>* documents, bool createCollision, bool useCoarse, std::vector<TerrainPropRangePart>* rangeParts)
     {
+        std::vector<TerrainPropRangePart> stagedParts;
         std::vector<TerrainPropDocument> collected;
         std::unique_ptr<wi::scene::Scene> staged;
         std::set<StableId> layers;
@@ -505,6 +506,7 @@ namespace renegade::bridge
             if (!layers.insert(doc.layerId).second) { error = "Duplicate terrain prop layer identity."; return false; }
             wi::scene::Scene layer;
             TerrainPropProjection projection(layer, createCollision);
+            if (rangeParts && useCoarse && !createCollision) projection.CollectRangeParts(&stagedParts);
             projection.SetLayerIdentity(doc.layerId);
             for (const auto& p : doc.profiles)
             {
@@ -522,6 +524,7 @@ namespace renegade::bridge
         }
         if (staged) scene.Merge(*staged);
         if (documents) *documents = std::move(collected);
+        if (rangeParts) *rangeParts = std::move(stagedParts);
         return true;
     }
 }

@@ -63,6 +63,8 @@ namespace renegade::bridge
         // Failed/pending destination requests retain current interests and bodies.
         bool Destination(wi::ecs::Entity actor, const XMFLOAT3&, float radius, std::string& error);
         const std::vector<TerrainPropDocument>& Documents() const { return documents_; }
+        void SetRangeParts(std::vector<TerrainPropRangePart> parts);
+        const std::vector<TerrainPropRangePart>& RangeParts() const { return rangeParts_; }
         bool ResidentEnabled() const noexcept { return residency_; }
         bool Ready() const { return stats_.ready&&(!residency_||wi::physics::terrain_props::AreTerrainRequestsReady(scene_)); }
         Statistics Stats() const
@@ -94,6 +96,8 @@ namespace renegade::bridge
         wi::scene::Scene& scene_;
         std::thread::id thread_;
         std::vector<TerrainPropDocument> documents_;
+        std::vector<TerrainPropRangePart> rangeParts_;
+        std::map<std::pair<StableId,uint64_t>,size_t> rangeAnchors_;
         std::vector<wi::ecs::Entity> terrainOwners_;
         std::shared_ptr<const TerrainPropCollisionIndex> index_;
         std::map<std::uint32_t,wi::ecs::Entity> bodies_;

@@ -10,6 +10,24 @@ namespace renegade::bridge
     using wi::ecs::Entity;
     using namespace DirectX;
 
+    void TerrainPropRangePart::EnsureIdentityAndTransform(wi::scene::Scene& scene) const
+    {
+        if (!scene.metadatas.Contains(entity)) {
+            auto& metadata = scene.metadatas.Create(entity);
+            metadata.runtimeProjectionOnly = true;
+            metadata.string_values.set("renegade.terrain_props.ranged","1");
+            metadata.string_values.set("renegade.terrain_props.layer",layer);
+            metadata.string_values.set("renegade.terrain_props.placement",std::to_string(placement));
+            metadata.string_values.set(ImpactSurfaceMetadataKey,ImpactSurfaceTypeToken(surface));
+            if (coarse) metadata.string_values.set("renegade.terrain_props.coarse","1");
+        }
+        if (!scene.transforms.Contains(entity)) {
+            auto& transform = scene.transforms.Create(entity);
+            transform.MatrixTransform(XMLoadFloat4x4(&matrix));
+            transform.UpdateTransform();
+        }
+    }
+
     Entity TerrainPropProjection::NewTransient(std::vector<Entity>& owner)
     {
         const Entity entity = wi::ecs::CreateEntity();
@@ -119,6 +137,24 @@ namespace renegade::bridge
                 XMMatrixRotationY(p.yawRadians) * XMMatrixTranslation(p.position[0], p.position[1], p.position[2]);
             for (const auto& part : prototype.parts)
             {
+                const auto matrix = XMLoadFloat4x4(&part.local) * world;
+                const float distance = static_cast<float>(std::min(double(prototype.drawDistance) * p.scale,
+                    double(std::numeric_limits<float>::max())));
+                if (rangeParts_ && distance > 0) {
+                    const auto bounds = scene_.meshes.GetComponent(part.mesh)->aabb.transform(matrix);
+                    const auto center = bounds.getCenter();
+                    const double reach = double(distance) + bounds.getRadius() +
+                        std::hypot(double(center.x)-p.position[0], double(center.z)-p.position[2]);
+                    if (std::isfinite(reach)) {
+                        TerrainPropRangePart record{wi::ecs::CreateEntity(),part.mesh,{},
+                            {p.position[0],p.position[1],p.position[2]},reach,distance,
+                            prototype.collision.shape != TerrainPropShape::None && &part == &prototype.parts.front(),
+                            prototype.representation == Representation::Coarse,layerIdentity_,p.id,TerrainPropSurface(prototype.collision)};
+                        XMStoreFloat4x4(&record.matrix,matrix);
+                        rangeParts_->push_back(std::move(record));
+                        continue;
+                    }
+                }
                 const Entity entity = NewTransient(owned);
                 if (prototype.representation != Representation::Default)
                     scene_.metadatas.GetComponent(entity)->string_values.set(prototype.representation == Representation::Coarse
@@ -129,11 +165,9 @@ namespace renegade::bridge
                     ImpactSurfaceTypeToken(TerrainPropSurface(prototype.collision)));
                 auto& object = scene_.objects.Create(entity);
                 object.meshID = part.mesh;
-                if (prototype.drawDistance > 0)
-                    object.draw_distance = static_cast<float>(std::min(double(prototype.drawDistance) * p.scale,
-                        double(std::numeric_limits<float>::max())));
+                if (distance > 0) object.draw_distance = distance;
                 auto& transform = scene_.transforms.Create(entity);
-                transform.MatrixTransform(XMLoadFloat4x4(&part.local) * world);
+                transform.MatrixTransform(matrix);
                 transform.UpdateTransform();
             }
             const auto& profile = prototype.collision;

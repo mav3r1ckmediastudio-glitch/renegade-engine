@@ -1,6 +1,7 @@
 #pragma once
 #include "renegade/bridge/TerrainPropCollisionWorld.h"
 #include "renegade/bridge/TerrainPropDetailProjection.h"
+#include "RuntimePropRangeResidency.h"
 #include <charconv>
 #include <cmath>
 #include <algorithm>
@@ -27,8 +28,9 @@ namespace renegade::runtime
         std::map<Cell, std::map<size_t,Batch>> cells_;
         std::set<Cell> active_;
         std::deque<Cell> pending_;
-        std::optional<Cell> center_;
+        std::optional<Cell> center_, viewCell_;
         std::optional<uint64_t> revision_;
+        RuntimePropRangeResidency ranges_;
         using ModelKey = std::pair<uint64_t, size_t>;
         using Preparation = std::future<bridge::PreparedReusableModelPlacement>;
         static constexpr size_t MaxPreparations = 2;
@@ -73,21 +75,31 @@ namespace renegade::runtime
                 }
             }
             if (byPlacement.empty()) return;
-            for (size_t i=0; i<scene.objects.GetCount(); ++i) {
-                const auto e = scene.objects.GetEntity(i);
+            auto bindCoarse = [&](wi::ecs::Entity e) {
                 const auto* m = scene.metadatas.GetComponent(e);
-                if (!m || !m->runtimeProjectionOnly || !m->string_values.has("renegade.terrain_props.coarse")) continue;
+                if (!m || !m->runtimeProjectionOnly || !m->string_values.has("renegade.terrain_props.coarse")) return;
                 const auto id = m->string_values.get(bridge::TerrainPropPlacementMetadataKey);
                 uint64_t number = 0;
                 const auto parsed = std::from_chars(id.data(), id.data()+id.size(), number);
-                if (parsed.ec != std::errc{} || parsed.ptr != id.data()+id.size()) continue;
+                if (parsed.ec != std::errc{} || parsed.ptr != id.data()+id.size()) return;
                 const auto b = byPlacement.find({m->string_values.get("renegade.terrain_props.layer"), number});
                 if (b != byPlacement.end()) b->second->coarse.push_back(e);
+            };
+            for (const auto& part : world.RangeParts()) {
+                if (!part.coarse) continue;
+                const auto batch=byPlacement.find({part.layer,part.placement});
+                if (batch!=byPlacement.end()) batch->second->coarse.push_back(part.entity);
+            }
+            for (size_t i=0; i<scene.objects.GetCount(); ++i) {
+                const auto e=scene.objects.GetEntity(i);
+                const auto* m=scene.metadatas.GetComponent(e);
+                if (m && !m->string_values.has("renegade.terrain_props.ranged")) bindCoarse(e);
             }
         }
     public:
         void Update(wi::scene::Scene& scene, uint64_t revision, const bridge::TerrainPropCollisionWorld* world,
-            const std::string& root, const bridge::StableId& project, const DirectX::XMFLOAT3& pos) {
+            const std::string& root, const bridge::StableId& project, const DirectX::XMFLOAT3& pos,
+            const DirectX::XMFLOAT3* camera = nullptr) {
             if (revision_ != revision) {
                 // A revision can change while the same coarse scene objects still exist.
                 for (const auto& cell : active_) for (const auto& entry : cells_.at(cell)) {
@@ -95,12 +107,18 @@ namespace renegade::runtime
                     for (auto entity : entry.second.coarse)
                         if (auto* object = scene.objects.GetComponent(entity)) object->SetRenderable(true);
                 }
-                cells_.clear(); models_.clear(); active_.clear(); pending_.clear(); center_.reset();
+                cells_.clear(); models_.clear(); active_.clear(); pending_.clear(); center_.reset(); viewCell_.reset();
                 revision_ = revision;
-                if (world) Index(scene,*world,root,project);
+                if (world) { ranges_.Index(scene,world->RangeParts()); Index(scene,*world,root,project); }
             }
             if (!std::isfinite(pos.x) || !std::isfinite(pos.z)) return;
             const auto center = At(pos.x,pos.z);
+            const auto& view = camera && std::isfinite(camera->x) && std::isfinite(camera->z) ? *camera : pos;
+            const auto viewCell = At(view.x,view.z);
+            if (world && viewCell_ != viewCell) {
+                ranges_.Update(scene,world->RangeParts(),view);
+                viewCell_ = viewCell;
+            }
             if (center_ != center) {
                 std::set<Cell> nearby;
                 for (auto x=center.first-3; x<=center.first+3; ++x)
@@ -162,7 +180,7 @@ namespace renegade::runtime
                     }
                 }
                 for (const auto e : batch.coarse)
-                    if (auto* object=scene.objects.GetComponent(e)) object->SetRenderable(!wanted);
+                    ranges_.SetRenderable(scene,e,!wanted);
                 if (!wanted) batch.model->Release(cell);
                 batch.fine = wanted;
                 if (wanted) active_.insert(cell);

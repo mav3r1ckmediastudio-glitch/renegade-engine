@@ -1,6 +1,7 @@
 #include <WickedEngine.h>
 #include "../Runtime/src/RuntimePropModelResidency.h"
 #include "../Runtime/src/RuntimePropCellResidency.h"
+#include "renegade/bridge/PhysicsService.h"
 #include <Windows.h>
 #include <Psapi.h>
 #include <array>
@@ -139,6 +140,50 @@ static void CheckSingleModelDrawDistance()
     if (!restored || restored->draw_distance != 375) throw std::runtime_error("Single-model draw distance lost on return");
 }
 
+static void CheckDistantRangeAnchor()
+{
+    using namespace renegade::bridge;
+    wi::scene::Scene scene, source;
+    source.Entity_CreateCube("boulder");
+    TerrainPropProfile profile;
+    profile.id[0]=1;
+    profile.modelAssetId=GenerateStableId();
+    profile.collision.shape=TerrainPropShape::BoulderBox;
+    profile.drawDistance=100;
+    TerrainPropDocument doc;
+    doc.layerId=GenerateStableId();
+    doc.nextPlacementId=3;
+    doc.profiles={profile};
+    TerrainPropPage page;
+    page.profiles={profile.id};
+    page.placements={{1,0,{0,0,0},0,1},{2,0,{8192,0,0},0,3}};
+    doc.pages={page};
+    TerrainPropProjection projection(scene,false);
+    projection.SetLayerIdentity(doc.layerId);
+    std::vector<TerrainPropRangePart> parts;
+    projection.CollectRangeParts(&parts);
+    std::string error;
+    if (!projection.Register(profile.id,source,profile.collision,error,profile.drawDistance) ||
+        !projection.Place(page,error)) throw std::runtime_error(error);
+    if (scene.objects.GetCount() || scene.transforms.GetCount()) throw std::runtime_error("Range parts eagerly projected");
+    auto world=TerrainPropCollisionWorld::Create(scene,{doc},false,error);
+    if (!world) throw std::runtime_error(error);
+    world->SetRangeParts(std::move(parts));
+    renegade::runtime::RuntimePropModelResidency scheduler;
+    scheduler.Update(scene,1,world.get(),"","",{0,0,0});
+    auto hit=Raycast(scene,wi::primitive::Ray(XMFLOAT3{8180,0,0},XMFLOAT3{1,0,0},0,15));
+    if (!hit.IsValid() || hit.terrainPropPlacement!=2 || scene.objects.Contains(hit.entity) ||
+        !scene.transforms.Contains(hit.entity)) throw std::runtime_error("Distant query lost its stable anchor");
+    XMFLOAT3 camera{8192,0,0};
+    scheduler.Update(scene,1,world.get(),"","",{0,0,0},&camera);
+    const auto* object=scene.objects.GetComponent(hit.entity);
+    if (!object || object->draw_distance!=300 || scene.objects.GetCount()!=1)
+        throw std::runtime_error("Detached camera failed to restore scaled boulder");
+    scheduler.Update(scene,1,world.get(),"","",{0,0,0});
+    if (scene.objects.Contains(hit.entity) || !scene.transforms.Contains(hit.entity) || scene.objects.GetCount()!=1)
+        throw std::runtime_error("Eviction lost gameplay anchor or left a render object");
+}
+
 static int MeasureMeshDetail(const char* root, const char* project, const char* fine, const char* coarse)
 {
     using namespace renegade::bridge;
@@ -257,9 +302,12 @@ int main(int argc, char** argv)
         }
     } drain;
 
-    if (meshDetail) {
-        try { CheckSingleModelDrawDistance(); return MeasureMeshDetail(argv[1],argv[3],argv[4],argv[5]); }
-        catch (const std::exception& e) { std::cerr << e.what() << std::endl; return 40; }
+    if (meshDetail || argc == 3) {
+        try {
+            CheckDistantRangeAnchor();
+            CheckSingleModelDrawDistance();
+            if (meshDetail) return MeasureMeshDetail(argv[1],argv[3],argv[4],argv[5]);
+        } catch (const std::exception& e) { std::cerr << e.what() << std::endl; return 40; }
     }
     if (argc == 4) return RunGovernedTextureProof(directory, argv[3]);
     if (argc == 3) return RunTerrainPropSlice(directory, argv[2]);

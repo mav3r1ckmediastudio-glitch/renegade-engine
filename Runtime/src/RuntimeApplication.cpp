@@ -790,12 +790,16 @@ namespace renegade::runtime
     {
         SyncPlayerForScene();
         static const bool usePropCells = std::getenv("RENEGADE_P4_CELL_RESIDENCY") != nullptr;
-        if (usePropCells && player_.IsSpawned()) {
-            XMFLOAT3 position;
-            if (bridge::GetPhysicsPosition(scenes_.GetScene(), player_.entity, position)) {
+        if (usePropCells) {
+            const auto* camera = renderer_.camera ? &renderer_.camera->Eye : nullptr;
+            XMFLOAT3 position{};
+            const bool hasPlayer = player_.IsSpawned() &&
+                bridge::GetPhysicsPosition(scenes_.GetScene(), player_.entity, position);
+            if (hasPlayer || camera) {
+                if (!hasPlayer) position = *camera;
                 propVisuals_.Update(scenes_.GetScene(), scenes_.Revision(), position);
                 propModels_.Update(scenes_.GetScene(),scenes_.Revision(),scenes_.TerrainPropCollisions().get(),
-                    startupResult_.project.rootPath,startupResult_.project.projectId,position);
+                    startupResult_.project.rootPath,startupResult_.project.projectId,position,camera);
             }
         }
         TickTerrainPropCollisionProof();

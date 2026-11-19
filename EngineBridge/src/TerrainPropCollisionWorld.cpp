@@ -469,6 +469,16 @@ namespace renegade::bridge
     void TerrainPropCollisionWorld::CancelDestination(wi::ecs::Entity actor)
     { if(Owner())destinations_.erase(actor); }
 
+    void TerrainPropCollisionWorld::SetRangeParts(std::vector<TerrainPropRangePart> parts)
+    {
+        rangeParts_=std::move(parts);
+        rangeAnchors_.clear();
+        for (size_t i=0; i<rangeParts_.size(); ++i) {
+            const auto& p=rangeParts_[i];
+            if (p.collisionAnchor) rangeAnchors_.emplace(std::make_pair(p.layer,p.placement),i);
+        }
+    }
+
     void TerrainPropCollisionWorld::RefreshAnchors()
     {
         if(!Owner())return;
@@ -477,7 +487,8 @@ namespace renegade::bridge
         {
             const auto& metadata=scene_.metadatas[i];
             const auto entity=scene_.metadatas.GetEntity(i);
-            if(!metadata.runtimeProjectionOnly||metadata.string_values.has("renegade.terrain_props.fine")||!scene_.objects.Contains(entity)||
+            if(!metadata.runtimeProjectionOnly||metadata.string_values.has("renegade.terrain_props.fine")||
+                (metadata.string_values.has("renegade.terrain_props.ranged") || !scene_.objects.Contains(entity))||
                 !metadata.string_values.has("renegade.terrain_props.layer")||
                 !metadata.string_values.has(TerrainPropPlacementMetadataKey))continue;
             const auto text=metadata.string_values.get(TerrainPropPlacementMetadataKey);
@@ -490,7 +501,16 @@ namespace renegade::bridge
     wi::ecs::Entity TerrainPropCollisionWorld::HitAnchor(const TerrainPropCollisionHit& hit) const
     {
         if(!Owner())return wi::ecs::INVALID_ENTITY;
-        auto found=anchors_.find({hit.layer,hit.placement});
+        const auto key=std::make_pair(hit.layer,hit.placement);
+        auto ranged=rangeAnchors_.find(key);
+        if (ranged!=rangeAnchors_.end()) {
+            const auto& part=rangeParts_[ranged->second];
+            // A returned entity can be held by gameplay after this cell is evicted.
+            part.EnsureIdentityAndTransform(scene_);
+            scene_.metadatas.GetComponent(part.entity)->string_values.set("renegade.terrain_props.hit_anchor","1");
+            return part.entity;
+        }
+        auto found=anchors_.find(key);
         if(found!=anchors_.end()&&scene_.transforms.Contains(found->second))return found->second;
         return wi::ecs::INVALID_ENTITY;
     }
