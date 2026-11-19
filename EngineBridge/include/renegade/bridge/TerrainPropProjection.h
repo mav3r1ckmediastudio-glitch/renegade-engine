@@ -50,6 +50,8 @@ namespace renegade::bridge
         bool Register(const TerrainPropProfileId&, const wi::scene::Scene& prepared,
             TerrainPropCollision, std::string& error);
         bool Place(const TerrainPropPage&, std::string& error);
+        enum class Representation { Default, Coarse, Fine };
+        void SetRepresentation(const TerrainPropProfileId& id, Representation value) { profiles_.at(id).representation = value; }
         void EvictPage(Cell cell);
         void UnregisterUnused(const TerrainPropProfileId&);
         std::unique_ptr<PendingPages> PreparePages(const std::vector<TerrainPropPage>&,
@@ -59,7 +61,7 @@ namespace renegade::bridge
         void ReleaseOwnership() noexcept;
     private:
         struct Part { wi::ecs::Entity mesh; XMFLOAT4X4 local; };
-        struct Prototype { std::vector<Part> parts; TerrainPropCollision collision; std::vector<wi::ecs::Entity> resources; };
+        struct Prototype { Representation representation = Representation::Default; std::vector<Part> parts; TerrainPropCollision collision; std::vector<wi::ecs::Entity> resources; };
         wi::ecs::Entity NewTransient(std::vector<wi::ecs::Entity>& owner);
         wi::scene::Scene& scene_;
         bool createCollision_ = true;

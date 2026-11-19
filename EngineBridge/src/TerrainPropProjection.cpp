@@ -119,6 +119,9 @@ namespace renegade::bridge
             for (const auto& part : prototype.parts)
             {
                 const Entity entity = NewTransient(owned);
+                if (prototype.representation != Representation::Default)
+                    scene_.metadatas.GetComponent(entity)->string_values.set(prototype.representation == Representation::Coarse
+                        ? "renegade.terrain_props.coarse" : "renegade.terrain_props.fine","1");
                 scene_.metadatas.GetComponent(entity)->string_values.set(
                     "renegade.terrain_props.placement", std::to_string(p.id));
                 scene_.metadatas.GetComponent(entity)->string_values.set(ImpactSurfaceMetadataKey,

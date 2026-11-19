@@ -1,4 +1,5 @@
 #include <WickedEngine.h>
+#include "../Runtime/src/RuntimePropModelResidency.h"
 #include <Windows.h>
 #include <Psapi.h>
 #include <array>
@@ -111,9 +112,91 @@ int MeasureTerrainPropResidency(const std::filesystem::path& directory, wi::scen
 int RunGovernedTextureProof(const std::filesystem::path&, const std::filesystem::path&);
 int RunTerrainPropSlice(const std::filesystem::path&, const std::filesystem::path&);
 
+// Read-only probe for separately registered owner-supplied detail products.
+static int MeasureMeshDetail(const char* root, const char* project, const char* fine, const char* coarse)
+{
+    using namespace renegade::bridge;
+    wi::scene::Scene scene;
+    TerrainPropProfile profile;
+    profile.id[0] = 1;
+    profile.modelAssetId = fine;
+    profile.coarseModelAssetId = coarse;
+    const auto layer = GenerateStableId();
+    TerrainPropProjection fallback(scene,false);
+    fallback.SetLayerIdentity(layer);
+    TerrainPropDetailProjection detail(scene, layer, profile, {root,project,fine});
+    TerrainPropPage a;
+    a.profiles.push_back(profile.id);
+    a.placements.push_back({1,0,{0,0,0},0,1});
+    auto b = a;
+    b.cellX = 1;
+    b.placements.front().id = 2;
+    b.placements.front().position[0] = 32;
+    std::string error;
+    const auto acquire = [&](TerrainPropDetailProjection& projection, const TerrainPropPage& page) {
+        if (!projection.Acquire(page,error)) throw std::runtime_error(error);
+    };
+    const auto measure = [&](const char* phase) {
+        uint64_t bytes = 0, triangles = 0;
+        for (size_t i = 0; i < scene.meshes.GetCount(); ++i) {
+            const auto& m = scene.meshes[i];
+            if (!m.generalBuffer.IsValid() || !m.ib.IsValid() || !m.vb_pos_wind.IsValid())
+                throw std::runtime_error("Missing native mesh buffer views");
+            for (const auto* view : {&m.ib,&m.vb_pos_wind,&m.vb_nor,&m.vb_tan,&m.vb_uvs,&m.vb_atl,&m.vb_col})
+                if (view->IsValid()) bytes += view->size;
+            triangles += m.indices.size()/3;
+        }
+        std::cout << phase << " mesh_view_bytes=" << bytes << " unique_triangles=" << triangles
+                  << " meshes=" << scene.meshes.GetCount() << " objects=" << scene.objects.GetCount() << std::endl;
+        return bytes;
+    };
+    {
+        auto prepared = ReusableAssetService().PrepareModelAssetPlacement({root,project,coarse});
+        if (!prepared.IsReady()) throw std::runtime_error(prepared.Result().error);
+        if (!fallback.Register(profile.id,*prepared.PeekScene(),profile.collision,error))
+            throw std::runtime_error(error);
+        fallback.SetRepresentation(profile.id,TerrainPropProjection::Representation::Coarse);
+        if (!fallback.Place(a,error) || !fallback.Place(b,error)) throw std::runtime_error(error);
+    }
+    const auto low = measure("coarse");
+    acquire(detail,a);
+    const auto shared = measure("fine_one_cell");
+    acquire(detail,b);
+    if (measure("fine_two_cells") != shared) return 41;
+    detail.Release({0,0});
+    if (measure("fine_one_remaining") != shared) return 42;
+    detail.Release({1,0});
+    if (measure("fine_released") != low || shared <= low) return 43;
+    acquire(detail,b);
+    if (measure("fine_reloaded") != shared) return 44;
+    detail.Release({1,0});
+    // Drive the same distance scheduler used by Runtime, with real coarse anchors.
+    TerrainPropDocument doc;
+    doc.layerId=layer;
+    doc.nextPlacementId=3;
+    doc.profiles.push_back(profile);
+    doc.pages={a,b};
+    auto world=TerrainPropCollisionWorld::Create(scene,{doc},false,error);
+    if (!world) throw std::runtime_error(error);
+    renegade::runtime::RuntimePropModelResidency scheduler;
+    auto travel = [&](float x,const char* phase,uint64_t expected) {
+        do { scheduler.Update(scene,1,world.get(),root,project,{x,0,0}); } while (!scheduler.Settled());
+        size_t visible=0;
+        for (size_t i=0; i<scene.objects.GetCount(); ++i) if (scene.objects[i].IsRenderable()) ++visible;
+        if (visible!=2 || measure(phase)!=expected) throw std::runtime_error("Distance transition lost coverage or mesh residency");
+    };
+    travel(400,"distance_far",low);
+    travel(0,"distance_near",shared);
+    travel(400,"distance_released",low);
+    travel(0,"distance_return",shared);
+
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
-    if (argc < 2 || argc > 4 || (argc == 4 && std::string(argv[2]) != "--governed-texture")) return 2;
+    const bool meshDetail = argc == 6 && std::string(argv[2]) == "--mesh-detail";
+    if (!meshDetail && (argc < 2 || argc > 4 || (argc == 4 && std::string(argv[2]) != "--governed-texture"))) return 2;
     const std::filesystem::path directory(argv[1]);
     const HWND window = CreateWindowExW(0, L"STATIC", L"Terrain prop probe",
         WS_POPUP, 0, 0, 64, 64, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -134,6 +217,10 @@ int main(int argc, char** argv)
         }
     } drain;
 
+    if (meshDetail) {
+        try { return MeasureMeshDetail(argv[1],argv[3],argv[4],argv[5]); }
+        catch (const std::exception& e) { std::cerr << e.what() << std::endl; return 40; }
+    }
     if (argc == 4) return RunGovernedTextureProof(directory, argv[3]);
     if (argc == 3) return RunTerrainPropSlice(directory, argv[2]);
     return MeasureTerrainPropResidency(directory, nullptr);

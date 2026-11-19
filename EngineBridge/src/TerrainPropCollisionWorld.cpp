@@ -477,7 +477,7 @@ namespace renegade::bridge
         {
             const auto& metadata=scene_.metadatas[i];
             const auto entity=scene_.metadatas.GetEntity(i);
-            if(!metadata.runtimeProjectionOnly||!scene_.objects.Contains(entity)||
+            if(!metadata.runtimeProjectionOnly||metadata.string_values.has("renegade.terrain_props.fine")||!scene_.objects.Contains(entity)||
                 !metadata.string_values.has("renegade.terrain_props.layer")||
                 !metadata.string_values.has(TerrainPropPlacementMetadataKey))continue;
             const auto text=metadata.string_values.get(TerrainPropPlacementMetadataKey);

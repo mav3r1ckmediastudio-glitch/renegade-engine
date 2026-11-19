@@ -118,6 +118,7 @@ namespace renegade::bridge
         void CreateProvingGround();
         // Runtime startup load. Studio scene replacement goes through
         // SceneDocumentService so selection/history are committed with it.
+        void EnableCoarseTerrainPropModels(bool enabled) { coarseTerrainPropModels_ = enabled; }
         bool LoadScene(const std::string& filePath);
 
         [[nodiscard]] wi::scene::Scene& GetScene() noexcept;
@@ -153,6 +154,7 @@ namespace renegade::bridge
 
         void ResetTerrainPropCollisions();
         wi::scene::Scene scene_;
+        bool coarseTerrainPropModels_ = false;
         std::shared_ptr<TerrainPropCollisionWorld> terrainPropCollisions_;
         std::string currentPath_;
         std::string lastError_;

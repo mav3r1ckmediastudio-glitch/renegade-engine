@@ -603,6 +603,7 @@ namespace renegade::runtime
     void RuntimeApplication::Initialize()
     {
         uiBindingCpuTiming_.Reset();
+        scenes_.EnableCoarseTerrainPropModels(std::getenv("RENEGADE_P4_CELL_RESIDENCY") != nullptr);
         wi::Application::Initialize();
         diagnosticService_.Record(bridge::DiagnosticSeverity::Info,
             "runtime", "runtime.initialized", "Runtime initialized");
@@ -791,8 +792,11 @@ namespace renegade::runtime
         static const bool usePropCells = std::getenv("RENEGADE_P4_CELL_RESIDENCY") != nullptr;
         if (usePropCells && player_.IsSpawned()) {
             XMFLOAT3 position;
-            if (bridge::GetPhysicsPosition(scenes_.GetScene(), player_.entity, position))
+            if (bridge::GetPhysicsPosition(scenes_.GetScene(), player_.entity, position)) {
                 propVisuals_.Update(scenes_.GetScene(), scenes_.Revision(), position);
+                propModels_.Update(scenes_.GetScene(),scenes_.Revision(),scenes_.TerrainPropCollisions().get(),
+                    startupResult_.project.rootPath,startupResult_.project.projectId,position);
+            }
         }
         TickTerrainPropCollisionProof();
         const auto collisionWorld=scenes_.TerrainPropCollisions();

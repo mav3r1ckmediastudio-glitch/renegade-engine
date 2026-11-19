@@ -50,7 +50,8 @@ namespace renegade::runtime
             for (size_t i = 0; i < scene.objects.GetCount(); ++i) {
                 const auto entity = scene.objects.GetEntity(i);
                 const auto* m = scene.metadatas.GetComponent(entity);
-                if (!m || !m->runtimeProjectionOnly || !m->string_values.has("renegade.terrain_props.placement") ||
+                if (!m || !m->runtimeProjectionOnly || m->string_values.has("renegade.terrain_props.coarse") ||
+                    m->string_values.has("renegade.terrain_props.fine") || !m->string_values.has("renegade.terrain_props.placement") ||
                     !m->string_values.has("renegade.terrain_props.layer")) continue;
                 placements[{m->string_values.get("renegade.terrain_props.layer"), m->string_values.get("renegade.terrain_props.placement")}]
                     .push_back({entity, scene.objects[i].meshID});

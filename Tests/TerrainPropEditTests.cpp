@@ -229,6 +229,33 @@ namespace
         scene.metadatas.GetComponent(lifecycleOwner)->string_values.set(
             "renegade.terrain_props.revision",beforeDeleteRevision);
         Check(lifecycle->Reconcile(error),error);
+        // Coarse products participate in history and packaging without changing placement IDs.
+        auto coarseCandidate = ModelImportCandidateService().PrepareModel(fixture.string());
+        Check(coarseCandidate.IsReady(), "coarse fixture preparation");
+        auto coarseRequest = request;
+        coarseRequest.assetName = "Coarse tree";
+        const auto coarseImport = ModelImportCommitService().CommitStaticModel(coarseRequest, coarseCandidate);
+        Check(coarseImport.succeeded && coarseImport.assetId != imported.assetId, "distinct coarse model product");
+        auto withCoarse = current;
+        withCoarse.profiles[0].coarseModelAssetId = coarseImport.assetId;
+        Check(commands.Execute(lifecycle->MakeCommand(withCoarse, lifecycle->Revision())), lifecycle->LastError());
+        TerrainPropDocument decoded;
+        Check(lifecycle->Read(decoded,error) && TerrainPropDocumentContentEqual(withCoarse,decoded), "coarse revision round trip");
+        std::vector<std::string> files;
+        std::vector<StableId> models;
+        Check(CollectTerrainPropDependencies(scene,fs::u8path(project.rootPath),project.projectId,files,models,error),error);
+        Check(std::find(models.begin(),models.end(),coarseImport.assetId)!=models.end() &&
+              std::find(models.begin(),models.end(),imported.assetId)!=models.end(), "package omitted a detail level");
+        const auto validCoarseRevision = lifecycle->Revision();
+        auto missingCoarse = withCoarse;
+        missingCoarse.profiles[0].coarseModelAssetId = GenerateStableId();
+        Check(!commands.Execute(lifecycle->MakeCommand(missingCoarse,validCoarseRevision)) &&
+              lifecycle->Revision()==validCoarseRevision,"unregistered coarse product accepted");
+        Check(commands.Undo() && lifecycle->Read(decoded,error) && decoded.profiles[0].coarseModelAssetId.empty(),
+              "Undo failed to restore single-model profile");
+        Check(commands.Redo() && lifecycle->Read(decoded,error) && decoded.profiles[0].coarseModelAssetId==coarseImport.assetId,
+              "Redo lost coarse model");
+        Check(commands.Undo(),"restore single-model fixture");
         // P3 profile fitting changes collision, never placement identity.
         Check(lifecycle->Read(current,error),error);
         auto collisionEdit=current;

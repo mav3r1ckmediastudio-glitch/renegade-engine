@@ -62,6 +62,7 @@ namespace renegade::bridge
         void CancelDestination(wi::ecs::Entity actor);
         // Failed/pending destination requests retain current interests and bodies.
         bool Destination(wi::ecs::Entity actor, const XMFLOAT3&, float radius, std::string& error);
+        const std::vector<TerrainPropDocument>& Documents() const { return documents_; }
         bool ResidentEnabled() const noexcept { return residency_; }
         bool Ready() const { return stats_.ready&&(!residency_||wi::physics::terrain_props::AreTerrainRequestsReady(scene_)); }
         Statistics Stats() const

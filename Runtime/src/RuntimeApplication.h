@@ -2,6 +2,7 @@
 #pragma once
 #include "RuntimeDialogue.h"
 #include "RuntimePropCellResidency.h"
+#include "RuntimePropModelResidency.h"
 #include "renegade/bridge/RiverFlowRenderer.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 
@@ -220,6 +221,7 @@ namespace renegade::runtime
         void ReportCreatorScriptDiagnostics();
 
         bridge::SceneService scenes_;
+        RuntimePropModelResidency propModels_;
         void RefreshUiBindingSources();
         void UpdateUiBindings();
         void UpdateLiveDiagnostics();

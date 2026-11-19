@@ -729,7 +729,7 @@ namespace renegade::bridge
         }
 
         std::vector<TerrainPropDocument> collisionDocuments;
-        if (!RestoreTerrainPropRevisions(*prepared.scene_, prepared.Path(), lastError_, &collisionDocuments, false))
+        if (!RestoreTerrainPropRevisions(*prepared.scene_, prepared.Path(), lastError_, &collisionDocuments, false, coarseTerrainPropModels_))
             return false;
 
         std::string riverNormalError;
