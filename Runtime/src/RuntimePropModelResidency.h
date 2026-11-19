@@ -29,13 +29,13 @@ namespace renegade::runtime
         std::deque<Cell> pending_;
         std::optional<Cell> center_;
         std::optional<uint64_t> revision_;
-        // A single worker owns detached product preparation. Only Update installs scene objects.
-        std::future<bridge::PreparedReusableModelPlacement> preparation_;
-        uint64_t preparationRevision_ = 0;
-        size_t preparationModel_ = 0;
-        Cell preparationCell_{};
-        bool Ready() const {
-            return preparation_.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+        using ModelKey = std::pair<uint64_t, size_t>;
+        using Preparation = std::future<bridge::PreparedReusableModelPlacement>;
+        static constexpr size_t MaxPreparations = 2;
+        std::map<ModelKey, Preparation> preparations_;
+        std::set<size_t> wantedModels_;
+        static bool Ready(const Preparation& job) {
+            return job.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
         }
         static Cell At(float x, float z) {
             const auto axis = [](float value) {
@@ -106,22 +106,31 @@ namespace renegade::runtime
                 for (auto x=center.first-3; x<=center.first+3; ++x)
                     for (auto z=center.second-3; z<=center.second+3; ++z)
                         if (cells_.count({x,z})) nearby.emplace(x,z);
+                wantedModels_.clear();
                 pending_.clear();
                 for (const auto& c : active_) if (!nearby.count(c)) pending_.push_back(c);
-                for (const auto& c : nearby) pending_.push_back(c);
+                std::vector<Cell> ordered(nearby.begin(),nearby.end());
+                auto distance = [&](Cell c) {
+                    auto x = c.first-center.first, z = c.second-center.second;
+                    return x*x + z*z;
+                };
+                std::stable_sort(ordered.begin(),ordered.end(),[&](Cell a, Cell b){ return distance(a)<distance(b); });
+                for (const auto& c : ordered) {
+                    pending_.push_back(c);
+                    for (const auto& entry : cells_.at(c)) wantedModels_.insert(entry.first);
+                }
                 center_=center;
             }
-            // Moving away or replacing a scene invalidates the installation target.
-            // Keep the worker alive until completion so a future destructor cannot block this frame.
-            if (preparation_.valid() && (preparationRevision_ != revision ||
-                std::abs(int64_t(preparationCell_.first)-center.first)>3 ||
-                std::abs(int64_t(preparationCell_.second)-center.second)>3)) {
-                if (Ready()) preparation_ = {};
+            for (auto job = preparations_.begin(); job != preparations_.end();) {
+                const bool obsolete = job->first.first != revision || !wantedModels_.count(job->first.second);
+                if (obsolete && Ready(job->second)) job = preparations_.erase(job);
+                else ++job;
             }
             if (pending_.empty()) return;
             const auto cell = pending_.front();
 
             const bool wanted = std::abs(int64_t(cell.first)-center.first)<=3 && std::abs(int64_t(cell.second)-center.second)<=3;
+            bool waiting = false;
             for (auto& pair : cells_.at(cell)) {
                 auto& batch = pair.second;
                 if (batch.fine == wanted || batch.coarse.empty()) continue;
@@ -129,21 +138,23 @@ namespace renegade::runtime
                     std::string error;
                     bridge::PreparedReusableModelPlacement prepared;
                     if (!batch.model->HasResidentModel()) {
-                        if (!preparation_.valid()) {
-                            preparationModel_ = pair.first;
-                            preparationCell_ = cell;
-                            preparationRevision_ = revision;
-                            preparation_ = std::async(std::launch::async, [request=batch.model->Request()] {
-                                return bridge::ReusableAssetService().PrepareModelAssetPlacement(request);
-                            });
-                        }
-                        if (!Ready()) return;
-                        if (preparationModel_ != pair.first || preparationRevision_ != revision) {
-                            preparation_ = {};
-                            return;
-                        }
-                        try { prepared = preparation_.get(); }
-                        catch (const std::exception& e) { error = e.what(); }
+                        const ModelKey key{revision,pair.first};
+                        try {
+                            auto job = preparations_.find(key);
+                            if (job == preparations_.end() && preparations_.size() < MaxPreparations) {
+                                auto worker = std::async(std::launch::async, [request=batch.model->Request()] {
+                                    return bridge::ReusableAssetService().PrepareModelAssetPlacement(request);
+                                });
+                                job = preparations_.emplace(key,std::move(worker)).first;
+                            }
+                            if (job == preparations_.end() || !Ready(job->second)) {
+                                waiting = true;
+                                continue;
+                            }
+                            auto worker = std::move(job->second);
+                            preparations_.erase(job);
+                            prepared = worker.get();
+                        } catch (const std::exception& e) { error = e.what(); }
                     }
                     if (!error.empty() || !batch.model->Acquire(batch.page,error,&prepared)) {
                         wi::backlog::post("Terrain prop detail: " + error,wi::backlog::LogLevel::Warning);
@@ -157,8 +168,9 @@ namespace renegade::runtime
                 if (wanted) active_.insert(cell);
             }
             pending_.pop_front();
+            if (waiting) pending_.push_back(cell);
             if (!wanted) active_.erase(cell);
         }
-        bool Settled() const { return pending_.empty() && !preparation_.valid(); }
+        bool Settled() const { return pending_.empty() && preparations_.empty(); }
     };
 }
