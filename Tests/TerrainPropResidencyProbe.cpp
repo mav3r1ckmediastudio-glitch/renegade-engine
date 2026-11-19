@@ -1,5 +1,6 @@
 #include <WickedEngine.h>
 #include "../Runtime/src/RuntimePropModelResidency.h"
+#include "../Runtime/src/RuntimePropCellResidency.h"
 #include <Windows.h>
 #include <Psapi.h>
 #include <array>
@@ -113,6 +114,31 @@ int RunGovernedTextureProof(const std::filesystem::path&, const std::filesystem:
 int RunTerrainPropSlice(const std::filesystem::path&, const std::filesystem::path&);
 
 // Read-only probe for separately registered owner-supplied detail products.
+static void CheckSingleModelDrawDistance()
+{
+    wi::scene::Scene scene;
+    const auto mesh = wi::ecs::CreateEntity();
+    scene.meshes.Create(mesh);
+    wi::ecs::Entity last = wi::ecs::INVALID_ENTITY;
+    for (int i=0; i<2; ++i) {
+        last = wi::ecs::CreateEntity();
+        scene.transforms.Create(last);
+        auto& metadata = scene.metadatas.Create(last);
+        metadata.runtimeProjectionOnly = true;
+        metadata.string_values.set("renegade.terrain_props.layer","probe");
+        metadata.string_values.set("renegade.terrain_props.placement",std::to_string(i));
+        auto& object = scene.objects.Create(last);
+        object.meshID = mesh;
+        object.draw_distance = 375;
+    }
+    renegade::runtime::RuntimePropCellResidency scheduler;
+    scheduler.Update(scene,1,{400,0,0});
+    if (scene.objects.Contains(last)) throw std::runtime_error("Single-model fixture did not evict detail");
+    scheduler.Update(scene,1,{0,0,0});
+    const auto* restored = scene.objects.GetComponent(last);
+    if (!restored || restored->draw_distance != 375) throw std::runtime_error("Single-model draw distance lost on return");
+}
+
 static int MeasureMeshDetail(const char* root, const char* project, const char* fine, const char* coarse)
 {
     using namespace renegade::bridge;
@@ -232,7 +258,7 @@ int main(int argc, char** argv)
     } drain;
 
     if (meshDetail) {
-        try { return MeasureMeshDetail(argv[1],argv[3],argv[4],argv[5]); }
+        try { CheckSingleModelDrawDistance(); return MeasureMeshDetail(argv[1],argv[3],argv[4],argv[5]); }
         catch (const std::exception& e) { std::cerr << e.what() << std::endl; return 40; }
     }
     if (argc == 4) return RunGovernedTextureProof(directory, argv[3]);

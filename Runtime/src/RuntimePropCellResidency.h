@@ -18,7 +18,7 @@ namespace renegade::runtime
     {
         using Entity = wi::ecs::Entity;
         using Cell = std::pair<int64_t, int64_t>;
-        struct Part { Entity entity, mesh; };
+        struct Part { Entity entity, mesh; float drawDistance; };
         struct Page {
             std::vector<Part> detail;
             size_t visible = 0;
@@ -54,7 +54,7 @@ namespace renegade::runtime
                     m->string_values.has("renegade.terrain_props.fine") || !m->string_values.has("renegade.terrain_props.placement") ||
                     !m->string_values.has("renegade.terrain_props.layer")) continue;
                 placements[{m->string_values.get("renegade.terrain_props.layer"), m->string_values.get("renegade.terrain_props.placement")}]
-                    .push_back({entity, scene.objects[i].meshID});
+                    .push_back({entity, scene.objects[i].meshID, scene.objects[i].draw_distance});
             }
             std::map<Cell, std::set<Entity>> represented;
             for (const auto& entry : placements) {
@@ -106,8 +106,11 @@ namespace renegade::runtime
                 if (page.visible == target) { page.queued.reset(); pending_.pop_front(); --budget; continue; }
                 if (page.wanted) {
                     const auto& part = page.detail[page.visible++];
-                    if (scene.transforms.Contains(part.entity) && scene.meshes.Contains(part.mesh) && !scene.objects.Contains(part.entity))
-                        scene.objects.Create(part.entity).meshID = part.mesh;
+                    if (scene.transforms.Contains(part.entity) && scene.meshes.Contains(part.mesh) && !scene.objects.Contains(part.entity)) {
+                        auto& object = scene.objects.Create(part.entity);
+                        object.meshID = part.mesh;
+                        object.draw_distance = part.drawDistance;
+                    }
                 } else {
                     scene.objects.Remove(page.detail[--page.visible].entity);
                 }
