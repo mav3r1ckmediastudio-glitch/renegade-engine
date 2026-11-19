@@ -365,7 +365,7 @@ namespace renegade::bridge
             return prepared;
         }
         const fs::path stagedPayload = placementDirectory /
-            fs::u8path(".renegade-" + request.assetId + ".placement.wiscene");
+            fs::u8path(".renegade-" + request.assetId + "-" + GenerateStableId() + ".placement.wiscene");
         fs::remove(stagedPayload, ec);
         ec.clear();
 

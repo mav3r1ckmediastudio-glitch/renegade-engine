@@ -5,6 +5,8 @@
 #include <cmath>
 #include <algorithm>
 #include <deque>
+#include <future>
+#include <chrono>
 #include <map>
 #include <optional>
 #include <set>
@@ -27,6 +29,14 @@ namespace renegade::runtime
         std::deque<Cell> pending_;
         std::optional<Cell> center_;
         std::optional<uint64_t> revision_;
+        // A single worker owns detached product preparation. Only Update installs scene objects.
+        std::future<bridge::PreparedReusableModelPlacement> preparation_;
+        uint64_t preparationRevision_ = 0;
+        size_t preparationModel_ = 0;
+        Cell preparationCell_{};
+        bool Ready() const {
+            return preparation_.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+        }
         static Cell At(float x, float z) {
             const auto axis = [](float value) {
                 return static_cast<int32_t>(std::clamp(std::floor(double(value)/32.0), -2147483640.0, 2147483640.0));
@@ -69,7 +79,8 @@ namespace renegade::runtime
                 if (!m || !m->runtimeProjectionOnly || !m->string_values.has("renegade.terrain_props.coarse")) continue;
                 const auto id = m->string_values.get(bridge::TerrainPropPlacementMetadataKey);
                 uint64_t number = 0;
-                if (std::from_chars(id.data(), id.data()+id.size(), number).ec != std::errc{}) continue;
+                const auto parsed = std::from_chars(id.data(), id.data()+id.size(), number);
+                if (parsed.ec != std::errc{} || parsed.ptr != id.data()+id.size()) continue;
                 const auto b = byPlacement.find({m->string_values.get("renegade.terrain_props.layer"), number});
                 if (b != byPlacement.end()) b->second->coarse.push_back(e);
             }
@@ -78,11 +89,17 @@ namespace renegade::runtime
         void Update(wi::scene::Scene& scene, uint64_t revision, const bridge::TerrainPropCollisionWorld* world,
             const std::string& root, const bridge::StableId& project, const DirectX::XMFLOAT3& pos) {
             if (revision_ != revision) {
+                // A revision can change while the same coarse scene objects still exist.
+                for (const auto& cell : active_) for (const auto& entry : cells_.at(cell)) {
+                    if (!entry.second.fine) continue;
+                    for (auto entity : entry.second.coarse)
+                        if (auto* object = scene.objects.GetComponent(entity)) object->SetRenderable(true);
+                }
                 cells_.clear(); models_.clear(); active_.clear(); pending_.clear(); center_.reset();
                 revision_ = revision;
                 if (world) Index(scene,*world,root,project);
             }
-            if (cells_.empty() || !std::isfinite(pos.x) || !std::isfinite(pos.z)) return;
+            if (!std::isfinite(pos.x) || !std::isfinite(pos.z)) return;
             const auto center = At(pos.x,pos.z);
             if (center_ != center) {
                 std::set<Cell> nearby;
@@ -91,19 +108,44 @@ namespace renegade::runtime
                         if (cells_.count({x,z})) nearby.emplace(x,z);
                 pending_.clear();
                 for (const auto& c : active_) if (!nearby.count(c)) pending_.push_back(c);
-                for (const auto& c : nearby) if (!active_.count(c)) pending_.push_back(c);
+                for (const auto& c : nearby) pending_.push_back(c);
                 center_=center;
+            }
+            // Moving away or replacing a scene invalidates the installation target.
+            // Keep the worker alive until completion so a future destructor cannot block this frame.
+            if (preparation_.valid() && (preparationRevision_ != revision ||
+                std::abs(int64_t(preparationCell_.first)-center.first)>3 ||
+                std::abs(int64_t(preparationCell_.second)-center.second)>3)) {
+                if (Ready()) preparation_ = {};
             }
             if (pending_.empty()) return;
             const auto cell = pending_.front();
-            pending_.pop_front();
+
             const bool wanted = std::abs(int64_t(cell.first)-center.first)<=3 && std::abs(int64_t(cell.second)-center.second)<=3;
             for (auto& pair : cells_.at(cell)) {
                 auto& batch = pair.second;
                 if (batch.fine == wanted || batch.coarse.empty()) continue;
                 if (wanted) {
                     std::string error;
-                    if (!batch.model->Acquire(batch.page,error)) {
+                    bridge::PreparedReusableModelPlacement prepared;
+                    if (!batch.model->HasResidentModel()) {
+                        if (!preparation_.valid()) {
+                            preparationModel_ = pair.first;
+                            preparationCell_ = cell;
+                            preparationRevision_ = revision;
+                            preparation_ = std::async(std::launch::async, [request=batch.model->Request()] {
+                                return bridge::ReusableAssetService().PrepareModelAssetPlacement(request);
+                            });
+                        }
+                        if (!Ready()) return;
+                        if (preparationModel_ != pair.first || preparationRevision_ != revision) {
+                            preparation_ = {};
+                            return;
+                        }
+                        try { prepared = preparation_.get(); }
+                        catch (const std::exception& e) { error = e.what(); }
+                    }
+                    if (!error.empty() || !batch.model->Acquire(batch.page,error,&prepared)) {
                         wi::backlog::post("Terrain prop detail: " + error,wi::backlog::LogLevel::Warning);
                         continue;
                     }
@@ -112,9 +154,11 @@ namespace renegade::runtime
                     if (auto* object=scene.objects.GetComponent(e)) object->SetRenderable(!wanted);
                 if (!wanted) batch.model->Release(cell);
                 batch.fine = wanted;
+                if (wanted) active_.insert(cell);
             }
-            if (wanted) active_.insert(cell); else active_.erase(cell);
+            pending_.pop_front();
+            if (!wanted) active_.erase(cell);
         }
-        bool Settled() const { return pending_.empty(); }
+        bool Settled() const { return pending_.empty() && !preparation_.valid(); }
     };
 }

@@ -179,16 +179,30 @@ static int MeasureMeshDetail(const char* root, const char* project, const char* 
     auto world=TerrainPropCollisionWorld::Create(scene,{doc},false,error);
     if (!world) throw std::runtime_error(error);
     renegade::runtime::RuntimePropModelResidency scheduler;
+    uint64_t revision = 1;
     auto travel = [&](float x,const char* phase,uint64_t expected) {
-        do { scheduler.Update(scene,1,world.get(),root,project,{x,0,0}); } while (!scheduler.Settled());
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(90);
+        do {
+            scheduler.Update(scene,revision,world.get(),root,project,{x,0,0});
+            if (scheduler.Settled()) break;
+            if (std::chrono::steady_clock::now() >= deadline) throw std::runtime_error("detail preparation timeout");
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        } while (true);
         size_t visible=0;
         for (size_t i=0; i<scene.objects.GetCount(); ++i) if (scene.objects[i].IsRenderable()) ++visible;
         if (visible!=2 || measure(phase)!=expected) throw std::runtime_error("Distance transition lost coverage or mesh residency");
     };
     travel(400,"distance_far",low);
+    scheduler.Update(scene,revision,world.get(),root,project,{0,0,0});
+    travel(400,"cancel_moved_away",low);
+    scheduler.Update(scene,revision,world.get(),root,project,{0,0,0});
+    ++revision;
+    travel(400,"cancel_old_revision",low);
     travel(0,"distance_near",shared);
     travel(400,"distance_released",low);
     travel(0,"distance_return",shared);
+    ++revision;
+    travel(400,"resident_revision_released",low);
 
     return 0;
 }

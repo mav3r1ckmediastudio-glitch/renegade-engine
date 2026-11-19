@@ -20,7 +20,10 @@ namespace renegade::bridge
             projection_.SetLayerIdentity(layer);
         }
 
-        bool Acquire(const TerrainPropPage& page, std::string& error)
+        bool HasResidentModel() const { return !cells_.empty(); }
+        const ReusableModelPlacementRequest& Request() const { return request_; }
+
+        bool Acquire(const TerrainPropPage& page, std::string& error, const PreparedReusableModelPlacement* supplied = nullptr)
         {
             const Cell cell{page.cellX, page.cellZ};
             if (cells_.count(cell)) return true;
@@ -31,7 +34,10 @@ namespace renegade::bridge
             }
             if (cells_.empty())
             {
-                auto prepared = ReusableAssetService().PrepareModelAssetPlacement(request_);
+                PreparedReusableModelPlacement local;
+                if (!supplied) local = ReusableAssetService().PrepareModelAssetPlacement(request_);
+                const auto& prepared = supplied ? *supplied : local;
+                if (prepared.Result().assetId != request_.assetId) { error = "Detail product identity changed."; return false; }
                 if (!prepared.IsReady()) { error = prepared.Result().error; return false; }
                 if (!projection_.Register(profile_.id, *prepared.PeekScene(), profile_.collision, error, profile_.drawDistance))
                     return false;
