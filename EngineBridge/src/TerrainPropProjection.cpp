@@ -29,10 +29,10 @@ namespace renegade::bridge
     }
 
     bool TerrainPropProjection::Register(const TerrainPropProfileId& id,
-        const wi::scene::Scene& source, TerrainPropCollision collision, std::string& error)
+        const wi::scene::Scene& source, TerrainPropCollision collision, std::string& error, float drawDistance)
     {
         error.clear();
-        if (&source == &scene_ || id == TerrainPropProfileId{} || profiles_.count(id) ||
+        if (!std::isfinite(drawDistance) || drawDistance < 0 || &source == &scene_ || id == TerrainPropProfileId{} || profiles_.count(id) ||
             source.objects.GetCount() == 0)
         {
             error = "Expected a new profile ID and a separate prepared static model.";
@@ -66,6 +66,7 @@ namespace renegade::bridge
         Prototype prototype;
         const auto firstResource = resources_.size();
         prototype.collision = collision;
+        prototype.drawDistance = drawDistance;
         std::unordered_map<Entity, Entity> meshes, materials;
         for (size_t i = 0; i < source.objects.GetCount(); ++i)
         {
@@ -126,7 +127,11 @@ namespace renegade::bridge
                     "renegade.terrain_props.placement", std::to_string(p.id));
                 scene_.metadatas.GetComponent(entity)->string_values.set(ImpactSurfaceMetadataKey,
                     ImpactSurfaceTypeToken(TerrainPropSurface(prototype.collision)));
-                scene_.objects.Create(entity).meshID = part.mesh;
+                auto& object = scene_.objects.Create(entity);
+                object.meshID = part.mesh;
+                if (prototype.drawDistance > 0)
+                    object.draw_distance = static_cast<float>(std::min(double(prototype.drawDistance) * p.scale,
+                        double(std::numeric_limits<float>::max())));
                 auto& transform = scene_.transforms.Create(entity);
                 transform.MatrixTransform(XMLoadFloat4x4(&part.local) * world);
                 transform.UpdateTransform();

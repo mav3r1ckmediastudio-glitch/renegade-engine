@@ -12,6 +12,7 @@ namespace renegade::bridge
         StableId modelAssetId;
         TerrainPropCollision collision;
         StableId coarseModelAssetId; // Optional independently loadable representation.
+        float drawDistance = 0; // Metres at unit placement scale. Zero keeps unlimited range.
     };
 
     struct TerrainPropDocument

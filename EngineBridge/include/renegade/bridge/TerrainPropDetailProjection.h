@@ -33,7 +33,7 @@ namespace renegade::bridge
             {
                 auto prepared = ReusableAssetService().PrepareModelAssetPlacement(request_);
                 if (!prepared.IsReady()) { error = prepared.Result().error; return false; }
-                if (!projection_.Register(profile_.id, *prepared.PeekScene(), profile_.collision, error))
+                if (!projection_.Register(profile_.id, *prepared.PeekScene(), profile_.collision, error, profile_.drawDistance))
                     return false;
                 projection_.SetRepresentation(profile_.id, TerrainPropProjection::Representation::Fine);
             }

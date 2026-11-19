@@ -246,6 +246,19 @@ namespace
         Check(CollectTerrainPropDependencies(scene,fs::u8path(project.rootPath),project.projectId,files,models,error),error);
         Check(std::find(models.begin(),models.end(),coarseImport.assetId)!=models.end() &&
               std::find(models.begin(),models.end(),imported.assetId)!=models.end(), "package omitted a detail level");
+        auto limited = withCoarse;
+        limited.profiles[0].drawDistance = 125.5f;
+        Check(commands.Execute(lifecycle->MakeCommand(limited, lifecycle->Revision())), lifecycle->LastError());
+        Check(lifecycle->Read(decoded,error) && TerrainPropDocumentContentEqual(limited,decoded), "draw distance round trip");
+        bool sawScaledBoulder = false;
+        for (auto& page : limited.pages) for (auto& placement : page.placements)
+            if (page.profiles[placement.profileIndex] == limited.profiles[0].id) placement.scale = 3;
+        Check(commands.Execute(lifecycle->MakeCommand(limited,lifecycle->Revision())), lifecycle->LastError());
+        for (size_t i=0; i<scene.objects.GetCount(); ++i)
+            if (scene.objects[i].draw_distance == 376.5f) sawScaledBoulder = true;
+        Check(sawScaledBoulder, "scaled placement did not extend native draw distance");
+        Check(commands.Undo(), "undo placement scale");
+        Check(commands.Undo() && lifecycle->Read(decoded,error) && decoded.profiles[0].drawDistance == 0, "restore unlimited draw distance");
         const auto validCoarseRevision = lifecycle->Revision();
         auto missingCoarse = withCoarse;
         missingCoarse.profiles[0].coarseModelAssetId = GenerateStableId();

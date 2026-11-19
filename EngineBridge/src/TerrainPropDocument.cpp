@@ -149,7 +149,7 @@ namespace renegade::bridge
             for (const auto& profile : doc.profiles)
             {
                 const auto& c = profile.collision;
-                if (!IsValidStableId(profile.modelAssetId) ||
+                if (!std::isfinite(profile.drawDistance) || profile.drawDistance < 0 || !IsValidStableId(profile.modelAssetId) ||
                     (!profile.coarseModelAssetId.empty() && !IsValidStableId(profile.coarseModelAssetId)) || profile.id == TerrainPropProfileId{} ||
                     !ids.insert(profile.id).second || static_cast<unsigned>(c.shape) > 2 ||
                     !std::isfinite(c.center.x) || !std::isfinite(c.center.y) || !std::isfinite(c.center.z) ||
@@ -223,6 +223,7 @@ namespace renegade::bridge
                 << ' ' << c.center.x << ' ' << c.center.y << ' ' << c.center.z
                 << ' ' << c.halfExtents.x << ' ' << c.halfExtents.y << ' ' << c.halfExtents.z
                 << ' ' << c.friction << ' ' << static_cast<unsigned>(c.surface);
+            if (profile.drawDistance > 0) content << " distance " << profile.drawDistance;
             if (!profile.coarseModelAssetId.empty()) content << ' ' << profile.coarseModelAssetId;
             content << '\n';
         }
@@ -245,7 +246,7 @@ namespace renegade::bridge
         for (size_t i = 0; i < a.profiles.size(); ++i)
         {
             const auto& x = a.profiles[i]; const auto& y = b.profiles[i];
-            if (x.id != y.id || x.modelAssetId != y.modelAssetId || x.coarseModelAssetId != y.coarseModelAssetId || x.collision.shape != y.collision.shape ||
+            if (x.id != y.id || x.modelAssetId != y.modelAssetId || x.drawDistance != y.drawDistance || x.coarseModelAssetId != y.coarseModelAssetId || x.collision.shape != y.collision.shape ||
                 x.collision.center.x != y.collision.center.x || x.collision.center.y != y.collision.center.y ||
                 x.collision.center.z != y.collision.center.z || x.collision.halfExtents.x != y.collision.halfExtents.x ||
                 x.collision.halfExtents.y != y.collision.halfExtents.y || x.collision.halfExtents.z != y.collision.halfExtents.z ||
@@ -295,8 +296,10 @@ namespace renegade::bridge
             return true;
         };
         bool hasCoarse = false;
+        bool hasDistance = false;
         for (const auto& profile : doc.profiles)
         {
+            hasDistance |= profile.drawDistance > 0;
             if (!checkModel(profile.modelAssetId)) return false;
             if (profile.coarseModelAssetId.empty()) continue;
             if (!checkModel(profile.coarseModelAssetId)) return false;
@@ -306,7 +309,7 @@ namespace renegade::bridge
         std::ostringstream manifest;
         manifest.imbue(std::locale::classic());
         manifest << std::setprecision(std::numeric_limits<float>::max_digits10)
-            << "RPROPS " << (hasCoarse ? 4 : 3) << ' ' << projectId << ' ' << doc.layerId << ' ' << doc.nextPlacementId << ' ' << doc.profiles.size() << ' ' << doc.pages.size() << '\n';
+            << "RPROPS " << (hasDistance ? 5 : hasCoarse ? 4 : 3) << ' ' << projectId << ' ' << doc.layerId << ' ' << doc.nextPlacementId << ' ' << doc.profiles.size() << ' ' << doc.pages.size() << '\n';
         for (const auto& profile : doc.profiles)
         {
             const auto& c = profile.collision;
@@ -314,7 +317,8 @@ namespace renegade::bridge
                 << ' ' << c.center.x << ' ' << c.center.y << ' ' << c.center.z
                 << ' ' << c.halfExtents.x << ' ' << c.halfExtents.y << ' ' << c.halfExtents.z
                 << ' ' << c.friction << ' ' << static_cast<unsigned>(c.surface);
-            if (hasCoarse) manifest << ' ' << (profile.coarseModelAssetId.empty() ? "-" : profile.coarseModelAssetId);
+            if (hasCoarse || hasDistance) manifest << ' ' << (profile.coarseModelAssetId.empty() ? "-" : profile.coarseModelAssetId);
+            if (hasDistance) manifest << ' ' << profile.drawDistance;
             manifest << '\n';
         }
         size_t encodedBytes = 0;
@@ -358,7 +362,7 @@ namespace renegade::bridge
         std::string magic, project;
         if (!(manifest >> magic >> version >> project >> doc.layerId) || !ReadUnsigned(manifest, doc.nextPlacementId) ||
             !(manifest >> profiles >> pages) ||
-            magic != "RPROPS" || (version < 1 || version > 4) || project != projectId || profiles > 4096 || pages > 32768)
+            magic != "RPROPS" || (version < 1 || version > 5) || project != projectId || profiles > 4096 || pages > 32768)
         { error = "Invalid terrain prop manifest header."; return false; }
         for (unsigned i = 0; i < profiles; ++i)
         {
@@ -377,13 +381,15 @@ namespace renegade::bridge
                 {error="Invalid terrain collision surface record.";return false;}
                 c.surface=static_cast<ImpactSurfaceType>(surface);
             }
-            if (version == 4)
+            if (version >= 4)
             {
                 std::string coarse;
                 if (!(manifest >> coarse) || (coarse != "-" && !IsValidStableId(coarse)))
                 { error = "Invalid coarse terrain model identity."; return false; }
                 if (coarse != "-") profile.coarseModelAssetId = std::move(coarse);
             }
+            if (version >= 5 && (!(manifest >> profile.drawDistance) || !std::isfinite(profile.drawDistance) || profile.drawDistance < 0))
+            { error = "Invalid terrain prop draw distance."; return false; }
             c.shape = static_cast<TerrainPropShape>(shape);
             for (size_t n = 0; n < profile.id.size(); ++n)
                 profile.id[n] = static_cast<std::uint8_t>(std::stoul(id.substr(n * 2, 2), nullptr, 16));
@@ -505,7 +511,7 @@ namespace renegade::bridge
                 const bool coarse = useCoarse && !p.coarseModelAssetId.empty() && p.coarseModelAssetId != p.modelAssetId;
                 auto model = ReusableAssetService().PrepareModelAssetPlacement({root.generic_u8string(), project, coarse ? p.coarseModelAssetId : p.modelAssetId});
                 if (!model.IsReady()) { error = model.Result().error; return false; }
-                if (!projection.Register(p.id, *model.PeekScene(), p.collision, error)) return false;
+                if (!projection.Register(p.id, *model.PeekScene(), p.collision, error, p.drawDistance)) return false;
                 if (coarse) projection.SetRepresentation(p.id, TerrainPropProjection::Representation::Coarse);
             }
             for (const auto& page : doc.pages)
