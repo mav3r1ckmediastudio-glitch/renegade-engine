@@ -4,7 +4,7 @@ P6 is the release milestone for terrain props. Biome design is a separate projec
 
 The occupied chassis owns the terrain detail origin while riding, including the interval before its render transform catches up to native physics. Walking resumes using the character body after exit. The native collision-world regression moves the occupied chassis across multiple 32-metre cells while the walking body stays behind. The stock vehicle brake lights still use their authored emissive material. The old private reference van and its UV-specific mask are excluded from this release.
 
-A maintainer can run the existing Runtime handshake workflow in standalone mode with a candidate ZIP release-asset ID, its SHA-256 and the expected Story Flow node. It checks the named executable in a fresh profile, inspects the native package and measures 60 DX12 frames. The four normal pull-request jobs keep their existing commands.
+A maintainer can run the existing Runtime handshake workflow in standalone mode with a candidate ZIP release-asset ID, its SHA-256 and the expected Story Flow node. It checks the named executable in a fresh profile, inspects the native package and records 240 measured DX12 frames after warmup. The four normal pull-request jobs keep their existing commands.
 
 The validations below belong to the named feature commits. The combined candidate requires its own Studio and Runtime builds, native woodland and Physics Lab runs, hosted checks and a standalone launch in a clean Windows environment. The original intermittent Debug expansion Undo crash remains recorded in the woodland handoff.
 
