@@ -160,7 +160,7 @@ namespace renegade::bridge
             auto model=ReusableAssetService().PrepareModelAssetPlacement(
                 {root_.generic_u8string(),project_,profile.modelAssetId});
             if (!model.IsReady()) { error=model.Result().error; return false; }
-            if (!replacement->Register(profile.id,*model.PeekScene(),profile.collision,error)) return false;
+            if (!replacement->Register(profile.id,*model.PeekScene(),profile.collision,error,profile.drawDistance)) return false;
         }
         for (const auto& page:doc.pages) if (!replacement->Place(page,error)) return false;
         projection_.reset();
@@ -188,7 +188,7 @@ namespace renegade::bridge
         auto collisionWorld=TerrainPropCollisionWorld::Find(scene_);
         auto collisionEdit=collisionWorld?collisionWorld->Stage(doc,error_):nullptr;
         if(collisionWorld&&!collisionEdit)return false;
-        bool changedCollision=false;
+        bool changedProjection=false;
         for(const auto& profile:doc.profiles)
         {
             const auto existing=std::find_if(before.profiles.begin(),before.profiles.end(),
@@ -197,11 +197,11 @@ namespace renegade::bridge
             if(existing->modelAssetId!=profile.modelAssetId)
             {error_="Replace a model with a new profile identity.";return false;}
             const auto& a=existing->collision;const auto& b=profile.collision;
-            changedCollision=changedCollision||a.shape!=b.shape||a.friction!=b.friction||a.surface!=b.surface||
+            changedProjection=changedProjection||existing->drawDistance!=profile.drawDistance||a.shape!=b.shape||a.friction!=b.friction||a.surface!=b.surface||
                 a.center.x!=b.center.x||a.center.y!=b.center.y||a.center.z!=b.center.z||
                 a.halfExtents.x!=b.halfExtents.x||a.halfExtents.y!=b.halfExtents.y||a.halfExtents.z!=b.halfExtents.z;
         }
-        if(changedCollision)
+        if(changedProjection)
         {
             // Profile edits preserve every placement/candidate identity. Stage
             // complete replacement objects at this same native safe point;
@@ -214,7 +214,7 @@ namespace renegade::bridge
                 auto model=ReusableAssetService().PrepareModelAssetPlacement(
                     {root_.generic_u8string(),project_,profile.modelAssetId});
                 if(!model.IsReady()){error_=model.Result().error;return false;}
-                if(!replacement->Register(profile.id,*model.PeekScene(),profile.collision,error_))return false;
+                if(!replacement->Register(profile.id,*model.PeekScene(),profile.collision,error_,profile.drawDistance))return false;
             }
             for(const auto& page:doc.pages)if(!replacement->Place(page,error_))return false;
             if((cancelled&&cancelled())||Revision()!=expected||
@@ -259,7 +259,7 @@ namespace renegade::bridge
             auto model=ReusableAssetService().PrepareModelAssetPlacement(
                 {root_.generic_u8string(),project_,p.modelAssetId});
             if (!model.IsReady()) {error_=model.Result().error;return false;}
-            if (!projection_->Register(p.id,*model.PeekScene(),p.collision,error_)) return false;
+            if (!projection_->Register(p.id,*model.PeekScene(),p.collision,error_,p.drawDistance)) return false;
             // Registered prototypes remain reusable even after an undone addition.
             newProfiles.push_back(p.id);
             displayed_.profiles.push_back(p);

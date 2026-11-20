@@ -53,7 +53,7 @@ namespace
         SceneInspectorSlider seed, radius, spacing;
         SceneInspectorComboBox collisionShape, collisionSurface;
         std::array<SceneInspectorSlider,3> collisionCenter, collisionExtent;
-        SceneInspectorSlider collisionFriction, minScale, maxScale;
+        SceneInspectorSlider collisionFriction, drawDistance, minScale, maxScale;
         SceneInspectorButton collisionApply, collisionClose, collisionFocus;
         int collisionEntry=-1;
         std::optional<TerrainPropPlacement> collisionPreview;
@@ -113,20 +113,25 @@ namespace
             auto& slider=p.rows[index]->density;slider.SetRange(0,maximum);slider.SetValue(value);slider.valueInputField.SetValue(value);
         }
     }
-    TerrainPropCollision* SelectedCollision()
+    TerrainPropProfile* SelectedProfile()
     {
         auto& p=Props();const auto& entries=p.draft.authoring.recipe.mix.entries;
         if(p.collisionEntry<0||size_t(p.collisionEntry)>=entries.size())return nullptr;
         const auto id=entries[p.collisionEntry].profileId;
-        for(auto& profile:p.draft.profiles)if(profile.id==id)return &profile.collision;
+        for(auto& profile:p.draft.profiles)if(profile.id==id)return &profile;
         return nullptr;
+    }
+    TerrainPropCollision* SelectedCollision()
+    {
+        auto* profile = SelectedProfile();
+        return profile ? &profile->collision : nullptr;
     }
     std::vector<wi::gui::Widget*> CollisionWidgets()
     {
         auto& p=Props();
         return {&p.collisionShape,&p.collisionCenter[0],&p.collisionCenter[1],&p.collisionCenter[2],
             &p.collisionExtent[0],&p.collisionExtent[1],&p.collisionExtent[2],&p.collisionFriction,
-            &p.collisionSurface,&p.minScale,&p.maxScale,&p.collisionFocus,&p.collisionApply,&p.collisionClose};
+            &p.collisionSurface,&p.drawDistance,&p.minScale,&p.maxScale,&p.collisionFocus,&p.collisionApply,&p.collisionClose};
     }
     void SyncCollisionControls()
     {
@@ -141,6 +146,7 @@ namespace
             SetCanonicalSetting(p.collisionExtent[i],.01f,100,extent[i]);
         }
         SetCanonicalSetting(p.collisionFriction,0,1,collision->friction);
+        SetCanonicalSetting(p.drawDistance,0,10000,SelectedProfile()->drawDistance);
         const auto& entry=p.draft.authoring.recipe.mix.entries[p.collisionEntry];
         SetCanonicalSetting(p.minScale,.01f,20,entry.minScale);
         SetCanonicalSetting(p.maxScale,.01f,20,entry.maxScale);
@@ -244,6 +250,13 @@ void StudioRenderPath::CreateTerrainPropControls()
             ("HALF EXTENT "+letter+" (m)").c_str(),extent);
         p.collisionExtent[axis].SetTooltip("Capsule: X = trunk radius, Y = half straight height; Z ignored. Box: local half extents. Placement scale applies uniformly.");
     }
+    slider(p.drawDistance,0,10000,0,"Terrain prop draw distance","DRAW DISTANCE (m)",[](float value){
+        if (auto* profile = SelectedProfile()) {
+            profile->drawDistance = CanonicalSetting(value,0,10000,profile->drawDistance);
+            SetCanonicalSetting(Props().drawDistance,0,10000,profile->drawDistance);
+        }
+    });
+    p.drawDistance.SetTooltip("Distance at unit placement scale. Zero keeps the prop visible at any distance.");
     slider(p.collisionFriction,0,1,.5f,"Terrain prop friction","FRICTION",[](float value){
         auto* c=SelectedCollision();if(!c)return;
         c->friction=CanonicalSetting(value,0,1,c->friction);
@@ -286,9 +299,9 @@ void StudioRenderPath::CreateTerrainPropControls()
     button(p.collisionFocus,"Focus terrain collision preview","FOCUS COLLISION PREVIEW",
         "Frame the first placement of this model. Orange wireframe shows the staged collision shape.",
         [](const wi::gui::EventArgs&){auto& p=Props();if(p.focusCollisionPreview)p.focusCollisionPreview();});
-    button(p.collisionApply,"Apply terrain prop collision","APPLY COLLISION SETTINGS","Update collision on existing placements as one Undo operation. Generate applies the scale range.",
+    button(p.collisionApply,"Apply terrain prop collision","APPLY PROP SETTINGS","Update draw distance and collision on existing placements as one Undo operation. Generate applies the scale range.",
         [](const wi::gui::EventArgs&){Props().pending=-3;});
-    button(p.collisionClose,"Close terrain prop collision","CLOSE COLLISION SETTINGS","Close these advanced settings. Draft settings remain staged until an Apply.",
+    button(p.collisionClose,"Close terrain prop collision","CLOSE PROP SETTINGS","Close these advanced settings. Draft settings remain staged until an Apply.",
         [](const wi::gui::EventArgs&){Props().collisionEntry=-1;Props().rebuild=true;});
     for(auto* widget:CollisionWidgets())widget->SetVisible(false);
     p.status.Create("Terrain props progress");p.status.SetText("Add models, set density, then Generate Apply or Paint.");
@@ -314,7 +327,7 @@ void StudioRenderPath::RebuildTerrainPropRows()
         auto density=[i,maximum](float v){CommitDensity(i,maximum,v);};
         row->density.OnValuePreview(density);row->density.OnValueCommitted(density);
         row->collision.Create("Terrain prop collision settings "+std::to_string(i));
-        row->collision.SetText(p.collisionEntry==int(i)?"COLLISION SETTINGS [OPEN]":"COLLISION / SCALE...");
+        row->collision.SetText(p.collisionEntry==int(i)?"PROP SETTINGS [OPEN]":"PROP SETTINGS...");
         row->collision.SetTooltip("Advanced per-model collision profile and uniform scale range.");
         row->collision.OnClick([i](const wi::gui::EventArgs&){
             auto& p=Props();p.collisionEntry=p.collisionEntry==int(i)?-1:int(i);p.rebuild=true;

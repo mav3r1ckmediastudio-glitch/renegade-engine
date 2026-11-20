@@ -4,6 +4,9 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <map>
+#include <string_view>
+#include <unordered_set>
 
 namespace renegade::runtime
 {
@@ -19,14 +22,17 @@ namespace renegade::runtime
             int phase=0,frames=0,waits=0;
             std::uint64_t revision=UINT64_MAX;
             std::uint32_t box=0;
-            float seconds=0,top=0,npcStart=0;
+            wi::ecs::Entity boulderAnchor = wi::ecs::INVALID_ENTITY;
+            std::set<wi::ecs::Entity> nearBoulder;
+            std::set<std::pair<int,int>> walkedCells;
+            float seconds=0,top=0,npcStart=0; XMFLOAT3 walkStart{}, walkEnd{};
             XMFLOAT3 landing{},destination{},source{};
             wi::ecs::Entity npc=wi::ecs::INVALID_ENTITY;
         };
         static State state;
         if(state.phase<0||state.phase==9)return;
         const auto log=[&](const std::string& message){std::ofstream(path,std::ios::app)<<message<<'\n';};
-        const auto fail=[&](const std::string& message){log("P3_RUNTIME_PROOF_FAIL "+message);state.phase=-1;};
+        const auto fail=[&](const std::string& message){proofWalkForward_=false;log("P3_RUNTIME_PROOF_FAIL "+message);state.phase=-1;};
         const auto root=std::filesystem::u8path(startupResult_.project.rootPath).filename().u8string();
         if(root.find("TerrainProof")==std::string::npos)
         {fail("Use a dedicated disposable TerrainProof project.");return;}
@@ -47,9 +53,34 @@ namespace renegade::runtime
                 wi::renderer::DrawCapsule(wi::primitive::Capsule(p,
                     XMFLOAT3{p.x,p.y+npc->height,p.z},npc->width),XMFLOAT4{1,.45f,.1f,1},false);
             }
+        const auto sampleVisuals = [&](const char* milestone) {
+            if (!std::getenv("RENEGADE_P4_RESIDENCY_PROOF")) return true;
+            std::size_t count = 0;
+            std::unordered_set<wi::ecs::Entity> meshes;
+            for (std::size_t i = 0; i < scene.objects.GetCount(); ++i) {
+                const auto entity = scene.objects.GetEntity(i);
+                const auto* metadata = scene.metadatas.GetComponent(entity);
+                if (!metadata || !metadata->runtimeProjectionOnly ||
+                    !metadata->string_values.has(bridge::TerrainPropPlacementMetadataKey)) continue;
+                if (std::string_view(milestone) == "boulder") state.nearBoulder.insert(entity);
+                if (std::string_view(milestone) == "return" && !state.nearBoulder.count(entity))
+                    return false;
+                ++count;
+                meshes.insert(scene.objects[i].meshID);
+            }
+            if (std::string_view(milestone) == "return" && count != state.nearBoulder.size()) return false;
+            log("P4_GPU_BYTES " + std::string(milestone) + " " + std::to_string(wi::graphics::GetDevice()->GetMemoryUsage().usage));
+            log(std::string("P4_SAMPLE ") + milestone + " x=" + std::to_string(position.x)
+                + " visual_objects=" + std::to_string(count) + " distinct_meshes=" + std::to_string(meshes.size()));
+            return true;
+        };
         if(state.phase==0)
         {
-            if(!world->Ready())return;
+            if(!world->Ready() || !propVisuals_.Settled())return;
+            if (std::getenv("RENEGADE_P4_RESIDENCY_PROOF")) {
+                const auto plane = scene.Entity_FindByName("Proof ground");
+                if (auto* object = scene.objects.GetComponent(plane)) object->SetRenderable(false);
+            }
             float nearest=std::numeric_limits<float>::max();bool found=false;
             const auto index=world->Index();
             for(std::uint32_t i=0;i<index->Count();++i)
@@ -64,7 +95,7 @@ namespace renegade::runtime
             const auto& c=index->GetProfile(record.profile).source.collision;
             state.top=record.center.y+c.halfExtents.y*record.scale;
             state.landing={record.center.x,state.top+2,record.center.z};
-            state.source=position;state.phase=1;
+            sampleVisuals("start"); state.source=position;state.phase=1;
             log("P3_RUNTIME_PROOF_BEGIN indexed="+std::to_string(index->Count()));
         }
         if(state.phase==1)
@@ -76,6 +107,7 @@ namespace renegade::runtime
         state.seconds+=std::max(0.f,scene.dt);
         if(state.phase==2)
         {
+            if (!propVisuals_.Settled()) return;
             if(!wi::physics::IsCharacterGroundSupported(*body))
             {if(state.seconds>8)fail("Player did not land on the authored boulder.");return;}
             // Wicked offsets the native character shape upward: GetPosition
@@ -93,6 +125,7 @@ namespace renegade::runtime
                     std::to_string(position.y)+" top="+std::to_string(state.top));
                 return;
             }
+            sampleVisuals("boulder");
             player_.yaw=-DirectX::XM_PIDIV2;player_.pitch=.55f;
             log("PLAYER_BOULDER_SUPPORTED y="+std::to_string(position.y)+" top="+std::to_string(state.top)+
                 " allocated="+std::to_string(world->Stats().nativeAllocated));
@@ -141,13 +174,68 @@ namespace renegade::runtime
             (void)bridge::SetLinearVelocity(scene,player_.entity,XMFLOAT3{0,0,0});
             state.phase=5;state.seconds=0;return;
         }
-        if(state.phase==5)
+        if (state.phase == 10 || state.phase == 11) {
+            state.walkedCells.emplace(int(std::floor(position.x/32.0f)), int(std::floor(position.z/32.0f)));
+            const auto target = state.phase == 10 ? state.walkEnd : state.walkStart;
+            const float dx = target.x-position.x, dz = target.z-position.z;
+            if (dx*dx + dz*dz > .75f*.75f) {
+                player_.yaw = std::atan2(dx,dz);
+                proofWalkForward_ = true;
+                if (state.seconds > 35) fail("Continuous traversal failed to reach target at " + std::to_string(position.x) + "," + std::to_string(position.z));
+                return;
+            }
+            proofWalkForward_ = false;
+            if (!propVisuals_.Settled()) return;
+            if (state.walkedCells.size() < 2) { fail("Walk did not cross a cell boundary"); return; }
+            log("P4_WALK cells=" + std::to_string(state.walkedCells.size()) + " z=" + std::to_string(position.z));
+            sampleVisuals(state.phase == 10 ? "walk_out" : "walk_back");
+            state.phase = state.phase == 10 ? 11 : 6;
+            state.seconds = 0;
+            return;
+        }
+        if (state.phase == 6) {
+            if (!bridge::SetPhysicsPosition(scene, player_.entity, state.landing)) return;
+            (void)bridge::SetLinearVelocity(scene, player_.entity, XMFLOAT3{0,0,0});
+            state.destination = state.landing;
+            state.phase = 7;
+            state.seconds = 0;
+            return;
+        }
+        if(state.phase==5 || state.phase==7)
         {
+            if (!propVisuals_.Settled()) return;
             if(!wi::physics::IsCharacterGroundSupported(*body))
             {if(state.seconds>10)fail("Player did not land after terrain-prefetched teleport.");return;}
             if(state.waits==0){fail("Teleport did not exercise pending destination readiness.");return;}
             if(std::abs(position.x-state.destination.x)>.5f||std::abs(position.z-state.destination.z)>.5f)
             {fail("Teleported player landed at the wrong destination.");return;}
+            if (std::getenv("RENEGADE_P4_RESIDENCY_PROOF") && state.phase == 5) {
+                sampleVisuals("outbound");
+                const auto& record = world->Index()->Placement(state.box);
+                bridge::TerrainPropCollisionHit hit;
+                hit.layer = world->Index()->Layer(record.layer);
+                hit.placement = record.id;
+                state.boulderAnchor = world->HitAnchor(hit);
+                if (state.boulderAnchor == wi::ecs::INVALID_ENTITY) { fail("Distant boulder lost its hit anchor"); return; }
+                state.walkStart = position;
+                std::string queryError;
+                for (int i = 0; i < 96; ++i) {
+                    const float yaw = i * DirectX::XM_2PI / 96;
+                    state.walkEnd = {position.x + std::sin(yaw)*48, position.y, position.z + std::cos(yaw)*48};
+                    auto from = position, to = state.walkEnd;
+                    from.y += .7f; to.y += .7f;
+                    bridge::TerrainPropCollisionHit obstacle;
+                    if (!world->Index()->Cast(from,to,.5f,obstacle,queryError)) { fail(queryError); return; }
+                    if (!obstacle.hit) { state.phase = 10; break; }
+                }
+                if (state.phase != 10) { fail("Could not find clear continuous traversal corridor"); return; }
+                state.seconds = 0;
+                return;
+            }
+            if (state.phase == 7) {
+                if (!scene.objects.Contains(state.boulderAnchor)) { fail("Returned boulder lost its render object"); return; }
+                if (!sampleVisuals("return")) { fail("Returned terrain object membership differs"); return; }
+            }
             const auto stats=world->Stats();
             log("P3_RUNTIME_PROOF_PASS waits="+std::to_string(state.waits)+" player="+
                 std::to_string(position.x)+","+std::to_string(position.y)+","+std::to_string(position.z)+

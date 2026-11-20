@@ -11,6 +11,8 @@ namespace renegade::bridge
         TerrainPropProfileId id{};
         StableId modelAssetId;
         TerrainPropCollision collision;
+        StableId coarseModelAssetId; // Optional independently loadable representation.
+        float drawDistance = 0; // Metres at unit placement scale. Zero keeps unlimited range.
     };
 
     struct TerrainPropDocument
@@ -54,5 +56,6 @@ namespace renegade::bridge
     // Called on detached candidate scenes before Studio or Runtime adopts them.
     bool RestoreTerrainPropRevisions(wi::scene::Scene& candidate,
         const std::filesystem::path& scenePath, std::string& error,
-        std::vector<TerrainPropDocument>* documents = nullptr, bool createCollision = true);
+        std::vector<TerrainPropDocument>* documents = nullptr, bool createCollision = true, bool useCoarse = false,
+        std::vector<TerrainPropRangePart>* rangeParts = nullptr);
 }

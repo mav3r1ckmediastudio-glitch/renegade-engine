@@ -603,6 +603,7 @@ namespace renegade::runtime
     void RuntimeApplication::Initialize()
     {
         uiBindingCpuTiming_.Reset();
+        scenes_.EnableCoarseTerrainPropModels(std::getenv("RENEGADE_P4_CELL_RESIDENCY") != nullptr);
         wi::Application::Initialize();
         diagnosticService_.Record(bridge::DiagnosticSeverity::Info,
             "runtime", "runtime.initialized", "Runtime initialized");
@@ -788,6 +789,19 @@ namespace renegade::runtime
     void RuntimeApplication::Update(const float dt)
     {
         SyncPlayerForScene();
+        static const bool usePropCells = std::getenv("RENEGADE_P4_CELL_RESIDENCY") != nullptr;
+        if (usePropCells) {
+            const auto* camera = renderer_.camera ? &renderer_.camera->Eye : nullptr;
+            XMFLOAT3 position{};
+            const bool hasPlayer = player_.IsSpawned() &&
+                bridge::GetPhysicsPosition(scenes_.GetScene(), player_.entity, position);
+            if (hasPlayer || camera) {
+                if (!hasPlayer) position = *camera;
+                propVisuals_.Update(scenes_.GetScene(), scenes_.Revision(), position);
+                propModels_.Update(scenes_.GetScene(),scenes_.Revision(),scenes_.TerrainPropCollisions().get(),
+                    startupResult_.project.rootPath,startupResult_.project.projectId,position,camera);
+            }
+        }
         TickTerrainPropCollisionProof();
         const auto collisionWorld=scenes_.TerrainPropCollisions();
         bool collisionReady=!collisionWorld||collisionWorld->Ready();
@@ -906,6 +920,11 @@ namespace renegade::runtime
                     if (!paused_)
                     {
                         auto playerInput=collisionReady?gameplayInput.player:bridge::PlayerInputFrame{};
+                        if (proofWalkForward_ && collisionReady) {
+                            playerInput.moveForward = 1; playerInput.moveRight = 0;
+                            playerInput.lookYaw = playerInput.lookPitch = 0;
+                            playerInput.sprintDown = true;
+                        }
                         if(g13e14Trace){
                             const auto phase=g13e14Frame%960;
                             playerInput.moveForward=phase<320?0.75f:(phase<640?-0.65f:0.25f);

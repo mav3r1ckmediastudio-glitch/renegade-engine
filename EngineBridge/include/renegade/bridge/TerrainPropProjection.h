@@ -24,6 +24,19 @@ namespace renegade::bridge
         return c.shape==TerrainPropShape::TrunkCapsule?ImpactSurfaceType::Wood:
             c.shape==TerrainPropShape::BoulderBox?ImpactSurfaceType::Stone:ImpactSurfaceType::Default;
     }
+    struct TerrainPropRangePart
+    {
+        wi::ecs::Entity entity, mesh;
+        XMFLOAT4X4 matrix;
+        XMFLOAT3 origin;
+        double range;
+        float drawDistance;
+        bool collisionAnchor, coarse;
+        std::string layer;
+        uint64_t placement;
+        ImpactSurfaceType surface;
+        void EnsureIdentityAndTransform(wi::scene::Scene&) const;
+    };
     // All mutation runs at the caller's scene/physics-safe point.
     class TerrainPropProjection
     {
@@ -48,8 +61,12 @@ namespace renegade::bridge
         TerrainPropProjection& operator=(const TerrainPropProjection&) = delete;
         void SetLayerIdentity(const std::string&);
         bool Register(const TerrainPropProfileId&, const wi::scene::Scene& prepared,
-            TerrainPropCollision, std::string& error);
+            TerrainPropCollision, std::string& error, float drawDistance = 0);
+        void CollectRangeParts(std::vector<TerrainPropRangePart>* parts) { rangeParts_ = parts; }
         bool Place(const TerrainPropPage&, std::string& error);
+        enum class Representation { Default, Coarse, Fine };
+        void SetRepresentation(const TerrainPropProfileId& id, Representation value) { profiles_.at(id).representation = value; }
+        void EvictPage(Cell cell);
         void UnregisterUnused(const TerrainPropProfileId&);
         std::unique_ptr<PendingPages> PreparePages(const std::vector<TerrainPropPage>&,
             std::string& error);
@@ -58,12 +75,13 @@ namespace renegade::bridge
         void ReleaseOwnership() noexcept;
     private:
         struct Part { wi::ecs::Entity mesh; XMFLOAT4X4 local; };
-        struct Prototype { std::vector<Part> parts; TerrainPropCollision collision; std::vector<wi::ecs::Entity> resources; };
-        wi::ecs::Entity NewTransient();
+        struct Prototype { float drawDistance = 0; Representation representation = Representation::Default; std::vector<Part> parts; TerrainPropCollision collision; std::vector<wi::ecs::Entity> resources; };
+        wi::ecs::Entity NewTransient(std::vector<wi::ecs::Entity>& owner);
         wi::scene::Scene& scene_;
+        std::vector<TerrainPropRangePart>* rangeParts_ = nullptr;
         bool createCollision_ = true;
         std::string layerIdentity_;
-        std::vector<wi::ecs::Entity> entities_;
+        std::vector<wi::ecs::Entity> resources_;
         std::map<TerrainPropProfileId, Prototype> profiles_;
         std::unordered_set<std::uint64_t> placementIds_;
         std::map<Cell, std::vector<wi::ecs::Entity>> pageEntities_;
