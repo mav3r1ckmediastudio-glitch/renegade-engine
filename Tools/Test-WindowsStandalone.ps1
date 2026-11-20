@@ -38,6 +38,7 @@ foreach ($entry in $manifest.files) {
         throw "Invalid manifest entry $($entry.path)"
     }
 }
+$sampleFrames = 240
 $frames = Join-Path $root 'frames.csv'
 $start = New-Object Diagnostics.ProcessStartInfo
 $start.FileName = Join-Path $game $exeName
@@ -47,7 +48,7 @@ $start.UseShellExecute = $false
 $start.EnvironmentVariables['LOCALAPPDATA'] = $profile
 $start.EnvironmentVariables['PATH'] = "$env:SystemRoot\System32;$env:SystemRoot"
 $start.EnvironmentVariables['RENEGADE_G13E13_PERF_CSV'] = $frames
-$start.EnvironmentVariables['RENEGADE_G13E13_FRAMES'] = '60'
+$start.EnvironmentVariables['RENEGADE_G13E13_FRAMES'] = [string]$sampleFrames
 $start.EnvironmentVariables['RENEGADE_G13E13_NO_SCREENSHOT'] = '1'
 $proc = [Diagnostics.Process]::Start($start)
 try {
@@ -64,11 +65,11 @@ $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
 foreach ($line in 'status=PASS','package_relative_launch=true','package_integrity=PASS','graphics_backend=DX12',"project_id=$($manifest.project_id)","flow_node_name=$ExpectedFlowNode","package_manifest_sha256=$manifestHash") {
     if ($line -notin $lines) { throw "Runtime did not report $line" }
 }
-if (@(Import-Csv -LiteralPath $frames).Count -ne 60) { throw 'Expected 60 measured runtime frames.' }
+if (@(Import-Csv -LiteralPath $frames).Count -ne $sampleFrames) { throw "Expected $sampleFrames measured runtime frames." }
 [ordered]@{
     revision = $Revision; executable = $exeName; archive_sha256 = $ArchiveSha256
     manifest_sha256 = $manifestHash; verified_files = @($manifest.files).Count
-    frames = 60; exit_code = 0; flow_node = ($lines -like 'flow_node_name=*')
+    frames = $sampleFrames; exit_code = 0; flow_node = ($lines -like 'flow_node_name=*')
     host = [Environment]::OSVersion.VersionString
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'result.json') -Encoding UTF8
 Get-Content -LiteralPath (Join-Path $root 'result.json')
