@@ -51,6 +51,7 @@ int main()
             for (float x : {0.f, 64.f, 160.f, -64.f})
             {
                 chassis->translation_local = {x, 2.f, 0.f};
+                chassis->SetDirty();
                 chassis->UpdateTransform();
                 const auto origin = renegade::runtime::TerrainPropViewOrigin(travel, seat, walking, &camera);
                 Require(origin && origin->x == x, "terrain detail must follow the vehicle across 32m cells");
