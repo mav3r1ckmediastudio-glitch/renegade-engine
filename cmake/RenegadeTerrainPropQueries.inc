@@ -16,10 +16,11 @@ namespace wi::physics::terrain_props
         {
         public:
             GameplayFilter(const wi::scene::Scene& scene,std::uint32_t mask,
-                const std::vector<wi::ecs::Entity>& excluded,bool propsOnly)
-                :scene_(scene),mask_(mask),excluded_(excluded),propsOnly_(propsOnly){}
+                const std::vector<wi::ecs::Entity>& excluded,bool propsOnly,bool includeSensors=false)
+                :scene_(scene),mask_(mask),excluded_(excluded),propsOnly_(propsOnly),includeSensors_(includeSensors){}
             bool ShouldCollideLocked(const JPH::Body& body) const override
             {
+                if(body.IsSensor()&&!includeSensors_)return false;
                 const auto entity=EntityOf(body);
                 if(entity==wi::ecs::INVALID_ENTITY)return false;
                 const auto* metadata=scene_.metadatas.GetComponent(entity);
@@ -37,13 +38,14 @@ namespace wi::physics::terrain_props
             std::uint32_t mask_;
             const std::vector<wi::ecs::Entity>& excluded_;
             bool propsOnly_;
+            bool includeSensors_;
         };
     }
 
     bool CastNativeScene(const wi::scene::Scene& scene,const XMFLOAT3& from,
         const XMFLOAT3& to,float radius,std::uint32_t mask,
         const std::vector<wi::ecs::Entity>& excluded,bool propsOnly,
-        NativeHit& output,std::string& error)
+        NativeHit& output,std::string& error,bool includeSensors)
     {
         if(!Finite(from)||!Finite(to)||!std::isfinite(radius)||radius<0)
         {error="Invalid native gameplay segment.";return false;}
@@ -56,7 +58,7 @@ namespace wi::physics::terrain_props
         const auto& physics=*static_cast<const wi::physics::PhysicsScene*>(scene.physics_scene.get());
         const JPH::RVec3 origin(from.x,from.y,from.z);
         const JPH::Vec3 direction{float(dx),float(dy),float(dz)};
-        GameplayFilter filter(scene,mask,excluded,propsOnly);
+        GameplayFilter filter(scene,mask,excluded,propsOnly,includeSensors);
         if(radius==0)
         {
             if(length==0) {output=result;error.clear();return true;}

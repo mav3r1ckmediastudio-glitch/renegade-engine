@@ -1,0 +1,50 @@
+{
+  "product": "Chanterelles.glb",
+  "category": "Small clutter",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/chanterelle-cluster",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/chanterelle-cluster/v1/lod0.glb",
+      "bytes": 6326156,
+      "sha256": "abe3639f749428257f5d096bc1529c297f8849cc334f27e7b20f41781d995c7f",
+      "triangles": 29999
+    },
+    {
+      "lod": 1,
+      "path": "/models/chanterelle-cluster/v1/lod1.glb",
+      "bytes": 1254512,
+      "sha256": "190b6692bddab760931370bf0dc49edf61845cb89bbb51825b43efeddc8eb872",
+      "triangles": 10000
+    },
+    {
+      "lod": 2,
+      "path": "/models/chanterelle-cluster/v1/lod2.glb",
+      "bytes": 402176,
+      "sha256": "4511ca11c382b31f28687305f4f48e42c5e3b03e997275c8e11908c868a20a2f",
+      "triangles": 2199
+    }
+  ],
+  "dimensions_m": [
+    0.20395,
+    0.07273,
+    0.19347
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "4dc74b084feef54a33da629b854dd891395ee0e067f8159709cd98d8b320f248",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    -0.012952420860528946,
+    0.004229192082012889,
+    -0.0010815262794494629
+  ]
+}

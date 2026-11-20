@@ -1,0 +1,58 @@
+{
+  "slug": "flat-quartzite-river-pebble",
+  "name": "Flat Quartzite River Pebble",
+  "category": "rocks",
+  "tags": [
+    "rock",
+    "river stone",
+    "river",
+    "riverbed",
+    "nature",
+    "water-worn",
+    "pebble",
+    "quartzite",
+    "flat",
+    "quartz vein"
+  ],
+  "description": "Flat, pale quartzite river pebble about 30 cm long and 9 cm thick with a thin white quartz vein. Smooth and dry, a good skimming shape.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-11-07",
+  "updated": "2026-11-07",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 0.295,
+    "y": 0.095,
+    "z": 0.262
+  },
+  "parts": [],
+  "animations": [],
+  "wind": false,
+  "preview": "/models/flat-quartzite-river-pebble/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/flat-quartzite-river-pebble/v1/lod0.glb",
+      "bytes": 79652,
+      "sha256": "5709b4a1e14c799a040c3fca022ba20f249add300d5af00d3ebdc4ee9d465275",
+      "triangles": 414
+    },
+    {
+      "lod": 1,
+      "path": "/models/flat-quartzite-river-pebble/v1/lod1.glb",
+      "bytes": 46612,
+      "sha256": "500eb79b0d8c583f0548418101d8493f7d9ca6d627aa8399f0fbe5a9390d2391",
+      "triangles": 138
+    },
+    {
+      "lod": 2,
+      "path": "/models/flat-quartzite-river-pebble/v1/lod2.glb",
+      "bytes": 21612,
+      "sha256": "db1430a196c13e7dd4d471689f184a29d8e7a4202212c5fe11aca1426e268f4c",
+      "triangles": 32
+    }
+  ]
+}

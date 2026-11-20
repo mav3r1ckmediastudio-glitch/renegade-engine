@@ -444,7 +444,8 @@ namespace renegade::bridge
         request.projectRoot = context.projectRoot;
         request.projectId = projectId_;
         request.assetId = product->assetId;
-        auto prepared = reusableAssets.PrepareModelAssetPlacement(request);
+        std::unordered_set<std::string> embeddedResources;
+        auto prepared = reusableAssets.PrepareModelAssetPlacementLegacy(request, &embeddedResources);
         if (!prepared.IsReady() || prepared.PeekScene() == nullptr)
         {
             error = prepared.Result().error.empty()
@@ -458,6 +459,11 @@ namespace renegade::bridge
             *prepared.PeekScene(), payloadDependencies);
         for (auto reference : payloadDependencies.references)
         {
+            // Compare names in the same archive directory before converting
+            // them to project paths. Loose textures still enter the graph.
+            if (reference.dependencyClass == DependencyClass::Texture &&
+                embeddedResources.count(reference.declaredPath) != 0)
+                continue;
             reference = ProjectRelativeCandidate(
                 context.projectRoot, std::move(reference));
             reference.provenance =

@@ -1,4 +1,5 @@
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/ConstraintService.h"
 
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/CollisionService.h"
@@ -713,6 +714,8 @@ namespace renegade::bridge
                     spline.spline_node_entities.end(), entity_) != spline.spline_node_entities.end())
                 spline.prev_mesh_generation_nodes = -1;
         }
+        if (scene_->constraints.Contains(entity_))
+            (void)RebindConstraint(*scene_, entity_);
         renegade::bridge::SyncNativeCharacterPoseFromTransform(*scene_, entity_);
 
         // Primitive dimensions on a reusable asset are authored in root-local

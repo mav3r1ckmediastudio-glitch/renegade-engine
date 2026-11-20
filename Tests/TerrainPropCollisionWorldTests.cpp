@@ -1,4 +1,5 @@
 #include "renegade/bridge/TerrainPropCollisionWorld.h"
+#include "../Runtime/src/TerrainPropViewOrigin.h"
 #include <wiPhysics.h>
 #include <wiLua.h>
 #include "renegade/bridge/PhysicsLuaService.h"
@@ -41,6 +42,49 @@ int main()
         wi::physics::Initialize();
         struct Workers{~Workers(){wi::jobsystem::ShutDown();}} workers;
         std::string error;
+        {
+            wi::scene::Scene travel;
+            const auto seat = travel.Entity_CreateTransform("Moving vehicle chassis");
+            const auto walking = travel.Entity_CreateTransform("Walking player");
+            const XMFLOAT3 camera{2.f, 3.f, 4.f};
+            auto* chassis = travel.transforms.GetComponent(seat);
+            for (float x : {0.f, 64.f, 160.f, -64.f})
+            {
+                chassis->translation_local = {x, 2.f, 0.f};
+                chassis->UpdateTransform();
+                const auto origin = renegade::runtime::TerrainPropViewOrigin(travel, seat, walking, &camera);
+                Require(origin && origin->x == x, "terrain detail must follow the vehicle across 32m cells");
+            }
+            // Register both bodies, then move the chassis between completed simulation steps.
+            // Its native pose is authoritative even before the render transform catches up.
+            for (auto id : {seat, walking})
+            {
+                auto& body = travel.rigidbodies.Create(id);
+                body.mass = 1.f;
+                body.shape = body.BOX;
+                body.box.halfextents = {1.f, .5f, 1.f};
+            }
+            wi::jobsystem::context physics;
+            travel.dt = 1.f / 60.f;
+            wi::physics::RunPhysicsUpdateSystem(physics, travel, travel.dt);
+            wi::jobsystem::Wait(physics);
+            XMFLOAT3 foot{};
+            Require(b::GetPhysicsPosition(travel, walking, foot), "walking body initialized");
+            for (float x : {96.f, 256.f, -128.f})
+            {
+                Require(b::SetPhysicsPosition(travel, seat, {x, 2.f, 0.f}), "move live chassis");
+                const auto aboard = renegade::runtime::TerrainPropViewOrigin(travel, seat, walking, &camera);
+                Require(aboard && std::abs(aboard->x - x) < .001f, "live chassis owns terrain detail while riding");
+            }
+            const auto afterExit = renegade::runtime::TerrainPropViewOrigin(travel, wi::ecs::INVALID_ENTITY,
+                walking, &camera);
+            Require(afterExit && std::abs(afterExit->x - foot.x) < .001f, "walking body regains terrain detail after exit");
+            const auto unboarded = renegade::runtime::TerrainPropViewOrigin(travel, wi::ecs::INVALID_ENTITY,
+                wi::ecs::INVALID_ENTITY, &camera);
+            Require(unboarded && unboarded->x == camera.x, "unspawned player uses camera after leaving vehicle");
+            Require(!renegade::runtime::TerrainPropViewOrigin(travel, wi::ecs::INVALID_ENTITY,
+                wi::ecs::INVALID_ENTITY, nullptr), "no resident view before scene and camera are available");
+        }
         auto document=Document();
         wi::scene::Scene scene;
         auto world=b::TerrainPropCollisionWorld::Create(scene,{document},true,error);

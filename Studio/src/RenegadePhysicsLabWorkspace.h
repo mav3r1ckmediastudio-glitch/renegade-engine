@@ -23,6 +23,7 @@ namespace renegade::studio
             Ragdoll,
             SoftBody,
             WickedCollider,
+            Breakables,
             Count,
         };
 
@@ -38,6 +39,7 @@ namespace renegade::studio
         void SetActive(bool active);
         [[nodiscard]] bool IsActive() const noexcept;
         void SetBounds(const XMFLOAT4& bounds);
+        void SetPage(Page page);
         [[nodiscard]] bool ContainsPointer(const XMFLOAT4& pointer) const noexcept;
         [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept;
         void Update(const wi::Canvas& canvas, float dt);

@@ -1,4 +1,5 @@
 #include "renegade/bridge/CameraService.h"
+#include "renegade/bridge/VehicleCockpitCamera.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -155,6 +156,52 @@ int main()
     {
         Fail("camera sanitization accepted invalid projection state");
     }
+
+    wi::scene::Scene vehicles;
+    const auto chassis = vehicles.Entity_CreateTransform("Cockpit test chassis");
+    vehicles.rigidbodies.Create(chassis).mass = 900.f;
+    if (!SetPlayerVehicleMode(vehicles, chassis, PlayerVehicleMode::Ground))
+        Fail("vehicle fixture mode setup failed");
+    auto& bodyPose = *vehicles.transforms.GetComponent(chassis);
+    bodyPose.Translate(XMFLOAT3{12.f, 4.f, -17.f});
+    bodyPose.RotateRollPitchYaw(XMFLOAT3{.15f, -.7f, .21f});
+    bodyPose.Scale(XMFLOAT3{1.15f, .9f, 1.3f});
+    bodyPose.UpdateTransform();
+    const auto mesh = vehicles.Entity_CreateTransform("Cabin");
+    vehicles.Component_Attach(mesh, chassis, true);
+    if (ResolveCockpitCameraChassis(vehicles, mesh) != chassis || ReadVehicleCockpitCamera(vehicles, chassis))
+        Fail("vehicle discovery or legacy fallback failed");
+
+    const VehicleCockpitCamera cockpit{{-.31f, 1.22f, .72f}, {-16.f, 28.f, 33.f}, 84.f};
+    wi::scene::CameraComponent preview;
+    preview.width = 1280.f;
+    preview.height = 720.f;
+    const auto& attachedBodyPose = *vehicles.transforms.GetComponent(chassis);
+    ApplyVehicleCockpitCamera(preview, attachedBodyPose, cockpit, true);
+    VehicleCockpitCamera captured;
+    if (!CaptureVehicleCockpitFromView(attachedBodyPose, preview, captured))
+        Fail("set from view did not resolve the cockpit pose");
+    const auto expected = CockpitFields(cockpit);
+    const auto actual = CockpitFields(captured);
+    for (size_t i = 0; i < expected.size(); ++i)
+        if (!Near(actual[i], expected[i])) Fail("capture round trip changed cockpit pose or lens");
+    if (!Near(CockpitFovFromLens(CockpitLensMillimetres(84.f)), 84.f))
+        Fail("focal length changed its paired field of view");
+
+    CommandService vehicleCommands;
+    if (!vehicleCommands.Execute(std::make_unique<SetVehicleCockpitCameraCommand>(vehicles, chassis, captured)) ||
+        !vehicleCommands.Undo() || ReadVehicleCockpitCamera(vehicles, chassis) ||
+        !vehicleCommands.Redo() || !ReadVehicleCockpitCamera(vehicles, chassis))
+        Fail("cockpit camera metadata did not support Undo and Redo");
+
+    wi::Archive vehicleArchive;
+    vehicles.Serialize(vehicleArchive);
+    vehicleArchive.SetReadModeAndResetPos(true);
+    wi::scene::Scene reopened;
+    reopened.Serialize(vehicleArchive);
+    const auto reloaded = ReadVehicleCockpitCamera(reopened, reopened.Entity_FindByName("Cockpit test chassis"));
+    if (!reloaded || !Near(reloaded->verticalFov, 84.f) || !Near(reloaded->angles.z, 33.f))
+        Fail("cockpit camera settings failed to survive scene save and reopen");
 
     std::cout << "PHASE5 GATE2 CAMERA PASS // native scene camera create, edit, Undo/Redo and transform ownership\n";
     return EXIT_SUCCESS;

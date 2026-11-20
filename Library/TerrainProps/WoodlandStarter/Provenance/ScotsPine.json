@@ -1,0 +1,50 @@
+{
+  "product": "ScotsPine.glb",
+  "category": "Conifers",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/scots-pine",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/scots-pine/v1/lod0.glb",
+      "bytes": 4342348,
+      "sha256": "937d65ec30f47b72800e684d9cb1c1b4524bcfbb1bcd65bd4532c1e28dd47f7b",
+      "triangles": 46910
+    },
+    {
+      "lod": 1,
+      "path": "/models/scots-pine/v1/lod1.glb",
+      "bytes": 1901988,
+      "sha256": "9b6b04bd8c42f94abb5f6553106642eec808439ae2309846583b915c9b1c8d90",
+      "triangles": 11450
+    },
+    {
+      "lod": 2,
+      "path": "/models/scots-pine/v1/lod2.glb",
+      "bytes": 317720,
+      "sha256": "56a64a57948d13d22ed859bcee0ce5e284159a069942d2ea0e3f0d2169a41a8b",
+      "triangles": 1942
+    }
+  ],
+  "dimensions_m": [
+    10.85624,
+    20.90132,
+    10.96601
+  ],
+  "up": "+Y",
+  "pivot": "Centre of the trunk base at ground level",
+  "sha256": "818b95651aed8a2f216dbd964d93daee18889b21c6c1a3c908b98986ef76b20a",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    0.14195199077932025,
+    0.3725469708442688,
+    0.14703002975433666
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "product": "FallenLog.glb",
+  "category": "Debris",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/fallen-log",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/fallen-log/v1/lod0.glb",
+      "bytes": 1452856,
+      "sha256": "bd819df46691699cb6a1902c5bce074773c8544d4fce02d3e0f00adcb56d1f80",
+      "triangles": 8498
+    },
+    {
+      "lod": 1,
+      "path": "/models/fallen-log/v1/lod1.glb",
+      "bytes": 453492,
+      "sha256": "00d1219213595eb56af1fe860d635df1cd4a50246338c3099456c322e03e417b",
+      "triangles": 2500
+    },
+    {
+      "lod": 2,
+      "path": "/models/fallen-log/v1/lod2.glb",
+      "bytes": 146536,
+      "sha256": "e12fededbca8e2ceba1cac11223515592b65d825e4afa08f8f088ae86a2314f0",
+      "triangles": 420
+    }
+  ],
+  "dimensions_m": [
+    6.32064,
+    0.44598,
+    0.47916
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "b64dc1588c0734c1abd5971c4b248c2a1b76ed6424f20adc8624a8ecef05f534",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    -0.14234232902526855,
+    0.062106285045476994,
+    0.03423178195953369
+  ]
+}

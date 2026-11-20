@@ -14,6 +14,7 @@ namespace renegade::runtime
         std::vector<Trace> traces;
         // Mesh or governed procedural appearance replaces diagnostic line/sphere feedback.
         std::unordered_set<std::uint64_t> presentedProjectiles;
+        wi::unordered_map<std::uint64_t, wi::ecs::Entity> excludedChassis;
         std::vector<Marker> markers;
         std::vector<bridge::ProjectileBounce> grenadeBounces;
         std::vector<bridge::ProjectileExplosion> grenadeExplosions;
@@ -27,6 +28,7 @@ namespace renegade::runtime
         {
             simulation.Reset(); traces.clear(); markers.clear(); presentedProjectiles.clear();
             grenadeBounces.clear();grenadeExplosions.clear();
+            excludedChassis.clear();
             launched = impacted = 0; lastContact = {}; lastError.clear();
             lastLaunchPosition={};lastLaunchSocket.clear();
             ++generation;
@@ -37,7 +39,7 @@ namespace renegade::runtime
         bool Launch(const bridge::ProjectileAssetDocument& asset,
                     const bridge::ProjectileSource& source,
                     const XMFLOAT3& eye, const XMFLOAT3& forward,
-                    std::uint64_t& id)
+                    std::uint64_t& id, wi::ecs::Entity chassis = wi::ecs::INVALID_ENTITY)
         {
             if (!bridge::ValidateProjectileAsset(asset, lastError)) return false;
             const float length = std::sqrt(forward.x*forward.x + forward.y*forward.y + forward.z*forward.z);
@@ -57,6 +59,7 @@ namespace renegade::runtime
             launch.velocity={aim.x*speed,aim.y*speed,aim.z*speed};
             if (!simulation.Launch(launch, id, lastError)) return false;
             if (!asset.meshAssetId.empty() || asset.fireballPresentation) presentedProjectiles.insert(id);
+            if (chassis != wi::ecs::INVALID_ENTITY) excludedChassis.emplace(id, chassis);
             ++launched;lastLaunchPosition=eye;
             return true;
         }
@@ -110,6 +113,13 @@ namespace renegade::runtime
                 const auto& records = simulation.Records();
                 if (std::none_of(records.begin(), records.end(), [&](const auto& r){ return r.id == *it; }))
                     it = presentedProjectiles.erase(it);
+                else ++it;
+            }
+            for (auto it = excludedChassis.begin(); it != excludedChassis.end();)
+            {
+                const auto& records = simulation.Records();
+                if (std::none_of(records.begin(), records.end(), [&](const auto& r){ return r.id == it->first; }))
+                    it = excludedChassis.erase(it);
                 else ++it;
             }
             return true;

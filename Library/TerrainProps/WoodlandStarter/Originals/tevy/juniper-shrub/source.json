@@ -1,0 +1,59 @@
+{
+  "slug": "juniper-shrub",
+  "name": "Common Juniper",
+  "category": "plants",
+  "tags": [
+    "plant",
+    "shrub",
+    "juniper",
+    "bush",
+    "conifer",
+    "evergreen",
+    "understory",
+    "heath",
+    "forest",
+    "nature",
+    "roadside"
+  ],
+  "description": "Common juniper about 2 m tall: an irregular, dense column of prickly blue-green needles in whorls of three, on several stems with stringy, peeling red-brown bark and a few blue-black berries.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-10-26",
+  "updated": "2026-10-26",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 1.823,
+    "y": 2.776,
+    "z": 2.163
+  },
+  "parts": [],
+  "animations": [],
+  "wind": true,
+  "preview": "/models/juniper-shrub/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/juniper-shrub/v1/lod0.glb",
+      "bytes": 1111112,
+      "sha256": "03ad06d536ea3d36d9e320d7f104f335b46ac81a489b0145e51965b0b99bd8c9",
+      "triangles": 14460
+    },
+    {
+      "lod": 1,
+      "path": "/models/juniper-shrub/v1/lod1.glb",
+      "bytes": 321264,
+      "sha256": "bdb61a885d4a711853345c9886c770d75cf81db0764ea62158bd266141c5cf17",
+      "triangles": 2706
+    },
+    {
+      "lod": 2,
+      "path": "/models/juniper-shrub/v1/lod2.glb",
+      "bytes": 118568,
+      "sha256": "a564dd6e7326a7ce73a14b02c66c6373f3549c68714cd7dd2bf0bf5f761e566a",
+      "triangles": 1184
+    }
+  ]
+}

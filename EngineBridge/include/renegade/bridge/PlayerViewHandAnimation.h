@@ -9,6 +9,7 @@
 namespace renegade::runtime {
 struct RuntimePlayerHandAnimationState {
  bool enabled=false,attacking=false,directional=false;
+ bool attackContact=false;
  std::array<std::array<wi::ecs::Entity,3>,4> directionalClips={};
  unsigned direction=0,chargePhase=0;
  float chargeSeconds=0,chargeStrength=0,gestureX=0,gestureY=0;
@@ -145,6 +146,7 @@ inline bool InitializeRuntimePlayerHandAnimations(wi::scene::Scene& scene,wi::ec
 }
 inline void UpdateRuntimePlayerHandAnimations(wi::scene::Scene& scene,RuntimePlayerHandAnimationState& state,
  PlayerViewAction movement,float dt,bool attackPressed,bool blockHeld,bool chargeHeld=false,bool releasePressed=false,float lookYaw=0,float lookPitch=0,bool cancel=false) {
+ state.attackContact=false;
  if(!state.enabled)return;
  const bool advancing=std::isfinite(dt)&&dt>0;
  if(!advancing && state.right!=wi::ecs::INVALID_ENTITY)return;
@@ -199,7 +201,14 @@ inline void UpdateRuntimePlayerHandAnimations(wi::scene::Scene& scene,RuntimePla
   return duration<=0||time>=duration;
  };
  advance(state.base,state.baseTime,true);
+ const float previousRightTime=state.rightTime;
  const bool attackEnded=advance(state.right,state.rightTime,!state.attacking && state.chargePhase!=1);
+ if(advancing && state.attacking) {
+  const auto* clip=scene.animations.GetComponent(state.right);
+  // Use a single contact moment inside the accepted swing clip.
+  const float contact=0.35f*(clip->end-clip->start);
+  state.attackContact=previousRightTime<contact && state.rightTime>=contact;
+ }
  const bool leftEnded=advance(state.left,state.leftTime,state.blockPhase==0||state.blockPhase==2);
  for(const auto e:state.generated){auto& c=*scene.animations.GetComponent(e);c.Pause();c.RootMotionOff();c.amount=0;}
  const auto pose=[&](wi::ecs::Entity entity,float time,float amount) {

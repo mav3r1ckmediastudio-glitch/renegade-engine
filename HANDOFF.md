@@ -1,3 +1,392 @@
+# Terrain props P6 and Physics Lab release candidate
+
+P6 is the release milestone for terrain props. Biome design is a separate project. This candidate combines the woodland content and terrain integration at 9b247a7 with the Physics Lab at 6bcc09c on main 9eae100. The Runtime frame restores the vehicle cockpit projection and synchronizes the vehicle trial. Terrain model residency runs whenever a player or camera provides a position, and the experimental switch still controls only cell thinning.
+
+The occupied chassis owns the terrain detail origin while riding, including the interval before its render transform catches up to native physics. Walking resumes using the character body after exit. The native collision-world regression moves the occupied chassis across multiple 32-metre cells while the walking body stays behind. The stock vehicle brake lights still use their authored emissive material. The old private reference van and its UV-specific mask are excluded from this release.
+
+A maintainer can run the existing Runtime handshake workflow in standalone mode with a candidate ZIP release-asset ID, its SHA-256 and the expected Story Flow node. It checks the named executable in a fresh profile, inspects the native package and measures 60 DX12 frames. The four normal pull-request jobs keep their existing commands.
+
+The validations below belong to the named feature commits. The combined candidate requires its own Studio and Runtime builds, native woodland and Physics Lab runs, hosted checks and a standalone launch in a clean Windows environment. The original intermittent Debug expansion Undo crash remains recorded in the woodland handoff.
+
+# Physics Lab local release candidate
+
+Windows x64/DX12 candidate dated 20 November 2026. The local branch is review/physics-lab-v1, integrated with main 9eae100. The original layout, bindings, vehicle and breakables source was checkpointed in 9e779d3. The Studio-to-Test Game authoring bench is b05ec7b. The new feature source is f3d88e0 with the immediate collider hierarchy refresh in 7393b71.
+
+The Lab includes the existing nine-page layout and vehicle controls, live World timing and counts with Step Once, compound colliders, and editable constraint frames. The compound and diagnostic bridge headers live in EngineBridge/include/renegade/bridge. Native adapters live in cmake/RenegadeCompoundCollider.inc and cmake/RenegadePhysicsDiagnostics.inc with their integration in RenegadePhysicsTempAllocator.cmake. Studio owns the Lab controls and viewport presentation. Shared transform commands rebuild edited constraint frames. Tools/VerifyDestructibles.cpp includes the authored scene and compound collider proofs. The current exposure is recorded in docs/JOLT_GAMEPLAY_COVERAGE.md and docs/FEATURE_MATRIX.csv.
+
+## Local verification
+
+The Studio bench preceded the feature changes. It was authored from the raw level using the Studio controls for a hinged door, sensor volume, pinned curtain and breakable barricade. Undo/Redo, Save, Reopen and DX12 Test Game were exercised. The native check on the exact Studio archive recorded 0.482 m of door travel, sensor enter and exit, no measurable pin drift, 0.924 m of free cloth movement, and four released barricade pieces. Test Game from the rebuilt Studio reported DX12 and successful startup of the saved 21-entity snapshot.
+
+The World viewport counted one paused tick and held its pose. The native proof also checked visible pose feedback, duplicate request handling, timing, awake bodies, constraints and contacts. A hinge pivot was moved with the Studio gizmo and undone. The compound proof reopened four primitives on one native body, raycast through the intended opening, then moved and undid a part. In Studio a box and capsule were added, the capsule was moved with the gizmo and the scene saved and reopened. The reopened shapes kept their positions. A sphere added in the final Studio build immediately appeared as a selected hierarchy child.
+
+Commands run from the repository root on DESIGN.
+
+    cmake -S . -B BUILD/clean-release
+    cmake --build BUILD/clean-release --config Release --target RenegadeStudio RenegadeRuntime RenegadeVerifyDestructibles RenegadeVerifyGameplayPhysics RenegadeVerifyClothPins RenegadeVehiclePhysicsTests RenegadeSoftBodyPhysicsTests RenegadePhysicsLuaTests RenegadePhase5Gate2CameraTests RenegadeProjectileSimulationTests RenegadeProjectileWorldTests RenegadeRuntimeProjectileSessionTests --parallel 6 -- /p:UseMultiToolTask=true /p:EnforceProcessCountAcrossBuilds=true /p:CL_MPCount=6
+    ctest --test-dir BUILD/clean-release -C Release -R "PhysicsLua|SoftBodyPhysics|VehiclePhysics|Phase5Gate2Camera|ProjectileSimulationTests|ProjectileWorld|RuntimeProjectileSession|GovernedLuaRuntimeSourceContract|StudioUiPolicy|JP01PhysicsLabSourceContract" --output-on-failure --timeout 45
+
+Release builds passed. All ten focused checks passed again after the final Studio hierarchy change. The native DX12 runs below passed from the Release Runtime working directory.
+
+    RenegadeVerifyDestructibles.exe --verify-studio-authoring <Studio-authored-wiscene>
+    RenegadeVerifyDestructibles.exe --verify-compound-collider <output-wiscene>
+    RenegadeVerifyGameplayPhysics.exe
+    RenegadeVerifyClothPins.exe <output-wiscene>
+    RenegadeVerifyDestructibles.exe <output-wiscene>
+    RenegadeVerifyDestructibles.exe <output-wiscene> --ragdoll
+    RenegadeVerifyDestructibles.exe --prop-swaps <local-source-assets> <output-wiscene>
+    RenegadeVerifyDestructibles.exe --weapon-breaks <local-source-assets> <output-wiscene>
+
+Logs, save/reopen fixtures and screenshots are retained under BUILD/PhysicsLabSignoff/V1Candidate on DESIGN. Record proof-ctest.log for the final focused runs, verification-native-proofs.txt for the native runs, and verified-test-game.log for the DX12 launch. CompoundPartsAfterReopen.jpg and CompoundHierarchyImmediateAdd.jpg show the saved geometry and immediate hierarchy update.
+
+Diagnostics monitor the current Studio scene. Compound authoring supports eight primitive parts on an ordinary rigid body and is intended for paused authoring. Vehicle damage is deferred for project-scale performance data. Hosted CI and independent review of the candidate are pending. Earlier entries below are historical checkpoints.
+
+# Vehicle cockpit camera authoring
+
+Uncommitted on the DESIGN Physics Lab worktree at 9f3fe46. Boardable vehicle chassis have a Cockpit Camera section in the Scene Inspector. It authors chassis-local position, pitch/yaw/roll and vertical FOV. The advanced lens value uses a 36 x 24 mm reference frame and edits the same FOV. Preview uses the shared Runtime pose rules and hides opaque cockpit glass for the render, while Set From View captures the regular perspective viewport. Reset restores the preset or imported marker. Settings support Undo/Redo and use native scene metadata. The Runtime restores the preceding camera projection when it leaves the authored cockpit view.
+
+Changed EngineBridge/include/renegade/bridge/VehicleCockpitCamera.h, Runtime/src/{RuntimeApplication.cpp,RuntimeVehiclePrototype.h}, Studio/src/{StudioApplication.h,StudioApplication.cpp,S1BInspectorSectionMigration.cpp}, Tests/Phase5Gate2CameraTests.cpp, Examples/Vehicles/VEHICLE_TEMPLATE_LIBRARY.md, docs/{ARCHITECTURE.md,FEATURE_MATRIX.csv} and this handoff.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadePhase5Gate2CameraTests RenegadeRuntime RenegadeStudio -- /m:4 /p:BuildProjectReferences=false
+    ctest --test-dir BUILD/clean-release -C Release -R "Phase5Gate2Camera|StudioUiPolicy|JP01PhysicsLabSourceContract|S3GovernedLuaRuntimeSourceContract|ProjectileSimulationTests" --output-on-failure --timeout 30
+
+Five targeted tests passed, including capture on a rotated and nonuniformly scaled chassis, the lens-to-FOV round trip, undo/redo and native scene archive reload. All eight starter projects reached Main Level in the updated DX12 Runtime. The Studio Release build was interrupted during linking by the DESIGN reboot. An incremental rebuild completed and the verified executable was staged in the existing Vehicle Template Library. The Studio proof selected a van mesh, previewed 60 degrees, changed to 90 degrees and saved the scene. DX12 Test Game opened the resulting snapshot, applied the 90 degree cockpit framing and returned to chase view. Proof logs and captures are in the CockpitCamera subfolder of the vehicle release.
+
+
+# Merlin helicopter and Oriole spacecraft starter projects
+
+Uncommitted on the DESIGN Physics Lab worktree at 9f3fe46. The local Vehicle Template Library now offers Merlin and Oriole as editable starter projects. Both include the imported GLB and its rig notes. Their controllers register an ordinary dynamic Jolt body and apply forces at the native fixed step. Merlin applies lift at the authored rotor hub with cyclic, pedals and an altitude-hold collective. Its runtime animates each authored rotor pivot. Oriole uses the 16 nozzle axes and positions to translate and rotate along six axes and cancels gravity on the registered craft. Neutral controls preserve momentum. Boarding starts on a normal-gravity deck. A separate docking or EVA system would be needed for in-space disembark.
+
+The Studio Vehicle page exposes both modes. C++ offers CommandHelicopter, IsHelicopterGrounded and CommandSpacecraft. Governed Lua offers helicopter_command, helicopter_grounded and spacecraft_command through renegade.physics. The control guide is Examples/Vehicles/VEHICLE_TEMPLATE_LIBRARY.md.
+
+Changed CMakeLists.txt, EngineBridge/include/renegade/bridge/FlightVehicleService.h, EngineBridge/src/PhysicsLuaService.cpp, cmake/{RenegadePhysicsTempAllocator.cmake,RenegadePhysicalVtol.inc}, Runtime/src/RuntimeVehiclePrototype.h, Studio/src/RenegadePhysicsLabWorkspace.cpp, Tools/{AuthorAdditionalFlight.cpp,InstallVehicleTemplateLibrary.ps1,NewVehicleProject.ps1}, Examples/Vehicles/VEHICLE_TEMPLATE_LIBRARY.md, docs/{ARCHITECTURE.md,FEATURE_MATRIX.csv} and this handoff.
+
+    cmake --build BUILD/clean-release --config Release --target WickedEngine_common WickedEngine_emb_shaders RenegadeEngineBridge RenegadeAuthorAdditionalFlight RenegadeRuntime RenegadeStudio -- /m:3 /p:BuildProjectReferences=false
+    RenegadeAuthorAdditionalFlight.exe merlin <Merlin_H4_Helicopter.glb> <Main.wiscene>
+    RenegadeAuthorAdditionalFlight.exe oriole <Oriole_U2_Spacecraft.glb> <Main.wiscene>
+    ctest --test-dir BUILD/clean-release -C Release -R "StudioUiPolicy|JP01PhysicsLabSourceContract|S3GovernedLuaRuntimeSourceContract|ProjectileSimulationTests" --output-on-failure --timeout 30
+
+Release targets and all four focused checks passed. The reopened Merlin scene lifted 10.36 m, flew 6.15 m in the forward sample, yawed and landed at its start height. The reopened Oriole scene measured all six axes and maintained 10.33 m/s during the neutral coasting sample without changing altitude. Both author proofs exercised calls through the live Lua binding. The bundled DX12 Runtime loaded Main Level for all eight templates. Independent interactive sessions verified boarding, departure and cockpit views for Merlin and Oriole, plus landing and disembarking for Merlin. Both authored scenes opened in Studio and Test Game launched their DX12 scene snapshots. Local build and verification records are in the AdditionalFlight subfolder of the existing vehicle release.
+
+
+# Original Workshop Van starter
+
+Uncommitted on the DESIGN Physics Lab worktree on 9f3fe46. Replaced the shareable van with the original Workshop Van generated by Examples/Vehicles/BuildWorkshopVan.py. The scene is authored from its GLB and Renegade-native primitives; it uses the previous template's gameplay, input and Story Flow documents. Both the Blender source and its GLB travel with new Van projects. The old template and verification copies were moved to a local-only folder outside the vehicle release. The installer and project creator require the original asset for the Van preset.
+
+The authored Jolt chassis has four wheel bindings and a separately bound cockpit steering pivot. The Runtime lights a chassis-owned BrakeLights mesh with its M_VehicleBrakeLights material. The legacy atlas mask remains available to existing local demos. The new project uses no atlas, image maps, Sketchfab geometry or Sketchfab textures.
+
+Changed CMakeLists.txt, Tools/AuthorWorkshopVan.cpp, Tools/InstallVehicleTemplateLibrary.ps1, Tools/NewVehicleProject.ps1, Runtime/src/RuntimeVehiclePrototype.h, Examples/Vehicles/{BuildWorkshopVan.py,VEHICLE_TEMPLATE_LIBRARY.md}, docs/ARCHITECTURE.md, docs/FEATURE_MATRIX.csv and HANDOFF.md.
+
+    blender -b --python-exit-code 1 --python Examples/Vehicles/BuildWorkshopVan.py -- <authoring-output>
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntime -- /m:3 /p:BuildProjectReferences=false
+    cmake --build BUILD/clean-release --config Release --target RenegadeAuthorWorkshopVan -- /m:3 /p:BuildProjectReferences=false
+    RenegadeAuthorWorkshopVan.exe <WorkshopVan.glb> <Main.wiscene>
+    ctest --test-dir BUILD/clean-release -C Release -R "StudioUiPolicy|JP01PhysicsLabSourceContract|S3GovernedLuaRuntimeSourceContract|ProjectileSimulationTests" --output-on-failure --timeout 30
+
+Release targets passed. The scene reopened with the named rig and original materials; native testing drove 31.26 m and braked to 0.00031 m/s. The installed creator made a fresh copy which reached Main Level in DX12. The same project opened in Studio and Test Game loaded its DX12 scene snapshot. The installer rejected the legacy van before creating a library. Visual checks covered the cockpit and both exterior views, steering, skid marks and illuminated brake lenses. All four focused tests passed. The locally staged build is available for owner review.
+
+
+# Reusable vehicle starter projects and tracked tuning
+
+Uncommitted on the DESIGN Physics Lab worktree on 9f3fe46. The starter creator makes independent editable projects for the van, basic VTOL, Lua VTOL, Kestrel, Vesper and Bastion. It retains the authored scene and entity IDs, assigns a new project ID, rebases owned sidecars and refreshes asset hashes without changing canonical registry formatting. The local library lives in BUILD/PhysicsLabSignoff/VehicleTemplateRelease/Vehicle Template Library. The Merlin H4 and Oriole U2 are model-import starters. The installed catalogue is Windows-only and uses a standalone project creator.
+
+Tracked Player Controls now exposes chassis and station layout, suspension, grip, braking, contact mode and Advanced drivetrain tuning. Changes use the Studio command stack and save to chassis metadata. An unbound chassis can use the default nine anchors per side. Existing named anchors and visual tread loops remain supported.
+
+Changed EngineBridge/include/renegade/bridge/{FlightVehicleService,TrackedVehicleTuning}.h, cmake/{RenegadePhysicsTempAllocator.cmake,RenegadeTrackedVehicle.inc}, Runtime/src/RuntimeTrackedVehicle.h, Studio/src/{RenegadePhysicsLabWorkspace,S1BInspectorSectionMigration}.cpp, Tools/{AuthorBastionTank.cpp,InstallVehicleTemplateLibrary.ps1,NewVehicleProject.ps1}, Examples/Vehicles/VEHICLE_TEMPLATE_LIBRARY.md, docs/ARCHITECTURE.md and docs/FEATURE_MATRIX.csv.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntime RenegadeStudio RenegadeAuthorBastionTank -- /m:4
+    ctest --test-dir BUILD/clean-release -C Release -R "StudioUiPolicy|JP01PhysicsLabSourceContract|S3GovernedLuaRuntimeSourceContract|ProjectileSimulationTests" --output-on-failure --timeout 30
+
+All three Release targets and all four focused checks passed. The final tracked proof verified saved torque, drive, brake, reverse and pivot behaviour. In Studio, a fresh Bastion project opened into its editable scene, selected the chassis, displayed all three contact testers and expanded the Advanced drivetrain controls. Fresh Basic VTOL also passed Studio project validation. The final bundled DX12 Runtime entered Main Level for all six fresh templates. The interactive project creator created a new Bastion project from its numbered menu. Studio Test Game launched the bundled DX12 Runtime and loaded the fresh Bastion scene snapshot. See the local release folder for build and verification logs.
+
+
+# Bastion T9 cannon effects
+
+Uncommitted in the Physics Lab worktree on 9f3fe46. Confirmed Bastion launches create a larger emissive shell with a layered tracer tail and world-space muzzle flash and smoke. The smoke briefly obscures the gunner's sight and drifts away from the muzzle. Confirmed Bastion hits create a scaled version of the shared visual blast with fire, embers, dust, soot and a transient point light. Rendering instances are retired through the existing projectile lifecycle. The effect uses procedural resources and requires no additional asset files.
+
+Changed Runtime/src/RuntimeApplication.cpp, Runtime/src/RuntimeProjectileVisuals.h, Runtime/src/RuntimeGrenadeExplosionFX.h, docs/ARCHITECTURE.md and this handoff.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntime --parallel 1 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/EffectsRuntime/
+    ctest --test-dir BUILD/clean-release -C Release -R "StudioUiPolicy|JP01PhysicsLabSourceContract|S3GovernedLuaRuntimeSourceContract|ProjectileSimulationTests" --output-on-failure --timeout 30
+
+Release built and all four checks passed. The standalone DX12 run opened the existing Bastion trial, fired through the gunner's sight and captured the muzzle flash, sight-obscuring smoke and a separate ground impact blast. The launcher is Play Bastion T9 Effects.cmd in BUILD/PhysicsLabSignoff/BastionCheck on DESIGN.
+
+# Bastion T9 turret trial
+
+Uncommitted in the Physics Lab worktree on 9f3fe46. The tracked demo uses the existing Turret_Yaw and Barrel_Elevation descendants. Mouse aim holds a world-space point at a fixed reference distance while the hull pivots. The authored pivots traverse and elevate at capped rates. Hold Aim for the temporary gunner view. Fire starts a range round from the actual barrel pose in the shared projectile simulation. Each round excludes its firing chassis and the player from contact. The two projected reticles show the intended point and the barrel direction at the same distance.
+
+The existing GameplayInput map supplies Aim, Fire and the look axes. Optional float metadata on Turret_Yaw sets renegade.turret.traverse_deg_s, renegade.turret.elevation_deg_s, renegade.turret.min_elevation_deg and renegade.turret.max_elevation_deg. Defaults are 90 degrees/second traverse, about 49 degrees/second elevation, 10 degrees of depression and 25 degrees of elevation. This trial uses the Bastion mesh's measured muzzle offset and a built-in range-round preset.
+
+Changed Runtime/src/RuntimeBastionTurret.h, Runtime/src/RuntimeTrackedVehicle.h, Runtime/src/RuntimeVehiclePrototype.h, Runtime/src/RuntimeApplication.cpp, Runtime/src/RuntimeApplication.h, Runtime/src/RuntimeProjectileSession.h, Runtime/src/RuntimeProjectileWorld.h, docs/ARCHITECTURE.md, docs/FEATURE_MATRIX.csv and this handoff.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntime --parallel 1 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/TurretRuntime/
+    cmake --build BUILD/clean-release --config Release --target RenegadeProjectileSimulationTests --parallel 1 -- /p:BuildProjectReferences=false
+    ctest --test-dir BUILD/clean-release -C Release -R "StudioUiPolicy|JP01PhysicsLabSourceContract|S3GovernedLuaRuntimeSourceContract|ProjectileSimulationTests" --output-on-failure --timeout 30
+
+Windows Release built and all four checks passed. A separate standalone DX12 smoke run opened the existing saved Bastion scene, boarded, exercised mouse yaw and elevation, pivoted the hull while keeping the aim point, switched in and out of the gunner view, and captured a tracer leaving the barrel. No scene serialization changes were required. The first desktop check lost foreground before input and was repeated successfully.
+
+Run Play Bastion T9 Turret.cmd in BUILD/PhysicsLabSignoff/BastionCheck on DESIGN. The next check is the owner playtest for camera feel and traverse tuning. Studio authoring widgets and hosted CI remain open.
+
+# Bastion T9 tracked driving trial
+
+Uncommitted in the Physics Lab worktree on 9f3fe46. The Bastion has a separate local driving range under BUILD/PhysicsLabSignoff/BastionCheck. It uses the authored GLB with a serialized tracked-vehicle tag. TrackedVehicleService registers two groups of nine Jolt wheel stations. The constraint is owned by the native rigid body. The Runtime feeds drive, steering and brake commands and drives the wheels and tread links from the native suspension and track state. The treads follow independent fixed visual loops. The current pass is a Runtime trial with authored bindings.
+
+Changed CMakeLists.txt, EngineBridge/include/renegade/bridge/TrackedVehicleService.h, Runtime/src/RuntimeTrackedVehicle.h, Runtime/src/RuntimeVehiclePrototype.h, Tools/AuthorBastionTank.cpp, cmake/RenegadePhysicsTempAllocator.cmake, cmake/RenegadeTrackedVehicle.inc, docs/ARCHITECTURE.md, and docs/FEATURE_MATRIX.csv.
+
+    cmake -S . -B BUILD/clean-release
+    cmake --build BUILD/clean-release --config Release --target WickedEngine_common WickedEngine_emb_shaders --parallel 2 -- /p:BuildProjectReferences=false
+    cmake --build BUILD/clean-release --config Release --target RenegadeAuthorBastionTank --parallel 1 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/Author/
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntime --parallel 1 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/Runtime/
+    <stage>/Author/RenegadeAuthorBastionTank.exe <stage>/Bastion_T9_Tank.glb <stage>/BastionTank/Content/Scenes/Main.wiscene
+    ctest --test-dir BUILD/clean-release -C Release -R "StudioUiPolicy|JP01PhysicsLabSourceContract|S3GovernedLuaRuntimeSourceContract" --output-on-failure --timeout 30
+
+The asset hash matched on transfer. The Windows Release builds and all three focused source checks passed. Native proof verified save/reopen, 14 supported wheel contacts on flat ground, a 27.55 m forward run, a 15.98 m reverse run, braking to rest, and a right pivot with about 1.2 cm of translation and opposite track speeds. The drive input applies the parking brake at rest. The DX12 standalone project opened and the interactive run captured boarding, driving, driver and rear-quarter cameras, and exit. Review the trial in Play Bastion T9.cmd. Further work for general creator exposure is to add tracked authoring controls in Physics Lab. No hosted CI or independent release verification was performed.
+
+# Vesper V9 Physical VTOL
+
+Uncommitted work on 9f3fe46. The separate Vesper V9 demo uses the full imported GLB, a box chassis collider and nacelles posed for hover. Physical VTOL is an authored player-controls mode that applies lift, drag and attitude torque immediately before the Jolt step. Moving turns tilt the lift vector. At rest, yaw pivots the aircraft without requiring a bank. FlightVehicleService exposes the commands and ground query to C++ and PhysicsLuaService exposes the same calls to Lua.
+
+The Runtime pilot has chase, cockpit and rear-quarter cameras. The cockpit uses the authored pilot eye. RuntimeVtolThrusterEffects binds the two exhaust markers on boarding, adds two short-lived additive layers per nozzle and stops emission on touchdown or exit. The demo poses both nacelles vertically.
+
+This pass touches CMakeLists.txt, EngineBridge/include/renegade/bridge/FlightVehicleService.h, EngineBridge/src/PhysicsLuaService.cpp, Runtime/src/RuntimeVehiclePrototype.h, Runtime/src/RuntimeVtolThrusterEffects.h, Studio/src/RenegadePhysicsLabWorkspace.cpp, Studio/src/StudioApplication.cpp, Tests/JP01PhysicsLabSourceContract.cmake, Tools/AuthorVesperVtol.cpp, cmake/RenegadePhysicalVtol.inc, cmake/RenegadePhysicsTempAllocator.cmake, docs/ARCHITECTURE.md, docs/FEATURE_MATRIX.csv, and docs/PHYSICS_LAB_VEHICLE_TEMPLATES.md.
+
+    cmake -S . -B BUILD/clean-release
+    cmake --build BUILD/clean-release --config Release --target WickedEngine_common WickedEngine_emb_shaders RenegadeEngineBridge RenegadeRuntimeBootstrap --parallel 1 -- /p:BuildProjectReferences=false
+    cmake --build BUILD/clean-release --config Release --target RenegadeAuthorVesperVtol --parallel 1 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/Author/
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntime --parallel 1 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/Runtime/
+    cmake --build BUILD/clean-release --config Release --target RenegadeStudio --parallel 1 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/Studio/
+    ctest --test-dir BUILD/clean-release -C Release -R "StudioUiPolicy|JP01PhysicsLabSourceContract|S3GovernedLuaRuntimeSourceContract" --output-on-failure --timeout 30
+
+Stage is BUILD/PhysicsLabSignoff/VesperCheck. The author executable imported the GLB and saved and reopened Content/Scenes/Main.wiscene under VesperVtol. The native Jolt proof climbed 10.4 m, settled into hover, pivoted with zero measured drift, banked about 18 degrees while changing course and touched down at rest. All three focused checks passed. The staged DX12 standalone Runtime confirmed boarding, three camera positions, two visible plumes following the nozzles in hover and bank, zero emission when parked after landing, and disembark. Studio built and opened. Standalone flight was visually checked. The Studio Test Game launch still needs interactive verification. No CI or independent release verification was performed.
+
+Project launchers are Play Vesper VTOL.cmd and Open Vesper VTOL in Studio.cmd in the stage folder. The next validation step is the Studio Test Game launch and authoring inspection on the owner seat.
+
+# Advanced fixed-wing authoring
+
+Uncommitted follow-up on 9f3fe46. Physics Lab's Fixed Wing page has a collapsed Advanced panel for per-aircraft tuning and a Part Bindings view. FixedWingTuning.h stores sanitized overrides on the chassis. FixedWingRig.h stores role annotations on descendant transforms. Defaults reproduce the stock Kestrel. RuntimeFixedWing.h resolves roles at registration, uses wheel axle plus tyre radius when a contact marker is absent, and applies the selected tuning and force positions to the airframe. FixedWingAerodynamics.h and the generated RenegadeFixedWing.inc support wing stall angle and landing-gear stiffness and damping. Studio edits use the shared undo stack.
+
+    cmake --build BUILD/clean-release --config Release --target WickedEngine_common WickedEngine_emb_shaders --parallel 2 -- /p:BuildProjectReferences=false
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntime --parallel 1 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/AdvancedRuntime/
+    cmake --build BUILD/clean-release --config Release --target RenegadeStudio --parallel 1 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/AdvancedStudio/
+    ctest --test-dir BUILD/clean-release -C Release -R "StudioUiPolicy|JP01PhysicsLabSourceContract|S3GovernedLuaRuntimeSourceContract" --output-on-failure --timeout 30
+    MSBuild <stage>/AdvancedProof/AdvancedProof.vcxproj /p:Configuration=Release /p:Platform=x64 /m:1
+    <stage>/AdvancedProof/out/AuthorKestrelRunway.exe <stage>/Kestrel_T7_Trainer.glb <stage>/AdvancedProof/Probe.wiscene --prove-flight
+
+Release physics, Studio and Runtime built and the three focused checks passed. The native probe verified stock takeoff, bank, touchdown and stop. It saved and reopened a renamed explicitly bound wheel without the legacy nose marker, plus changed thrust and fade speed. With authored settings, the same five-second power run reached 19.04 m/s versus stock 13.38 m/s. Studio showed the Advanced controls and applied values in the disposable editor project. The owner reported the feature works as expected. Both existing launchers now use the paired new builds. The original runway project is unchanged. The fixed-wing model uses one forward thrust source with speed-dependent fade and three gear positions. Detailed engine models, arbitrary visual hinge axes and independent CI verification remain outside this slice.
+
+# Physics Lab selection outline
+
+Studio compose now displays the selection outline whenever the scene viewport is available, including with the Physics Lab dock open. The outline retains its existing modal and viewport scissor checks. The Release Studio build, StudioUiPolicy and JP01PhysicsLabSourceContract passed. The trainer screenshot in the open Physics Lab confirms the cyan outline on the selected chassis and its visual parts. The existing Studio launcher now uses the corrected build.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadeStudio --parallel 2 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/OutlineStudio/
+    ctest --test-dir BUILD/clean-release -C Release -R "StudioUiPolicy|JP01PhysicsLabSourceContract" --output-on-failure --timeout 30
+
+
+# Kestrel selection in Studio
+
+Physics Lab's geometry picking now shares the viewport bounds and input policy used by navigation. Overlay markers retain their own policy. A fixed-wing descendant picked in the viewport targets its authored rigid-body chassis. The Lab also follows chassis ownership when the user selects an aircraft child in the hierarchy. Aircraft Vehicle settings expose the existing undoable mass and linear/angular damping controls and the player mode. Driving tests remain in Test Game.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadeStudio --parallel 2 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/SelectionStudio/
+    ctest --test-dir BUILD/clean-release -C Release -R "StudioUiPolicy|JP01PhysicsLabSourceContract" --output-on-failure --timeout 30
+
+DX12 Release Studio built and both focused checks passed. In the isolated runway copy, clicking the wing selected Kestrel T7 Chassis with and without Physics Lab open. The mass slider applied a change to 1732.8 kg and Undo restored 740 kg. Captures and logs are under BUILD/PhysicsLabSignoff/FixedWingCheck. The original editor window and runway scene were left alone. The existing Open Kestrel Runway in Studio launcher uses the updated Studio and the already tuned flight Runtime.
+
+# Kestrel flight handling tune
+
+RuntimeFixedWing now holds the requested pitch from mouse up/down, with an attitude correction through the physical elevator. Horizontal mouse movement retains nosewheel steering on the ground. In flight it requests a moderate bank, limits the aileron command and eases the wings back toward level after the turn input ends. W/S and braking bindings are unchanged. The trainer's aerodynamic model and the saved runway scene are unchanged.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntime --parallel 1 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/TunedRuntime/
+
+Release Runtime linked on DESIGN. The HandlingProbe under BUILD/PhysicsLabSignoff/FixedWingCheck was built through the same v145 authoring project and ran the real mouse-to-flight mapping against the saved Kestrel rig and Jolt. A single virtual mouse-up command at 24.01 m/s produced a sustained climb past 22 m at 1.84 m/s. Repeated virtual right turns peaked at 20.9 degrees of bank and 18.5 degrees per second of roll, then settled within 0.4 degrees of level. This was a native controller proof; the currently open game session was not interrupted to stage the new build. The two launchers now use the tuned Runtime and the previously verified parked Studio.
+
+# Kestrel editor stance and mouse controls
+
+Follow-up on the local 9f3fe46 fixed-wing work. The editor had a dynamic fuselage body but no registered gear rig, so it fell through the intended wheel-contact height. The generated Jolt adapter keeps unregistered fixed-wing bodies in authored poses. Registration switches the body to dynamic and wakes it, preserving its authored mass. AuthorKestrelRunway now verifies 120 fixed steps of editor-style parking before registering the same body and running its takeoff, bank, touchdown and braking proof. The verified runway project was preserved.
+
+Fixed wing uses W/S throttle and the existing gameplay look axes for mouse pitch and turn. Mouse X steers the nose wheel on the ground and banks with a little rudder in the air. The virtual stick returns smoothly to neutral when the mouse stops. Right mouse or Space brakes. Other vehicle controllers retain their previous bindings.
+
+The Wicked wrapper and Windows x64 Release Studio and Runtime builds succeeded using the commands below with isolated ParkedStudio and ParkedRuntime output directories. The extended native proof and both existing JP01 physics and governed Lua source contracts passed. Visual Studio verification captured the wheels above the runway. The corrected Test Game runtime launched and verified boarding, new HUD and throttle during the ground roll. The automated mouse flight check was interrupted by loss of window focus. Captures and logs are under BUILD/PhysicsLabSignoff/FixedWingCheck. Its two Kestrel launchers now target the corrected binaries.
+
+# Kestrel T7 fixed-wing runway milestone
+
+Uncommitted follow-up on 9f3fe46bf7b5c6f255aa2e297c8d2b0e2495377c. The Fixed Wing mode is saved in WISCENE metadata. Existing ground, VTOL and Scripted VTOL modes remain available. The runway demo uses the Kestrel GLB and its named gear, controls and eye marker. Native GLB import and save/reopen passed. The verified GLB SHA256 is 68e9f50634d3597c7f41d26222d0bc5c31ccf39848d6f82432aabe42394a5893.
+
+The bridge additions are FixedWingAerodynamics.h and FixedWingService.h. FlightVehicleService.h owns the serialized mode. The RenegadeFixedWing.inc generated adapter evaluates each registered aircraft and its suspension before every Jolt fixed step. RuntimeFixedWing.h binds the rig and RuntimeVehiclePrototype.h uses the existing boarding, camera and input paths. RenegadePhysicsLabWorkspace.cpp exposes the mode. VehiclePhysicsTests.cpp covers load direction, stall and metadata compatibility. Tools/AuthorKestrelRunway.cpp builds and verifies the exact demo scene. The flight guide, feature matrix and architecture notes describe these limits.
+
+Windows x64 Release commands, with trusted worktree directories provided in the invoking process Git configuration:
+
+    cmake -S . -B BUILD/clean-release
+    cmake --build BUILD/clean-release --config Release --target WickedEngine_common WickedEngine_emb_shaders --parallel 2 -- /p:BuildProjectReferences=false
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntimeBootstrap --parallel 2 -- /p:BuildProjectReferences=false
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntime --parallel 1 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/Runtime/
+    cmake --build BUILD/clean-release --config Release --target RenegadeStudio RenegadeVehiclePhysicsTests --parallel 1 -- /p:BuildProjectReferences=false /p:OutDir=<stage>/Studio/
+    <stage>/Studio/RenegadeVehiclePhysicsTests.exe
+    ctest --test-dir BUILD/clean-release -C Release -R "JP01PhysicsLabSourceContract|S3GovernedLuaRuntimeSourceContract" --output-on-failure --timeout 45
+    MSBuild <stage>/AuthorKestrelRunway.vcxproj /p:Configuration=Release /p:Platform=x64 /m:1
+    <stage>/out/AuthorKestrelRunway.exe <stage>/Kestrel_T7_Trainer.glb <stage>/KestrelRunway/Content/Scenes/Main.wiscene --prove-flight
+
+The stage is BUILD/PhysicsLabSignoff/FixedWingCheck. It contains build and native proof logs and the KestrelRunway project. Bootstrap, generated physics, Studio, Runtime and all three focused checks passed. The final native proof took off under aerodynamic forces, reported a 0.436 rad bank and 7.088 m/s lateral velocity change, touched down and stopped on the gear. DX12 standalone and Studio Test Game loaded the trainer. The final Test Game session verified boarding, all three camera modes, takeoff, a visible bank, touchdown on the runway, braking to 0 kt and exit. The same final Runtime boarded and lifted both the native VTOL template and the separate Scripted VTOL fixture. Screenshots and logs are in the stage. The mechanics use 740 kg, tuned low chassis damping, spring/damper ray gear and a trainer-specific aerodynamic configuration. They do not yet include fixed-wing Lua control, a general-purpose aircraft tuning panel, flight viewport guides or the later vehicle presets. Full CI and independent sign-off are pending.
+
+# Project-scripted VTOL
+
+Uncommitted Windows x64 Release follow-up on 9f3fe46 in the Physics Lab worktree. Select Scripted VTOL in the hull's Physics Lab Player Controls and attach Examples/Vehicles/VTOLController.lua as a scene Script. Runtime provides the boarded hull with scoped pilot input and accepts one flight command per update. The sample applies 80 percent thrust and 75 percent yaw and retains the hover target. Native VTOL retains its existing mode and input path. The scripted mode reuses the existing camera and boarding flow. W/S and A/D use the existing movement bindings. Space and C continue to be fixed VTOL keys.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntimeBootstrap --parallel 2 -- /p:BuildProjectReferences=false
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntime --parallel 2 -- /p:BuildProjectReferences=false /p:OutDir=<isolated-runtime-output>
+    cmake --build BUILD/clean-release --config Release --target RenegadeStudio --parallel 2 -- /p:BuildProjectReferences=false /p:OutDir=<isolated-studio-output>
+    cmake --build BUILD/clean-release --config Release --target RenegadeS3GovernedLuaRuntimeTests --parallel 1 -- /p:BuildProjectReferences=false
+    ctest --test-dir BUILD/clean-release -C Release -R "S3GovernedLuaRuntime|JP01PhysicsLab|VehiclePhysics|S5CoreGameplayApiSourceContract" --output-on-failure --timeout 45
+
+Bootstrap, Runtime and Studio Release builds succeeded after relinking Runtime against the rebuilt bootstrap. All five focused tests passed. BUILD/PhysicsLabSignoff/ScriptedVtolCheck/FlyingVehicle.renegade is a separate copy of the flying template. Native authoring saved and reopened the flight mode and the attachment. The standalone DX12 playtest confirmed boarding with E, takeoff with Space, forward travel with W, descent with C and exit with E. Screenshots and runtime logs are in BUILD/PhysicsLabSignoff/ScriptedVtolEvidence. Studio Test Game, the full CI suite and the wider Physics Lab sign-off remain unverified by this change.
+
+
+# Cockpit steering and Inspector collision shapes
+
+Uncommitted Windows x64 Release follow-up on 9f3fe46. S1BInspectorSectionMigration.cpp adds the rigid body's shape dropdown to the Physics section. It uses CheckCollisionTarget and SetCollisionCommand. RenegadePhysicsLabWorkspace.cpp and VehicleSteeringService.h author an optional child-entity steering wheel, signed local axis and travel to lock. RuntimeVehiclePrototype.h eases the authored mesh rotation toward the native front axle steer angle, sampled by RenegadeVehicleSteering.inc in the generated Wicked adapter. Runtime uses the imported origin and changes only wheel rotation.
+
+    cmake -S . -B BUILD/clean-release
+    cmake --build BUILD/clean-release --config Release --target WickedEngine_common WickedEngine_emb_shaders --parallel 2 -- /p:BuildProjectReferences=false
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntime --parallel 2 -- /p:BuildProjectReferences=false /p:OutDir=<isolated-runtime-output>
+    cmake --build BUILD/clean-release --config Release --target RenegadeStudio --parallel 2 -- /p:BuildProjectReferences=false /p:OutDir=<isolated-studio-output>
+    cmake --build BUILD/clean-release --config Release --target RenegadeVehiclePhysicsTests --parallel 1 -- /p:BuildProjectReferences=false
+    ctest --test-dir BUILD/clean-release -C Release -R "JP01PhysicsLab|VehiclePhysics|StudioUiPolicy|InspectorSection|InspectorMigration" --output-on-failure --timeout 45
+
+Studio and Runtime built successfully and six focused checks passed. In Studio, the van collider switched to Sphere and Undo restored Box. In standalone DX12 GroundVehicle Restored, the cockpit wheel visibly moved through a partial turn, reached lock, and returned to centre. The saved legacy van scene now references the three original GLB image payloads as physical files under its Scenes/VanTextures directory. A fresh native reopen found all four populated material texture slots and the steering wheel binding, and the standalone cockpit rendered textured. The original GroundVehicle asset was preserved. Evidence and logs are in BUILD/PhysicsLabSignoff, and the configured demo is under SteeringWheelRestored in that directory. CI and wider Physics Lab sign-off remain open.
+
+---
+
+# Player Start capsule in the Physics Lab
+
+Uncommitted StudioApplication.cpp follow-up on 9f3fe46. Compose now allows the Player Start capsule wherever the editor viewport is available, including the Physics Lab dock. The gizmo, general marker overlay, selection gesture and camera preview retain their previous Lab visibility rules.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadeStudio --parallel 2 -- /p:BuildProjectReferences=false /p:OutDir=<isolated-output-directory>
+    cmake --build BUILD/clean-release --config Release --target RenegadeStudioPlayerStartCacheTests --parallel 2 -- /p:BuildProjectReferences=false
+    ctest --test-dir BUILD/clean-release -C Release -R "StudioUiPolicy|JP01PhysicsLab|PlayerStart" --output-on-failure --timeout 45
+
+Both builds and all three tests passed. In DX12 Studio the cyan capsule and chassis wireframes were visible together with Physics Lab open on the Van Chassis. Screenshot evidence is in BUILD/PhysicsLabSignoff/player-start-in-vehicle-lab.jpg.
+
+---
+
+# Vehicle physics preview
+
+Uncommitted Windows x64 Release follow-up on 9f3fe46. RenegadePhysicsLabWorkspace.cpp adds a selected car or motorcycle preview of wheel and suspension geometry, plus the Box chassis collider. Draft slider values affect drawing during a drag. The normal command commits on release. The vehicle templates guide and feature matrix document the new authoring control.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadeStudio --parallel 2 -- /p:BuildProjectReferences=false /p:OutDir=<isolated-output-directory>
+    ctest --test-dir BUILD/clean-release -C Release -R "JP01PhysicsLab|VehiclePhysics|StudioUiPolicy" --output-on-failure --timeout 45
+
+The focused Release build and three tests passed. In DX12 Studio the van wheel outlines grew during a paused drag, Undo restored 0.254 m, and leaving the Vehicle page hid the preview. A separate edit to 0.516948 m and its wheel mappings survived save and reopen of the disposable van copy. Screenshot evidence is in BUILD/PhysicsLabSignoff/VehicleWireframeEvidence. Motorcycle visual coverage, broader per-page Test Game checks, and tracked vehicle authoring remain open.
+
+---
+
+# Physics Lab dock follow-up
+
+DESIGN Windows x64 Release EngineBridge and Studio built successfully. The Studio UI policy and soft-body regression passed. In DX12 Studio, right-mouse camera navigation moved the viewport with Physics Lab open. With an oak board selected, Environment and Terrain rendered without the Selected Asset overlap. Add Soft Body showed the rigid-physics message and left the barricade intact. The disposable Ragdoll Impact Playtest and screenshots are in BUILD/PhysicsLabSignoff. The screenshots are under FinalStudioUI. Broader Physics Lab authoring and Test Game coverage remain open.
+
+
+The dock keeps right-mouse viewport navigation available over the scene. Modal tools, menus and dock controls retain their existing input ownership. The Selected Asset Physics section starts hidden and is cleared before Environment or Terrain claims the Inspector.
+
+Soft Body creation now checks the actual mesh instances through the command shared by Studio, C++ and Lua. A rigid-body object or ancestor, such as the intact barricade, prevents conversion. A shared mesh also prevents conversion because Wicked stores one soft-body pose per mesh. Existing soft-body components can still be edited and removed. The barricade fixture and Studio UI policy checks cover these cases.
+
+---
+
+# Native ragdoll barricade proof
+
+Commit 4456ecb adds the ragdoll trial to Tools/VerifyDestructibles.cpp. The Windows x64 Release proof rebuilt successfully. It identified the right foot as the native impactor at 10.0666 m/s, released four pieces, and cleared the passage ray. The light impact fixture still rattled and returned to rest with its collision intact. The ordinary weight fixture passed again.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadeVerifyDestructibles -- /p:BuildProjectReferences=false
+
+Run RenegadeVerifyDestructibles from the Runtime Release working directory. To generate and verify the ragdoll scene, pass an output WISCENE path followed by --ragdoll. The generated DESIGN playtest is under BUILD/RagdollImpactPlaytest. Its launcher uses the existing Release Runtime.
+
+---
+
+
+# Destructible rattle and Blender authoring
+
+Implementation commit 519bad161adf6990c6c3932d6f0cd5fa543dfcb3. The native destructible listener now handles sub-threshold rattle separately from pending breaks. The physics scene keeps transient rattle poses for visible pieces and restores their authored pose before break or on expiry. The root collider stays fixed. One shared piece collector accepts nested imported transform groups and excludes mesh and material resources. Runtime passes frame time through PhysicsGameplayService.h. VerifyDestructibles.cpp checks the nested structure and optionally loads a real GLB through the static import candidate service.
+
+DESIGN Windows x64 Release Runtime and both native proof executables built successfully. The DX12 playtest launched. The destructible proof passed with both the built-in scene and a static GLB exported from Blender 5.1.1 and imported under a test wrapper. The light impact moved the visible board between -0.0510 and 0.0326 m, then returned it to rest while collision stayed solid. The strong impact at 11.1708 m/s released four pieces and the native path ray cleared. The existing gameplay physics native proof and all eight focused CTest entries passed.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadeVerifyDestructibles RenegadeVerifyGameplayPhysics RenegadeRuntime --parallel 4
+    cmake --build BUILD/clean-release --config Release --target RenegadeVerifyDestructibles -- /p:BuildProjectReferences=false
+    ctest --test-dir BUILD/clean-release -C Release -R "^(RenegadePhysicsLuaTests|RenegadeSoftBodyPhysicsTests|RenegadeJP01PhysicsLabSourceContract|RenegadeTerrainPropPhysicsTests|RenegadeTerrainPropCollisionWorldTests|RenegadeS1AInspectorSectionFrameworkTests|RenegadeS1AInspectorSectionSourceContract|StudioUiPolicy)$" --output-on-failure --timeout 45
+
+Run RenegadeVerifyDestructibles from the Runtime Release working directory. To test a Blender export with the existing fixture, pass an output WISCENE followed by the source GLB. Use the four-board dimensions and assembled floor pivot in the [breakable objects guide](docs/BREAKABLE_OBJECTS_GUIDE.md). The import candidate and physics were exercised. The interactive Studio placement and authoring steps remain for hands-on review. Continue with the ragdoll impact and debris lifetime checks.
+
+---
+
+
+# Impact destructibles and barricade playtest
+
+Implementation commit 88c7678d30e92f3a246974d9f3db8fa441753a7b on feature/physics-lab-vehicles. PhysicsGameplayService.h and PhysicsLuaService.cpp expose authoring, a break request and a scene event queue. RuntimeApplication.cpp prepares and steps the service, and RuntimeScriptRuntime.cpp exposes the request to Level-scoped creator Lua. RenegadePhysicsLabWorkspace.cpp and S1BInspectorSectionMigration.cpp author the impact threshold via the command stack. The generated Jolt adapter owns capture and deferred release. VerifyDestructibles.cpp produces and checks the barricade scene. The upstream pin is unchanged.
+
+On DESIGN, Windows x64 Release Studio and Runtime built with exit code zero. The native destructibles proof verified Undo/Redo, save/reopen, the light weight landing without a break, a hit at 11.1708 m/s releasing four pieces, the passage ray clearing and an explicit Lua break. The native sensor, ray and layer regression passed, as did all eight focused CTest entries. The generated Destructibles Playtest opened in standalone DX12. A post-impact frame showed the left barricade standing and the right barricade down in loose pieces.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadeVerifyDestructibles RenegadeVerifyGameplayPhysics RenegadePhysicsLuaTests RenegadeStudio RenegadeRuntime --parallel 4
+    ctest --test-dir BUILD/clean-release -C Release -R "^(RenegadePhysicsLuaTests|RenegadeSoftBodyPhysicsTests|RenegadeJP01PhysicsLabSourceContract|RenegadeTerrainPropPhysicsTests|RenegadeTerrainPropCollisionWorldTests|RenegadeS1AInspectorSectionFrameworkTests|RenegadeS1AInspectorSectionSourceContract|StudioUiPolicy)$" --output-on-failure --timeout 45
+
+Run RenegadeVerifyDestructibles.exe from the built Runtime Release directory. An optional .wiscene output argument saves the intact playtest scene. The local generated playtest uses that scene and the project's normal Test Game Runtime path.
+
+The authoring controls still need an interactive Studio review. Remaining destruction work includes the ragdoll-driven gameplay proof, fracture tools, creator-script break event delivery, damage accumulation, debris lifetime and a debris budget. See [Jolt gameplay coverage](docs/JOLT_GAMEPLAY_COVERAGE.md).
+
+---
+
+# Jolt rigid-body simulation collision filters
+
+Implementation commit e9285dc7bd98415fe2bfacb681a2a699b8fbe326 on feature/physics-lab-vehicles. PhysicsGameplayService.h and PhysicsLuaService.cpp expose authored collision layers and bilateral masks. RenegadePhysicsLabWorkspace.cpp adds the layer and eight mask toggles. S1BInspectorSectionMigration.cpp adds the layer and sensor fields. The generated Jolt overlay implements native pairing and live updates in RenegadeBodyCollisionFilter.inc, RenegadeGameplayContactEvents.inc and RenegadePhysicsTempAllocator.cmake. VerifyGameplayPhysics.cpp exercises these paths on DX12. The upstream pin is unchanged.
+
+DESIGN Windows x64 Release Studio and Runtime built successfully. The exact Runtime build opened the FlyingVehicle project in DX12. RenegadeVerifyGameplayPhysics.exe, run from the built Runtime Release directory, passed mask save/reopen, Undo/Redo, preservation through a ghost round-trip, one-sided collision rejection, legacy defaults, live Lua filter changes and wakeup when support was removed. The earlier sensor event and ray cases passed alongside it. All eight focused CTest entries passed.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadePhysicsLuaTests RenegadeVerifyGameplayPhysics RenegadeTerrainPropPhysicsTests RenegadeTerrainPropCollisionWorldTests RenegadeSoftBodyPhysicsTests RenegadeStudio RenegadeRuntime --parallel 4
+    ctest --test-dir BUILD/clean-release -C Release -R "^(RenegadePhysicsLuaTests|RenegadeSoftBodyPhysicsTests|RenegadeJP01PhysicsLabSourceContract|RenegadeTerrainPropPhysicsTests|RenegadeTerrainPropCollisionWorldTests)$" --output-on-failure --timeout 45
+    cmake --build BUILD/clean-release --config Release --target RenegadeS1AInspectorSectionFrameworkTests --parallel 4
+    ctest --test-dir BUILD/clean-release -C Release -R "^(RenegadeS1AInspectorSectionFrameworkTests|RenegadeS1AInspectorSectionSourceContract|StudioUiPolicy)$" --output-on-failure --timeout 45
+
+The new control layout still needs an interactive Studio review. Build and executable checks were local to the feature branch. Specialized body filters remain pending. Continue with native shape sweeps and overlap queries through the same entity-based C++ and Lua adapter. See [Jolt gameplay coverage](docs/JOLT_GAMEPLAY_COVERAGE.md).
+
+---
+
+
+# Jolt sensors, contact events and filtered body rays
+
+Implementation commit 27b6e884923cadbb79afb959a9f2bde763b99131 on feature/physics-lab-vehicles. The implementation updates the generated Wicked/Jolt wrapper, EngineBridge public service and Lua bindings, the Physics Lab rigid body controls and the native and Lua test paths. The pinned upstream commit is unchanged.
+
+On DESIGN, the Windows x64 Release Studio and Runtime builds linked. The standalone Runtime opened the existing FlyingVehicle project in DX12. The native sensor fixture used a fresh scene and verified Undo/Redo, save/reopen, five native ray filter cases, a live Lua raycast and native contact subscription, and one contact begin and end while a dynamic body fell through the sensor. Invalid Lua ray arguments now return nil and an error string. The Lua, soft-body, Physics Lab source contract and two terrain collision regressions passed.
+
+    cmake --build BUILD/clean-release --config Release --target RenegadePhysicsLuaTests RenegadeVerifyGameplayPhysics RenegadeTerrainPropPhysicsTests RenegadeTerrainPropCollisionWorldTests RenegadeStudio RenegadeRuntime --parallel 4
+    ctest --test-dir BUILD/clean-release -C Release -R "^(RenegadePhysicsLuaTests|RenegadeSoftBodyPhysicsTests|RenegadeJP01PhysicsLabSourceContract|RenegadeTerrainPropPhysicsTests|RenegadeTerrainPropCollisionWorldTests)$" --output-on-failure --timeout 45
+
+Run RenegadeVerifyGameplayPhysics.exe from the built Runtime Release working directory for the native proof. The fixture measured a final falling-body Y of -4.412 m after 85 frames.
+
+Remaining work includes a hands-on Sensor checkbox pass in Studio, larger-scene queue performance and true Jolt collision masks for simulation. Scene layer masks in this slice filter body queries. See [Jolt gameplay coverage](docs/JOLT_GAMEPLAY_COVERAGE.md) for scripting and remaining exposure.
+
+---
+
+
+# Jolt coverage and cloth pinning
+
+Implementation commit f555bbcb2e7c8f6a3ca1a7726ca1ba8bb1a7e300 on feature/physics-lab-vehicles. Changes cover the soft-body bridge, Lua bindings, Physics Lab buttons, C++ and Lua tests and the native cloth proof tool. Read [Jolt gameplay coverage](docs/JOLT_GAMEPLAY_COVERAGE.md) for the remaining exposure by subsystem.
+
+On DESIGN, Windows x64 Release Studio and Runtime linked successfully. These checks passed:
+
+    cmake --build BUILD/clean-release --config Release --target RenegadePhysicsLuaTests RenegadeSoftBodyPhysicsTests RenegadeStudio RenegadeRuntime --parallel 4
+    ctest --test-dir BUILD/clean-release -C Release -R "^(RenegadePhysicsLuaTests|RenegadeSoftBodyPhysicsTests|RenegadeJP01PhysicsLabSourceContract)$" --output-on-failure --timeout 45
+
+The native DX12 cloth proof reopened the scene and advanced 90 simulated frames. The pinned sample remained at Y=4.000 m, while the free sample fell from Y=4.000 m to Y=3.538 m.
+
+Remaining coverage includes visual Studio and Test Game cloth checks against colliders and the adapter work listed in the inventory. Start the next backend slice with body sensors, contact events, collision filtering and queries.
+
+---
+
+
+# Physics Lab and vehicle templates
+
+Local branch feature/physics-lab-vehicles starts at 3e0c69e9efd9fae57522e43027df82ac9854935d. The previous entries below refer to separate work.
+
+The docked Lab, asset Physics section, template launchers and public flight controller are described in [Physics Lab and vehicle templates](docs/PHYSICS_LAB_VEHICLE_TEMPLATES.md). Use the documented verification and remaining coverage for merge review.
+
+---
+
+
 # PR #197 UMA/wireframe recovery — 17 November 2026
 
 PR #197 remains draft. Original tip 585407a: both baseline jobs passed;
@@ -326,7 +715,7 @@ Preserve original dialogue and concurrent arms work.
 
 # Studio UI cohesion first pass — 16 November 2026
 
-Isolated checkout `E:\RenegadeUI-20261116`, branch
+Isolated UI checkout, branch
 `fix/ui-cohesion-pass1-20261116`, based on dialogue checkpoint `7d4839a`.
 The original dialogue checkout and concurrent arms work were not modified.
 No push, PR, merge or release is authorized/performed by this UI pass.
@@ -995,3 +1384,221 @@ Changes b6051f7 and c8cb327fd5b5bd5cfeda008036ced5428dca9050 preserve authored p
 Private standalone DX12 player, 200 supplied trees and 40 rocks, same 300 m out-and-back route. At 75 m/s, two one-worker runs settled 12.87 and 13.00 seconds after stopping. Two two-worker runs settled in 11.48 and 11.54 seconds. Full-frame startup maxima were variable: 377/396 ms with one worker and 1276/282 ms with two. The two-worker repeat had a 156 ms frame during return settlement, while the timed scheduler maximum in that phase was 0.80 ms. At 7.5 m/s, six of seven fine meshes were back on arrival; the last arrived 2.08 seconds later. P99 inbound frame interval was 16.24 ms, maximum 17.04 ms. The outbound maximum was 45.87 ms. These are automated player-position traces on the owner GPU. Fast traces exercised the queue change; the 7.5 m/s trace also included the single-model distance fix.
 
 Native render benchmark at a fixed camera, 1920x1080. Compare one 240-placement tile against nine identical tiles spaced 1024 m apart (2160 placements). Both produced exactly the same RGB frame, 212 range-eligible objects, 1595662 range-eligible triangles, 17 scene meshes and 780140544 device bytes. Scene objects increased from 304 to 2224 and transforms from 307 to 2227. Every additional out-of-range placement still became a native object and transform. The measured blocker is the coarse/single-model projection created at scene restore. The model scheduler bounds fine loads but does not yet bound that initial projection or its steady-state population. Remaining acceptance includes paging native placement creation by view/interest with conservative transformed bounds and fallback coverage, startup tracing, full local preflight and independent review. No hosted run for this checkpoint.
+
+### P5 woodland mesh distance validation
+
+Tested Release libraries from dd4913e70641d2b710205b719fb6a51e1e8c7970 against merged baseline 9eae1003308d39bca68da5cd9329bc41f60bc878 (identical tracked tree). This review changes HANDOFF.md only. The private fixed-seed tile contains 200 trees and 40 rocks. All six final 1080p stationary captures passed. At ground and elevated cameras respectively, normal mesh residency with shadows gave median CPU frame times of 0.578 and 0.529 ms, GPU frame times of 1.391 and 1.465 ms, and shadow pass times of 0.218 and 0.202 ms. Forcing coarse meshes gave GPU medians of 1.800 and 1.911 ms. Each median covers 60 matched frames. Reproduce with the private QA scripts run.ps1 -Count 200 across views 0/1 and (Shadows,Lod) pairs (0,0), (1,0), (1,2), then run python summarize.py. The QA README documents environment and settle settings.
+
+The separate nine-tile player approach measured median 13.34 ms, p99 16.42 ms and worst frame 39.41 ms. A 1175 ms pre-entry spike did not recur in repeats. A roughly 380-482 ms launch gap remains. One exploratory elevated coarse capture crashed in nvwgf2umx.dll; its identical retry passed. Cause unresolved.
+
+Keep the supplied meshes as the visual baseline. All three experimental baked oak representations failed visual review. No impostor ships from this evaluation. Next validation is a moving transition across mesh distance thresholds, including silhouette and shadow continuity at different authored scales. Independent exact-commit verification remains open.
+
+### P5 moving oak transition
+Two private Release runs completed 1400 frames each, shadows enabled, using the same supplied oak at scales 0.6, 1.2 and 1.8. Camera z moved from -310 to -35 m, paused, then returned. Ground view upgraded at frames 720/721 during the near pause; elevated view upgraded at 816/817 during retreat (z=-68/-68.5 m). Both downgraded at 873/874 (z=-96.5/-97 m). The three-oak scene changed from 9581 to 33050 renderable triangles. In ground frames 700 and 721 the camera is identical. The canopy outlines and leaf coverage change visibly; trunks and broad shadow footprints persist. This is a visual transition failure despite two successful captures. A held camera and delayed fine residency make the change particularly apparent. The elevated route has no matched-camera upgrade pair. Reproduce using the private motion QA scripts with Count 3, Lod 0, Shadows 1 and View 0/1, draw distance enabled. Review motion.csv and the ground swap.jpg; these captures include synchronous readbacks and do not measure traversal frame times. Next isolate asynchronous readiness from mesh-switch presentation before changing engine behavior.
+
+### P5 oak readiness trace
+Three private Release routes (1400 frames each) traced a shared fine-model request for three scaled oaks. The ground and elevated stress captures requested at z=-96 m. Preparation took 1410.52 and 1445.23 ms, followed by 1.93 and 0.44 ms until the first fine batch was enabled. The second batch followed on the next frame. The walking-speed control used 0.1 m steps with a target cadence of 75 Hz and disabled screenshot readbacks. It requested at z=-96 m and first enabled fine geometry at z=-87.6 m, after 1292.83 ms preparation and 2.56 ms from readiness to activation. The reopen log attributed 1045.79 ms to the scene stage and 243.52 ms to product processing. Explicit texture restoration took 0.06 ms. These are worker timings for one model, not application stalls. Both cells returned to coarse on retreat in all runs. Reproduce using the private trace and paced harnesses with Count 3, View 0/1 (paced View 0), Lod 0 and Shadows 1. Run summarize-traces.py to check the event order against motion.csv. Investigate the scene reopen stage for earlier availability and test transition presentation separately at matched camera positions. The walking control recorded activation without image capture.
+
+### P5 preloading control
+A private Release harness staged one shared fine oak payload before traversal, then consumed it through the existing page acquisition path. Three oaks at scales 0.6, 1.2 and 1.8 used this payload. Both paced 1400-frame routes passed. Ground/elevated preparation was 1496.73/1374.17 ms before movement. Both first enabled fine geometry on the first eligible frame (340, z=-96 m), finished on frame 341 and restored coarse geometry on frames 1061/1062. The earlier on-demand ground control first upgraded at -87.6 m. At a fixed camera across the threshold, two coarse frames were identical to displayed precision. Coarse-to-fine mean absolute RGB differences were 0.647/0.573 levels across the 1080p image. The gross crown silhouettes persist but foliage and elevated shadow detail change. Scripts build.ps1, run.ps1 (Count 3, Shadows 1, View 0/1) and compare.py reproduce this private staged experiment. It establishes first-use readiness for one shared model; production level loading, re-entry caching, dense-scene memory cost and visual acceptance remain open.
+
+### P5 player spawn preload integration
+Local Runtime change 423a1ec modifies RuntimeApplication.cpp and RuntimePropModelResidency.h. The normal player uses model residency and the separately experimental distant cell thinning remains opt-in. The spawn path selects up to two unique fine models by distance in the local nine-by-nine cell area, prepares them before player spawn and consumes each prepared payload on first acquisition. Revision changes clear staged payloads. The count limit is not a byte or time budget.
+
+Built the retained Release RenegadeRuntime.vcxproj with BuildProjectReferences=false, CL_MPCount=2 and /m:1. Clear RENEGADE_P4_CELL_RESIDENCY and launch the Release player with --project pointing at the mixed woodland descriptor and --renegade-ready-event pointing at a fresh named event. For 200 trees and 40 rocks, the retained baseline reached ready in 28.28 s, working set 1194 MiB and peak 1644 MiB. Final candidate reached ready in 22.39 s, working set 1483 MiB and peak 1791 MiB. Sampled working sets three seconds after readiness. The spawn log confirmed two shared models in 2786 ms. Single sequential samples, different cache states, no load-speed claim. The DX12 screenshot shows a populated woodland at Player Start. These runs used a project descriptor and bypassed Studio snapshot creation. The retained Release slice, edit and collision-world CTests passed 3/3 in 8.29 s. Full preflight, independent review and Studio snapshot traversal including moving canopy acceptance remain open. Private run commands, logs and captures are retained in RenegadeP5RuntimeQA.
+
+### Woodland Test Game scene-load failure and P5 ground traversal
+
+Implementation 84c38d13dd32b32fdd7abb25d532a0bddc85f325 on the local review branch fixes Runtime code 24 when Test Game relocates a woodland snapshot. The former Studio launched a player that failed to resolve the terrain revision; the authored scene opened with its complete population. EngineBridge/src/TestLevelSnapshotService.cpp now stages the referenced revision, pages, registry, fine and coarse model products, and governed model resource bindings. Deferred staging uses the captured scene and the selected destination. Tests/TerrainPropSliceProof.cpp reopens both eager and deferred snapshots after moving each away from the original registry. The test exercises cleanup with generated path names. The regular scene save format is unchanged.
+
+Release validation used the retained Windows x64 configuration. From a configured native build run these commands (PowerShell, with MSBuild on PATH).
+
+~~~powershell
+foreach ($target in @('EngineBridge/RenegadeEngineBridge','Studio/RenegadeStudio','Tests/RenegadeTerrainPropResidencyProbe','Tests/RenegadeTestLevelSnapshotTests','Tests/RenegadeTestLevelSnapshotRuntimeTests')) {
+    msbuild "$env:RENEGADE_NATIVE_BUILD/$target.vcxproj" /p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false /m:1 /v:minimal
+    if ($LASTEXITCODE) { throw $target }
+}
+ctest --test-dir $env:RENEGADE_NATIVE_BUILD -C Release -R 'RenegadeTestLevelSnapshot|RenegadeTerrainProp' --output-on-failure
+~~~
+
+All 11 selected tests passed. In a fresh-process woodland probe, moving the session to another volume preserved the 16 model IDs and all 17 terrain files. Detailed native reopen counted 241 rendered objects in both the source and the snapshot (240 props plus ground). The Studio toolbar Play action launched the DX12 child, its native ready signal fired and RuntimeBootstrap reported SUCCESS with exit code 0. Ground-level verification included walking forward, pausing, backing away and returning. The Release editor returned to Test Level completed and removed the session. A repeat from the same open editor also reached ready, exited normally and cleaned its separate session.
+
+The following sequential ground comparisons ran the retained pre-preload and candidate Release players against the same captured woodland descriptor. Each used 120 warmup frames and 1440 measured host frame intervals. In an isolated profile set RENEGADE_G13E13_PERF_CSV to an output CSV, RENEGADE_G13E13_FRAMES to 1440 and RENEGADE_G13E14_PLAYER_TRACE to a disposable position CSV. Launch RenegadeRuntime.exe with --project pointing to the captured TestLevel.renegade and alwaysactive. Repeat in reverse order with the position trace set to NUL to remove the periodic position file writes. The first runs travelled 64.83 and 64.69 metres respectively. RSS is the largest working set sampled at half-second intervals after readiness. The GPU column uses the native DXGI process-local measurement.
+
+| Run | Median ms | p99 ms | Worst ms | Frames over 33 ms | RSS MiB | GPU peak MiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| control | 13.342 | 16.071 | 2508.977 | 7 | 1215 | 921.789 |
+| candidate | 13.341 | 16.108 | 1325.087 | 3 | 1805 | 921.727 |
+| candidate-repeat | 13.343 | 15.953 | 16.413 | 0 | 1597 | 919.352 |
+| control-repeat | 13.345 | 16.090 | 16.495 | 0 | 1196 | 920.789 |
+
+The largest first-pass frames aligned with the position sampling cadence. The ground runs with the position sink set to NUL are the comparison without those disk writes. One candidate benchmark process exited before ready in the NVIDIA user-mode driver. Windows recorded access violation 0xc0000005 in nvwgf2umx.dll at offset 0x117158b. The dump shows DX12 and Runtime frames below the driver. The identical retry completed. The dump does not establish which application call or driver condition caused the access violation. This is an open stability item separate from the repeatable missing-revision exit code 24.
+
+P5 remains open. These ground measurements do not establish elevated silhouette or shadow continuity. The next visual check is a matched ground and elevated approach, hold, retreat and return at an oak detail boundary, with the fine and coarse silhouettes and shadow footprints aligned between views. Full preflight and independent exact-commit review remain outstanding.
+
+On 20 November 2026, Maverick signed off on the Woodland Grounded Test Game fix for exit code 24 (84c38d1).
+
+### P5 moving oak canopy and shadow validation
+
+Local implementation 2360aab1eff9c36c82cfaa0747d4b80c66076841 on review/p5-mesh-validation changes RuntimeApplication and RuntimePropModelResidency, the bridge TerrainPropProjection and TerrainPropDetailProjection, TerrainPropResidencyProbe, and the CMake overlay and shared TerrainPropDetailFade header. The decision is in docs/ARCHITECTURE.md. The validated source plus the associated assistant workflow fingerprint is a04c21528f4c0ae8b463a02ec8fa51569f0ef243.
+
+On Windows x64 with Visual Studio 18 2026, MSBuild 18.6.3 and DX12, configure the retained native build, regenerate embedded shaders, build the common renderer objects, rearchive the embedded renderer and relink the bridge, Runtime and probe. The direct project commands use the same Release/x64 configuration throughout. The variables below name the source checkout, its configured build, the local woodland fixture root, project ID, and registered oak LOD0 and LOD2 IDs.
+
+~~~powershell
+cmake -S $src -B $build
+foreach ($target in @('WickedEngine/WickedEngine/WickedEngine_common','WickedEngine/WickedEngine/WickedEngine_emb_shaders','EngineBridge/RenegadeEngineBridge','Runtime/RenegadeRuntime','Tests/RenegadeTerrainPropResidencyProbe')) {
+    msbuild "$build/$target.vcxproj" /p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false /m:1 /p:CL_MPCount=3 /v:minimal
+    if ($LASTEXITCODE) { throw $target }
+}
+Push-Location "$build/Tests/Release"
+./RenegadeTerrainPropResidencyProbe.exe $woodland --mesh-detail $projectId $oakLod0 $oakLod2
+Pop-Location
+ctest --test-dir $build -C Release -R 'RenegadeTestLevelSnapshot|RenegadeTerrainProp' --output-on-failure
+ctest --test-dir $build -C Release -R 'RenegadeAssistant' --output-on-failure
+~~~
+
+The native oak probe passed the partial retreat, turn back, retention and mid-fade revision checks. Resident mesh buffer views measured 132530 bytes coarse, 486130 bytes with fine resident, 486130 bytes after reversing and 132530 bytes after releasing on revision change. All 11 terrain/snapshot and five assistant checks passed. The staged review player SHA-256 was 3BD00397262D635B95392E0E0FAC1AA37AFE756C5C7D16231CAB140B1A0BA425. Studio's Test Game toolbar launched its freshly created woodland snapshot, the DX12 ready event fired, RuntimeBootstrap reported SUCCESS, the child exited 0 and Studio removed the snapshot.
+
+Private before-and-after render capture used the unchanged supplied big oak at scales 0.6, 1.2 and 1.8, shadows on, 1920 x 1080. The old executable used the previous distance scheduler. In the native capture runner, set P4_QA_DRAW_DISTANCE=1 and invoke run.ps1 3 0 1 0 and run.ps1 3 0 1 1 for the two views. The player crossed the 96 m cell boundary in approach and retreat, then performed a rapid return. Each camera held its transform for the measured switches. Compare successive saved frames two rendered frames apart in fixed crown and ground-shadow regions. Entries below are the largest mean absolute RGB difference in 8-bit intensity levels, before and after, over the first approach and retreat.
+
+| Region | Approach before / after | Retreat before / after |
+| --- | ---: | ---: |
+| Ground canopy | 5.0151 / 0.6255 | 5.0151 / 0.6049 |
+| Elevated canopy | 4.4016 / 0.5832 | 4.4016 / 0.5690 |
+| Elevated ground shadow | 1.4212 / 0.1506 | 1.4212 / 0.1656 |
+
+Near and far endpoint regions at frames 12, 66, 124 and 178 had zero RGB difference in both views. The initial ground control had an unlit sky and was excluded. Repeating the old executable produced matching sky and settled frames. The owner comparison clip uses this repeated control. Private assets, readbacks and harness scripts remain with the local oak validation run.
+
+The previous and candidate Release players separately ran the captured 200-tree/40-rock woodland. Each used 120 warmup and 1440 measured frames at the same settings. The position trace used NUL. Control and candidate respectively recorded median host intervals of 13.345 and 13.339 ms, p99 of 15.993 and 16.047 ms, worst intervals of 16.550 and 16.476 ms, and zero frames over 33 ms. Peak process-local GPU memory was 919.352 and 919.414 MiB. One pair of runs establishes performance for this route. The short overlap can draw both models in a transitioning cell.
+
+The visual and standalone checks cover the oak transition. Overall P5 awaits full frozen Debug and Release preflights with package proofs and independent verification of the exact candidate. The previously recorded intermittent NVIDIA startup failure is still open.
+
+On 20 November 2026, Maverick signed off on the P5 oak canopy and ground-shadow transition shown in Woodland_Oak_Transition.mp4, covering the ground and elevated approach, retreat and turn-back views. The reviewed implementation is 2360aab1eff9c36c82cfaa0747d4b80c66076841, with the measurements and Studio Test Game results recorded in 242e1f28997327df74d61bfdcb267560e874f548.
+
+### Terrain props, Test Game storage and standalone woodland
+
+Maverick signed off the woodland Test Game and canopy/shadow transition on 20 November. The independent source and focused-test review covers the storage correction at f70fbf2d650d8bec83b479a73967350403492833 and standalone dependency collection at 39727d737e8450202987b369e66343dcbc22fead. The candidate including runtime shutdown ordering and the corrected deferred process fixture is d48541e11c524f395534e329189b076415359dd0.
+
+- Test Game captures terrain revision references on the owning thread and measures unique revision, page, model and governed texture files before choosing where to write the snapshot. EngineBridge/src/TestLevelSnapshotService.cpp, TestLevelSnapshotStorage.h, TerrainPropDocument.cpp and its bridge header implement the change. Tests/TestLevelSnapshotTests.cpp covers the 4 GiB reserve.
+- Release Build Windows Game originally rejected a generated texture name when inspecting a governed reusable model. EngineBridge/src/ReusableAssetDependencyService.cpp, ReusableAssetPlacementService.cpp, WisceneEmbeddedResources.h and the ReusableAssetService bridge header now identify names with nonempty image data inside the specific model's WISCENE archive. Tests/ReusableAssetTests.cpp covers exact names, empty entries and truncation. Independent inspection found 72 material texture references in 16 woodland models and verified the embedded image for each reference within its own product. An additional native model import with a missing loose emissive texture still emitted a required texture dependency.
+- The private authoring project was copied for the export test. Only the copy has a level.complete route from its woodland level to Complete Game, which the production export smoke requires. The Release controller staged and launched the named game. The packaged DX12 child reported successful integrity, completed its Story Flow and exited 0. Final promotion rejected an unexpected empty log.txt. A Windows file-open trace recorded model preparation during exit. The runtime change at 9d8686c56258c1b811d5b35018a691ce4740a3e8 joins outstanding terrain model preparation before closing the Wicked job system. Runtime/src/RuntimeApplication.cpp, RuntimePropModelResidency.h and main_Windows.cpp own the change.
+- The earlier f70fbf2 native Debug aggregate built. Unfiltered CTest passed 329/330. RenegadeTestLevelRuntimeProcessTests handed its deferred-ready and restart tests a descriptor containing only the word fixture. Tests/TestLevelRuntimeProcessTests.cpp now writes a versioned descriptor with a stable project ID and the actual test scene. The production validator and the invalid-scene and cancellation assertions remain active.
+- Run the Studio Windows build script for Release and Debug. On the review host the CMake build uses two workers. Run the unfiltered CTest suites and both pairs of package proofs. From Release Studio, export the private woodland, relocate the complete exported folder, then launch the named executable with a fresh profile and an unrelated working directory. Match the woodland's 17 terrain files and 16 model products to the retained snapshot and count all 240 placements. Record the resulting build and package receipts before declaring the gate closed.
+- The earlier DX12 startup failure is separate from the reproducible packaging failure. A clean-machine launch and the redistribution status of the planned stock library remain P6 acceptance items. Observed temporary model writes under a packaged game's GameData/Intermediate/Imports also need a write-protected installation check.
+
+Creator documentation is in docs/TERRAIN_PROPS_CREATOR_GUIDE.md.
+
+
+### Read-only woodland export validation
+
+The read-only placement fix is dc17d6ab63c474cf416771a5719a83972ee4e0fe. The previous named game passed package integrity and then failed scene loading with exit code 24 because reusable placement tried to create GameData/Intermediate/Imports. A write-denied disposable installation reproduced the failure. EngineBridge/src/ReusableAssetPlacementService.cpp now passes the governed WISCENE bytes and their logical texture directory directly to the native archive. The configure-time change is in cmake/TerrainPropArchive.cmake and EngineBridge/patches/ReusableModelMemoryArchive.patch. Tests/ReusableAssetTests.cpp exercises compressed, uncompressed and truncated headers. The source and core overlay were independently reviewed on this commit. A clean-index patch check and repeat configuration matched the expected patched header hash bbb8a3d42bf385f6d8fb424bc7f742541c2c215a780f0503758678a4b6b81f28.
+
+The following local exercises used the candidate Release Runtime and Studio build controller rebuilt from the changed source, with existing native libraries for unchanged dependencies. The full frozen Debug and Release preflight is tracked separately.
+
+| Exercise | Result |
+| --- | --- |
+| Reusable product archive | RenegadeReusableAssetTests passed in Release. The corrected deferred-ready/restart test also passed in Debug when run with ctest -C Debug -R RenegadeTestLevelRuntimeProcessTests --output-on-failure. |
+| Test Game snapshot | CreateDeferred and FinalizeDeferredScene captured the woodland. The reloaded snapshot contained 17 terrain revision/page files, 16 model IDs and the same 241 detailed objects as the source. Snapshot cleanup succeeded and the native process exited 0. |
+| Build Windows Game | The Release Studio controller staged the named game, completed the authored Story Flow on DX12, passed post-smoke checks and promoted the folder. The controller exited 0. |
+| Relocated game | The named executable started with a fresh user profile from an empty unrelated directory. Runtime reported package-relative launch, package integrity PASS and DX12. After 120 warmup frames, 240 measured host-loop frames averaged 13.338 ms, with p99 13.753 ms. The executable exited 0. |
+| Protected installation | A separate copy denied file and directory creation and rejected an explicit sentinel write. The standalone passed package integrity, entered Main Level on DX12 and exited 0. Its 240 measured frames averaged 13.339 ms, p99 13.694 ms. The player-camera capture shows the rendered tree canopies, trunks and ground shadows. No game-folder log or placement directory appeared. |
+| Terrain content | Both copies contained the 240 placements. The 17 revision/page products and 16 models matched their source snapshot hashes. Neither installation contained SourceAssets. |
+
+The promoted executable SHA-256 was BCCE86B2423939A0765129C2BC1B6CA8866F377B21B2B89B5A83EC777078F280. The relocated and protected manifests both hashed to 3EB24C356939E51E552BD4657DC6AB594FCDA50AFFC6BCB80A66D08E16C8BEDA. The native protected-install capture hashed to 48B9B65362CFB6BD7DC795DACBCD086AEE701B7B4810AB683DC0003A34F2B520. Private artwork and native captures stay with the local test project.
+
+For reproduction, save a woodland with a complete Story Flow route and run Build Windows Game in Release. Move the entire promoted folder to an unrelated location, launch its named game with no project argument from an empty working directory and a new local profile, then repeat with writes denied beneath a disposable installation. Inspect RuntimeBootstrap.log and compare the exported model and page hashes against the saved project. The separate clean-machine and stock-content requirements remain open.
+
+## Woodland starter and collision generation closeout
+
+The approved P5 woodland uses the authored meshes and their distant representations. The 29-asset starter uses redistributable examples and has independent source records. The licensed private benchmark trees stay in the owner project.
+
+Two startup requests could put the same terrain chunk in one pending generation batch. The camera and collision worker then wrote the same grass index buffer concurrently. A cold Release player reproduced the failure. The native crash dump resolved to Wicked's terrain worker and HairParticleSystem::CreateFromMesh. Commit bf361c7ad5d5f3ab7e8b81b57dcab60b75a723cd makes each chunk unique within the current batch and converts absolute priority invalidation coordinates into camera-relative offsets exactly once. The terrain initialization test starts with overlapping collision and camera interests and validates live published chunk identities. The separate earlier code-24 fix remains covered by the read-only installation and snapshot checks.
+
+| Check on DESIGN | Verified result |
+| --- | --- |
+| Windows Release and Debug | Both Studio and Runtime built. The unfiltered suites passed all 346 Release tests and all 330 Debug tests. Both Studio executables passed their startup smoke check. All four package ZIP hashes matched and the dependency and asset-registry proofs passed in both configurations. The first run finished Release before a Debug build error. An initial Debug suite subsequently hit an access violation during expansion Undo in the terrain initialization check. Three direct reruns using that binary and the final full Debug run passed on the same source revision. The initial dump is retained on DESIGN in the stock-debug-final evidence directory. The cause of the one-off access violation has not been established. |
+| Stock palette | All 29 near meshes and 46 additional LOD meshes reopened through Renegade. All 110 material texture bindings were present on the near models. The catalog names the trunk, branch and canopy material groups and records the wind attributes available on each tree. |
+| Editable art | The Blender file reopened with 29 asset collections and 90 packed images. The procedural oak leaf litter regenerated to the same GLB digest. |
+| Editable woodland | The initial 206 placements and 54 backdrop trees give 260 saved placements in 15 pages, with 52 near/distant model assets and four saved mixes. The eight tree profiles use trunk capsules. The six rock profiles use fitted boxes. |
+| Test Game | The production deferred snapshot and Studio process launcher reached the player-ready event, exited 0 and removed the snapshot session. The Release check reopened 558 source objects with all 52 model dependencies. The extracted project ZIP passed the same launch from a separate location. The Debug runtime also passed a native Test Game launch. |
+| Exported woodland | Build Windows Game promoted the sample using the matching engine revision. All 143 manifest entries matched. A separately installed copy rejected writes and ran 240 DX12 frames with a fresh user profile. The camera capture shows the tree stand, undergrowth, rocks and clearing. The earlier 240-placement benchmark also passed relocation and write-denied installation on this source. |
+
+The ready-to-import art, source files, notices and catalog are in Library/TerrainProps/WoodlandStarter on the local content branch. The editable project, Blender file, standalone player and portable archives are in the RenegadeTerrainProps folder on DESIGN. The content commit 97ae0f23d726fe34413888dee65a5b3170520183 includes the tree material-group and wind inventory. The content additions do not change a build target or native code.
+
+The final package manifest SHA-256 is 1ad7c9d7355858fa5ce2cb386474a0e6a3c416b3f40b204ba5ba346ee7b47a61. The standalone includes the stock notices in GameData/Content/Data/WoodlandCredits.txt. Build Windows Game still marks the package as a development build. Hosted checks on the intended PR head and a standalone launch on a separate clean Windows machine remain release gates.
+
+## Deferred Physics Lab work
+
+Workshop Van vehicle damage has been removed from the active Physics Lab change. Revisit after profiling frame time and memory in representative Renegade projects. The prototype sources, reapply patch and two proof projects are preserved in the local RenegadeArchive under WorkshopVanDamage-20261120.
+
+Removal verification on Physics Lab HEAD 9f3fe46. The Windows x64 Release build relinked WickedEngine_common, WickedEngine_emb_shaders, RenegadeAuthorWorkshopVan, RenegadeRuntime, RenegadeVehiclePhysicsTests and RenegadePhase5Gate2CameraTests through cmake --build BUILD/clean-release --config Release with /m:1 /p:BuildProjectReferences=false. Seven focused Release CTests passed with ctest --test-dir BUILD/clean-release -C Release -R "VehiclePhysicsTests|Phase5Gate2CameraTests|ProjectileSimulationTests|S3GovernedLuaRuntimeSourceContract|StudioUiPolicy|JP01PhysicsLabSourceContract|SoftBodyPhysicsTests" --output-on-failure --timeout 30.
+
+The default Blender export contains 38,994 triangles and no morph targets. The native author saved and reopened the stock van and its Jolt drive and brake proof passed. The stock Workshop Van and the cockpit camera verification project both reached Main Level in the rebuilt standalone DX12 Runtime. The active Studio bundle already predated the prototype. The generated Jolt source and both Runtime binaries lack the prototype binding. Build and proof logs are under BUILD/PhysicsLabSignoff/VehicleTemplateRelease/DamageRemovalVerification. The archive reapply patch passed git apply --check. No hosted CI or merge was requested.
+
+## Imported Breakables Range
+
+Uncommitted on the Physics Lab worktree at 9f3fe46. PhysicsGameplayService.h, RenegadeDestructibles.inc and Tools/VerifyDestructibles.cpp add an intact-visual role and the native swap fixture. The architecture, breakables guide and feature matrix record the exposure. Existing assembled barricades retain their collider and rattle rules. The intact-swap path uses convex debris shaped from the authored meshes, with a box fallback for degenerate hulls and a smaller release impulse. The first box-only DX12 trial was visibly poor in review. The corrected trial embeds preview textures and uses a matte floor.
+
+    cmake --build BUILD/clean-release --config Release --target WickedEngine_common WickedEngine_emb_shaders RenegadeVerifyDestructibles RenegadeRuntime -- /m:1 /p:BuildProjectReferences=false
+    RenegadeVerifyDestructibles.exe --prop-swaps <stage>/SourceAssets <project>/Content/Scenes/Main.wiscene
+    RenegadeVerifyDestructibles.exe <stage>/baseline.wiscene
+    RenegadeVerifyDestructibles.exe <stage>/ragdoll.wiscene --ragdoll
+
+Windows Release built. The reopened scene starts with one visible intact mesh and one static body per prop. The crate, barrel and explosive barrel released 7, 7 and 5 convex bodies at 10.54, 10.22 and 11.01 m/s. After 340 native steps the lowest visible point across the debris was approximately 2 cm below the floor. Native assembled, rattle, script and ragdoll regressions passed. The separate DX12 launcher loaded the range and the captures show the textured intact props, release, and settled pieces. No missing-texture warning occurred in the new run.
+
+The user assets were prepared locally with their original UVs, 1K preview map copies and centred fragment groups. The stage is BUILD/PhysicsLabSignoff/BreakablePropSwap. Play Breakables Range.cmd uses the matching standalone Runtime. SourceAssets, asset preparation, proof logs, and ConvexCaptures are kept in that stage. The proof uses impact weights for all three props. Breakables page authoring, a debris fade lifecycle and the explosive barrel gameplay effect remain separate work. Keep future authoring compatible with both grouped and loose imported meshes.
+
+Final verification rebuilt RenegadePhysicsLuaTests and RenegadeSoftBodyPhysicsTests in Release and passed all eight targeted entries using ctest --test-dir BUILD/clean-release -C Release -R "VehiclePhysicsTests|Phase5Gate2CameraTests|ProjectileSimulationTests|S3GovernedLuaRuntimeSourceContract|StudioUiPolicy|JP01PhysicsLabSourceContract|SoftBodyPhysicsTests|PhysicsLuaTests" --output-on-failure --timeout 30.
+
+## Breakable weapon hits and environmental impacts
+
+Uncommitted at Physics Lab HEAD 9f3fe46. PhysicsGameplayService.h and the generated Jolt contact listener add persisted opt-in hit points and per-play-session damage. RuntimeApplication.cpp and RuntimeProjectileAim.h route confirmed hitscan and travelling projectile contacts into the existing release queue. PlayerViewHandAnimation.h emits one contact at 35 percent of an accepted independent-hands swing. Melee tests the first contact within 2.25 m with 12 to 20 hit points of damage based on charge. RuntimeProjectileWorld.h skips the hidden intact visual and hidden break fragments in mesh-based weapon queries. Ordinary non-breakable contact handling and the existing Lua event layout are preserved. Breakables in RenegadePhysicsLabWorkspace exposes Break Speed and Hit Points with Undo/Redo. Selecting a visible child resolves the nearest eligible rigid-body root. Tests/JP01PhysicsLabSourceContract.cmake registers the ninth page.
+
+    cmake --build BUILD/clean-release --config Release --target WickedEngine_common WickedEngine_emb_shaders RenegadeVerifyDestructibles -- /m:1 /p:BuildProjectReferences=false
+    cmake --build BUILD/clean-release --config Release --target RenegadeRuntime RenegadeStudio RenegadePhysicsLuaTests RenegadeProjectileWorldTests RenegadeRuntimeProjectileSessionTests -- /m:2 /p:BuildProjectReferences=false
+    RenegadeVerifyDestructibles.exe --weapon-breaks <stage>/SourceAssets <output.wiscene>
+    RenegadeVerifyDestructibles.exe --prop-swaps <stage>/SourceAssets <output.wiscene>
+    RenegadeVerifyDestructibles.exe <output.wiscene>
+    RenegadeVerifyDestructibles.exe <output.wiscene> --ragdoll
+    ctest --test-dir BUILD/clean-release -C Release -R "^(RenegadeProjectileSimulationTests|RenegadeProjectileWorldTests|RenegadeRuntimeProjectileSessionTests|RenegadePhysicsLuaTests|RenegadeSoftBodyPhysicsTests|RenegadeS3GovernedLuaRuntimeSourceContract|StudioUiPolicy|RenegadeJP01PhysicsLabSourceContract|RenegadePhase5Gate2CameraTests|RenegadeVehiclePhysicsTests)$" --output-on-failure --timeout 30
+
+The Windows Release builds and ten focused CTests passed. All four native fixtures exited zero after the temporary break-event ABI extension was removed. The weapon proof checked Undo/Redo and archive reopen; one contact from an accepted animated swing; melee rejection outside reach; a crate surviving its first hitscan contact and breaking after a travelling projectile; duplicate-queue rejection; a second melee strike breaking the barrel; and a falling weight breaking the explosive-barrel model. A final ray passed through the space where the intact crate had been. The local Weapon Breakables project reached its level in the rebuilt standalone DX12 Runtime. The native fixture drives the same weapon helpers used by Runtime; it does not simulate equipping and operating a specific weapon asset with keyboard input. Stage and receipts are in BUILD/PhysicsLabSignoff/BreakablePropSwap.
+
+The final Studio build resolved a viewport click on the crate Intact Mesh to the Crate Breakable root and displayed its authored 20 Hit Points and 0 Break Speed. WeaponStudio-RootSelected.jpg records the selection. Test Game from that Studio build launched its matching DX12 Runtime against a Studio-generated snapshot and reached Weapon Breakables. The bootstrap receipt is weapon-studio-test-game.log.
+
+## Explosive oil drum
+
+Uncommitted on Physics Lab HEAD 9f3fe46. PhysicsGameplayService.h and RenegadeDestructibles.inc add persisted, optional Blast Speed. A successful release uses the intact collider centre and the debris mesh bounds to send fragments up and outward. The existing break event and the non-explosive release path retain their behaviour. RuntimeApplication.cpp and RuntimeProjectileVisuals.h reuse the existing short-lived blast presentation and age its effects with or without a player. RenegadePhysicsLabWorkspace.cpp exposes the setting with Undo/Redo. Tools/VerifyDestructibles.cpp authors 5.5 m/s on the oil drum and checks a single blast at the collider centre with outward fragment motion. The authored debris is the asset's five surviving pieces.
+
+    cmake --build BUILD/clean-release --config Release --target WickedEngine_common WickedEngine_emb_shaders RenegadeRuntime RenegadeStudio RenegadeVerifyDestructibles RenegadePhysicsLuaTests RenegadeProjectileWorldTests RenegadeRuntimeProjectileSessionTests -- /m:3 /p:BuildProjectReferences=false
+    ctest --test-dir BUILD/clean-release -C Release -R "^(RenegadeProjectileSimulationTests|RenegadeProjectileWorldTests|RenegadeRuntimeProjectileSessionTests|RenegadePhysicsLuaTests|RenegadeSoftBodyPhysicsTests|RenegadeS3GovernedLuaRuntimeSourceContract|StudioUiPolicy|RenegadeJP01PhysicsLabSourceContract|RenegadePhase5Gate2CameraTests|RenegadeVehiclePhysicsTests)$" --output-on-failure --timeout 30
+
+Windows Release built successfully and all ten focused CTests passed. All four VerifyDestructibles runs passed (weapon-breaks, prop-swaps, legacy Lua, and ragdoll). Studio Test Game reached the DX12 level using a saved snapshot. The foreground standalone DX12 replay was visually confirmed from the intact drum through smoke and airborne pieces to settled debris, with the crate and wooden barrel intact. Evidence and matching launchers Play Barrel Blast.cmd and Open Barrel Blast in Studio.cmd are under BUILD/PhysicsLabSignoff/BreakablePropSwap. BarrelBlastReplay frames 036 through 045 show the effect and spread. The player's F8 binding replays the drop. Test Game was observed launching, and standalone was used for the captured result.
+
+## Breakables authoring and debris timing
+
+Uncommitted on Physics Lab HEAD 9f3fe46. PhysicsGameplayService.h, RenegadeDestructibles.inc and the generated Jolt wrapper store Debris Stay and Debris Fade on the breakable root. The timer runs from release. It uses native per-instance opacity, preserves debris collision during the fade and removes each fragment entity and its body at expiry. Existing data defaults to keeping debris for the session. The intact-mesh command marks one selected child and hides the other render meshes under the same static transform root. Undo restores the roles and render flags. Studio exposes the timing sliders and assignment button. Existing assembled assets continue to use their piece meshes directly.
+
+    cmake --build BUILD/clean-release --config Release --target WickedEngine_common WickedEngine_emb_shaders RenegadeRuntime RenegadeStudio RenegadeVerifyDestructibles RenegadePhysicsLuaTests RenegadeProjectileWorldTests RenegadeRuntimeProjectileSessionTests -- /m:3 /p:BuildProjectReferences=false
+    ctest --test-dir BUILD/clean-release -C Release -R "^(RenegadeProjectileSimulationTests|RenegadeProjectileWorldTests|RenegadeRuntimeProjectileSessionTests|RenegadePhysicsLuaTests|RenegadeSoftBodyPhysicsTests|RenegadeS3GovernedLuaRuntimeSourceContract|StudioUiPolicy|RenegadeJP01PhysicsLabSourceContract|RenegadePhase5Gate2CameraTests|RenegadeVehiclePhysicsTests)$" --output-on-failure --timeout 30
+
+The corrected Windows Release build and all ten focused CTests passed. All four native fixtures passed. The imported fixture used the intact-mesh command, verified Undo/Redo and reopened from WISCENE. The oil drum retained its five live bodies while fading, removed all five at expiry, and left the untimed crate debris present. The staged review sets the oil drum to 5 seconds of stay and 1.5 seconds of fade. Open Debris Review in Studio.cmd and Play Debris Review.cmd are in BUILD/PhysicsLabSignoff/BreakablePropSwap. The build and proof logs use the debris-controls prefix.
+The Studio panel showed all five numeric fields and the intact assignment action. Clicking the button on a different fragment transferred the visible role. Undo restored the oil drum shell and its 5 and 1.5 second values. DebrisStudioPanel.jpg, DebrisStudioAssignMesh.jpg and DebrisStudioFinal.jpg capture the sequence. The focused standalone DX12 replay showed the intact drum, blast, settled debris, partial fade and cleared floor with the crate and wooden barrel intact. Capture frames are under DebrisReviewFocused. The capture used Wicked's alwaysactive argument to keep advancing across desktop focus changes.
+
+## Explode on Break in the asset inspector
+
+Uncommitted at Physics Lab HEAD 9f3fe46. DestructibleBlastPreset.h and RenegadeDestructibles.inc share the release path's fragment bounds and constraint checks with a preset command. S1BInspectorSectionMigration.cpp shows Explode on Break for eligible static bodies and resolves the authored root when selecting a child mesh. The toggle writes the existing blast speed field (5.5 m/s on, zero off), preserving the break input and debris timing. Undo restores the exact previous speed. A previously authored blast can be removed after geometry edits. Runtime still owns visual presentation and only emits it after successful release.
+
+Windows x64 Release built the existing generated WickedEngine_common, WickedEngine_emb_shaders, RenegadeVerifyDestructibles, RenegadeStudio, RenegadeRuntime and RenegadePhysicsLuaTests projects with MSBuild /p:Configuration=Release /p:Platform=x64 /p:VisualStudioVersion=18.0 /p:BuildProjectReferences=false /m:3. See explode-inspector-build-final.log. The four native fixtures passed, including ordinary-collider rejection with a break speed set, missing-trigger rejection, compound fragment eligibility, a custom blast speed restored by Undo, and WISCENE reopen for physical and HP triggers. The same ten focused Release CTests listed for debris timing passed.
+
+In Studio, the oil drum checkbox toggled off and on while its break speed stayed at 6 m/s. The ordinary floor checkbox was disabled and clicking it left it unchecked. Both oil drum edits were undone after verification. The matching standalone DX12 replay showed the oil drum blast, scattered debris and timed fade. Captures and logs use the ExplodeInspector or explode-inspector prefix under BUILD/PhysicsLabSignoff/BreakablePropSwap. Launch the review with Open Explode Preset in Studio.cmd.
+
+## Physics Lab authoring walkthrough before the remaining tools
+
+The review branch integrated main 9eae100 at bc82418. The merge retains the cockpit camera update and main's terrain prop residency update in the same Runtime frame. Both original vehicle and terrain evidence entries are preserved. The pre-merge Physics Lab checkpoint is 9e779d3. The Wicked and imnodes gitlinks stayed at their pinned commits.
+
+Tools/VerifyDestructibles.cpp now offers --studio-authoring-fixture <output.wiscene> and --verify-studio-authoring <saved.wiscene>. The first writes raw door, hinge marker, sensor volume, cloth mesh and barricade geometry with a floor, player start and test weights. The second exercises the actual saved Studio authoring through native Jolt. It runs from the Runtime working directory. No geometry package is required.
+
+On DESIGN the preceding verified Physics Lab Studio build was used to add and bind the door's hinge, set an ordinary box as a sensor, add the curtain soft body and pin its top row, and set the static barricade's break speed. Undo/Redo was exercised while configuring the four setups. The scene saved and reopened through Studio. Native readback measured 0.482 m lateral door swing, sensor enter and exit with the weight settling at Y 0.17 m, zero pinned-node displacement with 0.925 m combined free-node Y/Z displacement, and four barricade pieces released. Studio Test Game reached the DX12 scene. The player pushed the hinged door open, and the sensor weight, hanging cloth and broken boards were visible. The short first process probe expired during Test Game preparation. The actual Runtime then started and its updated PASS bootstrap receipt was verified.
+
+Evidence is under BUILD/PhysicsLabSignoff/V1Candidate and uses the Bench or authoring-bench prefix. One UI issue surfaced. In a narrow Constraint dock the second body picker's lower entries clip until the dock is scrolled upward. The walkthrough succeeded with that adjustment. The exact merged candidate still needs its own build and regression pass before publication. The owner identified Physics diagnostics and Step Once, compound collider authoring, and viewport constraint editing as remaining feature work.

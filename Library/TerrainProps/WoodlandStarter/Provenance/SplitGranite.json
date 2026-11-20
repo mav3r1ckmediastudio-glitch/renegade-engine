@@ -1,0 +1,50 @@
+{
+  "product": "SplitGranite.glb",
+  "category": "Rocks and boulders",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/split-granite-boulder",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/split-granite-boulder/v1/lod0.glb",
+      "bytes": 515144,
+      "sha256": "613c981054472ad08e453a1ca07118e482426fe4ca93facb3ba0e2d90c66e06e",
+      "triangles": 1770
+    },
+    {
+      "lod": 1,
+      "path": "/models/split-granite-boulder/v1/lod1.glb",
+      "bytes": 185640,
+      "sha256": "ea8e7a110dfd166b05dcfd65b07e94c26876722d566e7ac3f02b46cb7a90fec4",
+      "triangles": 596
+    },
+    {
+      "lod": 2,
+      "path": "/models/split-granite-boulder/v1/lod2.glb",
+      "bytes": 62912,
+      "sha256": "64827b4247bc570a7089feb6a50a69788638fa35cd59f52a8397cde1f9da1ca9",
+      "triangles": 158
+    }
+  ],
+  "dimensions_m": [
+    2.929,
+    1.03235,
+    2.23069
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "0c151555a2ef0f4a8a28ae63c04397d89a59e79ca885dcfb07b47b3d5f6785aa",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    0.0268096923828125,
+    0.08090275408855518,
+    0.20914196968078613
+  ]
+}

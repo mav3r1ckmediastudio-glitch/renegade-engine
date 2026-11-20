@@ -1,0 +1,57 @@
+{
+  "slug": "bilberry-bush",
+  "name": "Bilberry Bush",
+  "category": "plants",
+  "tags": [
+    "plant",
+    "shrub",
+    "bilberry",
+    "blueberry",
+    "berry",
+    "dwarf shrub",
+    "forest floor",
+    "understory",
+    "nature"
+  ],
+  "description": "Low bilberry (blueberry) shrub about 35 cm tall: green angular stems, small oval leaves and a few ripe blue berries. Origin on the ground at the centre; carries _WIND data with leaf flutter for vertex shader sway.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-10-26",
+  "updated": "2026-10-26",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 0.324,
+    "y": 0.359,
+    "z": 0.362
+  },
+  "parts": [],
+  "animations": [],
+  "wind": true,
+  "preview": "/models/bilberry-bush/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/bilberry-bush/v1/lod0.glb",
+      "bytes": 520720,
+      "sha256": "57b0a57e3a5ff6a8f7eb75c07e4f54e24062f239c4de499db9ced3abc45a30ef",
+      "triangles": 9124
+    },
+    {
+      "lod": 1,
+      "path": "/models/bilberry-bush/v1/lod1.glb",
+      "bytes": 181884,
+      "sha256": "e957f8745408d2e48ce08f2fc1924ffc1929c2352aef545acd8101b4f238c3a1",
+      "triangles": 2834
+    },
+    {
+      "lod": 2,
+      "path": "/models/bilberry-bush/v1/lod2.glb",
+      "bytes": 170948,
+      "sha256": "3b2ada45e35a8b644ad2d74fb4e7fb871ea7029aa283edd050538dd5d64b34ce",
+      "triangles": 88
+    }
+  ]
+}

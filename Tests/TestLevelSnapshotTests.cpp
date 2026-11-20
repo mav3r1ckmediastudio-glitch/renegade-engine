@@ -1,3 +1,4 @@
+#include "../EngineBridge/src/TestLevelSnapshotStorage.h"
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -21,6 +22,25 @@ namespace
     {
         std::cerr << "FAIL: " << message << '\n';
         return 1;
+    }
+
+    bool CheckTerrainStorageBudget(const fs::path& fixture)
+    {
+        const auto source = fixture / "storage-source";
+        const auto session = fixture / "storage-session";
+        fs::create_directories(source);
+        fs::create_directories(session);
+        std::ofstream(session / "registry") << "1234";
+        std::ofstream(source / "registry") << "123456";
+        std::ofstream(source / "oak") << "1234567890";
+        constexpr std::uintmax_t reserve = 4ull * 1024 * 1024 * 1024;
+        const std::set<std::string> terrain = {"registry", "oak"};
+        using renegade::bridge::CanFitTestLevelSnapshot;
+        // Eight scene bytes, six registry bytes and ten oak bytes.
+        return !CanFitTestLevelSnapshot(reserve + 20, 8, session, source, terrain) &&
+            !CanFitTestLevelSnapshot(reserve + 24, 8, session, source, terrain) &&
+            CanFitTestLevelSnapshot(reserve + 25, 8, session, source, terrain) &&
+            !CanFitTestLevelSnapshot(reserve + 25, UINTMAX_MAX, session, source, terrain);
     }
 
     bool NearlyEqual(const float left, const float right)
@@ -99,6 +119,9 @@ int main()
                 std::chrono::steady_clock::now()
                     .time_since_epoch()
                     .count()));
+
+    if (!CheckTerrainStorageBudget(fixture.path))
+        return Fail("Test Game storage selection miscounted terrain companions or the free-space reserve");
 
     const fs::path projectRoot = fixture.path / "Project";
     const fs::path scenePath =

@@ -1,4 +1,5 @@
 #include "renegade/bridge/ReusableAssetService.h"
+#include "WisceneEmbeddedResources.h"
 
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/FirstPersonAssemblyService.h"
@@ -118,30 +119,6 @@ namespace renegade::bridge
             return stream.str();
         }
 
-        bool WritePayload(
-            const fs::path& path,
-            const std::vector<std::uint8_t>& payload,
-            std::string& error)
-        {
-            std::ofstream stream(path, std::ios::binary | std::ios::trunc);
-            if (!stream)
-            {
-                error = "Could not stage reusable asset payload for placement: " +
-                    path.generic_u8string();
-                return false;
-            }
-            stream.write(
-                reinterpret_cast<const char*>(payload.data()),
-                static_cast<std::streamsize>(payload.size()));
-            if (!stream)
-            {
-                error = "Could not write complete reusable asset payload for placement.";
-                return false;
-            }
-            error.clear();
-            return true;
-        }
-
         bool ParsePlacementCreatorRecipe(
             const ReusableModelAssetManifest& manifest,
             CreatorModelImportRecipe& creatorRecipe,
@@ -207,7 +184,8 @@ namespace renegade::bridge
     }
 
     PreparedReusableModelPlacement ReusableAssetService::PrepareModelAssetPlacement(
-        const ReusableModelPlacementRequest& request) const
+        const ReusableModelPlacementRequest& request,
+        std::unordered_set<std::string>* embeddedResources) const
     {
         const auto reopenStarted = std::chrono::steady_clock::now();
         PreparedReusableModelPlacement prepared;
@@ -325,14 +303,8 @@ namespace renegade::bridge
         }
         const bool preparedCharacterAsset =
             creatorRecipe.assetKind == CreatorAssetImportKind::Character;
-        // WISCENE material resources can retain relative paths from the model
-        // import. For retained glTF sources, sidecar images/buffers live beside
-        // the retained source under SourceAssets. Rehydrate the payload from
-        // that same directory whenever the retained source is available so
-        // Wicked resolves those relative paths against the correct base. This
-        // fixes the creator-facing geometry-without-textures failure. If the
-        // source is unavailable, preserve the accepted source-independent
-        // placement fallback used by the lifecycle tests.
+        // Relative sidecar names use the retained source directory when it exists.
+        // Source-independent products keep their original fallback resource names.
         fs::path placementDirectory = root / "Intermediate" / "Imports";
         const AssetRecord* sourceRecord = FindRecordById(
             registry, provenance->sourceAssetId);
@@ -357,42 +329,24 @@ namespace renegade::bridge
             }
         }
 
-        fs::create_directories(placementDirectory, ec);
-        if (ec)
-        {
-            result.error =
-                "Could not create reusable placement working directory: " + ec.message();
-            return prepared;
-        }
-        const fs::path stagedPayload = placementDirectory /
-            fs::u8path(".renegade-" + request.assetId + "-" + GenerateStableId() + ".placement.wiscene");
-        fs::remove(stagedPayload, ec);
-        ec.clear();
-
-        const auto cleanup = [&stagedPayload]()
-        {
-            std::error_code ignored;
-            fs::remove(stagedPayload, ignored);
-        };
-        if (!WritePayload(stagedPayload, document.payload, result.error))
-        {
-            cleanup();
-            return prepared;
-        }
-
         prepared.scene_ = wi::allocator::make_shared_single<wi::scene::Scene>();
-        wi::Archive archive(stagedPayload.generic_u8string(), true, false);
+        wi::Archive archive(document.payload.data(), document.payload.size(),
+            placementDirectory.generic_u8string() + "/", false);
         if (!archive.IsOpen())
         {
             result.error = "Could not open reusable asset WISCENE payload for placement.";
             prepared.scene_.reset();
-            cleanup();
             return prepared;
         }
-        // The staged payload is deleted below and cannot remain a streaming
-        // container. Archive data is already decoded in memory; this policy
-        // forces native resource deserialization to retain embedded file bytes.
-        // No source product bytes or on-disk header are modified.
+        if (embeddedResources != nullptr &&
+            !ReadWisceneEmbeddedNames(archive.GetData(), archive.GetSize(), archive.GetPos(),
+                archive.GetVersion(), archive.GetSourceDirectory(), *embeddedResources))
+        {
+            result.error = "Reusable model WISCENE embedded resource table is incomplete.";
+            prepared.scene_.reset();
+            return prepared;
+        }
+        // Embedded resources must retain their bytes once the memory archive closes.
         archive.SetCompressionEnabled(true);
         prepared.scene_->Serialize(archive);
         if (archive.GetPos() != archive.GetSize())
@@ -400,11 +354,9 @@ namespace renegade::bridge
             result.error =
                 "Reusable asset WISCENE payload contains trailing or incomplete data.";
             prepared.scene_.reset();
-            cleanup();
             return prepared;
         }
-        archive = wi::Archive();
-        cleanup();
+        archive.Close();
         const auto sceneDone = std::chrono::steady_clock::now();
 
         // Character classification belongs to the durable import recipe, not

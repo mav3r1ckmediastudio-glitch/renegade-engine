@@ -4,6 +4,9 @@
 #include <memory>
 
 #include "renegade/bridge/VehiclePhysicsService.h"
+#include "renegade/bridge/FixedWingAerodynamics.h"
+#include "renegade/bridge/FlightVehicleService.h"
+#include "renegade/bridge/VehicleSteeringService.h"
 
 namespace
 {
@@ -232,6 +235,62 @@ int main()
     {
         return Fail("vehicle authoring silently created a rigid body");
     }
+
+    using namespace renegade::bridge;
+    body.vehicle.type = Type::Car;
+    const auto steeringWheel = scene.Entity_CreateTransform("Cockpit wheel");
+    scene.Component_Attach(steeringWheel, entity, true);
+    const auto roadWheel = scene.Entity_CreateTransform("Road wheel");
+    scene.Component_Attach(roadWheel, entity, true);
+    body.vehicle.wheel_entity_front_left = roadWheel;
+    const SteeringWheelSettings steering{steeringWheel, {0.f, 0.f, 1.f}, 90.f};
+    CommandService steeringCommands;
+    if (CanBindSteeringWheel(scene, entity, roadWheel) ||
+        !steeringCommands.Execute(std::make_unique<SetSteeringWheelCommand>(scene, entity, steering)) ||
+        CaptureSteeringWheel(scene, entity).entity != steeringWheel ||
+        !steeringCommands.Undo() || CaptureSteeringWheel(scene, entity).entity != wi::ecs::INVALID_ENTITY ||
+        !steeringCommands.Redo() || CaptureSteeringWheel(scene, entity).entity != steeringWheel)
+    {
+        return Fail("optional cockpit wheel binding or Undo/Redo failed");
+    }
+
+    const XMFLOAT4 rest{0.f, 0.f, 0.f, 1.f};
+    const auto right = SteeringWheelRotation(steering, rest, 0.5f, 0.5f);
+    const auto left = SteeringWheelRotation(steering, rest, -0.5f, 0.5f);
+    const auto centered = SteeringWheelRotation(steering, rest, 0.f, 0.5f);
+    if (!NearlyEqual(right.z, 0.7071068f) || !NearlyEqual(left.z, -right.z) ||
+        !NearlyEqual(centered.z, 0.f) || !NearlyEqual(centered.w, 1.f))
+    {
+        return Fail("cockpit wheel did not follow steering lock and centre");
+    }
+
+    const float first = SmoothSteeringAngle(0.f, 0.5f, 1.f / 60.f);
+    if (first <= 0.f || first >= 0.5f || SmoothSteeringAngle(first, 0.f, 1.f / 60.f) >= first)
+        return Fail("cockpit steering jumps to lock or fails to move back toward centre");
+
+    if (!SetPlayerVehicleMode(scene, entity, PlayerVehicleMode::VTOL) ||
+        !SetPlayerVehicleMode(scene, entity, PlayerVehicleMode::FixedWing) ||
+        !IsFixedWing(scene, entity) || !IsFlightVehicle(scene, entity) ||
+        GetPlayerVehicleMode(scene, entity) != PlayerVehicleMode::FixedWing ||
+        !SetPlayerVehicleMode(scene, entity, PlayerVehicleMode::ScriptedVTOL) ||
+        IsFixedWing(scene, entity) ||
+        GetPlayerVehicleMode(scene, entity) != PlayerVehicleMode::ScriptedVTOL)
+        return Fail("fixed-wing mode interfered with saved VTOL modes");
+
+    const FixedWingSetup trainer;
+    const FlightVector cruise{0.f, -2.8f, 30.f};
+    const auto neutralFlight = EvaluateFixedWing(trainer, {}, cruise, {}, 1.225f);
+    const auto controls = EvaluateFixedWing(trainer, {0, 1, 1, 1}, cruise, {}, 1.225f);
+    const auto stall = EvaluateFixedWing(trainer, {}, {0, -15.f, 26.2f}, {}, 1.225f);
+    const auto stationary = EvaluateFixedWing(trainer, {1}, {}, {}, 1.225f);
+    const auto rollTorque = controls[0].position.Cross(controls[0].force) +
+        controls[1].position.Cross(controls[1].force);
+    if (neutralFlight[0].force.y <= 0.f || !NearlyEqual(neutralFlight[0].force.y, neutralFlight[1].force.y) ||
+        rollTorque.z >= 0.f || controls[2].position.Cross(controls[2].force).x >= 0.f ||
+        controls[3].position.Cross(controls[3].force).y <= 0.f ||
+        stall[0].force.y >= neutralFlight[0].force.y || stall[0].force.z >= neutralFlight[0].force.z ||
+        stationary[0].force.y != 0.f || stationary[4].force.z <= 0.f)
+        return Fail("fixed-wing airflow, stall or control load direction failed");
 
     std::cout << "PASS: JP01 Wicked vehicle physics parity\n";
     return 0;

@@ -68,6 +68,28 @@ int main()
         return Fail("soft-body target accepted an entity with no mesh");
     }
 
+    const auto barricade = scene.Entity_CreateTransform("Rigid barricade");
+    const auto boardGroup = scene.Entity_CreateTransform("Board group");
+    scene.Component_Attach(boardGroup, barricade, true);
+    scene.Component_Attach(objectEntity, boardGroup, true);
+    scene.rigidbodies.Create(barricade);
+    if (renegade::bridge::CreateSoftBodyPhysicsCommand(scene, objectEntity).Execute() ||
+        renegade::bridge::CreateSoftBodyPhysicsCommand(scene, meshEntity).Execute() ||
+        scene.softbodies.Contains(meshEntity) || !scene.rigidbodies.Contains(barricade))
+    {
+        return Fail("soft-body creation must preserve a barricade board and its parent collider");
+    }
+    scene.rigidbodies.Remove(barricade);
+
+    const auto sharedObject = wi::ecs::CreateEntity();
+    scene.objects.Create(sharedObject).meshID = meshEntity;
+    if (renegade::bridge::CreateSoftBodyPhysicsCommand(scene, objectEntity).Execute() ||
+        scene.softbodies.Contains(meshEntity))
+    {
+        return Fail("soft-body creation must preserve other instances of a shared mesh");
+    }
+    scene.objects.Remove(sharedObject);
+
     SoftBodyPhysicsState initial;
     initial.detail = 0.8f;
     initial.mass = 4.0f;
@@ -108,6 +130,28 @@ int main()
     body = scene.softbodies.GetComponent(meshEntity);
     if (body == nullptr)
         return Fail("soft-body Redo lost the Mesh component target");
+
+    body->weights = {1.0f, 0.5f, 1.0f};
+    renegade::bridge::CommandService pinCommands;
+    if (!pinCommands.Execute(std::make_unique<renegade::bridge::SetSoftBodyPinsCommand>(
+            scene, objectEntity, wi::vector<uint32_t>{2, 0})))
+        return Fail("pin command rejected valid graphics vertices");
+
+    const wi::vector<float> pinned{0.0f, 0.5f, 0.0f};
+    if (body->weights != pinned ||
+        !pinCommands.Undo() || body->weights != wi::vector<float>{1.0f, 0.5f, 1.0f} ||
+        !pinCommands.Redo() || body->weights != pinned)
+        return Fail("pin weight Undo/Redo did not preserve custom weights");
+
+    wi::Archive weightArchive;
+    wi::ecs::EntitySerializer serializer;
+    serializer.version = 2; // Native soft-body component format with graphics vertex weights.
+    body->Serialize(weightArchive, serializer);
+    weightArchive.SetReadModeAndResetPos(true);
+    wi::scene::SoftBodyPhysicsComponent reopened;
+    reopened.Serialize(weightArchive, serializer);
+    if (reopened.weights != pinned)
+        return Fail("native soft-body archive lost pin weights");
 
     const auto before = renegade::bridge::CaptureSoftBodyPhysics(*body);
     auto after = before;

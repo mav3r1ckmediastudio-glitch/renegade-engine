@@ -9,12 +9,26 @@ name: LP04 Runtime handshake probe
 # re-run by hand if a future runner generation might support it.
 on:
   workflow_dispatch:
+    inputs:
+      standalone_asset_id:
+        description: 'Optional numeric release asset ID for a named Windows game ZIP'
+        required: false
+        type: string
+      standalone_flow_node:
+        description: 'Expected Story Flow node for the playable scene'
+        required: false
+        type: string
+      standalone_sha256:
+        description: 'Expected SHA-256 of the exported ZIP'
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   handshake:
+    if: inputs.standalone_asset_id == '' && inputs.standalone_sha256 == '' && inputs.standalone_flow_node == ''
     name: LP04 real Runtime handshake (Debug)
     runs-on: windows-2025
     timeout-minutes: 30
@@ -75,3 +89,51 @@ jobs:
           path: BUILD/renegade/Runtime/Debug/Logs/**
           if-no-files-found: ignore
           retention-days: 7
+
+  standalone:
+    if: inputs.standalone_asset_id != '' || inputs.standalone_sha256 != '' || inputs.standalone_flow_node != ''
+    name: Clean Windows named-game launch
+    runs-on: windows-2025
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Get the standalone verification script
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: /Tools/Test-WindowsStandalone.ps1
+
+      - name: Download the selected package
+        shell: pwsh
+        env:
+          ASSET_ID: ${{ inputs.standalone_asset_id }}
+          EXPECTED_SHA: ${{ inputs.standalone_sha256 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ($env:ASSET_ID -notmatch '^[1-9][0-9]*$' -or $env:EXPECTED_SHA -notmatch '^[a-fA-F0-9]{64}$') {
+            throw 'Both a numeric asset ID and a SHA-256 digest are required.'
+          }
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/octet-stream' }
+          $url = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/assets/$env:ASSET_ID"
+          Invoke-WebRequest -Uri $url -Headers $headers -OutFile "$env:RUNNER_TEMP/standalone.zip"
+
+      - name: Launch the packaged game from a clean profile
+        shell: pwsh
+        env:
+          EXPECTED_SHA: ${{ inputs.standalone_sha256 }}
+          EXPECTED_NODE: ${{ inputs.standalone_flow_node }}
+        run: |
+          ./Tools/Test-WindowsStandalone.ps1 -Archive "$env:RUNNER_TEMP/standalone.zip" -ArchiveSha256 $env:EXPECTED_SHA -Revision $env:GITHUB_SHA -ExpectedFlowNode $env:EXPECTED_NODE -Output "$env:RUNNER_TEMP/standalone-proof"
+
+      - name: Retain bootstrap and frame evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clean-windows-standalone-proof
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/standalone-proof/result.json
+            ${{ runner.temp }}/standalone-proof/frames.csv
+            ${{ runner.temp }}/standalone-proof/profile/**/RuntimeBootstrap.log

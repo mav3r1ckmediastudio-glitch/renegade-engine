@@ -10,6 +10,7 @@
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/WeatherTransitionService.h"
 #include "renegade/bridge/GameplayEventService.h"
+#include "renegade/bridge/PhysicsGameplayService.h"
 #include "renegade/bridge/IdentityService.h"
 
 #include <wiLua.h>
@@ -228,6 +229,8 @@ namespace renegade::runtime
 
         const bridge::RuntimePlayerState* playerState = nullptr;
         const bridge::GameplayInputFrame* gameplayInput = nullptr;
+        bridge::ScriptedFlightFrame scriptedFlight;
+        bool scriptedFlightDriven = false;
 
         static void* LuaAllocate(
             void* userData,
@@ -833,6 +836,74 @@ namespace renegade::runtime
 
 
         #include "RuntimeParticleLua.inl"
+
+        bool IsScriptedFlightPilot(lua_State* state)
+        {
+            if (!running || !scene || scriptedFlight.entity == wi::ecs::INVALID_ENTITY)
+                return false;
+            RuntimeScriptEntityReference reference;
+            std::string error;
+            if (!ReadEntityReferenceForApi(state, 1, reference, error))
+                return false;
+            RuntimeScriptEntityApi api(*scene, entitiesById, generation);
+            wi::ecs::Entity target = wi::ecs::INVALID_ENTITY;
+            return api.Resolve(reference, target, error) && target == scriptedFlight.entity &&
+                bridge::GetPlayerVehicleMode(*scene, target) == bridge::PlayerVehicleMode::ScriptedVTOL;
+        }
+
+        static int FlightPilotInputLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            if (!owner || !owner->IsScriptedFlightPilot(state))
+            {
+                lua_pushnil(state);
+                return 1;
+            }
+            const auto& input = owner->scriptedFlight.input;
+            lua_pushnumber(state, input.thrust);
+            lua_pushnumber(state, input.yaw);
+            lua_pushnumber(state, input.climb);
+            return 3;
+        }
+
+        static int DriveScriptedFlightLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            if (!owner || !owner->IsScriptedFlightPilot(state) || owner->scriptedFlightDriven)
+                return PushNilError(state, "Scripted VTOL drive requires the piloted hull and one command per frame.");
+            const bridge::FlightVehicleInput input{
+                static_cast<float>(luaL_checknumber(state, 2)),
+                static_cast<float>(luaL_checknumber(state, 3)),
+                static_cast<float>(luaL_checknumber(state, 4))};
+            if (!std::isfinite(input.thrust) || !std::isfinite(input.yaw) || !std::isfinite(input.climb))
+                return PushNilError(state, "Scripted VTOL inputs must be finite.");
+            float target = static_cast<float>(luaL_optnumber(state, 5, std::numeric_limits<float>::quiet_NaN()));
+            const auto& frame = owner->scriptedFlight;
+            if (!bridge::DriveFlightVehicle(*owner->scene, frame.entity, input, frame.dt, target))
+                return PushNilError(state, "The scripted VTOL physics body is unavailable.");
+            owner->scriptedFlightDriven = true;
+            lua_pushnumber(state, target);
+            return 1;
+        }
+
+        static int BreakDestructibleLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            if (!owner || !owner->running || !owner->scene)
+                return PushFalseError(state, "Destructibles require a running Level.");
+            RuntimeScriptEntityReference reference;
+            std::string error;
+            if (!owner->ReadEntityReferenceForApi(state, 1, reference, error))
+                return PushFalseError(state, error);
+            RuntimeScriptEntityApi api(*owner->scene, owner->entitiesById, owner->generation);
+            wi::ecs::Entity target = wi::ecs::INVALID_ENTITY;
+            if (!api.Resolve(reference, target, error))
+                return PushFalseError(state, error);
+            if (!bridge::RequestDestructibleBreak(*owner->scene, target))
+                return PushFalseError(state, "The entity has no intact destructible collider.");
+            lua_pushboolean(state, 1);
+            return 1;
+        }
 
         static int LightGetStateLua(lua_State* state) {
             Impl* owner=FromUpvalue(state);
@@ -1546,6 +1617,18 @@ namespace renegade::runtime
             lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,LightSetStateLua,1);lua_setfield(lua,-2,"set_state");
             lua_setfield(lua,-2,"light");
             RegisterParticleLua();
+
+            lua_newtable(lua);
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, BreakDestructibleLua, 1);
+            lua_setfield(lua, -2, "break_destructible");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, FlightPilotInputLua, 1);
+            lua_setfield(lua, -2, "vtol_pilot_input");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, DriveScriptedFlightLua, 1);
+            lua_setfield(lua, -2, "vtol_pilot_drive");
+            lua_setfield(lua, -2, "physics");
 
             lua_newtable(lua);
             lua_pushinteger(lua, 1);
@@ -2484,6 +2567,12 @@ namespace renegade::runtime
     {
         impl_->playerState = player;
         impl_->gameplayInput = input;
+    }
+
+    void RuntimeScriptRuntime::SetScriptedFlightFrame(const bridge::ScriptedFlightFrame& frame) noexcept
+    {
+        impl_->scriptedFlight = frame;
+        impl_->scriptedFlightDriven = false;
     }
 
     void RuntimeScriptRuntime::SetInventoryGatewayProvider(

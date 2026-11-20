@@ -1,0 +1,59 @@
+{
+  "slug": "heather-clump",
+  "name": "Heather Clump",
+  "category": "plants",
+  "tags": [
+    "plant",
+    "shrub",
+    "heather",
+    "ling",
+    "calluna",
+    "dwarf shrub",
+    "heath",
+    "moor",
+    "forest floor",
+    "flowers",
+    "nature"
+  ],
+  "description": "Flowering common heather (ling) clump about 40 cm tall: a woody, twisted base and dense dark green shoots topped with spikes of small purple flowers. Origin on the ground at the centre; carries _WIND data for vertex shader sway.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-10-26",
+  "updated": "2026-10-26",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 0.689,
+    "y": 0.395,
+    "z": 0.732
+  },
+  "parts": [],
+  "animations": [],
+  "wind": true,
+  "preview": "/models/heather-clump/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/heather-clump/v1/lod0.glb",
+      "bytes": 512872,
+      "sha256": "d5f9aa221e9e8118ba29b8c481131f67d59bc1232ebcc0b8d58eef2a82ec8ded",
+      "triangles": 8388
+    },
+    {
+      "lod": 1,
+      "path": "/models/heather-clump/v1/lod1.glb",
+      "bytes": 212388,
+      "sha256": "5f95e4e9370303c555bcc2457c22ffb05ab9f017c4fe61b4e1a621cb62a1bcb8",
+      "triangles": 1936
+    },
+    {
+      "lod": 2,
+      "path": "/models/heather-clump/v1/lod2.glb",
+      "bytes": 150104,
+      "sha256": "c574ff9f0ef72b06bc4ec29719d5265f04abf5963c3b732dbd2dc59f12428ea6",
+      "triangles": 88
+    }
+  ]
+}

@@ -6,6 +6,7 @@
 #include "renegade/bridge/SpecialistComponentService.h"
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/TerrainService.h"
+#include "renegade/bridge/TerrainPropTerrainPhysics.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/ProjectService.h"
@@ -550,6 +551,14 @@ int main(int argc, char** argv)
         // Bound draw scheduling for the new software-rendered proof while
         // keeping the desktop, full terrain and rendering resolution unchanged.
         const bool boundedInitialization = (freshInitialization || maximumRecovery || maximumRender) && hosted;
+        // A cold player requests its ground while the native camera requests the same chunks.
+        namespace propTerrain = wi::physics::terrain_props;
+        const propTerrain::TerrainRequests spawnChunks{{0, 0}, {-1, -1}, {1, 0}};
+        if (freshInitialization)
+        {
+            std::string error;
+            Require(propTerrain::SetTerrainRequests(scene, terrainID, spawnChunks, error), error.c_str());
+        }
         const int proofWidth = 960;
         const int proofHeight = 640;
         wi::scene::CameraComponent camera;
@@ -727,6 +736,21 @@ int main(int argc, char** argv)
         if (defaultRecovery)
         {
             progress("default-361-ready");
+            if (freshInitialization)
+            {
+                for (const auto& key : spawnChunks)
+                {
+                    wi::terrain::Chunk coord{};
+                    coord.x = key.x;
+                    coord.z = key.z;
+                    const auto record = propTerrain::GetTerrainChunk(scene, terrainID, key);
+                    const auto chunk = terrain->chunks.find(coord);
+                    Require(chunk != terrain->chunks.end() && record.valid &&
+                        record.entity == chunk->second.entity && scene.meshes.Contains(record.entity),
+                        "Overlapping spawn and camera requests must publish the same live chunk");
+                }
+                propTerrain::ClearTerrainRequests(scene);
+            }
             Require(chunksBefore==361,"Creator-default 19x19 terrain was not generated");
             Require(!terrain->IsGrassEnabled() && scene.hairs.GetCount() == 0,
                 "Untouched terrain generated unconfigured procedural grass");

@@ -1,3 +1,4 @@
+#include "renegade/bridge/TerrainPropDetailFade.h"
 #include <WickedEngine.h>
 #include "../Runtime/src/RuntimePropModelResidency.h"
 #include "../Runtime/src/RuntimePropCellResidency.h"
@@ -230,10 +231,12 @@ static int MeasureMeshDetail(const char* root, const char* project, const char* 
         if (!fallback.Place(a,error) || !fallback.Place(b,error)) throw std::runtime_error(error);
     }
     const auto low = measure("coarse");
+    const size_t coarseParts = scene.objects.GetCount();
     acquire(detail,a);
     const auto shared = measure("fine_one_cell");
     acquire(detail,b);
     if (measure("fine_two_cells") != shared) return 41;
+    const size_t fineParts = scene.objects.GetCount() - coarseParts;
     detail.Release({0,0});
     if (measure("fine_one_remaining") != shared) return 42;
     detail.Release({1,0});
@@ -260,8 +263,15 @@ static int MeasureMeshDetail(const char* root, const char* project, const char* 
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         } while (true);
         size_t visible=0;
-        for (size_t i=0; i<scene.objects.GetCount(); ++i) if (scene.objects[i].IsRenderable()) ++visible;
-        if (visible!=2 || measure(phase)!=expected) throw std::runtime_error("Distance transition lost coverage or mesh residency");
+        for (size_t i=0; i<scene.objects.GetCount(); ++i) {
+            const auto& object=scene.objects[i];
+            if (!object.IsRenderable()) continue;
+            ++visible;
+            if (object.color.w!=1.f || (object._flags & RENEGADE_TERRAIN_PROP_DETAIL_FADE))
+                throw std::runtime_error("Settled detail retained a partial fade");
+        }
+        if (visible!=(expected==low ? coarseParts : fineParts) || measure(phase)!=expected)
+            throw std::runtime_error("Distance transition lost coverage or mesh residency");
     };
     travel(400,"distance_far",low);
     scheduler.Update(scene,revision,world.get(),root,project,{0,0,0});
@@ -272,6 +282,35 @@ static int MeasureMeshDetail(const char* root, const char* project, const char* 
     travel(0,"distance_near",shared);
     travel(400,"distance_released",low);
     travel(0,"distance_return",shared);
+    const auto step = [&](float x) {
+        scheduler.Update(scene,revision,world.get(),root,project,{x,0,0},nullptr,1.f/75.f);
+    };
+    const auto checkOverlap = [&]() {
+        float coarseCoverage = -1.f;
+        bool fineVisible = false;
+        for (size_t i=0; i<scene.objects.GetCount(); ++i) {
+            const auto& object=scene.objects[i];
+            const auto* meta=scene.metadatas.GetComponent(scene.objects.GetEntity(i));
+            if (!meta || meta->string_values.get(TerrainPropPlacementMetadataKey)!="1") continue;
+            if (!object.IsRenderable()) throw std::runtime_error("Reversing detail lost a representation");
+            if (meta->string_values.has("renegade.terrain_props.coarse")) {
+                if (!(object.color.w>0.f && object.color.w<1.f) || !(object._flags & RENEGADE_TERRAIN_PROP_DETAIL_FADE))
+                    throw std::runtime_error("Coarse overlap lost fractional coverage or shadow fade");
+                coarseCoverage=object.color.w;
+            } else if (meta->string_values.has("renegade.terrain_props.fine")) {
+                if (object.color.w!=1.f) throw std::runtime_error("Detail overlap lost its full silhouette");
+                fineVisible=true;
+            }
+        }
+        if (coarseCoverage<0.f || !fineVisible || scheduler.Settled())
+            throw std::runtime_error("Incomplete detail overlap");
+        return coarseCoverage;
+    };
+    for (int i=0; i<8; ++i) step(400);
+    const float outgoing=checkOverlap();
+    for (int i=0; i<4; ++i) step(0);
+    if (checkOverlap()>=outgoing || measure("distance_reversed")!=shared)
+        throw std::runtime_error("Reversing detail restarted the fade or changed mesh residency");
     ++revision;
     travel(400,"resident_revision_released",low);
 
