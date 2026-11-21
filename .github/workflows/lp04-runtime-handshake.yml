@@ -28,8 +28,12 @@ permissions: {}
 jobs:
   standalone:
     if: github.ref == 'refs/heads/qa/terrain-props-p6-clean-windows' && github.repository == 'mav3r1ckmediastudio-glitch/renegade-engine'
-    name: Clean Windows named-game launch
-    runs-on: windows-2025
+    name: Clean Windows named-game launch (${{ matrix.image }})
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [windows-2025, windows-2022]
+    runs-on: ${{ matrix.image }}
     timeout-minutes: 15
     permissions:
       contents: write
@@ -57,6 +61,13 @@ jobs:
           $url = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/assets/$env:ASSET_ID"
           Invoke-WebRequest -Uri $url -Headers $headers -OutFile "$env:RUNNER_TEMP/standalone.zip"
 
+      - name: Record display environment
+        shell: pwsh
+        run: |
+          Get-CimInstance Win32_OperatingSystem | Format-List Caption, Version, BuildNumber
+          Get-CimInstance Win32_VideoController | Format-List Name, DriverVersion, Status
+          "Session: $([Diagnostics.Process]::GetCurrentProcess().SessionId)"
+
       - name: Launch the packaged game from a clean profile
         shell: pwsh
         env:
@@ -65,13 +76,29 @@ jobs:
         run: |
           ./Tools/Test-WindowsStandalone.ps1 -Archive "$env:RUNNER_TEMP/standalone.zip" -ArchiveSha256 $env:EXPECTED_SHA -Revision 83636ca548c3165cb809dbbb7d38851d9487d160 -ExpectedFlowNode $env:EXPECTED_NODE -Output "$env:RUNNER_TEMP/standalone-proof"
 
+      - name: Record the executable fault
+        if: failure()
+        shell: pwsh
+        run: |
+          Start-Sleep -Seconds 4
+          $path = Join-Path $env:RUNNER_TEMP 'woodland-diagnostics.txt'
+          $filter = @{LogName='Application'; Id=1000,1001; StartTime=(Get-Date).AddMinutes(-8)}
+          $events = @(Get-WinEvent -FilterHashtable $filter -ErrorAction SilentlyContinue |
+              Where-Object { $_.Message -match 'TerrainPropsStockReview\.exe' })
+          if ($events.Count) {
+            $events | Select-Object Id, ProviderName, TimeCreated, Message | Format-List | Out-String | Tee-Object -FilePath $path
+          } else {
+            'No Application Error event was available for the named game.' | Tee-Object -FilePath $path
+          }
+
       - name: Retain bootstrap and frame evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: clean-windows-standalone-proof
+          name: clean-windows-standalone-proof-${{ matrix.image }}
           if-no-files-found: warn
           path: |
+            ${{ runner.temp }}/woodland-diagnostics.txt
             ${{ runner.temp }}/standalone-proof/result.json
             ${{ runner.temp }}/standalone-proof/frames.csv
             ${{ runner.temp }}/standalone-proof/profile/**/RuntimeBootstrap.log
