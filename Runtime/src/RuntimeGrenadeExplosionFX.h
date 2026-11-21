@@ -1,5 +1,5 @@
 #pragma once
-// Grenade-only visual presentation: flame front -> debris -> turbulent soot/dust.
+// Shared blast presentation: flame front, debris and turbulent soot/dust.
 // All gameplay blast, damage, ownership and timing stay in ProjectileSession.
 #include "renegade/bridge/ProjectileEffectRuntime.h"
 #include <WickedEngine.h>
@@ -63,7 +63,7 @@ struct RuntimeGrenadeExplosionFX {
         device->CreateTexture(&desc,&data,&texture);
         return texture;
     }
-    static std::vector<Burst> Create(wi::scene::Scene& scene,const XMFLOAT3& position) {
+    static std::vector<Burst> Create(wi::scene::Scene& scene,const XMFLOAT3& position, float scale = 1.f) {
         std::vector<Burst> out;out.reserve(Count);
         struct Recipe {
             Layer layer;float size;unsigned particles;float particleLife;
@@ -84,11 +84,11 @@ struct RuntimeGrenadeExplosionFX {
             bridge::ProjectileEffectLayer request;
             request.kind=recipe.layer==Soot||recipe.layer==Dust
                 ?bridge::ProjectileEffectKind::Smoke:bridge::ProjectileEffectKind::Sparks;
-            request.sizeMetres=recipe.size;
+            request.sizeMetres=recipe.size * scale;
             request.particleLifeSeconds=recipe.particleLife;
             request.particlesPerSecond=1;
-            const XMFLOAT3 at{position.x+recipe.offset.x,
-                position.y+recipe.offset.y,position.z+recipe.offset.z};
+            const XMFLOAT3 at{position.x+recipe.offset.x*scale,
+                position.y+recipe.offset.y*scale,position.z+recipe.offset.z*scale};
             const auto entity=bridge::CreateProjectileEffectEmitter(scene,request,at,true);
             if(entity==wi::ecs::INVALID_ENTITY)continue;
             if(auto* emitter=scene.emitters.GetComponent(entity)){
@@ -96,7 +96,8 @@ struct RuntimeGrenadeExplosionFX {
                 emitter->SetMaxParticleCount(recipe.particles+4);
                 emitter->count=0;
                 emitter->random_factor=recipe.spread;
-                emitter->velocity=recipe.velocity;
+                emitter->velocity={recipe.velocity.x*scale, recipe.velocity.y*scale, recipe.velocity.z*scale};
+                if(scale>1.f)emitter->normal_factor=1.7f*scale;
                 emitter->gravity=recipe.gravity;
                 emitter->scaleX=recipe.scaleX;emitter->scaleY=recipe.scaleY;
                 emitter->random_life=.25f;

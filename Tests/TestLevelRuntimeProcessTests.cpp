@@ -90,6 +90,13 @@ namespace
     TestLevelSnapshot MakeDeferredSnapshot(const fs::path& root, const std::string& token)
     {
         auto snapshot = MakeSnapshot(root, token);
+        {
+            std::ofstream descriptor(snapshot.descriptorPath, std::ios::trunc);
+            descriptor << "format = renegade-project\nversion = 1\n\n[project]\n"
+                       << "project_id = 238768e6-c842-45ce-875c-a3b909f7ac5c\n"
+                       << "name = DeferredFixture\n"
+                       << "startup_scene = Content/Scenes/TestLevel.wiscene\n";
+        }
         wi::scene::Scene scene;
         scene.Entity_CreateTransform("Deferred validation fixture");
         wi::Archive archive(snapshot.scenePath, false, false);

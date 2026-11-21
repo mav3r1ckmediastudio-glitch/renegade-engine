@@ -1,5 +1,18 @@
 # Architecture
 
+## Gameplay physics adapter
+
+The Physics Lab samples counts and timings from the native scene through EngineBridge. Diagnostic requests and queued paused steps belong to the scene's physics state and the contact sample shares the native listener. A paused step feeds back the resulting pose without interpolation. Diagnostics do not need a subscription to the gameplay event queue.
+
+Compound colliders use named transform children of the root rigid body. A child stores its primitive type in scene metadata and the existing transform stores its size and local pose. The generated native adapter reads the root's indexed children and builds one Jolt shape with the root's body properties. Constraint marker transform commands invalidate the existing native constraint so the next physics update can use the edited frame.
+
+Scripted VTOL uses Runtime's existing boarding, camera and gameplay input path. The host hands the governed Lua runtime a pilot frame for the selected hull before creator updates, then clears it. Creator scripts make one flight command per frame through the same EngineBridge stabilizer as native VTOL. The mode is stored alongside the existing flight metadata, and ordinary VTOL retains its native input path.
+
+Cockpit steering stores its settings on the visual child under the Car chassis. Native archives and prefab copies preserve that ownership through the hierarchy. The generated Wicked/Jolt wrapper reads the front wheels' steering angle between steps. Runtime applies a local rotation relative to the authored rest pose while the player drives the car.
+
+Impact destructibles reuse the scene-owned native contact listener. Only prepared play sessions track authored destructible roots. A Jolt contact callback records closing speed and direction without mutating the scene. The Runtime consumes pending impacts before its next scene update, validates every piece, then replaces the intact collider with dynamic bodies. Thresholds are entity metadata and release state belongs to the play scene. The intact-swap trial marks one descendant as the intact visual and authors the remaining mesh descendants hidden. On release, the intact visual is hidden and the pieces are shown and given convex colliders, with fitted boxes for pieces without a valid convex volume. Light impacts rattle the intact visual. Assembled pieces retain their original release behaviour. Weapon hit points use the same release queue and stay transient in the native scene. Hitscan and travelling shots consume the equipment definition damage. The accepted independent-hands swing queries reach and cover through the shared scene hit path. Existing scenes without an authored hit point rule retain their impact thresholds. Optional blast speed uses the intact collider centre and fragment geometry centres to launch debris outward, and supplies the Runtime with one presentation position on successful release. Runtime uses its shared blast effect lifecycle. The Lua break event retains its existing layout. Optional debris timing is authored on the root. Released pieces are tracked only by the play scene, fade with per-instance opacity, and have their entities and bodies removed at expiry. The intact-mesh authoring command sets the existing child role and restores prior visibility on Undo. The asset inspector blast preset checks the authored break trigger and shares fragment bounds and constraint validation with Runtime. It writes the same blast speed used by Physics Lab.
+The generated Wicked/Jolt wrapper owns native bodies and contact callbacks. EngineBridge defines scene-entity sensor settings, filtered query results and opt-in contact batches for Studio, Runtime and Lua. Native contact keys stay in the wrapper, and Lua reads a bounded scene-owned queue at the normal scene safe point. Sensor settings and rigid-body collision filters persist in the existing entity metadata archive and use the shared editor command stack. The native adapter preserves Wicked's motion class in the low bits of Jolt's object layer and encodes Renegade's layer and mask above it. Broad-phase mapping uses the motion class. The Jolt pair filter requires permission from both bodies. A live filter edit reuses the existing body and invalidates cached contacts. See [Jolt gameplay coverage](JOLT_GAMEPLAY_COVERAGE.md).
+
 ## Current integrated ownership — 10 November 2026
 
 The current source baseline is main 618b231 (PR #193), with Wicked pinned to
@@ -2409,6 +2422,33 @@ restore that preference; path tracing temporarily suspends it. Dedicated
 coplanar overlay PSOs are compiled through a bounded generated-source overlay,
 with the original renderer and submodule pin preserved. See WIREFRAME_VIEW_MODE.md.
 
+## Reusable vehicle starter projects
+
+The standalone vehicle project creator copies a complete authored starter into a new directory. It retains scene and entity identifiers, assigns a fresh project identifier, updates owned sidecar references and refreshes asset registry hashes. Each starter opens as an ordinary editable Studio project with the same main level and input setup as its authored demo.
+
+Merlin and Oriole use two additional modes of the native pre-step force controller. Merlin applies rotor lift at the authored hub, uses an altitude-hold and yaw-rate controller, and drives its display pivots separately from the rigid body. Oriole resolves its authored nozzles once per registration and mixes local translation and rotation into forces at those nozzle positions. Gravity compensation applies only to the registered craft so the pilot can board from a normal-gravity deck. With neutral input and zero damping the craft conserves momentum. The standard vehicle boarding and camera services own the player lifecycle, while C++ and governed Lua can command each controller independently.
+
+The Scene Inspector's Cockpit Camera section stores an optional chassis-local position and pitch/yaw/roll with a vertical field of view in native vehicle metadata. Studio and Runtime use the same camera transform and default marker rules. Set From View converts the perspective viewport into chassis space. The temporary editor preview leaves authored visibility unchanged and restores the viewport when it ends. Runtime applies the optional projection during the cockpit view and restores the preceding projection before the next camera owner runs.
+
+The original Workshop Van starter is exported from a procedural Blender source and assembled into a scene by the native author tool. A dedicated BrakeLights mesh below the active chassis uses M_VehicleBrakeLights for emissive braking. Existing local atlas-based projects still use the legacy brake mask.
+
+The tracked Player Controls mode registers a native tracked constraint on a dynamic rigid body with native Vehicle Type left at None. The tracked tuning fields live in chassis metadata. The native registration reads layout, suspension, grip, brakes and drivetrain parameters from the same typed bridge header used by Studio. Tracked uses the shared Ray, Sphere and Cylinder contact selection. With no named suspension anchors, the runtime supplies nine contact stations per side. Authored shoe loops remain a presentation binding.
+
+
+## Bastion tracked-vehicle trial
+
+A serialized tracked tag and 18 descendant suspension anchors enable the Bastion driving trial. The TrackedVehicleService attaches a Jolt tracked constraint to each registered chassis and removes it with the native rigid body. It exposes differential steering and track, wheel and contact state to the Runtime. The track shoe meshes follow independent fixed visual loops driven by Jolt's track speeds. Wheel meshes follow live suspension. The shoe loops keep their authored shape over terrain.
+
+The Bastion turret trial uses local transforms for traverse and elevation while the hull remains a Jolt tracked vehicle. Aim holds a world point at a fixed reference distance. The Runtime exposes that point and the actual barrel direction as separate HUD marks. Turret shots use the existing projectile session with per-shot chassis exclusion. Bastion muzzle bursts and scaled impact blasts use the shared Runtime projectile presentation and its transient cleanup. Aim and Fire come from the existing gameplay input map.
+
+## Physical VTOL
+
+Physical VTOL is an opt-in player-vehicle mode for a regular dynamic Jolt body. FlightVehicleService owns the authored mode and the C++ command surface. Lua and Runtime pass normalized commands to the scene's per-aircraft controller state. The generated Wicked Jolt override runs the controller before each Jolt step. It reads the body orientation, gravity and velocity, then adds body-axis lift, drag and attitude torque. A filtered ray and the chassis lower bounds identify the landing surface. On touchdown the surface bears the craft's weight while the player can disembark after stopping.
+
+## Fixed-wing physics
+
+Runtime resolves named aircraft rig nodes at scene activation. The serialized player-vehicle mode opts the dynamic chassis in. Each native physics scene owns its registered aircraft inputs and telemetry. The generated Wicked adapter samples the Jolt body immediately before each fixed step, computes Renegade-owned aerodynamic loads from relative airflow and applies those loads at their local centres. The same step evaluates sprung wheel contacts. Optional chassis metadata stores authoring coefficients. Part-role tags on descendants survive archive reload and prefab cloning without storing scene-local entity IDs. Visual control surfaces and cockpit cameras use the authored aircraft hierarchy.
+
 ## Terrain prop placement authority
 
 The P0/P1 bridge owns immutable placement revisions and a shared native projection. The archive boundary, wire formats, restore path and proposed P2/streaming interfaces are specified in [Terrain props P0/P1](TERRAIN_PROP_P1.md).
@@ -2501,3 +2541,15 @@ span, including when an archive embeds it. The native resource and queued work
 keep that handle alive. Project and package paths, product identity, semantic
 and content digest distinguish cache entries across relocation and reimport.
 The overlay checks its upstream anchors during configuration.
+
+### Terrain prop detail and shadow coverage
+
+The Windows player blends separately registered coarse and fine products over 0.55 seconds when a residency cell changes target. The active cell and profile keep the current transition weight. A reversal resumes from that weight. One model stays fully covered while the other fills or recedes, and the last outgoing fine page releases its shared mesh lease at the far endpoint. Native object and page lookups restrict each transition update to its projected parts. Render coverage belongs to the live projection and uses the application's elapsed frame time.
+
+The pinned renderer already converts object opacity to dithered visible coverage, including for opaque materials. Its alpha-tested shadow pass only considers material textures and alpha thresholds. Core-patch decision: the configure-time overlay in `cmake/RenegadeTerrainPropDetailFade.cmake` copies bit 22 from the projected native object flags to the existing shader instance flags, then uses object opacity for shadow-map dithering only when that bit is present. The bridge sets the bit only on fractional terrain detail coverage. Both languages consume `TerrainPropDetailFade.h`. This retains the native material cutout at every step and leaves fully visible objects on their ordinary shader path. On a Wicked update, check the bit against both native flag layouts, recheck the instance upload and shadow-pass anchors, rebuild embedded shaders and repeat the ground and elevated capture.
+
+### Reusable model placement from a read-only installation
+
+A governed model product already contains its native WISCENE payload. Placement now reads that span directly. Its logical resource directory is the retained source folder when available and the existing project-relative fallback otherwise. Both embedded names and loose sidecar lookups keep the same base. Embedded resources retain their bytes after placement.
+
+Core-patch decision: the pinned Wicked memory archive has no way to supply a logical source directory or suppress version dialogs. The configure-time overlay in `EngineBridge/patches/ReusableModelMemoryArchive.patch` adds an overload for those two inputs. The archive has no backing filename and placement creates no temporary file. When updating Wicked, check the native header and thumbnail layout, resource-name joining and retained-data behavior. Reopen both compressed and uncompressed products, then launch an exported game from a write-protected installation.

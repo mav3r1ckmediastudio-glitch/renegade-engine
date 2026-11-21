@@ -1,0 +1,72 @@
+{
+  "asset": "fern_02",
+  "provider": "Poly Haven",
+  "source_page": "https://polyhaven.com/a/fern_02",
+  "license": "CC0-1.0",
+  "license_source": "https://polyhaven.com/license",
+  "resolution": "2k",
+  "inputs": [
+    {
+      "path": "fern_02.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/2k/fern_02/fern_02_2k.gltf",
+      "size": 6899,
+      "sha256": "50540d37531f93fd693d5340d5b3095c9d6d2834fa05c74bea797d54f290cb6a"
+    },
+    {
+      "path": "textures/fern_02_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/fern_02/fern_02_diff_2k.jpg",
+      "size": 993703,
+      "sha256": "9ee18172170728050871772e2cd6d8d37b52f9138e61b49b04486623f9caf84b"
+    },
+    {
+      "path": "textures/fern_02_arm_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/fern_02/fern_02_arm_2k.jpg",
+      "size": 850856,
+      "sha256": "1eaf9bd29e2d83a77ca5d89bdddebcd9216b8b4ba244644580fe5b89bbe713f1"
+    },
+    {
+      "path": "fern_02.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/fern_02/fern_02.bin",
+      "size": 176176,
+      "sha256": "fe1abb762bcbbc7ad9e86925c8080437a62add257d9280e9142fdc85c226e64c"
+    },
+    {
+      "path": "textures/fern_02_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/fern_02/fern_02_nor_gl_2k.jpg",
+      "size": 1365615,
+      "sha256": "dfe1ac4a428d21f7c134411500177d66b8dd800c8fec6f0040c50f44414a777b"
+    }
+  ],
+  "source_gltf": "fern_02.gltf",
+  "scene_nodes": [
+    "fern_02_b",
+    "fern_02_c",
+    "fern_02_a",
+    "fern_02_d"
+  ],
+  "product": "WoodlandFern.glb",
+  "sha256": "531a6b9894dd0bca1f534c2d2a9e2704131b33ffaf1d171e0d47fe74d4eedd65",
+  "dimensions_m": [
+    0.55194,
+    0.2868,
+    0.61342
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "source_node": "fern_02_a",
+  "authors": {
+    "Rob Tuytel": "scanning",
+    "Rico Cilliers": "modeling"
+  },
+  "alpha_map": {
+    "path": "fern_02_alpha_2k.png",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/2k/fern_02/fern_02_alpha_2k.png",
+    "sha256": "f51eb9b8f9f4b25a882f8fe12d1ef53ba69448bac7e71396ec1f05b684e9ea75"
+  },
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    -0.0,
+    -0.0,
+    -0.0
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "source_page": "https://tevy.dev/models/silver-birch",
+  "license": "CC0-1.0",
+  "license_source": "https://tevy.dev/docs",
+  "source_product": "SilverBirch",
+  "instance_transforms": [
+    [
+      [
+        -0.23,
+        0,
+        0
+      ],
+      0.19,
+      [
+        0.63,
+        0.78,
+        0.63
+      ]
+    ],
+    [
+      [
+        0.35,
+        0,
+        0.24
+      ],
+      2.61,
+      [
+        0.56,
+        0.69,
+        0.56
+      ]
+    ]
+  ],
+  "pivot": "Centre of the trunk base at ground level",
+  "preparation": "Distinct composition using shared source mesh and material resources.",
+  "product": "BirchCoppice.glb",
+  "category": "Broadleaf trees",
+  "up": "+Y",
+  "dimensions_m": [
+    7.02017,
+    14.19944,
+    6.69971
+  ],
+  "sha256": "1855cf18e07c5c2a29481e386008e844ddbfd1302283b911f14afb06a0645dbd",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    -0.05566989168944089,
+    0.1560000023245811,
+    -0.06624296391076367
+  ]
+}

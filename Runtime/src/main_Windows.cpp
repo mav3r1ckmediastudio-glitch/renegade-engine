@@ -458,7 +458,6 @@ namespace
             return 0;
 
         case WM_DESTROY:
-            application.ShutdownForProcessExit();
             PostQuitMessage(application.ExitCode());
             return 0;
 
@@ -740,6 +739,7 @@ int APIENTRY wWinMain(
         }
     }
 
+    application.ShutdownForProcessExit();
     wi::jobsystem::ShutDown();
     return static_cast<int>(message.wParam);
 }

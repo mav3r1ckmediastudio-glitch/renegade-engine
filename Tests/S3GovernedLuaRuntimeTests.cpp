@@ -322,6 +322,50 @@ int main()
     }
 
 
+    // Flight pilot authority is frame-scoped and requires the opt-in vehicle mode.
+    {
+        wi::scene::Scene flightScene;
+        const auto hull = flightScene.Entity_CreateTransform("Scripted VTOL fixture");
+        if (!AssignNewPersistentEntityId(flightScene, hull, error) ||
+            !SetPlayerVehicleMode(flightScene, hull, PlayerVehicleMode::VTOL))
+            return Fail("VTOL fixture: " + error);
+
+        auto document = CreateScriptDocument(projectId, GenerateStableId(),
+            "Content/Scenes/Flight.wiscene", "test");
+        if (!WriteText(scripts / "flight_pilot.lua", R"lua(
+local frame = 0
+return { on_update = function(self)
+    frame = frame + 1
+    local thrust, yaw, climb = renegade.physics.vtol_pilot_input(self.entity)
+    if frame == 2 then
+        assert(math.abs(thrust - 0.5) < 0.001 and yaw == -1 and climb == 1)
+    else
+        assert(thrust == nil)
+    end
+    -- The fixture has no live body, and drive must never create one.
+    assert(renegade.physics.vtol_pilot_drive(self.entity, 0, 0, 0) == nil)
+end }
+)lua", error) ||
+            !Add(document, ScriptScope::Entity, PersistentEntityId(flightScene, hull),
+                Source("Content/Scripts/flight_pilot.lua"), error))
+            return Fail("VTOL script fixture: " + error);
+
+        RuntimeScriptRuntime runtime;
+        if (!runtime.StartScene(document, flightScene, root.generic_u8string(), error))
+            return Fail("VTOL script start: " + error);
+        const ScriptedFlightFrame pilot{hull, {0.5f, -1.f, 1.f}, 1.f / 60.f};
+        runtime.SetScriptedFlightFrame(pilot);
+        runtime.Update(pilot.dt);
+        if (!SetPlayerVehicleMode(flightScene, hull, PlayerVehicleMode::ScriptedVTOL))
+            return Fail("VTOL script mode was not applied");
+        runtime.SetScriptedFlightFrame(pilot);
+        runtime.Update(pilot.dt);
+        runtime.SetScriptedFlightFrame({});
+        runtime.Update(pilot.dt);
+        if (runtime.ActiveInstanceCount() != 1 || !runtime.Diagnostics().empty())
+            return Fail("VTOL script authority or input routing failed");
+    }
+
     // Weather G3: bounded Lua API, smooth game-time progression, paused state,
     // target query, once-only completion, and cancel/instant retarget.
     {

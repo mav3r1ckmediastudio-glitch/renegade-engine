@@ -1,5 +1,6 @@
 #pragma once
 #include "renegade/bridge/TerrainPropPage.h"
+#include "renegade/bridge/TerrainPropDetailFade.h"
 #include <WickedEngine.h>
 #include "renegade/bridge/ImpactSurface.h"
 #include <map>
@@ -24,6 +25,13 @@ namespace renegade::bridge
         return c.shape==TerrainPropShape::TrunkCapsule?ImpactSurfaceType::Wood:
             c.shape==TerrainPropShape::BoulderBox?ImpactSurfaceType::Stone:ImpactSurfaceType::Default;
     }
+    inline void SetTerrainPropDetailCoverage(wi::scene::ObjectComponent& object, float coverage)
+    {
+        object.color.w = coverage;
+        if (coverage > 0 && coverage < 1) object._flags |= RENEGADE_TERRAIN_PROP_DETAIL_FADE;
+        else object._flags &= ~RENEGADE_TERRAIN_PROP_DETAIL_FADE;
+    }
+
     struct TerrainPropRangePart
     {
         wi::ecs::Entity entity, mesh;
@@ -66,6 +74,7 @@ namespace renegade::bridge
         bool Place(const TerrainPropPage&, std::string& error);
         enum class Representation { Default, Coarse, Fine };
         void SetRepresentation(const TerrainPropProfileId& id, Representation value) { profiles_.at(id).representation = value; }
+        void SetPageDetailCoverage(Cell cell, float coverage);
         void EvictPage(Cell cell);
         void UnregisterUnused(const TerrainPropProfileId&);
         std::unique_ptr<PendingPages> PreparePages(const std::vector<TerrainPropPage>&,

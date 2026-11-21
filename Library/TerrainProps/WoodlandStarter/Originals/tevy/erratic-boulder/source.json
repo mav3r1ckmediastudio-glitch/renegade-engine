@@ -1,0 +1,55 @@
+{
+  "slug": "erratic-boulder",
+  "name": "Granite Erratic Boulder",
+  "category": "rocks",
+  "tags": [
+    "rock",
+    "boulder",
+    "granite",
+    "erratic",
+    "nature",
+    "forest",
+    "roadside"
+  ],
+  "description": "Angular glacial erratic of grey granite, about 2.5 m long and 1.3 m high, with sharp fracture faces, spalled corners and open joint cracks, lichen and moss on its top. Origin at ground level; about 0.25 m sits below the ground line.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-10-27",
+  "updated": "2026-10-27",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 2.333,
+    "y": 1.558,
+    "z": 1.689
+  },
+  "parts": [],
+  "animations": [],
+  "wind": false,
+  "preview": "/models/erratic-boulder/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/erratic-boulder/v1/lod0.glb",
+      "bytes": 1464160,
+      "sha256": "b27f8153a0b1fe2f29acf7f92545d355bf4047689220c91b6b937bf5234c69de",
+      "triangles": 11998
+    },
+    {
+      "lod": 1,
+      "path": "/models/erratic-boulder/v1/lod1.glb",
+      "bytes": 455372,
+      "sha256": "e96481b1361e0612eac48d4485bc3deddf88c2fc7ae57d47fc124952dc32176d",
+      "triangles": 2999
+    },
+    {
+      "lod": 2,
+      "path": "/models/erratic-boulder/v1/lod2.glb",
+      "bytes": 157636,
+      "sha256": "0ba912e963e61c001082114fa1483c7a8869c8889e0b85f9d59fd87a5f0761d9",
+      "triangles": 450
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 #include "RenegadePhysicsLabStudioChrome.h"
+#include "renegade/bridge/CompoundColliderService.h"
 
 #include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/CollisionService.h"
@@ -19,6 +20,11 @@ namespace
     constexpr wi::Color TextSecondary = wi::Color(226, 226, 226, 255);
     constexpr wi::Color TextStrong = wi::Color(244, 244, 244, 255);
     constexpr wi::Color Forge = wi::Color(210, 91, 29, 255);
+
+    XMFLOAT4 PhysicsDockBounds(const XMFLOAT4& viewport, float width)
+    {
+        return {viewport.z, viewport.y, viewport.z + width, viewport.w};
+    }
 
     constexpr float TopBarHeight = 64.0f;
     constexpr float AddPopupX = 328.0f;
@@ -88,7 +94,7 @@ namespace renegade::studio
             (void)bridge::BindPhysicsLua(session->Scenes().GetScene());
 
         physicsLab_.Create();
-        physicsLab_.SetBounds(ViewportBounds());
+        physicsLab_.SetBounds(PhysicsDockBounds(ViewportBounds(), InspectorWidth()));
         physicsLab_.SetActive(false);
 
         audioWorkspace_.Create();
@@ -111,7 +117,7 @@ namespace renegade::studio
         CreatorAssetStudioChrome::SetLayout(width, height);
         // Bounds only change when Studio layout changes. Relaying out every
         // frame would reset stateful GUI controls during interaction.
-        physicsLab_.SetBounds(ViewportBounds());
+        physicsLab_.SetBounds(PhysicsDockBounds(ViewportBounds(), InspectorWidth()));
         audioWorkspace_.SetBounds(AudioInspectorBounds());
         particleWorkspace_.SetBounds(AudioInspectorBounds());
         navigationWorkspace_.SetBounds(AudioInspectorBounds());
@@ -160,6 +166,13 @@ namespace renegade::studio
             });
     }
 
+    void RenegadePhysicsLabStudioChrome::OpenPhysicsPage(RenegadePhysicsLabWorkspace::Page page)
+    {
+        if (studioAction_) studioAction_(Action::SceneWorkspace);
+        SetPhysicsLabActive(true);
+        physicsLab_.SetPage(page);
+    }
+
     void RenegadePhysicsLabStudioChrome::PrepareViewportPlacement()
     {
         workspaceTransitionRequested_=true;
@@ -206,7 +219,7 @@ namespace renegade::studio
 
         if (studioAction_)
             studioAction_(Action::SceneWorkspace);
-        physicsLab_.SetBounds(ViewportBounds());
+        physicsLab_.SetBounds(PhysicsDockBounds(ViewportBounds(), InspectorWidth()));
         audioWorkspace_.SetBounds(AudioInspectorBounds());
         particleWorkspace_.SetBounds(AudioInspectorBounds());
         navigationWorkspace_.SetBounds(AudioInspectorBounds());
@@ -216,7 +229,7 @@ namespace renegade::studio
     {
         physicsLab_.SetActive(active);
         SetPhysicsWorkspaceIndicator(active);
-        physicsLab_.SetBounds(ViewportBounds());
+        physicsLab_.SetBounds(PhysicsDockBounds(ViewportBounds(), InspectorWidth()));
         if (active)
         {
             audioWorkspace_.SetActive(false);
@@ -290,6 +303,8 @@ namespace renegade::studio
 
         auto& scene = session->Scenes().GetScene();
         const wi::ecs::Entity selected = session->Selection().SelectedEntity();
+        if (page == Page::RigidBody && bridge::CompoundPartKind(scene, selected))
+            return;
         const wi::ecs::Entity target =
             bridge::ResolveCollisionAuthoringTarget(scene, selected);
         if (target != selected && target != wi::ecs::INVALID_ENTITY)

@@ -1,4 +1,7 @@
 #include "renegade/bridge/ReusableAssetService.h"
+#include "../EngineBridge/src/WisceneEmbeddedResources.h"
+
+#include <wiArchive.h>
 
 #include <algorithm>
 #include <filesystem>
@@ -80,6 +83,53 @@ int main()
     using namespace renegade::bridge;
     bool passed = true;
     std::string error;
+
+    for (bool compressed : {false, true})
+    {
+        wi::Archive writer;
+        writer << std::string("textures/oak.png");
+        writer.SetCompressionEnabled(compressed);
+        wi::vector<uint8_t> payload;
+        writer.WriteData(payload);
+
+        const std::string directory = "virtual/SourceAssets/Models/";
+        wi::Archive reader(payload.data(), payload.size(), directory, false);
+        if (!Check(reader.IsOpen(), "could not read the in-memory placement archive"))
+            return 1;
+        std::string texture;
+        reader >> texture;
+        passed &= Check(reader.GetSourceFileName().empty() &&
+            reader.GetSourceDirectory() + texture == directory + "textures/oak.png" &&
+            reader.GetPos() == reader.GetSize(), "placement must preserve relative sidecar names");
+        wi::Archive truncated(payload.data(), 9, directory, false);
+        passed &= Check(!truncated.IsOpen(), "truncated placement header should fail quietly");
+    }
+
+    // An importer-style filename, a resident resource or a matching basename in
+    // another folder cannot establish that an external texture is self-contained.
+    std::vector<std::uint8_t> archive;
+    const auto word = [&](std::uint64_t value) {
+        const auto* bytes = reinterpret_cast<const std::uint8_t*>(&value);
+        archive.insert(archive.end(), bytes, bytes + sizeof(value));
+    };
+    const auto entry = [&](const std::string& name, std::size_t length) {
+        word(name.size());
+        archive.insert(archive.end(), name.begin(), name.end());
+        word(0);
+        word(length);
+        archive.insert(archive.end(), length, 42);
+    };
+    word(0); word(24); word(0); word(2);
+    entry("foliage/gltfimport_42.png", 4);
+    entry("empty.png", 0);
+    const std::uint64_t end = archive.size();
+    std::memcpy(archive.data() + 16, &end, sizeof(end));
+    std::unordered_set<std::string> names;
+    passed &= Check(ReadWisceneEmbeddedNames(archive.data(), archive.size(), 0, 93, "models/", names) &&
+        names == std::unordered_set<std::string>{"models/foliage/gltfimport_42.png"},
+        "only this product's exact nonempty resource is embedded");
+    passed &= Check(!ReadWisceneEmbeddedNames(archive.data(), archive.size() - 1, 0, 93, "models/", names) &&
+        names.empty(), "a truncated resource table supplies no embedded names");
 
     const auto document = MakeDocument();
     passed &= Check(ValidateReusableModelAssetDocument(document, error),

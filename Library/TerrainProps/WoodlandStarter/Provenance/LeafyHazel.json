@@ -1,0 +1,50 @@
+{
+  "product": "LeafyHazel.glb",
+  "category": "Bushes",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/hazel-shrub",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/hazel-shrub/v1/lod0.glb",
+      "bytes": 842352,
+      "sha256": "25408075168c11a8642abf2e90327f916af7075a4f57b33b18223f40c7bb79b6",
+      "triangles": 11672
+    },
+    {
+      "lod": 1,
+      "path": "/models/hazel-shrub/v1/lod1.glb",
+      "bytes": 253452,
+      "sha256": "f99a1c396f82d554b88dc51cc05856f3abeb27c0f07664e4e0f31896bb225c91",
+      "triangles": 2554
+    },
+    {
+      "lod": 2,
+      "path": "/models/hazel-shrub/v1/lod2.glb",
+      "bytes": 97288,
+      "sha256": "64cae6a617c34e83efcd3db9d03976ca334c6327da91b7eb9817248747d2d789",
+      "triangles": 1070
+    }
+  ],
+  "dimensions_m": [
+    6.89859,
+    4.63393,
+    5.97813
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "85f833a4575a8cc280441209184e02f04a3ba7ca2e25d19fc88c414860d00819",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    0.24897050857543945,
+    0.04001082103751674,
+    -0.23842370510101318
+  ]
+}

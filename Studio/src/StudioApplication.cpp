@@ -17,6 +17,7 @@
 #include "TerrainInspectorEntity.h"
 #include "../../Tools/night_sky/CloudStudioReplay.h"
 #include "RiverNodeWidthGizmoAxis.h"
+#include "renegade/bridge/CompoundColliderService.h"
 #include "renegade/bridge/RiverWaterwayService.h"
 #include "RenegadeLivingPresenceLaunch.h"
 #include "renegade/bridge/PlayerPrefabService.h"
@@ -38,6 +39,7 @@
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/FlowService.h"
+#include "renegade/bridge/FlightVehicleService.h"
 #include "renegade/bridge/HumanoidRetargetService.h"
 #include "renegade/bridge/AnimationService.h"
 #include <algorithm>
@@ -987,6 +989,20 @@ namespace renegade::studio
         if (pathTracePreviewActive_)
         {
             RenderPath3D_PathTracing::Render();
+            return;
+        }
+        if (cockpitPreviewCamera_ && scene)
+        {
+            // Renderer-only visibility. GUI callbacks and saves see authored flags.
+            std::vector<wi::scene::ObjectComponent*> hidden;
+            for (const auto id : cockpitPreviewGlass_)
+                if (auto* object = scene->objects.GetComponent(id); object && object->IsRenderable())
+                {
+                    hidden.push_back(object);
+                    object->SetRenderable(false);
+                }
+            RenderPath3D::Render();
+            for (auto* object : hidden) object->SetRenderable(true);
             return;
         }
         RenderPath3D::Render();
@@ -4137,9 +4153,56 @@ namespace renegade::studio
 #endif
     }
 
+    void StudioRenderPath::EndVehicleCockpitPreview()
+    {
+        if (!cockpitPreviewCamera_) return;
+        if (camera && session_ && cockpitPreviewSceneRevision_ == session_->Scenes().Revision())
+        {
+            const auto width = camera->width;
+            const auto height = camera->height;
+            *camera = *cockpitPreviewCamera_;
+            camera->width = width;
+            camera->height = height;
+            camera->UpdateCamera();
+        }
+        cockpitPreviewCamera_.reset();
+        cockpitPreviewDraft_.reset();
+        cockpitPreviewGlass_.clear();
+        QueueInspectorRefresh();
+    }
+
+    void StudioRenderPath::UpdateVehicleCockpitPreview()
+    {
+        if (!cockpitPreviewCamera_) return;
+        if (!session_ || !camera || projectHubVisible_ || environmentWorkspaceActive_ || terrainWorkspaceActive_ ||
+            renderWorkspaceActive_ || studioChrome_.IsAudioWorkspaceActive() || studioChrome_.IsPhysicsLabActive() ||
+            !inspectorSectionRegistry_.IsExpanded("cockpit-camera") ||
+            session_->Scenes().Revision() != cockpitPreviewSceneRevision_ ||
+            session_->Selection().Entities().size() != 1 ||
+            session_->Selection().SelectedEntity() != cockpitPreviewSelection_ ||
+            (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) && !GetGUI().HasFocus()))
+        {
+            EndVehicleCockpitPreview();
+            return;
+        }
+        const auto& scene = session_->Scenes().GetScene();
+        const auto* transform = scene.transforms.GetComponent(cockpitPreviewChassis_);
+        if (!transform || !bridge::SupportsCockpitCamera(scene, cockpitPreviewChassis_))
+        {
+            EndVehicleCockpitPreview();
+            return;
+        }
+        const auto authored = bridge::ReadVehicleCockpitCamera(scene, cockpitPreviewChassis_);
+        const auto resolved = cockpitPreviewDraft_.value_or(authored.value_or(cockpitPreviewDefault_));
+        camera->SetOrtho(false);
+        camera->SetCustomProjectionEnabled(false);
+        bridge::ApplyVehicleCockpitCamera(*camera, *transform, resolved, true);
+    }
+
     void StudioRenderPath::Update(const float dt)
     {
         scenePopupInputCaptured_ = studioChrome_.HasOpenMenuPopup();
+        UpdateVehicleCockpitPreview();
         CaptureCloudBodyReplay();
         DiagnosticInputFrame diagnosticInput(diagnosticService_,
             wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
@@ -4316,12 +4379,20 @@ namespace renegade::studio
                 // opaque panel backgrounds above native Inspector controls.
                 const bool popupInput = studioChrome_.HasOpenMenuPopup();
                 const bool guiVisible = GetGUI().IsVisible();
+                const bool physicsLabActive = studioChrome_.IsPhysicsLabActive();
+                const auto transformCount = physicsLabActive ? scene->transforms.GetCount() : 0;
                 if (popupInput) GetGUI().SetVisible(false);
                 RenderPath3D::Update(dt);
                 if (popupInput)
                 {
                     GetGUI().SetVisible(guiVisible);
                     studioChrome_.Update(*this,dt);
+                }
+                // Lab commands can add transform children during GUI update.
+                if (physicsLabActive && scene->transforms.GetCount() != transformCount)
+                {
+                    RefreshHierarchy();
+                    RefreshStatus();
                 }
             }
         }
@@ -4470,7 +4541,8 @@ namespace renegade::studio
         const bool sceneOverlayAvailable = SceneOverlaysVisible() && !IsTerrainPropBrushActive();
         if (selectionGesture_)
         {
-            if (!sceneOverlayAvailable || scenePopupInputCaptured_ || studioChrome_.HasOpenMenuPopup())
+            if (!CurrentSceneOverlayState().CanNavigateViewport() || IsTerrainPropBrushActive() ||
+                scenePopupInputCaptured_ || studioChrome_.HasOpenMenuPopup())
                 selectionGesture_ = selectionBox_ = false;
             else if (HandleViewportSelection(pointer)) return; // Also finish a drag released over a panel.
         }
@@ -4804,7 +4876,9 @@ namespace renegade::studio
             sceneImage.blendFlag = wi::enums::BLENDMODE_PREMULTIPLIED;
             wi::image::Draw(&debugUAV,sceneImage,cmd);
         }
-        if (!SceneOverlaysVisible())
+        const auto overlays = CurrentSceneOverlayState();
+        // The spawn capsule shares the viewport's visibility, including the docked Lab.
+        if (!overlays.CanNavigateViewport())
         {
             wi::RenderPath2D::Compose(cmd);
             ComposeUiForeground(cmd);
@@ -4822,7 +4896,9 @@ namespace renegade::studio
         };
         device->BindScissorRects(1, &viewportScissor, cmd);
 
-        DrawMarkerIconOverlay(*this,*this,cmd);
+        const bool showSceneTools = overlays.Visible() && !cockpitPreviewCamera_;
+        if (showSceneTools)
+            DrawMarkerIconOverlay(*this,*this,cmd);
 
         // Draw the capsule after temporal postprocessing, before GUI, alongside the gizmo.
         // Project its connected 3D edges using one camera matrix for this frame.
@@ -4926,7 +5002,7 @@ namespace renegade::studio
             }
         }
 
-        if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
+        if (!cockpitPreviewCamera_ && !projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
             !projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible() &&
             !scenePrefabSavePanel_.IsVisible() &&
             outlinedSelection_ != wi::ecs::INVALID_ENTITY &&
@@ -4943,17 +5019,28 @@ namespace renegade::studio
                 XMFLOAT4(0.30f, 0.86f, 1.0f, 0.90f));
         }
 
-        if (!projectHubVisible_ && !handGripPanel_.IsVisible() && !assemblyPanel_.IsVisible() &&
-            !projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible() &&
+        bool physicsAuthoringGizmo = false;
+        if (session_ && studioChrome_.IsPhysicsLabActive() && gizmoEntity_ != wi::ecs::INVALID_ENTITY)
+        {
+            const auto& scene = session_->Scenes().GetScene();
+            physicsAuthoringGizmo = scene.constraints.Contains(gizmoEntity_) ||
+                bridge::GetCompoundPartParent(scene, gizmoEntity_) != wi::ecs::INVALID_ENTITY;
+        }
+        if ((showSceneTools || physicsAuthoringGizmo) && !projectHubVisible_ && !handGripPanel_.IsVisible() &&
+            !assemblyPanel_.IsVisible() && !projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible() &&
             !scenePrefabSavePanel_.IsVisible() &&
-            !gizmoSuppressedForCameraView_ &&
+            !gizmoSuppressedForCameraView_ && !cockpitPreviewCamera_ &&
             gizmoEntity_ != wi::ecs::INVALID_ENTITY)
         {
             gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);
         }
 
-        DrawSelectionGesture(cmd);
-        if (!projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible()) DrawPlayerCameraPreview(cmd);
+        if (showSceneTools)
+        {
+            DrawSelectionGesture(cmd);
+            if (!projectileCreatePanel_.IsVisible() && !launchSocketPanel_.IsVisible())
+                DrawPlayerCameraPreview(cmd);
+        }
 
         const wi::graphics::Rect fullScissor = {
             0,
@@ -9250,9 +9337,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     }
 
     bool StudioRenderPath::IsPointerOverViewport(
-        const XMFLOAT4& pointer) const noexcept
+        const XMFLOAT4& pointer, const bool forNavigation) const noexcept
     {
-        if (!SceneOverlaysVisible() || scenePopupInputCaptured_ ||
+        const auto overlay = CurrentSceneOverlayState();
+        if (cockpitPreviewCamera_ ||
+            !(forNavigation ? overlay.CanNavigateViewport() : overlay.Visible()) || scenePopupInputCaptured_ ||
             studioChrome_.HasOpenMenuPopup() || playerCameraPreviewHeaderPressed_) return false;
         const auto inset = PlayerCameraPreviewBounds();
         if (playerCameraPreviewVisible_ && pointer.x >= inset.x && pointer.x < inset.z &&
@@ -9267,7 +9356,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         const float dt,
         const XMFLOAT4& pointer)
     {
-        const bool pointerOverViewport = IsPointerOverViewport(pointer);
+        const bool pointerOverViewport = IsPointerOverViewport(pointer, true);
         if (!flyCameraActive_ &&
             pointerOverViewport &&
             !GetGUI().HasFocus() &&
@@ -9721,7 +9810,10 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             editingAssembly_=wi::ecs::INVALID_ENTITY;
         if(editingAssembly_!=wi::ecs::INVALID_ENTITY && entity!=editingAssembly_ &&
             !scene.Entity_IsDescendant(entity,editingAssembly_))editingAssembly_=wi::ecs::INVALID_ENTITY;
-        entity=bridge::ResolveAssemblySelection(scene,entity,editingAssembly_);
+        const auto aircraft = editingAssembly_ == wi::ecs::INVALID_ENTITY
+            ? bridge::ResolveAircraftChassis(scene, entity) : wi::ecs::INVALID_ENTITY;
+        entity = aircraft != wi::ecs::INVALID_ENTITY
+            ? aircraft : bridge::ResolveAssemblySelection(scene, entity, editingAssembly_);
         // A deliberate viewport selection owns the Inspector just like a
         // hierarchy selection, even when Environment or Render was active.
         SetEnvironmentWorkspaceActive(false);
@@ -9799,7 +9891,8 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             }
             RefreshHierarchy();RefreshInspector();RefreshStatus();return true;
         }
-        if(GetGUI().HasFocus() || !IsPointerOverViewport(pointer) ||
+        // Picking shares viewport access with navigation while Physics Lab is docked.
+        if(GetGUI().HasFocus() || !IsPointerOverViewport(pointer, true) ||
             !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) ||
             (gizmo_.IsInteracting() && !wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) &&
                 !wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT)))return false;

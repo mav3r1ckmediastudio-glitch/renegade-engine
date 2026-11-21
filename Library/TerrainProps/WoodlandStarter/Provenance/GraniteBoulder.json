@@ -1,0 +1,50 @@
+{
+  "product": "GraniteBoulder.glb",
+  "category": "Rocks and boulders",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/granite-boulder",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/granite-boulder/v1/lod0.glb",
+      "bytes": 1486204,
+      "sha256": "3246fd0cc4859da4cdba7ccae089a2871921327f4a5e82919ba0018a02910b3b",
+      "triangles": 8500
+    },
+    {
+      "lod": 1,
+      "path": "/models/granite-boulder/v1/lod1.glb",
+      "bytes": 427576,
+      "sha256": "a40b5170d6d437abb00b468a6f0843855d98da7d0972b21c8fcc84799b0593a3",
+      "triangles": 2300
+    },
+    {
+      "lod": 2,
+      "path": "/models/granite-boulder/v1/lod2.glb",
+      "bytes": 152280,
+      "sha256": "0acfb2e0c386f9a426fa591cdc7776aabfbe229508922ed46d19e117f20266f0",
+      "triangles": 350
+    }
+  ],
+  "dimensions_m": [
+    1.55808,
+    0.99028,
+    1.06275
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "3f8fff213162451f83508f70d7990310d9fc1f0c339e4809d294902653ebc782",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    -0.04517194628715515,
+    0.08014017543787055,
+    0.10860669612884521
+  ]
+}

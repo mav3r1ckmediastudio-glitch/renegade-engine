@@ -427,12 +427,10 @@ namespace renegade::bridge
         return ReadRevision(root, projectId, digest, output, error, nullptr);
     }
 
-    bool CollectTerrainPropDependencies(const wi::scene::Scene& scene, const fs::path& root,
-        const StableId& projectId, std::vector<std::string>& files, std::vector<StableId>& models,
-        std::string& error)
+    bool CaptureTerrainPropRevisionRefs(const wi::scene::Scene& scene, const StableId& projectId,
+        std::vector<std::string>& revisions, std::string& error)
     {
-        std::set<std::string> paths;
-        std::set<StableId> modelIds, layers;
+        std::vector<std::string> captured;
         for (size_t i = 0; i < scene.metadatas.GetCount(); ++i)
         {
             const auto& metadata = scene.metadatas[i];
@@ -443,8 +441,31 @@ namespace renegade::bridge
                 error = "Terrain prop dependency belongs to a different project.";
                 return false;
             }
+            captured.push_back(properties.get(RevisionKey));
+        }
+        revisions.swap(captured);
+        return true;
+    }
+
+    bool CollectTerrainPropDependencies(const wi::scene::Scene& scene, const fs::path& root,
+        const StableId& projectId, std::vector<std::string>& files, std::vector<StableId>& models,
+        std::string& error)
+    {
+        std::vector<std::string> revisions;
+        return CaptureTerrainPropRevisionRefs(scene, projectId, revisions, error) &&
+            CollectTerrainPropDependencies(revisions, root, projectId, files, models, error);
+    }
+
+    bool CollectTerrainPropDependencies(const std::vector<std::string>& revisions, const fs::path& root,
+        const StableId& projectId, std::vector<std::string>& files, std::vector<StableId>& models,
+        std::string& error)
+    {
+        std::set<std::string> paths;
+        std::set<StableId> modelIds, layers;
+        for (const auto& revision : revisions)
+        {
             TerrainPropDocument document;
-            if (!ReadRevision(root, projectId, properties.get(RevisionKey), document, error, &paths)) return false;
+            if (!ReadRevision(root, projectId, revision, document, error, &paths)) return false;
             if (!layers.insert(document.layerId).second)
             {
                 error = "Duplicate terrain prop layer identity.";

@@ -1,0 +1,50 @@
+{
+  "product": "BrokenSpruce.glb",
+  "category": "Dead trees",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/dead-spruce",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/dead-spruce/v1/lod0.glb",
+      "bytes": 1194380,
+      "sha256": "6a9011d7046b0a8475aaf7c0a651b223c20f80514d5813f181a45165579b017b",
+      "triangles": 6374
+    },
+    {
+      "lod": 1,
+      "path": "/models/dead-spruce/v1/lod1.glb",
+      "bytes": 805368,
+      "sha256": "93d6c2229ae34d3b44f6b0049b21034ca7e531b2f9ddd3c8b63544afd52fa6c7",
+      "triangles": 2253
+    },
+    {
+      "lod": 2,
+      "path": "/models/dead-spruce/v1/lod2.glb",
+      "bytes": 126908,
+      "sha256": "f68a00921f061b639fd415ac363ac5abcce07b988cd00dd6886cfb45a61802af",
+      "triangles": 522
+    }
+  ],
+  "dimensions_m": [
+    4.58887,
+    12.60346,
+    3.9983
+  ],
+  "up": "+Y",
+  "pivot": "Centre of the trunk base at ground level",
+  "sha256": "6a379153c002c299c66f2e8701b718a17bfb98a67d57cd85d15bf2a9a9c1e817",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    0.16230077680466273,
+    0.35198286175727844,
+    -0.16185979314107182
+  ]
+}

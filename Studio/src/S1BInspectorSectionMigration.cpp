@@ -6,11 +6,21 @@
 #include "Phase7Gate7ESpecialistInspector.h"
 #include "Phase7Gate7FMeshBlendInspector.h"
 #include "renegade/bridge/ObjectImpactSurfaceService.h"
+#include "renegade/bridge/CollisionService.h"
+#include "renegade/bridge/PhysicsGameplayService.h"
+#include "renegade/bridge/DestructibleBlastPreset.h"
+#include "renegade/bridge/FlightVehicleService.h"
+#include "renegade/bridge/CharacterPhysicsService.h"
+#include "renegade/bridge/SoftBodyPhysicsService.h"
+#include "renegade/bridge/VehiclePhysicsService.h"
+
+#include <array>
 #include "S4BScriptAttachmentInspector.h"
 #include "S4DGlobalScriptInspector.h"
 #include "Phase7Gate7AAnimationInspector.h"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -418,6 +428,422 @@ namespace renegade::studio
         if (!inspectorSectionRegistry_.Register(std::move(materials), error))
             studioChrome_.SetStatusText("S1B INSPECTOR // " + error);
 
+        struct PhysicsFields
+        {
+            SceneInspectorButton header;
+            SceneInspectorButton lab;
+            SceneInspectorComboBox shape;
+            SceneInspectorSlider mass;
+            SceneInspectorSlider friction;
+            SceneInspectorSlider bounce;
+            SceneInspectorSlider wheelRadius;
+            SceneInspectorCheckBox kinematic;
+
+            SceneInspectorCheckBox sensor;
+            SceneInspectorSlider collisionLayer;
+            SceneInspectorSlider breakSpeed;
+            SceneInspectorCheckBox explodeOnBreak;
+
+            std::array<wi::gui::Widget*, 11> Controls()
+            {
+                return {&shape, &mass, &friction, &bounce, &kinematic, &sensor, &collisionLayer, &breakSpeed,
+                    &explodeOnBreak, &wheelRadius, &lab};
+            }
+        };
+
+        auto physics = std::make_shared<PhysicsFields>();
+        auto target = [this]() -> wi::ecs::Entity
+        {
+            if (!session_ || session_->Selection().Entities().size() != 1)
+                return wi::ecs::INVALID_ENTITY;
+            auto& scene = session_->Scenes().GetScene();
+            const auto selected = session_->Selection().SelectedEntity();
+            if (scene.rigidbodies.Contains(selected)) return selected;
+            const auto wrapper = bridge::ResolveCollisionAuthoringTarget(scene, selected);
+            if (scene.rigidbodies.Contains(wrapper)) return wrapper;
+            return bridge::ResolveAuthoredDestructibleRoot(scene, selected);
+        };
+        auto editBody = [this, target](auto change)
+        {
+            const auto selected = target();
+            if (selected == wi::ecs::INVALID_ENTITY) return;
+            auto& scene = session_->Scenes().GetScene();
+            const auto before = bridge::CaptureCollision(*scene.rigidbodies.GetComponent(selected));
+            auto after = before;
+            change(after);
+            after = bridge::SanitizeCollisionState(after);
+            if (bridge::CheckCollisionTarget(scene, selected, after.shape) !=
+                bridge::CollisionTargetStatus::Supported)
+            {
+                studioChrome_.SetStatusText("PHYSICS // COLLISION SHAPE UNAVAILABLE FOR THIS BODY");
+                QueueInspectorRefresh();
+                return;
+            }
+            if (session_->Commands().Execute(std::make_unique<bridge::SetCollisionCommand>(
+                scene, selected, before, after))) QueueInspectorRefresh();
+        };
+        auto hasVehicle = [this, target]()
+        {
+            const auto selected = target();
+            if (selected == wi::ecs::INVALID_ENTITY) return false;
+            const auto* body = session_->Scenes().GetScene().rigidbodies.GetComponent(selected);
+            return body->vehicle.type != wi::scene::RigidBodyPhysicsComponent::Vehicle::Type::None;
+        };
+        using PhysicsPage = RenegadePhysicsLabWorkspace::Page;
+        auto selectedPhysicsPage = [this, target, hasVehicle]()
+        {
+            if (!session_ || session_->Selection().Entities().size() != 1)
+                return PhysicsPage::Count;
+            const auto& scene = session_->Scenes().GetScene();
+            const auto selected = session_->Selection().SelectedEntity();
+            const auto body = target();
+            if (hasVehicle() || bridge::IsFlightVehicle(scene, body) || bridge::IsTrackedVehicle(scene, body))
+                return PhysicsPage::Vehicle;
+            if (scene.constraints.Contains(selected))
+                return PhysicsPage::Constraint;
+            if (scene.humanoids.Contains(selected))
+                return PhysicsPage::Ragdoll;
+            if (scene.softbodies.Contains(bridge::ResolveSoftBodyMeshEntity(scene, selected)))
+                return PhysicsPage::SoftBody;
+            if (scene.colliders.Contains(selected))
+                return PhysicsPage::WickedCollider;
+            if (const auto* rigid = scene.rigidbodies.GetComponent(body))
+                return bridge::CaptureCharacterPhysics(*rigid).enabled ? PhysicsPage::Character : PhysicsPage::RigidBody;
+            return PhysicsPage::Count;
+        };
+        createHeader(physics->header, "Selected asset physics", "Edit the selected asset's physics", "physics");
+        physics->header.SetVisible(false);
+        physics->lab.Create("Physics Lab");
+        physics->lab.SetText("OPEN IN PHYSICS LAB");
+        physics->lab.OnClick([this, target, selectedPhysicsPage](const wi::gui::EventArgs&) {
+            const auto page = selectedPhysicsPage();
+            if (page == PhysicsPage::Count)
+                return;
+            if (page == PhysicsPage::Vehicle || page == PhysicsPage::Character || page == PhysicsPage::RigidBody)
+            {
+                const auto body = target();
+                if (body != wi::ecs::INVALID_ENTITY)
+                    session_->Selection().Select(body);
+            }
+            studioChrome_.OpenPhysicsPage(page);
+        });
+        using Shape = wi::scene::RigidBodyPhysicsComponent::CollisionShape;
+        physics->shape.Create("Collision shape");
+        physics->shape.AddItem("BOX", static_cast<std::uint64_t>(Shape::BOX));
+        physics->shape.AddItem("SPHERE", static_cast<std::uint64_t>(Shape::SPHERE));
+        physics->shape.AddItem("CAPSULE", static_cast<std::uint64_t>(Shape::CAPSULE));
+        physics->shape.AddItem("CYLINDER", static_cast<std::uint64_t>(Shape::CYLINDER));
+        physics->shape.AddItem("CONVEX HULL", static_cast<std::uint64_t>(Shape::CONVEX_HULL));
+        physics->shape.AddItem("TRIANGLE MESH", static_cast<std::uint64_t>(Shape::TRIANGLE_MESH));
+        physics->shape.AddItem("HEIGHT FIELD", static_cast<std::uint64_t>(Shape::HEIGHTFIELD));
+        physics->shape.OnSelect([editBody](const wi::gui::EventArgs& args) {
+            editBody([&](auto& state) { state.shape = static_cast<Shape>(args.userdata); });
+        });
+        physics->mass.Create(0.f, 10000.f, 1.f, 100000, "Physics mass", "MASS (KG)");
+        physics->friction.Create(0.f, 1.f, .2f, 10000, "Physics friction", "FRICTION");
+        physics->bounce.Create(0.f, 1.f, 0.f, 1000, "Physics restitution", "BOUNCE");
+        physics->wheelRadius.Create(.001f, 10.f, .3f, 10000, "Physics wheel radius", "WHEEL RADIUS (M)");
+        physics->kinematic.Create("KINEMATIC");
+        physics->sensor.Create("SENSOR");
+        physics->breakSpeed.Create(0, 100, 0, 1000, "Destructible impact speed", "BREAK SPEED (M/S)");
+        physics->breakSpeed.OnValueCommitted([this, target](float value)
+        {
+            const auto selected = target();
+            if (selected == wi::ecs::INVALID_ENTITY) return;
+            auto& scene = session_->Scenes().GetScene();
+            if (session_->Commands().Execute(std::make_unique<bridge::SetDestructibleImpactSpeedCommand>(
+                scene, selected, value))) QueueInspectorRefresh();
+        });
+        physics->explodeOnBreak.Create("EXPLODE ON BREAK");
+        physics->explodeOnBreak.OnClick([this, target](const wi::gui::EventArgs& args)
+        {
+            const auto selected = target();
+            if (selected == wi::ecs::INVALID_ENTITY) return;
+            auto& scene = session_->Scenes().GetScene();
+            if (!session_->Commands().Execute(std::make_unique<bridge::SetDestructibleBlastPresetCommand>(
+                scene, selected, args.bValue)))
+                studioChrome_.SetStatusText("PHYSICS // EXPLOSION REQUIRES A CONFIGURED BREAKABLE");
+            QueueInspectorRefresh();
+        });
+        physics->collisionLayer.Create(0, bridge::BodyCollisionLayerCount - 1, 0,
+            bridge::BodyCollisionLayerCount - 1, "Body simulation layer", "COLLISION LAYER");
+        physics->collisionLayer.OnValueCommitted([this, target](float value)
+        {
+            const auto selected = target();
+            if (selected == wi::ecs::INVALID_ENTITY) return;
+            auto& scene = session_->Scenes().GetScene();
+            auto filter = bridge::GetBodyCollisionFilter(scene, selected);
+            filter.layer = static_cast<int>(std::lround(value));
+            if (session_->Commands().Execute(std::make_unique<bridge::SetBodyCollisionFilterCommand>(
+                scene, selected, filter))) QueueInspectorRefresh();
+        });
+        physics->sensor.OnClick([this, target](const wi::gui::EventArgs& args)
+        {
+            const auto selected = target();
+            if (selected == wi::ecs::INVALID_ENTITY) return;
+            auto& scene = session_->Scenes().GetScene();
+            if (session_->Commands().Execute(std::make_unique<bridge::SetBodySensorCommand>(
+                scene, selected, args.bValue))) QueueInspectorRefresh();
+        });
+        physics->mass.OnValueCommitted([editBody](float value) { editBody([value](auto& state) { state.mass = value; }); });
+        physics->friction.OnValueCommitted([editBody](float value) { editBody([value](auto& state) { state.friction = value; }); });
+        physics->bounce.OnValueCommitted([editBody](float value) { editBody([value](auto& state) { state.restitution = value; }); });
+        physics->kinematic.OnClick([editBody](const wi::gui::EventArgs& args) { editBody([&](auto& state) { state.kinematic = args.bValue; }); });
+        physics->wheelRadius.OnValueCommitted([this, target, hasVehicle](float value)
+        {
+            if (!hasVehicle()) return;
+            auto& scene = session_->Scenes().GetScene();
+            const auto selected = target();
+            const auto before = bridge::CaptureVehiclePhysics(*scene.rigidbodies.GetComponent(selected));
+            auto after = before;
+            after.wheelRadius = value;
+            if (session_->Commands().Execute(std::make_unique<bridge::SetVehiclePhysicsCommand>(
+                scene, selected, before, after))) QueueInspectorRefresh();
+        });
+        for (auto* widget : physics->Controls())
+        {
+            inspectorPanel_.AddWidget(widget);
+            widget->SetVisible(false);
+        }
+        auto physicsProvider = std::make_shared<CallbackInspectorSectionProvider>(
+            MakeSection("physics", "PHYSICS", 15, false),
+            [this, physics, selectedPhysicsPage](const InspectorSectionContext& context)
+            {
+                const bool visible = context.hasSelection && !environmentWorkspaceActive_ &&
+                    !terrainWorkspaceActive_ && selectedPhysicsPage() != PhysicsPage::Count;
+                physics->header.SetVisible(visible);
+                if (!visible) for (auto* widget : physics->Controls()) widget->SetVisible(false);
+                return visible;
+            },
+            [this, target, hasVehicle](const InspectorSectionContext&, float) {
+                const auto id = target();
+                if (id == wi::ecs::INVALID_ENTITY) return 34.f;
+                const auto& body = *session_->Scenes().GetScene().rigidbodies.GetComponent(id);
+                if (bridge::SupportsDestructible(body)) return 340.f;
+                if (bridge::SupportsBodyCollisionFilter(body)) return 272.f;
+                return hasVehicle() ? 238.f : 204.f;
+            },
+            [this, physics, target](const InspectorSectionContext&)
+            {
+                const auto id = target();
+                if (id == wi::ecs::INVALID_ENTITY) return;
+                const auto& scene = session_->Scenes().GetScene();
+                const auto* body = scene.rigidbodies.GetComponent(id);
+                const auto state = bridge::CaptureCollision(*body);
+                physics->shape.SetSelectedByUserdataWithoutCallback(static_cast<std::uint64_t>(state.shape));
+                physics->mass.SetValue(state.mass);
+                physics->friction.SetValue(state.friction);
+                physics->bounce.SetValue(state.restitution);
+                physics->kinematic.SetCheck(state.kinematic);
+                const bool sensor = bridge::IsBodySensor(scene, id);
+                physics->sensor.SetCheck(sensor);
+                physics->breakSpeed.SetValue(bridge::GetDestructibleImpactSpeed(scene, id));
+                physics->breakSpeed.SetEnabled(!sensor);
+                const bool explosive = bridge::GetDestructibleBlastSpeed(scene, id) > 0.f;
+                const bool canExplode = bridge::SupportsDestructible(*body) &&
+                    bridge::CanUseDestructibleBlastPreset(scene, id);
+                physics->explodeOnBreak.SetCheck(explosive);
+                physics->explodeOnBreak.SetEnabled(!sensor && (canExplode || explosive));
+                physics->explodeOnBreak.SetTooltip(canExplode
+                    ? "Use the oil drum blast when this prop breaks. Fine-tune Blast Speed in Physics Lab."
+                    : "Requires a solid static parent, 2-16 usable fragments, and Break Speed or Hit Points.");
+                physics->collisionLayer.SetValue(static_cast<float>(bridge::GetBodyCollisionFilter(scene, id).layer));
+                physics->wheelRadius.SetValue(bridge::CaptureVehiclePhysics(*body).wheelRadius);
+            },
+            [this, physics, target, hasVehicle](const InspectorSectionContext&, const InspectorSectionLayout& layout)
+            {
+                physics->header.SetPos({12.f, layout.top});
+                physics->header.SetSize({layout.width, layout.headerHeight});
+                physics->header.SetText(layout.expanded ? "-  PHYSICS" : "+  PHYSICS");
+                float y = layout.contentTop;
+                const auto id = target();
+                const auto* body = id != wi::ecs::INVALID_ENTITY ? session_->Scenes().GetScene().rigidbodies.GetComponent(id) : nullptr;
+                for (auto* widget : physics->Controls())
+                {
+                    const bool bodyRow = body &&
+                        (widget != &physics->wheelRadius || hasVehicle()) &&
+                        (widget != &physics->sensor || bridge::SupportsBodySensor(*body)) &&
+                        (widget != &physics->collisionLayer || bridge::SupportsBodyCollisionFilter(*body)) &&
+                        ((widget != &physics->breakSpeed && widget != &physics->explodeOnBreak) ||
+                            bridge::SupportsDestructible(*body));
+                    const bool visible = layout.expanded && (widget == &physics->lab || bodyRow);
+                    widget->SetVisible(visible);
+                    if (!visible) continue;
+                    widget->SetPos({12.f, y});
+                    widget->SetSize({layout.width, 28.f});
+                    y += 34.f;
+                }
+            });
+        physicsInspectorSection_ = physicsProvider;
+        if (!inspectorSectionRegistry_.Register(std::move(physicsProvider), error))
+            studioChrome_.SetStatusText("PHYSICS INSPECTOR // " + error);
+
+        struct CockpitCameraFields
+        {
+            SceneInspectorButton header, preview, capture, reset, advanced;
+            std::array<SceneInspectorSlider, 8> controls;
+            bridge::VehicleCockpitCamera displayed;
+            bool showLens = false;
+
+            void Hide()
+            {
+                for (auto* button : {&preview, &capture, &reset, &advanced})
+                    button->SetVisible(false);
+                for (auto& slider : controls) slider.SetVisible(false);
+            }
+        };
+        auto cockpit = std::make_shared<CockpitCameraFields>();
+        auto* const cockpitFields = cockpit.get();
+        const auto cockpitTarget = [this]() {
+            if (!session_ || session_->Selection().Entities().size() != 1)
+                return wi::ecs::INVALID_ENTITY;
+            return bridge::ResolveCockpitCameraChassis(
+                session_->Scenes().GetScene(), session_->Selection().SelectedEntity());
+        };
+        const auto commitCockpit = [this, cockpitTarget](std::optional<bridge::VehicleCockpitCamera> settings) {
+            cockpitPreviewDraft_.reset();
+            const auto chassis = cockpitTarget();
+            if (chassis != wi::ecs::INVALID_ENTITY)
+                session_->Commands().Execute(std::make_unique<bridge::SetVehicleCockpitCameraCommand>(
+                    session_->Scenes().GetScene(), chassis, settings));
+            QueueInspectorRefresh();
+        };
+        createHeader(cockpit->header, "Cockpit camera", "Set the first-person driving or pilot view", "cockpit-camera");
+        cockpit->header.SetVisible(false);
+
+        cockpit->preview.Create("Preview cockpit");
+        cockpit->preview.OnClick([this, cockpitTarget](const wi::gui::EventArgs&) {
+            if (cockpitPreviewCamera_)
+            {
+                EndVehicleCockpitPreview();
+                return;
+            }
+            const auto chassis = cockpitTarget();
+            if (!camera || chassis == wi::ecs::INVALID_ENTITY) return;
+            auto& scene = session_->Scenes().GetScene();
+            cockpitPreviewCamera_ = *camera;
+            cockpitPreviewChassis_ = chassis;
+            cockpitPreviewSelection_ = session_->Selection().SelectedEntity();
+            cockpitPreviewSceneRevision_ = session_->Scenes().Revision();
+            cockpitPreviewGlass_ = bridge::FindCockpitGlass(scene, chassis);
+            cockpitPreviewDefault_ = bridge::DefaultVehicleCockpitCamera(scene, chassis,
+                bridge::ResolveDefaultCockpitMarker(scene, chassis), XMConvertToDegrees(camera->fov));
+            cockpitPreviewDraft_.reset();
+            flyCameraActive_ = false;
+            wi::input::HidePointer(false);
+            QueueInspectorRefresh();
+        });
+
+        cockpit->capture.Create("Set from view");
+        cockpit->capture.SetText("SET FROM VIEW");
+        cockpit->capture.SetTooltip("Save this viewport's position, aim and field of view relative to the vehicle.");
+        cockpit->capture.OnClick([this, cockpitTarget, commitCockpit](const wi::gui::EventArgs&) {
+            const auto chassis = cockpitTarget();
+            if (!camera || cockpitPreviewCamera_ || camera->IsOrtho() || chassis == wi::ecs::INVALID_ENTITY) return;
+            const auto* transform = session_->Scenes().GetScene().transforms.GetComponent(chassis);
+            bridge::VehicleCockpitCamera settings;
+            if (transform && bridge::CaptureVehicleCockpitFromView(*transform, *camera, settings))
+                commitCockpit(settings);
+        });
+        cockpit->reset.Create("Reset cockpit camera");
+        cockpit->reset.SetText("RESET TO DEFAULT");
+        cockpit->reset.OnClick([commitCockpit](const wi::gui::EventArgs&) { commitCockpit(std::nullopt); });
+        cockpit->advanced.Create("Advanced lens");
+        cockpit->advanced.OnClick([this, cockpitFields](const wi::gui::EventArgs&) {
+            cockpitFields->showLens = !cockpitFields->showLens;
+            QueueInspectorRefresh();
+        });
+
+        constexpr const char* labels[] = {
+            "LEFT / RIGHT (M)", "UP / DOWN (M)", "FORE / AFT (M)",
+            "PITCH (DEG)", "YAW (DEG)", "ROLL (DEG)", "VERTICAL FOV (DEG)", "LENS EQUIV. (MM)",
+        };
+        for (size_t i = 0; i < cockpit->controls.size(); ++i)
+        {
+            auto& slider = cockpit->controls[i];
+            const float minimum = i < 3 ? -100.f : i < 6 ? -180.f : i == 6 ? bridge::MinimumCockpitFov :
+                bridge::CockpitLensMillimetres(bridge::MaximumCockpitFov);
+            const float maximum = i < 3 ? 100.f : i < 6 ? 180.f : i == 6 ? bridge::MaximumCockpitFov :
+                bridge::CockpitLensMillimetres(bridge::MinimumCockpitFov);
+            const float initial = i < 6 ? 0.f : i == 6 ? 60.f : bridge::CockpitLensMillimetres(60.f);
+            slider.Create(minimum, maximum, initial, 10000, labels[i], labels[i]);
+            if (i == 7) slider.SetTooltip("Equivalent focal length on a 36 x 24 mm reference frame.");
+            const auto withValue = [cockpitFields, i](float value) {
+                auto fields = bridge::CockpitFields(cockpitFields->displayed);
+                fields[i == 7 ? 6 : i] = i == 7 ? bridge::CockpitFovFromLens(value) : value;
+                return bridge::CockpitFromFields(fields);
+            };
+            slider.OnValuePreview([this, withValue](float value) {
+                if (cockpitPreviewCamera_) cockpitPreviewDraft_ = withValue(value);
+            });
+            slider.OnValueCommitted([commitCockpit, withValue](float value) { commitCockpit(withValue(value)); });
+            inspectorPanel_.AddWidget(&slider);
+        }
+        for (auto* button : {&cockpit->preview, &cockpit->capture, &cockpit->reset, &cockpit->advanced})
+            inspectorPanel_.AddWidget(button);
+        cockpit->Hide();
+
+        auto cockpitProvider = std::make_shared<CallbackInspectorSectionProvider>(
+            MakeSection("cockpit-camera", "COCKPIT CAMERA", 16, false),
+            [this, cockpit, cockpitTarget](const InspectorSectionContext& context) {
+                const bool visible = context.hasSelection && !environmentWorkspaceActive_ &&
+                    !terrainWorkspaceActive_ && !renderWorkspaceActive_ &&
+                    !studioChrome_.IsAudioWorkspaceActive() && !studioChrome_.IsPhysicsLabActive() &&
+                    cockpitTarget() != wi::ecs::INVALID_ENTITY;
+                cockpit->header.SetVisible(visible);
+                if (!visible) cockpit->Hide();
+                return visible;
+            },
+            [cockpit](const InspectorSectionContext&, float) {
+                return 34.f * (cockpit->showLens ? 12.f : 11.f);
+            },
+            [this, cockpit, cockpitTarget](const InspectorSectionContext&) {
+                if (!inspectorSectionRegistry_.IsExpanded("cockpit-camera")) return;
+                const auto chassis = cockpitTarget();
+                if (chassis == wi::ecs::INVALID_ENTITY) return;
+                auto& scene = session_->Scenes().GetScene();
+                const auto saved = bridge::ReadVehicleCockpitCamera(scene, chassis);
+                const bool previewing = cockpitPreviewCamera_ && cockpitPreviewChassis_ == chassis;
+                if (saved)
+                    cockpit->displayed = *saved;
+                else if (previewing)
+                    cockpit->displayed = cockpitPreviewDefault_;
+                else
+                    cockpit->displayed = bridge::DefaultVehicleCockpitCamera(scene, chassis,
+                        bridge::ResolveDefaultCockpitMarker(scene, chassis), camera ? XMConvertToDegrees(camera->fov) : 60.f);
+                const auto values = bridge::CockpitFields(cockpit->displayed);
+                for (size_t i = 0; i < values.size(); ++i) cockpit->controls[i].SetValue(values[i]);
+                cockpit->controls.back().SetValue(bridge::CockpitLensMillimetres(values.back()));
+                cockpit->preview.SetText(previewing ? "EXIT COCKPIT PREVIEW" : "PREVIEW COCKPIT");
+                cockpit->capture.SetEnabled(camera && !previewing && !camera->IsOrtho());
+                cockpit->reset.SetEnabled(saved.has_value());
+                cockpit->advanced.SetText(cockpit->showLens ? "HIDE LENS EQUIVALENT" : "ADVANCED LENS");
+            },
+            [cockpit](const InspectorSectionContext&, const InspectorSectionLayout& layout) {
+                cockpit->header.SetPos({12.f, layout.top});
+                cockpit->header.SetSize({layout.width, layout.headerHeight});
+                cockpit->header.SetText(layout.expanded ? "-  COCKPIT CAMERA" : "+  COCKPIT CAMERA");
+                if (!layout.expanded) { cockpit->Hide(); return; }
+                float y = layout.contentTop;
+                const auto row = [&](wi::gui::Widget& widget) {
+                    widget.SetVisible(true);
+                    widget.SetPos({12.f, y});
+                    widget.SetSize({layout.width, 28.f});
+                    y += 34.f;
+                };
+                row(cockpit->preview);
+                row(cockpit->capture);
+                for (size_t i = 0; i < 7; ++i) row(cockpit->controls[i]);
+                row(cockpit->advanced);
+                cockpit->controls.back().SetVisible(cockpit->showLens);
+                if (cockpit->showLens) row(cockpit->controls.back());
+                row(cockpit->reset);
+            });
+        cockpitCameraInspectorSection_ = cockpitProvider;
+        error.clear();
+        if (!inspectorSectionRegistry_.Register(std::move(cockpitProvider), error))
+            studioChrome_.SetStatusText("COCKPIT CAMERA // " + error);
+
         RegisterPhase7Gate7AAnimationInspector(
             *this,
             inspectorPanel_,
@@ -576,7 +1002,7 @@ namespace renegade::studio
 
     void StudioRenderPath::ResetS1BInspectorDisclosure()
     {
-        for (const char* sectionId : {"object-metadata", AICharacterSectionId, "transform", "rendering", "materials", Phase7AnimationSectionId, S4BActionSectionId, S4BScriptSectionId, S4DGlobalScriptSectionId})
+        for (const char* sectionId : {"object-metadata", AICharacterSectionId, "transform", "physics", "cockpit-camera", "rendering", "materials", Phase7AnimationSectionId, S4BActionSectionId, S4BScriptSectionId, S4DGlobalScriptSectionId})
             (void)inspectorSectionRegistry_.SetExpanded(sectionId, false);
     }
 
@@ -685,6 +1111,12 @@ namespace renegade::studio
         if (environmentWorkspaceActive_ || terrainWorkspaceActive_ ||
             selectedWeather || selectedTerrain || selectedRiver)
         {
+            // Specialist panels skip the section registry layout, so clear
+            // the asset physics widgets before handing over the dock.
+            if (const auto physics = physicsInspectorSection_.lock())
+                (void)physics->IsVisible({});
+            if (const auto cockpit = cockpitCameraInspectorSection_.lock())
+                (void)cockpit->IsVisible({});
             return;
         }
 
@@ -855,6 +1287,13 @@ namespace renegade::studio
         registryTop=bottom+8.f;
         InspectorSectionContext context;
         context.transformOnly=multiple||groupSelection;
+        if (context.transformOnly)
+        {
+            if (const auto physics = physicsInspectorSection_.lock())
+                (void)physics->IsVisible({});
+            if (const auto cockpit = cockpitCameraInspectorSection_.lock())
+                (void)cockpit->IsVisible({});
+        }
         context.hasSelection = hasSession && !multiple && selected != wi::ecs::INVALID_ENTITY;
         context.selectionRevision=selectionRevision;
         context.userData = this;

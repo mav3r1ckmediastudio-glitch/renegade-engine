@@ -1,5 +1,6 @@
 #include "renegade/bridge/TerrainPropTerrainPhysics.h"
 #pragma once
+#include "renegade/bridge/PhysicsGameplayService.h"
 
 #include "RuntimeCombatDamage.h"
 #include "renegade/bridge/ObjectImpactSurfaceService.h"
@@ -15,6 +16,7 @@ namespace renegade::runtime
         std::string subjectId;
         wi::ecs::Entity root = wi::ecs::INVALID_ENTITY;
         const std::vector<wi::ecs::Entity>* excludedVisualRoots = nullptr;
+        wi::ecs::Entity additionalExcludedRoot = wi::ecs::INVALID_ENTITY;
     };
 
     inline XMFLOAT3 ProjectileNativeVector(const bridge::ProjectileVector& value)
@@ -92,10 +94,26 @@ namespace renegade::runtime
             return result;
         }
         const auto excluded = [&](wi::ecs::Entity entity) {
+            // Wicked mesh queries still return objects hidden by a breakable swap.
+            if (const auto* object = scene.objects.GetComponent(entity); object && !object->IsRenderable())
+            {
+                auto node = entity;
+                for (size_t depth = 0; node != wi::ecs::INVALID_ENTITY && depth <= scene.hierarchy.GetCount(); ++depth)
+                {
+                    if (bridge::IsDestructibleIntactVisual(scene, node) ||
+                        bridge::GetDestructibleImpactSpeed(scene, node) > 0.f ||
+                        bridge::GetDestructibleHitPoints(scene, node) > 0.f)
+                        return true;
+                    const auto* parent = scene.hierarchy.GetComponent(node);
+                    node = parent ? parent->parentID : wi::ecs::INVALID_ENTITY;
+                }
+            }
             // Rendered foliage is visual. Gameplay collision comes from the
             // authored capsule/convex profile, including nonresident placements.
             if(bridge::IsTerrainPropProjection(scene,entity))return true;
             if (perception_detail::EntityBelongsToRoot(scene,entity,owner.root)) return true;
+            if (owner.additionalExcludedRoot != wi::ecs::INVALID_ENTITY &&
+                perception_detail::EntityBelongsToRoot(scene, entity, owner.additionalExcludedRoot)) return true;
             if(owner.excludedVisualRoots)
                 for(const auto root:*owner.excludedVisualRoots)
                     if(perception_detail::EntityBelongsToRoot(scene,entity,root))return true;
@@ -124,6 +142,8 @@ namespace renegade::runtime
             ProjectileNativeVector(from),ProjectileNativeVector(to),radius,prop,queryError))
         {result.status=ProjectileQueryStatus::Blocked;return result;}
         std::vector<wi::ecs::Entity> nativeExcluded{owner.root};
+        if (owner.additionalExcludedRoot != wi::ecs::INVALID_ENTITY)
+            nativeExcluded.push_back(owner.additionalExcludedRoot);
         if(owner.excludedVisualRoots)nativeExcluded.insert(nativeExcluded.end(),
             owner.excludedVisualRoots->begin(),owner.excludedVisualRoots->end());
         wi::physics::terrain_props::NativeHit native;

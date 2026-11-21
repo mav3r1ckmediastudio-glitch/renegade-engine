@@ -1,0 +1,50 @@
+{
+  "product": "FloweringHeather.glb",
+  "category": "Bushes",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/heather-clump",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/heather-clump/v1/lod0.glb",
+      "bytes": 512872,
+      "sha256": "d5f9aa221e9e8118ba29b8c481131f67d59bc1232ebcc0b8d58eef2a82ec8ded",
+      "triangles": 8388
+    },
+    {
+      "lod": 1,
+      "path": "/models/heather-clump/v1/lod1.glb",
+      "bytes": 212388,
+      "sha256": "5f95e4e9370303c555bcc2457c22ffb05ab9f017c4fe61b4e1a621cb62a1bcb8",
+      "triangles": 1936
+    },
+    {
+      "lod": 2,
+      "path": "/models/heather-clump/v1/lod2.glb",
+      "bytes": 150104,
+      "sha256": "c574ff9f0ef72b06bc4ec29719d5265f04abf5963c3b732dbd2dc59f12428ea6",
+      "triangles": 88
+    }
+  ],
+  "dimensions_m": [
+    0.689,
+    0.3951,
+    0.7315
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "33888f3b7b86a328a41a3ab7470c91a0131d56f412fbed3a7ea44fe380c628b7",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    -0.038848429918289185,
+    0.017714687191354272,
+    0.005562245845794678
+  ]
+}

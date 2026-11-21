@@ -1,0 +1,58 @@
+{
+  "slug": "wildflower-patch",
+  "name": "Wildflower Patch",
+  "category": "plants",
+  "tags": [
+    "plant",
+    "ground cover",
+    "wildflower",
+    "meadow",
+    "grass",
+    "daisy",
+    "buttercup",
+    "clover",
+    "tileable",
+    "nature"
+  ],
+  "description": "Square 70 cm patch of short meadow grass with ox-eye daisies, yellow buttercups and a few red clovers, up to 50 cm tall. Every stem grows from inside the square, so copies on a 70 cm grid join edge to edge; the longest blades lean about 25 cm over the edges.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-10-27",
+  "updated": "2026-10-27",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 1.189,
+    "y": 0.535,
+    "z": 1.143
+  },
+  "parts": [],
+  "animations": [],
+  "wind": true,
+  "preview": "/models/wildflower-patch/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/wildflower-patch/v1/lod0.glb",
+      "bytes": 586924,
+      "sha256": "8fd2262da4a62e4d16c97f4bfd24c0aff1498f08fa34c3245cee13a40aefc096",
+      "triangles": 3860
+    },
+    {
+      "lod": 1,
+      "path": "/models/wildflower-patch/v1/lod1.glb",
+      "bytes": 235168,
+      "sha256": "52a0dc6f441b435c42e2f41edfddac5212881b17d294541d52b13ae192d8ac3b",
+      "triangles": 1236
+    },
+    {
+      "lod": 2,
+      "path": "/models/wildflower-patch/v1/lod2.glb",
+      "bytes": 81056,
+      "sha256": "39ed1a7d8b31967018d48ef38bc2b5f89b9e2d27ddf2c864385039b45a688c29",
+      "triangles": 500
+    }
+  ]
+}

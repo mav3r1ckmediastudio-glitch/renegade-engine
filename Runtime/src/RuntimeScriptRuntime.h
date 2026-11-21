@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/ScriptDocumentService.h"
 #include "renegade/bridge/GameplayInputService.h"
+#include "renegade/bridge/FlightVehicleService.h"
 #include "renegade/bridge/GameplayEventService.h"
 #include "renegade/bridge/InventoryGameplayGateway.h"
 #include "RuntimeDialogueScriptApi.h"
@@ -73,6 +74,8 @@ namespace renegade::runtime
         void SetGameplayState(
             const bridge::RuntimePlayerState* player,
             const bridge::GameplayInputFrame* input) noexcept;
+
+        void SetScriptedFlightFrame(const bridge::ScriptedFlightFrame& frame) noexcept;
 
         // Optional, host-authorised inventory access per script instance.
         // Must be configured before StartScene; no provider means no Lua

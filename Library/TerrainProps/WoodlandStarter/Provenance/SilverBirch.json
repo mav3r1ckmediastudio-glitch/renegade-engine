@@ -1,0 +1,50 @@
+{
+  "product": "SilverBirch.glb",
+  "category": "Broadleaf trees",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/silver-birch",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/silver-birch/v1/lod0.glb",
+      "bytes": 4651496,
+      "sha256": "e12466d3c07083acdbb248b252b8129fb72808d4d2bf9d08580ff646ab34e44b",
+      "triangles": 34726
+    },
+    {
+      "lod": 1,
+      "path": "/models/silver-birch/v1/lod1.glb",
+      "bytes": 1303800,
+      "sha256": "ba9ccd03ba2d0ad21f82eb6fd9934712822946b6c869069a17f3d5580b7ddedc",
+      "triangles": 11108
+    },
+    {
+      "lod": 2,
+      "path": "/models/silver-birch/v1/lod2.glb",
+      "bytes": 567360,
+      "sha256": "a6ae6b4384feeb955fdd5e23d21fa5d1feb821ddda1dd1d95892b82a1728bb92",
+      "triangles": 5446
+    }
+  ],
+  "dimensions_m": [
+    10.99472,
+    18.20441,
+    10.47351
+  ],
+  "up": "+Y",
+  "pivot": "Centre of the trunk base at ground level",
+  "sha256": "bd59f94eb2659294a002330a36e0c97fbf57d9882b6bbdf94fd6f14fbc783c67",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    -0.15365025401115417,
+    0.20000000298023224,
+    -0.07518243789672852
+  ]
+}

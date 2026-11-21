@@ -1,0 +1,50 @@
+{
+  "product": "DenseJuniper.glb",
+  "category": "Bushes",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/juniper-shrub",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/juniper-shrub/v1/lod0.glb",
+      "bytes": 1111112,
+      "sha256": "03ad06d536ea3d36d9e320d7f104f335b46ac81a489b0145e51965b0b99bd8c9",
+      "triangles": 14460
+    },
+    {
+      "lod": 1,
+      "path": "/models/juniper-shrub/v1/lod1.glb",
+      "bytes": 321264,
+      "sha256": "bdb61a885d4a711853345c9886c770d75cf81db0764ea62158bd266141c5cf17",
+      "triangles": 2706
+    },
+    {
+      "lod": 2,
+      "path": "/models/juniper-shrub/v1/lod2.glb",
+      "bytes": 118568,
+      "sha256": "a564dd6e7326a7ce73a14b02c66c6373f3549c68714cd7dd2bf0bf5f761e566a",
+      "triangles": 1184
+    }
+  ],
+  "dimensions_m": [
+    1.8232,
+    2.77618,
+    2.16294
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "f0a6c8c411d898f018330b7b62832290cf13cc45557368a60bc1f63661015607",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    -0.05951040983200073,
+    0.04000241724938891,
+    0.03265976905822754
+  ]
+}

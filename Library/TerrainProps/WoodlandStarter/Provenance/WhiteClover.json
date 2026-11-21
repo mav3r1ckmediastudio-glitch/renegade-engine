@@ -1,0 +1,50 @@
+{
+  "product": "WhiteClover.glb",
+  "category": "Ground plants",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/clover-patch",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/clover-patch/v1/lod0.glb",
+      "bytes": 460276,
+      "sha256": "5135032e19b11bcd8a4e60fd7f45fcad33c9b51c0ea6bd8f14daefe58a19af7b",
+      "triangles": 4510
+    },
+    {
+      "lod": 1,
+      "path": "/models/clover-patch/v1/lod1.glb",
+      "bytes": 175156,
+      "sha256": "0076550e16ee3027ca91a2ff41354fd230227be0e8a411725b5b99e87774bfb1",
+      "triangles": 836
+    },
+    {
+      "lod": 2,
+      "path": "/models/clover-patch/v1/lod2.glb",
+      "bytes": 56996,
+      "sha256": "c73ca692019d486f3ffb5353949966703ee17ccccd6da5d3186b307928699a4a",
+      "triangles": 138
+    }
+  ],
+  "dimensions_m": [
+    0.47664,
+    0.15938,
+    0.42648
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "b0b71a027d988fb95e5ac3815081f0f09458754e311c9be7e75cc30b2484fda3",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    -0.023310907185077667,
+    -0.0028018034183374674,
+    0.04210018366575241
+  ]
+}

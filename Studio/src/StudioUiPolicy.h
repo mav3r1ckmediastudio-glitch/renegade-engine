@@ -17,9 +17,14 @@ namespace renegade::studio::ui
         bool physics = false;
         bool toolWindow = false;
 
+        constexpr bool CanNavigateViewport() const noexcept
+        {
+            return levelWorkspace && !hub && !loading && !runtime && !toolWindow;
+        }
+
         constexpr bool Visible() const noexcept
         {
-            return levelWorkspace && !hub && !loading && !runtime && !physics && !toolWindow;
+            return CanNavigateViewport() && !physics;
         }
     };
 

@@ -1,0 +1,54 @@
+{
+  "slug": "granite-boulder",
+  "name": "Granite Boulder",
+  "category": "rocks",
+  "tags": [
+    "rock",
+    "boulder",
+    "granite",
+    "nature",
+    "forest",
+    "roadside"
+  ],
+  "description": "Weathered roadside granite boulder, about 1.6 m across, with rounded joint faces, spalled corners and an open crack, lichen on its sides and moss on top. Origin at ground level; about 0.2 m sits below the ground line.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-10-26",
+  "updated": "2026-10-26",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 1.558,
+    "y": 0.99,
+    "z": 1.063
+  },
+  "parts": [],
+  "animations": [],
+  "wind": false,
+  "preview": "/models/granite-boulder/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/granite-boulder/v1/lod0.glb",
+      "bytes": 1486204,
+      "sha256": "3246fd0cc4859da4cdba7ccae089a2871921327f4a5e82919ba0018a02910b3b",
+      "triangles": 8500
+    },
+    {
+      "lod": 1,
+      "path": "/models/granite-boulder/v1/lod1.glb",
+      "bytes": 427576,
+      "sha256": "a40b5170d6d437abb00b468a6f0843855d98da7d0972b21c8fcc84799b0593a3",
+      "triangles": 2300
+    },
+    {
+      "lod": 2,
+      "path": "/models/granite-boulder/v1/lod2.glb",
+      "bytes": 152280,
+      "sha256": "0acfb2e0c386f9a426fa591cdc7776aabfbe229508922ed46d19e117f20266f0",
+      "triangles": 350
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "product": "MeadowFlowers.glb",
+  "category": "Ground plants",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/wildflower-patch",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/wildflower-patch/v1/lod0.glb",
+      "bytes": 586924,
+      "sha256": "8fd2262da4a62e4d16c97f4bfd24c0aff1498f08fa34c3245cee13a40aefc096",
+      "triangles": 3860
+    },
+    {
+      "lod": 1,
+      "path": "/models/wildflower-patch/v1/lod1.glb",
+      "bytes": 235168,
+      "sha256": "52a0dc6f441b435c42e2f41edfddac5212881b17d294541d52b13ae192d8ac3b",
+      "triangles": 1236
+    },
+    {
+      "lod": 2,
+      "path": "/models/wildflower-patch/v1/lod2.glb",
+      "bytes": 81056,
+      "sha256": "39ed1a7d8b31967018d48ef38bc2b5f89b9e2d27ddf2c864385039b45a688c29",
+      "triangles": 500
+    }
+  ],
+  "dimensions_m": [
+    1.18928,
+    0.53502,
+    1.1434
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "5566f5e838754df58431374845f11aead9ae7e1049605001caf705cec63b93bf",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    -0.0015204846858978271,
+    0.018696084817812597,
+    0.03239139914512634
+  ]
+}

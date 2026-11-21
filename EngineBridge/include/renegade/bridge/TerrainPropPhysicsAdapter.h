@@ -53,7 +53,7 @@ namespace wi::physics::terrain_props
     // propsOnly is reserved for native CharacterComponent surface queries.
     bool CastNativeScene(const wi::scene::Scene&,const XMFLOAT3& from,const XMFLOAT3& to,
         float radius,std::uint32_t layerMask,const std::vector<wi::ecs::Entity>& excludedRoots,
-        bool propsOnly,NativeHit&,std::string& error);
+        bool propsOnly,NativeHit&,std::string& error,bool includeSensors=false);
     wi::scene::Scene::CapsuleIntersectionResult IntersectCapsule(
         const wi::scene::Scene&,const wi::primitive::Capsule&,std::uint32_t layerMask);
     wi::scene::Scene::RayIntersectionResult IntersectRay(

@@ -1,0 +1,55 @@
+{
+  "source_revision": "dcf309bd86bd521083d9c70f01f2de45fdc7c457",
+  "files": [
+    {
+      "path": "LICENSE",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/LICENSE",
+      "sha256": "20e4afadfb10c67952b3d73cd2982d21d165ab4ae82b0dd9e4d6f2166ee349b6"
+    },
+    {
+      "path": "LICENSE.md",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/textures/LICENSE.md",
+      "sha256": "c4c67cf955536e61d9ac3fdf13830114edcd4c19c9aa0356ed0862cedf64140a"
+    },
+    {
+      "path": "Bark004_1K-JPG_Color.jpg",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/textures/bark/Bark004_1K-JPG/Bark004_1K-JPG_Color.jpg",
+      "sha256": "63efa0c70f9a93edc15a3c568026066a55dc2c26de096b7b5aa327d5e9c6eee1"
+    },
+    {
+      "path": "Bark004_1K-JPG_NormalGL.jpg",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/textures/bark/Bark004_1K-JPG/Bark004_1K-JPG_NormalGL.jpg",
+      "sha256": "197e9ba1317517433d59f327cb7c8fac04b91b27b2f54ba16a58c4b2e329a180"
+    },
+    {
+      "path": "Bark004_1K-JPG_Roughness.jpg",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/textures/bark/Bark004_1K-JPG/Bark004_1K-JPG_Roughness.jpg",
+      "sha256": "e508b7dbf618087badc628ef6271290e5ecbe8163a2f6bc83957a1c9687b357a"
+    },
+    {
+      "path": "Bark012_1K-JPG_Color.jpg",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/textures/bark/Bark012_1K-JPG/Bark012_1K-JPG_Color.jpg",
+      "sha256": "772d7a35b1d93bce6de7ad8adeabfb6cc126ba52d07b7c9103ed9a7e65dac577"
+    },
+    {
+      "path": "Bark012_1K-JPG_NormalGL.jpg",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/textures/bark/Bark012_1K-JPG/Bark012_1K-JPG_NormalGL.jpg",
+      "sha256": "516a7c92605277d05c7fcdc8fb468572ccdba10a661da1212a10c57977d449b6"
+    },
+    {
+      "path": "Bark012_1K-JPG_Roughness.jpg",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/textures/bark/Bark012_1K-JPG/Bark012_1K-JPG_Roughness.jpg",
+      "sha256": "65bba089b8b7589e0dd6107fe418faaaa2ededcd610de4f9c9897bde763356a9"
+    },
+    {
+      "path": "oak.png",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/textures/leaves/oak.png",
+      "sha256": "24451223cf396d22910a4932b8bb996a7274e63d81e24128c96a430ab67822b1"
+    },
+    {
+      "path": "pine.png",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/textures/leaves/pine.png",
+      "sha256": "88be36a2387554ac4b7c7d1549eae454a37ad896e8e33a7d6ae5956bd169ab08"
+    }
+  ]
+}

@@ -28,6 +28,19 @@ p3_terrain_replace_once(
     "\t\t\tit++;\n\t\t}\n\n\t\tif (props_regenerated)"
     "\t\t\tif(p3_collision_wanted) wi::physics::terrain_props::PublishTerrainChunk(*scene, terrainEntity, {chunk.x,chunk.z}, chunk_data.entity, !chunk_data.invalidated && chunk_mesh != nullptr);\n\t\t\tit++;\n\t\t}\n\n\t\tif (props_regenerated)")
 p3_terrain_replace_once(
+    [=[generator->build_batch.push_back(chunk);]=]
+    [=[// Collision, invalidation and camera requests can address the same chunk
+					// before setup_chunk() reserves it. Each worker must own one chunk.
+					const auto& pending = generator->build_batch;
+					if (std::find(pending.begin(), pending.end(), chunk) != pending.end())
+					{
+					    return true;
+					}
+					generator->build_batch.push_back(chunk);]=])
+p3_terrain_replace_once(
+    "if (!request_chunk(chunk.x, chunk.z))"
+    "if (!request_chunk(chunk.x - center_chunk.x, chunk.z - center_chunk.z))")
+p3_terrain_replace_once(
     "\t\t\tauto request_all_chunks = [&]()\n\t\t\t{"
     "\t\t\tauto request_all_chunks = [&]()\n\t\t\t{\n\t\t\t\t// Collision interests share this queue and its existing time budget.\n\t\t\t\tif(const auto requests = wi::physics::terrain_props::GetTerrainRequests(*scene, terrainEntity))\n\t\t\t\t\tfor(const auto& key:*requests)\n\t\t\t\t\t\tif(!request_chunk(key.x-center_chunk.x,key.z-center_chunk.z))return;")
 string(PREPEND _p3_terrain

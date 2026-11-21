@@ -22,6 +22,7 @@ namespace renegade::studio
         void OnAction(std::function<void(Action)> callback);
         void RequestCurrentWorkspaceReconcile();
         void PrepareViewportPlacement();
+        void OpenPhysicsPage(RenegadePhysicsLabWorkspace::Page page);
         void OnSceneSelectionChanged();
         void SetParticlePickerAction(std::function<void(bool)> action) { particlePickerAction_=std::move(action); particleWorkspace_.SetEffectEditor([this](){if(particlePickerAction_)particlePickerAction_(true);}); }
         std::function<void(bool)> particlePickerAction_;

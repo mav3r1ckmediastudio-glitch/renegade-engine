@@ -27,6 +27,8 @@ Character import has its own animation/action assignment path.
 [Importer instructions](MODEL_IMPORTER_REBUILD.md);
 [Character workflow](CHARACTER_WORKFLOW_PROGRESS.md).
 
+[Build breakable objects in Blender and Renegade](BREAKABLE_OBJECTS_GUIDE.md).
+
 ## Select, transform and make assemblies
 
 1. Click an object; Shift-click toggles objects in viewport or hierarchy.

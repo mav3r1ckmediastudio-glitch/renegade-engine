@@ -1,0 +1,39 @@
+--- a/WickedEngine/wiArchive.h
++++ b/WickedEngine/wiArchive.h
+@@ -64,6 +64,36 @@
+ 		Archive(const std::string& fileName, bool readMode = true, bool report_errors = true);
+ 		// Creates a memory mapped archive in read mode
+ 		Archive(const uint8_t* data, size_t size);
++		// Read an owned or borrowed memory span with a base directory for relative resources.
++		// The caller supplies the trailing path separator and keeps the span alive until Close().
++		Archive(const uint8_t* data, size_t size, const std::string& source_directory, bool report_errors)
++			: report_errors(report_errors), data_ptr(data), data_ptr_size(size), directory(source_directory)
++		{
++			if (data == nullptr || size < sizeof(uint64_t))
++			{
++				Close();
++				return;
++			}
++			uint64_t version;
++			std::memcpy(&version, data, sizeof(version));
++			if (version >= 91)
++			{
++				if (size < sizeof(Header))
++				{
++					Close();
++					return;
++				}
++				uint64_t properties;
++				std::memcpy(&properties, data + sizeof(uint64_t), sizeof(properties));
++				const uint64_t thumbnail_size = version == 91 ? properties : uint32_t(properties);
++				if (thumbnail_size > size - sizeof(Header))
++				{
++					Close();
++					return;
++				}
++			}
++			SetReadModeAndResetPos(true);
++		}
+ 		~Archive() { Close(); }
+ 
+ 		Archive& operator=(const Archive&) = default;

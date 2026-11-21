@@ -22,11 +22,13 @@ namespace renegade::runtime
             bridge::TerrainPropDetailProjection* model = nullptr;
             bridge::TerrainPropPage page;
             std::vector<wi::ecs::Entity> coarse;
-            bool fine = false;
+            bool fine = false; // target representation
+            float fineWeight = 0;
         };
         std::vector<std::unique_ptr<bridge::TerrainPropDetailProjection>> models_;
         std::map<Cell, std::map<size_t,Batch>> cells_;
         std::set<Cell> active_;
+        std::set<std::pair<Cell, size_t>> fading_;
         std::deque<Cell> pending_;
         std::optional<Cell> center_, viewCell_;
         std::optional<uint64_t> revision_;
@@ -96,21 +98,110 @@ namespace renegade::runtime
                 if (m && !m->string_values.has("renegade.terrain_props.ranged")) bindCoarse(e);
             }
         }
-    public:
-        void Update(wi::scene::Scene& scene, uint64_t revision, const bridge::TerrainPropCollisionWorld* world,
-            const std::string& root, const bridge::StableId& project, const DirectX::XMFLOAT3& pos,
-            const DirectX::XMFLOAT3* camera = nullptr) {
+        void AdvanceFades(wi::scene::Scene& scene, float dt) {
+            constexpr float durationSeconds = 0.55f;
+            // A hitch may delay the blend, but must not skip straight to its endpoint.
+            const float step = std::isfinite(dt) ? std::clamp(dt, 0.f, 0.05f) / durationSeconds : 0.f;
+            for (auto it = fading_.begin(); it != fading_.end();) {
+                const auto cell = it->first;
+                auto& batches = cells_.at(cell);
+                auto& batch = batches.at(it->second);
+                const float target = batch.fine ? 1.f : 0.f;
+                batch.fineWeight = std::clamp(batch.fineWeight + (batch.fine ? step : -step), 0.f, 1.f);
+                // Keep one complete silhouette while the other fills or recedes.
+                const float fine = std::min(1.f, 2.f * batch.fineWeight);
+                const float coarse = std::min(1.f, 2.f * (1.f - batch.fineWeight));
+                batch.model->SetCoverage(cell, fine);
+                for (auto entity : batch.coarse)
+                    if (auto* object = scene.objects.GetComponent(entity))
+                        bridge::SetTerrainPropDetailCoverage(*object, coarse);
+                if (batch.fineWeight != target) {
+                    ++it;
+                    continue;
+                }
+                if (batch.fine) {
+                    for (auto entity : batch.coarse) ranges_.SetRenderable(scene, entity, false);
+                } else {
+                    batch.model->Release(cell);
+                    if (std::none_of(batches.begin(), batches.end(), [](const auto& entry) {
+                        return entry.second.fine || entry.second.fineWeight > 0;
+                    })) active_.erase(cell);
+                }
+                it = fading_.erase(it);
+            }
+        }
+
+        std::map<bridge::StableId,bridge::PreparedReusableModelPlacement> preloaded_;
+        void IndexRevision(wi::scene::Scene& scene, uint64_t revision,
+            const bridge::TerrainPropCollisionWorld* world, const std::string& root,
+            const bridge::StableId& project) {
             if (revision_ != revision) {
                 // A revision can change while the same coarse scene objects still exist.
                 for (const auto& cell : active_) for (const auto& entry : cells_.at(cell)) {
-                    if (!entry.second.fine) continue;
                     for (auto entity : entry.second.coarse)
-                        if (auto* object = scene.objects.GetComponent(entity)) object->SetRenderable(true);
+                        if (auto* object = scene.objects.GetComponent(entity)) {
+                            bridge::SetTerrainPropDetailCoverage(*object, 1.f);
+                            object->SetRenderable(true);
+                        }
                 }
-                cells_.clear(); models_.clear(); active_.clear(); pending_.clear(); center_.reset(); viewCell_.reset();
+                fading_.clear(); cells_.clear(); models_.clear(); active_.clear(); pending_.clear(); center_.reset(); viewCell_.reset();
+                preloaded_.clear();
                 revision_ = revision;
                 if (world) { ranges_.Index(scene,world->RangeParts()); Index(scene,*world,root,project); }
             }
+        }
+    public:
+        void FinishPreparations() noexcept {
+            // These workers deserialize scenes and create Wicked resources. Finish
+            // them while the job system, graphics device and log writer are live.
+            for (auto& entry : preparations_)
+                entry.second.wait();
+            preparations_.clear();
+        }
+
+        void PreloadSpawn(wi::scene::Scene& scene, uint64_t revision,
+            const bridge::TerrainPropCollisionWorld* world, const std::string& root,
+            const bridge::StableId& project, const DirectX::XMFLOAT3& spawn) {
+            IndexRevision(scene,revision,world,root,project);
+            if (cells_.empty() || !std::isfinite(spawn.x) || !std::isfinite(spawn.z)) return;
+            const auto center = At(spawn.x,spawn.z);
+            // One cell beyond the fine range provides coverage on the first approach.
+            std::map<bridge::StableId,float> nearest;
+            for (int dx=-4; dx<=4; ++dx) for (int dz=-4; dz<=4; ++dz) {
+                const auto cell = cells_.find({center.first+dx,center.second+dz});
+                if (cell == cells_.end()) continue;
+                for (const auto& entry : cell->second) {
+                    const auto& batch = entry.second;
+                    const auto& id = batch.model->Request().assetId;
+                    for (const auto& placement : batch.page.placements) {
+                        const float x = placement.position[0]-spawn.x;
+                        const float z = placement.position[2]-spawn.z;
+                        auto result = nearest.emplace(id,x*x+z*z);
+                        result.first->second = std::min(result.first->second,x*x+z*z);
+                    }
+                }
+            }
+            std::vector<std::pair<float,bridge::StableId>> ordered;
+            for (const auto& entry : nearest) ordered.emplace_back(entry.second,entry.first);
+            std::sort(ordered.begin(),ordered.end());
+            constexpr size_t maxSpawnModels = 2;
+            const auto start = std::chrono::steady_clock::now();
+            for (size_t i=0; i<std::min(maxSpawnModels,ordered.size()); ++i) {
+                const auto& id = ordered[i].second;
+                auto payload = bridge::ReusableAssetService().PrepareModelAssetPlacement({root,project,id});
+                if (payload.IsReady()) preloaded_.emplace(id,std::move(payload));
+                else wi::backlog::post("Terrain prop preload: "+payload.Result().error,wi::backlog::LogLevel::Warning);
+            }
+            if (!ordered.empty()) {
+                const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-start);
+                wi::backlog::post("Terrain prop spawn preload: models="+std::to_string(preloaded_.size())+
+                    " elapsed_ms="+std::to_string(ms.count()));
+            }
+        }
+        void Update(wi::scene::Scene& scene, uint64_t revision, const bridge::TerrainPropCollisionWorld* world,
+            const std::string& root, const bridge::StableId& project, const DirectX::XMFLOAT3& pos,
+            const DirectX::XMFLOAT3* camera = nullptr, float dt = 1.f / 60.f) {
+            IndexRevision(scene,revision,world,root,project);
             if (!std::isfinite(pos.x) || !std::isfinite(pos.z)) return;
             const auto center = At(pos.x,pos.z);
             const auto& view = camera && std::isfinite(camera->x) && std::isfinite(camera->z) ? *camera : pos;
@@ -144,7 +235,10 @@ namespace renegade::runtime
                 if (obsolete && Ready(job->second)) job = preparations_.erase(job);
                 else ++job;
             }
-            if (pending_.empty()) return;
+            if (pending_.empty()) {
+                AdvanceFades(scene, dt);
+                return;
+            }
             const auto cell = pending_.front();
 
             const bool wanted = std::abs(int64_t(cell.first)-center.first)<=3 && std::abs(int64_t(cell.second)-center.second)<=3;
@@ -155,7 +249,11 @@ namespace renegade::runtime
                 if (wanted) {
                     std::string error;
                     bridge::PreparedReusableModelPlacement prepared;
-                    if (!batch.model->HasResidentModel()) {
+                    auto staged = preloaded_.find(batch.model->Request().assetId);
+                    if (staged != preloaded_.end() && !batch.model->HasResidentModel()) {
+                        prepared = std::move(staged->second);
+                        preloaded_.erase(staged);
+                    } else if (!batch.model->HasResidentModel()) {
                         const ModelKey key{revision,pair.first};
                         try {
                             auto job = preparations_.find(key);
@@ -179,16 +277,16 @@ namespace renegade::runtime
                         continue;
                     }
                 }
-                for (const auto e : batch.coarse)
-                    ranges_.SetRenderable(scene,e,!wanted);
-                if (!wanted) batch.model->Release(cell);
+                if (!wanted)
+                    for (auto entity : batch.coarse) ranges_.SetRenderable(scene, entity, true);
                 batch.fine = wanted;
-                if (wanted) active_.insert(cell);
+                active_.insert(cell);
+                fading_.emplace(cell, pair.first);
             }
             pending_.pop_front();
             if (waiting) pending_.push_back(cell);
-            if (!wanted) active_.erase(cell);
+            AdvanceFades(scene, dt);
         }
-        bool Settled() const { return pending_.empty() && preparations_.empty(); }
+        bool Settled() const { return pending_.empty() && preparations_.empty() && fading_.empty(); }
     };
 }

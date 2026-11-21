@@ -1,6 +1,18 @@
 #include "renegade/bridge/PhysicsLuaService.h"
 
+#include "renegade/bridge/CollisionService.h"
+#include "renegade/bridge/ConstraintService.h"
+#include "renegade/bridge/CharacterPhysicsService.h"
+#include "renegade/bridge/VehiclePhysicsService.h"
+#include "renegade/bridge/RagdollPhysicsService.h"
+#include "renegade/bridge/SoftBodyPhysicsService.h"
+#include "renegade/bridge/WickedColliderService.h"
+#include "renegade/bridge/FlightVehicleService.h"
+#include "renegade/bridge/PhysicsGameplayService.h"
 #include "renegade/bridge/PhysicsService.h"
+
+#include <limits>
+#include <type_traits>
 #include "renegade/bridge/TerrainPropCollisionWorld.h"
 
 #include <wiLua.h>
@@ -394,6 +406,186 @@ namespace
         return 1;
     }
 
+    int LuaBodySensor(lua_State* L)
+    {
+        const auto entity = EntityArg(L, 1);
+        const auto* scene = Scene();
+        if (!scene || !scene->rigidbodies.Contains(entity))
+            lua_pushnil(L);
+        else
+            PushBool(L, renegade::bridge::IsBodySensor(*scene, entity));
+        return 1;
+    }
+
+    int LuaSetBodySensor(lua_State* L)
+    {
+        const auto entity = EntityArg(L, 1);
+        luaL_checktype(L, 2, LUA_TBOOLEAN);
+        auto* scene = Scene();
+        PushBool(L, scene && renegade::bridge::SetBodySensor(*scene, entity, lua_toboolean(L, 2) != 0));
+        return 1;
+    }
+
+    int LuaGetBodyCollisionFilter(lua_State* L)
+    {
+        const auto entity = EntityArg(L, 1);
+        const auto* scene = Scene();
+        const auto* body = scene ? scene->rigidbodies.GetComponent(entity) : nullptr;
+        if (!body || !renegade::bridge::SupportsBodyCollisionFilter(*body))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        const auto filter = renegade::bridge::GetBodyCollisionFilter(*scene, entity);
+        lua_pushinteger(L, filter.layer);
+        lua_pushinteger(L, filter.mask);
+        return 2;
+    }
+
+    int LuaSetBodyCollisionFilter(lua_State* L)
+    {
+        using namespace renegade::bridge;
+        const auto entity = EntityArg(L, 1);
+        int validLayer = 0, validMask = 0;
+        const auto layer = lua_tointegerx(L, 2, &validLayer);
+        const auto mask = lua_tointegerx(L, 3, &validMask);
+        auto* scene = Scene();
+        PushBool(L, scene && validLayer && validMask && layer >= 0 && layer < BodyCollisionLayerCount &&
+            mask >= 0 && mask <= AllBodyCollisionLayers &&
+            SetBodyCollisionFilter(*scene, entity, {static_cast<int>(layer), static_cast<int>(mask)}));
+        return 1;
+    }
+
+    int LuaSetDestructibleImpactSpeed(lua_State* L)
+    {
+        const auto entity = EntityArg(L, 1);
+        int valid = 0;
+        const auto speed = lua_tonumberx(L, 2, &valid);
+        auto* scene = Scene();
+        PushBool(L, scene && valid &&
+            renegade::bridge::SetDestructibleImpactSpeed(*scene, entity, static_cast<float>(speed)));
+        return 1;
+    }
+
+    int LuaBreakDestructible(lua_State* L)
+    {
+        const auto entity = EntityArg(L, 1);
+        auto* scene = Scene();
+        PushBool(L, scene && renegade::bridge::RequestDestructibleBreak(*scene, entity));
+        return 1;
+    }
+
+    int LuaDrainDestructibleBreaks(lua_State* L)
+    {
+        const auto* scene = Scene();
+        const auto events = scene ? renegade::bridge::DrainDestructibleBreakEvents(*scene)
+                                  : std::vector<renegade::bridge::DestructibleBreakEvent>{};
+        lua_createtable(L, static_cast<int>(events.size()), 0);
+        lua_Integer index = 1;
+        for (const auto& event : events)
+        {
+            lua_createtable(L, 0, 4);
+            lua_pushinteger(L, static_cast<lua_Integer>(event.entity)); lua_setfield(L, -2, "entity");
+            lua_pushinteger(L, static_cast<lua_Integer>(event.impactor)); lua_setfield(L, -2, "impactor");
+            lua_pushnumber(L, event.impactSpeed); lua_setfield(L, -2, "impact_speed");
+            lua_pushinteger(L, event.pieceCount); lua_setfield(L, -2, "piece_count");
+            lua_rawseti(L, -2, index++);
+        }
+        return 1;
+    }
+
+    int LuaEnableContactEvents(lua_State* L)
+    {
+        luaL_checktype(L, 1, LUA_TBOOLEAN);
+        auto* scene = Scene();
+        PushBool(L, scene && renegade::bridge::EnableContactEvents(*scene, lua_toboolean(L, 1) != 0));
+        return 1;
+    }
+
+    int LuaDrainContactEvents(lua_State* L)
+    {
+        const auto* scene = Scene();
+        const auto batch = scene ? renegade::bridge::DrainContactEvents(*scene)
+                                 : renegade::bridge::ContactEventBatch{};
+        lua_createtable(L, static_cast<int>(batch.events.size()), 0);
+        lua_Integer index = 1;
+        for (const auto& event : batch.events)
+        {
+            lua_createtable(L, 0, 6);
+            lua_pushinteger(L, static_cast<lua_Integer>(event.bodyA)); lua_setfield(L, -2, "body_a");
+            lua_pushinteger(L, static_cast<lua_Integer>(event.bodyB)); lua_setfield(L, -2, "body_b");
+            lua_pushinteger(L, event.subshapeA); lua_setfield(L, -2, "subshape_a");
+            lua_pushinteger(L, event.subshapeB); lua_setfield(L, -2, "subshape_b");
+            PushBool(L, event.sensor); lua_setfield(L, -2, "sensor");
+            lua_pushstring(L, event.began ? "begin" : "end"); lua_setfield(L, -2, "phase");
+            lua_rawseti(L, -2, index++);
+        }
+        lua_pushinteger(L, batch.dropped);
+        return 2;
+    }
+
+    int LuaRaycastBodies(lua_State* L)
+    {
+        const auto badArgument = [L](const char* message) {
+            lua_pushnil(L);
+            lua_pushstring(L, message);
+            return 2;
+        };
+        const auto readCoordinate = [L](int index, float& value) {
+            int numeric = 0;
+            value = static_cast<float>(lua_tonumberx(L, index, &numeric));
+            return numeric && std::isfinite(value);
+        };
+
+        XMFLOAT3 from, to;
+        if (!readCoordinate(1, from.x) || !readCoordinate(2, from.y) || !readCoordinate(3, from.z) ||
+            !readCoordinate(4, to.x) || !readCoordinate(5, to.y) || !readCoordinate(6, to.z))
+            return badArgument("A ray requires six finite coordinates.");
+
+        lua_Integer mask = UINT32_MAX;
+        if (!lua_isnoneornil(L, 7))
+        {
+            int integer = 0;
+            mask = lua_tointegerx(L, 7, &integer);
+            if (!integer || mask < 0 || static_cast<uint64_t>(mask) > UINT32_MAX)
+                return badArgument("Expected a 32-bit unsigned scene layer mask.");
+        }
+
+        auto exclude = wi::ecs::INVALID_ENTITY;
+        if (!lua_isnoneornil(L, 8))
+        {
+            int integer = 0;
+            const auto entity = lua_tointegerx(L, 8, &integer);
+            if (!integer || entity < 0)
+                return badArgument("Expected an entity ID.");
+            exclude = static_cast<wi::ecs::Entity>(entity);
+        }
+        if (!lua_isnoneornil(L, 9) && !lua_isboolean(L, 9))
+            return badArgument("Expected a boolean for sensor inclusion.");
+
+        const auto* scene = Scene();
+        wi::physics::terrain_props::NativeHit hit;
+        std::string error;
+        if (!scene || !renegade::bridge::RaycastBodies(*scene, from, to, static_cast<uint32_t>(mask),
+                exclude, lua_toboolean(L, 9) != 0, hit, error))
+        {
+            lua_pushnil(L);
+            lua_pushstring(L, scene ? error.c_str() : "No physics scene is bound.");
+            return 2;
+        }
+        if (hit.entity == wi::ecs::INVALID_ENTITY)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 0, 4);
+        lua_pushinteger(L, static_cast<lua_Integer>(hit.entity)); lua_setfield(L, -2, "entity");
+        lua_pushnumber(L, hit.fraction); lua_setfield(L, -2, "fraction");
+        PushVector(L, hit.position); lua_setfield(L, -2, "position");
+        PushVector(L, hit.normal); lua_setfield(L, -2, "normal");
+        return 1;
+    }
+
     int LuaRaycast(lua_State* L)
     {
         auto* scene = Scene();
@@ -496,6 +688,81 @@ namespace
             EntityArg(L, 1),
             static_cast<float>(luaL_checknumber(L, 2)),
             static_cast<float>(luaL_checknumber(L, 3))));
+        return 1;
+    }
+
+    int LuaPhysicalVtolCommand(lua_State* L)
+    {
+        auto* scene = Scene();
+        const auto entity = EntityArg(L, 1);
+        const renegade::bridge::FlightVehicleInput input{
+            static_cast<float>(luaL_checknumber(L, 2)),
+            static_cast<float>(luaL_checknumber(L, 3)),
+            static_cast<float>(luaL_checknumber(L, 4))};
+        const bool enabled = lua_isnoneornil(L, 5) || lua_toboolean(L, 5);
+        PushBool(L, scene && renegade::bridge::CommandPhysicalVtol(*scene, entity, input, enabled));
+        return 1;
+    }
+
+    int LuaPhysicalVtolGrounded(lua_State* L)
+    {
+        const auto* scene = Scene();
+        PushBool(L, scene && renegade::bridge::IsPhysicalVtolGrounded(*scene, EntityArg(L, 1)));
+        return 1;
+    }
+
+    int LuaHelicopterCommand(lua_State* L)
+    {
+        auto* scene = Scene();
+        const auto entity = EntityArg(L, 1);
+        const renegade::bridge::FlightVehicleInput input{
+            float(luaL_checknumber(L, 2)), float(luaL_checknumber(L, 3)), float(luaL_checknumber(L, 4))};
+        const bool enabled = lua_isnoneornil(L, 5) || lua_toboolean(L, 5);
+        PushBool(L, scene && renegade::bridge::CommandHelicopter(*scene, entity, input, enabled));
+        return 1;
+    }
+
+    int LuaHelicopterGrounded(lua_State* L)
+    {
+        const auto* scene = Scene();
+        PushBool(L, scene && renegade::bridge::IsHelicopterGrounded(*scene, EntityArg(L, 1)));
+        return 1;
+    }
+
+    int LuaSpacecraftCommand(lua_State* L)
+    {
+        auto* scene = Scene();
+        const auto entity = EntityArg(L, 1);
+        const renegade::bridge::SpacecraftInput input{
+            float(luaL_checknumber(L, 2)), float(luaL_checknumber(L, 3)), float(luaL_checknumber(L, 4)),
+            float(luaL_checknumber(L, 5)), float(luaL_checknumber(L, 6)), float(luaL_checknumber(L, 7))};
+        const bool enabled = lua_isnoneornil(L, 8) || lua_toboolean(L, 8);
+        PushBool(L, scene && renegade::bridge::CommandSpacecraft(*scene, entity, input, enabled));
+        return 1;
+    }
+
+    int LuaHasFlightVehicle(lua_State* L)
+    {
+        const auto* scene = Scene();
+        PushBool(L, scene && renegade::bridge::HasLiveFlightVehicle(*scene, EntityArg(L, 1)));
+        return 1;
+    }
+
+    int LuaFlightVehicleDrive(lua_State* L)
+    {
+        auto* scene = Scene();
+        const auto entity = EntityArg(L, 1);
+        const renegade::bridge::FlightVehicleInput input{
+            static_cast<float>(luaL_checknumber(L, 2)),
+            static_cast<float>(luaL_checknumber(L, 3)),
+            static_cast<float>(luaL_checknumber(L, 4))};
+        const float dt = static_cast<float>(luaL_checknumber(L, 5));
+        float altitude = static_cast<float>(
+            luaL_optnumber(L, 6, std::numeric_limits<float>::quiet_NaN()));
+        if (scene && renegade::bridge::DriveFlightVehicle(*scene, entity, input, dt, altitude))
+            lua_pushnumber(L, altitude);
+        else
+            lua_pushnil(L);
         return 1;
     }
 
@@ -645,6 +912,75 @@ namespace
         return 1;
     }
 
+    int LuaSoftBodyGetPins(lua_State* L)
+    {
+        auto* scene = Scene();
+        const auto entity = EntityArg(L, 1);
+        wi::vector<uint32_t> pins;
+        if (!scene || !renegade::bridge::GetSoftBodyPinnedVertices(*scene, entity, pins))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+
+        lua_createtable(L, static_cast<int>(pins.size()), 0);
+        lua_Integer slot = 1;
+        for (auto index : pins)
+        {
+            lua_pushinteger(L, index);
+            lua_rawseti(L, -2, slot++);
+        }
+        return 1;
+    }
+
+    int LuaSoftBodySetPins(lua_State* L)
+    {
+        auto* scene = Scene();
+        const auto entity = EntityArg(L, 1);
+        luaL_checktype(L, 2, LUA_TTABLE);
+        const auto meshEntity = scene ? renegade::bridge::ResolveSoftBodyMeshEntity(*scene, entity)
+                                      : wi::ecs::INVALID_ENTITY;
+        const auto* mesh = scene ? scene->meshes.GetComponent(meshEntity) : nullptr;
+        const auto length = lua_rawlen(L, 2);
+        if (!mesh || length > mesh->vertex_positions.size())
+        {
+            PushBool(L, false);
+            return 1;
+        }
+        wi::vector<uint32_t> pins;
+        lua_pushnil(L);
+        while (lua_next(L, 2) != 0)
+        {
+            const bool integer = lua_isinteger(L, -2);
+            const auto key = lua_tointeger(L, -2);
+            lua_pop(L, 1);
+            if (!integer || key < 1 || static_cast<uint64_t>(key) > length)
+            {
+                lua_pop(L, 1);
+                PushBool(L, false);
+                return 1;
+            }
+        }
+        pins.reserve(length);
+        for (size_t slot = 1; slot <= length; ++slot)
+        {
+            lua_rawgeti(L, 2, static_cast<lua_Integer>(slot));
+            const bool integer = lua_isinteger(L, -1);
+            const auto index = lua_tointeger(L, -1);
+            lua_pop(L, 1);
+            if (!integer || index < 0 || static_cast<uint64_t>(index) >= mesh->vertex_positions.size() ||
+                static_cast<uint64_t>(index) > UINT32_MAX)
+            {
+                PushBool(L, false);
+                return 1;
+            }
+            pins.push_back(static_cast<uint32_t>(index));
+        }
+        renegade::bridge::SetSoftBodyPinsCommand command(*scene, entity, std::move(pins));
+        PushBool(L, command.Execute());
+        return 1;
+    }
+
     int LuaSoftBodyReset(lua_State* L)
     {
         auto* scene = Scene();
@@ -703,6 +1039,8 @@ namespace
         lua_setfield(L, -2, name);
     }
 
+#include "PhysicsLuaAuthoring.inc"
+
     void InstallNamespace(lua_State* L)
     {
         lua_getglobal(L, "renegade");
@@ -726,6 +1064,7 @@ namespace
         lua_pushinteger(L, 1);
         lua_setfield(L, -2, "contract_version");
 
+        InstallPhysicsAuthoring(L);
         SetFunction(L, "get_world", LuaGetWorld);
         SetFunction(L, "set_enabled", LuaSetEnabled);
         SetFunction(L, "set_simulation_enabled", LuaSetSimulationEnabled);
@@ -757,6 +1096,16 @@ namespace
         SetFunction(L, "activate_all", LuaActivateAll);
         SetFunction(L, "reset_all", LuaResetAll);
         SetFunction(L, "optimize_broadphase", LuaOptimizeBroadphase);
+        SetFunction(L, "body_is_sensor", LuaBodySensor);
+        SetFunction(L, "body_set_sensor", LuaSetBodySensor);
+        SetFunction(L, "body_get_collision_filter", LuaGetBodyCollisionFilter);
+        SetFunction(L, "body_set_collision_filter", LuaSetBodyCollisionFilter);
+        SetFunction(L, "enable_contact_events", LuaEnableContactEvents);
+        SetFunction(L, "set_destructible_impact_speed", LuaSetDestructibleImpactSpeed);
+        SetFunction(L, "break_destructible", LuaBreakDestructible);
+        SetFunction(L, "drain_destructible_breaks", LuaDrainDestructibleBreaks);
+        SetFunction(L, "drain_contact_events", LuaDrainContactEvents);
+        SetFunction(L, "raycast_bodies", LuaRaycastBodies);
         SetFunction(L, "raycast", LuaRaycast);
         SetFunction(L, "set_terrain_interest", LuaTerrainInterest);
         SetFunction(L, "clear_terrain_interest", LuaClearTerrainInterest);
@@ -769,6 +1118,13 @@ namespace
         SetFunction(L, "character_change_capsule", LuaCharacterCapsule);
 
         SetFunction(L, "has_vehicle", LuaHasVehicle);
+        SetFunction(L, "has_flight_vehicle", LuaHasFlightVehicle);
+        SetFunction(L, "flight_vehicle_drive", LuaFlightVehicleDrive);
+        SetFunction(L, "physical_vtol_command", LuaPhysicalVtolCommand);
+        SetFunction(L, "physical_vtol_grounded", LuaPhysicalVtolGrounded);
+        SetFunction(L, "helicopter_command", LuaHelicopterCommand);
+        SetFunction(L, "helicopter_grounded", LuaHelicopterGrounded);
+        SetFunction(L, "spacecraft_command", LuaSpacecraftCommand);
         SetFunction(L, "vehicle_drive", LuaVehicleDrive);
         SetFunction(L, "vehicle_velocity", LuaVehicleVelocity);
         SetFunction(L, "vehicle_update_wheels", LuaVehicleUpdateWheels);
@@ -782,6 +1138,8 @@ namespace
         SetFunction(L, "has_soft_body", LuaHasSoftBody);
         SetFunction(L, "soft_body_set_active", LuaSoftBodyActive);
         SetFunction(L, "soft_body_node_position", LuaSoftBodyNode);
+        SetFunction(L, "soft_body_get_pinned_vertices", LuaSoftBodyGetPins);
+        SetFunction(L, "soft_body_set_pinned_vertices", LuaSoftBodySetPins);
         SetFunction(L, "soft_body_reset", LuaSoftBodyReset);
 
         SetFunction(L, "constraint_broken", LuaConstraintBroken);

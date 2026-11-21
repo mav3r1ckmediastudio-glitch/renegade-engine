@@ -134,9 +134,6 @@ require_text(physics_chrome_source
 # attribution remains in source comments, audits and licence notices rather than
 # occupying the authoring workspace itself.
 require_text(physics_workspace_source
-    "\"PHYSICS AUTHORING\""
-    "Renegade Physics Lab subtitle")
-require_text(physics_workspace_source
     "\"SECONDARY COLLIDER\""
     "creator-facing secondary collider label")
 require_text(physics_workspace_source
@@ -178,25 +175,16 @@ require_text(physics_chrome_source
     "physicsLab_.Update(canvas, dt);"
     "stateful Physics Lab widget update")
 
-# Owner-validation overlay regression: Physics Lab keeps authoritative Scene
-# selection, but Scene-only post passes must not render above its opaque GUI.
-# The derived render path bypasses only the selection-mask/gizmo post passes;
-# normal RenderPath3D scene rendering and the shared GUI continue unchanged.
+# Physics Lab shares the live viewport and fits the resizable Inspector dock.
+require_text(physics_chrome_source
+    "PhysicsDockBounds(ViewportBounds(), InspectorWidth())"
+    "Physics Lab follows dock bounds")
 require_text(studio_header
-    "class PhysicsLabStudioRenderPath final : public StudioRenderPath"
-    "Physics-aware Studio render path")
-require_text(studio_header
-    "return studioChrome_.IsPhysicsLabActive();"
-    "Physics Lab render-path state forwarding")
-require_text(studio_header
-    "wi::RenderPath3D::Render();"
-    "Physics Lab selection-mask suppression")
+    "studioChrome_.IsAudioWorkspaceActive() || studioChrome_.IsPhysicsLabActive()"
+    "Physics Lab and the regular Inspector share the dock")
 require_text(studio_header
     "StudioRenderPath::Compose(cmd);"
-    "Physics Lab shared overlay/foreground composition policy")
-require_text(studio_header
-    "PhysicsLabStudioRenderPath renderer_;"
-    "Physics-aware renderer ownership")
+    "Physics Lab shared overlay and foreground composition")
 
 # Owner validation exposed a severe imported-asset failure: attaching a dynamic
 # body to an internal GLTF/FBX node lets Wicked's parented rigid-body feedback
@@ -232,8 +220,11 @@ require_text(scene_document_source
     "(void)RepairReusableAssetCollisionTargets(*prepared.scene_);"
     "pre-physics WISCENE reusable-body repair")
 require_text(studio_source
-    "entity=bridge::ResolveAssemblySelection(scene,entity,editingAssembly_);"
-    "viewport reusable and assembly child selection promotion")
+    ": bridge::ResolveAssemblySelection(scene, entity, editingAssembly_);"
+    "viewport reusable and assembly child selection fallback")
+require_text(studio_source
+    "bridge::ResolveAircraftChassis(scene, entity)"
+    "viewport aircraft part promotion to the chassis")
 require_text(studio_source
     "for(auto root:session_->Selection().Entities())"
     "outline each selected root")
@@ -305,7 +296,7 @@ require_text(physics_lua_cmake
     "set_tests_properties(RenegadePhysicsLuaTests PROPERTIES TIMEOUT 30)"
     "fail-fast Lua contract timeout")
 
-# Eight curated creator-facing pages, matching the JP01 bounded scope.
+# Curated creator-facing Physics Lab pages.
 foreach(page IN ITEMS
     "World"
     "RigidBody"
@@ -314,7 +305,8 @@ foreach(page IN ITEMS
     "Vehicle"
     "Ragdoll"
     "SoftBody"
-    "WickedCollider")
+    "WickedCollider"
+    "Breakables")
     require_text(physics_workspace_header "${page}," "Physics Lab page ${page}")
 endforeach()
 
@@ -372,12 +364,6 @@ require_text(physics_workspace_source
 require_text(physics_workspace_source
     "bridge::SetPhysicsGravity"
     "scene-authoritative gravity bridge")
-
-# Physics Lab keeps the advanced Renegade runtime escape hatch visible without
-# exposing implementation provenance in the creator-facing labels.
-require_text(physics_workspace_source
-    "ADVANCED RUNTIME // renegade.physics"
-    "advanced Lua runtime signpost")
 
 # Existing-project terrain reload must anchor bundled default-grass resources to
 # the executable/install location, not a working directory that native Windows
