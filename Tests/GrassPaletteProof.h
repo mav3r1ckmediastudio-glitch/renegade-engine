@@ -116,13 +116,28 @@ namespace grass_palette_proof
         Check(projects.CreateProject(out.generic_u8string(),"GrassReview",seed),projects.LastError());
         const auto& project=projects.CurrentProject();
         const auto root=fs::u8path(project.rootPath);
-        auto entries=GrassPaletteEntries(root);
-        Check(entries.size()==10,"Ten bundled grass cutouts required");
+        auto entries=GrassPaletteEntries(root,PlantGroup::Grass);
+        const auto all=GrassPaletteEntries(root);
+        Check(entries.size()==10 && GrassPaletteEntries(root,PlantGroup::Freshwater).size()==5 &&
+            GrassPaletteEntries(root,PlantGroup::Marine).size()==5 &&
+            GrassPaletteEntries(root,PlantGroup::Alien).size()==10 && all.size()==30,
+            "Incorrect stock plant group membership");
+        Check(fs::is_directory(root/CustomPlantDirectory) && GrassPaletteEntries(root,PlantGroup::Custom).empty(),
+            "New project is missing its empty Custom plant folder");
+        GrassAtlas complete;
+        Check(BuildGrassAtlas(root,all,complete,error) && complete.frames==30,
+            "Failed to load all thirty plant sprites into a mixed brush: "+error);
         GrassAtlas meadow,bank;
         Check(BuildGrassAtlas(root,{entries[0],entries[5]},meadow,error),error);
         Check(BuildGrassAtlas(root,{entries[1],entries[7]},bank,error),error);
         Check(ImportGrassSheet(root,fs::u8path(meadow.path),2,2,error),error);
-        Check(GrassPaletteEntries(root).size()==12,"Sheet import must keep both occupied cells and omit transparent padding");
+        auto imported=GrassPaletteEntries(root,PlantGroup::Custom);
+        Check(imported.size()==2 && imported.front().parent_path()==root/CustomPlantDirectory,
+            "Sheet import must publish its occupied cells under Custom");
+        fs::copy_file(entries.front(),root/CustomPlantDirectory/"Dropped.PNG");
+        fs::copy_file(entries.back(),(root/CustomPlantDirectory).parent_path()/"Legacy.png");
+        Check(GrassPaletteEntries(root,PlantGroup::Custom).size()==4 && GrassPaletteEntries(root).size()==34,
+            "Custom group did not find dropped PNGs or legacy imports");
         Check(InitializeWickedVegetation(scene,terrain,&error),error);
         auto paint=[&](XMFLOAT3 centre, VegetationBrushMode mode, const GrassAtlas& atlas)
         {

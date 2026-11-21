@@ -1,3 +1,4 @@
+#include "renegade/bridge/GrassPalette.h"
 #include <map>
 #include <set>
 #include "renegade/bridge/GameplayAttributeDocumentService.h"
@@ -36,7 +37,7 @@ namespace
     constexpr const char* DefaultStartupFlow =
         "Content/StoryFlow/Main.renegade-flow";
 
-    constexpr std::array<const char*, 36> DefaultProjectDirectories = {
+    constexpr std::array<const char*, 37> DefaultProjectDirectories = {
         "Content/Scenes",
         "Content/StoryFlow",
         "Content/Models",
@@ -50,6 +51,7 @@ namespace
         "Content/Audio/UI",
         "Content/Video",
         "Content/Vegetation",
+        renegade::bridge::CustomPlantDirectory,
         "Content/Characters",
         "Content/Player",
         "Content/Weapons",

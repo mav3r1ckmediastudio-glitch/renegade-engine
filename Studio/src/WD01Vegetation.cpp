@@ -29,10 +29,19 @@ namespace
         Uniformity,
     };
 
+    using renegade::bridge::PlantGroup;
+    struct PlantFilter { PlantGroup group; const char* label; };
+    constexpr PlantFilter PlantFilters[] = {
+        {PlantGroup::All, "All plants"}, {PlantGroup::Grass, "Grass and weeds"},
+        {PlantGroup::Freshwater, "Tropical freshwater"}, {PlantGroup::Marine, "Marine"},
+        {PlantGroup::Alien, "Alien"}, {PlantGroup::Custom, "Custom"}
+    };
+
     class GrassThumbnail final : public renegade::studio::RenegadeButton
     {
     public:
         std::filesystem::path path;
+        PlantGroup group = PlantGroup::Grass;
         wi::Resource preview;
         bool selected = false;
         void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const override
@@ -51,6 +60,8 @@ namespace
     {
         wi::gui::Label header;
         wi::gui::Label source;
+        renegade::studio::SceneInspectorComboBox plantFilter;
+        PlantGroup group = PlantGroup::Grass;
         renegade::studio::SceneInspectorSlider brushSize;
         renegade::studio::SceneInspectorButton paint;
         renegade::studio::SceneInspectorButton erase;
@@ -202,6 +213,20 @@ namespace renegade::studio
         StyleLabel(state.source);
         inspectorPanel_.AddWidget(&state.source);
 
+        state.plantFilter.Create("Plant group");
+        state.plantFilter.SetTooltip("Filter the palette. Selected plants from other groups stay in the brush. Custom reads PNGs from Content/Vegetation/Palette/Custom.");
+        for (const auto& filter : PlantFilters) state.plantFilter.AddItem(filter.label);
+        state.plantFilter.SetSelectedWithoutCallback(1);
+        state.plantFilter.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            if (args.iValue < 0 || size_t(args.iValue) >= std::size(PlantFilters)) return;
+            auto& s = Controls();
+            s.group = PlantFilters[args.iValue].group;
+            if (s.group == PlantGroup::Custom || s.group == PlantGroup::All) s.refreshPalette = true;
+            QueueInspectorRefresh();
+        });
+        inspectorPanel_.AddWidget(&state.plantFilter);
+
         state.brushSize.Create(
             1.0f, 100.0f, state.brushRadius, 990.0f,
             "WD01 Grass Brush Size", "BRUSH SIZE");
@@ -247,6 +272,11 @@ namespace renegade::studio
                     std::string error;
                     const bool imported=bridge::ImportGrassSheet(std::filesystem::u8path(project.rootPath),
                         std::filesystem::u8path(path),cols,rows,error);
+                    if (imported)
+                    {
+                        Controls().group = PlantGroup::Custom;
+                        Controls().plantFilter.SetSelectedWithoutCallback(int(std::size(PlantFilters))-1);
+                    }
                     Controls().refreshPalette=true;
                     Controls().status.SetText(imported ? "Grass added to the palette." : error);
                     QueueInspectorRefresh();
@@ -561,7 +591,13 @@ namespace renegade::studio
         auto& s=Controls();
         if(!s.created)return {};
         if(group==0){s.header.SetVisible(false);s.source.SetVisible(false);std::vector<wi::gui::Widget*> rows;
-            for (size_t i=0;i<s.entryCount;++i) rows.push_back(s.thumbnails[i].get());
+            rows.push_back(&s.plantFilter);
+            for (size_t i=0; i<s.entryCount; ++i)
+            {
+                auto& thumb = *s.thumbnails[i];
+                if (s.group == PlantGroup::All || thumb.group == s.group) rows.push_back(&thumb);
+                else thumb.SetVisible(false);
+            }
             rows.insert(rows.end(),{&s.brushSize,&s.paint,&s.erase,&s.testInteraction,
                 &s.importColumns,&s.importRows,&s.importSheet});
             return rows;}
@@ -585,39 +621,49 @@ namespace renegade::studio
             for (const auto& thumbnail:state.thumbnails)
                 if (state.project==project && thumbnail->selected) selected.push_back(thumbnail->path);
             state.refreshPalette=false; state.project=project; state.rebuildAtlas=true;
-            auto entries=bridge::GrassPaletteEntries(std::filesystem::u8path(project));
-            state.entryCount=entries.size();
-            for (size_t i=0; i<entries.size(); ++i)
+            const auto root = std::filesystem::u8path(project);
+            // Older projects acquire the drop folder when the palette is first opened.
+            std::error_code folderError;
+            std::filesystem::create_directories(root / bridge::CustomPlantDirectory,folderError);
+            if (folderError) state.status.SetText("Could not create the Custom plant folder: "+folderError.message());
+            state.entryCount = 0;
+            for (const auto& filter : PlantFilters)
             {
-                if (i==state.thumbnails.size())
+                if (filter.group == PlantGroup::All) continue;
+                for (const auto& entry : bridge::GrassPaletteEntries(root,filter.group))
                 {
-                    auto button=std::make_unique<GrassThumbnail>();
-                    button->Create("Grass palette "+std::to_string(i));
-                    button->SetText("");
-                    button->OnClick([i](const wi::gui::EventArgs&)
+                    const size_t i = state.entryCount++;
+                    if (i==state.thumbnails.size())
                     {
-                        auto& s=Controls(); auto& t=*s.thumbnails[i];
-                        t.selected=!t.selected; t.SetAccentOutlineStyle(t.selected);
-                        s.rebuildAtlas=true;
-                        size_t count=0;
-                        for(size_t j=0;j<s.entryCount;++j) if(s.thumbnails[j]->selected) ++count;
-                        s.status.SetText(count ? std::to_string(count)+" grass types selected" : "Stock Wicked grass selected");
-                    });
-                    inspectorPanel_.AddWidget(button.get());
-                    state.thumbnails.push_back(std::move(button));
+                        auto button=std::make_unique<GrassThumbnail>();
+                        button->Create("Grass palette "+std::to_string(i));
+                        button->SetText("");
+                        button->OnClick([i](const wi::gui::EventArgs&)
+                        {
+                            auto& s=Controls(); auto& t=*s.thumbnails[i];
+                            t.selected=!t.selected; t.SetAccentOutlineStyle(t.selected);
+                            s.rebuildAtlas=true;
+                            size_t count=0;
+                            for(size_t j=0;j<s.entryCount;++j) if(s.thumbnails[j]->selected) ++count;
+                            s.status.SetText(count ? std::to_string(count)+" plant types selected" : "Stock Wicked grass selected");
+                        });
+                        inspectorPanel_.AddWidget(button.get());
+                        state.thumbnails.push_back(std::move(button));
+                    }
+                    auto& t=*state.thumbnails[i]; t.path=entry; t.group=filter.group;
+                    t.preview=wi::resourcemanager::Load(t.path.generic_u8string());
+                    t.selected=std::find(selected.begin(),selected.end(),t.path)!=selected.end();
+                    t.SetAccentOutlineStyle(t.selected);
+                    t.SetTooltip(t.path.stem().u8string());
                 }
-                auto& t=*state.thumbnails[i]; t.path=entries[i];
-                t.preview=wi::resourcemanager::Load(t.path.generic_u8string());
-                t.selected=std::find(selected.begin(),selected.end(),t.path)!=selected.end();
-                t.SetAccentOutlineStyle(t.selected);
-                t.SetTooltip(t.path.stem().u8string());
             }
-            for (size_t i=entries.size();i<state.thumbnails.size();++i)
+            for (size_t i=state.entryCount;i<state.thumbnails.size();++i)
             { state.thumbnails[i]->SetVisible(false); state.thumbnails[i]->selected=false; }
         }
         wi::gui::Widget* widgets[] = {
             &state.header,
             &state.source,
+            &state.plantFilter,
             &state.importSheet,&state.importRows,&state.importColumns,&state.testInteraction,
             &state.brushSize,
             &state.paint,

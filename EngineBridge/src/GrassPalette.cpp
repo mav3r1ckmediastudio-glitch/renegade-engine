@@ -78,7 +78,7 @@ namespace renegade::bridge
             if (!ComputePayloadSha256(bytes,id,error)) return false;
             const auto file = source.stem().u8string() + "_" + std::to_string(1 + x + y*columns)
                 + "_" + id.substr(0,16) + ".png";
-            files.push_back({(project/"Content/Vegetation/Palette"/fs::u8path(file)).generic_u8string(),std::move(bytes)});
+            files.push_back({(project/CustomPlantDirectory/fs::u8path(file)).generic_u8string(),std::move(bytes)});
         }
         if (files.empty()) { error="The PNG contains no visible grass."; return false; }
         return Publish(project,std::move(files),error);

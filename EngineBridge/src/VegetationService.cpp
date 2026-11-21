@@ -404,17 +404,29 @@ namespace
 
 namespace renegade::bridge
 {
-    std::vector<fs::path> GrassPaletteEntries(const fs::path& project)
+    std::vector<fs::path> GrassPaletteEntries(const fs::path& project, PlantGroup group)
     {
         std::vector<fs::path> entries;
-        for (const auto& folder : {fs::u8path(wi::helper::GetExecutablePath()).parent_path() /
-            "Content/terrain/foliage", project / "Content/Vegetation/Palette"})
+        const auto stock = BundledGrassRoot() / "foliage";
+        const auto custom = project / CustomPlantDirectory;
+        const auto append = [&](PlantGroup category, const fs::path& folder)
         {
+            if (group != PlantGroup::All && group != category) return;
             std::error_code ec;
-            for (fs::directory_iterator it(folder, ec), end; !ec && it != end; it.increment(ec))
-                if (it->path().extension() == ".png" && it->is_regular_file(ec)) entries.push_back(it->path());
-        }
-        std::sort(entries.begin(), entries.end());
+            for (fs::directory_iterator it(folder,ec), end; !ec && it != end; it.increment(ec))
+            {
+                auto ext = it->path().extension().wstring();
+                for (auto& c : ext) if (c >= L'A' && c <= L'Z') c += L'a' - L'A';
+                if (ext == L".png" && it->is_regular_file(ec)) entries.push_back(it->path());
+            }
+        };
+        append(PlantGroup::Grass, stock);
+        append(PlantGroup::Freshwater, stock / "Freshwater");
+        append(PlantGroup::Marine, stock / "Marine");
+        append(PlantGroup::Alien, stock / "Alien");
+        append(PlantGroup::Custom, custom);
+        append(PlantGroup::Custom, custom.parent_path()); // Imports from earlier projects.
+        std::sort(entries.begin(),entries.end());
         return entries;
     }
     bool IsWickedVegetationInitialized(
