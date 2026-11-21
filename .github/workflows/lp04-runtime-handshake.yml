@@ -1,153 +1,103 @@
 name: LP04 Runtime handshake probe
 
-# Diagnostic workflow on the private-release QA ref. The packaged bytes come
-# from an unpublished staging release. Only text diagnostics are published.
 on:
   push:
     branches: [qa/terrain-props-p6-clean-windows]
     paths: ['.github/workflows/lp04-runtime-handshake.yml']
   workflow_dispatch:
-    inputs:
-      standalone_asset_id:
-        description: 'Optional numeric release asset ID for a named Windows game ZIP'
-        required: false
-        type: string
-      standalone_flow_node:
-        description: 'Expected Story Flow node for the playable scene'
-        required: false
-        type: string
-      standalone_sha256:
-        description: 'Expected SHA-256 of the exported ZIP'
-        required: false
-        type: string
-
-env:
-  WOODLAND_ASSET_ID: '774153518'
-  WOODLAND_ZIP_SHA: '9dd13731db16f98c07acc870c1580c7692f88d83ac6059bb5311fa3d2af3c50a'
 
 permissions: {}
 
 jobs:
-  standalone:
+  test:
     if: github.ref == 'refs/heads/qa/terrain-props-p6-clean-windows' && github.repository == 'mav3r1ckmediastudio-glitch/renegade-engine'
-    name: Clean Windows named-game launch (${{ matrix.image }})
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [windows-2025]
-    runs-on: ${{ matrix.image }}
-    timeout-minutes: 24
+    name: Verify Windows audio fallback and woodland launch
+    runs-on: windows-2025
+    timeout-minutes: 170
     permissions:
       contents: write
+    env:
+      ORIGINAL_ZIP_SHA: '9dd13731db16f98c07acc870c1580c7692f88d83ac6059bb5311fa3d2af3c50a'
+      ORIGINAL_REVISION: '83636ca548c3165cb809dbbb7d38851d9487d160'
     steps:
-      - name: Get the standalone verification script
+      - name: Check out the isolated audio fix
         uses: actions/checkout@v4
         with:
-          ref: 83636ca548c3165cb809dbbb7d38851d9487d160
+          submodules: recursive
           persist-credentials: false
-          sparse-checkout-cone-mode: false
-          sparse-checkout: /Tools/Test-WindowsStandalone.ps1
 
-      - name: Download the selected package
+      - name: Build the Windows Release player and audio proof
+        shell: pwsh
+        run: |
+          cmake -S . -B BUILD/qa-runtime -A x64 -DRENEGADE_EMBED_SHADERS=ON
+          if ($LASTEXITCODE) { throw 'Windows configure failed.' }
+          cmake --build BUILD/qa-runtime --config Release --target RenegadeRuntime RenegadeAudioEndpointRecoveryProof --parallel
+          if ($LASTEXITCODE) { throw 'Windows Release compile failed.' }
+
+      - name: Run the missing endpoint and unexpected failure controls
+        shell: pwsh
+        run: |
+          ctest --test-dir BUILD/qa-runtime -C Release -R '^RenegadeAudio(MissingEndpointRecovery|UnexpectedEndpointFailure)$' --output-on-failure
+          if ($LASTEXITCODE) { throw 'Native audio recovery tests failed.' }
+          Copy-Item BUILD/qa-runtime/Testing/Temporary/LastTest.log "$env:RUNNER_TEMP/audio-ctest.log"
+
+      - name: Download the unpublished original woodland package
         shell: pwsh
         env:
-          ASSET_ID: ${{ inputs.standalone_asset_id || env.WOODLAND_ASSET_ID }}
-          EXPECTED_SHA: ${{ inputs.standalone_sha256 || env.WOODLAND_ZIP_SHA }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ($env:ASSET_ID -notmatch '^[1-9][0-9]*$' -or $env:EXPECTED_SHA -notmatch '^[a-fA-F0-9]{64}$') {
-            throw 'Both a numeric asset ID and a SHA-256 digest are required.'
-          }
-          if ($env:ASSET_ID -ne '774153518' -or $env:EXPECTED_SHA -ne '9dd13731db16f98c07acc870c1580c7692f88d83ac6059bb5311fa3d2af3c50a') { throw 'This run only accepts the staged woodland candidate.' }
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/octet-stream' }
-          $url = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/assets/$env:ASSET_ID"
-          Invoke-WebRequest -Uri $url -Headers $headers -OutFile "$env:RUNNER_TEMP/standalone.zip"
-
-      - name: Record display environment
-        shell: pwsh
-        run: |
-          Get-CimInstance Win32_OperatingSystem | Format-List Caption, Version, BuildNumber
-          Get-CimInstance Win32_VideoController | Format-List Name, DriverVersion, Status
-          "Session: $([Diagnostics.Process]::GetCurrentProcess().SessionId)"
-
-      - name: Launch the packaged game from a clean profile
-        id: launch
-        shell: pwsh
-        env:
-          EXPECTED_SHA: ${{ inputs.standalone_sha256 || env.WOODLAND_ZIP_SHA }}
-          EXPECTED_NODE: ${{ inputs.standalone_flow_node || 'Woodland clearing' }}
-        run: |
-          ./Tools/Test-WindowsStandalone.ps1 -Archive "$env:RUNNER_TEMP/standalone.zip" -ArchiveSha256 $env:EXPECTED_SHA -Revision 83636ca548c3165cb809dbbb7d38851d9487d160 -ExpectedFlowNode $env:EXPECTED_NODE -Output "$env:RUNNER_TEMP/standalone-proof"
-
-      - name: Record the executable fault
-        if: failure()
-        shell: pwsh
-        run: |
-          Start-Sleep -Seconds 4
-          $path = Join-Path $env:RUNNER_TEMP 'woodland-diagnostics.txt'
-          $filter = @{LogName='Application'; Id=1000,1001; StartTime=(Get-Date).AddMinutes(-8)}
-          $events = @(Get-WinEvent -FilterHashtable $filter -ErrorAction SilentlyContinue |
-              Where-Object { $_.Message -match 'TerrainPropsStockReview\.exe' })
-          if ($events.Count) {
-            $events | Select-Object Id, ProviderName, TimeCreated, Message | Format-List | Out-String | Tee-Object -FilePath $path
-          } else {
-            'No Application Error event was available for the named game.' | Tee-Object -FilePath $path
+          $url = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/assets/774153518"
+          $archive = Join-Path $env:RUNNER_TEMP 'original-woodland.zip'
+          Invoke-WebRequest -Uri $url -Headers $headers -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne $env:ORIGINAL_ZIP_SHA) {
+            throw 'Original woodland ZIP digest mismatch.'
           }
 
-      - name: Capture the native startup stack with CDB
-        if: failure() && steps.launch.outcome == 'failure'
-        timeout-minutes: 14
+      - name: Launch a diagnostic copy with the rebuilt player
         shell: pwsh
         run: |
-          $validated = Join-Path $env:RUNNER_TEMP 'standalone-proof'
-          $game = Join-Path $validated 'game/TerrainPropsStockReview.exe'
-          if (!(Test-Path -LiteralPath $game)) { throw 'The named game was not extracted.' }
-          $manifest = Get-Content -Raw -LiteralPath (Join-Path $validated 'game/package-manifest.json') | ConvertFrom-Json
-          $entry = @($manifest.files | Where-Object path -eq 'TerrainPropsStockReview.exe')
-          if ($entry.Count -ne 1 -or (Get-FileHash -LiteralPath $game -Algorithm SHA256).Hash -ne $entry[0].sha256) {
-            throw 'The named game did not match the verified manifest.'
+          $root = Join-Path $env:RUNNER_TEMP 'diagnostic-woodland'
+          Expand-Archive -LiteralPath "$env:RUNNER_TEMP/original-woodland.zip" -DestinationPath $root
+          $manifestPath = Join-Path $root 'package-manifest.json'
+          $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+          $reportPath = Join-Path $root 'build-report.json'
+          $report = Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json
+          if ($report.renegade_revision -ne $env:ORIGINAL_REVISION -or $manifest.executable -ne 'TerrainPropsStockReview.exe') {
+            throw 'Original woodland package identity mismatch.'
           }
-          $trace = (New-Item -ItemType Directory (Join-Path $env:RUNNER_TEMP 'startup-debug')).FullName
-          $sdk = Join-Path "${env:ProgramFiles(x86)}" 'Windows Kits/10/Debuggers/x64/cdb.exe'
-          if (!(Test-Path -LiteralPath $sdk)) {
-            $installer = Join-Path $trace 'winsdksetup.exe'
-            Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/?linkid=2382321' -OutFile $installer
-            $sig = Get-AuthenticodeSignature -LiteralPath $installer
-            if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
-              throw 'The Windows SDK installer signature did not validate.'
-            }
-            $install = Start-Process -FilePath $installer -ArgumentList '/features OptionId.WindowsDesktopDebuggers /q /norestart' -Wait -PassThru
-            if ($install.ExitCode -notin 0,3010) { throw "Windows debugger install exited with $($install.ExitCode)." }
+          $exe = Join-Path $root $manifest.executable
+          $entry = @($manifest.files | Where-Object path -eq $manifest.executable)
+          if ($entry.Count -ne 1 -or (Get-FileHash $exe -Algorithm SHA256).Hash -ne $entry[0].sha256) {
+            throw 'Original executable digest mismatch.'
           }
-          if (!(Test-Path -LiteralPath $sdk)) { throw 'CDB is unavailable on this runner.' }
-          $working = (New-Item -ItemType Directory (Join-Path $trace 'unrelated')).FullName
-          $env:LOCALAPPDATA = (New-Item -ItemType Directory (Join-Path $trace 'profile')).FullName
-          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-          $env:RENEGADE_G13E13_PERF_CSV = Join-Path $trace 'frames.csv'
-          $env:RENEGADE_G13E13_FRAMES = '240'
-          $env:RENEGADE_G13E13_NO_SCREENSHOT = '1'
-          $commands = Join-Path $trace 'startup.cdb'
-          @'
-          sxd -c2 ".lastevent; .exr -1; k 16; r; ub @rip L24; u @rip L16; ub TerrainPropsStockReview+0x37dd1e L32; lm a @rip; q" av
-          g
-          '@ | Set-Content -LiteralPath $commands -Encoding ascii
-          Push-Location -LiteralPath $working
-          try {
-            & $sdk -G -hd -noshell -cf $commands -y "srv*$trace\symbols*https://msdl.microsoft.com/download/symbols" $game alwaysactive |
-              Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'woodland-native-stack.txt')
-          } finally {
-            Pop-Location
-          }
+          $runtime = 'BUILD/qa-runtime/Runtime/Release/RenegadeRuntime.exe'
+          Copy-Item -LiteralPath $runtime -Destination $exe -Force
+          $entry[0].bytes = (Get-Item -LiteralPath $exe).Length
+          $entry[0].sha256 = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          [ordered]@{
+            original_revision = $env:ORIGINAL_REVISION
+            original_zip_sha256 = $env:ORIGINAL_ZIP_SHA
+            runtime_source = $env:GITHUB_SHA
+            runtime_sha256 = $entry[0].sha256
+            kind = 'diagnostic-repackage'
+          } | ConvertTo-Json | Set-Content -LiteralPath "$env:RUNNER_TEMP/diagnostic-provenance.json" -Encoding utf8NoBOM
+          $manifest | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $manifestPath -Encoding utf8NoBOM
+          $archive = Join-Path $env:RUNNER_TEMP 'diagnostic-woodland.zip'
+          [IO.Compression.ZipFile]::CreateFromDirectory($root, $archive, [IO.Compression.CompressionLevel]::Fastest, $false)
+          $digest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          # The report still describes the original export. The separate provenance
+          # record identifies the substituted player in this diagnostic copy.
+          ./Tools/Test-WindowsStandalone.ps1 -Archive $archive -ArchiveSha256 $digest -Revision $env:ORIGINAL_REVISION -ExpectedFlowNode 'Woodland clearing' -Output "$env:RUNNER_TEMP/diagnostic-proof"
 
-      - name: Retain bootstrap and frame evidence
+      - name: Retain only diagnostic evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: clean-windows-standalone-proof-${{ matrix.image }}
-          if-no-files-found: warn
+          name: woodland-audio-fallback-diagnostics
           path: |
-            ${{ runner.temp }}/woodland-native-stack.txt
-            ${{ runner.temp }}/woodland-diagnostics.txt
-            ${{ runner.temp }}/standalone-proof/result.json
-            ${{ runner.temp }}/standalone-proof/frames.csv
-            ${{ runner.temp }}/standalone-proof/profile/**/RuntimeBootstrap.log
+            ${{ runner.temp }}/audio-ctest.log
+            ${{ runner.temp }}/diagnostic-provenance.json
+            ${{ runner.temp }}/diagnostic-proof/result.json
+            ${{ runner.temp }}/diagnostic-proof/frames.csv
+            ${{ runner.temp }}/diagnostic-proof/profile/**/RuntimeBootstrap.log
