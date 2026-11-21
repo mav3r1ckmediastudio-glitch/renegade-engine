@@ -595,6 +595,23 @@ synchronization pass only when that lifecycle changes. Grass painting retains
 the existing Wicked `HairParticleSystem` instances and completed-stroke rebuild
 contract.
 
+The Vegetation workspace paints each selected grass mix into its own native
+hair mask on the affected terrain chunk. Studio packs the selected cutouts
+into a content-addressed atlas under the project's `Content/Vegetation/Mixes`.
+Each native hair material references that atlas, so the existing scene texture
+dependency walker can discover it. Wicked serializes the strand masks, atlas
+rectangles, emitter mesh references and materials. Repainting replaces the
+mix only at vertices inside the stroke. Stock grass retains its original mask
+and material. The brush indexes painted layers once per stroke.
+
+PNG sheet imports publish all cells in one project document transaction.
+Wicked supports up to 64 atlas rectangles per mix. Atlas generation preserves
+cutout proportions and places the base at the bottom of its cell. Imported
+sources keep their original resolution. Render atlases use cells up to 1024
+pixels and a sheet up to 4096 pixels square. The editor cursor uses a
+transient point force. The Runtime player carries a GPU capsule sized to its
+controller, while Jolt handles player movement and gameplay collisions.
+
 ## Core rules
 
 1. Prefer adapters over Wicked source changes.

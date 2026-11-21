@@ -1,3 +1,38 @@
+# Vegetation workspace and grass palette
+
+The local code checkpoint is `89f1c6def55b3f5e22d5e2d8193de4d7c7c6ab49` on `feature/vegetation-grass`, based on main `cb6bef622a292b6d451465b475b73130fc44858b`. The Vegetation toolbar button opens Grass, Terrain Painting and Terrain Props. Grass accepts the ten stock cutouts and project PNG imports. Select multiple thumbnails, arm Paint, then drag on terrain. Test Interaction bends the grass under a held left mouse button. The native player capsule bends grass in Runtime. The Terrain Painting section currently exposes the existing material controls. A terrain PBR paint brush is a subsequent milestone, after owner review of Grass.
+
+## Implementation
+
+- `Studio/src/WD01Vegetation.cpp`, `TerrainInspectorSections.cpp`, `TerrainPropPalette.cpp`, `StudioApplication.{h,cpp}`, `RenegadeStudioChrome.{h,cpp}`, `RenegadePhysicsLabStudioChrome.cpp` and `StudioLiveDiagnostics.cpp` own the palette, gesture history, workspace transitions, visibility and diagnostics.
+- `EngineBridge/src/GrassPalette.cpp` and `include/renegade/bridge/GrassPalette.h` implement the PNG and sheet importer and content-addressed atlases. `PayloadDigest.h` exposes the existing hash function to the texture library. `ResourceAssetCacheIdentityService.h` uses the shared declaration.
+- `EngineBridge/src/VegetationService.cpp`, its public header and `PlayerService.cpp` own terrain hair masks and the native force/collider integration. The ten PNGs live under `Content/terrain/foliage`. Studio, Runtime, EngineBridge and Tests CMake targets build or stage these resources.
+- `Tests/GrassPaletteProof.h` extends `RenegadeRiverTerrainFollowProof` with a seeded project. `Tests/TerrainInitializationProof.h` and `Tests/MaximumTerrainRiverProof.h` also pass the scene to the vegetation history capture. Run `git diff --name-only cb6bef6 89f1c6d` for the full code and asset inventory.
+- The pinned Wicked grass shader samples base colour and alpha. Lighting uses the generated blade normals and the renderer's AO buffer when available. The grass atlas requires one RGBA image per species. The limits are 64 selected cutouts per mix and 4096 pixels per render atlas. Many distinct overlapping mixes can add hair instances to a chunk. Performance in a dense production woodland remains unmeasured.
+
+## Player movement regression
+
+The owner observed a steady 75 FPS with slower movement and vibrating placeholder arms around the review patches. On a flat route before the correction, the collision world held 50 updates on the approach. Turning off the player's GPU grass collider produced the same trajectory. The approach averaged 2.77 m/s and the arms moved up to 8.04 mm between frames as input switched between walking and idle. The camera and view rig stayed aligned. Re-requesting an already resident terrain chunk temporarily cleared its readiness. `EngineBridge/src/TerrainPropCollisionWorld.cpp` now recognises the current generated mesh and live native body when the chunk is requested again. Invalidated chunks and bodies awaiting a refresh still require the ordinary terrain update. With the correction the approach, painted patch and far side all averaged 4.49 m/s, with zero movement holds and a maximum vertical arm step of 1.86 mm during walking. The native regression walks the route at 75 updates per second with 60 Hz physics and explicitly checks the invalidated-chunk case.
+
+## Verification on Windows x64 and DX12
+
+Commands for the CMake build, the focused contracts, and a reviewer reproducing the native scene are below. Run the native executable from its staged directory and supply a fresh output directory for each configuration.
+
+```powershell
+cmake -S . -B BUILD/renegade
+cmake --build BUILD/renegade --config Release --target RenegadeStudio RenegadeRuntime -j 6
+cmake --build BUILD/renegade --config Debug --target RenegadeStudio RenegadeRuntime -j 6
+ctest --test-dir BUILD/renegade -C Release -R "MarkerIconsSourceContract|WD01VegetationSourceContract|S1AInspectorSectionSourceContract|S1BInspectorMigrationSourceContract" --output-on-failure
+cmake --build BUILD/renegade --config Release --target RenegadeRiverTerrainFollowProof RenegadeTerrainPropCollisionWorldTests -j 6
+Push-Location BUILD/renegade/Tests/Release
+.\RenegadeRiverTerrainFollowProof.exe "$PWD/grass-review-output" grass-palette
+Pop-Location
+```
+
+The native grass proof passed in both Debug and Release on the RTX 4070 Ti. It retained exact per-mix masks across Undo/Redo, erase, scene save, cold reopen and native updates. A four-cell sheet yielded its two occupied cells. Both layers received a length edit. GPU vertex readback confirmed that the cursor bent one patch while the other stayed still, and the player capsule bent the second patch. The transient cursor force was absent from the saved scene. Both configurations printed `GRASS_CURSOR_AND_PLAYER_GPU_VERTEX_RESPONSE_PASS` and `GRASS_PALETTE_MIX_IMPORT_HISTORY_COLD_REOPEN_PASS`.
+
+The four focused source contracts passed. In native Release Studio the Vegetation toolbar opened, two thumbnails could be selected, and one stroke changed 601 vertices in one chunk. The level was saved and inspected. Standalone Runtime opened the project using `RenegadeRuntime.exe --project <GrassReview.renegade>`. The standalone capture and Studio Test Game both produced a DX12 player-camera image. The local review project is under `BUILD/grass-check/ReviewGrass/GrassReview`; the UI exercise uses a disposable copy. Preserve the project's Content directory when moving it. Independent review of this checkpoint is pending.
+
 # Terrain props P6 and Physics Lab release candidate
 
 P6 is the release milestone for terrain props. Biome design is a separate project. This candidate combines the woodland content and terrain integration at 9b247a7 with the Physics Lab at 6bcc09c on main 9eae100. The Runtime frame restores the vehicle cockpit projection and synchronizes the vehicle trial. Terrain model residency runs whenever a player or camera provides a position, and the experimental switch still controls only cell thinning.
