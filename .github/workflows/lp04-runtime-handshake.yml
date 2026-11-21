@@ -29,6 +29,10 @@ jobs:
       - name: Build the Windows Release player and audio proof
         shell: pwsh
         run: |
+          . ./Tools/Windows-Build.Common.ps1
+          $repositoryRoot = (Get-Location).Path
+          Assert-RenegadeWickedBaseline -RepositoryRoot $repositoryRoot
+          Set-RenegadePinnedDirectXMath -RepositoryRoot $repositoryRoot
           cmake -S . -B BUILD/qa-runtime -A x64 -DRENEGADE_EMBED_SHADERS=ON
           if ($LASTEXITCODE) { throw 'Windows configure failed.' }
           cmake --build BUILD/qa-runtime --config Release --target RenegadeRuntime RenegadeAudioEndpointRecoveryProof --parallel
