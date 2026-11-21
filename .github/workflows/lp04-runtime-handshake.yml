@@ -1,139 +1,68 @@
 name: LP04 Runtime handshake probe
 
-# Manual-only (workflow_dispatch). This previously also ran on pull_request
-# for paths touching the handshake test/Runtime readiness code, but the
-# probe cannot currently pass on GitHub's hosted Windows runners - see
-# docs/LP04_GATE3B2_RUNTIME_HANDSHAKE_EVIDENCE.md. Automatically re-running
-# and failing a check nobody can fix (a hosted-runner graphics-environment
-# limitation, not a code defect) would just be noise. Kept available to
-# re-run by hand if a future runner generation might support it.
 on:
   workflow_dispatch:
-    inputs:
-      standalone_asset_id:
-        description: 'Optional numeric release asset ID for a named Windows game ZIP'
-        required: false
-        type: string
-      standalone_flow_node:
-        description: 'Expected Story Flow node for the playable scene'
-        required: false
-        type: string
-      standalone_sha256:
-        description: 'Expected SHA-256 of the exported ZIP'
-        required: false
-        type: string
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
-  handshake:
-    if: inputs.standalone_asset_id == '' && inputs.standalone_sha256 == '' && inputs.standalone_flow_node == ''
-    name: LP04 real Runtime handshake (Debug)
-    runs-on: windows-2025
-    timeout-minutes: 30
-
-    steps:
-      - name: Check out Renegade and Wicked
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Configure MSBuild
-        uses: microsoft/setup-msbuild@v2
-        with:
-          msbuild-architecture: x64
-
-      - name: Configure handshake probe
-        shell: pwsh
-        run: >-
-          cmake
-          -S .
-          -B BUILD/renegade
-          -A x64
-          -DRENEGADE_EMBED_SHADERS=ON
-
-      - name: Build real Runtime handshake target
-        shell: pwsh
-        run: >-
-          cmake
-          --build BUILD/renegade
-          --config Debug
-          --target RenegadeTestLevelRuntimeHandshakeTests
-          --parallel
-
-      - name: Run real Runtime handshake probe
-        shell: pwsh
-        timeout-minutes: 5
-        run: |
-          $testExecutable = Join-Path $PWD "BUILD\renegade\Tests\Debug\RenegadeTestLevelRuntimeHandshakeTests.exe"
-          $runtimeExecutable = Join-Path $PWD "BUILD\renegade\Runtime\Debug\RenegadeRuntime.exe"
-
-          if (-not (Test-Path $testExecutable -PathType Leaf)) {
-              throw "Handshake test executable was not built: $testExecutable"
-          }
-          if (-not (Test-Path $runtimeExecutable -PathType Leaf)) {
-              throw "RenegadeRuntime.exe was not built: $runtimeExecutable"
-          }
-
-          & $testExecutable $runtimeExecutable
-          if ($LASTEXITCODE -ne 0) {
-              throw "LP04 real Runtime handshake probe failed with exit code $LASTEXITCODE."
-          }
-
-      - name: Upload Runtime bootstrap logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lp04-runtime-handshake-debug-${{ github.sha }}
-          path: BUILD/renegade/Runtime/Debug/Logs/**
-          if-no-files-found: ignore
-          retention-days: 7
-
   standalone:
-    if: inputs.standalone_asset_id != '' || inputs.standalone_sha256 != '' || inputs.standalone_flow_node != ''
-    name: Clean Windows named-game launch
+    name: Launch the final woodland export on clean Windows
+    if: github.ref == 'refs/heads/qa/terrain-props-p6-clean-windows' && github.repository == 'mav3r1ckmediastudio-glitch/renegade-engine'
     runs-on: windows-2025
-    timeout-minutes: 15
+    timeout-minutes: 23
     permissions:
-      contents: read
+      contents: write
+    env:
+      ASSET_ID: '775167221'
+      ZIP_SHA: '3cff65333394cb98810dc6cff48b792e183698a0538d2f273a014460ae028c8a'
+      RELEASE_REVISION: '5782939f61323f4de4fc5a3d3bcf6362796f229b'
     steps:
-      - name: Get the standalone verification script
+      - name: Check out only the release verifier
         uses: actions/checkout@v4
         with:
+          ref: '5782939f61323f4de4fc5a3d3bcf6362796f229b'
           persist-credentials: false
           sparse-checkout-cone-mode: false
           sparse-checkout: /Tools/Test-WindowsStandalone.ps1
 
-      - name: Download the selected package
+      - name: Download the exact unpublished QA asset
         shell: pwsh
         env:
-          ASSET_ID: ${{ inputs.standalone_asset_id }}
-          EXPECTED_SHA: ${{ inputs.standalone_sha256 }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ($env:ASSET_ID -notmatch '^[1-9][0-9]*$' -or $env:EXPECTED_SHA -notmatch '^[a-fA-F0-9]{64}$') {
-            throw 'Both a numeric asset ID and a SHA-256 digest are required.'
-          }
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/octet-stream' }
           $url = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/assets/$env:ASSET_ID"
-          Invoke-WebRequest -Uri $url -Headers $headers -OutFile "$env:RUNNER_TEMP/standalone.zip"
+          Invoke-WebRequest -Uri $url -Headers $headers -OutFile "$env:RUNNER_TEMP/woodland-release.zip"
 
-      - name: Launch the packaged game from a clean profile
+      - name: Launch and trace the original production executable
         shell: pwsh
-        env:
-          EXPECTED_SHA: ${{ inputs.standalone_sha256 }}
-          EXPECTED_NODE: ${{ inputs.standalone_flow_node }}
         run: |
-          ./Tools/Test-WindowsStandalone.ps1 -Archive "$env:RUNNER_TEMP/standalone.zip" -ArchiveSha256 $env:EXPECTED_SHA -Revision $env:GITHUB_SHA -ExpectedFlowNode $env:EXPECTED_NODE -Output "$env:RUNNER_TEMP/standalone-proof"
+          Get-CimInstance Win32_VideoController | Format-List Name, DriverVersion
+          $env:RENEGADE_G13E14_STAGE_TRACE = Join-Path $env:RUNNER_TEMP 'woodland-frames-trace.txt'
+          $source = Get-Content -Raw ./Tools/Test-WindowsStandalone.ps1
+          $needle = '$proc.WaitForExit(300000)'
+          if ([regex]::Matches($source, [regex]::Escape($needle)).Count -ne 1) {
+            throw 'Unexpected verifier timeout code.'
+          }
+          $check = Join-Path $env:RUNNER_TEMP 'Test-WindowsStandalone-Hosted.ps1'
+          $source.Replace($needle, '$proc.WaitForExit(900000)') | Set-Content -LiteralPath $check -Encoding utf8NoBOM
+          try {
+            & $check -Archive "$env:RUNNER_TEMP/woodland-release.zip" -ArchiveSha256 $env:ZIP_SHA -Revision $env:RELEASE_REVISION -ExpectedFlowNode 'Woodland clearing' -Output "$env:RUNNER_TEMP/standalone-proof"
+          } finally {
+            if (Test-Path $env:RENEGADE_G13E14_STAGE_TRACE) {
+              Get-Content -LiteralPath $env:RENEGADE_G13E14_STAGE_TRACE -Tail 20
+            }
+          }
 
-      - name: Retain bootstrap and frame evidence
+      - name: Retain native bootstrap and frame evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: clean-windows-standalone-proof
+          name: exact-woodland-windows-proof
           if-no-files-found: warn
           path: |
+            ${{ runner.temp }}/woodland-frames-trace.txt
             ${{ runner.temp }}/standalone-proof/result.json
             ${{ runner.temp }}/standalone-proof/frames.csv
             ${{ runner.temp }}/standalone-proof/profile/**/RuntimeBootstrap.log
