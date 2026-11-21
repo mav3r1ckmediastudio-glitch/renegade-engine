@@ -1,0 +1,50 @@
+{
+  "product": "SparseBilberry.glb",
+  "category": "Bushes",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/bilberry-bush",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/bilberry-bush/v1/lod0.glb",
+      "bytes": 520720,
+      "sha256": "57b0a57e3a5ff6a8f7eb75c07e4f54e24062f239c4de499db9ced3abc45a30ef",
+      "triangles": 9124
+    },
+    {
+      "lod": 1,
+      "path": "/models/bilberry-bush/v1/lod1.glb",
+      "bytes": 181884,
+      "sha256": "e957f8745408d2e48ce08f2fc1924ffc1929c2352aef545acd8101b4f238c3a1",
+      "triangles": 2834
+    },
+    {
+      "lod": 2,
+      "path": "/models/bilberry-bush/v1/lod2.glb",
+      "bytes": 170948,
+      "sha256": "3b2ada45e35a8b644ad2d74fb4e7fb871ea7029aa283edd050538dd5d64b34ce",
+      "triangles": 88
+    }
+  ],
+  "dimensions_m": [
+    0.32445,
+    0.35904,
+    0.36187
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "5d247fed22d32502c6fd1f0c08919ea4ab1e608bda5dc9bdea6098f62777f25f",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    -0.020911023020744324,
+    0.0012145587180238948,
+    0.016572512686252594
+  ]
+}

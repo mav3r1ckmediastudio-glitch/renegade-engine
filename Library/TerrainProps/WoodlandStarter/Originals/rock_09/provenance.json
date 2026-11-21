@@ -1,0 +1,44 @@
+{
+  "asset": "rock_09",
+  "provider": "Poly Haven",
+  "source_page": "https://polyhaven.com/a/rock_09",
+  "license": "CC0-1.0",
+  "license_source": "https://polyhaven.com/license",
+  "resolution": "2k",
+  "inputs": [
+    {
+      "path": "rock_09.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/2k/rock_09/rock_09_2k.gltf",
+      "size": 2745,
+      "sha256": "f5f430215ad93e3d95755aa78c1c84a619497dfdc1ee297f8ac35df607ee03a3"
+    },
+    {
+      "path": "textures/rock_09_nor_gl_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/rock_09/rock_09_nor_gl_2k.jpg",
+      "size": 2565303,
+      "sha256": "944b7763b6431671e07b4e7ebe082cf747e791513e27c830a3bb2dbee0246614"
+    },
+    {
+      "path": "textures/rock_09_diff_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/rock_09/rock_09_diff_2k.jpg",
+      "size": 2102702,
+      "sha256": "657406a77530db692061b475681f98cbf1c67be81a5c422830dbe6eb36df813a"
+    },
+    {
+      "path": "rock_09.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/rock_09/rock_09.bin",
+      "size": 286592,
+      "sha256": "780c37d6fc11ca3a01c3763535ef883908b6007271a46bd446d2289ded820751"
+    },
+    {
+      "path": "textures/rock_09_arm_2k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/rock_09/rock_09_arm_2k.jpg",
+      "size": 863180,
+      "sha256": "eaedeb8428079a27bc5e290a61375454035b5fcfb1e9c7d16ce4bc85313789da"
+    }
+  ],
+  "source_gltf": "rock_09.gltf",
+  "scene_nodes": [
+    "rock_09_LOD0"
+  ]
+}

@@ -1,4 +1,5 @@
 #include "renegade/bridge/TerrainPropDocument.h"
+#include "renegade/bridge/TestLevelSnapshotService.h"
 #include "renegade/bridge/TerrainPropCollisionWorld.h"
 #include "renegade/bridge/PhysicsService.h"
 #include "renegade/bridge/CommandService.h"
@@ -342,6 +343,29 @@ namespace
             << " combined_lod_buffer_bytes=" << benchmarkMesh.generalBuffer.desc.size
             << " native_impostor_atlas_bytes=" << wi::graphics::ComputeTextureMemorySizeInBytes(world.impostorArray.desc)
             << " atlas_slices=" << world.impostorArray.desc.array_size << std::endl;
+
+        // A Test Game copy must survive relocation away from the source registry.
+        // Reopening under the authoring root alone could mask a missing companion.
+        TestLevelSnapshotService snapshots(scenes, commands);
+        for (const bool deferred : {false, true})
+        {
+            TestLevelSnapshot snapshot;
+            if (deferred)
+            {
+                Check(snapshots.CreateDeferred(project, snapshot, error), error);
+                Check(snapshots.FinalizeDeferredScene(snapshot, error, false), error);
+            }
+            else Check(snapshots.Create(project, snapshot, error), error);
+
+            const auto isolated = run / (deferred ? "PlayDeferred" : "PlayImmediate");
+            fs::rename(snapshot.sessionDirectory, isolated);
+            SceneService player;
+            Check(player.LoadScene((isolated / "Content/Scenes/TestLevel.wiscene").string()),
+                player.LastError());
+            CheckPopulation(player.GetScene());
+            fs::rename(isolated, snapshot.sessionDirectory);
+            Check(snapshots.Cleanup(snapshot, error), error);
+        }
 
         // Give the standalone player a floor and a repeatable view of all three assets.
         const auto ground = live.Entity_CreateCube("Proof ground");

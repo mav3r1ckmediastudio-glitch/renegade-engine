@@ -1,0 +1,50 @@
+{
+  "product": "BranchPile.glb",
+  "category": "Debris",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/dead-branches",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 2,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/dead-branches/v2/lod0.glb",
+      "bytes": 487104,
+      "sha256": "33d4df76338922bc9fca9e5ca369d942fa9972dbad0073d1c0250a34f42213a1",
+      "triangles": 5332
+    },
+    {
+      "lod": 1,
+      "path": "/models/dead-branches/v2/lod1.glb",
+      "bytes": 194184,
+      "sha256": "78b6aa9c3e2f5f0f5e4ff8ac9a159fed7df08f7ac69def09588e4b25ef8e744f",
+      "triangles": 2606
+    },
+    {
+      "lod": 2,
+      "path": "/models/dead-branches/v2/lod2.glb",
+      "bytes": 54084,
+      "sha256": "d24b3687be61ee96982393bd0616e56b2636be390c90eb840519babf98e97178",
+      "triangles": 162
+    }
+  ],
+  "dimensions_m": [
+    1.69585,
+    0.13891,
+    1.63126
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "b4ef1ffcd9134f1beec8834a40d601913451a40d1d3db9d29c5484a50b216737",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    -0.10108834505081177,
+    -4.080410399609491e-05,
+    -0.002526909112930298
+  ]
+}

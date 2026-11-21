@@ -1,5 +1,6 @@
 #pragma once
 #include "RuntimeProjectileSession.h"
+#include "renegade/bridge/PhysicsGameplayService.h"
 namespace renegade::runtime {
 // Camera picks the intended target; muzzle sweep owns actual cover contact.
 inline bool ResolveMuzzleAim(const bridge::ProjectileSource& source,float aimRangeMetres,
@@ -72,5 +73,28 @@ inline bool QueryHitscan(const bridge::ProjectileSource& source,const XMFLOAT3 o
  result=query(probe,ProjectileBridgeVector(origin),ProjectileBridgeVector(end));
  if(result.status==bridge::ProjectileQueryStatus::Blocked){error="Hitscan world query was blocked.";return false;}
  error.clear();return true;
+}
+
+inline bool ApplyBreakableShot(wi::scene::Scene& scene, wi::ecs::Entity hit,
+    wi::ecs::Entity source, const bridge::ProjectileImpact& impact)
+{
+    return bridge::DamageDestructible(scene, hit, source, impact.damage,
+        ProjectileNativeVector(impact.incomingVelocity));
+}
+
+inline bool TraceBreakableMelee(wi::scene::Scene& scene, const RuntimeCharacterSystemState& characters,
+    const ProjectileOwnerBinding& owner, const XMFLOAT3& eye, const XMFLOAT3& direction, float damage)
+{
+    bridge::ProjectileSource source;
+    source.ownerSubjectId = owner.subjectId;
+    wi::ecs::Entity hit = wi::ecs::INVALID_ENTITY;
+    const auto query = [&](const auto& record, const auto& from, const auto& to) {
+        return QueryProjectileSceneSegment(scene, characters, owner, record, from, to, ~0u, &hit);
+    };
+    bridge::ProjectileQueryResult contact;
+    std::string error;
+    return QueryHitscan(source, eye, direction, 2.25f, query, contact, error) &&
+        contact.status == bridge::ProjectileQueryStatus::Hit &&
+        bridge::DamageDestructible(scene, hit, owner.root, damage, direction);
 }
 }

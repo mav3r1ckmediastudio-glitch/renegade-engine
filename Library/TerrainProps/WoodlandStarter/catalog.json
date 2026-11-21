@@ -1,0 +1,1003 @@
+{
+  "version": 1,
+  "units": "metres",
+  "up": "+Y",
+  "wind": "Static native models. EZ-Tree glTF sources retain authored wind attributes; wind response is not enabled in this starter scene.",
+  "models": [
+    {
+      "name": "OakMeadow",
+      "title": "Oak Meadow",
+      "category": "Broadleaf trees",
+      "model": "Models/OakMeadow.glb",
+      "sha256": "454f316500a3c53554a74de575b8659ddf8b30d5d079885ab568d4beb07e1111",
+      "dimensions_xyz_metres": [
+        10.80592,
+        13.2,
+        10.10586
+      ],
+      "pivot": "Centre of the trunk base at ground level",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/OakMeadow.glb",
+          "sha256": "01a662fab23da05942280495d4d0c7e17a56d05df9b6be051da38d821c6bd7a6"
+        },
+        "2": {
+          "path": "Detail/LOD2/OakMeadow.glb",
+          "sha256": "c1f680fd5e67534e31c2c0242654c62120aafec6394697fa16b676db24a81361"
+        }
+      },
+      "source": "Provenance/OakMeadow.json",
+      "authors": [
+        "Daniel Greenheck",
+        "ambientCG",
+        "Renegade Engine"
+      ],
+      "license": "MIT for EZ-Tree and foliage; CC0-1.0 for bark maps",
+      "native_asset_id": "06af07e9-0329-4669-80e6-fdc822e4f5f7",
+      "resolved_texture_slots": 4,
+      "mesh_material_groups": [
+        {
+          "mesh": "OakMeadow trunk",
+          "materials": [
+            "Trunk and branches"
+          ]
+        },
+        {
+          "mesh": "OakMeadow canopy",
+          "materials": [
+            "Oak canopy"
+          ]
+        }
+      ],
+      "authored_wind_attributes": [],
+      "collision_in_sample": "Trunk capsule. Leaves, needles and branches have no collider."
+    },
+    {
+      "name": "OakVeteran",
+      "title": "Oak Veteran",
+      "category": "Broadleaf trees",
+      "model": "Models/OakVeteran.glb",
+      "sha256": "5a1b96590405fd6f75825dac21a7745f228654e948bd1af0e587f1024308e3a7",
+      "dimensions_xyz_metres": [
+        17.29983,
+        18.5,
+        17.7666
+      ],
+      "pivot": "Centre of the trunk base at ground level",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/OakVeteran.glb",
+          "sha256": "17693b2273d20629309136a1daabcc203dff2afa2b664e9833ca7e3cccb4b10e"
+        },
+        "2": {
+          "path": "Detail/LOD2/OakVeteran.glb",
+          "sha256": "62899f74644b8852a13f57bdab4e14a594068e6f99dbbd5377c87b6f3517f941"
+        }
+      },
+      "source": "Provenance/OakVeteran.json",
+      "authors": [
+        "Daniel Greenheck",
+        "ambientCG",
+        "Renegade Engine"
+      ],
+      "license": "MIT for EZ-Tree and foliage; CC0-1.0 for bark maps",
+      "native_asset_id": "1486c000-1020-4a4b-988c-ab32bd3475b0",
+      "resolved_texture_slots": 4,
+      "mesh_material_groups": [
+        {
+          "mesh": "OakVeteran trunk",
+          "materials": [
+            "Trunk and branches"
+          ]
+        },
+        {
+          "mesh": "OakVeteran canopy",
+          "materials": [
+            "Oak canopy"
+          ]
+        }
+      ],
+      "authored_wind_attributes": [],
+      "collision_in_sample": "Trunk capsule. Leaves, needles and branches have no collider."
+    },
+    {
+      "name": "SilverBirch",
+      "title": "Silver Birch",
+      "category": "Broadleaf trees",
+      "model": "Models/SilverBirch.glb",
+      "sha256": "bd59f94eb2659294a002330a36e0c97fbf57d9882b6bbdf94fd6f14fbc783c67",
+      "dimensions_xyz_metres": [
+        10.99472,
+        18.20441,
+        10.47351
+      ],
+      "pivot": "Centre of the trunk base at ground level",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/SilverBirch.glb",
+          "sha256": "4f997fb430e05f3b1d37e6576411290e89d8495c1905720a6b0bc6f65827ca10"
+        },
+        "2": {
+          "path": "Detail/LOD2/SilverBirch.glb",
+          "sha256": "c65d076a6f5c8fca514e4e9bd0531d18495ae254af57dbeed7d174fa8fdb87ac"
+        }
+      },
+      "source": "Provenance/SilverBirch.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "89b696e9-20c9-4f61-90b7-18f298da020a",
+      "resolved_texture_slots": 6,
+      "mesh_material_groups": [
+        {
+          "mesh": "branches",
+          "materials": [
+            "birch_bark",
+            "birch_twig"
+          ]
+        },
+        {
+          "mesh": "leaves",
+          "materials": [
+            "birch_leaves"
+          ]
+        },
+        {
+          "mesh": "trunk",
+          "materials": [
+            "birch_bark"
+          ]
+        }
+      ],
+      "authored_wind_attributes": [
+        "_WIND"
+      ],
+      "collision_in_sample": "Trunk capsule. Leaves, needles and branches have no collider."
+    },
+    {
+      "name": "BirchCoppice",
+      "title": "Birch Coppice",
+      "category": "Broadleaf trees",
+      "model": "Models/BirchCoppice.glb",
+      "sha256": "1855cf18e07c5c2a29481e386008e844ddbfd1302283b911f14afb06a0645dbd",
+      "dimensions_xyz_metres": [
+        7.02017,
+        14.19944,
+        6.69971
+      ],
+      "pivot": "Centre of the trunk base at ground level",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/BirchCoppice.glb",
+          "sha256": "390c7ea10889c99f87e03cf46ed078d1072f54b4f4fb95bed33a5dcb5589dbdf"
+        },
+        "2": {
+          "path": "Detail/LOD2/BirchCoppice.glb",
+          "sha256": "f96902dcb0a8a7de533925b0f1be4efa558a88425378c498c1a352e2a9546eec"
+        }
+      },
+      "source": "Provenance/BirchCoppice.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "75ac4d94-0984-4161-992a-2143bf1161d6",
+      "resolved_texture_slots": 6,
+      "mesh_material_groups": [
+        {
+          "mesh": "branches",
+          "materials": [
+            "birch_bark",
+            "birch_twig"
+          ]
+        },
+        {
+          "mesh": "leaves",
+          "materials": [
+            "birch_leaves"
+          ]
+        },
+        {
+          "mesh": "trunk",
+          "materials": [
+            "birch_bark"
+          ]
+        }
+      ],
+      "authored_wind_attributes": [
+        "_WIND"
+      ],
+      "collision_in_sample": "Trunk capsule. Leaves, needles and branches have no collider."
+    },
+    {
+      "name": "ScotsPine",
+      "title": "Scots Pine",
+      "category": "Conifers",
+      "model": "Models/ScotsPine.glb",
+      "sha256": "818b95651aed8a2f216dbd964d93daee18889b21c6c1a3c908b98986ef76b20a",
+      "dimensions_xyz_metres": [
+        10.85624,
+        20.90132,
+        10.96601
+      ],
+      "pivot": "Centre of the trunk base at ground level",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/ScotsPine.glb",
+          "sha256": "69fb686481292459e7d9d848a78b985396aacbafd67f4f48fa6ba454ca2b5d6f"
+        },
+        "2": {
+          "path": "Detail/LOD2/ScotsPine.glb",
+          "sha256": "f26a6806667d6af7e5acc7894b680524ff622e46eb96d533886f06a408278e11"
+        }
+      },
+      "source": "Provenance/ScotsPine.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "98a36efd-4fc5-4b09-86b1-43845a53102c",
+      "resolved_texture_slots": 8,
+      "mesh_material_groups": [
+        {
+          "mesh": "branches",
+          "materials": [
+            "pine_branch",
+            "pine_deadwood"
+          ]
+        },
+        {
+          "mesh": "needles",
+          "materials": [
+            "pine_needles"
+          ]
+        },
+        {
+          "mesh": "trunk",
+          "materials": [
+            "pine_bark"
+          ]
+        }
+      ],
+      "authored_wind_attributes": [
+        "_WIND"
+      ],
+      "collision_in_sample": "Trunk capsule. Leaves, needles and branches have no collider."
+    },
+    {
+      "name": "YoungPine",
+      "title": "Young Pine",
+      "category": "Conifers",
+      "model": "Models/YoungPine.glb",
+      "sha256": "ba687c1352da1341a3eb53da5dc54b17b99cac7f6cbc842d27dfacde98d6302e",
+      "dimensions_xyz_metres": [
+        3.43223,
+        8.0,
+        3.52391
+      ],
+      "pivot": "Centre of the trunk base at ground level",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/YoungPine.glb",
+          "sha256": "3ac3be7b8c909d48f300bbcc9c9914edb9ce56555a25356c92f6951f417503fd"
+        },
+        "2": {
+          "path": "Detail/LOD2/YoungPine.glb",
+          "sha256": "88e4c9a80f6dc885ba92b04e6b8ce6b96b48a2adf15991689eee17a707156af0"
+        }
+      },
+      "source": "Provenance/YoungPine.json",
+      "authors": [
+        "Daniel Greenheck",
+        "ambientCG",
+        "Renegade Engine"
+      ],
+      "license": "MIT for EZ-Tree and foliage; CC0-1.0 for bark maps",
+      "native_asset_id": "395326c1-610b-4996-9ba1-3c4fc92d5c28",
+      "resolved_texture_slots": 4,
+      "mesh_material_groups": [
+        {
+          "mesh": "YoungPine trunk",
+          "materials": [
+            "Trunk and branches"
+          ]
+        },
+        {
+          "mesh": "YoungPine canopy",
+          "materials": [
+            "Pine needles"
+          ]
+        }
+      ],
+      "authored_wind_attributes": [],
+      "collision_in_sample": "Trunk capsule. Leaves, needles and branches have no collider."
+    },
+    {
+      "name": "StandingDeadOak",
+      "title": "Standing Dead Oak",
+      "category": "Dead trees",
+      "model": "Models/StandingDeadOak.glb",
+      "sha256": "31ea188a6e1218ad5f1a6e535b7a5c6f986de135cb10295d9f5e15073739bc01",
+      "dimensions_xyz_metres": [
+        8.67092,
+        11.8,
+        10.0656
+      ],
+      "pivot": "Centre of the trunk base at ground level",
+      "detail": {},
+      "source": "Provenance/StandingDeadOak.json",
+      "authors": [
+        "Daniel Greenheck",
+        "ambientCG",
+        "Renegade Engine"
+      ],
+      "license": "MIT for EZ-Tree and foliage; CC0-1.0 for bark maps",
+      "native_asset_id": "c3388a87-2da4-4519-99cd-5f773ae2d2fe",
+      "resolved_texture_slots": 3,
+      "mesh_material_groups": [
+        {
+          "mesh": "StandingDeadOak trunk",
+          "materials": [
+            "Trunk and branches"
+          ]
+        }
+      ],
+      "authored_wind_attributes": [],
+      "collision_in_sample": "Trunk capsule. Leaves, needles and branches have no collider."
+    },
+    {
+      "name": "BrokenSpruce",
+      "title": "Broken Spruce",
+      "category": "Dead trees",
+      "model": "Models/BrokenSpruce.glb",
+      "sha256": "6a379153c002c299c66f2e8701b718a17bfb98a67d57cd85d15bf2a9a9c1e817",
+      "dimensions_xyz_metres": [
+        4.58887,
+        12.60346,
+        3.9983
+      ],
+      "pivot": "Centre of the trunk base at ground level",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/BrokenSpruce.glb",
+          "sha256": "f8dcb2af5738771ddb3ef79e0d3cb0f572536982558f28394644d3f87ff2dbdf"
+        },
+        "2": {
+          "path": "Detail/LOD2/BrokenSpruce.glb",
+          "sha256": "5cdec7357ee4f553fc474dad5decfac6cb07f23cef44fac48a4d84c0ab7dcd61"
+        }
+      },
+      "source": "Provenance/BrokenSpruce.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "1306f55c-59fa-4b81-90bf-6defa0f41126",
+      "resolved_texture_slots": 6,
+      "mesh_material_groups": [
+        {
+          "mesh": "branches",
+          "materials": [
+            "dead_spruce_branch"
+          ]
+        },
+        {
+          "mesh": "lichen",
+          "materials": [
+            "dead_spruce_twigs"
+          ]
+        },
+        {
+          "mesh": "trunk",
+          "materials": [
+            "dead_spruce_bark"
+          ]
+        },
+        {
+          "mesh": "twigs",
+          "materials": [
+            "dead_spruce_twigs"
+          ]
+        }
+      ],
+      "authored_wind_attributes": [
+        "_WIND"
+      ],
+      "collision_in_sample": "Trunk capsule. Leaves, needles and branches have no collider."
+    },
+    {
+      "name": "LeafyHazel",
+      "title": "Leafy Hazel",
+      "category": "Bushes",
+      "model": "Models/LeafyHazel.glb",
+      "sha256": "85f833a4575a8cc280441209184e02f04a3ba7ca2e25d19fc88c414860d00819",
+      "dimensions_xyz_metres": [
+        6.89859,
+        4.63393,
+        5.97813
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/LeafyHazel.glb",
+          "sha256": "17e03ef2ce56ff9fcc17cf2322984d1d992e701e33fc8a1339e4f122f983d3a9"
+        },
+        "2": {
+          "path": "Detail/LOD2/LeafyHazel.glb",
+          "sha256": "7aef2cbf922778fa25cee1fa87f42d1458054af37dd9a81b04e7f44d18b39942"
+        }
+      },
+      "source": "Provenance/LeafyHazel.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "699b68cc-d1e8-49af-989b-595535125a5f",
+      "resolved_texture_slots": 6
+    },
+    {
+      "name": "DenseJuniper",
+      "title": "Dense Juniper",
+      "category": "Bushes",
+      "model": "Models/DenseJuniper.glb",
+      "sha256": "f0a6c8c411d898f018330b7b62832290cf13cc45557368a60bc1f63661015607",
+      "dimensions_xyz_metres": [
+        1.8232,
+        2.77618,
+        2.16294
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/DenseJuniper.glb",
+          "sha256": "32fcecbdd83d9d1ba3cff432ab7bfc4bd12200f21bcb34ad9c58641c2b0e1706"
+        },
+        "2": {
+          "path": "Detail/LOD2/DenseJuniper.glb",
+          "sha256": "a132fd49fe89680dad1a9690830e1d26ea29e780cc7f3f1bf8f4c3e2cedc7755"
+        }
+      },
+      "source": "Provenance/DenseJuniper.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "0658e99f-84d8-4efe-b40d-dd5f1f7c72c1",
+      "resolved_texture_slots": 6
+    },
+    {
+      "name": "SparseBilberry",
+      "title": "Sparse Bilberry",
+      "category": "Bushes",
+      "model": "Models/SparseBilberry.glb",
+      "sha256": "5d247fed22d32502c6fd1f0c08919ea4ab1e608bda5dc9bdea6098f62777f25f",
+      "dimensions_xyz_metres": [
+        0.32445,
+        0.35904,
+        0.36187
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/SparseBilberry.glb",
+          "sha256": "34bc52643cd21547f09721fa42d231a1602ca5dc33b1a99fe5350d874cfcd078"
+        },
+        "2": {
+          "path": "Detail/LOD2/SparseBilberry.glb",
+          "sha256": "6a5171e9b5f85c0b26583c48c94086dfa205d8864373296bf6a3955125435849"
+        }
+      },
+      "source": "Provenance/SparseBilberry.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "ecfc5d30-0bf9-4e0f-885c-787797962d0c",
+      "resolved_texture_slots": 2
+    },
+    {
+      "name": "FloweringHeather",
+      "title": "Flowering Heather",
+      "category": "Bushes",
+      "model": "Models/FloweringHeather.glb",
+      "sha256": "33888f3b7b86a328a41a3ab7470c91a0131d56f412fbed3a7ea44fe380c628b7",
+      "dimensions_xyz_metres": [
+        0.689,
+        0.3951,
+        0.7315
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/FloweringHeather.glb",
+          "sha256": "464229814f34f775aa9c04505210be8221896eb84ca60095725e90a264a275bb"
+        },
+        "2": {
+          "path": "Detail/LOD2/FloweringHeather.glb",
+          "sha256": "f754b1194b363cc7e83802cf507a6c676f692d08325ce4920ac766cffb9247eb"
+        }
+      },
+      "source": "Provenance/FloweringHeather.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "16274223-8405-49b4-9c78-bdbd4d18d5ab",
+      "resolved_texture_slots": 2
+    },
+    {
+      "name": "WoodlandRock",
+      "title": "Woodland Rock",
+      "category": "Rocks and boulders",
+      "model": "Models/WoodlandRock.glb",
+      "sha256": "d527488b6fd797f05d3c61932b04fc9962f4bfe52ed2d94abee4f4c087d713f5",
+      "dimensions_xyz_metres": [
+        0.07401,
+        0.03287,
+        0.14462
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {},
+      "source": "Provenance/WoodlandRock.json",
+      "authors": {
+        "Jenelle van Heerden": "All"
+      },
+      "license": "CC0-1.0",
+      "native_asset_id": "48b84ce0-7e8b-4f82-b12f-d957bdaf53d4",
+      "resolved_texture_slots": 3,
+      "collision_in_sample": "Fitted boulder box."
+    },
+    {
+      "name": "RiverCobble",
+      "title": "River Cobble",
+      "category": "Rocks and boulders",
+      "model": "Models/RiverCobble.glb",
+      "sha256": "ca75a8ffb0c7b8b2a981663accc5d9e8ba757fb52adffb7231871191b906c687",
+      "dimensions_xyz_metres": [
+        0.2953,
+        0.09485,
+        0.2617
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/RiverCobble.glb",
+          "sha256": "1cee7efd3acc608fdd3d045152123e6e1bca590a61fc6029ad92bcd11d2f1707"
+        },
+        "2": {
+          "path": "Detail/LOD2/RiverCobble.glb",
+          "sha256": "7f6915837e791e749f6fd89a9d6a97ced71b483a40f8e74ada0d2a9d4e61474b"
+        }
+      },
+      "source": "Provenance/RiverCobble.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "8df2834a-3615-4fb9-8c3e-62afd8026ffb",
+      "resolved_texture_slots": 4,
+      "collision_in_sample": "Fitted boulder box."
+    },
+    {
+      "name": "GraniteBoulder",
+      "title": "Granite Boulder",
+      "category": "Rocks and boulders",
+      "model": "Models/GraniteBoulder.glb",
+      "sha256": "3f8fff213162451f83508f70d7990310d9fc1f0c339e4809d294902653ebc782",
+      "dimensions_xyz_metres": [
+        1.55808,
+        0.99028,
+        1.06275
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/GraniteBoulder.glb",
+          "sha256": "1132213e156f6871632cd2fbc58a398551ce560f6fe4e210cc61dd799892d8ba"
+        },
+        "2": {
+          "path": "Detail/LOD2/GraniteBoulder.glb",
+          "sha256": "776ca9882a5814e6158cb367968a679ca78f01cc672e1f3a3a6ad125ccff43a0"
+        }
+      },
+      "source": "Provenance/GraniteBoulder.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "e0da2bc4-eba5-4896-91ce-166f7796f631",
+      "resolved_texture_slots": 4,
+      "collision_in_sample": "Fitted boulder box."
+    },
+    {
+      "name": "LimestoneBoulder",
+      "title": "Limestone Boulder",
+      "category": "Rocks and boulders",
+      "model": "Models/LimestoneBoulder.glb",
+      "sha256": "cc1a4b83c28188db2a10e8227716fec5d69b5cead28de264cf2ab9a9d7cc605e",
+      "dimensions_xyz_metres": [
+        1.46708,
+        0.77981,
+        1.48576
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/LimestoneBoulder.glb",
+          "sha256": "28e7b5720dfacadd121f8dc04610c1c04724348950ede3498de7098a61ea5b1c"
+        },
+        "2": {
+          "path": "Detail/LOD2/LimestoneBoulder.glb",
+          "sha256": "c7ea90a91783c68da497ee9b61ca3beff83f8b0f087699025b4728173ab28561"
+        }
+      },
+      "source": "Provenance/LimestoneBoulder.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "d1a34e99-1587-4002-b009-b27a97ebc654",
+      "resolved_texture_slots": 4,
+      "collision_in_sample": "Fitted boulder box."
+    },
+    {
+      "name": "SplitGranite",
+      "title": "Split Granite",
+      "category": "Rocks and boulders",
+      "model": "Models/SplitGranite.glb",
+      "sha256": "0c151555a2ef0f4a8a28ae63c04397d89a59e79ca885dcfb07b47b3d5f6785aa",
+      "dimensions_xyz_metres": [
+        2.929,
+        1.03235,
+        2.23069
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/SplitGranite.glb",
+          "sha256": "e679a76b7a9a38cf4bd894d426a173d2a3da7caaabb7bcfcbd779a6b68e2560a"
+        },
+        "2": {
+          "path": "Detail/LOD2/SplitGranite.glb",
+          "sha256": "5fff25b28d95416d7c28d2d6977494c3bad65ae5f739bdacb0227897fd361cf4"
+        }
+      },
+      "source": "Provenance/SplitGranite.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "b4831d13-6d79-48b9-909b-23aab2c1a776",
+      "resolved_texture_slots": 5,
+      "collision_in_sample": "Fitted boulder box."
+    },
+    {
+      "name": "GlacialErratic",
+      "title": "Glacial Erratic",
+      "category": "Rocks and boulders",
+      "model": "Models/GlacialErratic.glb",
+      "sha256": "1c65cf555f6b06a9ffd6018282183b6b5d6300a72baeb001fe01a1ed45dd4b16",
+      "dimensions_xyz_metres": [
+        2.33307,
+        1.55775,
+        1.68933
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/GlacialErratic.glb",
+          "sha256": "0963da9bab10347c8cba055318d4db295b0ca6b41a93bd16c27c7da3bf2c90d1"
+        },
+        "2": {
+          "path": "Detail/LOD2/GlacialErratic.glb",
+          "sha256": "1d7b7dc24bb8851421d9675b3b9d68661446b8bcc6aaf61778e4c5d0f5bf34db"
+        }
+      },
+      "source": "Provenance/GlacialErratic.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "f02fb3da-f400-4169-b503-bb83e5d02e81",
+      "resolved_texture_slots": 4,
+      "collision_in_sample": "Fitted boulder box."
+    },
+    {
+      "name": "WoodlandFern",
+      "title": "Woodland Fern",
+      "category": "Ground plants",
+      "model": "Models/WoodlandFern.glb",
+      "sha256": "531a6b9894dd0bca1f534c2d2a9e2704131b33ffaf1d171e0d47fe74d4eedd65",
+      "dimensions_xyz_metres": [
+        0.55194,
+        0.2868,
+        0.61342
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {},
+      "source": "Provenance/WoodlandFern.json",
+      "authors": {
+        "Rob Tuytel": "scanning",
+        "Rico Cilliers": "modeling"
+      },
+      "license": "CC0-1.0",
+      "native_asset_id": "c55e4446-86d7-47f6-9e6f-00f0709f6990",
+      "resolved_texture_slots": 3
+    },
+    {
+      "name": "WhiteClover",
+      "title": "White Clover",
+      "category": "Ground plants",
+      "model": "Models/WhiteClover.glb",
+      "sha256": "b0b71a027d988fb95e5ac3815081f0f09458754e311c9be7e75cc30b2484fda3",
+      "dimensions_xyz_metres": [
+        0.47664,
+        0.15938,
+        0.42648
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/WhiteClover.glb",
+          "sha256": "07f241195f1a2e85ba80c461590e308ad3260837b56bcfaf17ad96e5e0b5c102"
+        },
+        "2": {
+          "path": "Detail/LOD2/WhiteClover.glb",
+          "sha256": "80906f947241fa48541503a761a98d7d5c20b0a11f2691e92a653a2328e5c4df"
+        }
+      },
+      "source": "Provenance/WhiteClover.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "f3bb8368-7c30-4740-b550-6f7351dec1b0",
+      "resolved_texture_slots": 2
+    },
+    {
+      "name": "MeadowFlowers",
+      "title": "Meadow Flowers",
+      "category": "Ground plants",
+      "model": "Models/MeadowFlowers.glb",
+      "sha256": "5566f5e838754df58431374845f11aead9ae7e1049605001caf705cec63b93bf",
+      "dimensions_xyz_metres": [
+        1.18928,
+        0.53502,
+        1.1434
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/MeadowFlowers.glb",
+          "sha256": "312a02fc66f0a55a7c32f39c819e8af8e03bd64fdd1c53a23b05579a5e9b810e"
+        },
+        "2": {
+          "path": "Detail/LOD2/MeadowFlowers.glb",
+          "sha256": "9df2a9e1a6bde0bdd263edb1c40be0849e983f0711f457218aae8a48617eef93"
+        }
+      },
+      "source": "Provenance/MeadowFlowers.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "aa42279e-8a57-422f-912f-ed8bacd6651c",
+      "resolved_texture_slots": 2
+    },
+    {
+      "name": "CommonReeds",
+      "title": "Common Reeds",
+      "category": "Ground plants",
+      "model": "Models/CommonReeds.glb",
+      "sha256": "c0da31ab06f7045b9611c9c92f465a22e2cd144bc606401184c5d90647d4d711",
+      "dimensions_xyz_metres": [
+        2.8375,
+        3.17076,
+        2.19332
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/CommonReeds.glb",
+          "sha256": "644f60db1d6a9d6884ed69bdff6d77accd7aa7617ada7d6cecf0cac76f22df01"
+        },
+        "2": {
+          "path": "Detail/LOD2/CommonReeds.glb",
+          "sha256": "d250635cf1518405195900bf3215a25abebca33a0fd9faf20e9c735ae3a1f6b4"
+        }
+      },
+      "source": "Provenance/CommonReeds.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "5554c245-697f-42ef-a442-1b51de917e4e",
+      "resolved_texture_slots": 2
+    },
+    {
+      "name": "FallenLog",
+      "title": "Fallen Log",
+      "category": "Debris",
+      "model": "Models/FallenLog.glb",
+      "sha256": "b64dc1588c0734c1abd5971c4b248c2a1b76ed6424f20adc8624a8ecef05f534",
+      "dimensions_xyz_metres": [
+        6.32064,
+        0.44598,
+        0.47916
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/FallenLog.glb",
+          "sha256": "9a0ec10735013f118d9c07a354ead32208b5c67c1d98eda8fea6f1883431d211"
+        },
+        "2": {
+          "path": "Detail/LOD2/FallenLog.glb",
+          "sha256": "1a16de82ab20121d50eadaeabb784e0715ea640f57daeed5c3a3cb88f824226a"
+        }
+      },
+      "source": "Provenance/FallenLog.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "32bb32b2-d3ae-4bec-b4ce-3b1e0b07cff2",
+      "resolved_texture_slots": 4
+    },
+    {
+      "name": "WoodlandStump",
+      "title": "Woodland Stump",
+      "category": "Debris",
+      "model": "Models/WoodlandStump.glb",
+      "sha256": "c0caf014536612946653ba91cdf2de15ffa7f493651d5582c23a3a89ea79a668",
+      "dimensions_xyz_metres": [
+        1.42555,
+        0.57267,
+        1.59031
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {},
+      "source": "Provenance/WoodlandStump.json",
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "license": "CC0-1.0",
+      "native_asset_id": "fe9e5b2b-e21a-4c92-b882-a4402aea14c1",
+      "resolved_texture_slots": 3
+    },
+    {
+      "name": "BranchPile",
+      "title": "Branch Pile",
+      "category": "Debris",
+      "model": "Models/BranchPile.glb",
+      "sha256": "b4ef1ffcd9134f1beec8834a40d601913451a40d1d3db9d29c5484a50b216737",
+      "dimensions_xyz_metres": [
+        1.69585,
+        0.13891,
+        1.63126
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/BranchPile.glb",
+          "sha256": "008625bcabf4b1e8a47738e10cd98d9306ce7259961ce0bde8abfcfe55400624"
+        },
+        "2": {
+          "path": "Detail/LOD2/BranchPile.glb",
+          "sha256": "a37aa9dc32df0f2b997173a18ce50536186bd763b88e0a54c0c933cf426054c2"
+        }
+      },
+      "source": "Provenance/BranchPile.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "af7c2918-c9f5-42e6-903f-ae72be7d37e0",
+      "resolved_texture_slots": 2
+    },
+    {
+      "name": "OakLeafLitter",
+      "title": "Oak Leaf Litter",
+      "category": "Debris",
+      "model": "Models/OakLeafLitter.glb",
+      "sha256": "06bd5992b3e3db3028fdc901eb701b1e714728fdfff1bfd32da6d54b52ca0ba1",
+      "dimensions_xyz_metres": [
+        0.5833,
+        0.02333,
+        0.43663
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {},
+      "source": "Provenance/OakLeafLitter.json",
+      "authors": [
+        "Maverick Media Studio"
+      ],
+      "license": "Original starter artwork for Renegade Engine",
+      "native_asset_id": "b9e3e94a-cfae-4d13-9e34-b18f6459cec0",
+      "resolved_texture_slots": 3,
+      "redistribution": "Renegade-authored starter artwork. Supplied for inclusion with Renegade Engine and in games made with it."
+    },
+    {
+      "name": "PebbleCluster",
+      "title": "Pebble Cluster",
+      "category": "Small clutter",
+      "model": "Models/PebbleCluster.glb",
+      "sha256": "41fbe7a26fb328b53ea004f1620f47df03b680165f66dfcd36e227b0f8a0965b",
+      "dimensions_xyz_metres": [
+        0.45997,
+        0.02492,
+        0.38708
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {},
+      "source": "Provenance/PebbleCluster.json",
+      "authors": {
+        "Jenelle van Heerden": "All"
+      },
+      "license": "CC0-1.0",
+      "native_asset_id": "2c96abc9-1a58-44ad-9cb5-76c16b23e6c8",
+      "resolved_texture_slots": 3
+    },
+    {
+      "name": "Chanterelles",
+      "title": "Chanterelles",
+      "category": "Small clutter",
+      "model": "Models/Chanterelles.glb",
+      "sha256": "4dc74b084feef54a33da629b854dd891395ee0e067f8159709cd98d8b320f248",
+      "dimensions_xyz_metres": [
+        0.20395,
+        0.07273,
+        0.19347
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/Chanterelles.glb",
+          "sha256": "814222a7679c26d776441baaa324dbdefab4a3bea183d893be203b8c95886ad4"
+        },
+        "2": {
+          "path": "Detail/LOD2/Chanterelles.glb",
+          "sha256": "f5b53b14f94bc64fdc852c942247af3f6f938878cfbb543e5360cd874f6c5434"
+        }
+      },
+      "source": "Provenance/Chanterelles.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "99dd9e1f-c879-48bc-abff-fe1c283c7f99",
+      "resolved_texture_slots": 3
+    },
+    {
+      "name": "DryTussock",
+      "title": "Dry Tussock",
+      "category": "Small clutter",
+      "model": "Models/DryTussock.glb",
+      "sha256": "ef71af360f2812c72d450717e5c76a8943ada5d2afa763c8b1c75f24a3edbace",
+      "dimensions_xyz_metres": [
+        1.68827,
+        1.59924,
+        1.63468
+      ],
+      "pivot": "Ground level at the centre of the XZ footprint",
+      "detail": {
+        "1": {
+          "path": "Detail/LOD1/DryTussock.glb",
+          "sha256": "1620219d6db519768a2d0467176fcc7ef3fe11b8edb04073bc1b2c3d9918a954"
+        },
+        "2": {
+          "path": "Detail/LOD2/DryTussock.glb",
+          "sha256": "73788f451d08ba53697cd7f2c0e43385a10bb99a5749585cbbe43d8d318934a6"
+        }
+      },
+      "source": "Provenance/DryTussock.json",
+      "authors": [
+        "tevy"
+      ],
+      "license": "CC0-1.0",
+      "native_asset_id": "c04387d0-7590-468d-9d11-42944a9e8a89",
+      "resolved_texture_slots": 2
+    }
+  ]
+}

@@ -18,6 +18,11 @@
 #include "renegade/bridge/EquipmentAssetService.h"
 #include "renegade/bridge/ProjectileAssetService.h"
 #include "renegade/bridge/ReusableAssetService.h"
+#include "renegade/bridge/ResourceAssetDependencyService.h"
+#include "renegade/bridge/ResourceAssetService.h"
+#include "renegade/bridge/TerrainPropDocument.h"
+#include <set>
+#include "TestLevelSnapshotStorage.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/ScreenService.h"
@@ -48,10 +53,16 @@ namespace
 {
     namespace fs = std::filesystem;
 
+    struct CapturedScene
+    {
+        wi::vector<std::uint8_t> bytes;
+        std::vector<std::string> terrainRevisions;
+    };
+
     struct PendingSceneCaptures
     {
         std::mutex mutex;
-        std::unordered_map<std::string, wi::vector<std::uint8_t>> bytes;
+        std::unordered_map<std::string, CapturedScene> scenes;
     };
     PendingSceneCaptures& PendingCaptures()
     {
@@ -165,6 +176,20 @@ namespace
         fs::remove(directory, error);
     }
 
+    fs::path NativeSnapshotPath(fs::path path)
+    {
+#ifdef _WIN32
+        path = fs::absolute(path).make_preferred();
+        const auto& name = path.native();
+        if (name.rfind(LR"(\\?\)", 0) == 0) return path;
+        if (name.rfind(LR"(\\)", 0) == 0)
+            return fs::path(LR"(\\?\UNC\)" + name.substr(2));
+        return fs::path(LR"(\\?\)" + name);
+#else
+        return path;
+#endif
+    }
+
     bool RemoveSnapshotDirectory(
         const fs::path& sessionDirectory,
         std::string& error)
@@ -172,15 +197,15 @@ namespace
         {
             auto& captures = PendingCaptures();
             std::lock_guard<std::mutex> lock(captures.mutex);
-            for (auto i=captures.bytes.begin(); i!=captures.bytes.end();)
+            for (auto i=captures.scenes.begin(); i!=captures.scenes.end();)
             {
                 if (fs::u8path(i->first).parent_path().parent_path().parent_path() == sessionDirectory)
-                    i=captures.bytes.erase(i);
+                    i=captures.scenes.erase(i);
                 else ++i;
             }
         }
         std::error_code removeError;
-        fs::remove_all(sessionDirectory, removeError);
+        fs::remove_all(NativeSnapshotPath(sessionDirectory), removeError);
         if (removeError)
         {
             error = "Could not remove Test Level snapshot directory: " +
@@ -322,6 +347,94 @@ namespace
         {
             if (*part == "." || *part == "..")
                 return false;
+        }
+        return true;
+    }
+
+    bool CollectSnapshotTerrainFiles(
+        const std::vector<std::string>& revisions, const fs::path& sourceRoot,
+        const renegade::bridge::StableId& projectId, std::set<std::string>& files,
+        const std::function<bool(bool)>& progress, std::string& error)
+    {
+        using namespace renegade::bridge;
+        std::vector<std::string> pages;
+        std::vector<StableId> models;
+        if (!CollectTerrainPropDependencies(revisions, sourceRoot, projectId, pages, models, error))
+            return false;
+        if (pages.empty()) return true;
+
+        const auto root = sourceRoot.generic_u8string();
+        AssetRegistry registry;
+        if (!ReadAssetRegistry(root, projectId, registry, error)) return false;
+
+        files.insert(pages.begin(), pages.end());
+        files.insert(AssetRegistryDocumentName);
+        // The import transaction embeds native material resources in every .rasset.
+        // Governed texture/video overrides reference separate registry products.
+        const bool hasResources = std::any_of(registry.records.begin(), registry.records.end(),
+            [](const AssetRecord& record) {
+                return record.sourceAvailable && (record.dependencyClass == DependencyClass::Texture ||
+                    record.dependencyClass == DependencyClass::Video) &&
+                    fs::u8path(record.projectRelativePath).extension() == ResourceAssetExtension;
+            });
+        ResourceAssetDependencyProvider resources(projectId);
+        for (const auto& id : models)
+        {
+            if (progress && !progress(true)) { error = "Test Level preparation was cancelled."; return false; }
+            const auto record = std::find_if(registry.records.begin(), registry.records.end(),
+                [&](const AssetRecord& item) { return item.assetId == id; });
+            if (record == registry.records.end() || !record->sourceAvailable ||
+                record->dependencyClass != DependencyClass::ImportedContent ||
+                fs::u8path(record->projectRelativePath).extension() != ReusableAssetExtension ||
+                !IsSafeSnapshotContentPath(fs::u8path(record->projectRelativePath)))
+            {
+                error = "Test Game terrain prop model is unavailable: " + id;
+                return false;
+            }
+            files.insert(record->projectRelativePath);
+            if (hasResources)
+            {
+                DependencyNode model;
+                model.projectRelativePath = record->projectRelativePath;
+                model.dependencyClass = DependencyClass::ImportedContent;
+                if (!resources.Discover({root, &model}, [&](const DependencyCandidate& candidate) {
+                        files.insert(candidate.declaredPath);
+                    }, {}, error))
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    bool CopySnapshotTerrainFiles(const std::set<std::string>& files, const fs::path& sourceRoot,
+        const fs::path& destination, const std::function<bool(bool)>& progress, std::string& error)
+    {
+        using namespace renegade::bridge;
+        const auto root = sourceRoot.generic_u8string();
+        for (const auto& path : files)
+        {
+            if (progress && !progress(true))
+            {
+                error = "Test Level preparation was cancelled.";
+                return false;
+            }
+            const auto source = ResolveDependencyPath(root, path);
+            const auto target = ResolveDependencyPath(destination.generic_u8string(), path);
+            if (!source.accepted || !source.exists || !target.accepted)
+            {
+                error = "Test Game terrain prop dependency is unavailable: " + path;
+                return false;
+            }
+            const auto targetPath = fs::u8path(target.absolutePath);
+            std::error_code ec;
+            fs::create_directories(NativeSnapshotPath(targetPath.parent_path()), ec);
+            if (!ec) fs::copy_file(NativeSnapshotPath(fs::u8path(source.absolutePath)), NativeSnapshotPath(targetPath),
+                fs::copy_options::overwrite_existing, ec);
+            if (ec)
+            {
+                error = "Could not copy Test Game terrain prop dependency " + path + ": " + ec.message();
+                return false;
+            }
         }
         return true;
     }
@@ -1354,6 +1467,23 @@ namespace renegade::bridge
             if (!SnapshotParticleEffectRuntimeInputs(project.rootPath, project.projectId, created.sessionDirectory, error))
                 return failAndCleanup("Could not snapshot particle runtime catalog: " + error);
 
+            std::vector<std::string> terrainRevisions;
+            if (!CaptureTerrainPropRevisionRefs(scenes_.GetScene(), project.projectId, terrainRevisions, error))
+                return failAndCleanup("Could not capture terrain props: " + error);
+            if (deferValidation)
+            {
+                auto& captures = PendingCaptures();
+                std::lock_guard<std::mutex> lock(captures.mutex);
+                captures.scenes.at(created.scenePath).terrainRevisions = std::move(terrainRevisions);
+            }
+            else
+            {
+                std::set<std::string> files;
+                if (!CollectSnapshotTerrainFiles(terrainRevisions, fs::u8path(project.rootPath), project.projectId, files, {}, error) ||
+                    !CopySnapshotTerrainFiles(files, fs::u8path(project.rootPath), fs::u8path(created.sessionDirectory), {}, error))
+                    return failAndCleanup("Could not snapshot terrain props: " + error);
+            }
+
             if (!SnapshotGovernedMaterialInputs(
                     project,
                     created,
@@ -1574,7 +1704,7 @@ namespace renegade::bridge
                     {
                         auto& captures = PendingCaptures();
                         std::lock_guard<std::mutex> lock(captures.mutex);
-                        captures.bytes.emplace(scenePath.generic_u8string(), std::move(bytes));
+                        captures.scenes.emplace(scenePath.generic_u8string(), CapturedScene{std::move(bytes), {}});
                     }
                     timings.Mark("capture_owned_bytes");
                 }
@@ -1667,7 +1797,7 @@ namespace renegade::bridge
         auto& captures = PendingCaptures();
         std::lock_guard<std::mutex> lock(captures.mutex);
         std::error_code ec;
-        return captures.bytes.find(snapshot.scenePath) != captures.bytes.end() ||
+        return captures.scenes.find(snapshot.scenePath) != captures.scenes.end() ||
             fs::is_regular_file(fs::u8path(snapshot.scenePath + ".pending-validation"), ec);
     }
 
@@ -1688,14 +1818,24 @@ namespace renegade::bridge
                 error="Refusing deferred preparation outside the owned snapshot directory.";
                 return false;
             }
-            wi::vector<std::uint8_t> bytes;
+            CapturedScene captured;
             {
                 auto& captures=PendingCaptures();
                 std::lock_guard<std::mutex> lock(captures.mutex);
-                auto i=captures.bytes.find(snapshot.scenePath);
-                if(i!=captures.bytes.end()){bytes=std::move(i->second);captures.bytes.erase(i);}
+                auto i=captures.scenes.find(snapshot.scenePath);
+                if(i!=captures.scenes.end()){captured=std::move(i->second);captures.scenes.erase(i);}
             }
-            if (!bytes.empty() && preferLocalStorage)
+            auto& bytes = captured.bytes;
+            const bool hasCapture = !bytes.empty();
+            std::set<std::string> terrainFiles;
+            ProjectMetadata project;
+            if (!snapshot.descriptorPath.empty())
+            {
+                if (!ProjectService().InspectProject(snapshot.descriptorPath, project, error) ||
+                    !CollectSnapshotTerrainFiles(captured.terrainRevisions, originalRoot,
+                        project.projectId, terrainFiles, progress, error)) return false;
+            }
+            if (hasCapture && preferLocalStorage)
             {
 #ifdef _WIN32
                 const auto* local=_wgetenv(L"LOCALAPPDATA");
@@ -1705,12 +1845,9 @@ namespace renegade::bridge
                         std::to_string(std::hash<std::string>{}(originalRoot.generic_u8string()));
                     std::error_code ec;
                     const auto space=fs::space(fs::path(local),ec);
-                    std::uintmax_t companionBytes=0;
-                    for(const auto& f:fs::recursive_directory_iterator(originalSession))
-                        if(f.is_regular_file())companionBytes+=f.file_size();
-                    constexpr std::uintmax_t reserve=4ull*1024*1024*1024;
-                    if(!ec && localRoot.root_name()!=originalRoot.root_name() &&
-                        space.available>reserve+bytes.size()+companionBytes)
+                    if (!ec && localRoot.root_name() != originalRoot.root_name() &&
+                        CanFitTestLevelSnapshot(space.available, bytes.size(), NativeSnapshotPath(originalSession),
+                            NativeSnapshotPath(originalRoot), terrainFiles))
                     {
                         const auto owner=localRoot/".renegade-test-storage-owner";
                         const std::string ownerText="renegade-local-test-storage-v1\n"+
@@ -1772,6 +1909,17 @@ namespace renegade::bridge
             {
                 auto validation=PrepareWickedSceneOpen(snapshot.scenePath);
                 if(!validation.IsReady()){error="Test Level snapshot validation failed: "+validation.Error();return false;}
+                if (!snapshot.descriptorPath.empty())
+                {
+                    // A disk-only pending scene has no owner-thread capture in this process.
+                    if (!hasCapture &&
+                        (!CaptureTerrainPropRevisionRefs(*validation.ReadOnlyScene(), project.projectId,
+                            captured.terrainRevisions, error) ||
+                         !CollectSnapshotTerrainFiles(captured.terrainRevisions, originalRoot,
+                            project.projectId, terrainFiles, progress, error))) return false;
+                    if (!CopySnapshotTerrainFiles(terrainFiles, originalRoot,
+                            fs::u8path(snapshot.sessionDirectory), progress, error)) return false;
+                }
             }
             timings.Mark("deserialize_validate");
             std::error_code ec;

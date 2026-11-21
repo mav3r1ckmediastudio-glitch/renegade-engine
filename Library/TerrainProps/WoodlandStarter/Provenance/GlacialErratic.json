@@ -1,0 +1,50 @@
+{
+  "product": "GlacialErratic.glb",
+  "category": "Rocks and boulders",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/erratic-boulder",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/erratic-boulder/v1/lod0.glb",
+      "bytes": 1464160,
+      "sha256": "b27f8153a0b1fe2f29acf7f92545d355bf4047689220c91b6b937bf5234c69de",
+      "triangles": 11998
+    },
+    {
+      "lod": 1,
+      "path": "/models/erratic-boulder/v1/lod1.glb",
+      "bytes": 455372,
+      "sha256": "e96481b1361e0612eac48d4485bc3deddf88c2fc7ae57d47fc124952dc32176d",
+      "triangles": 2999
+    },
+    {
+      "lod": 2,
+      "path": "/models/erratic-boulder/v1/lod2.glb",
+      "bytes": 157636,
+      "sha256": "0ba912e963e61c001082114fa1483c7a8869c8889e0b85f9d59fd87a5f0761d9",
+      "triangles": 450
+    }
+  ],
+  "dimensions_m": [
+    2.33307,
+    1.55775,
+    1.68933
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "1c65cf555f6b06a9ffd6018282183b6b5d6300a72baeb001fe01a1ed45dd4b16",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    -0.0306088924407959,
+    0.10039348844168217,
+    -0.00617489218711853
+  ]
+}

@@ -6,6 +6,8 @@
 #include <cmath>
 #include <filesystem>
 #include "RuntimeApplication.h"
+#include "RuntimeVehiclePrototype.h"
+#include "TerrainPropViewOrigin.h"
 #include "RuntimeSingleLevelSavePolicy.h"
 #include "RuntimeWeatherDiagnostic.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
@@ -20,6 +22,7 @@
 #include "renegade/bridge/LaunchSocketService.h"
 
 #include "renegade/bridge/PhysicsLuaService.h"
+#include "renegade/bridge/PhysicsGameplayService.h"
 #include "renegade/bridge/ScreenService.h"
 #include "renegade/bridge/PrecipitationService.h"
 
@@ -305,11 +308,21 @@ namespace renegade::runtime
         RenderPath3D::Compose(cmd);
         const float width = std::max(1.0f, GetLogicalWidth());
         const float height = std::max(1.0f, GetLogicalHeight());
-        if (!paused_ && projectileAim_) {
+        if (!paused_ && projectileAim_ && !bastionAim_ && !bastionBarrel_) {
             wi::font::Params aim(width*0.5f,height*0.5f,18,
                 wi::font::WIFALIGN_CENTER,wi::font::WIFALIGN_CENTER,
                 wi::Color(245,245,245,220),wi::Color(0,0,0,160));
             wi::font::Draw("+",aim,cmd);
+        }
+        if (!paused_ && !inventoryVisible_) {
+            const auto marker = [&](const std::optional<XMFLOAT2>& p, const char* glyph, wi::Color color, int size) {
+                if (!p) return;
+                wi::font::Params style(p->x * width, p->y * height, size, wi::font::WIFALIGN_CENTER,
+                    wi::font::WIFALIGN_CENTER, color, wi::Color(0, 0, 0, 190));
+                wi::font::Draw(glyph, style, cmd);
+            };
+            marker(bastionAim_, "+", wi::Color(245, 245, 245, 235), 18);
+            marker(bastionBarrel_, "o", wi::Color(255, 187, 76, 255), 24);
         }
         if (!paused_ && hitConfirmSeconds_ > 0) {
             wi::font::Params confirm(width*0.5f,height*0.5f,24,
@@ -580,6 +593,7 @@ namespace renegade::runtime
 
     void RuntimeApplication::ShutdownForProcessExit() noexcept
     {
+        propModels_.FinishPreparations();
         dialogue_.Close(renderer_);
         hudSession_.Reset(renderer_);
         diagnosticService_.StopLocalEndpoint();
@@ -603,7 +617,7 @@ namespace renegade::runtime
     void RuntimeApplication::Initialize()
     {
         uiBindingCpuTiming_.Reset();
-        scenes_.EnableCoarseTerrainPropModels(std::getenv("RENEGADE_P4_CELL_RESIDENCY") != nullptr);
+        scenes_.EnableCoarseTerrainPropModels(true);
         wi::Application::Initialize();
         diagnosticService_.Record(bridge::DiagnosticSeverity::Info,
             "runtime", "runtime.initialized", "Runtime initialized");
@@ -789,17 +803,20 @@ namespace renegade::runtime
     void RuntimeApplication::Update(const float dt)
     {
         SyncPlayerForScene();
-        static const bool usePropCells = std::getenv("RENEGADE_P4_CELL_RESIDENCY") != nullptr;
-        if (usePropCells) {
+        static RuntimeVehicleTrial vehicleTrial;
+        vehicleTrial.RestoreCockpitProjection(renderer_.camera);
+        vehicleTrial.Sync(scenes_.GetScene(), scenes_.Revision());
+        {
             const auto* camera = renderer_.camera ? &renderer_.camera->Eye : nullptr;
-            XMFLOAT3 position{};
-            const bool hasPlayer = player_.IsSpawned() &&
-                bridge::GetPhysicsPosition(scenes_.GetScene(), player_.entity, position);
-            if (hasPlayer || camera) {
-                if (!hasPlayer) position = *camera;
-                propVisuals_.Update(scenes_.GetScene(), scenes_.Revision(), position);
+            const auto player = player_.IsSpawned() ? player_.entity : wi::ecs::INVALID_ENTITY;
+            const auto origin = TerrainPropViewOrigin(scenes_.GetScene(), vehicleTrial.current, player, camera);
+            if (origin) {
+                const auto& position = *origin;
+                static const bool experimentalCellThinning = std::getenv("RENEGADE_P4_CELL_RESIDENCY") != nullptr;
+                if (experimentalCellThinning)
+                    propVisuals_.Update(scenes_.GetScene(), scenes_.Revision(), position);
                 propModels_.Update(scenes_.GetScene(),scenes_.Revision(),scenes_.TerrainPropCollisions().get(),
-                    startupResult_.project.rootPath,startupResult_.project.projectId,position,camera);
+                    startupResult_.project.rootPath,startupResult_.project.projectId,position,camera,dt);
             }
         }
         TickTerrainPropCollisionProof();
@@ -915,7 +932,10 @@ namespace renegade::runtime
             if (gameplayFrame)
             {
                 SyncPlayerForScene();
-                if (player_.IsSpawned())
+                vehicleTrial.Sync(scenes_.GetScene(), scenes_.Revision());
+                vehicleTrial.Tick(scenes_.GetScene(), player_, gameplayInput_,
+                    gameplayInputAllowed && !paused_ && !inventoryOverlayOpen_ && !combatState_.playerDead, dt);
+                if (player_.IsSpawned() && !vehicleTrial.Active())
                 {
                     if (!paused_)
                     {
@@ -1036,7 +1056,7 @@ namespace renegade::runtime
         // again after physics below for the rendered view.
         if (gameplayFrame)
         {
-            if (player_.IsSpawned() && renderer_.camera != nullptr)
+            if (player_.IsSpawned() && renderer_.camera != nullptr && !vehicleTrial.Active())
                 bridge::ApplyRuntimePlayerCamera(scenes_.GetScene(), player_,
                     *renderer_.camera, playerSettings_);
             const CombatEventEmitter burnEvents=[this](bridge::GameplayEvent event,std::string& error) {
@@ -1044,6 +1064,32 @@ namespace renegade::runtime
                 return creatorScripts_.EnqueueGameplayEvent(std::move(event),error);
             };
             burning_.Update(scenes_.GetScene(),characterAiState_,characterPerceptionState_,combatState_,(paused_||!collisionReady)?0.f:dt,burnEvents);
+            if (!paused_ && collisionReady && vehicleTrial.bastionShot)
+            {
+                const auto& shot = *vehicleTrial.bastionShot;
+                auto asset = bridge::MakeProjectilePreset(bridge::ProjectilePreset::Bullet);
+                asset.projectId = startupResult_.project.projectId;
+                asset.assetId = RuntimeProjectileVisuals::BastionRoundId;
+                asset.name = "Bastion range round";
+                asset.gravityScale = 0.f;
+                asset.lifetimeSeconds = 2.5f;
+                bridge::ProjectileSource source;
+                source.ownerSubjectId = RuntimePlayerKnowledgeId;
+                source.sourceAssetId = asset.assetId;
+                source.factionId = "Player";
+                source.knownPosition = ProjectileBridgeVector(shot.origin);
+                std::uint64_t shotId = 0;
+                if (projectiles_.Launch(asset, source, shot.origin, shot.direction, shotId, shot.chassis))
+                {
+                    projectileVisuals_.SpawnBastionShot(scenes_.GetScene(), projectiles_, shotId, shot.origin, shot.direction);
+                    projectiles_.lastLaunchSocket = "Barrel_Elevation";
+                    diagnosticService_.Record(bridge::DiagnosticSeverity::Info, "runtime.projectile",
+                        "bastion.round_launched", "projectile=" + std::to_string(shotId));
+                }
+                else
+                    diagnosticService_.Record(bridge::DiagnosticSeverity::Error, "runtime.projectile",
+                        "bastion.launch_failed", projectiles_.lastError);
+            }
             UpdatePlayerProjectiles((paused_||!collisionReady) ? 0.0f : dt);
         }
 
@@ -1083,7 +1129,11 @@ namespace renegade::runtime
         {
             SyncCreatorScriptsForScene();
             if (!paused_&&collisionReady)
+            {
+                creatorScripts_.SetScriptedFlightFrame(vehicleTrial.scriptedFlight);
                 creatorScripts_.Update(dt);
+                creatorScripts_.SetScriptedFlightFrame({});
+            }
         }
         renderer_.SetInterfaceDeltaTime(dt);
         // Recheck script-spawned/moved interests before Wicked's single step.
@@ -1099,6 +1149,14 @@ namespace renegade::runtime
             terrainCollisionDiagnostic_=diagnostic;
         }
         else terrainCollisionDiagnostic_.clear();
+        if (gameplayFrame && !paused_ && collisionReady)
+        {
+            auto& scene = scenes_.GetScene();
+            std::vector<XMFLOAT3> blasts;
+            bridge::StepDestructibles(scene, dt, &blasts);
+            for (const auto& position : blasts)
+                projectileVisuals_.PresentBlast(scene, position, 5.f, 1.55f, .20f, 18.f, "Explosive prop flash");
+        }
         wi::Application::Update((paused_||!collisionReady) ? 0.0f : dt);
         // Current-pose marks must reach decal visibility/render upload after
         // native skinning, while transient entity mutation remains before it.
@@ -1135,11 +1193,12 @@ namespace renegade::runtime
         }
 
 
+        renderer_.SetBastionReticles({}, {});
         if (gameplayFrame)
         {
             if (player_.IsSpawned())
             {
-                if (renderer_.camera != nullptr)
+                if (renderer_.camera != nullptr && !vehicleTrial.ApplyCamera(scenes_.GetScene(), *renderer_.camera))
                 {
                     // Camera samples the same post-physics Player position that
                     // the parented View Rig inherited during Scene::Update.
@@ -1148,6 +1207,30 @@ namespace renegade::runtime
                         player_,
                         *renderer_.camera,
                         playerSettings_);
+                }
+                if (!paused_ && gameplayInputAllowed && !inventoryOverlayOpen_ && renderer_.camera)
+                {
+                    if (const auto* turret = vehicleTrial.ActiveTurret())
+                    {
+                        const auto vp = renderer_.camera->GetViewProjection();
+                        const auto project = [&](XMVECTOR point) -> std::optional<XMFLOAT2> {
+                            XMFLOAT4 clip;
+                            XMStoreFloat4(&clip, XMVector4Transform(XMVectorSetW(point, 1), vp));
+                            if (clip.w <= 0.f || std::abs(clip.x) > clip.w || std::abs(clip.y) > clip.w)
+                                return {};
+                            return XMFLOAT2(.5f + .5f * clip.x / clip.w, .5f - .5f * clip.y / clip.w);
+                        };
+                        const auto aim = XMLoadFloat3(&turret->aimPoint);
+                        std::optional<XMFLOAT2> bore;
+                        BastionTurretShot muzzle;
+                        if (turret->Muzzle(scenes_.GetScene(), vehicleTrial.current, muzzle))
+                        {
+                            const auto position = XMLoadFloat3(&muzzle.origin);
+                            const auto distance = std::max(1.f, XMVectorGetX(XMVector3Length(aim - position)));
+                            bore = project(position + XMLoadFloat3(&muzzle.direction) * distance);
+                        }
+                        renderer_.SetBastionReticles(project(aim), bore);
+                    }
                 }
                 wi::input::HidePointer(!paused_ &&
                     !dialogue_.Active() && !(inventoryOverlayOpen_ && inventoryScreenPresenter_->IsLoaded()));
@@ -1170,7 +1253,7 @@ namespace renegade::runtime
                     worldPickupFeedback_.clear();
             }
             renderer_.SetInteractionPrompt(dialogue_.Active()?std::string{}:!dialogue_.Prompt().empty()?dialogue_.Prompt():!worldPickupFeedback_.empty()
-                ? worldPickupFeedback_ : !pickupFrame.prompt.empty()
+                ? worldPickupFeedback_ : !vehicleTrial.prompt.empty() ? vehicleTrial.prompt : !pickupFrame.prompt.empty()
                     ? pickupFrame.prompt : creatorScripts_.CurrentPrompt());
             RefreshInventoryOverlay(true,
                 gameplayInputAllowed || inventoryInteractionAllowed);
@@ -1520,14 +1603,15 @@ namespace renegade::runtime
 
     void RuntimeApplication::UpdatePlayerProjectiles(const float dt)
     {
+        auto& scene = scenes_.GetScene();
         if (!player_.IsSpawned() || playerSceneRevision_ != scenes_.Revision() ||
             renderer_.camera == nullptr) {
             pendingProjectileShots_.clear();
             channelVisual_.Reset(scenes_.GetScene());channel_.Reset();channelScorchTrail_.Reset();lightningStorm_.Reset(scenes_.GetScene());lightningColumnReview_.Reset(scenes_.GetScene());lightningStormCastLatch_=false;
+            projectileVisuals_.TickTimedEffects(scene, dt);
             renderer_.SetProjectileContacts({});
             return;
         }
-        auto& scene = scenes_.GetScene();
         // Private visual approval fixture only: a persistent, easily inspected
         // single column. Do not enter the rejected Storm renderer or issue damage.
         if(playerEquipment_.primary.equipment.name=="Lightning Column - Strip Review") {
@@ -1540,6 +1624,7 @@ namespace renegade::runtime
                 wi::backlog::post("Lightning column: could not load all eleven supplied frames.",
                     wi::backlog::LogLevel::Error);
             pendingProjectileShots_.clear();
+            projectileVisuals_.TickTimedEffects(scene, dt);
             renderer_.SetProjectileContacts({});
             return;
         }
@@ -1601,6 +1686,13 @@ namespace renegade::runtime
         if(channelVisual_.root!=wi::ecs::INVALID_ENTITY)excludedVisuals.push_back(channelVisual_.root);
         if(lightningStorm_.root!=wi::ecs::INVALID_ENTITY)excludedVisuals.push_back(lightningStorm_.root);
         const ProjectileOwnerBinding owner{RuntimePlayerKnowledgeId, player_.entity, &excludedVisuals};
+        auto& hands = playerViewAnimation_.handLayers;
+        if (std::exchange(hands.attackContact, false) && dt > 0.f)
+        {
+            const float damage = 12.f + (hands.directional ? 8.f * hands.chargeStrength : 0.f);
+            (void)TraceBreakableMelee(scene, characterAiState_, owner,
+                renderer_.camera->Eye, renderer_.camera->At, damage);
+        }
         const auto emit = [this](bridge::GameplayEvent event, std::string& error) {
             diagnosticService_.Record(bridge::DiagnosticSeverity::Info,
                 "runtime.projectile", event.name, event.payload);
@@ -1850,6 +1942,7 @@ namespace renegade::runtime
                         impact.source=source;impact.contact=contact.contact;
                         impact.damage=request.hitscanDamage;
                         impact.incomingVelocity=ProjectileBridgeVector(direction);
+                        (void)ApplyBreakableShot(scene, queryHitEntity, owner.root, impact);
                         const auto& p=contact.contact.position;
                         (void)emit({0,"hitscan.impact",
                             "equipment="+request.equipmentId+
@@ -1894,7 +1987,10 @@ namespace renegade::runtime
                                const bridge::ProjectileVector& from,
                                const bridge::ProjectileVector& to) {
             wi::ecs::Entity hit=wi::ecs::INVALID_ENTITY;
-            auto result=QueryProjectileSceneSegment(scene, characterAiState_, owner, record, from, to,~0u,&hit);
+            auto shotOwner = owner;
+            const auto chassis = projectiles_.excludedChassis.find(record.id);
+            if (chassis != projectiles_.excludedChassis.end()) shotOwner.additionalExcludedRoot = chassis->second;
+            auto result=QueryProjectileSceneSegment(scene, characterAiState_, shotOwner, record, from, to,~0u,&hit);
             if(result.status==bridge::ProjectileQueryStatus::Hit)impactParents[record.id]=hit;
             return result;
         };
@@ -1904,7 +2000,10 @@ namespace renegade::runtime
         }
         for (const auto& impact : impacts) {
             const auto parent = impactParents[impact.projectileId];
+            (void)ApplyBreakableShot(scene, parent, owner.root, impact);
             projectileVisuals_.PresentSurfaceImpact(scene,impact,parent);
+            if (impact.source.sourceAssetId == RuntimeProjectileVisuals::BastionRoundId)
+                projectileVisuals_.PresentBastionImpact(scene, impact.contact);
             presentImpactAudio(impact);
             projectileVisuals_.Impact(scene,impact,parent);
             std::string ignored;
@@ -1999,6 +2098,8 @@ namespace renegade::runtime
             return;
         }
 
+        propModels_.PreloadSpawn(scenes_.GetScene(),scenes_.Revision(),scenes_.TerrainPropCollisions().get(),
+            startupResult_.project.rootPath,startupResult_.project.projectId,resolved.start.transform.translation);
         playerSettings_ = resolved.start.settings;
         if (!playerEquipment_.Load(startupResult_.project.rootPath,
                 startupResult_.project.projectId, playerSettings_))
@@ -3411,6 +3512,7 @@ namespace renegade::runtime
         dialogue_.SetLifecycleSink({});
 
         scriptSceneRevision_ = scenes_.Revision();
+        bridge::PrepareDestructibles(scenes_.GetScene());
         if (startupResult_.startupScenePath.empty())
             return;
 

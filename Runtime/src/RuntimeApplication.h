@@ -1,5 +1,7 @@
 #include "RuntimeGameplayAttributeWorld.h"
 #pragma once
+
+#include <optional>
 #include "RuntimeDialogue.h"
 #include "RuntimePropCellResidency.h"
 #include "RuntimePropModelResidency.h"
@@ -94,6 +96,8 @@ namespace renegade::runtime
         }
         void SetMeleePrompt(std::string prompt) { meleePrompt_=std::move(prompt); }
         void SetProjectileAim(bool enabled) { projectileAim_=enabled; }
+        void SetBastionReticles(std::optional<XMFLOAT2> aim, std::optional<XMFLOAT2> barrel)
+        { bastionAim_ = aim; bastionBarrel_ = barrel; }
         void SetProjectileContacts(std::vector<XMFLOAT2> contacts) { projectileContacts_=std::move(contacts); }
         void ConfirmTargetHit() { hitConfirmSeconds_=0.12f; }
         void ClearHitConfirmation() { hitConfirmSeconds_=0; }
@@ -132,6 +136,7 @@ namespace renegade::runtime
         std::string inventoryStatus_;
         std::string meleePrompt_;
         bool projectileAim_ = false;
+        std::optional<XMFLOAT2> bastionAim_, bastionBarrel_;
         std::vector<XMFLOAT2> projectileContacts_;
         float hitConfirmSeconds_ = 0;
         std::uint64_t renderSettingsSceneRevision_ = 0;

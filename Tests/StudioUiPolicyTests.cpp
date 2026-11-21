@@ -21,6 +21,8 @@ int main()
         surface.physics = (mask & 16) != 0;
         surface.toolWindow = (mask & 32) != 0;
         Check(surface.Visible() == (mask == 0), "World overlay escaped a blocking surface");
+        Check(surface.CanNavigateViewport() == ((mask & ~16u) == 0),
+              "Viewport navigation must stay available with the Physics Lab dock open");
     }
     Check(InspectorContentWidth(280.f,20.f)==236.f, "Narrow inspector forgot its scrollbar column");
     Check(InspectorContentWidth(360.f,20.f)==316.f, "Normal inspector content width is wrong");

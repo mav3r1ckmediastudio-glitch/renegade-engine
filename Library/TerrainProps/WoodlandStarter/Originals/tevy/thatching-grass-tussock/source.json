@@ -1,0 +1,57 @@
+{
+  "slug": "thatching-grass-tussock",
+  "name": "Thatching Grass Tussock",
+  "category": "plants",
+  "tags": [
+    "plant",
+    "grass",
+    "savanna",
+    "africa",
+    "dry grass",
+    "tussock",
+    "thatching grass",
+    "tall grass",
+    "safari"
+  ],
+  "description": "A tall tussock of dry thatching grass, about 1.5 m to the top of its seed heads. Straw and weathered grey blades arch out from a dense base under rusty, feathery heads.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-11-07",
+  "updated": "2026-11-07",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 1.688,
+    "y": 1.599,
+    "z": 1.635
+  },
+  "parts": [],
+  "animations": [],
+  "wind": true,
+  "preview": "/models/thatching-grass-tussock/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/thatching-grass-tussock/v1/lod0.glb",
+      "bytes": 283600,
+      "sha256": "29981ada7cd8dd39f51c1e533fcc0fd0020fbfd57b4d754cc95d5ce89956c91d",
+      "triangles": 3572
+    },
+    {
+      "lod": 1,
+      "path": "/models/thatching-grass-tussock/v1/lod1.glb",
+      "bytes": 123288,
+      "sha256": "332ee754f03c132645cd0fc8797b600772b1a82e33d0bddebbb2cb2c8e91f909",
+      "triangles": 880
+    },
+    {
+      "lod": 2,
+      "path": "/models/thatching-grass-tussock/v1/lod2.glb",
+      "bytes": 38284,
+      "sha256": "4f8c61cf7281c7d08d3c85b77a3db50bae9e1724df13b24185aa82209c2e5331",
+      "triangles": 100
+    }
+  ]
+}

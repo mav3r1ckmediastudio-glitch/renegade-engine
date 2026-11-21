@@ -52,6 +52,8 @@ namespace renegade::bridge
             return true;
         }
 
+        void SetCoverage(Cell cell, float coverage) { projection_.SetPageDetailCoverage(cell, coverage); }
+
         void Release(Cell cell)
         {
             if (!cells_.erase(cell)) return;

@@ -1,20 +1,29 @@
 #include "RenegadePhysicsLabWorkspace.h"
 
 #include "RenegadeStudioChrome.h"
+#include "renegade/bridge/FlightVehicleService.h"
+#include "renegade/bridge/FixedWingTuning.h"
+#include "renegade/bridge/TrackedVehicleTuning.h"
+#include "renegade/bridge/FixedWingRig.h"
 #include "renegade/bridge/CharacterPhysicsService.h"
+#include "renegade/bridge/PhysicsGameplayService.h"
 #include "renegade/bridge/CollisionService.h"
+#include "renegade/bridge/CompoundColliderService.h"
 #include "renegade/bridge/ConstraintService.h"
 #include "renegade/bridge/PhysicsService.h"
+#include "renegade/bridge/PhysicsDiagnosticsService.h"
 #include "renegade/bridge/RagdollPhysicsService.h"
 #include "renegade/bridge/SoftBodyPhysicsService.h"
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/VehiclePhysicsService.h"
+#include "renegade/bridge/VehicleSteeringService.h"
 #include "renegade/bridge/WickedColliderService.h"
 
 #include <algorithm>
 #include <array>
 #include <cfloat>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -115,6 +124,131 @@ namespace
             std::abs(left.z - right.z) <= Epsilon;
     }
 
+    class SetPlayerVehicleModeCommand final : public renegade::bridge::ICommand
+    {
+    public:
+        SetPlayerVehicleModeCommand(wi::scene::Scene& scene, wi::ecs::Entity entity,
+            renegade::bridge::PlayerVehicleMode mode)
+            : scene_(scene), entity_(entity),
+              before_(renegade::bridge::GetPlayerVehicleMode(scene, entity)), after_(mode)
+        {
+        }
+
+        bool Execute() override
+        {
+            return renegade::bridge::SetPlayerVehicleMode(scene_, entity_, after_);
+        }
+
+        void Undo() override
+        {
+            renegade::bridge::SetPlayerVehicleMode(scene_, entity_, before_);
+        }
+
+    private:
+        wi::scene::Scene& scene_;
+        wi::ecs::Entity entity_;
+        renegade::bridge::PlayerVehicleMode before_;
+        renegade::bridge::PlayerVehicleMode after_;
+    };
+
+    class SetAircraftTuningCommand final : public renegade::bridge::ICommand
+    {
+    public:
+        SetAircraftTuningCommand(wi::scene::Scene& scene, wi::ecs::Entity entity,
+            const renegade::bridge::FixedWingTuningField& field, float value)
+            : scene_(scene), entity_(entity), field_(field),
+              before_(renegade::bridge::ReadFixedWingTuningValue(scene, entity, field)),
+              after_(renegade::bridge::SanitizeFixedWingTuningValue(field, value)) {}
+
+        bool Execute() override
+        {
+            return before_.value_or(renegade::bridge::DefaultFixedWingTuning.*field_.member) != after_ &&
+                renegade::bridge::WriteFixedWingTuningValue(scene_, entity_, field_, after_);
+        }
+
+        void Undo() override
+        {
+            renegade::bridge::WriteFixedWingTuningValue(scene_, entity_, field_, before_);
+        }
+
+    private:
+        wi::scene::Scene& scene_;
+        wi::ecs::Entity entity_;
+        renegade::bridge::FixedWingTuningField field_;
+        std::optional<float> before_;
+        float after_;
+    };
+
+    class SetTrackedTuningCommand final : public renegade::bridge::ICommand
+    {
+    public:
+        SetTrackedTuningCommand(wi::scene::Scene& scene, wi::ecs::Entity entity,
+            const renegade::bridge::TrackedTuningField& field, float value)
+            : scene_(scene), entity_(entity), field_(field),
+              before_(renegade::bridge::ReadTrackedTuningValue(scene, entity, field)),
+              after_(renegade::bridge::SanitizeTrackedTuningValue(field, value)) {}
+
+        bool Execute() override
+        {
+            return before_.value_or(renegade::bridge::DefaultTrackedVehicleTuning.*field_.member) != after_ &&
+                renegade::bridge::WriteTrackedTuningValue(scene_, entity_, field_, after_);
+        }
+
+        void Undo() override
+        {
+            renegade::bridge::WriteTrackedTuningValue(scene_, entity_, field_, before_);
+        }
+
+    private:
+        wi::scene::Scene& scene_;
+        wi::ecs::Entity entity_;
+        renegade::bridge::TrackedTuningField field_;
+        std::optional<float> before_;
+        float after_;
+    };
+
+    class SetAircraftBindingCommand final : public renegade::bridge::ICommand
+    {
+    public:
+        SetAircraftBindingCommand(wi::scene::Scene& scene, wi::ecs::Entity chassis,
+            size_t part, std::vector<wi::ecs::Entity> before, wi::ecs::Entity after)
+            : scene_(scene), chassis_(chassis), part_(part), before_(std::move(before)), after_(after) {}
+
+        bool Execute() override
+        {
+            if (!renegade::bridge::IsFixedWing(scene_, chassis_) ||
+                !scene_.rigidbodies.Contains(chassis_))
+                return false;
+            XMMATRIX local;
+            if (after_ != wi::ecs::INVALID_ENTITY &&
+                (after_ == chassis_ || !renegade::bridge::FixedWingPartTransform(scene_, after_, chassis_, local)))
+                return false;
+            if (before_.empty() ? after_ == wi::ecs::INVALID_ENTITY
+                                : before_.size() == 1 && before_.front() == after_)
+                return false;
+            for (const auto entity : before_)
+                renegade::bridge::SetFixedWingPartBinding(scene_, entity, part_, false);
+            if (after_ != wi::ecs::INVALID_ENTITY)
+                renegade::bridge::SetFixedWingPartBinding(scene_, after_, part_, true);
+            return true;
+        }
+
+        void Undo() override
+        {
+            if (after_ != wi::ecs::INVALID_ENTITY)
+                renegade::bridge::SetFixedWingPartBinding(scene_, after_, part_, false);
+            for (const auto entity : before_)
+                renegade::bridge::SetFixedWingPartBinding(scene_, entity, part_, true);
+        }
+
+    private:
+        wi::scene::Scene& scene_;
+        wi::ecs::Entity chassis_;
+        size_t part_;
+        std::vector<wi::ecs::Entity> before_;
+        wi::ecs::Entity after_;
+    };
+
     class SetPhysicsGravityCommand final : public renegade::bridge::ICommand
     {
     public:
@@ -174,6 +308,7 @@ namespace renegade::studio
         bool created = false;
         bool active = false;
         bool pointerConsumed = false;
+        std::uint64_t commandRevision = 0;
         bool refreshPending = false;
         XMFLOAT4 bounds = {};
         bridge::StudioSession* session = nullptr;
@@ -182,6 +317,9 @@ namespace renegade::studio
         float scrollY = 0.0f;
         wi::gui::Widget contentClip;
         float pageContentHeight = 0.0f;
+        float compactCursor = 0.f;
+        struct Caption { const char* text; float x; float y; };
+        std::vector<Caption> captions;
         std::string status;
         bool statusError = false;
         std::vector<wi::gui::Widget*> allControls;
@@ -199,11 +337,15 @@ namespace renegade::studio
         SceneInspectorSlider worldConstraintDebugSize;
         SceneInspectorSlider worldDebugDistance;
         SceneInspectorSlider worldCharacterTolerance;
+        bridge::PhysicsDiagnostics worldDiagnostics;
+        RenegadeButton worldStep;
         RenegadeButton worldActivateAll;
         RenegadeButton worldOptimize;
         RenegadeButton worldReset;
 
         RenegadeButton rigidAdd;
+        SceneInspectorComboBox compoundShape;
+        RenegadeButton compoundAdd;
         RenegadeButton rigidRemove;
         SceneInspectorComboBox rigidShape;
         SceneInspectorSlider rigidBoxX;
@@ -222,6 +364,12 @@ namespace renegade::studio
         SceneInspectorSlider rigidOffsetX;
         SceneInspectorSlider rigidOffsetY;
         SceneInspectorSlider rigidOffsetZ;
+        SceneInspectorCheckBox rigidSensor;
+        SceneInspectorSlider rigidCollisionLayer;
+        SceneInspectorSlider rigidBreakSpeed, breakHitPoints, breakBlastSpeed;
+        SceneInspectorSlider breakDebrisStay, breakDebrisFade;
+        RenegadeButton breakUseIntactMesh;
+        std::array<SceneInspectorCheckBox, bridge::BodyCollisionLayerCount> rigidCollisionMask;
         SceneInspectorCheckBox rigidKinematic;
         SceneInspectorCheckBox rigid2D;
         SceneInspectorCheckBox rigidDisableDeactivation;
@@ -257,6 +405,21 @@ namespace renegade::studio
         SceneInspectorSlider characterSlope;
         SceneInspectorSlider characterGravity;
 
+        SceneInspectorCheckBox vehiclePhysicsPreview;
+        RenegadeButton fixedWingAdvanced;
+        RenegadeButton fixedWingBindings;
+        std::array<SceneInspectorSlider, std::size(bridge::FixedWingTuningFields)> fixedWingTuning;
+        std::array<SceneInspectorComboBox, bridge::FixedWingParts.size()> fixedWingParts;
+        RenegadeButton trackedAdvanced;
+        std::array<SceneInspectorSlider, std::size(bridge::TrackedTuningFields)> trackedTuning;
+        bool showTrackedAdvanced = false;
+        bool showFixedWingAdvanced = false;
+        bool showFixedWingBindings = false;
+        bool showVehiclePhysics = false;
+        SceneInspectorComboBox playerVehicleMode;
+        SceneInspectorComboBox steeringWheel;
+        std::array<SceneInspectorSlider, 3> steeringWheelAxis;
+        SceneInspectorSlider steeringWheelTravel;
         SceneInspectorComboBox vehicleType;
         SceneInspectorComboBox vehicleCollision;
         SceneInspectorSlider vehicleChassisWidth;
@@ -300,6 +463,8 @@ namespace renegade::studio
 
         RenegadeButton softAdd;
         RenegadeButton softRemove;
+        RenegadeButton softPinTop;
+        RenegadeButton softClearPins;
         RenegadeButton softReset;
         RenegadeButton softWake;
         SceneInspectorSlider softDetail;
@@ -346,11 +511,29 @@ namespace renegade::studio
                 std::to_string(static_cast<unsigned long long>(entity)) + "]";
         }
 
+        [[nodiscard]] wi::ecs::Entity BreakableRoot() const
+        {
+            const auto* scene = Scene();
+            if (!scene || !HasSelection()) return wi::ecs::INVALID_ENTITY;
+            auto entity = selectedEntity;
+            for (size_t depth = 0; entity != wi::ecs::INVALID_ENTITY && depth <= scene->hierarchy.GetCount(); ++depth)
+            {
+                if (const auto* body = scene->rigidbodies.GetComponent(entity))
+                    return bridge::SupportsDestructible(*body) && !bridge::IsBodySensor(*scene, entity)
+                        ? entity : wi::ecs::INVALID_ENTITY;
+                const auto* parent = scene->hierarchy.GetComponent(entity);
+                entity = parent ? parent->parentID : wi::ecs::INVALID_ENTITY;
+            }
+            return wi::ecs::INVALID_ENTITY;
+        }
+
         [[nodiscard]] std::string SelectedEntityLabel() const
         {
             const auto* scene = Scene();
             if (scene == nullptr || !HasSelection())
                 return "SELECTION // NONE";
+            if (page == Page::Breakables)
+                return "BREAKABLE ROOT // " + EntityLabel(*scene, BreakableRoot());
             return "SELECTION // " + EntityLabel(*scene, selectedEntity);
         }
 
@@ -617,6 +800,13 @@ namespace renegade::studio
             MakeSlider(worldDebugDistance, 0.0f, 2000.0f, 500.0f, 2000, "Physics debug distance", "PHYSICS DRAW DISTANCE", [this](const float value) { CommitWorldNumber(3, value); });
             MakeSlider(worldCharacterTolerance, 0.0f, 1.0f, 0.05f, 10000, "Character collision tolerance", "CHARACTER COLLISION TOLERANCE", [this](const float value) { CommitWorldNumber(4, value); });
 
+            MakeButton(worldStep, "Advance one native physics tick", "STEP ONCE", [this]()
+            {
+                auto* scene = Scene();
+                const bool queued = scene && bridge::RequestPhysicsStep(*scene);
+                SetStatus(queued ? "WORLD // ONE FIXED TICK QUEUED" : "WORLD // PAUSE SIMULATION FIRST", !queued);
+            });
+
             MakeButton(worldActivateAll, "Physics activate all", "ACTIVATE ALL RIGID BODIES", [this]()
             {
                 auto* scene = Scene();
@@ -637,6 +827,15 @@ namespace renegade::studio
             });
         }
 
+        wi::ecs::Entity CompoundRoot() const
+        {
+            const auto* scene = Scene();
+            if (!scene || !HasSelection())
+                return wi::ecs::INVALID_ENTITY;
+            const auto parent = bridge::GetCompoundPartParent(*scene, selectedEntity);
+            return parent == wi::ecs::INVALID_ENTITY ? selectedEntity : parent;
+        }
+
         void CreateRigidBody()
         {
             MakeButton(rigidAdd, "Add rigid body", "ADD RIGID BODY", [this]()
@@ -655,6 +854,29 @@ namespace renegade::studio
                     return;
                 const bool ok = ExecuteCommand<bridge::RemoveCollisionCommand>(*scene, selectedEntity);
                 SetStatus(ok ? "RIGID BODY // REMOVED" : "RIGID BODY // NOTHING TO REMOVE", !ok);
+            });
+
+            compoundShape.Create("Compound collider part shape");
+            compoundShape.AddItem("BOX");
+            compoundShape.AddItem("SPHERE");
+            compoundShape.AddItem("CAPSULE");
+            compoundShape.SetSelectedWithoutCallback(0);
+            MakeButton(compoundAdd, "Add a collider part to this body", "ADD COLLIDER PART", [this]()
+            {
+                auto* scene = Scene();
+                if (!scene || !HasSelection())
+                    return;
+                const auto shape = static_cast<bridge::CompoundPartShape>(compoundShape.GetSelected() + 1);
+                auto command = std::make_unique<bridge::AddCompoundPartCommand>(*scene, CompoundRoot(), shape);
+                const auto part = command->PartEntity();
+                const bool ok = session->Commands().Execute(std::move(command));
+                if (ok)
+                {
+                    session->Selection().Select(part);
+                    RequestRefresh();
+                }
+                SetStatus(ok ? "COLLIDER PART // MOVE, ROTATE OR SCALE IN VIEWPORT" :
+                    "COLLIDER PART // COULD NOT ADD PART (LIMIT 8)", !ok);
             });
 
             using Shape = wi::scene::RigidBodyPhysicsComponent::CollisionShape;
@@ -691,6 +913,94 @@ namespace renegade::studio
             MakeSlider(rigidOffsetY, -10.0f, 10.0f, 0.0f, 20000, "Rigid local offset Y", "LOCAL OFFSET Y", [this](const float value) { EditCollision([&](auto& state) { state.localOffset.y = value; }); });
             MakeSlider(rigidOffsetZ, -10.0f, 10.0f, 0.0f, 20000, "Rigid local offset Z", "LOCAL OFFSET Z", [this](const float value) { EditCollision([&](auto& state) { state.localOffset.z = value; }); });
 
+            rigidSensor.Create("SENSOR");
+            rigidSensor.OnClick([this](const wi::gui::EventArgs& args)
+            {
+                if (auto* scene = Scene(); scene && HasSelection())
+                    ExecuteCommand<bridge::SetBodySensorCommand>(*scene, selectedEntity, args.bValue);
+            });
+            MakeSlider(rigidBreakSpeed, 0, 100, 0, 1000, "Destructible impact speed", "BREAK SPEED (M/S)",
+                [this](float value)
+                {
+                    const auto root = BreakableRoot();
+                    if (auto* scene = Scene(); scene && root != wi::ecs::INVALID_ENTITY)
+                        ExecuteCommand<bridge::SetDestructibleImpactSpeedCommand>(*scene, root, value);
+                });
+            MakeSlider(breakHitPoints, 0, 10000, 0, 10000, "Breakable weapon hit points", "HIT POINTS",
+                [this](float value)
+                {
+                    const auto root = BreakableRoot();
+                    if (auto* scene = Scene(); scene && root != wi::ecs::INVALID_ENTITY)
+                        ExecuteCommand<bridge::SetDestructibleHitPointsCommand>(*scene, root, value);
+                });
+            MakeSlider(breakBlastSpeed, 0, bridge::MaxDestructibleBlastSpeed, 0, 240,
+                "Explosive debris launch speed. Zero disables the blast.", "BLAST SPEED (M/S)",
+                [this](float value)
+                {
+                    const auto root = BreakableRoot();
+                    if (auto* scene = Scene(); scene && root != wi::ecs::INVALID_ENTITY)
+                        ExecuteCommand<bridge::SetDestructibleBlastSpeedCommand>(*scene, root, value);
+                });
+            MakeSlider(breakDebrisStay, 0, bridge::MaxDestructibleDebrisStay, 0, 1200,
+                "Seconds after breaking before debris starts to fade. Zero keeps debris.", "DEBRIS STAY (S)",
+                [this](float seconds)
+                {
+                    const auto root = BreakableRoot();
+                    if (auto* scene = Scene(); scene && root != wi::ecs::INVALID_ENTITY)
+                    {
+                        auto timing = bridge::GetDestructibleDebrisTiming(*scene, root);
+                        timing.staySeconds = seconds;
+                        ExecuteCommand<bridge::SetDestructibleDebrisTimingCommand>(*scene, root, timing);
+                    }
+                });
+            MakeSlider(breakDebrisFade, 0, bridge::MaxDestructibleDebrisFade, 1, 100,
+                "Time to fade after Debris Stay. Zero removes debris immediately.", "DEBRIS FADE (S)",
+                [this](float seconds)
+                {
+                    const auto root = BreakableRoot();
+                    if (auto* scene = Scene(); scene && root != wi::ecs::INVALID_ENTITY)
+                    {
+                        auto timing = bridge::GetDestructibleDebrisTiming(*scene, root);
+                        timing.fadeSeconds = seconds;
+                        ExecuteCommand<bridge::SetDestructibleDebrisTimingCommand>(*scene, root, timing);
+                    }
+                });
+            MakeButton(breakUseIntactMesh, "Set selected mesh as intact", "SET AS INTACT MESH", [this]()
+            {
+                const auto root = BreakableRoot();
+                if (auto* scene = Scene(); scene && root != wi::ecs::INVALID_ENTITY)
+                {
+                    const bool changed = ExecuteCommand<bridge::SetDestructibleIntactMeshCommand>(*scene, root, selectedEntity);
+                    SetStatus(changed ? "INTACT MESH SET. DEBRIS HIDDEN." :
+                        "NEEDS AN INTACT MESH AND 2-16 PIECES", !changed);
+                }
+            });
+            MakeSlider(rigidCollisionLayer, 0, bridge::BodyCollisionLayerCount - 1, 0,
+                bridge::BodyCollisionLayerCount - 1, "Body simulation layer", "COLLISION LAYER",
+                [this](float value)
+                {
+                    if (auto* scene = Scene(); scene && HasSelection())
+                    {
+                        auto filter = bridge::GetBodyCollisionFilter(*scene, selectedEntity);
+                        filter.layer = static_cast<int>(std::lround(value));
+                        ExecuteCommand<bridge::SetBodyCollisionFilterCommand>(*scene, selectedEntity, filter);
+                    }
+                });
+            for (int i = 0; i < bridge::BodyCollisionLayerCount; ++i)
+            {
+                const auto label = "COLLIDE WITH " + std::to_string(i);
+                rigidCollisionMask[i].Create(label);
+                rigidCollisionMask[i].OnClick([this, i](const wi::gui::EventArgs& args)
+                {
+                    if (auto* scene = Scene(); scene && HasSelection())
+                    {
+                        auto filter = bridge::GetBodyCollisionFilter(*scene, selectedEntity);
+                        const int bit = 1 << i;
+                        filter.mask = args.bValue ? filter.mask | bit : filter.mask & ~bit;
+                        ExecuteCommand<bridge::SetBodyCollisionFilterCommand>(*scene, selectedEntity, filter);
+                    }
+                });
+            }
             rigidKinematic.Create("KINEMATIC");
             rigidKinematic.OnClick([this](const wi::gui::EventArgs& args) { EditCollision([&](auto& state) { state.kinematic = args.bValue; }); });
             rigid2D.Create("2D LOCK");
@@ -740,9 +1050,9 @@ namespace renegade::studio
             constraintType.OnSelect([this](const wi::gui::EventArgs& args) { EditConstraint([&](auto& state) { state.type = static_cast<Type>(args.userdata); }); });
 
             constraintBodyA.Create("Constraint Body A");
-            constraintBodyA.SetMaxVisibleItemCount(12);
+            constraintBodyA.SetMaxVisibleItemCount(5);
             constraintBodyB.Create("Constraint Body B");
-            constraintBodyB.SetMaxVisibleItemCount(12);
+            constraintBodyB.SetMaxVisibleItemCount(5);
             constraintBodyA.OnSelect([this](const wi::gui::EventArgs& args) { EditConstraint([&](auto& state) { state.bodyA = static_cast<wi::ecs::Entity>(args.userdata); }); });
             constraintBodyB.OnSelect([this](const wi::gui::EventArgs& args) { EditConstraint([&](auto& state) { state.bodyB = static_cast<wi::ecs::Entity>(args.userdata); }); });
             constraintNoSelfCollision.Create("DISABLE SELF COLLISION");
@@ -792,6 +1102,116 @@ namespace renegade::studio
         {
             using Type = wi::scene::RigidBodyPhysicsComponent::Vehicle::Type;
             using Mode = wi::scene::RigidBodyPhysicsComponent::Vehicle::CollisionMode;
+            using PlayerMode = bridge::PlayerVehicleMode;
+            MakeButton(trackedAdvanced, "Tracked drivetrain", "ADVANCED", [this]()
+            {
+                showTrackedAdvanced = !showTrackedAdvanced;
+                if (!showTrackedAdvanced) scrollY = 0.f;
+                RequestRefresh();
+            });
+            for (size_t i = 0; i < trackedTuning.size(); ++i)
+            {
+                const auto field = bridge::TrackedTuningFields[i];
+                MakeSlider(trackedTuning[i], field.minimum, field.maximum,
+                    bridge::DefaultTrackedVehicleTuning.*field.member, 10000, field.label, field.label,
+                    [this, field](float value)
+                    {
+                        if (TrackedSelected() && ExecuteCommand<SetTrackedTuningCommand>(
+                            *Scene(), selectedEntity, field, value))
+                            SetStatus("TRACKED TUNING APPLIED");
+                    });
+            }
+            MakeButton(fixedWingAdvanced, "Fixed wing advanced", "ADVANCED", [this]()
+            {
+                showFixedWingAdvanced = !showFixedWingAdvanced;
+                if (!showFixedWingAdvanced) scrollY = 0.f;
+                RequestRefresh();
+            });
+            MakeButton(fixedWingBindings, "Fixed wing part bindings", "PART BINDINGS", [this]()
+            {
+                showFixedWingBindings = !showFixedWingBindings;
+                scrollY = 0.f;
+                RequestRefresh();
+            });
+            for (size_t i = 0; i < fixedWingTuning.size(); ++i)
+            {
+                const auto field = bridge::FixedWingTuningFields[i];
+                MakeSlider(fixedWingTuning[i], field.minimum, field.maximum,
+                    bridge::DefaultFixedWingTuning.*field.member, 10000, field.label, field.label,
+                    [this, field](float value)
+                    {
+                        if (FixedWingSelected() && ExecuteCommand<SetAircraftTuningCommand>(
+                            *Scene(), selectedEntity, field, value))
+                            SetStatus("AIRCRAFT TUNING APPLIED");
+                    });
+            }
+            for (size_t i = 0; i < fixedWingParts.size(); ++i)
+            {
+                auto& combo = fixedWingParts[i];
+                combo.Create(bridge::FixedWingParts[i].label);
+                combo.SetMaxVisibleItemCount(10);
+                combo.OnSelect([this, i](const wi::gui::EventArgs& args)
+                {
+                    if (!FixedWingSelected()) return;
+                    auto& scene = *Scene();
+                    const auto rig = bridge::ReadFixedWingRig(scene, selectedEntity);
+                    if (ExecuteCommand<SetAircraftBindingCommand>(scene, selectedEntity, i,
+                        rig.assigned[i], static_cast<wi::ecs::Entity>(args.userdata)))
+                        SetStatus("AIRCRAFT PART APPLIED");
+                });
+            }
+            vehiclePhysicsPreview.Create("SHOW VEHICLE PHYSICS");
+            vehiclePhysicsPreview.OnClick([this](const wi::gui::EventArgs& args) { showVehiclePhysics = args.bValue; });
+            steeringWheel.Create("Cockpit steering wheel");
+            steeringWheel.SetMaxVisibleItemCount(12);
+            steeringWheel.OnSelect([this](const wi::gui::EventArgs& args) {
+                EditSteeringWheel([&](auto& settings) { settings.entity = static_cast<wi::ecs::Entity>(args.userdata); });
+            });
+            constexpr const char* axes[] = {"AXIS X", "AXIS Y", "AXIS Z"};
+            constexpr float XMFLOAT3::*components[] = {&XMFLOAT3::x, &XMFLOAT3::y, &XMFLOAT3::z};
+            for (size_t i = 0; i < steeringWheelAxis.size(); ++i)
+                MakeSlider(steeringWheelAxis[i], -1.0f, 1.0f, i == 2 ? 1.0f : 0.0f, 2000,
+                    axes[i], axes[i], [this, component = components[i]](float value) {
+                        EditSteeringWheel([&](auto& settings) { settings.axis.*component = value; });
+                    });
+            MakeSlider(steeringWheelTravel, 0.0f, 1080.0f, 180.0f, 1080,
+                "Steering wheel degrees from centre to lock", "TURN TO LOCK (DEG)", [this](float value) {
+                    EditSteeringWheel([&](auto& settings) { settings.degrees = value; });
+                });
+            playerVehicleMode.Create("Player controls");
+            playerVehicleMode.AddItem("DISABLED", Userdata(PlayerMode::Disabled));
+            playerVehicleMode.AddItem("GROUND", Userdata(PlayerMode::Ground));
+            playerVehicleMode.AddItem("VTOL", Userdata(PlayerMode::VTOL));
+            playerVehicleMode.AddItem("SCRIPTED VTOL", Userdata(PlayerMode::ScriptedVTOL));
+            playerVehicleMode.AddItem("FIXED WING", Userdata(PlayerMode::FixedWing));
+            playerVehicleMode.AddItem("PHYSICAL VTOL", Userdata(PlayerMode::PhysicalVTOL));
+            playerVehicleMode.AddItem("TRACKED", Userdata(PlayerMode::Tracked));
+            playerVehicleMode.AddItem("HELICOPTER", Userdata(PlayerMode::Helicopter));
+            playerVehicleMode.AddItem("SPACECRAFT", Userdata(PlayerMode::Spacecraft));
+            playerVehicleMode.OnSelect([this](const wi::gui::EventArgs& args) {
+                auto* scene = Scene();
+                auto* body = scene && HasSelection() ? scene->rigidbodies.GetComponent(selectedEntity) : nullptr;
+                if (!body)
+                    return;
+                const auto mode = static_cast<PlayerMode>(args.userdata);
+                const bool dynamic = !body->IsKinematic() && body->mass > 0.f;
+                const bool flight = mode == PlayerMode::VTOL || mode == PlayerMode::ScriptedVTOL ||
+                    mode == PlayerMode::FixedWing || mode == PlayerMode::PhysicalVTOL ||
+                    mode == PlayerMode::Helicopter || mode == PlayerMode::Spacecraft;
+                if ((mode == PlayerMode::Ground && (!dynamic || body->vehicle.type == Type::None)) ||
+                    ((flight || mode == PlayerMode::Tracked) &&
+                     (!dynamic || body->IsCharacterPhysics() || body->vehicle.type != Type::None)))
+                {
+                    SetStatus(mode == PlayerMode::Ground
+                        ? "GROUND NEEDS A DYNAMIC CAR OR MOTORCYCLE"
+                        : "SELECT A DYNAMIC BODY WITH VEHICLE TYPE NONE");
+                    playerVehicleMode.SetSelectedByUserdataWithoutCallback(
+                        Userdata(bridge::GetPlayerVehicleMode(*scene, selectedEntity)));
+                    return;
+                }
+                if (ExecuteCommand<SetPlayerVehicleModeCommand>(*scene, selectedEntity, mode))
+                    SetStatus("PLAYER CONTROLS APPLIED");
+            });
             vehicleType.Create("Vehicle physics type");
             vehicleType.AddItem("NONE", Userdata(Type::None));
             vehicleType.AddItem("CAR", Userdata(Type::Car));
@@ -896,8 +1316,19 @@ namespace renegade::studio
                 auto* scene = Scene();
                 if (scene == nullptr || !HasSelection())
                     return;
+                const auto block = bridge::GetSoftBodyCreationBlock(*scene, selectedEntity);
+                if (block == bridge::SoftBodyCreationBlock::RigidBody)
+                {
+                    SetStatus("SOFT BODY // OBJECT OR PARENT HAS RIGID PHYSICS", true);
+                    return;
+                }
+                if (block == bridge::SoftBodyCreationBlock::SharedMesh)
+                {
+                    SetStatus("SOFT BODY // REQUIRES A UNIQUE MESH", true);
+                    return;
+                }
                 const bool ok = ExecuteCommand<bridge::CreateSoftBodyPhysicsCommand>(*scene, selectedEntity, bridge::SoftBodyPhysicsState{});
-                SetStatus(ok ? "SOFT BODY // ADDED" : "SOFT BODY // SELECTION MUST RESOLVE TO A MESH", !ok);
+                SetStatus(ok ? "SOFT BODY // ADDED" : "SOFT BODY // COULD NOT ADD TO SELECTION", !ok);
             });
             MakeButton(softRemove, "Remove soft body", "REMOVE SOFT BODY", [this]()
             {
@@ -906,6 +1337,42 @@ namespace renegade::studio
                     return;
                 const bool ok = ExecuteCommand<bridge::RemoveSoftBodyPhysicsCommand>(*scene, selectedEntity);
                 SetStatus(ok ? "SOFT BODY // REMOVED" : "SOFT BODY // NOTHING TO REMOVE", !ok);
+            });
+            MakeButton(softPinTop, "Pin the highest mesh vertices in local Y", "PIN TOP EDGE", [this]()
+            {
+                auto* scene = Scene();
+                if (!scene || !HasSelection())
+                    return;
+                const auto entity = bridge::ResolveSoftBodyMeshEntity(*scene, selectedEntity);
+                const auto* mesh = scene->meshes.GetComponent(entity);
+                wi::vector<uint32_t> pins;
+                if (!mesh || mesh->vertex_positions.empty() ||
+                    !bridge::GetSoftBodyPinnedVertices(*scene, selectedEntity, pins))
+                    return;
+
+                const auto& vertices = mesh->vertex_positions;
+                const auto [lowest, highest] = std::minmax_element(vertices.begin(), vertices.end(),
+                    [](const XMFLOAT3& a, const XMFLOAT3& b) { return a.y < b.y; });
+                const float height = highest->y - lowest->y;
+                if (!(height > 0.0f) || !std::isfinite(height))
+                {
+                    SetStatus("SOFT BODY // MESH NEEDS A VERTICAL EDGE", true);
+                    return;
+                }
+                const float threshold = highest->y - height * 0.0001f;
+                for (uint32_t i = 0; i < vertices.size(); ++i)
+                    if (vertices[i].y >= threshold)
+                        pins.push_back(i);
+
+                if (ExecuteCommand<bridge::SetSoftBodyPinsCommand>(*scene, selectedEntity, std::move(pins)))
+                    SetStatus("SOFT BODY // TOP EDGE PINNED");
+            });
+            MakeButton(softClearPins, "Unpin every vertex on this mesh", "CLEAR PINS", [this]()
+            {
+                auto* scene = Scene();
+                if (scene && HasSelection() &&
+                    ExecuteCommand<bridge::SetSoftBodyPinsCommand>(*scene, selectedEntity, wi::vector<uint32_t>{}))
+                    SetStatus("SOFT BODY // PINS CLEARED");
             });
             MakeButton(softReset, "Reset soft body", "RESET SOFT BODY", [this]()
             {
@@ -977,12 +1444,17 @@ namespace renegade::studio
             add(worldEnabled); add(worldSimulation); add(worldInterpolation); add(worldDebug);
             add(worldGravityX); add(worldGravityY); add(worldGravityZ); add(worldAccuracy);
             add(worldFrameRate); add(worldConstraintDebugSize); add(worldDebugDistance);
-            add(worldCharacterTolerance); add(worldActivateAll); add(worldOptimize); add(worldReset);
+            add(worldCharacterTolerance); add(worldStep); add(worldActivateAll); add(worldOptimize); add(worldReset);
 
-            add(rigidAdd); add(rigidRemove); add(rigidShape); add(rigidBoxX); add(rigidBoxY); add(rigidBoxZ);
+            add(rigidAdd); add(rigidRemove); add(compoundShape); add(compoundAdd); add(rigidShape); add(rigidBoxX); add(rigidBoxY); add(rigidBoxZ);
             add(rigidSphereRadius); add(rigidCapsuleHeight); add(rigidCapsuleRadius); add(rigidMass);
             add(rigidFriction); add(rigidRestitution); add(rigidLinearDamping); add(rigidAngularDamping);
             add(rigidBuoyancy); add(rigidMeshLod); add(rigidOffsetX); add(rigidOffsetY); add(rigidOffsetZ);
+            add(rigidSensor);
+            add(rigidCollisionLayer);
+            add(rigidBreakSpeed); add(breakHitPoints); add(breakBlastSpeed);
+            add(breakDebrisStay); add(breakDebrisFade); add(breakUseIntactMesh);
+            for (auto& check : rigidCollisionMask) add(check);
             add(rigidKinematic); add(rigid2D); add(rigidDisableDeactivation); add(rigidStartDeactivated);
 
             add(constraintAdd); add(constraintRemove); add(constraintRebind); add(constraintType);
@@ -996,7 +1468,13 @@ namespace renegade::studio
 
             add(characterEnabled); add(characterSlope); add(characterGravity);
 
-            add(vehicleType); add(vehicleCollision); add(vehicleChassisWidth); add(vehicleChassisHeight);
+            add(steeringWheel); add(steeringWheelTravel);
+            for (auto& axis : steeringWheelAxis) add(axis);
+            add(fixedWingAdvanced); add(fixedWingBindings); add(trackedAdvanced);
+            for (auto& control : trackedTuning) add(control);
+            for (auto& control : fixedWingTuning) add(control);
+            for (auto& control : fixedWingParts) add(control);
+            add(vehiclePhysicsPreview); add(playerVehicleMode); add(vehicleType); add(vehicleCollision); add(vehicleChassisWidth); add(vehicleChassisHeight);
             add(vehicleChassisLength); add(vehicleFrontOffset); add(vehicleRearOffset); add(vehicleWheelRadius);
             add(vehicleWheelWidth); add(vehicleEngineTorque); add(vehicleClutch); add(vehicleRoll);
             add(vehicleSteering); add(vehicleFrontSuspMin); add(vehicleFrontSuspMax); add(vehicleFrontSuspFrequency);
@@ -1010,6 +1488,7 @@ namespace renegade::studio
             add(ragdollDisabled); add(ragdollPhysics); add(ragdoll2D); add(ragdollFatness);
             add(ragdollHeadSize); add(ragdollActivateAll);
 
+            add(softPinTop); add(softClearPins);
             add(softAdd); add(softRemove); add(softReset); add(softWake); add(softDetail); add(softMass);
             add(softFriction); add(softRestitution); add(softPressure); add(softVertexRadius); add(softWind);
 
@@ -1025,6 +1504,38 @@ namespace renegade::studio
                 if (widget != nullptr) widget->SetVisible(false);
         }
 
+        [[nodiscard]] wi::ecs::Entity SelectionTarget() const
+        {
+            if (session == nullptr || !session->Selection().HasSelection())
+                return wi::ecs::INVALID_ENTITY;
+            const auto selected = session->Selection().SelectedEntity();
+            const auto* scene = Scene();
+            if (scene && page == Page::RigidBody && bridge::CompoundPartKind(*scene, selected))
+                return selected;
+            const auto aircraft = scene != nullptr
+                ? bridge::ResolveAircraftChassis(*scene, selected) : wi::ecs::INVALID_ENTITY;
+            return aircraft == wi::ecs::INVALID_ENTITY ? selected : aircraft;
+        }
+
+        [[nodiscard]] bool TrackedSelected() const
+        {
+            const auto* scene = Scene();
+            return scene && bridge::IsTrackedVehicle(*scene, selectedEntity);
+        }
+
+        [[nodiscard]] bool ForceFlightSelected() const
+        {
+            const auto* scene = Scene();
+            return scene && bridge::IsForceFlightVehicle(*scene, selectedEntity);
+        }
+
+        [[nodiscard]] bool FixedWingSelected() const
+        {
+            const auto* scene = Scene();
+            return scene != nullptr && bridge::IsFixedWing(*scene, selectedEntity) &&
+                scene->rigidbodies.Contains(selectedEntity);
+        }
+
         void SetActive(const bool value)
         {
             if (active == value)
@@ -1035,8 +1546,7 @@ namespace renegade::studio
             if (active)
             {
                 session = bridge::StudioSession::Current();
-                selectedEntity = session != nullptr && session->Selection().HasSelection()
-                    ? session->Selection().SelectedEntity() : wi::ecs::INVALID_ENTITY;
+                selectedEntity = SelectionTarget();
                 RefreshNow();
             }
             else
@@ -1048,6 +1558,8 @@ namespace renegade::studio
 
         void SetBounds(const XMFLOAT4& value)
         {
+            if (bounds.x == value.x && bounds.y == value.y && bounds.z == value.z && bounds.w == value.w)
+                return;
             bounds = value;
             Layout();
         }
@@ -1073,8 +1585,13 @@ namespace renegade::studio
             }
             if (session != nullptr)
             {
-                const auto currentSelection = session->Selection().HasSelection()
-                    ? session->Selection().SelectedEntity() : wi::ecs::INVALID_ENTITY;
+                const auto revision = session->Commands().Revision();
+                if (commandRevision != revision)
+                {
+                    commandRevision = revision;
+                    RequestRefresh();
+                }
+                const auto currentSelection = SelectionTarget();
                 if (currentSelection != selectedEntity)
                 {
                     selectedEntity = currentSelection;
@@ -1121,6 +1638,251 @@ namespace renegade::studio
 
             if (refreshPending)
                 RefreshNow();
+            if (page == Page::World)
+            {
+                auto* scene = Scene();
+                worldDiagnostics = scene ? bridge::SamplePhysicsDiagnostics(*scene) : bridge::PhysicsDiagnostics{};
+                const auto world = bridge::CapturePhysicsWorldState();
+                worldStep.SetEnabled(worldDiagnostics.ready && world.enabled && !world.simulationEnabled);
+            }
+            DrawVehiclePhysicsPreview();
+            DrawConstraintFrame();
+            DrawCompoundCollider();
+        }
+
+        void DrawConstraintFrame() const
+        {
+            if (page != Page::Constraint || !HasSelection())
+                return;
+            const auto* scene = Scene();
+            const auto* joint = scene ? scene->constraints.GetComponent(selectedEntity) : nullptr;
+            const auto* transform = scene ? scene->transforms.GetComponent(selectedEntity) : nullptr;
+            if (!joint || !transform)
+                return;
+
+            const auto pivot = transform->GetPositionV();
+            const XMFLOAT3 rightValue = transform->GetRight();
+            const XMFLOAT3 upValue = transform->GetUp();
+            const auto right = XMVector3Normalize(XMLoadFloat3(&rightValue));
+            const auto up = XMVector3Normalize(XMLoadFloat3(&upValue));
+            const auto draw = [](FXMVECTOR start, FXMVECTOR end, const XMFLOAT4& color)
+            {
+                wi::renderer::RenderableLine segment;
+                XMStoreFloat3(&segment.start, start);
+                XMStoreFloat3(&segment.end, end);
+                segment.color_start = segment.color_end = color;
+                wi::renderer::DrawLine(segment);
+            };
+
+            constexpr XMFLOAT4 pivotColor{1.f, .58f, .16f, 1.f};
+            constexpr XMFLOAT4 axisColor{.17f, .92f, 1.f, 1.f};
+            constexpr XMFLOAT4 linkColor{.58f, .69f, .82f, 1.f};
+            for (const auto axis : {XMVectorSet(1, 0, 0, 0), XMVectorSet(0, 1, 0, 0),
+                                   XMVectorSet(0, 0, 1, 0)})
+                draw(pivot - axis * .10f, pivot + axis * .10f, pivotColor);
+
+            const auto drawAxis = [&](FXMVECTOR axis, FXMVECTOR side)
+            {
+                const auto tip = pivot + axis * .78f;
+                draw(pivot - axis * .32f, tip, axisColor);
+                draw(tip, tip - axis * .17f + side * .065f, axisColor);
+                draw(tip, tip - axis * .17f - side * .065f, axisColor);
+            };
+            using Type = wi::scene::PhysicsConstraintComponent::Type;
+            if (joint->type == Type::Hinge)
+                drawAxis(up, right);
+            else if (joint->type == Type::Slider || joint->type == Type::Cone || joint->type == Type::SwingTwist)
+                drawAxis(right, up);
+            else if (joint->type == Type::SixDOF)
+            {
+                drawAxis(right, up);
+                drawAxis(up, right);
+                drawAxis(XMVector3Normalize(XMVector3Cross(right, up)), up);
+            }
+            for (const auto body : {joint->bodyA, joint->bodyB})
+            {
+                if (const auto* bodyTransform = scene->transforms.GetComponent(body))
+                    draw(pivot, bodyTransform->GetPositionV(), linkColor);
+            }
+        }
+
+        void DrawCompoundCollider() const
+        {
+            if (page != Page::RigidBody || !HasSelection())
+                return;
+            const auto* scene = Scene();
+            const auto root = CompoundRoot();
+            const auto* body = scene->rigidbodies.GetComponent(root);
+            const auto* transform = scene->transforms.GetComponent(root);
+            if (!body || !transform || !bridge::SupportsCompoundCollider(*body))
+                return;
+            const auto parts = bridge::GetCompoundParts(*scene, root);
+            if (!parts.valid)
+                return;
+
+            constexpr int segments = 32;
+            for (size_t i = 0; i < parts.count; ++i)
+            {
+                const auto& part = parts.parts[i];
+                const auto pose = XMMatrixRotationQuaternion(XMLoadFloat4(&part.orientation)) *
+                    XMMatrixTranslationFromVector(XMLoadFloat3(&part.position)) * XMLoadFloat4x4(&transform->world);
+                const auto& half = part.halfExtents;
+                const XMFLOAT4 color = part.entity == selectedEntity
+                    ? XMFLOAT4{1.f, .58f, .16f, 1.f} : XMFLOAT4{.17f, .92f, 1.f, 1.f};
+                if (part.shape == bridge::CompoundPartShape::Box)
+                {
+                    wi::renderer::DrawBox(XMMatrixScaling(half.x, half.y, half.z) * pose, color, false);
+                    continue;
+                }
+
+                const auto draw = [&](FXMVECTOR start, FXMVECTOR end)
+                {
+                    wi::renderer::RenderableLine line;
+                    XMStoreFloat3(&line.start, XMVector3TransformCoord(start, pose));
+                    XMStoreFloat3(&line.end, XMVector3TransformCoord(end, pose));
+                    line.color_start = line.color_end = color;
+                    wi::renderer::DrawLine(line);
+                };
+                const auto arc = [&](FXMVECTOR u, FXMVECTOR v, FXMVECTOR center, float angle, int steps)
+                {
+                    for (int n = 0; n < steps; ++n)
+                    {
+                        const float a = angle * static_cast<float>(n) / steps;
+                        const float b = angle * static_cast<float>(n + 1) / steps;
+                        draw(center + u * std::cos(a) + v * std::sin(a),
+                            center + u * std::cos(b) + v * std::sin(b));
+                    }
+                };
+                const auto x = XMVectorSet(half.x, 0.f, 0.f, 0.f);
+                const auto y = XMVectorSet(0.f, half.x, 0.f, 0.f);
+                const auto z = XMVectorSet(0.f, 0.f, half.x, 0.f);
+                const auto zero = XMVectorZero();
+                if (part.shape == bridge::CompoundPartShape::Sphere)
+                {
+                    arc(x, y, zero, XM_2PI, segments);
+                    arc(x, z, zero, XM_2PI, segments);
+                    arc(z, y, zero, XM_2PI, segments);
+                }
+                else
+                {
+                    const auto top = XMVectorSet(0.f, half.y, 0.f, 0.f);
+                    const auto bottom = -top;
+                    arc(x, z, top, XM_2PI, segments);
+                    arc(x, z, bottom, XM_2PI, segments);
+                    for (const auto side : {x, z})
+                    {
+                        arc(side, y, top, XM_PI, segments / 2);
+                        arc(side, -y, bottom, XM_PI, segments / 2);
+                        draw(top + side, bottom + side);
+                        draw(top - side, bottom - side);
+                    }
+                }
+            }
+        }
+
+        void DrawVehiclePhysicsPreview() const
+        {
+            if (page != Page::Vehicle || !showVehiclePhysics || !HasSelection())
+                return;
+            const auto* scene = Scene();
+            const auto* body = scene ? scene->rigidbodies.GetComponent(selectedEntity) : nullptr;
+            const auto* transform = scene ? scene->transforms.GetComponent(selectedEntity) : nullptr;
+            if (!body || !transform || !body->IsVehicle())
+                return;
+
+            const auto vehicle = bridge::CaptureVehiclePhysics(*body);
+            const auto collision = bridge::CaptureCollision(*body);
+            const auto rotation = XMMatrixRotationQuaternion(transform->GetRotationV());
+            const auto pose = rotation * XMMatrixTranslationFromVector(
+                transform->GetPositionV() + XMLoadFloat3(&collision.localOffset));
+
+            if (collision.shape == wi::scene::RigidBodyPhysicsComponent::CollisionShape::BOX)
+            {
+                const auto& half = collision.boxHalfExtents;
+                const auto& scale = transform->scale_local;
+                wi::renderer::DrawBox(
+                    XMMatrixScaling(half.x * scale.x, half.y * scale.y, half.z * scale.z) * pose,
+                    {1.0f, 0.47f, 0.12f, 1.0f}, false);
+            }
+
+            const auto value = [](const SceneInspectorSlider& slider, const float committed)
+            {
+                return slider.IsDragging() ? slider.GetValue() : committed;
+            };
+            const auto world = [&](XMVECTOR local)
+            {
+                XMFLOAT3 point;
+                XMStoreFloat3(&point, XMVector3TransformCoord(local, pose));
+                return point;
+            };
+            const auto line = [&](XMVECTOR a, XMVECTOR b, const XMFLOAT4& color)
+            {
+                wi::renderer::RenderableLine segment;
+                segment.start = world(a);
+                segment.end = world(b);
+                segment.color_start = segment.color_end = color;
+                wi::renderer::DrawLine(segment);
+            };
+
+            const bool motorcycle = body->IsMotorcycle();
+            const float width = value(vehicleWheelWidth, vehicle.wheelWidth);
+            const float radius = value(vehicleWheelRadius, vehicle.wheelRadius);
+            const float halfWidth = motorcycle ? 0.0f : value(vehicleChassisWidth, vehicle.chassisHalfWidth);
+            const float height = value(vehicleChassisHeight, vehicle.chassisHalfHeight);
+            const float halfLength = value(vehicleChassisLength, vehicle.chassisHalfLength);
+            const XMFLOAT4 wheelColor{0.10f, 0.88f, 1.0f, 1.0f};
+            const XMFLOAT4 travelColor{1.0f, 0.92f, 0.26f, 1.0f};
+            for (int wheel = 0; wheel < (motorcycle ? 2 : 4); ++wheel)
+            {
+                const bool front = motorcycle ? wheel == 0 : wheel < 2;
+                const float z = front ? halfLength + value(vehicleFrontOffset, vehicle.frontWheelOffset)
+                                      : -halfLength + value(vehicleRearOffset, vehicle.rearWheelOffset);
+                const auto mount = XMVectorSet(wheel % 2 == 0 ? -halfWidth : halfWidth, height, z, 0.0f);
+                const float caster = motorcycle && front
+                    ? std::tan(wi::math::DegreesToRadians(value(vehicleMotoAngle,
+                        wi::math::RadiansToDegrees(vehicle.motorcycleFrontSuspensionAngle)))) : 0.0f;
+                const auto direction = XMVector3Normalize(XMVectorSet(0.0f, -1.0f, caster, 0.0f));
+                const float minimum = front ? value(vehicleFrontSuspMin, vehicle.frontSuspensionMinLength)
+                                            : value(vehicleRearSuspMin, vehicle.rearSuspensionMinLength);
+                const float maximum = std::max(minimum, front
+                    ? value(vehicleFrontSuspMax, vehicle.frontSuspensionMaxLength)
+                    : value(vehicleRearSuspMax, vehicle.rearSuspensionMaxLength));
+
+                const auto compressed = mount + direction * minimum;
+                const auto extended = mount + direction * maximum;
+                const auto axle = XMVectorSet(width * 0.5f, 0.0f, 0.0f, 0.0f);
+                line(mount, compressed, wheelColor);
+                line(compressed, extended, travelColor);
+                line(compressed - axle, compressed + axle, travelColor);
+                line(extended - axle, extended + axle, travelColor);
+
+                using Mode = wi::scene::RigidBodyPhysicsComponent::Vehicle::CollisionMode;
+                if (vehicle.collisionMode == Mode::Ray)
+                    line(extended, extended + direction * radius, travelColor);
+                else if (vehicle.collisionMode == Mode::Sphere)
+                {
+                    const float castRadius = 0.5f * (motorcycle ? radius : width);
+                    const auto castEnd = mount + direction * (maximum + radius - castRadius);
+                    wi::renderer::DrawSphere(wi::primitive::Sphere(world(castEnd), castRadius), travelColor, false);
+                }
+
+                // An authored wheel outline at full extension makes its fit visible in every contact mode.
+                constexpr int segments = 20;
+                const auto rim = [&](int index)
+                {
+                    const float angle = DirectX::XM_2PI * index / segments;
+                    return extended + XMVectorSet(0.0f, std::cos(angle) * radius, std::sin(angle) * radius, 0.0f);
+                };
+                for (int i = 0; i < segments; ++i)
+                {
+                    const auto a = rim(i);
+                    const auto b = rim(i + 1);
+                    line(a - axle, b - axle, wheelColor);
+                    line(a + axle, b + axle, wheelColor);
+                    if (i % 5 == 0)
+                        line(a - axle, a + axle, wheelColor);
+                }
+            }
         }
 
         void Render(const wi::Canvas& canvas, const wi::graphics::CommandList cmd) const
@@ -1133,17 +1895,26 @@ namespace renegade::studio
             DrawRect(bounds.x, bounds.y, width, 1.0f, Border, cmd);
             DrawRect(bounds.x, bounds.w - 1.0f, width, 1.0f, Border, cmd);
             DrawText("PHYSICS LAB", bounds.x + 22.0f, bounds.y + 14.0f, 17, TextStrong, cmd, 1.15f, 0.18f);
-            DrawText("PHYSICS AUTHORING", bounds.x + 22.0f, bounds.y + 38.0f, 9, Forge, cmd, 0.8f, 0.16f);
-            DrawText(SelectedEntityLabel(), std::max(bounds.x + 320.0f, bounds.z - 430.0f), bounds.y + 18.0f, 10, TextSecondary, cmd, 0.2f, 0.14f);
-            DrawText("ADVANCED RUNTIME // renegade.physics", std::max(bounds.x + 320.0f, bounds.z - 430.0f), bounds.y + 39.0f, 9, Muted, cmd, 0.2f, 0.12f);
+            const auto selection = SelectedEntityLabel();
+            DrawText(selection, bounds.x + 22.0f, bounds.y + 40.0f, 9, Muted, cmd);
             RenderTabs(cmd);
             RenderReadout(cmd);
 
+            const auto clipControls = [&] {
+                const float top = bounds.y + HeaderHeight + TabBandHeight() + ReadoutHeight;
+                contentClip.ApplyScissor(canvas,
+                    {int32_t(bounds.x + 14), int32_t(top), int32_t(bounds.z - 14),
+                     int32_t(std::max(top, bounds.w - StatusHeight - 5))}, cmd, false);
+            };
+            clipControls();
+            for (const auto& caption : captions)
+                DrawText(caption.text, caption.x + 1.f, caption.y, 9, TextSecondary, cmd);
             for (const auto* widget : activeControls)
             {
                 if (widget == nullptr || !widget->IsVisible() ||
                     dynamic_cast<const wi::gui::ComboBox*>(widget) != nullptr)
                     continue;
+                clipControls();
                 widget->Render(canvas, cmd);
             }
             for (auto it = activeControls.rbegin(); it != activeControls.rend(); ++it)
@@ -1151,7 +1922,10 @@ namespace renegade::studio
                 const auto* widget = *it;
                 if (widget != nullptr && widget->IsVisible() &&
                     dynamic_cast<const wi::gui::ComboBox*>(widget) != nullptr)
+                {
+                    clipControls();
                     widget->Render(canvas, cmd);
+                }
             }
 
             contentClip.ApplyScissor(canvas,{int32_t(bounds.x),int32_t(bounds.y),int32_t(bounds.z),int32_t(bounds.w)},cmd,false);
@@ -1164,14 +1938,19 @@ namespace renegade::studio
             }
         }
 
+        bool Compact() const { return bounds.z - bounds.x < 600.f; }
         int TabColumns() const { return bounds.z-bounds.x<600.f?2:bounds.z-bounds.x<1000.f?4:8; }
-        float TabBandHeight() const { return TabsHeight*(8/TabColumns()); }
+        float TabBandHeight() const
+        {
+            const int columns = TabColumns();
+            return TabsHeight * ((static_cast<int>(Page::Count) + columns - 1) / columns);
+        }
 
         void RenderTabs(const wi::graphics::CommandList cmd) const
         {
-            constexpr std::array<const char*, 8> labels = {
+            constexpr std::array<const char*, static_cast<size_t>(Page::Count)> labels = {
                 "WORLD", "RIGID BODY", "CONSTRAINT", "CHARACTER",
-                "VEHICLE", "RAGDOLL", "SOFT BODY", "SECONDARY COLLIDER"};
+                "VEHICLE", "RAGDOLL", "SOFT BODY", "COLLIDER", "BREAKABLES"};
             const float available = std::max(1.0f, bounds.z - bounds.x - 32.0f);
             const float tabWidth = available / TabColumns();
             const int textSize = 11;
@@ -1205,15 +1984,19 @@ namespace renegade::studio
             case Page::RigidBody: title = "RIGID BODY"; break;
             case Page::Constraint: title = "CONSTRAINT"; break;
             case Page::Character: title = "CHARACTER"; break;
-            case Page::Vehicle: title = "VEHICLE"; break;
+            case Page::Vehicle: title = FixedWingSelected() ? "FIXED WING" :
+                Scene() && bridge::IsHelicopter(*Scene(), selectedEntity) ? "HELICOPTER" :
+                Scene() && bridge::IsSpacecraft(*Scene(), selectedEntity) ? "SPACECRAFT" :
+                ForceFlightSelected() ? "PHYSICAL VTOL" : TrackedSelected() ? "TRACKED" : "VEHICLE"; break;
             case Page::Ragdoll: title = "RAGDOLL"; break;
             case Page::SoftBody: title = "SOFT BODY"; break;
             case Page::WickedCollider: title = "SECONDARY COLLIDER"; break;
+            case Page::Breakables: title = "BREAKABLES"; break;
             default: break;
             }
             DrawText(title, x, y, 12, TextStrong, cmd, 0.7f, 0.18f);
-            DrawText(PageHint(), x, y + 21.0f, 9, Muted, cmd);
-            RenderLiveReadout(x, y + 38.0f, cmd);
+            if (page != Page::World && !Compact()) DrawText(PageHint(), x, y + 21.0f, 9, Muted, cmd);
+            RenderLiveReadout(x, y + (Compact() || page == Page::World ? 21.0f : 38.0f), cmd);
         }
 
         [[nodiscard]] std::string PageHint() const
@@ -1222,12 +2005,18 @@ namespace renegade::studio
             {
             case Page::World: return "Scene gravity, simulation, solver and visualisation settings.";
             case Page::RigidBody: return "Rigid-body collision, material response, damping, buoyancy and body behaviour.";
-            case Page::Constraint: return "Constraint types, body bindings, limits, motors and break behaviour.";
+            case Page::Constraint: return "Use Move for the pivot and Rotate for the axis.";
             case Page::Character: return "Character movement physics. Capsule collision is recommended; mass and friction come from the rigid body.";
-            case Page::Vehicle: return "Car and motorcycle authoring, wheel mapping, suspension and live editor drive testing.";
+            case Page::Vehicle:
+                if (ForceFlightSelected()) return "Flight controls run in Test Game. Set the chassis shape in Rigid Body.";
+                if (TrackedSelected()) return "Tracked suspension and drivetrain run in Test Game.";
+                return FixedWingSelected()
+                ? "Aircraft mass and damping. Flight controls run in Test Game."
+                : "Car and motorcycle authoring, wheel mapping, suspension and live editor drive testing.";
             case Page::Ragdoll: return "Humanoid ragdoll behaviour, 2D locking, body proportions and activation.";
             case Page::SoftBody: return "Mesh-backed soft-body simulation with mass, friction, pressure, vertex radius and wind.";
             case Page::WickedCollider: return "Lightweight CPU/GPU collision for particles, hair and other secondary systems.";
+            case Page::Breakables: return "Select the prop or its intact mesh. Debris Stay at zero keeps debris.";
             default: return {};
             }
         }
@@ -1236,7 +2025,26 @@ namespace renegade::studio
         {
             auto* scene = Scene();
             if (page == Page::World)
+            {
+                const auto& stats = worldDiagnostics;
+                if (!stats.ready)
+                {
+                    DrawText("PHYSICS SCENE NOT READY", x, y, 9, Muted, cmd);
+                    return;
+                }
+                char values[128];
+                if (stats.lastUpdateSteps > 0)
+                    std::snprintf(values, sizeof(values), "PHYSICS %.2f MS   TICKS %llu   CONTACTS %u",
+                        stats.lastUpdateMilliseconds, static_cast<unsigned long long>(stats.totalFixedSteps),
+                        stats.lastStepContactManifolds);
+                else
+                    std::snprintf(values, sizeof(values), "WAITING FOR A PHYSICS TICK");
+                DrawText(values, x, y, 9, TextStrong, cmd);
+                std::snprintf(values, sizeof(values), "AWAKE %u / %u BODIES   NATIVE CONSTRAINTS %u",
+                    stats.awakeRigidBodies + stats.awakeSoftBodies, stats.totalBodies, stats.constraints);
+                DrawText(values, x, y + 14.f, 9, Muted, cmd);
                 return;
+            }
             if (scene == nullptr || !HasSelection())
             {
                 DrawText("SELECT AN ENTITY IN THE SCENE HIERARCHY", x, y, 9, Muted, cmd);
@@ -1244,10 +2052,28 @@ namespace renegade::studio
             }
             if (page == Page::RigidBody)
             {
+                if (bridge::CompoundPartKind(*scene, selectedEntity))
+                {
+                    DrawText("COMPOUND COLLIDER PART", x, y, 9, Success, cmd);
+                    return;
+                }
                 const auto* body = scene->rigidbodies.GetComponent(selectedEntity);
                 DrawText(body == nullptr ? "NO RIGID BODY COMPONENT" :
                     (bridge::HasLivePhysicsBody(*scene, selectedEntity) ? "LIVE BODY // READY" : "AUTHORED BODY // PENDING"),
                     x, y, 9, body != nullptr && bridge::HasLivePhysicsBody(*scene, selectedEntity) ? Success : Muted, cmd);
+            }
+            else if (page == Page::Breakables)
+            {
+                const auto root = BreakableRoot();
+                if (root == wi::ecs::INVALID_ENTITY)
+                    DrawText("ADD A SOLID STATIC BODY TO THE PARENT", x, y, 9, Muted, cmd);
+                else if (bridge::IsDestructibleIntactVisual(*scene, selectedEntity))
+                    DrawText("SELECTED MESH IS THE INTACT VISUAL", x, y, 9, Success, cmd);
+            }
+            else if (page == Page::Constraint)
+            {
+                if (scene->constraints.Contains(selectedEntity))
+                    DrawText("MOVE PIVOT  /  ROTATE AXIS", x, y, 9, Muted, cmd);
             }
             else if (page == Page::Character)
             {
@@ -1267,6 +2093,11 @@ namespace renegade::studio
             }
             else if (page == Page::Vehicle)
             {
+                if (FixedWingSelected())
+                {
+                    DrawText("FLY AND TEST THE GEAR IN TEST GAME", x, y, 9, Muted, cmd);
+                    return;
+                }
                 float velocity = 0.0f;
                 if (bridge::GetVehicleForwardVelocity(*scene, selectedEntity, velocity))
                     DrawText("LIVE FORWARD VELOCITY // " + std::to_string(velocity), x, y, 9, Success, cmd);
@@ -1296,6 +2127,8 @@ namespace renegade::studio
                 return;
             RefreshWorld();
             RefreshRigidBody();
+            if (page == Page::Breakables)
+                RefreshBreakables();
             RefreshConstraint();
             RefreshCharacter();
             RefreshVehicle();
@@ -1326,12 +2159,40 @@ namespace renegade::studio
             }
         }
 
+        void RefreshBreakables()
+        {
+            const auto* scene = Scene();
+            const auto root = BreakableRoot();
+            const bool enabled = scene && root != wi::ecs::INVALID_ENTITY;
+            rigidBreakSpeed.SetEnabled(enabled);
+            rigidBreakSpeed.SetValue(enabled ? bridge::GetDestructibleImpactSpeed(*scene, root) : 0.f);
+            breakHitPoints.SetEnabled(enabled);
+            breakHitPoints.SetValue(enabled ? bridge::GetDestructibleHitPoints(*scene, root) : 0.f);
+            breakBlastSpeed.SetEnabled(enabled);
+            breakBlastSpeed.SetValue(enabled ? bridge::GetDestructibleBlastSpeed(*scene, root) : 0.f);
+            const auto timing = enabled ? bridge::GetDestructibleDebrisTiming(*scene, root) : bridge::DestructibleDebrisTiming{};
+            breakDebrisStay.SetEnabled(enabled);
+            breakDebrisStay.SetValue(timing.staySeconds);
+            breakDebrisFade.SetEnabled(enabled && timing.staySeconds > 0.f);
+            breakDebrisFade.SetValue(timing.fadeSeconds);
+            breakUseIntactMesh.SetEnabled(enabled && selectedEntity != root && !scene->objects.Contains(root) &&
+                scene->objects.Contains(selectedEntity) && !bridge::IsDestructibleIntactVisual(*scene, selectedEntity));
+        }
+
         void RefreshRigidBody()
         {
             auto* scene = Scene();
             const auto* body = scene != nullptr && HasSelection() ? scene->rigidbodies.GetComponent(selectedEntity) : nullptr;
-            rigidAdd.SetEnabled(body == nullptr && HasSelection());
+            const int partKind = scene && HasSelection() ? bridge::CompoundPartKind(*scene, selectedEntity) : 0;
+            rigidAdd.SetEnabled(body == nullptr && HasSelection() && partKind == 0);
             rigidRemove.SetEnabled(body != nullptr);
+            const auto compoundRoot = CompoundRoot();
+            const auto* rootBody = scene ? scene->rigidbodies.GetComponent(compoundRoot) : nullptr;
+            const bool supportsCompound = rootBody && bridge::SupportsCompoundCollider(*rootBody);
+            const auto parts = supportsCompound ? bridge::GetCompoundParts(*scene, compoundRoot) : bridge::CompoundParts{};
+            const bool addPart = supportsCompound && parts.valid && parts.count < bridge::MaxCompoundParts;
+            compoundShape.SetEnabled(addPart);
+            compoundAdd.SetEnabled(addPart);
             const bool enabled = body != nullptr;
             rigidShape.SetEnabled(enabled);
             rigidBoxX.SetEnabled(enabled); rigidBoxY.SetEnabled(enabled); rigidBoxZ.SetEnabled(enabled);
@@ -1339,6 +2200,18 @@ namespace renegade::studio
             rigidMass.SetEnabled(enabled); rigidFriction.SetEnabled(enabled); rigidRestitution.SetEnabled(enabled);
             rigidLinearDamping.SetEnabled(enabled); rigidAngularDamping.SetEnabled(enabled); rigidBuoyancy.SetEnabled(enabled);
             rigidMeshLod.SetEnabled(enabled); rigidOffsetX.SetEnabled(enabled); rigidOffsetY.SetEnabled(enabled); rigidOffsetZ.SetEnabled(enabled);
+            const bool sensor = enabled && bridge::IsBodySensor(*scene, selectedEntity);
+            rigidSensor.SetEnabled(enabled && (sensor || bridge::SupportsBodySensor(*body)));
+            rigidSensor.SetCheck(sensor);
+            const bool supportsFilter = enabled && bridge::SupportsBodyCollisionFilter(*body);
+            const auto filter = supportsFilter ? bridge::GetBodyCollisionFilter(*scene, selectedEntity) : bridge::BodyCollisionFilter{};
+            rigidCollisionLayer.SetEnabled(supportsFilter);
+            rigidCollisionLayer.SetValue(static_cast<float>(filter.layer));
+            for (int i = 0; i < bridge::BodyCollisionLayerCount; ++i)
+            {
+                rigidCollisionMask[i].SetEnabled(supportsFilter);
+                rigidCollisionMask[i].SetCheck((filter.mask & (1 << i)) != 0);
+            }
             rigidKinematic.SetEnabled(enabled); rigid2D.SetEnabled(enabled); rigidDisableDeactivation.SetEnabled(enabled);
             rigidStartDeactivated.SetEnabled(enabled);
             if (body == nullptr)
@@ -1439,12 +2312,89 @@ namespace renegade::studio
             characterGravity.SetValue(state.gravityFactor);
         }
 
+        template <typename Fn>
+        void EditSteeringWheel(Fn&& edit)
+        {
+            auto* scene = Scene();
+            if (!scene || !HasSelection())
+                return;
+            auto settings = bridge::CaptureSteeringWheel(*scene, selectedEntity);
+            edit(settings);
+            if (ExecuteCommand<bridge::SetSteeringWheelCommand>(*scene, selectedEntity, settings))
+                SetStatus("COCKPIT STEERING // APPLIED");
+        }
+
+        void RefreshSteeringWheel(const wi::scene::Scene* scene)
+        {
+            steeringWheel.ClearItems();
+            steeringWheel.AddItem("<NONE>", wi::ecs::INVALID_ENTITY);
+            const auto* body = scene ? scene->rigidbodies.GetComponent(selectedEntity) : nullptr;
+            const bool car = body && body->IsCar();
+            steeringWheel.SetEnabled(car);
+            bridge::SteeringWheelSettings settings;
+            if (car)
+            {
+                settings = bridge::CaptureSteeringWheel(*scene, selectedEntity);
+                for (size_t i = 0; i < scene->objects.GetCount(); ++i)
+                {
+                    const auto entity = scene->objects.GetEntity(i);
+                    if (bridge::CanBindSteeringWheel(*scene, selectedEntity, entity))
+                        steeringWheel.AddItem(EntityLabel(*scene, entity), entity);
+                }
+            }
+            SelectEntity(steeringWheel, settings.entity);
+            const std::array axis{settings.axis.x, settings.axis.y, settings.axis.z};
+            const bool bound = settings.entity != wi::ecs::INVALID_ENTITY;
+            for (size_t i = 0; i < steeringWheelAxis.size(); ++i)
+            {
+                steeringWheelAxis[i].SetEnabled(bound);
+                steeringWheelAxis[i].SetValue(axis[i]);
+            }
+            steeringWheelTravel.SetEnabled(bound);
+            steeringWheelTravel.SetValue(settings.degrees);
+        }
+
+        void RefreshFixedWing(const wi::scene::Scene& scene)
+        {
+            if (!showFixedWingAdvanced || !FixedWingSelected() || page != Page::Vehicle)
+                return;
+            if (!showFixedWingBindings)
+            {
+                const auto values = bridge::ReadFixedWingTuning(scene, selectedEntity);
+                for (size_t i = 0; i < fixedWingTuning.size(); ++i)
+                    fixedWingTuning[i].SetValue(values.*bridge::FixedWingTuningFields[i].member);
+                return;
+            }
+
+            const auto rig = bridge::ReadFixedWingRig(scene, selectedEntity);
+            for (size_t i = 0; i < fixedWingParts.size(); ++i)
+            {
+                auto& combo = fixedWingParts[i];
+                combo.ClearItems();
+                const auto automatic = rig.automatic[i];
+                const auto label = automatic == wi::ecs::INVALID_ENTITY ? "AUTO"
+                    : "AUTO - " + EntityLabel(scene, automatic);
+                combo.AddItem(label, Userdata(wi::ecs::INVALID_ENTITY));
+                for (const auto entity : rig.candidates)
+                    combo.AddItem(EntityLabel(scene, entity), Userdata(entity));
+
+                const auto& assigned = rig.assigned[i];
+                if (assigned.size() > 1)
+                    combo.AddItem("MULTIPLE BINDINGS - CHOOSE ONE", Userdata(wi::ecs::INVALID_ENTITY));
+                combo.SetSelectedByUserdataWithoutCallback(
+                    Userdata(assigned.empty() ? wi::ecs::INVALID_ENTITY : assigned.front()));
+            }
+        }
+
         void RefreshVehicle()
         {
             auto* scene = Scene();
             const auto* body = scene != nullptr && HasSelection() ? scene->rigidbodies.GetComponent(selectedEntity) : nullptr;
             RebuildVehicleWheels();
+            RefreshSteeringWheel(scene);
             const bool enabled = body != nullptr;
+            vehiclePhysicsPreview.SetEnabled(body != nullptr && body->IsVehicle());
+            vehiclePhysicsPreview.SetCheck(showVehiclePhysics);
             for (auto* widget : VehicleAuthoringControls()) widget->SetEnabled(enabled);
             vehicleTestThrottle.SetEnabled(enabled); vehicleTestSteer.SetEnabled(enabled);
             vehicleTestBrake.SetEnabled(enabled); vehicleTestHandbrake.SetEnabled(enabled);
@@ -1454,7 +2404,15 @@ namespace renegade::studio
                 vehicleUpdateWheels.SetEnabled(false);
                 return;
             }
+            RefreshFixedWing(*scene);
+            if (TrackedSelected() && page == Page::Vehicle)
+            {
+                const auto values = bridge::ReadTrackedTuning(*scene, selectedEntity);
+                for (size_t i = 0; i < trackedTuning.size(); ++i)
+                    trackedTuning[i].SetValue(values.*bridge::TrackedTuningFields[i].member);
+            }
             const auto state = bridge::CaptureVehiclePhysics(*body);
+            playerVehicleMode.SetSelectedByUserdataWithoutCallback(Userdata(bridge::GetPlayerVehicleMode(*scene, selectedEntity)));
             vehicleType.SetSelectedByUserdataWithoutCallback(Userdata(state.type));
             vehicleCollision.SetSelectedByUserdataWithoutCallback(Userdata(state.collisionMode));
             vehicleChassisWidth.SetValue(state.chassisHalfWidth);
@@ -1518,6 +2476,7 @@ namespace renegade::studio
             const bool enabled = body != nullptr;
             softAdd.SetEnabled(mesh != wi::ecs::INVALID_ENTITY && !enabled);
             softRemove.SetEnabled(enabled);
+            softPinTop.SetEnabled(enabled); softClearPins.SetEnabled(enabled);
             softReset.SetEnabled(enabled);
             softWake.SetEnabled(enabled && scene != nullptr && bridge::HasLiveSoftBodyPhysics(*scene, selectedEntity));
             softDetail.SetEnabled(enabled);
@@ -1574,7 +2533,7 @@ namespace renegade::studio
         std::vector<wi::gui::Widget*> VehicleAuthoringControls()
         {
             std::vector<wi::gui::Widget*> controls = {
-                &vehicleType, &vehicleCollision, &vehicleChassisWidth, &vehicleChassisHeight, &vehicleChassisLength,
+                &playerVehicleMode, &vehicleType, &vehicleCollision, &vehicleChassisWidth, &vehicleChassisHeight, &vehicleChassisLength,
                 &vehicleFrontOffset, &vehicleRearOffset, &vehicleWheelRadius, &vehicleWheelWidth, &vehicleEngineTorque,
                 &vehicleClutch, &vehicleRoll, &vehicleSteering, &vehicleFrontSuspMin, &vehicleFrontSuspMax,
                 &vehicleFrontSuspFrequency, &vehicleFrontSuspDamping, &vehicleRearSuspMin, &vehicleRearSuspMax,
@@ -1694,6 +2653,7 @@ namespace renegade::studio
         void Layout()
         {
             activeControls.clear();
+            captions.clear();
             HideAll();
             if (!active || bounds.z <= bounds.x || bounds.w <= bounds.y)
                 return;
@@ -1706,6 +2666,7 @@ namespace renegade::studio
             const float gap = 18.0f;
             const float column = std::max(60.0f, (width - gap) * 0.5f);
             const float y = contentTop - scrollY;
+            compactCursor = y;
             switch (page)
             {
             case Page::World: LayoutWorld(left, y, width, column, gap); break;
@@ -1716,6 +2677,14 @@ namespace renegade::studio
             case Page::Ragdoll: LayoutRagdoll(left, y, width, column, gap); break;
             case Page::SoftBody: LayoutSoft(left, y, width, column, gap); break;
             case Page::WickedCollider: LayoutCollider(left, y, width, column, gap); break;
+            case Page::Breakables:
+                Place(rigidBreakSpeed, left, Row(y, 0), width);
+                Place(breakHitPoints, left, Row(y, 1), width);
+                Place(breakBlastSpeed, left, Row(y, 2), width);
+                Place(breakDebrisStay, left, Row(y, 3), width);
+                Place(breakDebrisFade, left, Row(y, 4), width);
+                Place(breakUseIntactMesh, left, Row(y, 6), width);
+                break;
             default: break;
             }
             ClampScroll();
@@ -1729,8 +2698,18 @@ namespace renegade::studio
         }
 
         template <typename Widget>
-        void Place(Widget& widget, const float x, const float y, const float width, const float height = RowHeight)
+        void Place(Widget& widget, float x, float y, float width, const float height = RowHeight,
+                   const char* caption = nullptr)
         {
+            if (Compact())
+            {
+                x = bounds.x + 24.f;
+                width = std::max(60.f, bounds.z - bounds.x - 48.f);
+                y = compactCursor;
+                if (caption) y += 14.f;
+                compactCursor = y + height + RowGap;
+            }
+            if (caption) captions.push_back({caption, x, y - 14.f});
             widget.AttachTo(&contentClip);
             widget.SetPos(XMFLOAT2(x, y));
             widget.SetSize(XMFLOAT2(width, height));
@@ -1747,7 +2726,9 @@ namespace renegade::studio
 
         void SetRows(const int rows) noexcept
         {
-            pageContentHeight = static_cast<float>(rows) * (RowHeight + RowGap) + 8.0f;
+            const float top = bounds.y + HeaderHeight + TabBandHeight() + ReadoutHeight;
+            pageContentHeight = Compact() ? std::max(0.f, compactCursor + scrollY - top) + 8.f
+                : static_cast<float>(rows) * (RowHeight + RowGap) + 8.f;
         }
 
         void LayoutWorld(const float x, const float y, const float width, const float column, const float gap)
@@ -1756,6 +2737,7 @@ namespace renegade::studio
             Place(worldSimulation, x + column + gap, Row(y, 0), column);
             Place(worldInterpolation, x, Row(y, 1), column);
             Place(worldDebug, x + column + gap, Row(y, 1), column);
+            Place(worldStep, x, Row(y, 2), width);
             Place(worldGravityX, x, Row(y, 3), column);
             Place(worldGravityY, x + column + gap, Row(y, 3), column);
             Place(worldGravityZ, x, Row(y, 4), column);
@@ -1774,12 +2756,33 @@ namespace renegade::studio
         {
             auto* scene = Scene();
             const auto* body = scene != nullptr && HasSelection() ? scene->rigidbodies.GetComponent(selectedEntity) : nullptr;
+            if (scene && HasSelection() && bridge::CompoundPartKind(*scene, selectedEntity))
+            {
+                captions.push_back({"MOVE, ROTATE OR SCALE IN VIEWPORT", x, Row(y, 0)});
+                captions.push_back({"DELETE PART FROM THE OBJECT HIERARCHY", x, Row(y, 1)});
+                if (Compact())
+                    compactCursor += RowHeight * 2.0f;
+                Place(compoundShape, x, Row(y, 3), width, RowHeight, "COLLIDER PART SHAPE");
+                Place(compoundAdd, x, Row(y, 4), width);
+                SetRows(6);
+                return;
+            }
             Place(rigidAdd, x, Row(y, 0), column);
             Place(rigidRemove, x + column + gap, Row(y, 0), column);
             if (body == nullptr) { SetRows(3); return; }
             const auto state = bridge::CaptureCollision(*body);
-            Place(rigidShape, x, Row(y, 2), width);
-            int row = 3;
+            int row = 2;
+            bool activeCompound = false;
+            if (bridge::SupportsCompoundCollider(*body))
+            {
+                const auto parts = bridge::GetCompoundParts(*scene, selectedEntity);
+                activeCompound = parts.valid && parts.count > 0;
+                Place(compoundShape, x, Row(y, row++), width, RowHeight, "COLLIDER PART SHAPE");
+                Place(compoundAdd, x, Row(y, row++), width);
+                ++row;
+            }
+            Place(rigidShape, x, Row(y, row++), width, RowHeight,
+                activeCompound ? "FALLBACK SHAPE (NO PARTS)" : "COLLISION SHAPE");
             using Shape = wi::scene::RigidBodyPhysicsComponent::CollisionShape;
             if (state.shape == Shape::BOX)
             {
@@ -1802,6 +2805,13 @@ namespace renegade::studio
             Place(rigidMass, x, Row(y, row), column); Place(rigidFriction, x + column + gap, Row(y, row++), column);
             Place(rigidRestitution, x, Row(y, row), column); Place(rigidBuoyancy, x + column + gap, Row(y, row++), column);
             Place(rigidLinearDamping, x, Row(y, row), column); Place(rigidAngularDamping, x + column + gap, Row(y, row++), column);
+            Place(rigidSensor, x, Row(y, row++), width);
+            Place(rigidCollisionLayer, x, Row(y, row++), width);
+            for (int i = 0; i < bridge::BodyCollisionLayerCount; i += 2)
+            {
+                Place(rigidCollisionMask[i], x, Row(y, row), column);
+                Place(rigidCollisionMask[i + 1], x + column + gap, Row(y, row++), column);
+            }
             Place(rigidKinematic, x, Row(y, row), column); Place(rigid2D, x + column + gap, Row(y, row++), column);
             Place(rigidDisableDeactivation, x, Row(y, row), column); Place(rigidStartDeactivated, x + column + gap, Row(y, row++), column);
             row++;
@@ -1818,9 +2828,9 @@ namespace renegade::studio
             Place(constraintRemove, x + column + gap, Row(y, 0), column);
             if (component == nullptr) { SetRows(3); return; }
             const auto state = bridge::CaptureConstraint(*component);
-            Place(constraintRebind, x, Row(y, 1), width);
-            Place(constraintType, x, Row(y, 3), width);
-            Place(constraintBodyA, x, Row(y, 4), column); Place(constraintBodyB, x + column + gap, Row(y, 4), column);
+            Place(constraintType, x, Row(y, 1), width);
+            Place(constraintBodyA, x, Row(y, 2), column); Place(constraintBodyB, x + column + gap, Row(y, 2), column);
+            Place(constraintRebind, x, Row(y, 4), width);
             Place(constraintNoSelfCollision, x, Row(y, 5), column);
             Place(constraintBreak, x + column + gap, Row(y, 5), column);
             Place(constraintDisableBreaking, x, Row(y, 6), width);
@@ -1877,7 +2887,78 @@ namespace renegade::studio
         void LayoutVehicle(const float x, const float y, const float width, const float column, const float gap)
         {
             int row = 0;
+            if (FixedWingSelected())
+            {
+                Place(playerVehicleMode, x, Row(y, row++), width, RowHeight, "PLAYER CONTROLS");
+                Place(rigidMass, x, Row(y, row++), width);
+                Place(rigidLinearDamping, x, Row(y, row++), width);
+                Place(rigidAngularDamping, x, Row(y, row++), width);
+                fixedWingAdvanced.SetText(showFixedWingAdvanced ? "HIDE ADVANCED" : "ADVANCED");
+                Place(fixedWingAdvanced, x, Row(y, row++), width);
+                if (showFixedWingAdvanced)
+                {
+                    fixedWingBindings.SetText(showFixedWingBindings ? "FLIGHT TUNING" : "PART BINDINGS");
+                    Place(fixedWingBindings, x, Row(y, row++), width);
+                    if (showFixedWingBindings)
+                    {
+                        constexpr auto gearStart = static_cast<size_t>(bridge::FixedWingPart::NoseWheel);
+                        constexpr auto forceStart = static_cast<size_t>(bridge::FixedWingPart::PortLift);
+                        const auto placePart = [&](size_t i)
+                        {
+                            Place(fixedWingParts[i], x, Row(y, row++), width, RowHeight,
+                                bridge::FixedWingParts[i].label);
+                        };
+                        for (size_t i = gearStart; i < forceStart; ++i) placePart(i);
+                        for (size_t i = 0; i < gearStart; ++i) placePart(i);
+                        for (size_t i = forceStart; i < fixedWingParts.size(); ++i) placePart(i);
+                    }
+                    else
+                    {
+                        for (auto& slider : fixedWingTuning)
+                            Place(slider, x, Row(y, row++), width);
+                    }
+                }
+                SetRows(row + 2);
+                return;
+            }
+            if (TrackedSelected())
+            {
+                Place(playerVehicleMode, x, Row(y, row++), width, RowHeight, "PLAYER CONTROLS");
+                Place(rigidMass, x, Row(y, row++), width);
+                Place(vehicleCollision, x, Row(y, row++), width, RowHeight, "CONTACT TEST");
+                for (size_t i = 0; i < trackedTuning.size(); ++i)
+                    if (!bridge::TrackedTuningFields[i].advanced)
+                        Place(trackedTuning[i], x, Row(y, row++), width);
+                trackedAdvanced.SetText(showTrackedAdvanced ? "HIDE ADVANCED" : "ADVANCED");
+                Place(trackedAdvanced, x, Row(y, row++), width);
+                if (showTrackedAdvanced)
+                    for (size_t i = 0; i < trackedTuning.size(); ++i)
+                        if (bridge::TrackedTuningFields[i].advanced)
+                            Place(trackedTuning[i], x, Row(y, row++), width);
+                SetRows(row + 2);
+                return;
+            }
+            if (ForceFlightSelected())
+            {
+                Place(playerVehicleMode, x, Row(y, row++), width, RowHeight, "PLAYER CONTROLS");
+                Place(rigidMass, x, Row(y, row++), width);
+                Place(rigidLinearDamping, x, Row(y, row++), width);
+                Place(rigidAngularDamping, x, Row(y, row++), width);
+                SetRows(row + 2);
+                return;
+            }
+            Place(vehiclePhysicsPreview, x, Row(y, row++), width);
+            Place(playerVehicleMode, x, Row(y, row++), width, RowHeight, "PLAYER CONTROLS");
             Place(vehicleType, x, Row(y, row), column); Place(vehicleCollision, x + column + gap, Row(y, row++), column);
+            ++row;
+            constexpr std::array<const char*, 4> wheelCaptions = {
+                "FRONT LEFT WHEEL", "FRONT RIGHT WHEEL", "REAR LEFT WHEEL", "REAR RIGHT WHEEL"};
+            for (std::size_t i = 0; i < vehicleWheels.size(); i += 2)
+            {
+                Place(vehicleWheels[i], x, Row(y, row), column, RowHeight, wheelCaptions[i]);
+                Place(vehicleWheels[i + 1], x + column + gap, Row(y, row), column, RowHeight, wheelCaptions[i + 1]);
+                row += 2;
+            }
             row++;
             Place(vehicleChassisWidth, x, Row(y, row), column); Place(vehicleChassisHeight, x + column + gap, Row(y, row++), column);
             Place(vehicleChassisLength, x, Row(y, row), column); Place(vehicleWheelRadius, x + column + gap, Row(y, row++), column);
@@ -1885,6 +2966,9 @@ namespace renegade::studio
             Place(vehicleClutch, x, Row(y, row), column); Place(vehicleRoll, x + column + gap, Row(y, row++), column);
             Place(vehicleSteering, x, Row(y, row), column); Place(vehicleFrontOffset, x + column + gap, Row(y, row++), column);
             Place(vehicleRearOffset, x, Row(y, row++), column);
+            Place(steeringWheel, x, Row(y, row++), width, RowHeight, "STEERING WHEEL");
+            for (auto& axis : steeringWheelAxis) Place(axis, x, Row(y, row++), width);
+            Place(steeringWheelTravel, x, Row(y, row++), width);
             row++;
             Place(vehicleFrontSuspMin, x, Row(y, row), column); Place(vehicleFrontSuspMax, x + column + gap, Row(y, row++), column);
             Place(vehicleFrontSuspFrequency, x, Row(y, row), column); Place(vehicleFrontSuspDamping, x + column + gap, Row(y, row++), column);
@@ -1895,11 +2979,6 @@ namespace renegade::studio
             Place(vehicleMotoAngle, x, Row(y, row), column); Place(vehicleMotoFrontBrake, x + column + gap, Row(y, row++), column);
             Place(vehicleMotoRearBrake, x, Row(y, row), column); Place(vehicleMotoLean, x + column + gap, Row(y, row++), column);
             row++;
-            for (std::size_t i = 0; i < vehicleWheels.size(); i += 2)
-            {
-                Place(vehicleWheels[i], x, Row(y, row), column);
-                Place(vehicleWheels[i + 1], x + column + gap, Row(y, row++), column);
-            }
             row++;
             Place(vehicleTestThrottle, x, Row(y, row), column); Place(vehicleTestSteer, x + column + gap, Row(y, row++), column);
             Place(vehicleTestBrake, x, Row(y, row), column); Place(vehicleTestHandbrake, x + column + gap, Row(y, row++), column);
@@ -1920,6 +2999,7 @@ namespace renegade::studio
         {
             Place(softAdd, x, Row(y, 0), column); Place(softRemove, x + column + gap, Row(y, 0), column);
             Place(softReset, x, Row(y, 1), column); Place(softWake, x + column + gap, Row(y, 1), column);
+            Place(softPinTop, x, Row(y, 2), column); Place(softClearPins, x + column + gap, Row(y, 2), column);
             Place(softDetail, x, Row(y, 3), column); Place(softMass, x + column + gap, Row(y, 3), column);
             Place(softFriction, x, Row(y, 4), column); Place(softRestitution, x + column + gap, Row(y, 4), column);
             Place(softPressure, x, Row(y, 5), column); Place(softVertexRadius, x + column + gap, Row(y, 5), column);
@@ -1961,6 +3041,15 @@ namespace renegade::studio
     bool RenegadePhysicsLabWorkspace::IsActive() const noexcept
     {
         return impl_->active;
+    }
+
+    void RenegadePhysicsLabWorkspace::SetPage(Page page)
+    {
+        if (page >= Page::Count || impl_->page == page)
+            return;
+        impl_->page = page;
+        impl_->scrollY = 0.f;
+        impl_->RequestRefresh();
     }
 
     void RenegadePhysicsLabWorkspace::SetBounds(const XMFLOAT4& bounds)

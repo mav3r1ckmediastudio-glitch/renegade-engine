@@ -1,0 +1,55 @@
+{
+  "slug": "split-granite-boulder",
+  "name": "Split Granite Boulder",
+  "category": "rocks",
+  "tags": [
+    "rock",
+    "boulder",
+    "granite",
+    "savanna",
+    "africa",
+    "lichen",
+    "split rock"
+  ],
+  "description": "A low granite boulder about 2.1 m long, split across by an open joint. Pinkish tan granite with dark patina and lichen, with a few tufts of dry grass at its foot.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-11-07",
+  "updated": "2026-11-07",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 2.929,
+    "y": 1.033,
+    "z": 2.23
+  },
+  "parts": [],
+  "animations": [],
+  "wind": true,
+  "preview": "/models/split-granite-boulder/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/split-granite-boulder/v1/lod0.glb",
+      "bytes": 515144,
+      "sha256": "613c981054472ad08e453a1ca07118e482426fe4ca93facb3ba0e2d90c66e06e",
+      "triangles": 1770
+    },
+    {
+      "lod": 1,
+      "path": "/models/split-granite-boulder/v1/lod1.glb",
+      "bytes": 185640,
+      "sha256": "ea8e7a110dfd166b05dcfd65b07e94c26876722d566e7ac3f02b46cb7a90fec4",
+      "triangles": 596
+    },
+    {
+      "lod": 2,
+      "path": "/models/split-granite-boulder/v1/lod2.glb",
+      "bytes": 62912,
+      "sha256": "64827b4247bc570a7089feb6a50a69788638fa35cd59f52a8397cde1f9da1ca9",
+      "triangles": 158
+    }
+  ]
+}

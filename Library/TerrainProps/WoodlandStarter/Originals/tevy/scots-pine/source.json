@@ -1,0 +1,54 @@
+{
+  "slug": "scots-pine",
+  "name": "Scots Pine",
+  "category": "trees",
+  "tags": [
+    "tree",
+    "pine",
+    "conifer",
+    "forest",
+    "nature",
+    "roadside"
+  ],
+  "description": "Mature Scots pine, about 20 m tall, with a long bare orange upper trunk, a flat-topped crown and tufts of paired needles.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-10-26",
+  "updated": "2026-10-27",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 10.857,
+    "y": 20.901,
+    "z": 10.966
+  },
+  "parts": [],
+  "animations": [],
+  "wind": true,
+  "preview": "/models/scots-pine/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/scots-pine/v1/lod0.glb",
+      "bytes": 4342348,
+      "sha256": "937d65ec30f47b72800e684d9cb1c1b4524bcfbb1bcd65bd4532c1e28dd47f7b",
+      "triangles": 46910
+    },
+    {
+      "lod": 1,
+      "path": "/models/scots-pine/v1/lod1.glb",
+      "bytes": 1901988,
+      "sha256": "9b6b04bd8c42f94abb5f6553106642eec808439ae2309846583b915c9b1c8d90",
+      "triangles": 11450
+    },
+    {
+      "lod": 2,
+      "path": "/models/scots-pine/v1/lod2.glb",
+      "bytes": 317720,
+      "sha256": "56a64a57948d13d22ed859bcee0ce5e284159a069942d2ea0e3f0d2169a41a8b",
+      "triangles": 1942
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "slug": "hazel-shrub",
+  "name": "Hazel Shrub",
+  "category": "plants",
+  "tags": [
+    "plant",
+    "shrub",
+    "hazel",
+    "bush",
+    "understory",
+    "hedge",
+    "broadleaf",
+    "forest",
+    "nature",
+    "roadside"
+  ],
+  "description": "Multi-stemmed common hazel, about 4.5 m tall: straight grey-brown stems fanning out from one stool into an open crown of round, double-toothed, softly hairy leaves, with a few catkins and nuts.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-10-26",
+  "updated": "2026-10-26",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 6.899,
+    "y": 4.634,
+    "z": 5.978
+  },
+  "parts": [],
+  "animations": [],
+  "wind": true,
+  "preview": "/models/hazel-shrub/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/hazel-shrub/v1/lod0.glb",
+      "bytes": 842352,
+      "sha256": "25408075168c11a8642abf2e90327f916af7075a4f57b33b18223f40c7bb79b6",
+      "triangles": 11672
+    },
+    {
+      "lod": 1,
+      "path": "/models/hazel-shrub/v1/lod1.glb",
+      "bytes": 253452,
+      "sha256": "f99a1c396f82d554b88dc51cc05856f3abeb27c0f07664e4e0f31896bb225c91",
+      "triangles": 2554
+    },
+    {
+      "lod": 2,
+      "path": "/models/hazel-shrub/v1/lod2.glb",
+      "bytes": 97288,
+      "sha256": "64cae6a617c34e83efcd3db9d03976ca334c6327da91b7eb9817248747d2d789",
+      "triangles": 1070
+    }
+  ]
+}

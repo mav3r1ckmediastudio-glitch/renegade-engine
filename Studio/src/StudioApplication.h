@@ -27,6 +27,7 @@
 #include "renegade/bridge/AssetBrowserService.h"
 #include "renegade/bridge/LightService.h"
 #include "renegade/bridge/CameraService.h"
+#include "renegade/bridge/VehicleCockpitCamera.h"
 #include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/DiagnosticService.h"
 #include "renegade/bridge/PlayerService.h"
@@ -76,6 +77,10 @@ namespace renegade::studio
         void SetLevelWorkspaceActive(bool active) noexcept { levelWorkspaceActive_ = active; }
         [[nodiscard]] bool SceneOverlaysVisible() const noexcept
         {
+            return !cockpitPreviewCamera_ && CurrentSceneOverlayState().Visible();
+        }
+        [[nodiscard]] ui::SceneOverlayState CurrentSceneOverlayState() const noexcept
+        {
             const bool tool = dialogueEditor_.IsVisible() || dialogueFrameSuspended_ ||
                 lightPicker_.IsVisible() || particlePicker_.IsVisible() || lightPickerFrameSuspended_ ||
                 modelImportPanel_.IsVisible() || assemblyPanel_.IsVisible() ||
@@ -86,7 +91,7 @@ namespace renegade::studio
                 pickupPanel_.IsVisible() || scenePrefabSavePanel_.IsVisible();
             return ui::SceneOverlayState{levelWorkspaceActive_,projectHubVisible_,
                 projectLoadingOverlay_.IsVisible(),testLevelRuntime_.IsActive() || testLevelFrameSuspended_,
-                studioChrome_.IsPhysicsLabActive(),tool}.Visible();
+                studioChrome_.IsPhysicsLabActive(),tool};
         }
         [[nodiscard]] bool SceneOverlayInputAllowed(const XMFLOAT4& pointer) const noexcept
         {
@@ -130,6 +135,16 @@ namespace renegade::studio
         void QueueInspectorRefresh() noexcept;
         void RefreshProjectHub();
         void RefreshAssetBrowser();
+        void EndVehicleCockpitPreview();
+        void UpdateVehicleCockpitPreview();
+        std::optional<wi::scene::CameraComponent> cockpitPreviewCamera_;
+        std::optional<bridge::VehicleCockpitCamera> cockpitPreviewDraft_;
+        std::vector<wi::ecs::Entity> cockpitPreviewGlass_;
+        bridge::VehicleCockpitCamera cockpitPreviewDefault_;
+        wi::ecs::Entity cockpitPreviewChassis_ = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity cockpitPreviewSelection_ = wi::ecs::INVALID_ENTITY;
+        std::uint64_t cockpitPreviewSceneRevision_ = 0;
+
         void UpdatePlayerCameraPreview(float dt);
         void DrawPlayerCameraPreview(wi::graphics::CommandList cmd) const;
         XMFLOAT4 PlayerCameraPreviewBounds() const noexcept;
@@ -252,7 +267,7 @@ namespace renegade::studio
         // destroys the Inspector's section state.
         void SyncAudioInspectorPresentation()
         {
-            if (studioChrome_.IsAudioWorkspaceActive())
+            if (studioChrome_.IsAudioWorkspaceActive() || studioChrome_.IsPhysicsLabActive())
             {
                 inspectorPanel_.wi::gui::Widget::SetVisible(false);
                 renderWorkspacePanel_.wi::gui::Widget::SetVisible(false);
@@ -836,7 +851,7 @@ namespace renegade::studio
         bool HandleViewportSelection(const XMFLOAT4& pointer);
         void HandleViewportNavigation(float dt, const XMFLOAT4& pointer);
         [[nodiscard]] bool IsPointerOverViewport(
-            const XMFLOAT4& pointer) const noexcept;
+            const XMFLOAT4& pointer, bool forNavigation = false) const noexcept;
         [[nodiscard]] bool IsSelectedEntityValid() const;
         void OpenProject();
         void OpenScene();
@@ -930,6 +945,8 @@ namespace renegade::studio
         wi::gui::Window inspectorPanel_;
         std::unique_ptr<ProjectInspectorSectionPreferenceStore> inspectorSectionPreferences_;
         InspectorSectionRegistry inspectorSectionRegistry_;
+        std::weak_ptr<IInspectorSectionProvider> physicsInspectorSection_;
+        std::weak_ptr<IInspectorSectionProvider> cockpitCameraInspectorSection_;
         std::uint64_t inspectorDisclosureSelectionRevision_ =
             static_cast<std::uint64_t>(-1);
         int inspectorDisclosureViewToken_ = -1;
@@ -1754,10 +1771,7 @@ namespace renegade::studio
         bool scenePopupInputCaptured_ = false;
     };
 
-    // The Physics Lab is a GUI workspace over the authoritative Scene render
-    // path. When it owns the viewport, bypass only Studio's post-3D editor
-    // overlays (selection outline and transform gizmo). The 3D scene itself,
-    // shared hierarchy/selection state and Wicked GUI continue to run normally.
+    // The Physics Lab shares the live Scene render path and the Inspector dock.
     class PhysicsLabStudioRenderPath final : public StudioRenderPath
     {
     public:
@@ -1774,11 +1788,6 @@ namespace renegade::studio
             if (IsTestLevelRuntimeActive())
             {
                 StudioRenderPath::Render();
-                return;
-            }
-            if (IsPhysicsLabActive())
-            {
-                wi::RenderPath3D::Render();
                 return;
             }
             StudioRenderPath::Render();

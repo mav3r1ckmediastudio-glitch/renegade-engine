@@ -1,0 +1,55 @@
+{
+  "slug": "silver-birch",
+  "name": "Silver Birch",
+  "category": "trees",
+  "tags": [
+    "tree",
+    "birch",
+    "broadleaf",
+    "deciduous",
+    "forest",
+    "nature",
+    "roadside"
+  ],
+  "description": "Mature silver birch, about 16 m tall, with white papery bark that turns black and fissured at the base, weeping outer twigs and an airy crown of small triangular leaves.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-10-26",
+  "updated": "2026-10-26",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 10.995,
+    "y": 18.204,
+    "z": 10.474
+  },
+  "parts": [],
+  "animations": [],
+  "wind": true,
+  "preview": "/models/silver-birch/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/silver-birch/v1/lod0.glb",
+      "bytes": 4651496,
+      "sha256": "e12466d3c07083acdbb248b252b8129fb72808d4d2bf9d08580ff646ab34e44b",
+      "triangles": 34726
+    },
+    {
+      "lod": 1,
+      "path": "/models/silver-birch/v1/lod1.glb",
+      "bytes": 1303800,
+      "sha256": "ba9ccd03ba2d0ad21f82eb6fd9934712822946b6c869069a17f3d5580b7ddedc",
+      "triangles": 11108
+    },
+    {
+      "lod": 2,
+      "path": "/models/silver-birch/v1/lod2.glb",
+      "bytes": 567360,
+      "sha256": "a6ae6b4384feeb955fdd5e23d21fa5d1feb821ddda1dd1d95892b82a1728bb92",
+      "triangles": 5446
+    }
+  ]
+}

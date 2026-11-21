@@ -1,0 +1,50 @@
+{
+  "product": "LimestoneBoulder.glb",
+  "category": "Rocks and boulders",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/limestone-boulder-medium",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/limestone-boulder-medium/v1/lod0.glb",
+      "bytes": 330112,
+      "sha256": "7890f8da7f1a2b3099a599679d3630d4320ba715b975168ce26abdb0ac895f2c",
+      "triangles": 2070
+    },
+    {
+      "lod": 1,
+      "path": "/models/limestone-boulder-medium/v1/lod1.glb",
+      "bytes": 144616,
+      "sha256": "cb9917608d8744b5f68ac937c496bf8d287671c2daa6323ade8a05ee2d825473",
+      "triangles": 664
+    },
+    {
+      "lod": 2,
+      "path": "/models/limestone-boulder-medium/v1/lod2.glb",
+      "bytes": 67884,
+      "sha256": "5371384e0ed0f6254a11e38d9d81661ec5d488b76a4269152a9e858e4c33f12b",
+      "triangles": 146
+    }
+  ],
+  "dimensions_m": [
+    1.46708,
+    0.77981,
+    1.48576
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "cc1a4b83c28188db2a10e8227716fec5d69b5cead28de264cf2ab9a9d7cc605e",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    0.008793056011199951,
+    0.048580098895623536,
+    0.047590792179107666
+  ]
+}

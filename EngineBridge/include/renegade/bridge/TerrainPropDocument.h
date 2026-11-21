@@ -46,6 +46,12 @@ namespace renegade::bridge
         const StableId& projectId, const std::string& digest,
         TerrainPropDocument& document, std::string& error);
 
+    // Capture only immutable revision identities on the scene-owning thread.
+    bool CaptureTerrainPropRevisionRefs(const wi::scene::Scene& scene, const StableId& projectId,
+        std::vector<std::string>& revisions, std::string& error);
+    bool CollectTerrainPropDependencies(const std::vector<std::string>& revisions,
+        const std::filesystem::path& root, const StableId& projectId, std::vector<std::string>& files,
+        std::vector<StableId>& models, std::string& error);
     bool CollectTerrainPropDependencies(const wi::scene::Scene& scene, const std::filesystem::path& root,
         const StableId& projectId, std::vector<std::string>& files, std::vector<StableId>& models,
         std::string& error);

@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace renegade::bridge
@@ -171,6 +172,7 @@ namespace renegade::bridge
         // one declaration of this member in that unit. All normal callers see
         // both the creator-facing router and this explicit backend.
         [[nodiscard]] PreparedReusableModelPlacement PrepareModelAssetPlacementLegacy(
-            const ReusableModelPlacementRequest& request) const;
+            const ReusableModelPlacementRequest& request,
+            std::unordered_set<std::string>* embeddedResources = nullptr) const;
     };
 }

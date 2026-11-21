@@ -1,0 +1,50 @@
+{
+  "product": "RiverCobble.glb",
+  "category": "Rocks and boulders",
+  "provider": "tevy",
+  "authors": [
+    "tevy"
+  ],
+  "license": "CC0-1.0",
+  "source_page": "https://tevy.dev/models/flat-quartzite-river-pebble",
+  "license_source": "https://tevy.dev/docs",
+  "source_version": 1,
+  "source_files": [
+    {
+      "lod": 0,
+      "path": "/models/flat-quartzite-river-pebble/v1/lod0.glb",
+      "bytes": 79652,
+      "sha256": "5709b4a1e14c799a040c3fca022ba20f249add300d5af00d3ebdc4ee9d465275",
+      "triangles": 414
+    },
+    {
+      "lod": 1,
+      "path": "/models/flat-quartzite-river-pebble/v1/lod1.glb",
+      "bytes": 46612,
+      "sha256": "500eb79b0d8c583f0548418101d8493f7d9ca6d627aa8399f0fbe5a9390d2391",
+      "triangles": 138
+    },
+    {
+      "lod": 2,
+      "path": "/models/flat-quartzite-river-pebble/v1/lod2.glb",
+      "bytes": 21612,
+      "sha256": "db1430a196c13e7dd4d471689f184a29d8e7a4202212c5fe11aca1426e268f4c",
+      "triangles": 32
+    }
+  ],
+  "dimensions_m": [
+    0.2953,
+    0.09485,
+    0.2617
+  ],
+  "up": "+Y",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "sha256": "ca75a8ffb0c7b8b2a981663accc5d9e8ba757fb52adffb7231871191b906c687",
+  "preparation": "Decoded meshopt geometry and KTX2 images, retained material slots and converted quantized vertex attributes to floats.",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    0.00709967315196991,
+    0.004851615620986127,
+    -0.001971036195755005
+  ]
+}

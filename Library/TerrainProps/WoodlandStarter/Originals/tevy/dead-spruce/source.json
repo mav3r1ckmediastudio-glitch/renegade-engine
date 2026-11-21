@@ -1,0 +1,58 @@
+{
+  "slug": "dead-spruce",
+  "name": "Dead Spruce Snag",
+  "category": "trees",
+  "tags": [
+    "tree",
+    "spruce",
+    "dead tree",
+    "snag",
+    "deadwood",
+    "lichen",
+    "conifer",
+    "forest",
+    "nature",
+    "roadside"
+  ],
+  "description": "Standing dead spruce, about 12 m tall, with a snapped jagged top. Grey bark falls away in patches from silver weathered wood; bare drooping branches, many broken short, carry dead twigs and pale beard lichen that sway in the wind.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-10-26",
+  "updated": "2026-10-26",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 4.589,
+    "y": 12.603,
+    "z": 3.999
+  },
+  "parts": [],
+  "animations": [],
+  "wind": true,
+  "preview": "/models/dead-spruce/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/dead-spruce/v1/lod0.glb",
+      "bytes": 1194380,
+      "sha256": "6a9011d7046b0a8475aaf7c0a651b223c20f80514d5813f181a45165579b017b",
+      "triangles": 6374
+    },
+    {
+      "lod": 1,
+      "path": "/models/dead-spruce/v1/lod1.glb",
+      "bytes": 805368,
+      "sha256": "93d6c2229ae34d3b44f6b0049b21034ca7e531b2f9ddd3c8b63544afd52fa6c7",
+      "triangles": 2253
+    },
+    {
+      "lod": 2,
+      "path": "/models/dead-spruce/v1/lod2.glb",
+      "bytes": 126908,
+      "sha256": "f68a00921f061b639fd415ac363ac5abcce07b988cd00dd6886cfb45a61802af",
+      "triangles": 522
+    }
+  ]
+}

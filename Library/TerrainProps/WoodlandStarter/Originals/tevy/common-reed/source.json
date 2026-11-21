@@ -1,0 +1,56 @@
+{
+  "slug": "common-reed",
+  "name": "Common Reed Clump",
+  "category": "plants",
+  "tags": [
+    "plant",
+    "reed",
+    "reeds",
+    "lake",
+    "shore",
+    "wetland",
+    "water",
+    "nature"
+  ],
+  "description": "Clump of common reed standing in shallow water, about 2 x 1.4 m. Green stems 1.5 to 2.5 m tall with grey-green leaves and purple-brown plumes, mixed with last year's straw-coloured stems. Plant clumps about 1.5 m apart along the shore.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-10-26",
+  "updated": "2026-10-26",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 2.837,
+    "y": 3.171,
+    "z": 2.193
+  },
+  "parts": [],
+  "animations": [],
+  "wind": true,
+  "preview": "/models/common-reed/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/common-reed/v1/lod0.glb",
+      "bytes": 1210800,
+      "sha256": "b1c835c55230b2b3e9c33ba823a416daafbddfc109b810c4b7b09ecdd58ececf",
+      "triangles": 17108
+    },
+    {
+      "lod": 1,
+      "path": "/models/common-reed/v1/lod1.glb",
+      "bytes": 355124,
+      "sha256": "2f828380660cc87e638e1c360fef6043115ff16dea1e2be61a1c0ac1d294da9c",
+      "triangles": 4040
+    },
+    {
+      "lod": 2,
+      "path": "/models/common-reed/v1/lod2.glb",
+      "bytes": 183936,
+      "sha256": "b1d5e6fc9f3d931a9f5f31a87e447c640c6c8cad6ea995016dd4b0799c300349",
+      "triangles": 72
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "provider": "Renegade Engine",
+  "authors": [
+    "Maverick Media Studio"
+  ],
+  "license": "Original starter artwork for Renegade Engine",
+  "source_page": "Included procedural source and the three original leaf textures",
+  "license_source": "Original Renegade content",
+  "pivot": "Ground level at the centre of the XZ footprint",
+  "seed": 44386,
+  "product": "OakLeafLitter.glb",
+  "category": "Debris",
+  "up": "+Y",
+  "dimensions_m": [
+    0.5833,
+    0.02333,
+    0.43663
+  ],
+  "sha256": "06bd5992b3e3db3028fdc901eb701b1e714728fdfff1bfd32da6d54b52ca0ba1",
+  "ground_transform_applied": true,
+  "asset_root_translation_m": [
+    0.011132866144180298,
+    0.0016589006409049034,
+    0.00578317791223526
+  ],
+  "redistribution": "Renegade-authored starter artwork. Supplied for inclusion with Renegade Engine and in games made with it."
+}

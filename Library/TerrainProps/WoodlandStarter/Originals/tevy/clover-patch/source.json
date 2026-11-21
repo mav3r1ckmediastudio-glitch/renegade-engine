@@ -1,0 +1,58 @@
+{
+  "slug": "clover-patch",
+  "name": "White Clover Patch",
+  "category": "plants",
+  "tags": [
+    "plant",
+    "ground cover",
+    "clover",
+    "white clover",
+    "wildflower",
+    "flower",
+    "lawn",
+    "meadow",
+    "verge",
+    "nature"
+  ],
+  "description": "Patch of white clover about 50 cm across, with five round white flower heads on stalks up to 15 cm. Three-part leaves with a pale chevron rise from runners creeping over the ground; older florets turn pink-brown under each head.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-10-27",
+  "updated": "2026-10-27",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 0.477,
+    "y": 0.159,
+    "z": 0.426
+  },
+  "parts": [],
+  "animations": [],
+  "wind": true,
+  "preview": "/models/clover-patch/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/clover-patch/v1/lod0.glb",
+      "bytes": 460276,
+      "sha256": "5135032e19b11bcd8a4e60fd7f45fcad33c9b51c0ea6bd8f14daefe58a19af7b",
+      "triangles": 4510
+    },
+    {
+      "lod": 1,
+      "path": "/models/clover-patch/v1/lod1.glb",
+      "bytes": 175156,
+      "sha256": "0076550e16ee3027ca91a2ff41354fd230227be0e8a411725b5b99e87774bfb1",
+      "triangles": 836
+    },
+    {
+      "lod": 2,
+      "path": "/models/clover-patch/v1/lod2.glb",
+      "bytes": 56996,
+      "sha256": "c73ca692019d486f3ffb5353949966703ee17ccccd6da5d3186b307928699a4a",
+      "triangles": 138
+    }
+  ]
+}

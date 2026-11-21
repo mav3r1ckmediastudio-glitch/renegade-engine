@@ -276,6 +276,15 @@ namespace renegade::bridge
         return true;
     }
 
+    void TerrainPropProjection::SetPageDetailCoverage(Cell cell, float coverage)
+    {
+        const auto page = pageEntities_.find(cell);
+        if (page == pageEntities_.end()) return;
+        for (auto entity : page->second)
+            if (auto* object = scene_.objects.GetComponent(entity))
+                SetTerrainPropDetailCoverage(*object, coverage);
+    }
+
     void TerrainPropProjection::EvictPage(Cell cell)
     {
         const auto found = pageEntities_.find(cell);

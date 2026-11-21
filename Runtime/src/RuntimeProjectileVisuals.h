@@ -54,8 +54,9 @@ namespace renegade::runtime
             t->ClearTransform();t->MatrixTransform(pose);t->UpdateTransform();return true;
         }
         struct Effect { wi::ecs::Entity entity; float seconds; };
-        struct GrenadeFlash { wi::ecs::Entity light; float seconds; float radius; };
-        std::vector<GrenadeFlash> grenadeFlashes;
+        struct BlastFlash { wi::ecs::Entity light; float seconds; float duration; float intensity; };
+        std::vector<BlastFlash> blastFlashes;
+        static constexpr char BastionRoundId[] = "dc026d08-91c9-482d-90a3-8211659c983e";
         struct ImpactDecal { wi::ecs::Entity entity; float seconds; RuntimeImpactMarks::Anchor anchor; float bleedAge=-1; };
         std::vector<Retained> retained;
         std::vector<Effect> dyingEffects;
@@ -79,13 +80,13 @@ namespace renegade::runtime
             for (const auto& [id, root] : instances) scene.Entity_Remove(root);
             for(const auto& r:retained)scene.Entity_Remove(r.root);
             for(const auto& e:dyingEffects)scene.Entity_Remove(e.entity);
-            for(const auto& f:grenadeFlashes)scene.Entity_Remove(f.light);
+            for(const auto& f:blastFlashes)scene.Entity_Remove(f.light);
             for(const auto& d:impactDecals)scene.Entity_Remove(d.entity);
             channelScorchCanvas.Reset(scene);
             impactGeometry.Reset(scene);blood.Reset(scene);
             blood.directionalPrototype=std::getenv("RENEGADE_DIRECTIONAL_BLOOD")!=nullptr;
             retained.clear();dyingEffects.clear();impactDecals.clear();flightEffects.clear();
-            grenadeFlashes.clear();
+            blastFlashes.clear();
             instances.clear(); instanceAssets.clear(); roots.clear(); templates.clear(); error.clear();
             lightningScorchPrewarmVariant=0;
         }
@@ -812,36 +813,120 @@ namespace renegade::runtime
                 wi::jobsystem::Wait(ctx);
             }
         }
+        void SpawnBastionShot(wi::scene::Scene& scene, RuntimeProjectileSession& session,
+            std::uint64_t id, const XMFLOAT3& origin, const XMFLOAT3& direction)
+        {
+            const auto root = scene.Entity_CreateTransform("Bastion range shell");
+            instances.emplace(id, root);
+            roots.push_back(root);
+            session.presentedProjectiles.insert(id);
+
+            const auto addShape = [&](const char* name, XMFLOAT3 scale, float z, XMFLOAT4 color,
+                                      XMFLOAT4 emissive, bool additive) {
+                const auto entity = scene.Entity_CreateSphere(name, 1.f, 8, 12);
+                scene.Component_Attach(entity, root, true);
+                auto& t = *scene.transforms.GetComponent(entity);
+                t.Scale(scale);
+                t.Translate(XMFLOAT3(0, 0, z));
+                auto& material = *scene.materials.GetComponent(entity);
+                material.SetBaseColor(color);
+                material.SetEmissiveColor(emissive);
+                if (additive) material.userBlendMode = wi::enums::BLENDMODE_ADDITIVE;
+                material.SetDirty();
+            };
+            addShape("Bastion glowing shell", {.16f,.16f,.42f}, 0,
+                {1.f,.68f,.29f,1.f}, {1.f,.56f,.16f,4.f}, false);
+            addShape("Bastion tracer core", {.075f,.075f,2.75f}, -2.6f,
+                {1.f,.37f,.06f,.92f}, {1.f,.26f,.035f,2.8f}, true);
+            addShape("Bastion tracer halo", {.19f,.19f,2.85f}, -2.65f,
+                {1.f,.21f,.025f,.26f}, {1.f,.16f,.015f,.7f}, true);
+
+            if (EffectCount() + 2 > 128) return;
+
+            // World-space smoke lingers where fired while the turret continues to move.
+            for (const bool flash : {true, false})
+            {
+                bridge::ProjectileEffectLayer recipe;
+                recipe.kind = flash ? bridge::ProjectileEffectKind::Flame : bridge::ProjectileEffectKind::Smoke;
+                recipe.sizeMetres = flash ? .95f : 2.35f;
+                recipe.particleLifeSeconds = flash ? .13f : 1.32f;
+                const auto entity = bridge::CreateProjectileEffectEmitter(scene, recipe, origin, true);
+                auto& emitter = *scene.emitters.GetComponent(entity);
+                emitter.burst_on_create = flash ? 13 : 32;
+                emitter.SetMaxParticleCount(flash ? 20 : 40);
+                emitter.random_factor = flash ? .65f : .44f;
+                emitter.normal_factor = flash ? 2.4f : 1.55f;
+                const float push = flash ? 4.f : 1.75f;
+                emitter.velocity = {direction.x*push, direction.y*push + (flash ? 0.f : .7f), direction.z*push};
+                emitter.scaleX = flash ? .48f : 1.85f;
+                emitter.scaleY = flash ? .48f : 1.85f;
+                emitter.SetOpacityCurveControl(.04f, flash ? .24f : .42f);
+                auto& material = *scene.materials.GetComponent(entity);
+                if (!flash)
+                {
+                    material.SetBaseColor({.29f,.28f,.27f,.59f});
+                    const auto& mask = RuntimeGrenadeExplosionFX::Texture(RuntimeGrenadeExplosionFX::Soot);
+                    if(mask.IsValid())
+                        material.textures[wi::scene::MaterialComponent::BASECOLORMAP].resource.SetTexture(mask);
+                }
+                material.SetDirty();
+                dyingEffects.push_back({entity, flash ? .24f : 1.65f});
+            }
+        }
+
+        void PresentBlast(wi::scene::Scene& scene, const XMFLOAT3& point, float radius, float scale,
+                          float duration, float intensity, const char* lightName)
+        {
+            if(EffectCount()+RuntimeGrenadeExplosionFX::Count>128)return;
+            for(const auto& layer:RuntimeGrenadeExplosionFX::Create(scene,point,scale))
+                dyingEffects.push_back({layer.entity,layer.duration});
+            if(blastFlashes.size()>=12){
+                scene.Entity_Remove(blastFlashes.front().light);
+                blastFlashes.erase(blastFlashes.begin());
+            }
+            const auto light=scene.Entity_CreateLight(lightName,point,
+                XMFLOAT3{1.f,.64f,.31f},intensity,radius,wi::scene::LightComponent::POINT);
+            blastFlashes.push_back({light,duration,duration,intensity});
+        }
+
+        void PresentBastionImpact(wi::scene::Scene& scene, const bridge::ProjectileContact& contact)
+        {
+            const XMFLOAT3 point{
+                contact.position.x + contact.normal.x * .22f,
+                contact.position.y + contact.normal.y * .22f,
+                contact.position.z + contact.normal.z * .22f};
+            PresentBlast(scene,point,9.f,3.4f,.23f,38.f,"Bastion impact flash");
+        }
+
         void PresentGrenadeExplosion(wi::scene::Scene& scene,
                                      const bridge::ProjectileExplosion& explosion) {
-            if(!bridge::FiniteProjectileVector(explosion.position) ||
-               explosion.radius<=0 ||
-               EffectCount()+RuntimeGrenadeExplosionFX::Count>128)return;
-            const auto point=ProjectileNativeVector(explosion.position);
-            for(const auto& layer:RuntimeGrenadeExplosionFX::Create(scene,point))
-                dyingEffects.push_back({layer.entity,layer.duration});
-            if(grenadeFlashes.size()>=12){
-                scene.Entity_Remove(grenadeFlashes.front().light);
-                grenadeFlashes.erase(grenadeFlashes.begin());
-            }
-            const auto light=scene.Entity_CreateLight("Grenade transient blast light",point,
-                XMFLOAT3{1.f,.64f,.31f},12.f,explosion.radius*1.5f,
-                wi::scene::LightComponent::POINT);
-            grenadeFlashes.push_back({light,.16f,explosion.radius});
+            if(!bridge::FiniteProjectileVector(explosion.position) || explosion.radius<=0)return;
+            PresentBlast(scene,ProjectileNativeVector(explosion.position),explosion.radius*1.5f,
+                1.f,.16f,12.f,"Grenade transient blast light");
         }
-        void Sync(wi::scene::Scene& scene, const bridge::ProjectileSimulation& simulation,float dt=0)
+        void TickTimedEffects(wi::scene::Scene& scene, float dt)
         {
-            for(auto it=grenadeFlashes.begin();it!=grenadeFlashes.end();) {
+            for(auto it=blastFlashes.begin();it!=blastFlashes.end();) {
                 it->seconds-=std::max(0.f,dt);
                 if(it->seconds<=0){
                     scene.Entity_Remove(it->light);
-                    it=grenadeFlashes.erase(it);
+                    it=blastFlashes.erase(it);
                 } else {
                     if(auto* light=scene.lights.GetComponent(it->light))
-                        light->intensity=12.f*std::pow(it->seconds/.16f,2.f);
+                        light->intensity=it->intensity*std::pow(it->seconds/it->duration,2.f);
                     ++it;
                 }
             }
+            for(auto it=dyingEffects.begin();it!=dyingEffects.end();) {
+                it->seconds-=dt;
+                if(it->seconds<=0) {scene.Entity_Remove(it->entity);it=dyingEffects.erase(it);}
+                else ++it;
+            }
+        }
+
+        void Sync(wi::scene::Scene& scene, const bridge::ProjectileSimulation& simulation,float dt=0)
+        {
+            TickTimedEffects(scene, dt);
             channelScorchCanvas.Sync(scene,dt);
             blood.Update(scene,dt,roots);
             impactGeometry.Update(scene,dt);
@@ -858,8 +943,9 @@ namespace renegade::runtime
                 const auto cached=association==instanceAssets.end() ? templates.end() :
                     templates.find(association->second);
                 const Template* visual=cached==templates.end()?nullptr:&cached->second;
-                if (visual) {
-                    const auto matrix=Pose(visual->definition,record.launch.velocity,
+                if (visual || record.launch.source.sourceAssetId == BastionRoundId) {
+                    const bridge::ProjectileAssetDocument shellPose;
+                    const auto matrix=Pose(visual ? visual->definition : shellPose,record.launch.velocity,
                         record.launch.position,record.grenadeAngle);
                     if(auto* transform=scene.transforms.GetComponent(it->second)) {
                         transform->ClearTransform();transform->MatrixTransform(matrix);transform->UpdateTransform();
@@ -880,11 +966,6 @@ namespace renegade::runtime
                 } else if(!FollowReceiver(scene,*it)) {
                     scene.Entity_Remove(it->root);it=retained.erase(it);
                 } else ++it;
-            }
-            for(auto it=dyingEffects.begin();it!=dyingEffects.end();) {
-                it->seconds-=dt;
-                if(it->seconds<=0) {scene.Entity_Remove(it->entity);it=dyingEffects.erase(it);}
-                else ++it;
             }
             for(auto it=impactDecals.begin();it!=impactDecals.end();) {
                 if(it->bleedAge>=0) {

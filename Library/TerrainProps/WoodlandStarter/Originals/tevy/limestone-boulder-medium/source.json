@@ -1,0 +1,56 @@
+{
+  "slug": "limestone-boulder-medium",
+  "name": "Medium Limestone Boulder",
+  "category": "rocks",
+  "tags": [
+    "rock",
+    "boulder",
+    "limestone",
+    "karst",
+    "lichen",
+    "moss",
+    "nature",
+    "medium"
+  ],
+  "description": "Pale grey limestone boulder about 1.5 m across and 0.8 m tall, blocky with rounded edges. Rain-cut flutes, run-off streaks, lichen spots and moss at the foot.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-11-07",
+  "updated": "2026-11-07",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 1.467,
+    "y": 0.78,
+    "z": 1.486
+  },
+  "parts": [],
+  "animations": [],
+  "wind": false,
+  "preview": "/models/limestone-boulder-medium/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/limestone-boulder-medium/v1/lod0.glb",
+      "bytes": 330112,
+      "sha256": "7890f8da7f1a2b3099a599679d3630d4320ba715b975168ce26abdb0ac895f2c",
+      "triangles": 2070
+    },
+    {
+      "lod": 1,
+      "path": "/models/limestone-boulder-medium/v1/lod1.glb",
+      "bytes": 144616,
+      "sha256": "cb9917608d8744b5f68ac937c496bf8d287671c2daa6323ade8a05ee2d825473",
+      "triangles": 664
+    },
+    {
+      "lod": 2,
+      "path": "/models/limestone-boulder-medium/v1/lod2.glb",
+      "bytes": 67884,
+      "sha256": "5371384e0ed0f6254a11e38d9d81661ec5d488b76a4269152a9e858e4c33f12b",
+      "triangles": 146
+    }
+  ]
+}

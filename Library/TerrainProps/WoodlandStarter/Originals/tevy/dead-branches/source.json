@@ -1,0 +1,58 @@
+{
+  "slug": "dead-branches",
+  "name": "Fallen Dead Branches",
+  "category": "plants",
+  "tags": [
+    "branches",
+    "deadwood",
+    "twigs",
+    "spruce",
+    "birch",
+    "forest floor",
+    "debris",
+    "brush",
+    "nature",
+    "props"
+  ],
+  "description": "Small pile of fallen dead spruce and birch branches about 1.5 m across, with dry twigs and a few brown needles. Origin on the ground at the centre of the pile.",
+  "license": "CC0-1.0",
+  "version": 2,
+  "changes": "Fixed flickering where overlapping surfaces shared the same plane.",
+  "created": "2026-10-26",
+  "updated": "2026-11-06",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 1.696,
+    "y": 0.139,
+    "z": 1.631
+  },
+  "parts": [],
+  "animations": [],
+  "wind": false,
+  "preview": "/models/dead-branches/v2/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/dead-branches/v2/lod0.glb",
+      "bytes": 487104,
+      "sha256": "33d4df76338922bc9fca9e5ca369d942fa9972dbad0073d1c0250a34f42213a1",
+      "triangles": 5332
+    },
+    {
+      "lod": 1,
+      "path": "/models/dead-branches/v2/lod1.glb",
+      "bytes": 194184,
+      "sha256": "78b6aa9c3e2f5f0f5e4ff8ac9a159fed7df08f7ac69def09588e4b25ef8e744f",
+      "triangles": 2606
+    },
+    {
+      "lod": 2,
+      "path": "/models/dead-branches/v2/lod2.glb",
+      "bytes": 54084,
+      "sha256": "d24b3687be61ee96982393bd0616e56b2636be390c90eb840519babf98e97178",
+      "triangles": 162
+    }
+  ]
+}

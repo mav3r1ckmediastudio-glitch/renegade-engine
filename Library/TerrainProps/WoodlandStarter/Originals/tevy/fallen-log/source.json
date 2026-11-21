@@ -1,0 +1,55 @@
+{
+  "slug": "fallen-log",
+  "name": "Fallen Spruce Log",
+  "category": "props",
+  "tags": [
+    "log",
+    "deadwood",
+    "spruce",
+    "wood",
+    "forest",
+    "nature",
+    "roadside"
+  ],
+  "description": "Fallen spruce trunk, about 6 m long and 0.4 m thick, lying on the forest floor. One end sawn with growth rings, the other snapped into splinters. Bark partly peeled to grey weathered wood with beetle galleries, dead branch stubs and moss.",
+  "license": "CC0-1.0",
+  "version": 1,
+  "changes": "First release.",
+  "created": "2026-10-26",
+  "updated": "2026-10-26",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "dimensions": {
+    "x": 6.321,
+    "y": 0.446,
+    "z": 0.479
+  },
+  "parts": [],
+  "animations": [],
+  "wind": false,
+  "preview": "/models/fallen-log/v1/preview.webp",
+  "files": [
+    {
+      "lod": 0,
+      "path": "/models/fallen-log/v1/lod0.glb",
+      "bytes": 1452856,
+      "sha256": "bd819df46691699cb6a1902c5bce074773c8544d4fce02d3e0f00adcb56d1f80",
+      "triangles": 8498
+    },
+    {
+      "lod": 1,
+      "path": "/models/fallen-log/v1/lod1.glb",
+      "bytes": 453492,
+      "sha256": "00d1219213595eb56af1fe860d635df1cd4a50246338c3099456c322e03e417b",
+      "triangles": 2500
+    },
+    {
+      "lod": 2,
+      "path": "/models/fallen-log/v1/lod2.glb",
+      "bytes": 146536,
+      "sha256": "e12fededbca8e2ceba1cac11223515592b65d825e4afa08f8f088ae86a2314f0",
+      "triangles": 420
+    }
+  ]
+}
