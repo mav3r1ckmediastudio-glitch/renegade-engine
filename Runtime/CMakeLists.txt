@@ -195,6 +195,9 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grass.wiscene"
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/grass.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/Content/terrain/foliage"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/foliage"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grassparticle.png"
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/grassparticle.png"

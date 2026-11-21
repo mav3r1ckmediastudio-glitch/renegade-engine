@@ -213,7 +213,7 @@ namespace maximum_terrain_river_proof
             VegetationBrushMode::Paint,&grassBefore);
         Check(painted.changed && painted.affectedVertices>0,"Maximum outer-ring grass paint failed");
         FinalizeWickedVegetationStroke(scene,*terrain,grassBefore);
-        auto grassAfter=CaptureWickedVegetationAfter(*terrain,grassBefore);
+        auto grassAfter=CaptureWickedVegetationAfter(scene,*terrain,grassBefore);
         const auto masks=Grass(*terrain);
         WickedVegetationStrokeCommand grass(scene,terrainID,grassBefore,grassAfter);
         grass.Undo();Check(Grass(*terrain)!=masks,"Maximum grass Undo failed");

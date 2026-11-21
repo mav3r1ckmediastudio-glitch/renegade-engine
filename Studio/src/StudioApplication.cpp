@@ -3287,6 +3287,7 @@ namespace renegade::studio
                 action == RenegadeStudioChrome::Action::SceneWorkspace ||
                 action == RenegadeStudioChrome::Action::EnvironmentWorkspace ||
                 action == RenegadeStudioChrome::Action::TerrainWorkspace ||
+                action == RenegadeStudioChrome::Action::VegetationWorkspace ||
                 action == RenegadeStudioChrome::Action::RenderWorkspace)
             {
                 ResetS1BInspectorDisclosure();
@@ -3376,6 +3377,9 @@ namespace renegade::studio
                 break;
             case RenegadeStudioChrome::Action::EnvironmentWorkspace:
                 RequestDiagnosticAction(EditorAction::OpenEnvironmentWorkspace);
+                break;
+            case RenegadeStudioChrome::Action::VegetationWorkspace:
+                RequestDiagnosticAction(EditorAction::OpenVegetationWorkspace);
                 break;
             case RenegadeStudioChrome::Action::TerrainWorkspace:
                 RequestDiagnosticAction(EditorAction::OpenTerrainWorkspace);
@@ -6431,7 +6435,7 @@ namespace renegade::studio
             const auto* name =
                 session_->Scenes().GetScene().names.GetComponent(entity);
             SetInspectorHeading(
-                "TERRAIN // " +
+                (terrainWorkspaceActive_ && vegetationWorkspace_ ? "VEGETATION // " : "TERRAIN // ") +
                 (multiple ? std::to_string(session_->Selection().Entities().size())+" OBJECTS" :
                     name != nullptr && !name->name.empty()
                     ? name->name
@@ -6823,6 +6827,9 @@ namespace renegade::studio
         case EditorAction::OpenEnvironmentWorkspace:
             SetEnvironmentWorkspaceActive(true);
             break;
+        case EditorAction::OpenVegetationWorkspace:
+            SetTerrainWorkspaceActive(true, true);
+            break;
         case EditorAction::OpenTerrainWorkspace:
             SetTerrainWorkspaceActive(true);
             break;
@@ -6967,15 +6974,25 @@ namespace renegade::studio
         }
         studioChrome_.SetEnvironmentWorkspaceActive(
             environmentWorkspaceActive_);
-        studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_);
+        studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_, vegetationWorkspace_);
         ClearSelectionOutline();
         RefreshHierarchy();
         RefreshInspector();
         RefreshStatus();
     }
 
-    void StudioRenderPath::SetTerrainWorkspaceActive(const bool active)
+    void StudioRenderPath::SetTerrainWorkspaceActive(const bool active, const bool vegetation)
     {
+        if (terrainWorkspaceActive_ && vegetationWorkspace_ != vegetation)
+        {
+            DisableWd01VegetationBrush();
+            DisableTerrainPropBrush();
+            terrainRiverBrushActive_ = false;
+            terrainRiverStrokeActive_ = false;
+            terrainRiverStrokePoints_.clear();
+            terrainRiverBrushButton_.SetText("DRAW RIVER");
+        }
+        vegetationWorkspace_ = active && vegetation;
         if (active && renderWorkspaceActive_)
             SetRenderWorkspaceActive(false);
         if (sunPreviewPlaying_)
@@ -6996,7 +7013,7 @@ namespace renegade::studio
             terrainRiverBrushButton_.SetText("DRAW RIVER");
         }
         studioChrome_.SetEnvironmentWorkspaceActive(environmentWorkspaceActive_);
-        studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_);
+        studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_, vegetationWorkspace_);
         // Preserve a selected river (or one of its spline control points).
         // The Terrain workspace already edits its own terrain carrier; forcing
         // selection to that carrier made every river material control inert.
@@ -9701,7 +9718,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                     return false; // Select terrain again to resume manual sculpting.
             }
         }
-        if (!terrainWorkspaceActive_ || session_ == nullptr || flyCameraActive_ ||
+        if (vegetationWorkspace_ || !terrainWorkspaceActive_ || session_ == nullptr || flyCameraActive_ ||
             GetGUI().HasFocus() || !IsPointerOverViewport(pointer) ||
             session_->Scenes().GetScene().terrains.GetCount() == 0)
         {

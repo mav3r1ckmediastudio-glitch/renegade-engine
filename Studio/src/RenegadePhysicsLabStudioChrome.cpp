@@ -150,6 +150,7 @@ namespace renegade::studio
                     action == Action::SceneWorkspace ||
                     action == Action::EnvironmentWorkspace ||
                     action == Action::TerrainWorkspace ||
+                    action == Action::VegetationWorkspace ||
                     action == Action::RenderWorkspace)
                 {
                     workspaceTransitionRequested_ = true;

@@ -253,6 +253,97 @@ namespace
         return true;
     }
 
+    constexpr const char* PaletteKey = "renegade.grass.atlas_frames.v1";
+    using renegade::bridge::GrassAtlas;
+    using renegade::bridge::VegetationChunkState;
+    using renegade::bridge::VegetationStrokeState;
+
+    GrassAtlas LayerAtlas(const wi::scene::Scene& scene, wi::ecs::Entity entity)
+    {
+        const auto* material = scene.materials.GetComponent(entity);
+        const auto* metadata = scene.metadatas.GetComponent(entity);
+        if (!material || !metadata || !metadata->int_values.has(PaletteKey)) return {};
+        return {material->textures[wi::scene::MaterialComponent::BASECOLORMAP].name,
+            static_cast<unsigned>(metadata->int_values.get(PaletteKey))};
+    }
+
+    void IndexLayers(const wi::scene::Scene& scene, VegetationStrokeState& stroke)
+    {
+        if (stroke.indexed) return;
+        stroke.indexed = true;
+        for (size_t i=0; i<scene.hairs.GetCount(); ++i)
+        {
+            const auto entity = scene.hairs.GetEntity(i);
+            const auto* metadata = scene.metadatas.GetComponent(entity);
+            if (metadata && metadata->int_values.has(PaletteKey))
+                stroke.layers[scene.hairs[i].meshID].push_back(entity);
+        }
+    }
+
+    wi::HairParticleSystem& CreateLayer(wi::scene::Scene& scene, const wi::terrain::Terrain& terrain,
+        wi::ecs::Entity chunk, wi::ecs::Entity entity, const GrassAtlas& atlas, size_t vertices)
+    {
+        auto& hair = scene.hairs.Create(entity);
+        hair = terrain.grass_properties;
+        hair.DeleteRenderData();
+        hair.meshID = chunk;
+        hair.strandCount = 0;
+        hair.vertex_lengths.assign(vertices, 0.f);
+        hair.indices.clear();
+        const auto side = static_cast<unsigned>(std::ceil(std::sqrt(double(atlas.frames))));
+        const float scale = 1.f / side;
+        hair.atlas_rects.resize(atlas.frames);
+        for (unsigned i=0; i<atlas.frames; ++i)
+        {
+            hair.atlas_rects[i].texMulAdd = {scale, scale, (i%side)*scale, (i/side)*scale};
+            hair.atlas_rects[i].size = 1.f;
+        }
+        auto& material = scene.materials.Create(entity);
+        material = terrain.grass_material;
+        material.baseColor = {1,1,1,1};
+        auto& slot = material.textures[wi::scene::MaterialComponent::BASECOLORMAP];
+        slot.name = atlas.path;
+        slot.resource = wi::resourcemanager::Load(slot.name);
+        material.SetDirty();
+        material.CreateRenderData();
+        scene.names.Create(entity) = "Painted grass";
+        scene.transforms.Create(entity);
+        scene.metadatas.Create(entity).int_values.set(PaletteKey, int(atlas.frames));
+        scene.Component_Attach(entity,chunk,true);
+        return hair;
+    }
+
+    void RefreshLayer(wi::HairParticleSystem& hair, const wi::terrain::Terrain& terrain)
+    {
+        hair.strandCount = static_cast<uint32_t>(NativeStrandCount(terrain, ActiveVertexCount(hair))
+            * terrain.grass_density);
+        // Wicked rebuilds the masked index distribution on the next native update.
+        hair._flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
+        hair.SetDirty();
+    }
+
+    void PaintLayer(wi::scene::Scene& scene, const wi::terrain::Terrain& terrain,
+        const wi::terrain::ChunkData& chunk, const wi::scene::MeshComponent& mesh,
+        VegetationStrokeState& stroke, wi::ecs::Entity entity, const std::vector<size_t>& vertices,
+        float target, renegade::bridge::VegetationPaintResult& result)
+    {
+        auto& hair = *scene.hairs.GetComponent(entity);
+        if (hair.vertex_lengths.size()!=mesh.vertex_positions.size()) return;
+        if (std::none_of(vertices.begin(),vertices.end(),[&](size_t v){return hair.vertex_lengths[v]!=target;}))
+            return;
+        auto found = std::find_if(stroke.chunks.begin(),stroke.chunks.end(),
+            [&](const auto& snapshot){return snapshot.layer==entity;});
+        if (found==stroke.chunks.end())
+            stroke.chunks.push_back({chunk.entity,hair.vertex_lengths,entity,LayerAtlas(scene,entity)});
+        for (auto v: vertices)
+        {
+            if (hair.vertex_lengths[v]!=target) ++result.affectedVertices;
+            hair.vertex_lengths[v]=target;
+        }
+        RefreshLayer(hair,terrain);
+        result.changed=true;
+    }
+
     void CaptureBefore(
         renegade::bridge::VegetationStrokeState* state,
         const wi::terrain::ChunkData& chunk)
@@ -261,7 +352,7 @@ namespace
             return;
         for (const auto& existing : state->chunks)
         {
-            if (existing.chunkEntity == chunk.entity)
+            if (existing.chunkEntity == chunk.entity && existing.layer == wi::ecs::INVALID_ENTITY)
                 return;
         }
         renegade::bridge::VegetationChunkState snapshot;
@@ -313,6 +404,19 @@ namespace
 
 namespace renegade::bridge
 {
+    std::vector<fs::path> GrassPaletteEntries(const fs::path& project)
+    {
+        std::vector<fs::path> entries;
+        for (const auto& folder : {fs::u8path(wi::helper::GetExecutablePath()).parent_path() /
+            "Content/terrain/foliage", project / "Content/Vegetation/Palette"})
+        {
+            std::error_code ec;
+            for (fs::directory_iterator it(folder, ec), end; !ec && it != end; it.increment(ec))
+                if (it->path().extension() == ".png" && it->is_regular_file(ec)) entries.push_back(it->path());
+        }
+        std::sort(entries.begin(), entries.end());
+        return entries;
+    }
     bool IsWickedVegetationInitialized(
         const wi::scene::Scene& scene,
         const wi::terrain::Terrain& terrain) noexcept
@@ -487,14 +591,42 @@ namespace renegade::bridge
         return initialized;
     }
 
+    void UpdateGrassInteraction(wi::scene::Scene& scene, wi::ecs::Entity& entity,
+        const XMFLOAT3& position, const XMFLOAT3& normal)
+    {
+        if (!scene.forces.Contains(entity))
+        {
+            entity = wi::ecs::CreateEntity();
+            auto& force = scene.forces.Create(entity);
+            force.type = wi::scene::ForceFieldComponent::Type::Point;
+            force.gravity = -40.f;
+            force.range = 2.f;
+            scene.transforms.Create(entity);
+            scene.metadatas.Create(entity).runtimeProjectionOnly = true;
+        }
+        auto& transform = *scene.transforms.GetComponent(entity);
+        XMStoreFloat3(&transform.translation_local, XMLoadFloat3(&position) + XMLoadFloat3(&normal)*2.f);
+        transform.SetDirty();
+    }
+
+    void ClearGrassInteraction(wi::scene::Scene& scene, wi::ecs::Entity& entity)
+    {
+        if (entity != wi::ecs::INVALID_ENTITY && scene.forces.Contains(entity))
+            scene.Entity_Remove(entity);
+        entity = wi::ecs::INVALID_ENTITY;
+    }
+
     VegetationPaintResult PaintWickedVegetation(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,
         const XMFLOAT3& center,
         const float radius,
         const VegetationBrushMode mode,
-        VegetationStrokeState* beforeState)
+        VegetationStrokeState* beforeState,
+        const GrassAtlas& atlas)
     {
+        VegetationStrokeState local;
+        auto& stroke = beforeState ? *beforeState : local;
         VegetationPaintResult result;
         if (!IsWickedVegetationInitialized(scene, terrain))
         {
@@ -502,6 +634,10 @@ namespace renegade::bridge
             return result;
         }
 
+        if (!stroke.indexed && mode == VegetationBrushMode::Paint &&
+            (atlas.frames > 64 || (atlas.frames && (atlas.path.empty() || !wi::helper::FileExists(atlas.path)))))
+        { result.error="Invalid grass palette atlas."; return result; }
+        IndexLayers(scene,stroke);
         SynchronizeWickedVegetation(scene, terrain);
         const float brushRadius = std::clamp(radius, 0.5f, 250.0f);
         const float radiusSquared = brushRadius * brushRadius;
@@ -536,6 +672,7 @@ namespace renegade::bridge
                 continue;
 
             std::vector<std::size_t> changedVertices;
+            std::vector<std::size_t> footprint;
             for (std::size_t index = 0;
                 index < mesh->vertex_positions.size(); ++index)
             {
@@ -558,21 +695,45 @@ namespace renegade::bridge
                 if (!underBrush)
                     continue;
 
+                footprint.push_back(index);
                 const float current =
                     chunk.grass.vertex_lengths[index];
                 const float target =
-                    mode == VegetationBrushMode::Paint ? 1.0f : 0.0f;
+                    mode == VegetationBrushMode::Paint && !atlas.frames ? 1.0f : 0.0f;
                 if (std::abs(current - target) <= MaskEpsilon)
                     continue;
                 changedVertices.push_back(index);
             }
 
+            if (footprint.empty()) continue;
+            auto& layers = stroke.layers[chunk.entity];
+            wi::ecs::Entity selected = wi::ecs::INVALID_ENTITY;
+            if (mode == VegetationBrushMode::Paint && atlas.frames)
+            {
+                for (auto entity: layers)
+                {
+                    auto existing = LayerAtlas(scene,entity);
+                    if (existing.frames == atlas.frames &&
+                        fs::u8path(existing.path).filename() == fs::u8path(atlas.path).filename())
+                    { selected=entity; break; }
+                }
+                if (selected==wi::ecs::INVALID_ENTITY)
+                {
+                    selected=wi::ecs::CreateEntity();
+                    CreateLayer(scene,terrain,chunk.entity,selected,atlas,mesh->vertex_positions.size());
+                    layers.push_back(selected);
+                }
+            }
+            const auto previous = result.affectedVertices;
+            for (auto entity: layers)
+                PaintLayer(scene,terrain,chunk,*mesh,stroke,entity,footprint,entity==selected ? 1.f : 0.f,result);
+            if (changedVertices.empty() && result.affectedVertices!=previous) ++result.affectedChunks;
             if (changedVertices.empty())
                 continue;
 
             CaptureBefore(beforeState, chunk);
             const float target =
-                mode == VegetationBrushMode::Paint ? 1.0f : 0.0f;
+                mode == VegetationBrushMode::Paint && !atlas.frames ? 1.0f : 0.0f;
             for (const auto index : changedVertices)
                 chunk.grass.vertex_lengths[index] = target;
 
@@ -591,6 +752,12 @@ namespace renegade::bridge
     {
         for (const auto& snapshot : touchedState.chunks)
         {
+            if (snapshot.layer!=wi::ecs::INVALID_ENTITY)
+            {
+                auto* hair=scene.hairs.GetComponent(snapshot.layer);
+                if (hair && ActiveVertexCount(*hair)==0) scene.Entity_Remove(snapshot.layer);
+                continue;
+            }
             auto* chunk = FindChunk(terrain, snapshot.chunkEntity);
             if (chunk != nullptr)
                 SynchronizeLiveGrass(scene, terrain, *chunk, true);
@@ -598,12 +765,22 @@ namespace renegade::bridge
     }
 
     VegetationStrokeState CaptureWickedVegetationAfter(
+        const wi::scene::Scene& scene,
         const wi::terrain::Terrain& terrain,
         const VegetationStrokeState& beforeState)
     {
         VegetationStrokeState after;
         for (const auto& before : beforeState.chunks)
         {
+            if (before.layer!=wi::ecs::INVALID_ENTITY)
+            {
+                auto snapshot=before;
+                const auto* hair=scene.hairs.GetComponent(before.layer);
+                if (hair) snapshot.vertexLengths=hair->vertex_lengths;
+                else snapshot.vertexLengths.clear();
+                if (snapshot.vertexLengths!=before.vertexLengths) after.chunks.push_back(std::move(snapshot));
+                continue;
+            }
             const auto* chunk =
                 FindChunk(terrain, before.chunkEntity);
             if (chunk == nullptr ||
@@ -634,6 +811,23 @@ namespace renegade::bridge
             const auto* mesh = chunk == nullptr
                 ? nullptr
                 : scene.meshes.GetComponent(chunk->entity);
+            if (snapshot.layer!=wi::ecs::INVALID_ENTITY && chunk && mesh)
+            {
+                if (std::none_of(snapshot.vertexLengths.begin(),snapshot.vertexLengths.end(),[](float v){return v>MaskEpsilon;}))
+                {
+                    if (scene.hairs.Contains(snapshot.layer)) scene.Entity_Remove(snapshot.layer);
+                }
+                else
+                {
+                    if (snapshot.vertexLengths.size()!=mesh->vertex_positions.size()) return false;
+                    auto* hair=scene.hairs.GetComponent(snapshot.layer);
+                    if (!hair) hair=&CreateLayer(scene,terrain,chunk->entity,snapshot.layer,snapshot.atlas,mesh->vertex_positions.size());
+                    hair->vertex_lengths=snapshot.vertexLengths;
+                    RefreshLayer(*hair,terrain);
+                }
+                applied=true;
+                continue;
+            }
             if (chunk == nullptr || mesh == nullptr ||
                 snapshot.vertexLengths.size() !=
                     mesh->vertex_positions.size())
@@ -746,6 +940,17 @@ namespace renegade::bridge
                         settings.density);
             }
         }
+        for (size_t i=0;i<scene.hairs.GetCount();++i)
+        {
+            auto& hair=scene.hairs[i];
+            const auto* metadata=scene.metadatas.GetComponent(scene.hairs.GetEntity(i));
+            const auto* parent=scene.hierarchy.GetComponent(hair.meshID);
+            if (!metadata || !metadata->int_values.has(PaletteKey) || !parent ||
+                parent->parentID!=terrain.terrainEntity) continue;
+            ApplySettings(hair,settings,rebuildTopology);
+            if (settings.density != before.density)
+                hair.strandCount=static_cast<uint32_t>(NativeStrandCount(terrain,ActiveVertexCount(hair))*settings.density);
+        }
         return true;
     }
 
@@ -760,6 +965,7 @@ namespace renegade::bridge
         , before_(std::move(before))
         , after_(std::move(after))
     {
+        before_.layers.clear();
     }
 
     bool WickedVegetationStrokeCommand::Apply(

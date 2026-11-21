@@ -568,9 +568,9 @@ void StudioRenderPath::TickTerrainProps()
         }
         QueueTerrainPropEdit(operation);
     }
-    if(!terrainWorkspaceActive_){p.armed=false;if(p.stroke){p.stroke=false;p.path.clear();}}
+    if(!terrainWorkspaceActive_ || !vegetationWorkspace_){p.armed=false;if(p.stroke){p.stroke=false;p.path.clear();}}
     RefreshTerrainPropControls();
-    if(terrainWorkspaceActive_&&terrainSectionExpanded_[15]&&p.collisionPreview)
+    if(terrainWorkspaceActive_&&vegetationWorkspace_&&terrainSectionExpanded_[15]&&p.collisionPreview)
         if(const auto* c=SelectedCollision();c&&c->shape!=TerrainPropShape::None)
         {
             const auto& placement=*p.collisionPreview;
@@ -599,7 +599,7 @@ bool StudioRenderPath::HandleTerrainProps(const XMFLOAT4& pointer)
         p.paint.SetText("PAINT");p.erase.SetText("ERASE");
         p.status.SetText("TERRAIN PROPS // CANCELLED");
     }
-    if(!session_ || !p.armed || !terrainWorkspaceActive_)return false;
+    if(!session_ || !p.armed || !terrainWorkspaceActive_ || !vegetationWorkspace_)return false;
     if(p.stroke && wi::input::Release(wi::input::MOUSE_BUTTON_LEFT)){
         p.stroke=false;p.pending=int(p.mode);return true;
     }
@@ -675,7 +675,7 @@ void StudioRenderPath::TickTerrainPropProof()
             // The opt-in descriptor must refer to a dedicated disposable project.
             require(std::filesystem::path(project.rootPath).filename().u8string().find("TerrainProof")!=std::string::npos,
                 "Use a disposable TerrainProof project for this destructive QA fixture");
-            SetProjectHubVisible(false);SetTerrainWorkspaceActive(true);
+            SetProjectHubVisible(false);SetTerrainWorkspaceActive(true,true);
             if(const char* text=std::getenv("RENEGADE_TERRAIN_PROP_PROOF_INSPECTOR_WIDTH")){
                 char* end=nullptr;const float width=std::strtof(text,&end);
                 require(end!=text && *end==0 && std::isfinite(width) && width>=280 && width<=520,
@@ -807,7 +807,7 @@ void StudioRenderPath::TickTerrainPropProof()
         {
             SyncTerrainPropPalette();require(count(p.draft)>0,"Reopen lost population");
             require(!p.draft.authoring.clearings.empty(),"Reopen lost clearings");
-            SetProjectHubVisible(false);SetTerrainWorkspaceActive(true);terrainSectionExpanded_[15]=true;
+            SetProjectHubVisible(false);SetTerrainWorkspaceActive(true,true);terrainSectionExpanded_[15]=true;
             editorCameraTransform_.ClearTransform();
             auto view=DirectX::XMMatrixLookAtLH(DirectX::XMVectorSet(18,22,-32,1),
                 DirectX::XMVectorSet(0,0,0,1),DirectX::XMVectorSet(0,1,0,0));

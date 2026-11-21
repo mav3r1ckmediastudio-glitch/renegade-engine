@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <unordered_map>
+#include "renegade/bridge/GrassPalette.h"
 
 #include <WickedEngine.h>
 
@@ -38,11 +40,15 @@ namespace renegade::bridge
     {
         wi::ecs::Entity chunkEntity = wi::ecs::INVALID_ENTITY;
         std::vector<float> vertexLengths;
+        wi::ecs::Entity layer = wi::ecs::INVALID_ENTITY;
+        GrassAtlas atlas;
     };
 
     struct VegetationStrokeState
     {
         std::vector<VegetationChunkState> chunks;
+        bool indexed = false;
+        std::unordered_map<wi::ecs::Entity, std::vector<wi::ecs::Entity>> layers;
         bool hasLastCenter = false;
         XMFLOAT3 lastCenter = {};
     };
@@ -84,13 +90,19 @@ namespace renegade::bridge
         wi::terrain::Terrain& terrain,
         bool& allChunksReady);
 
+    // The preview force is excluded from authored scene archives.
+    void UpdateGrassInteraction(wi::scene::Scene& scene, wi::ecs::Entity& force,
+        const XMFLOAT3& position, const XMFLOAT3& normal);
+    void ClearGrassInteraction(wi::scene::Scene& scene, wi::ecs::Entity& force);
+
     VegetationPaintResult PaintWickedVegetation(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,
         const XMFLOAT3& center,
         float radius,
         VegetationBrushMode mode,
-        VegetationStrokeState* beforeState = nullptr);
+        VegetationStrokeState* beforeState = nullptr,
+        const GrassAtlas& atlas = {});
 
     // Rebuilds the native per-chunk emitter distribution once when a completed
     // gesture ends, not once per pointer sample.
@@ -100,6 +112,7 @@ namespace renegade::bridge
         const VegetationStrokeState& touchedState);
 
     [[nodiscard]] VegetationStrokeState CaptureWickedVegetationAfter(
+        const wi::scene::Scene& scene,
         const wi::terrain::Terrain& terrain,
         const VegetationStrokeState& beforeState);
 
