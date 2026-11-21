@@ -10,7 +10,7 @@ jobs:
     name: Launch the final woodland export on clean Windows
     if: github.ref == 'refs/heads/qa/terrain-props-p6-clean-windows' && github.repository == 'mav3r1ckmediastudio-glitch/renegade-engine'
     runs-on: windows-2025
-    timeout-minutes: 23
+    timeout-minutes: 61
     permissions:
       contents: write
     env:
@@ -46,7 +46,52 @@ jobs:
             throw 'Unexpected verifier timeout code.'
           }
           $check = Join-Path $env:RUNNER_TEMP 'Test-WindowsStandalone-Hosted.ps1'
-          $source.Replace($needle, '$proc.WaitForExit(900000)') | Set-Content -LiteralPath $check -Encoding utf8NoBOM
+          $env:RENEGADE_WOODLAND_WINDOW_EVIDENCE = Join-Path $env:RUNNER_TEMP 'woodland-window-geometry.txt'
+          $launchAnchor = '$proc = [Diagnostics.Process]::Start($start)' + [char]10 + 'try {'
+          $source = $source.Replace([string]([char]13), '')
+          if ([regex]::Matches($source, [regex]::Escape($launchAnchor)).Count -ne 1) {
+            throw 'Unexpected verifier launch code.'
+          }
+          $resize = @'
+          $proc = [Diagnostics.Process]::Start($start)
+          try {
+              Add-Type -TypeDefinition @"
+          using System;
+          using System.Runtime.InteropServices;
+          public static class WoodlandWindow {
+              [StructLayout(LayoutKind.Sequential)]
+              public struct Rect { public int Left, Top, Right, Bottom; }
+              [DllImport("user32.dll", SetLastError = true)]
+              public static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+              [DllImport("user32.dll", SetLastError = true)]
+              public static extern bool GetClientRect(IntPtr hwnd, out Rect rect);
+          }
+          "@
+              $ready = [Diagnostics.Stopwatch]::StartNew()
+              do {
+                  if ($proc.HasExited) { throw "The woodland exited before its first window with $($proc.ExitCode)." }
+                  $proc.Refresh()
+                  $h = $proc.MainWindowHandle
+                  if (!$h) { Start-Sleep -Milliseconds 100 }
+              } until ($h -or $ready.Elapsed.TotalSeconds -ge 35)
+              if (!$h -or ![WoodlandWindow]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 336, 219, 0x4016)) {
+                  throw 'Could not resize the real woodland window.'
+              }
+              $resizeDeadline = [Diagnostics.Stopwatch]::StartNew()
+              do {
+                  $rect = New-Object WoodlandWindow+Rect
+                  if (![WoodlandWindow]::GetClientRect($h, [ref]$rect)) { throw 'Could not read woodland window geometry.' }
+                  $width = $rect.Right - $rect.Left
+                  $height = $rect.Bottom - $rect.Top
+                  $small = $width -gt 0 -and $width -le 360 -and $height -gt 0 -and $height -le 220
+                  if (!$small) { Start-Sleep -Milliseconds 200 }
+              } until ($small -or $resizeDeadline.Elapsed.TotalSeconds -ge 160)
+              if (!$small) { throw 'The render window did not reach the requested test size.' }
+              "native_client_width=$width" , "native_client_height=$height" |
+                  Set-Content -LiteralPath $env:RENEGADE_WOODLAND_WINDOW_EVIDENCE -Encoding utf8NoBOM
+          '@
+          $source.Replace($launchAnchor, $resize).Replace($needle, '$proc.WaitForExit(3240000)') |
+            Set-Content -LiteralPath $check -Encoding utf8NoBOM
           try {
             & $check -Archive "$env:RUNNER_TEMP/woodland-release.zip" -ArchiveSha256 $env:ZIP_SHA -Revision $env:RELEASE_REVISION -ExpectedFlowNode 'Woodland clearing' -Output "$env:RUNNER_TEMP/standalone-proof"
           } finally {
@@ -62,6 +107,7 @@ jobs:
           name: exact-woodland-windows-proof
           if-no-files-found: warn
           path: |
+            ${{ runner.temp }}/woodland-window-geometry.txt
             ${{ runner.temp }}/woodland-frames-trace.txt
             ${{ runner.temp }}/standalone-proof/result.json
             ${{ runner.temp }}/standalone-proof/frames.csv
