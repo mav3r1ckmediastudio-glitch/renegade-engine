@@ -1,13 +1,11 @@
 name: LP04 Runtime handshake probe
 
-# Manual-only (workflow_dispatch). This previously also ran on pull_request
-# for paths touching the handshake test/Runtime readiness code, but the
-# probe cannot currently pass on GitHub's hosted Windows runners - see
-# docs/LP04_GATE3B2_RUNTIME_HANDSHAKE_EVIDENCE.md. Automatically re-running
-# and failing a check nobody can fix (a hosted-runner graphics-environment
-# limitation, not a code defect) would just be noise. Kept available to
-# re-run by hand if a future runner generation might support it.
+# Diagnostic workflow on the private-release QA ref. The packaged bytes come
+# from an unpublished staging release. Only text diagnostics are published.
 on:
+  push:
+    branches: [qa/terrain-props-p6-clean-windows]
+    paths: ['.github/workflows/lp04-runtime-handshake.yml']
   workflow_dispatch:
     inputs:
       standalone_asset_id:
@@ -23,6 +21,10 @@ on:
         required: false
         type: string
 
+env:
+  WOODLAND_ASSET_ID: '774153518'
+  WOODLAND_ZIP_SHA: '9dd13731db16f98c07acc870c1580c7692f88d83ac6059bb5311fa3d2af3c50a'
+
 permissions: {}
 
 jobs:
@@ -34,7 +36,7 @@ jobs:
       matrix:
         image: [windows-2025]
     runs-on: ${{ matrix.image }}
-    timeout-minutes: 15
+    timeout-minutes: 24
     permissions:
       contents: write
     steps:
@@ -49,14 +51,14 @@ jobs:
       - name: Download the selected package
         shell: pwsh
         env:
-          ASSET_ID: ${{ inputs.standalone_asset_id }}
-          EXPECTED_SHA: ${{ inputs.standalone_sha256 }}
+          ASSET_ID: ${{ inputs.standalone_asset_id || env.WOODLAND_ASSET_ID }}
+          EXPECTED_SHA: ${{ inputs.standalone_sha256 || env.WOODLAND_ZIP_SHA }}
           GH_TOKEN: ${{ github.token }}
         run: |
           if ($env:ASSET_ID -notmatch '^[1-9][0-9]*$' -or $env:EXPECTED_SHA -notmatch '^[a-fA-F0-9]{64}$') {
             throw 'Both a numeric asset ID and a SHA-256 digest are required.'
           }
-          if ($env:ASSET_ID -ne '774170436' -or $env:EXPECTED_SHA -ne 'f1152f5d713e4e4a81479682e632a0ca0cb99a072f5e9af2e895c7e51e8612ec') { throw 'This run only accepts the staged woodland candidate.' }
+          if ($env:ASSET_ID -ne '774153518' -or $env:EXPECTED_SHA -ne '9dd13731db16f98c07acc870c1580c7692f88d83ac6059bb5311fa3d2af3c50a') { throw 'This run only accepts the staged woodland candidate.' }
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/octet-stream' }
           $url = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/assets/$env:ASSET_ID"
           Invoke-WebRequest -Uri $url -Headers $headers -OutFile "$env:RUNNER_TEMP/standalone.zip"
@@ -69,12 +71,13 @@ jobs:
           "Session: $([Diagnostics.Process]::GetCurrentProcess().SessionId)"
 
       - name: Launch the packaged game from a clean profile
+        id: launch
         shell: pwsh
         env:
-          EXPECTED_SHA: ${{ inputs.standalone_sha256 }}
-          EXPECTED_NODE: ${{ inputs.standalone_flow_node }}
+          EXPECTED_SHA: ${{ inputs.standalone_sha256 || env.WOODLAND_ZIP_SHA }}
+          EXPECTED_NODE: ${{ inputs.standalone_flow_node || 'Woodland clearing' }}
         run: |
-          ./Tools/Test-WindowsStandalone.ps1 -Archive "$env:RUNNER_TEMP/standalone.zip" -ArchiveSha256 $env:EXPECTED_SHA -Revision bf361c7ad5d5f3ab7e8b81b57dcab60b75a723cd -ExpectedFlowNode $env:EXPECTED_NODE -Output "$env:RUNNER_TEMP/standalone-proof"
+          ./Tools/Test-WindowsStandalone.ps1 -Archive "$env:RUNNER_TEMP/standalone.zip" -ArchiveSha256 $env:EXPECTED_SHA -Revision 83636ca548c3165cb809dbbb7d38851d9487d160 -ExpectedFlowNode $env:EXPECTED_NODE -Output "$env:RUNNER_TEMP/standalone-proof"
 
       - name: Record the executable fault
         if: failure()
@@ -91,6 +94,51 @@ jobs:
             'No Application Error event was available for the named game.' | Tee-Object -FilePath $path
           }
 
+      - name: Capture the native startup stack with CDB
+        if: failure() && steps.launch.outcome == 'failure'
+        timeout-minutes: 14
+        shell: pwsh
+        run: |
+          $validated = Join-Path $env:RUNNER_TEMP 'standalone-proof'
+          $game = Join-Path $validated 'game/TerrainPropsStockReview.exe'
+          if (!(Test-Path -LiteralPath $game)) { throw 'The named game was not extracted.' }
+          $manifest = Get-Content -Raw -LiteralPath (Join-Path $validated 'game/package-manifest.json') | ConvertFrom-Json
+          $entry = @($manifest.files | Where-Object path -eq 'TerrainPropsStockReview.exe')
+          if ($entry.Count -ne 1 -or (Get-FileHash -LiteralPath $game -Algorithm SHA256).Hash -ne $entry[0].sha256) {
+            throw 'The named game did not match the verified manifest.'
+          }
+          $trace = (New-Item -ItemType Directory (Join-Path $env:RUNNER_TEMP 'startup-debug')).FullName
+          $sdk = Join-Path "${env:ProgramFiles(x86)}" 'Windows Kits/10/Debuggers/x64/cdb.exe'
+          if (!(Test-Path -LiteralPath $sdk)) {
+            $installer = Join-Path $trace 'winsdksetup.exe'
+            Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/?linkid=2382321' -OutFile $installer
+            $sig = Get-AuthenticodeSignature -LiteralPath $installer
+            if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+              throw 'The Windows SDK installer signature did not validate.'
+            }
+            $install = Start-Process -FilePath $installer -ArgumentList '/features OptionId.WindowsDesktopDebuggers /q /norestart' -Wait -PassThru
+            if ($install.ExitCode -notin 0,3010) { throw "Windows debugger install exited with $($install.ExitCode)." }
+          }
+          if (!(Test-Path -LiteralPath $sdk)) { throw 'CDB is unavailable on this runner.' }
+          $working = (New-Item -ItemType Directory (Join-Path $trace 'unrelated')).FullName
+          $env:LOCALAPPDATA = (New-Item -ItemType Directory (Join-Path $trace 'profile')).FullName
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          $env:RENEGADE_G13E13_PERF_CSV = Join-Path $trace 'frames.csv'
+          $env:RENEGADE_G13E13_FRAMES = '240'
+          $env:RENEGADE_G13E13_NO_SCREENSHOT = '1'
+          $commands = Join-Path $trace 'startup.cdb'
+          @'
+          sxd -c2 ".lastevent; .exr -1; .ecxr; k 32; lm a @rip; q" av
+          g
+          '@ | Set-Content -LiteralPath $commands -Encoding ascii
+          Push-Location -LiteralPath $working
+          try {
+            & $sdk -G -hd -noshell -cf $commands -y "srv*$trace\symbols*https://msdl.microsoft.com/download/symbols" $game alwaysactive |
+              Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'woodland-native-stack.txt')
+          } finally {
+            Pop-Location
+          }
+
       - name: Retain bootstrap and frame evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -98,6 +146,7 @@ jobs:
           name: clean-windows-standalone-proof-${{ matrix.image }}
           if-no-files-found: warn
           path: |
+            ${{ runner.temp }}/woodland-native-stack.txt
             ${{ runner.temp }}/woodland-diagnostics.txt
             ${{ runner.temp }}/standalone-proof/result.json
             ${{ runner.temp }}/standalone-proof/frames.csv
