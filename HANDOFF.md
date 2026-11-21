@@ -8,6 +8,8 @@ A maintainer can run the existing Runtime handshake workflow in standalone mode 
 
 The validations below belong to the named feature commits. The combined candidate requires its own Studio and Runtime builds, native woodland and Physics Lab runs, hosted checks and a standalone launch in a clean Windows environment. The original intermittent Debug expansion Undo crash remains recorded in the woodland handoff.
 
+Windows startup without a default playback device now leaves audio unavailable and skips the native reverb call when its voice is absent. The pinned Wicked source remains governed by the existing generated audio overlay. The native missing-endpoint proof applies the scene audio mix after fault injection and retains the unexpected-HRESULT negative control. The original P6 woodland executable reached DX12 device creation and Player Start on the hosted runner before dereferencing the missing reverb voice. See Actions runs 44885103319 and 44885408823 for the debugger evidence.
+
 # Physics Lab local release candidate
 
 Windows x64/DX12 candidate dated 20 November 2026. The local branch is review/physics-lab-v1, integrated with main 9eae100. The original layout, bindings, vehicle and breakables source was checkpointed in 9e779d3. The Studio-to-Test Game authoring bench is b05ec7b. The new feature source is f3d88e0 with the immediate collider hierarchy refresh in 7393b71.
