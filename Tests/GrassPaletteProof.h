@@ -93,6 +93,7 @@ namespace grass_palette_proof
         wi::terrain::Chunk key;
         key.x = pending.front().key.x;
         key.z = pending.front().key.z;
+        terrain.Generation_Cancel();
         auto& chunk = terrain.chunks.at(key);
         chunk.invalidated = true;
         Check(native::SetTerrainRequests(scene,terrain.terrainEntity,{},error),error);

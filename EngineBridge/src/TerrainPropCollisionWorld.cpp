@@ -252,7 +252,8 @@ namespace renegade::bridge
             {
                 // Prediction can request a chunk again before the next terrain update.
                 // A live, current heightfield already provides support on this frame.
-                if (!record.valid && record.entity == wi::ecs::INVALID_ENTITY)
+                if (!record.valid && record.entity == wi::ecs::INVALID_ENTITY &&
+                    !scene_.terrains.GetComponent(item.first)->IsGenerationBusy())
                 {
                     const auto& terrain = *scene_.terrains.GetComponent(item.first);
                     wi::terrain::Chunk key;
