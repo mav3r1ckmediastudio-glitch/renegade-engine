@@ -66,6 +66,10 @@ namespace renegade::bridge
             if (FAILED(tile.Initialize2D(Format,w,h,1,1))) { error="Unable to allocate grass tile."; return false; }
             for (size_t line=0; line<h; ++line)
                 std::memcpy(tile.GetPixels()+line*tile.GetImage(0,0,0)->rowPitch,pixels+line*base.rowPitch,w*4);
+            bool visible=false;
+            for(size_t offset=3; offset<tile.GetPixelsSize(); offset+=4)
+                if(tile.GetPixels()[offset]!=0) { visible=true; break; }
+            if (!visible) continue;
             Blob png;
             if (FAILED(SaveToWICMemory(*tile.GetImage(0,0,0), WIC_FLAGS_NONE,
                 GetWICCodec(WIC_CODEC_PNG), png))) { error = "Unable to encode foliage tile."; return false; }
@@ -76,6 +80,7 @@ namespace renegade::bridge
                 + "_" + id.substr(0,16) + ".png";
             files.push_back({(project/"Content/Vegetation/Palette"/fs::u8path(file)).generic_u8string(),std::move(bytes)});
         }
+        if (files.empty()) { error="The PNG contains no visible grass."; return false; }
         return Publish(project,std::move(files),error);
     }
     bool BuildGrassAtlas(const fs::path& project, const std::vector<fs::path>& selected,

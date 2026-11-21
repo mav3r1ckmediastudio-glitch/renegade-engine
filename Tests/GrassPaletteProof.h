@@ -54,7 +54,7 @@ namespace grass_palette_proof
         Check(BuildGrassAtlas(root,{entries[0],entries[5]},meadow,error),error);
         Check(BuildGrassAtlas(root,{entries[1],entries[7]},bank,error),error);
         Check(ImportGrassSheet(root,fs::u8path(meadow.path),2,2,error),error);
-        Check(GrassPaletteEntries(root).size()==14,"Sheet did not import as four selectable cells");
+        Check(GrassPaletteEntries(root).size()==12,"Sheet import must keep both occupied cells and omit transparent padding");
         Check(InitializeWickedVegetation(scene,terrain,&error),error);
         auto paint=[&](XMFLOAT3 centre, VegetationBrushMode mode, const GrassAtlas& atlas)
         {
@@ -126,6 +126,13 @@ namespace grass_palette_proof
         spawn.translation={0,.1f,-7};
         CreatePlayerStartCommand start(scene,spawn);
         Check(start.Execute(),"Review Player Start failed");
+        const auto preview=scene.Entity_CreateCamera("Grass review",1280,720);
+        auto& pose=*scene.transforms.GetComponent(preview);
+        pose.MatrixTransform(DirectX::XMMatrixInverse(nullptr,DirectX::XMMatrixLookAtLH(
+            DirectX::XMVectorSet(0,2,-8,1),DirectX::XMVectorSet(0,.65f,4,1),DirectX::XMVectorSet(0,1,0,0))));
+        pose.UpdateTransform();
+        scene.cameras.GetComponent(preview)->TransformCamera(pose);
+        scene.cameras.GetComponent(preview)->UpdateCamera();
         const auto path=(root/fs::u8path(project.startupScene)).generic_u8string();
         { wi::Archive archive(path,false,false);scene.Serialize(archive);Check(archive.SaveFile(path),"Save failed"); }
         ClearGrassInteraction(scene,force);
