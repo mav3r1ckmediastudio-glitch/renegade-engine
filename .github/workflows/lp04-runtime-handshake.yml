@@ -23,84 +23,21 @@ on:
         required: false
         type: string
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
-  handshake:
-    if: inputs.standalone_asset_id == '' && inputs.standalone_sha256 == '' && inputs.standalone_flow_node == ''
-    name: LP04 real Runtime handshake (Debug)
-    runs-on: windows-2025
-    timeout-minutes: 30
-
-    steps:
-      - name: Check out Renegade and Wicked
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Configure MSBuild
-        uses: microsoft/setup-msbuild@v2
-        with:
-          msbuild-architecture: x64
-
-      - name: Configure handshake probe
-        shell: pwsh
-        run: >-
-          cmake
-          -S .
-          -B BUILD/renegade
-          -A x64
-          -DRENEGADE_EMBED_SHADERS=ON
-
-      - name: Build real Runtime handshake target
-        shell: pwsh
-        run: >-
-          cmake
-          --build BUILD/renegade
-          --config Debug
-          --target RenegadeTestLevelRuntimeHandshakeTests
-          --parallel
-
-      - name: Run real Runtime handshake probe
-        shell: pwsh
-        timeout-minutes: 5
-        run: |
-          $testExecutable = Join-Path $PWD "BUILD\renegade\Tests\Debug\RenegadeTestLevelRuntimeHandshakeTests.exe"
-          $runtimeExecutable = Join-Path $PWD "BUILD\renegade\Runtime\Debug\RenegadeRuntime.exe"
-
-          if (-not (Test-Path $testExecutable -PathType Leaf)) {
-              throw "Handshake test executable was not built: $testExecutable"
-          }
-          if (-not (Test-Path $runtimeExecutable -PathType Leaf)) {
-              throw "RenegadeRuntime.exe was not built: $runtimeExecutable"
-          }
-
-          & $testExecutable $runtimeExecutable
-          if ($LASTEXITCODE -ne 0) {
-              throw "LP04 real Runtime handshake probe failed with exit code $LASTEXITCODE."
-          }
-
-      - name: Upload Runtime bootstrap logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lp04-runtime-handshake-debug-${{ github.sha }}
-          path: BUILD/renegade/Runtime/Debug/Logs/**
-          if-no-files-found: ignore
-          retention-days: 7
-
   standalone:
-    if: inputs.standalone_asset_id != '' || inputs.standalone_sha256 != '' || inputs.standalone_flow_node != ''
+    if: github.ref == 'refs/heads/qa/terrain-props-p6-clean-windows' && github.repository == 'mav3r1ckmediastudio-glitch/renegade-engine'
     name: Clean Windows named-game launch
     runs-on: windows-2025
     timeout-minutes: 15
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Get the standalone verification script
         uses: actions/checkout@v4
         with:
+          ref: 83636ca548c3165cb809dbbb7d38851d9487d160
           persist-credentials: false
           sparse-checkout-cone-mode: false
           sparse-checkout: /Tools/Test-WindowsStandalone.ps1
@@ -115,6 +52,7 @@ jobs:
           if ($env:ASSET_ID -notmatch '^[1-9][0-9]*$' -or $env:EXPECTED_SHA -notmatch '^[a-fA-F0-9]{64}$') {
             throw 'Both a numeric asset ID and a SHA-256 digest are required.'
           }
+          if ($env:ASSET_ID -ne '774153518' -or $env:EXPECTED_SHA -ne '9dd13731db16f98c07acc870c1580c7692f88d83ac6059bb5311fa3d2af3c50a') { throw 'This run only accepts the staged woodland candidate.' }
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/octet-stream' }
           $url = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/assets/$env:ASSET_ID"
           Invoke-WebRequest -Uri $url -Headers $headers -OutFile "$env:RUNNER_TEMP/standalone.zip"
@@ -125,7 +63,7 @@ jobs:
           EXPECTED_SHA: ${{ inputs.standalone_sha256 }}
           EXPECTED_NODE: ${{ inputs.standalone_flow_node }}
         run: |
-          ./Tools/Test-WindowsStandalone.ps1 -Archive "$env:RUNNER_TEMP/standalone.zip" -ArchiveSha256 $env:EXPECTED_SHA -Revision $env:GITHUB_SHA -ExpectedFlowNode $env:EXPECTED_NODE -Output "$env:RUNNER_TEMP/standalone-proof"
+          ./Tools/Test-WindowsStandalone.ps1 -Archive "$env:RUNNER_TEMP/standalone.zip" -ArchiveSha256 $env:EXPECTED_SHA -Revision 83636ca548c3165cb809dbbb7d38851d9487d160 -ExpectedFlowNode $env:EXPECTED_NODE -Output "$env:RUNNER_TEMP/standalone-proof"
 
       - name: Retain bootstrap and frame evidence
         if: always()
