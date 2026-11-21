@@ -123,7 +123,7 @@ namespace grass_palette_proof
             "Pointer force did not produce a localized change in grass vertices");
         // Saving while the pointer is held must serialize the authored hair only.
         TransformState spawn;
-        spawn.translation={0,.1f,-7};
+        spawn.translation={0,.1f,-11};
         CreatePlayerStartCommand start(scene,spawn);
         Check(start.Execute(),"Review Player Start failed");
         const auto preview=scene.Entity_CreateCamera("Grass review",1280,720);

@@ -7035,9 +7035,10 @@ namespace renegade::studio
                     break;
                 }
             }
-            if (!riverSelected)
+            if (vegetationWorkspace_ || !riverSelected)
                 session_->Selection().Select(scene.terrains.GetEntity(0));
         }
+        SyncGizmoSelection();
         ClearSelectionOutline();
         RefreshHierarchy();
         RefreshInspector();
@@ -13587,6 +13588,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
         const auto entity = session_->Selection().SelectedEntity();
         auto& scene = session_->Scenes().GetScene();
+        if (terrainWorkspaceActive_ && vegetationWorkspace_ && scene.terrains.Contains(entity))
+        {
+            gizmoSelectionRevision_=session_->Selection().Revision();
+            return;
+        }
         const auto* transform = scene.transforms.GetComponent(entity);
         if (transform == nullptr)
         {
@@ -13638,6 +13644,12 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         const auto selected = session_ != nullptr
             ? session_->Selection().SelectedEntity()
             : wi::ecs::INVALID_ENTITY;
+        if (terrainWorkspaceActive_ && vegetationWorkspace_ && session_ &&
+            session_->Scenes().GetScene().terrains.Contains(selected))
+        {
+            if (outlinedSelection_ != wi::ecs::INVALID_ENTITY) ClearSelectionOutline();
+            return;
+        }
         if (session_ && selected == outlinedSelection_ && outlineSelectionRevision_ == session_->Selection().Revision())
             return;
 
