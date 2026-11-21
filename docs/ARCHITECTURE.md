@@ -604,7 +604,7 @@ rectangles, emitter mesh references and materials. Repainting replaces the
 mix only at vertices inside the stroke. Stock grass retains its original mask
 and material. The brush indexes painted layers once per stroke.
 
-PNG sheet imports publish all cells in one project document transaction.
+The plant group selector filters the visible thumbnails and keeps the brush selection across groups. Stock entries comprise grass and weeds, tropical freshwater, marine and alien plants. The Custom group reads loose PNGs and imported sprite cells from `Content/Vegetation/Palette/Custom` and recognises earlier imports directly under `Content/Vegetation/Palette`. PNG sheet imports publish all occupied cells in one project document transaction.
 Wicked supports up to 64 atlas rectangles per mix. Atlas generation preserves
 cutout proportions and places the base at the bottom of its cell. Imported
 sources keep their original resolution. Render atlases use cells up to 1024

@@ -1,3 +1,25 @@
+# Plant groups and custom foliage
+
+The local source checkpoint is `20acf418a705e9618d532fc6ea71bdb8711bd80d` on `feature/vegetation-grass`. Open **Vegetation → Grass → Painting**. The group selector starts on Grass and weeds. All plants includes 10 grass and weeds, five tropical freshwater plants, five marine plants, ten alien plants and any project imports. Switching groups preserves every plant in the brush.
+
+Studio's **Import Plant Texture** accepts a transparent PNG or an evenly divided PNG sheet with up to 64 cells. The importer writes occupied cells to `Content/Vegetation/Palette/Custom`. An individual PNG placed directly in that folder is discovered when Custom or All plants is selected. Earlier PNGs in the parent Palette directory still appear in Custom. New projects have the folder from creation and earlier projects acquire it when the palette opens. This milestone covers foliage colour and alpha. User-painted terrain PBR materials remain the next milestone.
+
+Changes are in `EngineBridge/include/renegade/bridge/GrassPalette.h`, the GrassPalette, ProjectService and VegetationService bridge sources, `Studio/src/WD01Vegetation.cpp`, the two focused tests and the Alien, Freshwater and Marine folders under `Content/terrain/foliage`. Use `git diff --name-only 8307ff0 20acf41` for all source and asset paths. The signatures and dimensions of all 30 named stock files are covered by the existing vegetation CTest contract. The GPU test decodes the 30 files together, checks species counts and builds a mixed brush, exercises a two-cell project import, and discovers both a manually dropped uppercase-extension PNG and a legacy import.
+
+Windows x64 local verification used the configured native Debug and Release outputs. For each configuration, the MSBuild targets were `RenegadeTextureCook`, `RenegadeEngineBridge`, `RenegadeRiverTerrainFollowProof`, `RenegadeStudio` and `RenegadeRuntime` with `/p:BuildProjectReferences=false` against built dependencies. All three executable directories contained all 30 stock PNGs. Reproduce the focused checks in PowerShell from the checkout:
+
+```powershell
+foreach ($cfg in 'Release', 'Debug') {
+    cmake --build BUILD/renegade --config $cfg --target RenegadeStudio RenegadeRuntime RenegadeRiverTerrainFollowProof -j 6
+    ctest --test-dir BUILD/renegade -C $cfg -R 'MarkerIconsSourceContract|WD01VegetationSourceContract|S1AInspectorSectionSourceContract|S1BInspectorMigrationSourceContract' --output-on-failure
+    Push-Location "BUILD/renegade/Tests/$cfg"
+    .\RenegadeRiverTerrainFollowProof.exe "$PWD/plant-groups-$(Get-Date -Format yyyyMMddHHmmss)" grass-palette
+    Pop-Location
+}
+```
+
+All four focused contracts passed in both configurations. Both GPU runs passed bending under the cursor and player, steady walking and arms, multi-species painting and erase, Undo/Redo, and cold reopen. A standalone Release run on an isolated Windows desktop completed the 720-frame walk and saved the native player-camera capture. A temporary isolated Studio test controller exercised the production dropdown and thumbnail callbacks on a copy with one project PNG, verified the six visible counts (10 default grass, 31 All plants, 5 freshwater, 5 marine, 10 alien, 1 Custom), and selected grass, alien and custom plants in one brush. The open menu and filtered grid were captured from Studio's native 2D render target. The controller and fixture are local QA files under the ignored BUILD directory. Human review of this dropdown and hosted CI are pending.
+
 # Vegetation workspace and grass palette
 
 The local code checkpoint is `3dfc6eaf05bfbfc53564a85c7ebe72a05674f473` on `feature/vegetation-grass`, based on main `cb6bef622a292b6d451465b475b73130fc44858b`. The Vegetation toolbar button opens Grass, Terrain Painting and Terrain Props. Grass accepts the ten stock cutouts and project PNG imports. Select multiple thumbnails, arm Paint, then drag on terrain. Test Interaction bends the grass under a held left mouse button. The native player capsule bends grass in Runtime. The Terrain Painting section currently exposes the existing material controls. A terrain PBR paint brush is a subsequent milestone, after owner review of Grass.
