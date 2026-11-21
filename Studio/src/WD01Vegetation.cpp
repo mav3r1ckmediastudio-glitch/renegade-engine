@@ -251,8 +251,8 @@ namespace renegade::studio
         gridSize(state.importColumns,"Grass sheet columns","SHEET COLUMNS",state.columns);
         gridSize(state.importRows,"Grass sheet rows","SHEET ROWS",state.rows);
         state.importSheet.Create("Import grass PNG");
-        state.importSheet.SetText("IMPORT GRASS TEXTURE");
-        state.importSheet.SetTooltip("Add a transparent PNG to this project's palette. Each cell of a sheet becomes a selectable grass.");
+        state.importSheet.SetText("IMPORT PLANT TEXTURE");
+        state.importSheet.SetTooltip("Add a transparent PNG to Custom. Each occupied sheet cell becomes a selectable plant.");
         state.importSheet.OnClick([this](const wi::gui::EventArgs&)
         {
             if (!session_ || !session_->Projects().HasProject()) return;
@@ -261,7 +261,7 @@ namespace renegade::studio
             wi::helper::FileDialogParams dialog;
             dialog.type=wi::helper::FileDialogParams::OPEN;
             dialog.extensions={"png"};
-            dialog.description="Grass cutout or sprite sheet";
+            dialog.description="Plant cutout or sprite sheet";
             wi::helper::FileDialog(dialog,[this,project,cols,rows](const std::string& path)
             {
                 wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
@@ -278,7 +278,7 @@ namespace renegade::studio
                         Controls().plantFilter.SetSelectedWithoutCallback(int(std::size(PlantFilters))-1);
                     }
                     Controls().refreshPalette=true;
-                    Controls().status.SetText(imported ? "Grass added to the palette." : error);
+                    Controls().status.SetText(imported ? "Plant texture added to Custom." : error);
                     QueueInspectorRefresh();
                 });
             });
@@ -692,12 +692,14 @@ namespace renegade::studio
         state.source.SetEnabled(true);
         state.status.SetEnabled(true);
 
+        constexpr const char* missingTerrain = "VEGETATION // CREATE TERRAIN FIRST";
         if (!hasTerrain)
         {
-            state.status.SetText(
-                "VEGETATION // CREATE TERRAIN FIRST");
+            state.status.SetText(missingTerrain);
             return;
         }
+        if (state.status.GetText() == missingTerrain)
+            state.status.SetText("Select plants to mix in the brush.");
         auto* terrain = CurrentTerrain(session_);
         if (terrain == nullptr || state.settingsDragging)
             return;
