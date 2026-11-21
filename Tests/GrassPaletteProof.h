@@ -74,6 +74,16 @@ namespace grass_palette_proof
             "Riverbank changed meadow grass inside the same chunk");
         second.Undo(); Check(Capture(scene)==beforeBank,"Undo riverbank changed meadow");
         Check(second.Execute() && Capture(scene)==both,"Redo lost mixed grass");
+        const auto settings=CaptureWickedVegetationSettings(terrain);
+        auto edited=settings;edited.length=settings.length*.65f;
+        Check(ApplyWickedVegetationSettings(scene,terrain,edited),"Grass length edit failed");
+        for(size_t i=0;i<scene.hairs.GetCount();++i)
+        {
+            const auto* name=scene.names.GetComponent(scene.hairs.GetEntity(i));
+            if(name && name->name=="Painted grass")
+                Check(std::abs(scene.hairs[i].length-edited.length)<.0001f,"Appearance edit missed a palette layer");
+        }
+        Check(ApplyWickedVegetationSettings(scene,terrain,settings),"Grass length restore failed");
         auto erase=paint(left,VegetationBrushMode::Delete,{});
         Check(Capture(scene).size()==1,"Eraser left grass on cleared patch");
         erase.Undo(); Check(Capture(scene)==both,"Undo erase did not restore exact masks");

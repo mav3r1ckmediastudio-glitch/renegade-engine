@@ -944,9 +944,8 @@ namespace renegade::bridge
         {
             auto& hair=scene.hairs[i];
             const auto* metadata=scene.metadatas.GetComponent(scene.hairs.GetEntity(i));
-            const auto* parent=scene.hierarchy.GetComponent(hair.meshID);
-            if (!metadata || !metadata->int_values.has(PaletteKey) || !parent ||
-                parent->parentID!=terrain.terrainEntity) continue;
+            if (!metadata || !metadata->int_values.has(PaletteKey) ||
+                !scene.Entity_IsDescendant(hair.meshID,terrain.terrainEntity)) continue;
             ApplySettings(hair,settings,rebuildTopology);
             if (settings.density != before.density)
                 hair.strandCount=static_cast<uint32_t>(NativeStrandCount(terrain,ActiveVertexCount(hair))*settings.density);
