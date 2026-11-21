@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [windows-2025, windows-2022]
+        image: [windows-2025]
     runs-on: ${{ matrix.image }}
     timeout-minutes: 15
     permissions:
@@ -56,7 +56,7 @@ jobs:
           if ($env:ASSET_ID -notmatch '^[1-9][0-9]*$' -or $env:EXPECTED_SHA -notmatch '^[a-fA-F0-9]{64}$') {
             throw 'Both a numeric asset ID and a SHA-256 digest are required.'
           }
-          if ($env:ASSET_ID -ne '774153518' -or $env:EXPECTED_SHA -ne '9dd13731db16f98c07acc870c1580c7692f88d83ac6059bb5311fa3d2af3c50a') { throw 'This run only accepts the staged woodland candidate.' }
+          if ($env:ASSET_ID -ne '774170436' -or $env:EXPECTED_SHA -ne 'f1152f5d713e4e4a81479682e632a0ca0cb99a072f5e9af2e895c7e51e8612ec') { throw 'This run only accepts the staged woodland candidate.' }
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/octet-stream' }
           $url = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/assets/$env:ASSET_ID"
           Invoke-WebRequest -Uri $url -Headers $headers -OutFile "$env:RUNNER_TEMP/standalone.zip"
@@ -74,7 +74,7 @@ jobs:
           EXPECTED_SHA: ${{ inputs.standalone_sha256 }}
           EXPECTED_NODE: ${{ inputs.standalone_flow_node }}
         run: |
-          ./Tools/Test-WindowsStandalone.ps1 -Archive "$env:RUNNER_TEMP/standalone.zip" -ArchiveSha256 $env:EXPECTED_SHA -Revision 83636ca548c3165cb809dbbb7d38851d9487d160 -ExpectedFlowNode $env:EXPECTED_NODE -Output "$env:RUNNER_TEMP/standalone-proof"
+          ./Tools/Test-WindowsStandalone.ps1 -Archive "$env:RUNNER_TEMP/standalone.zip" -ArchiveSha256 $env:EXPECTED_SHA -Revision bf361c7ad5d5f3ab7e8b81b57dcab60b75a723cd -ExpectedFlowNode $env:EXPECTED_NODE -Output "$env:RUNNER_TEMP/standalone-proof"
 
       - name: Record the executable fault
         if: failure()
