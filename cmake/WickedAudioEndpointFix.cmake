@@ -27,6 +27,22 @@ set(_renegade_audio_replacement [=[hr = audioEngine->CreateMasteringVoice(&maste
             xaudio_assert(SUCCEEDED(hr), "IXAudio2::CreateMasteringVoice");]=])
 string(REPLACE "${_renegade_audio_anchor}" "${_renegade_audio_replacement}"
     _renegade_audio_text "${_renegade_audio_text}")
+
+# Unlike volume setters, Wicked's Windows reverb setter assumes its voice
+# exists. Scene activation still applies the authored mix without an endpoint.
+set(_renegade_reverb_anchor [=[		XAUDIO2FX_REVERB_PARAMETERS native;
+		ReverbConvertI3DL2ToNative(&reverbPresets[preset], &native);
+		xaudio_check(audio_internal->reverbSubmix->SetEffectParameters(0, &native, sizeof(native)));]=])
+string(FIND "${_renegade_audio_text}" "${_renegade_reverb_anchor}" _renegade_reverb_pos)
+if(_renegade_reverb_pos EQUAL -1)
+    message(FATAL_ERROR "Pinned Wicked audio changed: Windows reverb anchor missing")
+endif()
+set(_renegade_reverb_guard [=[		if (audio_internal == nullptr || audio_internal->reverbSubmix == nullptr)
+			return;
+]=])
+string(REPLACE "${_renegade_reverb_anchor}" "${_renegade_reverb_guard}${_renegade_reverb_anchor}"
+    _renegade_audio_text "${_renegade_audio_text}")
+
 set(_renegade_audio_generated_src "${CMAKE_CURRENT_BINARY_DIR}/RenegadeWickedFix/wiAudio.cpp")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/RenegadeWickedFix")
 set(_renegade_write_audio TRUE)
