@@ -2,6 +2,8 @@
 #include "renegade/bridge/VegetationService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/PlayerService.h"
+#include "renegade/bridge/PlayerViewRig.h"
+#include "renegade/bridge/TerrainPropCollisionWorld.h"
 #include "renegade/bridge/ProjectService.h"
 #include <filesystem>
 #include <map>
@@ -35,6 +37,71 @@ namespace grass_palette_proof
             Check(masks.emplace(key,hair.vertex_lengths).second,"Unexpected second chunk in one-chunk proof");
         }
         return masks;
+    }
+
+    inline void VerifyPlayerWalk(SceneService& loaded)
+    {
+        namespace native = wi::physics::terrain_props;
+        using namespace renegade::runtime;
+        auto& scene = loaded.GetScene();
+        auto start = ResolvePlayerStart(scene).start;
+        start.transform.translation = {-6, .15f, -10};
+        RuntimePlayerState player;
+        RuntimePlayerViewRigState rig;
+        std::string error;
+        wi::physics::SetEnabled(true);
+        wi::physics::SetSimulationEnabled(true);
+        wi::physics::SetFrameRate(60);
+        wi::physics::SetInterpolationEnabled(true);
+        Check(SpawnRuntimePlayer(scene,start,player,error,start.settings),error);
+        Check(SpawnRuntimePlayerViewRig(scene,rig,player.entity,start.settings.eyeHeight,error),error);
+        const auto world = loaded.TerrainPropCollisions();
+        Check(world && world->ResidentEnabled(),"Review terrain requires collision residency");
+        wi::scene::CameraComponent camera;
+        camera.CreatePerspective(960,640,.1f,500.f);
+        constexpr float dt = 1.f / 75;
+        float previousZ = start.transform.translation.z;
+        float previousHandY = 0;
+        for (int frame=0; frame<510; ++frame)
+        {
+            const bool ready = world->Ready();
+            PlayerInputFrame input;
+            input.moveForward = frame>=75 && ready ? 1.f : 0.f;
+            (void)UpdateRuntimePlayer(scene,player,input,start.settings);
+            (void)PoseRuntimePlayerViewRig(scene,rig,player.yaw,player.pitch);
+            UpdateRuntimePlayerViewRigPresentation(scene,rig,input,ready ? dt : 0.f);
+            const bool supported = world->UpdateSceneInterests(dt);
+            scene.Update(supported ? dt : 0.f);
+            ApplyRuntimePlayerCamera(scene,player,camera,start.settings);
+            const float handY = scene.transforms.GetComponent(rig.primaryArmProof)->GetPosition().y-camera.Eye.y;
+            if (previousZ >= -9 && previousZ < 14)
+            {
+                Check(supported && ready,"Walking stopped for a resident terrain tile");
+                Check(camera.Eye.z-previousZ > start.settings.walkSpeed*dt*.95f,
+                    "Player slowed down on the flat route across the grass");
+                Check(std::abs(handY-previousHandY)<.0025f,"Walking arms snapped relative to the camera");
+            }
+            previousZ = camera.Eye.z;
+            previousHandY = handY;
+        }
+        Check(previousZ>14,"Character did not cross the grass onto bare terrain");
+
+        // A previously live body cannot stand in for terrain currently being rebuilt.
+        auto& terrain = scene.terrains[0];
+        const auto pending = native::GetTerrainChunkRecords(scene,terrain.terrainEntity);
+        Check(!pending.empty(),"Missing terrain collision records after the walk");
+        wi::terrain::Chunk key;
+        key.x = pending.front().key.x;
+        key.z = pending.front().key.z;
+        auto& chunk = terrain.chunks.at(key);
+        chunk.invalidated = true;
+        Check(native::SetTerrainRequests(scene,terrain.terrainEntity,{},error),error);
+        Check(!world->UpdateSceneInterests(0),"Invalidated terrain accepted stale collision");
+        chunk.invalidated = false;
+        terrain.Generation_Cancel();
+        DespawnRuntimePlayerViewRig(scene,rig);
+        DespawnRuntimePlayer(scene,player);
+        std::cout<<"GRASS_STEADY_WALK_AND_ARM_POSE_PASS"<<std::endl;
     }
 
     inline void Run(wi::scene::Scene& scene, wi::terrain::Terrain& terrain, const fs::path& out,
@@ -156,6 +223,7 @@ namespace grass_palette_proof
         wi::graphics::GetDevice()->WaitForGPU();
         render.scene=&scene;
         Check(Capture(cold.GetScene())==both,"First native updates after cold reopen lost a painted layer");
+        VerifyPlayerWalk(cold);
         std::cout<<"GRASS_PALETTE_MIX_IMPORT_HISTORY_COLD_REOPEN_PASS"<<std::endl;
     }
 }
