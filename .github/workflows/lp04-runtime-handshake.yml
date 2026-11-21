@@ -128,7 +128,7 @@ jobs:
           $env:RENEGADE_G13E13_NO_SCREENSHOT = '1'
           $commands = Join-Path $trace 'startup.cdb'
           @'
-          sxd -c2 ".lastevent; .exr -1; .ecxr; k 32; lm a @rip; q" av
+          sxd -c2 ".lastevent; .exr -1; k 16; r; ub @rip L24; u @rip L16; ub TerrainPropsStockReview+0x37dd1e L32; lm a @rip; q" av
           g
           '@ | Set-Content -LiteralPath $commands -Encoding ascii
           Push-Location -LiteralPath $working
