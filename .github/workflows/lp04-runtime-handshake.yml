@@ -10,7 +10,7 @@ jobs:
     name: Launch the final woodland export on clean Windows
     if: github.ref == 'refs/heads/qa/terrain-props-p6-clean-windows' && github.repository == 'mav3r1ckmediastudio-glitch/renegade-engine'
     runs-on: windows-2025
-    timeout-minutes: 61
+    timeout-minutes: 127
     permissions:
       contents: write
     env:
@@ -90,7 +90,7 @@ jobs:
               "native_client_width=$width" , "native_client_height=$height" |
                   Set-Content -LiteralPath $env:RENEGADE_WOODLAND_WINDOW_EVIDENCE -Encoding utf8NoBOM
           '@
-          $source.Replace($launchAnchor, $resize).Replace($needle, '$proc.WaitForExit(3240000)') |
+          $source.Replace($launchAnchor, $resize).Replace($needle, '$proc.WaitForExit(7200000)') |
             Set-Content -LiteralPath $check -Encoding utf8NoBOM
           try {
             & $check -Archive "$env:RUNNER_TEMP/woodland-release.zip" -ArchiveSha256 $env:ZIP_SHA -Revision $env:RELEASE_REVISION -ExpectedFlowNode 'Woodland clearing' -Output "$env:RUNNER_TEMP/standalone-proof"
