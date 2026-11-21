@@ -645,7 +645,7 @@ namespace renegade::studio
                             s.rebuildAtlas=true;
                             size_t count=0;
                             for(size_t j=0;j<s.entryCount;++j) if(s.thumbnails[j]->selected) ++count;
-                            s.status.SetText(count ? std::to_string(count)+" plant types selected" : "Stock Wicked grass selected");
+                            s.status.SetText(count ? std::to_string(count)+(count == 1 ? " plant selected" : " plants selected") : "Stock Wicked grass selected");
                         });
                         inspectorPanel_.AddWidget(button.get());
                         state.thumbnails.push_back(std::move(button));
