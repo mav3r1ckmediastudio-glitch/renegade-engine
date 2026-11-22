@@ -1,3 +1,4 @@
+#include "renegade/bridge/GroundPaint.h"
 #include <cfloat>
 #include <cstring>
 #include "renegade/bridge/TestLevelLaunchTiming.h"
@@ -12006,6 +12007,21 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         if (!session_->Commands().Execute(std::move(command)))
         {
             return;
+        }
+        if (session_->Projects().HasProject())
+        {
+            const auto root=fs::u8path(session_->Projects().CurrentProject().rootPath);
+            const auto palette=bridge::GroundPalette(root);
+            std::string error;
+            const auto rock=bridge::ResolveGroundMaterial(scene,palette.at(4),root,error);
+            auto* created=scene.terrains.GetComponent(createCommand->CreatedEntity());
+            if(rock!=wi::ecs::INVALID_ENTITY && created && !created->materialEntities.empty())
+            {
+                // CreateTerrainCommand captures this configured terrain on the first Undo.
+                auto defaults=bridge::SetGroundBase(scene,created->terrainEntity,created->materialEntities.front(),rock,{});
+                defaults->Execute();
+            }
+            else if(!error.empty())studioChrome_.SetStatusText(error);
         }
         session_->Selection().Select(createCommand->CreatedEntity());
         RefreshHierarchy();

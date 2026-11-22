@@ -200,6 +200,7 @@ namespace renegade::studio
         if (state.created)
             return;
         state.created = true;
+        CreateGroundPanel();
 
         state.header.Create("WD01 Wicked Vegetation Header");
         state.header.SetText("VEGETATION // WICKED GRASS");
@@ -762,6 +763,7 @@ namespace renegade::studio
 
     void StudioRenderPath::DisableWd01VegetationBrush()
     {
+        StopGroundPaint();
         auto& state = Controls();
         if (session_)
         {
@@ -795,6 +797,7 @@ namespace renegade::studio
     bool StudioRenderPath::HandleWd01Vegetation(
         const XMFLOAT4& pointer)
     {
+        if(HandleGroundPaint(pointer))return true;
         auto& state = Controls();
         if (state.force!=wi::ecs::INVALID_ENTITY && session_ &&
             (!state.interaction || !terrainWorkspaceActive_ || !vegetationWorkspace_ ||

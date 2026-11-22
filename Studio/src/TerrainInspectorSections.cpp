@@ -48,6 +48,7 @@ void StudioRenderPath::LayoutTerrainSections()
     rows[1]={&terrainSizeReadout_,&expandTerrainButton_,&terrainChunkScale_,&terrainMinimumHeight_,&terrainMaximumHeight_,&terrainLodBias_};
     rows[2]={&terrainSculptMode_,&terrainBrushRadius_,&terrainBrushStrength_,&terrainBrushFalloff_,&terrainBrushReadout_,&terrainStrokeDiagnostic_};
     rows[3]={&terrainMaterialPreset_,&terrainTextureScale_,&terrainLowAltitudeBlend_,&terrainBaseBlend_,&terrainSlopeBlend_,&terrainApplyDefaultGrassButton_,&terrainReloadMaterialButton_};
+    auto ground=GroundPaintWidgets();rows[3].insert(rows[3].begin(),ground.begin(),ground.end());
     rows[4]={&terrainRiverStatus_};
     rows[5]={&terrainRiverBrushButton_,&terrainRiverWidth_};
     rows[6]={&terrainRiverFitButton_,&terrainRiverReflectionAlignButton_,&terrainRiverRockyBedButton_,&terrainRiverCarveDepth_,&terrainRiverCarveBank_,&terrainRiverCarveButton_,&terrainRiverUnlinkButton_};
@@ -256,7 +257,7 @@ void StudioRenderPath::LayoutTerrainSections()
         for(auto* widget:rows[i])
         {
             widget->SetVisible(true);
-            if (std::string_view(widget->GetWidgetTypeName())=="GrassThumbnail")
+            if (std::string_view(widget->GetWidgetTypeName())=="GrassThumbnail" || std::string_view(widget->GetWidgetTypeName())=="GroundThumbnail")
             {
                 const float tileWidth=(width-24-18)/4;
                 Place(*widget,36+(tile%4)*(tileWidth+6),y,tileWidth,58);

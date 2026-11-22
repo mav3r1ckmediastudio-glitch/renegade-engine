@@ -39,6 +39,7 @@ namespace renegade::bridge
         wi::ecs::Entity terrain_, river_, materialEntity_=wi::ecs::INVALID_ENTITY;
         std::string assets_, error_;
         std::vector<ChunkMask> masks_;
+        std::size_t materialSlot_=0, originalSlotCount_=0;
         bool prepared_ = false, applied_ = false, reuseMaterial_ = false;
     };
 }

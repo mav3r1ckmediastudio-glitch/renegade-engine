@@ -1,3 +1,4 @@
+#include "renegade/bridge/GroundPaint.h"
 #include "renegade/bridge/TerrainOperationProgress.h"
 #include "renegade/bridge/TerrainService.h"
 #include "renegade/bridge/RiverTerrainLayerService.h"
@@ -494,6 +495,8 @@ namespace
             chunk->sphere.center.y += chunk->position.y;
             chunk->sphere.center.z += chunk->position.z;
             chunk->sphere.radius = mesh->aabb.getRadius();
+            renegade::bridge::RefreshGroundSlope(terrain,*chunk,*mesh);
+            renegade::bridge::RefreshGroundGrass(*terrain.scene,terrain,*chunk);
             { TerrainStageTrace trace("height_texture"); UpdateTerrainChunkHeightData(terrain, *chunk, *mesh); }
 
             if (refreshPhysics && terrain.IsPhysicsEnabled())

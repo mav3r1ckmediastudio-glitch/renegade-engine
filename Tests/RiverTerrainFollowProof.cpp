@@ -17,6 +17,7 @@
 #include "../EngineBridge/src/PlaceableWaterfallAuthoring.h"
 #include "TerrainInitializationProof.h"
 #include "GrassPaletteProof.h"
+#include "GroundPaintProof.h"
 #include "TerrainPlayerPreviewProof.h"
 #include "MaximumTerrainRiverProof.h"
 #include "NativeCrashCapture.h"
@@ -522,7 +523,7 @@ int main(int argc, char** argv)
             settings.minimumHeight = -20;
             settings.maximumHeight = 40;
         }
-        if (argc==3 && std::string(argv[2])=="grass-palette")
+        if (argc==3 && (std::string(argv[2])=="grass-palette" || std::string(argv[2])=="ground-paint"))
         {
             settings.physics=true;
             settings.physicsChunkRadius=settings.visibleChunkRadius+1;
@@ -735,6 +736,11 @@ int main(int argc, char** argv)
         gpu->WaitForGPU();
         Require(terrain->chunks.size() >= 9,
             "real finite terrain did not generate all chunks");
+        if (argc==3 && std::string(argv[2])=="ground-paint")
+        {
+            ground_paint_proof::Run(scene,*terrain,out,render,camera);
+            return 0;
+        }
         if (argc==3 && std::string(argv[2])=="grass-palette")
         {
             grass_palette_proof::Run(scene,*terrain,out,render,camera);

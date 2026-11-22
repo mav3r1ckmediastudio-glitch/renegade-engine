@@ -47,6 +47,7 @@ include(cmake/TerrainPropArchive.cmake)
 include(cmake/ParticleCoreOverlay.cmake)
 include(cmake/RenegadeNightSkyOverlay.cmake)
 include(cmake/RenegadeTerrainPropDetailFade.cmake)
+include(cmake/GroundPaintOverlay.cmake)
 add_subdirectory(WickedEngine)
 include(cmake/RenegadeOfflineShaderCompiler.cmake)
 include(cmake/WickedBacklogShutdownFix.cmake)
@@ -114,6 +115,7 @@ target_sources(RenegadeEngineBridge PRIVATE
     EngineBridge/src/SpecialistComponentService.cpp
     EngineBridge/include/renegade/bridge/TerrainCreatorGapService.h
     EngineBridge/src/TerrainCreatorGapService.cpp
+    EngineBridge/src/GroundPaint.cpp
 )
 
 if(WIN32)

@@ -776,6 +776,10 @@ namespace renegade::studio
         void QueueSelectedRiverReflectionAlignment();
         void QueueSelectedRiverRockyBed();
         bool HandleRiverSplineControlPoints(const XMFLOAT4& pointer);
+        void CreateGroundPanel();
+        void StopGroundPaint();
+        bool HandleGroundPaint(const XMFLOAT4& pointer);
+        std::vector<wi::gui::Widget*> GroundPaintWidgets();
         void CreateWd01VegetationControls();
         void LayoutWd01VegetationControls(float fieldWidth);
         void RefreshWd01VegetationControls(bool hasTerrain);

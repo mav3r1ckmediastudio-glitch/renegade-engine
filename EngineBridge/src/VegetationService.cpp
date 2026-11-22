@@ -1,3 +1,4 @@
+#include "renegade/bridge/GroundPaint.h"
 #include "renegade/bridge/VegetationService.h"
 
 #include <algorithm>
@@ -250,6 +251,7 @@ namespace
                 chunk.grass_entity, chunk.entity, true);
 
         chunk.grass_density_current = terrain.grass_density;
+        renegade::bridge::RefreshGroundGrass(scene,terrain,chunk);
         return true;
     }
 
@@ -329,17 +331,20 @@ namespace
     {
         auto& hair = *scene.hairs.GetComponent(entity);
         if (hair.vertex_lengths.size()!=mesh.vertex_positions.size()) return;
-        if (std::none_of(vertices.begin(),vertices.end(),[&](size_t v){return hair.vertex_lengths[v]!=target;}))
+        auto authored=renegade::bridge::AuthoredPlantLengths(scene,entity,hair);
+        if (std::none_of(vertices.begin(),vertices.end(),[&](size_t v){return authored[v]!=target;}))
             return;
         auto found = std::find_if(stroke.chunks.begin(),stroke.chunks.end(),
             [&](const auto& snapshot){return snapshot.layer==entity;});
         if (found==stroke.chunks.end())
-            stroke.chunks.push_back({chunk.entity,hair.vertex_lengths,entity,LayerAtlas(scene,entity)});
+            stroke.chunks.push_back({chunk.entity,authored,entity,LayerAtlas(scene,entity)});
         for (auto v: vertices)
         {
-            if (hair.vertex_lengths[v]!=target) ++result.affectedVertices;
-            hair.vertex_lengths[v]=target;
+            if (authored[v]!=target) ++result.affectedVertices;
+            authored[v]=target;
         }
+        renegade::bridge::SetAuthoredPlantLengths(scene,entity,authored);
+        hair.vertex_lengths=std::move(authored);
         RefreshLayer(hair,terrain);
         result.changed=true;
     }
@@ -767,7 +772,12 @@ namespace renegade::bridge
             if (snapshot.layer!=wi::ecs::INVALID_ENTITY)
             {
                 auto* hair=scene.hairs.GetComponent(snapshot.layer);
-                if (hair && ActiveVertexCount(*hair)==0) scene.Entity_Remove(snapshot.layer);
+                if(hair)
+                {
+                    auto authored=AuthoredPlantLengths(scene,snapshot.layer,*hair);
+                    if(std::none_of(authored.begin(),authored.end(),[](float x){return x>MaskEpsilon;}))scene.Entity_Remove(snapshot.layer);
+                    else if(auto* chunk=FindChunk(terrain,snapshot.chunkEntity))RefreshGroundGrass(scene,terrain,*chunk);
+                }
                 continue;
             }
             auto* chunk = FindChunk(terrain, snapshot.chunkEntity);
@@ -788,7 +798,7 @@ namespace renegade::bridge
             {
                 auto snapshot=before;
                 const auto* hair=scene.hairs.GetComponent(before.layer);
-                if (hair) snapshot.vertexLengths=hair->vertex_lengths;
+                if (hair) snapshot.vertexLengths=AuthoredPlantLengths(scene,before.layer,*hair);
                 else snapshot.vertexLengths.clear();
                 if (snapshot.vertexLengths!=before.vertexLengths) after.chunks.push_back(std::move(snapshot));
                 continue;
@@ -834,8 +844,10 @@ namespace renegade::bridge
                     if (snapshot.vertexLengths.size()!=mesh->vertex_positions.size()) return false;
                     auto* hair=scene.hairs.GetComponent(snapshot.layer);
                     if (!hair) hair=&CreateLayer(scene,terrain,chunk->entity,snapshot.layer,snapshot.atlas,mesh->vertex_positions.size());
+                    SetAuthoredPlantLengths(scene,snapshot.layer,snapshot.vertexLengths);
                     hair->vertex_lengths=snapshot.vertexLengths;
                     RefreshLayer(*hair,terrain);
+                    RefreshGroundGrass(scene,terrain,*chunk);
                 }
                 applied=true;
                 continue;
