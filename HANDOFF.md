@@ -1,3 +1,9 @@
+# Zone resize and gallery placement
+
+Implementation commit 44bf593d30bb921d690a3a030b6373947a997358 on feature/gameplay-zones. StudioApplication routes single-zone Scale to its six face handles. ZoneStudio enlarges handles in Scale and adds dimension tooltips. Updated architecture and assistant source evidence. The local ZoneAnchorReview project uses one station mesh per zone, in zone-local coordinates. The original gallery projects were retained.
+
+Local x64 Release build compiled StudioApplication, MarkerIconOverlay and ZoneStudio and linked Studio. The gallery fixture proof exercised all 13 presets at 12 m wide, 2 m tall and 0.4 m deep. Checked local pivot and world translation, unit scale, square pad, board aspect and UVs, extended gameplay containment, and undo/redo. Ran native zone tests, marker source contract, 84 assistant workflows and packaged knowledge tests. The standalone DX12 gallery loaded all 13 zones and the boards were readable from the spawn. Desktop shortcuts target the corrected review copy. Hosted CI and owner acceptance are pending.
+
 # Gameplay zone visual identification
 
 Implementation commit: 07ed43606c04314b737adeb7d91788c0db181f99 on feature/gameplay-zones. ZoneStudio, MarkerIconOverlay and StudioApplication draw preset icons, names and matching bounds in Scene. The stock atlas is staged by the Windows Studio packaging check and covered by the marker asset contract. Updated architecture, feature matrix and assistant evidence.
