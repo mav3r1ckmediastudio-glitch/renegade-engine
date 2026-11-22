@@ -145,7 +145,7 @@ namespace renegade::runtime
             if(mesh!=wi::ecs::INVALID_ENTITY && scene.meshes.Contains(mesh))return;
             mesh=scene.Entity_CreateTransform("Blood droplet resource");
             auto& material=scene.materials.Create(mesh);
-            material.baseColor={.26f,.012f,.018f,1};material.SetRoughness(.18f);
+            material.baseColor={.20f,.006f,.012f,1};material.SetRoughness(.38f);
             material.SetReflectance(.04f);material.SetCastShadow(false);material.emissiveColor={0,0,0,0};
             auto& geometry=scene.meshes.Create(mesh);
             constexpr unsigned lat=12,lon=24;
@@ -190,7 +190,7 @@ namespace renegade::runtime
                 const float angle=float(i)*2.399963f+float(seed%31);
                 const float spread=.35f+.35f*float(i%3);
                 Drop drop;drop.entity=entity;drop.source=source;
-                drop.radius=.003f+.007f*Variation(seed*59u+i*101u+7u);
+                drop.radius=.0012f+.0028f*Variation(seed*59u+i*101u+7u);
                 drop.position={point.x+direction.x*.035f,point.y+direction.y*.035f,point.z+direction.z*.035f};
                 drop.velocity={direction.x*(1.1f+strength)+std::cos(angle)*spread,
                     direction.y*(1.1f+strength)+.35f+float(i%4)*.12f,
@@ -214,8 +214,16 @@ namespace renegade::runtime
             {
                 const float visible=1.f-.75f*std::clamp((drop.age-.35f)/.85f,0.f,1.f);
                 const float radius=drop.radius*visible;
-                t->ClearTransform();t->Scale(XMFLOAT3{radius,radius*1.4f,radius});
-                t->Translate(drop.position);t->UpdateTransform();
+                // Align a thin liquid streak with travel instead of a round bead.
+                auto axis=XMLoadFloat3(&drop.velocity);
+                const float speed=XMVectorGetX(XMVector3Length(axis));
+                axis=speed>.0001f?axis/speed:XMVectorSet(0,1,0,0);
+                const auto up=std::abs(XMVectorGetY(axis))>.95f?XMVectorSet(1,0,0,0):XMVectorSet(0,1,0,0);
+                const auto facing=XMMatrixInverse(nullptr,XMMatrixLookToLH(XMVectorZero(),axis,up));
+                const float length=radius*1.5f+std::min(.010f,speed*.0012f);
+                t->ClearTransform();t->MatrixTransform(XMMatrixScaling(radius*.65f,radius*.65f,length)*facing*
+                    XMMatrixTranslation(drop.position.x,drop.position.y,drop.position.z));
+                t->UpdateTransform();
             }
         }
         void Mark(wi::scene::Scene& scene,const XMFLOAT3& point,const XMFLOAT3& normal,

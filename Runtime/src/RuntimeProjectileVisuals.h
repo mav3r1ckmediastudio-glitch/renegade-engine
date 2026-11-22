@@ -412,7 +412,7 @@ namespace renegade::runtime
                     blood.directionalPrototype?&sheetFacing:nullptr,
                     blood.directionalPrototype?&sheetOutward:nullptr))
                     addBurst(ImpactTexture::BloodSpray,bridge::ProjectileEffectKind::Smoke,
-                        embedded?.70f:1.0f,1.25f,1,.45f,0,{.70f,.70f,.70f,.9f},false);
+                        embedded?.24f:.34f,1.25f,1,.45f,0,{.32f,.006f,.012f,.88f},false);
                 auto source=parent;
                 for(size_t i=0;i<=scene.hierarchy.GetCount() && source!=wi::ecs::INVALID_ENTITY;++i)
                 {

@@ -46,9 +46,10 @@ namespace renegade::runtime
             if(donor==wi::ecs::INVALID_ENTITY && !builtin.IsValid())return false;
             wi::scene::MaterialComponent material;
             if(donor!=wi::ecs::INVALID_ENTITY)material=*scene.materials.GetComponent(donor);
-            if(builtin.IsValid()) {
+            if(donor==wi::ecs::INVALID_ENTITY && builtin.IsValid()) {
                 material.textures[wi::scene::MaterialComponent::BASECOLORMAP].resource.SetTexture(builtin);
-                material.baseColor={1,1,1,1};
+                // The built-in atlas stores white RGB and liquid coverage in alpha.
+                material.baseColor={.32f,.006f,.012f,.88f};
                 material.SetRoughness(.25f);material.SetReflectance(.04f);
             }
             if(wi::graphics::GetDevice() &&
@@ -85,7 +86,7 @@ namespace renegade::runtime
                     sheet.start.y+=outward->y*.10f+sheet.facing.y*.08f;
                     sheet.start.z+=outward->z*.10f+sheet.facing.z*.08f;
                 }
-                sheet.size=layer?.62f:1.04f;
+                sheet.size=layer?.18f:.30f;
                 sheet.rotation=(float(seed%7)-3)*.13f+(layer?.65f:0);
                 sheet.life=layer?.48f:.38f;
                 if(directional)
