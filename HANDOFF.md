@@ -1,3 +1,9 @@
+# Gameplay zone visual identification
+
+Implementation commit: 07ed43606c04314b737adeb7d91788c0db181f99 on feature/gameplay-zones. ZoneStudio, MarkerIconOverlay and StudioApplication draw preset icons, names and matching bounds in Scene. The stock atlas is staged by the Windows Studio packaging check and covered by the marker asset contract. Updated architecture, feature matrix and assistant evidence.
+
+Local Release Studio compiled both changed translation units and linked against the previous configured Release objects. Native gameplay zone cases, the marker icon CMake contract, 84 assistant workflow tests and the packaged knowledge test passed. The desktop review gallery includes 13 matching illustrated stations. Inspected labels and zone dimensions in the DX12 editor and verified signs and 13 zones in the standalone DX12 runtime. Gallery art is review-project scenery. Debug and hosted CI are pending.
+
 # Complete gameplay zone palette
 
 Implementation commit `8982534b3b3731812e633baa38d027a34cef4a55` on local branch `feature/gameplay-zones`.
