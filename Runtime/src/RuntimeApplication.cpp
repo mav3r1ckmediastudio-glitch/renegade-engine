@@ -6,6 +6,7 @@
 #include <cmath>
 #include <filesystem>
 #include "RuntimeApplication.h"
+#include "renegade/bridge/ZoneService.h"
 #include "RuntimeVehiclePrototype.h"
 #include "TerrainPropViewOrigin.h"
 #include "RuntimeSingleLevelSavePolicy.h"
@@ -472,7 +473,7 @@ namespace renegade::runtime
             return;
         }
 
-        if(!pauseOverlayVisible_) return;
+        if(!pauseOverlayVisible_ && !levelComplete_) return;
         wi::image::Params shade(0.0f, 0.0f, width, height,
             wi::Color(0, 0, 0, 145));
         shade.blendFlag = wi::enums::BLENDMODE_ALPHA;
@@ -487,7 +488,7 @@ namespace renegade::runtime
             wi::Color(245, 245, 245, 255),
             wi::Color::Transparent());
         title.bolden = 0.12f;
-        wi::font::Draw("PAUSED", title, cmd);
+        wi::font::Draw(levelComplete_ ? "LEVEL COMPLETE" : "PAUSED", title, cmd);
 
         wi::font::Params hint(
             width * 0.5f,
@@ -497,7 +498,7 @@ namespace renegade::runtime
             wi::font::WIFALIGN_CENTER,
             wi::Color(220, 220, 220, 255),
             wi::Color::Transparent());
-        wi::font::Draw("ESC RESUME   //   R RESET", hint, cmd);
+        wi::font::Draw(levelComplete_ ? "ENTER TO FINISH" : "ESC RESUME   //   R RESET", hint, cmd);
     }
 
     void RuntimeApplication::SetBootstrapResult(RuntimeBootstrapResult result)
@@ -802,6 +803,8 @@ namespace renegade::runtime
 
     void RuntimeApplication::Update(const float dt)
     {
+        if (directLevelWon_ && wi::input::Press(wi::input::KEYBOARD_BUTTON_ENTER))
+            quitRequested_ = true;
         SyncPlayerForScene();
         static RuntimeVehicleTrial vehicleTrial;
         vehicleTrial.RestoreCockpitProjection(renderer_.camera);
@@ -1128,6 +1131,8 @@ namespace renegade::runtime
         if (gameplayFrame)
         {
             SyncCreatorScriptsForScene();
+            if (!paused_ && collisionReady && gameplayInputAllowed && !inventoryOverlayOpen_)
+                UpdateZones();
             if (!paused_&&collisionReady)
             {
                 creatorScripts_.SetScriptedFlightFrame(vehicleTrial.scriptedFlight);
@@ -3498,6 +3503,14 @@ namespace renegade::runtime
         inventorySelection_.Reset();
         inventoryUiStatus_.clear();
         inventorySession_.Reset();
+        zoneContacts_.clear();
+        directLevelWon_ = false;
+        auto& activeScene = scenes_.GetScene();
+        for (size_t index = 0; index < activeScene.metadatas.GetCount(); ++index)
+        {
+            const auto id = activeScene.metadatas.GetEntity(index);
+            if (bridge::zones::IsZone(activeScene, id)) zoneContacts_.push_back({id});
+        }
         worldPickups_.Reset();
         runtimeItemCatalogue_={};
         runtimeItemCatalogueLoaded_=false;
@@ -3801,7 +3814,8 @@ namespace renegade::runtime
     void RuntimeApplication::RefreshEffectivePause() noexcept
     {
         renderer_.SetPauseOverlayVisible(manualPauseRequested_ && !uiPauseRequested_);
-        const bool paused = manualPauseRequested_ || uiPauseRequested_;
+        renderer_.SetLevelComplete(directLevelWon_);
+        const bool paused = directLevelWon_ || manualPauseRequested_ || uiPauseRequested_;
         if (paused_ == paused)
             return;
 
@@ -4337,6 +4351,44 @@ namespace renegade::runtime
         return true;
     }
 
+    void RuntimeApplication::UpdateZones()
+    {
+        if (zoneContacts_.empty() || !player_.IsSpawned()) return;
+        const auto* level = flowStarted_ ? flow_.CurrentNode() : nullptr;
+        if (level && level->kind != bridge::FlowNodeKind::Level) return;
+        const auto& scene = scenes_.GetScene();
+        const auto* player = scene.transforms.GetComponent(player_.entity);
+        if (!player) return;
+        for (auto& contact : zoneContacts_)
+        {
+            bridge::zones::Definition zone;
+            const auto* transform = scene.transforms.GetComponent(contact.id);
+            if (!transform || !bridge::zones::Read(scene, contact.id, zone)) continue;
+            const bool inside = bridge::zones::Contains(zone, XMLoadFloat4x4(&transform->world), player->GetPosition());
+            if (inside == contact.inside) continue;
+            contact.inside = inside;
+            if (zone.behaviour == bridge::zones::Behaviour::Win)
+            {
+                if (!inside || contact.won) continue;
+                contact.won = true;
+                if (level)
+                    QueueAction({"level.complete", {}, RuntimeInputSource::Gameplay, startupResult_.lastActionSequence + 1});
+                else
+                    directLevelWon_ = true;
+                diagnosticService_.Record(bridge::DiagnosticSeverity::Info, "runtime.zone", "level.complete", bridge::PersistentEntityId(scene, contact.id));
+                return;
+            }
+            bridge::GameplayEvent event;
+            event.name = inside ? zone.enter : zone.exit;
+            if (event.name.empty()) continue;
+            event.targetEntityId = zone.target;
+            event.senderEntityId = bridge::PersistentEntityId(scene, contact.id);
+            std::string error;
+            if (!creatorScripts_.EnqueueGameplayEvent(std::move(event), error))
+                wi::backlog::post("Zone event: " + error, wi::backlog::LogLevel::Warning);
+        }
+    }
+
     void RuntimeApplication::QueueAction(RuntimeActionRequest request)
     {
         pendingActions_.push_back(std::move(request));
@@ -4377,8 +4429,9 @@ namespace renegade::runtime
                     RefreshUiComposition();return;
                 }
             }
-            const bool flowPause=current&&current->kind==bridge::FlowNodeKind::Level&&request.actionId=="ui.pause";
-            if(flowScreen||flowPause)
+            const bool levelOutcome = current && current->kind == bridge::FlowNodeKind::Level &&
+                (request.actionId == "ui.pause" || request.actionId == "level.complete");
+            if(flowScreen||levelOutcome)
             {
                 const auto oldFlow=flow_;
                 const auto oldBootstrap=startupResult_;
@@ -4408,6 +4461,9 @@ namespace renegade::runtime
                     startupResult_.screenLoaded=false;pendingEnterOverride_.reset();
                 }
                 if(startupResult_.flowTerminalAction==bridge::FlowTerminalAction::Quit)quitRequested_=true;
+                if (request.actionId == "level.complete" &&
+                    startupResult_.flowTerminalAction == bridge::FlowTerminalAction::CompleteGame)
+                    directLevelWon_ = true;
                 result.succeeded=true;result.code=RuntimeActionCode::Success;
                 result.message="Runtime Screen action advanced Story Flow to '"+startupResult_.flowNodeName+"'.";
                 RecordAction(result);return; // drop additional source-instance requests

@@ -81,6 +81,7 @@ namespace renegade::runtime
             bridge::SceneService& scenes,
             std::string projectRoot) noexcept;
         void SetPaused(bool paused) noexcept;
+        void SetLevelComplete(bool complete) noexcept { levelComplete_ = complete; }
         void SetPauseOverlayVisible(bool visible) noexcept { pauseOverlayVisible_=visible; }
         void SetInterfaceDeltaTime(float dt) noexcept;
         void SetInteractionPrompt(std::string prompt) noexcept;
@@ -127,6 +128,7 @@ namespace renegade::runtime
         bool renderSettingsInitialized_ = false;
         bool paused_ = false;
         bool pauseOverlayVisible_ = false;
+        bool levelComplete_ = false;
         float interfaceDeltaTime_ = 0;
         std::string interactionPrompt_;
         bridge::InventoryOverlayView inventoryView_;
@@ -196,6 +198,10 @@ namespace renegade::runtime
         void SyncLevelHud();
         void OnGovernedHudGameplayEvent(const bridge::GameplayEvent& event);
         void ProcessHudActions();
+        struct ZoneContact { wi::ecs::Entity id; bool inside = false, won = false; };
+        std::vector<ZoneContact> zoneContacts_;
+        bool directLevelWon_ = false;
+        void UpdateZones();
         void QueueAction(RuntimeActionRequest request);
         void ProcessPendingActions();
         void CancelScreenExit();

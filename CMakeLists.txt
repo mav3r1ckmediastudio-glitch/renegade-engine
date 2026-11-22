@@ -393,6 +393,7 @@ if(TARGET RenegadeStudioCI)
         RenegadeRiverCascadeTests
         RenegadeRiverSmoothDropTests
         RenegadeRiverCourseTests
+        RenegadeGameplayZoneTests
         RenegadePlaceableWaterfallAuthoringTests
         RenegadePlaceableWaterfallTests
         RenegadeRiverWaterfallFlightTests

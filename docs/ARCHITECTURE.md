@@ -1,5 +1,11 @@
 # Architecture
 
+## Gameplay zones
+
+A zone is a named scene entity with a persistent ID, a transform and versioned local box bounds in WISCENE metadata. Studio places its origin on the picked surface. The Scene workspace owns the outline, six resize handles and inspector. Preset changes keep the bounds and identity. A zone contributes no render mesh or physics shape.
+
+Runtime tracks the player origin in each authored box using the inverse world transform. Custom Trigger sends a named event on entry and exit to the chosen persistent entity or to the project scripts by broadcast. Win Zone sends the existing Story Flow `level.complete` action once per level visit. A direct level launch presents a completion overlay and accepts Enter to finish.
+
 ## Gameplay physics adapter
 
 The Physics Lab samples counts and timings from the native scene through EngineBridge. Diagnostic requests and queued paused steps belong to the scene's physics state and the contact sample shares the native listener. A paused step feeds back the resulting pose without interpolation. Diagnostics do not need a subscription to the gameplay event queue.

@@ -2896,6 +2896,7 @@ namespace renegade::studio
         terrainStrokeDiagnostic_.SetText("LAST STROKE // READY");
         inspectorPanel_.AddWidget(&terrainStrokeDiagnostic_);
 
+        CreateZoneControls();
         CreateWaterfallControls();
         createSectionLabel(terrainRiverLabel_, "Terrain River Section",
             "WATER // DRAG TO DRAW RIVER");
@@ -3345,6 +3346,21 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::CreateRectangleLight:
                 pendingLightType_ = wi::scene::LightComponent::RECTANGLE;
                 RequestDiagnosticAction(EditorAction::CreateLight);
+                break;
+            case RenegadeStudioChrome::Action::CreateZone:
+                if (session_ && !testLevelRuntime_.IsActive() && !projectHubVisible_)
+                {
+                    SetEnvironmentWorkspaceActive(false);
+                    SetTerrainWorkspaceActive(false);
+                    SetRenderWorkspaceActive(false);
+                    CancelLightPlacement();
+                    particlePlacementActive_ = false;
+                    DisableWd01VegetationBrush();
+                    DisableTerrainPropBrush();
+                    studioChrome_.PrepareViewportPlacement();
+                    zonePlacing_ = true;
+                    studioChrome_.SetStatusText("ZONE // CLICK GROUND TO PLACE // RIGHT CLICK TO CANCEL");
+                }
                 break;
             case RenegadeStudioChrome::Action::CreatePlayerStart:
                 RequestDiagnosticAction(EditorAction::CreatePlayerStart);
@@ -4331,6 +4347,7 @@ namespace renegade::studio
         if (session_ != nullptr)
         {
             ScopedCPUProfiling("Studio weather authoring");
+            DrawZones();
             TickWeatherPresetTransition(dt);
             bridge::RefreshPrecipitationVisual(session_->Scenes().GetScene());
         }
@@ -4647,6 +4664,7 @@ namespace renegade::studio
             return;
         }
 
+        if (HandleZonePointer(pointer)) return;
         if(HandleParticlePlacement(pointer))return;
         if (HandleLightPlacement(pointer))
         {
@@ -5564,6 +5582,7 @@ namespace renegade::studio
 
     void StudioRenderPath::RefreshHierarchy()
     {
+        editorZones_.clear();
         hierarchyTree_.ClearItems();
         std::vector<RenegadeStudioChrome::HierarchyRow> chromeRows;
         if (session_ == nullptr)
@@ -5595,13 +5614,15 @@ namespace renegade::studio
             item.open = true;
             item.selected = session_->Selection().Contains(entity.entity);
             hierarchyTree_.AddItem(item);
+            const bool zone = bridge::zones::IsZone(scene, entity.entity);
+            if (zone) editorZones_.push_back(entity.entity);
             chromeRows.push_back({
                 entity.name,
                 entity.depth,
                 session_->Selection().Contains(entity.entity),
                 static_cast<std::uint64_t>(entity.entity),
                 entity.logicalAsset,
-                ToHierarchyCategory(entity.category),
+                zone ? RenegadeStudioChrome::HierarchyCategory::Zones : ToHierarchyCategory(entity.category),
             });
         }
         studioChrome_.SetHierarchyRows(std::move(chromeRows));
@@ -5673,6 +5694,7 @@ namespace renegade::studio
 
     void StudioRenderPath::RefreshInspector()
     {
+        if (LayoutZoneInspector()) return;
         // Standalone waterfall selection owns a dedicated panel, not the generic component inspector.
         if(session_ && session_->Selection().Entities().size()<2 && LayoutWaterfallInspector())return;
         if(!projectHubVisible_&&!renderWorkspaceActive_)inspectorPanel_.SetVisible(true);
