@@ -1,3 +1,13 @@
+# Gameplay zone picking and editable Lua
+
+Implementation commit `e4e86eb313c22d941ee8f9572b41fd97ade49bd7` on the local `feature/gameplay-zones` branch.
+
+- Click a visible face in the Scene viewport to reselect a zone. Picking uses the ray intersection with the transformed box and respects closer scene geometry. Normal gizmo and resize-handle handling stays available.
+- Studio includes the Trigger and Win packages under Content/ScriptLibrary/RenegadeZones. Adopting a preset uses its project-owned source in Content/Scripts/Library. The zone inspector opens a Lua source window with Save, Preview Enter and Preview Exit. A save or clean external edit reruns the isolated preview. A launched game reads the project source when its scene starts.
+- Changes cover ZoneService, Studio selection and zone authoring, ZoneScriptEditor, RuntimeApplication, RuntimeScriptRuntime, stock packages, build and test definitions, gameplay zone tests, assistant evidence, architecture and feature matrix.
+- Local Windows x64 Release builds of Studio and Runtime passed using the existing dependency cache with build writes on C. The native zone test covered rotated faces, inside rays, stable history and reopening, independent project copies, editable behavior and disabled attachments. Reproduce with RenegadeGameplayZoneTests. The two affected Phase 5/6 source contracts, packaged assistant knowledge check and the offline 84-case assistant suite also passed.
+- In the private Studio review, a click within an unselected Win Zone face opened its Gameplay Zone inspector. Checked Preview Exit, modified and saved the real Lua source, rejected an invalid draft without replacing the saved script, and verified external changes refreshed the preview. Restored the original source. In the standalone player a single attached Lua Win Zone was active in Level One. Using normal W movement through the doorway produced a successful gameplay level.complete and entered Level Two. Proof is in the private ZoneLuaReview/Proof directory on DESIGN. No Debug build or hosted CI run in this pass.
+
 # Scene gameplay zones
 
 Implementation commit `929158a933b9ff9d1a6b2d83d69a306bc9f5c480` on the local `feature/gameplay-zones` branch.
