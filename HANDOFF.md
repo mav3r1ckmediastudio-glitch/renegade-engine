@@ -1,3 +1,13 @@
+# Owner-review fixes for mixed foliage and live terrain painting
+
+Implementation `f2a22afc6a2600ad85b0141ce108594bdee464cd`. CTest registration `e6cb76ef6827152637a686ce25fe69beb4c3e0b6`. Use `BUILD/recovered-r1-ground/TerrainPaintReview/TerrainPaintReview.renegade` for the saved mixed poppy/daisy path on DESIGN.
+
+- The Studio crash was traced to DX12 terrain tile writeback after a brush invalidated the pending resolution. The overlay in cmake/GroundPaintOverlay.cmake now uses the live residency resolution for GPU copies and handles a previous-frame blendmap after Undo. Tests/GroundPaintProof.h paints and undoes new layers between scene update and rendering.
+- EngineBridge/src/VegetationService.cpp selects deterministic per-strand palette sampling for newly painted and reopened mixed grass. Each complete group of strand IDs uses every selected frame once. Tests/GrassPaletteProof.h reads actual GPU UVs, checks spatial mixing and compares assignments after reopen.
+- Rebuild the Studio, Runtime and RenegadeRiverTerrainFollowProof targets for Windows x64 Debug and Release. Run `ctest --test-dir BUILD/renegade -C <config> -R "RenegadeVegetation_|MarkerIconsSourceContract|WD01VegetationSourceContract|S1AInspectorSectionSourceContract|S1BInspectorMigrationSourceContract|RockyRiverbedDeployment" --output-on-failure`. The seven focused checks passed in both configurations. The two native vegetation cases now run in ordinary Studio CI.
+- On the RTX 4070 Ti the two-species patch returned 121/122 strands, with identical frame choices after reopen. The 30-species brush returned 8 or 9 per variety across 243 strands. Visual inspection of ground-paint.png showed red poppies and white daisies interspersed along both edges of the path. Coverage is by strand count; sprite size and alpha affect apparent area.
+- The private Studio input check dragged the path on a disposable copy, undid and redid the stroke and launched Test Game. Release also passed the flat-rocky river regression and a standalone Runtime walk of the recovered scene. Hosted results and final owner visual acceptance are separate.
+
 # Terrain material painting in Vegetation
 
 Implementation commit `3789ce2afe9d748f5ff0bfedefab932c256768bc` on `feature/vegetation-grass`. Review locally with the saved `BUILD/ground-review-release/TerrainPaintReview/TerrainPaintReview.renegade` project. The review level includes a path painted in two passes, a sculpted bank and particle grass. Final ground artwork and independent owner sign-off are pending.
