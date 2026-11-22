@@ -39,6 +39,72 @@ namespace grass_palette_proof
         return masks;
     }
 
+    // Read the actual atlas UV and root position produced by the compute shader.
+    // Counts alone would miss a patch with all the white plants on one side.
+    inline std::vector<unsigned> VerifyMix(const wi::HairParticleSystem& hair)
+    {
+        using namespace wi::graphics;
+        using UV = wi::scene::MeshComponent::Vertex_UVS;
+        wi::vector<uint8_t> bytes;
+        Check(wi::helper::saveBufferToMemory(hair.generalBuffer, bytes), "Mixed strand readback failed");
+        const size_t stride = (2 + 2 * hair.segmentCount) * hair.billboardCount;
+        const unsigned n = unsigned(hair.atlas_rects.size());
+        const unsigned side = unsigned(std::ceil(std::sqrt(double(n))));
+        const size_t posStride = GetFormatStride(hair.position_format);
+        const auto& pos = hair.vb_pos[0];
+        const auto& uv = hair.vb_uvs;
+        Check(n > 1 && hair.strandCount >= n && pos.offset + pos.size <= bytes.size() &&
+            uv.offset + uv.size <= bytes.size() && size_t(hair.strandCount) * stride * sizeof(UV) <= uv.size &&
+            size_t(hair.strandCount) * stride * posStride <= pos.size, "Incomplete mixed-strand buffers");
+        std::vector<unsigned> frames, totals(n);
+        std::vector<XMFLOAT2> roots;
+        XMFLOAT2 centre{};
+        for (unsigned i = 0; i < hair.strandCount; ++i)
+        {
+            const size_t v = i * stride;
+            UV sprite{};
+            std::memcpy(&sprite, bytes.data() + uv.offset + v * sizeof(UV), sizeof(UV));
+            // The first root vertex is at the lower-left corner of its sprite.
+            const int column = int(std::lround(sprite.uv0.x * side / 65535.f));
+            const int row = int(std::lround(sprite.uv0.y * side / 65535.f)) - 1;
+            Check(column >= 0 && column < int(side) && row >= 0 && row * side + column < n,
+                "Mixed grass sampled an empty atlas cell");
+            frames.push_back(row * side + column);
+            ++totals[frames.back()];
+            XMFLOAT2 root{};
+            const auto* xyz = bytes.data() + pos.offset + v * posStride;
+            if (IsFormatUnorm(hair.position_format))
+            {
+                uint16_t coords[3]; std::memcpy(coords, xyz, sizeof(coords));
+                root = {float(coords[0]), float(coords[2])};
+            }
+            else
+            {
+                float coords[3]; std::memcpy(coords, xyz, sizeof(coords));
+                root = {coords[0], coords[2]};
+            }
+            roots.push_back(root); centre.x += root.x; centre.y += root.y;
+        }
+        auto spread = std::minmax_element(totals.begin(), totals.end());
+        Check(*spread.second - *spread.first <= 1, "Painted plant counts differ by more than one");
+        centre.x /= hair.strandCount; centre.y /= hair.strandCount;
+        std::vector<std::vector<unsigned>> quadrants(4, std::vector<unsigned>(n));
+        for (size_t i = 0; i < roots.size(); ++i)
+            ++quadrants[(roots[i].x > centre.x) + 2 * (roots[i].y > centre.y)][frames[i]];
+        if (n == 2)
+        {
+            for (const auto& q : quadrants)
+            {
+                const unsigned count = q[0] + q[1];
+                Check(count >= 12 && std::min(q[0], q[1]) >= count / 5,
+                    "Mixed patch contains a single-variety region");
+            }
+        }
+        std::cout << "GRASS_GPU_MIX frames=" << n << " min=" << *spread.first
+            << " max=" << *spread.second << " strands=" << frames.size() << std::endl;
+        return frames;
+    }
+
     inline void VerifyPlayerWalk(SceneService& loaded)
     {
         namespace native = wi::physics::terrain_props;
@@ -197,6 +263,18 @@ namespace grass_palette_proof
             }
             throw std::runtime_error("Missing grass renderer");
         };
+        auto verifyMeadow = [&](wi::scene::Scene& target)
+        {
+            for (size_t i = 0; i < target.hairs.GetCount(); ++i)
+            {
+                const auto* m = target.materials.GetComponent(target.hairs.GetEntity(i));
+                if (m && fs::u8path(m->textures[wi::scene::MaterialComponent::BASECOLORMAP].name).filename()
+                        == fs::u8path(meadow.path).filename())
+                    return VerifyMix(target.hairs[i]);
+            }
+            throw std::runtime_error("Missing mixed meadow");
+        };
+        const auto meadowFrames = verifyMeadow(scene);
         auto meadowRest=geometry(meadow), bankRest=geometry(bank);
         wi::ecs::Entity force=wi::ecs::INVALID_ENTITY;
         UpdateGrassInteraction(scene,force,left,{0,1,0});
@@ -237,8 +315,21 @@ namespace grass_palette_proof
         render.scene=&cold.GetScene();
         for(int i=0;i<15;++i)frame();
         wi::graphics::GetDevice()->WaitForGPU();
+        Check(verifyMeadow(cold.GetScene()) == meadowFrames, "Reopened meadow changed per-strand varieties");
         render.scene=&scene;
         Check(Capture(cold.GetScene())==both,"First native updates after cold reopen lost a painted layer");
+        auto largeMix = paint(left, VegetationBrushMode::Paint, complete);
+        for (int i = 0; i < 20; ++i) frame();
+        wi::graphics::GetDevice()->WaitForGPU();
+        bool checkedAll = false;
+        for (size_t i = 0; i < scene.hairs.GetCount(); ++i)
+            if (scene.hairs[i].atlas_rects.size() == complete.frames)
+            {
+                VerifyMix(scene.hairs[i]);
+                checkedAll = true;
+            }
+        Check(checkedAll, "Missing thirty-variety mix");
+        largeMix.Undo();
         VerifyPlayerWalk(cold);
         std::cout<<"GRASS_PALETTE_MIX_IMPORT_HISTORY_COLD_REOPEN_PASS"<<std::endl;
     }

@@ -260,6 +260,10 @@ namespace
     using renegade::bridge::VegetationChunkState;
     using renegade::bridge::VegetationStrokeState;
 
+    // Non-negative uniformity controls Wicked's spatial noise for ordinary hair.
+    // Painted mixes opt into the per-strand atlas mode in the simulation shader.
+    constexpr float MixedPaletteUniformity = -1.f;
+
     GrassAtlas LayerAtlas(const wi::scene::Scene& scene, wi::ecs::Entity entity)
     {
         const auto* material = scene.materials.GetComponent(entity);
@@ -294,6 +298,8 @@ namespace
         hair.indices.clear();
         const auto side = static_cast<unsigned>(std::ceil(std::sqrt(double(atlas.frames))));
         const float scale = 1.f / side;
+        if (atlas.frames > 1)
+            hair.uniformity = MixedPaletteUniformity;
         hair.atlas_rects.resize(atlas.frames);
         for (unsigned i=0; i<atlas.frames; ++i)
         {
@@ -445,6 +451,14 @@ namespace renegade::bridge
     void RebindWickedVegetationResources(
         wi::scene::Scene& scene)
     {
+        // Previously saved palette layers carry their frame count in metadata.
+        for (size_t i = 0; i < scene.hairs.GetCount(); ++i)
+        {
+            auto& hair = scene.hairs[i];
+            const auto* meta = scene.metadatas.GetComponent(scene.hairs.GetEntity(i));
+            if (hair.atlas_rects.size() > 1 && meta && meta->int_values.has(PaletteKey))
+                hair.uniformity = MixedPaletteUniformity;
+        }
         const std::string texturePath =
             (BundledGrassRoot() / "grassparticle.png")
                 .generic_u8string();
@@ -971,6 +985,8 @@ namespace renegade::bridge
             if (!metadata || !metadata->int_values.has(PaletteKey) ||
                 !scene.Entity_IsDescendant(hair.meshID,terrain.terrainEntity)) continue;
             ApplySettings(hair,settings,rebuildTopology);
+            if (hair.atlas_rects.size() > 1)
+                hair.uniformity = MixedPaletteUniformity;
             if (settings.density != before.density)
                 hair.strandCount=static_cast<uint32_t>(NativeStrandCount(terrain,ActiveVertexCount(hair))*settings.density);
         }

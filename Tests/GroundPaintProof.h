@@ -34,7 +34,7 @@ namespace ground_paint_proof
             check(std::none_of(entry.second.blendmap_layers[1].pixels.begin(),entry.second.blendmap_layers[1].pixels.end(),[](uint8_t v){return v>0;}),"Flattened bank retained rock");
         check(SculptTerrain(scene,terrain,{11,0,15},10,11,.2f,TerrainSculptMode::Raise,0),"Review bank failed");
         auto vegetation=GrassPaletteEntries(root,PlantGroup::Grass);
-        GrassAtlas atlas;check(BuildGrassAtlas(root,{vegetation.front()},atlas,error),error);
+        GrassAtlas atlas;check(BuildGrassAtlas(root,{vegetation.at(5),vegetation.at(6)},atlas,error),error);
         check(InitializeWickedVegetation(scene,terrain,&error),error);
         auto appearance=CaptureWickedVegetationSettings(terrain);
         appearance.length*=.4f;appearance.width*=.65f;
@@ -81,6 +81,29 @@ namespace ground_paint_proof
             wi::graphics::GetDevice()->SubmitCommandLists();wi::renderer::UpdateGPUSuballocator();};
         for(int i=0;i<45;++i)frame();wi::graphics::GetDevice()->WaitForGPU();terrain.Generation_Cancel();
         check(wi::helper::saveTextureToFile(render.GetRenderResult3D(),(out/"ground-paint.png").generic_u8string()),"Capture failed");
+        // Studio handles brush input between scene update and rendering. At this
+        // point writeback must still clear the current frame's live residency.
+        const auto pathMaterial = id(choices.at(8));
+        for (int strokeIndex = 0; strokeIndex < 5; ++strokeIndex)
+        {
+            GroundStroke livePath(scene, terrain.terrainEntity, pathMaterial, GroundTool::Paint, 4, 1, .65f);
+            render.PreUpdate();
+            render.Update(1.f / 60.f);
+            check(livePath.Dab({-6.f + strokeIndex, 0, -7.f}), "Live viewport paint did not change");
+            render.PreRender();
+            render.Render();
+            wi::graphics::GetDevice()->SubmitCommandLists();
+            wi::renderer::UpdateGPUSuballocator();
+            render.PreUpdate();
+            render.Update(1.f / 60.f);
+            check(livePath.TryUndo(), "Live viewport undo failed");
+            render.PreRender();
+            render.Render();
+            wi::graphics::GetDevice()->SubmitCommandLists();
+            wi::renderer::UpdateGPUSuballocator();
+        }
+        wi::graphics::GetDevice()->WaitForGPU();
+        std::cout << "GROUND_PAINT_LIVE_FRAME_WRITEBACK_PASS" << std::endl;
         const auto savedSize=scene.materials.GetComponent(stones)->texMulAdd.x;
         check(savedSize==gravel.tileMetres,"Gravel tiling did not retain metres per repeat");
         TransformState start;start.translation={0,1,-9};CreatePlayerStartCommand spawn(scene,start);check(spawn.Execute(),"Spawn failed");

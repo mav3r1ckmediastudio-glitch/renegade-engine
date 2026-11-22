@@ -1,3 +1,18 @@
+# Renegade palette hair uses independently scattered strand IDs. Rotate each group
+# of N IDs so every selected atlas frame occurs once per complete group.
+_ns_replace("shaders/hairparticle_simulateCS.hlsl"
+    "currentFrame = uint(noise_gradient_3D(position * xHairUniformity) * 1000) % xHairAtlasRectCount;"
+[=[if (xHairUniformity == -1)
+        {
+            RNG paletteRng;
+            paletteRng.init(uint2(xHairRandomSeed, DTid.x / xHairAtlasRectCount), 2);
+            currentFrame = (DTid.x % xHairAtlasRectCount + paletteRng.next_uint(xHairAtlasRectCount)) % xHairAtlasRectCount;
+        }
+        else
+        {
+            currentFrame = uint(noise_gradient_3D(position * xHairUniformity) * 1000) % xHairAtlasRectCount;
+        }]=] "RNG paletteRng;")
+
 # The terrain tile baker gets its chunk origin from the native CPU residency pass.
 # Keep legacy materials on Wicked's original UV and mip path.
 _ns_replace("wiTerrain.cpp" "void Terrain::UpdateVirtualTexturesCPU()"
@@ -52,3 +67,21 @@ _ns_replace("wiTerrain.cpp" "XMFLOAT4 materialBlendWeights(region_base, region_s
                             region_low_altitude = region_high_altitude = 0;
                         }
                         XMFLOAT4 materialBlendWeights(region_base, region_slope, region_low_altitude, region_high_altitude);]=] "if (useGroundRules)")
+
+# A brush edit can invalidate the *next* terrain update after the CPU has
+# already prepared this frame. Finish queued work using its live allocation.
+_ns_replace("wiTerrain.cpp" "vt->resolution >> request.lod"
+    "(vt->residency ? vt->residency->resolution : min_virtual_resolution) >> request.lod"
+    "min_virtual_resolution) >> request.lod")
+_ns_replace("wiTerrain.cpp" "clear_residencies[vt->resolution]"
+    "clear_residencies[vt->residency->resolution]" "clear_residencies[vt->residency->resolution]")
+_ns_replace("wiTerrain.cpp" "clear.resolution != vt->resolution"
+    "clear.resolution != vt->residency->resolution" "clear.resolution != vt->residency->resolution")
+_ns_replace("wiTerrain.cpp" "clear.init(vt->resolution)"
+    "clear.init(vt->residency->resolution)" "clear.init(vt->residency->resolution)")
+# Undo can remove a material after the old blendmap was prepared for this frame.
+_ns_replace("wiTerrain.cpp" "const uint baseMaterialCount = push.blendmap_layers - splineMaterialCount;"
+[=[if (push.blendmap_layers < splineMaterialCount || push.blendmap_layers - splineMaterialCount > materialEntities.size())
+                    continue;
+                const uint baseMaterialCount = push.blendmap_layers - splineMaterialCount;]=]
+    "push.blendmap_layers - splineMaterialCount > materialEntities.size()")
