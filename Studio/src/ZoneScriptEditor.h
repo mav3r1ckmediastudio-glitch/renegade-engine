@@ -108,7 +108,8 @@ namespace renegade::studio
             if (!lua.StartScene(doc, scene, root_, error)) { Status(prefix + error); return; }
             bridge::GameplayEvent e;
             e.name = edge; e.targetEntityId = e.senderEntityId = attachment_.ownerEntityId;
-            e.payload = enter_ ? zone_.enter : zone_.exit;
+            e.payload = zone_.behaviour==bridge::zones::Behaviour::Trigger ? (enter_ ? zone_.enter : zone_.exit)
+                : (enter_ ? zone_.primary : zone_.secondary);
             if (!lua.EnqueueGameplayEvent(std::move(e), error)) { Status(prefix + error); return; }
             lua.Update(0); lua.Update(0);
             for (const auto& diagnostic : lua.Diagnostics())

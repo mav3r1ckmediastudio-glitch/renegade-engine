@@ -2,6 +2,8 @@
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/ScriptLibraryService.h"
 #include "../Runtime/src/RuntimeScriptRuntime.h"
+#include "../Runtime/src/RuntimeZoneState.h"
+#include "renegade/bridge/StudioSession.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -26,10 +28,11 @@ static void VerifyZoneLibrary(wi::scene::Scene& scene, const StableId& owner)
     {
         const auto root = temp / project;
         fs::create_directories(root);
-        for (auto behaviour : {zones::Behaviour::Trigger,zones::Behaviour::Win})
+        for (int index=0;index<int(zones::Behaviour::Count);++index)
         {
+            const auto behaviour=zones::Behaviour(index);
             const bool win = behaviour == zones::Behaviour::Win;
-            const std::string family = win ? "Win" : "Trigger";
+            const std::string family=zones::Info(behaviour).family;
             ScriptLibraryAdoptionResult adopted;
             std::string error;
             const bool ok = ScriptLibraryService{}.AdoptEntry(root.generic_u8string(),
@@ -55,6 +58,16 @@ static void VerifyZoneLibrary(wi::scene::Scene& scene, const StableId& owner)
             doc.attachments.front().enabled = false;
             Require(dispatch(true)==zones::EdgeEvent(behaviour,true),"Disabled zone executed a script");
             doc.attachments.front().enabled = true;
+            if (!win && behaviour!=zones::Behaviour::Trigger)
+            {
+                const std::string expected="zone.apply."+std::string(zones::EdgeEvent(behaviour,true)+5);
+                Require(dispatch(true)==expected,"Stock zone did not dispatch the correct effect on entry");
+                const bool releases=behaviour==zones::Behaviour::Ambience || behaviour==zones::Behaviour::Environment ||
+                    behaviour==zones::Behaviour::Health || behaviour==zones::Behaviour::Message;
+                const std::string exit=zones::EdgeEvent(behaviour,false);
+                Require(dispatch(false)==(releases ? "zone.apply."+exit.substr(5) : exit),"Incorrect zone release");
+                continue;
+            }
             if (!win)
             {
                 Require(dispatch(true)=="zone.forward.enter" && dispatch(false)=="zone.forward.exit","Wrong stock trigger events");
@@ -72,6 +85,74 @@ static void VerifyZoneLibrary(wi::scene::Scene& scene, const StableId& owner)
             }
         }
     }
+}
+
+static void VerifyFirstSave()
+{
+    namespace fs=std::filesystem;
+    const auto temp=fs::temp_directory_path()/("renegade-zone-save-"+GenerateStableId());
+    struct Cleanup { fs::path path; ~Cleanup(){std::error_code ec; fs::remove_all(path,ec);} } cleanup{temp};
+    fs::create_directories(temp/"Projects");
+    const auto model=temp/"Template.wiscene";
+    { wi::scene::Scene scene; scene.Entity_CreateTransform("Template"); wi::Archive out(model.generic_u8string(),false,false); scene.Serialize(out); }
+    StudioSession session;
+    session.Projects().Initialize((temp/"state.ini").generic_u8string());
+    Require(session.Projects().CreateProject((temp/"Projects").generic_u8string(),"ZoneTest",model.generic_u8string()),"Create project failed");
+    Require(session.LoadScene(session.Projects().StartupScenePath()),"Project did not open");
+    session.NewScene();
+    auto& scene=session.Scenes().GetScene();
+    zones::Create create(scene,{}); Require(create.Execute(),"Unsaved zone creation failed");
+    const auto& root=session.Projects().CurrentProject().rootPath;
+    auto preset=fs::path(__FILE__).parent_path().parent_path()/"Library/Scripts/RenegadeZones/Message";
+    ScriptLibraryAdoptionResult adoption;
+    std::string error;
+    Require(ScriptLibraryService{}.AdoptEntry(root,(preset/ScriptLibraryPackageFilename).generic_u8string(),"MessageZone.lua",adoption,error),"Could not adopt message");
+    Require(session.Scripts().EnsureZoneDocument(error),"Could not initialise unsaved zone document");
+    auto a=CreateScriptAttachment(ScriptScope::Entity,create.PersistentId(),adoption.binding);
+    Require(AddScriptAttachment(*session.Scripts().Document(),a,error),"Unable to bind unsaved zone");
+    const auto path=(fs::u8path(root)/"Content/Scenes/FirstSave.wiscene").generic_u8string();
+    Require(session.SaveScene(path) && session.LoadScene(path) && session.Scripts().EnsureCurrent(error),"First save/reopen failed");
+    Require(FindScriptAttachment(*session.Scripts().Document(),a.scriptInstanceId)!=nullptr,"First save lost zone script");
+}
+
+static void VerifyPalette()
+{
+    using namespace renegade::runtime;
+    wi::scene::Scene authored;
+    for (int i=0; i<int(zones::Behaviour::Count); ++i)
+    {
+        zones::Create create(authored,{float(i),0,0});
+        Require(create.Execute(),"Failed to create zone");
+        zones::Definition z; zones::Choose(z,zones::Behaviour(i));
+        z.primary="first"; z.secondary="second"; z.amount=23; z.seconds=7; z.cooldown=4;
+        z.target=GenerateStableId(); z.activation=1; z.repeat=2;
+        zones::Write(authored,create.Id(),z);
+    }
+    wi::Archive saved; authored.Serialize(saved); saved.SetReadModeAndResetPos(true);
+    wi::scene::Scene reopened; reopened.Serialize(saved);
+    Require(reopened.metadatas.GetCount()==zones::Presets.size(),"Reopened palette lost zones");
+    for (size_t i=0; i<zones::Presets.size(); ++i)
+    {
+        zones::Definition z;
+        Require(zones::Read(reopened,reopened.metadatas.GetEntity(i),z) && int(z.behaviour)==int(i) &&
+            z.primary=="first" && z.secondary=="second" && z.amount==23 && z.seconds==7 && z.cooldown==4 &&
+            !z.target.empty() && z.activation==1 && z.repeat==2,"Reopen lost preset settings");
+    }
+    zones::Definition z; z.activation=1; z.repeat=2; z.cooldown=3;
+    ZoneContact c{};
+    Require(SampleZone(c,z,true,false,0)==ZoneEdge::None,"Interaction activated on entry");
+    Require(SampleZone(c,z,true,true,0)==ZoneEdge::Enter,"Interaction missed");
+    Require(SampleZone(c,z,true,true,0)==ZoneEdge::None,"Held interaction fired twice");
+    Require(SampleZone(c,z,false,false,1)==ZoneEdge::Exit,"Lost matching exit");
+    Require(SampleZone(c,z,true,true,1)==ZoneEdge::None,"Cooldown not respected");
+    Require(SampleZone(c,z,true,true,1)==ZoneEdge::Enter,"Cooldown did not expire");
+    z.repeat=1;
+    (void)SampleZone(c,z,false,false,4);
+    Require(SampleZone(c,z,true,true,0)==ZoneEdge::None,"One-shot fired twice");
+    c={}; c.suppressArrival=true; z.activation=0; z.repeat=0;
+    Require(SampleZone(c,z,true,false,0)==ZoneEdge::None,"Destination retriggered teleport");
+    (void)SampleZone(c,z,false,false,0);
+    Require(SampleZone(c,z,true,false,0)==ZoneEdge::Enter,"Teleport did not rearm after leaving");
 }
 
 int main(int argc, char** argv)
@@ -122,6 +203,8 @@ int main(int argc, char** argv)
         Require(zones::Read(reopened,copy,loaded) && loaded.behaviour == zones::Behaviour::Win &&
             loaded.low == box.low && loaded.high == box.high && PersistentEntityId(reopened,copy) == stable,
             "WISCENE round trip lost settings");
+        VerifyFirstSave();
+        VerifyPalette();
         VerifyZoneLibrary(scene,stable);
         if (argc == 2)
         {
@@ -133,7 +216,7 @@ int main(int argc, char** argv)
             Require(output.IsOpen(), "Unable to create review scene");
             scene.Serialize(output);
         }
-        std::cout << "PASS rotated box, upper floor, adjacent room, non-solid anchor, history, preset wiring, WISCENE reopen, face ray picking, independent projects and Lua behaviour\n";
+        std::cout << "PASS rotated box, upper floor, adjacent room, non-solid anchor, history, preset wiring, WISCENE reopen, face ray picking, 13 presets, WISCENE settings, activation policies, independent projects and Lua behaviour\n";
         return 0;
     }
     catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }

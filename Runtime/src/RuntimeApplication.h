@@ -3,6 +3,7 @@
 
 #include <optional>
 #include "RuntimeDialogue.h"
+#include "RuntimeZoneState.h"
 #include "RuntimePropCellResidency.h"
 #include "RuntimePropModelResidency.h"
 #include "renegade/bridge/RiverFlowRenderer.h"
@@ -95,6 +96,7 @@ namespace renegade::runtime
             inventorySelectedRow_=selectedRow;
             inventoryStatus_=std::move(status);
         }
+        void SetZoneMessage(std::string value) { zoneMessage_=std::move(value); }
         void SetMeleePrompt(std::string prompt) { meleePrompt_=std::move(prompt); }
         void SetProjectileAim(bool enabled) { projectileAim_=enabled; }
         void SetBastionReticles(std::optional<XMFLOAT2> aim, std::optional<XMFLOAT2> barrel)
@@ -136,6 +138,7 @@ namespace renegade::runtime
         int inventorySelectedPanel_=-1;
         int inventorySelectedRow_=-1;
         std::string inventoryStatus_;
+        std::string zoneMessage_;
         std::string meleePrompt_;
         bool projectileAim_ = false;
         std::optional<XMFLOAT2> bastionAim_, bastionBarrel_;
@@ -198,10 +201,15 @@ namespace renegade::runtime
         void SyncLevelHud();
         void OnGovernedHudGameplayEvent(const bridge::GameplayEvent& event);
         void ProcessHudActions();
-        struct ZoneContact { wi::ecs::Entity id; bool inside = false, won = false, scripted = false; };
+        ZoneEffects zoneEffects_;
+        std::string zoneArrivalMarker_, zoneOutcome_;
+        bool MovePlayerToZone(const ZonePose& pose, std::string& error);
+        void ApplyZoneEffect(ZoneContact& contact, const bridge::zones::Definition& zone, bool enter, const std::string& payload);
+        void StepZoneEffects(float dt);
+        void ApplyZoneHealth(float amount);
         std::vector<ZoneContact> zoneContacts_;
         bool directLevelWon_ = false;
-        void UpdateZones();
+        void UpdateZones(float dt);
         void OnZoneScriptEvent(const bridge::GameplayEvent& event);
         void CompleteZone(ZoneContact& contact);
         void QueueAction(RuntimeActionRequest request);

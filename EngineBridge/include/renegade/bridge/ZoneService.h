@@ -9,7 +9,30 @@ namespace renegade::bridge::zones
 {
     using Entity = wi::ecs::Entity;
     using Scene = wi::scene::Scene;
-    enum class Behaviour { Trigger, Win };
+    enum class Behaviour { Trigger, Win, Message, Objective, Checkpoint, Transition, Teleport, Health, Kill, Encounter, Dialogue, Ambience, Environment, Count };
+    struct Preset
+    {
+        const char *label, *family, *source, *onEnter, *onExit, *targetLabel;
+        const char *primaryLabel, *secondaryLabel, *primaryDefault, *secondaryDefault;
+        const char *modes, *amountLabel, *secondsLabel;
+        float amount, seconds;
+    };
+    inline constexpr std::array<Preset, size_t(Behaviour::Count)> Presets{{
+        {"Custom Trigger", "Trigger", "Content/Scripts/Library/renegade.zones.trigger/TriggerZone.lua", "zone.trigger.enter", "zone.trigger.exit", "Event target", "Enter event", "Exit event", "enter", "exit", "", "", "", 0, 0},
+        {"Win Zone", "Win", "Content/Scripts/Library/renegade.zones.win/WinZone.lua", "zone.win.enter", "zone.win.exit", "", "", "", "", "", "", "", "", 0, 0},
+        {"Message / Tutorial", "Message", "Content/Scripts/Library/renegade.zones.message/MessageZone.lua", "zone.message.enter", "zone.message.exit", "", "Message", "", "Welcome!", "", "Timed|While inside", "", "Duration (s)", 0, 4},
+        {"Objective", "Objective", "Content/Scripts/Library/renegade.zones.objective/ObjectiveZone.lua", "zone.objective.enter", "zone.objective.exit", "", "Objective ID", "", "first.objective", "", "Start|Advance|Complete", "", "", 0, 0},
+        {"Checkpoint", "Checkpoint", "Content/Scripts/Library/renegade.zones.checkpoint/CheckpointZone.lua", "zone.checkpoint.enter", "zone.checkpoint.exit", "Respawn marker", "", "", "", "", "", "", "", 0, 0},
+        {"Level Transition", "Transition", "Content/Scripts/Library/renegade.zones.transition/TransitionZone.lua", "zone.transition.enter", "zone.transition.exit", "", "Flow outcome", "Arrival marker", "level.complete", "", "", "", "", 0, 0},
+        {"Teleport", "Teleport", "Content/Scripts/Library/renegade.zones.teleport/TeleportZone.lua", "zone.teleport.enter", "zone.teleport.exit", "Destination", "", "", "", "", "", "", "", 0, 0},
+        {"Damage / Healing", "Health", "Content/Scripts/Library/renegade.zones.health/HealthZone.lua", "zone.health.enter", "zone.health.exit", "", "", "", "", "", "Damage on entry|Heal on entry|Damage per second|Heal per second", "Health points", "", 10, 0},
+        {"Kill / Out of Bounds", "Kill", "Content/Scripts/Library/renegade.zones.kill/KillZone.lua", "zone.kill.enter", "zone.kill.exit", "", "", "", "", "", "Return to checkpoint|Instant death", "", "", 0, 0},
+        {"Encounter / Spawn", "Encounter", "Content/Scripts/Library/renegade.zones.encounter/EncounterZone.lua", "zone.encounter.enter", "zone.encounter.exit", "Group / spawner", "Activation event", "", "activate", "", "", "", "", 0, 0},
+        {"Dialogue", "Dialogue", "Content/Scripts/Library/renegade.zones.dialogue/DialogueZone.lua", "zone.dialogue.enter", "zone.dialogue.exit", "Speaker", "Dialogue asset", "Entry", "", "", "", "", "", 0, 0},
+        {"Audio / Ambience", "Ambience", "Content/Scripts/Library/renegade.zones.ambience/AmbienceZone.lua", "zone.ambience.enter", "zone.ambience.exit", "Sound source", "", "", "", "", "", "", "Fade (s)", 0, 1},
+        {"Environment", "Environment", "Content/Scripts/Library/renegade.zones.environment/EnvironmentZone.lua", "zone.environment.enter", "zone.environment.exit", "", "", "", "", "", "Clear|Scattered|Overcast|Storm", "", "Blend (s)", 0, 2}
+    }};
+    inline const Preset& Info(Behaviour b) { return Presets.at(size_t(b)); }
 
     // Bounds are in authored local metres. The placement origin is on the floor.
     struct Definition
@@ -17,6 +40,9 @@ namespace renegade::bridge::zones
         std::array<float, 3> low{-1, 0, -1};
         std::array<float, 3> high{1, 2, 1};
         Behaviour behaviour = Behaviour::Trigger;
+        std::string primary, secondary;
+        int mode = 0, activation = 0, repeat = 0;
+        float amount = 0, seconds = 0, cooldown = 1;
         std::string enter = "enter", exit = "exit", target;
     };
 
@@ -26,15 +52,23 @@ namespace renegade::bridge::zones
 
     inline const char* ScriptPath(Behaviour behaviour)
     {
-        return behaviour == Behaviour::Win
-            ? "Content/Scripts/Library/renegade.zones.win/WinZone.lua"
-            : "Content/Scripts/Library/renegade.zones.trigger/TriggerZone.lua";
+        return Info(behaviour).source;
     }
 
     inline const char* EdgeEvent(Behaviour behaviour, bool enter)
     {
-        if (behaviour == Behaviour::Win) return enter ? "zone.win.enter" : "zone.win.exit";
-        return enter ? "zone.trigger.enter" : "zone.trigger.exit";
+        return enter ? Info(behaviour).onEnter : Info(behaviour).onExit;
+    }
+
+    inline void Choose(Definition& zone, Behaviour b)
+    {
+        zone.behaviour = b;
+        const auto& preset = Info(b);
+        zone.primary = preset.primaryDefault;
+        zone.secondary = preset.secondaryDefault;
+        zone.amount = preset.amount;
+        zone.seconds = preset.seconds;
+        zone.mode = 0;
     }
 
     inline bool IsZone(const Scene& scene, Entity id)
@@ -60,7 +94,17 @@ namespace renegade::bridge::zones
             zone.low[i] = m.float_values.get(Low[i]);
             zone.high[i] = m.float_values.get(High[i]);
         }
-        zone.behaviour = m.int_values.get("zone.behaviour") == 1 ? Behaviour::Win : Behaviour::Trigger;
+        const int code = m.int_values.get("zone.behaviour");
+        if (code < 0 || code >= int(Behaviour::Count)) return false;
+        Choose(zone, Behaviour(code));
+        if (m.string_values.has("zone.primary")) zone.primary = m.string_values.get("zone.primary");
+        if (m.string_values.has("zone.secondary")) zone.secondary = m.string_values.get("zone.secondary");
+        if (m.float_values.has("zone.amount")) zone.amount = m.float_values.get("zone.amount");
+        if (m.float_values.has("zone.seconds")) zone.seconds = m.float_values.get("zone.seconds");
+        zone.cooldown = m.float_values.has("zone.cooldown") ? m.float_values.get("zone.cooldown") : 1.f;
+        zone.activation = m.int_values.get("zone.activation");
+        zone.repeat = m.int_values.get("zone.repeat");
+        zone.mode = m.int_values.get("zone.mode");
         zone.enter = m.string_values.get("zone.enter");
         zone.exit = m.string_values.get("zone.exit");
         zone.target = m.string_values.get("zone.target");
@@ -77,6 +121,14 @@ namespace renegade::bridge::zones
             m.float_values.set(Low[i], zone.low[i]);
             m.float_values.set(High[i], zone.high[i]);
         }
+        m.string_values.set("zone.primary", zone.primary);
+        m.string_values.set("zone.secondary", zone.secondary);
+        m.float_values.set("zone.amount", zone.amount);
+        m.float_values.set("zone.seconds", zone.seconds);
+        m.float_values.set("zone.cooldown", zone.cooldown);
+        m.int_values.set("zone.mode", zone.mode);
+        m.int_values.set("zone.activation", zone.activation);
+        m.int_values.set("zone.repeat", zone.repeat);
         m.string_values.set("zone.enter", zone.enter);
         m.string_values.set("zone.exit", zone.exit);
         m.string_values.set("zone.target", zone.target);

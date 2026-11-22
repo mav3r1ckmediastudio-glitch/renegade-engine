@@ -19,16 +19,15 @@ namespace renegade::studio
         {
             changed = false;
             auto& scripts = session.Scripts();
-            if (!scripts.EnsureCurrent(error)) return false;
+            if (!scripts.EnsureZoneDocument(error)) return false;
             auto& doc = *scripts.Document();
             const std::string path = zones::ScriptPath(behaviour);
-            const auto other = zones::ScriptPath(behaviour == zones::Behaviour::Win ?
-                zones::Behaviour::Trigger : zones::Behaviour::Win);
             for (const auto& a : doc.attachments)
             {
                 if (a.ownerEntityId != owner) continue;
                 if (a.sourcePath == path) { instance = a.scriptInstanceId; return true; }
-                if (a.sourcePath == other) instance = a.scriptInstanceId;
+                for (const auto& preset : zones::Presets)
+                    if (a.sourcePath == preset.source) instance = a.scriptInstanceId;
             }
             std::vector<bridge::ScriptAuthoringSource> sources;
             std::vector<bridge::ScriptMetadataDiagnostic> diagnostics;
@@ -79,10 +78,13 @@ namespace renegade::studio
         zoneName_.OnInputAccepted([this](const wi::gui::EventArgs&) { CommitSelectedSceneName(zoneName_.GetValue()); });
         zoneInspector_.AddWidget(&zoneName_);
         zonePreset_.Create("Zone behaviour");
-        zonePreset_.AddItem("Custom Trigger");
-        zonePreset_.AddItem("Win Zone");
+        for (const auto& preset : zones::Presets) zonePreset_.AddItem(preset.label);
+        zonePreset_.SetMaxVisibleItemCount(13);
         zonePreset_.OnSelect([this](const wi::gui::EventArgs& args) {
-            EditSelectedZone([&](auto& zone) { zone.behaviour = args.iValue == 1 ? zones::Behaviour::Win : zones::Behaviour::Trigger; });
+            if (args.iValue >= 0 && args.iValue < int(zones::Behaviour::Count))
+                EditSelectedZone([&](auto& zone) {
+                    if (int(zone.behaviour) != args.iValue) zones::Choose(zone, zones::Behaviour(args.iValue));
+                });
         });
         zoneInspector_.AddWidget(&zonePreset_);
         const char* labels[] = {"WIDTH (m)", "HEIGHT (m)", "DEPTH (m)"};
@@ -98,6 +100,27 @@ namespace renegade::studio
             });
             zoneInspector_.AddWidget(&slider);
         }
+        for (size_t i=0; i<zoneOptions_.size(); ++i)
+        {
+            auto& combo=zoneOptions_[i];
+            combo.Create(i==0 ? "Effect mode" : i==1 ? "Activation" : "Repeat policy");
+            if (i==1) { combo.AddItem("On entry"); combo.AddItem("Press Interact inside"); }
+            if (i==2) { combo.AddItem("Every visit"); combo.AddItem("Once per level visit"); combo.AddItem("After cooldown"); }
+            combo.OnSelect([this,i](const wi::gui::EventArgs& a){
+                EditSelectedZone([&](auto& z){ (i==0 ? z.mode : i==1 ? z.activation : z.repeat)=a.iValue; });
+            });
+            zoneInspector_.AddWidget(&combo);
+        }
+        for (size_t i=0; i<zoneNumbers_.size(); ++i)
+        {
+            auto& n=zoneNumbers_[i];
+            const char* label=i==0 ? "Health points" : i==1 ? "Duration (s)" : "Cooldown (s)";
+            n.Create(0, i==0 ? 1000.f : 300.f, 1, 1000, label, label);
+            n.OnValueCommitted([this,i](float value){
+                EditSelectedZone([&](auto& z){ (i==0 ? z.amount : i==1 ? z.seconds : z.cooldown)=value; });
+            });
+            zoneInspector_.AddWidget(&n);
+        }
         zoneTarget_.Create("Target");
         zoneTarget_.OnSelect([this](const wi::gui::EventArgs& a) {
             if (a.iValue >= 0 && size_t(a.iValue) < zoneTargetIds_.size())
@@ -110,7 +133,8 @@ namespace renegade::studio
             field.Create(i == 0 ? "Enter Event" : "Exit Event");
             field.SetDescription(i == 0 ? "Enter event " : "Exit event ");
             field.OnInputAccepted([this,i](const wi::gui::EventArgs&) {
-                EditSelectedZone([&](auto& zone) { (i == 0 ? zone.enter : zone.exit) = zoneEvents_[i].GetValue(); });
+                EditSelectedZone([&](auto& zone) { if (zone.behaviour==zones::Behaviour::Trigger) (i==0 ? zone.enter : zone.exit)=zoneEvents_[i].GetValue();
+                    else (i==0 ? zone.primary : zone.secondary)=zoneEvents_[i].GetValue(); });
             });
             zoneInspector_.AddWidget(&field);
         }
@@ -134,7 +158,6 @@ namespace renegade::studio
         const auto root = session_->Projects().CurrentProject().rootPath;
         std::string error;
         auto fail = [&] { studioChrome_.SetStatusText("ZONE LUA // " + error); };
-        if (!scripts.EnsureCurrent(error)) { fail(); return; }
         auto batch = std::make_unique<bridge::SelectionBatchCommand>();
         bridge::StableId instance;
         bool changed;
@@ -158,7 +181,7 @@ namespace renegade::studio
         change(zone);
         auto batch = std::make_unique<bridge::SelectionBatchCommand>();
         batch->Add(std::make_unique<zones::Edit>(scene,id,zone));
-        if (zone.behaviour != oldBehaviour && !session_->Scenes().CurrentPath().empty())
+        if (zone.behaviour != oldBehaviour && session_->Projects().HasProject())
         {
             bridge::StableId instance;
             bool changed;
@@ -203,13 +226,13 @@ namespace renegade::studio
             place(zoneSizes_[i]);
         }
         bool trigger = zone.behaviour == zones::Behaviour::Trigger;
-        zoneTarget_.SetVisible(trigger);
-        for (auto& field : zoneEvents_) field.SetVisible(trigger);
-        if (trigger)
+        const auto& preset=zones::Info(zone.behaviour);
+        zoneTarget_.SetVisible(*preset.targetLabel);
+        if (*preset.targetLabel)
         {
             zoneTarget_.ClearItems();
             zoneTargetIds_ = {""};
-            zoneTarget_.AddItem("Broadcast to all");
+            zoneTarget_.AddItem(trigger ? "Broadcast to all" : std::string(preset.targetLabel)+" (choose target)");
             int selected = 0;
             const auto& scene = session_->Scenes().GetScene();
             for (size_t i = 0; i < scene.names.GetCount(); ++i)
@@ -228,11 +251,45 @@ namespace renegade::studio
             }
             zoneTarget_.SetSelectedWithoutCallback(selected);
             place(zoneTarget_);
-            for (size_t i = 0; i < zoneEvents_.size(); ++i)
-            {
-                zoneEvents_[i].SetValue(i == 0 ? zone.enter : zone.exit);
-                place(zoneEvents_[i], 85.f);
+        }
+        for (size_t i=0; i<zoneEvents_.size(); ++i)
+        {
+            const char* label=i==0 ? preset.primaryLabel : preset.secondaryLabel;
+            auto& field=zoneEvents_[i];
+            field.SetVisible(*label);
+            if (!*label) continue;
+            field.SetDescription(std::string(label)+" ");
+            field.SetValue(trigger ? (i==0 ? zone.enter : zone.exit) : (i==0 ? zone.primary : zone.secondary));
+            place(field,100.f);
+        }
+        auto& modes=zoneOptions_[0];
+        modes.SetVisible(*preset.modes);
+        if (*preset.modes)
+        {
+            modes.ClearItems();
+            std::string options=preset.modes;
+            size_t start=0;
+            for (;;) {
+                const auto end=options.find('|',start);
+                modes.AddItem(options.substr(start,end-start));
+                if (end==std::string::npos) break;
+                start=end+1;
             }
+            modes.SetSelectedWithoutCallback(zone.mode);
+            place(modes);
+        }
+        zoneOptions_[1].SetSelectedWithoutCallback(zone.activation); place(zoneOptions_[1]);
+        zoneOptions_[2].SetSelectedWithoutCallback(zone.repeat); place(zoneOptions_[2]);
+        for (size_t i=0; i<zoneNumbers_.size(); ++i)
+        {
+            auto& n=zoneNumbers_[i];
+            const char* label=i==0 ? preset.amountLabel : i==1 ? preset.secondsLabel : "Cooldown (s)";
+            const bool visible=*label && (i!=2 || zone.repeat==2);
+            n.SetVisible(visible);
+            if (!visible) continue;
+            n.SetTooltip(label);
+            if (!n.IsDragging()) n.SetValue(i==0 ? zone.amount : i==1 ? zone.seconds : zone.cooldown);
+            place(n);
         }
         place(zoneScript_);
         return true;
@@ -307,7 +364,7 @@ namespace renegade::studio
                 const auto owner = command->PersistentId();
                 auto batch = std::make_unique<bridge::SelectionBatchCommand>();
                 batch->Add(std::move(command));
-                if (!session_->Scenes().CurrentPath().empty())
+                if (session_->Projects().HasProject())
                 {
                     bridge::StableId instance;
                     bool changed;

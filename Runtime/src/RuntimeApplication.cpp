@@ -316,6 +316,11 @@ namespace renegade::runtime
                 wi::Color(245,245,245,220),wi::Color(0,0,0,160));
             wi::font::Draw("+",aim,cmd);
         }
+        if (!paused_ && !zoneMessage_.empty()) {
+            wi::font::Params text(width*.5f,height*.18f,24,wi::font::WIFALIGN_CENTER,wi::font::WIFALIGN_CENTER,
+                wi::Color(255,255,255,255),wi::Color(0,0,0,220));
+            wi::font::Draw(zoneMessage_,text,cmd);
+        }
         if (!paused_ && !inventoryVisible_) {
             const auto marker = [&](const std::optional<XMFLOAT2>& p, const char* glyph, wi::Color color, int size) {
                 if (!p) return;
@@ -1133,7 +1138,7 @@ namespace renegade::runtime
         {
             SyncCreatorScriptsForScene();
             if (!paused_ && collisionReady && gameplayInputAllowed && !inventoryOverlayOpen_)
-                UpdateZones();
+                UpdateZones(dt);
             if (!paused_&&collisionReady)
             {
                 creatorScripts_.SetScriptedFlightFrame(vehicleTrial.scriptedFlight);
@@ -3505,6 +3510,8 @@ namespace renegade::runtime
         inventoryUiStatus_.clear();
         inventorySession_.Reset();
         zoneContacts_.clear();
+        zoneEffects_={};
+        renderer_.SetZoneMessage({});
         directLevelWon_ = false;
         auto& activeScene = scenes_.GetScene();
         for (size_t index = 0; index < activeScene.metadatas.GetCount(); ++index)
@@ -3642,19 +3649,41 @@ namespace renegade::runtime
             return;
         }
 
-        std::unordered_set<bridge::StableId> winOwners, triggerOwners;
-        for (auto behaviour : {bridge::zones::Behaviour::Win, bridge::zones::Behaviour::Trigger})
-        {
-            const auto owners = creatorScripts_.EntityOwnersForSource(bridge::zones::ScriptPath(behaviour));
-            auto& set = behaviour == bridge::zones::Behaviour::Win ? winOwners : triggerOwners;
-            set.insert(owners.begin(), owners.end());
-        }
+        if (!zoneContacts_.empty() && !zoneEffects_.identities.Build(activeScene,error))
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Error,"runtime.zone","zone.identity",error);
+        std::unordered_map<bridge::StableId, std::vector<std::string>> owners;
+        for (const auto& preset : bridge::zones::Presets)
+            for (const auto& owner : creatorScripts_.EntityOwnersForSource(preset.source))
+                owners[owner].push_back(preset.source);
         for (auto& contact : zoneContacts_)
         {
             bridge::zones::Definition zone;
-            if (!bridge::zones::Read(activeScene, contact.id, zone)) continue;
-            const auto& set = zone.behaviour == bridge::zones::Behaviour::Win ? winOwners : triggerOwners;
-            contact.scripted = set.count(bridge::PersistentEntityId(activeScene, contact.id)) != 0;
+            if (!bridge::zones::Read(activeScene,contact.id,zone)) continue;
+            const auto it=owners.find(bridge::PersistentEntityId(activeScene,contact.id));
+            if (it!=owners.end())
+                contact.scripted=std::find(it->second.begin(),it->second.end(),bridge::zones::ScriptPath(zone.behaviour))!=it->second.end();
+            if (contact.scripted && zone.behaviour==bridge::zones::Behaviour::Encounter)
+            {
+                const auto group=zoneEffects_.identities.Resolve(zone.target);
+                if (group!=wi::ecs::INVALID_ENTITY)
+                    for (size_t i=0; i<activeScene.characters.GetCount(); ++i) {
+                        const auto npc=activeScene.characters.GetEntity(i);
+                        if (npc!=player_.entity && (npc==group || activeScene.Entity_IsDescendant(npc,group)))
+                            activeScene.characters[i].SetActive(false);
+                    }
+            }
+        }
+        if (!zoneArrivalMarker_.empty()) {
+            const auto marker=activeScene.Entity_FindByName(zoneArrivalMarker_);
+            const auto* t=activeScene.transforms.GetComponent(marker);
+            if (!t) error="Arrival marker missing: "+zoneArrivalMarker_;
+            else {
+                XMFLOAT3 forward;
+                XMStoreFloat3(&forward,XMVector3Rotate(XMVectorSet(0,0,1,0),t->GetRotationV()));
+                MovePlayerToZone({t->GetPosition(),std::atan2(forward.x,forward.z)},error);
+            }
+            if (!error.empty()) diagnosticService_.Record(bridge::DiagnosticSeverity::Warning,"runtime.zone","zone.arrival",error);
+            zoneArrivalMarker_.clear();
         }
 
         // StartScene/BeginScene intentionally clears diagnostics for the new
@@ -4367,6 +4396,242 @@ namespace renegade::runtime
         return true;
     }
 
+    bool RuntimeApplication::MovePlayerToZone(const ZonePose& pose, std::string& error)
+    {
+        auto& scene=scenes_.GetScene();
+        auto* transform=scene.transforms.GetComponent(player_.entity);
+        if (!transform) { error="Player has no transform."; return false; }
+        if (!bridge::RequireTerrainPropDestination(scene,player_.entity,pose.position,1,error)) return false;
+        transform->ClearTransform();
+        transform->Translate(pose.position);
+        transform->UpdateTransform();
+        if (auto* body=scene.rigidbodies.GetComponent(player_.entity); body && body->physicsobject) {
+            wi::physics::SetPosition(*body,pose.position);
+            wi::physics::SetLinearVelocity(*body,{0,0,0});
+        }
+        player_.yaw=pose.yaw; player_.pitch=0;
+        for (auto& c : zoneContacts_) {
+            bridge::zones::Definition z;
+            const auto* t=scene.transforms.GetComponent(c.id);
+            if (t && bridge::zones::Read(scene,c.id,z) &&
+                (z.behaviour==bridge::zones::Behaviour::Teleport || z.behaviour==bridge::zones::Behaviour::Kill) &&
+                bridge::zones::Contains(z,XMLoadFloat4x4(&t->world),pose.position))
+                c.suppressArrival=true;
+        }
+        error.clear(); return true;
+    }
+
+    void RuntimeApplication::ApplyZoneHealth(float amount)
+    {
+        if (combatState_.playerDead || !std::isfinite(amount)) return;
+        if (amount>=0) combatState_.playerHealth=std::min(combatState_.playerMaxHealth,combatState_.playerHealth+amount);
+        else { bool died=false; (void)ApplyCombatDamage(scenes_.GetScene(),combatState_,RuntimePlayerKnowledgeId,-amount,died); }
+    }
+
+    void RuntimeApplication::ApplyZoneEffect(ZoneContact& c, const bridge::zones::Definition& z, bool enter, const std::string& payload)
+    {
+        using B=bridge::zones::Behaviour;
+        auto& effects=zoneEffects_;
+        auto& scene=scenes_.GetScene();
+        const auto owner=bridge::PersistentEntityId(scene,c.id);
+        const auto target=effects.identities.Resolve(z.target);
+        std::string error;
+        auto say=[&](std::string text,float seconds) {
+            auto& msgs=effects.messages;
+            msgs.erase(std::remove_if(msgs.begin(),msgs.end(),[&](const auto& m){return m.owner==c.id;}),msgs.end());
+            if (!text.empty()) msgs.push_back({c.id,std::move(text),seconds});
+        };
+        auto send=[&](std::string name,std::string info,const bridge::StableId& recipient) {
+            bridge::GameplayEvent e; e.name=std::move(name); e.payload=std::move(info);
+            e.senderEntityId=owner; e.targetEntityId=recipient;
+            (void)creatorScripts_.EnqueueGameplayEvent(std::move(e),error);
+        };
+        auto markerPose=[&](wi::ecs::Entity entity,ZonePose& pose) {
+            auto* t=scene.transforms.GetComponent(entity);
+            if (!t) { error="Choose a destination with a transform."; return false; }
+            XMFLOAT3 forward; XMStoreFloat3(&forward,XMVector3Rotate(XMVectorSet(0,0,1,0),t->GetRotationV()));
+            pose={t->GetPosition(),std::atan2(forward.x,forward.z)}; return true;
+        };
+        switch(z.behaviour) {
+        case B::Message:
+            if (enter) say(payload,z.mode==1 ? -1.f : z.seconds);
+            else if (z.mode==1) say("",0);
+            break;
+        case B::Objective:
+            if (enter && !payload.empty()) {
+                auto [it,fresh]=effects.objectives.emplace(payload,0);
+                if (it->second<0 || (!fresh && z.mode==0)) return;
+                if (z.mode==1) ++it->second;
+                if (z.mode==2) it->second=-1;
+                const char* status=z.mode==2 ? "complete" : z.mode==1 ? "advanced" : "started";
+                say("Objective "+std::string(status)+": "+payload,4);
+                send("objective."+std::string(status),payload,{});
+            }
+            break;
+        case B::Checkpoint:
+            if (enter) {
+                ZonePose p;
+                if (markerPose(z.target.empty()?c.id:target,p)) {
+                    effects.checkpoint=p; say("Checkpoint reached",2); send("checkpoint.activated",owner,{});
+                }
+            }
+            break;
+        case B::Transition:
+            if (enter) {
+                const auto* node=flowStarted_ ? flow_.CurrentNode() : nullptr;
+                bool route=false;
+                if (node) for (const auto& link : flow_.Document().routes)
+                    if (link.sourceNodeId==node->id && link.outcome==payload) route=true;
+                if (!route) { error="No Story Flow route for outcome '"+payload+"'."; break; }
+                if (!zoneOutcome_.empty()) return;
+                zoneOutcome_=payload; zoneArrivalMarker_=z.secondary;
+                QueueAction({payload,{},RuntimeInputSource::Gameplay,startupResult_.lastActionSequence+1});
+            }
+            break;
+        case B::Teleport:
+            if (enter && !c.suppressArrival) {
+                ZonePose p; if (markerPose(target,p)) MovePlayerToZone(p,error);
+            }
+            break;
+        case B::Health:
+            if (z.mode>=2) c.healthRunning=enter;
+            else if (enter) ApplyZoneHealth(z.mode==1 ? z.amount : -z.amount);
+            break;
+        case B::Kill:
+            if (enter && !c.suppressArrival) {
+                if (z.mode==1) ApplyZoneHealth(-combatState_.playerHealth);
+                else if (MovePlayerToZone(effects.checkpoint.value_or(ZonePose{player_.spawnPosition,0}),error)) {
+                    combatState_.playerDead=false; combatState_.playerHealth=combatState_.playerMaxHealth;
+                }
+            }
+            break;
+        case B::Encounter:
+            if (enter) {
+                if (target==wi::ecs::INVALID_ENTITY) { error="Choose a placed enemy group or scripted spawner."; break; }
+                for (size_t i=0; i<scene.characters.GetCount(); ++i) {
+                    const auto npc=scene.characters.GetEntity(i);
+                    if (npc!=player_.entity && (npc==target || scene.Entity_IsDescendant(npc,target))) scene.characters[i].SetActive(true);
+                }
+                if (!payload.empty()) send(payload,"",z.target);
+            }
+            break;
+        case B::Dialogue:
+            if (enter) {
+                if (!z.target.empty() && target==wi::ecs::INVALID_ENTITY) { error="Dialogue speaker is missing."; break; }
+                (void)dialogue_.ScriptApi(scene,renderer_).start(target,payload,z.secondary,error);
+            }
+            break;
+        case B::Ambience:
+        {
+            auto* sound=scene.sounds.GetComponent(target);
+            if (!sound || !sound->soundResource.IsValid() || !sound->soundinstance.IsValid()) {
+                error="Choose a playable Sound Source."; break;
+            }
+            auto& stack=effects.cues;
+            const auto bus=sound->soundinstance.type;
+            // A local music or ambience cue can temporarily take over an existing
+            // cue on the same bus. Keep its playback position throughout the fade.
+            const auto authoredBus=bridge::CaptureSoundSource(scene,target).bus;
+            if (enter && (authoredBus==bridge::AudioBus::Ambience || authoredBus==bridge::AudioBus::Music)) {
+                for (size_t i=0; i<scene.sounds.GetCount(); ++i) {
+                    const auto id=scene.sounds.GetEntity(i);
+                    const auto& prior=scene.sounds[i];
+                    if (id==target || prior.soundinstance.type!=bus || !prior.IsPlaying()) continue;
+                    auto added=effects.fades.try_emplace(id);
+                    if (added.second) {
+                        added.first->second.volume=prior.volume;
+                        added.first->second.originallyPlaying=true;
+                    }
+                }
+            }
+            stack.erase(std::remove_if(stack.begin(),stack.end(),[&](const auto& q){return q.owner==c.id;}),stack.end());
+            if (enter) {
+                auto result=effects.fades.try_emplace(target);
+                if (result.second) {
+                    auto& f=result.first->second; f.volume=sound->volume; f.originallyPlaying=sound->IsPlaying();
+                    if (!f.originallyPlaying) sound->volume=0;
+                }
+                stack.push_back({c.id,target});
+            }
+            for (auto& item:effects.fades) {
+                auto& f=item.second;
+                auto* source=scene.sounds.GetComponent(item.first); if (!source) continue;
+                if (source->soundinstance.type!=bus) continue;
+                const auto current=std::find_if(stack.rbegin(),stack.rend(),[&](const auto& q){
+                    const auto* candidate=scene.sounds.GetComponent(q.source);
+                    return candidate && candidate->soundinstance.type==bus;
+                });
+                const bool hasZone=current!=stack.rend();
+                const bool owned=std::any_of(stack.begin(),stack.end(),[&](const auto& q){return q.source==item.first;});
+                f.release=!hasZone || (!owned && !f.originallyPlaying);
+                const bool audible=hasZone ? current->source==item.first : f.originallyPlaying;
+                f.from=source->volume; f.to=audible ? f.volume : 0; f.duration=z.seconds; f.elapsed=0;
+                if (audible) source->Play();
+            }
+            break;
+        }
+        case B::Environment:
+        {
+            auto& stack=effects.weather;
+            auto& component=scene.weathers.GetCount()?scene.weathers[0]:scene.weather;
+            const auto current=bridge::CaptureWeather(component);
+            if (!effects.outsideWeather) effects.outsideWeather=current;
+            stack.erase(std::remove_if(stack.begin(),stack.end(),[&](const auto& q){return q.owner==c.id;}),stack.end());
+            if (enter) stack.push_back({c.id,z.mode});
+            const auto to=stack.empty() ? *effects.outsideWeather : bridge::MakeWeatherPreset(*effects.outsideWeather,
+                bridge::WeatherPreset(std::clamp(stack.back().preset,0,3)));
+            (void)effects.weatherBlend.Start(current,to,z.seconds);
+            bridge::ApplyWeather(component,effects.weatherBlend.Current());
+            if (scene.weathers.GetCount()) scene.weather=component;
+            break;
+        }
+        default: return;
+        }
+        const std::string code=bridge::zones::EdgeEvent(z.behaviour,enter);
+        diagnosticService_.Record(error.empty()?bridge::DiagnosticSeverity::Info:bridge::DiagnosticSeverity::Warning,
+            "runtime.zone",code,error.empty()?owner:error);
+    }
+
+    void RuntimeApplication::StepZoneEffects(float dt)
+    {
+        auto& e=zoneEffects_;
+        auto& scene=scenes_.GetScene();
+        if (combatState_.playerDead && e.checkpoint) {
+            std::string error;
+            if (MovePlayerToZone(*e.checkpoint,error)) {
+                combatState_.playerHealth=combatState_.playerMaxHealth;
+                combatState_.playerDead=false;
+            }
+        }
+        e.messages.erase(std::remove_if(e.messages.begin(),e.messages.end(),[&](auto& m){
+            if (m.remaining<0) return false;
+            m.remaining-=dt; return m.remaining<=0;
+        }),e.messages.end());
+        renderer_.SetZoneMessage(e.messages.empty()?std::string{}:e.messages.back().text);
+        for (auto it=e.fades.begin();it!=e.fades.end();) {
+            auto& f=it->second; auto* source=scene.sounds.GetComponent(it->first);
+            if (!source) { it=e.fades.erase(it); continue; }
+            f.elapsed+=dt;
+            const float t=f.duration>0 ? std::min(1.f,f.elapsed/f.duration) : 1.f;
+            source->volume=f.from+(f.to-f.from)*t;
+            if (t>=1 && f.release) {
+                if (!f.originallyPlaying) source->Stop();
+                source->volume=f.volume;
+                if (f.originallyPlaying)
+                    diagnosticService_.Record(bridge::DiagnosticSeverity::Info,"runtime.zone","zone.ambience.restored",
+                        bridge::PersistentEntityId(scene,it->first)+" volume="+std::to_string(source->volume));
+                it=e.fades.erase(it);
+            } else ++it;
+        }
+        if (e.weatherBlend.IsActive()) {
+            e.weatherBlend.Advance(dt);
+            auto& component=scene.weathers.GetCount()?scene.weathers[0]:scene.weather;
+            bridge::ApplyWeather(component,e.weatherBlend.Current());
+            if (scene.weathers.GetCount()) scene.weather=component;
+        }
+        if (e.weather.empty() && !e.weatherBlend.IsActive()) e.outsideWeather.reset();
+    }
+
     void RuntimeApplication::CompleteZone(ZoneContact& contact)
     {
         if (contact.won) return;
@@ -4382,7 +4647,8 @@ namespace renegade::runtime
     void RuntimeApplication::OnZoneScriptEvent(const bridge::GameplayEvent& event)
     {
         const bool complete = event.name == "zone.complete";
-        if ((!complete && event.name != "zone.forward.enter" && event.name != "zone.forward.exit") ||
+        const bool effect = event.name.rfind("zone.apply.",0)==0;
+        if ((!effect && !complete && event.name != "zone.forward.enter" && event.name != "zone.forward.exit") ||
             event.targetEntityId.empty() || event.senderEntityId != event.targetEntityId) return;
         const auto& scene = scenes_.GetScene();
         for (auto& contact : zoneContacts_)
@@ -4390,6 +4656,13 @@ namespace renegade::runtime
             if (!contact.scripted || bridge::PersistentEntityId(scene, contact.id) != event.targetEntityId) continue;
             bridge::zones::Definition zone;
             if (!bridge::zones::Read(scene, contact.id, zone)) return;
+            if (effect) {
+                const std::string expected=std::string("zone.apply.")+ (bridge::zones::EdgeEvent(zone.behaviour,true)+5);
+                const std::string exit=std::string("zone.apply.")+ (bridge::zones::EdgeEvent(zone.behaviour,false)+5);
+                if (event.name==expected || event.name==exit)
+                    ApplyZoneEffect(contact,zone,event.name==expected,event.payload);
+                return;
+            }
             if (complete && zone.behaviour == bridge::zones::Behaviour::Win) CompleteZone(contact);
             else if (!complete && zone.behaviour == bridge::zones::Behaviour::Trigger && !event.payload.empty())
             {
@@ -4405,9 +4678,10 @@ namespace renegade::runtime
         }
     }
 
-    void RuntimeApplication::UpdateZones()
+    void RuntimeApplication::UpdateZones(float dt)
     {
         if (zoneContacts_.empty() || !player_.IsSpawned()) return;
+        StepZoneEffects(dt);
         const auto* level = flowStarted_ ? flow_.CurrentNode() : nullptr;
         if (level && level->kind != bridge::FlowNodeKind::Level) return;
         const auto& scene = scenes_.GetScene();
@@ -4419,14 +4693,23 @@ namespace renegade::runtime
             const auto* transform = scene.transforms.GetComponent(contact.id);
             if (!transform || !bridge::zones::Read(scene, contact.id, zone)) continue;
             const bool inside = bridge::zones::Contains(zone, XMLoadFloat4x4(&transform->world), player->GetPosition());
-            if (inside == contact.inside) continue;
-            contact.inside = inside;
+            if (inside && contact.healthRunning && zone.behaviour==bridge::zones::Behaviour::Health)
+                ApplyZoneHealth((zone.mode==3 ? zone.amount : -zone.amount)*dt);
+            if (inside && zone.activation==1 && !contact.active && !(zone.repeat==1 && contact.fired) &&
+                contact.cooldown<=0 && zoneEffects_.messages.empty()) {
+                const auto& binding=inputMap_.bindings[size_t(bridge::GameplayAction::Interact)];
+                renderer_.SetZoneMessage("Press "+binding.keyboard+" to interact");
+            }
+            const auto edge=SampleZone(contact,zone,inside,gameplayInput_.interactPressed,dt);
+            if (edge==ZoneEdge::None) continue;
+            if (edge==ZoneEdge::Enter && zone.activation==1) gameplayInput_.interactPressed=false;
             bridge::GameplayEvent event;
             event.senderEntityId = bridge::PersistentEntityId(scene, contact.id);
             if (contact.scripted)
             {
                 event.name = bridge::zones::EdgeEvent(zone.behaviour, inside);
-                event.payload = inside ? zone.enter : zone.exit;
+                event.payload = zone.behaviour==bridge::zones::Behaviour::Trigger ? (inside ? zone.enter : zone.exit) :
+                    (inside ? zone.primary : zone.secondary);
                 event.targetEntityId = event.senderEntityId;
             }
             else if (zone.behaviour == bridge::zones::Behaviour::Win)
@@ -4435,12 +4718,13 @@ namespace renegade::runtime
                 CompleteZone(contact);
                 return;
             }
-            else
+            else if (zone.behaviour==bridge::zones::Behaviour::Trigger)
             {
                 event.name = inside ? zone.enter : zone.exit;
                 if (event.name.empty()) continue;
                 event.targetEntityId = zone.target;
             }
+            else continue;
             std::string error;
             if (!creatorScripts_.EnqueueGameplayEvent(std::move(event), error))
                 wi::backlog::post("Zone event: " + error, wi::backlog::LogLevel::Warning);
@@ -4488,7 +4772,9 @@ namespace renegade::runtime
                 }
             }
             const bool levelOutcome = current && current->kind == bridge::FlowNodeKind::Level &&
-                (request.actionId == "ui.pause" || request.actionId == "level.complete");
+                (request.actionId == "ui.pause" || request.actionId == "level.complete" ||
+                 (!zoneOutcome_.empty() && request.inputSource==RuntimeInputSource::Gameplay && request.actionId==zoneOutcome_));
+            if (levelOutcome) zoneOutcome_.clear();
             if(flowScreen||levelOutcome)
             {
                 const auto oldFlow=flow_;
@@ -4498,7 +4784,7 @@ namespace renegade::runtime
                 std::string error;
                 if(!step.succeeded||!flow_.ApplyStep(scenes_,startupResult_,step,error))
                 {
-                    flow_=oldFlow;startupResult_=oldBootstrap;CancelScreenExit();
+                    zoneArrivalMarker_.clear(); flow_=oldFlow;startupResult_=oldBootstrap;CancelScreenExit();
                     result.code=RuntimeActionCode::FlowStartFailed;
                     result.message=step.succeeded?error:step.message;
                     RecordAction(result);return;
@@ -4508,7 +4794,7 @@ namespace renegade::runtime
                 {
                     if(!LoadCurrentFlowScreen(error))
                     {
-                        flow_=oldFlow;startupResult_=oldBootstrap;CancelScreenExit();
+                        zoneArrivalMarker_.clear(); flow_=oldFlow;startupResult_=oldBootstrap;CancelScreenExit();
                         result.code=RuntimeActionCode::FlowStartFailed;result.message=error;
                         RecordAction(result);return;
                     }

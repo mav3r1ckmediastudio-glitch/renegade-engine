@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.health",
+  "package_version": "1.0.0",
+  "display_name": "Damage / Healing",
+  "files": [
+    {
+      "path": "HealthZone.lua",
+      "content_hash": "fnv1a64:65f14715a7fa81a8",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "HealthZone.lua"
+  ]
+}
