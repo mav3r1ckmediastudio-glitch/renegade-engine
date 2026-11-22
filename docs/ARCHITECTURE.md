@@ -6,6 +6,10 @@ A zone is a named scene entity with a persistent ID, a transform and versioned l
 
 Runtime tracks the player origin in each authored box using the inverse world transform. Custom Trigger sends a named event on entry and exit to the chosen persistent entity or to the project scripts by broadcast. Win Zone sends the existing Story Flow `level.complete` action once per level visit. A direct level launch presents a completion overlay and accepts Enter to finish.
 
+The installed Studio carries two independent Creator Library packages under `Content/ScriptLibrary/RenegadeZones`. A saved scene adopts the selected preset into the project through the existing script library and records its entity attachment in the normal scene `.rscripts` companion. New placements and preset switches group the box and attachment changes into one history operation. Opening Edit Lua Script on an older native zone adopts its script. Existing scenes with no zone script retain their native entry and exit behaviour.
+
+The source window edits the project copy and validates Lua syntax and metadata before a transactional save. Enter and Exit previews dispatch the same targeted edge event through a separate governed RuntimeScriptRuntime on an isolated zone. Saving reruns the preview. Clean buffers pick up external saves and a conflicting external save preserves the local draft. Test Game uses the launch snapshot. A viewport click tests the local faces of visible zone boxes against the nearest ordinary scene hit and passes the result through standard selection.
+
 ## Gameplay physics adapter
 
 The Physics Lab samples counts and timings from the native scene through EngineBridge. Diagnostic requests and queued paused steps belong to the scene's physics state and the contact sample shares the native listener. A paused step feeds back the resulting pose without interpolation. Diagnostics do not need a subscription to the gameplay event queue.

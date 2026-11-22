@@ -916,6 +916,8 @@ namespace renegade::studio
         bool waterfallControlsCreated_=false;std::string waterfallUiError_;
         wi::gui::Window zoneInspector_;
         SceneInspectorComboBox zonePreset_, zoneTarget_;
+        SceneInspectorButton zoneScript_;
+        void OpenSelectedZoneScript();
         std::array<SceneInspectorSlider, 3> zoneSizes_;
         SceneInspectorTextInputField zoneName_;
         std::array<SceneInspectorTextInputField, 2> zoneEvents_;

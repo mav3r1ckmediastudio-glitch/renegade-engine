@@ -198,10 +198,12 @@ namespace renegade::runtime
         void SyncLevelHud();
         void OnGovernedHudGameplayEvent(const bridge::GameplayEvent& event);
         void ProcessHudActions();
-        struct ZoneContact { wi::ecs::Entity id; bool inside = false, won = false; };
+        struct ZoneContact { wi::ecs::Entity id; bool inside = false, won = false, scripted = false; };
         std::vector<ZoneContact> zoneContacts_;
         bool directLevelWon_ = false;
         void UpdateZones();
+        void OnZoneScriptEvent(const bridge::GameplayEvent& event);
+        void CompleteZone(ZoneContact& contact);
         void QueueAction(RuntimeActionRequest request);
         void ProcessPendingActions();
         void CancelScreenExit();

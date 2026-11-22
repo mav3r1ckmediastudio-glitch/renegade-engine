@@ -1,4 +1,6 @@
 #include "StudioApplication.h"
+#include "ZoneScriptEditor.h"
+#include "renegade/bridge/ScriptLibraryService.h"
 #include <algorithm>
 #include <cmath>
 
@@ -9,6 +11,53 @@ namespace renegade::studio
     namespace zones = bridge::zones;
     namespace
     {
+        // The attachment and the box share one Undo operation. Legacy native zones
+        // acquire their project script when the creator opens the source.
+        bool PrepareZoneScript(bridge::StudioSession& session, const bridge::StableId& owner,
+                               zones::Behaviour behaviour, bridge::SelectionBatchCommand& batch,
+                               bridge::StableId& instance, bool& changed, std::string& error)
+        {
+            changed = false;
+            auto& scripts = session.Scripts();
+            if (!scripts.EnsureCurrent(error)) return false;
+            auto& doc = *scripts.Document();
+            const std::string path = zones::ScriptPath(behaviour);
+            const auto other = zones::ScriptPath(behaviour == zones::Behaviour::Win ?
+                zones::Behaviour::Trigger : zones::Behaviour::Win);
+            for (const auto& a : doc.attachments)
+            {
+                if (a.ownerEntityId != owner) continue;
+                if (a.sourcePath == path) { instance = a.scriptInstanceId; return true; }
+                if (a.sourcePath == other) instance = a.scriptInstanceId;
+            }
+            std::vector<bridge::ScriptAuthoringSource> sources;
+            std::vector<bridge::ScriptMetadataDiagnostic> diagnostics;
+            if (!scripts.EnumerateProjectSources(bridge::ScriptPresentation::Script,sources,diagnostics,error)) return false;
+            auto source = std::find_if(sources.begin(),sources.end(),[&](const auto& s){return s.sourcePath==path;});
+            if (source == sources.end()) { error = "Cannot find a valid zone script: " + path; return false; }
+            auto binding = source->binding;
+            if (source->libraryEntry && !source->libraryAdopted)
+            {
+                bridge::ScriptLibraryAdoptionResult adoption;
+                if (!bridge::ScriptLibraryService{}.AdoptEntry(session.Projects().CurrentProject().rootPath,
+                    source->libraryManifestPath,source->libraryEntryPath,adoption,error)) return false;
+                binding = std::move(adoption.binding);
+            }
+            std::unique_ptr<bridge::ICommand> edit;
+            if (instance.empty())
+            {
+                auto attachment = bridge::CreateScriptAttachment(bridge::ScriptScope::Entity,owner,binding);
+                if (!bridge::ApplyScriptMetadataDefaults(source->metadata,attachment,error)) return false;
+                instance = attachment.scriptInstanceId;
+                edit = bridge::MakeAddScriptAttachmentCommand(doc,std::move(attachment),error);
+            }
+            else edit = bridge::MakeReplaceScriptSourceCommand(doc,instance,binding,error);
+            if (!edit) return false;
+            batch.Add(std::move(edit));
+            changed = true;
+            return true;
+        }
+
         XMFLOAT3 FacePoint(const zones::Definition& z, int face, FXMMATRIX world, float outward = 0)
         {
             std::array<float, 3> p;
@@ -65,7 +114,37 @@ namespace renegade::studio
             });
             zoneInspector_.AddWidget(&field);
         }
+        zoneScript_.Create("Edit Zone Lua");
+        zoneScript_.SetText("EDIT LUA SCRIPT");
+        zoneScript_.SetTooltip("Open the project copy of this stock zone script. Save to refresh its preview.");
+        zoneScript_.OnClick([this](const auto&) { OpenSelectedZoneScript(); });
+        zoneInspector_.AddWidget(&zoneScript_);
         zoneInspector_.SetVisible(false);
+    }
+
+    void StudioRenderPath::OpenSelectedZoneScript()
+    {
+        if (!session_ || !session_->Projects().HasProject()) return;
+        auto& scripts = session_->Scripts();
+        const auto& scene = session_->Scenes().GetScene();
+        const auto entity = session_->Selection().SelectedEntity();
+        zones::Definition zone;
+        if (!zones::Read(scene,entity,zone)) return;
+        const auto owner = bridge::PersistentEntityId(scene,entity);
+        const auto root = session_->Projects().CurrentProject().rootPath;
+        std::string error;
+        auto fail = [&] { studioChrome_.SetStatusText("ZONE LUA // " + error); };
+        if (!scripts.EnsureCurrent(error)) { fail(); return; }
+        auto batch = std::make_unique<bridge::SelectionBatchCommand>();
+        bridge::StableId instance;
+        bool changed;
+        if (!PrepareZoneScript(*session_,owner,zone.behaviour,*batch,instance,changed,error)) { fail(); return; }
+        if (changed && !session_->Commands().Execute(std::move(batch))) { error="Could not attach the zone script."; fail(); return; }
+        auto* attachment = bridge::FindScriptAttachment(*scripts.Document(),instance);
+        if (!attachment) return;
+        RefreshStatus();
+        static ZoneScriptEditor editor;
+        if (!editor.Open(GetActiveWindow(),root,*attachment,zone,[this] { QueueInspectorRefresh(); },error)) fail();
     }
 
     void StudioRenderPath::EditSelectedZone(const std::function<void(zones::Definition&)>& change)
@@ -75,8 +154,22 @@ namespace renegade::studio
         auto id = session_->Selection().SelectedEntity();
         zones::Definition zone;
         if (!zones::Read(scene, id, zone)) return;
+        const auto oldBehaviour = zone.behaviour;
         change(zone);
-        if (session_->Commands().Execute(std::make_unique<zones::Edit>(scene, id, zone)))
+        auto batch = std::make_unique<bridge::SelectionBatchCommand>();
+        batch->Add(std::make_unique<zones::Edit>(scene,id,zone));
+        if (zone.behaviour != oldBehaviour && !session_->Scenes().CurrentPath().empty())
+        {
+            bridge::StableId instance;
+            bool changed;
+            std::string error;
+            if (!PrepareZoneScript(*session_,bridge::PersistentEntityId(scene,id),zone.behaviour,*batch,instance,changed,error))
+            {
+                studioChrome_.SetStatusText("ZONE LUA // " + error);
+                QueueInspectorRefresh(); return;
+            }
+        }
+        if (session_->Commands().Execute(std::move(batch)))
             QueueInspectorRefresh();
     }
 
@@ -141,6 +234,7 @@ namespace renegade::studio
                 place(zoneEvents_[i], 85.f);
             }
         }
+        place(zoneScript_);
         return true;
     }
 
@@ -210,7 +304,20 @@ namespace renegade::studio
             {
                 auto command = std::make_unique<zones::Create>(scene,p);
                 const auto created = command->Id();
-                if (session_->Commands().Execute(std::move(command)))
+                const auto owner = command->PersistentId();
+                auto batch = std::make_unique<bridge::SelectionBatchCommand>();
+                batch->Add(std::move(command));
+                if (!session_->Scenes().CurrentPath().empty())
+                {
+                    bridge::StableId instance;
+                    bool changed;
+                    std::string error;
+                    if (!PrepareZoneScript(*session_,owner,zones::Behaviour::Trigger,*batch,instance,changed,error))
+                    {
+                        studioChrome_.SetStatusText("ZONE LUA // " + error); return true;
+                    }
+                }
+                if (session_->Commands().Execute(std::move(batch)))
                 {
                     zonePlacing_ = false;
                     session_->Selection().Select(created);

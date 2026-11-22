@@ -9939,7 +9939,26 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 !wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT)))return false;
         if(PickWaterfallHandles(pointer))return true;
         const auto ray=wi::renderer::GetPickRay(static_cast<long>(pointer.x),static_cast<long>(pointer.y),*this,*camera);
-        auto hit=wi::scene::Pick(ray,wi::enums::FILTER_OBJECT_ALL,~0u,scene).entity;
+        const auto objectHit=wi::scene::Pick(ray,wi::enums::FILTER_OBJECT_ALL,~0u,scene);
+        auto hit=objectHit.entity;
+        if (studioChrome_.IsSceneWorkspaceActive() && !studioChrome_.IsPhysicsLabActive() && !studioChrome_.IsAudioWorkspaceActive())
+        {
+            float nearest = hit == wi::ecs::INVALID_ENTITY ? ray.TMax : objectHit.distance;
+            for (auto id : editorZones_)
+            {
+                if (!studioChrome_.ShowZones() && !session_->Selection().Contains(id)) continue;
+                const auto* transform = scene.transforms.GetComponent(id);
+                bridge::zones::Definition bounds;
+                float distance;
+                if (transform && bridge::zones::Read(scene,id,bounds) &&
+                    bridge::zones::HitDistance(bounds,XMLoadFloat4x4(&transform->world),ray,distance) &&
+                    distance <= nearest)
+                {
+                    nearest = distance;
+                    hit = id;
+                }
+            }
+        }
         if(waterfallRenderer_.Owns(hit))hit=waterfallRenderer_.Owner(hit);
         const bool add=wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) || wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT);
         environmentWorkspaceActive_=false;terrainWorkspaceActive_=false;

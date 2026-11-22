@@ -1871,7 +1871,7 @@ endif()
 # G13D: authored scene-bound waterfall definition, persistent native metadata,
 # bounded stable identity, and exact Undo/Redo. Rendering remains G13C owner-approved.
 add_executable(RenegadeGameplayZoneTests GameplayZoneTests.cpp)
-target_link_libraries(RenegadeGameplayZoneTests PRIVATE Renegade::EngineBridge)
+target_link_libraries(RenegadeGameplayZoneTests PRIVATE Renegade::RuntimeBootstrap)
 add_test(NAME RenegadeGameplayZoneTests COMMAND RenegadeGameplayZoneTests)
 
 add_executable(RenegadePlaceableWaterfallAuthoringTests PlaceableWaterfallAuthoringTests.cpp)

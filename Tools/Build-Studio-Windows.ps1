@@ -214,6 +214,15 @@ try {
             throw "S7 packaged Studio must contain exactly six stock Lua Actions."
         }
 
+        foreach ($zone in @("Trigger", "Win")) {
+            $zonePackage = Join-Path $packageRoot "Content\ScriptLibrary\RenegadeZones\$zone"
+            foreach ($file in @("renegade-script-package.json", "${zone}Zone.lua")) {
+                if (-not (Test-Path (Join-Path $zonePackage $file) -PathType Leaf)) {
+                    throw "Packaged Studio is missing the $zone zone script package file $file."
+                }
+            }
+        }
+
         # The owner audit must travel with the exact executable it validates.
         # A green source-tree document is not usable evidence when the Release
         # artifact is downloaded and tested outside the repository.

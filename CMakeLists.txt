@@ -212,6 +212,12 @@ if(WIN32)
     include(Studio/Phase6Gate3.cmake)
     add_subdirectory(Runtime)
     include(Runtime/S3GovernedLuaRuntime.cmake)
+    add_custom_target(RenegadeZoneScriptLibrary
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/Library/Scripts/RenegadeZones"
+            "${CMAKE_BINARY_DIR}/Studio/$<CONFIG>/Content/ScriptLibrary/RenegadeZones"
+        VERBATIM)
+    add_dependencies(RenegadeStudio RenegadeZoneScriptLibrary)
     include(Runtime/S5CoreGameplayApi.cmake)
     include(Runtime/LP06Gate3.cmake)
     add_subdirectory(Tests)

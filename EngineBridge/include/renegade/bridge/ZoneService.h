@@ -24,6 +24,19 @@ namespace renegade::bridge::zones
     inline constexpr const char* Low[] = {"zone.min.x", "zone.min.y", "zone.min.z"};
     inline constexpr const char* High[] = {"zone.max.x", "zone.max.y", "zone.max.z"};
 
+    inline const char* ScriptPath(Behaviour behaviour)
+    {
+        return behaviour == Behaviour::Win
+            ? "Content/Scripts/Library/renegade.zones.win/WinZone.lua"
+            : "Content/Scripts/Library/renegade.zones.trigger/TriggerZone.lua";
+    }
+
+    inline const char* EdgeEvent(Behaviour behaviour, bool enter)
+    {
+        if (behaviour == Behaviour::Win) return enter ? "zone.win.enter" : "zone.win.exit";
+        return enter ? "zone.trigger.enter" : "zone.trigger.exit";
+    }
+
     inline bool IsZone(const Scene& scene, Entity id)
     {
         const auto* m = scene.metadatas.GetComponent(id);
@@ -81,11 +94,41 @@ namespace renegade::bridge::zones
                p.y <= zone.high[1] && p.z >= zone.low[2] && p.z <= zone.high[2];
     }
 
+    inline bool HitDistance(const Definition& zone, DirectX::FXMMATRIX world,
+                            const wi::primitive::Ray& ray, float& distance)
+    {
+        using namespace DirectX;
+        XMVECTOR determinant;
+        const auto inverse = XMMatrixInverse(&determinant,world);
+        if (XMVectorGetX(determinant) == 0) return false;
+        XMFLOAT3 origin, direction;
+        XMStoreFloat3(&origin,XMVector3TransformCoord(XMLoadFloat3(&ray.origin),inverse));
+        // Keep the local direction unnormalised so t remains a world-space distance.
+        XMStoreFloat3(&direction,XMVector3TransformNormal(XMLoadFloat3(&ray.direction),inverse));
+        const std::array<float,3> o{origin.x,origin.y,origin.z}, d{direction.x,direction.y,direction.z};
+        float nearT = -FLT_MAX, farT = FLT_MAX;
+        for (size_t i=0; i<3; ++i)
+        {
+            if (std::abs(d[i]) < 1e-8f)
+            {
+                if (o[i] < zone.low[i] || o[i] > zone.high[i]) return false;
+                continue;
+            }
+            const float a = (zone.low[i]-o[i])/d[i], b = (zone.high[i]-o[i])/d[i];
+            nearT = std::max(nearT,std::min(a,b));
+            farT = std::min(farT,std::max(a,b));
+            if (nearT > farT) return false;
+        }
+        distance = nearT >= ray.TMin ? nearT : farT;
+        return distance >= ray.TMin && distance <= ray.TMax;
+    }
+
     class Create final : public ICommand
     {
     public:
         Create(Scene& scene, XMFLOAT3 position) : scene_(scene), position_(position) {}
         Entity Id() const { return id_; }
+        const StableId& PersistentId() const { return stableId_; }
         bool Execute() override
         {
             if (scene_.transforms.Contains(id_) || scene_.names.Contains(id_)) return false;

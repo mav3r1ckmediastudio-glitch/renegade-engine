@@ -1,3 +1,4 @@
+#include <unordered_set>
 #include "renegade/bridge/TerrainPropCollisionWorld.h"
 #include "renegade/bridge/ParticleEffectService.h"
 #include "../../EngineBridge/src/PlaceableWaterfallAuthoring.h"
@@ -625,7 +626,7 @@ namespace renegade::runtime
         diagnosticService_.Identify("runtime");
         diagnosticService_.StartLocalEndpoint(38742);
         creatorScripts_.SetGameplayEventObserver([this](const bridge::GameplayEvent& event)
-        {OnGovernedHudGameplayEvent(event);});
+        { OnZoneScriptEvent(event); OnGovernedHudGameplayEvent(event); });
 
         // This is retained for existing engine-internal/unsafe Wicked Lua
         // integrations. Creator S3 scripts never borrow that global VM: their
@@ -3641,6 +3642,21 @@ namespace renegade::runtime
             return;
         }
 
+        std::unordered_set<bridge::StableId> winOwners, triggerOwners;
+        for (auto behaviour : {bridge::zones::Behaviour::Win, bridge::zones::Behaviour::Trigger})
+        {
+            const auto owners = creatorScripts_.EntityOwnersForSource(bridge::zones::ScriptPath(behaviour));
+            auto& set = behaviour == bridge::zones::Behaviour::Win ? winOwners : triggerOwners;
+            set.insert(owners.begin(), owners.end());
+        }
+        for (auto& contact : zoneContacts_)
+        {
+            bridge::zones::Definition zone;
+            if (!bridge::zones::Read(activeScene, contact.id, zone)) continue;
+            const auto& set = zone.behaviour == bridge::zones::Behaviour::Win ? winOwners : triggerOwners;
+            contact.scripted = set.count(bridge::PersistentEntityId(activeScene, contact.id)) != 0;
+        }
+
         // StartScene/BeginScene intentionally clears diagnostics for the new
         // Level generation. Reset the publication cursor only after that
         // successful transition so every new instance failure is surfaced.
@@ -4351,6 +4367,44 @@ namespace renegade::runtime
         return true;
     }
 
+    void RuntimeApplication::CompleteZone(ZoneContact& contact)
+    {
+        if (contact.won) return;
+        contact.won = true;
+        if (flowStarted_ && flow_.CurrentNode())
+            QueueAction({"level.complete", {}, RuntimeInputSource::Gameplay, startupResult_.lastActionSequence + 1});
+        else
+            directLevelWon_ = true;
+        diagnosticService_.Record(bridge::DiagnosticSeverity::Info, "runtime.zone", "level.complete",
+            bridge::PersistentEntityId(scenes_.GetScene(), contact.id));
+    }
+
+    void RuntimeApplication::OnZoneScriptEvent(const bridge::GameplayEvent& event)
+    {
+        const bool complete = event.name == "zone.complete";
+        if ((!complete && event.name != "zone.forward.enter" && event.name != "zone.forward.exit") ||
+            event.targetEntityId.empty() || event.senderEntityId != event.targetEntityId) return;
+        const auto& scene = scenes_.GetScene();
+        for (auto& contact : zoneContacts_)
+        {
+            if (!contact.scripted || bridge::PersistentEntityId(scene, contact.id) != event.targetEntityId) continue;
+            bridge::zones::Definition zone;
+            if (!bridge::zones::Read(scene, contact.id, zone)) return;
+            if (complete && zone.behaviour == bridge::zones::Behaviour::Win) CompleteZone(contact);
+            else if (!complete && zone.behaviour == bridge::zones::Behaviour::Trigger && !event.payload.empty())
+            {
+                bridge::GameplayEvent forwarded;
+                forwarded.name = event.payload;
+                forwarded.targetEntityId = zone.target;
+                forwarded.senderEntityId = event.senderEntityId;
+                std::string error;
+                if (!creatorScripts_.EnqueueGameplayEvent(std::move(forwarded), error))
+                    wi::backlog::post("Zone script: " + error, wi::backlog::LogLevel::Warning);
+            }
+            return;
+        }
+    }
+
     void RuntimeApplication::UpdateZones()
     {
         if (zoneContacts_.empty() || !player_.IsSpawned()) return;
@@ -4367,22 +4421,26 @@ namespace renegade::runtime
             const bool inside = bridge::zones::Contains(zone, XMLoadFloat4x4(&transform->world), player->GetPosition());
             if (inside == contact.inside) continue;
             contact.inside = inside;
-            if (zone.behaviour == bridge::zones::Behaviour::Win)
+            bridge::GameplayEvent event;
+            event.senderEntityId = bridge::PersistentEntityId(scene, contact.id);
+            if (contact.scripted)
+            {
+                event.name = bridge::zones::EdgeEvent(zone.behaviour, inside);
+                event.payload = inside ? zone.enter : zone.exit;
+                event.targetEntityId = event.senderEntityId;
+            }
+            else if (zone.behaviour == bridge::zones::Behaviour::Win)
             {
                 if (!inside || contact.won) continue;
-                contact.won = true;
-                if (level)
-                    QueueAction({"level.complete", {}, RuntimeInputSource::Gameplay, startupResult_.lastActionSequence + 1});
-                else
-                    directLevelWon_ = true;
-                diagnosticService_.Record(bridge::DiagnosticSeverity::Info, "runtime.zone", "level.complete", bridge::PersistentEntityId(scene, contact.id));
+                CompleteZone(contact);
                 return;
             }
-            bridge::GameplayEvent event;
-            event.name = inside ? zone.enter : zone.exit;
-            if (event.name.empty()) continue;
-            event.targetEntityId = zone.target;
-            event.senderEntityId = bridge::PersistentEntityId(scene, contact.id);
+            else
+            {
+                event.name = inside ? zone.enter : zone.exit;
+                if (event.name.empty()) continue;
+                event.targetEntityId = zone.target;
+            }
             std::string error;
             if (!creatorScripts_.EnqueueGameplayEvent(std::move(event), error))
                 wi::backlog::post("Zone event: " + error, wi::backlog::LogLevel::Warning);
