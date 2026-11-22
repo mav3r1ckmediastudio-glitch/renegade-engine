@@ -264,6 +264,41 @@ int main()
         return fail("character impact effect lifetime");
     visuals.Reset(*scene);
     {
+        auto filtered=std::make_unique<wi::scene::Scene>();
+        const auto removed=filtered->Entity_CreateTransform("Expired collision object");
+        filtered->objects.Create(removed).filterMask=wi::enums::FILTER_OPAQUE;
+        const auto actor=filtered->Entity_CreateTransform("Blood collision Character");
+        filtered->characters.Create(actor);
+        const auto body=filtered->Entity_CreateTransform("Blood collision Character mesh");
+        filtered->Component_Attach(body,actor);
+        auto& object=filtered->objects.Create(body);
+        object.filterMask=wi::enums::FILTER_NAVIGATION_MESH;
+        object.filterMaskDynamic=wi::enums::FILTER_OPAQUE;
+        {
+            runtime::RuntimeBloodEffects::CollisionFilterScope filters(*filtered);
+            filters.Exclude(body);
+            filters.Exclude(body);
+            if(filtered->objects.GetComponent(body)->GetFilterMask()!=0 ||
+               filtered->objects.GetComponent(removed)->GetFilterMask()!=wi::enums::FILTER_OPAQUE)
+                return fail("blood query exclusion changed unrelated object filtering");
+            filtered->Entity_Remove(removed);
+        }
+        const auto* restored=filtered->objects.GetComponent(body);
+        if(!restored || restored->filterMask!=wi::enums::FILTER_NAVIGATION_MESH ||
+           restored->filterMaskDynamic!=wi::enums::FILTER_OPAQUE)
+            return fail("blood query exclusion did not restore filters after object compaction");
+        runtime::RuntimeBloodEffects blood;
+        blood.Spawn(*filtered,{0,1,0},{0,0,-1},actor,1.f,0);
+        if(std::find(blood.characterObjects.begin(),blood.characterObjects.end(),body)==
+           blood.characterObjects.end())
+            return fail("blood query cache missed a native Character descendant");
+        blood.Reset(*filtered);
+        if(!blood.characterObjects.empty() ||
+           filtered->objects.GetComponent(body)->GetFilterMask()!=
+               (wi::enums::FILTER_NAVIGATION_MESH|wi::enums::FILTER_OPAQUE))
+            return fail("blood cleanup damaged character query filtering");
+    }
+    {
         runtime::RuntimeBloodEffects bloodProof;
         const auto baseObjects=scene->objects.GetCount(),baseMeshes=scene->meshes.GetCount(),
             baseMaterials=scene->materials.GetCount(),baseDecals=scene->decals.GetCount();

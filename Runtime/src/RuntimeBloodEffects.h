@@ -22,6 +22,31 @@ namespace renegade::runtime
         std::vector<Drop> drops;
         std::vector<Stain> stains;
         unsigned stainSerial=0;
+        std::vector<wi::ecs::Entity> characterObjects;
+
+        struct CollisionFilterScope
+        {
+            struct Saved { wi::ecs::Entity entity; uint32_t authored, dynamic; };
+            wi::scene::Scene& scene;
+            std::vector<Saved> saved;
+            explicit CollisionFilterScope(wi::scene::Scene& value) : scene(value) {}
+            void Exclude(wi::ecs::Entity entity)
+            {
+                auto* object=scene.objects.GetComponent(entity);
+                if(!object || object->GetFilterMask()==0)return;
+                saved.push_back({entity,object->filterMask,object->filterMaskDynamic});
+                object->filterMask=object->filterMaskDynamic=0;
+            }
+            ~CollisionFilterScope()
+            {
+                for(const auto& item:saved)
+                    if(auto* object=scene.objects.GetComponent(item.entity))
+                    {
+                        object->filterMask=item.authored;
+                        object->filterMaskDynamic=item.dynamic;
+                    }
+            }
+        };
         static const wi::graphics::Texture& StainSurface(float dry)
         {
             static std::array<wi::graphics::Texture,16> textures;
@@ -142,6 +167,15 @@ namespace renegade::runtime
         void Spawn(wi::scene::Scene& scene,const XMFLOAT3& point,const XMFLOAT3& direction,
             wi::ecs::Entity source,float strength,unsigned seed)
         {
+            // Refresh on a hit, when new cosmetic objects are being created.
+            characterObjects.clear();
+            for(size_t oi=0;oi<scene.objects.GetCount();++oi)
+            {
+                const auto entity=scene.objects.GetEntity(oi);
+                for(size_t ci=0;ci<scene.characters.GetCount();++ci)
+                    if(Belongs(scene,entity,scene.characters.GetEntity(ci)))
+                    {characterObjects.push_back(entity);break;}
+            }
             PrepareMesh(scene);
             const unsigned count=std::max(18u,unsigned(60*strength));
             const auto axis=XMVector3Normalize(XMLoadFloat3(&direction));
@@ -217,6 +251,15 @@ namespace renegade::runtime
         {
             if(dt<=0)return;
             liquidSheets.Update(scene,dt);
+            // Queries finish before Scene::Update. Restore by entity because
+            // expiry can compact the native object component array below.
+            CollisionFilterScope collisionFilters(scene);
+            for(const auto& drop:drops)collisionFilters.Exclude(drop.entity);
+            for(const auto& sheet:liquidSheets.sheets)collisionFilters.Exclude(sheet.entity);
+            for(const auto entity:characterObjects)
+                for(size_t ci=0;ci<scene.characters.GetCount();++ci)
+                    if(Belongs(scene,entity,scene.characters.GetEntity(ci)))
+                    {collisionFilters.Exclude(entity);break;}
             for(auto it=drops.begin();it!=drops.end();)
             {
                 // Bound query work even after a long hitch; presentation ages still expire normally.
@@ -277,7 +320,7 @@ namespace renegade::runtime
             liquidSheets.Reset(scene);
             for(const auto& d:drops)scene.Entity_Remove(d.entity);
             for(const auto& s:stains)scene.Entity_Remove(s.entity);
-            drops.clear();stains.clear();stainSerial=0;hitSerial=0;
+            drops.clear();stains.clear();characterObjects.clear();stainSerial=0;hitSerial=0;
             if(mesh!=wi::ecs::INVALID_ENTITY)scene.Entity_Remove(mesh);
             mesh=wi::ecs::INVALID_ENTITY;
         }
