@@ -475,6 +475,18 @@ if(WIN32)
             "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/riverbed/rocky_rugged"
         VERBATIM)
 
+    foreach(paint_mode IN ITEMS grass-palette ground-paint)
+        add_test(NAME RenegadeVegetation_${paint_mode}
+            COMMAND "${CMAKE_COMMAND}"
+                "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
+                "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/${paint_mode}-$<CONFIG>"
+                "-DRENEGADE_RIVER_MODE=${paint_mode}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
+        set_tests_properties(RenegadeVegetation_${paint_mode} PROPERTIES
+            WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
+            TIMEOUT 600)
+    endforeach()
+
     # Exercise the real creator-default extent, not only the historical 3x3 fixture.
     add_test(NAME RenegadeRiverDefaultTerrainRecovery
         COMMAND "${CMAKE_COMMAND}"

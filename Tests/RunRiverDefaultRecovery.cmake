@@ -15,6 +15,8 @@ if(NOT DEFINED RENEGADE_RIVER_MODE)
     set(RENEGADE_RIVER_MODE default-recovery)
 endif()
 if(NOT RENEGADE_RIVER_MODE STREQUAL "default-recovery" AND
+   NOT RENEGADE_RIVER_MODE STREQUAL "grass-palette" AND
+   NOT RENEGADE_RIVER_MODE STREQUAL "ground-paint" AND
    NOT RENEGADE_RIVER_MODE STREQUAL "terrain-initialization" AND
    NOT RENEGADE_RIVER_MODE STREQUAL "maximum-expanded-first" AND
    NOT RENEGADE_RIVER_MODE STREQUAL "maximum-linked-first" AND
