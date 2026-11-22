@@ -443,6 +443,16 @@ namespace renegade::bridge
         body.capsule.radius = safe.capsuleRadius;
         body.capsule.height = safe.capsuleHeight;
         body.SetCharacterPhysics(true);
+
+        // The player transform is at the feet. The GPU collider drives Wicked hair
+        // through the same movement as the Jolt character.
+        auto& grassCollider = scene.colliders.Create(entity);
+        grassCollider.shape = wi::scene::ColliderComponent::Shape::Capsule;
+        grassCollider.radius = safe.capsuleRadius;
+        grassCollider.offset = {0, 0, 0};
+        grassCollider.tail = {0, PlayerCapsuleTotalHeight(safe), 0};
+        grassCollider.SetCPUEnabled(false);
+        grassCollider.SetGPUEnabled(true);
         body.character.maxSlopeAngle = wi::math::DegreesToRadians(
             safe.maximumSlopeDegrees);
         body.character.gravityFactor = safe.gravityFactor;

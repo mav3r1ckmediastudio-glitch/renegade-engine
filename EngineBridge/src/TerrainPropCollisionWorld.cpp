@@ -248,8 +248,30 @@ namespace renegade::bridge
             if(!native::SetTerrainRequests(scene_,item.first,std::move(item.second),error))return false;
         bool ready=true;std::size_t changes=0;
         for(const auto& item:requests)
-            for(const auto& record:native::GetTerrainChunkRecords(scene_,item.first))
+            for(auto record:native::GetTerrainChunkRecords(scene_,item.first))
             {
+                // Prediction can request a chunk again before the next terrain update.
+                // A live, current heightfield already provides support on this frame.
+                if (!record.valid && record.entity == wi::ecs::INVALID_ENTITY &&
+                    !scene_.terrains.GetComponent(item.first)->IsGenerationBusy())
+                {
+                    const auto& terrain = *scene_.terrains.GetComponent(item.first);
+                    wi::terrain::Chunk key;
+                    key.x = record.key.x;
+                    key.z = record.key.z;
+                    const auto chunk = terrain.chunks.find(key);
+                    if (chunk != terrain.chunks.end() && !chunk->second.invalidated)
+                    {
+                        const auto entity = chunk->second.entity;
+                        const auto* body = scene_.rigidbodies.GetComponent(entity);
+                        if (body && !body->IsRefreshParametersNeeded() &&
+                            scene_.meshes.Contains(entity) && native::HasLiveBody(scene_,entity))
+                        {
+                            native::PublishTerrainChunk(scene_,item.first,record.key,entity,true);
+                            record = {record.key,entity,true};
+                        }
+                    }
+                }
                 if(!record.valid){ready=false;continue;}
                 const auto* body=scene_.rigidbodies.GetComponent(record.entity);
                 if(body&&native::HasLiveBody(scene_,record.entity)&&!body->IsRefreshParametersNeeded())

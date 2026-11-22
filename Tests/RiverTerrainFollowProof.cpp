@@ -16,6 +16,8 @@
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "../EngineBridge/src/PlaceableWaterfallAuthoring.h"
 #include "TerrainInitializationProof.h"
+#include "GrassPaletteProof.h"
+#include "GroundPaintProof.h"
 #include "TerrainPlayerPreviewProof.h"
 #include "MaximumTerrainRiverProof.h"
 #include "NativeCrashCapture.h"
@@ -127,8 +129,15 @@ int main(int argc, char** argv)
         return 2;
     }
     fs::create_directories(out);
+    const char* hostedFlag = std::getenv("RENEGADE_HOSTED_HEADLESS_GRAPHICS");
+    const bool hosted = hostedFlag && std::strcmp(hostedFlag,"1") == 0;
+    const bool painting = argc == 3 && (std::string(argv[2]) == "grass-palette" ||
+        std::string(argv[2]) == "ground-paint");
+    const bool hostedPainting = painting && hosted;
+    const int proofWidth = hostedPainting ? 320 : 960;
+    const int proofHeight = hostedPainting ? 216 : 640;
     HWND window = CreateWindowExW(0, L"STATIC", L"River On Actual Terrain",
-        WS_OVERLAPPEDWINDOW, 0, 0, 960, 640, nullptr, nullptr,
+        WS_OVERLAPPEDWINDOW, 0, 0, proofWidth, proofHeight, nullptr, nullptr,
         GetModuleHandleW(nullptr), nullptr);
     wi::Application app;
     app.allow_hdr = false;
@@ -138,8 +147,6 @@ int main(int argc, char** argv)
             << std::chrono::duration<double,std::milli>(
                 std::chrono::steady_clock::now()-proofStarted).count() << std::endl;
     };
-    const char* hostedFlag = std::getenv("RENEGADE_HOSTED_HEADLESS_GRAPHICS");
-    const bool hosted = hostedFlag && std::strcmp(hostedFlag,"1") == 0;
     if (hosted)
     {
         // CI has no interactive desktop. Report assertions instead of waiting
@@ -521,6 +528,11 @@ int main(int argc, char** argv)
             settings.minimumHeight = -20;
             settings.maximumHeight = 40;
         }
+        if (painting)
+        {
+            settings.physics=true;
+            settings.physicsChunkRadius=settings.visibleChunkRadius+1;
+        }
         wi::ecs::Entity terrainID=wi::ecs::INVALID_ENTITY;
         if(maximumRender)
         {
@@ -559,8 +571,6 @@ int main(int argc, char** argv)
             std::string error;
             Require(propTerrain::SetTerrainRequests(scene, terrainID, spawnChunks, error), error.c_str());
         }
-        const int proofWidth = 960;
-        const int proofHeight = 640;
         wi::scene::CameraComponent camera;
         camera.CreatePerspective(proofWidth,proofHeight,0.1f,500.0f,
             DirectX::XMConvertToRadians(60.0f));
@@ -585,9 +595,7 @@ int main(int argc, char** argv)
             wi::Application& app;
             ~ScopedDisarm() { app.ActivatePath(nullptr); }
         } disarm{app};
-        const char* headlessFlag=std::getenv("RENEGADE_HOSTED_HEADLESS_GRAPHICS");
-        const bool hostedOffscreen=defaultRecovery && headlessFlag &&
-            std::string(headlessFlag)=="1";
+        const bool hostedOffscreen = (defaultRecovery || painting) && hosted;
         // Hosted WARP is a software renderer. Generate the complete native
         // terrain through normal scene updates before paying for full draws.
         // The owner desktop keeps its original presentation/warm-up path.
@@ -647,7 +655,27 @@ int main(int argc, char** argv)
         }
         if(defaultRecovery) std::cout<<"RIVER_PROOF_FRAME_MODE "
             <<(hostedOffscreen?"hosted-offscreen":"desktop-presentation")<<std::endl;
-        if(hostedOffscreen)
+        if (hostedPainting)
+        {
+            progress("paint-terrain-generation");
+            constexpr size_t expectedChunks = 9; // radius-one terrain
+            for (int frame = 0; frame < 1800 && terrain->chunks.size() < expectedChunks; ++frame)
+            {
+                proofUpdate();
+                Sleep(5);
+            }
+            terrain->Generation_Cancel();
+            for (int frame = 0; frame < 3; ++frame) proofUpdate();
+            terrain->Generation_Cancel();
+            Require(terrain->chunks.size() == expectedChunks, "Painting fixture terrain is incomplete");
+            for (const auto& entry : terrain->chunks)
+            {
+                const auto* mesh = scene.meshes.GetComponent(entry.second.entity);
+                Require(mesh && !mesh->vertex_positions.empty(), "Painting fixture mesh did not publish");
+            }
+            progress("paint-terrain-published");
+        }
+        else if(hostedOffscreen)
         {
             progress("terrain-generation-updates");
             for(int frame=0;frame<1800 && terrain->chunks.size()!=361;++frame)
@@ -729,6 +757,16 @@ int main(int argc, char** argv)
         gpu->WaitForGPU();
         Require(terrain->chunks.size() >= 9,
             "real finite terrain did not generate all chunks");
+        if (argc==3 && std::string(argv[2])=="ground-paint")
+        {
+            ground_paint_proof::Run(scene,*terrain,out,render,camera,hostedPainting);
+            return 0;
+        }
+        if (argc==3 && std::string(argv[2])=="grass-palette")
+        {
+            grass_palette_proof::Run(scene,*terrain,out,render,camera,hostedPainting);
+            return 0;
+        }
         const auto chunksBefore = terrain->chunks.size();
         std::cout << "TERRAIN_CHUNKS=" << chunksBefore << "\n";
 

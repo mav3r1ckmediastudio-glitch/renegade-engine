@@ -21,13 +21,14 @@ namespace renegade::bridge
                t.generation<1 || t.generation>MaximumTerrainChunkRadius ||
                t.chunks.size()!=std::size_t(TerrainChunkCountPerSide(t.generation))*
                    TerrainChunkCountPerSide(t.generation) ||
-               t.materialEntities.size()<4 || t.materialEntities.size()>5)return false;
-            if(t.materialEntities.size()==5)
+               t.materialEntities.size()<4)return false;
+            for(size_t layer=4;layer<t.materialEntities.size();++layer)
             {
-                const auto id=t.materialEntities.back();
+                const auto id=t.materialEntities[layer];
                 const auto* name=scene.names.GetComponent(id);
-                if(!name || name->name!="Renegade Rocky Riverbed" ||
-                    !scene.materials.Contains(id))return false;
+                const auto* meta=scene.metadatas.GetComponent(id);
+                if(!scene.materials.Contains(id) || (!name || (name->name!="Renegade Rocky Riverbed" &&
+                    (!meta || !meta->float_values.has("renegade.ground.coverage")))))return false;
             }
             for(const auto& entry:t.chunks)
             {
@@ -185,11 +186,18 @@ namespace renegade::bridge
         if(!ValidateRiverTerrainLayers(*scene_,terrain_,error_))return false;
         if(!ValidRockTerrain(*scene_,*terrain))
         {
-            error_="Rocky bed requires four original slots, optionally followed by its shared Rocky Riverbed slot";
+            error_="Rocky bed requires valid terrain and supported ground paint layers";
             return false;
         }
-        reuseMaterial_=terrain->materialEntities.size()==5;
-        if(reuseMaterial_)materialEntity_=terrain->materialEntities.back();
+        originalSlotCount_=terrain->materialEntities.size();
+        materialSlot_=originalSlotCount_;
+        for(size_t layer=4;layer<originalSlotCount_;++layer)
+        {
+            const auto* name=scene_->names.GetComponent(terrain->materialEntities[layer]);
+            if(name && name->name=="Renegade Rocky Riverbed"){materialSlot_=layer;break;}
+        }
+        reuseMaterial_=materialSlot_<originalSlotCount_;
+        if(reuseMaterial_)materialEntity_=terrain->materialEntities[materialSlot_];
         const auto points=SampleSplineWorldPoints(*scene_,river_,128);
         if(points.size()<2)
         {
@@ -209,8 +217,8 @@ namespace renegade::bridge
             ChunkMask mask;
             mask.entity=c.entity;
             mask.pixels.resize(wi::terrain::vertexCount,0);
-            if(reuseMaterial_)mask.before.assign(c.blendmap_layers.back().pixels.begin(),
-                c.blendmap_layers.back().pixels.end());
+            if(reuseMaterial_)mask.before.assign(c.blendmap_layers[materialSlot_].pixels.begin(),
+                c.blendmap_layers[materialSlot_].pixels.end());
             std::vector<XMFLOAT3> positions;
             positions.reserve(mesh->vertex_positions.size());
             float minX=std::numeric_limits<float>::max(),minZ=minX;
@@ -286,8 +294,8 @@ namespace renegade::bridge
         auto* terrain=scene_->terrains.GetComponent(terrain_);
         if(!terrain || !ValidRockTerrain(*scene_,*terrain) ||
            masks_.size()!=terrain->chunks.size() ||
-           terrain->materialEntities.size()!=(reuseMaterial_?5u:4u) ||
-           (reuseMaterial_ && terrain->materialEntities.back()!=materialEntity_))
+           terrain->materialEntities.size()!=originalSlotCount_ ||
+           (reuseMaterial_ && terrain->materialEntities[materialSlot_]!=materialEntity_))
         {
             error_="Terrain material layout changed; refusing rocky mask application";
             return false;
@@ -338,7 +346,7 @@ namespace renegade::bridge
                    m.pixels.size()==wi::terrain::vertexCount)
                     {
                         if(reuseMaterial_ && !std::equal(m.before.begin(),m.before.end(),
-                            kv.second.blendmap_layers.back().pixels.begin()))
+                            kv.second.blendmap_layers[materialSlot_].pixels.begin()))
                         {error_="Rocky paint changed since this command was prepared";return false;}
                         found=true;break;
                     }
@@ -367,7 +375,7 @@ namespace renegade::bridge
             const auto it=std::find_if(masks_.begin(),masks_.end(),
                 [&](const ChunkMask& m){return m.entity==kv.second.entity;});
             if(!reuseMaterial_)kv.second.blendmap_layers.emplace_back();
-            auto& pixels=kv.second.blendmap_layers.back().pixels;
+            auto& pixels=kv.second.blendmap_layers[materialSlot_].pixels;
             pixels.assign(it->pixels.begin(),it->pixels.end());
             RefreshNativeTerrainBlendmap(*terrain,kv.second);
         }
@@ -386,15 +394,15 @@ namespace renegade::bridge
     {
         if(!applied_)return;
         auto* terrain=scene_->terrains.GetComponent(terrain_);
-        if(!terrain || terrain->materialEntities.size()!=5 ||
-           terrain->materialEntities.back()!=materialEntity_)return;
+        if(!terrain || terrain->materialEntities.size()<=materialSlot_ ||
+           terrain->materialEntities[materialSlot_]!=materialEntity_)return;
         for(const auto& kv:terrain->chunks)
         {
-            if(kv.second.blendmap_layers.size()!=5)return;
+            if(kv.second.blendmap_layers.size()!=terrain->materialEntities.size())return;
             const auto it=std::find_if(masks_.begin(),masks_.end(),
                 [&](const ChunkMask& m){return m.entity==kv.second.entity;});
             if(it==masks_.end() || !std::equal(it->pixels.begin(),it->pixels.end(),
-                kv.second.blendmap_layers.back().pixels.begin()))return;
+                kv.second.blendmap_layers[materialSlot_].pixels.begin()))return;
         }
         terrain->Generation_Cancel();
         if(auto* gpu=wi::graphics::GetDevice())gpu->WaitForGPU();
@@ -404,15 +412,15 @@ namespace renegade::bridge
             {
                 const auto it=std::find_if(masks_.begin(),masks_.end(),
                     [&](const ChunkMask& m){return m.entity==kv.second.entity;});
-                kv.second.blendmap_layers.back().pixels.assign(
+                kv.second.blendmap_layers[materialSlot_].pixels.assign(
                     it->before.begin(),it->before.end());
             }
-            else kv.second.blendmap_layers.pop_back();
+            else kv.second.blendmap_layers.erase(kv.second.blendmap_layers.begin()+materialSlot_);
             RefreshNativeTerrainBlendmap(*terrain,kv.second);
         }
         if(!reuseMaterial_)
         {
-            terrain->materialEntities.pop_back();
+            terrain->materialEntities.erase(terrain->materialEntities.begin()+materialSlot_);
             scene_->Entity_Remove(materialEntity_);
         }
         applied_=false;

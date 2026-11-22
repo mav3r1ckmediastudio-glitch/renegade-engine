@@ -9,13 +9,13 @@ namespace renegade::studio
 {
 namespace
 {
-    constexpr int TerrainParents[16]={-1,0,0,0,-1,4,4,4,4,4,4,-1,11,11,11,-1};
+    constexpr int TerrainParents[16]={-1,0,0,-1,-1,4,4,4,4,4,4,-1,11,11,11,-1};
     constexpr const char* TerrainIds[16]={"terrain","terrain.size","terrain.sculpt","terrain.materials",
         "rivers","rivers.paint","rivers.bed","rivers.flow","rivers.appearance","rivers.waterfalls","rivers.advanced",
         "vegetation","vegetation.paint","vegetation.appearance","vegetation.simulation","terrain.props"};
-    constexpr const char* TerrainTitles[16]={"TERRAIN","SIZE & HEIGHT RANGE","SCULPTING","MATERIALS & BLENDING",
+    constexpr const char* TerrainTitles[16]={"TERRAIN","SIZE & HEIGHT RANGE","SCULPTING","TERRAIN PAINTING",
         "RIVERS","PAINTING","RIVERBED & BANKS","FLOW & DIRECTION","WATER COLOUR & CLARITY","WATERFALLS","ADVANCED",
-        "VEGETATION","PAINTING","APPEARANCE","SIMULATION & DETAIL","TERRAIN PROPS"};
+        "GRASS","PAINTING","APPEARANCE","SIMULATION & DETAIL","TERRAIN PROPS"};
     void Place(wi::gui::Widget& widget,float x,float y,float width,float height=28)
     {widget.SetPos(XMFLOAT2(x,y));widget.SetSize(XMFLOAT2(std::max(1.f,width),height));}
 }
@@ -48,6 +48,7 @@ void StudioRenderPath::LayoutTerrainSections()
     rows[1]={&terrainSizeReadout_,&expandTerrainButton_,&terrainChunkScale_,&terrainMinimumHeight_,&terrainMaximumHeight_,&terrainLodBias_};
     rows[2]={&terrainSculptMode_,&terrainBrushRadius_,&terrainBrushStrength_,&terrainBrushFalloff_,&terrainBrushReadout_,&terrainStrokeDiagnostic_};
     rows[3]={&terrainMaterialPreset_,&terrainTextureScale_,&terrainLowAltitudeBlend_,&terrainBaseBlend_,&terrainSlopeBlend_,&terrainApplyDefaultGrassButton_,&terrainReloadMaterialButton_};
+    auto ground=GroundPaintWidgets();rows[3].insert(rows[3].begin(),ground.begin(),ground.end());
     rows[4]={&terrainRiverStatus_};
     rows[5]={&terrainRiverBrushButton_,&terrainRiverWidth_};
     rows[6]={&terrainRiverFitButton_,&terrainRiverReflectionAlignButton_,&terrainRiverRockyBedButton_,&terrainRiverCarveDepth_,&terrainRiverCarveBank_,&terrainRiverCarveButton_,&terrainRiverUnlinkButton_};
@@ -173,7 +174,7 @@ void StudioRenderPath::LayoutTerrainSections()
         {
             auto& header=terrainSectionHeaders_[i];header.Create(std::string("Terrain disclosure ")+TerrainTitles[i]);
             header.SetTooltip("Expand or collapse this group. Tool settings and active brushes are preserved.");
-            if(session_){ProjectInspectorSectionPreferenceStore prefs(session_->Projects());terrainSectionExpanded_[i]=prefs.ReadExpanded(TerrainIds[i],false);}
+            if(session_){ProjectInspectorSectionPreferenceStore prefs(session_->Projects());terrainSectionExpanded_[i]=prefs.ReadExpanded(TerrainIds[i],i==11 || i==12);}
             header.OnClick([this,i](const wi::gui::EventArgs&){
                 if(selectedRiverInspectorActive_ && (i==4 || (i>=6 && i<=8)))
                 {
@@ -196,12 +197,13 @@ void StudioRenderPath::LayoutTerrainSections()
     createTerrainButton_.SetVisible(active&&!hasTerrain);
     if(active&&!hasTerrain)Place(createTerrainButton_,12,44,width);
     float y=hasTerrain?44.f:84.f;
-    for(size_t i=0;i<rows.size();++i)
+    constexpr size_t sectionOrder[] = {0,1,2,4,5,6,7,8,9,10,11,12,13,14,3,15};
+    for(size_t i : sectionOrder)
     {
         const int parent=TerrainParents[i];
         const bool visible=selectedMode
             ? (i==4 || (i>=6 && i<=8 && selectedRiverInspectorExpanded_))
-            : active&&(hasTerrain||i==4||i==9)&&(parent<0||terrainSectionExpanded_[parent]);
+            : active && ((i == 3 || i >= 11) == vegetationWorkspace_) && (hasTerrain||i==4||i==9)&&(parent<0||terrainSectionExpanded_[parent]);
         const bool expanded=selectedMode
             ? (i==4 ? selectedRiverInspectorExpanded_
                 : (i>=6 && i<=8 && selectedRiverSubsectionExpanded_[i-6]))
@@ -251,9 +253,19 @@ void StudioRenderPath::LayoutTerrainSections()
             y+=8;
             continue;
         }
+        size_t tile=0;
         for(auto* widget:rows[i])
         {
             widget->SetVisible(true);
+            if (std::string_view(widget->GetWidgetTypeName())=="GrassThumbnail" || std::string_view(widget->GetWidgetTypeName())=="GroundThumbnail")
+            {
+                const float tileWidth=(width-24-18)/4;
+                Place(*widget,36+(tile%4)*(tileWidth+6),y,tileWidth,58);
+                if (++tile%4==0) y+=64;
+                continue;
+            }
+            if (tile%4) y+=64;
+            tile=0;
             const float height=(widget==&riverFlowStatus_||widget==&terrainRiverStatus_||widget==&terrainStrokeDiagnostic_||i==11)?40.f:(i==15 && widget==rows[15].back()?54.f:28.f);
             Place(*widget,36,y,width-24,height);y+=height+6;
         }
@@ -296,7 +308,8 @@ float StudioRenderPath::LayoutOceanSubsections(float top,float width,bool visibl
         }
         oceanSubsectionsCreated_=true;
     }
-    for(size_t i=0;i<rows.size();++i)
+    constexpr size_t sectionOrder[] = {0,1,2,4,5,6,7,8,9,10,11,12,13,14,3,15};
+    for(size_t i : sectionOrder)
     {
         auto& header=oceanSubsectionHeaders_[i];header.SetVisible(visible);
         header.SetText(std::string(oceanSubsectionExpanded_[i]?"-  ":"+  ")+titles[i]);

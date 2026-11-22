@@ -1223,8 +1223,9 @@ namespace renegade::studio
     }
 
     void RenegadeStudioChrome::SetTerrainWorkspaceActive(
-        const bool active) noexcept
+        const bool active, const bool vegetation) noexcept
     {
+        vegetationWorkspace_ = active && vegetation;
         terrainWorkspaceActive_ = active;
         if (active)
         {
@@ -1533,7 +1534,7 @@ namespace renegade::studio
     {
         std::vector<icons::Control> c;
         const char* tools[]={"select","move","rotate","scale"};
-        const bool compact=width_<1120.f;
+        const bool compact=width_<1150.f;
         const float side=compact?28.f:32.f, step=side+4.f;
         for(int i=0;i<4;++i)c.push_back({i,tools[i],{compact?588.f+i*step:600.f+i*step,16,side,side},true,activeTool_==i,i==1?"Move / Translate (W)":i==2?"Rotate (E)":i==3?"Scale (R)":"Select"});
         if(!compact) {
@@ -1541,12 +1542,12 @@ namespace renegade::studio
         c.push_back({5,"redo",{792,16,32,32},true,false,"Redo (Ctrl+Y)"});
         c.push_back({6,"save",{828,16,32,32},true,false,"Save (Ctrl+S)"});
         }
-        const float start=width_-196.f;
+        const float start=width_-232.f;
         c.push_back({7,testLevelState_==TestLevelState::Running?"stop":"play",{start-44,16,32,32},testLevelState_!=TestLevelState::Starting,false,
             testLevelState_==TestLevelState::Starting?"Starting Test Game":testLevelState_==TestLevelState::Running?"Stop Test Game":"Test Game"});
-        const char* modes[]={"scene","environment","terrain","render","physics"};
-        const bool active[]={IsSceneWorkspaceActive()&&!physicsWorkspaceActive_,environmentWorkspaceActive_,terrainWorkspaceActive_,renderWorkspaceActive_,physicsWorkspaceActive_};
-        for(int i=0;i<5;++i)c.push_back({8+i,modes[i],{start+i*36.f,16,32,32},true,active[i]});
+        const char* modes[]={"scene","environment","terrain","vegetation","render","physics"};
+        const bool active[]={IsSceneWorkspaceActive()&&!physicsWorkspaceActive_,environmentWorkspaceActive_,terrainWorkspaceActive_ && !vegetationWorkspace_,terrainWorkspaceActive_ && vegetationWorkspace_,renderWorkspaceActive_,physicsWorkspaceActive_};
+        for(int i=0;i<6;++i)c.push_back({8+i,modes[i],{start+i*36.f,16,32,32},true,active[i]});
         return c;
     }
 
@@ -1576,7 +1577,7 @@ namespace renegade::studio
                 else if(action_) {
                     const Action actions[]={Action::Undo,Action::Redo,Action::Save,
                         testLevelState_==TestLevelState::Running?Action::TestLevelStop:Action::TestLevelPlay,
-                        Action::SceneWorkspace,Action::EnvironmentWorkspace,Action::TerrainWorkspace,
+                        Action::SceneWorkspace,Action::EnvironmentWorkspace,Action::TerrainWorkspace,Action::VegetationWorkspace,
                         Action::RenderWorkspace,Action::PhysicsWorkspace};
                     action_(actions[toolbarCommand-4]);
                 }

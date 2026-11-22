@@ -192,7 +192,7 @@ namespace terrain_initialization_proof
             VegetationBrushMode::Paint,&grassBefore);
         Check(painted.changed && painted.affectedVertices>0,"Manual grass cannot paint new terrain");
         FinalizeWickedVegetationStroke(scene,*terrain,grassBefore);
-        const auto grassAfter=CaptureWickedVegetationAfter(*terrain,grassBefore);
+        const auto grassAfter=CaptureWickedVegetationAfter(scene,*terrain,grassBefore);
         WickedVegetationStrokeCommand grassHistory(scene,terrainID,grassBefore,grassAfter);
         const auto paintedMasks=Grass(*terrain);
         grassHistory.Undo();

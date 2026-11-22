@@ -329,6 +329,7 @@ namespace renegade::studio
             ToggleGrid,
             OpenEnvironmentWorkspace,
             OpenTerrainWorkspace,
+            OpenVegetationWorkspace,
             OpenRenderWorkspace,
             OpenSceneWorkspace,
             StartTestLevel,
@@ -775,6 +776,10 @@ namespace renegade::studio
         void QueueSelectedRiverReflectionAlignment();
         void QueueSelectedRiverRockyBed();
         bool HandleRiverSplineControlPoints(const XMFLOAT4& pointer);
+        void CreateGroundPanel();
+        void StopGroundPaint();
+        bool HandleGroundPaint(const XMFLOAT4& pointer);
+        std::vector<wi::gui::Widget*> GroundPaintWidgets();
         void CreateWd01VegetationControls();
         void LayoutWd01VegetationControls(float fieldWidth);
         void RefreshWd01VegetationControls(bool hasTerrain);
@@ -784,7 +789,7 @@ namespace renegade::studio
         bool HandleWd01Vegetation(const XMFLOAT4& pointer);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
-        void SetTerrainWorkspaceActive(bool active);
+        void SetTerrainWorkspaceActive(bool active, bool vegetation = false);
         void SetRenderWorkspaceActive(bool active);
         void CreateRenderWorkspace();
         void LayoutRenderWorkspace();
@@ -1651,6 +1656,7 @@ namespace renegade::studio
         wi::ecs::Entity nightSliderEntity_ = wi::ecs::INVALID_ENTITY;
         bridge::NightSkyState nightSliderBefore_, nightSliderAfter_;
         bool terrainWorkspaceActive_ = false;
+        bool vegetationWorkspace_ = false;
         bool renderWorkspaceActive_ = false;
         bool renderSliderActive_ = false;
         bool renderSliderHadCarrierBefore_ = false;

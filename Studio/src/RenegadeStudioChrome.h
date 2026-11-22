@@ -327,6 +327,7 @@ namespace renegade::studio
             ViewWireframeOverlay,
             EnvironmentWorkspace,
             TerrainWorkspace,
+            VegetationWorkspace,
             RenderWorkspace,
             SceneWorkspace,
             PhysicsWorkspace,
@@ -387,7 +388,7 @@ namespace renegade::studio
         void SetGridVisible(bool visible) noexcept;
         void SetViewportViewMode(int mode) noexcept { viewportViewMode_ = mode; }
         void SetEnvironmentWorkspaceActive(bool active) noexcept;
-        void SetTerrainWorkspaceActive(bool active) noexcept;
+        void SetTerrainWorkspaceActive(bool active, bool vegetation = false) noexcept;
         void SetRenderWorkspaceActive(bool active) noexcept;
         [[nodiscard]] bool IsRenderWorkspaceActive() const noexcept
         {
@@ -439,7 +440,7 @@ namespace renegade::studio
             action_(environmentWorkspaceActive_
                 ? Action::EnvironmentWorkspace
                 : terrainWorkspaceActive_
-                    ? Action::TerrainWorkspace
+                    ? (vegetationWorkspace_ ? Action::VegetationWorkspace : Action::TerrainWorkspace)
                     : renderWorkspaceActive_
                         ? Action::RenderWorkspace
                         : Action::SceneWorkspace);
@@ -548,6 +549,7 @@ namespace renegade::studio
         int viewportViewMode_ = 0;
         bool environmentWorkspaceActive_ = false;
         bool terrainWorkspaceActive_ = false;
+        bool vegetationWorkspace_ = false;
         bool renderWorkspaceActive_ = false;
         TestLevelState testLevelState_ = TestLevelState::Idle;
         bool pointerConsumed_ = false;

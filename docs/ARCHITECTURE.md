@@ -595,6 +595,23 @@ synchronization pass only when that lifecycle changes. Grass painting retains
 the existing Wicked `HairParticleSystem` instances and completed-stroke rebuild
 contract.
 
+The Vegetation workspace paints each selected grass mix into its own native
+hair mask on the affected terrain chunk. Studio packs the selected cutouts
+into a content-addressed atlas under the project's `Content/Vegetation/Mixes`.
+Each native hair material references that atlas, so the existing scene texture
+dependency walker can discover it. Wicked serializes the strand masks, atlas
+rectangles, emitter mesh references and materials. Repainting replaces the
+mix only at vertices inside the stroke. Stock grass retains its original mask
+and material. The brush indexes painted layers once per stroke.
+
+The plant group selector filters the visible thumbnails and keeps the brush selection across groups. Stock entries comprise grass and weeds, tropical freshwater, marine and alien plants. The Custom group reads loose PNGs and imported sprite cells from `Content/Vegetation/Palette/Custom` and recognises earlier imports directly under `Content/Vegetation/Palette`. PNG sheet imports publish all occupied cells in one project document transaction.
+Wicked supports up to 64 atlas rectangles per mix. Atlas generation preserves
+cutout proportions and places the base at the bottom of its cell. Imported
+sources keep their original resolution. Render atlases use cells up to 1024
+pixels and a sheet up to 4096 pixels square. The editor cursor uses a
+transient point force. The Runtime player carries a GPU capsule sized to its
+controller, while Jolt handles player movement and gameplay collisions.
+
 ## Core rules
 
 1. Prefer adapters over Wicked source changes.
@@ -2553,3 +2570,9 @@ The pinned renderer already converts object opacity to dithered visible coverage
 A governed model product already contains its native WISCENE payload. Placement now reads that span directly. Its logical resource directory is the retained source folder when available and the existing project-relative fallback otherwise. Both embedded names and loose sidecar lookups keep the same base. Embedded resources retain their bytes after placement.
 
 Core-patch decision: the pinned Wicked memory archive has no way to supply a logical source directory or suppress version dialogs. The configure-time overlay in `EngineBridge/patches/ReusableModelMemoryArchive.patch` adds an overload for those two inputs. The archive has no backing filename and placement creates no temporary file. When updating Wicked, check the native header and thumbnail layout, resource-name joining and retained-data behavior. Reopen both compressed and uncompressed products, then launch an exported game from a write-protected installation.
+
+## Terrain material painting
+
+The Vegetation workspace calls GroundPaint in EngineBridge. Each paint layer keeps its native Wicked chunk blend mask. Strokes change the selected coverage and retain underlying material masks. Front-to-back compositing reveals the previous ground as paint is erased. Material tiling is expressed in world metres. The native material, masks and automatic rock settings travel with the WISCENE. The project owns the textures under Content/Terrain/Materials.
+
+Paint coverage controls the visibility of existing Wicked hair grass. Authored placements survive suppression and are restored deterministically as the surface changes. Sculpt updates the slope/height mask below hand paint. The CMake overlay in cmake/GroundPaintOverlay.cmake adapts native terrain rendering for world-aligned texture scale and compositing while retaining the pinned upstream commit. Each tile update uploads the current width and height of the source texture for every layer and PBR channel alongside its material index. The tile shader uses these dimensions for mip and UV calculations. This avoids a bindless texture-size query that caused DX12 device removal on the Microsoft Basic Render Driver during mixed-material painting. GroundPaintProof exercises seam continuity, ground and grass restoration and save/reopen using a real DX12 scene.

@@ -122,6 +122,7 @@ add_executable(RenegadeStudio WIN32
     src/Phase7Gate7AAnimationInspector.cpp
     src/Phase7Gate7AAnimationInspector.h
     src/WD01Vegetation.cpp
+    src/GroundPaintPanel.cpp
     src/NightSkyStudioIntegration.cpp
     src/TerrainInspectorSections.cpp
     src/MoonStudioIntegration.cpp
@@ -152,6 +153,14 @@ set_target_properties(RenegadeTerrainSurfacePacker PROPERTIES
 )
 # Stage the same verified stock products for direct, incremental and CI builds.
 function(renegade_stage_default_grass target)
+    set(stock_maps)
+    foreach(id base ground ground2 low_altitude slope rock darkrock high_altitude pavingstone bricks)
+        list(APPEND stock_maps "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/${id}.jpg" "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/${id}_nor.jpg")
+    endforeach()
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target}>/Content/terrain/ground"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${stock_maps} "$<TARGET_FILE_DIR:${target}>/Content/terrain/ground"
+        VERBATIM)
     add_custom_target(${target}DefaultGrass
         COMMAND "${CMAKE_COMMAND}"
             "-DPACKER=$<TARGET_FILE:RenegadeTerrainSurfacePacker>"
@@ -303,6 +312,9 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grass.wiscene"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/grass.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/Content/terrain/foliage"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/foliage"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grassparticle.png"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/grassparticle.png"

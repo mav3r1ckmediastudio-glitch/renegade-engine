@@ -6,6 +6,7 @@
 #include <cmath>
 #include <memory>
 #include <sstream>
+#include <filesystem>
 #include <string>
 
 namespace
@@ -28,14 +29,52 @@ namespace
         Uniformity,
     };
 
+    using renegade::bridge::PlantGroup;
+    struct PlantFilter { PlantGroup group; const char* label; };
+    constexpr PlantFilter PlantFilters[] = {
+        {PlantGroup::All, "All plants"}, {PlantGroup::Grass, "Grass and weeds"},
+        {PlantGroup::Freshwater, "Tropical freshwater"}, {PlantGroup::Marine, "Marine"},
+        {PlantGroup::Alien, "Alien"}, {PlantGroup::Custom, "Custom"}
+    };
+
+    class GrassThumbnail final : public renegade::studio::RenegadeButton
+    {
+    public:
+        std::filesystem::path path;
+        PlantGroup group = PlantGroup::Grass;
+        wi::Resource preview;
+        bool selected = false;
+        void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const override
+        {
+            RenegadeButton::Render(canvas,cmd);
+            if (!IsVisible() || !preview.IsValid()) return;
+            const float side = std::min(scale.x,scale.y)-8.f;
+            wi::image::Params params(translation.x+(scale.x-side)*.5f,
+                translation.y+(scale.y-side)*.5f,side,side,wi::Color::White());
+            wi::image::Draw(&preview.GetTexture(),params,cmd);
+        }
+        const char* GetWidgetTypeName() const override { return "GrassThumbnail"; }
+    };
+
     struct VegetationControls
     {
         wi::gui::Label header;
         wi::gui::Label source;
+        renegade::studio::SceneInspectorComboBox plantFilter;
+        PlantGroup group = PlantGroup::Grass;
         renegade::studio::SceneInspectorSlider brushSize;
         renegade::studio::SceneInspectorButton paint;
         renegade::studio::SceneInspectorButton erase;
         wi::gui::Label status;
+        renegade::studio::SceneInspectorButton importSheet, testInteraction;
+        renegade::studio::SceneInspectorSlider importColumns, importRows;
+        unsigned columns=1, rows=1;
+        std::string project;
+        bool refreshPalette=true, rebuildAtlas=true, interaction=false;
+        wi::ecs::Entity force=wi::ecs::INVALID_ENTITY;
+        std::vector<std::unique_ptr<GrassThumbnail>> thumbnails;
+        size_t entryCount=0;
+        renegade::bridge::GrassAtlas atlas;
 
         renegade::studio::SceneInspectorSlider density;
         renegade::studio::SceneInspectorSlider length;
@@ -161,6 +200,7 @@ namespace renegade::studio
         if (state.created)
             return;
         state.created = true;
+        CreateGroundPanel();
 
         state.header.Create("WD01 Wicked Vegetation Header");
         state.header.SetText("VEGETATION // WICKED GRASS");
@@ -173,6 +213,20 @@ namespace renegade::studio
             "Pinned Wicked grass.wiscene, native GPU simulation, culling, wind and collider response.");
         StyleLabel(state.source);
         inspectorPanel_.AddWidget(&state.source);
+
+        state.plantFilter.Create("Plant group");
+        state.plantFilter.SetTooltip("Filter the palette. Selected plants from other groups stay in the brush. Custom reads PNGs from Content/Vegetation/Palette/Custom.");
+        for (const auto& filter : PlantFilters) state.plantFilter.AddItem(filter.label);
+        state.plantFilter.SetSelectedWithoutCallback(1);
+        state.plantFilter.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            if (args.iValue < 0 || size_t(args.iValue) >= std::size(PlantFilters)) return;
+            auto& s = Controls();
+            s.group = PlantFilters[args.iValue].group;
+            if (s.group == PlantGroup::Custom || s.group == PlantGroup::All) s.refreshPalette = true;
+            QueueInspectorRefresh();
+        });
+        inspectorPanel_.AddWidget(&state.plantFilter);
 
         state.brushSize.Create(
             1.0f, 100.0f, state.brushRadius, 990.0f,
@@ -188,12 +242,68 @@ namespace renegade::studio
         state.brushSize.OnValueCommitted(updateBrush);
         inspectorPanel_.AddWidget(&state.brushSize);
 
+        auto gridSize=[this](SceneInspectorSlider& slider,const char* name,const char* label,unsigned& value)
+        {
+            slider.Create(1,64,1,63,name,label);
+            slider.SetTooltip("Grid dimensions for the next PNG import. Use 1 by 1 for a single cutout.");
+            slider.OnValueCommitted([&value](float v){value=static_cast<unsigned>(std::lround(v));});
+            inspectorPanel_.AddWidget(&slider);
+        };
+        gridSize(state.importColumns,"Grass sheet columns","SHEET COLUMNS",state.columns);
+        gridSize(state.importRows,"Grass sheet rows","SHEET ROWS",state.rows);
+        state.importSheet.Create("Import grass PNG");
+        state.importSheet.SetText("IMPORT PLANT TEXTURE");
+        state.importSheet.SetTooltip("Add a transparent PNG to Custom. Each occupied sheet cell becomes a selectable plant.");
+        state.importSheet.OnClick([this](const wi::gui::EventArgs&)
+        {
+            if (!session_ || !session_->Projects().HasProject()) return;
+            const auto project=session_->Projects().CurrentProject();
+            const unsigned cols=Controls().columns, rows=Controls().rows;
+            wi::helper::FileDialogParams dialog;
+            dialog.type=wi::helper::FileDialogParams::OPEN;
+            dialog.extensions={"png"};
+            dialog.description="Plant cutout or sprite sheet";
+            wi::helper::FileDialog(dialog,[this,project,cols,rows](const std::string& path)
+            {
+                wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this,project,cols,rows,path](uint64_t)
+                {
+                    if (path.empty() || !session_ || !session_->Projects().HasProject() ||
+                        session_->Projects().CurrentProject().projectId!=project.projectId) return;
+                    std::string error;
+                    const bool imported=bridge::ImportGrassSheet(std::filesystem::u8path(project.rootPath),
+                        std::filesystem::u8path(path),cols,rows,error);
+                    if (imported)
+                    {
+                        Controls().group = PlantGroup::Custom;
+                        Controls().plantFilter.SetSelectedWithoutCallback(int(std::size(PlantFilters))-1);
+                    }
+                    Controls().refreshPalette=true;
+                    Controls().status.SetText(imported ? "Plant texture added to Custom." : error);
+                    QueueInspectorRefresh();
+                });
+            });
+        });
+        inspectorPanel_.AddWidget(&state.importSheet);
+        state.testInteraction.Create("Test grass interaction");
+        state.testInteraction.SetText("TEST INTERACTION");
+        state.testInteraction.SetTooltip("Hold the left mouse button over the terrain to bend grass.");
+        state.testInteraction.OnClick([this](const wi::gui::EventArgs&)
+        {
+            DisableTerrainPropBrush();
+            DisableWd01VegetationBrush();
+            auto& s=Controls(); s.interaction=true; s.brushActive=true;
+            s.testInteraction.SetAccentOutlineStyle(true);
+            s.status.SetText("Hold left mouse over grass to test bending.");
+        });
+        inspectorPanel_.AddWidget(&state.testInteraction);
         state.paint.Create("WD01 Paint Grass");
         state.paint.SetText("PAINT");
         state.paint.SetTooltip(
             "Paint Wicked grass using native per-chunk HairParticle masks.");
         state.paint.OnClick([this](const wi::gui::EventArgs&)
         {
+            DisableWd01VegetationBrush();
             auto& value = Controls();
             terrainRiverBrushActive_ = false;
             terrainRiverStrokeActive_ = false;
@@ -216,6 +326,7 @@ namespace renegade::studio
             "Remove native Wicked grass with the same cross-chunk brush.");
         state.erase.OnClick([this](const wi::gui::EventArgs&)
         {
+            DisableWd01VegetationBrush();
             auto& value = Controls();
             terrainRiverBrushActive_ = false;
             terrainRiverStrokeActive_ = false;
@@ -480,7 +591,17 @@ namespace renegade::studio
     {
         auto& s=Controls();
         if(!s.created)return {};
-        if(group==0){s.header.SetVisible(false);s.source.SetVisible(false);return {&s.brushSize,&s.paint,&s.erase};}
+        if(group==0){s.header.SetVisible(false);s.source.SetVisible(false);std::vector<wi::gui::Widget*> rows;
+            rows.push_back(&s.plantFilter);
+            for (size_t i=0; i<s.entryCount; ++i)
+            {
+                auto& thumb = *s.thumbnails[i];
+                if (s.group == PlantGroup::All || thumb.group == s.group) rows.push_back(&thumb);
+                else thumb.SetVisible(false);
+            }
+            rows.insert(rows.end(),{&s.brushSize,&s.paint,&s.erase,&s.testInteraction,
+                &s.importColumns,&s.importRows,&s.importSheet});
+            return rows;}
         if(group==3)return {&s.status};
         if(group==1)return {&s.density,&s.length,&s.width,&s.randomness,&s.randomSeed,&s.uniformity};
         return {&s.stiffness,&s.drag,&s.gravity,&s.segments,&s.billboards,&s.viewDistance,&s.cameraBend};
@@ -492,10 +613,59 @@ namespace renegade::studio
         auto& state = Controls();
         if (!state.created)
             return;
-        const bool visible = terrainWorkspaceActive_;
+        const bool visible = terrainWorkspaceActive_ && vegetationWorkspace_;
+        const auto project=session_ && session_->Projects().HasProject()
+            ? session_->Projects().CurrentProject().rootPath : std::string{};
+        if (visible && !project.empty() && (state.refreshPalette || state.project!=project))
+        {
+            std::vector<std::filesystem::path> selected;
+            for (const auto& thumbnail:state.thumbnails)
+                if (state.project==project && thumbnail->selected) selected.push_back(thumbnail->path);
+            state.refreshPalette=false; state.project=project; state.rebuildAtlas=true;
+            const auto root = std::filesystem::u8path(project);
+            // Older projects acquire the drop folder when the palette is first opened.
+            std::error_code folderError;
+            std::filesystem::create_directories(root / bridge::CustomPlantDirectory,folderError);
+            if (folderError) state.status.SetText("Could not create the Custom plant folder: "+folderError.message());
+            state.entryCount = 0;
+            for (const auto& filter : PlantFilters)
+            {
+                if (filter.group == PlantGroup::All) continue;
+                for (const auto& entry : bridge::GrassPaletteEntries(root,filter.group))
+                {
+                    const size_t i = state.entryCount++;
+                    if (i==state.thumbnails.size())
+                    {
+                        auto button=std::make_unique<GrassThumbnail>();
+                        button->Create("Grass palette "+std::to_string(i));
+                        button->SetText("");
+                        button->OnClick([i](const wi::gui::EventArgs&)
+                        {
+                            auto& s=Controls(); auto& t=*s.thumbnails[i];
+                            t.selected=!t.selected; t.SetAccentOutlineStyle(t.selected);
+                            s.rebuildAtlas=true;
+                            size_t count=0;
+                            for(size_t j=0;j<s.entryCount;++j) if(s.thumbnails[j]->selected) ++count;
+                            s.status.SetText(count ? std::to_string(count)+(count == 1 ? " plant selected" : " plants selected") : "Stock Wicked grass selected");
+                        });
+                        inspectorPanel_.AddWidget(button.get());
+                        state.thumbnails.push_back(std::move(button));
+                    }
+                    auto& t=*state.thumbnails[i]; t.path=entry; t.group=filter.group;
+                    t.preview=wi::resourcemanager::Load(t.path.generic_u8string());
+                    t.selected=std::find(selected.begin(),selected.end(),t.path)!=selected.end();
+                    t.SetAccentOutlineStyle(t.selected);
+                    t.SetTooltip(t.path.stem().u8string());
+                }
+            }
+            for (size_t i=state.entryCount;i<state.thumbnails.size();++i)
+            { state.thumbnails[i]->SetVisible(false); state.thumbnails[i]->selected=false; }
+        }
         wi::gui::Widget* widgets[] = {
             &state.header,
             &state.source,
+            &state.plantFilter,
+            &state.importSheet,&state.importRows,&state.importColumns,&state.testInteraction,
             &state.brushSize,
             &state.paint,
             &state.erase,
@@ -523,12 +693,14 @@ namespace renegade::studio
         state.source.SetEnabled(true);
         state.status.SetEnabled(true);
 
+        constexpr const char* missingTerrain = "VEGETATION // CREATE TERRAIN FIRST";
         if (!hasTerrain)
         {
-            state.status.SetText(
-                "VEGETATION // CREATE TERRAIN FIRST");
+            state.status.SetText(missingTerrain);
             return;
         }
+        if (state.status.GetText() == missingTerrain)
+            state.status.SetText("Select plants to mix in the brush.");
         auto* terrain = CurrentTerrain(session_);
         if (terrain == nullptr || state.settingsDragging)
             return;
@@ -591,7 +763,26 @@ namespace renegade::studio
 
     void StudioRenderPath::DisableWd01VegetationBrush()
     {
+        StopGroundPaint();
         auto& state = Controls();
+        if (session_)
+        {
+            auto& scene = session_->Scenes().GetScene();
+            bridge::ClearGrassInteraction(scene,state.force);
+            if (state.strokeChanged)
+            {
+                if (auto* terrain = scene.terrains.GetComponent(state.strokeTerrain))
+                {
+                    bridge::FinalizeWickedVegetationStroke(scene,*terrain,state.strokeBefore);
+                    auto after=bridge::CaptureWickedVegetationAfter(scene,*terrain,state.strokeBefore);
+                    if (!after.chunks.empty())
+                        session_->Commands().RecordExecuted(std::make_unique<bridge::WickedVegetationStrokeCommand>(
+                            scene,state.strokeTerrain,std::move(state.strokeBefore),std::move(after)));
+                }
+            }
+        }
+        state.interaction=false;
+        state.testInteraction.SetAccentOutlineStyle(false);
         state.brushActive = false;
         state.strokeActive = false;
         state.strokeChanged = false;
@@ -606,8 +797,14 @@ namespace renegade::studio
     bool StudioRenderPath::HandleWd01Vegetation(
         const XMFLOAT4& pointer)
     {
+        if(HandleGroundPaint(pointer))return true;
         auto& state = Controls();
-        if (!state.created || !state.brushActive ||
+        if (state.force!=wi::ecs::INVALID_ENTITY && session_ &&
+            (!state.interaction || !terrainWorkspaceActive_ || !vegetationWorkspace_ ||
+             !wi::input::Down(wi::input::MOUSE_BUTTON_LEFT) || flyCameraActive_ || GetGUI().HasFocus() ||
+             !IsPointerOverViewport(pointer) || camera==nullptr))
+            bridge::ClearGrassInteraction(session_->Scenes().GetScene(),state.force);
+        if (!state.created || !state.brushActive || !vegetationWorkspace_ ||
             !terrainWorkspaceActive_ || session_ == nullptr)
         {
             return false;
@@ -643,7 +840,7 @@ namespace renegade::studio
                     state.strokeBefore);
                 auto after =
                     bridge::CaptureWickedVegetationAfter(
-                        *strokeTerrain,
+                        scene, *strokeTerrain,
                         state.strokeBefore);
                 if (!after.chunks.empty())
                 {
@@ -690,6 +887,15 @@ namespace renegade::studio
         const bool leftDown = wi::input::Down(
             wi::input::MOUSE_BUTTON_LEFT);
 
+        if (state.interaction)
+        {
+            if (leftDown && picked.entity!=wi::ecs::INVALID_ENTITY)
+                bridge::UpdateGrassInteraction(scene,state.force,picked.position,picked.normal);
+            else
+                bridge::ClearGrassInteraction(scene,state.force);
+            return leftDown;
+        }
+
         if (picked.entity != wi::ecs::INVALID_ENTITY)
         {
             const XMFLOAT4 colour =
@@ -709,6 +915,16 @@ namespace renegade::studio
             picked.entity != wi::ecs::INVALID_ENTITY)
         {
             std::string error;
+            if (state.mode==bridge::VegetationBrushMode::Paint && state.rebuildAtlas)
+            {
+                std::vector<std::filesystem::path> selected;
+                for (size_t i=0; i<state.entryCount; ++i)
+                    if (state.thumbnails[i]->selected) selected.push_back(state.thumbnails[i]->path);
+                if (selected.empty()) state.atlas={};
+                else if (!bridge::BuildGrassAtlas(std::filesystem::u8path(state.project),selected,state.atlas,error))
+                { state.status.SetText(error); return true; }
+                state.rebuildAtlas=false;
+            }
             if (!bridge::InitializeWickedVegetation(
                     scene, *terrain, &error))
             {
@@ -734,7 +950,7 @@ namespace renegade::studio
                     picked.position,
                     state.brushRadius,
                     state.mode,
-                    &state.strokeBefore);
+                    &state.strokeBefore, state.atlas);
             if (!result.error.empty())
             {
                 state.status.SetText(

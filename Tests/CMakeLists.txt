@@ -460,6 +460,9 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grass.wiscene"
                 "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/grass.wiscene"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_SOURCE_DIR}/Content/terrain/foliage"
+                "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/foliage"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grassparticle.png"
                 "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/grassparticle.png"
@@ -471,6 +474,18 @@ if(WIN32)
             "${CMAKE_SOURCE_DIR}/Content/terrain/riverbed/rocky_rugged"
             "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/riverbed/rocky_rugged"
         VERBATIM)
+
+    foreach(paint_mode IN ITEMS grass-palette ground-paint)
+        add_test(NAME RenegadeVegetation_${paint_mode}
+            COMMAND "${CMAKE_COMMAND}"
+                "-DRENEGADE_RIVER_PROOF=$<TARGET_FILE:RenegadeRiverTerrainFollowProof>"
+                "-DRENEGADE_RIVER_OUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/${paint_mode}-$<CONFIG>"
+                "-DRENEGADE_RIVER_MODE=${paint_mode}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/RunRiverDefaultRecovery.cmake")
+        set_tests_properties(RenegadeVegetation_${paint_mode} PROPERTIES
+            WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>"
+            TIMEOUT 600)
+    endforeach()
 
     # Exercise the real creator-default extent, not only the historical 3x3 fixture.
     add_test(NAME RenegadeRiverDefaultTerrainRecovery

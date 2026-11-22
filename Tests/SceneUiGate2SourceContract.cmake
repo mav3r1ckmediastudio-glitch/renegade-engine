@@ -103,8 +103,17 @@ require_text(story_flow_integration_source
 # Each specialist workspace explicitly deactivates the other and synchronizes
 # both chrome flags before refreshing the Inspector.
 require_text(studio_source
-    "case EditorAction::OpenEnvironmentWorkspace:\n            SetEnvironmentWorkspaceActive(true);\n            break;\n        case EditorAction::OpenTerrainWorkspace:\n            SetTerrainWorkspaceActive(true);"
-    "specialist workspace actions routed through the exclusive setters")
+    "case EditorAction::OpenEnvironmentWorkspace:\n            SetEnvironmentWorkspaceActive(true);\n            break;"
+    "Environment workspace routing")
+require_text(studio_source
+    "case EditorAction::OpenTerrainWorkspace:\n            SetTerrainWorkspaceActive(true);\n            break;"
+    "Terrain workspace routing")
+require_text(studio_source
+    "case EditorAction::OpenVegetationWorkspace:\n            SetTerrainWorkspaceActive(true, true);\n            break;"
+    "Vegetation workspace routing")
+require_text(studio_source
+    "vegetationWorkspace_ = active && vegetation;"
+    "Vegetation mode follows the active workspace")
 require_text(studio_source
     "case EditorAction::OpenSceneWorkspace:\n            SetEnvironmentWorkspaceActive(false);\n            SetTerrainWorkspaceActive(false);"
     "Scene workspace clears both specialist modes")
@@ -118,7 +127,7 @@ require_text(studio_source
     "studioChrome_.SetEnvironmentWorkspaceActive(\n            environmentWorkspaceActive_);"
     "Environment chrome synchronization")
 require_text(studio_source
-    "studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_);"
+    "studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_, vegetationWorkspace_);"
     "Terrain chrome synchronization")
 
 # Inspector component ownership follows the active specialist workspace rather

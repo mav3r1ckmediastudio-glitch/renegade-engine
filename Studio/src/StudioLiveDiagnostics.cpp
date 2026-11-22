@@ -36,6 +36,7 @@ namespace renegade::studio
         case EditorAction::ScaleTool: return "ScaleTool";
         case EditorAction::ToggleGrid: return "ToggleGrid";
         case EditorAction::OpenEnvironmentWorkspace: return "OpenEnvironmentWorkspace";
+        case EditorAction::OpenVegetationWorkspace: return "OpenVegetationWorkspace";
         case EditorAction::OpenTerrainWorkspace: return "OpenTerrainWorkspace";
         case EditorAction::OpenRenderWorkspace: return "OpenRenderWorkspace";
         case EditorAction::OpenSceneWorkspace: return "OpenSceneWorkspace";
@@ -96,7 +97,7 @@ namespace renegade::studio
         const std::string workspace = !levelEditor ? outerWorkspace : projectHubVisible_ ? "project_hub" :
             studioChrome_.IsPhysicsLabActive() ? "physics" : studioChrome_.IsParticleWorkspaceActive() ? "particles" :
             studioChrome_.IsAudioWorkspaceActive() ? "audio" :
-            terrainWorkspaceActive_ ? "terrain" : environmentWorkspaceActive_ ? "environment" :
+            terrainWorkspaceActive_ ? (vegetationWorkspace_ ? "vegetation" : "terrain") : environmentWorkspaceActive_ ? "environment" :
             renderWorkspaceActive_ ? "render" : "scene";
         const bool projectOpen = session_ && session_->Projects().HasProject();
         const auto selected = session_ ? session_->Selection().SelectedEntity() : wi::ecs::INVALID_ENTITY;
