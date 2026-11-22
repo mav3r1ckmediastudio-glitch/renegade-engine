@@ -2,7 +2,7 @@
 
 ## Gameplay zones
 
-A zone is a named scene entity with a persistent ID, a transform and versioned local box bounds in WISCENE metadata. Studio places its origin on the picked surface. The Scene workspace owns the outline, six resize handles and inspector. Preset changes keep the bounds and identity. A zone contributes no render mesh or physics shape. In the Scene viewport its preset controls the outline colour, icon and nameplate. Nearby and selected zones take priority when labels overlap. The gallery demonstrates the same symbols using ordinary authored signs and floor materials.
+A zone is a named scene entity with a persistent ID, a transform and versioned local box bounds in WISCENE metadata. Studio places its origin on the picked surface. The Scene workspace owns the outline, six resize handles and inspector. Preset changes keep the bounds and identity. A zone contributes no render mesh or physics shape. In the Scene viewport its preset controls the outline colour, icon and nameplate. Nearby and selected zones take priority when labels overlap. Scale on a single zone edits its six faces. Numeric width and depth preserve the centre, and numeric height preserves the base. The review gallery stations use fixed-size local artwork at each zone origin.
 
 Runtime tracks the player origin in each authored box using the inverse world transform. Custom Trigger sends a named event on entry and exit to the chosen persistent entity or to the project scripts by broadcast. Win Zone sends the existing Story Flow `level.complete` action once per level visit. A direct level launch presents a completion overlay and accepts Enter to finish.
 

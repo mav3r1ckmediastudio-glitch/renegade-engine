@@ -13658,6 +13658,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
         gizmoSelectionRevision_=session_->Selection().Revision();
         selectionTransformsBefore_.clear();
+        // A single zone has six face handles. Editing its local bounds keeps the
+        // placement transform and the aspect ratio of any attached artwork intact.
+        if (gizmo_.isScalator && session_->Selection().Entities().size() == 1 &&
+            bridge::zones::IsZone(scene, entity))
+            return;
         gizmo_.scene=&scene;
         for(auto e:bridge::SelectionRoots(scene,session_->Selection().Entities())) {
             wi::scene::PickResult selected;selected.entity=e;

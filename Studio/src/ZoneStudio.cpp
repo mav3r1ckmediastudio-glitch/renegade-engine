@@ -92,6 +92,7 @@ namespace renegade::studio
         {
             auto& slider = zoneSizes_[i];
             slider.Create(.1f, 100.f, 2.f, 999.f, labels[i], labels[i]);
+            slider.SetTooltip("Enter a size in metres or drag a gold face handle in the viewport.");
             slider.OnValueCommitted([this,i](float extent) {
                 EditSelectedZone([&](auto& zone) {
                     if (i != 1) zone.low[i] += (zone.high[i] - zone.low[i] - extent) * .5f;
@@ -392,7 +393,7 @@ namespace renegade::studio
             wi::renderer::DrawBox(matrix, selected ? XMFLOAT4(1,.55f,.14f,1) : ZoneColors[size_t(z.behaviour)].toFloat4(), false);
             if (selected)
                 for (int face = 0; face < 6; ++face)
-                    wi::renderer::DrawSphere(wi::primitive::Sphere(FacePoint(z,face,world),.09f), {1,.65f,.2f,1}, false);
+                    wi::renderer::DrawSphere(wi::primitive::Sphere(FacePoint(z,face,world),gizmo_.isScalator ? .15f : .09f), {1,.65f,.2f,1}, false);
         }
     }
 
