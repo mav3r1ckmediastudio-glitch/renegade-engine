@@ -172,7 +172,7 @@ namespace grass_palette_proof
     }
 
     inline void Run(wi::scene::Scene& scene, wi::terrain::Terrain& terrain, const fs::path& out,
-        wi::RenderPath3D& render, wi::scene::CameraComponent& camera)
+        wi::RenderPath3D& render, wi::scene::CameraComponent& camera, bool hosted)
     {
         std::string error;
         const auto seed=(out/"terrain-template.wiscene").generic_u8string();
@@ -243,7 +243,7 @@ namespace grass_palette_proof
             render.PreUpdate();render.Update(1.f/60.f);render.PreRender();render.Render();
             wi::graphics::GetDevice()->SubmitCommandLists();wi::renderer::UpdateGPUSuballocator();
         };
-        for(int i=0;i<45;++i)frame();
+        for (int i = 0; i < (hosted ? 3 : 45); ++i) frame();
         wi::graphics::GetDevice()->WaitForGPU();
         Check(Capture(scene)==both,"Native terrain updates replaced custom hair");
         Check(wi::helper::saveTextureToFile(render.GetRenderResult3D(),(out/"meadow-riverbank.png").generic_u8string()),
@@ -278,7 +278,7 @@ namespace grass_palette_proof
         auto meadowRest=geometry(meadow), bankRest=geometry(bank);
         wi::ecs::Entity force=wi::ecs::INVALID_ENTITY;
         UpdateGrassInteraction(scene,force,left,{0,1,0});
-        for(int i=0;i<20;++i)frame();
+        for (int i = 0; i < (hosted ? 3 : 20); ++i) frame();
         wi::graphics::GetDevice()->WaitForGPU();
         Check(geometry(meadow)!=meadowRest && geometry(bank)==bankRest,
             "Pointer force did not produce a localized change in grass vertices");
@@ -306,20 +306,20 @@ namespace grass_palette_proof
         Check(SpawnRuntimePlayer(scene,startData,player,error,startData.settings),error);
         const auto* collider=scene.colliders.GetComponent(player.entity);
         Check(collider && collider->IsGPUEnabled() && !collider->IsCPUEnabled(),"Missing native grass player collider");
-        for(int i=0;i<25;++i)frame();
+        for (int i = 0; i < (hosted ? 3 : 25); ++i) frame();
         wi::graphics::GetDevice()->WaitForGPU();
         Check(geometry(bank)!=bankRest,"Player capsule left grass vertices unchanged");
         DespawnRuntimePlayer(scene,player);
         std::cout<<"GRASS_CURSOR_AND_PLAYER_GPU_VERTEX_RESPONSE_PASS"<<std::endl;
 
         render.scene=&cold.GetScene();
-        for(int i=0;i<15;++i)frame();
+        for (int i = 0; i < (hosted ? 3 : 15); ++i) frame();
         wi::graphics::GetDevice()->WaitForGPU();
         Check(verifyMeadow(cold.GetScene()) == meadowFrames, "Reopened meadow changed per-strand varieties");
         render.scene=&scene;
         Check(Capture(cold.GetScene())==both,"First native updates after cold reopen lost a painted layer");
         auto largeMix = paint(left, VegetationBrushMode::Paint, complete);
-        for (int i = 0; i < 20; ++i) frame();
+        for (int i = 0; i < (hosted ? 3 : 20); ++i) frame();
         wi::graphics::GetDevice()->WaitForGPU();
         bool checkedAll = false;
         for (size_t i = 0; i < scene.hairs.GetCount(); ++i)

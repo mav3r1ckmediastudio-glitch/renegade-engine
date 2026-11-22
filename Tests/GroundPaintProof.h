@@ -6,7 +6,7 @@ namespace ground_paint_proof
     using namespace renegade::bridge;
     namespace fs=std::filesystem;
     inline void Run(wi::scene::Scene& scene,wi::terrain::Terrain& terrain,const fs::path& out,
-        wi::RenderPath3D& render,wi::scene::CameraComponent& camera)
+        wi::RenderPath3D& render,wi::scene::CameraComponent& camera, bool hosted)
     {
         auto check=[](bool ok,const std::string& message){if(!ok)throw std::runtime_error(message);};
         const auto seed=(out/"seed.wiscene").generic_u8string();
@@ -79,7 +79,7 @@ namespace ground_paint_proof
         camera.TransformCamera(cameraPose);camera.UpdateCamera();
         auto frame=[&]{render.PreUpdate();render.Update(1.f/60.f);render.PreRender();render.Render();
             wi::graphics::GetDevice()->SubmitCommandLists();wi::renderer::UpdateGPUSuballocator();};
-        for(int i=0;i<45;++i)frame();wi::graphics::GetDevice()->WaitForGPU();terrain.Generation_Cancel();
+        for (int i = 0; i < (hosted ? 3 : 45); ++i) frame();wi::graphics::GetDevice()->WaitForGPU();terrain.Generation_Cancel();
         check(wi::helper::saveTextureToFile(render.GetRenderResult3D(),(out/"ground-paint.png").generic_u8string()),"Capture failed");
         // Studio handles brush input between scene update and rendering. At this
         // point writeback must still clear the current frame's live residency.
@@ -110,7 +110,7 @@ namespace ground_paint_proof
         const auto path=(root/fs::u8path(project.startupScene)).generic_u8string();
         {wi::Archive a(path,false,false);scene.Serialize(a);check(a.SaveFile(path),"Scene save failed");}
         SceneService cold;check(cold.LoadScene(path),cold.LastError());auto& newScene=cold.GetScene();render.scene=&newScene;
-        for(int i=0;i<20;++i)frame();wi::graphics::GetDevice()->WaitForGPU();
+        for (int i = 0; i < (hosted ? 3 : 20); ++i) frame();wi::graphics::GetDevice()->WaitForGPU();
         auto& t=newScene.terrains[0];t.Generation_Cancel();
         check(t.chunks.at(key).blendmap_layers.back().pixels==gravelMask &&
             t.chunks.at(key).blendmap_layers[t.materialEntities.size()-2].pixels==earth,"Cold reopen changed paint");

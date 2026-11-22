@@ -85,3 +85,50 @@ _ns_replace("wiTerrain.cpp" "const uint baseMaterialCount = push.blendmap_layers
                     continue;
                 const uint baseMaterialCount = push.blendmap_layers - splineMaterialCount;]=]
     "push.blendmap_layers - splineMaterialCount > materialEntities.size()")
+
+# Upload the dimensions of the actual source map for each layer and PBR channel.
+# Divergent GetDimensions on bindless terrain textures removes the WARP device.
+# Keep the same UV and mip calculations for both authored and legacy materials.
+_ns_replace("wiTerrain.cpp"
+[=[device->AllocateGPU(sizeof(uint) * push.blendmap_layers + sizeof(XMFLOAT3), cmd);]=]
+[=[device->AllocateGPU(sizeof(uint) * push.blendmap_layers + sizeof(XMFLOAT3) + sizeof(XMUINT2) * push.blendmap_layers, cmd);]=] "sizeof(XMUINT2) * push.blendmap_layers")
+_ns_replace("wiTerrain.cpp"
+[=[				for (uint i = 0; i < splineMaterialCount; ++i)
+				{
+					const Entity entity = splineMaterialEntities[i];
+					const uint material_index = (uint)scene->materials.GetIndex(entity);
+					std::memcpy((uint*)mem.data + baseMaterialCount + i, &material_index, sizeof(uint)); // force memcpy to avoid uncached read from GPU pointer!
+				}
+				for (uint i = 0; i < baseMaterialCount; ++i)
+				{
+					const Entity entity = materialEntities[i];
+					const uint material_index = (uint)scene->materials.GetIndex(entity);
+					std::memcpy((uint*)mem.data + i, &material_index, sizeof(uint)); // force memcpy to avoid uncached read from GPU pointer!
+				}]=]
+[=[                // GPU upload memory is write-combined. Only write to it.
+                auto* indices = static_cast<uint*>(mem.data);
+                auto* sizes = reinterpret_cast<uint8_t*>(indices + push.blendmap_layers) + sizeof(XMFLOAT3);
+                for (uint layer = 0; layer < push.blendmap_layers; ++layer)
+                {
+                    const Entity entity = layer < baseMaterialCount ? materialEntities[layer]
+                        : splineMaterialEntities[layer - baseMaterialCount];
+                    const uint index = uint(scene->materials.GetIndex(entity));
+                    std::memcpy(indices + layer, &index, sizeof(index));
+                    XMUINT2 dimensions = {1, 1};
+                    if (index < scene->materials.GetCount())
+                    {
+                        const auto& source = scene->materials[index].textures[map_type].resource;
+                        if (source.IsValid() && source.GetTexture().IsValid())
+                        {
+                            const auto& desc = source.GetTexture().desc;
+                            dimensions = {desc.width, desc.height};
+                        }
+                    }
+                    std::memcpy(sizes + layer * sizeof(dimensions), &dimensions, sizeof(dimensions));
+                }]=] "std::memcpy(sizes + layer")
+_ns_replace("shaders/terrainVirtualTextureUpdateCS.hlsl"
+[=[float2 dim = 0;
+				tex.GetDimensions(dim.x, dim.y);]=]
+[=[uint dimensionOffset = push.blendmap_buffer_offset + push.blendmap_layers * sizeof(uint)
+                    + sizeof(float3) + blendmap_index * sizeof(uint2);
+                float2 dim = float2(blendmap_buffer.Load2(dimensionOffset));]=] "blendmap_buffer.Load2(dimensionOffset)")
