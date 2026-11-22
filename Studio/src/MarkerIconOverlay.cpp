@@ -504,6 +504,7 @@ namespace renegade::studio
             static_cast<std::int32_t>(canvas.LogicalToPhysical(viewport.w))};
         wi::graphics::GetDevice()->BindScissorRects(1,&clip,cmd);
         overlay.RenderMarkers(canvas,cmd);
+        owner.DrawZoneLabels(cmd);
     }
 
     void EnsureMarkerIconOverlay(StudioRenderPath& owner)

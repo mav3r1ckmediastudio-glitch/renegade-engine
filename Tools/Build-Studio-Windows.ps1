@@ -181,7 +181,8 @@ try {
             "player_start.png",
             "script_entity.png",
             "trigger_zone.png",
-            "waypoint.png"
+            "waypoint.png",
+            "zone_presets.png"
         )
         $builtMarkerIconRoot = Join-Path $studioDirectory "Content\editor\markericons"
         $packagedMarkerIconRoot = Join-Path $packageRoot "Content\editor\markericons"

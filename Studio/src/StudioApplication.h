@@ -279,6 +279,8 @@ namespace renegade::studio
                 inspectorPanel_.wi::gui::Widget::SetVisible(!waterfallInspector_.IsVisible() && !zoneInspector_.IsVisible());
         }
 
+        void DrawZoneLabels(wi::graphics::CommandList cmd) const;
+
         [[nodiscard]] XMFLOAT4 StoryFlowWorkspaceBounds() const noexcept
         {
             return studioChrome_.ViewportBounds();

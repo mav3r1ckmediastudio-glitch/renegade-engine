@@ -295,6 +295,85 @@ namespace renegade::studio
         return true;
     }
 
+    namespace
+    {
+        // Atlas cells follow the stable, serialized gameplay preset order.
+        constexpr wi::Color ZoneColors[] = {
+            {228,157,100}, {244,198,92}, {117,188,245}, {237,217,128},
+            {85,219,171}, {113,202,249}, {185,154,250}, {255,136,127},
+            {250,120,115}, {239,165,116}, {126,219,200}, {128,187,255}, {164,212,153}
+        };
+        static_assert(std::size(ZoneColors)==zones::Presets.size());
+    }
+
+    void StudioRenderPath::DrawZoneLabels(wi::graphics::CommandList cmd) const
+    {
+        if (!session_ || !camera || !studioChrome_.IsSceneWorkspaceActive() || editorZones_.empty()) return;
+        const auto& scene=session_->Scenes().GetScene();
+        const bool visible=studioChrome_.ShowZones();
+        const auto viewport=StoryFlowWorkspaceBounds();
+        static const auto atlas=wi::resourcemanager::Load("Content/editor/markericons/zone_presets.png");
+        struct Label { XMFLOAT2 anchor; size_t index; float distance; bool selected; };
+        std::vector<Label> labels;
+        const auto eye=XMLoadFloat3(&camera->Eye);
+        for (const auto id : editorZones_) {
+            const bool selected=session_->Selection().Contains(id);
+            if ((!visible && !selected) || !session_->Scenes().IsHierarchyVisible(id)) continue;
+            zones::Definition zone;
+            const auto* t=scene.transforms.GetComponent(id);
+            if (!t || !zones::Read(scene,id,zone)) continue;
+            if (selected && zoneFace_>=0 && zoneDragEntity_==id) zone=zonePreview_;
+            const auto world=FacePoint(zone,3,XMLoadFloat4x4(&t->world));
+            XMFLOAT2 anchor;
+            if (ProjectEditorPoint(world,anchor))
+                labels.push_back({anchor,size_t(zone.behaviour),XMVectorGetX(XMVector3LengthSq(XMLoadFloat3(&world)-eye)),selected});
+        }
+        // Give selected and nearby boxes first choice of the available space.
+        std::stable_sort(labels.begin(),labels.end(),[](const Label& a,const Label& b) {
+            return a.selected!=b.selected ? a.selected : a.distance<b.distance;
+        });
+        std::vector<XMFLOAT4> used;
+        auto rect=[&](float x,float y,float w,float h,wi::Color color) {
+            wi::image::Params p(x,y,w,h,color); wi::image::Draw(nullptr,p,cmd);
+        };
+        for (const auto& label:labels) {
+            const auto& preset=zones::Presets[label.index];
+            const auto color=ZoneColors[label.index];
+            wi::font::Params font(0,0,16,wi::font::WIFALIGN_LEFT,wi::font::WIFALIGN_CENTER,
+                wi::Color(248,248,244),wi::Color(0,0,0,0));
+            const float textWidth=wi::font::TextWidth(preset.label,font);
+            bool placed=false;
+            for (int attempt=0;attempt<5 && !placed;++attempt) {
+                const bool compact=attempt>=3;
+                const float width=compact ? 28.f : 38.f+textWidth;
+                const float offset=attempt==1 ? -32.f : attempt==2 ? 32.f : attempt==4 ? -30.f : 0.f;
+                if (viewport.z-viewport.x<width+4 || viewport.w-viewport.y<32) break;
+                const float x=std::clamp(label.anchor.x-width*.5f,viewport.x+2,viewport.z-width-2);
+                const float y=std::clamp(label.anchor.y-31+offset,viewport.y+2,viewport.w-30);
+                if (std::any_of(used.begin(),used.end(),[&](const XMFLOAT4& r) {
+                    return x<r.z+2 && x+width+2>r.x && y<r.w+2 && y+29>r.y;
+                })) continue;
+                used.push_back({x,y,x+width,y+27});
+                const float ax=std::clamp(label.anchor.x,x+2,x+width-2);
+                if (label.anchor.y>y+27) rect(ax-1,y+27,2,label.anchor.y-y-27,color);
+                else if(label.anchor.y<y) rect(ax-1,label.anchor.y,2,y-label.anchor.y,color);
+                rect(x,y,width,27,label.selected?wi::Color(251,151,60):wi::Color(68,82,92));
+                rect(x+1,y+1,width-2,25,wi::Color(18,26,32,247));
+                rect(x+1,y+1,3,25,color);
+                if (atlas.IsValid()) {
+                    wi::image::Params icon(x+6,y+3,21,21,color);
+                    icon.enableDrawRect({float(label.index%4)*64,float(label.index/4)*64,64,64});
+                    wi::image::Draw(&atlas.GetTexture(),icon,cmd);
+                }
+                if (!compact) {
+                    font.posX=x+31; font.posY=y+13;
+                    wi::font::Draw(preset.label,font,cmd);
+                }
+                placed=true;
+            }
+        }
+    }
+
     void StudioRenderPath::DrawZones()
     {
         if (projectHubVisible_ || !studioChrome_.IsSceneWorkspaceActive()) return;
@@ -305,12 +384,12 @@ namespace renegade::studio
             auto* t = scene.transforms.GetComponent(id);
             if (!t || !zones::Read(scene,id,z)) continue;
             const bool selected = session_->Selection().Contains(id);
-            if (!selected && !studioChrome_.ShowZones()) continue;
+            if ((!selected && !studioChrome_.ShowZones()) || !session_->Scenes().IsHierarchyVisible(id)) continue;
             if (selected && zoneFace_ >= 0 && zoneDragEntity_ == id) z = zonePreview_;
             const auto world = XMLoadFloat4x4(&t->world);
             const auto matrix = XMMatrixScaling((z.high[0]-z.low[0])*.5f,(z.high[1]-z.low[1])*.5f,(z.high[2]-z.low[2])*.5f)
                 * XMMatrixTranslation((z.high[0]+z.low[0])*.5f,(z.high[1]+z.low[1])*.5f,(z.high[2]+z.low[2])*.5f) * world;
-            wi::renderer::DrawBox(matrix, selected ? XMFLOAT4(1,.55f,.14f,1) : XMFLOAT4(.25f,.8f,.65f,.8f), false);
+            wi::renderer::DrawBox(matrix, selected ? XMFLOAT4(1,.55f,.14f,1) : ZoneColors[size_t(z.behaviour)].toFloat4(), false);
             if (selected)
                 for (int face = 0; face < 6; ++face)
                     wi::renderer::DrawSphere(wi::primitive::Sphere(FacePoint(z,face,world),.09f), {1,.65f,.2f,1}, false);
