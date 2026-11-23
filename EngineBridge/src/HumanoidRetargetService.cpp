@@ -262,14 +262,22 @@ namespace renegade::bridge
             result.error = "Selected character has no native Wicked ArmatureComponent.";
             return result;
         }
+        return BuildAutoHumanoidMapping(scene,armature->boneCollection);
+    }
+
+    HumanoidAutoMapResult BuildAutoHumanoidMapping(const wi::scene::Scene& scene,
+        const wi::vector<wi::ecs::Entity>& joints)
+    {
+        HumanoidAutoMapResult result;
+        result.mapping.componentExists = true;
         struct NamedBone
         {
             Entity entity = wi::ecs::INVALID_ENTITY;
             std::string name;
         };
         std::vector<NamedBone> namedBones;
-        namedBones.reserve(armature->boneCollection.size());
-        for (const auto entity : armature->boneCollection)
+        namedBones.reserve(joints.size());
+        for (const auto entity : joints)
         {
             const auto* name = scene.names.GetComponent(entity);
             if (entity != wi::ecs::INVALID_ENTITY && name != nullptr && !name->name.empty())

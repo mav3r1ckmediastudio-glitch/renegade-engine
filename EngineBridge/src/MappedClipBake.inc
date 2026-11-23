@@ -1,9 +1,13 @@
 // Build a clip-only snapshot on the target skeleton. Entity IDs are local to
 // each scene. The matching-rig importer resolves the retained snapshot by name.
-static void CopyBakeRig(const wi::scene::Scene& from, wi::scene::Scene& to)
+static bool CopyBakeRig(const wi::scene::Scene& from, wi::scene::Scene& to, std::string& error)
 {
+    AnimationRigBones bones;
+    if (!CollectAnimationRig(from,bones,error)) return false;
     const auto rig = from.armatures.GetEntity(0);
-    to.armatures.Create(rig) = from.armatures[0];
+    auto& palette = to.armatures.Create(rig);
+    palette.boneCollection = std::move(bones.boneCollection);
+    palette.inverseBindMatrices = std::move(bones.inverseBindMatrices);
     const auto copyChain = [&](wi::ecs::Entity bone) {
         while (bone != wi::ecs::INVALID_ENTITY && !to.transforms.Contains(bone)) {
             const auto* t = from.transforms.GetComponent(bone);
@@ -17,7 +21,8 @@ static void CopyBakeRig(const wi::scene::Scene& from, wi::scene::Scene& to)
         }
     };
     copyChain(rig);
-    for (auto bone : from.armatures[0].boneCollection) copyChain(bone);
+    for (auto bone : palette.boneCollection) copyChain(bone);
+    return true;
 }
 
 // Preserve the motion between a mapped joint and its nearest mapped ancestor.
@@ -129,12 +134,11 @@ bool ModelImportCandidateService::EditMappedClip(ModelImportCandidate& candidate
 {
     using namespace wi::scene;
     using Entity = wi::ecs::Entity;
-    if (!candidate.IsReady() || candidate.scene_->armatures.GetCount()!=1 ||
-        source.armatures.GetCount()!=1 || clipIndex>=source.animations.GetCount()) {
+    if (!candidate.IsReady() || clipIndex>=source.animations.GetCount()) {
         error="Select one source clip and a single target skeleton."; return false;
     }
     Scene src, dst;
-    CopyBakeRig(source,src); CopyBakeRig(*candidate.scene_,dst);
+    if (!CopyBakeRig(source,src,error) || !CopyBakeRig(*candidate.scene_,dst,error)) return false;
     const auto& sb=src.armatures[0].boneCollection;
     const auto& tb=dst.armatures[0].boneCollection;
     if (targets.size()!=sb.size()) {error="The source skeleton changed."; return false;}
@@ -203,13 +207,13 @@ bool ModelImportCandidateService::EditMappedClip(ModelImportCandidate& candidate
     };
     // Keep the imported Wicked humanoid roles. An explicit mapping overrides
     // the corresponding target slot; additional joints are baked separately.
-    auto roles=[](const Scene& scene) {
+    auto roles=[](const Scene& scene, const auto& joints) {
         for(size_t i=0;i<scene.humanoids.GetCount();++i)
             if(scene.humanoids[i].IsValid())
                 return CaptureHumanoidMapping(scene,scene.humanoids.GetEntity(i));
-        return BuildAutoHumanoidMapping(scene,scene.armatures.GetEntity(0)).mapping;
+        return BuildAutoHumanoidMapping(scene,joints).mapping;
     };
-    const auto sourceRoles=roles(source),targetRoles=roles(*candidate.scene_);
+    const auto sourceRoles=roles(source,sb),targetRoles=roles(*candidate.scene_,tb);
     std::set<Entity> assigned;
     for(size_t slot=0;slot<HumanoidBoneCount;++slot) {
         auto it=std::find_if(pairs.begin(),pairs.end(),[&](const auto& p){

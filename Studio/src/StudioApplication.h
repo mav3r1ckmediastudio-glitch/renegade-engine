@@ -1612,7 +1612,13 @@ namespace renegade::studio
         wi::gui::Button modelImportRotateLeft_;
         wi::gui::Button modelImportRotateRight_;
         wi::gui::ComboBox modelImportClip_;
-        wi::gui::ComboBox modelImportAction_;
+        wi::gui::TreeList characterClips_;
+        wi::gui::Label actionPrompt_;
+        std::array<wi::gui::Button, 8> actionChoices_;
+        std::array<wi::gui::TextInputField, 3> clipTiming_;
+        std::map<int, std::pair<float,float>> originalClipRanges_;
+        void RefreshCharacterClips();
+        void EditClipTiming(int field, const std::string& value);
         wi::gui::Button modelImportAddAnimation_;
         std::vector<std::string> modelImportActions_;
         wi::gui::Button modelImportPlay_;

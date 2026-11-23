@@ -6,15 +6,62 @@
 #include <set>
 namespace renegade::bridge
 {
+    bool CollectAnimationRig(const wi::scene::Scene& scene, AnimationRigBones& result, std::string& error)
+    {
+        using namespace wi::ecs;
+        result = {};
+        if (!scene.armatures.GetCount()) { error = "No skin skeleton was found."; return false; }
+        std::set<Entity> joints;
+        const auto first = scene.armatures.GetEntity(0);
+        auto world = [&](Entity entity) {
+            const auto* t = scene.transforms.GetComponent(entity);
+            return t ? t->GetLocalMatrix() * scene.ComputeParentMatrixRecursive(entity) : XMMatrixIdentity();
+        };
+        const auto frame = world(first);
+        for (size_t i = 0; i < scene.armatures.GetCount(); ++i) {
+            const auto& skin = scene.armatures[i];
+            if (skin.boneCollection.empty() || skin.boneCollection.size() != skin.inverseBindMatrices.size()) {
+                error = "Skin has an incomplete bind pose."; return false;
+            }
+            const auto skinFrame = world(scene.armatures.GetEntity(i));
+            if (i && std::abs(XMVectorGetX(XMMatrixDeterminant(skinFrame))) < 1e-20f) {
+                error = "Skin has a singular transform."; return false;
+            }
+            const auto toSkin = i ? frame * XMMatrixInverse(nullptr, skinFrame) : XMMatrixIdentity();
+            for (size_t j = 0; j < skin.boneCollection.size(); ++j) {
+                const Entity bone = skin.boneCollection[j];
+                if (!joints.insert(bone).second) continue;
+                result.boneCollection.push_back(bone);
+                auto bind = skin.inverseBindMatrices[j];
+                if (i) XMStoreFloat4x4(&bind, toSkin * XMLoadFloat4x4(&skin.inverseBindMatrices[j]));
+                result.inverseBindMatrices.push_back(bind);
+            }
+        }
+        // Several skins may cover disjoint parts of one hierarchy. Equal names on
+        // independent characters are never sufficient evidence of a shared skeleton.
+        if (scene.armatures.GetCount() > 1) {
+            Entity root = INVALID_ENTITY;
+            for (auto bone : result.boneCollection) {
+                Entity highest = bone;
+                for (auto h = scene.hierarchy.GetComponent(bone); h; h = scene.hierarchy.GetComponent(h->parentID))
+                    if (joints.count(h->parentID)) highest = h->parentID;
+                if (root != INVALID_ENTITY && highest != root) {
+                    error = "The model contains independent skeletons."; return false;
+                }
+                root = highest;
+            }
+        }
+        return true;
+    }
+
     bool AppendMatchingRigAnimationScene(wi::scene::Scene& destination,
         const wi::scene::Scene& source, std::vector<wi::ecs::Entity>& created,
         std::string& error)
     {
         created.clear(); error.clear();
         auto fail=[&](const char* message){error=message;return false;};
-        if(source.armatures.GetCount()!=1 || destination.armatures.GetCount()!=1)
-            return fail("Matching-rig clips require one source and one destination skeleton.");
-        const auto& src=source.armatures[0]; const auto& dst=destination.armatures[0];
+        AnimationRigBones src, dst;
+        if (!CollectAnimationRig(source,src,error) || !CollectAnimationRig(destination,dst,error)) return false;
         if(src.boneCollection.empty() || src.boneCollection.size()!=dst.boneCollection.size() ||
             src.inverseBindMatrices.size()!=src.boneCollection.size() ||
             dst.inverseBindMatrices.size()!=dst.boneCollection.size())

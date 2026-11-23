@@ -48,6 +48,22 @@ int main()
             unchanged.animations.GetCount()==0 && unchanged.animation_datas.GetCount()==0,
             "Invalid rig accepted or failed copy mutated destination"))return 3;
     }
+    // A rigid accessory and a body can skin different subsets of one joint tree.
+    Scene shared;
+    Rig(shared,false);
+    const auto child=shared.armatures[0].boneCollection.back();
+    shared.armatures[0].boneCollection.pop_back();
+    shared.armatures[0].inverseBindMatrices.pop_back();
+    auto& accessory=shared.armatures.Create(wi::ecs::CreateEntity());
+    accessory.boneCollection={child};
+    accessory.inverseBindMatrices={wi::math::IDENTITY_MATRIX};
+    if(!Check(AppendMatchingRigAnimationScene(shared,source,created,error),"Shared skeleton rejected") ||
+       !Check(shared.animations[0].channels[0].target==child && shared.armatures.GetCount()==2 &&
+              shared.armatures[0].boneCollection.size()==1 && accessory.boneCollection[0]==child,
+              "Shared skin palette or channel target changed"))return 7;
+    shared.hierarchy.Remove(child);
+    if(!Check(!AppendMatchingRigAnimationScene(shared,source,created,error) &&
+              shared.animations.GetCount()==1,"Independent skeletons were combined"))return 8;
     CreatorModelImportRecipe recipe;
     recipe.assetKind=CreatorAssetImportKind::Character;
     CreatorExternalAnimationImportRecipe external;

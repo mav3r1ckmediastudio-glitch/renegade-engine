@@ -514,7 +514,7 @@ namespace renegade::bridge
                 CreatorAnimationImportRecipe clip;
                 clip.sourceAnimationIndex = static_cast<std::uint32_t>(i);
                 clip.name = name ? name->name : "Clip " + std::to_string(i + 1);
-                clip.start = native.start; clip.end = native.end; clip.action = action;
+                clip.start = native.start; clip.end = native.end; clip.speed = native.speed; clip.action = action;
                 authoredRecipe.animations.push_back(std::move(clip));
             }
             else
@@ -523,7 +523,7 @@ namespace renegade::bridge
                 clip.sourceProjectRelativePath = dependencyPaths[external->dependencyIndex].lexically_relative(root).generic_u8string();
                 clip.sourceAnimationIndex = static_cast<std::uint32_t>(i - external->firstAnimationIndex);
                 clip.name = name ? name->name : "External Clip " + std::to_string(i + 1);
-                clip.start = native.start; clip.end = native.end; clip.action = action; clip.autoMapSource = !external->matchingRig; clip.matchingRig = external->matchingRig;
+                clip.start = native.start; clip.end = native.end; clip.speed = native.speed; clip.action = action; clip.autoMapSource = !external->matchingRig; clip.matchingRig = external->matchingRig;
                 authoredRecipe.externalAnimations.push_back(std::move(clip));
             }
         }

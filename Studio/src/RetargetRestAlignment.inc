@@ -80,7 +80,7 @@ static std::string AlignRestRigs(wi::scene::Scene& src,const wi::scene::Scene& d
     for(auto e:roots) src.Component_Attach(e,wrapper,true);
 
     const auto& sb=src.armatures[0].boneCollection;
-    const auto& tb=dst.armatures[0].boneCollection;
+    const auto tb=ImportAnimationBones(dst);
     std::vector<std::pair<size_t,size_t>> order;
     for(size_t i=0;i<sb.size();++i){
         size_t depth=0;auto e=sb[i];

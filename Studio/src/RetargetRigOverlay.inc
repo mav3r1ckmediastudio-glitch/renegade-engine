@@ -3,7 +3,7 @@ void StudioRenderPath::DrawRetargetSource(wi::graphics::CommandList cmd) const
     const auto& src=*rtScene_;const auto& dst=modelImportPreview_->InspectionScene();
     const auto viewport=modelImportPreviewImage_.GetPos(),size=modelImportPreviewImage_.GetSize();
     const auto& sb=src.armatures[0].boneCollection;
-    const auto& tb=dst.armatures[0].boneCollection;
+
     // Source reference positions were aligned in the candidate rig's world
     // space. Show them through the same mesh and import transforms as the skin.
     const auto& candidate=*modelImportCandidate_->PeekScene();
@@ -14,7 +14,7 @@ void StudioRenderPath::DrawRetargetSource(wi::graphics::CommandList cmd) const
         * XMLoadFloat4x4(&dst.transforms.GetComponent(previewRig)->world) * rigToObject;
     wi::primitive::AABB sourceBounds,targetBounds;
     for(auto e:sb){const auto p=src.transforms.GetComponent(e)->GetPosition();sourceBounds.AddPoint(XMVector3TransformCoord(XMLoadFloat3(&p),sourceToPreview));}
-    for(auto e:tb){const auto p=dst.transforms.GetComponent(e)->GetPosition();targetBounds.AddPoint(XMVector3TransformCoord(XMLoadFloat3(&p),rigToObject));}
+    for(const auto& bone:importBones_){const auto p=dst.transforms.GetComponent(bone.entity)->GetPosition();targetBounds.AddPoint(XMVector3TransformCoord(XMLoadFloat3(&p),rigToObject));}
     const auto sc=sourceBounds.getCenter(),tc=targetBounds.getCenter();
     const float offset=size.x*0.27f;
     std::map<wi::ecs::Entity,XMFLOAT3> points;

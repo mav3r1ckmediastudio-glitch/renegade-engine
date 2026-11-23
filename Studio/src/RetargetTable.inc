@@ -70,7 +70,7 @@ void StudioRenderPath::SelectMapTarget(int t)
     auto it=std::find(rtPairs_.begin(),rtPairs_.end(),t);
     rtSource_.SetSelectedWithoutCallback(it==rtPairs_.end()?-1:int(it-rtPairs_.begin()));
     auto& scene=modelImportPreview_->InspectionScene();
-    auto e=scene.armatures[0].boneCollection[t];
+    auto e=ImportAnimationBones(scene)[t];
     auto bone=std::find_if(importBones_.begin(),importBones_.end(),[&](const auto& b){return b.entity==e;});
     if(bone!=importBones_.end())importBone_.SetSelected(int(bone-importBones_.begin()));
     RefreshMapRows();
@@ -157,7 +157,7 @@ void StudioRenderPath::AssignMapSource(int target,int source)
         };
         auto chain=[&](const auto& scene,const auto& names,int start){
             std::vector<int> list{start};auto stem=digit(names[start]);
-            const auto& bones=scene.armatures[0].boneCollection;
+            const auto bones=ImportAnimationBones(scene);
             while(!stem.empty()){
                 int child=-1;
                 for(int j=0;j<int(bones.size());++j){const auto* h=scene.hierarchy.GetComponent(bones[j]);

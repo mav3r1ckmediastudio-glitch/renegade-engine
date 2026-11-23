@@ -106,7 +106,7 @@ void StudioRenderPath::ResizeImportWorkspace(float width, float height)
     for(int i=0;i<3;++i)place(rtRigDegrees_[i],right+74+140*i,642,65,25);
     place(rtRigApply_,right,673,half,26);place(rtRigReset_,right+half+gap,673,half,26);
     place(mapUndo_,right,714,half,26);place(mapRedo_,right+half+gap,714,half,26);
-    place(clipPose_,right,408,inspectorWidth,28);place(clipEditScope_,right+92,457,inspectorWidth-120,27);
+    place(clipPose_,right,535,inspectorWidth,28);place(clipEditScope_,right+92,457,inspectorWidth-120,27);
     place(importFront_, right, 133, 210, 28);
     place(importFit_, right + 219, 133, 210, 28);
     place(importZoomIn_, right, 170, 210, 28);
@@ -146,8 +146,14 @@ void StudioRenderPath::ResizeImportWorkspace(float width, float height)
     place(importStep_[1], pad + 3 * (transport + gap), 96 + viewHeight, transport, 28);
     place(modelImportTime_, pad + 150, 137 + viewHeight, std::max(30.f, viewWidth - 225), 23);
     place(modelImportSpeed_, right + 155, 273, 210, 24);
-    place(modelImportAction_, right + 138, 318, 292, 30);
-    place(modelImportAddAnimation_, right, 367, inspectorWidth, 32);
+    place(characterClips_, right, 127, inspectorWidth, 192);
+    place(actionPrompt_, right, 328, inspectorWidth, 22);
+    const float cell = (inspectorWidth - 3 * gap) / 4;
+    for (int i = 0; i < 8; ++i)
+        place(actionChoices_[i], right + (i % 4) * (cell + gap), 356 + (i / 4) * 33, cell, 28);
+    for (int i = 0; i < 3; ++i)
+        place(clipTiming_[i], right + 79 + i * 144, 441, 61, 27);
+    place(modelImportAddAnimation_, right, 491, inspectorWidth, 32);
     place(modelImportRole_, right + 93, 295, 337, 28);
     place(modelImportName_, pad + 92, footer, viewWidth - 92, 27);
     place(modelImportFolder_, pad + 92, footer + 36, viewWidth - 92, 27);
@@ -282,11 +288,16 @@ void StudioRenderPath::LayoutImportWorkspace()
     modelImportMaterial_.SetVisible(materials); modelImportMapSlot_.SetVisible(materials);
     modelImportAssignMap_.SetVisible(materials); modelImportMapInfo_.SetVisible(materials);
     modelImportWarnings_.SetVisible(materials);
-    modelImportClip_.SetVisible(actions); const bool timeline = !rt && (!pose || mapEditingClip_) && (character || importWorkflow_ == ImportWorkflow::Animated);
+    modelImportClip_.SetVisible(actions && !character); const bool timeline = !rt && (!pose || mapEditingClip_) && (character || importWorkflow_ == ImportWorkflow::Animated);
     modelImportPlay_.SetVisible(timeline);
     for (auto& step : importStep_) step.SetVisible(timeline);
     modelImportRestart_.SetVisible(timeline); modelImportTime_.SetVisible(timeline);
-    modelImportSpeed_.SetVisible(actions); modelImportAction_.SetVisible(actions && character);
+    modelImportSpeed_.SetVisible(actions && !character);
+    characterClips_.SetVisible(actions && character);
+    actionPrompt_.SetVisible(actions && character);
+    for (auto& button : actionChoices_) button.SetVisible(actions && character);
+    for (auto& field : clipTiming_) field.SetVisible(actions && character);
+    if (actions && character) RefreshCharacterClips();
     modelImportAddAnimation_.SetVisible(actions && character);
     modelImportName_.SetVisible(chosen); modelImportTags_.SetVisible(chosen);
     modelImportFolder_.SetVisible(chosen); modelImportFolderChoices_.SetVisible(chosen);
@@ -324,4 +335,73 @@ void StudioRenderPath::ApplyImportTransform()
     importTransform_=correction;
     modelImportClip_.SetSelected(clip);
     if (clip>0) modelImportPreview_->Scrub(time);
+}
+
+void StudioRenderPath::RefreshCharacterClips()
+{
+    if (!modelImportCandidate_ || !modelImportPreview_) return;
+    const auto clips = modelImportPreview_->Clips();
+    const int selected = modelImportClip_.GetSelected() - 1;
+    const bool valid = selected >= 0 && size_t(selected) < clips.size() && size_t(selected) < modelImportActions_.size();
+    characterClips_.ClearItems();
+    for (int i = -1; i < int(clips.size()); ++i) {
+        wi::gui::TreeList::Item row;
+        row.selected = i == selected;
+        row.name = i < 0 ? "Reference pose" : clips[i].name + "   |   " +
+            (size_t(i) < modelImportActions_.size() ? modelImportActions_[i] : "Unassigned");
+        characterClips_.AddItem(row);
+    }
+    for (auto& button : actionChoices_) {
+        button.SetEnabled(valid);
+        button.SetColor(valid && button.GetText() == modelImportActions_[selected] ?
+            theme::Accent : theme::Control, wi::gui::IDLE);
+    }
+    for (auto& field : clipTiming_) { field.SetEnabled(valid); field.SetValue(""); }
+    if (!valid) return;
+    const auto& clip = clips[selected];
+    clipTiming_[0].SetValue(std::to_string(std::lround(clip.start * 30)));
+    clipTiming_[1].SetValue(std::to_string(std::lround(clip.end * 30)));
+    std::ostringstream speed;
+    speed << clip.speed;
+    clipTiming_[2].SetValue(speed.str());
+}
+void StudioRenderPath::EditClipTiming(int field, const std::string& value)
+{
+    const int index = modelImportClip_.GetSelected() - 1;
+    if (!modelImportCandidate_ || !modelImportPreview_ || index < 0) return;
+    auto& scene = *modelImportCandidate_->PeekMutableScene();
+    if (size_t(index) >= scene.animations.GetCount()) return;
+    auto& authored = scene.animations[index];
+    const auto range = originalClipRanges_.emplace(index, std::make_pair(authored.start, authored.end)).first->second;
+    char* end = nullptr;
+    float number = std::strtof(value.c_str(), &end);
+    bool valid = end != value.c_str() && *end == 0 && std::isfinite(number);
+    if (field == 2) valid = valid && number >= 0.1f && number <= 4.f;
+    else {
+        valid = valid && number == std::floor(number) &&
+            number >= std::lround(range.first * 30) && number <= std::lround(range.second * 30);
+        // Preserve fractional source endpoints when displayed on the frame grid.
+        if (number == std::lround(range.first * 30)) number = range.first;
+        else if (number == std::lround(range.second * 30)) number = range.second;
+        else number /= 30.f;
+        valid = valid && (field == 0 ? number < authored.end : number > authored.start);
+    }
+    if (!valid) {
+        modelImportSummary_.SetText(field == 2 ? "Enter a playback speed from 0.1 to 4." :
+            "Enter a whole frame within the source clip. Start must precede End.");
+        RefreshCharacterClips();
+        return;
+    }
+    if (field == 0) authored.start = number;
+    if (field == 1) authored.end = number;
+    if (field == 2) authored.speed = number;
+    auto& preview = modelImportPreview_->InspectionScene().animations[index];
+    preview.start = authored.start;
+    preview.end = authored.end;
+    preview.speed = authored.speed;
+    modelImportTime_.SetRange(authored.start, std::max(authored.start + 0.001f, authored.end));
+    modelImportPreview_->Scrub(field == 0 ? authored.start : field == 1 ? authored.end : preview.timer);
+    modelImportTime_.SetValue(modelImportPreview_->ClipTime());
+    modelImportSummary_.SetText(CharacterIdleHint(modelImportActions_));
+    RefreshCharacterClips();
 }

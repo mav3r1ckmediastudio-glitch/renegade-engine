@@ -34,8 +34,17 @@ XMFLOAT3 StudioRenderPath::ImportPosePoint(int field) const
 
 // Skinning writes vertices in armature space. The renderer then places the
 // skinned mesh with the object transform, which can include FBX unit conversion.
+static wi::vector<wi::ecs::Entity> ImportAnimationBones(const wi::scene::Scene& scene)
+{
+    if (scene.armatures.GetCount() == 1) return scene.armatures[0].boneCollection;
+    bridge::AnimationRigBones rig;
+    std::string error;
+    if (!bridge::CollectAnimationRig(scene,rig,error)) return {};
+    return std::move(rig.boneCollection);
+}
+
 static XMMATRIX ImportRigToObject(const wi::scene::Scene& scene) {
-    if(scene.armatures.GetCount()!=1)return XMMatrixIdentity();
+    if(!scene.armatures.GetCount())return XMMatrixIdentity();
     const auto rig=scene.armatures.GetEntity(0);
     const auto* arm=scene.transforms.GetComponent(rig);
     if(!arm)return XMMatrixIdentity();
@@ -176,7 +185,7 @@ void StudioRenderPath::UpdateImportRigInput()
             return;
         }
         if(closest>=0){
-            auto& bones=scene.armatures[0].boneCollection;
+            const auto bones=ImportAnimationBones(scene);
             auto it=std::find(bones.begin(),bones.end(),importBones_[closest].entity);
             if (it != bones.end()) {
                 const int target = int(it - bones.begin());

@@ -4,16 +4,31 @@
 // Animation-only FBX exports can have named transforms and tracks without a skin.
 static bool BuildClipOnlyRig(wi::scene::Scene& scene)
 {
-    if(scene.armatures.GetCount() || !scene.animations.GetCount() || scene.objects.GetCount())return false;
+    if(scene.armatures.GetCount()>1 || !scene.animations.GetCount() || scene.objects.GetCount())return false;
     std::set<wi::ecs::Entity> joints;
     for(size_t i=0;i<scene.animations.GetCount();++i)
         for(const auto& channel:scene.animations[i].channels)
             if(scene.transforms.Contains(channel.target) && scene.names.Contains(channel.target))
                 joints.insert(channel.target);
     if(joints.empty())return false;
-    const auto root=wi::ecs::CreateEntity();
-    scene.transforms.Create(root);
-    auto& arm=scene.armatures.Create(root);
+    // A meshless FBX can arrive with a synthesized skin palette pointing at
+    // end markers instead of animated transforms. Rebuild only when a named
+    // skeletal track is missing. Include unanimated joints between tracks.
+    const bool existing = scene.armatures.GetCount() == 1;
+    const auto root = existing ? scene.armatures.GetEntity(0) : wi::ecs::CreateEntity();
+    if (existing) {
+        const auto& original = scene.armatures[0].boneCollection;
+        std::set<wi::ecs::Entity> known(original.begin(), original.end());
+        if (std::includes(known.begin(), known.end(), joints.begin(), joints.end())) return false;
+        const auto animated = joints;
+        for (auto bone : animated) {
+            for (auto h = scene.hierarchy.GetComponent(bone); h; h = scene.hierarchy.GetComponent(h->parentID))
+                if (known.count(h->parentID)) joints.insert(h->parentID);
+        }
+    } else scene.transforms.Create(root);
+    auto& arm = existing ? scene.armatures[0] : scene.armatures.Create(root);
+    arm.boneCollection.clear();
+    arm.inverseBindMatrices.clear();
     for(size_t i=0;i<scene.transforms.GetCount();++i){
         const auto bone=scene.transforms.GetEntity(i);
         if(!joints.count(bone))continue;
@@ -76,7 +91,7 @@ void StudioRenderPath::CreateRetargetWorkspace()
     button(mapRedo_,"Redo",[this]{ReplayMapEdit(true);});
     button(mapHoldBranch_, "Hold unmatched branch", [this] {
         const auto& scene = modelImportPreview_->InspectionScene();
-        const auto& bones = scene.armatures[0].boneCollection;
+        const auto bones = ImportAnimationBones(scene);
         if (mapTargetIndex_ < 0 || size_t(mapTargetIndex_) >= bones.size()) return;
         const auto root = bones[mapTargetIndex_];
         const std::set<int> mapped(rtPairs_.begin(), rtPairs_.end());
@@ -195,13 +210,21 @@ static bool PrepareImportRetargetSource(const std::string& path,const wi::scene:
     const auto failure=bridge::ConsumeWickedModelImporterFailureDiagnostic();
 
     const bool clipOnly=failure.empty() && BuildClipOnlyRig(*next);
-    if(!failure.empty() || next->armatures.GetCount()!=1 || target.armatures.GetCount()!=1 ||
+    if(!failure.empty() ||
         next->animations.GetCount()==0) {
         error=failure.empty()?"Choose an FBX with one skeleton and at least one clip.":failure;return false;
     }
-    auto names=[](const wi::scene::Scene& s,std::vector<std::string>& out) {
+    bridge::AnimationRigBones sourceRig,targetRig;
+    if (!bridge::CollectAnimationRig(*next,sourceRig,error) || !bridge::CollectAnimationRig(target,targetRig,error)) return false;
+    // The source inspection scene is private. Extend its first palette for
+    // reference-pose editing, preserving all existing mesh indices.
+    if (next->armatures.GetCount() > 1) {
+        next->armatures[0].boneCollection = sourceRig.boneCollection;
+        next->armatures[0].inverseBindMatrices = sourceRig.inverseBindMatrices;
+    }
+    auto names=[](const wi::scene::Scene& s,const auto& bones,std::vector<std::string>& out) {
         std::set<std::string> unique;
-        for(auto e:s.armatures[0].boneCollection) {
+        for(auto e:bones) {
             const auto* n=s.names.GetComponent(e);
             if(!s.transforms.Contains(e) || !n || n->name.empty() || !unique.insert(n->name).second)return false;
             out.push_back(n->name);
@@ -209,7 +232,7 @@ static bool PrepareImportRetargetSource(const std::string& path,const wi::scene:
         return !out.empty();
     };
     std::vector<std::string> sn,tn;
-    if(!names(*next,sn)||!names(target,tn)){
+    if(!names(*next,sourceRig.boneCollection,sn)||!names(target,targetRig.boneCollection,tn)){
         error="Each rig needs uniquely named joints with transforms.";return false;
     }
     (void)bridge::DisableDefaultHumanoidLookAt(*next);
@@ -223,14 +246,18 @@ static bool PrepareImportRetargetSource(const std::string& path,const wi::scene:
     const auto nativeSource=nativeRig(*next),nativeTarget=nativeRig(target);
     if(nativeSource!=wi::ecs::INVALID_ENTITY && nativeTarget!=wi::ecs::INVALID_ENTITY){
         const auto& sb=next->armatures[0].boneCollection;
-        const auto& tb=target.armatures[0].boneCollection;
+        const auto& tb=targetRig.boneCollection;
         const auto& src=*next->humanoids.GetComponent(nativeSource);
         const auto& dst=*target.humanoids.GetComponent(nativeTarget);
         std::vector<int> slots(sb.size(),-2);std::set<int> used;
+        for (size_t i=0; i<sn.size(); ++i) {
+            const auto exact=std::find(tn.begin(),tn.end(),sn[i]);
+            if (exact!=tn.end()) { slots[i]=int(exact-tn.begin()); used.insert(slots[i]); }
+        }
         for(size_t slot=0;slot<bridge::HumanoidBoneCount;++slot){
             auto a=std::find(sb.begin(),sb.end(),src.bones[slot]);
             auto b=std::find(tb.begin(),tb.end(),dst.bones[slot]);
-            if(a!=sb.end() && b!=tb.end() && used.insert(int(b-tb.begin())).second)
+            if(a!=sb.end() && b!=tb.end() && slots[a-sb.begin()]<0 && used.insert(int(b-tb.begin())).second)
                 slots[a-sb.begin()]=int(b-tb.begin());
         }
         if(!used.empty()){
@@ -246,15 +273,14 @@ static bool PrepareImportRetargetSource(const std::string& path,const wi::scene:
     const bool avatar=!companion && LoadAvatarReference(*next,fs::u8path(path));
     if(!clipOnly && !avatar)next->ResetPose(next->armatures.GetEntity(0));
     next->Update(0);
-    auto mapping=[](const wi::scene::Scene& scene){
-        const auto rig=scene.armatures.GetEntity(0);
+    auto mapping=[](const wi::scene::Scene& scene, const auto& joints){
         for(size_t i=0;i<scene.humanoids.GetCount();++i)
             if(scene.humanoids[i].IsValid())return bridge::CaptureHumanoidMapping(scene,scene.humanoids.GetEntity(i));
-        return bridge::BuildAutoHumanoidMapping(scene,rig).mapping;
+        return bridge::BuildAutoHumanoidMapping(scene,joints).mapping;
     };
-    auto srcMap=mapping(*next);
-    const auto dstMap=mapping(target);
-    const auto& srcBones=next->armatures[0].boneCollection;const auto& dstBones=target.armatures[0].boneCollection;
+    auto srcMap=mapping(*next,sourceRig.boneCollection);
+    const auto dstMap=mapping(target,targetRig.boneCollection);
+    const auto& srcBones=next->armatures[0].boneCollection;const auto& dstBones=targetRig.boneCollection;
     std::vector<int> pairs(sn.size(),-2);std::set<int> used;
     for(size_t i=0;i<sn.size();++i){
         const auto it=std::find(tn.begin(),tn.end(),sn[i]);
@@ -334,7 +360,7 @@ void StudioRenderPath::SelectRetargetBone()
     rtTargetTurn_.SetEnabled(t>=0);
     if(t>=0 && modelImportPreview_) {
         auto& scene=modelImportPreview_->InspectionScene();
-        auto e=scene.armatures[0].boneCollection[t];
+        auto e=ImportAnimationBones(scene)[t];
         for(size_t j=0;j<importBones_.size();++j)if(importBones_[j].entity==e){importBone_.SetSelected(int(j));break;}
     }
 }
@@ -434,7 +460,7 @@ bool StudioRenderPath::WriteMappedTake(bool explicitBake)
     const int selected=rtClip_.GetSelected();
     if(selected<0 || !modelImportCandidate_)return false;
     auto previous=explicitBake?std::make_shared<bridge::ModelImportCandidate>(modelImportCandidate_->CaptureBakeState()):nullptr;
-    auto takes=mappedTakes_;auto actions=modelImportActions_;
+    auto takes=mappedTakes_;auto actions=modelImportActions_;auto ranges=originalClipRanges_;
     const int priorSelection=modelImportClip_.GetSelected()-1;
     const float time=modelImportPreview_->ClipTime();
     if(!rtScene_.IsValid() || rtClip_.GetSelected()<0 || !modelImportCandidate_)return false;
@@ -450,17 +476,27 @@ bool StudioRenderPath::WriteMappedTake(bool explicitBake)
     const std::string label=rtScene_->animations.GetCount()==1?rtFile_:rtClip_.GetItemText(index);
     std::string error;
     auto& take=mappedTakes_[index];
+    const bool retainTiming = take.clip >= 0 && originalClipRanges_.count(take.clip);
+    float start=0, end=0, speed=1;
+    if(retainTiming) {
+        const auto& clip=modelImportCandidate_->PeekScene()->animations[take.clip];
+        start=clip.start; end=clip.end; speed=clip.speed;
+    }
     if(!bridge::ModelImportCandidateService().EditMappedClip(*modelImportCandidate_,*rtScene_,index,rtPairs_,rtSourcePose_,targetPose,label,error,take.clip,take.keys,mapKept_)){
         ShowStudioMessageBox(error,"Bake retargeted clip");return false;
     }
     if(take.clip<0)take.clip=int(modelImportCandidate_->Summary().animations)-1;
     const int baked=take.clip;
+    if(retainTiming) {
+        auto& clip=modelImportCandidate_->PeekMutableScene()->animations[baked];
+        clip.start=start; clip.end=end; clip.speed=speed;
+    }
     modelImportActions_.resize(modelImportCandidate_->Summary().animations,"Unassigned");
     if(!takes.count(index) || takes[index].clip<0)modelImportActions_[baked]=SuggestImportedCharacterAction(label);
     if(explicitBake){
-        MapHistory([this,previous,takes,actions,clip=priorSelection,time]() mutable {
+        MapHistory([this,previous,takes,actions,ranges,clip=priorSelection,time]() mutable {
             int current=modelImportClip_.GetSelected()-1;
-            std::swap(*modelImportCandidate_,*previous);mappedTakes_.swap(takes);modelImportActions_.swap(actions);
+            std::swap(*modelImportCandidate_,*previous);mappedTakes_.swap(takes);modelImportActions_.swap(actions);originalClipRanges_.swap(ranges);
             mapEditingClip_=false;RefreshBakedPreview(clip,time);clip=current;
         });
         importPage_=ImportPage::Actions;mapEditingClip_=false;

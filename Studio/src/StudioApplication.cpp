@@ -12,6 +12,7 @@
 #include "shaders/ShaderInterop_Renderer.h"
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
+#include "renegade/bridge/MatchingRigAnimationService.h"
 #include "StudioTheme.h"
 #include "MarkerIconOverlay.h"
 #include "CreatorAssetFrameBoundary.h"
@@ -3620,12 +3621,6 @@ namespace renegade::studio
             for (auto& step : importStep_) step.SetEnabled(selected);
             modelImportTime_.SetEnabled(selected);
             modelImportSpeed_.SetEnabled(selected);
-            modelImportAction_.SetEnabled(selected);
-            if (selected && size_t(args.iValue - 1) < modelImportActions_.size()) {
-                const std::vector<std::string> actions = {"Unassigned", "Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death"};
-                const auto found = std::find(actions.begin(), actions.end(), modelImportActions_[args.iValue - 1]);
-                modelImportAction_.SetSelected(int(found - actions.begin()));
-            }
             if (selected) {
                 const auto& clip = clips[args.iValue - 1];
                 modelImportTime_.SetRange(clip.start, std::max(clip.end, clip.start + 0.001f));
@@ -3669,21 +3664,36 @@ namespace renegade::studio
             if (modelImportPreview_) modelImportPreview_->SetSpeed(args.fValue);
         });
         modelImportPanel_.AddWidget(&modelImportSpeed_);
-        modelImportAction_.Create("Gameplay action");
-        modelImportAction_.SetPos(XMFLOAT2(160.0f, 645.0f));
-        modelImportAction_.SetSize(XMFLOAT2(350.0f, 30.0f));
-        for (const auto* action : {"Unassigned", "Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death"})
-            modelImportAction_.AddItem(action);
-        modelImportAction_.OnSelect([this](const wi::gui::EventArgs& args) {
-            const int clip = modelImportClip_.GetSelected() - 1;
-            const std::vector<std::string> actions = {"Unassigned", "Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death"};
-            if (clip >= 0 && size_t(clip) < modelImportActions_.size() && args.iValue >= 0 && size_t(args.iValue) < actions.size())
-                {
-                modelImportActions_[clip] = actions[args.iValue];
-                modelImportSummary_.SetText(CharacterIdleHint(modelImportActions_));
-            }
+        characterClips_.Create("Animation clips");
+        characterClips_.OnSelect([this](const wi::gui::EventArgs& args) {
+            if (args.iValue >= 0) modelImportClip_.SetSelected(args.iValue);
         });
-        modelImportPanel_.AddWidget(&modelImportAction_);
+        modelImportPanel_.AddWidget(&characterClips_);
+        actionPrompt_.Create("Assign selected clip to");
+        modelImportPanel_.AddWidget(&actionPrompt_);
+        const char* actions[] = {"Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death", "Unassigned"};
+        for (int i = 0; i < 8; ++i) {
+            auto& button = actionChoices_[i];
+            const std::string action = actions[i];
+            button.Create(action);
+            button.OnClick([this, action](const wi::gui::EventArgs&) {
+                const int clip = modelImportClip_.GetSelected() - 1;
+                if (clip < 0 || size_t(clip) >= modelImportActions_.size()) return;
+                modelImportActions_[clip] = action;
+                modelImportSummary_.SetText(CharacterIdleHint(modelImportActions_));
+                RefreshCharacterClips();
+            });
+            modelImportPanel_.AddWidget(&button);
+        }
+        const char* timing[] = {"Start frame", "End frame", "Speed x"};
+        for (int i = 0; i < 3; ++i) {
+            auto& field = clipTiming_[i];
+            field.Create(timing[i]);
+            field.SetDescription(std::string(timing[i]) + "  ");
+            field.SetTooltip(i == 2 ? "Saved playback multiplier (0.1 to 4)" : "Frame on the 30 fps preview timeline");
+            field.OnInputAccepted([this, i](const wi::gui::EventArgs& args) { EditClipTiming(i, args.sValue); });
+            modelImportPanel_.AddWidget(&field);
+        }
         modelImportAddAnimation_.Create("Add External Animation FBX");
         modelImportAddAnimation_.SetText("Add animation clips...");
         modelImportAddAnimation_.SetTooltip("Select one or more FBX files with Ctrl or Shift. Use Retargeting for manual overrides.");
@@ -7441,8 +7451,7 @@ namespace renegade::studio
                         modelImportRole_.SetSelected(0);modelImportTags_.SetValue("");
                         modelImportActions_.clear();
                         for(const auto& clip:modelImportPreview_->Clips())modelImportActions_.push_back(SuggestImportedCharacterAction(clip.name));
-                        modelImportAction_.SetVisible(character);
-                        modelImportAction_.SetEnabled(false);
+                        originalClipRanges_.clear();
                         modelImportAddAnimation_.SetVisible(character);
                         modelImportClip_.SetVisible(character);
                         modelImportPlay_.SetVisible(character);
