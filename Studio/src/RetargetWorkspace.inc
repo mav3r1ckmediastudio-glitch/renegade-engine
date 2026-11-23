@@ -1,4 +1,5 @@
 #include "RetargetRestAlignment.inc"
+#include "RetargetJointNames.inc"
 
 // Animation-only FBX exports can have named transforms and tracks without a skin.
 static bool BuildClipOnlyRig(wi::scene::Scene& scene)
@@ -32,6 +33,10 @@ void StudioRenderPath::CreateRetargetWorkspace()
     button(rtSourceTurn_,"Rotate source joint",[this]{RotateRetargetBone(true);});
     button(rtTargetTurn_,"Rotate target joint",[this]{RotateRetargetBone(false);});
     button(rtBake_,"Bake clip to Actions",[this]{
+        if(std::find(rtPairs_.begin(),rtPairs_.end(),-2)!=rtPairs_.end()){
+            std::replace(rtPairs_.begin(),rtPairs_.end(),-2,-1);
+            SelectRetargetBone();UpdateRetargetStatus();return;
+        }
         const auto generation=modelImportGeneration_;
         wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,generation](uint64_t){
             if(generation==modelImportGeneration_ && modelImportPanel_.IsVisible() && importPage_==ImportPage::Retarget)
@@ -96,17 +101,26 @@ void StudioRenderPath::OpenRetargetSource()
                     if(scene.humanoids[i].IsValid())return bridge::CaptureHumanoidMapping(scene,scene.humanoids.GetEntity(i));
                 return bridge::BuildAutoHumanoidMapping(scene,rig).mapping;
             };
-            const auto srcMap=mapping(*next),dstMap=mapping(target);
+            auto srcMap=mapping(*next);
+            const auto dstMap=mapping(target);
             const auto& srcBones=next->armatures[0].boneCollection;const auto& dstBones=target.armatures[0].boneCollection;
             std::vector<int> pairs(sn.size(),-2);std::set<int> used;
             for(size_t i=0;i<sn.size();++i){
                 const auto it=std::find(tn.begin(),tn.end(),sn[i]);
                 if(it!=tn.end()){pairs[i]=int(it-tn.begin());used.insert(pairs[i]);}
             }
+            SuggestNamedPairs(sn,tn,pairs,used);
             for(size_t k=0;k<bridge::HumanoidBoneCount;++k) {
                 auto a=std::find(srcBones.begin(),srcBones.end(),srcMap.bones[k]),b=std::find(dstBones.begin(),dstBones.end(),dstMap.bones[k]);
                 if(a!=srcBones.end() && b!=dstBones.end() && pairs[a-srcBones.begin()]<0 && used.insert(int(b-dstBones.begin())).second)
                     pairs[a-srcBones.begin()]=int(b-dstBones.begin());
+            }
+            // Derive alignment landmarks from the actual one-to-one suggestions.
+            for(size_t k=0;k<bridge::HumanoidBoneCount;++k){
+                auto b=std::find(dstBones.begin(),dstBones.end(),dstMap.bones[k]);
+                if(b==dstBones.end())continue;
+                auto a=std::find(pairs.begin(),pairs.end(),int(b-dstBones.begin()));
+                if(a!=pairs.end())srcMap.bones[k]=srcBones[a-pairs.begin()];
             }
             const auto& rawTarget=*modelImportCandidate_->PeekMutableScene();
             const auto result=AlignRestRigs(*next,rawTarget,srcMap,mapping(rawTarget),pairs);
@@ -151,7 +165,11 @@ void StudioRenderPath::UpdateRetargetStatus()
     const int matched=int(rtPairs_.size())-ignored-unresolved;
     rtSummary_.SetText("Source: "+rtFile_+"\n"+std::to_string(matched)+" matched   /   "+std::to_string(ignored)+" ignored   /   "+
         std::to_string(unresolved)+" unresolved\n"+std::to_string(rtTargetNames_.size()-matched)+" target-only joints keep their reference pose.\n"+rtSummary_.GetTooltip());
-    rtBake_.SetEnabled(unresolved==0 && matched>0);
+    rtBake_.SetText(unresolved ? "Ignore "+std::to_string(unresolved)+" unmatched source joints" : "Bake clip to Actions");
+    std::string extras;
+    for(size_t i=0;i<rtPairs_.size();++i)if(rtPairs_[i]==-2)extras+=(extras.empty()?"":", ")+rtSourceNames_[i];
+    rtBake_.SetTooltip(unresolved ? extras : "Bake the selected clip with this mapping.");
+    rtBake_.SetEnabled(matched>0);
 }
 
 void StudioRenderPath::RotateRetargetBone(bool source)
