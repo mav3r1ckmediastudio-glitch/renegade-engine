@@ -3632,6 +3632,7 @@ namespace renegade::studio
                 modelImportTime_.SetValue(clip.start);
                 modelImportSpeed_.SetValue(clip.speed);
             }
+            if(modelImportCandidate_)LayoutImportWorkspace();
         });
         modelImportPanel_.AddWidget(&modelImportClip_);
         modelImportPlay_.Create("Preview Play Pause");
@@ -4375,7 +4376,7 @@ namespace renegade::studio
             // receives clicks or shortcuts while a conversation is being edited.
             wi::RenderPath2D::Update(dt);
             dialogueGui_.Update(*this,dt);
-            if (modelImportPanel_.IsVisible() && modelImportPreview_ && !NavigateImportViewport() && importPage_ == ImportPage::Pose && RigEditingVisible())
+            if (modelImportPanel_.IsVisible() && modelImportPreview_ && !NavigateImportViewport() && RigEditingVisible())
                 UpdateImportRigInput();
             if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_)
             {
@@ -4387,6 +4388,11 @@ namespace renegade::studio
                 {
                     modelImportPreview_->PreUpdate();
                     modelImportPreview_->Update(dt);
+                    if(mapEditingClip_ && importPage_==ImportPage::Pose && rigDrag_==RigHandle::None &&
+                       displayedPoseTime_!=modelImportPreview_->ClipTime()){
+                        displayedPoseTime_=modelImportPreview_->ClipTime();
+                        RefreshPoseFields();
+                    }
                 }
                 wi::Resource image;
                 image.SetTexture(modelImportPreview_->GetRenderResult3D());
@@ -7356,6 +7362,7 @@ namespace renegade::studio
     #include "ImportRigWorkspace.inc"
     static XMMATRIX ImportRigToObject(const wi::scene::Scene&);
 #include "RetargetWorkspace.inc"
+#include "RetargetTable.inc"
     #include "RetargetRigOverlay.inc"
     #include "UnifiedImportWorkspace.inc"
 
@@ -7363,7 +7370,7 @@ namespace renegade::studio
     {
         ++modelImportGeneration_;
         modelImportAddAnimation_.SetEnabled(true);
-        rtScene_ = {}; rtFile_.clear(); rtPairs_.clear(); rtSourcePose_.clear();
+        mappedTakes_.clear();mapHistory_.clear();mapCursor_=0;mapEditingClip_=mapDirty_=false;mapKept_.clear();sourceScreenPoints_.clear();rtScene_ = {}; rtFile_.clear(); rtPairs_.clear(); rtSourcePose_.clear();
         rtSourceNames_.clear(); rtTargetNames_.clear();
         rtSource_.ClearItems(); rtTarget_.ClearItems(); rtClip_.ClearItems();
         importCameraDrag_ = ImportCameraDrag::None;

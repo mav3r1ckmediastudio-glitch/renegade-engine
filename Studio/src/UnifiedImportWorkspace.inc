@@ -33,7 +33,9 @@ void StudioRenderPath::CreateImportWorkspace()
         button.Create(pages[i]);
         button.OnClick([this, i](const wi::gui::EventArgs&) {
             if ((importPage_ == ImportPage::Pose || importPage_ == ImportPage::Retarget) && i != int(importPage_)) {
-                HideImportPoseMarker();
+                if(mapDirty_ && mappedTakes_.count(rtClip_.GetSelected()) && !WriteMappedTake(false))return;
+                bool keepClip=mapEditingClip_;mapEditingClip_=false;HideImportPoseMarker();
+                if(!keepClip)
                 modelImportClip_.SetSelected(modelImportClip_.GetSelected());
             }
             importPage_ = static_cast<ImportPage>(i);
@@ -82,15 +84,25 @@ void StudioRenderPath::ResizeImportWorkspace(float width, float height)
     place(importPageButtons_[5],right+2*(tabWidth+gap),86,tabWidth,28);
     place(rtOpen_,right,128,inspectorWidth,28);
     place(rtClip_,right+96,165,inspectorWidth-96,26);
-    place(rtSource_,right+96,201,inspectorWidth-96,26);
-    place(rtTarget_,right+96,237,inspectorWidth-96,26);
-    place(rtSourceTurn_,right,313,(inspectorWidth-gap)/2,28);
-    place(rtTargetTurn_,right+(inspectorWidth+gap)/2,313,(inspectorWidth-gap)/2,28);
-    place(rtSummary_,right,352,inspectorWidth,86);
-    place(rtBake_,right,446,inspectorWidth,30);
-    for(int i=0;i<3;++i)place(rtRigDegrees_[i],right+74+140*i,491,65,27);
-    place(rtRigApply_,right,529,(inspectorWidth-gap)/2,28);
-    place(rtRigReset_,right+(inspectorWidth+gap)/2,529,(inspectorWidth-gap)/2,28);
+    float half=(inspectorWidth-gap)/2;
+    place(mapSearch_,right+38,198,half-38,24);
+    place(mapPrev_,right+half+gap,198,half/2-2,24);
+    place(mapNext_,right+half*1.5f+gap,198,half/2,24);
+    place(mapSourceHeader_,right,226,half,22);
+    place(mapTargetHeader_,right+half+gap,226,half,22);
+    for(int row=0;row<MapRows;++row){
+        place(mapSourceRows_[row],right,251+row*28,half-22,25);
+        place(mapTargetRows_[row],right+half+gap,251+row*28,half,25);
+    }
+    place(mapSourceLabel_,right,394,half,24);
+    place(mapTargetLabel_,right+half+gap,394,half,24);
+    place(mapReviewExtras_,right,424,inspectorWidth,25);
+    place(rtSourceTurn_,right,492,half,26);place(rtTargetTurn_,right+half+gap,492,half,26);
+    place(rtSummary_,right,524,inspectorWidth,73);place(rtBake_,right,602,inspectorWidth,29);
+    for(int i=0;i<3;++i)place(rtRigDegrees_[i],right+74+140*i,642,65,25);
+    place(rtRigApply_,right,673,half,26);place(rtRigReset_,right+half+gap,673,half,26);
+    place(mapUndo_,right,714,half,26);place(mapRedo_,right+half+gap,714,half,26);
+    place(clipPose_,right,408,inspectorWidth,28);place(clipEditScope_,right+92,457,inspectorWidth-120,27);
     place(importFront_, right, 133, 210, 28);
     place(importFit_, right + 219, 133, 210, 28);
     place(importZoomIn_, right, 170, 210, 28);
@@ -98,7 +110,7 @@ void StudioRenderPath::ResizeImportWorkspace(float width, float height)
     place(importRigInfo_, right, 218, inspectorWidth, 90);
     place(importBone_, right + 64, 127, 366, 28);
     for (int i = 0; i < 9; ++i)
-        place(importPoseFields_[i], right + 74 + (i % 3) * 140, (importPage_==ImportPage::Retarget ? 276 : 167) + (i / 3) * 39, 65, 27);
+        place(importPoseFields_[i], right + 74 + (i % 3) * 140, (importPage_==ImportPage::Retarget ? 459 : 167) + (i / 3) * 39, 65, 27);
     place(poseInfluence_, right + 98, 392, 272, 23);
     place(poseRotate_, right, 286, 211, 28);
     place(poseSolve_, right + 219, 286, 211, 28);
@@ -185,7 +197,8 @@ void StudioRenderPath::SelectImportWorkflow(ImportWorkflow workflow)
 {
     if (!modelImportCandidate_) return;
     if ((importPage_ == ImportPage::Pose || importPage_ == ImportPage::Retarget) && modelImportPreview_) {
-        HideImportPoseMarker();
+        if(mapDirty_ && mappedTakes_.count(rtClip_.GetSelected()) && !WriteMappedTake(false))return;
+        mapEditingClip_=false;HideImportPoseMarker();
         modelImportClip_.SetSelected(modelImportClip_.GetSelected());
     }
     importWorkflow_ = workflow;
@@ -230,24 +243,38 @@ void StudioRenderPath::LayoutImportWorkspace()
     }
     importBone_.SetVisible(pose);
     poseInfluence_.SetVisible(pose);
+    if(mapEditingClip_ && pose)for(auto* b:{&poseCompare_,&poseReset_,&poseSave_,&poseLoad_})b->SetVisible(false);
     const bool rt = character && importPage_ == ImportPage::Retarget;
     for(auto& field:rtRigDegrees_)field.SetVisible(rt && rtScene_.IsValid());
     rtOpen_.SetVisible(rt); rtSummary_.SetVisible(rt);
     for (auto* b : {&rtSourceTurn_,&rtTargetTurn_,&rtRigApply_,&rtRigReset_,&rtBake_}) b->SetVisible(rt && rtScene_.IsValid());
-    for (auto* c : {&rtSource_,&rtTarget_,&rtClip_}) c->SetVisible(rt && rtScene_.IsValid());
+    rtSource_.SetVisible(false);rtTarget_.SetVisible(false);
+    bool ready=rt && rtScene_.IsValid();
+    rtClip_.SetVisible(ready);
+    mapSearch_.SetVisible(ready);mapPrev_.SetVisible(ready);mapNext_.SetVisible(ready);
+    mapSourceHeader_.SetVisible(ready);mapTargetHeader_.SetVisible(ready);
+    mapTargetLabel_.SetVisible(ready);mapSourceLabel_.SetVisible(ready);
+    for(int j=0;j<MapRows;++j){mapSourceRows_[j].SetVisible(ready && mapFirst_+j<int(mapFiltered_.size()));mapTargetRows_[j].SetVisible(mapSourceRows_[j].IsVisible());}
+    mapReviewExtras_.SetVisible(ready && std::find(rtPairs_.begin(),rtPairs_.end(),-2)!=rtPairs_.end());
+    mapUndo_.SetVisible(character && (rt||actions||pose));mapRedo_.SetVisible(mapUndo_.IsVisible());
+    mapUndo_.SetEnabled(mapCursor_>0);mapRedo_.SetEnabled(mapCursor_<mapHistory_.size());
+    clipPose_.SetVisible(actions && std::any_of(mappedTakes_.begin(),mappedTakes_.end(),[this](const auto& t){return t.second.clip>=0 && t.second.clip+1==modelImportClip_.GetSelected();}));
+    clipEditScope_.SetVisible(pose && mapEditingClip_);
+
     const float right = std::max(252.f, modelImportPanel_.GetSize().x-462.f);
     for (int j=0;j<9;++j) {
         importPoseFields_[j].SetVisible(pose || (rt && rtScene_.IsValid() && j<3));
-        if(j<3) importPoseFields_[j].SetPos({right+74+140.f*j,rt?276.f:167.f});
+        if(j<3) importPoseFields_[j].SetPos({right+74+140.f*j,rt?459.f:167.f});
     }
     for (auto* button : {&poseRotate_, &poseSolve_, &poseCompare_, &poseReset_, &poseSave_, &poseLoad_}) button->SetVisible(pose);
+    if(pose && mapEditingClip_)for(auto* b:{&poseCompare_,&poseReset_,&poseSave_,&poseLoad_})b->SetVisible(false);
     for (auto& field : importTransformFields_) field.SetVisible(model);
     importApplyTransform_.SetVisible(model);
     modelImportRole_.SetVisible(model && importWorkflow_==ImportWorkflow::Player);
     modelImportMaterial_.SetVisible(materials); modelImportMapSlot_.SetVisible(materials);
     modelImportAssignMap_.SetVisible(materials); modelImportMapInfo_.SetVisible(materials);
     modelImportWarnings_.SetVisible(materials);
-    modelImportClip_.SetVisible(actions); const bool timeline = !rt && !pose && (character || importWorkflow_ == ImportWorkflow::Animated);
+    modelImportClip_.SetVisible(actions); const bool timeline = !rt && (!pose || mapEditingClip_) && (character || importWorkflow_ == ImportWorkflow::Animated);
     modelImportPlay_.SetVisible(timeline);
     for (auto& step : importStep_) step.SetVisible(timeline);
     modelImportRestart_.SetVisible(timeline); modelImportTime_.SetVisible(timeline);

@@ -18,11 +18,12 @@ void StudioRenderPath::DrawRetargetSource(wi::graphics::CommandList cmd) const
     const auto sc=sourceBounds.getCenter(),tc=targetBounds.getCenter();
     const float offset=size.x*0.27f;
     std::map<wi::ecs::Entity,XMFLOAT3> points;
+    sourceScreenPoints_.clear();
     for(auto e:sb){
         const auto p=src.transforms.GetComponent(e)->GetPosition();
         const auto oriented=XMVector3TransformCoord(XMLoadFloat3(&p),sourceToPreview);
         XMFLOAT3 world;XMStoreFloat3(&world,(oriented-XMLoadFloat3(&sc))+XMLoadFloat3(&tc));
-        auto projected=ProjectImportPoint(world);projected.x-=offset;points.emplace(e,projected);
+        auto projected=ProjectImportPoint(world);projected.x-=offset;points.emplace(e,projected);sourceScreenPoints_.push_back(projected);
     }
     const float dpi=GetPhysicalWidth()/std::max(1.f,GetLogicalWidth());
     const wi::graphics::Rect clip={long(viewport.x*dpi),long(viewport.y*dpi),long((viewport.x+size.x)*dpi),long((viewport.y+size.y)*dpi)};

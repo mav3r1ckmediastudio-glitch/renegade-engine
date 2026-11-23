@@ -1,3 +1,6 @@
+#include <set>
+#include <functional>
+#include "renegade/bridge/ModelImportCandidateService.h"
 #pragma once
 #include "DialogueEditorWindow.h"
 #include "StudioUiPolicy.h"
@@ -1867,6 +1870,36 @@ namespace renegade::studio
         std::array<wi::gui::TextInputField,3> rtRigDegrees_;
         wi::gui::Button rtRigApply_,rtRigReset_;
         wi::ecs::Entity rtOrientationRoot_ = wi::ecs::INVALID_ENTITY;
+        static constexpr int MapRows=5;
+        std::array<wi::gui::ComboBox,MapRows> mapSourceRows_;
+        std::array<wi::gui::Button,MapRows> mapTargetRows_;
+        wi::gui::Button mapPrev_,mapNext_,mapUndo_,mapRedo_,mapReviewExtras_,clipPose_;
+        wi::gui::Label mapSourceHeader_,mapTargetHeader_;
+        wi::gui::TextInputField mapSearch_,mapSourceLabel_,mapTargetLabel_;
+        wi::gui::ComboBox clipEditScope_;
+        std::vector<std::string> sourceLabels_,targetLabels_;
+        std::vector<int> mapFiltered_;
+        std::set<int> mapKept_;
+        int mapFirst_=0,mapTargetIndex_=-1;
+        bool mapEditingClip_=false,mapReplaying_=false,mapDirty_=false;
+        struct EditableTake {
+            int clip=-1;
+            std::vector<bridge::RetargetPoseKey> keys;
+        };
+        std::map<int,EditableTake> mappedTakes_;
+        std::vector<std::function<void()>> mapHistory_;
+        std::size_t mapCursor_=0;
+        void MapHistory(std::function<void()>);
+        void ReplayMapEdit(bool redo);
+        void SelectMapTarget(int target);
+        void RefreshMapRows();
+        void AssignMapSource(int target,int source);
+        void RefreshBakedPreview(int clip,float time);
+        bool WriteMappedTake(bool explicitBake);
+        std::array<float,3> appliedRigAngles_{};
+        float displayedPoseTime_ = -FLT_MAX;
+        mutable std::vector<XMFLOAT3> sourceScreenPoints_;
+
     };
 
     // The Physics Lab shares the live Scene render path and the Inspector dock.

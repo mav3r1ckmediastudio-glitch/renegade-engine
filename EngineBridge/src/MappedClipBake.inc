@@ -118,6 +118,14 @@ bool ModelImportCandidateService::AppendMappedClip(ModelImportCandidate& candida
     const std::map<std::string,XMFLOAT4>& sourcePose, const std::map<std::string,XMFLOAT4>& targetPose,
     const std::string& label, std::string& error) const
 {
+    return EditMappedClip(candidate,source,clipIndex,targets,sourcePose,targetPose,label,error,-1,{});
+}
+
+bool ModelImportCandidateService::EditMappedClip(ModelImportCandidate& candidate,
+    const wi::scene::Scene& source, size_t clipIndex, const std::vector<int>& targets,
+    const std::map<std::string,XMFLOAT4>& sourcePose, const std::map<std::string,XMFLOAT4>& targetPose,
+    const std::string& label, std::string& error, int replaceIndex, const std::vector<RetargetPoseKey>& edits) const
+{
     using namespace wi::scene;
     using Entity = wi::ecs::Entity;
     if (!candidate.IsReady() || candidate.scene_->armatures.GetCount()!=1 ||
@@ -235,6 +243,49 @@ bool ModelImportCandidateService::AppendMappedClip(ModelImportCandidate& candida
         auto& ch=merged.channels.emplace_back();ch.target=e;ch.path=Channel::Path::ROTATION;
         ch.samplerIndex=int(merged.samplers.size());merged.samplers.emplace_back().data=dataEntity;
     }
+    for(const auto& edit:edits){
+        const auto it=std::find_if(tb.begin(),tb.end(),[&](Entity e){
+            const auto* n=dst.names.GetComponent(e);return n && n->name==edit.bone;});
+        if(it==tb.end()){error="Edited target bone is missing.";return false;}
+        auto channel=std::find_if(merged.channels.begin(),merged.channels.end(),[&](const auto& c){
+            return c.target==*it && c.path==Channel::Path::ROTATION;});
+        if(channel==merged.channels.end()){
+            const auto id=wi::ecs::CreateEntity();auto& data=dst.animation_datas.Create(id);
+            const auto q=dst.transforms.GetComponent(*it)->rotation_local;
+            data.keyframe_times={clip.start};data.keyframe_data={q.x,q.y,q.z,q.w};
+            auto& c=merged.channels.emplace_back();c.path=Channel::Path::ROTATION;c.target=*it;
+            c.samplerIndex=int(merged.samplers.size());merged.samplers.emplace_back().data=id;
+            channel=std::prev(merged.channels.end());
+        }
+        auto& sampler=merged.samplers[channel->samplerIndex];
+        auto& data=*dst.animation_datas.GetComponent(sampler.data);
+        auto& times=data.keyframe_times;auto& values=data.keyframe_data;
+        if(times.empty() || values.size()!=4*times.size()){error="Unsupported rotation curve.";return false;}
+        const auto q=edit.rotation;
+        if(edit.wholeClip){times={clip.start};values={q.x,q.y,q.z,q.w};continue;}
+        auto sample=[&](float t){
+            size_t hi=std::lower_bound(times.begin(),times.end(),t)-times.begin();
+            auto at=[&](size_t j){return XMVectorSet(values[4*j],values[4*j+1],values[4*j+2],values[4*j+3]);};
+            if(hi==0)return at(0);
+            if(hi==times.size())return at(hi-1);
+            if(times[hi]==t)return at(hi);
+            if(sampler.mode==AnimationComponent::AnimationSampler::STEP)return at(hi-1);
+            return XMQuaternionSlerp(at(hi-1),at(hi),(t-times[hi-1])/(times[hi]-times[hi-1]));
+        };
+        auto put=[&](float t,FXMVECTOR value){
+            auto at=std::lower_bound(times.begin(),times.end(),t);
+            size_t j=at-times.begin();
+            if(at==times.end() || *at!=t){times.insert(at,t);values.insert(values.begin()+4*j,4,0.f);}
+            XMFLOAT4 v;XMStoreFloat4(&v,value);
+            values[4*j]=v.x;values[4*j+1]=v.y;values[4*j+2]=v.z;values[4*j+3]=v.w;
+        };
+        float t=std::clamp(edit.time,clip.start,clip.end);
+        float left=std::max(clip.start,t-1.f/30),right=std::min(clip.end,t+1.f/30);
+        const auto l=sample(left),r=sample(right);
+        if(left<t)put(left,l);
+        if(right>t)put(right,r);
+        put(t,XMLoadFloat4(&q));
+    }
     dst.humanoids.Clear();
     const Entity result=wi::ecs::CreateEntity();
     dst.animations.Create(result)=std::move(merged);
@@ -250,10 +301,27 @@ bool ModelImportCandidateService::AppendMappedClip(ModelImportCandidate& candida
     const size_t first=prepared->animations.GetCount();
     std::vector<Entity> created;
     if(!AppendMatchingRigAnimationScene(*prepared,dst,created,error))return false;
-    candidate.dependencies_.reserve(candidate.dependencies_.size()+1);
-    candidate.externalAnimations_.reserve(candidate.externalAnimations_.size()+1);
-    candidate.externalAnimations_.push_back({candidate.dependencies_.size(),first,1,true});
-    candidate.dependencies_.push_back(std::move(snapshot));
+    if(replaceIndex>=0){
+        auto existing=std::find_if(candidate.externalAnimations_.begin(),candidate.externalAnimations_.end(),
+            [&](const auto& entry){return entry.firstAnimationIndex==size_t(replaceIndex) && entry.animationCount==1;});
+        if(existing==candidate.externalAnimations_.end() || size_t(replaceIndex)>=first){
+            error="The original baked clip is unavailable.";return false;
+        }
+        auto& original=prepared->animations[replaceIndex];
+        // Matching-rig import allocates independent sampler data for each baked clip.
+        std::set<Entity> oldKeys;
+        for(const auto& sampler:original.samplers)oldKeys.insert(sampler.data);
+        original=std::move(*prepared->animations.GetComponent(created.front()));
+        prepared->Entity_Remove(created.front());
+        for(auto e:oldKeys)prepared->animation_datas.Remove(e);
+        snapshot.retainedRelativePath=candidate.dependencies_[existing->dependencyIndex].retainedRelativePath;
+        candidate.dependencies_[existing->dependencyIndex]=std::move(snapshot);
+    }else{
+        candidate.dependencies_.reserve(candidate.dependencies_.size()+1);
+        candidate.externalAnimations_.reserve(candidate.externalAnimations_.size()+1);
+        candidate.externalAnimations_.push_back({candidate.dependencies_.size(),first,1,true});
+        candidate.dependencies_.push_back(std::move(snapshot));
+    }
     candidate.scene_=std::move(prepared);
     candidate.summary_=ImportService::Summarize(*candidate.scene_);
     candidate.evidence_=ImportService::SummarizeModelEvidence(*candidate.scene_);

@@ -47,6 +47,15 @@ namespace renegade::bridge
         ModelImportCandidate(const ModelImportCandidate&) = delete;
         ModelImportCandidate& operator=(const ModelImportCandidate&) = delete;
 
+        // Mapped-clip baking replaces the scene atomically. Keep its previous
+        // scene and retained sources available for importer-local Undo.
+        ModelImportCandidate CaptureBakeState() const {
+            ModelImportCandidate state;
+            state.scene_=scene_;state.sourcePath_=sourcePath_;state.error_=error_;state.warnings_=warnings_;
+            state.sourceBytes_=sourceBytes_;state.sourceFingerprint_=sourceFingerprint_;state.sourceFormat_=sourceFormat_;
+            state.dependencies_=dependencies_;state.externalAnimations_=externalAnimations_;
+            state.summary_=summary_;state.evidence_=evidence_;return state;
+        }
         [[nodiscard]] bool IsReady() const noexcept
         {
             return scene_.IsValid() && error_.empty();
@@ -89,12 +98,22 @@ namespace renegade::bridge
         ImportedModelEvidence evidence_;
     };
 
+    struct RetargetPoseKey {
+        std::string bone;
+        float time = 0;
+        XMFLOAT4 rotation{};
+        bool wholeClip = false;
+    };
+
     class ModelImportCandidateService
     {
     public:
         bool AppendMappedClip(ModelImportCandidate&, const wi::scene::Scene&, size_t clipIndex,
             const std::vector<int>& targets, const std::map<std::string,XMFLOAT4>& sourcePose,
             const std::map<std::string,XMFLOAT4>& targetPose, const std::string& label, std::string& error) const;
+        bool EditMappedClip(ModelImportCandidate&, const wi::scene::Scene&, size_t clipIndex,
+            const std::vector<int>& targets, const std::map<std::string,XMFLOAT4>& sourcePose,
+            const std::map<std::string,XMFLOAT4>& targetPose, const std::string& label, std::string& error, int replaceIndex, const std::vector<RetargetPoseKey>& edits) const;
         // Failure leaves the candidate unchanged. Only baked native clips join it.
         [[nodiscard]] bool AppendExternalAnimations(ModelImportCandidate& candidate,
             const std::string& sourcePath, std::string& error) const;

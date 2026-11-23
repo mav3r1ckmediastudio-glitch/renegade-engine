@@ -3,7 +3,12 @@ void StudioRenderPath::CreateImportRigTools()
 {
     const auto button = [this](wi::gui::Button& widget, const char* label, auto callback) {
         widget.Create(label);
-        widget.OnClick([callback](const wi::gui::EventArgs&) { callback(); });
+        widget.OnClick([this,callback](const wi::gui::EventArgs&) {
+            auto generation=modelImportGeneration_;
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,generation,callback](uint64_t){
+                if(modelImportPanel_.IsVisible() && generation==modelImportGeneration_)callback();
+            });
+        });
         modelImportPanel_.AddWidget(&widget);
     };
     button(importFront_, "Front view", [this]{ if (modelImportPreview_) modelImportPreview_->SetView(0, 0); });
@@ -31,7 +36,10 @@ void StudioRenderPath::CreateImportRigTools()
     button(poseCompare_, "Show original", [this]{ ApplyReferencePose(!comparingPose_); RefreshPoseFields(); });
     button(poseReset_, "Reset selected bone", [this]{
         const int i = importBone_.GetSelected();
-        if (i >= 0 && size_t(i) < importBones_.size()) importPoseRotations_.erase(importBones_[i].path);
+        if(i<0 || size_t(i)>=importBones_.size() || !importPoseRotations_.count(importBones_[i].path))return;
+        auto old=importPoseRotations_;
+        MapHistory([this,old]() mutable {importPoseRotations_.swap(old);if(importPage_==ImportPage::Pose || importPage_==ImportPage::Retarget)ApplyReferencePose(false);});
+        mapDirty_=true;importPoseRotations_.erase(importBones_[i].path);
         ApplyReferencePose(false); RefreshPoseFields();
     });
     button(poseSave_, "Save reference pose...", [this]{ ImportPoseFile(true); });
@@ -54,7 +62,8 @@ void StudioRenderPath::EnterImportPose()
         importBone_.AddItem(label);
         if (label == "hand_l" || label == "LeftHand") initial = int(i);
     }
-    ApplyReferencePose(false);
+    if(!mapEditingClip_)ApplyReferencePose(false);
+    else {comparingPose_=false;modelImportPreview_->Scrub(modelImportPreview_->ClipTime());}
     if (!importBones_.empty()) importBone_.SetSelected(initial);
 }
 
@@ -121,6 +130,7 @@ void StudioRenderPath::ApplyPoseEdit(bool solve)
         }
     }
     auto& scene = modelImportPreview_->InspectionScene();
+    auto previousPose=importPoseRotations_;
     const auto& tip = importBones_[i];
     if (!solve) {
         auto& t = *scene.transforms.GetComponent(tip.entity);
@@ -182,7 +192,25 @@ void StudioRenderPath::ApplyPoseEdit(bool solve)
         mix(root, originalRoot);
         mix(mid, originalMiddle);
     }
-    ApplyReferencePose(false);
+    if(mapEditingClip_){
+        const int take=rtClip_.GetSelected();auto& keys=mappedTakes_.at(take).keys;auto old=keys;
+        for(const auto& b:importBones_){
+            auto edited=importPoseRotations_.find(b.path);
+            if(edited==importPoseRotations_.end())continue;
+            auto prior=previousPose.find(b.path);
+            if(prior!=previousPose.end() && std::memcmp(&prior->second,&edited->second,sizeof(XMFLOAT4))==0)continue;
+            auto* name=scene.names.GetComponent(b.entity);
+            if(name)keys.push_back({name->name,modelImportPreview_->ClipTime(),edited->second,clipEditScope_.GetSelected()==1});
+        }
+        importPoseRotations_.swap(previousPose);
+        if(!WriteMappedTake(false)){keys.swap(old);return;}
+        MapHistory([this,take,old]() mutable {mappedTakes_.at(take).keys.swap(old);});
+        if(size_t(i)<importBones_.size())importBone_.SetSelected(i);
+        LayoutImportWorkspace();
+    }else{
+        MapHistory([this,previousPose]() mutable {importPoseRotations_.swap(previousPose);if(importPage_==ImportPage::Pose || importPage_==ImportPage::Retarget)ApplyReferencePose(false);});
+        mapDirty_=true;ApplyReferencePose(false);
+    }
     RefreshPoseFields();
 }
 

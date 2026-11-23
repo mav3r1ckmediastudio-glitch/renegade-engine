@@ -48,6 +48,9 @@ static XMMATRIX ImportRigToObject(const wi::scene::Scene& scene) {
     return XMMatrixIdentity();
 }
 
+static XMFLOAT3 TransformRigPoint(XMFLOAT3 point,FXMMATRIX matrix){
+    XMFLOAT3 result;XMStoreFloat3(&result,XMVector3TransformCoord(XMLoadFloat3(&point),matrix));return result;
+}
 void StudioRenderPath::DrawImportRig(wi::graphics::CommandList cmd) const
 {
     const auto pos=modelImportPreviewImage_.GetPos(), size=modelImportPreviewImage_.GetSize();
@@ -89,7 +92,7 @@ void StudioRenderPath::DrawImportRig(wi::graphics::CommandList cmd) const
     }
     if(importPage_==ImportPage::Pose && !comparingPose_ && points.count(tip) && points.count(mid) && points.count(parent(mid))) {
         for(int i=0;i<2;++i) {
-            const auto handle=ProjectImportPoint(ImportPosePoint(i?6:3));
+            const auto handle=ProjectImportPoint(TransformRigPoint(ImportPosePoint(i?6:3),rigToObject));
             if(!visible(handle))continue;
             const auto color=i?wi::Color(116,195,255,255):wi::Color(255,155,55,255);
             const auto j=points.at(i?mid:tip);
@@ -116,14 +119,15 @@ void StudioRenderPath::UpdateImportRigInput()
 {
     const auto mouse=wi::input::GetPointer();
     const auto pos=modelImportPreviewImage_.GetPos(), size=modelImportPreviewImage_.GetSize();
+    const auto mapping=ImportRigToObject(modelImportPreview_->InspectionScene());
     if(rigDrag_!=RigHandle::None) {
         if(!wi::input::Down(wi::input::MOUSE_BUTTON_LEFT)) {
-            rigDrag_=RigHandle::None;dragOriginalPose_.clear();return;
+            rigDrag_=RigHandle::None;dragOriginalPose_.clear();ApplyPoseEdit(true);return;
         }
-        const auto anchor=ProjectImportPoint(dragAnchor_);
+        const auto anchor=ProjectImportPoint(TransformRigPoint(dragAnchor_,mapping));
         const float dx=std::clamp(mouse.x,pos.x,pos.x+size.x)-dragStart_.x;
         const float dy=std::clamp(mouse.y,pos.y,pos.y+size.y)-dragStart_.y;
-        const auto moved=UnprojectImportPoint({anchor.x+dx,anchor.y+dy,anchor.z});
+        const auto moved=TransformRigPoint(UnprojectImportPoint({anchor.x+dx,anchor.y+dy,anchor.z}),XMMatrixInverse(nullptr,mapping));
         if(!std::isfinite(moved.x)||!std::isfinite(moved.y)||!std::isfinite(moved.z))return;
         auto target=dragTarget_,pole=dragPole_;
         (rigDrag_==RigHandle::Target?target:pole)=moved;
@@ -131,18 +135,17 @@ void StudioRenderPath::UpdateImportRigInput()
             const float v[]={target.x,target.y,target.z,pole.x,pole.y,pole.z};
             for(int i=0;i<6;++i)importPoseFields_[3+i].SetValue(v[i]);
         };
-        importPoseRotations_=dragOriginalPose_;ApplyReferencePose(false);fields();
-        ApplyPoseEdit(true);fields();return;
+        fields();return;
     }
     if(mouse.x<pos.x || mouse.x>pos.x+size.x || mouse.y<pos.y || mouse.y>pos.y+size.y ||
         !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))return;
     auto& scene=modelImportPreview_->InspectionScene();
     const auto distance=[&](XMFLOAT3 world) {
-        const auto p=ProjectImportPoint(world);
+        const auto p=ProjectImportPoint(TransformRigPoint(world,mapping));
         return p.z<0||p.z>1?1e10f:std::hypot(mouse.x-p.x,mouse.y-p.y);
     };
     const int selected=importBone_.GetSelected();
-    if(!comparingPose_ && selected>=0 && size_t(selected)<importBones_.size()) {
+    if(importPage_==ImportPage::Pose && !comparingPose_ && selected>=0 && size_t(selected)<importBones_.size()) {
         const auto parent=[&](wi::ecs::Entity e){auto* h=scene.hierarchy.GetComponent(e);return h?h->parentID:wi::ecs::INVALID_ENTITY;};
         const auto mid=parent(importBones_[selected].entity), root=parent(mid);
         const auto isBone=[&](wi::ecs::Entity e){return std::any_of(importBones_.begin(),importBones_.end(),[e](const auto& b){return b.entity==e;});};
@@ -160,5 +163,17 @@ void StudioRenderPath::UpdateImportRigInput()
         const float d=distance(t->GetPosition());
         if(d<best){closest=int(i);best=d;}
     }
-    if(closest>=0)importBone_.SetSelected(closest);
+    if(importPage_==ImportPage::Retarget && rtScene_.IsValid()){
+        int src=-1;
+        for(int j=0;j<int(sourceScreenPoints_.size());++j){
+            auto p=sourceScreenPoints_[j];float d=std::hypot(p.x-mouse.x,p.y-mouse.y);
+            if(p.z>=0 && p.z<=1 && d<best){best=d;src=j;}
+        }
+        if(src>=0){AssignMapSource(mapTargetIndex_,src);return;}
+        if(closest>=0){
+            auto& bones=scene.armatures[0].boneCollection;
+            auto it=std::find(bones.begin(),bones.end(),importBones_[closest].entity);
+            if(it!=bones.end()){int t=int(it-bones.begin());mapSearch_.SetValue("");mapFirst_=t/MapRows*MapRows;SelectMapTarget(t);}
+        }
+    }else if(closest>=0)importBone_.SetSelected(closest);
 }
