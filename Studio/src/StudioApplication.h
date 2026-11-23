@@ -1873,7 +1873,7 @@ namespace renegade::studio
         static constexpr int MapRows=5;
         std::array<wi::gui::ComboBox,MapRows> mapSourceRows_;
         std::array<wi::gui::Button,MapRows> mapTargetRows_;
-        wi::gui::Button mapPrev_,mapNext_,mapUndo_,mapRedo_,mapReviewExtras_,clipPose_;
+        wi::gui::Button mapPrev_,mapNext_,mapUndo_,mapRedo_,mapReviewExtras_,mapHoldBranch_,clipPose_;
         wi::gui::Label mapSourceHeader_,mapTargetHeader_;
         wi::gui::TextInputField mapSearch_,mapSourceLabel_,mapTargetLabel_;
         wi::gui::ComboBox clipEditScope_;

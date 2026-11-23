@@ -124,7 +124,8 @@ bool ModelImportCandidateService::AppendMappedClip(ModelImportCandidate& candida
 bool ModelImportCandidateService::EditMappedClip(ModelImportCandidate& candidate,
     const wi::scene::Scene& source, size_t clipIndex, const std::vector<int>& targets,
     const std::map<std::string,XMFLOAT4>& sourcePose, const std::map<std::string,XMFLOAT4>& targetPose,
-    const std::string& label, std::string& error, int replaceIndex, const std::vector<RetargetPoseKey>& edits) const
+    const std::string& label, std::string& error, int replaceIndex, const std::vector<RetargetPoseKey>& edits,
+    const std::set<int>& heldTargets) const
 {
     using namespace wi::scene;
     using Entity = wi::ecs::Entity;
@@ -232,6 +233,33 @@ bool ModelImportCandidateService::EditMappedClip(ModelImportCandidate& candidate
         bakeSlots();
     }
     if(merged.channels.empty()) {error="No mapped bone has an animated track in this clip.";return false;}
+    // Explicit holds must overwrite the preceding clip's local pose on playback.
+    for (int index : heldTargets) {
+        if (index < 0 || size_t(index) >= tb.size() || used.count(index)) {
+            error = "A held target is missing or also has a source assignment.";
+            return false;
+        }
+        const auto bone = tb[index];
+        const auto* transform = dst.transforms.GetComponent(bone);
+        if (!transform) { error = "Held target has no reference transform."; return false; }
+        const auto key = [&](Channel::Path path, std::initializer_list<float> values) {
+            const auto id = wi::ecs::CreateEntity();
+            auto& data = dst.animation_datas.Create(id);
+            data.keyframe_times = {clip.start};
+            data.keyframe_data.assign(values.begin(), values.end());
+            auto& channel = merged.channels.emplace_back();
+            channel.target = bone;
+            channel.path = path;
+            channel.samplerIndex = int(merged.samplers.size());
+            merged.samplers.emplace_back().data = id;
+        };
+        const auto& p = transform->translation_local;
+        const auto& q = transform->rotation_local;
+        const auto& s = transform->scale_local;
+        key(Channel::Path::TRANSLATION, {p.x,p.y,p.z});
+        key(Channel::Path::ROTATION, {q.x,q.y,q.z,q.w});
+        key(Channel::Path::SCALE, {s.x,s.y,s.z});
+    }
     for(auto e:tb) {
         const auto* name=dst.names.GetComponent(e);
         if(!name || !targetPose.count(name->name))continue;

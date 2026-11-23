@@ -96,7 +96,8 @@ void StudioRenderPath::ResizeImportWorkspace(float width, float height)
     }
     place(mapSourceLabel_,right,394,half,24);
     place(mapTargetLabel_,right+half+gap,394,half,24);
-    place(mapReviewExtras_,right,424,inspectorWidth,25);
+    place(mapReviewExtras_,right,424,half,25);
+    place(mapHoldBranch_,right+half+gap,424,half,25);
     place(rtSourceTurn_,right,492,half,26);place(rtTargetTurn_,right+half+gap,492,half,26);
     place(rtSummary_,right,524,inspectorWidth,73);place(rtBake_,right,602,inspectorWidth,29);
     for(int i=0;i<3;++i)place(rtRigDegrees_[i],right+74+140*i,642,65,25);
@@ -256,6 +257,7 @@ void StudioRenderPath::LayoutImportWorkspace()
     mapSourceHeader_.SetVisible(ready);mapTargetHeader_.SetVisible(ready);
     mapTargetLabel_.SetVisible(ready);mapSourceLabel_.SetVisible(ready);
     for(int j=0;j<MapRows;++j){mapSourceRows_[j].SetVisible(ready && mapFirst_+j<int(mapFiltered_.size()));mapTargetRows_[j].SetVisible(mapSourceRows_[j].IsVisible());}
+    mapHoldBranch_.SetVisible(ready);
     mapReviewExtras_.SetVisible(ready && std::find(rtPairs_.begin(),rtPairs_.end(),-2)!=rtPairs_.end());
     mapUndo_.SetVisible(character && (rt||actions||pose));mapRedo_.SetVisible(mapUndo_.IsVisible());
     mapUndo_.SetEnabled(mapCursor_>0);mapRedo_.SetEnabled(mapCursor_<mapHistory_.size());

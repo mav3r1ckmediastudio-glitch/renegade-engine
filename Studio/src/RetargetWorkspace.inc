@@ -70,6 +70,29 @@ void StudioRenderPath::CreateRetargetWorkspace()
     button(mapNext_,"Next",[this]{mapFirst_+=MapRows;RefreshMapRows();});
     button(mapUndo_,"Undo",[this]{ReplayMapEdit(false);});
     button(mapRedo_,"Redo",[this]{ReplayMapEdit(true);});
+    button(mapHoldBranch_, "Hold unmatched branch", [this] {
+        const auto& scene = modelImportPreview_->InspectionScene();
+        const auto& bones = scene.armatures[0].boneCollection;
+        if (mapTargetIndex_ < 0 || size_t(mapTargetIndex_) >= bones.size()) return;
+        const auto root = bones[mapTargetIndex_];
+        const std::set<int> mapped(rtPairs_.begin(), rtPairs_.end());
+        auto previous = mapKept_;
+        for (int i = 0; i < int(bones.size()); ++i) {
+            if (mapped.count(i)) continue;
+            auto joint = bones[i];
+            while (joint != root) {
+                const auto* parent = scene.hierarchy.GetComponent(joint);
+                if (!parent) break;
+                joint = parent->parentID;
+            }
+            if (joint == root) mapKept_.insert(i);
+        }
+        if (previous == mapKept_) return;
+        MapHistory([this, previous]() mutable { mapKept_.swap(previous); });
+        mapDirty_ = true;
+        RefreshMapRows();
+    });
+    mapHoldBranch_.SetTooltip("Bake the reference pose on each unmatched target in the selected branch. Mapped joints keep their animation.");
     button(mapReviewExtras_,"Review unused source",[this]{
         const auto it=std::find(rtPairs_.begin(),rtPairs_.end(),-2);
         if(it==rtPairs_.end())return;
@@ -297,7 +320,7 @@ void StudioRenderPath::UpdateRetargetStatus()
     const int ignored=int(std::count(rtPairs_.begin(),rtPairs_.end(),-1));
     const int matched=int(rtPairs_.size())-ignored-unresolved;
     rtSummary_.SetText("Source: "+rtFile_+"\n"+std::to_string(matched)+" matched   /   "+std::to_string(ignored)+" ignored   /   "+
-        std::to_string(unresolved)+" unresolved\n"+std::to_string(rtTargetNames_.size()-matched)+" target-only joints keep their reference pose.\n"+rtSummary_.GetTooltip());
+        std::to_string(unresolved)+" unresolved\n"+std::to_string(mapKept_.size())+" held in reference pose / "+std::to_string(rtTargetNames_.size()-matched-mapKept_.size())+" unassigned targets.\n"+rtSummary_.GetTooltip());
     rtBake_.SetText(unresolved ? "Review "+std::to_string(unresolved)+" unresolved joints" : "Bake clip to Actions");
     std::string extras;
     for(size_t i=0;i<rtPairs_.size();++i)if(rtPairs_[i]==-2)extras+=(extras.empty()?"":", ")+rtSourceNames_[i];
@@ -394,7 +417,7 @@ bool StudioRenderPath::WriteMappedTake(bool explicitBake)
     const std::string label=rtScene_->animations.GetCount()==1?rtFile_:rtClip_.GetItemText(index);
     std::string error;
     auto& take=mappedTakes_[index];
-    if(!bridge::ModelImportCandidateService().EditMappedClip(*modelImportCandidate_,*rtScene_,index,rtPairs_,rtSourcePose_,targetPose,label,error,take.clip,take.keys)){
+    if(!bridge::ModelImportCandidateService().EditMappedClip(*modelImportCandidate_,*rtScene_,index,rtPairs_,rtSourcePose_,targetPose,label,error,take.clip,take.keys,mapKept_)){
         ShowStudioMessageBox(error,"Bake retargeted clip");return false;
     }
     if(take.clip<0)take.clip=int(modelImportCandidate_->Summary().animations)-1;
