@@ -101,6 +101,8 @@ void StudioRenderPath::CreateRetargetWorkspace()
     mapSourceLabel_.OnInputAccepted([rename](const wi::gui::EventArgs&){rename(true);});
     mapTargetLabel_.OnInputAccepted([rename](const wi::gui::EventArgs&){rename(false);});
     clipEditScope_.Create("Apply pose to");clipEditScope_.AddItem("This frame");clipEditScope_.AddItem("Hold for whole clip");
+    clipEditScope_.AddItem("Offset whole clip");
+    clipEditScope_.SetTooltip("Offset adds your local rotation to each frame, keeping the animated swing. Hold locks the selected joint rotation.");
     modelImportPanel_.AddWidget(&clipEditScope_);
     button(clipPose_,"Edit baked pose / IK",[this]{
         for(const auto& item:mappedTakes_)if(item.second.clip+1==modelImportClip_.GetSelected())rtClip_.SetSelectedWithoutCallback(item.first);

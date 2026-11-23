@@ -262,7 +262,17 @@ bool ModelImportCandidateService::EditMappedClip(ModelImportCandidate& candidate
         auto& times=data.keyframe_times;auto& values=data.keyframe_data;
         if(times.empty() || values.size()!=4*times.size()){error="Unsupported rotation curve.";return false;}
         const auto q=edit.rotation;
-        if(edit.wholeClip){times={clip.start};values={q.x,q.y,q.z,q.w};continue;}
+        if(edit.scope==RetargetPoseScope::Offset){
+            const auto offset=XMLoadFloat4(&q);
+            for(size_t j=0;j<values.size();j+=4){
+                const auto local=XMVectorSet(values[j],values[j+1],values[j+2],values[j+3]);
+                XMFLOAT4 result;
+                XMStoreFloat4(&result,XMQuaternionNormalize(XMQuaternionMultiply(offset,local)));
+                values[j]=result.x;values[j+1]=result.y;values[j+2]=result.z;values[j+3]=result.w;
+            }
+            continue;
+        }
+        if(edit.scope==RetargetPoseScope::Hold){times={clip.start};values={q.x,q.y,q.z,q.w};continue;}
         auto sample=[&](float t){
             size_t hi=std::lower_bound(times.begin(),times.end(),t)-times.begin();
             auto at=[&](size_t j){return XMVectorSet(values[4*j],values[4*j+1],values[4*j+2],values[4*j+3]);};

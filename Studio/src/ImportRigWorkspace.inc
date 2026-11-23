@@ -132,8 +132,10 @@ void StudioRenderPath::ApplyPoseEdit(bool solve)
     auto& scene = modelImportPreview_->InspectionScene();
     auto previousPose=importPoseRotations_;
     const auto& tip = importBones_[i];
+    std::map<wi::ecs::Entity,XMFLOAT4> before;
     if (!solve) {
         auto& t = *scene.transforms.GetComponent(tip.entity);
+        before.emplace(tip.entity,t.rotation_local);
         const auto increment = XMQuaternionRotationRollPitchYaw(XMConvertToRadians(v[0]), XMConvertToRadians(v[1]), XMConvertToRadians(v[2]));
         XMStoreFloat4(&t.rotation_local, XMQuaternionNormalize(XMQuaternionMultiply(increment, XMLoadFloat4(&t.rotation_local))));
         importPoseRotations_[tip.path] = t.rotation_local;
@@ -182,6 +184,7 @@ void StudioRenderPath::ApplyPoseEdit(bool solve)
         };
         const auto originalRoot = scene.transforms.GetComponent(root)->rotation_local;
         const auto originalMiddle = scene.transforms.GetComponent(mid)->rotation_local;
+        before.emplace(root,originalRoot);before.emplace(mid,originalMiddle);
         aim(root, mid, elbow);
         aim(mid, tip.entity, a+axis*d);
         const auto mix = [&](wi::ecs::Entity joint, const XMFLOAT4& before) {
@@ -194,13 +197,18 @@ void StudioRenderPath::ApplyPoseEdit(bool solve)
     }
     if(mapEditingClip_){
         const int take=rtClip_.GetSelected();auto& keys=mappedTakes_.at(take).keys;auto old=keys;
+        const auto scope=static_cast<bridge::RetargetPoseScope>(clipEditScope_.GetSelected());
         for(const auto& b:importBones_){
-            auto edited=importPoseRotations_.find(b.path);
-            if(edited==importPoseRotations_.end())continue;
-            auto prior=previousPose.find(b.path);
-            if(prior!=previousPose.end() && std::memcmp(&prior->second,&edited->second,sizeof(XMFLOAT4))==0)continue;
-            auto* name=scene.names.GetComponent(b.entity);
-            if(name)keys.push_back({name->name,modelImportPreview_->ClipTime(),edited->second,clipEditScope_.GetSelected()==1});
+            const auto input=before.find(b.entity);
+            if(input==before.end())continue;
+            auto rotation=importPoseRotations_.at(b.path);
+            const auto original=XMQuaternionNormalize(XMLoadFloat4(&input->second));
+            const auto edited=XMQuaternionNormalize(XMLoadFloat4(&rotation));
+            if(scope==bridge::RetargetPoseScope::Offset){
+                XMStoreFloat4(&rotation,XMQuaternionNormalize(XMQuaternionMultiply(edited,XMQuaternionInverse(original))));
+            }
+            const auto* name=scene.names.GetComponent(b.entity);
+            if(name)keys.push_back({name->name,modelImportPreview_->ClipTime(),rotation,scope});
         }
         importPoseRotations_.swap(previousPose);
         if(!WriteMappedTake(false)){keys.swap(old);return;}

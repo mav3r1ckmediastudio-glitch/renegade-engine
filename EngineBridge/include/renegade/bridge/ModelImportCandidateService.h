@@ -98,11 +98,12 @@ namespace renegade::bridge
         ImportedModelEvidence evidence_;
     };
 
+    enum class RetargetPoseScope { Frame, Hold, Offset };
     struct RetargetPoseKey {
         std::string bone;
         float time = 0;
         XMFLOAT4 rotation{};
-        bool wholeClip = false;
+        RetargetPoseScope scope = RetargetPoseScope::Frame;
     };
 
     class ModelImportCandidateService
