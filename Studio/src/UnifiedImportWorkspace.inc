@@ -1,6 +1,21 @@
 // Member implementations for the native Model Importer.
 void StudioRenderPath::CreateImportWorkspace()
 {
+    importSide_.Create("Side view");
+    importSide_.OnClick([this](const wi::gui::EventArgs&) {
+        if (modelImportPreview_) modelImportPreview_->SetView(XM_PIDIV2, 0.f);
+    });
+    modelImportPanel_.AddWidget(&importSide_);
+    for (int i = 0; i < 2; ++i) {
+        auto& step = importStep_[i];
+        step.Create(i ? "Next frame" : "Prev frame");
+        step.SetTooltip("Step the preview by 1/30 second");
+        step.OnClick([this, i](const wi::gui::EventArgs&) {
+            if (modelImportPreview_ && modelImportPreview_->HasClip())
+                modelImportPreview_->Scrub(modelImportPreview_->ClipTime() + (i ? 1.f : -1.f) / 30.f);
+        });
+        modelImportPanel_.AddWidget(&step);
+    }
     const char* workflows[] = {"Static Model", "Animated Model", "Character", "Player Arms / Weapon"};
     for (int i = 0; i < 4; ++i) {
         auto& button = importWorkflowButtons_[i];
@@ -42,8 +57,8 @@ void StudioRenderPath::ResizeImportWorkspace(float width, float height)
     const float right = std::max(252.f, width - inspectorWidth - 32);
     const float viewWidth = right - 2 * pad;
     const float footer = std::max(430.f, height - 147);
-    const float viewHeight = footer - 148;
-    const float half = (viewWidth - gap) / 2;
+    const float viewHeight = footer - 225;
+    const float third = (viewWidth - 2 * gap) / 3;
     const auto place = [](auto& widget, float x, float y, float w, float h) {
         widget.SetPos({x, y});
         widget.SetSize({w, h});
@@ -58,18 +73,22 @@ void StudioRenderPath::ResizeImportWorkspace(float width, float height)
         place(importTransformFields_[i], right + 73 + 141 * (i % 3), 108 + 48 * (i / 3), 63, 28);
     place(importApplyTransform_, right + 183, 204, 247, 28);
     place(modelImportPreviewImage_, pad, 52, viewWidth, viewHeight);
-    place(modelImportRotateLeft_, pad, 60 + viewHeight, half, 28);
-    place(modelImportRotateRight_, pad + half + gap, 60 + viewHeight, half, 28);
-    place(modelImportSummary_, pad, 96 + viewHeight, viewWidth, 42);
+    place(modelImportRotateLeft_, pad, 60 + viewHeight, third, 28);
+    place(modelImportRotateRight_, pad + third + gap, 60 + viewHeight, third, 28);
+    place(importSide_, pad + 2 * (third + gap), 60 + viewHeight, third, 28);
+    place(modelImportSummary_, pad, 174 + viewHeight, viewWidth, 42);
     place(modelImportMaterial_, right + 92, 102, 338, 28);
     place(modelImportMapSlot_, right + 92, 141, 338, 28);
     place(modelImportAssignMap_, right, 181, inspectorWidth, 32);
     place(modelImportMapInfo_, right, 225, inspectorWidth, 99);
     place(modelImportWarnings_, right, 332, inspectorWidth, std::min(180.f, footer - 340));
     place(modelImportClip_, right + 86, 107, 344, 30);
-    place(modelImportPlay_, right, 151, 211, 30);
-    place(modelImportRestart_, right + 219, 151, 211, 30);
-    place(modelImportTime_, right + 155, 198, 210, 24);
+    const float transport = (viewWidth - 3 * gap) / 4;
+    place(modelImportPlay_, pad, 96 + viewHeight, transport, 28);
+    place(modelImportRestart_, pad + transport + gap, 96 + viewHeight, transport, 28);
+    place(importStep_[0], pad + 2 * (transport + gap), 96 + viewHeight, transport, 28);
+    place(importStep_[1], pad + 3 * (transport + gap), 96 + viewHeight, transport, 28);
+    place(modelImportTime_, pad + 150, 137 + viewHeight, std::max(30.f, viewWidth - 225), 23);
     place(modelImportSpeed_, right + 155, 241, 210, 24);
     place(modelImportAction_, right + 138, 286, 292, 30);
     place(modelImportAddAnimation_, right, 335, inspectorWidth, 32);
@@ -119,8 +138,10 @@ void StudioRenderPath::LayoutImportWorkspace()
     modelImportMaterial_.SetVisible(materials); modelImportMapSlot_.SetVisible(materials);
     modelImportAssignMap_.SetVisible(materials); modelImportMapInfo_.SetVisible(materials);
     modelImportWarnings_.SetVisible(materials);
-    modelImportClip_.SetVisible(actions); modelImportPlay_.SetVisible(actions);
-    modelImportRestart_.SetVisible(actions); modelImportTime_.SetVisible(actions);
+    modelImportClip_.SetVisible(actions); const bool timeline = character || importWorkflow_ == ImportWorkflow::Animated;
+    modelImportPlay_.SetVisible(timeline);
+    for (auto& step : importStep_) step.SetVisible(timeline);
+    modelImportRestart_.SetVisible(timeline); modelImportTime_.SetVisible(timeline);
     modelImportSpeed_.SetVisible(actions); modelImportAction_.SetVisible(actions && character);
     modelImportAddAnimation_.SetVisible(actions && character);
     modelImportName_.SetVisible(chosen); modelImportTags_.SetVisible(chosen);
@@ -154,6 +175,7 @@ void StudioRenderPath::ApplyImportTransform()
     const int clip=modelImportClip_.GetSelected();
     const float time=modelImportPreview_->ClipTime();
     modelImportPreviewImage_.SetImage({});
+    preview->AddImportFloor();
     modelImportPreview_=std::move(preview);
     importTransform_=correction;
     modelImportClip_.SetSelected(clip);

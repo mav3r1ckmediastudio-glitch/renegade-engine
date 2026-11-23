@@ -216,6 +216,44 @@ namespace renegade::studio
         renderedFrames_ = 0;
     }
 
+    void ModelImportPreview::AddImportFloor()
+    {
+        // This scene is a private copy. Keep the zero plane independent of the
+        // model correction so moving the model shows actual ground clearance.
+        const auto floor = scene->Entity_CreateObject("Import preview floor");
+        const auto meshID = wi::ecs::CreateEntity();
+        auto& mesh = scene->meshes.Create(meshID);
+        const float spacing = std::pow(10.f, std::floor(std::log10(std::max(radius_, 0.001f)))) * 0.5f;
+        for (int shade = 0; shade < 2; ++shade)
+        {
+            const auto materialID = wi::ecs::CreateEntity();
+            auto& material = scene->materials.Create(materialID);
+            material.shaderType = wi::scene::MaterialComponent::SHADERTYPE_UNLIT;
+            material.SetDoubleSided(true);
+            const float tone = shade ? 0.095f : 0.075f;
+            material.SetBaseColor({tone, tone + 0.004f, tone + 0.01f, 1});
+            wi::scene::MeshComponent::MeshSubset subset;
+            subset.materialID = materialID;
+            subset.indexOffset = unsigned(mesh.indices.size());
+            for (int z = -20; z < 20; ++z)
+                for (int x = -20; x < 20; ++x)
+                {
+                    if (((x + z + 40) % 2) != shade) continue;
+                    const unsigned first = unsigned(mesh.vertex_positions.size());
+                    const float l = x * spacing, r = (x + 1) * spacing;
+                    const float n = z * spacing, f = (z + 1) * spacing;
+                    mesh.vertex_positions.insert(mesh.vertex_positions.end(), {{l,0,n},{l,0,f},{r,0,f},{r,0,n}});
+                    mesh.indices.insert(mesh.indices.end(), {first,first+1,first+2,first,first+2,first+3});
+                }
+            subset.indexCount = unsigned(mesh.indices.size()) - subset.indexOffset;
+            mesh.subsets.push_back(subset);
+        }
+        mesh.vertex_normals.resize(mesh.vertex_positions.size(), {0,1,0});
+        mesh.CreateRenderData();
+        scene->objects.GetComponent(floor)->meshID = meshID;
+        renderedFrames_ = 0;
+    }
+
     void ModelImportPreview::FitModel()
     {
         radius_ = sourceRadius_ * appearanceScale_; zoom_ = 1; pan_ = {};

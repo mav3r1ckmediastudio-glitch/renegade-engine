@@ -28,7 +28,7 @@ require_text(workspace "place(modelImportPreviewImage_, pad, 52, viewWidth, view
 require_text(importer "modelImportPreview_->SetViewportSize(" "native resolution preview")
 require_text(workspace "modelImportMaterial_.SetVisible(materials);" "material inspection")
 require_text(workspace "modelImportClip_.SetVisible(actions);" "clip inspection")
-require_text(workspace "modelImportTime_.SetVisible(actions);" "scrub control")
+require_text(workspace "modelImportTime_.SetVisible(timeline);" "scrub control")
 require_text(workspace "modelImportAction_.SetVisible(actions && character);" "gameplay assignment")
 require_text(workspace "modelImportFolder_.SetVisible(chosen);" "explicit destination")
 require_text(workspace "ApplyImportTransform();" "editable import transform")

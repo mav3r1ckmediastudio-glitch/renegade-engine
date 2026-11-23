@@ -1,3 +1,7 @@
+# Ground reference and walk inspection | DESIGN
+
+The rebuilt local Studio has a private checker floor at world Y=0, side view, and a persistent animation transport below the viewport for Character and Animated workflows. Previous/next step in 1/30 s review increments. Opened the combat creature, applied the rotation and height correction, loaded ThirdPersonWalk and inspected the stride in side view. Screenshot WalkFloor.jpg in UnifiedImportReview. Both character and layout source contracts passed. Advanced, Edit Pose/IK and Retargeting UI remain pending.
+
 # Combat creature foot playback | DESIGN review
 
 Owner confirmed the feet are now correct in the local runtime. The recording showed rapid toe rotation during ThirdPersonIdle. Restoring the nonserialized foot placement flag alone did not fix it. Wicked creates ankle solvers on active mapped characters even when terrain foot placement is off. For Renegade-owned controllers the runtime now reserves disabled IK components on otherwise unconfigured feet; existing author-defined IK is retained. Scene reopen also restores the controller setting. The rebuilt Runtime is installed beside the review Studio. CW04 regression covers reopen, runtime startup and authored IK preservation. Treat this idle playback as the accepted baseline.

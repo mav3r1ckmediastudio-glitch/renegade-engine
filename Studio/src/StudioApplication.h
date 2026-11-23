@@ -1808,6 +1808,7 @@ namespace renegade::studio
         std::array<wi::gui::Button, 3> importPageButtons_;
         std::array<wi::gui::TextInputField, 7> importTransformFields_;
         wi::gui::Button importApplyTransform_;
+        wi::gui::Button importSide_, importStep_[2];
         bridge::CreatorModelTransformRecipe importTransform_;
         void CreateImportWorkspace();
         void SelectImportWorkflow(ImportWorkflow workflow);

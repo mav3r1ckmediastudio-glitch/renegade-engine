@@ -3581,6 +3581,7 @@ namespace renegade::studio
             const bool selected = args.iValue > 0 && size_t(args.iValue) <= clips.size();
             modelImportPlay_.SetEnabled(selected);
             modelImportRestart_.SetEnabled(selected);
+            for (auto& step : importStep_) step.SetEnabled(selected);
             modelImportTime_.SetEnabled(selected);
             modelImportSpeed_.SetEnabled(selected);
             modelImportAction_.SetEnabled(selected);
@@ -7353,6 +7354,7 @@ namespace renegade::studio
                             ShowStudioMessageBox(previewError, "Model Preview");
                             return;
                         }
+                        preview->AddImportFloor();
                         modelImportPreview_ = std::move(preview);
                         modelImportFolderChoices_.ClearItems();
                         std::vector<std::string> folders={"Content","Content/Models","Content/Characters","Content/Player/Arms","Content/Player/Weapons"};
@@ -7526,6 +7528,7 @@ namespace renegade::studio
                         ShowStudioMessageBox(error, "Animation Preview");
                         return;
                     }
+                    preview->AddImportFloor();
                     modelImportPreview_ = std::move(preview);
                     modelImportPreviewImage_.SetImage({});
                     modelImportCommit_.SetEnabled(false);
