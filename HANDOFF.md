@@ -1,3 +1,21 @@
+# Grass clump coverage correction, 23 November 2026
+
+Implementation 7b977746f7bc59bd851b7779c8a9d7605bb12349 on feature/foliage-512 follows the owner's observation that even the previous very dense grass had larger gaps than Wicked. This is a separate visual trial; production painting defaults remain unchanged.
+
+Inspection at source alpha >= 128 gave mean aspect-weighted visible sprite area about 0.0875 for the previous set and 0.1344 for the normalized Wicked set. This is a source-mask proxy, not a measured screen-coverage percentage. Previous grass also had tall narrow bases, while Wicked includes wider low patches. Raising tuft count alone did not correct the silhouette distribution.
+
+Added assets/foliage/review/renegade_coverage_grass_atlas_v2.png, its visible-root crop sidecar and exact artwork prompt. Six 512-square cells form a 1024x1536 atlas. Several small crowns distribute narrow blades across each broad base. SHA-256 d863e86a0a4cf17fdc714982f7778fd29b3efd9bebe53aaea6af56534a28c562. The new source-mask proxy is about 0.2825. The PNG is unmodified; native alpha cutoff 0.5 remains necessary to reject its low-alpha halo. No claim is made for alpha blending or distant mip quality.
+
+The generated sheet was lighter than v1. Coverage mode applies only to the v2 material a linear RGB base multiplier of (0.670896, 0.660796, 0.778305), derived from the average linear colour ratio of alpha-qualified source pixels. Other plots retain white multipliers. This calibrates the new artwork towards the earlier accepted colour, rather than silently changing its PNG.
+
+Tools/HairGrassAtlasReview.cpp now accepts --coverage previous-atlas.png after its four normal arguments. Four 72-square-metre patches run left to right: Wicked 1800 at X-12, previous v1 3600 at X-4, v2 1800 at X4 and v2 3600 at X12. Common height/width, two segments, two cards, randomness and seed remain unchanged. Counts are asserted after cold reopen; six new rectangles are checked. The default and --dense modes remain available.
+
+Windows x64 Release compile, link, save/cold reopen and four native captures passed. The author printed REBUILT_HAIR_ATLAS_REVIEW_PASS and the harness printed HAIR_ATLAS_BUILD_AND_NATIVE_REVIEW_PASS. Native close-ups show much fuller coverage at 1800 and 3600 than the previous narrow-clump trial. The owner must still judge appearance and coverage.
+
+Reproduction is under E:\RenegadeAssets\HairGrassRebuild: prepare-coverage-review.py, build-coverage.py/.cmd, build-coverage.log, response files and open-coverage-review.py. The playable project is CoverageGrassReview/CoverageGrassReview.renegade. Captures hair-plot-0 through hair-plot-3 and the receipt are in Content/Scenes. Old projects and PNGs remain available.
+
+The fresh standalone DX12 Runtime PID 8036 opened Grass Coverage Review at 1920x1009. Focused player capture CoverageGrassReview-Focused.jpg shows the player inside the revised 1800 patch and a 75 FPS overlay. Live diagnostics had 1430 submitted frames, unpaused, X3.39 Z3.90 after starting at X4 Z-3, demonstrating advancing frames and movement. This is a spot observation, not an isolated GPU cost or whole-level benchmark. The preceding review Runtime was closed; importer Studio was preserved. No merge, push or production rollout occurred.
+
 # Open grass atlas and density review, 23 November 2026
 
 Implementation `d3dcadd` on `feature/foliage-512` adds `Tools/HairGrassAtlasReview.cpp` and the original trial PNG, crop metadata and README in `assets/foliage/review`. The owner said the revised artwork looks better than Wicked's original and requested very dense coverage. Treat this as artwork direction approval; density judgement and production integration are still pending.
