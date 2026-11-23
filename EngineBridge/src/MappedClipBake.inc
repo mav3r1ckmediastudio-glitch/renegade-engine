@@ -20,6 +20,99 @@ static void CopyBakeRig(const wi::scene::Scene& from, wi::scene::Scene& to)
     for (auto bone : from.armatures[0].boneCollection) copyChain(bone);
 }
 
+// Preserve the motion between a mapped joint and its nearest mapped ancestor.
+// An unmatched parent may carry all pelvis translation and facing rotation.
+static bool FoldAnimatedParents(wi::scene::Scene& scene, wi::scene::AnimationComponent& clip,
+    const std::set<wi::ecs::Entity>& mapped, std::string& error)
+{
+    using namespace wi::scene;
+    using Entity=wi::ecs::Entity;
+    using Channel=AnimationComponent::AnimationChannel;
+    using Path=Channel::Path;
+    struct Chain {
+        Entity bone;
+        std::vector<Entity> parents;
+        XMFLOAT4X4 inverseRest;
+        AnimationDataComponent keys[3];
+    };
+    std::set<Entity> animated, affected, inputs;
+    for(const auto& ch:clip.channels)animated.insert(ch.target);
+    std::vector<Chain> chains;
+    for(auto bone:mapped){
+        Chain chain{};chain.bone=bone;
+        auto rest=XMMatrixIdentity();
+        bool moving=false;
+        for(auto h=scene.hierarchy.GetComponent(bone);h;h=scene.hierarchy.GetComponent(h->parentID)){
+            auto e=h->parentID;
+            if(mapped.count(e))break;
+            auto* t=scene.transforms.GetComponent(e);
+            if(!t)break;
+            chain.parents.push_back(e);rest=rest*t->GetLocalMatrix();
+            moving=moving || animated.count(e);
+        }
+        if(!moving)continue;
+        if(std::abs(XMVectorGetX(XMMatrixDeterminant(rest)))<1e-20f){error="Singular animated parent transform.";return false;}
+        XMStoreFloat4x4(&chain.inverseRest,XMMatrixInverse(nullptr,rest));
+        affected.insert(bone);inputs.insert(bone);
+        inputs.insert(chain.parents.begin(),chain.parents.end());chains.push_back(std::move(chain));
+    }
+    if(chains.empty())return true;
+    std::set<float> times{clip.start,clip.end};
+    for(const auto& ch:clip.channels){
+        if(!inputs.count(ch.target))continue;
+        const auto& sampler=clip.samplers[ch.samplerIndex];
+        for(auto t:scene.animation_datas.GetComponent(sampler.data)->keyframe_times){
+            if(t<clip.start || t>clip.end)continue;
+            times.insert(t);
+            if(sampler.mode==AnimationComponent::AnimationSampler::STEP && t>clip.start)
+                times.insert(std::nextafter(t,clip.start));
+        }
+    }
+    std::vector<float> knots(times.begin(),times.end());
+    for(size_t i=1;i<knots.size();++i){
+        const int subdivisions=int(std::ceil((knots[i]-knots[i-1])*60.f));
+        for(int j=1;j<subdivisions;++j)times.insert(knots[i-1]+(knots[i]-knots[i-1])*float(j)/subdivisions);
+    }
+    std::vector<TransformComponent> reference;
+    for(size_t i=0;i<scene.transforms.GetCount();++i)reference.push_back(scene.transforms[i]);
+    clip.Pause();clip.amount=1;clip.RootMotionOff();
+    for(float time:times){
+        clip.timer=time;clip.last_update_time=-std::numeric_limits<float>::max();scene.Update(0);
+        for(auto& chain:chains){
+            auto m=scene.transforms.GetComponent(chain.bone)->GetLocalMatrix();
+            for(auto e:chain.parents)m=m*scene.transforms.GetComponent(e)->GetLocalMatrix();
+            XMVECTOR scale,rotation,translation;
+            if(!XMMatrixDecompose(&scale,&rotation,&translation,m*XMLoadFloat4x4(&chain.inverseRest))){
+                error="Animated parent chain cannot be represented by local scale, rotation and translation.";return false;
+            }
+            const XMVECTOR values[]={translation,rotation,scale};
+            for(int k=0;k<3;++k){
+                auto& data=chain.keys[k];XMFLOAT4 value;XMStoreFloat4(&value,values[k]);
+                if(k==1 && data.keyframe_data.size()>=4){
+                    const auto* prev=data.keyframe_data.data()+data.keyframe_data.size()-4;
+                    if(prev[0]*value.x+prev[1]*value.y+prev[2]*value.z+prev[3]*value.w<0)
+                        XMStoreFloat4(&value,-values[k]);
+                }
+                data.keyframe_times.push_back(time);
+                for(int j=0;j<(k==1?4:3);++j)data.keyframe_data.push_back((&value.x)[j]);
+            }
+        }
+    }
+    for(size_t i=0;i<reference.size();++i)scene.transforms[i]=reference[i];
+    clip.channels.erase(std::remove_if(clip.channels.begin(),clip.channels.end(),
+        [&](const Channel& ch){return affected.count(ch.target)>0;}),clip.channels.end());
+    for(auto& chain:chains){
+        const Path paths[]={Path::TRANSLATION,Path::ROTATION,Path::SCALE};
+        for(int k=0;k<3;++k){
+            const auto id=wi::ecs::CreateEntity();
+            scene.animation_datas.Create(id)=std::move(chain.keys[k]);
+            auto& ch=clip.channels.emplace_back();ch.target=chain.bone;ch.path=paths[k];
+            ch.samplerIndex=int(clip.samplers.size());clip.samplers.emplace_back().data=id;
+        }
+    }
+    return true;
+}
+
 bool ModelImportCandidateService::AppendMappedClip(ModelImportCandidate& candidate,
     const wi::scene::Scene& source, size_t clipIndex, const std::vector<int>& targets,
     const std::map<std::string,XMFLOAT4>& sourcePose, const std::map<std::string,XMFLOAT4>& targetPose,
@@ -81,6 +174,9 @@ bool ModelImportCandidateService::AppendMappedClip(ModelImportCandidate& candida
         }
         pairs.emplace_back(sb[i],tb[t]);
     }
+    std::set<Entity> mapped;
+    for(const auto& pair:pairs)mapped.insert(pair.first);
+    if(!FoldAnimatedParents(src,input,mapped,error))return false;
     const auto rig=dst.armatures.GetEntity(0);
     auto& sh=src.humanoids.Create(src.armatures.GetEntity(0));
     dst.humanoids.Create(rig);
