@@ -1,3 +1,7 @@
+# Animation-only FBX source | DESIGN review
+
+The desktop importer shortcut now launches RenegadeStudioClipRigs.exe. In Character > Retargeting, opened Desktop/GameDev/Animations/Goblin_Club_Attack01.fbx, baked 67 pairs to SK_Creature_01, scrubbed the two-second clip, assigned Attack and saved Content/Characters/goblinattackcreature.rasset in the review project. One target-only joint retained its reference pose. The meshless source overlay appeared sideways; inspect its display basis separately. This clip was reviewed in Actions only.
+
 # Character retargeting and full-viewport library save | DESIGN review
 
 Open the Renegade - Unified Model Importer desktop shortcut (RenegadeStudioMappedImport.exe). Level Editor > Add > Import Model > choose a character FBX > Character > Retargeting > Open source rig and clips. The amber skeleton shows the source beside the target mesh and cyan rig. Source and target local reference rotations can be edited separately. Suggestions use unique names and humanoid roles. Manual overrides are one-to-one. Unresolved source joints block baking until paired or ignored. Target-only joints retain their local reference pose. Bake clip to Actions, scrub, assign an action and Add to Library. The retained native target-rig snapshot replays by named skeleton topology and inverse binds. The editable mapping session is transient. The review supports single-armature FBX sources with named bones and linear or stepped skeletal tracks.

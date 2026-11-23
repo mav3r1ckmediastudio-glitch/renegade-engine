@@ -1,3 +1,26 @@
+// Animation-only FBX exports can have named transforms and tracks without a skin.
+static bool BuildClipOnlyRig(wi::scene::Scene& scene)
+{
+    if(scene.armatures.GetCount() || !scene.animations.GetCount() || scene.objects.GetCount())return false;
+    std::set<wi::ecs::Entity> joints;
+    for(size_t i=0;i<scene.animations.GetCount();++i)
+        for(const auto& channel:scene.animations[i].channels)
+            if(scene.transforms.Contains(channel.target) && scene.names.Contains(channel.target))
+                joints.insert(channel.target);
+    if(joints.empty())return false;
+    const auto root=wi::ecs::CreateEntity();
+    scene.transforms.Create(root);
+    auto& arm=scene.armatures.Create(root);
+    for(size_t i=0;i<scene.transforms.GetCount();++i){
+        const auto bone=scene.transforms.GetEntity(i);
+        if(!joints.count(bone))continue;
+        const auto world=scene.transforms[i].GetLocalMatrix()*scene.ComputeParentMatrixRecursive(bone);
+        XMFLOAT4X4 inverse;XMStoreFloat4x4(&inverse,XMMatrixInverse(nullptr,world));
+        arm.boneCollection.push_back(bone);arm.inverseBindMatrices.push_back(inverse);
+    }
+    return true;
+}
+
 void StudioRenderPath::CreateRetargetWorkspace()
 {
     const auto button=[this](wi::gui::Button& b,const char* label,auto action) {
@@ -41,6 +64,7 @@ void StudioRenderPath::OpenRetargetSource()
             ImportModel_FBX(path,*next);
             const auto failure=bridge::ConsumeWickedModelImporterFailureDiagnostic();
             auto& target=modelImportPreview_->InspectionScene();
+            const bool clipOnly=failure.empty() && BuildClipOnlyRig(*next);
             if(!failure.empty() || next->armatures.GetCount()!=1 || target.armatures.GetCount()!=1 ||
                 next->animations.GetCount()==0) {
                 ShowStudioMessageBox(failure.empty()?"Choose an FBX with one skeleton and at least one clip.":failure,"Retarget source");return;
@@ -61,7 +85,8 @@ void StudioRenderPath::OpenRetargetSource()
             (void)bridge::DisableDefaultHumanoidLookAt(*next);
             bridge::PauseImportedModelAnimations(*next);
             for(size_t i=0;i<next->animations.GetCount();++i)next->animations[i].amount=0;
-            next->ResetPose(next->armatures.GetEntity(0));next->Update(0);
+            if(!clipOnly)next->ResetPose(next->armatures.GetEntity(0));
+            next->Update(0);
             auto mapping=[](const wi::scene::Scene& scene){
                 const auto rig=scene.armatures.GetEntity(0);
                 for(size_t i=0;i<scene.humanoids.GetCount();++i)
