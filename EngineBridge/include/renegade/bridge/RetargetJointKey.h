@@ -11,6 +11,13 @@ inline std::string RetargetJointKey(std::string name)
     const auto ns=name.find_last_of(":|");
     if(ns!=std::string::npos)name.erase(0,ns+1);
     for(auto& c:name)c=char(std::tolower(static_cast<unsigned char>(c)));
+    // Exporters use these characters interchangeably between side and bone tokens.
+    for (char& c : name) {
+        if (std::isspace(static_cast<unsigned char>(c)) || c == '.' || c == '-') c = '_';
+    }
+    const auto first=name.find_first_not_of('_');
+    if(first==std::string::npos)return {};
+    name=name.substr(first,name.find_last_not_of('_')-first+1);
     // Biped accepts an arbitrary instance number and several export separators.
     if(name.rfind("bip",0)==0 && name.size()>3 && std::isdigit(static_cast<unsigned char>(name[3]))) {
         size_t end=3;
@@ -28,6 +35,10 @@ inline std::string RetargetJointKey(std::string name)
     else if(name.rfind("right",0)==0){side="r";name.erase(0,5);}
     else if(name.size()>2 && (name[0]=='l'||name[0]=='r') && (name[1]==' '||name[1]=='_')){
         side=name.substr(0,1);name.erase(0,2);
+    }else if(name.size()>5 && name.compare(name.size()-5,5,"_left")==0){
+        side="l";name.resize(name.size()-5);
+    }else if(name.size()>6 && name.compare(name.size()-6,6,"_right")==0){
+        side="r";name.resize(name.size()-6);
     }else if(name.size()>2 && name[name.size()-2]=='_' && (name.back()=='r'||name.back()=='l')){
         side=name.substr(name.size()-1);name.resize(name.size()-2);
     }
