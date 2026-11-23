@@ -8,6 +8,7 @@
 #define UFBX_REAL_TYPE float
 #include <ufbx.h>
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <exception>
 #include <fstream>
@@ -38,6 +39,48 @@ namespace
         return std::mismatch(root.begin(), root.end(), path.begin(), path.end()).first == root.end();
     }
     std::string String(ufbx_string value) { return std::string(value.data, value.length); }
+    bool RepairInvalidSkinWeights(wi::scene::Scene& scene, std::vector<std::string>& warnings,
+        std::string& error)
+    {
+        for (size_t i = 0; i < scene.meshes.GetCount(); ++i)
+        {
+            auto& mesh = scene.meshes[i];
+            size_t repaired = 0;
+            for (size_t v = 0; v < mesh.vertex_boneweights.size(); ++v)
+            {
+                auto& primary = mesh.vertex_boneweights[v];
+                auto* secondary = v < mesh.vertex_boneweights2.size() ? &mesh.vertex_boneweights2[v] : nullptr;
+                float* weights[] = { &primary.x, &primary.y, &primary.z, &primary.w,
+                    secondary ? &secondary->x : nullptr, secondary ? &secondary->y : nullptr,
+                    secondary ? &secondary->z : nullptr, secondary ? &secondary->w : nullptr };
+                bool invalid = false;
+                double total = 0;
+                for (auto* weight : weights)
+                {
+                    if (!weight) continue;
+                    if (!std::isfinite(*weight) || *weight < 0) invalid = true;
+                    else total += *weight;
+                }
+                if (!invalid) continue;
+                if (total == 0)
+                {
+                    error = "Mesh " + std::to_string(i + 1) + ", vertex " + std::to_string(v) +
+                        " has invalid skin weights and no usable bone influence. Repair the weights in the source model.";
+                    return false;
+                }
+                for (auto* weight : weights)
+                    if (weight) *weight = std::isfinite(*weight) && *weight > 0 ? float(*weight / total) : 0;
+                ++repaired;
+            }
+            if (repaired)
+            {
+                mesh.CreateRenderData();
+                warnings.push_back("Mesh " + std::to_string(i + 1) + ": recovered skin weights on " +
+                    std::to_string(repaired) + " vertices using their remaining bone influences.");
+            }
+        }
+        return true;
+    }
     bool SnapshotFbxTextures(const fs::path& source,
         std::vector<renegade::bridge::ModelImportDependency>& dependencies,
         std::string& error, std::vector<std::string>& warnings, const std::set<std::string>* required = nullptr)
@@ -336,6 +379,11 @@ namespace renegade::bridge
                 ImportModel_FBX(candidate.sourcePath_, *candidate.scene_);
             else if (candidate.sourceFormat_ == ModelSourceFormat::Obj) ImportModel_OBJ(candidate.sourcePath_, *candidate.scene_);
             else ImportModel_GLTF(candidate.sourcePath_, *candidate.scene_);
+            if (!RepairInvalidSkinWeights(*candidate.scene_, candidate.warnings_, candidate.error_))
+            {
+                candidate.scene_.reset();
+                return candidate;
+            }
             // Unique cache keys force the preview to use the exact snapshotted
             // bytes, even when a previous import cached the original filename.
             for (size_t i = 0; i < candidate.scene_->materials.GetCount(); ++i)
@@ -416,7 +464,9 @@ namespace renegade::bridge
         candidate.evidence_ = ImportService::SummarizeModelEvidence(*candidate.scene_);
         if (candidate.summary_.meshes == 0 || candidate.summary_.objects == 0)
         {
-            candidate.error_ = "Model conversion produced no mesh and object content.";
+            candidate.error_ = candidate.summary_.meshes == 0 && candidate.summary_.animations != 0
+                ? "This file contains animation clips and no mesh. Open the character model first, then use Add Animation FBX."
+                : "Model conversion produced no mesh and object content.";
             candidate.scene_.reset();
         }
         return candidate;
