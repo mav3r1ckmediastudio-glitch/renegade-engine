@@ -1,3 +1,6 @@
+# Owner approval of three grass presentations, 23 November 2026
+
+The owner reviewed the live Grass Coverage Review and said all three Renegade grasses look good. This approves the visual direction for previous narrow-clump grass at 3600 tufts and revised broad-clump grass at 1800 and 3600 tufts. Keep both atlas styles and the three review presentations available. These are two textures at three style/density combinations, all using native hair rendering. This does not establish a whole-level performance gate, distance/mip acceptance, production palette integration, merge permission or distribution approval. The implementation and native evidence are recorded below. The active playable review and unrelated importer Studio were left untouched.
 # Grass clump coverage correction, 23 November 2026
 
 Implementation 7b977746f7bc59bd851b7779c8a9d7605bb12349 on feature/foliage-512 follows the owner's observation that even the previous very dense grass had larger gaps than Wicked. This is a separate visual trial; production painting defaults remain unchanged.
