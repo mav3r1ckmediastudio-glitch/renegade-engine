@@ -158,6 +158,7 @@ namespace
 
 namespace renegade::bridge
 {
+#include "MappedClipBake.inc"
     bool ModelImportCandidateService::AppendExternalAnimations(
         ModelImportCandidate& candidate, const std::string& sourcePath,
         std::string& error) const

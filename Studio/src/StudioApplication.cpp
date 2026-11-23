@@ -42,6 +42,8 @@
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/FlightVehicleService.h"
 #include "renegade/bridge/HumanoidRetargetService.h"
+#include "renegade/bridge/ModelImporterFailureAdapter.h"
+#include <ModelImporter.h>
 #include "renegade/bridge/AnimationService.h"
 #include <algorithm>
 #include <array>
@@ -4338,7 +4340,7 @@ namespace renegade::studio
             // receives clicks or shortcuts while a conversation is being edited.
             wi::RenderPath2D::Update(dt);
             dialogueGui_.Update(*this,dt);
-            if (modelImportPanel_.IsVisible() && modelImportPreview_ && !NavigateImportViewport() && RigEditingVisible())
+            if (modelImportPanel_.IsVisible() && modelImportPreview_ && !NavigateImportViewport() && importPage_ == ImportPage::Pose && RigEditingVisible())
                 UpdateImportRigInput();
             if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_)
             {
@@ -4898,6 +4900,7 @@ namespace renegade::studio
             if(dialogueFrameSuspended_) {
                 dialogueGui_.Render(*this,cmd);
                 if (RigEditingVisible()) DrawImportRig(cmd);
+                if (modelImportPanel_.IsVisible() && importPage_==ImportPage::Retarget && rtScene_.IsValid()) DrawRetargetSource(cmd);
             }
             else ComposeUiForeground(cmd);
             return;
@@ -7316,11 +7319,16 @@ namespace renegade::studio
 
     #include "ImportRigOverlay.inc"
     #include "ImportRigWorkspace.inc"
+    #include "RetargetWorkspace.inc"
+    #include "RetargetRigOverlay.inc"
     #include "UnifiedImportWorkspace.inc"
 
     void StudioRenderPath::OpenStaticModelImporter(bool fromProjectile)
     {
         ++modelImportGeneration_;
+        rtScene_ = {}; rtFile_.clear(); rtPairs_.clear(); rtSourcePose_.clear();
+        rtSourceNames_.clear(); rtTargetNames_.clear();
+        rtSource_.ClearItems(); rtTarget_.ClearItems(); rtClip_.ClearItems();
         importCameraDrag_ = ImportCameraDrag::None;
         rigDrag_ = RigHandle::None;
         importPoseRotations_.clear();

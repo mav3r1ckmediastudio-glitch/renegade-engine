@@ -1,8 +1,7 @@
 // Draw rig controls in the importer GUI pass so the character cannot occlude them.
 bool StudioRenderPath::RigEditingVisible() const
 {
-    return modelImportPreview_ && modelImportPanel_.IsVisible() && importBone_.IsVisible() &&
-        importPage_ == ImportPage::Pose && !importBones_.empty();
+    return modelImportPreview_ && modelImportPanel_.IsVisible() && (importPage_ == ImportPage::Pose || importPage_ == ImportPage::Retarget) && !importBones_.empty();
 }
 
 XMFLOAT3 StudioRenderPath::ProjectImportPoint(XMFLOAT3 world) const
@@ -71,7 +70,7 @@ void StudioRenderPath::DrawImportRig(wi::graphics::CommandList cmd) const
         const float r=entity==tip?3.8f:2.f;
         wi::image::Draw(nullptr,wi::image::Params(p.x-r,p.y-r,2*r,2*r,wi::Color(209,245,248,255)),cmd);
     }
-    if(!comparingPose_ && points.count(tip) && points.count(mid) && points.count(parent(mid))) {
+    if(importPage_==ImportPage::Pose && !comparingPose_ && points.count(tip) && points.count(mid) && points.count(parent(mid))) {
         for(int i=0;i<2;++i) {
             const auto handle=ProjectImportPoint(ImportPosePoint(i?6:3));
             if(!visible(handle))continue;

@@ -426,7 +426,32 @@ namespace renegade::studio
             return false;
         }
         wi::vector<std::uint8_t> bytes;
-        if (!wi::helper::saveTextureToMemoryFile(GetRenderResult3D(), "PNG", bytes))
+        const auto& texture=GetRenderResult3D();
+        auto desc=texture.GetDesc();
+        constexpr uint32_t width=512, height=320;
+        wi::vector<uint8_t> pixels;
+        if(!wi::helper::saveTextureToMemory(texture,pixels)) {
+            error="Could not read the model preview.";return false;
+        }
+        const size_t stride=wi::graphics::GetFormatStride(desc.format);
+        if(!stride || !desc.width || !desc.height || pixels.size()<size_t(desc.width)*desc.height*stride) {
+            error="Unexpected thumbnail pixel layout.";return false;
+        }
+        // Preserve the full camera framing in the fixed-size asset catalogue card.
+        const double fit=std::min(double(width)/desc.width,double(height)/desc.height);
+        const uint32_t w=std::clamp(uint32_t(std::lround(desc.width*fit)),1u,width);
+        const uint32_t h=std::clamp(uint32_t(std::lround(desc.height*fit)),1u,height);
+        wi::vector<uint8_t> card(size_t(width)*height*stride,0);
+        for(uint32_t y=0;y<h;++y) {
+            const uint32_t sy=uint32_t((uint64_t(2*y+1)*desc.height)/(2*h));
+            for(uint32_t x=0;x<w;++x) {
+                const uint32_t sx=uint32_t((uint64_t(2*x+1)*desc.width)/(2*w));
+                const size_t out=(size_t(y+(height-h)/2)*width+x+(width-w)/2)*stride;
+                std::copy_n(pixels.data()+(size_t(sy)*desc.width+sx)*stride,stride,card.data()+out);
+            }
+        }
+        desc.width=width;desc.height=height;
+        if (!wi::helper::saveTextureToMemoryFile(card,desc,"PNG",bytes))
         {
             error = "Could not capture the rendered model thumbnail.";
             return false;

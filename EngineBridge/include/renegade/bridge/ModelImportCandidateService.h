@@ -1,4 +1,5 @@
 #pragma once
+#include <map>
 
 #include "renegade/bridge/ImportService.h"
 
@@ -91,6 +92,9 @@ namespace renegade::bridge
     class ModelImportCandidateService
     {
     public:
+        bool AppendMappedClip(ModelImportCandidate&, const wi::scene::Scene&, size_t clipIndex,
+            const std::vector<int>& targets, const std::map<std::string,XMFLOAT4>& sourcePose,
+            const std::map<std::string,XMFLOAT4>& targetPose, const std::string& label, std::string& error) const;
         // Failure leaves the candidate unchanged. Only baked native clips join it.
         [[nodiscard]] bool AppendExternalAnimations(ModelImportCandidate& candidate,
             const std::string& sourcePath, std::string& error) const;

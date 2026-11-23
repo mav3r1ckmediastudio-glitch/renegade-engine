@@ -1802,11 +1802,26 @@ namespace renegade::studio
         bool scenePopupInputCaptured_ = false;
 
         enum class ImportWorkflow { None, Static, Animated, Character, Player };
-        enum class ImportPage { Model, Materials, Actions, Advanced, Pose };
+        enum class ImportPage { Model, Materials, Actions, Advanced, Pose, Retarget };
         ImportWorkflow importWorkflow_ = ImportWorkflow::None;
         ImportPage importPage_ = ImportPage::Model;
         std::array<wi::gui::Button, 4> importWorkflowButtons_;
-        std::array<wi::gui::Button, 5> importPageButtons_;
+        std::array<wi::gui::Button, 6> importPageButtons_;
+        wi::gui::Button rtOpen_, rtSourceTurn_, rtTargetTurn_, rtBake_;
+        wi::gui::ComboBox rtSource_, rtTarget_, rtClip_;
+        wi::gui::Label rtSummary_;
+        wi::allocator::shared_ptr<wi::scene::Scene> rtScene_;
+        std::vector<int> rtPairs_;
+        std::vector<std::string> rtSourceNames_, rtTargetNames_;
+        std::map<std::string,XMFLOAT4> rtSourcePose_;
+        std::string rtFile_;
+        void CreateRetargetWorkspace();
+        void OpenRetargetSource();
+        void SelectRetargetBone();
+        void UpdateRetargetStatus();
+        void RotateRetargetBone(bool source);
+        void BakeRetargetClip();
+        void DrawRetargetSource(wi::graphics::CommandList) const;
         std::array<wi::gui::TextInputField, 7> importTransformFields_;
         wi::gui::Button importApplyTransform_;
         void CreateImportRigTools();

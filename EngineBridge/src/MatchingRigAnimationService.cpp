@@ -100,6 +100,12 @@ namespace renegade::bridge
         const std::string& sourcePath,std::vector<wi::ecs::Entity>& created,std::string& error)
     {
         auto source=wi::allocator::make_shared<wi::scene::Scene>();
+        if (wi::helper::toUpper(wi::helper::GetExtensionFromFileName(sourcePath)) == "WISCENE") {
+            wi::Archive archive(sourcePath,true,false);
+            if(!archive.IsOpen()){error="Retained rig clip could not be opened.";return false;}
+            source->Serialize(archive);
+            return AppendMatchingRigAnimationScene(destination,*source,created,error);
+        }
         ClearWickedModelImporterFailureDiagnostic();
         ImportModel_FBX(sourcePath,*source);
         const auto failure=ConsumeWickedModelImporterFailureDiagnostic();

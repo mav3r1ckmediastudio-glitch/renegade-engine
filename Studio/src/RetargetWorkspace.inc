@@ -1,0 +1,171 @@
+void StudioRenderPath::CreateRetargetWorkspace()
+{
+    const auto button=[this](wi::gui::Button& b,const char* label,auto action) {
+        b.Create(label);b.OnClick([action](const wi::gui::EventArgs&){action();});modelImportPanel_.AddWidget(&b);
+    };
+    button(rtOpen_,"Open source rig and clips...",[this]{OpenRetargetSource();});
+    button(rtSourceTurn_,"Rotate source joint",[this]{RotateRetargetBone(true);});
+    button(rtTargetTurn_,"Rotate target joint",[this]{RotateRetargetBone(false);});
+    button(rtBake_,"Bake clip to Actions",[this]{
+        const auto generation=modelImportGeneration_;
+        wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,generation](uint64_t){
+            if(generation==modelImportGeneration_ && modelImportPanel_.IsVisible() && importPage_==ImportPage::Retarget)
+                BakeRetargetClip();
+        });
+    });
+    rtClip_.Create("Source clip");rtSource_.Create("Source joint");rtTarget_.Create("Target joint");
+    for(auto* c:{&rtClip_,&rtSource_,&rtTarget_})modelImportPanel_.AddWidget(c);
+    rtSource_.OnSelect([this](const wi::gui::EventArgs&){SelectRetargetBone();});
+    rtTarget_.OnSelect([this](const wi::gui::EventArgs& a){
+        const int i=rtSource_.GetSelected(), t=a.iValue-2;
+        if(i<0 || size_t(i)>=rtPairs_.size())return;
+        if(t>=0 && std::find(rtPairs_.begin(),rtPairs_.end(),t)!=rtPairs_.end() && rtPairs_[i]!=t) {
+            ShowStudioMessageBox("This target is assigned to another source joint. Clear that pair first.","Bone mapping");
+        } else rtPairs_[i]=t;
+        SelectRetargetBone();UpdateRetargetStatus();
+    });
+    rtSummary_.Create("Retarget status");modelImportPanel_.AddWidget(&rtSummary_);
+}
+
+void StudioRenderPath::OpenRetargetSource()
+{
+    const auto generation=modelImportGeneration_;
+    wi::helper::FileDialogParams params;
+    params.type=wi::helper::FileDialogParams::OPEN;params.description="Source skeleton and animation";params.extensions={"fbx"};
+    wi::helper::FileDialog(params,[this,generation](const std::string& path){
+        wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,generation,path](uint64_t){
+            if(path.empty() || generation!=modelImportGeneration_ || !modelImportPanel_.IsVisible() ||
+                importPage_!=ImportPage::Retarget || !modelImportPreview_)return;
+            auto next=wi::allocator::make_shared<wi::scene::Scene>();
+            bridge::ClearWickedModelImporterFailureDiagnostic();
+            ImportModel_FBX(path,*next);
+            const auto failure=bridge::ConsumeWickedModelImporterFailureDiagnostic();
+            auto& target=modelImportPreview_->InspectionScene();
+            if(!failure.empty() || next->armatures.GetCount()!=1 || target.armatures.GetCount()!=1 ||
+                next->animations.GetCount()==0) {
+                ShowStudioMessageBox(failure.empty()?"Choose an FBX with one skeleton and at least one clip.":failure,"Retarget source");return;
+            }
+            auto names=[](const wi::scene::Scene& s,std::vector<std::string>& out) {
+                std::set<std::string> unique;
+                for(auto e:s.armatures[0].boneCollection) {
+                    const auto* n=s.names.GetComponent(e);
+                    if(!s.transforms.Contains(e) || !n || n->name.empty() || !unique.insert(n->name).second)return false;
+                    out.push_back(n->name);
+                }
+                return !out.empty();
+            };
+            std::vector<std::string> sn,tn;
+            if(!names(*next,sn)||!names(target,tn)){
+                ShowStudioMessageBox("Each rig needs uniquely named joints with transforms.","Retarget source");return;
+            }
+            (void)bridge::DisableDefaultHumanoidLookAt(*next);
+            bridge::PauseImportedModelAnimations(*next);
+            for(size_t i=0;i<next->animations.GetCount();++i)next->animations[i].amount=0;
+            next->ResetPose(next->armatures.GetEntity(0));next->Update(0);
+            auto mapping=[](const wi::scene::Scene& scene){
+                const auto rig=scene.armatures.GetEntity(0);
+                for(size_t i=0;i<scene.humanoids.GetCount();++i)
+                    if(scene.humanoids[i].IsValid())return bridge::CaptureHumanoidMapping(scene,scene.humanoids.GetEntity(i));
+                return bridge::BuildAutoHumanoidMapping(scene,rig).mapping;
+            };
+            const auto srcMap=mapping(*next),dstMap=mapping(target);
+            const auto& srcBones=next->armatures[0].boneCollection;const auto& dstBones=target.armatures[0].boneCollection;
+            std::vector<int> pairs(sn.size(),-2);std::set<int> used;
+            for(size_t i=0;i<sn.size();++i){
+                const auto it=std::find(tn.begin(),tn.end(),sn[i]);
+                if(it!=tn.end()){pairs[i]=int(it-tn.begin());used.insert(pairs[i]);}
+            }
+            for(size_t k=0;k<bridge::HumanoidBoneCount;++k) {
+                auto a=std::find(srcBones.begin(),srcBones.end(),srcMap.bones[k]),b=std::find(dstBones.begin(),dstBones.end(),dstMap.bones[k]);
+                if(a!=srcBones.end() && b!=dstBones.end() && pairs[a-srcBones.begin()]<0 && used.insert(int(b-dstBones.begin())).second)
+                    pairs[a-srcBones.begin()]=int(b-dstBones.begin());
+            }
+            rtScene_=std::move(next);rtFile_=fs::u8path(path).stem().generic_u8string();
+            rtSourceNames_=std::move(sn);rtTargetNames_=std::move(tn);rtPairs_=std::move(pairs);rtSourcePose_.clear();
+            rtClip_.ClearItems();rtSource_.ClearItems();rtTarget_.ClearItems();
+            rtTarget_.AddItem("Unresolved");rtTarget_.AddItem("Ignore source motion");
+            for(const auto& n:rtTargetNames_)rtTarget_.AddItem(n);
+            for(const auto& n:rtSourceNames_)rtSource_.AddItem(n);
+            for(size_t i=0;i<rtScene_->animations.GetCount();++i){
+                auto* n=rtScene_->names.GetComponent(rtScene_->animations.GetEntity(i));
+                rtClip_.AddItem(rtFile_+(n?" / "+n->name:""));
+            }
+            rtClip_.SetSelected(0);
+            auto first=std::find(rtPairs_.begin(),rtPairs_.end(),-2);
+            auto hand=std::find(rtSourceNames_.begin(),rtSourceNames_.end(),"hand_l");
+            rtSource_.SetSelected(first!=rtPairs_.end()?int(first-rtPairs_.begin()):hand!=rtSourceNames_.end()?int(hand-rtSourceNames_.begin()):0);
+            UpdateRetargetStatus();LayoutImportWorkspace();
+        });
+    });
+}
+
+void StudioRenderPath::SelectRetargetBone()
+{
+    int i=rtSource_.GetSelected();
+    if(i<0 || size_t(i)>=rtPairs_.size())return;
+    int t=rtPairs_[i];rtTarget_.SetSelectedWithoutCallback(t+2);
+    rtTargetTurn_.SetEnabled(t>=0);
+    if(t>=0 && modelImportPreview_) {
+        auto& scene=modelImportPreview_->InspectionScene();
+        auto e=scene.armatures[0].boneCollection[t];
+        for(size_t j=0;j<importBones_.size();++j)if(importBones_[j].entity==e){importBone_.SetSelected(int(j));break;}
+    }
+}
+
+void StudioRenderPath::UpdateRetargetStatus()
+{
+    if(!rtScene_.IsValid()){rtSummary_.SetText("Open an animation FBX to compare its skeleton with this character.");return;}
+    const int unresolved=int(std::count(rtPairs_.begin(),rtPairs_.end(),-2));
+    const int ignored=int(std::count(rtPairs_.begin(),rtPairs_.end(),-1));
+    const int matched=int(rtPairs_.size())-ignored-unresolved;
+    rtSummary_.SetText("Source: "+rtFile_+"\n"+std::to_string(matched)+" matched   /   "+std::to_string(ignored)+" ignored   /   "+
+        std::to_string(unresolved)+" unresolved\n"+std::to_string(rtTargetNames_.size()-matched)+" target-only joints keep their reference pose.");
+    rtBake_.SetEnabled(unresolved==0 && matched>0);
+}
+
+void StudioRenderPath::RotateRetargetBone(bool source)
+{
+    if(!source){ApplyPoseEdit(false);return;}
+    int i=rtSource_.GetSelected();
+    if(!rtScene_.IsValid() || i<0 || size_t(i)>=rtPairs_.size())return;
+    float angles[3]{};
+    for(int k=0;k<3;++k){
+        auto text=importPoseFields_[k].GetValue();char* end=nullptr;
+        angles[k]=std::strtof(text.c_str(),&end);
+        if(text.empty() || *end || !std::isfinite(angles[k]) || std::abs(angles[k])>3600){
+            ShowStudioMessageBox("Enter a finite joint rotation in degrees.","Source pose");return;
+        }
+    }
+    auto* t=rtScene_->transforms.GetComponent(rtScene_->armatures[0].boneCollection[i]);
+    t->Rotate(XMQuaternionRotationRollPitchYaw(XMConvertToRadians(angles[0]),XMConvertToRadians(angles[1]),XMConvertToRadians(angles[2])));
+    rtSourcePose_[rtSourceNames_[i]]=t->rotation_local;rtScene_->Update(0);
+    for(int k=0;k<3;++k)importPoseFields_[k].SetValue(0);
+}
+
+void StudioRenderPath::BakeRetargetClip()
+{
+    if(!rtScene_.IsValid() || rtClip_.GetSelected()<0 || !modelImportCandidate_)return;
+    std::map<std::string,XMFLOAT4> targetPose;
+    auto& scene=modelImportPreview_->InspectionScene();
+    for(const auto& b:importBones_){
+        auto it=importPoseRotations_.find(b.path);
+        if(it!=importPoseRotations_.end())targetPose[scene.names.GetComponent(b.entity)->name]=it->second;
+    }
+    const int index=rtClip_.GetSelected();
+    const std::string label=rtScene_->animations.GetCount()==1?rtFile_:rtClip_.GetItemText(index);
+    std::string error;
+    if(!bridge::ModelImportCandidateService().AppendMappedClip(*modelImportCandidate_,*rtScene_,index,rtPairs_,rtSourcePose_,targetPose,label,error)){
+        ShowStudioMessageBox(error,"Bake retargeted clip");return;
+    }
+    auto next=std::make_unique<ModelImportPreview>();
+    if(!next->Prepare(*modelImportCandidate_->PeekMutableScene(),error,importTransform_,modelImportProjectId_)){
+        ShowStudioMessageBox(error,"Retarget preview");return;
+    }
+    next->AddImportFloor();modelImportPreviewImage_.SetImage({});modelImportPreview_=std::move(next);
+    modelImportActions_.resize(modelImportCandidate_->Summary().animations,"Unassigned");
+    modelImportClip_.ClearItems();modelImportClip_.AddItem("REFERENCE POSE");
+    for(const auto& clip:modelImportPreview_->Clips())modelImportClip_.AddItem(clip.name+" ("+std::to_string(clip.end-clip.start)+" s)");
+    importPage_=ImportPage::Actions;LayoutImportWorkspace();
+    modelImportClip_.SetSelected(int(modelImportClip_.GetItemCount())-1);
+    modelImportSummary_.SetText("Retargeted "+label+"\nScrub the clip and assign a gameplay action.");
+}
