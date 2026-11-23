@@ -8,7 +8,7 @@ In Terrain > Vegetation, choose a **Grass preset**, then Paint. The three review
 | Meadow - Full | Broad bases made of fine blades; six variations | 25 |
 | Meadow - Very Full | Same broad clumps at higher density | 50 |
 
-These are starting points. The preset changes the terrain's shared grass settings, including density, height, width, segments and cards. Existing painted textures remain assigned, but their geometry/density follows those shared controls. Use the sliders to customise the result. Choosing a plant thumbnail returns the brush to Selected plant mix, preserving the existing multi-species workflow.
+These are starting points. The preset changes the terrain's shared grass settings, including density, height, width, segments and cards. Existing painted textures remain assigned, but their geometry/density follows those shared controls. Use the sliders to customise the result. Choosing a plant thumbnail returns the brush to Custom plant mix, preserving the existing multi-species workflow.
 
 The reviewed geometry uses length 0.5, width 0.9, two segments and two crossed cards, length randomness 0.25, seed 17 and 100-metre view distance. Density is the existing terrain multiplier: 25/3 or 50/3. The supported multiplier range now reaches 20. Native masks and terrain sampling make the precise count depend on the painted footprint and boundary vertices.
 
@@ -18,10 +18,16 @@ The broad artwork's linear RGB material multiplier is (0.670896, 0.660796, 0.778
 
 Large-area validation uses Tools/GrassFieldReview.cpp: a 64 x 64 metre field, 102400 or 204800 tufts, matched native settings and near/25m/60m views at 1920 x 1009. GPU timestamp intervals surround the complete native Render stage. Reported intervals include the scene and terrain, rather than grass alone; serial-frame wall times include a GPU wait and do not represent overlapping gameplay throughput. This test does not establish a populated woodland performance guarantee.
 
-Tools/StockGrassPresetProof.cpp exercises adoption, actual painting, global-setting history, paint Undo/Redo, crop/material restoration, six-variation GPU readback and cold reopen for all three options. The local Studio probe invokes the real selector callbacks and checks history and the existing plant filter.
+Tools/StockGrassPresetProof.cpp exercises adoption, actual painting, global-setting history, paint Undo/Redo, crop/material restoration, six-variation GPU readback and cold reopen for all three options. The local Studio probe invokes the real selector callbacks and checks history and retained custom thumbnails.
 
 Tools/PrairieWindReview.cpp is a separate motion demonstration. It authors a gentle directional ambient force and four broad, animated gust volumes across the large field. Native animations and force components persist with the scene. It does not change the existing weather presets or add a new general-purpose wind editor.
 
 ## Validation correction
 
 Earlier review emitters omitted their mesh subset. Native CreateFromMesh therefore found no usable triangle distribution, and repeated buffer reconstruction prevented sustained wind. Those earlier motion claims and timing measurements are invalidated. The review and field authors now declare a six-index mesh subset, and the prairie author repairs/validates its loaded emitter before use. The corrected 4096-square-metre test measured near-view total GPU Render medians of 1.85 ms bare, 3.30 ms Wicked at 25 tufts/m2, 4.75 ms Meadow Open at 50, 3.71 ms Meadow Full at 25 and 5.53 ms Meadow Very Full at 50. The committed CSV contains the corrected run, including P95 and distance samples. Existing terrain painting uses native terrain subsets and was not affected by this test-fixture defect.
+
+## Stock selection and current acceptance
+
+Only the three meadow choices remain stock additions. The thirty earlier grass, weed, freshwater, marine and alien PNGs are removed from shipping content and UI discovery. Packaging retires those exact bundled filenames from existing build directories; project Custom folders and previously painted Mixes are untouched. Custom PNG and sheet import remain supported. Choose a meadow preset explicitly; Custom plant mix requires at least one selected custom thumbnail.
+
+The owner's 23 November recording shows texture flicker/shimmer and stuttering grass movement. These are unresolved. Grass appearance is approved, but prairie wind is not visually accepted. Advancing native forces, GPU readback and FPS measurements do not override that failure. Earlier handoff motion claims must not be treated as acceptance.

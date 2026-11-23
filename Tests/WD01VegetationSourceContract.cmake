@@ -52,43 +52,18 @@ if(NOT STOCK_WINDOW EQUAL -1)
     message(FATAL_ERROR "WD01 contract: stock Wicked Editor UI must not be embedded")
 endif()
 
-# Every shipped palette choice needs an RGBA cutout in its own group.
+# Only the two reviewed sheets are shipped; they provide three meadow presets.
 set(plant_root "${RENEGADE_SOURCE_DIR}/Content/terrain/foliage")
-set(stock_plants
-    "01_short_grass_albedo.png"
-    "02_long_grass_albedo.png"
-    "03_dead_grass_albedo.png"
-    "04_burnt_grass_albedo.png"
-    "05_wheat_albedo.png"
-    "06_daisies_albedo.png"
-    "07_poppies_albedo.png"
-    "08_nettles_albedo.png"
-    "09_clover_albedo.png"
-    "10_thistles_albedo.png"
-    "Alien/01_lumen_grass_albedo.png"
-    "Alien/02_crimson_razorgrass_albedo.png"
-    "Alien/03_spore_grass_albedo.png"
-    "Alien/04_crystal_grass_albedo.png"
-    "Alien/05_velvet_frond_albedo.png"
-    "Alien/06_glowcap_grass_albedo.png"
-    "Alien/07_void_leaf_grass_albedo.png"
-    "Alien/08_curlgrass_albedo.png"
-    "Alien/09_coral_grass_albedo.png"
-    "Alien/10_rift_blossom_albedo.png"
-    "Freshwater/06_vallisneria_albedo.png"
-    "Freshwater/07_amazon_sword_albedo.png"
-    "Freshwater/08_anubias_albedo.png"
-    "Freshwater/09_java_fern_albedo.png"
-    "Freshwater/10_red_ludwigia_albedo.png"
-    "Marine/01_coastal_seagrass_albedo.png"
-    "Marine/02_sea_lettuce_albedo.png"
-    "Marine/03_red_algae_albedo.png"
-    "Marine/04_feather_algae_albedo.png"
-    "Marine/05_golden_kelp_albedo.png"
-)
-foreach(plant IN LISTS stock_plants)
-    file(READ "${plant_root}/${plant}" png_header OFFSET 0 LIMIT 26 HEX)
-    if(NOT png_header MATCHES "^89504e470d0a1a0a0000000d4948445200000200000002000806$")
-        message(FATAL_ERROR "Plant palette requires a 512 x 512 RGBA cutout at ${plant}")
+foreach(plant IN ITEMS meadow_open.png meadow_full.png)
+    file(READ "${plant_root}/Presets/${plant}" png_header OFFSET 0 LIMIT 26 HEX)
+    if(NOT png_header MATCHES "^89504e470d0a1a0a0000000d4948445200000400000006000806$")
+        message(FATAL_ERROR "Meadow preset requires a 1024 x 1536 RGBA sheet at ${plant}")
     endif()
 endforeach()
+file(GLOB_RECURSE shipped_plants RELATIVE "${plant_root}" "${plant_root}/*.png")
+list(SORT shipped_plants)
+if(NOT shipped_plants STREQUAL "Presets/meadow_full.png;Presets/meadow_open.png")
+    message(FATAL_ERROR "Unapproved bundled foliage: ${shipped_plants}")
+endif()
+wd01_require("${WD01_STUDIO_CMAKE}" "Tools/PackageStockFoliage.cmake" "Studio must retire stale bundled additions")
+wd01_require("${WD01_RUNTIME_CMAKE}" "Tools/PackageStockFoliage.cmake" "Runtime must retire stale bundled additions")

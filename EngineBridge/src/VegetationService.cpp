@@ -510,7 +510,6 @@ namespace renegade::bridge
     std::vector<fs::path> GrassPaletteEntries(const fs::path& project, PlantGroup group)
     {
         std::vector<fs::path> entries;
-        const auto stock = BundledGrassRoot() / "foliage";
         const auto custom = project / CustomPlantDirectory;
         const auto append = [&](PlantGroup category, const fs::path& folder)
         {
@@ -523,10 +522,8 @@ namespace renegade::bridge
                 if (ext == L".png" && it->is_regular_file(ec)) entries.push_back(it->path());
             }
         };
-        append(PlantGroup::Grass, stock);
-        append(PlantGroup::Freshwater, stock / "Freshwater");
-        append(PlantGroup::Marine, stock / "Marine");
-        append(PlantGroup::Alien, stock / "Alien");
+        // Retired bundled categories stay empty even in an older, uncleared install.
+        // Existing project-owned PNGs and painted atlases remain independent.
         append(PlantGroup::Custom, custom);
         append(PlantGroup::Custom, custom.parent_path()); // Imports from earlier projects.
         std::sort(entries.begin(),entries.end());

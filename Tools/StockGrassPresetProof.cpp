@@ -49,7 +49,9 @@ int main(int argc,char**argv){try{
   for(int i=0;i<20;++i){app.is_window_active=true;app.Run();}
   auto kind=static_cast<StockGrassPreset>(preset);GrassAtlas atlas,again;
   Check(BuildStockGrassAtlas(root,kind,atlas,error),error);Check(BuildStockGrassAtlas(root,kind,again,error)&&atlas.path==again.path,"Stock adoption is not deterministic");
-  Check(GrassPaletteEntries(root).size()==30,"Meadow presets changed existing palette membership");
+  Check(GrassPaletteEntries(root).empty(),"Retired bundled foliage is still discoverable");
+  for(auto retired:{PlantGroup::Grass,PlantGroup::Freshwater,PlantGroup::Marine,PlantGroup::Alien})
+   Check(GrassPaletteEntries(root,retired).empty(),"Retired stock group is not empty");
   auto before=CaptureWickedVegetationSettings(terrain),settings=StockGrassPresetSettings(kind,before);
   ApplyWickedVegetationSettings(scene,terrain,settings);Check(std::abs(terrain.grass_density-settings.density)<.0001f,"Meadow density was clamped");
   SetWickedVegetationSettingsCommand setting(scene,terrain.terrainEntity,before,settings);setting.Undo();Check(std::abs(terrain.grass_density-before.density)<.0001f,"Settings Undo failed");Check(setting.Execute(),"Settings Redo failed");

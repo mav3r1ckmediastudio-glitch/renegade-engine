@@ -182,28 +182,30 @@ namespace grass_palette_proof
         Check(projects.CreateProject(out.generic_u8string(),"GrassReview",seed),projects.LastError());
         const auto& project=projects.CurrentProject();
         const auto root=fs::u8path(project.rootPath);
-        auto entries=GrassPaletteEntries(root,PlantGroup::Grass);
-        const auto all=GrassPaletteEntries(root);
-        Check(entries.size()==10 && GrassPaletteEntries(root,PlantGroup::Freshwater).size()==5 &&
-            GrassPaletteEntries(root,PlantGroup::Marine).size()==5 &&
-            GrassPaletteEntries(root,PlantGroup::Alien).size()==10 && all.size()==30,
-            "Incorrect stock plant group membership");
-        Check(fs::is_directory(root/CustomPlantDirectory) && GrassPaletteEntries(root,PlantGroup::Custom).empty(),
-            "New project is missing its empty Custom plant folder");
-        GrassAtlas complete;
-        Check(BuildGrassAtlas(root,all,complete,error) && complete.frames==30,
-            "Failed to load all thirty plant sprites into a mixed brush: "+error);
-        GrassAtlas meadow,bank;
-        Check(BuildGrassAtlas(root,{entries[0],entries[5]},meadow,error),error);
-        Check(BuildGrassAtlas(root,{entries[1],entries[7]},bank,error),error);
+        Check(GrassPaletteEntries(root).empty() &&
+            GrassPaletteEntries(root,PlantGroup::Grass).empty() &&
+            GrassPaletteEntries(root,PlantGroup::Freshwater).empty() &&
+            GrassPaletteEntries(root,PlantGroup::Marine).empty() &&
+            GrassPaletteEntries(root,PlantGroup::Alien).empty(),
+            "Retired stock plants remain discoverable");
+        Check(fs::is_directory(root/CustomPlantDirectory), "New project is missing its Custom plant folder");
+        GrassAtlas approved;
+        Check(BuildStockGrassAtlas(root,StockGrassPreset::MeadowOpen,approved,error),error);
+        Check(ImportGrassSheet(root,fs::u8path(approved.path),2,3,error),error);
+        auto entries=GrassPaletteEntries(root,PlantGroup::Custom);
+        Check(entries.size()==6,"Approved sheet did not import six custom cells");
+        GrassAtlas complete,meadow,bank;
+        Check(BuildGrassAtlas(root,entries,complete,error) && complete.frames==6,error);
+        Check(BuildGrassAtlas(root,{entries[0],entries[1]},meadow,error),error);
+        Check(BuildGrassAtlas(root,{entries[2],entries[3]},bank,error),error);
         Check(ImportGrassSheet(root,fs::u8path(meadow.path),2,2,error),error);
         auto imported=GrassPaletteEntries(root,PlantGroup::Custom);
-        Check(imported.size()==2 && imported.front().parent_path()==root/CustomPlantDirectory,
+        Check(imported.size()==8 && imported.front().parent_path()==root/CustomPlantDirectory,
             "Sheet import must publish its occupied cells under Custom");
         fs::copy_file(entries.front(),root/CustomPlantDirectory/"Dropped.PNG");
         fs::copy_file(entries.back(),(root/CustomPlantDirectory).parent_path()/"Legacy.png");
-        Check(GrassPaletteEntries(root,PlantGroup::Custom).size()==4 && GrassPaletteEntries(root).size()==34,
-            "Custom group did not find dropped PNGs or legacy imports");
+        Check(GrassPaletteEntries(root,PlantGroup::Custom).size()==10 && GrassPaletteEntries(root).size()==10,
+            "Custom palette did not retain dropped PNGs or legacy project imports");
         Check(InitializeWickedVegetation(scene,terrain,&error),error);
         auto paint=[&](XMFLOAT3 centre, VegetationBrushMode mode, const GrassAtlas& atlas)
         {
@@ -328,7 +330,7 @@ namespace grass_palette_proof
                 VerifyMix(scene.hairs[i]);
                 checkedAll = true;
             }
-        Check(checkedAll, "Missing thirty-variety mix");
+        Check(checkedAll, "Missing six-variety custom mix");
         largeMix.Undo();
         VerifyPlayerWalk(cold);
         std::cout<<"GRASS_PALETTE_MIX_IMPORT_HISTORY_COLD_REOPEN_PASS"<<std::endl;

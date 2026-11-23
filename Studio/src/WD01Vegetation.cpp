@@ -30,18 +30,12 @@ namespace
     };
 
     using renegade::bridge::PlantGroup;
-    struct PlantFilter { PlantGroup group; const char* label; };
-    constexpr PlantFilter PlantFilters[] = {
-        {PlantGroup::All, "All plants"}, {PlantGroup::Grass, "Grass and weeds"},
-        {PlantGroup::Freshwater, "Tropical freshwater"}, {PlantGroup::Marine, "Marine"},
-        {PlantGroup::Alien, "Alien"}, {PlantGroup::Custom, "Custom"}
-    };
 
     class GrassThumbnail final : public renegade::studio::RenegadeButton
     {
     public:
         std::filesystem::path path;
-        PlantGroup group = PlantGroup::Grass;
+        PlantGroup group = PlantGroup::Custom;
         wi::Resource preview;
         bool selected = false;
         void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const override
@@ -60,9 +54,9 @@ namespace
     {
         wi::gui::Label header;
         wi::gui::Label source;
-        renegade::studio::SceneInspectorComboBox plantFilter, stockPresets;
+        renegade::studio::SceneInspectorComboBox stockPresets;
         int stockPreset=0;
-        PlantGroup group = PlantGroup::Grass;
+        PlantGroup group = PlantGroup::Custom;
         renegade::studio::SceneInspectorSlider brushSize;
         renegade::studio::SceneInspectorButton paint;
         renegade::studio::SceneInspectorButton erase;
@@ -216,7 +210,7 @@ namespace renegade::studio
         inspectorPanel_.AddWidget(&state.source);
 
         state.stockPresets.Create("Grass preset");
-        state.stockPresets.AddItem("Selected plant mix");
+        state.stockPresets.AddItem("Custom plant mix");
         state.stockPresets.AddItem("Meadow - Open");
         state.stockPresets.AddItem("Meadow - Full");
         state.stockPresets.AddItem("Meadow - Very Full");
@@ -253,19 +247,6 @@ namespace renegade::studio
         });
         inspectorPanel_.AddWidget(&state.stockPresets);
 
-        state.plantFilter.Create("Plant group");
-        state.plantFilter.SetTooltip("Filter the palette. Selected plants from other groups stay in the brush. Custom reads PNGs from Content/Vegetation/Palette/Custom.");
-        for (const auto& filter : PlantFilters) state.plantFilter.AddItem(filter.label);
-        state.plantFilter.SetSelectedWithoutCallback(1);
-        state.plantFilter.OnSelect([this](const wi::gui::EventArgs& args)
-        {
-            if (args.iValue < 0 || size_t(args.iValue) >= std::size(PlantFilters)) return;
-            auto& s = Controls();
-            s.group = PlantFilters[args.iValue].group;
-            if (s.group == PlantGroup::Custom || s.group == PlantGroup::All) s.refreshPalette = true;
-            QueueInspectorRefresh();
-        });
-        inspectorPanel_.AddWidget(&state.plantFilter);
 
         state.brushSize.Create(
             1.0f, 100.0f, state.brushRadius, 990.0f,
@@ -315,7 +296,6 @@ namespace renegade::studio
                     if (imported)
                     {
                         Controls().group = PlantGroup::Custom;
-                        Controls().plantFilter.SetSelectedWithoutCallback(int(std::size(PlantFilters))-1);
                     }
                     Controls().refreshPalette=true;
                     Controls().status.SetText(imported ? "Plant texture added to Custom." : error);
@@ -632,7 +612,6 @@ namespace renegade::studio
         if(!s.created)return {};
         if(group==0){s.header.SetVisible(false);s.source.SetVisible(false);std::vector<wi::gui::Widget*> rows;
             rows.push_back(&s.stockPresets);
-            rows.push_back(&s.plantFilter);
             for (size_t i=0; i<s.entryCount; ++i)
             {
                 auto& thumb = *s.thumbnails[i];
@@ -669,10 +648,8 @@ namespace renegade::studio
             std::filesystem::create_directories(root / bridge::CustomPlantDirectory,folderError);
             if (folderError) state.status.SetText("Could not create the Custom plant folder: "+folderError.message());
             state.entryCount = 0;
-            for (const auto& filter : PlantFilters)
             {
-                if (filter.group == PlantGroup::All) continue;
-                for (const auto& entry : bridge::GrassPaletteEntries(root,filter.group))
+                for (const auto& entry : bridge::GrassPaletteEntries(root,PlantGroup::Custom))
                 {
                     const size_t i = state.entryCount++;
                     if (i==state.thumbnails.size())
@@ -688,12 +665,12 @@ namespace renegade::studio
                             s.rebuildAtlas=true;
                             size_t count=0;
                             for(size_t j=0;j<s.entryCount;++j) if(s.thumbnails[j]->selected) ++count;
-                            s.status.SetText(count ? std::to_string(count)+(count == 1 ? " plant selected" : " plants selected") : "Stock Wicked grass selected");
+                            s.status.SetText(count ? std::to_string(count)+(count == 1 ? " plant selected" : " plants selected") : "Choose a meadow preset or select a custom plant");
                         });
                         inspectorPanel_.AddWidget(button.get());
                         state.thumbnails.push_back(std::move(button));
                     }
-                    auto& t=*state.thumbnails[i]; t.path=entry; t.group=filter.group;
+                    auto& t=*state.thumbnails[i]; t.path=entry; t.group=PlantGroup::Custom;
                     t.preview=wi::resourcemanager::Load(t.path.generic_u8string());
                     t.selected=std::find(selected.begin(),selected.end(),t.path)!=selected.end();
                     t.SetAccentOutlineStyle(t.selected);
@@ -707,7 +684,6 @@ namespace renegade::studio
             &state.header,
             &state.source,
             &state.stockPresets,
-            &state.plantFilter,
             &state.importSheet,&state.importRows,&state.importColumns,&state.testInteraction,
             &state.brushSize,
             &state.paint,
@@ -969,7 +945,8 @@ namespace renegade::studio
                         static_cast<bridge::StockGrassPreset>(state.stockPreset-1),state.atlas,error))
                     {state.status.SetText(error);return true;}
                 }
-                else if (selected.empty()) state.atlas={};
+                else if (selected.empty())
+                { state.status.SetText("Select a custom plant or choose a meadow preset."); return true; }
                 else if (!bridge::BuildGrassAtlas(std::filesystem::u8path(state.project),selected,state.atlas,error))
                 { state.status.SetText(error); return true; }
                 state.rebuildAtlas=false;

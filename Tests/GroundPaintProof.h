@@ -33,8 +33,7 @@ namespace ground_paint_proof
         for(const auto& entry:terrain.chunks)
             check(std::none_of(entry.second.blendmap_layers[1].pixels.begin(),entry.second.blendmap_layers[1].pixels.end(),[](uint8_t v){return v>0;}),"Flattened bank retained rock");
         check(SculptTerrain(scene,terrain,{11,0,15},10,11,.2f,TerrainSculptMode::Raise,0),"Review bank failed");
-        auto vegetation=GrassPaletteEntries(root,PlantGroup::Grass);
-        GrassAtlas atlas;check(BuildGrassAtlas(root,{vegetation.at(5),vegetation.at(6)},atlas,error),error);
+        GrassAtlas atlas;check(BuildStockGrassAtlas(root,StockGrassPreset::MeadowOpen,atlas,error),error);
         check(InitializeWickedVegetation(scene,terrain,&error),error);
         auto appearance=CaptureWickedVegetationSettings(terrain);
         appearance.length*=.4f;appearance.width*=.65f;

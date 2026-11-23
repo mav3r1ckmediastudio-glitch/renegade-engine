@@ -604,7 +604,7 @@ rectangles, emitter mesh references and materials. Repainting replaces the
 mix only at vertices inside the stroke. Stock grass retains its original mask
 and material. The brush indexes painted layers once per stroke.
 
-The plant group selector filters the visible thumbnails and keeps the brush selection across groups. Stock entries comprise grass and weeds, tropical freshwater, marine and alien plants. The Custom group reads loose PNGs and imported sprite cells from `Content/Vegetation/Palette/Custom` and recognises earlier imports directly under `Content/Vegetation/Palette`. PNG sheet imports publish all occupied cells in one project document transaction.
+Stock foliage is limited to Meadow Open, Full and Very Full. The earlier thirty grass/weed, freshwater, marine and alien cutouts are retired from the bundled palette. Compatibility enum values remain but return no stock entries, even when stale files remain in an old install. Packaging removes only the known retired bundled filenames. Custom thumbnails read loose PNGs and imported sprite cells from `Content/Vegetation/Palette/Custom` and recognises earlier imports directly under `Content/Vegetation/Palette`. PNG sheet imports publish all occupied cells in one project document transaction.
 Wicked supports up to 64 atlas rectangles per mix. Atlas generation preserves
 cutout proportions and places the base at the bottom of its cell. Imported
 sources keep their original resolution. Render atlases use cells up to 1024
