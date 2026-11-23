@@ -96,9 +96,12 @@ void StudioRenderPath::ResizeImportWorkspace(float width, float height)
         place(importTransformFields_[i], right + 73 + 141 * (i % 3), 140 + 48 * (i / 3), 63, 28);
     place(importApplyTransform_, right + 183, 236, 247, 28);
     place(modelImportPreviewImage_, pad, 52, viewWidth, viewHeight);
-    place(modelImportRotateLeft_, pad, 60 + viewHeight, third, 28);
-    place(modelImportRotateRight_, pad + third + gap, 60 + viewHeight, third, 28);
-    place(importSide_, pad + 2 * (third + gap), 60 + viewHeight, third, 28);
+    const float presetWidth = std::min(105.f, viewWidth * 0.14f);
+    const float hintWidth = viewWidth - 3 * (presetWidth + gap);
+    place(importNavigationHint_, pad, 60 + viewHeight, hintWidth, 28);
+    place(modelImportRotateLeft_, pad + hintWidth + gap, 60 + viewHeight, presetWidth, 28);
+    place(modelImportRotateRight_, pad + hintWidth + 2 * gap + presetWidth, 60 + viewHeight, presetWidth, 28);
+    place(importSide_, pad + viewWidth - presetWidth, 60 + viewHeight, presetWidth, 28);
     place(modelImportSummary_, pad, 174 + viewHeight, viewWidth, 42);
     place(modelImportMaterial_, right + 92, 134, 338, 28);
     place(modelImportMapSlot_, right + 92, 173, 338, 28);
@@ -123,6 +126,47 @@ void StudioRenderPath::ResizeImportWorkspace(float width, float height)
     place(modelImportCancel_, right, footer + 76, 207, 32);
     place(modelImportCommit_, right + 215, footer + 76, 215, 32);
 }
+bool StudioRenderPath::NavigateImportViewport()
+{
+    if (rigDrag_ != RigHandle::None) return false;
+    const auto pointer = wi::input::GetPointer();
+    const auto pos = modelImportPreviewImage_.GetPos();
+    const auto size = modelImportPreviewImage_.GetSize();
+    const bool inside = pointer.x >= pos.x && pointer.x < pos.x + size.x &&
+        pointer.y >= pos.y && pointer.y < pos.y + size.y;
+    const float speed = wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) ||
+        wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT) ? 0.2f : 1.f;
+
+    if (inside && pointer.z != 0)
+        modelImportPreview_->Zoom(std::exp(-std::clamp(pointer.z, -10.f, 10.f) * 0.14f * speed));
+
+    if (importCameraDrag_ == ImportCameraDrag::None)
+    {
+        if (!inside) return false;
+        if (wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
+            importCameraDrag_ = ImportCameraDrag::Orbit;
+        else if (wi::input::Press(wi::input::MOUSE_BUTTON_MIDDLE))
+            importCameraDrag_ = ImportCameraDrag::Pan;
+        else return false;
+        importCameraPointer_ = {pointer.x, pointer.y};
+    }
+    const bool orbit = importCameraDrag_ == ImportCameraDrag::Orbit;
+    if (!wi::input::Down(orbit ? wi::input::MOUSE_BUTTON_RIGHT : wi::input::MOUSE_BUTTON_MIDDLE))
+    {
+        importCameraDrag_ = ImportCameraDrag::None;
+        return false;
+    }
+    const float dx = (pointer.x - importCameraPointer_.x) * speed;
+    const float dy = (pointer.y - importCameraPointer_.y) * speed;
+    importCameraPointer_ = {pointer.x, pointer.y};
+    if (dx != 0 || dy != 0)
+    {
+        if (orbit) modelImportPreview_->Orbit(dx * 0.006f, dy * 0.006f);
+        else modelImportPreview_->Pan(dx / size.y, dy / size.y);
+    }
+    return true;
+}
+
 void StudioRenderPath::SelectImportWorkflow(ImportWorkflow workflow)
 {
     if (!modelImportCandidate_) return;

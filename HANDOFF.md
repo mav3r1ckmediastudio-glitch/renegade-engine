@@ -1,3 +1,7 @@
+# Continuous viewport orbit | DESIGN review
+
+The desktop importer shortcut launches RenegadeStudioOrbit.exe. In the Level Editor use Add > Import Model, then Character > Edit Pose / IK. Right-drag orbits horizontally and vertically, middle-drag pans, and wheel zooms. Shift uses one fifth sensitivity. Left input continues to select joints and move IK handles. The camera controls are shared across importer pages. Verified the combat creature in the released DX12 editor at an oblique angle with projected rig and handles visible. The review-layout and Character workflow CMake checks passed.
+
 # Visible skeleton and IK handles | DESIGN review
 
 Open the Renegade - Unified Model Importer shortcut. In the Level Editor choose Add > Import Model, open SK_Creature_01.fbx, then Character > Edit Pose / IK. The review launcher now starts RenegadeStudioRigOverlay.exe. Bones are clickable. Drag the orange ring to position the selected joint and the blue diamond to set the bend plane.

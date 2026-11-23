@@ -3522,6 +3522,9 @@ namespace renegade::studio
         modelImportPreviewImage_.SetPos(XMFLOAT2(20.0f, 35.0f));
         modelImportPreviewImage_.SetSize(XMFLOAT2(512.0f, 320.0f));
         modelImportPanel_.AddWidget(&modelImportPreviewImage_);
+        importNavigationHint_.Create("Preview navigation");
+        importNavigationHint_.SetText("RMB orbit   |   MMB pan   |   Wheel zoom   |   Shift for precision");
+        modelImportPanel_.AddWidget(&importNavigationHint_);
         modelImportRotateLeft_.Create("Rotate Preview Left");
         modelImportRotateLeft_.SetText("ROTATE LEFT");
         modelImportRotateLeft_.SetPos(XMFLOAT2(20.0f, 365.0f));
@@ -4335,7 +4338,8 @@ namespace renegade::studio
             // receives clicks or shortcuts while a conversation is being edited.
             wi::RenderPath2D::Update(dt);
             dialogueGui_.Update(*this,dt);
-            if (RigEditingVisible()) UpdateImportRigInput();
+            if (modelImportPanel_.IsVisible() && modelImportPreview_ && !NavigateImportViewport() && RigEditingVisible())
+                UpdateImportRigInput();
             if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_)
             {
                 const auto viewport = modelImportPreviewImage_.GetSize();
@@ -7317,6 +7321,8 @@ namespace renegade::studio
     void StudioRenderPath::OpenStaticModelImporter(bool fromProjectile)
     {
         ++modelImportGeneration_;
+        importCameraDrag_ = ImportCameraDrag::None;
+        rigDrag_ = RigHandle::None;
         importPoseRotations_.clear();
         importBones_.clear();
         if (session_ == nullptr || !session_->Projects().HasProject())

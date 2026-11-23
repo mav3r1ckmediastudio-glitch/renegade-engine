@@ -1815,6 +1815,11 @@ namespace renegade::studio
         void HideImportPoseMarker();
         void DrawImportRig(wi::graphics::CommandList cmd) const;
         void UpdateImportRigInput();
+        bool NavigateImportViewport();
+        enum class ImportCameraDrag { None, Orbit, Pan };
+        ImportCameraDrag importCameraDrag_ = ImportCameraDrag::None;
+        XMFLOAT2 importCameraPointer_{};
+        wi::gui::Label importNavigationHint_;
         enum class RigHandle { None, Target, Pole };
         RigHandle rigDrag_ = RigHandle::None;
         XMFLOAT3 dragTarget_{}, dragPole_{}, dragAnchor_{};
