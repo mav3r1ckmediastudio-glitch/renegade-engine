@@ -1876,7 +1876,10 @@ namespace renegade::studio
         wi::gui::Button mapPrev_,mapNext_,mapUndo_,mapRedo_,mapReviewExtras_,mapHoldBranch_,clipPose_;
         wi::gui::Label mapSourceHeader_,mapTargetHeader_;
         wi::gui::TextInputField mapSearch_,mapSourceLabel_,mapTargetLabel_;
-        wi::gui::ComboBox clipEditScope_;
+        wi::gui::ComboBox clipEditScope_, reviewSources_;
+        wi::gui::Button reviewShowAll_, reviewAssign_;
+        bool reviewingPairs_ = false;
+        int reviewSource_ = -1;
         std::vector<std::string> sourceLabels_,targetLabels_;
         std::vector<int> mapFiltered_;
         std::set<int> mapKept_;

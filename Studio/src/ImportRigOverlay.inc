@@ -169,11 +169,25 @@ void StudioRenderPath::UpdateImportRigInput()
             auto p=sourceScreenPoints_[j];float d=std::hypot(p.x-mouse.x,p.y-mouse.y);
             if(p.z>=0 && p.z<=1 && d<best){best=d;src=j;}
         }
-        if(src>=0){AssignMapSource(mapTargetIndex_,src);return;}
+        if (src >= 0) {
+            if (reviewingPairs_) {
+                if (rtPairs_[src] == -2) { reviewSource_ = src; RefreshMapRows(); }
+            } else AssignMapSource(mapTargetIndex_,src);
+            return;
+        }
         if(closest>=0){
             auto& bones=scene.armatures[0].boneCollection;
             auto it=std::find(bones.begin(),bones.end(),importBones_[closest].entity);
-            if(it!=bones.end()){int t=int(it-bones.begin());mapSearch_.SetValue("");mapFirst_=t/MapRows*MapRows;SelectMapTarget(t);}
+            if (it != bones.end()) {
+                const int target = int(it - bones.begin());
+                mapSearch_.SetValue("");
+                RefreshMapRows();
+                const auto row = std::find(mapFiltered_.begin(), mapFiltered_.end(), target);
+                if (row != mapFiltered_.end()) {
+                    mapFirst_ = int(row - mapFiltered_.begin()) / MapRows * MapRows;
+                    SelectMapTarget(target);
+                }
+            }
         }
     }else if(closest>=0)importBone_.SetSelected(closest);
 }

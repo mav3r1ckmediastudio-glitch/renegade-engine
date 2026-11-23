@@ -55,8 +55,12 @@ void StudioRenderPath::CreateRetargetWorkspace()
     button(rtTargetTurn_,"Rotate target joint",[this]{RotateRetargetBone(false);});
     button(rtBake_,"Bake clip to Actions",[this]{
         if(std::find(rtPairs_.begin(),rtPairs_.end(),-2)!=rtPairs_.end()){
-            rtSource_.SetSelected(int(std::find(rtPairs_.begin(),rtPairs_.end(),-2)-rtPairs_.begin()));
-            SelectRetargetBone();UpdateRetargetStatus();return;
+            reviewingPairs_ = true;
+            mapFirst_ = 0;
+            mapSearch_.SetValue("");
+            RefreshMapRows();
+            LayoutImportWorkspace();
+            return;
         }
         BakeRetargetClip();
     });
@@ -93,10 +97,31 @@ void StudioRenderPath::CreateRetargetWorkspace()
         RefreshMapRows();
     });
     mapHoldBranch_.SetTooltip("Bake the reference pose on each unmatched target in the selected branch. Mapped joints keep their animation.");
+    reviewSources_.Create("Unresolved sources");
+    reviewSources_.SetTooltip("Select an unresolved source joint to assign or ignore.");
+    reviewSources_.SetMaxVisibleItemCount(9);
+    reviewSources_.OnSelect([this](const wi::gui::EventArgs& a) {
+        reviewSource_ = int(a.userdata);
+        rtSource_.SetSelected(reviewSource_);
+    });
+    modelImportPanel_.AddWidget(&reviewSources_);
+    button(reviewAssign_, "Assign selected pair", [this] {
+        if (reviewSource_ >= 0 && rtPairs_[reviewSource_] == -2 &&
+            std::find(mapFiltered_.begin(), mapFiltered_.end(), mapTargetIndex_) != mapFiltered_.end())
+            AssignMapSource(mapTargetIndex_, reviewSource_);
+    });
+    button(reviewShowAll_, "Show all target bones", [this] {
+        reviewingPairs_ = false;
+        mapFirst_ = 0;
+        mapSearch_.SetValue("");
+        RefreshMapRows();
+        LayoutImportWorkspace();
+    });
     button(mapReviewExtras_,"Review unused source",[this]{
         const auto it=std::find(rtPairs_.begin(),rtPairs_.end(),-2);
         if(it==rtPairs_.end())return;
-        int index=int(it-rtPairs_.begin());
+        int index = reviewingPairs_ ? reviewSource_ : int(it-rtPairs_.begin());
+        if (index < 0 || index >= int(rtPairs_.size()) || rtPairs_[index] != -2) return;
         auto old=rtPairs_;MapHistory([this,old]() mutable {rtPairs_.swap(old);});
         rtPairs_[index]=-1;mapDirty_=true;RefreshMapRows();
     });
@@ -280,6 +305,7 @@ void StudioRenderPath::OpenRetargetSource()
             rtScene_=std::move(source.scene);rtFile_=fs::u8path(path).stem().generic_u8string();
             rtSourceNames_=std::move(source.sourceNames);rtTargetNames_=std::move(source.targetNames);rtPairs_=std::move(source.pairs);rtSourcePose_.clear();
             mappedTakes_.clear();mapHistory_.clear();mapCursor_=0;mapKept_.clear();mapEditingClip_=mapDirty_=false;
+            reviewingPairs_ = false; reviewSource_ = -1;
             sourceLabels_=rtSourceNames_;targetLabels_=rtTargetNames_;mapSearch_.SetValue("");mapFirst_=0;
             rtOrientationRoot_=wi::ecs::INVALID_ENTITY;appliedRigAngles_={};
             for(auto& field:rtRigDegrees_)field.SetValue(0);
@@ -325,7 +351,14 @@ void StudioRenderPath::UpdateRetargetStatus()
     std::string extras;
     for(size_t i=0;i<rtPairs_.size();++i)if(rtPairs_[i]==-2)extras+=(extras.empty()?"":", ")+rtSourceNames_[i];
     rtBake_.SetTooltip(unresolved ? extras : "Bake the selected clip with this mapping.");
-    rtBake_.SetEnabled(matched>0 && unresolved==0);
+    if (reviewingPairs_) {
+        const size_t open = rtTargetNames_.size() - matched - mapKept_.size();
+        rtSummary_.SetText(std::to_string(unresolved) + " unresolved source joints\n" +
+            (open ? std::to_string(open) + " unassigned targets (red). Choose a source in a row."
+                  : "All targets are assigned or held.") +
+            "\nFor a source with no partner, select it and click Ignore.");
+    }
+    rtBake_.SetEnabled(unresolved > 0 || matched > 0);
 }
 
 void StudioRenderPath::ApplySourceRigRotation()

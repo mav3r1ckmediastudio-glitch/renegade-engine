@@ -28,7 +28,7 @@ bool StudioRenderPath::ScrollRetargetTable()
         return false;
     }
     // An expanded picker owns its own list and wheel input.
-    if (rtClip_.GetState() == wi::gui::ACTIVE || std::any_of(mapSourceRows_.begin(), mapSourceRows_.end(),
+    if (reviewSources_.GetState() == wi::gui::ACTIVE || rtClip_.GetState() == wi::gui::ACTIVE || std::any_of(mapSourceRows_.begin(), mapSourceRows_.end(),
         [](const auto& row) { return row.IsVisible() && row.GetState() == wi::gui::ACTIVE; }))
         return false;
 
@@ -83,6 +83,7 @@ void StudioRenderPath::RefreshMapRows()
     mapFiltered_.clear();
     for(int t=0;t<int(targetLabels_.size());++t){
         auto it=std::find(rtPairs_.begin(),rtPairs_.end(),t);
+        if (reviewingPairs_ && (it != rtPairs_.end() || mapKept_.count(t))) continue;
         std::string words=targetLabels_[t]+" "+rtTargetNames_[t];
         if(it!=rtPairs_.end())words+=" "+sourceLabels_[it-rtPairs_.begin()]+" "+rtSourceNames_[it-rtPairs_.begin()];
         if(search.empty() || lower(words).find(search)!=std::string::npos)mapFiltered_.push_back(t);
@@ -97,23 +98,41 @@ void StudioRenderPath::RefreshMapRows()
         c.ClearItems();c.AddItem("Choose source...",uint64_t(-1));c.AddItem("Keep reference pose",0);
         int selected=mapKept_.count(t)?1:0;
         for(int j=0;j<int(sourceLabels_.size());++j){
+            if (reviewingPairs_ && rtPairs_[j] != -2) continue;
             c.AddItem(sourceLabels_[j],j+1);
             if(it!=rtPairs_.end() && j==it-rtPairs_.begin())selected=int(c.GetItemCount())-1;
         }
-        c.SetSelectedWithoutCallback(selected);b.SetText(targetLabels_[t]);b.SetTooltip(rtTargetNames_[t]);
-        b.SetColor(mapTargetIndex_==t?theme::Accent:theme::Control,wi::gui::IDLE);
+        c.SetSelectedWithoutCallback(selected);b.SetText(reviewingPairs_ && mapTargetIndex_ == t ? "> " + targetLabels_[t] : targetLabels_[t]);b.SetTooltip(rtTargetNames_[t]);
+        b.SetColor(reviewingPairs_ ? wi::Color(151,47,48) :
+            (mapTargetIndex_==t ? theme::Accent : theme::Control), wi::gui::IDLE);
     }
     const int count = int(mapFiltered_.size());
     const std::string range = count ? std::to_string(mapFirst_ + 1) + "-" +
         std::to_string(std::min(mapFirst_ + MapRows, count)) + " of " + std::to_string(count) : "0";
-    mapTargetHeader_.SetText("TARGET   " + range);
+    mapTargetHeader_.SetText((reviewingPairs_ ? "UNASSIGNED   " : "TARGET   ") + range);
     mapPrev_.SetEnabled(mapFirst_>0);mapNext_.SetEnabled(mapFirst_+MapRows<int(mapFiltered_.size()));
     int src=rtSource_.GetSelected();mapSourceLabel_.SetEnabled(src>=0 && src<int(sourceLabels_.size()));
     mapSourceLabel_.SetValue(src>=0 && src<int(sourceLabels_.size())?sourceLabels_[src]:"");
     if(mapTargetIndex_>=0 && mapTargetIndex_<int(targetLabels_.size()))mapTargetLabel_.SetValue(targetLabels_[mapTargetIndex_]);
     auto extra=std::find(rtPairs_.begin(),rtPairs_.end(),-2);
+    if (reviewingPairs_) {
+        reviewSources_.ClearItems();
+        int selected = 0;
+        for (int i = 0; i < int(rtPairs_.size()); ++i) {
+            if (rtPairs_[i] != -2) continue;
+            if (reviewSource_ == i) selected = int(reviewSources_.GetItemCount());
+            reviewSources_.AddItem(sourceLabels_[i], i);
+        }
+        reviewSource_ = extra == rtPairs_.end() ? -1 :
+            int(reviewSources_.GetItemUserData(selected));
+        reviewSources_.SetSelectedWithoutCallback(reviewSource_ < 0 ? -1 : selected);
+        reviewSources_.SetEnabled(reviewSource_ >= 0);
+        rtSource_.SetSelectedWithoutCallback(reviewSource_);
+        reviewAssign_.SetEnabled(reviewSource_ >= 0 &&
+            std::find(mapFiltered_.begin(), mapFiltered_.end(), mapTargetIndex_) != mapFiltered_.end());
+    }
     mapReviewExtras_.SetVisible(rt && extra!=rtPairs_.end());
-    if(extra!=rtPairs_.end())mapReviewExtras_.SetText("Ignore source: "+rtSourceNames_[extra-rtPairs_.begin()]);
+    if(extra!=rtPairs_.end())mapReviewExtras_.SetText(reviewingPairs_ ? "Ignore selected source" : "Ignore source: "+rtSourceNames_[extra-rtPairs_.begin()]);
     mapUndo_.SetEnabled(mapCursor_>0);mapRedo_.SetEnabled(mapCursor_<mapHistory_.size());
     UpdateRetargetStatus();
 }
