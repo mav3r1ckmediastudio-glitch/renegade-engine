@@ -453,6 +453,27 @@ namespace renegade::bridge
                 ResetRuntimeCharacters(scene, candidate);
                 return false;
             }
+            // Wicked does not serialise this runtime flag. Owned controllers
+            // use the animation's authored foot transforms.
+            if (ReadBool(scene.metadatas.GetComponent(record.entity), CharacterControllerOwnedMetadataKey, false))
+            {
+                character->SetFootPlacementEnabled(false);
+                // Wicked creates active ankle solvers even when terrain foot
+                // placement is off. Reserve disabled slots for clip-driven
+                // feet. Existing authored IK retains its own configuration.
+                using Bone = wi::scene::HumanoidComponent::HumanoidBone;
+                for (size_t i = 0; i < scene.humanoids.GetCount(); ++i)
+                {
+                    const auto rig = scene.humanoids.GetEntity(i);
+                    if (rig != record.entity && !scene.Entity_IsDescendant(rig, record.entity)) continue;
+                    for (const auto side : {Bone::LeftFoot, Bone::RightFoot})
+                    {
+                        const auto foot = scene.humanoids[i].bones[size_t(side)];
+                        if (foot != wi::ecs::INVALID_ENTITY && !scene.inverse_kinematics.Contains(foot))
+                            scene.inverse_kinematics.Create(foot).SetDisabled();
+                    }
+                }
+            }
             SyncNativeCharacterPoseFromTransform(scene, record.entity);
             character->SetActive(true);
         }

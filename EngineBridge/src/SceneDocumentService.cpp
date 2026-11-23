@@ -260,8 +260,13 @@ namespace renegade::bridge
             // Transform on inactive editor characters during the first update.
             for (size_t i = 0; i < prepared.scene_->characters.GetCount(); ++i) {
                 const auto entity = prepared.scene_->characters.GetEntity(i);
-                if (IsRenegadeCharacter(*prepared.scene_, entity))
+                if (IsRenegadeCharacter(*prepared.scene_, entity)) {
+                    const auto* metadata = prepared.scene_->metadatas.GetComponent(entity);
+                    if (metadata->bool_values.has(CharacterControllerOwnedMetadataKey) &&
+                        metadata->bool_values.get(CharacterControllerOwnedMetadataKey))
+                        prepared.scene_->characters[i].SetFootPlacementEnabled(false);
                     SyncNativeCharacterPoseFromTransform(*prepared.scene_, entity);
+                }
             }
         }
         catch (const std::exception& error)

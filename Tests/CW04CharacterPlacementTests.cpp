@@ -266,9 +266,28 @@ int main()
     auto& loaded = *reopened.MutablePreparedScene();
     const auto actors = CollectCharacters(loaded);
     if (!Require(actors.size() == 1, "reopened character missing")) return 1;
+    if (!Require(!loaded.characters.GetComponent(actors.front())->IsFootPlacementEnabled(),
+            "scene reopen enabled procedural foot placement on an authored character")) return 1;
     const auto pose = loaded.characters.GetComponent(actors.front())->GetPositionInterpolated();
     if (!Require(pose.x == 7 && pose.y == 2 && pose.z == -11,
             "first native tick would move the placed character")) return 1;
+
+    // Starting Test Game on a mapped rig must not add a live ankle solver
+    // over the clip. Preserve any explicitly authored IK on the other foot.
+    using Bone = wi::scene::HumanoidComponent::HumanoidBone;
+    const auto left = wi::ecs::CreateEntity(), right = wi::ecs::CreateEntity();
+    auto& rig = loaded.humanoids.Create(actors.front());
+    rig.bones[size_t(Bone::LeftFoot)] = left;
+    rig.bones[size_t(Bone::RightFoot)] = right;
+    loaded.inverse_kinematics.Create(right).chain_length = 3;
+    CharacterRuntimeState playback;
+    std::string playbackError;
+    if (!Require(InitializeRuntimeCharacters(loaded, playback, playbackError), playbackError)) return 1;
+    const auto* automatic = loaded.inverse_kinematics.GetComponent(left);
+    const auto* authoredIK = loaded.inverse_kinematics.GetComponent(right);
+    if (!Require(automatic && automatic->IsDisabled(), "runtime ankle overrides authored animation") ||
+        !Require(authoredIK && !authoredIK->IsDisabled() && authoredIK->chain_length == 3,
+            "runtime changed authored ankle IK")) return 1;
 
     adopted.Undo();
     if (!Require(!dragScene.transforms.Contains(dragWrapper),
