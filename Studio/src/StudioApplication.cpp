@@ -26,6 +26,11 @@
 #include "renegade/bridge/RiverTerrainLayerService.h"
 #include "renegade/bridge/RiverbedMaterialService.h"
 #include "renegade/bridge/SpecialistComponentService.h"
+#ifdef _WIN32
+#include <Windows.h>
+#include <commdlg.h>
+#pragma comment(lib,"comdlg32.lib")
+#endif
 #include <cctype>
 #include "StudioUserPreferences.h"
 
@@ -3650,7 +3655,8 @@ namespace renegade::studio
         });
         modelImportPanel_.AddWidget(&modelImportAction_);
         modelImportAddAnimation_.Create("Add External Animation FBX");
-        modelImportAddAnimation_.SetText("ADD ANIMATION FBX");
+        modelImportAddAnimation_.SetText("Add animation clips...");
+        modelImportAddAnimation_.SetTooltip("Select one or more FBX files with Ctrl or Shift. Use Retargeting for manual overrides.");
         modelImportAddAnimation_.SetPos(XMFLOAT2(20.0f, 685.0f));
         modelImportAddAnimation_.SetSize(XMFLOAT2(510.0f, 30.0f));
         modelImportAddAnimation_.OnClick([this](const wi::gui::EventArgs&) { AppendModelImportAnimations(); });
@@ -7326,6 +7332,7 @@ namespace renegade::studio
     void StudioRenderPath::OpenStaticModelImporter(bool fromProjectile)
     {
         ++modelImportGeneration_;
+        modelImportAddAnimation_.SetEnabled(true);
         rtScene_ = {}; rtFile_.clear(); rtPairs_.clear(); rtSourcePose_.clear();
         rtSourceNames_.clear(); rtTargetNames_.clear();
         rtSource_.ClearItems(); rtTarget_.ClearItems(); rtClip_.ClearItems();
@@ -7520,27 +7527,81 @@ namespace renegade::studio
         });
     }
 
+static bool AppendCharacterAnimationFile(bridge::ModelImportCandidate& candidate,const std::string& path,std::string& error)
+{
+    bridge::ModelImportCandidateService importer;
+    if(importer.AppendExternalAnimations(candidate,path,error))return true;
+    ImportRetargetSource source;
+    if(!PrepareImportRetargetSource(path,*candidate.PeekMutableScene(),source,error))return false;
+    if(!source.bodyAligned || source.scene->animations.GetCount()!=1){
+        error="Open this source in Retargeting to review its skeleton and clips.";return false;
+    }
+    for(size_t i=0;i<source.pairs.size();++i){
+        if(source.pairs[i]>=0)continue;
+        const auto key=RetargetJointKey(source.sourceNames[i]);
+        if(key.empty() || key.find("ponytail")!=std::string::npos || key.find("attachment")!=std::string::npos){
+            source.pairs[i]=-1;continue;
+        }
+        error="Review unmatched joint "+source.sourceNames[i]+" in Retargeting.";return false;
+    }
+    return importer.AppendMappedClip(candidate,*source.scene,0,source.pairs,{},{},fs::u8path(path).stem().u8string(),error);
+}
+
+static void ChooseAnimationFiles(std::function<void(std::vector<std::string>)> selected)
+{
+#ifdef _WIN32
+    std::vector<wchar_t> names(65536);
+    OPENFILENAMEW dialog{};
+    dialog.lStructSize=sizeof(dialog);dialog.hwndOwner=GetActiveWindow();
+    dialog.lpstrTitle=L"Add animation clips (Ctrl or Shift to select multiple)";
+    dialog.lpstrFilter=L"Animation FBX (*.fbx)\0*.fbx\0";
+    dialog.lpstrFile=names.data();dialog.nMaxFile=DWORD(names.size());
+    dialog.Flags=OFN_EXPLORER|OFN_ALLOWMULTISELECT|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR;
+    if(!GetOpenFileNameW(&dialog)){
+        if(CommDlgExtendedError())MessageBoxW(dialog.hwndOwner,L"The file picker could not read the selection. Try a smaller group.",L"Add animations",MB_OK);
+        return;
+    }
+    fs::path first(names.data());
+    const wchar_t* file=names.data()+wcslen(names.data())+1;
+    std::vector<std::string> paths;
+    if(!*file)paths.push_back(first.u8string());
+    else while(*file){paths.push_back((first/file).u8string());file+=wcslen(file)+1;}
+    selected(std::move(paths));
+#else
+    wi::helper::FileDialogParams params;
+    params.type=wi::helper::FileDialogParams::OPEN;params.description="Add animation";params.extensions={"fbx"};
+    wi::helper::FileDialog(params,[selected](const std::string& file){if(!file.empty())selected({file});});
+#endif
+}
+
     void StudioRenderPath::AppendModelImportAnimations()
     {
-        if (!modelImportCandidate_ || !modelImportPanel_.IsVisible()) return;
-        const auto projectId = modelImportProjectId_;
-        const auto modelSource = modelImportCandidate_->SourcePath();
-        wi::helper::FileDialogParams params;
-        params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "Select matching-rig or humanoid animation FBX";
-        params.extensions = {"fbx"};
-        wi::helper::FileDialog(params, [this, projectId, modelSource](const std::string& path) {
-            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                [this, projectId, modelSource, path](std::uint64_t) {
-                    if (path.empty() || !modelImportCandidate_ || !modelImportPanel_.IsVisible() ||
-                        session_ == nullptr || !session_->Projects().HasProject() ||
-                        session_->Projects().CurrentProject().projectId != projectId ||
-                        modelImportCandidate_->SourcePath() != modelSource) return;
+        if(!modelImportCandidate_ || !modelImportPanel_.IsVisible())return;
+        const auto generation=modelImportGeneration_;
+        ChooseAnimationFiles([this,generation](std::vector<std::string> files){
+            if(files.empty())return;
+            struct Batch {
+                std::vector<std::string> files;
+                size_t index=0, added=0;
+                std::string failures;
+            };
+            auto batch=std::make_shared<Batch>();
+            batch->files=std::move(files);
+            auto advance=[this,generation,batch](auto self)->void {
+                wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,generation,batch,self](uint64_t){
+                    if(generation!=modelImportGeneration_ || !modelImportCandidate_ || !modelImportPanel_.IsVisible() ||
+                       !session_ || !session_->Projects().HasProject() || session_->Projects().CurrentProject().projectId!=modelImportProjectId_)return;
+                    modelImportAddAnimation_.SetEnabled(false);
+                    const auto& file=batch->files[batch->index++];
                     std::string error;
-                    if (!bridge::ModelImportCandidateService().AppendExternalAnimations(*modelImportCandidate_, path, error)) {
-                        ShowStudioMessageBox(error, "Add Animation");
-                        return;
+                    if(AppendCharacterAnimationFile(*modelImportCandidate_,file,error))++batch->added;
+                    else batch->failures+=fs::u8path(file).filename().u8string()+" - "+error+"\n";
+                    if(batch->index<batch->files.size()){
+                        modelImportSummary_.SetText("Adding animations "+std::to_string(batch->index)+" / "+std::to_string(batch->files.size()));
+                        self(self);return;
                     }
+                    modelImportAddAnimation_.SetEnabled(true);
+                    if(!batch->added){ShowStudioMessageBox(batch->failures,"Animations requiring review");return;}
                     auto preview = std::make_unique<ModelImportPreview>();
                     if (!preview->Prepare(*modelImportCandidate_->PeekMutableScene(), error, importTransform_, modelImportProjectId_)) {
                         modelImportCandidate_.reset();
@@ -7560,11 +7621,12 @@ namespace renegade::studio
                     for (const auto& clip : modelImportPreview_->Clips())
                         modelImportClip_.AddItem(clip.name + " (" + std::to_string(clip.end - clip.start) + " s)");
                     modelImportClip_.SetSelected(int(modelImportCandidate_->ExternalAnimations().back().firstAnimationIndex + 1));
-                    modelImportSummary_.SetText("CHARACTER // " +
-                        std::to_string(modelImportCandidate_->Summary().animations) +
-                        " clips\nSelect a clip and assign its gameplay action.");
-                    studioChrome_.SetStatusText("MODEL IMPORT // ANIMATION ADDED");
+                    modelImportSummary_.SetText(std::to_string(batch->added)+" animation files added. Select a clip to assign its gameplay action.");
+                    studioChrome_.SetStatusText("MODEL IMPORT // ANIMATIONS ADDED");
+                    if(!batch->failures.empty())ShowStudioMessageBox(batch->failures,"Remaining animations requiring review");
                 });
+            };
+            advance(advance);
         });
     }
 

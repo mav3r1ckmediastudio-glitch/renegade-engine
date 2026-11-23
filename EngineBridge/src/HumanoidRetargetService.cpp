@@ -329,6 +329,13 @@ namespace renegade::bridge
         for (std::size_t i = 0; i < scene.humanoids.GetCount(); ++i)
             if (scene.humanoids[i].IsValid())
                 ++usableRigs;
+        // FBX can attach the native humanoid to the file root instead of the armature.
+        if (usableRigs == 1 && scene.armatures.GetCount() == 1)
+        {
+            (void)DisableDefaultHumanoidLookAt(scene);
+            error.clear();
+            return true;
+        }
         for (std::size_t i = 0; i < scene.armatures.GetCount(); ++i)
         {
             const auto rig = scene.armatures.GetEntity(i);

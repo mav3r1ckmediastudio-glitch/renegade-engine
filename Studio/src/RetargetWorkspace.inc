@@ -57,6 +57,80 @@ void StudioRenderPath::CreateRetargetWorkspace()
     rtSummary_.Create("Retarget status");modelImportPanel_.AddWidget(&rtSummary_);
 }
 
+struct ImportRetargetSource
+{
+    wi::allocator::shared_ptr<wi::scene::Scene> scene;
+    std::vector<std::string> sourceNames, targetNames;
+    std::vector<int> pairs;
+    std::string status;
+    bool bodyAligned=false;
+};
+static bool PrepareImportRetargetSource(const std::string& path,const wi::scene::Scene& target,ImportRetargetSource& out,std::string& error)
+{
+    auto next=wi::allocator::make_shared<wi::scene::Scene>();
+    bridge::ClearWickedModelImporterFailureDiagnostic();
+    ImportModel_FBX(path,*next);
+    const auto failure=bridge::ConsumeWickedModelImporterFailureDiagnostic();
+
+    const bool clipOnly=failure.empty() && BuildClipOnlyRig(*next);
+    if(!failure.empty() || next->armatures.GetCount()!=1 || target.armatures.GetCount()!=1 ||
+        next->animations.GetCount()==0) {
+        error=failure.empty()?"Choose an FBX with one skeleton and at least one clip.":failure;return false;
+    }
+    auto names=[](const wi::scene::Scene& s,std::vector<std::string>& out) {
+        std::set<std::string> unique;
+        for(auto e:s.armatures[0].boneCollection) {
+            const auto* n=s.names.GetComponent(e);
+            if(!s.transforms.Contains(e) || !n || n->name.empty() || !unique.insert(n->name).second)return false;
+            out.push_back(n->name);
+        }
+        return !out.empty();
+    };
+    std::vector<std::string> sn,tn;
+    if(!names(*next,sn)||!names(target,tn)){
+        error="Each rig needs uniquely named joints with transforms.";return false;
+    }
+    (void)bridge::DisableDefaultHumanoidLookAt(*next);
+    bridge::PauseImportedModelAnimations(*next);
+    for(size_t i=0;i<next->animations.GetCount();++i)next->animations[i].amount=0;
+    const bool companion=clipOnly && LoadCompanionRest(*next,fs::u8path(path).parent_path()/"T_pose.fbx");
+    if(!clipOnly)next->ResetPose(next->armatures.GetEntity(0));
+    next->Update(0);
+    auto mapping=[](const wi::scene::Scene& scene){
+        const auto rig=scene.armatures.GetEntity(0);
+        for(size_t i=0;i<scene.humanoids.GetCount();++i)
+            if(scene.humanoids[i].IsValid())return bridge::CaptureHumanoidMapping(scene,scene.humanoids.GetEntity(i));
+        return bridge::BuildAutoHumanoidMapping(scene,rig).mapping;
+    };
+    auto srcMap=mapping(*next);
+    const auto dstMap=mapping(target);
+    const auto& srcBones=next->armatures[0].boneCollection;const auto& dstBones=target.armatures[0].boneCollection;
+    std::vector<int> pairs(sn.size(),-2);std::set<int> used;
+    for(size_t i=0;i<sn.size();++i){
+        const auto it=std::find(tn.begin(),tn.end(),sn[i]);
+        if(it!=tn.end()){pairs[i]=int(it-tn.begin());used.insert(pairs[i]);}
+    }
+    SuggestNamedPairs(sn,tn,pairs,used);
+    for(size_t k=0;k<bridge::HumanoidBoneCount;++k) {
+        auto a=std::find(srcBones.begin(),srcBones.end(),srcMap.bones[k]),b=std::find(dstBones.begin(),dstBones.end(),dstMap.bones[k]);
+        if(a!=srcBones.end() && b!=dstBones.end() && pairs[a-srcBones.begin()]<0 && used.insert(int(b-dstBones.begin())).second)
+            pairs[a-srcBones.begin()]=int(b-dstBones.begin());
+    }
+    // Derive alignment landmarks from the actual one-to-one suggestions.
+    for(size_t k=0;k<bridge::HumanoidBoneCount;++k){
+        auto b=std::find(dstBones.begin(),dstBones.end(),dstMap.bones[k]);
+        if(b==dstBones.end())continue;
+        auto a=std::find(pairs.begin(),pairs.end(),int(b-dstBones.begin()));
+        if(a!=pairs.end())srcMap.bones[k]=srcBones[a-pairs.begin()];
+    }
+
+    const auto result=AlignRestRigs(*next,target,srcMap,dstMap,pairs);
+    out.bodyAligned=result.find("Body axes aligned")==0;
+    out.status=(companion?"T_pose.fbx":clipOnly?"FBX default pose":"Source bind pose")+std::string(" / ")+result;
+    out.scene=std::move(next);out.sourceNames=std::move(sn);out.targetNames=std::move(tn);out.pairs=std::move(pairs);
+    return true;
+}
+
 void StudioRenderPath::OpenRetargetSource()
 {
     const auto generation=modelImportGeneration_;
@@ -66,67 +140,14 @@ void StudioRenderPath::OpenRetargetSource()
         wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,generation,path](uint64_t){
             if(path.empty() || generation!=modelImportGeneration_ || !modelImportPanel_.IsVisible() ||
                 importPage_!=ImportPage::Retarget || !modelImportPreview_)return;
-            auto next=wi::allocator::make_shared<wi::scene::Scene>();
-            bridge::ClearWickedModelImporterFailureDiagnostic();
-            ImportModel_FBX(path,*next);
-            const auto failure=bridge::ConsumeWickedModelImporterFailureDiagnostic();
-            auto& target=modelImportPreview_->InspectionScene();
-            const bool clipOnly=failure.empty() && BuildClipOnlyRig(*next);
-            if(!failure.empty() || next->armatures.GetCount()!=1 || target.armatures.GetCount()!=1 ||
-                next->animations.GetCount()==0) {
-                ShowStudioMessageBox(failure.empty()?"Choose an FBX with one skeleton and at least one clip.":failure,"Retarget source");return;
+            ImportRetargetSource source;
+            std::string error;
+            if(!PrepareImportRetargetSource(path,*modelImportCandidate_->PeekMutableScene(),source,error)){
+                ShowStudioMessageBox(error,"Retarget source");return;
             }
-            auto names=[](const wi::scene::Scene& s,std::vector<std::string>& out) {
-                std::set<std::string> unique;
-                for(auto e:s.armatures[0].boneCollection) {
-                    const auto* n=s.names.GetComponent(e);
-                    if(!s.transforms.Contains(e) || !n || n->name.empty() || !unique.insert(n->name).second)return false;
-                    out.push_back(n->name);
-                }
-                return !out.empty();
-            };
-            std::vector<std::string> sn,tn;
-            if(!names(*next,sn)||!names(target,tn)){
-                ShowStudioMessageBox("Each rig needs uniquely named joints with transforms.","Retarget source");return;
-            }
-            (void)bridge::DisableDefaultHumanoidLookAt(*next);
-            bridge::PauseImportedModelAnimations(*next);
-            for(size_t i=0;i<next->animations.GetCount();++i)next->animations[i].amount=0;
-            const bool companion=clipOnly && LoadCompanionRest(*next,fs::u8path(path).parent_path()/"T_pose.fbx");
-            if(!clipOnly)next->ResetPose(next->armatures.GetEntity(0));
-            next->Update(0);
-            auto mapping=[](const wi::scene::Scene& scene){
-                const auto rig=scene.armatures.GetEntity(0);
-                for(size_t i=0;i<scene.humanoids.GetCount();++i)
-                    if(scene.humanoids[i].IsValid())return bridge::CaptureHumanoidMapping(scene,scene.humanoids.GetEntity(i));
-                return bridge::BuildAutoHumanoidMapping(scene,rig).mapping;
-            };
-            auto srcMap=mapping(*next);
-            const auto dstMap=mapping(target);
-            const auto& srcBones=next->armatures[0].boneCollection;const auto& dstBones=target.armatures[0].boneCollection;
-            std::vector<int> pairs(sn.size(),-2);std::set<int> used;
-            for(size_t i=0;i<sn.size();++i){
-                const auto it=std::find(tn.begin(),tn.end(),sn[i]);
-                if(it!=tn.end()){pairs[i]=int(it-tn.begin());used.insert(pairs[i]);}
-            }
-            SuggestNamedPairs(sn,tn,pairs,used);
-            for(size_t k=0;k<bridge::HumanoidBoneCount;++k) {
-                auto a=std::find(srcBones.begin(),srcBones.end(),srcMap.bones[k]),b=std::find(dstBones.begin(),dstBones.end(),dstMap.bones[k]);
-                if(a!=srcBones.end() && b!=dstBones.end() && pairs[a-srcBones.begin()]<0 && used.insert(int(b-dstBones.begin())).second)
-                    pairs[a-srcBones.begin()]=int(b-dstBones.begin());
-            }
-            // Derive alignment landmarks from the actual one-to-one suggestions.
-            for(size_t k=0;k<bridge::HumanoidBoneCount;++k){
-                auto b=std::find(dstBones.begin(),dstBones.end(),dstMap.bones[k]);
-                if(b==dstBones.end())continue;
-                auto a=std::find(pairs.begin(),pairs.end(),int(b-dstBones.begin()));
-                if(a!=pairs.end())srcMap.bones[k]=srcBones[a-pairs.begin()];
-            }
-            const auto& rawTarget=*modelImportCandidate_->PeekMutableScene();
-            const auto result=AlignRestRigs(*next,rawTarget,srcMap,mapping(rawTarget),pairs);
-            rtSummary_.SetTooltip((companion?"T_pose.fbx":clipOnly?"FBX default pose":"Source bind pose")+std::string(" / ")+result);
-            rtScene_=std::move(next);rtFile_=fs::u8path(path).stem().generic_u8string();
-            rtSourceNames_=std::move(sn);rtTargetNames_=std::move(tn);rtPairs_=std::move(pairs);rtSourcePose_.clear();
+            rtSummary_.SetTooltip(source.status);
+            rtScene_=std::move(source.scene);rtFile_=fs::u8path(path).stem().generic_u8string();
+            rtSourceNames_=std::move(source.sourceNames);rtTargetNames_=std::move(source.targetNames);rtPairs_=std::move(source.pairs);rtSourcePose_.clear();
             rtClip_.ClearItems();rtSource_.ClearItems();rtTarget_.ClearItems();
             rtTarget_.AddItem("Unresolved");rtTarget_.AddItem("Ignore source motion");
             for(const auto& n:rtTargetNames_)rtTarget_.AddItem(n);
