@@ -1,3 +1,9 @@
+# Stock foliage resolution
+
+Local branch feature/foliage-512, implementation c37b5667fd59adfc4a8881b4f7011a7d854cbd4b. Regenerated the 30 stock cutouts in Content/terrain/foliage at 512 by 512 with straight RGBA, retaining filenames, palette groups and plant anchoring. Updated the dimension check in Tests/WD01VegetationSourceContract.cmake.
+
+Verified with cmake -DRENEGADE_SOURCE_DIR=<checkout> -P Tests/WD01VegetationSourceContract.cmake and PaintHardware.exe <fresh-output> grass-palette using the staged Release assets. Native RTX 4070 Ti readback showed 243 strands distributed 8 or 9 per species for the 30-frame mix. Verified 3072-square full-mix atlas and 1024-square two-species atlases. Cursor and player response, walking and arm pose, import, history and cold reopen passed. Compared meadow-riverbank renders from the two asset versions. Existing project-local mixed atlases persist as authored. This is a local asset change awaiting integration.
+
 # PR 203 Studio verification repair
 
 Implementation commit `16d39a42f65bf853f14ba11bfd6d86fb52be94bf`. The first hosted Studio run failed the same five checks in Debug and Release. Both Windows baseline jobs passed.
