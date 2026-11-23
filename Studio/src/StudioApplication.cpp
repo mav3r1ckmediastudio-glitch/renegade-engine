@@ -1,3 +1,4 @@
+#include "renegade/bridge/RetargetJointKey.h"
 #include "renegade/bridge/GroundPaint.h"
 #include <cfloat>
 #include <cstring>
@@ -78,6 +79,31 @@ namespace
         if(!device)return renegade::bridge::ResolvePlayerStart(scene);
         static thread_local renegade::studio::PlayerStartFrameCache cache;
         return cache.Resolve(scene,device->GetFrameCount(),sceneRevision,commandRevision);
+    }
+
+    std::string SuggestImportedCharacterAction(std::string name)
+    {
+        const auto marker = name.find_last_of('@');
+        if (marker != std::string::npos) name.erase(0, marker + 1);
+        std::string key;
+        for (const unsigned char ch : name) if (std::isalnum(ch)) key += char(std::tolower(ch));
+        if (key.rfind("thirdperson", 0) == 0) key.erase(0, 11);
+        if (key == "idle" || key == "idleunarmed") return "Idle";
+        if (key == "walk" || key == "walkforward" || key == "walkforwardunarmed") return "Walk";
+        if (key == "run" || key == "runforward" || key == "runforwardunarmed") return "Run";
+        if (key.rfind("attack", 0) == 0) return "Attack";
+        if (key == "death" || key == "reload" || key == "hit") {
+            key.front() = char(std::toupper(static_cast<unsigned char>(key.front())));
+            return key;
+        }
+        return "Unassigned";
+    }
+
+    std::string CharacterIdleHint(const std::vector<std::string>& actions)
+    {
+        return std::find(actions.begin(),actions.end(),"Idle")==actions.end()
+            ? "Add or assign an Idle clip for playback while standing in Test Game."
+            : "Idle assigned for Test Game.";
     }
 
     constexpr std::uint8_t SelectionStencilReference = 0x0F;
@@ -3651,7 +3677,10 @@ namespace renegade::studio
             const int clip = modelImportClip_.GetSelected() - 1;
             const std::vector<std::string> actions = {"Unassigned", "Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death"};
             if (clip >= 0 && size_t(clip) < modelImportActions_.size() && args.iValue >= 0 && size_t(args.iValue) < actions.size())
+                {
                 modelImportActions_[clip] = actions[args.iValue];
+                modelImportSummary_.SetText(CharacterIdleHint(modelImportActions_));
+            }
         });
         modelImportPanel_.AddWidget(&modelImportAction_);
         modelImportAddAnimation_.Create("Add External Animation FBX");
@@ -7325,7 +7354,8 @@ namespace renegade::studio
 
     #include "ImportRigOverlay.inc"
     #include "ImportRigWorkspace.inc"
-    #include "RetargetWorkspace.inc"
+    static XMMATRIX ImportRigToObject(const wi::scene::Scene&);
+#include "RetargetWorkspace.inc"
     #include "RetargetRigOverlay.inc"
     #include "UnifiedImportWorkspace.inc"
 
@@ -7402,7 +7432,8 @@ namespace renegade::studio
                         for(size_t i=0;i<modelImportFolderChoices_.GetItemCount();++i)
                             if(modelImportFolderChoices_.GetItemText(int(i))==modelImportFolder_.GetValue())modelImportFolderChoices_.SetSelected(int(i));
                         modelImportRole_.SetSelected(0);modelImportTags_.SetValue("");
-                        modelImportActions_.assign(candidate->Summary().animations, "Unassigned");
+                        modelImportActions_.clear();
+                        for(const auto& clip:modelImportPreview_->Clips())modelImportActions_.push_back(SuggestImportedCharacterAction(clip.name));
                         modelImportAction_.SetVisible(character);
                         modelImportAction_.SetEnabled(false);
                         modelImportAddAnimation_.SetVisible(character);
@@ -7537,7 +7568,7 @@ static bool AppendCharacterAnimationFile(bridge::ModelImportCandidate& candidate
         error="Open this source in Retargeting to review its skeleton and clips.";return false;
     }
     for(size_t i=0;i<source.pairs.size();++i){
-        if(source.pairs[i]>=0)continue;
+        if(source.pairs[i]!=-2)continue;
         const auto key=RetargetJointKey(source.sourceNames[i]);
         if(key.empty() || key.find("ponytail")!=std::string::npos || key.find("attachment")!=std::string::npos){
             source.pairs[i]=-1;continue;
@@ -7615,13 +7646,14 @@ static void ChooseAnimationFiles(std::function<void(std::vector<std::string>)> s
                     modelImportPreview_ = std::move(preview);
                     modelImportPreviewImage_.SetImage({});
                     modelImportCommit_.SetEnabled(false);
-                    modelImportActions_.resize(modelImportCandidate_->Summary().animations, "Unassigned");
+                    const auto reviewedClips=modelImportPreview_->Clips();
+                    while(modelImportActions_.size()<reviewedClips.size())modelImportActions_.push_back(SuggestImportedCharacterAction(reviewedClips[modelImportActions_.size()].name));
                     modelImportClip_.ClearItems();
                     modelImportClip_.AddItem("REFERENCE POSE");
                     for (const auto& clip : modelImportPreview_->Clips())
                         modelImportClip_.AddItem(clip.name + " (" + std::to_string(clip.end - clip.start) + " s)");
                     modelImportClip_.SetSelected(int(modelImportCandidate_->ExternalAnimations().back().firstAnimationIndex + 1));
-                    modelImportSummary_.SetText(std::to_string(batch->added)+" animation files added. Select a clip to assign its gameplay action.");
+                    modelImportSummary_.SetText(std::to_string(batch->added)+" animation file(s) added. "+CharacterIdleHint(modelImportActions_));
                     studioChrome_.SetStatusText("MODEL IMPORT // ANIMATIONS ADDED");
                     if(!batch->failures.empty())ShowStudioMessageBox(batch->failures,"Remaining animations requiring review");
                 });

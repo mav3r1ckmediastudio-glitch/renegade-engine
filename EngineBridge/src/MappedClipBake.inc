@@ -182,22 +182,46 @@ bool ModelImportCandidateService::AppendMappedClip(ModelImportCandidate& candida
     dst.humanoids.Create(rig);
     AnimationComponent merged=clip;
     merged.channels.clear();merged.samplers.clear();merged.retargets.clear();
-    // Wicked transfers between corresponding slots. Batch arbitrary named pairs,
-    // including tails and wings, without installing a humanoid on the asset.
-    for(size_t base=0;base<pairs.size();base+=HumanoidBoneCount) {
-        auto& dh=*dst.humanoids.GetComponent(rig);
-        std::fill(std::begin(sh.bones),std::end(sh.bones),wi::ecs::INVALID_ENTITY);
-        std::fill(std::begin(dh.bones),std::end(dh.bones),wi::ecs::INVALID_ENTITY);
-        for(size_t j=0;j<HumanoidBoneCount && base+j<pairs.size();++j) {
-            sh.bones[j]=pairs[base+j].first; dh.bones[j]=pairs[base+j].second;
-        }
+    auto& dh=*dst.humanoids.GetComponent(rig);
+    auto bakeSlots=[&]() {
         const Entity part=dst.RetargetAnimation(rig,original,true,&src);
-        if(part==wi::ecs::INVALID_ENTITY) continue;
+        if(part==wi::ecs::INVALID_ENTITY) return;
         const auto& baked=*dst.animations.GetComponent(part);
         const int offset=int(merged.samplers.size());
         for(auto channel:baked.channels) {channel.samplerIndex+=offset;merged.channels.push_back(channel);}
         for(const auto& sampler:baked.samplers) merged.samplers.push_back(sampler);
         dst.animations.Remove(part);dst.hierarchy.Remove(part);
+    };
+    // Keep the imported Wicked humanoid roles. An explicit mapping overrides
+    // the corresponding target slot; additional joints are baked separately.
+    auto roles=[](const Scene& scene) {
+        for(size_t i=0;i<scene.humanoids.GetCount();++i)
+            if(scene.humanoids[i].IsValid())
+                return CaptureHumanoidMapping(scene,scene.humanoids.GetEntity(i));
+        return BuildAutoHumanoidMapping(scene,scene.armatures.GetEntity(0)).mapping;
+    };
+    const auto sourceRoles=roles(source),targetRoles=roles(*candidate.scene_);
+    std::set<Entity> assigned;
+    for(size_t slot=0;slot<HumanoidBoneCount;++slot) {
+        auto it=std::find_if(pairs.begin(),pairs.end(),[&](const auto& p){
+            return p.first==sourceRoles.bones[slot];});
+        if(it==pairs.end() && sourceRoles.bones[slot]==wi::ecs::INVALID_ENTITY)
+            it=std::find_if(pairs.begin(),pairs.end(),[&](const auto& p){
+                return p.second==targetRoles.bones[slot];});
+        if(it!=pairs.end() && assigned.insert(it->first).second){
+            sh.bones[slot]=it->first;dh.bones[slot]=it->second;
+        }
+    }
+    if(!assigned.empty())bakeSlots();
+    pairs.erase(std::remove_if(pairs.begin(),pairs.end(),[&](const auto& p){
+        return assigned.count(p.first)>0;}),pairs.end());
+    for(size_t base=0;base<pairs.size();base+=HumanoidBoneCount) {
+        std::fill(std::begin(sh.bones),std::end(sh.bones),wi::ecs::INVALID_ENTITY);
+        std::fill(std::begin(dh.bones),std::end(dh.bones),wi::ecs::INVALID_ENTITY);
+        for(size_t j=0;j<HumanoidBoneCount && base+j<pairs.size();++j) {
+            sh.bones[j]=pairs[base+j].first;dh.bones[j]=pairs[base+j].second;
+        }
+        bakeSlots();
     }
     if(merged.channels.empty()) {error="No mapped bone has an animated track in this clip.";return false;}
     for(auto e:tb) {

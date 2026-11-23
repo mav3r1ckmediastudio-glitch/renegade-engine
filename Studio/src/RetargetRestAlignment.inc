@@ -1,3 +1,5 @@
+#include "RetargetAvatarReference.inc"
+
 // Animation packs often ship the neutral skeleton as a separate one-frame take.
 static bool LoadCompanionRest(wi::scene::Scene& src, const fs::path& file)
 {
@@ -117,5 +119,7 @@ static std::string AlignRestRigs(wi::scene::Scene& src,const wi::scene::Scene& d
         tr->SetDirty();++adjusted;
     }
     src.Update(0);
-    return "Body axes aligned / "+std::to_string(adjusted)+" joint swings adjusted.";
+    std::ostringstream status;
+    status<<"Source to target scale "<<std::setprecision(4)<<ratio<<"x / "<<adjusted<<" joint swings adjusted.";
+    return status.str();
 }

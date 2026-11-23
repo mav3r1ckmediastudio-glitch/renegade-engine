@@ -88,6 +88,9 @@ void StudioRenderPath::ResizeImportWorkspace(float width, float height)
     place(rtTargetTurn_,right+(inspectorWidth+gap)/2,313,(inspectorWidth-gap)/2,28);
     place(rtSummary_,right,352,inspectorWidth,86);
     place(rtBake_,right,446,inspectorWidth,30);
+    for(int i=0;i<3;++i)place(rtRigDegrees_[i],right+74+140*i,491,65,27);
+    place(rtRigApply_,right,529,(inspectorWidth-gap)/2,28);
+    place(rtRigReset_,right+(inspectorWidth+gap)/2,529,(inspectorWidth-gap)/2,28);
     place(importFront_, right, 133, 210, 28);
     place(importFit_, right + 219, 133, 210, 28);
     place(importZoomIn_, right, 170, 210, 28);
@@ -228,8 +231,9 @@ void StudioRenderPath::LayoutImportWorkspace()
     importBone_.SetVisible(pose);
     poseInfluence_.SetVisible(pose);
     const bool rt = character && importPage_ == ImportPage::Retarget;
+    for(auto& field:rtRigDegrees_)field.SetVisible(rt && rtScene_.IsValid());
     rtOpen_.SetVisible(rt); rtSummary_.SetVisible(rt);
-    for (auto* b : {&rtSourceTurn_,&rtTargetTurn_,&rtBake_}) b->SetVisible(rt && rtScene_.IsValid());
+    for (auto* b : {&rtSourceTurn_,&rtTargetTurn_,&rtRigApply_,&rtRigReset_,&rtBake_}) b->SetVisible(rt && rtScene_.IsValid());
     for (auto* c : {&rtSource_,&rtTarget_,&rtClip_}) c->SetVisible(rt && rtScene_.IsValid());
     const float right = std::max(252.f, modelImportPanel_.GetSize().x-462.f);
     for (int j=0;j<9;++j) {

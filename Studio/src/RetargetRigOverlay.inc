@@ -4,21 +4,24 @@ void StudioRenderPath::DrawRetargetSource(wi::graphics::CommandList cmd) const
     const auto viewport=modelImportPreviewImage_.GetPos(),size=modelImportPreviewImage_.GetSize();
     const auto& sb=src.armatures[0].boneCollection;
     const auto& tb=dst.armatures[0].boneCollection;
-    const auto rotation=XMMatrixRotationRollPitchYaw(XMConvertToRadians(importTransform_.rotationXDegrees),
-        XMConvertToRadians(importTransform_.rotationYDegrees),XMConvertToRadians(importTransform_.rotationZDegrees));
+    // Source reference positions were aligned in the candidate rig's world
+    // space. Show them through the same mesh and import transforms as the skin.
+    const auto& candidate=*modelImportCandidate_->PeekScene();
+    const auto rawRig=candidate.armatures.GetEntity(0);
+    const auto previewRig=dst.armatures.GetEntity(0);
+    const auto rigToObject=ImportRigToObject(dst);
+    const auto sourceToPreview=XMMatrixInverse(nullptr,XMLoadFloat4x4(&candidate.transforms.GetComponent(rawRig)->world))
+        * XMLoadFloat4x4(&dst.transforms.GetComponent(previewRig)->world) * rigToObject;
     wi::primitive::AABB sourceBounds,targetBounds;
-    for(auto e:sb){const auto p=src.transforms.GetComponent(e)->GetPosition();sourceBounds.AddPoint(XMVector3TransformCoord(XMLoadFloat3(&p),rotation));}
-    for(auto e:tb){const auto p=dst.transforms.GetComponent(e)->GetPosition();targetBounds.AddPoint(XMLoadFloat3(&p));}
+    for(auto e:sb){const auto p=src.transforms.GetComponent(e)->GetPosition();sourceBounds.AddPoint(XMVector3TransformCoord(XMLoadFloat3(&p),sourceToPreview));}
+    for(auto e:tb){const auto p=dst.transforms.GetComponent(e)->GetPosition();targetBounds.AddPoint(XMVector3TransformCoord(XMLoadFloat3(&p),rigToObject));}
     const auto sc=sourceBounds.getCenter(),tc=targetBounds.getCenter();
-    const auto se=sourceBounds.getHalfWidth(),te=targetBounds.getHalfWidth();
-    const float scale=XMVectorGetX(XMVector3Length(XMLoadFloat3(&te))) /
-        std::max(0.00001f,XMVectorGetX(XMVector3Length(XMLoadFloat3(&se))));
     const float offset=size.x*0.27f;
     std::map<wi::ecs::Entity,XMFLOAT3> points;
     for(auto e:sb){
         const auto p=src.transforms.GetComponent(e)->GetPosition();
-        const auto oriented=XMVector3TransformCoord(XMLoadFloat3(&p),rotation);
-        XMFLOAT3 world;XMStoreFloat3(&world,(oriented-XMLoadFloat3(&sc))*scale+XMLoadFloat3(&tc));
+        const auto oriented=XMVector3TransformCoord(XMLoadFloat3(&p),sourceToPreview);
+        XMFLOAT3 world;XMStoreFloat3(&world,(oriented-XMLoadFloat3(&sc))+XMLoadFloat3(&tc));
         auto projected=ProjectImportPoint(world);projected.x-=offset;points.emplace(e,projected);
     }
     const float dpi=GetPhysicalWidth()/std::max(1.f,GetLogicalWidth());

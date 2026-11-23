@@ -1,5 +1,6 @@
 #include "renegade/bridge/HumanoidRetargetService.h"
 #include "ModelImporter.h"
+#include "renegade/bridge/RetargetJointKey.h"
 
 #include <algorithm>
 #include <cctype>
@@ -103,6 +104,8 @@ namespace
         const std::string token = Normalize(candidate == nullptr ? "" : candidate);
         if (name.empty() || token.empty())
             return -1;
+        if (candidate && renegade::bridge::RetargetJointKey(entityName) == renegade::bridge::RetargetJointKey(candidate))
+            return 29000 + static_cast<int>(token.size()) + (name == token ? 2000 : 0);
         if (name == token)
             return 30000 + static_cast<int>(token.size());
         if (name.size() >= token.size() &&

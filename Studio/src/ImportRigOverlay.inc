@@ -32,6 +32,22 @@ XMFLOAT3 StudioRenderPath::ImportPosePoint(int field) const
     return {value(0),value(1),value(2)};
 }
 
+// Skinning writes vertices in armature space. The renderer then places the
+// skinned mesh with the object transform, which can include FBX unit conversion.
+static XMMATRIX ImportRigToObject(const wi::scene::Scene& scene) {
+    if(scene.armatures.GetCount()!=1)return XMMatrixIdentity();
+    const auto rig=scene.armatures.GetEntity(0);
+    const auto* arm=scene.transforms.GetComponent(rig);
+    if(!arm)return XMMatrixIdentity();
+    for(size_t i=0;i<scene.objects.GetCount();++i){
+        const auto* mesh=scene.meshes.GetComponent(scene.objects[i].meshID);
+        if(!mesh || mesh->armatureID!=rig)continue;
+        const auto* obj=scene.transforms.GetComponent(scene.objects.GetEntity(i));
+        if(obj)return XMMatrixInverse(nullptr,XMLoadFloat4x4(&arm->world))*XMLoadFloat4x4(&obj->world);
+    }
+    return XMMatrixIdentity();
+}
+
 void StudioRenderPath::DrawImportRig(wi::graphics::CommandList cmd) const
 {
     const auto pos=modelImportPreviewImage_.GetPos(), size=modelImportPreviewImage_.GetSize();
@@ -54,9 +70,10 @@ void StudioRenderPath::DrawImportRig(wi::graphics::CommandList cmd) const
     const auto parent=[&](wi::ecs::Entity e){const auto* h=scene.hierarchy.GetComponent(e);return h?h->parentID:wi::ecs::INVALID_ENTITY;};
     const auto mid=parent(tip);
     std::map<wi::ecs::Entity,XMFLOAT3> points;
+    const auto rigToObject=ImportRigToObject(scene);
     for(const auto& bone:importBones_) {
         const auto* t=scene.transforms.GetComponent(bone.entity);
-        if(t) points.emplace(bone.entity,ProjectImportPoint(t->GetPosition()));
+        if(t){XMFLOAT3 world;XMStoreFloat3(&world,XMVector3TransformCoord(XMLoadFloat4x4(&t->world).r[3],rigToObject));points.emplace(bone.entity,ProjectImportPoint(world));}
     }
     for(const auto& [entity,p]:points) {
         auto it=points.find(parent(entity));

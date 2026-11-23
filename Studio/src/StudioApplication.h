@@ -1863,6 +1863,10 @@ namespace renegade::studio
         void LayoutImportWorkspace();
         void ResizeImportWorkspace(float width, float height);
         void ApplyImportTransform();
+        void ApplySourceRigRotation();
+        std::array<wi::gui::TextInputField,3> rtRigDegrees_;
+        wi::gui::Button rtRigApply_,rtRigReset_;
+        wi::ecs::Entity rtOrientationRoot_ = wi::ecs::INVALID_ENTITY;
     };
 
     // The Physics Lab shares the live Scene render path and the Inspector dock.
