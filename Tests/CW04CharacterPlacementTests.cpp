@@ -4,6 +4,8 @@
 
 #include <WickedEngine.h>
 
+#include "renegade/bridge/SceneDocumentService.h"
+#include <filesystem>
 #include <iostream>
 #include <string>
 
@@ -244,6 +246,29 @@ int main()
     {
         return 1;
     }
+
+    // Wicked stores the scene Transform, but controller interpolation state
+    // starts at zero after deserialization. Check before the first live tick.
+    auto* authored = dragScene.transforms.GetComponent(dragWrapper);
+    authored->translation_local = XMFLOAT3(7, 2, -11);
+    authored->SetDirty();
+    SyncNativeCharacterPoseFromTransform(dragScene, dragWrapper);
+    const auto path = std::filesystem::temp_directory_path() /
+        (GenerateStableId() + ".wiscene");
+    {
+        wi::Archive archive;
+        dragScene.Serialize(archive);
+        if (!Require(archive.SaveFile(path.string()), "write placed character")) return 1;
+    }
+    auto reopened = PrepareWickedSceneOpen(path.string());
+    std::filesystem::remove(path);
+    if (!Require(reopened.IsReady(), reopened.Error())) return 1;
+    auto& loaded = *reopened.MutablePreparedScene();
+    const auto actors = CollectCharacters(loaded);
+    if (!Require(actors.size() == 1, "reopened character missing")) return 1;
+    const auto pose = loaded.characters.GetComponent(actors.front())->GetPositionInterpolated();
+    if (!Require(pose.x == 7 && pose.y == 2 && pose.z == -11,
+            "first native tick would move the placed character")) return 1;
 
     adopted.Undo();
     if (!Require(!dragScene.transforms.Contains(dragWrapper),

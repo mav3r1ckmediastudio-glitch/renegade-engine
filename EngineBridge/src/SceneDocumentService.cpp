@@ -4,6 +4,7 @@
 #include "renegade/bridge/SceneDocumentService.h"
 
 #include "renegade/bridge/CollisionService.h"
+#include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/DependencyService.h"
 #include "renegade/bridge/FlowService.h"
@@ -255,6 +256,13 @@ namespace renegade::bridge
         {
             prepared.scene_ = std::make_unique<wi::scene::Scene>();
             prepared.scene_->Serialize(archive);
+            // Controller pose is transient. Wicked also writes it back to the
+            // Transform on inactive editor characters during the first update.
+            for (size_t i = 0; i < prepared.scene_->characters.GetCount(); ++i) {
+                const auto entity = prepared.scene_->characters.GetEntity(i);
+                if (IsRenegadeCharacter(*prepared.scene_, entity))
+                    SyncNativeCharacterPoseFromTransform(*prepared.scene_, entity);
+            }
         }
         catch (const std::exception& error)
         {
