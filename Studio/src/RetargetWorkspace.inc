@@ -1,3 +1,5 @@
+#include "RetargetRestAlignment.inc"
+
 // Animation-only FBX exports can have named transforms and tracks without a skin.
 static bool BuildClipOnlyRig(wi::scene::Scene& scene)
 {
@@ -85,6 +87,7 @@ void StudioRenderPath::OpenRetargetSource()
             (void)bridge::DisableDefaultHumanoidLookAt(*next);
             bridge::PauseImportedModelAnimations(*next);
             for(size_t i=0;i<next->animations.GetCount();++i)next->animations[i].amount=0;
+            const bool companion=clipOnly && LoadCompanionRest(*next,fs::u8path(path).parent_path()/"T_pose.fbx");
             if(!clipOnly)next->ResetPose(next->armatures.GetEntity(0));
             next->Update(0);
             auto mapping=[](const wi::scene::Scene& scene){
@@ -105,6 +108,9 @@ void StudioRenderPath::OpenRetargetSource()
                 if(a!=srcBones.end() && b!=dstBones.end() && pairs[a-srcBones.begin()]<0 && used.insert(int(b-dstBones.begin())).second)
                     pairs[a-srcBones.begin()]=int(b-dstBones.begin());
             }
+            const auto& rawTarget=*modelImportCandidate_->PeekMutableScene();
+            const auto result=AlignRestRigs(*next,rawTarget,srcMap,mapping(rawTarget),pairs);
+            rtSummary_.SetTooltip((companion?"T_pose.fbx":clipOnly?"FBX default pose":"Source bind pose")+std::string(" / ")+result);
             rtScene_=std::move(next);rtFile_=fs::u8path(path).stem().generic_u8string();
             rtSourceNames_=std::move(sn);rtTargetNames_=std::move(tn);rtPairs_=std::move(pairs);rtSourcePose_.clear();
             rtClip_.ClearItems();rtSource_.ClearItems();rtTarget_.ClearItems();
@@ -144,7 +150,7 @@ void StudioRenderPath::UpdateRetargetStatus()
     const int ignored=int(std::count(rtPairs_.begin(),rtPairs_.end(),-1));
     const int matched=int(rtPairs_.size())-ignored-unresolved;
     rtSummary_.SetText("Source: "+rtFile_+"\n"+std::to_string(matched)+" matched   /   "+std::to_string(ignored)+" ignored   /   "+
-        std::to_string(unresolved)+" unresolved\n"+std::to_string(rtTargetNames_.size()-matched)+" target-only joints keep their reference pose.");
+        std::to_string(unresolved)+" unresolved\n"+std::to_string(rtTargetNames_.size()-matched)+" target-only joints keep their reference pose.\n"+rtSummary_.GetTooltip());
     rtBake_.SetEnabled(unresolved==0 && matched>0);
 }
 

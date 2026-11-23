@@ -1,3 +1,7 @@
+# Automatic rest alignment | DESIGN review
+
+The desktop shortcut launches RenegadeStudioAligned.exe. Character > Retargeting > Open source rig and clips now fits the source body frame to the raw target and aligns mapped unbranched joint directions before manual edits. Skinned sources use bind pose. Animation-only sources try an adjacent T_pose.fbx, checking joint names and parent names. In Studio, tested SK_Creature_01 with ThirdPersonWalk (68 pairs, zero swing adjustments) and Goblin_Club_Attack01 (67 pairs, companion reference, 31 adjustments). Baked both into Actions. User reviewed the goblin motion. This build was checked in the importer; runtime acceptance remains open.
+
 # Animation-only FBX source | DESIGN review
 
 The desktop importer shortcut now launches RenegadeStudioClipRigs.exe. In Character > Retargeting, opened Desktop/GameDev/Animations/Goblin_Club_Attack01.fbx, baked 67 pairs to SK_Creature_01, scrubbed the two-second clip, assigned Attack and saved Content/Characters/goblinattackcreature.rasset in the review project. One target-only joint retained its reference pose. The meshless source overlay appeared sideways; inspect its display basis separately. This clip was reviewed in Actions only.
