@@ -22,7 +22,7 @@ static void Describe(std::ostream&out,const char*name,const wi::HairParticleSyst
 static Entity Emitter(Scene&s,float x){
  Entity e=wi::ecs::CreateEntity();s.names.Create(e)="Comparison emitter";s.transforms.Create(e);
  auto&m=s.meshes.Create(e);m.vertex_positions={{x-3,.025f,2},{x-3,.025f,14},{x+3,.025f,2},{x+3,.025f,14}};
- m.vertex_normals.assign(4,{0,1,0});m.vertex_uvset_0={{0,0},{0,1},{1,0},{1,1}};m.indices={0,1,2,2,1,3};m.CreateRenderData();return e;
+ m.vertex_normals.assign(4,{0,1,0});m.vertex_uvset_0={{0,0},{0,1},{1,0},{1,1}};m.indices={0,1,2,2,1,3};auto&subset=m.subsets.emplace_back();subset.indexOffset=0;subset.indexCount=6;m.CreateRenderData();return e;
 }
 static void Plot(Scene&s,float x,const char*name,const wi::HairParticleSystem&source,const MaterialComponent&sourceMat){
  Entity emitter=Emitter(s,x);Entity e=wi::ecs::CreateEntity();s.names.Create(e)=name;s.transforms.Create(e);

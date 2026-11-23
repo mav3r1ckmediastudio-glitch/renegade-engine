@@ -41,7 +41,7 @@ int main(int argc,char**argv){try{
  // Remove review signs; keep the same terrain, sky and sun.
  std::vector<wi::ecs::Entity> signs;for(size_t i=0;i<scene.names.GetCount();++i)if(scene.names[i].name.rfind("plot-",0)==0)signs.push_back(scene.names.GetEntity(i));for(auto e:signs)scene.Entity_Remove(e);
  auto emitter=wi::ecs::CreateEntity();scene.transforms.Create(emitter);scene.names.Create(emitter)="64m grass field emitter";
- auto&m=scene.meshes.Create(emitter);m.vertex_positions={{-32,.025f,0},{-32,.025f,64},{32,.025f,0},{32,.025f,64}};m.vertex_normals.assign(4,{0,1,0});m.vertex_uvset_0={{0,0},{0,1},{1,0},{1,1}};m.indices={0,1,2,2,1,3};m.CreateRenderData();
+ auto&m=scene.meshes.Create(emitter);m.vertex_positions={{-32,.025f,0},{-32,.025f,64},{32,.025f,0},{32,.025f,64}};m.vertex_normals.assign(4,{0,1,0});m.vertex_uvset_0={{0,0},{0,1},{1,0},{1,1}};m.indices={0,1,2,2,1,3};auto&subset=m.subsets.emplace_back();subset.indexOffset=0;subset.indexCount=6;m.CreateRenderData();
  auto field=wi::ecs::CreateEntity();scene.transforms.Create(field);scene.names.Create(field)="Large meadow";
  CameraComponent camera;camera.CreatePerspective(1920,1009,.05f,300.f);
  wi::RenderPath3D render;render.scene=&scene;render.camera=&camera;render.init(1920,1009,96);render.setMotionBlurEnabled(false);render.setDepthOfFieldEnabled(false);render.setOcclusionCullingEnabled(false);render.ResizeBuffers();app.ActivatePath(&render);

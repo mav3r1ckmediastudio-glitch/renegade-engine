@@ -21,3 +21,7 @@ Large-area validation uses Tools/GrassFieldReview.cpp: a 64 x 64 metre field, 10
 Tools/StockGrassPresetProof.cpp exercises adoption, actual painting, global-setting history, paint Undo/Redo, crop/material restoration, six-variation GPU readback and cold reopen for all three options. The local Studio probe invokes the real selector callbacks and checks history and the existing plant filter.
 
 Tools/PrairieWindReview.cpp is a separate motion demonstration. It authors a gentle directional ambient force and four broad, animated gust volumes across the large field. Native animations and force components persist with the scene. It does not change the existing weather presets or add a new general-purpose wind editor.
+
+## Validation correction
+
+Earlier review emitters omitted their mesh subset. Native CreateFromMesh therefore found no usable triangle distribution, and repeated buffer reconstruction prevented sustained wind. Those earlier motion claims and timing measurements are invalidated. The review and field authors now declare a six-index mesh subset, and the prairie author repairs/validates its loaded emitter before use. The corrected 4096-square-metre test measured near-view total GPU Render medians of 1.85 ms bare, 3.30 ms Wicked at 25 tufts/m2, 4.75 ms Meadow Open at 50, 3.71 ms Meadow Full at 25 and 5.53 ms Meadow Very Full at 50. The committed CSV contains the corrected run, including P95 and distance samples. Existing terrain painting uses native terrain subsets and was not affected by this test-fixture defect.
