@@ -1,6 +1,7 @@
 #pragma once
 #include <WickedEngine.h>
 #include "renegade/bridge/ModelAnimationPreviewService.h"
+#include "renegade/bridge/CreatorModelImportRecipe.h"
 #include <string>
 #include <array>
 #include "renegade/bridge/LaunchSocketService.h"
@@ -17,6 +18,8 @@ namespace renegade::studio
     {
     public:
         bool Prepare(wi::scene::Scene& source, std::string& error);
+        bool Prepare(wi::scene::Scene& source, std::string& error,
+            const bridge::CreatorModelTransformRecipe& correction, const bridge::StableId& projectId);
         void RefreshMaterials(const wi::scene::Scene& source);
         void Rotate(float radians);
         void Orbit(float yaw, float pitch);

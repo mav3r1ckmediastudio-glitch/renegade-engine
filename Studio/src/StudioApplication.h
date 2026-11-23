@@ -1799,6 +1799,20 @@ namespace renegade::studio
         bool sceneOpenInProgress_ = false;
         bool levelWorkspaceActive_ = true;
         bool scenePopupInputCaptured_ = false;
+
+        enum class ImportWorkflow { None, Static, Animated, Character, Player };
+        enum class ImportPage { Model, Materials, Actions };
+        ImportWorkflow importWorkflow_ = ImportWorkflow::None;
+        ImportPage importPage_ = ImportPage::Model;
+        std::array<wi::gui::Button, 4> importWorkflowButtons_;
+        std::array<wi::gui::Button, 3> importPageButtons_;
+        std::array<wi::gui::TextInputField, 7> importTransformFields_;
+        wi::gui::Button importApplyTransform_;
+        bridge::CreatorModelTransformRecipe importTransform_;
+        void CreateImportWorkspace();
+        void SelectImportWorkflow(ImportWorkflow workflow);
+        void LayoutImportWorkspace();
+        void ApplyImportTransform();
     };
 
     // The Physics Lab shares the live Scene render path and the Inspector dock.

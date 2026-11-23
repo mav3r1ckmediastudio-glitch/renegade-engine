@@ -249,6 +249,13 @@ namespace renegade::bridge
     ModelImportCommitResult ModelImportCommitService::CommitModel(
         const ModelImportCommitRequest& request, ModelImportCandidate& candidate) const
     {
+        return CommitModel(request, candidate, {}, false);
+    }
+
+    ModelImportCommitResult ModelImportCommitService::CommitModel(
+        const ModelImportCommitRequest& request, ModelImportCandidate& candidate,
+        const CreatorModelTransformRecipe& transform, bool animatedModel) const
+    {
         ModelImportCommitResult result;
         if (!candidate.IsReady() || candidate.PeekMutableScene() == nullptr ||
             !IsValidStableId(request.projectId))
@@ -263,7 +270,7 @@ namespace renegade::bridge
         }
         // Static compatibility requests must not silently accept a rig or clips.
         // Character requests use the separately validated native rig round-trip.
-        if (!request.characterAsset && (candidate.Evidence().HasRigOrAnimationPayload() ||
+        if (!request.characterAsset && !animatedModel && (candidate.Evidence().HasRigOrAnimationPayload() ||
             candidate.Summary().animations != 0))
         {
             result.error = "Static import requires a model without rig or animation content.";
@@ -487,6 +494,7 @@ namespace renegade::bridge
         }
 
         CreatorModelImportRecipe authoredRecipe;
+        authoredRecipe.transform = transform;
         authoredRecipe.assetKind = request.characterAsset ? CreatorAssetImportKind::Character : CreatorAssetImportKind::Model;
         if (!request.animationActions.empty() &&
             (!request.characterAsset || request.animationActions.size() != candidate.Summary().animations))
@@ -540,6 +548,13 @@ namespace renegade::bridge
             candidate.PeekMutableScene()->Serialize(clone);
             clone.SetReadModeAndResetPos(true);
             commitScene.Serialize(clone);
+            if (transform.authored)
+            {
+                CreatorModelImportRecipe correction;
+                correction.transform = transform;
+                if (!ApplyCreatorModelImportRecipe(commitScene, request.projectRoot, request.projectId, correction, result.error))
+                    return result;
+            }
             PauseImportedModelAnimations(commitScene);
             if (request.characterAsset)
                 for (size_t i = 0; i < commitScene.animations.GetCount(); ++i)

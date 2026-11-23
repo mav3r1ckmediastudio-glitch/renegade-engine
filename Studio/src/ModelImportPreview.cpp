@@ -21,6 +21,12 @@ namespace renegade::studio
 
     bool ModelImportPreview::Prepare(wi::scene::Scene& source, std::string& error)
     {
+        return Prepare(source, error, {}, {});
+    }
+
+    bool ModelImportPreview::Prepare(wi::scene::Scene& source, std::string& error,
+        const bridge::CreatorModelTransformRecipe& correction, const bridge::StableId& projectId)
+    {
         paired_ = pairedPlaying_ = false;assemblyHands_={};assemblyShieldHeld_=false;
         previewScene_ = wi::allocator::make_shared<wi::scene::Scene>();
         wi::Archive archive;
@@ -32,6 +38,13 @@ namespace renegade::studio
             for (size_t slot = 0; slot < wi::scene::MaterialComponent::TEXTURESLOT_COUNT; ++slot)
                 scene->materials[i].textures[slot] = source.materials[i].textures[slot];
             scene->materials[i].SetDirty();
+        }
+        if (correction.authored)
+        {
+            bridge::CreatorModelImportRecipe recipe;
+            recipe.transform = correction;
+            if (!bridge::ApplyCreatorModelImportRecipe(*scene, {}, projectId, recipe, error))
+                return false;
         }
         camera = &previewCamera_;
         animationPreview_.Prepare(*scene);

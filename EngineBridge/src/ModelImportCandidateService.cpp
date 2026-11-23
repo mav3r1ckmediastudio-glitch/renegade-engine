@@ -214,6 +214,14 @@ namespace renegade::bridge
             { error = "External animation source changed during conversion."; return false; }
             (void)DisableDefaultHumanoidLookAt(*prepared);
             PauseImportedModelAnimations(*prepared);
+            // FBX exporters often call every clip "Unreal Take". Retain the
+            // source file identity in the authored clip name and reimport recipe.
+            const auto sourceName = fs::u8path(sourcePath).stem().generic_u8string();
+            for (auto entity : created) {
+                auto* name = prepared->names.GetComponent(entity);
+                if (!name) name = &prepared->names.Create(entity);
+                name->name = created.size() == 1 ? sourceName : sourceName + " / " + name->name;
+            }
             ModelImportDependency source;
             source.sourcePath = fs::absolute(fs::u8path(sourcePath)).generic_u8string();
             source.retainedRelativePath = GenerateStableId() + "/" +
