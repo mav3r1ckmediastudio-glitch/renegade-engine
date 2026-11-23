@@ -10,6 +10,7 @@
 #include "renegade/bridge/ProjectileAssetService.h"
 
 #include <array>
+#include <map>
 #include "ModelImportPreview.h"
 #include "LightPickerWindow.h"
 #include "ParticlePickerWindow.h"
@@ -1801,13 +1802,30 @@ namespace renegade::studio
         bool scenePopupInputCaptured_ = false;
 
         enum class ImportWorkflow { None, Static, Animated, Character, Player };
-        enum class ImportPage { Model, Materials, Actions };
+        enum class ImportPage { Model, Materials, Actions, Advanced, Pose };
         ImportWorkflow importWorkflow_ = ImportWorkflow::None;
         ImportPage importPage_ = ImportPage::Model;
         std::array<wi::gui::Button, 4> importWorkflowButtons_;
-        std::array<wi::gui::Button, 3> importPageButtons_;
+        std::array<wi::gui::Button, 5> importPageButtons_;
         std::array<wi::gui::TextInputField, 7> importTransformFields_;
         wi::gui::Button importApplyTransform_;
+        void CreateImportRigTools();
+        void EnterImportPose();
+        void RefreshPoseFields();
+        void HideImportPoseMarker();
+        wi::ecs::Entity importPoseMarker_ = wi::ecs::INVALID_ENTITY;
+        wi::gui::Slider poseInfluence_;
+        void ApplyPoseEdit(bool solve);
+        void ApplyReferencePose(bool original);
+        void ImportPoseFile(bool save);
+        std::map<std::string, XMFLOAT4> importPoseRotations_;
+        std::vector<bridge::PlayerViewBoneChoice> importBones_;
+        wi::gui::ComboBox importBone_;
+        std::array<wi::gui::TextInputField, 9> importPoseFields_;
+        wi::gui::Button poseRotate_, poseSolve_, poseCompare_, poseReset_, poseSave_, poseLoad_;
+        wi::gui::Button importFront_, importFit_, importZoomIn_, importZoomOut_;
+        wi::gui::Label importRigInfo_;
+        bool comparingPose_ = false;
         wi::gui::Button importSide_, importStep_[2];
         bridge::CreatorModelTransformRecipe importTransform_;
         void CreateImportWorkspace();

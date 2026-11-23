@@ -1,3 +1,9 @@
+# Character reference pose and Advanced workspace | DESIGN review
+
+Continue on feature/unified-model-importer. Desktop shortcut Renegade - Unified Model Importer launches the new Release build (UnifiedImportReview/Studio/RenegadeStudioPoseReview.exe). Level Editor > Add > Import Model > Character > Edit Pose / IK. Select a bone; the orange marker is at its joint. Local incremental rotation, world target and pole, IK influence, original comparison, reset selected joint and separate versioned .rpose save/load are active. Advanced provides front view, fit, zoom, corrected reference dimensions and bone count. The gameplay rig and clips are separate from the reference pose.
+
+Verified through the actual UI: the 68-bone combat creature hand_l target moved from Y=1.1868 m to Y=1.66 m. Saved CreatureHandReview.rpose, compared the original, then reopened the same FBX in a fresh Studio process and loaded the file. At partial IK influence the Y result was between the original and requested Y. Release build and both importer CMake checks passed. Renegade-Character-Pose.jpg and the test pose are in UnifiedImportReview on DESIGN. The paired source/target retarget workspace, manual overrides and explicit unmatched-bone baking remain outstanding. No hosted CI, push or merge.
+
 # Ground reference and walk inspection | DESIGN
 
 The rebuilt local Studio has a private checker floor at world Y=0, side view, and a persistent animation transport below the viewport for Character and Animated workflows. Previous/next step in 1/30 s review increments. Opened the combat creature, applied the rotation and height correction, loaded ThirdPersonWalk and inspected the stride in side view. Screenshot WalkFloor.jpg in UnifiedImportReview. Both character and layout source contracts passed. Advanced, Edit Pose/IK and Retargeting UI remain pending.

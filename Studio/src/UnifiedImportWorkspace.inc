@@ -25,12 +25,18 @@ void StudioRenderPath::CreateImportWorkspace()
         });
         modelImportPanel_.AddWidget(&button);
     }
-    const char* pages[] = {"Model", "Materials", "Actions"};
-    for (int i = 0; i < 3; ++i) {
+    CreateImportRigTools();
+    const char* pages[] = {"Model", "Materials", "Actions", "Advanced", "Edit Pose / IK"};
+    for (int i = 0; i < 5; ++i) {
         auto& button = importPageButtons_[i];
         button.Create(pages[i]);
         button.OnClick([this, i](const wi::gui::EventArgs&) {
+            if (importPage_ == ImportPage::Pose && i != int(ImportPage::Pose)) {
+                HideImportPoseMarker();
+                modelImportClip_.SetSelected(modelImportClip_.GetSelected());
+            }
             importPage_ = static_cast<ImportPage>(i);
+            if (importPage_ == ImportPage::Pose) EnterImportPose();
             LayoutImportWorkspace();
         });
         modelImportPanel_.AddWidget(&button);
@@ -69,30 +75,47 @@ void StudioRenderPath::ResizeImportWorkspace(float width, float height)
     const float tabWidth = (inspectorWidth - 2 * gap) / 3;
     for (int i = 0; i < 3; ++i)
         place(importPageButtons_[i], right + (tabWidth + gap) * i, 52, tabWidth, 28);
+    place(importPageButtons_[3], right, 86, tabWidth, 28);
+    place(importPageButtons_[4], right + tabWidth + gap, 86, 2 * tabWidth + gap, 28);
+    place(importFront_, right, 133, 210, 28);
+    place(importFit_, right + 219, 133, 210, 28);
+    place(importZoomIn_, right, 170, 210, 28);
+    place(importZoomOut_, right + 219, 170, 210, 28);
+    place(importRigInfo_, right, 218, inspectorWidth, 90);
+    place(importBone_, right + 64, 127, 366, 28);
+    for (int i = 0; i < 9; ++i)
+        place(importPoseFields_[i], right + 74 + (i % 3) * 140, 167 + (i / 3) * 39, 65, 27);
+    place(poseInfluence_, right + 98, 392, 272, 23);
+    place(poseRotate_, right, 286, 211, 28);
+    place(poseSolve_, right + 219, 286, 211, 28);
+    place(poseCompare_, right, 322, 211, 28);
+    place(poseReset_, right + 219, 322, 211, 28);
+    place(poseSave_, right, 358, 211, 28);
+    place(poseLoad_, right + 219, 358, 211, 28);
     for (int i = 0; i < 7; ++i)
-        place(importTransformFields_[i], right + 73 + 141 * (i % 3), 108 + 48 * (i / 3), 63, 28);
-    place(importApplyTransform_, right + 183, 204, 247, 28);
+        place(importTransformFields_[i], right + 73 + 141 * (i % 3), 140 + 48 * (i / 3), 63, 28);
+    place(importApplyTransform_, right + 183, 236, 247, 28);
     place(modelImportPreviewImage_, pad, 52, viewWidth, viewHeight);
     place(modelImportRotateLeft_, pad, 60 + viewHeight, third, 28);
     place(modelImportRotateRight_, pad + third + gap, 60 + viewHeight, third, 28);
     place(importSide_, pad + 2 * (third + gap), 60 + viewHeight, third, 28);
     place(modelImportSummary_, pad, 174 + viewHeight, viewWidth, 42);
-    place(modelImportMaterial_, right + 92, 102, 338, 28);
-    place(modelImportMapSlot_, right + 92, 141, 338, 28);
-    place(modelImportAssignMap_, right, 181, inspectorWidth, 32);
-    place(modelImportMapInfo_, right, 225, inspectorWidth, 99);
-    place(modelImportWarnings_, right, 332, inspectorWidth, std::min(180.f, footer - 340));
-    place(modelImportClip_, right + 86, 107, 344, 30);
+    place(modelImportMaterial_, right + 92, 134, 338, 28);
+    place(modelImportMapSlot_, right + 92, 173, 338, 28);
+    place(modelImportAssignMap_, right, 213, inspectorWidth, 32);
+    place(modelImportMapInfo_, right, 257, inspectorWidth, 99);
+    place(modelImportWarnings_, right, 364, inspectorWidth, std::min(180.f, footer - 372));
+    place(modelImportClip_, right + 86, 139, 344, 30);
     const float transport = (viewWidth - 3 * gap) / 4;
     place(modelImportPlay_, pad, 96 + viewHeight, transport, 28);
     place(modelImportRestart_, pad + transport + gap, 96 + viewHeight, transport, 28);
     place(importStep_[0], pad + 2 * (transport + gap), 96 + viewHeight, transport, 28);
     place(importStep_[1], pad + 3 * (transport + gap), 96 + viewHeight, transport, 28);
     place(modelImportTime_, pad + 150, 137 + viewHeight, std::max(30.f, viewWidth - 225), 23);
-    place(modelImportSpeed_, right + 155, 241, 210, 24);
-    place(modelImportAction_, right + 138, 286, 292, 30);
-    place(modelImportAddAnimation_, right, 335, inspectorWidth, 32);
-    place(modelImportRole_, right + 93, 263, 337, 28);
+    place(modelImportSpeed_, right + 155, 273, 210, 24);
+    place(modelImportAction_, right + 138, 318, 292, 30);
+    place(modelImportAddAnimation_, right, 367, inspectorWidth, 32);
+    place(modelImportRole_, right + 93, 295, 337, 28);
     place(modelImportName_, pad + 92, footer, viewWidth - 92, 27);
     place(modelImportFolder_, pad + 92, footer + 36, viewWidth - 92, 27);
     place(modelImportFolderChoices_, right + 86, footer, 344, 27);
@@ -103,6 +126,10 @@ void StudioRenderPath::ResizeImportWorkspace(float width, float height)
 void StudioRenderPath::SelectImportWorkflow(ImportWorkflow workflow)
 {
     if (!modelImportCandidate_) return;
+    if (importPage_ == ImportPage::Pose && modelImportPreview_) {
+        HideImportPoseMarker();
+        modelImportClip_.SetSelected(modelImportClip_.GetSelected());
+    }
     importWorkflow_ = workflow;
     importPage_ = ImportPage::Model;
     if (!modelImportFromProjectile_) {
@@ -128,17 +155,32 @@ void StudioRenderPath::LayoutImportWorkspace()
         b.SetColor(int(importWorkflow_)==i+1 ? theme::Accent : theme::Control, wi::gui::IDLE);
         b.SetEnabled(i==0 ? !evidence.HasRigOrAnimationPayload() : i==2 ? evidence.skinnedMeshes && evidence.armatureBones : true);
     }
-    for (int i=0;i<3;++i) {
-        importPageButtons_[i].SetVisible(chosen && (i!=2 || character || importWorkflow_==ImportWorkflow::Animated));
+    for (int i=0;i<5;++i) {
+        importPageButtons_[i].SetVisible(chosen && (i!=2 || character || importWorkflow_==ImportWorkflow::Animated) && (i!=4 || character));
         importPageButtons_[i].SetColor(int(importPage_)==i ? theme::Accent : theme::Control, wi::gui::IDLE);
     }
+    const bool advanced = chosen && importPage_ == ImportPage::Advanced;
+    const bool pose = character && importPage_ == ImportPage::Pose;
+    for (auto* button : {&importFront_, &importFit_, &importZoomIn_, &importZoomOut_}) button->SetVisible(advanced);
+    importRigInfo_.SetVisible(advanced);
+    if (advanced && modelImportPreview_) {
+        const auto size = modelImportPreview_->ModelSize();
+        std::ostringstream info;
+        info << std::fixed << std::setprecision(3) << "Reference size (m)   " << size.x << " x " << size.y << " x " << size.z
+             << "\nArmature bones   " << evidence.armatureBones << "\nFloor height   0.000 m";
+        importRigInfo_.SetText(info.str());
+    }
+    importBone_.SetVisible(pose);
+    poseInfluence_.SetVisible(pose);
+    for (auto& field : importPoseFields_) field.SetVisible(pose);
+    for (auto* button : {&poseRotate_, &poseSolve_, &poseCompare_, &poseReset_, &poseSave_, &poseLoad_}) button->SetVisible(pose);
     for (auto& field : importTransformFields_) field.SetVisible(model);
     importApplyTransform_.SetVisible(model);
     modelImportRole_.SetVisible(model && importWorkflow_==ImportWorkflow::Player);
     modelImportMaterial_.SetVisible(materials); modelImportMapSlot_.SetVisible(materials);
     modelImportAssignMap_.SetVisible(materials); modelImportMapInfo_.SetVisible(materials);
     modelImportWarnings_.SetVisible(materials);
-    modelImportClip_.SetVisible(actions); const bool timeline = character || importWorkflow_ == ImportWorkflow::Animated;
+    modelImportClip_.SetVisible(actions); const bool timeline = !pose && (character || importWorkflow_ == ImportWorkflow::Animated);
     modelImportPlay_.SetVisible(timeline);
     for (auto& step : importStep_) step.SetVisible(timeline);
     modelImportRestart_.SetVisible(timeline); modelImportTime_.SetVisible(timeline);
@@ -146,7 +188,7 @@ void StudioRenderPath::LayoutImportWorkspace()
     modelImportAddAnimation_.SetVisible(actions && character);
     modelImportName_.SetVisible(chosen); modelImportTags_.SetVisible(chosen);
     modelImportFolder_.SetVisible(chosen); modelImportFolderChoices_.SetVisible(chosen);
-    modelImportCommit_.SetVisible(chosen);
+    modelImportCommit_.SetVisible(chosen && !pose);
     modelImportCommit_.SetColor(theme::Accent, wi::gui::IDLE);
 }
 void StudioRenderPath::ApplyImportTransform()

@@ -7306,11 +7306,14 @@ namespace renegade::studio
         }
     }
 
+    #include "ImportRigWorkspace.inc"
     #include "UnifiedImportWorkspace.inc"
 
     void StudioRenderPath::OpenStaticModelImporter(bool fromProjectile)
     {
         ++modelImportGeneration_;
+        importPoseRotations_.clear();
+        importBones_.clear();
         if (session_ == nullptr || !session_->Projects().HasProject())
             return;
         assemblyPanel_.SetVisible(false); assemblyImage_.SetImage({}); assemblyPreview_.reset();

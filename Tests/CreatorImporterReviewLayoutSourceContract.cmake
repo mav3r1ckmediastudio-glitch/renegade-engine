@@ -31,6 +31,10 @@ require_text(workspace "modelImportClip_.SetVisible(actions);" "clip inspection"
 require_text(workspace "modelImportTime_.SetVisible(timeline);" "scrub control")
 require_text(workspace "modelImportAction_.SetVisible(actions && character);" "gameplay assignment")
 require_text(workspace "modelImportFolder_.SetVisible(chosen);" "explicit destination")
+file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/ImportRigWorkspace.inc" rig_workspace)
+require_text(rig_workspace "CollectPlayerViewBones(scene, importBones_, error)" "real armature for reference pose editing")
+require_text(rig_workspace "poseInfluence_.GetValue()" "adjustable IK influence")
+require_text(rig_workspace "ProjectDocumentTransaction().Execute" "durable reference pose file")
 require_text(workspace "ApplyImportTransform();" "editable import transform")
 require_text(importer "SelectImportWorkflow(fromProjectile ? ImportWorkflow::Static : ImportWorkflow::None);" "choose after preview")
 

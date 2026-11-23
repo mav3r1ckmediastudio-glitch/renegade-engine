@@ -28,6 +28,8 @@ namespace renegade::studio
         void Pan(float horizontal, float vertical);
         void FitModel();
         void AddImportFloor();
+        wi::scene::Scene& InspectionScene() { return *scene; }
+        void RefreshPose() { scene->Update(0); renderedFrames_ = 0; }
         void SetViewportSize(unsigned width, unsigned height);
         void SetModelAppearance(float scale, const std::array<float,3>& rotation);
         void SetProjectileEffects(const std::vector<bridge::ProjectileEffectLayer>&);
