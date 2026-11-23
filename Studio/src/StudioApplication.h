@@ -1881,6 +1881,9 @@ namespace renegade::studio
         std::vector<int> mapFiltered_;
         std::set<int> mapKept_;
         int mapFirst_=0,mapTargetIndex_=-1;
+        bool mapDragging_ = false;
+        float mapDragY_ = 0;
+        bool ScrollRetargetTable();
         bool mapEditingClip_=false,mapReplaying_=false,mapDirty_=false;
         struct EditableTake {
             int clip=-1;

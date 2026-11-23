@@ -15,6 +15,54 @@ void StudioRenderPath::ReplayMapEdit(bool redo)
         WriteMappedTake(false);
     SelectMapTarget(mapTargetIndex_);RefreshMapRows();LayoutImportWorkspace();
 }
+bool StudioRenderPath::ScrollRetargetTable()
+{
+    const auto pointer = wi::input::GetPointer();
+    if (!wi::input::Down(wi::input::MOUSE_BUTTON_MIDDLE))
+        mapDragging_ = false;
+
+    if (importPage_ != ImportPage::Retarget || !mapTargetHeader_.IsVisible() ||
+        !rtScene_.IsValid() || importCameraDrag_ != ImportCameraDrag::None)
+    {
+        mapDragging_ = false;
+        return false;
+    }
+    // An expanded picker owns its own list and wheel input.
+    if (rtClip_.GetState() == wi::gui::ACTIVE || std::any_of(mapSourceRows_.begin(), mapSourceRows_.end(),
+        [](const auto& row) { return row.IsVisible() && row.GetState() == wi::gui::ACTIVE; }))
+        return false;
+
+    const auto top = mapSourceHeader_.GetPos();
+    const auto right = mapTargetHeader_.GetPos().x + mapTargetHeader_.GetSize().x;
+    const auto bottom = mapSourceLabel_.GetPos().y;
+    const bool overTable = pointer.x >= top.x && pointer.x < right &&
+        pointer.y >= top.y && pointer.y < bottom;
+    if (overTable && wi::input::Press(wi::input::MOUSE_BUTTON_MIDDLE))
+    {
+        mapDragging_ = true;
+        mapDragY_ = pointer.y;
+    }
+    int rows = 0;
+    if (mapDragging_)
+    {
+        const float pitch = std::max(1.f, mapTargetRows_[1].GetPos().y - mapTargetRows_[0].GetPos().y);
+        rows = int((mapDragY_ - pointer.y) / pitch);
+        mapDragY_ -= rows * pitch;
+    }
+    else if (overTable && pointer.z != 0)
+        rows = pointer.z > 0 ? -std::max(1, int(pointer.z)) : std::max(1, int(-pointer.z));
+    else
+        return false;
+
+    const int first = std::clamp(mapFirst_ + rows, 0, std::max(0, int(mapFiltered_.size()) - MapRows));
+    if (first != mapFirst_)
+    {
+        mapFirst_ = first;
+        RefreshMapRows();
+    }
+    return true;
+}
+
 void StudioRenderPath::SelectMapTarget(int t)
 {
     if(t<0 || t>=int(rtTargetNames_.size()))return;
@@ -39,7 +87,7 @@ void StudioRenderPath::RefreshMapRows()
         if(it!=rtPairs_.end())words+=" "+sourceLabels_[it-rtPairs_.begin()]+" "+rtSourceNames_[it-rtPairs_.begin()];
         if(search.empty() || lower(words).find(search)!=std::string::npos)mapFiltered_.push_back(t);
     }
-    mapFirst_=std::clamp(mapFirst_,0,std::max(0,(int(mapFiltered_.size())-1)/MapRows*MapRows));
+    mapFirst_=std::clamp(mapFirst_,0,std::max(0,int(mapFiltered_.size())-MapRows));
     const bool rt=importPage_==ImportPage::Retarget;
     for(int row=0;row<MapRows;++row){
         auto& c=mapSourceRows_[row];auto& b=mapTargetRows_[row];
@@ -55,6 +103,10 @@ void StudioRenderPath::RefreshMapRows()
         c.SetSelectedWithoutCallback(selected);b.SetText(targetLabels_[t]);b.SetTooltip(rtTargetNames_[t]);
         b.SetColor(mapTargetIndex_==t?theme::Accent:theme::Control,wi::gui::IDLE);
     }
+    const int count = int(mapFiltered_.size());
+    const std::string range = count ? std::to_string(mapFirst_ + 1) + "-" +
+        std::to_string(std::min(mapFirst_ + MapRows, count)) + " of " + std::to_string(count) : "0";
+    mapTargetHeader_.SetText("TARGET   " + range);
     mapPrev_.SetEnabled(mapFirst_>0);mapNext_.SetEnabled(mapFirst_+MapRows<int(mapFiltered_.size()));
     int src=rtSource_.GetSelected();mapSourceLabel_.SetEnabled(src>=0 && src<int(sourceLabels_.size()));
     mapSourceLabel_.SetValue(src>=0 && src<int(sourceLabels_.size())?sourceLabels_[src]:"");

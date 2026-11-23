@@ -154,6 +154,7 @@ void StudioRenderPath::ResizeImportWorkspace(float width, float height)
 }
 bool StudioRenderPath::NavigateImportViewport()
 {
+    if (ScrollRetargetTable()) return true;
     if (rigDrag_ != RigHandle::None) return false;
     const auto pointer = wi::input::GetPointer();
     const auto pos = modelImportPreviewImage_.GetPos();
