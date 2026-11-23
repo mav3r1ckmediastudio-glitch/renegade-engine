@@ -36,6 +36,13 @@ namespace renegade::bridge
         bool cameraBend = true;
     };
 
+    // Stock artwork and reviewed starting settings; native WISCENE remains authoritative.
+    enum class StockGrassPreset { MeadowOpen, MeadowFull, MeadowVeryFull };
+    bool BuildStockGrassAtlas(const std::filesystem::path& project, StockGrassPreset preset,
+        GrassAtlas& atlas, std::string& error);
+    WickedVegetationSettings StockGrassPresetSettings(StockGrassPreset preset,
+        const WickedVegetationSettings& current) noexcept;
+
     struct VegetationChunkState
     {
         wi::ecs::Entity chunkEntity = wi::ecs::INVALID_ENTITY;

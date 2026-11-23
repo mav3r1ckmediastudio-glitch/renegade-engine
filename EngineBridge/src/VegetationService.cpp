@@ -5,6 +5,11 @@
 #include <cmath>
 #include <filesystem>
 #include <utility>
+#include <array>
+#include <fstream>
+#include <iterator>
+#include "renegade/bridge/PayloadDigest.h"
+#include "renegade/bridge/ProjectDocumentTransaction.h"
 
 namespace
 {
@@ -28,6 +33,36 @@ namespace
         return (fs::u8path(wi::helper::GetCurrentPath()) /
                 "Content" / "terrain")
             .lexically_normal();
+    }
+
+    struct StockGrassStyle
+    {
+        const char* source;
+        const char* digest;
+        const char* projectFile;
+        std::array<std::array<unsigned,4>,6> crops;
+        XMFLOAT4 colour;
+    };
+    const StockGrassStyle MeadowOpenStyle{
+        "meadow_open.png",
+        "c083bbb89d84d7df9e7ac353dcbd4b6ed131f81dc9b51afc51d0d50321b77113",
+        "meadow-open-c083bbb89d84d7df.png",
+        {{{39,21,420,484},{565,15,977,480},{66,660,462,986},
+          {601,526,955,993},{71,1063,474,1508},{590,1026,914,1507}}},
+        {1,1,1,1}};
+    const StockGrassStyle MeadowFullStyle{
+        "meadow_full.png",
+        "d863e86a0a4cf17fdc714982f7778fd29b3efd9bebe53aaea6af56534a28c562",
+        "meadow-full-d863e86a0a4cf17f.png",
+        {{{24,123,484,475},{521,129,983,473},{28,619,492,943},
+          {531,560,998,943},{40,1070,498,1426},{528,1086,994,1425}}},
+        {.670896f,.660796f,.778305f,1}};
+    const StockGrassStyle* StockGrassStyleFor(const std::string& path)
+    {
+        const auto file=fs::u8path(path).filename().u8string();
+        if(file==MeadowOpenStyle.projectFile)return &MeadowOpenStyle;
+        if(file==MeadowFullStyle.projectFile)return &MeadowFullStyle;
+        return nullptr;
     }
 
     bool HasMarker(
@@ -306,9 +341,27 @@ namespace
             hair.atlas_rects[i].texMulAdd = {scale, scale, (i%side)*scale, (i/side)*scale};
             hair.atlas_rects[i].size = 1.f;
         }
+        const auto* style=StockGrassStyleFor(atlas.path);
+        if(style && atlas.frames==6)
+        {
+            for(unsigned i=0;i<6;++i)
+            {
+                const auto& c=style->crops[i];
+                hair.atlas_rects[i].texMulAdd={
+                    float(c[2]-c[0])/1024, float(c[3]-c[1])/1536,
+                    float(c[0])/1024, float(c[1])/1536};
+            }
+        }
         auto& material = scene.materials.Create(entity);
         material = terrain.grass_material;
         material.baseColor = {1,1,1,1};
+        if(style && atlas.frames==6)
+        {
+            material.baseColor=style->colour;
+            material.SetRoughness(.9f);
+            material.SetReflectance(.02f);
+            material.SetAlphaRef(.5f);
+        }
         auto& slot = material.textures[wi::scene::MaterialComponent::BASECOLORMAP];
         slot.name = atlas.path;
         slot.resource = wi::resourcemanager::Load(slot.name);
@@ -415,6 +468,45 @@ namespace
 
 namespace renegade::bridge
 {
+    bool BuildStockGrassAtlas(const fs::path& project, StockGrassPreset preset,
+        GrassAtlas& atlas, std::string& error)
+    {
+        const auto& style=preset==StockGrassPreset::MeadowOpen?MeadowOpenStyle:MeadowFullStyle;
+        const auto source=BundledGrassRoot()/"foliage"/"Presets"/style.source;
+        std::ifstream file(source,std::ios::binary);
+        if(!file){error="Bundled meadow grass is missing.";return false;}
+        std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)),{});
+        std::string digest;
+        if(!ComputePayloadSha256(bytes,digest,error))return false;
+        if(digest!=style.digest){error="Bundled meadow grass failed its content check.";return false;}
+        const auto target=project/"Content/Vegetation/Mixes"/style.projectFile;
+        std::ifstream existing(target,std::ios::binary);
+        std::vector<uint8_t> current((std::istreambuf_iterator<char>(existing)),{});
+        if(current!=bytes)
+        {
+            ProjectDocumentTransactionOptions options;
+            options.allowedRoot=project.generic_u8string();
+            options.journalDirectory=(project/"Intermediate/Transactions").generic_u8string();
+            const auto result=ProjectDocumentTransaction{}.Execute(
+                {{target.generic_u8string(),std::move(bytes)}},options);
+            if(!result.success){error=result.message;return false;}
+        }
+        atlas={target.generic_u8string(),6};
+        return true;
+    }
+
+    WickedVegetationSettings StockGrassPresetSettings(StockGrassPreset preset,
+        const WickedVegetationSettings& current) noexcept
+    {
+        auto settings=current;
+        settings.density=(preset==StockGrassPreset::MeadowFull?25.f:50.f)/3.f;
+        settings.length=.5f;settings.width=.9f;
+        settings.segmentCount=2;settings.billboardCount=2;
+        settings.randomness=.25f;settings.randomSeed=17;
+        settings.uniformity=MixedPaletteUniformity;settings.viewDistance=100.f;
+        return settings;
+    }
+
     std::vector<fs::path> GrassPaletteEntries(const fs::path& project, PlantGroup group)
     {
         std::vector<fs::path> entries;
@@ -909,7 +1001,7 @@ namespace renegade::bridge
     {
         WickedVegetationSettings settings = requested;
         settings.density =
-            std::clamp(settings.density, 0.0f, 4.0f);
+            std::clamp(settings.density, 0.0f, 20.0f);
         settings.length =
             std::clamp(settings.length, 0.0f, 4.0f);
         settings.width =

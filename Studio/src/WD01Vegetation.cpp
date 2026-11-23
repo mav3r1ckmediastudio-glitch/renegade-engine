@@ -60,7 +60,8 @@ namespace
     {
         wi::gui::Label header;
         wi::gui::Label source;
-        renegade::studio::SceneInspectorComboBox plantFilter;
+        renegade::studio::SceneInspectorComboBox plantFilter, stockPresets;
+        int stockPreset=0;
         PlantGroup group = PlantGroup::Grass;
         renegade::studio::SceneInspectorSlider brushSize;
         renegade::studio::SceneInspectorButton paint;
@@ -213,6 +214,44 @@ namespace renegade::studio
             "Pinned Wicked grass.wiscene, native GPU simulation, culling, wind and collider response.");
         StyleLabel(state.source);
         inspectorPanel_.AddWidget(&state.source);
+
+        state.stockPresets.Create("Grass preset");
+        state.stockPresets.AddItem("Selected plant mix");
+        state.stockPresets.AddItem("Meadow - Open");
+        state.stockPresets.AddItem("Meadow - Full");
+        state.stockPresets.AddItem("Meadow - Very Full");
+        state.stockPresets.SetSelectedWithoutCallback(0);
+        state.stockPresets.SetTooltip(
+            "Choose reviewed meadow artwork and starting settings. Changes grass settings across this terrain. "
+            "Paint adds the chosen six-variation mix; existing textures are preserved. Sliders can customise it.");
+        state.stockPresets.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            auto& s=Controls();
+            if(args.iValue<0||args.iValue>3)return;
+            if(args.iValue==0){s.stockPreset=0;s.rebuildAtlas=true;return;}
+            auto* terrain=CurrentTerrain(session_);
+            if(!terrain||!session_||!session_->Projects().HasProject())return;
+            const auto preset=static_cast<bridge::StockGrassPreset>(args.iValue-1);
+            std::string error;
+            bridge::GrassAtlas atlas;
+            if(!bridge::BuildStockGrassAtlas(std::filesystem::u8path(
+                session_->Projects().CurrentProject().rootPath),preset,atlas,error) ||
+                !bridge::InitializeWickedVegetation(session_->Scenes().GetScene(),*terrain,&error))
+            {
+                s.stockPresets.SetSelectedWithoutCallback(s.stockPreset);
+                s.status.SetText(error);return;
+            }
+            auto& scene=session_->Scenes().GetScene();
+            const auto before=bridge::CaptureWickedVegetationSettings(*terrain);
+            const auto after=bridge::StockGrassPresetSettings(preset,before);
+            bridge::ApplyWickedVegetationSettings(scene,*terrain,after);
+            session_->Commands().RecordExecuted(std::make_unique<bridge::SetWickedVegetationSettingsCommand>(
+                scene,terrain->terrainEntity,before,after));
+            s.stockPreset=args.iValue;s.atlas=std::move(atlas);s.rebuildAtlas=false;
+            s.status.SetText("Meadow preset ready. Paint to place it.");
+            QueueInspectorRefresh();
+        });
+        inspectorPanel_.AddWidget(&state.stockPresets);
 
         state.plantFilter.Create("Plant group");
         state.plantFilter.SetTooltip("Filter the palette. Selected plants from other groups stay in the brush. Custom reads PNGs from Content/Vegetation/Palette/Custom.");
@@ -434,7 +473,7 @@ namespace renegade::studio
         };
 
         createSetting(
-            state.density, 0.0f, 4.0f, 1.0f, 1000.0f,
+            state.density, 0.0f, 20.0f, 1.0f, 1000.0f,
             "WD01 Grass Density", "DENSITY",
             "Wicked terrain grass density multiplier.",
             SettingField::Density);
@@ -592,6 +631,7 @@ namespace renegade::studio
         auto& s=Controls();
         if(!s.created)return {};
         if(group==0){s.header.SetVisible(false);s.source.SetVisible(false);std::vector<wi::gui::Widget*> rows;
+            rows.push_back(&s.stockPresets);
             rows.push_back(&s.plantFilter);
             for (size_t i=0; i<s.entryCount; ++i)
             {
@@ -621,6 +661,7 @@ namespace renegade::studio
             std::vector<std::filesystem::path> selected;
             for (const auto& thumbnail:state.thumbnails)
                 if (state.project==project && thumbnail->selected) selected.push_back(thumbnail->path);
+            if(state.project!=project){state.stockPreset=0;state.stockPresets.SetSelectedWithoutCallback(0);}
             state.refreshPalette=false; state.project=project; state.rebuildAtlas=true;
             const auto root = std::filesystem::u8path(project);
             // Older projects acquire the drop folder when the palette is first opened.
@@ -642,6 +683,7 @@ namespace renegade::studio
                         button->OnClick([i](const wi::gui::EventArgs&)
                         {
                             auto& s=Controls(); auto& t=*s.thumbnails[i];
+                            s.stockPreset=0;s.stockPresets.SetSelectedWithoutCallback(0);
                             t.selected=!t.selected; t.SetAccentOutlineStyle(t.selected);
                             s.rebuildAtlas=true;
                             size_t count=0;
@@ -664,6 +706,7 @@ namespace renegade::studio
         wi::gui::Widget* widgets[] = {
             &state.header,
             &state.source,
+            &state.stockPresets,
             &state.plantFilter,
             &state.importSheet,&state.importRows,&state.importColumns,&state.testInteraction,
             &state.brushSize,
@@ -920,7 +963,13 @@ namespace renegade::studio
                 std::vector<std::filesystem::path> selected;
                 for (size_t i=0; i<state.entryCount; ++i)
                     if (state.thumbnails[i]->selected) selected.push_back(state.thumbnails[i]->path);
-                if (selected.empty()) state.atlas={};
+                if(state.stockPreset>0)
+                {
+                    if(!bridge::BuildStockGrassAtlas(std::filesystem::u8path(state.project),
+                        static_cast<bridge::StockGrassPreset>(state.stockPreset-1),state.atlas,error))
+                    {state.status.SetText(error);return true;}
+                }
+                else if (selected.empty()) state.atlas={};
                 else if (!bridge::BuildGrassAtlas(std::filesystem::u8path(state.project),selected,state.atlas,error))
                 { state.status.SetText(error); return true; }
                 state.rebuildAtlas=false;
