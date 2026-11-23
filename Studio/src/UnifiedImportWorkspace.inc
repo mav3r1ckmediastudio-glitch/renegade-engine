@@ -5,8 +5,6 @@ void StudioRenderPath::CreateImportWorkspace()
     for (int i = 0; i < 4; ++i) {
         auto& button = importWorkflowButtons_[i];
         button.Create(workflows[i]);
-        button.SetPos({16.f + 246.f*i, 10});
-        button.SetSize({238, 30});
         button.OnClick([this, i](const wi::gui::EventArgs&) {
             SelectImportWorkflow(static_cast<ImportWorkflow>(i+1));
         });
@@ -16,8 +14,6 @@ void StudioRenderPath::CreateImportWorkspace()
     for (int i = 0; i < 3; ++i) {
         auto& button = importPageButtons_[i];
         button.Create(pages[i]);
-        button.SetPos({552.f + 145.f*i, 54});
-        button.SetSize({137, 28});
         button.OnClick([this, i](const wi::gui::EventArgs&) {
             importPage_ = static_cast<ImportPage>(i);
             LayoutImportWorkspace();
@@ -29,39 +25,61 @@ void StudioRenderPath::CreateImportWorkspace()
         auto& field = importTransformFields_[i];
         field.Create(labels[i]);
         field.SetDescription(std::string(labels[i]) + "  ");
-        field.SetPos({625.f+141.f*(i%3), 108.f+48.f*(i/3)});
-        field.SetSize({63,28});
         field.SetCancelInputEnabled(false);
         field.SetTooltip(i < 3 ? "Degrees" : i < 6 ? "Metres" : "Uniform scale");
         modelImportPanel_.AddWidget(&field);
     }
     importApplyTransform_.Create("Apply Transform");
-    importApplyTransform_.SetPos({735,204});
-    importApplyTransform_.SetSize({246,28});
     importApplyTransform_.OnClick([this](const wi::gui::EventArgs&) { ApplyImportTransform(); });
     modelImportPanel_.AddWidget(&importApplyTransform_);
-    modelImportPanel_.SetSize({1010,635});
-    modelImportPreviewImage_.SetPos({16,54});
-    modelImportRotateLeft_.SetPos({16,381}); modelImportRotateRight_.SetPos({282,381});
-    modelImportSummary_.SetPos({16,419}); modelImportSummary_.SetSize({512,66});
-    modelImportMaterial_.SetPos({640,102}); modelImportMaterial_.SetSize({340,28});
-    modelImportMapSlot_.SetPos({640,141}); modelImportMapSlot_.SetSize({340,28});
-    modelImportAssignMap_.SetPos({552,181}); modelImportMapInfo_.SetPos({552,225});
-    modelImportWarnings_.SetPos({552,340}); modelImportWarnings_.SetSize({430,138});
-    modelImportClip_.SetPos({628,107}); modelImportClip_.SetSize({353,30});
-    modelImportPlay_.SetPos({552,151}); modelImportPlay_.SetSize({209,30});
-    modelImportRestart_.SetPos({772,151}); modelImportRestart_.SetSize({209,30});
-    modelImportTime_.SetPos({706,198}); modelImportTime_.SetSize({210,24});
-    modelImportSpeed_.SetPos({706,241}); modelImportSpeed_.SetSize({210,24});
-    modelImportAction_.SetPos({690,286}); modelImportAction_.SetSize({291,30});
-    modelImportAddAnimation_.SetPos({552,335}); modelImportAddAnimation_.SetSize({429,32});
-    modelImportRole_.SetPos({645,263}); modelImportRole_.SetSize({336,28});
-    modelImportName_.SetPos({107,497}); modelImportName_.SetSize({420,27});
-    modelImportFolderChoices_.SetPos({638,497}); modelImportFolderChoices_.SetSize({344,27});
-    modelImportFolder_.SetPos({107,534}); modelImportFolder_.SetSize({420,27});
-    modelImportTags_.SetPos({638,534}); modelImportTags_.SetSize({344,27});
-    modelImportCancel_.SetPos({552,574}); modelImportCancel_.SetSize({200,32});
-    modelImportCommit_.SetPos({764,574}); modelImportCommit_.SetSize({218,32});
+}
+
+void StudioRenderPath::ResizeImportWorkspace(float width, float height)
+{
+    constexpr float pad = 16, gap = 8, inspectorWidth = 430;
+    modelImportPanel_.SetPos({0, 0});
+    modelImportPanel_.SetSize({width, height});
+    const float right = std::max(252.f, width - inspectorWidth - 32);
+    const float viewWidth = right - 2 * pad;
+    const float footer = std::max(430.f, height - 147);
+    const float viewHeight = footer - 148;
+    const float half = (viewWidth - gap) / 2;
+    const auto place = [](auto& widget, float x, float y, float w, float h) {
+        widget.SetPos({x, y});
+        widget.SetSize({w, h});
+    };
+    const float workflowWidth = (width - 2 * pad - 3 * gap) / 4;
+    for (int i = 0; i < 4; ++i)
+        place(importWorkflowButtons_[i], pad + (workflowWidth + gap) * i, 8, workflowWidth, 30);
+    const float tabWidth = (inspectorWidth - 2 * gap) / 3;
+    for (int i = 0; i < 3; ++i)
+        place(importPageButtons_[i], right + (tabWidth + gap) * i, 52, tabWidth, 28);
+    for (int i = 0; i < 7; ++i)
+        place(importTransformFields_[i], right + 73 + 141 * (i % 3), 108 + 48 * (i / 3), 63, 28);
+    place(importApplyTransform_, right + 183, 204, 247, 28);
+    place(modelImportPreviewImage_, pad, 52, viewWidth, viewHeight);
+    place(modelImportRotateLeft_, pad, 60 + viewHeight, half, 28);
+    place(modelImportRotateRight_, pad + half + gap, 60 + viewHeight, half, 28);
+    place(modelImportSummary_, pad, 96 + viewHeight, viewWidth, 42);
+    place(modelImportMaterial_, right + 92, 102, 338, 28);
+    place(modelImportMapSlot_, right + 92, 141, 338, 28);
+    place(modelImportAssignMap_, right, 181, inspectorWidth, 32);
+    place(modelImportMapInfo_, right, 225, inspectorWidth, 99);
+    place(modelImportWarnings_, right, 332, inspectorWidth, std::min(180.f, footer - 340));
+    place(modelImportClip_, right + 86, 107, 344, 30);
+    place(modelImportPlay_, right, 151, 211, 30);
+    place(modelImportRestart_, right + 219, 151, 211, 30);
+    place(modelImportTime_, right + 155, 198, 210, 24);
+    place(modelImportSpeed_, right + 155, 241, 210, 24);
+    place(modelImportAction_, right + 138, 286, 292, 30);
+    place(modelImportAddAnimation_, right, 335, inspectorWidth, 32);
+    place(modelImportRole_, right + 93, 263, 337, 28);
+    place(modelImportName_, pad + 92, footer, viewWidth - 92, 27);
+    place(modelImportFolder_, pad + 92, footer + 36, viewWidth - 92, 27);
+    place(modelImportFolderChoices_, right + 86, footer, 344, 27);
+    place(modelImportTags_, right + 86, footer + 36, 344, 27);
+    place(modelImportCancel_, right, footer + 76, 207, 32);
+    place(modelImportCommit_, right + 215, footer + 76, 215, 32);
 }
 void StudioRenderPath::SelectImportWorkflow(ImportWorkflow workflow)
 {

@@ -1,3 +1,7 @@
+# Full-window importer review | DESIGN
+
+The importer follows the Studio client size. The model viewport renders at its displayed resolution and the inspector and library footer stay visible. Verified the combat creature in Character / Actions at 1920x1009 and 1264x741, including retaining the scrubbed pose after restoring and remaximising Studio. Local Release build and both importer contract checks passed. Same desktop shortcut and menu path as below.
+
 # Unified Model Importer | DESIGN review | 23 November 2026
 
 On feature/unified-model-importer, following b35605b. Implementation commits 8d18756 and e90f9d3. Local Release review build and isolated project in %LOCALAPPDATA%/RenegadeWork/UnifiedImportReview. Desktop shortcut: Renegade - Unified Model Importer. Open Starter Level / Open Editor if starting in Story Flow. In the Level Editor choose Add > Import Model..., select the FBX, then Character. The shared preview has four workflow choices. Character has Model, Materials and Actions pages. See Studio/src/UnifiedImportWorkspace.inc, ModelImportPreview, StudioApplication and EngineBridge's ModelImportCandidateService and ModelImportCommitService.

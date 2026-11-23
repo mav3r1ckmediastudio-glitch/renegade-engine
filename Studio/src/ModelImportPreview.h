@@ -27,6 +27,7 @@ namespace renegade::studio
         void Zoom(float factor);
         void Pan(float horizontal, float vertical);
         void FitModel();
+        void SetViewportSize(unsigned width, unsigned height);
         void SetModelAppearance(float scale, const std::array<float,3>& rotation);
         void SetProjectileEffects(const std::vector<bridge::ProjectileEffectLayer>&);
         XMFLOAT3 ModelSize() const { return modelSize_; }

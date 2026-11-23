@@ -4336,6 +4336,10 @@ namespace renegade::studio
             dialogueGui_.Update(*this,dt);
             if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_)
             {
+                const auto viewport = modelImportPreviewImage_.GetSize();
+                const float dpi = GetPhysicalWidth() / std::max(1.f, GetLogicalWidth());
+                modelImportPreview_->SetViewportSize(
+                    std::max(1, int(viewport.x * dpi)), std::max(1, int(viewport.y * dpi)));
                 if (modelImportPreview_->NeedsRender())
                 {
                     modelImportPreview_->PreUpdate();
@@ -5117,9 +5121,7 @@ namespace renegade::studio
         const bool sideBySide=assemblyHandPanel_.IsVisible() && width>=1840;
         assemblyPanel_.SetPos(XMFLOAT2(sideBySide?20.0f:std::max(0.0f,(width-1080)*0.5f),std::max(0.0f,(height-810)*0.5f)));
         assemblyHandPanel_.SetPos(XMFLOAT2(sideBySide?1120.0f:std::max(0.0f,(width-730)*0.5f),std::max(0.0f,(height-780)*0.5f)));
-        modelImportPanel_.SetPos(XMFLOAT2(
-            std::max(0.0f, (width - modelImportPanel_.GetSize().x) * 0.5f),
-            std::max(0.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));
+        ResizeImportWorkspace(width, height);
         pickupPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
             std::max(30.0f, (height - 740.0f) * 0.5f)));

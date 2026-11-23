@@ -1812,6 +1812,7 @@ namespace renegade::studio
         void CreateImportWorkspace();
         void SelectImportWorkflow(ImportWorkflow workflow);
         void LayoutImportWorkspace();
+        void ResizeImportWorkspace(float width, float height);
         void ApplyImportTransform();
     };
 

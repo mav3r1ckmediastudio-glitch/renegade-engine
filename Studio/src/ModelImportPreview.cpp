@@ -205,10 +205,21 @@ namespace renegade::studio
         XMStoreFloat3(&pan_,XMLoadFloat3(&pan_) + span*(-horizontal*right + vertical*up));
         FitCamera(); renderedFrames_ = 0;
     }
+    void ModelImportPreview::SetViewportSize(unsigned width, unsigned height)
+    {
+        if (GetPhysicalWidth() == width && GetPhysicalHeight() == height) return;
+        init(width, height, 96);
+        previewCamera_.CreatePerspective(float(width), float(height),
+            std::max(0.00001f, radius_ * 0.001f), radius_ * 20.f, XM_PI / 4.f);
+        FitCamera();
+        ResizeBuffers();
+        renderedFrames_ = 0;
+    }
+
     void ModelImportPreview::FitModel()
     {
         radius_ = sourceRadius_ * appearanceScale_; zoom_ = 1; pan_ = {};
-        previewCamera_.CreatePerspective(512,320,std::max(0.00001f,radius_*0.001f),
+        previewCamera_.CreatePerspective(float(GetPhysicalWidth()),float(GetPhysicalHeight()),std::max(0.00001f,radius_*0.001f),
             radius_*20.0f,XM_PI/4.0f);
         FitCamera(); renderedFrames_ = 0;
     }
