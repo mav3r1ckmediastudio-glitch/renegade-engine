@@ -1,3 +1,9 @@
+# Visible skeleton and IK handles | DESIGN review
+
+Open the Renegade - Unified Model Importer shortcut. In the Level Editor choose Add > Import Model, open SK_Creature_01.fbx, then Character > Edit Pose / IK. The review launcher now starts RenegadeStudioRigOverlay.exe. Bones are clickable. Drag the orange ring to position the selected joint and the blue diamond to set the bend plane.
+
+Verified on a fresh combat creature FBX in the DX12 Studio viewport. Dragged hand_l upward from Y=1.1868 to 1.49847 and moved its elbow pole independently. Used Show original to compare the head before and after the arm edit. Screenshot in UnifiedImportReview/Renegade-Visible-Rig-IK.jpg. Fresh model ingestion now invokes the existing default look-at cleanup. A native import probe confirmed look-at disabled and stable head rotation between updates 120 and 240. Both importer source contracts passed. This pass covers the editor pose view. Runtime head playback and the paired retargeting workflow require separate verification.
+
 # Character reference pose and Advanced workspace | DESIGN review
 
 Continue on feature/unified-model-importer. Desktop shortcut Renegade - Unified Model Importer launches the new Release build (UnifiedImportReview/Studio/RenegadeStudioPoseReview.exe). Level Editor > Add > Import Model > Character > Edit Pose / IK. Select a bone; the orange marker is at its joint. Local incremental rotation, world target and pole, IK influence, original comparison, reset selected joint and separate versioned .rpose save/load are active. Advanced provides front view, fit, zoom, corrected reference dimensions and bone count. The gameplay rig and clips are separate from the reference pose.

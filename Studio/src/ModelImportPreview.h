@@ -28,6 +28,7 @@ namespace renegade::studio
         void Pan(float horizontal, float vertical);
         void FitModel();
         void AddImportFloor();
+        const wi::scene::CameraComponent& InspectionCamera() const { return previewCamera_; }
         wi::scene::Scene& InspectionScene() { return *scene; }
         void RefreshPose() { scene->Update(0); renderedFrames_ = 0; }
         void SetViewportSize(unsigned width, unsigned height);

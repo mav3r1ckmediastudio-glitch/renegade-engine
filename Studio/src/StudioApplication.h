@@ -1813,7 +1813,17 @@ namespace renegade::studio
         void EnterImportPose();
         void RefreshPoseFields();
         void HideImportPoseMarker();
-        wi::ecs::Entity importPoseMarker_ = wi::ecs::INVALID_ENTITY;
+        void DrawImportRig(wi::graphics::CommandList cmd) const;
+        void UpdateImportRigInput();
+        enum class RigHandle { None, Target, Pole };
+        RigHandle rigDrag_ = RigHandle::None;
+        XMFLOAT3 dragTarget_{}, dragPole_{}, dragAnchor_{};
+        XMFLOAT2 dragStart_{};
+        std::map<std::string, XMFLOAT4> dragOriginalPose_;
+        XMFLOAT3 ImportPosePoint(int field) const;
+        XMFLOAT3 ProjectImportPoint(XMFLOAT3 world) const;
+        XMFLOAT3 UnprojectImportPoint(XMFLOAT3 screen) const;
+        bool RigEditingVisible() const;
         wi::gui::Slider poseInfluence_;
         void ApplyPoseEdit(bool solve);
         void ApplyReferencePose(bool original);

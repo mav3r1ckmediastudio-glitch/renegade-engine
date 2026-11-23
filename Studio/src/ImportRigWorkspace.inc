@@ -79,11 +79,8 @@ void StudioRenderPath::ApplyReferencePose(bool original)
 
 void StudioRenderPath::HideImportPoseMarker()
 {
-    if (modelImportPreview_ && importPoseMarker_ != wi::ecs::INVALID_ENTITY) {
-        modelImportPreview_->InspectionScene().Entity_Remove(importPoseMarker_);
-        modelImportPreview_->RefreshPose();
-    }
-    importPoseMarker_ = wi::ecs::INVALID_ENTITY;
+    rigDrag_ = RigHandle::None;
+    dragOriginalPose_.clear();
 }
 
 void StudioRenderPath::RefreshPoseFields()
@@ -107,19 +104,6 @@ void StudioRenderPath::RefreshPoseFields()
         text << std::setprecision(5) << values[j];
         importPoseFields_[j].SetValue(text.str());
     }
-    if (!scene.objects.Contains(importPoseMarker_)) {
-        const auto size = modelImportPreview_->ModelSize();
-        const float radius = std::max({size.x,size.y,size.z}) * 0.021f;
-        importPoseMarker_ = scene.Entity_CreateSphere("Selected pose joint",radius,12,16);
-        auto* material = scene.materials.GetComponent(importPoseMarker_);
-        material->shaderType = wi::scene::MaterialComponent::SHADERTYPE_UNLIT;
-        material->SetBaseColor({1.f,0.24f,0.025f,1.f});
-        material->SetDirty();
-    }
-    auto& marker = *scene.transforms.GetComponent(importPoseMarker_);
-    marker.translation_local = target;
-    marker.SetDirty();
-    modelImportPreview_->RefreshPose();
     importBone_.SetTooltip(importBones_[i].label);
 }
 
@@ -161,12 +145,12 @@ void StudioRenderPath::ApplyPoseEdit(bool solve)
         const auto goal = XMVectorSet(v[3],v[4],v[5],0), pole = XMVectorSet(v[6],v[7],v[8],0);
         const float l1 = length(b-a), l2 = length(c-b), distance = length(goal-a);
         if (std::min({l1,l2,distance}) < 1e-6f) {
-            ShowStudioMessageBox("The target and both limb segments must have a nonzero length.", "Two-bone IK"); return;
+            if (rigDrag_ == RigHandle::None) ShowStudioMessageBox("The target and both limb segments must have a nonzero length.", "Two-bone IK"); return;
         }
         const auto axis = XMVector3Normalize(goal-a);
         const auto bend = pole-a-axis*XMVectorGetX(XMVector3Dot(pole-a,axis));
         if (length(bend) < 1e-6f) {
-            ShowStudioMessageBox("Move the pole off the line between the chain root and target.", "Two-bone IK"); return;
+            if (rigDrag_ == RigHandle::None) ShowStudioMessageBox("Move the pole off the line between the chain root and target.", "Two-bone IK"); return;
         }
         const float d = std::clamp(distance, std::max(1e-6f,std::abs(l1-l2)), l1+l2);
         const float along = (l1*l1-l2*l2+d*d)/(2*d);

@@ -4335,6 +4335,7 @@ namespace renegade::studio
             // receives clicks or shortcuts while a conversation is being edited.
             wi::RenderPath2D::Update(dt);
             dialogueGui_.Update(*this,dt);
+            if (RigEditingVisible()) UpdateImportRigInput();
             if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_)
             {
                 const auto viewport = modelImportPreviewImage_.GetSize();
@@ -4890,7 +4891,10 @@ namespace renegade::studio
             wi::image::Params backdrop(0,0,float(GetLogicalWidth()),float(GetLogicalHeight()),HologramPanel);
             wi::image::Draw(nullptr,backdrop,cmd);
             wi::RenderPath2D::Compose(cmd);
-            if(dialogueFrameSuspended_) dialogueGui_.Render(*this,cmd);
+            if(dialogueFrameSuspended_) {
+                dialogueGui_.Render(*this,cmd);
+                if (RigEditingVisible()) DrawImportRig(cmd);
+            }
             else ComposeUiForeground(cmd);
             return;
         }
@@ -7306,6 +7310,7 @@ namespace renegade::studio
         }
     }
 
+    #include "ImportRigOverlay.inc"
     #include "ImportRigWorkspace.inc"
     #include "UnifiedImportWorkspace.inc"
 

@@ -387,6 +387,7 @@ namespace renegade::bridge
                 ImportModel_FBX(candidate.sourcePath_, *candidate.scene_);
             else if (candidate.sourceFormat_ == ModelSourceFormat::Obj) ImportModel_OBJ(candidate.sourcePath_, *candidate.scene_);
             else ImportModel_GLTF(candidate.sourcePath_, *candidate.scene_);
+            (void)DisableDefaultHumanoidLookAt(*candidate.scene_);
             if (!RepairInvalidSkinWeights(*candidate.scene_, candidate.warnings_, candidate.error_))
             {
                 candidate.scene_.reset();
