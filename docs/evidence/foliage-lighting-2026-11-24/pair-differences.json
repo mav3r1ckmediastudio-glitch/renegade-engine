@@ -1,0 +1,514 @@
+[
+  {
+    "study": "NativeV1",
+    "a": "night-no-moon",
+    "b": "night-sky-full-moon",
+    "view": "shelter",
+    "region": "front_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.010185185185185184
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-no-moon",
+    "b": "night-sky-full-moon",
+    "view": "shelter",
+    "region": "sheltered_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.01008695652173913
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-no-moon",
+    "b": "night-sky-full-moon",
+    "view": "shelter",
+    "region": "shelter_terrain",
+    "mean_absolute_rgb_difference": 0.010106951871657754
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-no-moon",
+    "b": "night-sky-full-moon",
+    "view": "shelter",
+    "region": "neutral_post",
+    "mean_absolute_rgb_difference": 0.011228070175438596
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-no-moon",
+    "b": "night-sky-full-moon",
+    "view": "shelter",
+    "region": "red_wall",
+    "mean_absolute_rgb_difference": 0.010329380764163372
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-no-moon",
+    "b": "night-sky-full-moon",
+    "view": "overview",
+    "region": "exposed_terrain",
+    "mean_absolute_rgb_difference": 2.5062656641604008e-05
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-no-moon",
+    "b": "night-sky-full-moon",
+    "view": "overview",
+    "region": "short_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.0
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-no-moon",
+    "b": "night-sky-full-moon",
+    "view": "overview",
+    "region": "dry_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.00037037037037037035
+  },
+  {
+    "study": "NativeV1",
+    "a": "day-off",
+    "b": "day-surfel",
+    "view": "shelter",
+    "region": "front_grass_and_gaps",
+    "mean_absolute_rgb_difference": 1.6856296296296296
+  },
+  {
+    "study": "NativeV1",
+    "a": "day-off",
+    "b": "day-surfel",
+    "view": "shelter",
+    "region": "sheltered_grass_and_gaps",
+    "mean_absolute_rgb_difference": 7.631884057971014
+  },
+  {
+    "study": "NativeV1",
+    "a": "day-off",
+    "b": "day-surfel",
+    "view": "shelter",
+    "region": "shelter_terrain",
+    "mean_absolute_rgb_difference": 0.4023707664884136
+  },
+  {
+    "study": "NativeV1",
+    "a": "day-off",
+    "b": "day-surfel",
+    "view": "shelter",
+    "region": "neutral_post",
+    "mean_absolute_rgb_difference": 3.6251461988304094
+  },
+  {
+    "study": "NativeV1",
+    "a": "day-off",
+    "b": "day-surfel",
+    "view": "shelter",
+    "region": "red_wall",
+    "mean_absolute_rgb_difference": 0.9870355731225295
+  },
+  {
+    "study": "NativeV1",
+    "a": "day-off",
+    "b": "day-surfel",
+    "view": "overview",
+    "region": "exposed_terrain",
+    "mean_absolute_rgb_difference": 0.9673308270676692
+  },
+  {
+    "study": "NativeV1",
+    "a": "day-off",
+    "b": "day-surfel",
+    "view": "overview",
+    "region": "short_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.9243918918918919
+  },
+  {
+    "study": "NativeV1",
+    "a": "day-off",
+    "b": "day-surfel",
+    "view": "overview",
+    "region": "dry_grass_and_gaps",
+    "mean_absolute_rgb_difference": 1.1573063973063973
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-surfel",
+    "view": "shelter",
+    "region": "front_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.03466975308641975
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-surfel",
+    "view": "shelter",
+    "region": "sheltered_grass_and_gaps",
+    "mean_absolute_rgb_difference": 4.395855072463768
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-surfel",
+    "view": "shelter",
+    "region": "shelter_terrain",
+    "mean_absolute_rgb_difference": 0.013266488413547238
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-surfel",
+    "view": "shelter",
+    "region": "neutral_post",
+    "mean_absolute_rgb_difference": 0.011228070175438596
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-surfel",
+    "view": "shelter",
+    "region": "red_wall",
+    "mean_absolute_rgb_difference": 2.610144927536232
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-surfel",
+    "view": "overview",
+    "region": "exposed_terrain",
+    "mean_absolute_rgb_difference": 0.0518671679197995
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-surfel",
+    "view": "overview",
+    "region": "short_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.05261261261261261
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-surfel",
+    "view": "overview",
+    "region": "dry_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.18175084175084177
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-ssgi",
+    "view": "shelter",
+    "region": "front_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.009688271604938271
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-ssgi",
+    "view": "shelter",
+    "region": "sheltered_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.02628985507246377
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-ssgi",
+    "view": "shelter",
+    "region": "shelter_terrain",
+    "mean_absolute_rgb_difference": 0.009358288770053477
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-ssgi",
+    "view": "shelter",
+    "region": "neutral_post",
+    "mean_absolute_rgb_difference": 0.011228070175438596
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-ssgi",
+    "view": "shelter",
+    "region": "red_wall",
+    "mean_absolute_rgb_difference": 0.014782608695652176
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-ssgi",
+    "view": "overview",
+    "region": "exposed_terrain",
+    "mean_absolute_rgb_difference": 0.019022556390977444
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-ssgi",
+    "view": "overview",
+    "region": "short_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.01051801801801802
+  },
+  {
+    "study": "NativeV1",
+    "a": "night-lantern-off",
+    "b": "night-lantern-ssgi",
+    "view": "overview",
+    "region": "dry_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.015286195286195287
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-no-moon-surfel",
+    "b": "night-sky-full-moon-surfel",
+    "view": "shelter",
+    "region": "front_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.006682098765432098
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-no-moon-surfel",
+    "b": "night-sky-full-moon-surfel",
+    "view": "shelter",
+    "region": "sheltered_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.0
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-no-moon-surfel",
+    "b": "night-sky-full-moon-surfel",
+    "view": "shelter",
+    "region": "shelter_terrain",
+    "mean_absolute_rgb_difference": 0.011301247771836007
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-no-moon-surfel",
+    "b": "night-sky-full-moon-surfel",
+    "view": "shelter",
+    "region": "neutral_post",
+    "mean_absolute_rgb_difference": 0.0468421052631579
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-no-moon-surfel",
+    "b": "night-sky-full-moon-surfel",
+    "view": "shelter",
+    "region": "red_wall",
+    "mean_absolute_rgb_difference": 0.0
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-no-moon-surfel",
+    "b": "night-sky-full-moon-surfel",
+    "view": "overview",
+    "region": "exposed_terrain",
+    "mean_absolute_rgb_difference": 0.025137844611528824
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-no-moon-surfel",
+    "b": "night-sky-full-moon-surfel",
+    "view": "overview",
+    "region": "short_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.06941441441441441
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-no-moon-surfel",
+    "b": "night-sky-full-moon-surfel",
+    "view": "overview",
+    "region": "dry_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.18942760942760942
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-inherited-ambient",
+    "b": "night-readable-inherited-ambient-surfel",
+    "view": "shelter",
+    "region": "front_grass_and_gaps",
+    "mean_absolute_rgb_difference": 126.84397222222223
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-inherited-ambient",
+    "b": "night-readable-inherited-ambient-surfel",
+    "view": "shelter",
+    "region": "sheltered_grass_and_gaps",
+    "mean_absolute_rgb_difference": 128.91930434782608
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-inherited-ambient",
+    "b": "night-readable-inherited-ambient-surfel",
+    "view": "shelter",
+    "region": "shelter_terrain",
+    "mean_absolute_rgb_difference": 65.03641711229947
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-inherited-ambient",
+    "b": "night-readable-inherited-ambient-surfel",
+    "view": "shelter",
+    "region": "neutral_post",
+    "mean_absolute_rgb_difference": 190.17008771929827
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-inherited-ambient",
+    "b": "night-readable-inherited-ambient-surfel",
+    "view": "shelter",
+    "region": "red_wall",
+    "mean_absolute_rgb_difference": 116.00955204216073
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-inherited-ambient",
+    "b": "night-readable-inherited-ambient-surfel",
+    "view": "overview",
+    "region": "exposed_terrain",
+    "mean_absolute_rgb_difference": 65.13904761904762
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-inherited-ambient",
+    "b": "night-readable-inherited-ambient-surfel",
+    "view": "overview",
+    "region": "short_grass_and_gaps",
+    "mean_absolute_rgb_difference": 137.0369144144144
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-inherited-ambient",
+    "b": "night-readable-inherited-ambient-surfel",
+    "view": "overview",
+    "region": "dry_grass_and_gaps",
+    "mean_absolute_rgb_difference": 140.40488215488213
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-cold-moonlight",
+    "b": "night-readable-cold-moonlight-surfel",
+    "view": "shelter",
+    "region": "front_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.2601635802469136
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-cold-moonlight",
+    "b": "night-readable-cold-moonlight-surfel",
+    "view": "shelter",
+    "region": "sheltered_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.1648985507246377
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-cold-moonlight",
+    "b": "night-readable-cold-moonlight-surfel",
+    "view": "shelter",
+    "region": "shelter_terrain",
+    "mean_absolute_rgb_difference": 0.018150623885918003
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-cold-moonlight",
+    "b": "night-readable-cold-moonlight-surfel",
+    "view": "shelter",
+    "region": "neutral_post",
+    "mean_absolute_rgb_difference": 0.07403508771929825
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-cold-moonlight",
+    "b": "night-readable-cold-moonlight-surfel",
+    "view": "shelter",
+    "region": "red_wall",
+    "mean_absolute_rgb_difference": 0.12612648221343872
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-cold-moonlight",
+    "b": "night-readable-cold-moonlight-surfel",
+    "view": "overview",
+    "region": "exposed_terrain",
+    "mean_absolute_rgb_difference": 0.2031203007518797
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-cold-moonlight",
+    "b": "night-readable-cold-moonlight-surfel",
+    "view": "overview",
+    "region": "short_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.5402702702702703
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-cold-moonlight",
+    "b": "night-readable-cold-moonlight-surfel",
+    "view": "overview",
+    "region": "dry_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.5788888888888889
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-lantern-off",
+    "b": "night-readable-lantern-surfel",
+    "view": "shelter",
+    "region": "front_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.3315740740740741
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-lantern-off",
+    "b": "night-readable-lantern-surfel",
+    "view": "shelter",
+    "region": "sheltered_grass_and_gaps",
+    "mean_absolute_rgb_difference": 7.304463768115942
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-lantern-off",
+    "b": "night-readable-lantern-surfel",
+    "view": "shelter",
+    "region": "shelter_terrain",
+    "mean_absolute_rgb_difference": 0.06509803921568628
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-lantern-off",
+    "b": "night-readable-lantern-surfel",
+    "view": "shelter",
+    "region": "neutral_post",
+    "mean_absolute_rgb_difference": 0.10880116959064329
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-lantern-off",
+    "b": "night-readable-lantern-surfel",
+    "view": "shelter",
+    "region": "red_wall",
+    "mean_absolute_rgb_difference": 5.04459815546772
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-lantern-off",
+    "b": "night-readable-lantern-surfel",
+    "view": "overview",
+    "region": "exposed_terrain",
+    "mean_absolute_rgb_difference": 0.17769423558897243
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-lantern-off",
+    "b": "night-readable-lantern-surfel",
+    "view": "overview",
+    "region": "short_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.3824099099099099
+  },
+  {
+    "study": "NativeFollowupV2",
+    "a": "night-readable-lantern-off",
+    "b": "night-readable-lantern-surfel",
+    "view": "overview",
+    "region": "dry_grass_and_gaps",
+    "mean_absolute_rgb_difference": 0.6554882154882155
+  }
+]

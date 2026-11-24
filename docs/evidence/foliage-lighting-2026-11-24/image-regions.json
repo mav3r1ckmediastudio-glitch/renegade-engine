@@ -1,0 +1,54 @@
+{
+  "shelter": {
+    "front_grass_and_gaps": [
+      50,
+      450,
+      450,
+      720
+    ],
+    "sheltered_grass_and_gaps": [
+      420,
+      380,
+      650,
+      430
+    ],
+    "shelter_terrain": [
+      900,
+      540,
+      1240,
+      760
+    ],
+    "neutral_post": [
+      790,
+      270,
+      850,
+      460
+    ],
+    "red_wall": [
+      330,
+      245,
+      560,
+      355
+    ]
+  },
+  "overview": {
+    "exposed_terrain": [
+      30,
+      620,
+      220,
+      760
+    ],
+    "short_grass_and_gaps": [
+      545,
+      410,
+      730,
+      490
+    ],
+    "dry_grass_and_gaps": [
+      1010,
+      400,
+      1230,
+      445
+    ]
+  }
+}

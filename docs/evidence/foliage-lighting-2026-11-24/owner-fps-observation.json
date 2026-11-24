@@ -1,0 +1,48 @@
+{
+  "submitted_frame_rate": 75.77994413593737,
+  "samples": [
+    {
+      "t": 179452.4438337,
+      "pid": 2800,
+      "frames": 96476,
+      "paused": true,
+      "foreground": false
+    },
+    {
+      "t": 179453.4455773,
+      "pid": 2800,
+      "frames": 96552,
+      "paused": true,
+      "foreground": false
+    },
+    {
+      "t": 179454.4476637,
+      "pid": 2800,
+      "frames": 96628,
+      "paused": true,
+      "foreground": false
+    },
+    {
+      "t": 179455.4512217,
+      "pid": 2800,
+      "frames": 96704,
+      "paused": true,
+      "foreground": false
+    },
+    {
+      "t": 179456.4539066,
+      "pid": 2800,
+      "frames": 96780,
+      "paused": true,
+      "foreground": false
+    },
+    {
+      "t": 179457.4583531,
+      "pid": 2800,
+      "frames": 96856,
+      "paused": true,
+      "foreground": false
+    }
+  ],
+  "note": "diagnostic submitted frames, not measured presentation FPS; focus/pause state included"
+}

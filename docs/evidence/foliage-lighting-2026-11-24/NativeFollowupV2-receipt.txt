@@ -1,0 +1,26 @@
+Explicit exposure per case (1 proof, 3 readable night); eye adaptation/bloom/DOF/motion blur off. Wind frozen for matched lighting images.
+night-readable-inherited-ambient exposure=3 source_realistic_sky=0 source_ambient=0.75,0.75,0.75
+night-readable-inherited-ambient view=0 sun_y=-0.965926 ambient=0.75,0.75,0.75 lights=1 moon_descriptor=1287 surfel=0 ssgi=0
+night-readable-inherited-ambient view=1 sun_y=-0.965926 ambient=0.75,0.75,0.75 lights=1 moon_descriptor=1287 surfel=0 ssgi=0
+night-readable-inherited-ambient-surfel exposure=3 source_realistic_sky=0 source_ambient=0.75,0.75,0.75
+night-readable-inherited-ambient-surfel view=0 sun_y=-0.965926 ambient=0.75,0.75,0.75 lights=1 moon_descriptor=1287 surfel=1 ssgi=0
+night-readable-inherited-ambient-surfel view=1 sun_y=-0.965926 ambient=0.75,0.75,0.75 lights=1 moon_descriptor=1287 surfel=1 ssgi=0
+night-no-moon-surfel exposure=3 source_realistic_sky=0 source_ambient=0.75,0.75,0.75
+night-no-moon-surfel view=0 sun_y=-0.965926 ambient=0,0,0 lights=1 moon_descriptor=-1 surfel=1 ssgi=0
+night-no-moon-surfel view=1 sun_y=-0.965926 ambient=0,0,0 lights=1 moon_descriptor=-1 surfel=1 ssgi=0
+night-sky-full-moon-surfel exposure=3 source_realistic_sky=0 source_ambient=0.75,0.75,0.75
+night-sky-full-moon-surfel view=0 sun_y=-0.965926 ambient=0,0,0 lights=1 moon_descriptor=1287 surfel=1 ssgi=0
+night-sky-full-moon-surfel view=1 sun_y=-0.965926 ambient=0,0,0 lights=1 moon_descriptor=1287 surfel=1 ssgi=0
+night-readable-cold-moonlight exposure=3 source_realistic_sky=0 source_ambient=0.75,0.75,0.75
+night-readable-cold-moonlight view=0 sun_y=-0.965926 ambient=0,0,0 lights=2 moon_descriptor=1287 surfel=0 ssgi=0
+night-readable-cold-moonlight view=1 sun_y=-0.965926 ambient=0,0,0 lights=2 moon_descriptor=1287 surfel=0 ssgi=0
+night-readable-cold-moonlight-surfel exposure=3 source_realistic_sky=0 source_ambient=0.75,0.75,0.75
+night-readable-cold-moonlight-surfel view=0 sun_y=-0.965926 ambient=0,0,0 lights=2 moon_descriptor=1287 surfel=1 ssgi=0
+night-readable-cold-moonlight-surfel view=1 sun_y=-0.965926 ambient=0,0,0 lights=2 moon_descriptor=1287 surfel=1 ssgi=0
+night-readable-lantern-off exposure=3 source_realistic_sky=0 source_ambient=0.75,0.75,0.75
+night-readable-lantern-off view=0 sun_y=-0.965926 ambient=0,0,0 lights=3 moon_descriptor=1287 surfel=0 ssgi=0
+night-readable-lantern-off view=1 sun_y=-0.965926 ambient=0,0,0 lights=3 moon_descriptor=1287 surfel=0 ssgi=0
+night-readable-lantern-surfel exposure=3 source_realistic_sky=0 source_ambient=0.75,0.75,0.75
+night-readable-lantern-surfel view=0 sun_y=-0.965926 ambient=0,0,0 lights=3 moon_descriptor=1287 surfel=1 ssgi=0
+night-readable-lantern-surfel view=1 sun_y=-0.965926 ambient=0,0,0 lights=3 moon_descriptor=1287 surfel=1 ssgi=0
+FOLIAGE_LIGHTING_SAVE_REOPEN_NATIVE_CAPTURE_PASS

@@ -1,0 +1,15 @@
+{
+  "scene_byte_identical": true,
+  "scene_sha256": "798a180b7c74c897fb4bccd743dd123ccf92b92e80d419d78c31e7123db120e9",
+  "original_vs_relocated_frame60_mean_abs_rgb": [
+    16.295104230561908,
+    11.95332859346828,
+    11.926038355731519
+  ],
+  "capture_size": [
+    1264,
+    681
+  ],
+  "note": "normal unmodified Runtime cold load, controller terminated only own verification process; startup comparison not converged GI/performance proof",
+  "comparison_limit": "Startup captures have different player view directions; RGB differences do not measure visual parity. Both were inspected for the expected scene, foliage and illumination. Exact preservation is established by the unchanged scene hash and native settings/resource contract."
+}

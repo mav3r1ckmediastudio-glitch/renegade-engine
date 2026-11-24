@@ -1,0 +1,26 @@
+[
+  {
+    "case": "day-surfel",
+    "pid": 30940,
+    "native_player_capture": "G13E14_ACTUAL_PLAYER_CAMERA_CAPTURE success=1 waterfall_active=0 river_active=0 emitters=0",
+    "bytes": 1399415,
+    "capture_frame": 60,
+    "termination": "controller stops its own isolated test after capture; no clean-exit claim"
+  },
+  {
+    "case": "night-readable-cold-moonlight-surfel",
+    "pid": 35112,
+    "native_player_capture": "G13E14_ACTUAL_PLAYER_CAMERA_CAPTURE success=1 waterfall_active=0 river_active=0 emitters=0",
+    "bytes": 1172497,
+    "capture_frame": 60,
+    "termination": "controller stops its own isolated test after capture; no clean-exit claim"
+  },
+  {
+    "case": "night-readable-lantern-surfel",
+    "pid": 46264,
+    "native_player_capture": "G13E14_ACTUAL_PLAYER_CAMERA_CAPTURE success=1 waterfall_active=0 river_active=0 emitters=0",
+    "bytes": 1282958,
+    "capture_frame": 60,
+    "termination": "controller stops its own isolated test after capture; no clean-exit claim"
+  }
+]
