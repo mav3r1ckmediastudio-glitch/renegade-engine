@@ -78,4 +78,3 @@ The controller then terminated its own test processes (exit 1); clean shutdown
 was not verified. Static captures were visually inspected: TAA smooths cutout
 edges but noticeably softens grass detail. A still capture does not certify
 motion or remove the outstanding owner video failure.
-
