@@ -1,26 +1,29 @@
-# Meadow grass presets
+# Stock vegetation presets
 
-In Terrain > Vegetation, choose a **Grass preset**, then Paint. The three reviewed options use native GPU hair grass.
+In Terrain > Vegetation, choose a Grass preset, then Paint. Eight approved choices use seven original RGBA sheets, each with six cropped variations.
 
-| Preset | Artwork | Nominal tufts per square metre |
-|---|---|---:|
-| Meadow - Open | Narrow meadow clumps; six variations | 50 |
-| Meadow - Full | Broad bases made of fine blades; six variations | 25 |
-| Meadow - Very Full | Same broad clumps at higher density | 50 |
+| Preset | Height (m) | Nominal tufts / square metre |
+|---|---:|---:|
+| Meadow - Open | 0.50 | 50 |
+| Meadow - Full | 0.50 | 25 |
+| Meadow - Very Full | 0.50 | 50 |
+| Short grass | 0.25 | 25 |
+| Dry grass | 0.45 | 25 |
+| Seedhead grass | 0.65 | 15 |
+| Low clover | 0.12 | 20 |
+| Small wildflowers | 0.30 | 4 |
 
-These are starting points. The preset changes the terrain's shared grass settings, including density, height, width, segments and cards. Existing painted textures remain assigned, but their geometry/density follows those shared controls. Use the sliders to customise the result. Choosing a plant thumbnail returns the brush to Custom plant mix, preserving the existing multi-species workflow.
+Selecting a stock choice changes the brush only. Painting adds that plant alongside existing plants. The sliders edit that stock choice across this terrain, including its existing painted layers and subsequent strokes. Choosing clover therefore does not resize meadow grass or flowers. Full and Very Full have separate layer identities and densities. Delete removes all vegetation under the brush, and Undo/Redo restores the affected species.
 
-The reviewed geometry uses length 0.5, width 0.9, two segments and two crossed cards, length randomness 0.25, seed 17 and 100-metre view distance. Density is the existing terrain multiplier: 25/3 or 50/3. The supported multiplier range now reaches 20. Native masks and terrain sampling make the precise count depend on the painted footprint and boundary vertices.
+Custom plant mix retains its existing multi-thumbnail atlas import and replacement painting: a Custom stroke replaces other vegetation within its footprint. Custom sliders affect custom and legacy terrain vegetation, leaving the new independent stock layers unchanged. Previously saved meadow layers retain their original appearance and shared settings; no automatic migration is applied.
 
-The preset adopts its PNG into the project's Content/Vegetation/Mixes through a document transaction. Its versioned content identity also identifies the six crop rectangles and material colour calibration when Undo/Redo recreates a painted layer. The native hair rectangles, material, emitter references and masks are serialized in WISCENE; Runtime does not need the original review atlas sidecar. Existing square-cell mixed atlases retain their layout and appearance.
+The approved stock defaults use width 0.9, two segments/two crossed cards, length randomness 0.25, seed 17, drag 0.12, gravity power 0.02 and 100-metre view distance. Density is the native multiplier (nominal tufts / 3); exact counts depend on terrain sampling, painted boundaries and ground coverage. Ground-material Grass Coverage suppresses/restores each species using its own density.
 
-The broad artwork's linear RGB material multiplier is (0.670896, 0.660796, 0.778305), matching the earlier accepted grass colour. Both source sheets retain low-alpha fringe, so these presets use native alpha clipping at 0.5, roughness 0.9 and reflectance 0.02. They are not alpha-blended foliage.
+Source adoption verifies SHA-256 and writes a versioned project-owned PNG through ProjectDocumentTransaction. Native hair geometry, atlas crop rectangles, material, masks and density metadata persist in WISCENE. Terrain metadata saves per-stock-choice edits, including settings changed before the first stroke. Material alpha clipping is 0.5, roughness 0.9, reflectance 0.02 and emissive strength zero. Broad meadow keeps the approved linear RGB multiplier (0.670896, 0.660796, 0.778305); the other stock sheets use white. PNG bytes and crops are unchanged from the approved artwork.
 
-Large-area validation uses Tools/GrassFieldReview.cpp: a 64 x 64 metre field, 102400 or 204800 tufts, matched native settings and near/25m/60m views at 1920 x 1009. GPU timestamp intervals surround the complete native Render stage. Reported intervals include the scene and terrain, rather than grass alone; serial-frame wall times include a GPU wait and do not represent overlapping gameplay throughput. This test does not establish a populated woodland performance guarantee.
+The registered grass-palette proof now also runs StockPlantProfilesProof.h: eight overlapping stock choices, independent edits, Custom isolation, paint and erase history, ground coverage and native cold reopen. FoliageNightReferenceVerify optionally compares a painted stock scene against the six-species approved reference's geometry, dynamics, material and crop values. These checks do not imply a populated-world performance or release gate.
 
-Tools/StockGrassPresetProof.cpp exercises adoption, actual painting, global-setting history, paint Undo/Redo, crop/material restoration, six-variation GPU readback and cold reopen for all three options. The local Studio probe invokes the real selector callbacks and checks history and retained custom thumbnails.
-
-Tools/PrairieWindReview.cpp is a separate motion demonstration. It authors a gentle directional ambient force and four broad, animated gust volumes across the large field. Native animations and force components persist with the scene. It does not change the existing weather presets or add a new general-purpose wind editor.
+Large-field timing and historical motion limitations below remain scoped to their original tests. The later native-breeze and six-species appearance approvals are recorded in HANDOFF.md. The approved night scene remains Examples/FoliageNightReference; it is preserved unchanged. Automatic world-moonlight tracking remains separate work.
 
 ## Validation correction
 
@@ -28,6 +31,6 @@ Earlier review emitters omitted their mesh subset. Native CreateFromMesh therefo
 
 ## Stock selection and current acceptance
 
-Only the three meadow choices remain stock additions. The thirty earlier grass, weed, freshwater, marine and alien PNGs are removed from shipping content and UI discovery. Packaging retires those exact bundled filenames from existing build directories; project Custom folders and previously painted Mixes are untouched. Custom PNG and sheet import remain supported. Choose a meadow preset explicitly; Custom plant mix requires at least one selected custom thumbnail.
+Stock now includes the three meadow choices plus the five temperate additions approved on 24 November. The thirty earlier grass, weed, freshwater, marine and alien PNGs are removed from shipping content and UI discovery. Packaging retires those exact bundled filenames from existing build directories; project Custom folders and previously painted Mixes are untouched. Custom PNG and sheet import remain supported. Choose a meadow preset explicitly; Custom plant mix requires at least one selected custom thumbnail.
 
 The owner's 23 November recording shows texture flicker/shimmer and stuttering grass movement. These are unresolved. Grass appearance is approved, but prairie wind is not visually accepted. Advancing native forces, GPU readback and FPS measurements do not override that failure. Earlier handoff motion claims must not be treated as acceptance.

@@ -7,6 +7,7 @@
 #include "renegade/bridge/ProjectService.h"
 #include <filesystem>
 #include <map>
+#include "StockPlantProfilesProof.h"
 
 namespace grass_palette_proof
 {
@@ -333,6 +334,7 @@ namespace grass_palette_proof
         Check(checkedAll, "Missing six-variety custom mix");
         largeMix.Undo();
         VerifyPlayerWalk(cold);
+        stock_plant_profiles_proof::Run(scene,terrain,root,render,hosted);
         std::cout<<"GRASS_PALETTE_MIX_IMPORT_HISTORY_COLD_REOPEN_PASS"<<std::endl;
     }
 }

@@ -1,0 +1,6 @@
+{
+  "pid": 34348,
+  "project_id": "f84e8a72-538c-48f1-99fb-61e3d8414bdd",
+  "project_loaded_in_review_studio": true,
+  "test": "exact owner launcher on isolated desktop; review-only startup opens project and Vegetation; all painting/widgets use compiled production code"
+}

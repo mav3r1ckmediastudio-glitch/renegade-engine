@@ -42,6 +42,8 @@ namespace
         const char* projectFile;
         std::array<std::array<unsigned,4>,6> crops;
         XMFLOAT4 colour;
+        float height = .5f;
+        float tuftsPerSquareMetre = 50;
     };
     const StockGrassStyle MeadowOpenStyle{
         "meadow_open.png",
@@ -57,8 +59,25 @@ namespace
         {{{24,123,484,475},{521,129,983,473},{28,619,492,943},
           {531,560,998,943},{40,1070,498,1426},{528,1086,994,1425}}},
         {.670896f,.660796f,.778305f,1}};
+    const std::array<StockGrassStyle, renegade::bridge::StockGrassPresetCount> StockPlantStyles{{
+        StockGrassStyle{"meadow_open.png", MeadowOpenStyle.digest, "meadow-open-v2-c083bbb89d84d7df.png", MeadowOpenStyle.crops, MeadowOpenStyle.colour, .5f, 50},
+        StockGrassStyle{"meadow_full.png", MeadowFullStyle.digest, "meadow-full-v2-d863e86a0a4cf17f.png", MeadowFullStyle.crops, MeadowFullStyle.colour, .5f, 25},
+        StockGrassStyle{"meadow_full.png", MeadowFullStyle.digest, "meadow-very-full-v2-d863e86a0a4cf17f.png", MeadowFullStyle.crops, MeadowFullStyle.colour, .5f, 50},
+        StockGrassStyle{"short_grass.png", "545bd5279944dd664531a2a9fffd990f085046625844decfdde66b403efdacd6", "short-grass-v1-545bd5279944dd66.png", {{{10,313,466,488},{547,270,987,488},{19,785,486,982},{535,772,1005,982},{37,1282,444,1492},{527,1320,997,1492}}}, {1,1,1,1}, 0.25f, 25},
+        StockGrassStyle{"dry_grass.png", "7e8324f7e190b5f69995b74b918490621e0a2458a1748dd2ddeee3e1727ab10e", "dry-grass-v1-7e8324f7e190b5f6.png", {{{23,23,469,492},{521,73,998,492},{32,547,484,1004},{539,549,988,1004},{22,1095,493,1504},{553,1067,955,1504}}}, {1,1,1,1}, 0.45f, 25},
+        StockGrassStyle{"seedhead_grass.png", "3332e133cbbd84652c7806e5d135b22e5ae92e1523d03f4be9b05fad82c31553", "seedhead-grass-v1-3332e133cbbd8465.png", {{{58,16,462,489},{561,20,980,489},{32,535,476,1001},{564,536,972,1001},{41,1042,477,1513},{549,1052,993,1513}}}, {1,1,1,1}, 0.65f, 15},
+        StockGrassStyle{"low_clover.png", "3fb5ce4dfb3877431d178e8c1c8f869407ce86d96a3306c85769d45717f5780b", "low-clover-v1-3fb5ce4dfb387743.png", {{{27,312,481,449},{544,278,994,449},{25,831,482,962},{545,843,1002,967},{31,1339,478,1482},{547,1364,993,1481}}}, {1,1,1,1}, 0.12f, 20},
+        StockGrassStyle{"small_wildflowers.png", "423ff16d5012ec791f123b8fb150ad4b3a41f6f49aa81e1a20329f0c98db7f6b", "small-wildflowers-v1-423ff16d5012ec79.png", {{{152,22,383,498},{625,19,883,498},{107,576,386,1007},{625,541,902,1007},{114,1051,375,1517},{609,1069,892,1517}}}, {1,1,1,1}, 0.3f, 4},
+    }};
+    const StockGrassStyle* IndependentStockStyle(const std::string& path)
+    {
+        const auto file=fs::u8path(path).filename().u8string();
+        for(const auto& style:StockPlantStyles)if(file==style.projectFile)return &style;
+        return nullptr;
+    }
     const StockGrassStyle* StockGrassStyleFor(const std::string& path)
     {
+        if(const auto* style=IndependentStockStyle(path))return style;
         const auto file=fs::u8path(path).filename().u8string();
         if(file==MeadowOpenStyle.projectFile)return &MeadowOpenStyle;
         if(file==MeadowFullStyle.projectFile)return &MeadowFullStyle;
@@ -150,6 +169,38 @@ namespace
         if (rebuildTopology)
             grass._flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
         grass.SetDirty();
+    }
+
+    using Settings=renegade::bridge::WickedVegetationSettings;
+    struct ProfileField { const char* name; float Settings::*member; };
+    const ProfileField ProfileFields[]={
+        {"density",&Settings::density},{"length",&Settings::length},{"width",&Settings::width},
+        {"stiffness",&Settings::stiffness},{"drag",&Settings::drag},{"gravity",&Settings::gravityPower},
+        {"randomness",&Settings::randomness},{"distance",&Settings::viewDistance},{"uniformity",&Settings::uniformity}};
+    std::string ProfileKey(const StockGrassStyle& style,const char* field)
+    {return std::string("renegade.grass.stock_profile.v1.")+style.projectFile+"."+field;}
+    Settings ReadProfile(const wi::scene::Scene& scene,const wi::terrain::Terrain& terrain,const StockGrassStyle& style)
+    {
+        Settings value;
+        value.density=style.tuftsPerSquareMetre/3.f;value.length=style.height;value.width=.9f;
+        value.segmentCount=2;value.billboardCount=2;value.randomSeed=17;value.randomness=.25f;
+        value.uniformity=-1;value.viewDistance=100;value.drag=.12f;value.gravityPower=.02f;
+        const auto* m=scene.metadatas.GetComponent(terrain.terrainEntity);
+        if(!m)return value;
+        for(const auto& field:ProfileFields){const auto key=ProfileKey(style,field.name);if(m->float_values.has(key))value.*(field.member)=m->float_values.get(key);}
+        for(auto pair:{std::pair<const char*,uint32_t*>{"seed",&value.randomSeed},{"segments",&value.segmentCount},{"cards",&value.billboardCount}})
+        {const auto key=ProfileKey(style,pair.first);if(m->int_values.has(key))*pair.second=uint32_t(m->int_values.get(key));}
+        const auto key=ProfileKey(style,"camera_bend");if(m->bool_values.has(key))value.cameraBend=m->bool_values.get(key);
+        return value;
+    }
+    void WriteProfile(wi::scene::Scene& scene,wi::ecs::Entity entity,const StockGrassStyle& style,const Settings& value)
+    {
+        auto* m=scene.metadatas.GetComponent(entity);if(!m)m=&scene.metadatas.Create(entity);
+        for(const auto& field:ProfileFields)m->float_values.set(ProfileKey(style,field.name),value.*(field.member));
+        m->int_values.set(ProfileKey(style,"seed"),int(value.randomSeed));
+        m->int_values.set(ProfileKey(style,"segments"),int(value.segmentCount));
+        m->int_values.set(ProfileKey(style,"cards"),int(value.billboardCount));
+        m->bool_values.set(ProfileKey(style,"camera_bend"),value.cameraBend);
     }
 
     bool SameSettings(
@@ -341,6 +392,9 @@ namespace
             hair.atlas_rects[i].texMulAdd = {scale, scale, (i%side)*scale, (i/side)*scale};
             hair.atlas_rects[i].size = 1.f;
         }
+        const auto* independent=IndependentStockStyle(atlas.path);
+        if(independent && atlas.frames==6)
+            ApplySettings(hair,ReadProfile(scene,terrain,*independent),true);
         const auto* style=StockGrassStyleFor(atlas.path);
         if(style && atlas.frames==6)
         {
@@ -361,6 +415,7 @@ namespace
             material.SetRoughness(.9f);
             material.SetReflectance(.02f);
             material.SetAlphaRef(.5f);
+            material.SetEmissiveStrength(0);
         }
         auto& slot = material.textures[wi::scene::MaterialComponent::BASECOLORMAP];
         slot.name = atlas.path;
@@ -369,15 +424,21 @@ namespace
         material.CreateRenderData();
         scene.names.Create(entity) = "Painted grass";
         scene.transforms.Create(entity);
-        scene.metadatas.Create(entity).int_values.set(PaletteKey, int(atlas.frames));
+        auto& metadata=scene.metadatas.Create(entity);
+        metadata.int_values.set(PaletteKey, int(atlas.frames));
+        if(independent && atlas.frames==6)
+            metadata.float_values.set(renegade::bridge::PlantDensityKey,ReadProfile(scene,terrain,*independent).density);
         scene.Component_Attach(entity,chunk,true);
         return hair;
     }
 
-    void RefreshLayer(wi::HairParticleSystem& hair, const wi::terrain::Terrain& terrain)
+    void RefreshLayer(wi::scene::Scene& scene,wi::ecs::Entity entity,wi::HairParticleSystem& hair, const wi::terrain::Terrain& terrain)
     {
+        const auto* m=scene.metadatas.GetComponent(entity);
+        const float density=m&&m->float_values.has(renegade::bridge::PlantDensityKey)
+            ?m->float_values.get(renegade::bridge::PlantDensityKey):terrain.grass_density;
         hair.strandCount = static_cast<uint32_t>(NativeStrandCount(terrain, ActiveVertexCount(hair))
-            * terrain.grass_density);
+            * density);
         // Wicked rebuilds the masked index distribution on the next native update.
         hair._flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
         hair.SetDirty();
@@ -404,7 +465,7 @@ namespace
         }
         renegade::bridge::SetAuthoredPlantLengths(scene,entity,authored);
         hair.vertex_lengths=std::move(authored);
-        RefreshLayer(hair,terrain);
+        RefreshLayer(scene,entity,hair,terrain);
         result.changed=true;
     }
 
@@ -471,14 +532,16 @@ namespace renegade::bridge
     bool BuildStockGrassAtlas(const fs::path& project, StockGrassPreset preset,
         GrassAtlas& atlas, std::string& error)
     {
-        const auto& style=preset==StockGrassPreset::MeadowOpen?MeadowOpenStyle:MeadowFullStyle;
+        const auto index=static_cast<unsigned>(preset);
+        if(index>=StockPlantStyles.size()){error="Unknown stock plant preset.";return false;}
+        const auto& style=StockPlantStyles[index];
         const auto source=BundledGrassRoot()/"foliage"/"Presets"/style.source;
         std::ifstream file(source,std::ios::binary);
-        if(!file){error="Bundled meadow grass is missing.";return false;}
+        if(!file){error="Bundled stock plant is missing.";return false;}
         std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)),{});
         std::string digest;
         if(!ComputePayloadSha256(bytes,digest,error))return false;
-        if(digest!=style.digest){error="Bundled meadow grass failed its content check.";return false;}
+        if(digest!=style.digest){error="Bundled stock plant failed its content check.";return false;}
         const auto target=project/"Content/Vegetation/Mixes"/style.projectFile;
         std::ifstream existing(target,std::ios::binary);
         std::vector<uint8_t> current((std::istreambuf_iterator<char>(existing)),{});
@@ -499,11 +562,14 @@ namespace renegade::bridge
         const WickedVegetationSettings& current) noexcept
     {
         auto settings=current;
-        settings.density=(preset==StockGrassPreset::MeadowFull?25.f:50.f)/3.f;
-        settings.length=.5f;settings.width=.9f;
+        const auto index=static_cast<unsigned>(preset);
+        if(index>=StockPlantStyles.size())return settings;
+        settings.density=StockPlantStyles[index].tuftsPerSquareMetre/3.f;
+        settings.length=StockPlantStyles[index].height;settings.width=.9f;
         settings.segmentCount=2;settings.billboardCount=2;
         settings.randomness=.25f;settings.randomSeed=17;
         settings.uniformity=MixedPaletteUniformity;settings.viewDistance=100.f;
+        settings.stiffness=.5f;settings.drag=.12f;settings.gravityPower=.02f;
         return settings;
     }
 
@@ -757,6 +823,7 @@ namespace renegade::bridge
         if (!stroke.indexed && mode == VegetationBrushMode::Paint &&
             (atlas.frames > 64 || (atlas.frames && (atlas.path.empty() || !wi::helper::FileExists(atlas.path)))))
         { result.error="Invalid grass palette atlas."; return result; }
+        const bool independent=mode==VegetationBrushMode::Paint && atlas.frames==6 && IndependentStockStyle(atlas.path);
         IndexLayers(scene,stroke);
         SynchronizeWickedVegetation(scene, terrain);
         const float brushRadius = std::clamp(radius, 0.5f, 250.0f);
@@ -819,7 +886,7 @@ namespace renegade::bridge
                 const float current =
                     chunk.grass.vertex_lengths[index];
                 const float target =
-                    mode == VegetationBrushMode::Paint && !atlas.frames ? 1.0f : 0.0f;
+                    independent ? current : (mode == VegetationBrushMode::Paint && !atlas.frames ? 1.0f : 0.0f);
                 if (std::abs(current - target) <= MaskEpsilon)
                     continue;
                 changedVertices.push_back(index);
@@ -846,7 +913,7 @@ namespace renegade::bridge
             }
             const auto previous = result.affectedVertices;
             for (auto entity: layers)
-                PaintLayer(scene,terrain,chunk,*mesh,stroke,entity,footprint,entity==selected ? 1.f : 0.f,result);
+                if(!independent || entity==selected) PaintLayer(scene,terrain,chunk,*mesh,stroke,entity,footprint,entity==selected ? 1.f : 0.f,result);
             if (changedVertices.empty() && result.affectedVertices!=previous) ++result.affectedChunks;
             if (changedVertices.empty())
                 continue;
@@ -949,7 +1016,7 @@ namespace renegade::bridge
                     if (!hair) hair=&CreateLayer(scene,terrain,chunk->entity,snapshot.layer,snapshot.atlas,mesh->vertex_positions.size());
                     SetAuthoredPlantLengths(scene,snapshot.layer,snapshot.vertexLengths);
                     hair->vertex_lengths=snapshot.vertexLengths;
-                    RefreshLayer(*hair,terrain);
+                    RefreshLayer(scene,snapshot.layer,*hair,terrain);
                     RefreshGroundGrass(scene,terrain,*chunk);
                 }
                 applied=true;
@@ -1073,11 +1140,68 @@ namespace renegade::bridge
             const auto* metadata=scene.metadatas.GetComponent(scene.hairs.GetEntity(i));
             if (!metadata || !metadata->int_values.has(PaletteKey) ||
                 !scene.Entity_IsDescendant(hair.meshID,terrain.terrainEntity)) continue;
+            // Scoped stock layers are edited through their own profile, never terrain-wide controls.
+            if(metadata->float_values.has(PlantDensityKey))continue;
             ApplySettings(hair,settings,rebuildTopology);
             if (hair.atlas_rects.size() > 1)
                 hair.uniformity = MixedPaletteUniformity;
             if (settings.density != before.density)
                 hair.strandCount=static_cast<uint32_t>(NativeStrandCount(terrain,ActiveVertexCount(hair))*settings.density);
+        }
+        return true;
+    }
+
+    WickedVegetationSettings CaptureWickedVegetationSettings(const wi::scene::Scene& scene,
+        const wi::terrain::Terrain& terrain,const GrassAtlas& atlas)
+    {
+        const auto* style=atlas.frames==6?IndependentStockStyle(atlas.path):nullptr;
+        return style?ReadProfile(scene,terrain,*style):CaptureWickedVegetationSettings(terrain);
+    }
+
+    bool ApplyWickedVegetationSettings(wi::scene::Scene& scene,wi::terrain::Terrain& terrain,
+        const WickedVegetationSettings& requested,const GrassAtlas& atlas)
+    {
+        const auto* style=atlas.frames==6?IndependentStockStyle(atlas.path):nullptr;
+        if(!style)return ApplyWickedVegetationSettings(scene,terrain,requested);
+        WickedVegetationSettings settings = requested;
+        settings.density =
+            std::clamp(settings.density, 0.0f, 20.0f);
+        settings.length =
+            std::clamp(settings.length, 0.0f, 4.0f);
+        settings.width =
+            std::clamp(settings.width, 0.0f, 2.0f);
+        settings.stiffness =
+            std::clamp(settings.stiffness, 0.0f, 10.0f);
+        settings.drag =
+            std::clamp(settings.drag, 0.0f, 1.0f);
+        settings.gravityPower =
+            std::clamp(settings.gravityPower, 0.0f, 1.0f);
+        settings.randomness =
+            std::clamp(settings.randomness, 0.0f, 1.0f);
+        settings.randomSeed =
+            std::clamp(settings.randomSeed, 1u, 12345u);
+        settings.segmentCount =
+            std::clamp(settings.segmentCount, 1u, 10u);
+        settings.billboardCount =
+            std::clamp(settings.billboardCount, 1u, 10u);
+        settings.viewDistance =
+            std::clamp(settings.viewDistance, 0.0f, 1000.0f);
+        settings.uniformity = -1.f;
+
+        const auto before=ReadProfile(scene,terrain,*style);
+        if(SameSettings(before,settings))return false;
+        WriteProfile(scene,terrain.terrainEntity,*style,settings);
+        const bool topology=before.segmentCount!=settings.segmentCount||before.billboardCount!=settings.billboardCount;
+        for(size_t i=0;i<scene.hairs.GetCount();++i)
+        {
+            const auto entity=scene.hairs.GetEntity(i);
+            auto& hair=scene.hairs[i];const auto* m=scene.materials.GetComponent(entity);
+            if(!m||!scene.Entity_IsDescendant(hair.meshID,terrain.terrainEntity)||
+                fs::u8path(m->textures[wi::scene::MaterialComponent::BASECOLORMAP].name).filename()!=fs::u8path(atlas.path).filename())continue;
+            ApplySettings(hair,settings,topology);
+            scene.metadatas.GetComponent(entity)->float_values.set(PlantDensityKey,settings.density);
+            RefreshLayer(scene,entity,hair,terrain);
+            if(auto* chunk=FindChunk(terrain,hair.meshID))RefreshGroundGrass(scene,terrain,*chunk);
         }
         return true;
     }
@@ -1123,11 +1247,13 @@ namespace renegade::bridge
             wi::scene::Scene& scene,
             const wi::ecs::Entity terrainEntity,
             WickedVegetationSettings before,
-            WickedVegetationSettings after)
+            WickedVegetationSettings after,
+            GrassAtlas atlas)
         : scene_(&scene)
         , terrainEntity_(terrainEntity)
         , before_(before)
         , after_(after)
+        , atlas_(std::move(atlas))
     {
     }
 
@@ -1140,9 +1266,9 @@ namespace renegade::bridge
             scene_->terrains.GetComponent(terrainEntity_);
         return terrain != nullptr &&
             (ApplyWickedVegetationSettings(
-                 *scene_, *terrain, settings) ||
+                 *scene_, *terrain, settings, atlas_) ||
              SameSettings(
-                 CaptureWickedVegetationSettings(*terrain),
+                 CaptureWickedVegetationSettings(*scene_,*terrain,atlas_),
                  settings));
     }
 

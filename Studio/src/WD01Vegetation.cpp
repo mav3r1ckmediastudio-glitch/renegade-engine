@@ -95,6 +95,7 @@ namespace
         wi::ecs::Entity settingsTerrain =
             wi::ecs::INVALID_ENTITY;
         renegade::bridge::WickedVegetationSettings settingsBefore;
+        renegade::bridge::GrassAtlas settingsAtlas;
 
         bool strokeActive = false;
         bool strokeChanged = false;
@@ -113,6 +114,9 @@ namespace
             controls = std::make_unique<VegetationControls>();
         return *controls;
     }
+
+    renegade::bridge::GrassAtlas SelectedAtlas()
+    {const auto& state=Controls();return state.stockPreset>0?state.atlas:renegade::bridge::GrassAtlas{};}
 
     wi::terrain::Terrain* CurrentTerrain(
         renegade::bridge::StudioSession* session,
@@ -214,35 +218,34 @@ namespace renegade::studio
         state.stockPresets.AddItem("Meadow - Open");
         state.stockPresets.AddItem("Meadow - Full");
         state.stockPresets.AddItem("Meadow - Very Full");
+        state.stockPresets.AddItem("Short grass");
+        state.stockPresets.AddItem("Dry grass");
+        state.stockPresets.AddItem("Seedhead grass");
+        state.stockPresets.AddItem("Low clover");
+        state.stockPresets.AddItem("Small wildflowers");
+        state.stockPresets.SetMaxVisibleItemCount(int(bridge::StockGrassPresetCount)+1);
         state.stockPresets.SetSelectedWithoutCallback(0);
         state.stockPresets.SetTooltip(
-            "Choose reviewed meadow artwork and starting settings. Changes grass settings across this terrain. "
-            "Paint adds the chosen six-variation mix; existing textures are preserved. Sliders can customise it.");
+            "Stock plants keep their own height and density. Paint adds the selected plant alongside other stock plants. "
+            "Sliders edit the selected stock plant only; Custom controls apply to custom and legacy layers.");
         state.stockPresets.OnSelect([this](const wi::gui::EventArgs& args)
         {
             auto& s=Controls();
-            if(args.iValue<0||args.iValue>3)return;
-            if(args.iValue==0){s.stockPreset=0;s.rebuildAtlas=true;return;}
+            if(args.iValue<0||args.iValue>int(bridge::StockGrassPresetCount))return;
+            if(args.iValue==0){s.stockPreset=0;s.rebuildAtlas=true;QueueInspectorRefresh();return;}
             auto* terrain=CurrentTerrain(session_);
             if(!terrain||!session_||!session_->Projects().HasProject())return;
             const auto preset=static_cast<bridge::StockGrassPreset>(args.iValue-1);
             std::string error;
             bridge::GrassAtlas atlas;
             if(!bridge::BuildStockGrassAtlas(std::filesystem::u8path(
-                session_->Projects().CurrentProject().rootPath),preset,atlas,error) ||
-                !bridge::InitializeWickedVegetation(session_->Scenes().GetScene(),*terrain,&error))
+                session_->Projects().CurrentProject().rootPath),preset,atlas,error))
             {
                 s.stockPresets.SetSelectedWithoutCallback(s.stockPreset);
                 s.status.SetText(error);return;
             }
-            auto& scene=session_->Scenes().GetScene();
-            const auto before=bridge::CaptureWickedVegetationSettings(*terrain);
-            const auto after=bridge::StockGrassPresetSettings(preset,before);
-            bridge::ApplyWickedVegetationSettings(scene,*terrain,after);
-            session_->Commands().RecordExecuted(std::make_unique<bridge::SetWickedVegetationSettingsCommand>(
-                scene,terrain->terrainEntity,before,after));
             s.stockPreset=args.iValue;s.atlas=std::move(atlas);s.rebuildAtlas=false;
-            s.status.SetText("Meadow preset ready. Paint to place it.");
+            s.status.SetText("Plant ready. Paint to add it; sliders edit this plant only.");
             QueueInspectorRefresh();
         });
         inspectorPanel_.AddWidget(&state.stockPresets);
@@ -403,9 +406,9 @@ namespace renegade::studio
                 }
                 value.settingsDragging = true;
                 value.settingsTerrain = terrainEntity;
-                value.settingsBefore =
-                    bridge::CaptureWickedVegetationSettings(
-                        *terrain);
+                value.settingsAtlas=SelectedAtlas();
+                value.settingsBefore = bridge::CaptureWickedVegetationSettings(
+                    session_->Scenes().GetScene(),*terrain,value.settingsAtlas);
             });
             slider.OnValuePreview([this, field](const float input)
             {
@@ -414,12 +417,12 @@ namespace renegade::studio
                     return;
                 auto settings =
                     bridge::CaptureWickedVegetationSettings(
-                        *terrain);
+                        session_->Scenes().GetScene(),*terrain,Controls().settingsDragging?Controls().settingsAtlas:SelectedAtlas());
                 SetField(settings, field, input);
                 bridge::ApplyWickedVegetationSettings(
                     session_->Scenes().GetScene(),
                     *terrain,
-                    settings);
+                    settings,Controls().settingsDragging?Controls().settingsAtlas:SelectedAtlas());
             });
             slider.OnValueCommitted([this](const float)
             {
@@ -437,14 +440,14 @@ namespace renegade::studio
                     return;
                 const auto after =
                     bridge::CaptureWickedVegetationSettings(
-                        *terrain);
+                        scene,*terrain,value.settingsAtlas);
                 session_->Commands().RecordExecuted(
                     std::make_unique<
                         bridge::SetWickedVegetationSettingsCommand>(
                         scene,
                         value.settingsTerrain,
                         value.settingsBefore,
-                        after));
+                        after,value.settingsAtlas));
                 value.status.SetText(
                     "VEGETATION // SETTINGS UPDATED");
                 RefreshStatus();
@@ -455,12 +458,12 @@ namespace renegade::studio
         createSetting(
             state.density, 0.0f, 20.0f, 1.0f, 1000.0f,
             "WD01 Grass Density", "DENSITY",
-            "Wicked terrain grass density multiplier.",
+            "Density of the selected stock plant. Custom edits custom and legacy plants on this terrain.",
             SettingField::Density);
         createSetting(
             state.length, 0.0f, 4.0f, 1.0f, 1000.0f,
             "WD01 Grass Length", "LENGTH",
-            "Native HairParticle strand length.",
+            "Plant height in metres. Stock choices keep independent heights.",
             SettingField::Length);
         createSetting(
             state.width, 0.0f, 2.0f, 1.0f, 1000.0f,
@@ -537,7 +540,7 @@ namespace renegade::studio
             }
             auto before =
                 bridge::CaptureWickedVegetationSettings(
-                    *terrain);
+                    scene,*terrain,SelectedAtlas());
             auto after = before;
             after.cameraBend = args.bValue;
             session_->Commands().Execute(
@@ -546,7 +549,7 @@ namespace renegade::studio
                     scene,
                     terrainEntity,
                     before,
-                    after));
+                    after,SelectedAtlas()));
             Controls().status.SetText(
                 "VEGETATION // CAMERA BEND UPDATED");
             RefreshStatus();
@@ -665,7 +668,7 @@ namespace renegade::studio
                             s.rebuildAtlas=true;
                             size_t count=0;
                             for(size_t j=0;j<s.entryCount;++j) if(s.thumbnails[j]->selected) ++count;
-                            s.status.SetText(count ? std::to_string(count)+(count == 1 ? " plant selected" : " plants selected") : "Choose a meadow preset or select a custom plant");
+                            s.status.SetText(count ? std::to_string(count)+(count == 1 ? " plant selected" : " plants selected") : "Choose a stock plant or select a custom plant");
                         });
                         inspectorPanel_.AddWidget(button.get());
                         state.thumbnails.push_back(std::move(button));
@@ -724,7 +727,7 @@ namespace renegade::studio
         if (terrain == nullptr || state.settingsDragging)
             return;
         const auto settings =
-            bridge::CaptureWickedVegetationSettings(*terrain);
+            bridge::CaptureWickedVegetationSettings(session_->Scenes().GetScene(),*terrain,SelectedAtlas());
         state.density.SetValue(settings.density);
         state.length.SetValue(settings.length);
         state.width.SetValue(settings.width);
@@ -740,6 +743,7 @@ namespace renegade::studio
             static_cast<float>(settings.billboardCount));
         state.viewDistance.SetValue(settings.viewDistance);
         state.uniformity.SetValue(settings.uniformity);
+        state.uniformity.SetEnabled(state.stockPreset==0);
         state.cameraBend.SetCheck(settings.cameraBend);
     }
 
@@ -946,7 +950,7 @@ namespace renegade::studio
                     {state.status.SetText(error);return true;}
                 }
                 else if (selected.empty())
-                { state.status.SetText("Select a custom plant or choose a meadow preset."); return true; }
+                { state.status.SetText("Select a custom plant or choose a stock plant."); return true; }
                 else if (!bridge::BuildGrassAtlas(std::filesystem::u8path(state.project),selected,state.atlas,error))
                 { state.status.SetText(error); return true; }
                 state.rebuildAtlas=false;

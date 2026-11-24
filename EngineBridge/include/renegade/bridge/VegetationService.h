@@ -37,7 +37,9 @@ namespace renegade::bridge
     };
 
     // Stock artwork and reviewed starting settings; native WISCENE remains authoritative.
-    enum class StockGrassPreset { MeadowOpen, MeadowFull, MeadowVeryFull };
+    enum class StockGrassPreset { MeadowOpen, MeadowFull, MeadowVeryFull, ShortGrass, DryGrass, SeedheadGrass, LowClover, SmallWildflowers };
+    inline constexpr unsigned StockGrassPresetCount = 8;
+    inline constexpr char PlantDensityKey[] = "renegade.grass.layer_density.v1";
     bool BuildStockGrassAtlas(const std::filesystem::path& project, StockGrassPreset preset,
         GrassAtlas& atlas, std::string& error);
     WickedVegetationSettings StockGrassPresetSettings(StockGrassPreset preset,
@@ -136,6 +138,15 @@ namespace renegade::bridge
         wi::terrain::Terrain& terrain,
         const WickedVegetationSettings& settings);
 
+    // Stock choices have independent native geometry and saved per-plant settings.
+    // Empty/custom atlases keep the existing terrain-wide custom workflow.
+    [[nodiscard]] WickedVegetationSettings CaptureWickedVegetationSettings(
+        const wi::scene::Scene& scene, const wi::terrain::Terrain& terrain,
+        const GrassAtlas& atlas);
+    bool ApplyWickedVegetationSettings(wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain, const WickedVegetationSettings& settings,
+        const GrassAtlas& atlas);
+
     class WickedVegetationStrokeCommand final : public ICommand
     {
     public:
@@ -164,7 +175,8 @@ namespace renegade::bridge
             wi::scene::Scene& scene,
             wi::ecs::Entity terrainEntity,
             WickedVegetationSettings before,
-            WickedVegetationSettings after);
+            WickedVegetationSettings after,
+            GrassAtlas atlas = {});
 
         bool Execute() override;
         void Undo() override;
@@ -176,5 +188,6 @@ namespace renegade::bridge
         wi::ecs::Entity terrainEntity_ = wi::ecs::INVALID_ENTITY;
         WickedVegetationSettings before_;
         WickedVegetationSettings after_;
+        GrassAtlas atlas_;
     };
 }

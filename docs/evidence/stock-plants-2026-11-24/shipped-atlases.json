@@ -1,0 +1,37 @@
+[
+  {
+    "path": "Content/terrain/foliage/Presets/dry_grass.png",
+    "sha256": "7e8324f7e190b5f69995b74b918490621e0a2458a1748dd2ddeee3e1727ab10e",
+    "size_bytes": 1850455
+  },
+  {
+    "path": "Content/terrain/foliage/Presets/low_clover.png",
+    "sha256": "3fb5ce4dfb3877431d178e8c1c8f869407ce86d96a3306c85769d45717f5780b",
+    "size_bytes": 1417002
+  },
+  {
+    "path": "Content/terrain/foliage/Presets/meadow_full.png",
+    "sha256": "d863e86a0a4cf17fdc714982f7778fd29b3efd9bebe53aaea6af56534a28c562",
+    "size_bytes": 2110175
+  },
+  {
+    "path": "Content/terrain/foliage/Presets/meadow_open.png",
+    "sha256": "c083bbb89d84d7df9e7ac353dcbd4b6ed131f81dc9b51afc51d0d50321b77113",
+    "size_bytes": 1697399
+  },
+  {
+    "path": "Content/terrain/foliage/Presets/seedhead_grass.png",
+    "sha256": "3332e133cbbd84652c7806e5d135b22e5ae92e1523d03f4be9b05fad82c31553",
+    "size_bytes": 1908199
+  },
+  {
+    "path": "Content/terrain/foliage/Presets/short_grass.png",
+    "sha256": "545bd5279944dd664531a2a9fffd990f085046625844decfdde66b403efdacd6",
+    "size_bytes": 1578435
+  },
+  {
+    "path": "Content/terrain/foliage/Presets/small_wildflowers.png",
+    "sha256": "423ff16d5012ec791f123b8fb150ad4b3a41f6f49aa81e1a20329f0c98db7f6b",
+    "size_bytes": 1561091
+  }
+]

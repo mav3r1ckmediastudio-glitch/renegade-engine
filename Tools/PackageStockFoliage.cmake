@@ -40,4 +40,9 @@ endforeach()
 file(MAKE_DIRECTORY "${FOLIAGE_DESTINATION}/Presets")
 file(COPY "${FOLIAGE_SOURCE}/Presets/meadow_open.png"
           "${FOLIAGE_SOURCE}/Presets/meadow_full.png"
+          "${FOLIAGE_SOURCE}/Presets/short_grass.png"
+          "${FOLIAGE_SOURCE}/Presets/dry_grass.png"
+          "${FOLIAGE_SOURCE}/Presets/seedhead_grass.png"
+          "${FOLIAGE_SOURCE}/Presets/low_clover.png"
+          "${FOLIAGE_SOURCE}/Presets/small_wildflowers.png"
      DESTINATION "${FOLIAGE_DESTINATION}/Presets")
