@@ -1,0 +1,5 @@
+mode,strands,forces,animations,wind_x,wind_speed,wind_randomness,samples,median_ms,p95_ms,p99_ms,max_ms,over_25ms,over_33ms
+travelling-gusts,204800,5,5,0,0,0,900,13.3336,15.794,18.4703,44.2504,2,2
+no-wind,204800,0,0,0,0,0,900,13.3337,15.9767,38.0158,89.9496,10,10
+steady-force,204800,1,0,0,0,0,900,13.3336,15.3633,20.7262,41.4318,8,7
+native-breeze,204800,0,0,0.08,1,5,900,13.3336,16.1584,20.8824,46.4019,8,8
