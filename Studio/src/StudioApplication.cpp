@@ -51,6 +51,7 @@
 #include "renegade/bridge/HumanoidRetargetService.h"
 #include "renegade/bridge/ModelImporterFailureAdapter.h"
 #include <ModelImporter.h>
+#include "Utility/stb_image.h"
 #include "renegade/bridge/AnimationService.h"
 #include <algorithm>
 #include <array>
@@ -333,6 +334,7 @@ namespace
 
 namespace renegade::studio
 {
+    #include "ImportMaterials.inc"
     struct StudioRenderPath::ProjectLoadOperation
     {
         std::string descriptorPath;
@@ -3585,6 +3587,7 @@ namespace renegade::studio
         modelImportMaterial_.SetPos({650,45}); modelImportMaterial_.SetSize({355,30});
         modelImportMaterial_.OnSelect([this](const wi::gui::EventArgs&) { RefreshModelImportTextureInfo(); });
         modelImportPanel_.AddWidget(&modelImportMaterial_);
+        importMaterials_=std::make_shared<ImportMaterials>(*this);
         modelImportMapSlot_.Create("Material map slot");
         modelImportMapSlot_.SetText("Map: ");
         modelImportMapSlot_.SetPos({650,95}); modelImportMapSlot_.SetSize({355,30});
@@ -3664,36 +3667,57 @@ namespace renegade::studio
             if (modelImportPreview_) modelImportPreview_->SetSpeed(args.fValue);
         });
         modelImportPanel_.AddWidget(&modelImportSpeed_);
-        characterClips_.Create("Animation clips");
-        characterClips_.OnSelect([this](const wi::gui::EventArgs& args) {
-            if (args.iValue >= 0) modelImportClip_.SetSelected(args.iValue);
-        });
-        modelImportPanel_.AddWidget(&characterClips_);
-        actionPrompt_.Create("Assign selected clip to");
-        modelImportPanel_.AddWidget(&actionPrompt_);
-        const char* actions[] = {"Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death", "Unassigned"};
-        for (int i = 0; i < 8; ++i) {
-            auto& button = actionChoices_[i];
-            const std::string action = actions[i];
-            button.Create(action);
-            button.OnClick([this, action](const wi::gui::EventArgs&) {
-                const int clip = modelImportClip_.GetSelected() - 1;
-                if (clip < 0 || size_t(clip) >= modelImportActions_.size()) return;
-                modelImportActions_[clip] = action;
-                modelImportSummary_.SetText(CharacterIdleHint(modelImportActions_));
-                RefreshCharacterClips();
-            });
+        actionTable_.Create("Animation entries", wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        modelImportPanel_.AddWidget(&actionTable_);
+        auto entryButton=[this](wi::gui::Button& button,const char* caption,auto callback) {
+            button.Create(caption);
+            button.OnClick([callback](const wi::gui::EventArgs&){callback();});
             modelImportPanel_.AddWidget(&button);
+        };
+        sourceHeading_.Create("Animation clips");
+        entriesHeading_.Create("Action entries");
+        modelImportPanel_.AddWidget(&sourceHeading_);
+        modelImportPanel_.AddWidget(&entriesHeading_);
+        const char* columns[]={"Name","Action","Source clip","Start","End","Speed"};
+        for(int c=0;c<6;++c) {
+            entryHeaders_[c].Create(columns[c]);
+            modelImportPanel_.AddWidget(&entryHeaders_[c]);
         }
-        const char* timing[] = {"Start frame", "End frame", "Speed x"};
-        for (int i = 0; i < 3; ++i) {
-            auto& field = clipTiming_[i];
-            field.Create(timing[i]);
-            field.SetDescription(std::string(timing[i]) + "  ");
-            field.SetTooltip(i == 2 ? "Saved playback multiplier (0.1 to 4)" : "Frame on the 30 fps preview timeline");
-            field.OnInputAccepted([this, i](const wi::gui::EventArgs& args) { EditClipTiming(i, args.sValue); });
-            modelImportPanel_.AddWidget(&field);
-        }
+        actionSources_.Create("Source clips", wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        modelImportPanel_.AddWidget(&actionSources_);
+        entryButton(referencePose_,"Preview reference pose",[this]{SelectActionEntry(-1);});
+        entryButton(removeEntry_,"Remove",[this]{
+            const int row=actionEntries_.selected;
+            if(row<0 || row>=int(actionEntries_.rows.size())) return;
+            RememberActionEdit();
+            actionEntries_.rows.erase(actionEntries_.rows.begin()+row);
+            SelectActionEntry(std::min(row,int(actionEntries_.rows.size())-1));
+        });
+        entryButton(addEntry_,"+ Add entry",[this]{
+            if(!actionSourceCount_) return;
+            RememberActionEdit();
+            bridge::CreatorAnimationImportRecipe entry;
+            if(actionEntries_.selected>=0) entry=actionEntries_.rows[actionEntries_.selected];
+            else {
+                const int sourceIndex=std::max(0,modelImportClip_.GetSelected()-1);
+                entry.sourceAnimationIndex=uint32_t(sourceIndex);
+                const auto clip=modelImportPreview_->Clips()[sourceIndex];
+                const auto& source=modelImportCandidate_->PeekScene()->animations[sourceIndex];
+                entry.name=clip.name; entry.start=source.start; entry.end=source.end; entry.speed=source.speed;
+                entry.action="Unassigned";
+            }
+            const auto base=entry.name;
+            for(int suffix=2;std::any_of(actionEntries_.rows.begin(),actionEntries_.rows.end(),
+                [&](const auto& other){return other.name==entry.name;});++suffix)
+                entry.name=base+" "+std::to_string(suffix);
+            actionEntries_.rows.push_back(entry);
+            SelectActionEntry(int(actionEntries_.rows.size())-1);
+            actionTable_.scrollbar_vertical.SetOffset(-float(actionEntries_.rows.size()*34));
+        });
+        entryButton(entryUndo_,"Undo",[this]{UndoActionEdit(false);});
+        entryButton(entryRedo_,"Redo",[this]{UndoActionEdit(true);});
+        entryHint_.Create("Add to Library saves these entries with the character.");
+        modelImportPanel_.AddWidget(&entryHint_);
         modelImportAddAnimation_.Create("Add External Animation FBX");
         modelImportAddAnimation_.SetText("Add animation clips...");
         modelImportAddAnimation_.SetTooltip("Select one or more FBX files with Ctrl or Shift. Use Retargeting for manual overrides.");
@@ -4067,7 +4091,11 @@ namespace renegade::studio
                 wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
         };
         applyWorkspaceTheme(gui);
+        for(auto& corner:theme.image.corners_rounding) corner.radius=3.f;
+        theme.shadow=1.f;
+        theme.shadow_color=wi::Color(65,73,79,255);
         applyWorkspaceTheme(modelImportPanel_);
+        modelImportPanel_.SetColor(wi::Color(15,18,20,255),wi::gui::WIDGET_ID_WINDOW_BASE);
         modelImportPreviewImage_.SetColor(wi::Color::White());
 
         // Rendered pixels need an untinted image; the global GUI theme uses
@@ -4390,6 +4418,7 @@ namespace renegade::studio
                 UpdateImportRigInput();
             if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_)
             {
+                importMaterials_->hover();
                 const auto viewport = modelImportPreviewImage_.GetSize();
                 const float dpi = GetPhysicalWidth() / std::max(1.f, GetLogicalWidth());
                 modelImportPreview_->SetViewportSize(
@@ -4950,6 +4979,7 @@ namespace renegade::studio
             wi::RenderPath2D::Compose(cmd);
             if(dialogueFrameSuspended_) {
                 dialogueGui_.Render(*this,cmd);
+                if(modelImportPanel_.IsVisible() && importMaterials_)importMaterials_->render(cmd);
                 if (RigEditingVisible()) DrawImportRig(cmd);
                 if (modelImportPanel_.IsVisible() && importPage_==ImportPage::Retarget && rtScene_.IsValid()) DrawRetargetSource(cmd);
             }
@@ -7451,7 +7481,8 @@ namespace renegade::studio
                         modelImportRole_.SetSelected(0);modelImportTags_.SetValue("");
                         modelImportActions_.clear();
                         for(const auto& clip:modelImportPreview_->Clips())modelImportActions_.push_back(SuggestImportedCharacterAction(clip.name));
-                        originalClipRanges_.clear();
+                        for(auto& button : sourceClipButtons_) actionSources_.RemoveWidget(button.get());
+                        sourceClipButtons_.clear(); actionEntries_={}; actionSourceCount_=0; for(auto& row:actionWidgets_) row->source.ClearItems(); entryUndoStack_.clear(); entryRedoStack_.clear();
                         modelImportAddAnimation_.SetVisible(character);
                         modelImportClip_.SetVisible(character);
                         modelImportPlay_.SetVisible(character);
@@ -7486,6 +7517,7 @@ namespace renegade::studio
                                 (materialName ? materialName->name : "Material"));
                         }
                         modelImportCandidate_ = std::move(candidate);
+                        importMaterials_->reset();
                         // Selection callbacks read the active candidate: install it first
                         // so the initial review shows this source's maps and warnings.
                         modelImportMaterial_.SetSelected(0);
@@ -7541,6 +7573,7 @@ namespace renegade::studio
                 warnings += "\nAdditional source maps are unavailable; inspect each material slot.";
         }
         modelImportWarnings_.SetText(warnings);
+        if(importMaterials_) importMaterials_->refresh();
     }
 
     void StudioRenderPath::AssignModelImportTexture()
@@ -7706,7 +7739,7 @@ static void ChooseAnimationFiles(std::function<void(std::vector<std::string>)> s
                 request.creatorTags = tags;
                 request.playerRole = role == 1 ? "arms" : role == 2 ? "weapon" : "";
                 if (importWorkflow_ == ImportWorkflow::Character)
-                    request.animationActions = modelImportActions_;
+                    SyncActionSources();
                 request.characterAsset = importWorkflow_ == ImportWorkflow::Character;
                 std::string thumbnailError;
                 if (!modelImportPreview_ ||
@@ -7715,8 +7748,11 @@ static void ChooseAnimationFiles(std::function<void(std::vector<std::string>)> s
                     ShowStudioMessageBox(thumbnailError, "Model Thumbnail");
                     return;
                 }
+                auto materialCandidate=modelImportCandidate_->CaptureBakeState();
+                if(!importMaterials_->retain(materialCandidate,thumbnailError)){ShowStudioMessageBox(thumbnailError,"Save material");return;}
                 const auto result = bridge::ModelImportCommitService().CommitModel(
-                    request, *modelImportCandidate_, importTransform_, importWorkflow_ == ImportWorkflow::Animated || importWorkflow_ == ImportWorkflow::Player);
+                    request, materialCandidate, importTransform_, importWorkflow_ == ImportWorkflow::Animated || importWorkflow_ == ImportWorkflow::Player,
+                    request.characterAsset ? &actionEntries_.rows : nullptr);
                 if (!result.succeeded)
                 {
                     studioChrome_.SetStatusText("MODEL IMPORT // " + result.error);

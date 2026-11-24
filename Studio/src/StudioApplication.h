@@ -1603,6 +1603,8 @@ namespace renegade::studio
         bool assemblyRefreshing_ = false;
         bool assemblyPreviewRefreshPending_ = false, assemblyDraftPreviewDirty_ = true;
         float assemblyPreviewRefreshDelay_ = 0;
+        struct ImportMaterials;
+        std::shared_ptr<ImportMaterials> importMaterials_;
         wi::gui::Window modelImportPanel_;
         wi::gui::ComboBox modelImportMaterial_, modelImportMapSlot_;
         wi::gui::Button modelImportAssignMap_;
@@ -1612,13 +1614,36 @@ namespace renegade::studio
         wi::gui::Button modelImportRotateLeft_;
         wi::gui::Button modelImportRotateRight_;
         wi::gui::ComboBox modelImportClip_;
-        wi::gui::TreeList characterClips_;
-        wi::gui::Label actionPrompt_;
-        std::array<wi::gui::Button, 8> actionChoices_;
-        std::array<wi::gui::TextInputField, 3> clipTiming_;
-        std::map<int, std::pair<float,float>> originalClipRanges_;
+        struct ActionRowWidgets {
+            wi::gui::Button preview;
+            wi::gui::TextInputField name, start, end, speed;
+            wi::gui::ComboBox type, source;
+        };
+        struct ActionEntries {
+            std::vector<bridge::CreatorAnimationImportRecipe> rows;
+            int selected=-1;
+        } actionEntries_;
+        wi::gui::Window actionTable_;
+        wi::gui::Window actionSources_;
+        std::vector<std::unique_ptr<wi::gui::Button>> sourceClipButtons_;
+        wi::gui::Label sourceHeading_, entriesHeading_;
+        std::array<wi::gui::Label,6> entryHeaders_;
+        wi::gui::Button removeEntry_;
+        void PreviewActionSource(int index);
+        void PositionActionRow(ActionRowWidgets& row, int index);
+
+        wi::gui::Button referencePose_, addEntry_, entryUndo_, entryRedo_;
+        wi::gui::Label entryHint_;
+        std::vector<std::unique_ptr<ActionRowWidgets>> actionWidgets_;
+        std::vector<ActionEntries> entryUndoStack_, entryRedoStack_;
+        size_t actionSourceCount_=0;
         void RefreshCharacterClips();
-        void EditClipTiming(int field, const std::string& value);
+        void SyncActionSources();
+        void SelectActionEntry(int row);
+        void CreateActionRow(int row);
+        void EditActionRow(int row,int field,const std::string& value,int choice=-1);
+        void RememberActionEdit();
+        void UndoActionEdit(bool redo);
         wi::gui::Button modelImportAddAnimation_;
         std::vector<std::string> modelImportActions_;
         wi::gui::Button modelImportPlay_;

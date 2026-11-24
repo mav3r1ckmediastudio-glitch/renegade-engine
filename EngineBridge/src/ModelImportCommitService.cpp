@@ -256,6 +256,14 @@ namespace renegade::bridge
         const ModelImportCommitRequest& request, ModelImportCandidate& candidate,
         const CreatorModelTransformRecipe& transform, bool animatedModel) const
     {
+        return CommitModel(request, candidate, transform, animatedModel, nullptr);
+    }
+
+    ModelImportCommitResult ModelImportCommitService::CommitModel(
+        const ModelImportCommitRequest& request, ModelImportCandidate& candidate,
+        const CreatorModelTransformRecipe& transform, bool animatedModel,
+        const std::vector<CreatorAnimationImportRecipe>* entries) const
+    {
         ModelImportCommitResult result;
         if (!candidate.IsReady() || candidate.PeekMutableScene() == nullptr ||
             !IsValidStableId(request.projectId))
@@ -499,33 +507,47 @@ namespace renegade::bridge
         if (!request.animationActions.empty() &&
             (!request.characterAsset || request.animationActions.size() != candidate.Summary().animations))
         { result.error = "Animation action assignments do not match the Character clips."; return result; }
-        const std::vector<std::string> actionsAllowed = {"Unassigned", "Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death"};
-        for (size_t i = 0; request.characterAsset && i < candidate.Summary().animations; ++i)
-        {
-            const std::string action = request.animationActions.empty() ? "Unassigned" : request.animationActions[i];
-            if (std::find(actionsAllowed.begin(), actionsAllowed.end(), action) == actionsAllowed.end())
-            { result.error = "Unknown Character animation action."; return result; }
-            const auto& native = candidate.PeekScene()->animations[i];
-            const auto* name = candidate.PeekScene()->names.GetComponent(candidate.PeekScene()->animations.GetEntity(i));
-            const auto external = std::find_if(candidate.ExternalAnimations().begin(), candidate.ExternalAnimations().end(),
-                [i](const auto& source) { return i >= source.firstAnimationIndex && i < source.firstAnimationIndex + source.animationCount; });
-            if (external == candidate.ExternalAnimations().end())
-            {
-                CreatorAnimationImportRecipe clip;
-                clip.sourceAnimationIndex = static_cast<std::uint32_t>(i);
-                clip.name = name ? name->name : "Clip " + std::to_string(i + 1);
-                clip.start = native.start; clip.end = native.end; clip.speed = native.speed; clip.action = action;
-                authoredRecipe.animations.push_back(std::move(clip));
+        CreatorModelImportRecipe nativeEntries;
+        if (entries && !request.characterAsset) {result.error="Animation entries require a Character."; return result;}
+        const size_t sourceCount=candidate.Summary().animations;
+        const size_t entryCount=entries ? entries->size() : sourceCount;
+        const std::vector<std::string> allowed={"Unassigned","Idle","Walk","Run","Attack","Melee","Fire","Cast","Reload","Hit","Death","Gesture","Situational idle"};
+        for(size_t row=0;request.characterAsset && row<entryCount;++row) {
+            CreatorAnimationImportRecipe entry;
+            if(entries) entry=(*entries)[row];
+            else {
+                entry.sourceAnimationIndex=static_cast<uint32_t>(row);
+                const auto& native=candidate.PeekScene()->animations[row];
+                const auto* name=candidate.PeekScene()->names.GetComponent(candidate.PeekScene()->animations.GetEntity(row));
+                entry.name=name ? name->name : "Clip "+std::to_string(row+1);
+                entry.start=native.start; entry.end=native.end; entry.speed=native.speed;
+                entry.action=request.animationActions.empty() ? "Unassigned" : request.animationActions[row];
             }
-            else
-            {
+            const size_t i=entry.sourceAnimationIndex;
+            if(i>=sourceCount || std::find(allowed.begin(),allowed.end(),entry.action)==allowed.end()) {
+                result.error="Animation entry has an unavailable source or unknown action.";return result;
+            }
+            nativeEntries.animations.push_back(entry);
+            auto external=std::find_if(candidate.ExternalAnimations().begin(),candidate.ExternalAnimations().end(),
+                [i](const auto& source){return i>=source.firstAnimationIndex && i<source.firstAnimationIndex+source.animationCount;});
+            if(external==candidate.ExternalAnimations().end()) authoredRecipe.animations.push_back(entry);
+            else {
                 CreatorExternalAnimationImportRecipe clip;
-                clip.sourceProjectRelativePath = dependencyPaths[external->dependencyIndex].lexically_relative(root).generic_u8string();
-                clip.sourceAnimationIndex = static_cast<std::uint32_t>(i - external->firstAnimationIndex);
-                clip.name = name ? name->name : "External Clip " + std::to_string(i + 1);
-                clip.start = native.start; clip.end = native.end; clip.speed = native.speed; clip.action = action; clip.autoMapSource = !external->matchingRig; clip.matchingRig = external->matchingRig;
+                clip.sourceProjectRelativePath=dependencyPaths[external->dependencyIndex].lexically_relative(root).generic_u8string();
+                clip.sourceAnimationIndex=static_cast<uint32_t>(i-external->firstAnimationIndex);
+                clip.name=entry.name;clip.start=entry.start;clip.end=entry.end;clip.speed=entry.speed;clip.action=entry.action;
+                clip.matchingRig=external->matchingRig;clip.autoMapSource=!external->matchingRig;
                 authoredRecipe.externalAnimations.push_back(std::move(clip));
             }
+        }
+        // An empty recipe means preserve source takes on legacy assets. An explicit
+        // disabled entry distinguishes removing every embedded take on reimport.
+        if(entries && sourceCount && authoredRecipe.animations.empty() &&
+            (candidate.ExternalAnimations().empty() || candidate.ExternalAnimations().front().firstAnimationIndex>0)) {
+            CreatorAnimationImportRecipe omitted;
+            omitted.enabled=false; omitted.name="Omitted"; omitted.start=candidate.PeekScene()->animations[0].start;
+            omitted.end=candidate.PeekScene()->animations[0].end;
+            authoredRecipe.animations.push_back(omitted);
         }
         // Record every retained map by material slot. Reimport must not depend
         // on obsolete absolute paths baked into FBX/MTL or the original source tree.
@@ -555,12 +577,16 @@ namespace renegade::bridge
                 if (!ApplyCreatorModelImportRecipe(commitScene, request.projectRoot, request.projectId, correction, result.error))
                     return result;
             }
+            if(entries) {
+                if(entries->empty()) commitScene.animations.Clear();
+                else if(!ApplyCreatorModelImportRecipe(commitScene,request.projectRoot,request.projectId,nativeEntries,result.error)) return result;
+            }
             PauseImportedModelAnimations(commitScene);
             if (request.characterAsset)
                 for (size_t i = 0; i < commitScene.animations.GetCount(); ++i)
                     commitScene.metadatas.Create(commitScene.animations.GetEntity(i)).string_values.set(
                         CreatorCharacterAnimationActionMetadataKey,
-                        request.animationActions.empty() ? "Unassigned" : request.animationActions[i]);
+                        nativeEntries.animations[i].action);
             if (request.characterAsset && commitScene.transforms.GetCount() != 0)
             {
                 const auto rootEntity = commitScene.transforms.GetEntity(0);
@@ -606,7 +632,9 @@ namespace renegade::bridge
         ModelDerivedMetadata metadataValue;
         metadataValue.known = true;
         metadataValue.skinned = candidate.Evidence().skinnedMeshes != 0;
-        metadataValue.animated = candidate.Summary().animations != 0;
+        metadataValue.animated = commitScene.animations.GetCount() != 0;
+        size_t channels=0;
+        for(size_t i=0;i<commitScene.animations.GetCount();++i) channels+=commitScene.animations[i].channels.size();
         const auto count = [&result](std::size_t value, std::uint32_t& output)
         {
             if (value > (std::numeric_limits<std::uint32_t>::max)())
@@ -620,8 +648,8 @@ namespace renegade::bridge
         if (!count(candidate.Summary().meshes, metadataValue.meshCount) ||
             !count(candidate.Summary().materials, metadataValue.materialCount))
             return result;
-        if (!count(candidate.Summary().animations, metadataValue.animationClipCount) ||
-            !count(candidate.Evidence().animationChannels, metadataValue.animationChannelCount) ||
+        if (!count(commitScene.animations.GetCount(), metadataValue.animationClipCount) ||
+            !count(channels, metadataValue.animationChannelCount) ||
             !count(candidate.PeekScene()->armatures.GetCount(), metadataValue.armatureCount) ||
             !count(candidate.Evidence().armatureBones, metadataValue.boneCount)) return result;
         std::size_t morphCount = 0;

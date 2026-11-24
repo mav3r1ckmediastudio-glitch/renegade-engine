@@ -9,6 +9,7 @@
 namespace renegade::bridge
 {
     struct CreatorModelTransformRecipe;
+    struct CreatorAnimationImportRecipe;
 
     struct ModelImportCommitRequest
     {
@@ -49,6 +50,10 @@ namespace renegade::bridge
         [[nodiscard]] ModelImportCommitResult CommitModel(
             const ModelImportCommitRequest& request, ModelImportCandidate& candidate,
             const CreatorModelTransformRecipe& transform, bool animatedModel) const;
+        [[nodiscard]] ModelImportCommitResult CommitModel(
+            const ModelImportCommitRequest& request, ModelImportCandidate& candidate,
+            const CreatorModelTransformRecipe& transform, bool animatedModel,
+            const std::vector<CreatorAnimationImportRecipe>* entries) const;
         [[nodiscard]] ModelImportCommitResult CommitStaticModel(
             const ModelImportCommitRequest& request,
             ModelImportCandidate& candidate) const;

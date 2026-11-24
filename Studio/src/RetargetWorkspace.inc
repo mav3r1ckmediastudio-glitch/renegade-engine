@@ -460,7 +460,7 @@ bool StudioRenderPath::WriteMappedTake(bool explicitBake)
     const int selected=rtClip_.GetSelected();
     if(selected<0 || !modelImportCandidate_)return false;
     auto previous=explicitBake?std::make_shared<bridge::ModelImportCandidate>(modelImportCandidate_->CaptureBakeState()):nullptr;
-    auto takes=mappedTakes_;auto actions=modelImportActions_;auto ranges=originalClipRanges_;
+    auto takes=mappedTakes_;auto actions=modelImportActions_;auto entries=actionEntries_;auto sourceCount=actionSourceCount_;
     const int priorSelection=modelImportClip_.GetSelected()-1;
     const float time=modelImportPreview_->ClipTime();
     if(!rtScene_.IsValid() || rtClip_.GetSelected()<0 || !modelImportCandidate_)return false;
@@ -476,27 +476,17 @@ bool StudioRenderPath::WriteMappedTake(bool explicitBake)
     const std::string label=rtScene_->animations.GetCount()==1?rtFile_:rtClip_.GetItemText(index);
     std::string error;
     auto& take=mappedTakes_[index];
-    const bool retainTiming = take.clip >= 0 && originalClipRanges_.count(take.clip);
-    float start=0, end=0, speed=1;
-    if(retainTiming) {
-        const auto& clip=modelImportCandidate_->PeekScene()->animations[take.clip];
-        start=clip.start; end=clip.end; speed=clip.speed;
-    }
     if(!bridge::ModelImportCandidateService().EditMappedClip(*modelImportCandidate_,*rtScene_,index,rtPairs_,rtSourcePose_,targetPose,label,error,take.clip,take.keys,mapKept_)){
         ShowStudioMessageBox(error,"Bake retargeted clip");return false;
     }
     if(take.clip<0)take.clip=int(modelImportCandidate_->Summary().animations)-1;
     const int baked=take.clip;
-    if(retainTiming) {
-        auto& clip=modelImportCandidate_->PeekMutableScene()->animations[baked];
-        clip.start=start; clip.end=end; clip.speed=speed;
-    }
     modelImportActions_.resize(modelImportCandidate_->Summary().animations,"Unassigned");
     if(!takes.count(index) || takes[index].clip<0)modelImportActions_[baked]=SuggestImportedCharacterAction(label);
     if(explicitBake){
-        MapHistory([this,previous,takes,actions,ranges,clip=priorSelection,time]() mutable {
+        MapHistory([this,previous,takes,actions,entries,sourceCount,clip=priorSelection,time]() mutable {
             int current=modelImportClip_.GetSelected()-1;
-            std::swap(*modelImportCandidate_,*previous);mappedTakes_.swap(takes);modelImportActions_.swap(actions);originalClipRanges_.swap(ranges);
+            std::swap(*modelImportCandidate_,*previous);mappedTakes_.swap(takes);modelImportActions_.swap(actions);std::swap(entries,actionEntries_);std::swap(sourceCount,actionSourceCount_);entryUndoStack_.clear();entryRedoStack_.clear();
             mapEditingClip_=false;RefreshBakedPreview(clip,time);clip=current;
         });
         importPage_=ImportPage::Actions;mapEditingClip_=false;

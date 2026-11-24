@@ -12,8 +12,14 @@ namespace renegade::studio
         {
             for (size_t slot = 0; slot < wi::scene::MaterialComponent::TEXTURESLOT_COUNT; ++slot)
                 previewScene_->materials[i].textures[slot] = source.materials[i].textures[slot];
-            previewScene_->materials[i].normalMapStrength = source.materials[i].normalMapStrength;
-            previewScene_->materials[i].SetOcclusionEnabled_Secondary(source.materials[i].IsOcclusionEnabled_Secondary());
+            auto& dst=previewScene_->materials[i];
+            const auto& src=source.materials[i];
+            dst.roughness=src.roughness; dst.metalness=src.metalness; dst.reflectance=src.reflectance;
+            dst.normalMapStrength=src.normalMapStrength; dst.emissiveColor=src.emissiveColor;
+            dst.alphaRef=src.alphaRef; dst.userBlendMode=src.userBlendMode; dst.shaderType=src.shaderType; dst.customShaderID=src.customShaderID;
+            dst.SetDoubleSided(src.IsDoubleSided());
+            dst.SetOcclusionEnabled_Primary(src.IsOcclusionEnabled_Primary());
+            dst.SetOcclusionEnabled_Secondary(src.IsOcclusionEnabled_Secondary());
             previewScene_->materials[i].SetDirty();
         }
         renderedFrames_ = 0;

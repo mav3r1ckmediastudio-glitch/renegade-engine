@@ -1,3 +1,13 @@
+# Character Materials and Actions review | DESIGN | 24 November 2026
+
+Open the desktop shortcut **Renegade - Material Inspector**. In the level editor use Add > Import Model..., choose Character, then Materials. The review binary is RenegadeStudioMaterialInspector.exe. The separate review project, UI captures, channel-check input and readback logs are under UnifiedImportReview/MaterialsReview beside the worktree. Existing creator sessions were left open.
+
+The Materials inspector edits the selected native material in the candidate and mirrors it into the character preview. Separate AO, roughness and metalness images or a user-selected packed image can produce the renderer's surface texture. The channel selectors accept R, G, B or A; image alpha is independent of opaque, cutout or blended rendering. Authored inputs and the rendered surface texture are retained with the model. The saved WISCENE carries the native material and input/mapping metadata. The fresh source-FBX reconversion path was not verified. No tattoo/stamp tooling is included.
+
+Local DX12 checks: assigned five body maps through Studio, set roughness to 1.6 and double-sided on, saved matreviewone, placed it through the asset browser and ran Test Game. An independent load through PrepareModelPlacement recovered the native roughness, sidedness and three live texture resources. Packed test saved packedmatqa with roughness sourced from alpha and cutout set to 0.32. Readback returned alphaRef 0.68, mapping RAB and double-sided on. All 2048 texels of the retained cooked surface matched the selected R/A/B inputs. Original source art was left intact. Materials testing used the creator's character-with-animation pack.
+
+The Actions layout uses individual full-width rows for source previews, a separate reference pose, and a scrollable editable entries table with a fixed footer. Prior Studio checks covered clicking five source rows. A saved pair of action variants with different timing and playback in Test Game still requires separate acceptance.
+
 # Whole-clip rotation offsets | DESIGN
 
 Desktop shortcut Renegade - Unified Model Importer opens RenegadeStudioClipOffset.exe. From Character > Retargeting, bake a clip to Actions. Open Edit baked pose / IK, select the target bone, choose Apply pose to > Offset whole clip, enter an incremental local rotation and click Apply rotation. Undo/Redo and Add to Library use the existing clip editing path. A two-bone IK edit applies the corresponding local offsets to the two solved joints. No character-specific offsets or defaults are in the importer.

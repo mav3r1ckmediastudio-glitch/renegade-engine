@@ -57,6 +57,11 @@ namespace renegade::bridge
             state.dependencies_=dependencies_;state.externalAnimations_=externalAnimations_;
             state.summary_=summary_;state.evidence_=evidence_;return state;
         }
+        // Preserve authored input images and cooked ORM in the same transaction as the model.
+        void RetainMaterialInput(ModelImportDependency input) {
+            for(const auto& dependency:dependencies_) if(dependency.previewResourceName==input.previewResourceName) return;
+            dependencies_.push_back(std::move(input));
+        }
         [[nodiscard]] bool IsReady() const noexcept
         {
             return scene_.IsValid() && error_.empty();

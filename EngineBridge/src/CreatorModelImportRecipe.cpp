@@ -357,19 +357,10 @@ namespace renegade::bridge
 
             for (const auto& group : groups)
             {
-                std::set<std::uint32_t> sourceIndices;
                 bool hasEnabledClip = false;
                 std::uint32_t maximumSourceIndex = 0;
                 for (const auto* clip : group.clips)
                 {
-                    if (clip == nullptr ||
-                        !sourceIndices.insert(clip->sourceAnimationIndex).second)
-                    {
-                        error =
-                            "Character external animation recipe contains duplicate source-action provenance for " +
-                            group.projectRelativePath + ".";
-                        return false;
-                    }
                     maximumSourceIndex = std::max(maximumSourceIndex, clip->sourceAnimationIndex);
                     hasEnabledClip = hasEnabledClip || clip->enabled;
                 }
@@ -406,6 +397,8 @@ namespace renegade::bridge
                     return false;
                 }
 
+                std::vector<wi::scene::AnimationComponent> originals;
+                for(auto entity:result.createdAnimations) originals.push_back(*scene.animations.GetComponent(entity));
                 std::set<wi::ecs::Entity> keptAnimations;
                 constexpr float RangeTolerance = 0.0001f;
                 for (const auto* clip : group.clips)
@@ -413,7 +406,7 @@ namespace renegade::bridge
                     if (clip == nullptr || !clip->enabled)
                         continue;
 
-                    const auto entity = result.createdAnimations[clip->sourceAnimationIndex];
+                    auto entity = result.createdAnimations[clip->sourceAnimationIndex];
                     auto* animation = scene.animations.GetComponent(entity);
                     if (animation == nullptr)
                     {
@@ -421,8 +414,9 @@ namespace renegade::bridge
                             "Retargeted Character animation disappeared before final asset preparation.";
                         return false;
                     }
-                    if (clip->start < animation->start - RangeTolerance ||
-                        clip->end > animation->end + RangeTolerance)
+                    const auto& source=originals[clip->sourceAnimationIndex];
+                    if (clip->start < source.start - RangeTolerance ||
+                        clip->end > source.end + RangeTolerance)
                     {
                         error =
                             "Character external animation range falls outside its retargeted source action for '" +
@@ -430,6 +424,14 @@ namespace renegade::bridge
                         return false;
                     }
 
+                    if(keptAnimations.count(entity)) {
+                        const auto parent=scene.hierarchy.GetComponent(entity);
+                        const auto parentId=parent ? parent->parentID : wi::ecs::INVALID_ENTITY;
+                        entity=wi::ecs::CreateEntity();
+                        animation=&scene.animations.Create(entity);
+                        *animation=source;
+                        if(parentId!=wi::ecs::INVALID_ENTITY) scene.Component_Attach(entity,parentId);
+                    }
                     animation->start = clip->start;
                     animation->end = clip->end;
                     animation->speed = clip->speed;

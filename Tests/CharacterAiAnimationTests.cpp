@@ -175,7 +175,7 @@ int main()
     if (attackTwoAnimation == nullptr || !attackTwoAnimation->IsPlaying() ||
         record->activeClip == firstAttack)
     {
-        return Fail("attack variants must cycle deterministically");
+        return Fail("a new attack must avoid the immediately preceding variant when another is eligible");
     }
 
     RuntimeCharacterDecisionState decisions;
