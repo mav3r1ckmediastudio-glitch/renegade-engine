@@ -1,3 +1,13 @@
+# Foliage PR 204 resident-walk CI correction, 24 November 2026
+
+Correction commit cbdbf59ec9d3e871d5696d313fd6da838d3b9320 addresses the second hosted failure on head fe1d8c688ac6750b6bfbbf462149b64194a0554d (merge 1623d8b222b6461f818bb2242477515496f10c2d). Studio run 45470313728 Release passes the full suite/startup; Debug fails only RenegadeVegetation_grass-palette. Baseline and the previous assistant correction pass. Local native Debug/WARP cold-load repetition reproduces the exact walking failure at run 4: prediction grows required collision cells from four to six while two new records are still unpublished. The runtime correctly holds unknown support; the test had not established residency over its entire measured route.
+
+Tests/GrassPaletteProof.h now pins and explicitly verifies all nine native route cells before walking, with bounded normal native publication and scoped interest cleanup. Every movement/arm/final-distance assertion remains. Stale-collision refusal is strengthened to prove a live old body and exactly one blocked cell (9 required, 8 ready). Failure diagnostics record requested cells/body state safely. No production rendering, collision policy, assets, importer, upstream or workflow changes.
+
+Verification: 20 consecutive native Debug/WARP cold-load walking and stale-cell checks pass. Complete registered grass proof via RunRiverDefaultRecovery.cmake passes Debug WARP (67.365 s) and Release WARP (57.774 s), including GPU response, eight stock choices, Custom mixing, Undo/Redo and reopening. WD01VegetationSourceContract and all 161 assistant evidence records pass; git diff --check passes. These use matching cached dependencies, not full clean local Studio builds. Exact commands, source hash, hosted job IDs, limits and four portable logs are in docs/FOLIAGE_PR204_WALK_CI_CORRECTION_2026-11-24.md and docs/evidence/foliage-ci-walk-2026-11-24. This documentation checkpoint records that exact correction commit.
+
+Next: push source and evidence together; inspect fresh full hosted checks against the latest head. Keep PR 204 unmerged pending green CI and explicit owner merge approval. Importer work remains separate; no owner application was closed/restarted.
+
 # Foliage PR 204 CI correction, 24 November 2026
 
 Correction commit ce3f6ee6f31786c8d302ab503c8534f158c10757 fixes the failed assistant evidence fingerprint on PR 204. Failed head b118cdcafa8e6f8828ba10466072ea94b7865884 compiled successfully in both Studio configurations; only RenegadeAssistantWorkflowSuite failed. Baseline Debug/Release passed. The changed foliage architecture document invalidated the whole-file digest for the unchanged Surface Type instructions.
