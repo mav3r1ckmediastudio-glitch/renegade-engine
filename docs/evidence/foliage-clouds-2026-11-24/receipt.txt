@@ -1,0 +1,5 @@
+night-clouds coverage=0.52 cast_shadow=1 exposure=3 foliage_layers=6
+day-cloud-shadows coverage=0.52 cast_shadow=1 exposure=1 foliage_layers=6
+day-clouds-no-shadow coverage=0.52 cast_shadow=0 exposure=1 foliage_layers=6
+night-clouds-no-shadow coverage=0.52 cast_shadow=0 exposure=3 foliage_layers=6
+FOLIAGE_CLOUD_SAVE_REOPEN_NATIVE_VIEWS_PASS
