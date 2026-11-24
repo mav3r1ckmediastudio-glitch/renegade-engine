@@ -1,3 +1,11 @@
+# Foliage PR 204 opened, 24 November 2026
+
+The owner explicitly authorised opening the foliage PR separately from importer work. PR https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/pull/204 targets main from feature/foliage-512. Initial published head is 688d1b1fb6ea78b8478f103ef6c9fdffd57f9f3c; production integration source is e963d2ee39d73cd2400ddafbcc80358ad1153d48, with the later lighting/cloud preview commits retained. This is a documentation-only publication checkpoint; code/assets are unchanged from the initial PR head.
+
+Fetched main is 7ad72ea7842f5d731fd8019867d7d6f50a2d2916 and is already an ancestor (0 commits behind, 27 foliage commits ahead before this checkpoint). The 135-file PR diff contains no importer paths or upstream submodule pointer changes. Full-range git diff --check passes. Both studio.yml and windows-baseline.yml trigger on pull_request targeting main and include Debug/Release matrices; the separate known-environment handshake probe is manual-only. Local bounded validation and its cached-build limits are recorded below and in the linked foliage reports. Hosted checks must be evaluated against the latest pushed head, not the earlier cached application identity.
+
+User authorisation is to open the PR for CI, not merge it. No merge or auto-merge is requested. Importer work remains on its own branch/PR. Next: inspect the latest-head hosted checks, fix foliage failures within scope, and retain exact-head evidence. Full CI and independent/owner final painter acceptance remain before merge/release. The cloudy preview and desktop review launchers are preserved; this publication work does not start additional local renderers.
+
 # Cloud-cover and shadow preview, 24 November 2026
 
 Preview source/evidence commit 816b0f1b6af5e5b728cbba4796abb3670f533b02 on feature/foliage-512. Before proceeding, the owner asked to see the approved scene with cloud cover and shadows, then responded positively to the cloudy-night view. Keep that as appearance feedback only. The original clear-night archive remains unchanged.
