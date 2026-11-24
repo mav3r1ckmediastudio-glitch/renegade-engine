@@ -1,3 +1,13 @@
+# Foliage PR 204 CI correction, 24 November 2026
+
+Correction commit ce3f6ee6f31786c8d302ab503c8534f158c10757 fixes the failed assistant evidence fingerprint on PR 204. Failed head b118cdcafa8e6f8828ba10466072ea94b7865884 compiled successfully in both Studio configurations; only RenegadeAssistantWorkflowSuite failed. Baseline Debug/Release passed. The changed foliage architecture document invalidated the whole-file digest for the unchanged Surface Type instructions.
+
+Changed Tools/assistant_knowledge/workflows.json: renewed only the reviewed architecture digest and recorded the review. No validation/test weakening, engine, renderer, importer or upstream change. This checkpoint adds this handoff and docs/FOLIAGE_PR204_CI_CORRECTION_2026-11-24.md with exact run/job identifiers, commands and reproduction evidence. Full workflow-evidence audit found no other stale digests.
+
+Fresh local AssistantWorkflowSuite reproduces the identical four subtest failures before the correction and passes all 84 tests after it (exit 0). AssistantPackagedKnowledgeTests passes Gitless routing/identity and changed-source/stale-index rejection (exit 0). git diff --check passes. Full commands and limits are in the correction report. Existing foliage previews remain untouched; no second renderer was launched.
+
+Next: push the correction and this checkpoint, evaluate fresh hosted checks against the latest PR head, fix any further failures, and await explicit merge approval. Importer work stays separate. Hosted CI is not yet claimed green.
+
 # Foliage PR 204 opened, 24 November 2026
 
 The owner explicitly authorised opening the foliage PR separately from importer work. PR https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/pull/204 targets main from feature/foliage-512. Initial published head is 688d1b1fb6ea78b8478f103ef6c9fdffd57f9f3c; production integration source is e963d2ee39d73cd2400ddafbcc80358ad1153d48, with the later lighting/cloud preview commits retained. This is a documentation-only publication checkpoint; code/assets are unchanged from the initial PR head.
