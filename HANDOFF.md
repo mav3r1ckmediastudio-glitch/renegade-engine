@@ -1,3 +1,9 @@
+# Owner approval of five temperate additions, 24 November 2026
+
+At add0cb2d04e97091e66d8fb6045e2b4c81140ba6 the owner reviewed the live Temperate Foliage Review and said "i love it all!". Record visual acceptance of the five additional plants alongside the previously approved meadow: short grass, dry grass, seedhead grass, low clover and small wildflowers. This is appearance approval, not a GI, distance/mip, benchmark or release sign-off. The live review was opened as PID 30308 and its advancing frames were verified after focus/resize. Production palette integration and CI preparation remain the next implementation work.
+
+The owner asks whether grass reacts to global illumination. Inspection of the existing local hairparticlePS.hlsl, shadingHF.hlsli and lightingHF.hlsli confirms sky/ambient lighting, direct lights/shadows, an SSGI input and the shared indirect-diffuse paths for ray-traced diffuse, Surfel GI, voxel GI and DDGI when their resources/settings are active. This is shader-path evidence; a GI on/off visual test of the accepted plants has not yet been run. No lighting defaults or shaders were changed to answer this question.
+
 # Approved native-breeze appearance and five temperate candidates, 24 November 2026
 
 The owner reviewed 01 Native Breeze in the live normal Runtime and said "grass looks great". Keep that meadow/native-breeze appearance as the accepted baseline. Do not expand this wording into an explicit stutter, distance/mip, whole-level performance or TAA acceptance. The owner Runtime PID 42040 remains open and responsive; it was not closed or replaced while preparing the additions.
