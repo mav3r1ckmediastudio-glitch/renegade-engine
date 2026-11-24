@@ -46,7 +46,7 @@
         {
           "path": "docs/ARCHITECTURE.md",
           "needle": "Creator steps: select an object; choose Surface Type directly in its Inspector.",
-          "sha256": "52117c3b4d99c3629face5a21d1a4b0df6d43776bf75d3196b3d8d9016b12b4b"
+          "sha256": "05192193d71a87a313b67112dd57c2b04f393d691e03579f10e1694f7fcf99f7"
         },
         {
           "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
@@ -2016,5 +2016,10 @@
     "date": "2026-11-16",
     "source_checkpoint": "7d4839ab1b048a8c423dbed76654b3d86d0eeac5",
     "scope": "Reviewed dialogue-only additions to StudioApplication, the appended tenth Add-menu action and architecture notes. Existing importer, animation, equipment, prefab and Surface Type controls and every curated evidence needle remain present. Refreshed affected UTF-8/LF whole-file fingerprints only; existing native acceptance limits and fail-closed evidence validation remain unchanged."
+  },
+  "foliage_integration_review": {
+    "date": "2026-11-24",
+    "source_checkpoint": "b118cdcafa8e6f8828ba10466072ea94b7865884",
+    "scope": "Reviewed the foliage-only architecture edits against main. The object Surface Type section, inspector controls, command and native acceptance receipt are unchanged. Refreshed only its architecture UTF-8/LF whole-file fingerprint; existing acceptance limits and fail-closed validation remain unchanged."
   }
 }
