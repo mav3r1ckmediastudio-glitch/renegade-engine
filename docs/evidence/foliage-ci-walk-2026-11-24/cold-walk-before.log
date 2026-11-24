@@ -1,0 +1,18 @@
+COLD_WALK_RUN 0
+GRASS_STEADY_WALK_AND_ARM_POSE_PASS
+COLD_WALK_RUN 1
+GRASS_STEADY_WALK_AND_ARM_POSE_PASS
+COLD_WALK_RUN 2
+GRASS_STEADY_WALK_AND_ARM_POSE_PASS
+COLD_WALK_RUN 3
+GRASS_STEADY_WALK_AND_ARM_POSE_PASS
+COLD_WALK_RUN 4
+GRASS_WALK_COLLISION_NOT_READY frame=139 z=-6.37132 previous_z=-6.37132 ready_before=1 supported=0 required=6 resident=4 diagnostic=Preparing terrain collision; simulation is held.
+GRASS_WALK_TERRAIN busy=1 chunks=9
+GRASS_WALK_CHUNK x=-1 z=-1 valid=1 entity=126 body=1 refresh=0 live=1
+GRASS_WALK_CHUNK x=-1 z=0 valid=1 entity=133 body=1 refresh=0 live=1
+GRASS_WALK_CHUNK x=-1 z=1 valid=0 entity=0 body=0 refresh=0 live=0
+GRASS_WALK_CHUNK x=0 z=-1 valid=1 entity=127 body=1 refresh=0 live=1
+GRASS_WALK_CHUNK x=0 z=0 valid=1 entity=125 body=1 refresh=0 live=1
+GRASS_WALK_CHUNK x=0 z=1 valid=0 entity=0 body=0 refresh=0 live=0
+FAIL Walking stopped for a resident terrain tile
