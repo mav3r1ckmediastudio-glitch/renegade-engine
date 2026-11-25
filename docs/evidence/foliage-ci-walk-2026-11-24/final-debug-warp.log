@@ -1,0 +1,17 @@
+-- Terrain/river recovery evidence: <qa-output>\final-debug-warp/20261124T215619Z-10d205cc43d9
+RIVER_PROOF_STAGE device-create elapsed_ms=0.0425
+RIVER_PROOF_STAGE device-created elapsed_ms=41.8816
+RIVER_PROOF_ADAPTER Microsoft Basic Render Driver
+RIVER_PROOF_STAGE components-initialised elapsed_ms=193.602
+NATIVE_TERRAIN_MATERIAL_RESOURCES=PASS
+RIVER_PROOF_STAGE paint-terrain-generation elapsed_ms=720.457
+RIVER_PROOF_STAGE paint-terrain-published elapsed_ms=901.246
+GRASS_GPU_MIX frames=2 min=121 max=122 strands=243
+GRASS_CURSOR_AND_PLAYER_GPU_VERTEX_RESPONSE_PASS
+GRASS_GPU_MIX frames=2 min=121 max=122 strands=243
+GRASS_GPU_MIX frames=6 min=40 max=41 strands=243
+GRASS_WALK_RESIDENT_ROUTE required=9 ready=9 preparation_frames=0
+GRASS_INVALIDATED_RESIDENT_TILE_HELD required=9 ready=8
+GRASS_STEADY_WALK_AND_ARM_POSE_PASS
+STOCK_EIGHT_PLANTS_OVERLAP_SETTINGS_GROUND_HISTORY_REOPEN_PASS
+GRASS_PALETTE_MIX_IMPORT_HISTORY_COLD_REOPEN_PASS

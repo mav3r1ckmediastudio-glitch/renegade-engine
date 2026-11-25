@@ -7,6 +7,10 @@
 #include "renegade/bridge/ProjectService.h"
 #include <filesystem>
 #include <map>
+#include <chrono>
+#include <thread>
+#include <iostream>
+#include "StockPlantProfilesProof.h"
 
 namespace grass_palette_proof
 {
@@ -123,6 +127,34 @@ namespace grass_palette_proof
         Check(SpawnRuntimePlayerViewRig(scene,rig,player.entity,start.settings.eyeHeight,error),error);
         const auto world = loaded.TerrainPropCollisions();
         Check(world && world->ResidentEnabled(),"Review terrain requires collision residency");
+        // This measures steady walking over resident terrain, not cold-streaming
+        // admission. Pin the radius-one fixture before movement prediction can
+        // grow the actor's requests from four cells to six partway along the walk.
+        constexpr std::uint64_t routeInterest = 0x475241535357414cULL;
+        Check(world->SetInterest(routeInterest,{{0,0,0},{0,0,0},1},error),error);
+        struct ScopedRouteInterest
+        {
+            std::shared_ptr<TerrainPropCollisionWorld> world;
+            std::uint64_t id;
+            ~ScopedRouteInterest() { world->RemoveInterest(id); }
+        } route{world,routeInterest};
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+        bool routeReady=false;
+        unsigned preparationFrames=0;
+        for (; preparationFrames<1800 && std::chrono::steady_clock::now()<deadline; ++preparationFrames)
+        {
+            routeReady=world->UpdateSceneInterests(0);
+            if (routeReady && world->Ready()) break;
+            // Native terrain publication still runs while simulation is held.
+            // No input, synthetic ready flags or collision records are injected.
+            scene.Update(0);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        const auto prepared=world->Stats();
+        Check(routeReady && world->Ready() && prepared.terrainRequired==9 && prepared.terrainReady==9,
+            "Walking route did not prepare all nine native collision tiles: "+prepared.diagnostic);
+        std::cout<<"GRASS_WALK_RESIDENT_ROUTE required="<<prepared.terrainRequired
+            <<" ready="<<prepared.terrainReady<<" preparation_frames="<<preparationFrames<<std::endl;
         wi::scene::CameraComponent camera;
         camera.CreatePerspective(960,640,.1f,500.f);
         constexpr float dt = 1.f / 75;
@@ -142,6 +174,29 @@ namespace grass_palette_proof
             const float handY = scene.transforms.GetComponent(rig.primaryArmProof)->GetPosition().y-camera.Eye.y;
             if (previousZ >= -9 && previousZ < 14)
             {
+                if (!supported || !ready)
+                {
+                    const auto stats = world->Stats();
+                    std::cerr << "GRASS_WALK_COLLISION_NOT_READY frame=" << frame
+                        << " z=" << camera.Eye.z << " previous_z=" << previousZ
+                        << " ready_before=" << ready << " supported=" << supported
+                        << " required=" << stats.terrainRequired << " resident=" << stats.terrainReady
+                        << " diagnostic=" << stats.diagnostic << std::endl;
+                    for (size_t i=0; i<scene.terrains.GetCount(); ++i)
+                    {
+                        const auto& t=scene.terrains[i];
+                        std::cerr << "GRASS_WALK_TERRAIN busy=" << t.IsGenerationBusy() << std::endl;
+                        for (const auto& record : native::GetTerrainChunkRecords(scene,t.terrainEntity))
+                        {
+                            const auto* body=scene.rigidbodies.GetComponent(record.entity);
+                            std::cerr << "GRASS_WALK_CHUNK x=" << record.key.x << " z=" << record.key.z
+                                << " valid=" << record.valid << " entity=" << record.entity
+                                << " body=" << bool(body)
+                                << " refresh=" << (body && body->IsRefreshParametersNeeded())
+                                << " live=" << native::HasLiveBody(scene,record.entity) << std::endl;
+                        }
+                    }
+                }
                 Check(supported && ready,"Walking stopped for a resident terrain tile");
                 Check(camera.Eye.z-previousZ > start.settings.walkSpeed*dt*.95f,
                     "Player slowed down on the flat route across the grass");
@@ -161,9 +216,16 @@ namespace grass_palette_proof
         key.z = pending.front().key.z;
         terrain.Generation_Cancel();
         auto& chunk = terrain.chunks.at(key);
+        Check(native::HasLiveBody(scene,chunk.entity),"Stale-collision check requires a live old body");
         chunk.invalidated = true;
         Check(native::SetTerrainRequests(scene,terrain.terrainEntity,{},error),error);
         Check(!world->UpdateSceneInterests(0),"Invalidated terrain accepted stale collision");
+        const auto held=world->Stats();
+        Check(held.terrainRequired==9 && held.terrainReady==8 &&
+            !native::GetTerrainChunk(scene,terrain.terrainEntity,pending.front().key).valid,
+            "Invalidated route tile was not the sole blocked native collision cell");
+        std::cout<<"GRASS_INVALIDATED_RESIDENT_TILE_HELD required="<<held.terrainRequired
+            <<" ready="<<held.terrainReady<<std::endl;
         chunk.invalidated = false;
         terrain.Generation_Cancel();
         DespawnRuntimePlayerViewRig(scene,rig);
@@ -182,28 +244,30 @@ namespace grass_palette_proof
         Check(projects.CreateProject(out.generic_u8string(),"GrassReview",seed),projects.LastError());
         const auto& project=projects.CurrentProject();
         const auto root=fs::u8path(project.rootPath);
-        auto entries=GrassPaletteEntries(root,PlantGroup::Grass);
-        const auto all=GrassPaletteEntries(root);
-        Check(entries.size()==10 && GrassPaletteEntries(root,PlantGroup::Freshwater).size()==5 &&
-            GrassPaletteEntries(root,PlantGroup::Marine).size()==5 &&
-            GrassPaletteEntries(root,PlantGroup::Alien).size()==10 && all.size()==30,
-            "Incorrect stock plant group membership");
-        Check(fs::is_directory(root/CustomPlantDirectory) && GrassPaletteEntries(root,PlantGroup::Custom).empty(),
-            "New project is missing its empty Custom plant folder");
-        GrassAtlas complete;
-        Check(BuildGrassAtlas(root,all,complete,error) && complete.frames==30,
-            "Failed to load all thirty plant sprites into a mixed brush: "+error);
-        GrassAtlas meadow,bank;
-        Check(BuildGrassAtlas(root,{entries[0],entries[5]},meadow,error),error);
-        Check(BuildGrassAtlas(root,{entries[1],entries[7]},bank,error),error);
+        Check(GrassPaletteEntries(root).empty() &&
+            GrassPaletteEntries(root,PlantGroup::Grass).empty() &&
+            GrassPaletteEntries(root,PlantGroup::Freshwater).empty() &&
+            GrassPaletteEntries(root,PlantGroup::Marine).empty() &&
+            GrassPaletteEntries(root,PlantGroup::Alien).empty(),
+            "Retired stock plants remain discoverable");
+        Check(fs::is_directory(root/CustomPlantDirectory), "New project is missing its Custom plant folder");
+        GrassAtlas approved;
+        Check(BuildStockGrassAtlas(root,StockGrassPreset::MeadowOpen,approved,error),error);
+        Check(ImportGrassSheet(root,fs::u8path(approved.path),2,3,error),error);
+        auto entries=GrassPaletteEntries(root,PlantGroup::Custom);
+        Check(entries.size()==6,"Approved sheet did not import six custom cells");
+        GrassAtlas complete,meadow,bank;
+        Check(BuildGrassAtlas(root,entries,complete,error) && complete.frames==6,error);
+        Check(BuildGrassAtlas(root,{entries[0],entries[1]},meadow,error),error);
+        Check(BuildGrassAtlas(root,{entries[2],entries[3]},bank,error),error);
         Check(ImportGrassSheet(root,fs::u8path(meadow.path),2,2,error),error);
         auto imported=GrassPaletteEntries(root,PlantGroup::Custom);
-        Check(imported.size()==2 && imported.front().parent_path()==root/CustomPlantDirectory,
+        Check(imported.size()==8 && imported.front().parent_path()==root/CustomPlantDirectory,
             "Sheet import must publish its occupied cells under Custom");
         fs::copy_file(entries.front(),root/CustomPlantDirectory/"Dropped.PNG");
         fs::copy_file(entries.back(),(root/CustomPlantDirectory).parent_path()/"Legacy.png");
-        Check(GrassPaletteEntries(root,PlantGroup::Custom).size()==4 && GrassPaletteEntries(root).size()==34,
-            "Custom group did not find dropped PNGs or legacy imports");
+        Check(GrassPaletteEntries(root,PlantGroup::Custom).size()==10 && GrassPaletteEntries(root).size()==10,
+            "Custom palette did not retain dropped PNGs or legacy project imports");
         Check(InitializeWickedVegetation(scene,terrain,&error),error);
         auto paint=[&](XMFLOAT3 centre, VegetationBrushMode mode, const GrassAtlas& atlas)
         {
@@ -328,9 +392,10 @@ namespace grass_palette_proof
                 VerifyMix(scene.hairs[i]);
                 checkedAll = true;
             }
-        Check(checkedAll, "Missing thirty-variety mix");
+        Check(checkedAll, "Missing six-variety custom mix");
         largeMix.Undo();
         VerifyPlayerWalk(cold);
+        stock_plant_profiles_proof::Run(scene,terrain,root,render,hosted);
         std::cout<<"GRASS_PALETTE_MIX_IMPORT_HISTORY_COLD_REOPEN_PASS"<<std::endl;
     }
 }

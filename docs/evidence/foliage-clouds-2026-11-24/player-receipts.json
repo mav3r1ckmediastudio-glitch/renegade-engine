@@ -1,0 +1,18 @@
+[
+  {
+    "case": "night-clouds",
+    "pid": 28064,
+    "capture": "G13E14_ACTUAL_PLAYER_CAMERA_CAPTURE success=1 waterfall_active=0 river_active=0 emitters=0",
+    "frame": 60,
+    "bytes": 1502396,
+    "termination": "controller terminates only own isolated test; no clean-exit or performance claim"
+  },
+  {
+    "case": "day-cloud-shadows",
+    "pid": 42912,
+    "capture": "G13E14_ACTUAL_PLAYER_CAMERA_CAPTURE success=1 waterfall_active=0 river_active=0 emitters=0",
+    "frame": 60,
+    "bytes": 1495441,
+    "termination": "controller terminates only own isolated test; no clean-exit or performance claim"
+  }
+]

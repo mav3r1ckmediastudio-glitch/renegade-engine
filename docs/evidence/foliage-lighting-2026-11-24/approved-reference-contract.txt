@@ -1,0 +1,4 @@
+FoliageNightReferenceVerify.cpp
+APPROVED_FOLIAGE_NIGHT_REFERENCE_PASS embedded_foliage_atlases=6
+Approved GI/exposure changed
+APPROVED_REFERENCE_NEGATIVE_GI_CONTROL_REJECTED

@@ -1,4 +1,5 @@
 #include "renegade/bridge/GroundPaint.h"
+#include "renegade/bridge/VegetationService.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
 #include "renegade/bridge/CreatorSurfaceBuilderService.h"
 #include <algorithm>
@@ -249,7 +250,9 @@ namespace renegade::bridge
                 if(!weights.empty() && (hash&65535u)+.5f>=weights[i]*65536.f)authored[i]=0;
                 if(authored[i]>0)++count;
             }
-            const auto strands=uint32_t(float(count)*3*t.chunk_scale*t.chunk_scale*t.grass_density);
+            const float density=palette && meta->float_values.has(PlantDensityKey)
+                ?meta->float_values.get(PlantDensityKey):t.grass_density;
+            const auto strands=uint32_t(float(count)*3*t.chunk_scale*t.chunk_scale*density);
             if(hair.vertex_lengths!=authored || hair.strandCount!=strands)
             {
                 hair.vertex_lengths=std::move(authored);hair.strandCount=strands;

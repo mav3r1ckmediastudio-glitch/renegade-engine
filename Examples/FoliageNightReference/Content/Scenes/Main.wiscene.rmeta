@@ -1,0 +1,10 @@
+format = renegade-document
+version = 1
+
+[document]
+project_id = ddfdd5bd-2df2-455e-9153-7d7ed0c16ca3
+migrated_from = 0
+id = 36c39ac1-bcf2-4ea3-a9cd-3f00a392aadd
+type = scene
+path_hint = Content/Scenes/Main.wiscene
+generator = RenegadeGrassReview/1

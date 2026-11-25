@@ -460,9 +460,10 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grass.wiscene"
                 "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/grass.wiscene"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_SOURCE_DIR}/Content/terrain/foliage"
-                "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/foliage"
+            COMMAND ${CMAKE_COMMAND}
+                "-DFOLIAGE_SOURCE=${CMAKE_SOURCE_DIR}/Content/terrain/foliage"
+                "-DFOLIAGE_DESTINATION=$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/foliage"
+                -P "${CMAKE_SOURCE_DIR}/Tools/PackageStockFoliage.cmake"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grassparticle.png"
                 "$<TARGET_FILE_DIR:RenegadeRiverTerrainFollowProof>/Content/terrain/grassparticle.png"

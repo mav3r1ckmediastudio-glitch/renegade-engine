@@ -1,0 +1,26 @@
+[
+  {
+    "pair": [
+      "day-cloud-shadows",
+      "day-clouds-no-shadow"
+    ],
+    "lower_ground_mean_abs_rgb": [
+      85.1909130859375,
+      80.07275634765625,
+      56.984287109375
+    ],
+    "note": "display-space pixels at identical exposure within each pair; includes terrain/grass; not physical radiance"
+  },
+  {
+    "pair": [
+      "night-clouds",
+      "night-clouds-no-shadow"
+    ],
+    "lower_ground_mean_abs_rgb": [
+      0.107607421875,
+      0.0819384765625,
+      0.0572900390625
+    ],
+    "note": "display-space pixels at identical exposure within each pair; includes terrain/grass; not physical radiance"
+  }
+]

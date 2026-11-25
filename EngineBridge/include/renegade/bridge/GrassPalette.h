@@ -11,6 +11,7 @@ namespace renegade::bridge
         unsigned frames = 0;
     };
 
+    // Retired stock category values remain for source compatibility; their queries return empty.
     enum class PlantGroup { All, Grass, Freshwater, Marine, Alien, Custom };
     inline constexpr char CustomPlantDirectory[] = "Content/Vegetation/Palette/Custom";
 
