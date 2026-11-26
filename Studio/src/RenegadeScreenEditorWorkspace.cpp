@@ -1,3 +1,5 @@
+#include "renegade/bridge/ScreenClickSound.h"
+#include "renegade/bridge/DialogueAssetService.h"
 #include "RenegadeScreenEditorWorkspace.h"
 #include <cstdio>
 #include "StudioTheme.h"
@@ -696,6 +698,13 @@ namespace renegade::studio
         }
         stateImage_.Create("Button state artwork");
         stateImage_.OnClick([this](const wi::gui::EventArgs&) { if (editState_) editState_(basicState_, false); });
+        clickSound_.Create("Button click sound");
+        clickSound_.OnClick([this](const wi::gui::EventArgs&){ ChooseClickSound(); });
+        previewSound_.Create("Preview click sound"); previewSound_.SetText("Preview");
+        previewSound_.OnClick([this](const wi::gui::EventArgs&){ UpdateClickSound("preview"); });
+        defaultSound_.Create("Use click sound as default for all buttons");
+        defaultSound_.SetText("Use as default for all buttons");
+        defaultSound_.OnClick([this](const wi::gui::EventArgs&){ UpdateClickSound("promote"); });
         stateColour_.Create("Button state colour");
         stateColour_.OnClick([this](const wi::gui::EventArgs&) { if (editState_) editState_(basicState_, true); });
         appearanceButton_.Create("Screen Editor Appearance Inspector");
@@ -836,6 +845,9 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&stateTabs_[2]),
                 static_cast<wi::gui::Widget*>(&stateImage_),
                 static_cast<wi::gui::Widget*>(&stateColour_),
+                static_cast<wi::gui::Widget*>(&clickSound_),
+                static_cast<wi::gui::Widget*>(&previewSound_),
+                static_cast<wi::gui::Widget*>(&defaultSound_),
                 static_cast<wi::gui::Widget*>(&appearanceButton_),
                 static_cast<wi::gui::Widget*>(&imageAssetButton_),
                 static_cast<wi::gui::Widget*>(&progressFrameButton_),
@@ -989,6 +1001,16 @@ namespace renegade::studio
         full(destinationButton_, HeaderHeight + 493.0f, 32.0f);
         full(deleteButton_, HeaderHeight + 560.0f, 31.0f);
         full(duplicateButton_, HeaderHeight + 602.0f, 31.0f);
+        if (graphicTarget && graphicTarget->kind==bridge::ScreenWidgetKind::Button)
+        {
+            const float previewWidth=65;
+            full(clickSound_,HeaderHeight+530,28);
+            clickSound_.SetSize({fieldWidth-previewWidth-5,28});
+            previewSound_.SetPos({inspectorX+fieldWidth-previewWidth,HeaderHeight+530});
+            previewSound_.SetSize({previewWidth,28});
+            full(defaultSound_,HeaderHeight+562,28);
+            pair(deleteButton_,duplicateButton_,HeaderHeight+602);
+        }
         const float pickerHeight = std::min(240.0f,
             std::max(160.0f, height_ - HeaderHeight - FooterHeight - 300.0f));
         const float pickerLastY = std::max(HeaderHeight,
@@ -1065,6 +1087,23 @@ namespace renegade::studio
         }
         stateImage_.SetVisible(showStates);
         stateColour_.SetVisible(showStates);
+        clickSound_.SetVisible(showStates);
+        previewSound_.SetVisible(showStates);
+        defaultSound_.SetVisible(showStates);
+        if(showStates && !gridProjectRoot_.empty())
+        {
+            const auto& sounds=bridge::ProjectClickSounds(gridProjectRoot_);
+            const bridge::ScreenClickSounds::Key key={session_->Document().envelope.documentId,selectedWidgetId_};
+            const auto clip=sounds.Resolve(key);
+            const auto it=sounds.buttons.find(key);
+            const auto name=std::filesystem::u8path(clip).filename().u8string();
+            const auto label=it==sounds.buttons.end() ? (clip.empty() ? std::string("Add sound...") : "Default: "+name) :
+                (clip.empty() ? std::string("Silent") : name);
+            clickSound_.SetText("Click sound: "+label);
+            clickSound_.SetTooltip("Choose a project clip, import audio, follow the project default, or silence this button.");
+            previewSound_.SetEnabled(!clip.empty());
+            defaultSound_.SetEnabled(it!=sounds.buttons.end() && !clip.empty());
+        }
         if (showStates)
         {
             const auto& v = basicState_ == 0 ? selected->style.normal : basicState_ == 1 ? selected->style.hover : selected->style.pressed;
@@ -1175,6 +1214,9 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&stateTabs_[2]),
                 static_cast<wi::gui::Widget*>(&stateImage_),
                 static_cast<wi::gui::Widget*>(&stateColour_),
+                static_cast<wi::gui::Widget*>(&clickSound_),
+                static_cast<wi::gui::Widget*>(&previewSound_),
+                static_cast<wi::gui::Widget*>(&defaultSound_),
                 static_cast<wi::gui::Widget*>(&appearanceButton_),
                 static_cast<wi::gui::Widget*>(&imageAssetButton_),
                 static_cast<wi::gui::Widget*>(&progressFrameButton_),
@@ -1267,6 +1309,9 @@ namespace renegade::studio
                 static_cast<const wi::gui::Widget*>(&stateTabs_[2]),
                 static_cast<const wi::gui::Widget*>(&stateImage_),
                 static_cast<const wi::gui::Widget*>(&stateColour_),
+                static_cast<const wi::gui::Widget*>(&clickSound_),
+                static_cast<const wi::gui::Widget*>(&previewSound_),
+                static_cast<const wi::gui::Widget*>(&defaultSound_),
                 static_cast<const wi::gui::Widget*>(&appearanceButton_),
                 static_cast<const wi::gui::Widget*>(&imageAssetButton_),
                 static_cast<const wi::gui::Widget*>(&progressFrameButton_),
@@ -2934,6 +2979,93 @@ namespace renegade::studio
 
 namespace renegade::studio
 {
+    void RenegadeScreenEditorWorkspace::UpdateClickSound(const std::string& command,const std::string& clip)
+    {
+        if(!session_ || gridProjectRoot_.empty()) return;
+        const auto* button=session_->FindWidget(selectedWidgetId_);
+        if(!button || button->kind!=bridge::ScreenWidgetKind::Button) return;
+        const bridge::ScreenClickSounds::Key key={session_->Document().envelope.documentId,button->id};
+        auto& current=bridge::ProjectClickSounds(gridProjectRoot_);
+        std::string error;
+        if(command=="preview")
+        {
+            if(!bridge::PlayScreenClick(gridProjectRoot_,current.Resolve(key),error)) SetStatus(error);
+            return;
+        }
+        auto next=bridge::ScreenClickSounds::Read(gridProjectRoot_);
+        if(command=="promote")
+        {
+            auto path=next.Resolve(key);
+            if(path.empty()) return;
+            next.projectDefault=path;
+            next.buttons.erase(key);
+        }
+        else if(command=="default") next.buttons.erase(key);
+        else if(command=="silent") next.buttons[key]="";
+        else if(command=="local")
+        {
+            std::string absolute;
+            if(!bridge::ResolveScreenResourcePath(gridProjectRoot_,clip,absolute,error) ||
+                !bridge::ValidateAudioAssetForWicked(absolute,error)) { SetStatus(error);return; }
+            next.buttons[key]=clip;
+        }
+        else return;
+        if(!next.Save(gridProjectRoot_,error)) {SetStatus(error);return;}
+        current=std::move(next);
+        SetStatus(command=="promote" ? "PROJECT DEFAULT CLICK SOUND SAVED" : "BUTTON CLICK SOUND SAVED");
+    }
+
+    void RenegadeScreenEditorWorkspace::ChooseClickSound()
+    {
+        if(!session_ || gridProjectRoot_.empty()) return;
+        const auto root=gridProjectRoot_;
+        const auto doc=session_->Document().envelope.documentId;
+        const auto id=selectedWidgetId_;
+        const auto stillSelected=[this,root,doc,id]{
+            return session_ && session_->IsLoaded() && gridProjectRoot_==root &&
+                session_->Document().envelope.documentId==doc && selectedWidgetId_==id;
+        };
+        const auto& sounds=bridge::ProjectClickSounds(root);
+        const auto it=sounds.buttons.find({doc,id});
+        const auto current=it==sounds.buttons.end() ? "@default" : it->second.empty() ? "@silent" : it->second;
+        std::vector<RenegadeScreenChoicePicker::Choice> choices={
+            {"Use project default","@default"},{"Silent","@silent"},{"Import sound...","@import"}};
+        namespace fs=std::filesystem;
+        std::error_code ec;
+        const auto base=fs::u8path(root);
+        for(fs::recursive_directory_iterator files(base/"Content/Audio",fs::directory_options::skip_permission_denied,ec),end;
+            !ec && files!=end;files.increment(ec))
+        {
+            const auto& file=files->path();
+            auto ext=file.extension().u8string();
+            std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char c){return char(std::tolower(c));});
+            if((ext==".wav" || ext==".ogg") && files->is_regular_file(ec))
+                choices.push_back({file.filename().u8string(),
+                    file.lexically_relative(base).generic_u8string()});
+        }
+        std::sort(choices.begin()+3,choices.end(),[](const auto& a,const auto& b){return a.label<b.label;});
+        destinationPicker_.Open("CLICK SOUND",std::move(choices),current,
+            [this,root,stillSelected](const std::string& value){
+                if(!stillSelected())return;
+                if(value=="@default" || value=="@silent"){UpdateClickSound(value.substr(1));return;}
+                if(value!="@import"){UpdateClickSound("local",value);return;}
+                wi::helper::FileDialogParams dialog;
+                dialog.type=wi::helper::FileDialogParams::OPEN;
+                dialog.description="Import button click sound";
+                dialog.extensions={"wav","ogg"};
+                wi::helper::FileDialog(dialog,[this,root,stillSelected](const std::string& path){
+                    if(path.empty())return;
+                    wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                        [this,root,stillSelected,path](std::uint64_t){
+                            if(!stillSelected()) return;
+                            std::string clip,error;
+                            if(bridge::ImportUiClickSound(root,path,clip,error)) UpdateClickSound("local",clip);
+                            else SetStatus(error);
+                        });
+                });
+            });
+    }
+
     void RenegadeScreenEditorWorkspace::OpenDestinationPicker()
     {
         if (!session_ || !session_->IsLoaded() || !openScreenRoute_)

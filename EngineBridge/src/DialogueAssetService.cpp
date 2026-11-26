@@ -9,7 +9,7 @@
 namespace renegade::bridge
 {
 namespace fs = std::filesystem;
-bool ImportDialogueVoice(const std::string &root, const std::string &source, std::string &relative, std::string &error)
+static bool ImportProjectAudio(const std::string &root, const std::string &source, const char* folder, std::string &relative, std::string &error)
 {
     relative.clear();
     error.clear();
@@ -32,7 +32,9 @@ bool ImportDialogueVoice(const std::string &root, const std::string &source, std
     stem.resize(std::min(size_t(60), stem.size()));
     auto extension = file.extension().u8string();
     std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return char(std::tolower(c)); });
-    const auto path = "Content/Audio/Dialogue/" + stem + "-" + GenerateStableId() + extension;
+    const auto path = std::string(folder) == "Content/Audio/UI/" ?
+        std::string(folder) + GenerateStableId() + "/" + file.filename().u8string() :
+        std::string(folder) + stem + "-" + GenerateStableId() + extension;
     std::ifstream in(file, std::ios::binary);
     ProjectDocumentWrite write;
     write.destinationPath = (base / fs::u8path(path)).generic_u8string();
@@ -46,6 +48,14 @@ bool ImportDialogueVoice(const std::string &root, const std::string &source, std
     if (!result.success) { error = result.message; return false; }
     relative = path;
     return true;
+}
+bool ImportDialogueVoice(const std::string& root,const std::string& source,std::string& relative,std::string& error)
+{
+    return ImportProjectAudio(root,source,"Content/Audio/Dialogue/",relative,error);
+}
+bool ImportUiClickSound(const std::string& root,const std::string& source,std::string& relative,std::string& error)
+{
+    return ImportProjectAudio(root,source,"Content/Audio/UI/",relative,error);
 }
 bool ResolveDialogueVoicePath(const std::string &root, const std::string &relative, std::string &absolute, std::string &error)
 {

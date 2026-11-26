@@ -145,6 +145,7 @@ namespace renegade::screen
         void EmbedInWindow(wi::RenderPath2D& renderPath,wi::gui::Window& parent);
         void DetachPresentation(wi::RenderPath2D& renderPath) noexcept;
         [[nodiscard]] bool IsInputEnabled() const noexcept;
+        void PlayButtonClick(const bridge::StableId& id);
         void PreviewWidgetAppearance(const bridge::StableId& widgetId, ScreenInteractionState state, const bridge::ScreenColor* colour = nullptr);
         void SetFocusedWidget(const bridge::StableId& widgetId);
         void SetWidgetState(

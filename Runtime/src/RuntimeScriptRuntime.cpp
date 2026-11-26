@@ -1,6 +1,7 @@
 #include "renegade/bridge/ParticleEffectRuntimeService.h"
 #include <type_traits>
 #include "RuntimeScriptRuntime.h"
+#include "renegade/bridge/ScreenClickSound.h"
 #include "RuntimeScriptEntityApi.h"
 #include "InventoryLuaBridge.h"
 #include "renegade/bridge/DialogueService.h"
@@ -905,6 +906,34 @@ namespace renegade::runtime
             return 1;
         }
 
+        static int UiClickSoundLua(lua_State* state)
+        {
+            auto* self=FromUpvalue(state);
+            if(!self || self->projectRoot.empty()) return luaL_error(state,"No active project");
+            const bridge::ScreenClickSounds::Key key={luaL_checkstring(state,1),luaL_checkstring(state,2)};
+            auto& sounds=bridge::ProjectClickSounds(self->projectRoot);
+            if(lua_gettop(state)>2)
+            {
+                const std::string mode=luaL_checkstring(state,3);
+                if(mode=="default") sounds.buttons.erase(key);
+                else if(mode=="silent") sounds.buttons[key]="";
+                else if(mode=="local")
+                {
+                    const std::string path=luaL_checkstring(state,4);
+                    std::string absolute,error;
+                    if(!bridge::ResolveScreenResourcePath(self->projectRoot,path,absolute,error) ||
+                        !bridge::ValidateAudioAssetForWicked(absolute,error))
+                        return luaL_error(state,"%s",error.c_str());
+                    sounds.buttons[key]=path;
+                }
+                else return luaL_error(state,"Expected default, local or silent");
+            }
+            const auto it=sounds.buttons.find(key);
+            lua_pushstring(state,sounds.Resolve(key).c_str());
+            lua_pushstring(state,it==sounds.buttons.end() ? "default" : it->second.empty() ? "silent" : "local");
+            return 2;
+        }
+
         static int LightGetStateLua(lua_State* state) {
             Impl* owner=FromUpvalue(state);
             if(!owner||!owner->scene)return PushNilError(state,"Light API is not bound to a Level.");
@@ -1670,6 +1699,7 @@ namespace renegade::runtime
             lua_pushlightuserdata(lua, this);
             lua_pushcclosure(lua, UiShowPromptLua, 1);
             lua_setfield(lua, -2, "show_prompt");
+            lua_pushlightuserdata(lua,this); lua_pushcclosure(lua,UiClickSoundLua,1); lua_setfield(lua,-2,"button_click_sound");
             lua_setfield(lua, -2, "ui");
 
             lua_newtable(lua);

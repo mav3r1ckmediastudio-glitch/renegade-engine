@@ -705,6 +705,7 @@ namespace renegade::runtime
         {
             if(!controller_->ExecuteInteractions(request.widgetId,bridge::ScreenInteractionEvent::Activate,error))
             {wi::backlog::post("UI interaction rejected: "+error,wi::backlog::LogLevel::Warning);return;}
+            renderer_.PlayButtonClick(request.widgetId);
             RefreshVisualFocus(*controller_);
             if(const auto* widget=controller_->FindWidget(request.widgetId);widget&&!ShouldDispatchScreenAction(*widget,inventoryHost_))
                 return; // Atomic local UI actions succeeded; do not dispatch Flow.
@@ -757,6 +758,7 @@ namespace renegade::runtime
                 wi::backlog::LogLevel::Warning);
             return;
         }
+        renderer_.PlayButtonClick(request.widgetId);
         RefreshVisualFocus(*controller_);
         if(const auto* widget=controller_->FindWidget(request.widgetId);
            widget && !ShouldDispatchScreenAction(*widget,inventoryHost_)) {

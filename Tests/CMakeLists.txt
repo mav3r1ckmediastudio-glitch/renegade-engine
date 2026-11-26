@@ -197,6 +197,11 @@ add_test(NAME RenegadeForkLightningTests COMMAND RenegadeForkLightningTests)
 
 # Gate 3 governed creator Lua weather gameplay contract. Same sandbox and
 # shared runtime state as production; no second Lua interpreter.
+add_executable(RenegadeScreenClickSoundTests ScreenClickSoundTests.cpp)
+target_link_libraries(RenegadeScreenClickSoundTests PRIVATE Renegade::RuntimeBootstrap)
+set_target_properties(RenegadeScreenClickSoundTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeScreenClickSoundTests COMMAND RenegadeScreenClickSoundTests)
+
 add_executable(RenegadeWeatherLuaRuntimeTests WeatherLuaRuntimeTests.cpp)
 target_link_libraries(RenegadeWeatherLuaRuntimeTests PRIVATE Renegade::RuntimeBootstrap)
 set_target_properties(RenegadeWeatherLuaRuntimeTests PROPERTIES FOLDER "Renegade/Tests")

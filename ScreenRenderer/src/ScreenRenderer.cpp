@@ -1,4 +1,5 @@
 #include <optional>
+#include "renegade/bridge/ScreenClickSound.h"
 #include "renegade/screen/ScreenRenderer.h"
 #include "renegade/screen/ScreenTextLayout.h"
 #include "renegade/bridge/ScreenThemeResolver.h"
@@ -1208,6 +1209,16 @@ namespace renegade::screen
     bool ScreenRenderer::IsInputEnabled() const noexcept
     {
         return impl_->inputEnabled;
+    }
+
+    void ScreenRenderer::PlayButtonClick(const bridge::StableId& id)
+    {
+        const auto found=impl_->byId.find(id);
+        if(found==impl_->byId.end() || found->second->authored.kind!=bridge::ScreenWidgetKind::Button) return;
+        const auto& sounds=bridge::ProjectClickSounds(impl_->projectRoot);
+        std::string error;
+        if(!bridge::PlayScreenClick(impl_->projectRoot,sounds.Resolve({impl_->document.envelope.documentId,id}),error))
+            wi::backlog::post("UI click sound: "+error,wi::backlog::LogLevel::Warning);
     }
 
     void ScreenRenderer::PreviewWidgetAppearance(const bridge::StableId& widgetId, ScreenInteractionState state, const bridge::ScreenColor* colour)

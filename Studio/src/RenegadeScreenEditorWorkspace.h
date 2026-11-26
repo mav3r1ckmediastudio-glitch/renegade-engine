@@ -353,6 +353,9 @@ namespace renegade::studio
         RenegadeButton appearanceButton_;
         RenegadeButton stateTabs_[3];
         RenegadeButton stateImage_, stateColour_;
+        RenegadeButton clickSound_, previewSound_, defaultSound_;
+        void ChooseClickSound();
+        void UpdateClickSound(const std::string& command, const std::string& clip = {});
         unsigned basicState_ = 0;
         bridge::StableId stateOwner_;
         std::function<void(unsigned, bool)> editState_;
