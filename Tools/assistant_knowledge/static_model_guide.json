@@ -46,7 +46,7 @@
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
-          "needle": "modelImportCommit_.SetText(\"IMPORT ASSET\");"
+          "needle": "modelImportCommit_.SetText(\"Add to Library\");"
         }
       ]
     },

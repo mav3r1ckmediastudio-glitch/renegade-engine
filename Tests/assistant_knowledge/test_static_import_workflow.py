@@ -29,7 +29,7 @@ class StaticImportWorkflowTests(unittest.TestCase):
             with self.subTest(q=q):
                 a=self.answer(q);self.assertIsNotNone(a)
                 self.assertIn("**IMPORT MODEL...**",a)
-                self.assertIn("**IMPORT ASSET**",a)
+                self.assertIn("**Add to Library**",a)
                 self.assertIn("7. Drag that imported card",a)
 
     def test_characters_and_animations_are_separate(self):
@@ -65,7 +65,7 @@ class StaticImportWorkflowTests(unittest.TestCase):
 
     def test_novice_requirements_and_outcome(self):
         a=self.answer("How do I import a static model?")
-        for text in ["**General model**","**Import to**","**Content/Models/Props**",
+        for text in ["**Static Model**","**Import to**","**Content/Models/Props**",
                      "do not choose the folder","does not automatically add collision",
                      "placing it and saving the scene are separate","**Ctrl+S**"]:
             self.assertIn(text,a)
