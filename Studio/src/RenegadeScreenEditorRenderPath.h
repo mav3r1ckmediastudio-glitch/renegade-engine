@@ -192,7 +192,7 @@ namespace renegade::studio
             if (appearancePreviewId_ != selection)
                 renderer_.PreviewWidgetAppearance(appearancePreviewId_, screen::ScreenInteractionState::Normal);
             appearancePreviewId_ = selection;
-            renderer_.PreviewWidgetAppearance(selection, workspace_.BasicPreviewState());
+            renderer_.PreviewWidgetAppearance(selection, workspace_.BasicPreviewState(), advancedInspector_.BasicPreviewColour());
             advancedInspector_.ApplySimulationPreview(renderer_);
             advancedInspector_.TickAnimationPreview(dt);
             renderer_.SetAnimationPreview(advancedInspector_.AnimationPreview());

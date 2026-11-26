@@ -1069,9 +1069,7 @@ namespace renegade::studio
         {
             const auto& v = basicState_ == 0 ? selected->style.normal : basicState_ == 1 ? selected->style.hover : selected->style.pressed;
             stateImage_.SetText(v.imageResourcePath.empty() ? "Choose image..." : "Change image...");
-            char colour[32];
-            std::snprintf(colour,sizeof(colour),"Colour #%02X%02X%02X",unsigned(v.background.red), unsigned(v.background.green), unsigned(v.background.blue));
-            stateColour_.SetText(colour);
+            stateColour_.SetText("Colour");
         }
         imageAssetButton_.SetVisible(!button && selectedReady && !focusCanvas_ && !rightCollapsed_ &&
             !inspectorSuppressed_);
@@ -2401,6 +2399,19 @@ namespace renegade::studio
             preview.x + 392.0f, height_ - FooterHeight + 14.0f,
             11, HasPendingSave() ? Orange : Muted, cmd);
         RenderControls(canvas, cmd);
+        if (stateColour_.IsVisible() && session_)
+        {
+            if (const auto* widget = session_->FindWidget(selectedWidgetId_))
+            {
+                const auto& state = basicState_==0 ? widget->style.normal : basicState_==1 ? widget->style.hover : widget->style.pressed;
+                const auto c = state.imageResourcePath.empty() && widget->resourcePath.empty() ? state.background : state.imageTint;
+                const auto p = stateColour_.GetPos();
+                const float y = p.y+(stateColour_.GetSize().y-14)*0.5f;
+                Rect(p.x+6,y,14,14,wi::Color(190,190,190,255),cmd);
+                Rect(p.x+6,y,7,14,wi::Color(80,80,80,255),cmd);
+                Rect(p.x+6,y,14,14,wi::Color(c.red,c.green,c.blue,c.alpha),cmd);
+            }
+        }
         if(inventoryButton_.IsVisible()){ApplyScissor(canvas,scissorRect,cmd);inventoryButton_.Render(canvas,cmd);}
         if(InventoryInspectorActive())inventoryInspector_.Render(canvas,cmd);
         ApplyScissor(canvas,scissorRect,cmd);

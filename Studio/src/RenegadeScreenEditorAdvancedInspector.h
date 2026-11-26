@@ -455,6 +455,11 @@ namespace renegade::studio
         }
 
 
+        const bridge::ScreenColor* BasicPreviewColour() const noexcept
+        {
+            return previewBasicColour_ && colorPicker_.IsOpen() ? &colorPicker_.Colour() : nullptr;
+        }
+
         void OpenBasicButtonState(unsigned state, bool colour)
         {
             if (!session_ || !workspace_ || state > 2) return;
@@ -462,7 +467,7 @@ namespace renegade::studio
             if (!Selected() || Selected()->kind != bridge::ScreenWidgetKind::Button) return;
             state_ = static_cast<VisualState>(state);
             RefreshFromSelection(true);
-            if (colour) OpenStateColor(ColorTarget::Background, true);
+            if (colour) OpenStateColor(!DraftVisual()->imageResourcePath.empty() || !Selected()->resourcePath.empty() ? ColorTarget::Tint : ColorTarget::Background, true);
             else OpenStateImagePicker();
         }
 
@@ -549,7 +554,7 @@ namespace renegade::studio
             colorPicker_.SetLayout(
                 panelX_ + 12.0f, panelY_ + 82.0f,
                 std::max(280.0f, panelWidth_ - 24.0f),
-                std::min(340.0f, std::max(280.0f, panelHeight_ - 110.0f)));
+                std::clamp(panelHeight_ - 110.0f, 280.f, 424.f));
             gameplayAttributeInspector_.SetLayout(width_,height_);
             LayoutControls();
         }
@@ -597,7 +602,7 @@ namespace renegade::studio
             }
             if (colorPicker_.IsOpen())
             {
-                colorPicker_.Update();
+                colorPicker_.Update(canvas,dt);
                 return;
             }
             for (auto* widget : AllControls())
@@ -664,7 +669,7 @@ namespace renegade::studio
             dataInspector_.Render(canvas,cmd);
             ApplyScissor(canvas,scissorRect,cmd);
             choicePicker_.Render(cmd);
-            colorPicker_.Render(cmd);
+            colorPicker_.Render(canvas,cmd);
             ApplyScissor(canvas,scissorRect,cmd);gameplayAttributeInspector_.Render(canvas,cmd);
         }
 
@@ -1440,7 +1445,8 @@ namespace renegade::studio
             const auto widgetId = selectedId_;
             const auto screenId = session_->Document().envelope.documentId;
             const auto visualState = state_;
-            colorPicker_.Open(title, value,
+            previewBasicColour_ = commitImmediately;
+            colorPicker_.Open(projectRoot_, title, value,
                 [this, target, widgetId, screenId, visualState, commitImmediately](const bridge::ScreenColor& color)
                 {
                     if (!session_ || !session_->IsLoaded() || selectedId_ != widgetId ||
@@ -2102,6 +2108,7 @@ namespace renegade::studio
         std::vector<bridge::ScreenCreatorResourceChoice> imageResources_;
         std::vector<bridge::ScreenCreatorResourceChoice> fontResources_;
         RenegadeScreenChoicePicker choicePicker_;
+        bool previewBasicColour_ = false;
         RenegadeScreenColorPicker colorPicker_;
 
         RenegadeButton toggleButton_;

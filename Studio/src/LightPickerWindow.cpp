@@ -1,4 +1,5 @@
 #include "LightPickerWindow.h"
+#include "StudioColourWheel.h"
 #include "RenegadeStudioChrome.h"
 #include "StudioButtonVisual.h"
 #include "StudioNumericControl.h"
@@ -46,13 +47,6 @@ public:
    IsEnabled()?wi::Color(235,238,239,255):wi::Color(120,128,129,255));
   wi::font::Draw(GetName(),fp,cmd);
  }
-};
-class LightColourWheel : public wi::gui::ColorPicker {
-public:
- void HideFields() {
-  for(wi::gui::Widget* w:std::array<wi::gui::Widget*,8>{&text_R,&text_G,&text_B,&text_H,&text_S,&text_V,&text_hex,&alphaSlider})w->SetVisible(false);
- }
- void ResizeLayout() override {HideFields();wi::gui::ColorPicker::ResizeLayout();}
 };
 class IconButton : public PickerButton {
 public:
@@ -163,7 +157,7 @@ struct LightPickerWindow::Impl {
  std::vector<XMFLOAT3> colours;bool placeRequest=false,applyRequest=false,dirtyPreview=true;
  std::unique_ptr<LightPreview> preview;
  wi::gui::TreeList list;RenegadeTextInputField search,name;
- LightColourWheel colour;
+ StudioColourWheel colour;
  wi::gui::TextInputField red,green,blue,hex;
  XMFLOAT3 colourValue={1,1,1};
  std::array<IconButton,4> types;std::array<IconButton,6> behaviours;

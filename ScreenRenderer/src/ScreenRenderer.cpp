@@ -1,3 +1,4 @@
+#include <optional>
 #include "renegade/screen/ScreenRenderer.h"
 #include "renegade/screen/ScreenTextLayout.h"
 #include "renegade/bridge/ScreenThemeResolver.h"
@@ -146,6 +147,7 @@ namespace
         float scaleX = 1.0f;
         float scaleY = 1.0f;
         bool keyboardFocused = false;
+        std::optional<ScreenColor> previewColour;
         ScreenInteractionState previewState = ScreenInteractionState::Normal;
         renegade::bridge::ScreenAccessibilitySettings accessibility;
         bool hasClip = false;
@@ -327,8 +329,8 @@ namespace
             const wi::Resource* image = (accessibility.contrast!=0 &&
                 authored.kind!=renegade::bridge::ScreenWidgetKind::Image) || resource == resources.end() ?
                 nullptr : &resource->second;
-            const ScreenColor& surfaceColor = image != nullptr && image->IsValid() ?
-                visual.imageTint : visual.background;
+            const auto surfaceColor = previewColour.value_or(image != nullptr && image->IsValid() ?
+                visual.imageTint : visual.background);
             renegade::bridge::ScreenRect imageRect{
                 translation.x+border,translation.y+border,scale.x-border*2,scale.y-border*2};
             if(image&&image->IsValid()&&authored.kind==renegade::bridge::ScreenWidgetKind::Image) {
@@ -1208,10 +1210,14 @@ namespace renegade::screen
         return impl_->inputEnabled;
     }
 
-    void ScreenRenderer::PreviewWidgetAppearance(const bridge::StableId& widgetId, ScreenInteractionState state)
+    void ScreenRenderer::PreviewWidgetAppearance(const bridge::StableId& widgetId, ScreenInteractionState state, const bridge::ScreenColor* colour)
     {
         if (const auto found = impl_->byId.find(widgetId); found != impl_->byId.end())
+        {
             found->second->previewState = state;
+            if (colour) found->second->previewColour = *colour;
+            else found->second->previewColour.reset();
+        }
     }
 
     void ScreenRenderer::SetFocusedWidget(const bridge::StableId& widgetId)
