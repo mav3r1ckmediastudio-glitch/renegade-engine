@@ -1,0 +1,109 @@
+{
+  "schema": 1,
+  "approved_date": "2026-11-24",
+  "scene_sha256": "798a180b7c74c897fb4bccd743dd123ccf92b92e80d419d78c31e7123db120e9",
+  "approval": "Owner approved the live normal Runtime night scene: moonlight + lantern, Surfel GI on.",
+  "settings": {
+    "sun_time_hours": 0,
+    "flat_ambient_rgb": [
+      0,
+      0,
+      0
+    ],
+    "surfel_gi": true,
+    "ssgi": false,
+    "exposure_control": 3,
+    "gi_boost": 1,
+    "eye_adaptation": false,
+    "bloom": false,
+    "motion_blur": false,
+    "depth_of_field": false,
+    "anti_aliasing": "Off",
+    "moon_enabled": true,
+    "moon_phase": 0.5,
+    "moon_brightness": 0.7,
+    "moon_azimuth": -35,
+    "moon_elevation": 35,
+    "directional_moonlight_colour": [
+      0.56,
+      0.69,
+      1.0
+    ],
+    "directional_moonlight_intensity": 0.5,
+    "lantern_colour": [
+      1.0,
+      0.714,
+      0.361
+    ],
+    "lantern_intensity": 12,
+    "lantern_range": 10,
+    "wind": "paused for matched lighting comparison"
+  },
+  "files": [
+    {
+      "path": "Content/Data/GameplayInput.renegade-input",
+      "size_bytes": 1202,
+      "sha256": "a67f39a9b92a08085a7370b0b261f54c571d09b19a87c42c849b0c8c91d48f82"
+    },
+    {
+      "path": "Content/Scenes/Main.wiscene",
+      "size_bytes": 19986019,
+      "sha256": "798a180b7c74c897fb4bccd743dd123ccf92b92e80d419d78c31e7123db120e9"
+    },
+    {
+      "path": "Content/Scenes/Main.wiscene.rmeta",
+      "size_bytes": 258,
+      "sha256": "abf84c6ebe3549872d6a08ea5ce2bb70e00649329f2c148cdc3af26c83e9889d"
+    },
+    {
+      "path": "Content/Vegetation/TemperateReview/dry_grass.png",
+      "size_bytes": 1850455,
+      "sha256": "7e8324f7e190b5f69995b74b918490621e0a2458a1748dd2ddeee3e1727ab10e"
+    },
+    {
+      "path": "Content/Vegetation/TemperateReview/dry_grass.png.rects",
+      "size_bytes": 116,
+      "sha256": "fdeb21384ba688de8069a25fdf0c17d874dd6859acd986f987ed3c2151b5c105"
+    },
+    {
+      "path": "Content/Vegetation/TemperateReview/low_clover.png",
+      "size_bytes": 1417002,
+      "sha256": "3fb5ce4dfb3877431d178e8c1c8f869407ce86d96a3306c85769d45717f5780b"
+    },
+    {
+      "path": "Content/Vegetation/TemperateReview/low_clover.png.rects",
+      "size_bytes": 117,
+      "sha256": "4af8aacc2a337ada5a1fe2e0562e243e830f4b966d63e093a43c435b4ca53d8a"
+    },
+    {
+      "path": "Content/Vegetation/TemperateReview/seedhead_grass.png",
+      "size_bytes": 1908199,
+      "sha256": "3332e133cbbd84652c7806e5d135b22e5ae92e1523d03f4be9b05fad82c31553"
+    },
+    {
+      "path": "Content/Vegetation/TemperateReview/seedhead_grass.png.rects",
+      "size_bytes": 116,
+      "sha256": "ca83e313871436600d0ffb8d28c81d612509e968cae7d829d420a719940c002e"
+    },
+    {
+      "path": "Content/Vegetation/TemperateReview/short_grass.png",
+      "size_bytes": 1578435,
+      "sha256": "545bd5279944dd664531a2a9fffd990f085046625844decfdde66b403efdacd6"
+    },
+    {
+      "path": "Content/Vegetation/TemperateReview/short_grass.png.rects",
+      "size_bytes": 117,
+      "sha256": "112b90371a3ce449219f42224dbdb41bd66757756af9b264c983a659b9289d82"
+    },
+    {
+      "path": "Content/Vegetation/TemperateReview/small_wildflowers.png",
+      "size_bytes": 1561091,
+      "sha256": "423ff16d5012ec791f123b8fb150ad4b3a41f6f49aa81e1a20329f0c98db7f6b"
+    },
+    {
+      "path": "Content/Vegetation/TemperateReview/small_wildflowers.png.rects",
+      "size_bytes": 119,
+      "sha256": "8c06ff17c52d62a94854f34823b2dbe8164f02436eb1a7e63aad14a483efebf9"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+preset=0 strands=3449
+preset=1 strands=1724
+preset=2 strands=3449
+preset=3 strands=1724
+preset=4 strands=1724
+preset=5 strands=1035
+preset=6 strands=1380
+preset=7 strands=276
+ALL_EIGHT_STOCK_NATIVE_POSITION_SPANS_MOVED_PASS
+STOCK_PAINTER_NATIVE_DAY_NIGHT_NEAR_DISTANCE_CAPTURE_PASS

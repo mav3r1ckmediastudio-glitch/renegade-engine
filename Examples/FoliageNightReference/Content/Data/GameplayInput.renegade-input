@@ -1,0 +1,91 @@
+format = renegade-input-map
+version = 1
+
+[action.move_forward]
+keyboard = W
+mouse =
+gamepad = LEFT_Y_POS
+
+[action.move_backward]
+keyboard = S
+mouse =
+gamepad = LEFT_Y_NEG
+
+[action.move_left]
+keyboard = A
+mouse =
+gamepad = LEFT_X_NEG
+
+[action.move_right]
+keyboard = D
+mouse =
+gamepad = LEFT_X_POS
+
+[action.look_yaw]
+keyboard =
+mouse = MOUSE_X
+gamepad = RIGHT_X
+
+[action.look_pitch]
+keyboard =
+mouse = MOUSE_Y
+gamepad = RIGHT_Y
+
+[action.jump]
+keyboard = SPACE
+mouse =
+gamepad = BUTTON_2
+
+[action.sprint]
+keyboard = LSHIFT
+mouse =
+gamepad = BUTTON_7
+
+[action.interact]
+keyboard = E
+mouse =
+gamepad =
+
+[action.pause]
+keyboard = ESCAPE
+mouse =
+gamepad =
+
+[action.reset]
+keyboard = F8
+mouse =
+gamepad =
+
+[action.fire]
+keyboard =
+mouse = MOUSE_LEFT
+gamepad =
+
+[action.reload]
+keyboard = R
+mouse =
+gamepad =
+
+[action.aim]
+keyboard =
+mouse = MOUSE_RIGHT
+gamepad =
+
+[action.toggle_equipment]
+keyboard = Q
+mouse =
+gamepad =
+
+[action.cancel_equipment]
+keyboard = C
+mouse =
+gamepad =
+
+[action.off_hand_use]
+keyboard =
+mouse = MOUSE_RIGHT
+gamepad =
+
+[settings]
+mouse_look_scale = 0.0017
+gamepad_look_radians_per_second = 2.5

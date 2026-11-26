@@ -1,0 +1,18 @@
+[
+  {
+    "case": "painted-stock",
+    "pid": 34000,
+    "capture": "G13E14_ACTUAL_PLAYER_CAMERA_CAPTURE success=1 waterfall_active=0 river_active=0 emitters=0",
+    "frame": 60,
+    "bytes": 1358037,
+    "termination": "controller terminates only own isolated test; no clean-exit or performance claim"
+  },
+  {
+    "case": "approved-night",
+    "pid": 41972,
+    "capture": "G13E14_ACTUAL_PLAYER_CAMERA_CAPTURE success=1 waterfall_active=0 river_active=0 emitters=0",
+    "frame": 60,
+    "bytes": 1282308,
+    "termination": "controller terminates only own isolated test; no clean-exit or performance claim"
+  }
+]

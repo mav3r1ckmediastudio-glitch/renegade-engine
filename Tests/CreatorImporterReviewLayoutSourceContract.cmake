@@ -42,7 +42,7 @@ require_text(importer "SelectImportWorkflow(fromProjectile ? ImportWorkflow::Sta
 # Import is only committed after a rendered preview is ready and a thumbnail
 # can be captured from that same preview.
 require_text(importer
-    "modelImportCommit_.SetEnabled(modelImportPreview_->IsReady() && importWorkflow_ != ImportWorkflow::None);"
+    "modelImportCommit_.SetEnabled(modelImportPreview_->IsReady() && importWorkflow_ != ImportWorkflow::None && (importWorkflow_ != ImportWorkflow::Player || modelImportRole_.GetSelected()>0));"
     "preview readiness gates import")
 require_text(importer
     "!modelImportPreview_->CapturePng(request.thumbnailPng, thumbnailError)"

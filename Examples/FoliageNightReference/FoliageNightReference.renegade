@@ -1,0 +1,15 @@
+format = renegade-project
+version = 1
+
+[project]
+project_id = ddfdd5bd-2df2-455e-9153-7d7ed0c16ca3
+name = Approved Foliage Night Reference
+startup_scene = Content/Scenes/Main.wiscene
+startup_flow_id =
+startup_flow =
+startup_screen_id =
+startup_screen =
+attribute_document_id =
+attribute_document =
+default_hud_id =
+default_hud =
