@@ -1,3 +1,11 @@
+# Basic button click sounds on DESIGN, 26 November 2026
+
+Source c765749903fd0e92ad57e0ca3ec833c4936d6a38 on feature/ui-designer-basic-pause. Select a button in Basic, open Click sound, choose an existing clip or Import sound..., then Preview. Use as default for all buttons promotes this clip and sets that button to inherit. Choose Silent for an individual button or Use project default to restore inheritance. Imported WAV and OGG files go into Content/Audio/UI. Project and per-button settings are stored in Content/UI/ButtonSounds.rui-audio with screen and widget IDs.
+
+Lua exposes renegade.ui.button_click_sound(screenId, widgetId). It returns the effective project-relative clip and the mode (default, local or silent). A third argument sets the mode for this run, with the project-relative clip as the fourth argument for local. The native governed Lua regression checks all modes and confirms script changes leave the authored configuration intact.
+
+Local incremental Release Studio and Runtime linked on DESIGN. A new project was authored through Basic with Resume following the project default, Options using Soft tick.wav, and Main Menu silent. Changing the project default retained both overrides and a new button displayed the current default. After restarting Studio and opening the project from the Hub, Test Game played the default via keyboard on Title and via mouse on Resume, the soft click on Options, and effectively zero signal on Main Menu with successful navigation. Studio Preview and Test Game audio were measured using a Windows audio-session peak meter restricted to their process IDs. Receipts are in docs/evidence/basic-pause-2026-11-26. Hosted CI, export packaging and physical controller listening were not part of the review.
+
 # UI Designer colour wheel and palette, 26 November 2026
 
 Source 48faa9fd996fac6f1599270f7ca2354708d8d226 on feature/ui-designer-basic-pause. Basic button state Colour opens the same wheel as the Light Picker. Opacity and Save to palette sit below the wheel. A solid button edits its background and an image button edits its tint. The Basic canvas previews the colour before Apply. Project colours include opacity and live in Content/UI/Palette.rcolours. Saving a swatch is independent of applying an element edit.
