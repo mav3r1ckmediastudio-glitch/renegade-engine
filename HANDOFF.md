@@ -1,3 +1,9 @@
+# UI Designer colour wheel and palette, 26 November 2026
+
+Source 48faa9fd996fac6f1599270f7ca2354708d8d226 on feature/ui-designer-basic-pause. Basic button state Colour opens the same wheel as the Light Picker. Opacity and Save to palette sit below the wheel. A solid button edits its background and an image button edits its tint. The Basic canvas previews the colour before Apply. Project colours include opacity and live in Content/UI/Palette.rcolours. Saving a swatch is independent of applying an element edit.
+
+DESIGN native incremental Release linked with cached dependencies. Using a fresh project through Studio, the reviewer previewed orange at 75% opacity on Pause Options hover, saved the swatch, and cancelled. Options returned to cyan. Applying the saved swatch to Main Menu hover produced orange in Test Game using the existing runtime. After restarting Studio, selecting the swatch on the Save / Load screen gave its Back button the same live preview. The screenshot directory docs/evidence/basic-pause-2026-11-26 includes the saved swatch, the runtime hover and the reopened picker. Hosted checks, an image-tint visual check and a Light Picker UI regression pass remain open.
+
 # Basic UI Designer review on DESIGN, 26 November 2026
 
 Source commit f789813f4d1075ddf24bfa0650bc16193e2ebda2 on feature/ui-designer-basic-pause, based on main a9d10b5. This local review used an incremental native Release Studio with cached dependencies and the existing Test Game runtime.
