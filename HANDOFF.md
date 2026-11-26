@@ -1,3 +1,11 @@
+# Basic UI Designer review on DESIGN, 26 November 2026
+
+Source commit f789813f4d1075ddf24bfa0650bc16193e2ebda2 on feature/ui-designer-basic-pause, based on main a9d10b5. This local review used an incremental native Release Studio with cached dependencies and the existing Test Game runtime.
+
+In a new project created through Project Hub, the reviewer opened Pause from Story Flow, dragged and resized the stock Options button, changed its hover colour and dragged a new Button from Elements onto the grid. The reviewer edited its display text, assigned SaveLoad using Destination and imported a striped PNG for Pressed. In Test Game, Escape opened the edited Pause screen. Hover showed the chosen colour, holding the added button showed the imported image, and releasing opened Save / Load. The blank project's save module is unconfigured. After closing and restarting Studio, the recent project reopened with the edited position, button state artwork and route intact. Screenshots are in docs/evidence/basic-pause-2026-11-26.
+
+Free placement in starter content applies to newly generated Pause screens. Legacy managed containers, the other screen templates, preset authoring and scripting exposure still need separate review. The Basic inspector still represents the image by a Change image button and colour by hex text. Hosted checks and a clean packaged build remain outstanding.
+
 # Foliage PR 204 resident-walk CI correction, 24 November 2026
 
 Correction commit cbdbf59ec9d3e871d5696d313fd6da838d3b9320 addresses the second hosted failure on head fe1d8c688ac6750b6bfbbf462149b64194a0554d (merge 1623d8b222b6461f818bb2242477515496f10c2d). Studio run 45470313728 Release passes the full suite/startup; Debug fails only RenegadeVegetation_grass-palette. Baseline and the previous assistant correction pass. Local native Debug/WARP cold-load repetition reproduces the exact walking failure at run 4: prediction grows required collision cells from four to six while two new records are still unpublished. The runtime correctly holds unknown support; the test had not established residency over its entire measured route.
