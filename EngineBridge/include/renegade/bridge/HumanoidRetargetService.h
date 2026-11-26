@@ -97,6 +97,9 @@ namespace renegade::bridge
         const wi::scene::Scene& scene,
         wi::ecs::Entity rigEntity);
 
+    [[nodiscard]] HumanoidAutoMapResult BuildAutoHumanoidMapping(
+        const wi::scene::Scene& scene, const wi::vector<wi::ecs::Entity>& joints);
+
     // Imported humanoids default to looking at world origin even without a
     // configured target. Do not let that procedural head turn masquerade as
     // embedded animation in the preview or newly committed asset.

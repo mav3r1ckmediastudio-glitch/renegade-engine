@@ -284,6 +284,7 @@ namespace renegade::studio
             Terrain,
             Effects,
             Audio,
+            Zones,
             Other,
             Count,
         };
@@ -318,6 +319,7 @@ namespace renegade::studio
             CreateEnvironmentProbe,
             ImportStaticGlb,
             CreateProjectile,
+            CreateZone,
             CreateParticleEffect,
             CreateNavigationGrid,
             Focus,
@@ -335,6 +337,7 @@ namespace renegade::studio
             TestLevelStop,
             BuildWindowsGame,
             ToggleAssistant,
+            OpenWeaponEditor,
         };
 
         struct HierarchyRow
@@ -399,6 +402,7 @@ namespace renegade::studio
             return !environmentWorkspaceActive_ &&
                 !terrainWorkspaceActive_ && !renderWorkspaceActive_;
         }
+        bool ShowZones() const noexcept { return showZones_; }
         void SetTestLevelState(TestLevelState state) noexcept;
         void ResetTransientPointerState() noexcept;
         void SetPanelSizes(
@@ -545,6 +549,7 @@ namespace renegade::studio
         ui::ReleaseAction menuGesture_;
         int activeMenu_ = -1;
         int activeViewportMenu_ = -1;
+        bool showZones_ = true;
         bool gridVisible_ = true;
         int viewportViewMode_ = 0;
         bool environmentWorkspaceActive_ = false;

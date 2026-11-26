@@ -13,8 +13,8 @@
           "needle": "params.extensions = {\"glb\", \"fbx\", \"obj\"};"
         },
         {
-          "path": "Studio/src/StudioApplication.cpp",
-          "needle": "\"Animated import currently requires a skinned mesh and skeleton.\""
+          "path": "Studio/src/UnifiedImportWorkspace.inc",
+          "needle": "i==2 ? evidence.skinnedMeshes && evidence.armatureBones"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
@@ -31,7 +31,7 @@
       "sources": [
         {
           "path": "Studio/src/StudioApplication.cpp",
-          "needle": "modelImportAddAnimation_.SetText(\"ADD ANIMATION FBX\");"
+          "needle": "modelImportAddAnimation_.SetText(\"Add animation clips...\");"
         },
         {
           "path": "EngineBridge/src/ModelImportCandidateService.cpp",
@@ -51,12 +51,12 @@
       "id": "animation-action-v1",
       "sources": [
         {
-          "path": "Studio/src/StudioApplication.cpp",
-          "needle": "modelImportAction_.Create(\"Gameplay action\");"
+          "path": "Studio/src/CharacterActionEntries.inc",
+          "needle": "if(valid) updated.action=entryTypes[choice];"
         },
         {
-          "path": "Studio/src/StudioApplication.cpp",
-          "needle": "{\"Unassigned\", \"Idle\", \"Walk\", \"Run\", \"Attack\", \"Reload\", \"Hit\", \"Death\"}"
+          "path": "Studio/src/CharacterActionEntries.inc",
+          "needle": "constexpr const char* entryTypes[]="
         },
         {
           "path": "docs/MODEL_IMPORTER_REBUILD.md",

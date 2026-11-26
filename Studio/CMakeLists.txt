@@ -72,6 +72,7 @@ endif()
 
 add_executable(RenegadeStudio WIN32
     src/DialogueEditorWindow.cpp
+    src/ZoneStudio.cpp
     src/WaterfallStudioIntegration.cpp
     src/WaterfallTransparentStudio.cpp
     src/RiverFlowStudioIntegration.cpp
@@ -191,6 +192,13 @@ target_include_directories(RenegadeStudio
         "${CMAKE_SOURCE_DIR}/ThirdParty/imnodes"
 )
 
+target_sources(RenegadeStudio PRIVATE
+    src/WeaponEditor/WeaponWorkspace.cpp
+    src/WeaponEditor/Translator.cpp)
+add_custom_command(TARGET RenegadeStudio POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/Content/WeaponEditor" "$<TARGET_FILE_DIR:RenegadeStudio>/Content/WeaponEditor"
+    VERBATIM)
 target_link_libraries(RenegadeStudio
     PRIVATE
         Renegade::EngineBridge

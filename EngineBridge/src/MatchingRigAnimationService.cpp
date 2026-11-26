@@ -6,15 +6,94 @@
 #include <set>
 namespace renegade::bridge
 {
+    bool CollectAnimationRig(const wi::scene::Scene& scene, AnimationRigBones& result, std::string& error)
+    {
+        using namespace wi::ecs;
+        result = {};
+        if (!scene.armatures.GetCount()) { error = "No skin skeleton was found."; return false; }
+        std::set<Entity> joints;
+        const auto first = scene.armatures.GetEntity(0);
+        auto world = [&](Entity entity) {
+            const auto* t = scene.transforms.GetComponent(entity);
+            return t ? t->GetLocalMatrix() * scene.ComputeParentMatrixRecursive(entity) : XMMatrixIdentity();
+        };
+        const auto frame = world(first);
+        for (size_t i = 0; i < scene.armatures.GetCount(); ++i) {
+            const auto& skin = scene.armatures[i];
+            if (skin.boneCollection.empty() || skin.boneCollection.size() != skin.inverseBindMatrices.size()) {
+                error = "Skin has an incomplete bind pose."; return false;
+            }
+            const auto skinFrame = world(scene.armatures.GetEntity(i));
+            if (i && std::abs(XMVectorGetX(XMMatrixDeterminant(skinFrame))) < 1e-20f) {
+                error = "Skin has a singular transform."; return false;
+            }
+            const auto toSkin = i ? frame * XMMatrixInverse(nullptr, skinFrame) : XMMatrixIdentity();
+            for (size_t j = 0; j < skin.boneCollection.size(); ++j) {
+                const Entity bone = skin.boneCollection[j];
+                if (!joints.insert(bone).second) continue;
+                result.boneCollection.push_back(bone);
+                auto bind = skin.inverseBindMatrices[j];
+                if (i) XMStoreFloat4x4(&bind, toSkin * XMLoadFloat4x4(&skin.inverseBindMatrices[j]));
+                result.inverseBindMatrices.push_back(bind);
+            }
+        }
+        // Several skins may cover disjoint parts of one hierarchy. Equal names on
+        // independent characters are never sufficient evidence of a shared skeleton.
+        if (scene.armatures.GetCount() > 1) {
+            Entity root = INVALID_ENTITY;
+            for (auto bone : result.boneCollection) {
+                Entity highest = bone;
+                for (auto h = scene.hierarchy.GetComponent(bone); h; h = scene.hierarchy.GetComponent(h->parentID))
+                    if (joints.count(h->parentID)) highest = h->parentID;
+                if (root != INVALID_ENTITY && highest != root) {
+                    error = "The model contains independent skeletons."; return false;
+                }
+                root = highest;
+            }
+        }
+        return true;
+    }
+
+    // Rigid object clips drive named transform nodes (hinges, wheels, etc.).
+    // Compare complete named paths below the importer-created file root.
+    static std::string ObjectTrackPath(const wi::scene::Scene& scene, wi::ecs::Entity id)
+    {
+        std::string path;
+        std::set<wi::ecs::Entity> visited;
+        while (const auto* parent = scene.hierarchy.GetComponent(id)) {
+            if (!visited.insert(id).second) return {};
+            const auto* name = scene.names.GetComponent(id);
+            if (!name || name->name.empty()) return {};
+            path = std::to_string(name->name.size()) + ":" + name->name + path;
+            id = parent->parentID;
+        }
+        return path;
+    }
+
     bool AppendMatchingRigAnimationScene(wi::scene::Scene& destination,
         const wi::scene::Scene& source, std::vector<wi::ecs::Entity>& created,
         std::string& error)
     {
         created.clear(); error.clear();
         auto fail=[&](const char* message){error=message;return false;};
-        if(source.armatures.GetCount()!=1 || destination.armatures.GetCount()!=1)
-            return fail("Matching-rig clips require one source and one destination skeleton.");
-        const auto& src=source.armatures[0]; const auto& dst=destination.armatures[0];
+        AnimationRigBones src, dst;
+        std::map<wi::ecs::Entity,wi::ecs::Entity> targets;
+        if (!destination.armatures.GetCount() && !source.armatures.GetCount()) {
+            std::map<std::string,wi::ecs::Entity> byPath;
+            for (size_t i=0; i<destination.transforms.GetCount(); ++i) {
+                const auto id=destination.transforms.GetEntity(i);
+                const auto path=ObjectTrackPath(destination,id);
+                if (path.empty()) continue;
+                if (!byPath.emplace(path,id).second) byPath[path]=wi::ecs::INVALID_ENTITY;
+            }
+            for (size_t i=0; i<source.transforms.GetCount(); ++i) {
+                const auto id=source.transforms.GetEntity(i);
+                const auto it=byPath.find(ObjectTrackPath(source,id));
+                if (it!=byPath.end() && it->second!=wi::ecs::INVALID_ENTITY)
+                    targets.emplace(id,it->second);
+            }
+        } else {
+        if (!CollectAnimationRig(source,src,error) || !CollectAnimationRig(destination,dst,error)) return false;
         if(src.boneCollection.empty() || src.boneCollection.size()!=dst.boneCollection.size() ||
             src.inverseBindMatrices.size()!=src.boneCollection.size() ||
             dst.inverseBindMatrices.size()!=dst.boneCollection.size())
@@ -41,7 +120,6 @@ namespace renegade::bridge
             }
             return std::string{};
         };
-        std::map<wi::ecs::Entity,wi::ecs::Entity> targets;
         std::set<std::string> sourceNames;
         for(size_t i=0;i<src.boneCollection.size();++i) {
             const auto bone=src.boneCollection[i];const auto* name=source.names.GetComponent(bone);
@@ -57,6 +135,7 @@ namespace renegade::bridge
                 if(!std::isfinite(a[k]) || !std::isfinite(b[k]) || std::abs(a[k]-b[k])>0.0002f)
                     return fail("Matching-rig inverse bind poses differ; retargeting is required.");
         }
+        }
         if(source.animations.GetCount()==0)return fail("Source contains no animation clips.");
         using Channel=wi::scene::AnimationComponent::AnimationChannel;
         for(size_t i=0;i<source.animations.GetCount();++i) {
@@ -69,7 +148,7 @@ namespace renegade::bridge
                     (channel.path!=Channel::Path::TRANSLATION && channel.path!=Channel::Path::ROTATION &&
                      channel.path!=Channel::Path::SCALE) || channel.samplerIndex<0 ||
                     size_t(channel.samplerIndex)>=clip.samplers.size())
-                    return fail("Matching-rig clip has a missing bone or unsupported track.");
+                    return fail("An animated part or bone has no unique matching target, or the track type is unsupported.");
             }
             for(const auto& sampler:clip.samplers)
                 if(sampler.scene || !source.animation_datas.Contains(sampler.data))
@@ -100,8 +179,17 @@ namespace renegade::bridge
         const std::string& sourcePath,std::vector<wi::ecs::Entity>& created,std::string& error)
     {
         auto source=wi::allocator::make_shared<wi::scene::Scene>();
+        if (wi::helper::toUpper(wi::helper::GetExtensionFromFileName(sourcePath)) == "WISCENE") {
+            wi::Archive archive(sourcePath,true,false);
+            if(!archive.IsOpen()){error="Retained rig clip could not be opened.";return false;}
+            source->Serialize(archive);
+            return AppendMatchingRigAnimationScene(destination,*source,created,error);
+        }
         ClearWickedModelImporterFailureDiagnostic();
-        ImportModel_FBX(sourcePath,*source);
+        const auto ext=wi::helper::toUpper(wi::helper::GetExtensionFromFileName(sourcePath));
+        if (ext=="GLB") ImportModel_GLTF(sourcePath,*source);
+        else if (ext=="FBX") ImportModel_FBX(sourcePath,*source);
+        else {error="Select an FBX or binary glTF animation.";return false;}
         const auto failure=ConsumeWickedModelImporterFailureDiagnostic();
         if(!failure.empty()){error=failure;return false;}
         return AppendMatchingRigAnimationScene(destination,*source,created,error);

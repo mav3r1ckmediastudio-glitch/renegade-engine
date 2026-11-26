@@ -101,7 +101,8 @@ require_text("${creator_recipe}" "RetargetHumanoidAnimationsCommand command(" "C
 require_text("${creator_recipe}" "SourceAssets" "CW-03 governed source root")
 require_text("${creator_recipe}" "Animations" "CW-03 governed animation tree")
 require_text("${creator_recipe}" "Snapshots" "CW-03 immutable snapshot tree")
-require_text("${creator_recipe}" "recipe.assetKind != CreatorAssetImportKind::Character" "CW-03 Character-only external provenance")
+require_text("${creator_recipe}" "if (recipe.assetKind == CreatorAssetImportKind::Character)" "CW-03 Character humanoid preparation")
+require_text("${creator_recipe}" "if (!clip.matchingRig)" "Model external clips require matching parts")
 require_text("${creator_recipe}" "RetargetExternalAnimations(" "CW-03 final-import retarget boundary")
 
 string(FIND "${inspector}" "HumanoidWindow.h" stock_humanoid_window)

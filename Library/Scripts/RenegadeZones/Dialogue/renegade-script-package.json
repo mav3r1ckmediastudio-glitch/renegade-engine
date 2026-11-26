@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.dialogue",
+  "package_version": "1.0.0",
+  "display_name": "Dialogue",
+  "files": [
+    {
+      "path": "DialogueZone.lua",
+      "content_hash": "fnv1a64:1e3f2944a1ff99c8",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "DialogueZone.lua"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.checkpoint",
+  "package_version": "1.0.0",
+  "display_name": "Checkpoint",
+  "files": [
+    {
+      "path": "CheckpointZone.lua",
+      "content_hash": "fnv1a64:536f1ff459f4e030",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "CheckpointZone.lua"
+  ]
+}

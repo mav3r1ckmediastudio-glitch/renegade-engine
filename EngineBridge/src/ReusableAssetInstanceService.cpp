@@ -6,6 +6,7 @@
 #include "renegade/bridge/AnimationService.h"
 #include "renegade/bridge/ModelAnimationPreviewService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
+#include "renegade/bridge/ModelClipPlayback.h"
 #include "renegade/bridge/IdentityService.h"
 
 #include <algorithm>
@@ -747,8 +748,13 @@ namespace renegade::bridge
             // or all mutually exclusive imported actions simultaneously.
             if (promoteCharacter_)
                 StartCharacterIdlePreview(*scene_, entity_);
-            else if (scene_->animations.GetCount() == animationCountBefore + 1)
-                scene_->animations[animationCountBefore].Play();
+            else {
+                bool configured = false;
+                for (size_t i = animationCountBefore; i < scene_->animations.GetCount(); ++i)
+                    if (StartImportedObjectClip(*scene_,i)) configured = true;
+                if (!configured && scene_->animations.GetCount() == animationCountBefore + 1)
+                    scene_->animations[animationCountBefore].Play();
+            }
 
             CaptureMaterialResources(materialCountBefore);
 

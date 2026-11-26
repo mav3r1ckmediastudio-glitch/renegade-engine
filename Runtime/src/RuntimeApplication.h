@@ -1,8 +1,11 @@
+#include "RuntimeWeaponEffects.h"
+#include "renegade/bridge/WeaponLoadout.h"
 #include "RuntimeGameplayAttributeWorld.h"
 #pragma once
 
 #include <optional>
 #include "RuntimeDialogue.h"
+#include "RuntimeZoneState.h"
 #include "RuntimePropCellResidency.h"
 #include "RuntimePropModelResidency.h"
 #include "renegade/bridge/RiverFlowRenderer.h"
@@ -81,6 +84,7 @@ namespace renegade::runtime
             bridge::SceneService& scenes,
             std::string projectRoot) noexcept;
         void SetPaused(bool paused) noexcept;
+        void SetLevelComplete(bool complete) noexcept { levelComplete_ = complete; }
         void SetPauseOverlayVisible(bool visible) noexcept { pauseOverlayVisible_=visible; }
         void SetInterfaceDeltaTime(float dt) noexcept;
         void SetInteractionPrompt(std::string prompt) noexcept;
@@ -94,6 +98,7 @@ namespace renegade::runtime
             inventorySelectedRow_=selectedRow;
             inventoryStatus_=std::move(status);
         }
+        void SetZoneMessage(std::string value) { zoneMessage_=std::move(value); }
         void SetMeleePrompt(std::string prompt) { meleePrompt_=std::move(prompt); }
         void SetProjectileAim(bool enabled) { projectileAim_=enabled; }
         void SetBastionReticles(std::optional<XMFLOAT2> aim, std::optional<XMFLOAT2> barrel)
@@ -127,6 +132,7 @@ namespace renegade::runtime
         bool renderSettingsInitialized_ = false;
         bool paused_ = false;
         bool pauseOverlayVisible_ = false;
+        bool levelComplete_ = false;
         float interfaceDeltaTime_ = 0;
         std::string interactionPrompt_;
         bridge::InventoryOverlayView inventoryView_;
@@ -134,6 +140,7 @@ namespace renegade::runtime
         int inventorySelectedPanel_=-1;
         int inventorySelectedRow_=-1;
         std::string inventoryStatus_;
+        std::string zoneMessage_;
         std::string meleePrompt_;
         bool projectileAim_ = false;
         std::optional<XMFLOAT2> bastionAim_, bastionBarrel_;
@@ -196,6 +203,17 @@ namespace renegade::runtime
         void SyncLevelHud();
         void OnGovernedHudGameplayEvent(const bridge::GameplayEvent& event);
         void ProcessHudActions();
+        ZoneEffects zoneEffects_;
+        std::string zoneArrivalMarker_, zoneOutcome_;
+        bool MovePlayerToZone(const ZonePose& pose, std::string& error);
+        void ApplyZoneEffect(ZoneContact& contact, const bridge::zones::Definition& zone, bool enter, const std::string& payload);
+        void StepZoneEffects(float dt);
+        void ApplyZoneHealth(float amount);
+        std::vector<ZoneContact> zoneContacts_;
+        bool directLevelWon_ = false;
+        void UpdateZones(float dt);
+        void OnZoneScriptEvent(const bridge::GameplayEvent& event);
+        void CompleteZone(ZoneContact& contact);
         void QueueAction(RuntimeActionRequest request);
         void ProcessPendingActions();
         void CancelScreenExit();
@@ -366,5 +384,24 @@ namespace renegade::runtime
         bool characterSceneSyncFailed_ = false;
         std::uint64_t scriptSceneRevision_ = 0;
         std::size_t reportedScriptDiagnostics_ = 0;
+        std::vector<bridge::WeaponSlot> weaponSlots_;
+        std::vector<std::string> slotNames_;
+        std::vector<int> slotAmmo_;
+        size_t activeWeaponSlot_=0;
+        wi::unordered_set<wi::ecs::Entity> ownedViewEntities_;
+        RuntimeWeaponEffects weaponEffects_;
+        struct PreparedWeaponSlot {
+            RuntimeShotProfile shotProfile;
+            RuntimePlayerViewRigState rig;
+            RuntimePlayerViewAnimationState animation;
+            RuntimeEquipmentLoadout equipment;
+            wi::unordered_set<wi::ecs::Entity> entities;
+            std::vector<std::pair<wi::ecs::Entity, wi::scene::ObjectComponent>> parkedObjects;
+            bool ready = false;
+        };
+        std::vector<PreparedWeaponSlot> preparedWeapons_;
+        void SelectWeaponSlot(size_t);
+        void ApplyWeaponMaterials(const std::string&);
+
     };
 }

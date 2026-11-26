@@ -213,6 +213,7 @@ namespace renegade::runtime
         bool running = false;
         bool paused = false;
         std::vector<Instance> instances;
+        std::unordered_multimap<std::string, bridge::StableId> entityOwnersBySource;
         std::unordered_map<bridge::StableId, wi::ecs::Entity> entitiesById;
         std::vector<RuntimeScriptDiagnostic> diagnostics;
         bridge::GameplayEventService gameplayEvents;
@@ -2354,6 +2355,8 @@ namespace renegade::runtime
             ordered.reserve(document.attachments.size());
             for (const auto& attachment : document.attachments)
             {
+                if (attachment.scope == bridge::ScriptScope::Entity)
+                    entityOwnersBySource.emplace(attachment.sourcePath, attachment.ownerEntityId);
                 if (attachment.enabled)
                     ordered.push_back(attachment);
             }
@@ -2397,6 +2400,7 @@ namespace renegade::runtime
 
         void StopScene() noexcept
         {
+            entityOwnersBySource.clear();
             weatherTransition = bridge::WeatherTransitionController{};
             weatherTargetPreset.clear();
             weatherCompletionPending = false;
@@ -2601,6 +2605,15 @@ namespace renegade::runtime
             return false;
         }
         return impl_->gameplayEvents.Enqueue(std::move(event), error);
+    }
+
+    std::vector<bridge::StableId> RuntimeScriptRuntime::EntityOwnersForSource(const std::string& path) const
+    {
+        std::vector<bridge::StableId> owners;
+        const auto range = impl_->entityOwnersBySource.equal_range(path);
+        for (auto it = range.first; it != range.second; ++it)
+            owners.push_back(it->second);
+        return owners;
     }
 
     void RuntimeScriptRuntime::SetGameplayEventObserver(

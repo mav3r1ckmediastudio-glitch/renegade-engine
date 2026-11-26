@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.message",
+  "package_version": "1.0.0",
+  "display_name": "Message / Tutorial",
+  "files": [
+    {
+      "path": "MessageZone.lua",
+      "content_hash": "fnv1a64:8edb172e17564702",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "MessageZone.lua"
+  ]
+}

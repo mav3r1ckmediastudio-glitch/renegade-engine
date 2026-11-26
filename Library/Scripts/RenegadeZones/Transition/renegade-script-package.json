@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.transition",
+  "package_version": "1.0.0",
+  "display_name": "Level Transition",
+  "files": [
+    {
+      "path": "TransitionZone.lua",
+      "content_hash": "fnv1a64:731a33913c4a5dc8",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "TransitionZone.lua"
+  ]
+}

@@ -5,6 +5,7 @@
 #include "renegade/bridge/ReusableAssetRuntimeService.h"
 #include "renegade/bridge/VideoAssetService.h"
 
+#include "renegade/bridge/ModelClipPlayback.h"
 #include <sstream>
 #include <utility>
 
@@ -44,6 +45,7 @@ namespace renegade::runtime
                     videos.error;
                 return false;
             }
+            bridge::StartImportedObjectClips(scenes.GetScene());
             error.clear();
             return true;
         }
@@ -116,6 +118,7 @@ namespace renegade::runtime
             return false;
         }
 
+        bridge::StartImportedObjectClips(scenes.GetScene());
         result.entityCount = scenes.EntityCount();
         error.clear();
         return true;

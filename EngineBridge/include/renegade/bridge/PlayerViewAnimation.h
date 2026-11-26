@@ -1,4 +1,5 @@
 #pragma once
+#include "MeleeWeaponSettings.h"
 
 #include "renegade/bridge/PlayerViewRig.h"
 #include "renegade/bridge/PlayerViewHandAnimation.h"
@@ -32,7 +33,7 @@ namespace renegade::runtime
     };
     struct RuntimePlayerViewAnimationState
     {
-        std::array<std::vector<RuntimePlayerViewAnimationClip>, 16> clips;
+        std::array<std::vector<RuntimePlayerViewAnimationClip>, 23> clips;
         wi::ecs::Entity activeClip = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity outgoingClip = wi::ecs::INVALID_ENTITY;
         PlayerViewAction activeAction = PlayerViewAction::Idle;
@@ -47,6 +48,7 @@ namespace renegade::runtime
         unsigned spellPhase = 0; // Ready, Begin, Hold, Release/recovery.
         float spellTime = 0;
         bool oneShotPlaying = false;
+        unsigned nextMeleeAttack=0;
         bool aiming = false;
         bool equipped = true;
         bool groundKnown = false;
@@ -57,6 +59,8 @@ namespace renegade::runtime
         bridge::FirearmSettings firearm;
         float shotCooldown = 0;
         // Loaded ammunition; reserve ammunition is not modelled yet.
+        bool meleeWeapon=false,meleeContact=false,meleeStarted=false;
+        bridge::MeleeWeaponSettings strike;
         int loadedShells = 2;
         // Per-update acceptance pulse: only a successfully started, ammo-backed shot.
         bool shotAccepted = false;
@@ -69,12 +73,28 @@ namespace renegade::runtime
         RuntimePlayerHandAnimationState handLayers;
     };
 
+    inline void InterruptSightEntryForShot(RuntimePlayerViewAnimationState& state, bool aimDown, bool triggerPressed) noexcept
+    {
+        if (aimDown && triggerPressed && state.pairedAssembly && state.equipped &&
+            state.activeAction == PlayerViewAction::AimIn && state.oneShotPlaying) {
+            state.aiming = true;
+            state.oneShotPlaying = false;
+        }
+    }
+
     [[nodiscard]] inline std::size_t PlayerViewActionIndex(
         const PlayerViewAction action) noexcept
     {
         switch (action)
         {
         case PlayerViewAction::Charge: return 14;
+        case PlayerViewAction::Attack2: return 16;
+        case PlayerViewAction::Attack3: return 17;
+        case PlayerViewAction::BlockIn: return 18;
+        case PlayerViewAction::BlockHold: return 19;
+        case PlayerViewAction::BlockOut: return 20;
+        case PlayerViewAction::FireStart: return 21;
+        case PlayerViewAction::FireStop: return 22;
         case PlayerViewAction::Release: return 15;
         case PlayerViewAction::Equip: return 9;
         case PlayerViewAction::Unequip: return 10;
@@ -159,6 +179,13 @@ namespace renegade::runtime
                 authoredAction == "JumpLoop" ? PlayerViewAction::JumpLoop : PlayerViewAction::JumpLand;
             return true;
         }
+        if (authoredAction == "FireStart") { action=PlayerViewAction::FireStart; return true; }
+        if (authoredAction == "FireStop") { action=PlayerViewAction::FireStop; return true; }
+        if (authoredAction == "Attack2") { action=PlayerViewAction::Attack2; return true; }
+        if (authoredAction == "Attack3") { action=PlayerViewAction::Attack3; return true; }
+        if (authoredAction == "BlockIn") { action=PlayerViewAction::BlockIn; return true; }
+        if (authoredAction == "BlockHold") { action=PlayerViewAction::BlockHold; return true; }
+        if (authoredAction == "BlockOut") { action=PlayerViewAction::BlockOut; return true; }
         if (authoredAction == "AimIn" || authoredAction == "AimOut" || authoredAction == "AimAttack")
         {
             action = authoredAction == "AimIn" ? PlayerViewAction::AimIn :
@@ -331,6 +358,10 @@ namespace renegade::runtime
         {
             const auto entity = scene.metadatas.GetEntity(i);
             const auto& metadata = scene.metadatas[i];
+            if((entity==rig.viewModelRoot||scene.Entity_IsDescendant(entity,rig.viewModelRoot))&&metadata.bool_values.has(bridge::MeleeWeaponKey)&&metadata.bool_values.get(bridge::MeleeWeaponKey)){
+                state.meleeWeapon=true;state.strike=bridge::GetMeleeWeapon(metadata);
+                if(!state.strike.Valid()){error="Invalid melee weapon settings.";return false;}
+            }
             if ((entity == rig.viewModelRoot || scene.Entity_IsDescendant(entity, rig.viewModelRoot)) &&
                 metadata.bool_values.has("renegade.first_person.assembly") &&
                 metadata.bool_values.get("renegade.first_person.assembly"))
@@ -342,6 +373,7 @@ namespace renegade::runtime
                 state.integratedAssembly = metadata.bool_values.has("renegade.first_person.assembly.integrated_weapon") && metadata.bool_values.get("renegade.first_person.assembly.integrated_weapon");
             }
         }
+        if(state.meleeWeapon)state.loadedShells=0;
         for(size_t i=0;i<scene.metadatas.GetCount();++i) {
             const auto entity=scene.metadatas.GetEntity(i);const auto& m=scene.metadatas[i];
             if((entity==rig.viewModelRoot || scene.Entity_IsDescendant(entity,rig.viewModelRoot)) &&
@@ -701,8 +733,9 @@ namespace renegade::runtime
         const bool grounded = true,
         const bool chargeHeld = false,
         const bool releasePressed = false,
-        const bool offHandBlockHeld = false, const float meleeLookYaw = 0, const float meleeLookPitch = 0, const bool cancelMelee = false, const RuntimeReloadStageRequest* reloadStage = nullptr) noexcept
+        const bool offHandBlockHeld = false, const float meleeLookYaw = 0, const float meleeLookPitch = 0, const bool cancelMelee = false, const RuntimeReloadStageRequest* reloadStage = nullptr, bool triggerHeld = false) noexcept
     {
+        state.meleeContact=state.meleeStarted=false;
         state.shotAccepted = false;
         state.reloadStageAccepted = state.reloadStageCompleted = false;
         if (!state.initialized)
@@ -760,8 +793,28 @@ namespace renegade::runtime
                 }
                 return arms && (state.integratedAssembly || weapon) && positive;
             };
-            if (state.oneShotPlaying)
-                next = state.activeAction;
+            const bool phasedFire = !state.meleeWeapon && state.integratedAssembly &&
+                !state.clips[PlayerViewActionIndex(PlayerViewAction::FireStart)].empty() &&
+                !state.clips[PlayerViewActionIndex(PlayerViewAction::Attack)].empty();
+            const bool continuingFire = phasedFire && (state.activeAction==PlayerViewAction::FireStart ||
+                state.activeAction==PlayerViewAction::Attack);
+            bool loopShot=false;
+            bool stoppingFire=false;
+            if (advancing && continuingFire && (!triggerHeld || state.loadedShells<=0 || reloadPressed || toggleEquipmentPressed)){
+                state.oneShotPlaying=false;
+                if(!reloadPressed && !toggleEquipmentPressed)stoppingFire=startAction(PlayerViewAction::FireStop);
+            }
+            if (state.oneShotPlaying){
+                if(!stoppingFire)next=state.activeAction;
+            }
+            else if(advancing && continuingFire && triggerHeld && state.loadedShells>0 && !reloadPressed && !toggleEquipmentPressed){
+                next=PlayerViewAction::Attack;
+                loopShot=state.shotCooldown<=0;
+            }
+            else if(advancing && phasedFire && state.equipped && firePressed && state.loadedShells>0 &&
+                    !reloadPressed && !toggleEquipmentPressed && !continuingFire){
+                startAction(PlayerViewAction::FireStart);
+            }
             else if (advancing && state.equipped && releasePressed)
             {
                 if (startAction(PlayerViewAction::Release)) state.aiming = false;
@@ -803,14 +856,23 @@ namespace renegade::runtime
                 next = PlayerViewAction::Charge;
                 state.aiming = false;
             }
-            else if (advancing && state.equipped && (reloadPressed || firePressed))
+            else if (state.meleeWeapon && state.equipped && aimDown &&
+                     !state.clips[PlayerViewActionIndex(PlayerViewAction::BlockHold)].empty()) {
+                if (state.activeAction==PlayerViewAction::BlockHold || state.activeAction==PlayerViewAction::BlockIn ||
+                    !startAction(PlayerViewAction::BlockIn)) next=PlayerViewAction::BlockHold;
+            }
+            else if (state.meleeWeapon && !aimDown &&
+                     (state.activeAction==PlayerViewAction::BlockHold || state.activeAction==PlayerViewAction::BlockIn) &&
+                     startAction(PlayerViewAction::BlockOut)) {}
+            else if (advancing && state.equipped && ((!state.meleeWeapon&&reloadPressed) || firePressed))
             {
-                const auto action = reloadPressed
+                const bool reload=!state.meleeWeapon&&reloadPressed;
+                const auto action = reload
                     ? (state.loadedShells > 0 && state.firearm.allowPartialReload ? PlayerViewAction::ReloadPartial : PlayerViewAction::Reload)
                     : (state.aiming ? PlayerViewAction::AimAttack : PlayerViewAction::Attack);
-                const bool allowed = reloadPressed ? (state.loadedShells < state.firearm.capacity &&
+                const bool allowed = reload ? (state.loadedShells < state.firearm.capacity &&
                     (state.loadedShells == 0 || state.firearm.allowPartialReload)) :
-                    (state.loadedShells > 0 && state.shotCooldown <= 0);
+                    (state.meleeWeapon || (state.loadedShells > 0 && state.shotCooldown <= 0));
                 // A missing partial pair may use the authored full reload, but
                 // a missing fire pair must never consume ammunition.
                 auto selected = action;
@@ -822,6 +884,14 @@ namespace renegade::runtime
                     selected = PlayerViewAction::Reload;
                 if (allowed && !state.clips[PlayerViewActionIndex(selected)].empty())
                 {
+                    if(state.meleeWeapon && selected==PlayerViewAction::Attack){
+                        const PlayerViewAction order[]={PlayerViewAction::Attack,PlayerViewAction::Attack2,PlayerViewAction::Attack3};
+                        for(unsigned i=0;i<3;++i){
+                            selected=order[state.nextMeleeAttack];
+                            state.nextMeleeAttack=(state.nextMeleeAttack+1)%3;
+                            if(!state.clips[PlayerViewActionIndex(selected)].empty())break;
+                        }
+                    }
                     next = selected;
                     if (reloadPressed) state.aiming = false;
                     state.activeClip = wi::ecs::INVALID_ENTITY;
@@ -829,7 +899,7 @@ namespace renegade::runtime
                 }
             }
             // Reconcile hold/release after a busy action. Never interrupt paired tracks.
-            if (!state.oneShotPlaying && advancing && state.equipped && !state.jumpCycleActive && !chargeHeld && aimDown != state.aiming)
+            if (!state.meleeWeapon && !state.oneShotPlaying && advancing && state.equipped && !state.jumpCycleActive && !chargeHeld && aimDown != state.aiming)
             {
                 const auto transition = aimDown ? PlayerViewAction::AimIn : PlayerViewAction::AimOut;
                 if (!state.clips[PlayerViewActionIndex(transition)].empty())
@@ -846,13 +916,14 @@ namespace renegade::runtime
             }
             const bool startingShot = state.oneShotPlaying &&
                 state.activeClip == wi::ecs::INVALID_ENTITY &&
-                (next == PlayerViewAction::Attack || next == PlayerViewAction::AimAttack);
+                (next == PlayerViewAction::Attack || next == PlayerViewAction::AimAttack || next==PlayerViewAction::Attack2 || next==PlayerViewAction::Attack3);
             if (!RequestRuntimePlayerViewAnimation(scene, state, next))
             {
                 state.oneShotPlaying = false;state.reloadStagePlaying=false;state.reloadStageAccepted=false;
                 return;
             }
-            if (startingShot) {
+            if(startingShot&&state.meleeWeapon)state.meleeStarted=true;
+            if ((startingShot||loopShot)&&!state.meleeWeapon) {
                 state.shotAccepted = true;
                 --state.loadedShells;
                 state.shotCooldown = state.firearm.minimumShotInterval;
@@ -866,7 +937,12 @@ namespace renegade::runtime
             {
                 if (state.oneShotPlaying)
                 {
+                    auto oldTime=state.pairedTime;
                     state.pairedTime = std::min(state.pairedTime + dt, duration);
+                    if(state.meleeWeapon&&(state.activeAction==PlayerViewAction::Attack||state.activeAction==PlayerViewAction::Attack2||state.activeAction==PlayerViewAction::Attack3)){
+                        const float marker=duration*state.strike.contact;
+                        state.meleeContact=(oldTime<marker||(state.meleeStarted&&marker==0))&&state.pairedTime>=marker;
+                    }
                     if (state.pairedTime >= duration)
                     {
                         if (state.activeAction == PlayerViewAction::Reload ||

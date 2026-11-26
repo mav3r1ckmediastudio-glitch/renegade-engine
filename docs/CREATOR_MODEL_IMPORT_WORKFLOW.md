@@ -1,5 +1,7 @@
 # Creator Model Import Workflow
 
+For the unified importer in current Studio review builds, use the [Model Importer manual](manual/MODEL_IMPORTER.md). The PR #57 sections below describe the earlier interface.
+
 ## Scope
 PR #57 restores Renegade Studio's guided creator model-import workflow. Importing a model first opens an isolated preview workspace. The preview is temporary; authoritative project assets are created only after the creator accepts the import.
 
@@ -95,3 +97,14 @@ Existing LP07/LP08 tests continue to cover reusable-model conversion, placement,
 
 ## Owner acceptance
 CI is necessary but not sufficient. Before accepting PR #57, test the Release artifact with the previously problematic crocodile FBX, a textured GLB/GLTF, a multi-material model where available, and an animated model where available. Confirm preview visibility, material selection and texture detection, animation editing, thumbnail capture/retake, Confirm Import without automatic scene insertion, Asset Browser drag/drop and surface grounding, save/reopen/reimport, and at least one packaged textured model.
+
+
+## Reusing motion on an animated object
+
+Open the model through **Add > Import Model...** and choose **Animated Model > Actions**. Click **Add animation clips...** and select an FBX or GLB. For example, a second export of an aircraft can contain just the animation for its propeller. Keep the animated part names and their parent hierarchy consistent between exports. A skinned object needs a matching skeleton and bind pose.
+
+Click the clip to watch it on the model. Each entry has its own start frame, end frame and speed. Use **On level start** to leave it waiting, loop it, or play it once and hold the last frame. **Add to Library** saves the configured model and retains the external clip source with the project.
+
+## Keeping one frame as a static prop
+
+In **Animated Model > Actions**, click a clip and scrub to the frame you want. Use the frame-step buttons for a finer adjustment. Open **Advanced > Export current pose as static GLB...** and choose a new filename. Open that GLB through **Add > Import Model... > Static Model**, check the preview and choose **Add to Library**. You can keep editing the animated original independently.

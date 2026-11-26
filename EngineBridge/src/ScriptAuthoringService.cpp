@@ -394,6 +394,26 @@ namespace renegade::bridge
         return true;
     }
 
+    bool ScriptAuthoringService::EnsureZoneDocument(std::string& error)
+    {
+        if (!scenes_ || !projects_ || !commands_ || !projects_->HasProject() ||
+            !scenes_->CurrentPath().empty())
+            return EnsureCurrent(error);
+        const auto& project=projects_->CurrentProject();
+        if (loaded_ && loadedScenePath_.empty() && loadedProjectId_==project.projectId &&
+            loadedSceneRevision_==scenes_->Revision())
+            return EnsureCurrent(error);
+        document_=CreateScriptDocument(project.projectId,GenerateStableId(),
+            "Content/Scenes/Untitled.wiscene","Renegade Studio");
+        loaded_=true;
+        companionExistedWhenLoaded_=false;
+        loadedProjectId_=project.projectId;
+        loadedScenePath_.clear();
+        loadedSceneRevision_=scenes_->Revision();
+        error.clear();
+        return true;
+    }
+
     bool ScriptAuthoringService::EnsureCurrent(std::string& error)
     {
         if (scenes_ == nullptr || projects_ == nullptr || commands_ == nullptr)

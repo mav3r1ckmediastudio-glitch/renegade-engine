@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.objective",
+  "package_version": "1.0.0",
+  "display_name": "Objective",
+  "files": [
+    {
+      "path": "ObjectiveZone.lua",
+      "content_hash": "fnv1a64:c31a1d41cde6e9b0",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "ObjectiveZone.lua"
+  ]
+}

@@ -252,6 +252,9 @@ namespace renegade::runtime
                 }
                 return accepted;
             };
+            combatState_.playerMeleeGuard=renderer_.camera && playerViewAnimation_.meleeWeapon &&
+                playerViewAnimation_.equipped && playerViewAnimation_.activeAction==PlayerViewAction::BlockHold;
+            if(combatState_.playerMeleeGuard)combatState_.guardFacing=renderer_.camera->At;
             UpdateRuntimeCombatDecision(
                 scenes_.GetScene(),
                 characterAiState_,
@@ -358,6 +361,29 @@ namespace renegade::runtime
         lastDiagnosticProjectileLaunched_=projectiles_.launched;
         lastDiagnosticProjectilePending_=pendingRelease;
 
+        if (!zoneContacts_.empty()) {
+            const auto& scene=scenes_.GetScene();
+            const auto& fx=zoneEffects_;
+            const auto* sound=fx.cues.empty() ? nullptr : scene.sounds.GetComponent(fx.cues.back().source);
+            const auto weather=bridge::CaptureWeather(scene.weathers.GetCount() ? scene.weathers[0] : scene.weather);
+            std::uint64_t mutedCues=0;
+            for (const auto& item : fx.fades) {
+                const auto* cue=scene.sounds.GetComponent(item.first);
+                if (item.second.originallyPlaying && item.second.to==0 && cue && cue->IsPlaying() && cue->volume==0) ++mutedCues;
+            }
+            diagnosticService_.SetState("zones",{
+                {"count",std::uint64_t(zoneContacts_.size())},
+                {"message",fx.messages.empty()?std::string{}:fx.messages.back().text},
+                {"objectives",std::uint64_t(fx.objectives.size())},
+                {"checkpoint",fx.checkpoint.has_value()},
+                {"health",std::to_string(combatState_.playerHealth)},{"dead",combatState_.playerDead},
+                {"dialogue",dialogue_.Active()},
+                {"ambience_playing",sound && sound->IsPlaying()},
+                {"ambience_volume",std::to_string(sound?sound->volume:0.f)},
+                {"prior_cues_muted",mutedCues},{"active_weather_zones",std::uint64_t(fx.weather.size())},
+                {"weather_fog_density",std::to_string(weather.fogDensity)}
+            });
+        }
         std::uint64_t navigationArrived = 0;
         for (const auto& agent : navigationState_.agents)
         {

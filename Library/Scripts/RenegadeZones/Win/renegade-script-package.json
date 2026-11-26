@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.win",
+  "package_version": "1.0.0",
+  "display_name": "Win Zone",
+  "files": [
+    {
+      "path": "WinZone.lua",
+      "content_hash": "fnv1a64:8bf0538664efb35e",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "WinZone.lua"
+  ]
+}

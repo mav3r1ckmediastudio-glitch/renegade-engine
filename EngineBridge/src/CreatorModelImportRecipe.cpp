@@ -357,19 +357,10 @@ namespace renegade::bridge
 
             for (const auto& group : groups)
             {
-                std::set<std::uint32_t> sourceIndices;
                 bool hasEnabledClip = false;
                 std::uint32_t maximumSourceIndex = 0;
                 for (const auto* clip : group.clips)
                 {
-                    if (clip == nullptr ||
-                        !sourceIndices.insert(clip->sourceAnimationIndex).second)
-                    {
-                        error =
-                            "Character external animation recipe contains duplicate source-action provenance for " +
-                            group.projectRelativePath + ".";
-                        return false;
-                    }
                     maximumSourceIndex = std::max(maximumSourceIndex, clip->sourceAnimationIndex);
                     hasEnabledClip = hasEnabledClip || clip->enabled;
                 }
@@ -406,6 +397,8 @@ namespace renegade::bridge
                     return false;
                 }
 
+                std::vector<wi::scene::AnimationComponent> originals;
+                for(auto entity:result.createdAnimations) originals.push_back(*scene.animations.GetComponent(entity));
                 std::set<wi::ecs::Entity> keptAnimations;
                 constexpr float RangeTolerance = 0.0001f;
                 for (const auto* clip : group.clips)
@@ -413,7 +406,7 @@ namespace renegade::bridge
                     if (clip == nullptr || !clip->enabled)
                         continue;
 
-                    const auto entity = result.createdAnimations[clip->sourceAnimationIndex];
+                    auto entity = result.createdAnimations[clip->sourceAnimationIndex];
                     auto* animation = scene.animations.GetComponent(entity);
                     if (animation == nullptr)
                     {
@@ -421,8 +414,9 @@ namespace renegade::bridge
                             "Retargeted Character animation disappeared before final asset preparation.";
                         return false;
                     }
-                    if (clip->start < animation->start - RangeTolerance ||
-                        clip->end > animation->end + RangeTolerance)
+                    const auto& source=originals[clip->sourceAnimationIndex];
+                    if (clip->start < source.start - RangeTolerance ||
+                        clip->end > source.end + RangeTolerance)
                     {
                         error =
                             "Character external animation range falls outside its retargeted source action for '" +
@@ -430,10 +424,20 @@ namespace renegade::bridge
                         return false;
                     }
 
+                    if(keptAnimations.count(entity)) {
+                        const auto parent=scene.hierarchy.GetComponent(entity);
+                        const auto parentId=parent ? parent->parentID : wi::ecs::INVALID_ENTITY;
+                        entity=wi::ecs::CreateEntity();
+                        animation=&scene.animations.Create(entity);
+                        *animation=source;
+                        if(parentId!=wi::ecs::INVALID_ENTITY) scene.Component_Attach(entity,parentId);
+                    }
                     animation->start = clip->start;
                     animation->end = clip->end;
                     animation->speed = clip->speed;
-                    if (!clip->action.empty())
+                    if (clip->modelStart!=ModelClipStart::Legacy)
+                        scene.metadatas.Create(entity).int_values.set(ModelClipStartKey,int(clip->modelStart));
+                    else if (!clip->action.empty())
                         scene.metadatas.Create(entity).string_values.set(
                             CreatorCharacterAnimationActionMetadataKey, clip->action);
                     if (!clip->name.empty())
@@ -645,7 +649,7 @@ namespace renegade::bridge
                         return false;
                     }
                     if (item.size() != 5 + (item.contains("speed") ? 1 : 0) +
-                        (item.contains("action") ? 1 : 0) ||
+                        (item.contains("action") ? 1 : 0) + (item.contains("model_start") ? 1 : 0) ||
                         (item.contains("speed") && !item.at("speed").is_number()) ||
                         (item.contains("action") && !item.at("action").is_string()))
                     {
@@ -659,6 +663,12 @@ namespace renegade::bridge
                     animation.start = item.at("start").get<float>();
                     animation.end = item.at("end").get<float>();
                     animation.speed = item.value("speed", 1.0f);
+                    if (item.contains("model_start")) {
+                        if (!item.at("model_start").is_number_integer()) { error="Invalid object clip start mode."; return false; }
+                        const auto mode=item.at("model_start").get<int64_t>();
+                        if (mode<1 || mode>3) { error="Unknown object clip start mode."; return false; }
+                        animation.modelStart=static_cast<ModelClipStart>(mode);
+                    }
                     animation.action = item.value("action", std::string{});
                     if (animation.action.size() > 64 ||
                         std::any_of(animation.action.begin(), animation.action.end(),
@@ -697,9 +707,11 @@ namespace renegade::bridge
                     if (!item.is_object() || item.size() != 6 +
                         (item.contains("auto_map_source") ? 1 : 0) +
                         (item.contains("matching_rig") ? 1 : 0) +
+                        (item.contains("model_start") ? 1 : 0) +
                         (item.contains("action") ? 1 : 0) + (item.contains("speed") ? 1 : 0) ||
                         (item.contains("auto_map_source") && !item.at("auto_map_source").is_boolean()) ||
                         (item.contains("matching_rig") && !item.at("matching_rig").is_boolean()) ||
+                        (item.contains("model_start") && !item.at("model_start").is_number_integer()) ||
                         (item.contains("action") && !item.at("action").is_string()) ||
                         (item.contains("speed") && !item.at("speed").is_number()) ||
                         !item.contains("source_project_relative_path") ||
@@ -718,6 +730,9 @@ namespace renegade::bridge
                     animation.sourceProjectRelativePath =
                         item.at("source_project_relative_path").get<std::string>();
                     animation.autoMapSource = item.value("auto_map_source", false);
+                    const int startMode=item.value("model_start",0);
+                    if(startMode<0 || startMode>int(ModelClipStart::Once)){error="Invalid object playback mode.";return false;}
+                    animation.modelStart=static_cast<ModelClipStart>(startMode);
                     animation.matchingRig = item.value("matching_rig", false);
                     animation.action = item.value("action", std::string{});
                     animation.speed = item.value("speed", 1.0f);
@@ -862,6 +877,7 @@ namespace renegade::bridge
                     entry["speed"] = animation.speed;
                 if (!animation.action.empty())
                     entry["action"] = animation.action;
+                if (animation.modelStart != ModelClipStart::Legacy) entry["model_start"] = int(animation.modelStart);
                 animations.push_back(std::move(entry));
             }
             root["animations"] = std::move(animations);
@@ -889,6 +905,7 @@ namespace renegade::bridge
                     {"start", animation.start},
                 });
                 if (animation.autoMapSource) animations.back()["auto_map_source"] = true;
+                if (animation.modelStart!=ModelClipStart::Legacy) animations.back()["model_start"]=int(animation.modelStart);
                 if (animation.matchingRig) animations.back()["matching_rig"] = true;
                 if (!animation.action.empty()) animations.back()["action"] = animation.action;
                 if (animation.speed != 1.0f) animations.back()["speed"] = animation.speed;
@@ -1059,6 +1076,11 @@ namespace renegade::bridge
                 animation.start = clip.start;
                 animation.end = clip.end;
                 animation.speed = clip.speed;
+                if (recipe.assetKind == CreatorAssetImportKind::Model && clip.modelStart != ModelClipStart::Legacy) {
+                    auto* metadata = scene.metadatas.GetComponent(target);
+                    if (!metadata) metadata = &scene.metadatas.Create(target);
+                    metadata->int_values.set(ModelClipStartKey, int(clip.modelStart));
+                }
                 auto* name = scene.names.GetComponent(target);
                 if (name == nullptr)
                     name = &scene.names.Create(target);
@@ -1075,12 +1097,13 @@ namespace renegade::bridge
             }
         }
 
-        if (!recipe.externalAnimations.empty() &&
-            recipe.assetKind != CreatorAssetImportKind::Character)
+        if (recipe.assetKind == CreatorAssetImportKind::Model && !recipe.externalAnimations.empty())
         {
-            error =
-                "External humanoid animations can only be committed by a Character import recipe.";
-            return false;
+            for (const auto& clip : recipe.externalAnimations) {
+                if (!clip.matchingRig) {error="Object animations require matching parts.";return false;}
+            }
+            if (!RetargetExternalAnimations(scene,projectRoot,wi::ecs::INVALID_ENTITY,recipe.externalAnimations,error))
+                return false;
         }
 
         if (recipe.assetKind == CreatorAssetImportKind::Character)

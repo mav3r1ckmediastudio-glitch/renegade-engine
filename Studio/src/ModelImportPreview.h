@@ -1,6 +1,7 @@
 #pragma once
 #include <WickedEngine.h>
 #include "renegade/bridge/ModelAnimationPreviewService.h"
+#include "renegade/bridge/CreatorModelImportRecipe.h"
 #include <string>
 #include <array>
 #include "renegade/bridge/LaunchSocketService.h"
@@ -17,6 +18,8 @@ namespace renegade::studio
     {
     public:
         bool Prepare(wi::scene::Scene& source, std::string& error);
+        bool Prepare(wi::scene::Scene& source, std::string& error,
+            const bridge::CreatorModelTransformRecipe& correction, const bridge::StableId& projectId);
         void RefreshMaterials(const wi::scene::Scene& source);
         void Rotate(float radians);
         void Orbit(float yaw, float pitch);
@@ -24,8 +27,14 @@ namespace renegade::studio
         void Zoom(float factor);
         void Pan(float horizontal, float vertical);
         void FitModel();
+        void AddImportFloor();
+        const wi::scene::CameraComponent& InspectionCamera() const { return previewCamera_; }
+        wi::scene::Scene& InspectionScene() { return *scene; }
+        void RefreshPose() { scene->Update(0); renderedFrames_ = 0; }
+        void SetViewportSize(unsigned width, unsigned height);
         void SetModelAppearance(float scale, const std::array<float,3>& rotation);
         void SetProjectileEffects(const std::vector<bridge::ProjectileEffectLayer>&);
+        float ReferenceBaseHeight() const { return sourceCenter_.y - modelSize_.y * 0.5f; }
         XMFLOAT3 ModelSize() const { return modelSize_; }
         std::vector<bridge::PlayerViewBoneChoice> SocketParents() const;
         bool PickSocket(float u,float v,const bridge::LaunchSocketDefinition&,XMFLOAT3&,std::string&) const;

@@ -1,6 +1,10 @@
+#include <set>
+#include <functional>
+#include "renegade/bridge/ModelImportCandidateService.h"
 #pragma once
 #include "DialogueEditorWindow.h"
 #include "StudioUiPolicy.h"
+#include "renegade/bridge/ZoneService.h"
 #include "renegade/bridge/SceneAssemblyService.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/RiverFlowRenderer.h"
@@ -9,6 +13,7 @@
 #include "renegade/bridge/ProjectileAssetService.h"
 
 #include <array>
+#include <map>
 #include "ModelImportPreview.h"
 #include "LightPickerWindow.h"
 #include "ParticlePickerWindow.h"
@@ -182,6 +187,7 @@ namespace renegade::studio
         void AssignModelImportTexture();
         void RefreshModelImportTextureInfo();
         void CommitStaticModelImporter();
+        void CommitStaticModelImporter(bool openWeaponEditor);
         void RestoreGovernedMaterialTextures();
 
         void RequestProjectHubFromStoryFlow();
@@ -275,8 +281,10 @@ namespace renegade::studio
             }
 
             if (!projectHubVisible_ && !renderWorkspaceActive_)
-                inspectorPanel_.wi::gui::Widget::SetVisible(!waterfallInspector_.IsVisible());
+                inspectorPanel_.wi::gui::Widget::SetVisible(!waterfallInspector_.IsVisible() && !zoneInspector_.IsVisible());
         }
+
+        void DrawZoneLabels(wi::graphics::CommandList cmd) const;
 
         [[nodiscard]] XMFLOAT4 StoryFlowWorkspaceBounds() const noexcept
         {
@@ -913,6 +921,27 @@ namespace renegade::studio
         wi::gui::Label waterfallStatus_,waterfallPlacement_,waterfallWater_,waterfallSpray_;
         std::array<SceneInspectorSlider,6> waterfallSliders_;
         bool waterfallControlsCreated_=false;std::string waterfallUiError_;
+        wi::gui::Window zoneInspector_;
+        SceneInspectorComboBox zonePreset_, zoneTarget_;
+        std::array<SceneInspectorComboBox, 3> zoneOptions_;
+        std::array<SceneInspectorSlider, 3> zoneNumbers_;
+        SceneInspectorButton zoneScript_;
+        void OpenSelectedZoneScript();
+        std::array<SceneInspectorSlider, 3> zoneSizes_;
+        SceneInspectorTextInputField zoneName_;
+        std::array<SceneInspectorTextInputField, 2> zoneEvents_;
+        std::vector<std::string> zoneTargetIds_;
+        std::vector<wi::ecs::Entity> editorZones_;
+        bool zonePlacing_ = false;
+        int zoneFace_ = -1;
+        wi::ecs::Entity zoneDragEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::zones::Definition zoneStart_, zonePreview_;
+        XMFLOAT2 zonePointerStart_{}, zonePixelsPerMetre_{};
+        void CreateZoneControls();
+        bool LayoutZoneInspector();
+        void EditSelectedZone(const std::function<void(bridge::zones::Definition&)>& change);
+        void DrawZones();
+        bool HandleZonePointer(const XMFLOAT4& pointer);
         void CreateWaterfallControls();
         void TickWaterfallStudioProof();
         bool waterfallReviewConfigured_=false;int waterfallProofFrame_=0;
@@ -1575,6 +1604,8 @@ namespace renegade::studio
         bool assemblyRefreshing_ = false;
         bool assemblyPreviewRefreshPending_ = false, assemblyDraftPreviewDirty_ = true;
         float assemblyPreviewRefreshDelay_ = 0;
+        struct ImportMaterials;
+        std::shared_ptr<ImportMaterials> importMaterials_;
         wi::gui::Window modelImportPanel_;
         wi::gui::ComboBox modelImportMaterial_, modelImportMapSlot_;
         wi::gui::Button modelImportAssignMap_;
@@ -1584,7 +1615,36 @@ namespace renegade::studio
         wi::gui::Button modelImportRotateLeft_;
         wi::gui::Button modelImportRotateRight_;
         wi::gui::ComboBox modelImportClip_;
-        wi::gui::ComboBox modelImportAction_;
+        struct ActionRowWidgets {
+            wi::gui::Button preview;
+            wi::gui::TextInputField name, start, end, speed;
+            wi::gui::ComboBox type, source;
+        };
+        struct ActionEntries {
+            std::vector<bridge::CreatorAnimationImportRecipe> rows;
+            int selected=-1;
+        } actionEntries_;
+        wi::gui::Window actionTable_;
+        wi::gui::Window actionSources_;
+        std::vector<std::unique_ptr<wi::gui::Button>> sourceClipButtons_;
+        wi::gui::Label sourceHeading_, entriesHeading_;
+        std::array<wi::gui::Label,6> entryHeaders_;
+        wi::gui::Button removeEntry_;
+        void PreviewActionSource(int index);
+        void PositionActionRow(ActionRowWidgets& row, int index);
+
+        wi::gui::Button referencePose_, addEntry_, entryUndo_, entryRedo_;
+        wi::gui::Label entryHint_;
+        std::vector<std::unique_ptr<ActionRowWidgets>> actionWidgets_;
+        std::vector<ActionEntries> entryUndoStack_, entryRedoStack_;
+        size_t actionSourceCount_=0;
+        void RefreshCharacterClips();
+        void SyncActionSources();
+        void SelectActionEntry(int row);
+        void CreateActionRow(int row);
+        void EditActionRow(int row,int field,const std::string& value,int choice=-1);
+        void RememberActionEdit();
+        void UndoActionEdit(bool redo);
         wi::gui::Button modelImportAddAnimation_;
         std::vector<std::string> modelImportActions_;
         wi::gui::Button modelImportPlay_;
@@ -1775,6 +1835,109 @@ namespace renegade::studio
         bool sceneOpenInProgress_ = false;
         bool levelWorkspaceActive_ = true;
         bool scenePopupInputCaptured_ = false;
+
+        enum class ImportWorkflow { None, Static, Animated, Character, Player };
+        enum class ImportPage { Model, Materials, Actions, Advanced, Pose, Retarget };
+        ImportWorkflow importWorkflow_ = ImportWorkflow::None;
+        ImportPage importPage_ = ImportPage::Model;
+        std::array<wi::gui::Button, 4> importWorkflowButtons_;
+        std::array<wi::gui::Button, 6> importPageButtons_;
+        wi::gui::Button rtOpen_, rtSourceTurn_, rtTargetTurn_, rtBake_;
+        wi::gui::ComboBox rtSource_, rtTarget_, rtClip_;
+        wi::gui::Label rtSummary_;
+        wi::allocator::shared_ptr<wi::scene::Scene> rtScene_;
+        std::vector<int> rtPairs_;
+        std::vector<std::string> rtSourceNames_, rtTargetNames_;
+        std::map<std::string,XMFLOAT4> rtSourcePose_;
+        std::string rtFile_;
+        void CreateRetargetWorkspace();
+        void OpenRetargetSource();
+        void SelectRetargetBone();
+        void UpdateRetargetStatus();
+        void RotateRetargetBone(bool source);
+        void BakeRetargetClip();
+        void DrawRetargetSource(wi::graphics::CommandList) const;
+        std::array<wi::gui::TextInputField, 7> importTransformFields_;
+        wi::gui::Button importResetTransform_;
+        void CreateImportRigTools();
+        void EnterImportPose();
+        void RefreshPoseFields();
+        void HideImportPoseMarker();
+        void DrawImportRig(wi::graphics::CommandList cmd) const;
+        void UpdateImportRigInput();
+        bool NavigateImportViewport();
+        enum class ImportCameraDrag { None, Orbit, Pan };
+        ImportCameraDrag importCameraDrag_ = ImportCameraDrag::None;
+        XMFLOAT2 importCameraPointer_{};
+        wi::gui::Label importNavigationHint_;
+        enum class RigHandle { None, Target, Pole };
+        RigHandle rigDrag_ = RigHandle::None;
+        XMFLOAT3 dragTarget_{}, dragPole_{}, dragAnchor_{};
+        XMFLOAT2 dragStart_{};
+        std::map<std::string, XMFLOAT4> dragOriginalPose_;
+        XMFLOAT3 ImportPosePoint(int field) const;
+        XMFLOAT3 ProjectImportPoint(XMFLOAT3 world) const;
+        XMFLOAT3 UnprojectImportPoint(XMFLOAT3 screen) const;
+        bool RigEditingVisible() const;
+        wi::gui::Slider poseInfluence_;
+        void ApplyPoseEdit(bool solve);
+        void ApplyReferencePose(bool original);
+        void ImportPoseFile(bool save);
+        std::map<std::string, XMFLOAT4> importPoseRotations_;
+        std::vector<bridge::PlayerViewBoneChoice> importBones_;
+        wi::gui::ComboBox importBone_;
+        std::array<wi::gui::TextInputField, 9> importPoseFields_;
+        wi::gui::Button poseRotate_, poseSolve_, poseCompare_, poseReset_, poseSave_, poseLoad_;
+        wi::gui::Button importFront_, importFit_, importZoomIn_, importZoomOut_;
+        wi::gui::Label importRigInfo_;
+        bool comparingPose_ = false;
+        wi::gui::Button importSide_, importStep_[2];
+        bridge::CreatorModelTransformRecipe importTransform_;
+        void CreateImportWorkspace();
+        void SelectImportWorkflow(ImportWorkflow workflow);
+        void LayoutImportWorkspace();
+        void ResizeImportWorkspace(float width, float height);
+        void ApplyImportTransform();
+        void ApplySourceRigRotation();
+        std::array<wi::gui::TextInputField,3> rtRigDegrees_;
+        wi::gui::Button rtRigApply_,rtRigReset_;
+        wi::ecs::Entity rtOrientationRoot_ = wi::ecs::INVALID_ENTITY;
+        static constexpr int MapRows=5;
+        std::array<wi::gui::ComboBox,MapRows> mapSourceRows_;
+        std::array<wi::gui::Button,MapRows> mapTargetRows_;
+        wi::gui::Button mapPrev_,mapNext_,mapUndo_,mapRedo_,mapReviewExtras_,mapHoldBranch_,clipPose_;
+        wi::gui::Label mapSourceHeader_,mapTargetHeader_;
+        wi::gui::TextInputField mapSearch_,mapSourceLabel_,mapTargetLabel_;
+        wi::gui::ComboBox clipEditScope_, reviewSources_;
+        wi::gui::Button reviewShowAll_, reviewAssign_;
+        bool reviewingPairs_ = false;
+        int reviewSource_ = -1;
+        std::vector<std::string> sourceLabels_,targetLabels_;
+        std::vector<int> mapFiltered_;
+        std::set<int> mapKept_;
+        int mapFirst_=0,mapTargetIndex_=-1;
+        bool mapDragging_ = false;
+        float mapDragY_ = 0;
+        bool ScrollRetargetTable();
+        bool mapEditingClip_=false,mapReplaying_=false,mapDirty_=false;
+        struct EditableTake {
+            int clip=-1;
+            std::vector<bridge::RetargetPoseKey> keys;
+        };
+        std::map<int,EditableTake> mappedTakes_;
+        std::vector<std::function<void()>> mapHistory_;
+        std::size_t mapCursor_=0;
+        void MapHistory(std::function<void()>);
+        void ReplayMapEdit(bool redo);
+        void SelectMapTarget(int target);
+        void RefreshMapRows();
+        void AssignMapSource(int target,int source);
+        void RefreshBakedPreview(int clip,float time);
+        bool WriteMappedTake(bool explicitBake);
+        std::array<float,3> appliedRigAngles_{};
+        float displayedPoseTime_ = -FLT_MAX;
+        mutable std::vector<XMFLOAT3> sourceScreenPoints_;
+
     };
 
     // The Physics Lab shares the live Scene render path and the Inspector dock.

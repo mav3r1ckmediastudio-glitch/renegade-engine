@@ -60,6 +60,19 @@ namespace renegade::bridge
         }
     }
 
+    bool EncodeMaterialTgaAsPng(const uint8_t* data, size_t size, std::vector<uint8_t>& png)
+    {
+        ComApartment apartment;
+        ScratchImage decoded;
+        if (FAILED(LoadFromTGAMemory(data, size, TGA_FLAGS_NONE, nullptr, decoded))) return false;
+        Blob encoded;
+        if (FAILED(SaveToWICMemory(*decoded.GetImage(0,0,0), WIC_FLAGS_NONE,
+                GetWICCodec(WIC_CODEC_PNG), encoded))) return false;
+        const auto* first = static_cast<const uint8_t*>(encoded.GetBufferPointer());
+        png.assign(first, first + encoded.GetBufferSize());
+        return true;
+    }
+
     bool ValidateMaterialTextureProduct(const std::vector<std::uint8_t>& bytes,
         TextureSemantic semantic, std::string& error)
     {

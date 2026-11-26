@@ -98,6 +98,7 @@ namespace renegade::runtime
         // Read-only observer at the governed, accepted event consumer. It is
         // invoked once per event before creator on_event callbacks, never on
         // a rejected producer event. No second gameplay event queue.
+        [[nodiscard]] std::vector<bridge::StableId> EntityOwnersForSource(const std::string& path) const;
         void SetGameplayEventObserver(
             std::function<void(const bridge::GameplayEvent&)> observer);
 

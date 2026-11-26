@@ -20,6 +20,7 @@ namespace renegade::runtime
         const bridge::GameplayAttributeInstance* playerAttributes = nullptr;
         const bridge::GameplayAttributeInstance* projectAttributes = nullptr;
         const std::map<bridge::StableId, bridge::GameplayAttributeInstance>* characterAttributes = nullptr;
+        std::string weaponName,weaponSlots;
     };
 
     // Read-only adapters over actual gameplay owners. It never creates health,
@@ -90,6 +91,8 @@ namespace renegade::runtime
                     }
                     if (sources.playerView && sources.playerView->initialized)
                     {
+                        if(source.attributeId=="equipment.name" && !sources.weaponName.empty()){value=sources.weaponName;available=true;}
+                        if(source.attributeId=="equipment.slots" && !sources.weaponSlots.empty()){value=sources.weaponSlots;available=true;}
                         if (source.attributeId == "equipment.equipped")
                         { value = sources.playerView->equipped; available = true; }
                         if (sources.playerView->pairedAssembly)
@@ -169,7 +172,7 @@ namespace renegade::runtime
         {
             return id == "health.current" || id == "health.maximum" || id == "alive" ||
                 id == "ammo.loaded" || id == "ammo.capacity" || id == "ammo.reserve" ||
-                id == "ammo.reloading" || id == "equipment.equipped";
+                id == "ammo.reloading" || id == "equipment.equipped" || id=="equipment.name" || id=="equipment.slots";
         }
         struct Lifetime
         {

@@ -1,5 +1,6 @@
 #include "renegade/bridge/HumanoidRetargetService.h"
 #include "renegade/bridge/AnimationService.h"
+#include "renegade/bridge/RetargetJointKey.h"
 
 #include <chrono>
 #include <filesystem>
@@ -37,6 +38,13 @@ namespace
 
 int main()
 {
+    using renegade::bridge::RetargetJointKey;
+    for (const char* spelling : {"l_forearm", "L_forearm", "l forearm", "L forearm",
+             "left_forearm", "left forearm", "forearm.L", "forearm-left", "Bip01_L_Forearm"})
+        if (!Require(RetargetJointKey(spelling) == "lowerarml", spelling)) return 1;
+    for (const char* spelling : {"R.ForeArm", "forearm right", "right-lowerarm", "forearm_R"})
+        if (!Require(RetargetJointKey(spelling) == "lowerarmr", spelling)) return 1;
+
     wi::scene::Scene scene;
     const auto rig = wi::ecs::CreateEntity();
     scene.names.Create(rig).name = "Mixamo Character";

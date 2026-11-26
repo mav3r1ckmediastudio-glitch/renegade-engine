@@ -46,24 +46,13 @@ require_text(recipe_source
     "asset_kind must be model or character"
     "fail-closed classification validation")
 
-# The rebuilt importer no longer exposes the retired Model/Character selector.
-# It derives Character status from the real imported rig and carries that exact
-# classification into the governed commit request.
-require_text(studio_source
-    "const bool character = candidate->Evidence().skinnedMeshes != 0 &&"
-    "automatic skinned-mesh Character detection")
-require_text(studio_source
-    "candidate->Evidence().armatureBones != 0;"
-    "automatic skeleton requirement")
-require_text(studio_source
-    "request.characterAsset = modelImportCandidate_ &&"
-    "commit request receives detected Character classification")
-require_text(studio_source
-    "modelImportAction_.SetVisible(character);"
-    "Character-only gameplay action authoring")
-require_text(studio_source
-    "modelImportAddAnimation_.SetVisible(character);"
-    "Character-only external animation authoring")
+file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/UnifiedImportWorkspace.inc" workspace)
+require_text(workspace "evidence.skinnedMeshes && evidence.armatureBones" "rig requirement")
+require_text(studio_source "request.characterAsset = importWorkflow_ == ImportWorkflow::Character;" "explicit classification")
+file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/CharacterActionEntries.inc" entries)
+require_text(entries "w.type.SetVisible(i<count && importWorkflow_ == ImportWorkflow::Character);" "semantic assignment")
+require_text(workspace "const bool clipEntries = actions && (character || importWorkflow_ == ImportWorkflow::Animated);" "shared clip authoring workflows")
+require_text(workspace "modelImportAddAnimation_.SetVisible(clipEntries);" "external animation authoring")
 
 # The commit service is the durable authority. It maps the detected request to
 # recipe kind and stores semantic animation actions on native clip metadata.
