@@ -201,4 +201,3 @@ void layoutCasingPreviewUI(float x,float span,float tx,float tw,float y){
     if(!GetGUI().IsTyping())casingScaleInput.SetValue(casingScale);
     if(cue!=casingTimes.end())cleanPlace(casingClearTime,x,478,span,32);
 }
-

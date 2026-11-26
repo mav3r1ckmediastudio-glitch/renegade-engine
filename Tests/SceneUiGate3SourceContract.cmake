@@ -118,7 +118,7 @@ require_text(studio_header_source
     "RenegadeTextInputField hubNewProjectNameInput_;"
     "Project Hub retains independent typography")
 require_text(studio_header_source
-    "wi::gui::ComboBox modelImportAction_;"
+    "wi::gui::ComboBox type, source;"
     "rebuilt creator importer retains independent native combo typography")
 require_text(studio_header_source
     "wi::gui::Button modelImportCommit_;"

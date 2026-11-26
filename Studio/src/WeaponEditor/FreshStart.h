@@ -11,4 +11,3 @@
         frameArmsControls();cleanAdvancedOpen=false;layoutCleanUI();
         status.SetText("Fresh setup: original Idle pose at frame 0. No weapon, fitting, finger presets or IK keys loaded.");
     }
-    

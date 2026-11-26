@@ -90,4 +90,3 @@ public:
 	wi::vector<XMFLOAT4X4> matrices_start;
 	wi::vector<XMFLOAT4X4> matrices_current;
 };
-

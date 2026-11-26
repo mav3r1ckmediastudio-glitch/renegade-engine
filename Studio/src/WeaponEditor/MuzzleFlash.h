@@ -306,5 +306,3 @@ void layoutFlashControls(float x,float span,float tx,float tw,float y){
         auto& a=arms.animations[anim];cleanPlace(flashTick,tx+8+std::clamp(seconds/std::max(.0001f,a.end-a.start),0.f,1.f)*(tw-108)-2,y+51,4,15);
     }else flashInfo.SetText(clip+" has no flash cue for this PSP.");
 }
-
-

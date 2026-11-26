@@ -349,4 +349,3 @@ void drawSpawnDirections(){
         colour.w=.62f;drawMarkerArrow(ghost->position,ghost->direction,colour);
     }
 }
-
