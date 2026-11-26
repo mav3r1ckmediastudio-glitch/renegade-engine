@@ -187,6 +187,7 @@ namespace renegade::studio
         void AssignModelImportTexture();
         void RefreshModelImportTextureInfo();
         void CommitStaticModelImporter();
+        void CommitStaticModelImporter(bool openWeaponEditor);
         void RestoreGovernedMaterialTextures();
 
         void RequestProjectHubFromStoryFlow();
@@ -1857,7 +1858,7 @@ namespace renegade::studio
         void BakeRetargetClip();
         void DrawRetargetSource(wi::graphics::CommandList) const;
         std::array<wi::gui::TextInputField, 7> importTransformFields_;
-        wi::gui::Button importApplyTransform_;
+        wi::gui::Button importResetTransform_;
         void CreateImportRigTools();
         void EnterImportPose();
         void RefreshPoseFields();

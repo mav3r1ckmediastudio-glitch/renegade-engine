@@ -163,14 +163,19 @@ void StudioRenderPath::CreateRetargetWorkspace()
     };
     mapSourceLabel_.OnInputAccepted([rename](const wi::gui::EventArgs&){rename(true);});
     mapTargetLabel_.OnInputAccepted([rename](const wi::gui::EventArgs&){rename(false);});
+    importMaterials_->pin.create();
     clipEditScope_.Create("Apply pose to");clipEditScope_.AddItem("This frame");clipEditScope_.AddItem("Hold for whole clip");
-    clipEditScope_.AddItem("Offset whole clip");
+    clipEditScope_.AddItem("Offset whole clip");clipEditScope_.AddItem("Pin joint");
+    clipEditScope_.OnSelect([this](const wi::gui::EventArgs&){LayoutImportWorkspace();});
     clipEditScope_.SetTooltip("Offset adds your local rotation to each frame, keeping the animated swing. Hold locks the selected joint rotation.");
     modelImportPanel_.AddWidget(&clipEditScope_);
     button(clipPose_,"Edit baked pose / IK",[this]{
         for(const auto& item:mappedTakes_)if(item.second.clip+1==modelImportClip_.GetSelected())rtClip_.SetSelectedWithoutCallback(item.first);
         mapEditingClip_=true;importPage_=ImportPage::Pose;displayedPoseTime_=-FLT_MAX;
-        EnterImportPose();SelectMapTarget(mapTargetIndex_);LayoutImportWorkspace();
+        EnterImportPose();
+        const int index=modelImportClip_.GetSelected()-1;
+        importMaterials_->pin.open(index);clipEditScope_.SetSelectedWithoutCallback(3);
+        LayoutImportWorkspace();
     });
     rtClip_.Create("Source clip");rtSource_.Create("Source joint");rtTarget_.Create("Target joint");
     for(auto* c:{&rtClip_,&rtSource_,&rtTarget_})modelImportPanel_.AddWidget(c);
@@ -476,8 +481,17 @@ bool StudioRenderPath::WriteMappedTake(bool explicitBake)
     const std::string label=rtScene_->animations.GetCount()==1?rtFile_:rtClip_.GetItemText(index);
     std::string error;
     auto& take=mappedTakes_[index];
+    const auto& pins=importMaterials_->pin.applied;
+    const bool reapply=take.clip>=0 && importMaterials_->pin.generation==modelImportGeneration_ && pins.count(take.clip) && !pins.at(take.clip).empty();
+    auto prePinState=reapply?std::make_unique<bridge::ModelImportCandidate>(modelImportCandidate_->CaptureBakeState()):nullptr;
     if(!bridge::ModelImportCandidateService().EditMappedClip(*modelImportCandidate_,*rtScene_,index,rtPairs_,rtSourcePose_,targetPose,label,error,take.clip,take.keys,mapKept_)){
         ShowStudioMessageBox(error,"Bake retargeted clip");return false;
+    }
+    if(reapply){
+        for(const auto& pin:importMaterials_->pin.applied[take.clip])
+            if(!bridge::ModelImportCandidateService().PinBakedClip(*modelImportCandidate_,take.clip,pin,error)){
+                *modelImportCandidate_=std::move(*prePinState);ShowStudioMessageBox(error,"Reapply clip pin");return false;
+            }
     }
     if(take.clip<0)take.clip=int(modelImportCandidate_->Summary().animations)-1;
     const int baked=take.clip;

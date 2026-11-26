@@ -7,6 +7,8 @@
 #include <cmath>
 #include <filesystem>
 #include "RuntimeApplication.h"
+#include "json.hpp"
+#include "renegade/bridge/WeaponSurface.h"
 #include "renegade/bridge/ZoneService.h"
 #include "RuntimeVehiclePrototype.h"
 #include "TerrainPropViewOrigin.h"
@@ -616,6 +618,10 @@ namespace renegade::runtime
         ResetRuntimePlayerViewAnimations(
             scenes_.GetScene(), playerViewAnimation_);
         DespawnRuntimePlayerViewRig(scenes_.GetScene(), playerViewRig_);
+        for(auto& slot:preparedWeapons_)
+            for(auto entity:slot.entities)scenes_.GetScene().Entity_Remove(entity,false);
+        weaponEffects_={};
+        preparedWeapons_.clear();
         creatorScripts_.Shutdown();
         scriptSceneRevision_ = 0;
         reportedScriptDiagnostics_ = 0;
@@ -863,6 +869,8 @@ namespace renegade::runtime
             // first-person presentation to the same post-physics position.
             gameplayInput_ = (gameplayInputAllowed || inventoryInteractionAllowed)
                 ? bridge::CaptureGameplayInput(inputMap_, dt) : bridge::GameplayInputFrame{};
+            if(gameplayInputAllowed && !paused_ && playerViewAnimation_.initialized)
+                for(size_t i=0;i<weaponSlots_.size();++i)if(wi::input::Press(static_cast<wi::input::BUTTON>('1'+i)))SelectWeaponSlot(i);
             dialogue_.SetAccessibilitySettings(uiAccessibility_.presentation);
             dialogue_.SetItemQuery([this](const std::string& item,int count){
                 const auto* inventory=inventorySession_.Inventory();
@@ -982,6 +990,12 @@ namespace renegade::runtime
                         (paused_||!collisionReady) ? 0.0f : dt);
                     auto* body = scenes_.GetScene().rigidbodies.GetComponent(player_.entity);
                     const bool grounded = body == nullptr || wi::physics::IsCharacterGroundSupported(*body);
+                    auto triggerInput=gameplayInput;
+                    if(activeWeaponSlot_<preparedWeapons_.size())triggerInput.firePressed=RuntimeWeaponEffects::Trigger(
+                        gameplayInput.firePressed,gameplayInput.fireDown,preparedWeapons_[activeWeaponSlot_].shotProfile,playerViewAnimation_.loadedShells);
+                    // A sight pose may be a long idle loop. The trigger can interrupt sight entry.
+                    if(!paused_ && collisionReady)
+                        InterruptSightEntryForShot(playerViewAnimation_,triggerInput.aimDown,triggerInput.firePressed);
                     const bool presentationBusy = playerViewAnimation_.oneShotPlaying ||
                         (playerViewAnimation_.equipped && (playerViewAnimation_.jumpCycleActive ||
                             playerViewAnimation_.takeoffPending || playerViewAnimation_.landingPending ||
@@ -991,7 +1005,7 @@ namespace renegade::runtime
                     const bool chainWindow=melee.directional && melee.attacking && strike &&
                         strike->end-strike->start-melee.rightTime<=melee.chainWindowSeconds;
                     const auto equipmentInput =
-                        playerEquipment_.RouteStaged(gameplayInput, playerViewAnimation_.equipped,
+                        playerEquipment_.RouteStaged(triggerInput, playerViewAnimation_.equipped,
                             presentationBusy, (paused_||!collisionReady) ? 0.0f : dt, playerViewAnimation_.aiming,
                             !playerViewAnimation_.clips[PlayerViewActionIndex(PlayerViewAction::Charge)].empty() &&
                             !playerViewAnimation_.clips[PlayerViewActionIndex(PlayerViewAction::Release)].empty(),
@@ -1023,15 +1037,20 @@ namespace renegade::runtime
                         (paused_||!collisionReady) ? 0.0f : dt,
                         !paused_ && equipmentInput.firePressed,
                         !paused_ && equipmentInput.reloadPressed,
-                        equipmentInput.aimDown,
+                        playerViewAnimation_.meleeWeapon ? gameplayInput.aimDown : equipmentInput.aimDown,
                         !paused_ && equipmentInput.toggleEquipmentPressed,
                         grounded, stormAnimation.chargeHeld, stormAnimation.releasePressed,
                         playerEquipment_.offHandBlockPresentation, gameplayInput.player.lookYaw, gameplayInput.player.lookPitch, equipmentInput.cancelEquipmentPressed,
-                        &playerEquipment_.reloadStageRequest);
+                        &playerEquipment_.reloadStageRequest, !paused_ && gameplayInput.fireDown);
                     // Re-arm only on a real mouse-up edge, after the native
                     // animation has consumed this frame's input.
                     if(!paused_ && !gameplayInput.fireDown && naturalStormEquipped)
                         lightningStormCastLatch_=false;
+                    if(!paused_ && collisionReady && activeWeaponSlot_<preparedWeapons_.size())
+                        weaponEffects_.AnimationFrame(scenes_.GetScene(),preparedWeapons_[activeWeaponSlot_].shotProfile,
+                            playerViewAnimation_.activeClip,playerViewAnimation_.shotAccepted || playerViewAnimation_.meleeStarted || playerViewAnimation_.reloadStageAccepted);
+                    if(!paused_ && playerViewAnimation_.shotAccepted && activeWeaponSlot_<preparedWeapons_.size())
+                        weaponEffects_.Shot(preparedWeapons_[activeWeaponSlot_].shotProfile,playerViewAnimation_.activeAction==PlayerViewAction::AimAttack);
                     if(!paused_)playerEquipment_.AfterNativePresentation(playerViewAnimation_);
                     for (auto& request : playerEquipment_.TakeProjectileRequests()) {
                         // Native firearm acceptance includes ammunition, cooldown,
@@ -1063,6 +1082,14 @@ namespace renegade::runtime
         // while the GPU still holds the sheet's metre-scale transform.
         // Sample the current completed scene for aiming, then refresh the camera
         // again after physics below for the rendered view.
+        const bool keepFiringSound=gameplayFrame && !paused_ && collisionReady && gameplayInputAllowed &&
+            !inventoryOverlayOpen_ && gameplayInput_.fireDown && playerViewAnimation_.equipped &&
+            (playerViewAnimation_.shotAccepted || playerViewAnimation_.loadedShells>0) &&
+            playerViewAnimation_.activeAction!=PlayerViewAction::FireStop &&
+            playerViewAnimation_.activeAction!=PlayerViewAction::Reload &&
+            playerViewAnimation_.activeAction!=PlayerViewAction::ReloadPartial &&
+            activeWeaponSlot_<preparedWeapons_.size();
+        weaponEffects_.KeepFiringSound(keepFiringSound?&preparedWeapons_[activeWeaponSlot_].shotProfile:nullptr);
         if (gameplayFrame)
         {
             if (player_.IsSpawned() && renderer_.camera != nullptr && !vehicleTrial.Active())
@@ -1072,6 +1099,7 @@ namespace renegade::runtime
                 diagnosticService_.Record(bridge::DiagnosticSeverity::Info,"runtime.combat",event.name,event.payload);
                 return creatorScripts_.EnqueueGameplayEvent(std::move(event),error);
             };
+            weaponEffects_.Update(scenes_.GetScene(),(paused_||!collisionReady)?0.f:dt);
             burning_.Update(scenes_.GetScene(),characterAiState_,characterPerceptionState_,combatState_,(paused_||!collisionReady)?0.f:dt,burnEvents);
             if (!paused_ && collisionReady && vehicleTrial.bastionShot)
             {
@@ -1566,6 +1594,14 @@ namespace renegade::runtime
         sources.combat = &combatState_;
         sources.characters = &characterAiState_;
         sources.playerView = &playerViewAnimation_;
+        if(activeWeaponSlot_<slotNames_.size()){
+            sources.weaponName=slotNames_[activeWeaponSlot_];
+            for(size_t i=0;i<slotNames_.size();++i){
+                if(!sources.weaponSlots.empty())sources.weaponSlots+="    ";
+                auto label=std::to_string(i+1)+" "+slotNames_[i];
+                sources.weaponSlots+=i==activeWeaponSlot_?"["+label+"]":label;
+            }
+        }
         sources.sceneGeneration = scenes_.Revision();
         sources.combatReady = characterSceneRevision_ != 0 &&
             characterSceneRevision_ == scenes_.Revision() && !characterSceneSyncFailed_;
@@ -1710,6 +1746,18 @@ namespace renegade::runtime
             // Governed queue remains the shared script/event boundary.
             return creatorScripts_.EnqueueGameplayEvent(std::move(event), error);
         };
+        if(std::exchange(playerViewAnimation_.meleeContact,false)&&dt>0&&renderer_.camera){
+            bridge::ProjectileSource source;source.ownerSubjectId=owner.subjectId;source.sourceAssetId=playerEquipment_.primary.equipment.assetId;source.factionId="Player";
+            wi::ecs::Entity hit=wi::ecs::INVALID_ENTITY;
+            auto query=[&](const auto& record,const auto& from,const auto& to){return QueryProjectileSceneSegment(scene,characterAiState_,owner,record,from,to,~0u,&hit);};
+            bridge::ProjectileQueryResult contact;std::string error;
+            if(QueryHitscan(source,renderer_.camera->Eye,renderer_.camera->At,playerViewAnimation_.strike.reach,query,contact,error)&&contact.status==bridge::ProjectileQueryStatus::Hit){
+                bridge::ProjectileImpact impact;impact.source=source;impact.contact=contact.contact;impact.damage=playerViewAnimation_.strike.damage;impact.incomingVelocity=ProjectileBridgeVector(renderer_.camera->At);
+                (void)bridge::DamageDestructible(scene,hit,owner.root,impact.damage,renderer_.camera->At);
+                if(ApplyProjectileCharacterImpact(scene,characterAiState_,characterPerceptionState_,combatState_,impact,emit).damageApplied)renderer_.ConfirmTargetHit();
+                (void)emit({0,"melee.contact","equipment="+source.sourceAssetId,source.ownerSubjectId,contact.contact.targetSubjectId},error);
+            }
+        }
         if(std::isfinite(dt) && dt>0) {
             const auto applyChannel=[&](const bridge::ProjectileImpact& impact) {
                 const auto damage=ApplyProjectileCharacterImpact(scene,characterAiState_,
@@ -2069,6 +2117,7 @@ namespace renegade::runtime
         renderer_.SetProjectileContacts({});
     }
 
+#include "RuntimeWeaponSlots.inc"
     void RuntimeApplication::SyncPlayerForScene()
     {
         if (playerSceneRevision_ == scenes_.Revision())
@@ -2112,6 +2161,17 @@ namespace renegade::runtime
         propModels_.PreloadSpawn(scenes_.GetScene(),scenes_.Revision(),scenes_.TerrainPropCollisions().get(),
             startupResult_.project.rootPath,startupResult_.project.projectId,resolved.start.transform.translation);
         playerSettings_ = resolved.start.settings;
+        weaponSlots_=bridge::ReadWeaponSlots(std::filesystem::u8path(startupResult_.project.rootPath),playerSettings_.primaryEquipmentAssetId);
+        weaponEffects_={};
+        preparedWeapons_.clear();
+        preparedWeapons_.resize(weaponSlots_.size());
+        activeWeaponSlot_=0;slotNames_.clear();slotAmmo_.assign(weaponSlots_.size(),-1);
+        for(size_t i=0;i<weaponSlots_.size();++i){
+            bridge::EquipmentAssetDocument doc;std::string error;
+            const auto& id=weaponSlots_[i].equipment;
+            if(id==playerSettings_.primaryEquipmentAssetId)activeWeaponSlot_=i;
+            slotNames_.push_back(bridge::LoadEquipmentAsset(startupResult_.project.rootPath,startupResult_.project.projectId,id,doc,error)?doc.equipment.name:"");
+        }
         if (!playerEquipment_.Load(startupResult_.project.rootPath,
                 startupResult_.project.projectId, playerSettings_))
         {
@@ -2190,6 +2250,7 @@ namespace renegade::runtime
             if (!playerSettings_.firstPersonArmsAssetId.empty())
             {
                 std::string armsError;
+                wi::unordered_set<wi::ecs::Entity> beforeView;scenes_.GetScene().FindAllEntities(beforeView);
                 const bool loaded = startupResult_.packageRelativeLaunch
                     ? LoadPackagedRuntimePlayerViewAsset(
                         scenes_.GetScene(),
@@ -2227,6 +2288,9 @@ namespace renegade::runtime
                         "Governed first-person arms asset loaded: " +
                             playerSettings_.firstPersonArmsAssetId);
 
+                    ownedViewEntities_.clear();scenes_.GetScene().FindAllEntities(ownedViewEntities_);
+                    for(auto entity:beforeView)ownedViewEntities_.erase(entity);
+                    if(activeWeaponSlot_<weaponSlots_.size())ApplyWeaponMaterials(weaponSlots_[activeWeaponSlot_].setup);
                     std::string animationError;
                     if (!InitializeRuntimePlayerViewAnimations(
                             scenes_.GetScene(),
@@ -2246,6 +2310,17 @@ namespace renegade::runtime
                             scenes_.GetScene(),
                             playerViewAnimation_,
                             PlayerViewAction::Idle);
+                        if(activeWeaponSlot_<preparedWeapons_.size()){
+                            const size_t startingSlot=activeWeaponSlot_;
+                            auto& first=preparedWeapons_[startingSlot];
+                            first.rig=playerViewRig_;
+                            first.animation=playerViewAnimation_;
+                            first.entities=std::move(ownedViewEntities_);
+                            weaponEffects_.Prepare(scenes_.GetScene(),first.rig.viewModelRoot,std::filesystem::u8path(startupResult_.project.rootPath),weaponSlots_[startingSlot].setup,first.shotProfile);
+                            first.ready=true;
+                            for(size_t index=0;index<preparedWeapons_.size();++index)SelectWeaponSlot(index);
+                            SelectWeaponSlot(startingSlot);
+                        }
                         diagnosticService_.Record(
                             bridge::DiagnosticSeverity::Info,
                             "runtime.player.view_rig",
@@ -4044,6 +4119,10 @@ namespace renegade::runtime
         scriptSceneRevision_ = 0;
         SetPaused(false);
         DespawnRuntimePlayerViewRig(scenes_.GetScene(), playerViewRig_);
+        for(auto& slot:preparedWeapons_)
+            for(auto entity:slot.entities)scenes_.GetScene().Entity_Remove(entity,false);
+        weaponEffects_={};
+        preparedWeapons_.clear();
         bridge::DespawnRuntimePlayer(scenes_.GetScene(), player_);
         player_ = {};
         playerSettings_ = {};

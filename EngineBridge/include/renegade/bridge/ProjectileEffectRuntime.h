@@ -61,4 +61,30 @@ namespace renegade::bridge
         if(burst)emitter.burst_on_create=48;
         return entity;
     }
+        inline XMMATRIX ProjectileVisualPose(const ProjectileAssetDocument& d,
+            const ProjectileVector& velocity, const ProjectileVector& position,
+            float grenadeSpinAngle=0.f) {
+            if(d.grenade.enabled) {
+                // Grenades tumble continuously. Aligning the mesh with velocity
+                // on every bounce made it snap/flip as soon as gravity reversed.
+                const auto spin=XMMatrixRotationAxis(
+                    XMVector3Normalize(XMVectorSet(.73f,.11f,.67f,0)),
+                    grenadeSpinAngle);
+                return XMMatrixScaling(d.visualScale,d.visualScale,d.visualScale) *
+                    XMMatrixRotationRollPitchYaw(
+                        XMConvertToRadians(d.visualRotationDegrees[0]),
+                        XMConvertToRadians(d.visualRotationDegrees[1]),
+                        XMConvertToRadians(d.visualRotationDegrees[2])) *
+                    spin * XMMatrixTranslation(position.x,position.y,position.z);
+            }
+            auto direction=XMVectorSet(velocity.x,velocity.y,velocity.z,0);
+            direction=XMVectorGetX(XMVector3LengthSq(direction))>.00000001f?
+                XMVector3Normalize(direction):XMVectorSet(0,0,1,0);
+            const auto up=std::abs(XMVectorGetY(direction))>.99f?XMVectorSet(1,0,0,0):XMVectorSet(0,1,0,0);
+            const auto facing=XMMatrixInverse(nullptr,XMMatrixLookToLH(XMVectorZero(),direction,up));
+            return XMMatrixScaling(d.visualScale,d.visualScale,d.visualScale) *
+                XMMatrixRotationRollPitchYaw(XMConvertToRadians(d.visualRotationDegrees[0]),
+                    XMConvertToRadians(d.visualRotationDegrees[1]),XMConvertToRadians(d.visualRotationDegrees[2])) *
+                facing * XMMatrixTranslation(position.x,position.y,position.z);
+        }
 }

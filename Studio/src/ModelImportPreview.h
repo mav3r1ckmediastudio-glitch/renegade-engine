@@ -34,6 +34,7 @@ namespace renegade::studio
         void SetViewportSize(unsigned width, unsigned height);
         void SetModelAppearance(float scale, const std::array<float,3>& rotation);
         void SetProjectileEffects(const std::vector<bridge::ProjectileEffectLayer>&);
+        float ReferenceBaseHeight() const { return sourceCenter_.y - modelSize_.y * 0.5f; }
         XMFLOAT3 ModelSize() const { return modelSize_; }
         std::vector<bridge::PlayerViewBoneChoice> SocketParents() const;
         bool PickSocket(float u,float v,const bridge::LaunchSocketDefinition&,XMFLOAT3&,std::string&) const;

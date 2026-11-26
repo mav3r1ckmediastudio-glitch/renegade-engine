@@ -59,6 +59,8 @@ add_executable(RenegadeRuntime WIN32
 )
 renegade_stage_default_grass(RenegadeRuntime)
 
+target_include_directories(RenegadeRuntime PRIVATE "${CMAKE_SOURCE_DIR}/WickedEngine/Editor")
+
 target_link_libraries(RenegadeRuntime
     PRIVATE
         Renegade::RuntimeBootstrap

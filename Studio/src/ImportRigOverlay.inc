@@ -131,7 +131,7 @@ void StudioRenderPath::UpdateImportRigInput()
     const auto mapping=ImportRigToObject(modelImportPreview_->InspectionScene());
     if(rigDrag_!=RigHandle::None) {
         if(!wi::input::Down(wi::input::MOUSE_BUTTON_LEFT)) {
-            rigDrag_=RigHandle::None;dragOriginalPose_.clear();ApplyPoseEdit(true);return;
+            rigDrag_=RigHandle::None;dragOriginalPose_.clear();if(!importMaterials_->pin.active())ApplyPoseEdit(true);return;
         }
         const auto anchor=ProjectImportPoint(TransformRigPoint(dragAnchor_,mapping));
         const float dx=std::clamp(mouse.x,pos.x,pos.x+size.x)-dragStart_.x;

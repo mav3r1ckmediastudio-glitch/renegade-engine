@@ -353,6 +353,7 @@ namespace renegade::bridge
         if (category == "materials") return AssetType::Material;
         if (category == "vegetation") return AssetType::Vegetation;
         if (category == "characters") return AssetType::Character;
+        if (category == "player" && extension == ".rasset") return AssetType::Model;
         if (category == "player") return AssetType::Player;
         if (category == "weapons") return AssetType::Weapon;
         if (category == "projectiles") return AssetType::Projectile;

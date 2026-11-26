@@ -508,11 +508,11 @@ namespace renegade::bridge
             (!request.characterAsset || request.animationActions.size() != candidate.Summary().animations))
         { result.error = "Animation action assignments do not match the Character clips."; return result; }
         CreatorModelImportRecipe nativeEntries;
-        if (entries && !request.characterAsset) {result.error="Animation entries require a Character."; return result;}
+        if (entries && !request.characterAsset && !animatedModel) {result.error="Animation entries require an animated model."; return result;}
         const size_t sourceCount=candidate.Summary().animations;
         const size_t entryCount=entries ? entries->size() : sourceCount;
         const std::vector<std::string> allowed={"Unassigned","Idle","Walk","Run","Attack","Melee","Fire","Cast","Reload","Hit","Death","Gesture","Situational idle"};
-        for(size_t row=0;request.characterAsset && row<entryCount;++row) {
+        for(size_t row=0;(request.characterAsset || entries) && row<entryCount;++row) {
             CreatorAnimationImportRecipe entry;
             if(entries) entry=(*entries)[row];
             else {
@@ -522,6 +522,11 @@ namespace renegade::bridge
                 entry.name=name ? name->name : "Clip "+std::to_string(row+1);
                 entry.start=native.start; entry.end=native.end; entry.speed=native.speed;
                 entry.action=request.animationActions.empty() ? "Unassigned" : request.animationActions[row];
+            }
+            if (request.characterAsset) entry.modelStart = ModelClipStart::Legacy;
+            else {
+                entry.action = "Unassigned";
+                if (entry.modelStart == ModelClipStart::Legacy) entry.modelStart = ModelClipStart::Wait;
             }
             const size_t i=entry.sourceAnimationIndex;
             if(i>=sourceCount || std::find(allowed.begin(),allowed.end(),entry.action)==allowed.end()) {
@@ -536,7 +541,7 @@ namespace renegade::bridge
                 clip.sourceProjectRelativePath=dependencyPaths[external->dependencyIndex].lexically_relative(root).generic_u8string();
                 clip.sourceAnimationIndex=static_cast<uint32_t>(i-external->firstAnimationIndex);
                 clip.name=entry.name;clip.start=entry.start;clip.end=entry.end;clip.speed=entry.speed;clip.action=entry.action;
-                clip.matchingRig=external->matchingRig;clip.autoMapSource=!external->matchingRig;
+                clip.modelStart=entry.modelStart;clip.matchingRig=external->matchingRig;clip.autoMapSource=!external->matchingRig;
                 authoredRecipe.externalAnimations.push_back(std::move(clip));
             }
         }

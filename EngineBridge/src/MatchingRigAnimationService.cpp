@@ -54,6 +54,22 @@ namespace renegade::bridge
         return true;
     }
 
+    // Rigid object clips drive named transform nodes (hinges, wheels, etc.).
+    // Compare complete named paths below the importer-created file root.
+    static std::string ObjectTrackPath(const wi::scene::Scene& scene, wi::ecs::Entity id)
+    {
+        std::string path;
+        std::set<wi::ecs::Entity> visited;
+        while (const auto* parent = scene.hierarchy.GetComponent(id)) {
+            if (!visited.insert(id).second) return {};
+            const auto* name = scene.names.GetComponent(id);
+            if (!name || name->name.empty()) return {};
+            path = std::to_string(name->name.size()) + ":" + name->name + path;
+            id = parent->parentID;
+        }
+        return path;
+    }
+
     bool AppendMatchingRigAnimationScene(wi::scene::Scene& destination,
         const wi::scene::Scene& source, std::vector<wi::ecs::Entity>& created,
         std::string& error)
@@ -61,6 +77,22 @@ namespace renegade::bridge
         created.clear(); error.clear();
         auto fail=[&](const char* message){error=message;return false;};
         AnimationRigBones src, dst;
+        std::map<wi::ecs::Entity,wi::ecs::Entity> targets;
+        if (!destination.armatures.GetCount() && !source.armatures.GetCount()) {
+            std::map<std::string,wi::ecs::Entity> byPath;
+            for (size_t i=0; i<destination.transforms.GetCount(); ++i) {
+                const auto id=destination.transforms.GetEntity(i);
+                const auto path=ObjectTrackPath(destination,id);
+                if (path.empty()) continue;
+                if (!byPath.emplace(path,id).second) byPath[path]=wi::ecs::INVALID_ENTITY;
+            }
+            for (size_t i=0; i<source.transforms.GetCount(); ++i) {
+                const auto id=source.transforms.GetEntity(i);
+                const auto it=byPath.find(ObjectTrackPath(source,id));
+                if (it!=byPath.end() && it->second!=wi::ecs::INVALID_ENTITY)
+                    targets.emplace(id,it->second);
+            }
+        } else {
         if (!CollectAnimationRig(source,src,error) || !CollectAnimationRig(destination,dst,error)) return false;
         if(src.boneCollection.empty() || src.boneCollection.size()!=dst.boneCollection.size() ||
             src.inverseBindMatrices.size()!=src.boneCollection.size() ||
@@ -88,7 +120,6 @@ namespace renegade::bridge
             }
             return std::string{};
         };
-        std::map<wi::ecs::Entity,wi::ecs::Entity> targets;
         std::set<std::string> sourceNames;
         for(size_t i=0;i<src.boneCollection.size();++i) {
             const auto bone=src.boneCollection[i];const auto* name=source.names.GetComponent(bone);
@@ -104,6 +135,7 @@ namespace renegade::bridge
                 if(!std::isfinite(a[k]) || !std::isfinite(b[k]) || std::abs(a[k]-b[k])>0.0002f)
                     return fail("Matching-rig inverse bind poses differ; retargeting is required.");
         }
+        }
         if(source.animations.GetCount()==0)return fail("Source contains no animation clips.");
         using Channel=wi::scene::AnimationComponent::AnimationChannel;
         for(size_t i=0;i<source.animations.GetCount();++i) {
@@ -116,7 +148,7 @@ namespace renegade::bridge
                     (channel.path!=Channel::Path::TRANSLATION && channel.path!=Channel::Path::ROTATION &&
                      channel.path!=Channel::Path::SCALE) || channel.samplerIndex<0 ||
                     size_t(channel.samplerIndex)>=clip.samplers.size())
-                    return fail("Matching-rig clip has a missing bone or unsupported track.");
+                    return fail("An animated part or bone has no unique matching target, or the track type is unsupported.");
             }
             for(const auto& sampler:clip.samplers)
                 if(sampler.scene || !source.animation_datas.Contains(sampler.data))
@@ -154,7 +186,10 @@ namespace renegade::bridge
             return AppendMatchingRigAnimationScene(destination,*source,created,error);
         }
         ClearWickedModelImporterFailureDiagnostic();
-        ImportModel_FBX(sourcePath,*source);
+        const auto ext=wi::helper::toUpper(wi::helper::GetExtensionFromFileName(sourcePath));
+        if (ext=="GLB") ImportModel_GLTF(sourcePath,*source);
+        else if (ext=="FBX") ImportModel_FBX(sourcePath,*source);
+        else {error="Select an FBX or binary glTF animation.";return false;}
         const auto failure=ConsumeWickedModelImporterFailureDiagnostic();
         if(!failure.empty()){error=failure;return false;}
         return AppendMatchingRigAnimationScene(destination,*source,created,error);

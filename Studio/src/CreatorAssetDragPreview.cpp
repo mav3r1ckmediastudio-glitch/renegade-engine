@@ -1,4 +1,5 @@
 #include "renegade/bridge/ModelAnimationPreviewService.h"
+#include "renegade/bridge/ModelClipPlayback.h"
 #include "RenegadeStudioChrome.h"
 #include "CreatorAssetFrameBoundary.h"
 
@@ -644,20 +645,22 @@ namespace
         wi::unordered_set<wi::ecs::Entity> createdSet;
         for (const auto entity : preview.createdEntities)
             createdSet.insert(entity);
+        bool hasObjectPlayback = false;
         std::size_t previewClipCount = 0;
         wi::ecs::Entity previewFirstClip = wi::ecs::INVALID_ENTITY;
         for (std::size_t index = 0; index < scene.animations.GetCount(); ++index)
         {
             const auto entity = scene.animations.GetEntity(index);
             if (createdSet.count(entity) == 0) continue;
-            scene.animations[index].Stop();
+            if (renegade::bridge::StartImportedObjectClip(scene,index)) hasObjectPlayback = true;
+            else scene.animations[index].Stop();
             if (previewFirstClip == wi::ecs::INVALID_ENTITY)
                 previewFirstClip = entity;
             ++previewClipCount;
         }
         // Never run all Character actions simultaneously on drag. A single
         // clip remains previewable; multi-clip Characters wait for Runtime AI.
-        if (!renegade::bridge::ModelImportStartsPaused(scene, wrapper) &&
+        if (!hasObjectPlayback && !renegade::bridge::ModelImportStartsPaused(scene, wrapper) &&
             previewFirstClip != wi::ecs::INVALID_ENTITY &&
             (previewClipCount == 1 || !preview.preparedCharacterAsset))
         {

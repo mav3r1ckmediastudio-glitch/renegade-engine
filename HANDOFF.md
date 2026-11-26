@@ -1,3 +1,60 @@
+# Native Studio weapon workspace | DESIGN | 25 November 2026
+
+Local integration checkpoint `e029759950e8b7c91e957519d25d487fe1d33a98` contains the current unified importer and the weapon workspace together. The working importer branch and its existing index were preserved. Use `git diff --name-only e029759950e8b7c91e957519d25d487fe1d33a98^ e029759950e8b7c91e957519d25d487fe1d33a98` for the file list. The editor lives in `Studio/src/WeaponEditor`. StudioApplication, UnifiedImportWorkspace, RenegadeStudioChrome and the Windows message loop connect the two entry points. The Studio target compiles the workspace and stages the preview textures.
+
+The local x64 Release review compiled WeaponWorkspace, Translator, StudioApplication, RenegadeStudioChrome and main_Windows with the importer's existing MSVC response files and linked the Studio executable. Run `cmake -DRENEGADE_SOURCE_DIR=<checkout> -P Tests/<contract>.cmake` for Phase5Gate3SourceContract, CreatorImporterReviewLayoutSourceContract and CharacterWorkflowSourceContract. All three passed. A clean CMake build, Debug, hosted CI, shipping and player equip are pending.
+
+In the DX12 Studio window, Add > Weapon Editor opened the marker workspace. Add > Import Model > Player Arms / Weapon also handed the selected triangle source into it. After adding a grip, PSP and casing marker, saving, closing Studio, reopening and saving a second copy, both JSON documents matched exactly. The second fixture used a locally generated two-arm rig, Idle and Reload clips, and a triangle. The review mounted the object using two grips, enabled IK, selected the left hand and reopened the fitted setup in a fresh process. Both saved documents matched exactly, including the rig reference and fit transform. Back to importer restored the previous workspace. One launch on a heavier character review scene exited in the NVIDIA driver. The repeat checks used a disposable copy of ProvingGround. The cause of the driver exit is unconfirmed.
+
+No stock arms, models or audio from either candidate kit are part of this checkpoint. Template selection remains paused. Test Game equip, full animation quality and owner review are separate from the editor checks.
+
+# FBX rigid clip and morph pose verification | DESIGN | 24 November 2026
+
+Local feature/unified-model-importer at 08aaf23 plus uncommitted edits. Renegade - Model Objects now launches ObjectPlaybackReview/Studio/RenegadeStudioObjectPose.exe (DX12). The other open importer session was left alone.
+
+Tested separate Panel.fbx and HingeTurn.fbx in Animated Model > Actions > Add animation clips. Measured 90 degrees on the driven hinge. Reproduced a DX12 failure during morph pose export. EngineBridge/src/ModelImportCandidateService.cpp now serializes the sampled geometry and releases the deforming scene before reconstructing static mesh resources for GLB export and verification. Built with Build/ExtrasFinish.cmd. CMake CreatorImporterReviewLayoutSourceContract and CharacterWorkflowSourceContract both passed.
+
+Studio QA: MorphPanel.glb > Animated Model > Actions; scrubbed to 0.510729 seconds. Advanced > Export current pose as static GLB; reopened UI-verified.glb through Add > Import Model > Static Model. All 24 positions agree with the sampled source within 0.0000002 model units. The exported GLB has no animation or morph channels. Native FormatCheck compared the half-time frozen result to the sampled Wicked mesh (max error zero). The vampire skinned-pose regression also passed. Evidence and Blender QA fixtures in UnifiedImportReview/ObjectFormatProof, including Morph-Preview.jpg, Morph-Reopened.jpg, HingeUI.jpg, fixed.log and skin-regression.log. No push or merge.
+
+# Static and animated objects | DESIGN | 24 November 2026
+
+On feature/unified-model-importer at 08aaf23 plus local changes. Desktop shortcut Renegade - Model Objects now opens ObjectPlaybackReview/Studio/RenegadeStudioModelExtras.exe (DX12).
+Animated Model > Actions > Add animation clips... accepts FBX or GLB with matching part hierarchies or matching skeletons. Animated Model > Advanced > Export current pose as static GLB... samples the selected frame. Reopen through Static Model. See docs/CREATOR_MODEL_IMPORT_WORKFLOW.md.
+
+UI test: added PropellerTurn.glb to Kestrel, scrubbed, exported Kestrel-UI-Pose.glb and saved kestrelobjectextras via Add to Library. Verified retained-source recipe replay, playback metadata on fresh placement, the exported propeller's 90-degree rotation, and Vampire sampled/exported bounds within 0.000018. Used Studio Test Game on KestrelGlassQA.wiscene; visible cockpit structure behind overlapping canopy surfaces. See ObjectExtrasReview/{KestrelExternalClip.jpg,Kestrel-TestGame.jpg,native.log,rebuild.log,skin.log}. Glass checked on this aircraft. Separate external FBX object motion and morph fixtures remain untested.
+
+Build: UnifiedImportReview/Build/ExtrasParallel.cmd (x64 Release). cmake -DRENEGADE_SOURCE_DIR=<Zones> -P Tests/CharacterWorkflowSourceContract.cmake and Tests/CreatorImporterReviewLayoutSourceContract.cmake passed. Files changed in Studio/src (StudioApplication.cpp, UnifiedImportWorkspace.inc, ImportMaterials.inc), EngineBridge/src (MatchingRigAnimationService, ModelImportCandidateService, CreatorModelImportRecipe, ModelImportCommitService), the candidate and recipe headers, workflow contract and creator guide. No push or merge.
+
+# Part pivot inspection | DESIGN | 24 November 2026
+
+Desktop shortcut Renegade - Model Objects. Add > Import Model... > Static Model or Animated Model > Advanced > Part pivot. Click a mesh or select an imported transform to inspect its axes, parent and coordinates. Verified by clicking the Kestrel propeller in Static Model. Selected Propeller_Spin under Kestrel_T7_Root and saw axes at the hub. Confirmed selection and inspector in Animated Model. This is inspection only. Review screenshot in UnifiedImportReview/PartPivotReview/Kestrel-Propeller-Pivot.jpg. Outstanding: extra clip files, static pose extraction and overlapping glass in Test Game.
+
+# Animated Model startup playback | DESIGN | 24 November 2026
+
+Renegade - Model Objects opens ObjectPlaybackReview/Studio/RenegadeStudioModelObjects.exe with its own sibling Runtime/RenegadeRuntime.exe. Add > Import Model... > Animated Model > Actions. Select an entry, then On level start > Wait, Loop selected clip or Play once and hold. Choosing automatic playback designates that one entry and sets the others to Wait. Add to Library retains the choice and clip timing. Old assets without the playback field follow their existing behaviour.
+
+UI sample in ActionTableWalk/Project: Content/Models/playbackobjectreview, one embedded source split into two entries (Scene waiting, opening playing once through frame 90 at 0.8x). Placed through the Asset Browser and ran Test Game from this build. ObjectPlaybackReview/verified.log records fresh placement plus native level-start and time-step checks for selected entry, endpoint, wrap and wait. Native loop and wait checks switched modes in memory; the once configuration was authored and saved in Studio. Packaged shipping launch has not been exercised. Existing character and importer layout contracts passed. Other audit items below remain open.
+
+# Static and Animated Model review | DESIGN | 24 November 2026
+
+Desktop shortcut Renegade - Model Objects launches RenegadeStudioModelReview.exe in ActionTableWalk/Studio. Shared Materials now exposes opacity and RGB tint values on the native material. Static Model and Animated Model have Place base on floor for the transformed reference bounds. Animated Model > Actions exposes named entries with source, start/end frames and speed, including multiple entries per embedded take. Gameplay action assignment remains on Character.
+
+Studio-authored assets in ActionTableWalk/Project/Content/Models include kestrelglassreview (source opacity 0.34, edited 0.42, original RGB and sidedness on fresh placement) and objectclipverified (renamed objectmotion, end frame 90, playback speed 0.8, fresh placement confirmed). The two importer source contracts pass. QA captures in UnifiedImportReview/ModelObjectsReview. Open items include runtime playback defaults and loop/hold, extra clip files for animated objects, static pose extraction, part/pivot inspection and overlapping glass in Test Game.
+
+# Baked clip floor lift | DESIGN | 24 November 2026
+
+Desktop shortcut **Renegade - Floor Lift** launches RenegadeStudioFloorLift.exe. Add > Import Model... > Character > Actions > select a baked clip > Edit baked pose / IK > Pin joint > Preview floor lift > Keep floor lift. The lift uses the lowest sampled skinned vertex across the clip and adds one vertical offset. Use Add to Library to save.
+
+Review asset Content/Characters/floorliftvampire in ActionTableWalk was saved through Studio and loaded via placement. The pinned Goblin_Eat_OnFloor_Loop clears the importer floor over 241 checked poses. The higher sole remains slightly above it. Rest pose and measured ankle excursion match the pinned baseline. Test Game played the saved clip. Terrain contact at level scale was not measured. Sleep and worship were sampled separately. Crawl remains unverified.
+
+# Character joint pins review | DESIGN | 24 November 2026
+
+Desktop shortcut **Renegade - Joint Pins** launches RenegadeStudioPinEditor.exe from UnifiedImportReview/ActionTableWalk/Studio. Add > Import Model... > Character > Actions > select a baked retargeted clip > Edit baked pose / IK > Apply pose to > Pin joint. Preview and keep or discard the pin. Undo/Redo uses the pose editor's history. Add to Library retains the corrected animation curves.
+
+The selected joint can be fixed in clip space or relative to another rig joint, locking position, rotation or both over a 30 fps frame range with optional blend frames. Parent count limits the IK chain. Find next source contact suggests sustained low-motion intervals for the selected joint when its original mapped source is loaded. The user reviews each suggestion. Baked corrections travel with the clip. Pins do not provide automatic body-to-ground clearance.
+
+DESIGN review evidence is under UnifiedImportReview/JointPinReview and UnifiedImportReview/Build. PinCheck exercises both vampire ankles, left hand relative to the clavicle and head rotation, including decoding the retained animation. The vampire was also configured from Studio, assigned the eating loop as Idle, saved as pinreviewvampire, placed and run in Test Game. PinPlacement reopened that Studio-saved asset and measured left/right ankle travel at 0.19%/0.25% of shin length.
+
 # Character Materials and Actions review | DESIGN | 24 November 2026
 
 Open the desktop shortcut **Renegade - Material Inspector**. In the level editor use Add > Import Model..., choose Character, then Materials. The review binary is RenegadeStudioMaterialInspector.exe. The separate review project, UI captures, channel-check input and readback logs are under UnifiedImportReview/MaterialsReview beside the worktree. Existing creator sessions were left open.

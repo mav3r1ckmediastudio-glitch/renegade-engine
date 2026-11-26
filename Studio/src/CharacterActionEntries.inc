@@ -62,6 +62,7 @@ void StudioRenderPath::SelectActionEntry(int row)
 }
 void StudioRenderPath::PositionActionRow(ActionRowWidgets& w,int row)
 {
+    const auto& actionColumnEdges = importWorkflow_ == ImportWorkflow::Animated ? modelColumnEdges : characterColumnEdges;
     const float width=actionTable_.GetSize().x-24;
     const float y=3+row*34.f;
     auto place=[&](auto& widget,int column,float left,float reserve) {
@@ -122,13 +123,18 @@ void StudioRenderPath::RefreshCharacterClips()
         button.SetColor(theme::Accent, wi::gui::ACTIVE);
         button.SetSize({std::max(20.f, actionSources_.GetSize().x-20.f), 32.f});
     }
-    removeEntry_.SetEnabled(actionEntries_.selected>=0);
+    const int selected = actionEntries_.selected;
+    const bool hasEntry = selected >= 0 && selected < int(actionEntries_.rows.size());
+    importMaterials_->objectPlayback.SetEnabled(hasEntry);
+    importMaterials_->objectPlayback.SetSelectedWithoutCallback(hasEntry ? std::max(0,int(actionEntries_.rows[selected].modelStart)-1) : 0);
+    removeEntry_.SetEnabled(hasEntry);
     const auto count=actionEntries_.rows.size();
     while(actionWidgets_.size()<count) CreateActionRow(int(actionWidgets_.size()));
     for(size_t i=0;i<actionWidgets_.size();++i) {
         auto& w=*actionWidgets_[i];
         for(wi::gui::Widget* widget:std::array<wi::gui::Widget*,7>{&w.preview,&w.name,&w.type,&w.source,&w.start,&w.end,&w.speed})
             widget->SetVisible(i<count);
+        w.type.SetVisible(i<count && importWorkflow_ == ImportWorkflow::Character);
         if(i>=count) continue;
         const auto& entry=actionEntries_.rows[i];
         w.preview.SetColor(int(i)==actionEntries_.selected ? theme::Accent : theme::Control,wi::gui::IDLE);

@@ -1,12 +1,19 @@
 // Native material values and texture resources live on the import candidate; the
 // editor retains the separate and packed inputs so a mode switch is reversible.
 struct StudioRenderPath::ImportMaterials {
+    #include "CharacterHeldItem.inc"
+    HeldItem held;
+    wi::gui::Button weaponEditor;
+    #include "ModelPartInspector.inc"
+    ModelPartInspector parts;
+    #include "ClipPinEditor.inc"
+    ClipPinEditor pin;
     using Mat=wi::scene::MaterialComponent;
     using Map=Mat::TextureMap;
     enum Role { Base, Normal, Rough, Metal, AO, Emission, Packed, Extra, Count };
     inline static const char* labels[Count]={"Base colour","Normal","Roughness","Metalness","Ambient occlusion","Emissive","Packed surface","Other map"};
-    inline static const char* values[6]={"Normal strength","Roughness","Metalness","Reflectance","Emissive intensity","Alpha cutoff"};
-    inline static constexpr float maxima[6]={4,4,1,1,32,1};
+    inline static const char* values[]={"Normal strength","Roughness","Metalness","Reflectance","Emissive intensity","Alpha cutoff","Opacity","Tint red","Tint green","Tint blue"};
+    inline static constexpr float maxima[]={4,4,1,1,32,1,1,1,1,1};
     inline static constexpr int native[Count]={Mat::BASECOLORMAP,Mat::NORMALMAP,-1,-1,Mat::OCCLUSIONMAP,Mat::EMISSIVEMAP,Mat::SURFACEMAP,-1};
     struct State {
         Mat mat;
@@ -19,11 +26,22 @@ struct StudioRenderPath::ImportMaterials {
     std::vector<State> states;
     std::vector<History> undo,redo;
     wi::gui::Window panel;
+    wi::gui::Button placeOnFloor, exportPose;
+    wi::gui::Label playbackHeading;
+    wi::gui::ComboBox objectPlayback;
     wi::gui::Label thumbs[Count], names[Count], preview,caption;
     wi::gui::Button files[Count], clear[Count], back,forward,colour;
-    wi::gui::ComboBox mode,alpha,channels[3],shader,extra;
-    wi::gui::CheckBox sides;
-    struct InspectorSlider : wi::gui::Slider {
+    template<typename Control>
+    struct SpacedCaption : Control {
+        void Update(const wi::Canvas& canvas, float dt) override {
+            Control::Update(canvas, dt);
+            this->font.params.posX = this->GetPos().x - 10.f;
+        }
+    };
+    SpacedCaption<wi::gui::ComboBox> mode,alpha,channels[3],shader;
+    wi::gui::ComboBox extra;
+    SpacedCaption<wi::gui::CheckBox> sides;
+    struct InspectorSlider : SpacedCaption<wi::gui::Slider> {
         void Render(const wi::Canvas& canvas,wi::graphics::CommandList cmd) const override {
             if(!IsVisible())return;
             font.Draw(cmd);
@@ -38,7 +56,7 @@ struct StudioRenderPath::ImportMaterials {
             valueInputField.Render(canvas,cmd);
         }
     };
-    InspectorSlider sliders[6];
+    InspectorSlider sliders[std::size(values)];
     wi::gui::Label mapHeading,valueHeading;
     int drag=-1,hovered=-1;
     bool alphaView=false;
@@ -130,6 +148,7 @@ struct StudioRenderPath::ImportMaterials {
         if(!compose(s))app.ShowStudioMessageBox("Surface inputs could not be combined. Review the material maps.","Material maps");
     }
     void reset(){
+        held.reset();
         states.clear();undo.clear();redo.clear();hovered=drag=-1;hoverMap={};alphaImage={};
         auto& scene=*app.modelImportCandidate_->PeekMutableScene();
         for(size_t i=0;i<scene.materials.GetCount();++i){
@@ -202,7 +221,54 @@ struct StudioRenderPath::ImportMaterials {
         });});
     }
 
-    explicit ImportMaterials(StudioRenderPath& owner):app(owner){
+    explicit ImportMaterials(StudioRenderPath& owner):held(owner),parts(owner),pin(owner),app(owner){
+        objectPlayback.Create("");
+        objectPlayback.SetTooltip("Choose what this entry does when the level starts. Only one entry on the object can start automatically.");
+        playbackHeading.Create("On level start");
+        app.modelImportPanel_.AddWidget(&playbackHeading);
+        objectPlayback.AddItem("Wait");
+        objectPlayback.AddItem("Loop selected clip");
+        objectPlayback.AddItem("Play once and hold");
+        objectPlayback.OnSelect([this](auto args) {
+            const int row=app.actionEntries_.selected;
+            if(row<0 || row>=int(app.actionEntries_.rows.size())) return;
+            app.RememberActionEdit();
+            for(auto& entry:app.actionEntries_.rows) {
+                if(args.iValue>0) entry.modelStart=bridge::ModelClipStart::Wait;
+            }
+            app.actionEntries_.rows[row].modelStart=static_cast<bridge::ModelClipStart>(args.iValue+1);
+            app.RefreshCharacterClips();
+        });
+        app.modelImportPanel_.AddWidget(&objectPlayback);
+        exportPose.Create("Export current pose as static GLB...");
+        exportPose.SetTooltip("Save this frame as a new model. Open the GLB in Static Model to add it to your library.");
+        exportPose.OnClick([this](const auto&) {
+            if (!app.modelImportPreview_ || !app.modelImportCandidate_) return;
+            const int clip=app.modelImportClip_.GetSelected()-1;
+            const float time=app.modelImportPreview_->ClipTime();
+            const auto generation=app.modelImportGeneration_;
+            wi::helper::FileDialogParams dialog;
+            dialog.type=wi::helper::FileDialogParams::SAVE;
+            dialog.description="Save static pose";dialog.extensions={"glb"};
+            wi::helper::FileDialog(dialog,[this,clip,time,generation](const std::string& path){
+                wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,clip,time,generation,path](uint64_t){
+                    if (path.empty() || generation!=app.modelImportGeneration_ || !app.modelImportCandidate_) return;
+                    std::string error;
+                    if(!bridge::ModelImportCandidateService().ExportStaticPose(*app.modelImportCandidate_,clip,time,app.importTransform_,app.modelImportProjectId_,path,error))
+                        app.ShowStudioMessageBox(error,"Export static pose");
+                    else app.studioChrome_.SetStatusText("STATIC POSE SAVED // "+path);
+                });
+            });
+        });
+        app.modelImportPanel_.AddWidget(&exportPose);
+        placeOnFloor.Create("Place base on floor");
+        placeOnFloor.OnClick([this](const auto&) {
+            if (!app.modelImportPreview_) return;
+            const float y = app.importTransform_.positionY - app.modelImportPreview_->ReferenceBaseHeight();
+            app.importTransformFields_[4].SetValue(y);
+            app.ApplyImportTransform();
+        });
+        app.modelImportPanel_.AddWidget(&placeOnFloor);
         panel.Create("Material properties",wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
         app.modelImportPanel_.AddWidget(&panel);
         auto add=[&](auto& widget,const char* text){widget.Create(text);panel.AddWidget(&widget);};
@@ -230,7 +296,7 @@ struct StudioRenderPath::ImportMaterials {
         add(alpha,"Alpha mode");for(auto l:{"Opaque","Cutout","Blended"})alpha.AddItem(l);
         alpha.OnSelect([this](auto a){edit([&](State& s){s.mat.userBlendMode=a.iValue==2?wi::enums::BLENDMODE_ALPHA:wi::enums::BLENDMODE_OPAQUE;s.mat.alphaRef=a.iValue==1?.5f:1.f;});});
         add(sides,"Double-sided");sides.OnClick([this](auto a){edit([&](State& s){s.mat.SetDoubleSided(a.bValue);});});
-        for(int i=0;i<6;++i){
+        for(int i=0;i<std::size(values);++i){
             sliders[i].Create(0,maxima[i],0,1000,values[i]);panel.AddWidget(&sliders[i]);
             sliders[i].valueInputField.SetFloatPrecision(3);
             sliders[i].OnSlide([this,i](auto a){
@@ -241,7 +307,11 @@ struct StudioRenderPath::ImportMaterials {
                 switch(i){case 0:m.normalMapStrength=v;break;case 1:m.roughness=v;break;case 2:m.metalness=v;break;
                     case 3:m.reflectance=v;break;case 4:m.SetEmissiveStrength(v);
                     if(v>0&&m.emissiveColor.x==0&&m.emissiveColor.y==0&&m.emissiveColor.z==0)m.emissiveColor={1,1,1,v};break;
-                    case 5:m.alphaRef=1-std::max(1.f/256,v);break;}
+                    case 5:m.alphaRef=1-std::max(1.f/256,v);break;
+                    case 6:m.baseColor.w=v;break;
+                    case 7:m.baseColor.x=v;break;
+                    case 8:m.baseColor.y=v;break;
+                    case 9:m.baseColor.z=v;break;}
                 s.edited=true;apply(index());
             });
         }
@@ -262,13 +332,13 @@ struct StudioRenderPath::ImportMaterials {
             bool on=r==Packed?packed:r==Rough||r==Metal||r==AO?!packed:true;
             thumbs[r].SetVisible(on);names[r].SetVisible(on&&r!=Extra);files[r].SetVisible(on);clear[r].SetVisible(on);
             if(!on)continue;
-            box(thumbs[r],3,y,31,31);box(names[r],40,y,119,31);box(files[r],162,y,w-194,31);box(clear[r],w-29,y,28,31);
-            if(r==Extra)box(extra,40,y,119,31);y+=35;
+            box(thumbs[r],3,y,31,31);box(names[r],40,y,132,31);box(files[r],182,y,w-214,31);box(clear[r],w-29,y,28,31);
+            if(r==Extra)box(extra,40,y,132,31);y+=35;
         }
         for(int c=0;c<3;++c){channels[c].SetVisible(packed);box(channels[c],52+c*w/3,y,w/3-55,24);}
         if(packed)y+=30;
         box(colour,3,y,w-3,25);y+=30;box(valueHeading,3,y,w-3,23);y+=29;
-        for(int i=0;i<6;++i){if(i==5)continue;box(sliders[i],143,y,w-206,17);y+=28;}
+        for(int i=0;i<std::size(values);++i){if(i==5)continue;box(sliders[i],143,y,w-206,17);y+=28;}
         box(alpha,110,y,w-110,24);y+=31;
         bool cut=valid()&&current().mat.IsAlphaTestEnabled();
         sliders[5].SetVisible(cut);if(cut){box(sliders[5],143,y,w-206,17);y+=26;}
@@ -287,8 +357,8 @@ struct StudioRenderPath::ImportMaterials {
         for(int c=0;c<3;++c)channels[c].SetSelectedWithoutCallback(s.channel[c]);
         sides.SetCheck(s.mat.IsDoubleSided());
         alpha.SetSelectedWithoutCallback(s.mat.userBlendMode!=wi::enums::BLENDMODE_OPAQUE?2:s.mat.IsAlphaTestEnabled()?1:0);
-        float v[]={s.mat.normalMapStrength,s.mat.roughness,s.mat.metalness,s.mat.reflectance,s.mat.GetEmissiveStrength(),1-s.mat.alphaRef};
-        for(int i=0;i<6;++i){sliders[i].SetRange(0,maxima[i]);sliders[i].SetValue(v[i]);}
+        float v[]={s.mat.normalMapStrength,s.mat.roughness,s.mat.metalness,s.mat.reflectance,s.mat.GetEmissiveStrength(),1-s.mat.alphaRef,s.mat.baseColor.w,s.mat.baseColor.x,s.mat.baseColor.y,s.mat.baseColor.z};
+        for(int i=0;i<std::size(values);++i){sliders[i].SetRange(0,maxima[i]);sliders[i].SetValue(v[i]);}
         colour.SetText(alphaView?"Thumbnail preview: Alpha":"Thumbnail preview: Colour");
         back.SetEnabled(!undo.empty());forward.SetEnabled(!redo.empty());arrange();
     }

@@ -1,3 +1,4 @@
+#include "json.hpp"
 #include "renegade/bridge/ParticleEffectRuntimeDependencies.h"
 #include "renegade/bridge/TestLevelLaunchTiming.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
@@ -16,6 +17,7 @@
 #include "renegade/bridge/PlayerPrefabService.h"
 #include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/EquipmentAssetService.h"
+#include "renegade/bridge/WeaponLoadout.h"
 #include "renegade/bridge/ProjectileAssetService.h"
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/ResourceAssetDependencyService.h"
@@ -755,7 +757,43 @@ namespace
             fs::copy_options::overwrite_existing, ec);
         if (ec) { error = "Could not snapshot equipment registry: " + ec.message(); return false; }
         std::unordered_set<StableId> copied;
-        for (const auto& id : {settings.primaryEquipmentAssetId, settings.offHandEquipmentAssetId})
+        auto slots=ReadWeaponSlots(fs::u8path(project.rootPath),settings.primaryEquipmentAssetId);
+        std::vector<StableId> ids={settings.primaryEquipmentAssetId,settings.offHandEquipmentAssetId};
+        auto copyLoadoutFile=[&](const fs::path& path){
+            const auto src=ResolveDependencyPath(project.rootPath,path.generic_u8string());
+            if(!src.accepted || !src.exists){error="Missing loadout file: "+path.generic_u8string();return false;}
+            const auto dest=fs::u8path(snapshot.sessionDirectory)/path;
+            fs::create_directories(dest.parent_path(),ec);
+            if(!ec)fs::copy_file(src.absolutePath,dest,fs::copy_options::overwrite_existing,ec);
+            if(ec)error=ec.message();
+            return !ec;
+        };
+        if(IsValidStableId(settings.primaryEquipmentAssetId)){
+            const auto path=WeaponLoadoutPath(settings.primaryEquipmentAssetId);
+            if(fs::exists(fs::u8path(project.rootPath)/path) && !copyLoadoutFile(path))return false;
+        }
+        std::set<fs::path> shotResources;
+        for(const auto& slot:slots){
+            ids.push_back(slot.equipment);
+            if(slot.setup.empty())continue;
+            auto path=fs::u8path(slot.setup);
+            if(!copyLoadoutFile(path))return false;
+            std::ifstream input(fs::u8path(project.rootPath)/path);
+            auto doc=nlohmann::json::parse(input,nullptr,false);if(!doc.is_object())continue;
+            if(doc.contains("barrelEffects"))for(auto& effect:doc["barrelEffects"])if(effect.contains("file")&&effect["file"].is_string())shotResources.insert(fs::u8path(effect["file"].get<std::string>()));
+            auto sound=doc.value("shotSound",std::string{});if(!sound.empty())shotResources.insert(fs::u8path(sound));
+            if(doc.contains("animationSounds"))for(auto& clip:doc["animationSounds"])
+                for(auto& cue:clip)if(cue.is_array()&&cue.size()==2&&cue[1].is_string())shotResources.insert(fs::u8path(cue[1].get<std::string>()));
+            if(doc.contains("casingPreview")){auto m=doc["casingPreview"].value("model",std::string{});if(!m.empty())shotResources.insert((path.parent_path()/fs::u8path(m)).lexically_normal());}
+            if(doc.contains("muzzleFlashPreview")){
+                const char* flash[]={"Compact.png","Star.png","Long.png"};auto texture=fs::path("Content/Player/WeaponFX")/flash[std::clamp(doc["muzzleFlashPreview"].value("style",0),0,2)];
+                auto custom=doc["muzzleFlashPreview"].value("texture",std::string{});
+                if(!custom.empty())shotResources.insert(fs::u8path(custom));
+                else if(fs::exists(fs::u8path(project.rootPath)/texture))shotResources.insert(texture);
+            }
+        }
+        for(const auto& resource:shotResources)if(!IsSafeSnapshotContentPath(resource)||!copyLoadoutFile(resource))return false;
+        for (const auto& id : ids)
         {
             if (id.empty() || !copied.insert(id).second) continue;
             EquipmentAssetDocument document;

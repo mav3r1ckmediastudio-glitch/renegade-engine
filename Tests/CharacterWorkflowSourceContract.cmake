@@ -49,8 +49,10 @@ require_text(recipe_source
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/UnifiedImportWorkspace.inc" workspace)
 require_text(workspace "evidence.skinnedMeshes && evidence.armatureBones" "rig requirement")
 require_text(studio_source "request.characterAsset = importWorkflow_ == ImportWorkflow::Character;" "explicit classification")
-require_text(workspace "modelImportAction_.SetVisible(actions && character);" "semantic assignment")
-require_text(workspace "modelImportAddAnimation_.SetVisible(actions && character);" "external animation authoring")
+file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/CharacterActionEntries.inc" entries)
+require_text(entries "w.type.SetVisible(i<count && importWorkflow_ == ImportWorkflow::Character);" "semantic assignment")
+require_text(workspace "const bool clipEntries = actions && (character || importWorkflow_ == ImportWorkflow::Animated);" "shared clip authoring workflows")
+require_text(workspace "modelImportAddAnimation_.SetVisible(clipEntries);" "external animation authoring")
 
 # The commit service is the durable authority. It maps the detected request to
 # recipe kind and stores semantic animation actions on native clip metadata.

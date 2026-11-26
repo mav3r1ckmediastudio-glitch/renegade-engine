@@ -337,6 +337,7 @@ namespace renegade::studio
             TestLevelStop,
             BuildWindowsGame,
             ToggleAssistant,
+            OpenWeaponEditor,
         };
 
         struct HierarchyRow

@@ -333,6 +333,42 @@ bool ModelImportCandidateService::EditMappedClip(ModelImportCandidate& candidate
     dst.animations.Create(result)=std::move(merged);
     dst.names.Create(result).name=label;
     for(const auto& sampler:dst.animations.GetComponent(result)->samplers) dst.Component_Attach(sampler.data,result);
+    return CommitBakedSkeleton(candidate,dst,replaceIndex,error);
+}
+
+#include "ClipJointPin.inc"
+#include "ClipFloor.inc"
+
+bool ModelImportCandidateService::PinBakedClip(ModelImportCandidate& candidate,int clipIndex,
+    const ClipJointPin& pin,std::string& error) const
+{
+    for(const auto& entry:candidate.externalAnimations_){
+        if(entry.firstAnimationIndex!=size_t(clipIndex) || entry.animationCount!=1)continue;
+        const auto& snapshot=candidate.dependencies_.at(entry.dependencyIndex);
+        if(fs::path(snapshot.retainedRelativePath).extension()!=".wiscene")continue;
+        wi::scene::Scene scene;
+        wi::Archive input(snapshot.bytes.data(),snapshot.bytes.size());
+        scene.Serialize(input);
+        if(scene.animations.GetCount()!=1){error="Invalid baked skeleton.";return false;}
+        auto transforms=scene.transforms.GetComponentArray();
+        const auto original=scene.animations[0];
+        if(pin.floorOffsets.empty()){if(!BakeJointPin(scene,pin,error))return false;}
+        else if(!ApplyClipFloor(scene,pin,error))return false;
+        for(size_t i=0;i<transforms.size();++i)scene.transforms[i]=transforms[i];
+        auto channels=std::move(scene.animations[0].channels);
+        auto samplers=std::move(scene.animations[0].samplers);
+        scene.animations[0]=original;
+        scene.animations[0].channels=std::move(channels);
+        scene.animations[0].samplers=std::move(samplers);
+        return CommitBakedSkeleton(candidate,scene,clipIndex,error);
+    }
+    error="Select a baked retargeted clip.";return false;
+}
+
+bool ModelImportCandidateService::CommitBakedSkeleton(ModelImportCandidate& candidate,wi::scene::Scene& dst,int replaceIndex,std::string& error) const
+{
+    using namespace wi::scene;
+    using wi::ecs::Entity;
     wi::Archive retained; dst.Serialize(retained);
     wi::vector<uint8_t> bytes;retained.WriteData(bytes);
     ModelImportDependency snapshot;

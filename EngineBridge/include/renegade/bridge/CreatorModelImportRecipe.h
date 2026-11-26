@@ -41,6 +41,9 @@ namespace renegade::bridge
         float emissiveStrength = 0.0f;
     };
 
+    enum class ModelClipStart : std::uint8_t { Legacy, Wait, Loop, Once };
+    inline constexpr const char* ModelClipStartKey = "renegade.model.clip_start";
+
     struct CreatorAnimationImportRecipe
     {
         std::uint32_t sourceAnimationIndex = 0;
@@ -51,6 +54,7 @@ namespace renegade::bridge
         // Empty means a legacy recipe. New Characters assign an action explicitly.
         std::string action;
         bool enabled = true;
+        ModelClipStart modelStart = ModelClipStart::Legacy;
     };
 
     // External clips are project-governed import provenance. They deliberately
@@ -68,6 +72,7 @@ namespace renegade::bridge
         bool enabled = true;
         bool autoMapSource = false;
         bool matchingRig = false;
+        ModelClipStart modelStart = ModelClipStart::Legacy;
         std::string action;
         float speed = 1.0f;
     };

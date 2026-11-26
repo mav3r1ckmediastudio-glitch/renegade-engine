@@ -1,3 +1,5 @@
+#include "RuntimeWeaponEffects.h"
+#include "renegade/bridge/WeaponLoadout.h"
 #include "RuntimeGameplayAttributeWorld.h"
 #pragma once
 
@@ -382,5 +384,24 @@ namespace renegade::runtime
         bool characterSceneSyncFailed_ = false;
         std::uint64_t scriptSceneRevision_ = 0;
         std::size_t reportedScriptDiagnostics_ = 0;
+        std::vector<bridge::WeaponSlot> weaponSlots_;
+        std::vector<std::string> slotNames_;
+        std::vector<int> slotAmmo_;
+        size_t activeWeaponSlot_=0;
+        wi::unordered_set<wi::ecs::Entity> ownedViewEntities_;
+        RuntimeWeaponEffects weaponEffects_;
+        struct PreparedWeaponSlot {
+            RuntimeShotProfile shotProfile;
+            RuntimePlayerViewRigState rig;
+            RuntimePlayerViewAnimationState animation;
+            RuntimeEquipmentLoadout equipment;
+            wi::unordered_set<wi::ecs::Entity> entities;
+            std::vector<std::pair<wi::ecs::Entity, wi::scene::ObjectComponent>> parkedObjects;
+            bool ready = false;
+        };
+        std::vector<PreparedWeaponSlot> preparedWeapons_;
+        void SelectWeaponSlot(size_t);
+        void ApplyWeaponMaterials(const std::string&);
+
     };
 }

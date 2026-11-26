@@ -11,7 +11,8 @@ void StudioRenderPath::ReplayMapEdit(bool redo)
     mapReplaying_=true;
     auto& swap=mapHistory_[redo?mapCursor_++:--mapCursor_];swap();
     mapReplaying_=false;
-    if(!mappedTakes_.empty() && mappedTakes_.count(rtClip_.GetSelected()) && mappedTakes_.at(rtClip_.GetSelected()).clip>=0)
+    if(importMaterials_->pin.historyRestored)importMaterials_->pin.historyRestored=false;
+    else if(!mappedTakes_.empty() && mappedTakes_.count(rtClip_.GetSelected()) && mappedTakes_.at(rtClip_.GetSelected()).clip>=0)
         WriteMappedTake(false);
     SelectMapTarget(mapTargetIndex_);RefreshMapRows();LayoutImportWorkspace();
 }
