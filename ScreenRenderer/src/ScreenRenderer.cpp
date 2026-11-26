@@ -146,6 +146,7 @@ namespace
         float scaleX = 1.0f;
         float scaleY = 1.0f;
         bool keyboardFocused = false;
+        ScreenInteractionState previewState = ScreenInteractionState::Normal;
         renegade::bridge::ScreenAccessibilitySettings accessibility;
         bool hasClip = false;
         renegade::bridge::ScreenRect clip;
@@ -280,6 +281,7 @@ namespace
             if (renegade::bridge::IsScreenInteractive(authored.kind) &&
                 !authored.enabled)
                 return ScreenInteractionState::Disabled;
+            if (previewState != ScreenInteractionState::Normal) return previewState;
             if (GetState() == wi::gui::ACTIVE)
                 return ScreenInteractionState::Pressed;
             if (GetState() == wi::gui::FOCUS)
@@ -1204,6 +1206,12 @@ namespace renegade::screen
     bool ScreenRenderer::IsInputEnabled() const noexcept
     {
         return impl_->inputEnabled;
+    }
+
+    void ScreenRenderer::PreviewWidgetAppearance(const bridge::StableId& widgetId, ScreenInteractionState state)
+    {
+        if (const auto found = impl_->byId.find(widgetId); found != impl_->byId.end())
+            found->second->previewState = state;
     }
 
     void ScreenRenderer::SetFocusedWidget(const bridge::StableId& widgetId)

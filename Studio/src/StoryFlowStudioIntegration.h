@@ -292,6 +292,15 @@ namespace renegade::studio
                         error.clear();
                         return true;
                     });
+                screenEditor.OnDestinationName([this](const std::string& action) -> std::string {
+                    if (!authoringSession_.IsLoaded()) return {};
+                    const auto& flow = authoringSession_.Document();
+                    for (const auto& route : flow.routes)
+                        if (route.sourceNodeId == screenEditorHandoff_.screenNodeId && route.outcome == action)
+                            for (const auto& node : flow.nodes)
+                                if (node.id == route.destinationNodeId) return node.name;
+                    return {};
+                });
                 screenEditor.OnOpenScreenRoute(
                     [this, &storyFlow](const bridge::ScreenDocument& screen,
                         const bridge::StableId& buttonId,

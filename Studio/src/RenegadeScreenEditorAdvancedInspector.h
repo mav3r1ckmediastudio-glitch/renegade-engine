@@ -455,6 +455,17 @@ namespace renegade::studio
         }
 
 
+        void OpenBasicButtonState(unsigned state, bool colour)
+        {
+            if (!session_ || !workspace_ || state > 2) return;
+            selectedId_ = workspace_->SelectedWidgetId();
+            if (!Selected() || Selected()->kind != bridge::ScreenWidgetKind::Button) return;
+            state_ = static_cast<VisualState>(state);
+            RefreshFromSelection(true);
+            if (colour) OpenStateColor(ColorTarget::Background, true);
+            else OpenStateImagePicker();
+        }
+
         void OpenAppearanceForSelection()
         {
             if (!session_ || !workspace_) return;
@@ -1394,7 +1405,7 @@ namespace renegade::studio
                 });
         }
 
-        void OpenStateColor(const ColorTarget target)
+        void OpenStateColor(const ColorTarget target, bool commitImmediately = false)
         {
             const auto* widget = Selected();
             if (!widget) return;
@@ -1430,7 +1441,7 @@ namespace renegade::studio
             const auto screenId = session_->Document().envelope.documentId;
             const auto visualState = state_;
             colorPicker_.Open(title, value,
-                [this, target, widgetId, screenId, visualState](const bridge::ScreenColor& color)
+                [this, target, widgetId, screenId, visualState, commitImmediately](const bridge::ScreenColor& color)
                 {
                     if (!session_ || !session_->IsLoaded() || selectedId_ != widgetId ||
                         session_->Document().envelope.documentId != screenId ||
@@ -1460,6 +1471,7 @@ namespace renegade::studio
                         draftStyle_.text.shadowColor = color;
                         shadowColorInput_.SetValue(ColorText(color));
                     }
+                    if (commitImmediately) CommitCreatorEdit(CurrentCreatorEdit(), "BUTTON COLOUR UPDATED");
                 });
         }
 

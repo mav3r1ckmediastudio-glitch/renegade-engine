@@ -54,7 +54,10 @@ namespace
             group.anchors={.06f,choices.size()<=2?.72f:.36f,.94f,.94f,0,0,0,0};
             group.container.mode=ScreenChildLayout::Grid;group.container.columns=2;
             group.container.padding=4;group.container.gap=12;
-            const auto parent=group.id;d.widgets.push_back(group);
+            const bool freePause = name == "Pause";
+            const auto parent=group.id;
+            if (!freePause) d.widgets.push_back(group);
+            size_t index = 0;
             for(const auto& choice:choices)
             {
                 bool declared=false;for(const auto& action:d.actions)declared|=action.id==choice.action;
@@ -62,6 +65,12 @@ namespace
                 ScreenWidget button;button.id=GenerateStableId();button.kind=ScreenWidgetKind::Button;
                 button.name=choice.label;button.text=choice.label;button.actionId=choice.action;
                 button.enabled=choice.enabled;button.parentId=parent;button.rect={0,0,300,64};
+                if (freePause)
+                {
+                    button.parentId.clear();
+                    button.rect = {(d.designWidth - 360.0f) * 0.5f,
+                        256.0f + static_cast<float>(index++) * 80.0f, 360.0f, 64.0f};
+                }
                 button.style=MakeScreenWidgetStyleTemplate(button.kind,64);
                 button.style.text.fontSize=20;button.style.text.wrap=true;
                 if(choice.enabled)d.focusOrder.push_back(button.id);

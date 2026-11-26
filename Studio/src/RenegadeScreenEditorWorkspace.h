@@ -31,6 +31,11 @@ namespace renegade::studio
     {
     public:
         void Create();
+        screen::ScreenInteractionState BasicPreviewState() const noexcept
+        {
+            if (stateOwner_ != selectedWidgetId_ || inspectorSuppressed_) return screen::ScreenInteractionState::Normal;
+            return static_cast<screen::ScreenInteractionState>(basicState_);
+        }
         void SetLayout(float width, float height);
         void Bind(
             bridge::ScreenAuthoringSession* session,
@@ -114,6 +119,8 @@ namespace renegade::studio
             const bridge::ScreenDocument&, const bridge::StableId&,
             const bridge::StableId&, bool&, std::string&)>;
         void OnOpenScreenRoute(OpenScreenRouteCallback callback);
+        void OnDestinationName(std::function<std::string(const std::string&)> callback) { destinationName_ = std::move(callback); }
+        void OnEditButtonState(std::function<void(unsigned, bool)> callback) { editState_ = std::move(callback); }
         using RouteHistoryCallback = std::function<bool(bool undo, std::string&)>;
         void OnRouteHistoryAction(RouteHistoryCallback callback);
         using CoordinatedSaveCallback = std::function<bool(
@@ -210,7 +217,7 @@ namespace renegade::studio
         void RedoScreen();
         void ToggleVisible();
         void ToggleEnabled();
-        void CreateElement(bridge::ScreenWidgetKind kind, bool background);
+        void CreateElement(bridge::ScreenWidgetKind kind, bool background, const XMFLOAT4* drop = nullptr);
         void DuplicateSelectedWidget();
         void DeleteSelectedWidget();
         void MoveSelectedWidgetToBack();
@@ -341,7 +348,15 @@ namespace renegade::studio
         RenegadeButton imageAssetButton_;
         RenegadeButton progressFrameButton_;
         RenegadeButton progressFillButton_;
+        bool paletteButtonPending_ = false;
+        XMFLOAT4 palettePress_ = {};
         RenegadeButton appearanceButton_;
+        RenegadeButton stateTabs_[3];
+        RenegadeButton stateImage_, stateColour_;
+        unsigned basicState_ = 0;
+        bridge::StableId stateOwner_;
+        std::function<void(unsigned, bool)> editState_;
+        std::function<std::string(const std::string&)> destinationName_;
         RenegadeButton basicActionButton_;
         RenegadeScreenChoicePicker basicActionPicker_;
         RenegadeButton destinationButton_;

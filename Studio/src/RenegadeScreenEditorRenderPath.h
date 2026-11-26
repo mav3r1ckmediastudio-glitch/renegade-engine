@@ -53,6 +53,9 @@ namespace renegade::studio
             {
                 previewDirty_ = true;
             });
+            workspace_.OnEditButtonState([this](unsigned state,bool colour) {
+                advancedInspector_.OpenBasicButtonState(state,colour);
+            });
             workspace_.OnAppearanceRequested([this]()
             {
                 advancedInspector_.OpenAppearanceForSelection();
@@ -185,6 +188,11 @@ namespace renegade::studio
                     workspace_.ReportPreviewRecovered();
                 }
             }
+            const auto& selection = workspace_.SelectedWidgetId();
+            if (appearancePreviewId_ != selection)
+                renderer_.PreviewWidgetAppearance(appearancePreviewId_, screen::ScreenInteractionState::Normal);
+            appearancePreviewId_ = selection;
+            renderer_.PreviewWidgetAppearance(selection, workspace_.BasicPreviewState());
             advancedInspector_.ApplySimulationPreview(renderer_);
             advancedInspector_.TickAnimationPreview(dt);
             renderer_.SetAnimationPreview(advancedInspector_.AnimationPreview());
@@ -353,6 +361,9 @@ namespace renegade::studio
             workspace_.OnOpenProjectScreen(std::move(callback));
         }
 
+        void OnDestinationName(std::function<std::string(const std::string&)> callback) {
+            workspace_.OnDestinationName(std::move(callback));
+        }
         void OnOpenScreenRoute(
             RenegadeScreenEditorWorkspace::OpenScreenRouteCallback callback)
         {
@@ -513,6 +524,7 @@ namespace renegade::studio
         bool loaded_ = false;
         bool open_ = false;
         bool standaloneEditing_ = false;
+        bridge::StableId appearancePreviewId_;
         bool previewDirty_ = false;
         bool previewSourceConflict_ = false;
         bool advancedExpanded_ = false;

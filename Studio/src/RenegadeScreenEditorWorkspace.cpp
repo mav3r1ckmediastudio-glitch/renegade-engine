@@ -1,4 +1,5 @@
 #include "RenegadeScreenEditorWorkspace.h"
+#include <cstdio>
 #include "StudioTheme.h"
 #include "StoryFlowOverviewPolicy.h"
 #include "ScreenCanvasGrid.h"
@@ -133,6 +134,8 @@ namespace renegade::studio
         renderer_ = renderer;
         selectedWidgetId_.clear();
         selectedWidgetIds_.clear();
+        paletteButtonPending_ = false;
+        stateOwner_.clear();
         inventoryElementMode_=false;
         camera_.Reset();
         cameraPanning_ = false;
@@ -684,6 +687,17 @@ namespace renegade::studio
         inventoryButton_.OnClick([this](const wi::gui::EventArgs&){
             inventoryElementMode_=false;basicActionPicker_.Close();destinationPicker_.Close();
         });
+        const char* labels[] = {"Normal", "Hover", "Pressed"};
+        for (unsigned i = 0; i < 3; ++i)
+        {
+            stateTabs_[i].Create(std::string("Button appearance ") + labels[i]);
+            stateTabs_[i].SetText(labels[i]);
+            stateTabs_[i].OnClick([this,i](const wi::gui::EventArgs&) { basicState_ = i; });
+        }
+        stateImage_.Create("Button state artwork");
+        stateImage_.OnClick([this](const wi::gui::EventArgs&) { if (editState_) editState_(basicState_, false); });
+        stateColour_.Create("Button state colour");
+        stateColour_.OnClick([this](const wi::gui::EventArgs&) { if (editState_) editState_(basicState_, true); });
         appearanceButton_.Create("Screen Editor Appearance Inspector");
         appearanceButton_.SetText("STYLE / FONT");
         appearanceButton_.SetTooltip(
@@ -817,6 +831,11 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&gridSnapButton_),
                 static_cast<wi::gui::Widget*>(&gridSpacingInput_),
                 static_cast<wi::gui::Widget*>(&toolboxSearchInput_),
+                static_cast<wi::gui::Widget*>(&stateTabs_[0]),
+                static_cast<wi::gui::Widget*>(&stateTabs_[1]),
+                static_cast<wi::gui::Widget*>(&stateTabs_[2]),
+                static_cast<wi::gui::Widget*>(&stateImage_),
+                static_cast<wi::gui::Widget*>(&stateColour_),
                 static_cast<wi::gui::Widget*>(&appearanceButton_),
                 static_cast<wi::gui::Widget*>(&imageAssetButton_),
                 static_cast<wi::gui::Widget*>(&progressFrameButton_),
@@ -958,6 +977,15 @@ namespace renegade::studio
             inspectorX + std::max(0.0f, fieldWidth - 112.0f),
             HeaderHeight + 37.0f));
         appearanceButton_.SetSize(XMFLOAT2(112.0f, 25.0f));
+        const float tabWidth = (fieldWidth - 8.0f)/3;
+        for (unsigned i = 0; i < 3; ++i)
+        {
+            stateTabs_[i].SetPos({inspectorX+i*(tabWidth+4), HeaderHeight+383});
+            stateTabs_[i].SetSize({tabWidth, 27});
+        }
+        pair(stateImage_,stateColour_,HeaderHeight+414);
+        if (graphicTarget && graphicTarget->kind == bridge::ScreenWidgetKind::Button)
+            full(basicActionButton_,HeaderHeight+449,30);
         full(destinationButton_, HeaderHeight + 493.0f, 32.0f);
         full(deleteButton_, HeaderHeight + 560.0f, 31.0f);
         full(duplicateButton_, HeaderHeight + 602.0f, 31.0f);
@@ -1027,7 +1055,25 @@ namespace renegade::studio
             (selected->kind == bridge::ScreenWidgetKind::Button || (dialogue && selected->kind == bridge::ScreenWidgetKind::Text)) &&
             !inspectorSuppressed_;
         basicActionButton_.SetVisible(actionReady && !focusCanvas_ && !rightCollapsed_);
-        imageAssetButton_.SetVisible(selectedReady && !focusCanvas_ && !rightCollapsed_ &&
+        const bool button = selectedReady && selected->kind == bridge::ScreenWidgetKind::Button;
+        const bool showStates = button && !inspectorSuppressed_ && !focusCanvas_ && !rightCollapsed_ && !InventoryInspectorActive();
+        if (stateOwner_ != selectedWidgetId_) { stateOwner_ = selectedWidgetId_; basicState_ = 0; }
+        for (unsigned i=0; i<3; ++i)
+        {
+            stateTabs_[i].SetVisible(showStates);
+            stateTabs_[i].SetAccentOutlineStyle(i==basicState_);
+        }
+        stateImage_.SetVisible(showStates);
+        stateColour_.SetVisible(showStates);
+        if (showStates)
+        {
+            const auto& v = basicState_ == 0 ? selected->style.normal : basicState_ == 1 ? selected->style.hover : selected->style.pressed;
+            stateImage_.SetText(v.imageResourcePath.empty() ? "Choose image..." : "Change image...");
+            char colour[32];
+            std::snprintf(colour,sizeof(colour),"Colour #%02X%02X%02X",unsigned(v.background.red), unsigned(v.background.green), unsigned(v.background.blue));
+            stateColour_.SetText(colour);
+        }
+        imageAssetButton_.SetVisible(!button && selectedReady && !focusCanvas_ && !rightCollapsed_ &&
             !inspectorSuppressed_);
         const bool progressArtworkReady = selectedReady &&
             selected->kind == bridge::ScreenWidgetKind::Progress &&
@@ -1048,10 +1094,11 @@ namespace renegade::studio
             static_cast<bool>(openScreenRoute_));
         const bool hasContext = loaded && std::any_of(projectScreens_.begin(),projectScreens_.end(),[&](const auto& e){return e.available&&!e.nodeId.empty()&&e.documentId==session_->Document().envelope.documentId;});
         destinationButton_.SetEnabled(actionReady&&hasContext);
-        destinationButton_.SetText(hasContext?"DESTINATION":"NO FLOW CONTEXT");
+        const auto destination = hasContext && actionReady && destinationName_ ? destinationName_(selected->actionId) : std::string{};
+        destinationButton_.SetText(!hasContext ? "No flow context" : destination.empty() ? "Choose destination..." : destination);
         destinationButton_.SetTooltip(hasContext?"Choose the destination in this Flow context.":"Standalone Screen: routes are disabled. Open or add an explicit Screen node in Journey first.");
         if (actionReady)
-            basicActionButton_.SetText(dialogue ? "ROLE: " + (selected->dialogueRole.empty()?std::string("DECORATION"):selected->dialogueRole) : "ACTION: " + selected->actionId);
+            basicActionButton_.SetText(dialogue ? "ROLE: " + (selected->dialogueRole.empty()?std::string("DECORATION"):selected->dialogueRole) : "On click: " + selected->actionId);
         const bool inspectorAvailable = selectedReady && !focusCanvas_ && !rightCollapsed_ &&
             !inspectorSuppressed_;
         deleteButton_.SetVisible(inspectorAvailable &&
@@ -1125,6 +1172,11 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&gridSnapButton_),
                 static_cast<wi::gui::Widget*>(&gridSpacingInput_),
                 static_cast<wi::gui::Widget*>(&toolboxSearchInput_),
+                static_cast<wi::gui::Widget*>(&stateTabs_[0]),
+                static_cast<wi::gui::Widget*>(&stateTabs_[1]),
+                static_cast<wi::gui::Widget*>(&stateTabs_[2]),
+                static_cast<wi::gui::Widget*>(&stateImage_),
+                static_cast<wi::gui::Widget*>(&stateColour_),
                 static_cast<wi::gui::Widget*>(&appearanceButton_),
                 static_cast<wi::gui::Widget*>(&imageAssetButton_),
                 static_cast<wi::gui::Widget*>(&progressFrameButton_),
@@ -1212,6 +1264,11 @@ namespace renegade::studio
                 static_cast<const wi::gui::Widget*>(&gridSnapButton_),
                 static_cast<const wi::gui::Widget*>(&gridSpacingInput_),
                 static_cast<const wi::gui::Widget*>(&toolboxSearchInput_),
+                static_cast<const wi::gui::Widget*>(&stateTabs_[0]),
+                static_cast<const wi::gui::Widget*>(&stateTabs_[1]),
+                static_cast<const wi::gui::Widget*>(&stateTabs_[2]),
+                static_cast<const wi::gui::Widget*>(&stateImage_),
+                static_cast<const wi::gui::Widget*>(&stateColour_),
                 static_cast<const wi::gui::Widget*>(&appearanceButton_),
                 static_cast<const wi::gui::Widget*>(&imageAssetButton_),
                 static_cast<const wi::gui::Widget*>(&progressFrameButton_),
@@ -1615,7 +1672,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::CreateElement(
         const bridge::ScreenWidgetKind kind,
-        const bool background)
+        const bool background, const XMFLOAT4* drop)
     {
         if (!session_ || !session_->IsLoaded()) return;
         const auto& document = session_->Document();
@@ -1693,6 +1750,14 @@ namespace renegade::studio
 
         bridge::StableId created;
         std::string error;
+        if (drop)
+        {
+            const auto view = PreviewViewport();
+            widget.rect.x = std::clamp((drop->x-view.x)*document.designWidth/view.width-widget.rect.width/2, 0.0f, document.designWidth-widget.rect.width);
+            widget.rect.y = std::clamp((drop->y-view.y)*document.designHeight/view.height-widget.rect.height/2, 0.0f, document.designHeight-widget.rect.height);
+            if (gridSnapEnabled_ && !wi::input::Down(wi::input::KEYBOARD_BUTTON_ALT) && !wi::input::Down(wi::input::KEYBOARD_BUTTON_ALTGR))
+                widget.rect = SnapScreenGridRect(widget.rect, ScreenGridGesture::Move, static_cast<float>(gridSpacing_), document.designWidth, document.designHeight);
+        }
         const bool createdOk = kind == bridge::ScreenWidgetKind::Button
             ? session_->CreateButtonWithUniqueAction(
                 std::move(widget), created, error)
@@ -1980,6 +2045,19 @@ namespace renegade::studio
         if (!IsVisible() || !IsEnabled()) return;
         const XMFLOAT4 pointer = wi::input::GetPointer();
         const bool holdingLeft = wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
+        if (paletteButtonPending_)
+        {
+            if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE)) paletteButtonPending_ = false;
+            else if (!holdingLeft)
+            {
+                paletteButtonPending_ = false;
+                if (Contains(PreviewBounds(), pointer) && Contains(PreviewViewport(), pointer) && !Contains(MinimapBounds(), pointer))
+                    CreateElement(bridge::ScreenWidgetKind::Button, false, &pointer);
+                else if (std::abs(pointer.x-palettePress_.x)<5 && std::abs(pointer.y-palettePress_.y)<5)
+                    CreateElement(bridge::ScreenWidgetKind::Button, false);
+            }
+            return;
+        }
         if(!focusCanvas_ && pointer.y>=HeaderHeight+4 && pointer.y<=HeaderHeight+28 && wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)){
             if(pointer.x>=0&&pointer.x<=28){TogglePane(true);return;}
             if(pointer.x>=width_-28){TogglePane(false);return;}
@@ -2163,10 +2241,8 @@ namespace renegade::studio
                         HeaderHeight + 403.0f, 9, Muted, cmd);
                 if (widget->kind == bridge::ScreenWidgetKind::Button)
                 {
-                    Label("ON CLICK / SYMBOLIC ACTION", inspectorX,
-                        HeaderHeight + 403.0f, 9, Muted, cmd);
-                    Label("DESTINATION / STORYFLOW SCREEN", inspectorX,
-                        HeaderHeight + 473.0f, 9, Muted, cmd);
+                    Label("DESTINATION", inspectorX,
+                        HeaderHeight + 480.0f, 9, Muted, cmd);
                 }
             }
         }
@@ -2540,7 +2616,9 @@ namespace renegade::studio
             case ScreenToolboxAction::Text:
                 CreateElement(bridge::ScreenWidgetKind::Text, false); break;
             case ScreenToolboxAction::Button:
-                CreateElement(bridge::ScreenWidgetKind::Button, false); break;
+                paletteButtonPending_ = true;
+                palettePress_ = pointer;
+                break;
             case ScreenToolboxAction::Image:
                 CreateElement(bridge::ScreenWidgetKind::Image, false); break;
             case ScreenToolboxAction::Background:
