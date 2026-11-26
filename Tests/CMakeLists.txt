@@ -1986,6 +1986,7 @@ if(WIN32)
         ../Runtime/src/RuntimeLiveDiagnostics.cpp
         ../Runtime/src/RuntimeImpactDustResource.cpp
         ../Runtime/src/WaterfallTransparentRuntime.cpp)
+    target_include_directories(RenegadeRuntimeSceneTransitionTests PRIVATE "${CMAKE_SOURCE_DIR}/WickedEngine/Editor")
     target_link_libraries(RenegadeRuntimeSceneTransitionTests PRIVATE Renegade::RuntimeBootstrap)
     target_compile_definitions(RenegadeRuntimeSceneTransitionTests PRIVATE
         UNICODE _UNICODE
