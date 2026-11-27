@@ -1,6 +1,6 @@
 # Carousel editor uses shared Studio UI, 27 November 2026
 
-Source checkpoint: pending local commit in this correction; the exact source commit is recorded in the follow-up checkpoint below. This supersedes the separate Windows carousel dialog and the intermediate recolour. The original carousel data/playback implementation remains 1821e38918bb4369593a7cd55944091d559de63b.
+Source checkpoint: c6afbd307e85218598376fc1088c4a2bc0c8dda4 on feature/ui-loading-media. Use git show --stat for the exact implementation file list. This supersedes the separate Windows carousel dialog and the intermediate recolour. The original carousel data/playback implementation remains 1821e38918bb4369593a7cd55944091d559de63b.
 
 Replaced the dialog with a shared StudioModalWindow, shared accent-outline Renegade buttons, native list/preview, numeric duration, shuffle and a native multiline caption widget. The modal blocks underlying Screen operations and preserves native text-input ownership. File picker callbacks return through the GUI safe point with weak ownership and generation checks. Removed only the obsolete carousel dialog resource; hint editing is unchanged. The body scrolls and footer actions remain pinned.
 
