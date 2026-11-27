@@ -17,6 +17,12 @@ This roadmap separates delivered source from remaining product work.
 | Light/particle authoring | Complete picker/behaviour/texture/fields/lifetime/shapes/timing/Lua source merged in #192. | Track remaining owner/independent limits explicitly rather than calling the source a local-only candidate. |
 | General assemblies | Multi-selection and functional prefabs merged in #193 after four green candidate checks. | Large assembly stress testing, broader independent acceptance and source-linked prefab updating are separate work. |
 
+## UI Designer guidance required before release — 27 November 2026
+
+Owner requirement: add a guided UI creation wizard before Renegade releases, and provide hover tooltips with the most-used controls covered as a minimum. The proposed wizard must produce ordinary editable layers, groups and bindings so users can learn to build their own interfaces. First expose the generic construction tools that supplied prefabs depend on; use the same controls for different artwork, fill shapes and condition-driven overlays. P0 tooltip coverage includes common toolbar actions, Layers, geometry, masks/fills, bindings, Preview and reusable assets. Existing icon title tooltips are only partial coverage.
+
+See [UI Designer guidance release requirements](UI_DESIGNER_GUIDANCE_RELEASE_REQUIREMENTS.md) for the proposed workflow, tooltip priorities and acceptance checks. Status: requirements recorded; wizard implementation and complete tooltip coverage remain pending. This dated requirement does not change the historical integration baseline above.
+
 ## Next work requires a bounded brief
 
 The modular ruined castle kit can now use functional assemblies and individual
