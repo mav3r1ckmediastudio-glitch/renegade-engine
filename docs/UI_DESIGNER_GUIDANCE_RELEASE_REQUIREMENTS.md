@@ -21,6 +21,18 @@ Provide Back, Cancel and a way to skip guidance for experienced users. Reopening
 
 Expose generic layer, mask/fill, appearance/state, animation, binding and prefab controls before making a wizard that depends on them. Generic Liquid Fill creation and Progress effect/mask editing are now exposed; see SCREEN_LIQUID_FILL_AUTHORING.md. Broader appearance thresholds and animation/state authoring remain prerequisites for the corresponding wizard pages. The supplied glass/cork/metal PNG is one flattened artwork layer; the guidance must accurately describe combined artwork instead of presenting imaginary editable sublayers.
 
+## Required C++ and Lua access
+
+Owner requirement, 27 November 2026: every new UI capability must also be accessible through scripting. Basic/Advanced controls and the wizard are convenience interfaces over shared capabilities, not exclusive ways to create or change UI.
+
+- Expose creation, configuration and control of the same ordinary widgets, layers, bindings, masked fills, appearance states/thresholds, animations, sounds and reusable compositions through supported C++ and Lua APIs.
+- Runtime scripts must be able to update values, artwork/visibility, active states and animation, and receive the relevant UI events. Document each API's supported execution context; expose editor authoring through governed authoring services rather than silently persisting Runtime-only changes.
+- Wizard results use the same data and services that scripts can construct and edit. Preserve normal authoring validation and coherent Undo/Redo for editor mutations, project resource ownership, and stable instance identity/lifecycle.
+- Provide paired editor and Lua examples that create an equivalent indicator and drive it from gameplay, with C++ API references. Include custom attributes, independent instances and missing/destroyed sources.
+- Scripting access is part of each feature's acceptance, not a later optional enhancement. Verify equivalent editor/script behaviour, documented errors and lifecycle handling, authoring save/reload, and standalone Runtime execution where applicable.
+
+This is a binding implementation requirement. It does not claim the existing generic fill controls or all planned wizard/state features already have complete C++/Lua parity; audit existing coverage and record gaps before claiming completion.
+
 ## Tooltip coverage
 
 Release minimum: cover the common authoring controls, all icon-only actions in that workflow, and fields whose meaning or effect is unclear. Audit the remaining enabled Designer controls and extend coverage as practical; existing short icon titles are not evidence of complete explanatory coverage.
