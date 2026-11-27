@@ -1,6 +1,6 @@
 # Generic RPG world navigation bar, 27 November 2026
 
-Status: owner requirement recorded; generic gameplay navigation bar and four launch appearances are not implemented or verified by this checkpoint.
+Status: generic navigation is implemented and locally verified on Windows x64 DX12 Release with neutral and supplied fantasy example appearances. Four full launch-set completion and the remaining acceptance work below are pending. See UI_WORLD_NAVIGATION_AUTHORING.md and evidence/world-navigation-2026-11-27.
 
 The owner means the horizontal in-game compass/point-of-interest strip at the top of an RPG world view. The owner will provide four full UI asset sets for launch. Build one generic navigation capability with a neutral starter appearance, with each set supplying an interchangeable visual preset. All may be customised or replaced by creators.
 
@@ -18,7 +18,7 @@ The owner means the horizontal in-game compass/point-of-interest strip at the to
 
 ## Existing asset evidence
 
-Inspected the supplied fantasy set's navigation_registry.json and gui/1x/world_compass/compass_config.json plus reference compass_math.js. It supplies 1x/2x backing/rail, bearing strip, fixed needle, direction images and fifteen POI icon categories. The registry describes fixed housing/needle and moving clipped ticks/markers, real caller-provided bearings/distances, +Z north and +X east. Reference code covers wrapped bearing deltas, projection and priority-based decluttering. This is asset/reference evidence, not native Runtime implementation proof or an audit of all four launch sets.
+Inspected the supplied fantasy set's navigation_registry.json and gui/1x/world_compass/compass_config.json plus reference compass_math.js. It supplies 1x/2x backing/rail, bearing strip, fixed needle, direction images and fifteen POI icon categories. The registry describes fixed housing/needle and moving clipped ticks/markers, real caller-provided bearings/distances, +Z north and +X east. Reference code covers wrapped bearing deltas, projection and priority-based decluttering. Native implementation evidence is now recorded separately in evidence/world-navigation-2026-11-27. This asset inspection is not an audit of all four launch sets.
 
 ## Acceptance before completion
 

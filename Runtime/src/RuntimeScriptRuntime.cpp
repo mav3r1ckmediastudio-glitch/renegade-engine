@@ -1,3 +1,4 @@
+#include "renegade/bridge/WorldNavigationService.h"
 #include "RuntimeScreenCamera.h"
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/ScreenBackgroundPanel.h"
@@ -206,6 +207,7 @@ namespace renegade::runtime
             std::unique_ptr<InventoryLuaContext> inventoryLua;
         };
 
+        bridge::WorldNavigationService navigation;
         std::unique_ptr<bridge::ParticleEffectRuntimeService> particles;
         lua_State* lua = nullptr;
         MemoryBudget memory;
@@ -841,6 +843,7 @@ namespace renegade::runtime
 
 
         #include "RuntimeParticleLua.inl"
+        #include "RuntimeNavigationLua.inl"
 
         bool IsScriptedFlightPilot(lua_State* state)
         {
@@ -1789,6 +1792,7 @@ namespace renegade::runtime
             lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,LightSetStateLua,1);lua_setfield(lua,-2,"set_state");
             lua_setfield(lua,-2,"light");
             RegisterParticleLua();
+            RegisterNavigationLua();
 
             lua_newtable(lua);
             lua_pushlightuserdata(lua, this);
@@ -2572,6 +2576,7 @@ namespace renegade::runtime
 
         void StopScene() noexcept
         {
+
             weatherTransition = bridge::WeatherTransitionController{};
             weatherTargetPreset.clear();
             weatherCompletionPending = false;
@@ -2586,6 +2591,7 @@ namespace renegade::runtime
                 projectRoot.clear();
                 running = false;
                 paused = false;
+                navigation.Reset();
                 return;
             }
             if (running)
@@ -2610,6 +2616,7 @@ namespace renegade::runtime
                 ++generation;
             running = false;
             paused = false;
+            navigation.Reset();
         }
 
         void Shutdown() noexcept
@@ -2965,5 +2972,19 @@ namespace renegade::runtime
     RuntimeScriptRuntime::Diagnostics() const noexcept
     {
         return impl_->diagnostics;
+    }
+}
+
+namespace renegade::runtime
+{
+    bridge::WorldNavigationService& RuntimeScriptRuntime::Navigation(){return impl_->navigation;}
+    void RuntimeScriptRuntime::ResolveNavigationEntities()
+    {
+        impl_->navigation.ResolveEntities([this](const std::string& id)->std::optional<bridge::NavigationPoint>{
+            if(!impl_->scene)return {};
+            RuntimeScriptEntityApi api(*impl_->scene,impl_->entitiesById,impl_->generation);XMFLOAT3 p;std::string error;
+            if(!api.GetWorldPosition({id,impl_->generation},p,error))return {};
+            return bridge::NavigationPoint{p.x,p.y,p.z};
+        });
     }
 }

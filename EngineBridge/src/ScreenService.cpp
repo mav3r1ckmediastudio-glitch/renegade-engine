@@ -1,3 +1,4 @@
+#include "ScreenNavigationSerialization.h"
 #include "renegade/bridge/ScreenService.h"
 #include "ScreenBindingPersistence.h"
 #include "renegade/bridge/AssetRegistryService.h"
@@ -451,6 +452,7 @@ namespace renegade::bridge
                     !widget.resourcePath.empty())
                     addUnique(document.imagePaths, widget.resourcePath);
                 if (widget.carousel) for (const auto& entry:widget.carousel->entries) addUnique(document.imagePaths,entry.image);
+                if(widget.navigation){auto config=*widget.navigation;for(const auto* path:NavigationResources(config))if(!path->empty())addUnique(document.imagePaths,*path);if(widget.style.text.fontResource!=BuiltinScreenFont)addUnique(document.fontPaths,widget.style.text.fontResource);}
                 if(widget.liquid)
                 {
                     addUnique(document.imagePaths,widget.liquid->mask);
@@ -1073,7 +1075,7 @@ namespace renegade::bridge
                 }
             }
 
-            if (widget.kind == ScreenWidgetKind::Text || IsScreenInteractive(widget.kind))
+            if (widget.navigation || widget.kind == ScreenWidgetKind::Text || IsScreenInteractive(widget.kind))
             {
                 const auto& text = style.text;
                 const bool builtinFont = text.fontResource == BuiltinScreenFont;
@@ -1117,6 +1119,12 @@ namespace renegade::bridge
                 { error = "Fill binding requires a Progress element."; return false; }
             }
 
+            if(widget.navigation)
+            {
+                if(document.schemaVersion<3||widget.kind!=ScreenWidgetKind::Image||!ValidateScreenNavigation(*widget.navigation,error))
+                {if(error.empty())error="Navigation requires an Image component and schema3.";return false;}
+                auto config=*widget.navigation;for(const auto* path:NavigationResources(config))if(!path->empty()&&!IsContentRelativePath(*path)){error="Navigation artwork must be project-contained.";return false;}
+            }
             if(widget.liquid)
             {
                 const auto& l=*widget.liquid;
@@ -1484,6 +1492,7 @@ namespace renegade::bridge
                     section.Set("resource", widget.resourcePath);
                     section.Set("action", widget.actionId);
                     if (widget.carouselCaption) section.Set("carousel_caption",true);
+                if(widget.navigation)detail::WriteNavigation(section,*widget.navigation);
                 if(widget.liquid)
                 {
                     const auto& l=*widget.liquid;
@@ -1871,6 +1880,11 @@ namespace renegade::bridge
                 widget.text = section.GetText("text");
                 widget.resourcePath = section.GetText("resource");
                 if (sourceSchema>=3) widget.hintListPath=section.GetText("hint_list");
+                if(section.Has("navigation_version"))
+                {
+                    if(sourceSchema<3||!detail::ReadNavigation(section,widget.navigation.emplace()))
+                    {error="Malformed world navigation component.";return false;}
+                }
                 if(section.Has("liquid_mask"))
                 {
                     if(sourceSchema<3){error="Liquid requires Screen schema 3.";return false;}

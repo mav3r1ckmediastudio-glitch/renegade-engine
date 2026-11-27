@@ -1,0 +1,25 @@
+Test project C:/Users/paulw/AppData/Local/RenegadeWork/DesignerBackground1127/BUILD/creator
+      Start 175: StudioUiPolicy
+ 1/10 Test #175: StudioUiPolicy ........................   Passed    0.02 sec
+      Start 207: RenegadeWeatherLuaRuntimeTests
+ 2/10 Test #207: RenegadeWeatherLuaRuntimeTests ........   Passed    0.02 sec
+      Start 249: RenegadeRuntimeScreenTests
+ 3/10 Test #249: RenegadeRuntimeScreenTests ............   Passed    0.04 sec
+      Start 250: RenegadeScreenRendererTests
+ 4/10 Test #250: RenegadeScreenRendererTests ...........   Passed    0.06 sec
+      Start 252: RenegadeScreenAuthoringSessionTests
+ 5/10 Test #252: RenegadeScreenAuthoringSessionTests ...   Passed    4.19 sec
+      Start 284: RenegadeScreenLibraryTests
+ 6/10 Test #284: RenegadeScreenLibraryTests ............   Passed    1.30 sec
+      Start 286: RenegadeProjectUiScaffoldTests
+ 7/10 Test #286: RenegadeProjectUiScaffoldTests ........   Passed    3.84 sec
+      Start 336: RenegadeParticleLuaTests
+ 8/10 Test #336: RenegadeParticleLuaTests ..............   Passed    0.50 sec
+      Start 350: RenegadeScreenHealthPrefabTests
+ 9/10 Test #350: RenegadeScreenHealthPrefabTests .......   Passed    1.02 sec
+      Start 351: RenegadeWorldNavigationTests
+10/10 Test #351: RenegadeWorldNavigationTests ..........   Passed    0.34 sec
+
+100% tests passed out of 10
+
+Total Test time (real) =  11.42 sec

@@ -1,3 +1,5 @@
+#include <set>
+#include "renegade/bridge/WorldNavigationService.h"
 #include <fstream>
 #include <random>
 #include "ScreenCameraFeed.h"
@@ -187,6 +189,8 @@ namespace
         std::mt19937 carouselRandom{std::random_device{}()};
         bool emptyCarouselCaption=false;
         std::optional<std::string> carouselCaptionText;
+
+        #include "ScreenNavigationDrawing.inl"
 
         wi::Resource liquidSound;
         wi::audio::SoundInstance liquidVoice;
@@ -450,6 +454,8 @@ namespace
             }
             else if (!authored.video || hideVideoForCameraOverride || transparency==renegade::bridge::VideoTransparency::Opaque) DrawSurface(image,imageRect.x,imageRect.y,imageRect.width,imageRect.height,
                 std::max(0.0f,radius-border),ToWickedColor(surfaceColor,style.opacity),cmd);
+
+            DrawNavigation(canvas,cmd,clipped,style);
 
             if (authored.kind == renegade::bridge::ScreenWidgetKind::Progress)
             {
@@ -908,6 +914,11 @@ namespace renegade::screen
         wi::gui::Window* embeddedParent=nullptr;
         std::vector<std::unique_ptr<ScreenSurface>> surfaces;
         std::unordered_map<bridge::StableId, ScreenSurface*> byId;
+        std::map<bridge::StableId,bridge::ScreenWidget> navigationOriginal;
+        std::map<bridge::StableId,bool> navigationVisibility,navigationBindingVisibility;
+        std::set<bridge::StableId> navigationDynamic;
+        std::uint64_t navigationRevision=UINT64_MAX;
+
         std::unordered_map<bridge::StableId, bridge::ScreenRect> logicalRects;
         struct ScrollThumb {bridge::StableId trackId;float position=0;float fraction=1;};
         std::unordered_map<bridge::StableId,ScrollThumb> scrollThumbs;
@@ -1080,6 +1091,7 @@ namespace renegade::screen
                 impl_->inputEnabled &&
                 bridge::IsScreenInteractive(widget.kind) && widget.enabled);
             surface->SetText(widget.text);
+            if(widget.navigation){impl_->navigationOriginal[widget.id]=widget;if(!surface->LoadNavigationArtwork(projectRoot,error)){Reset(renderPath);return false;}}
             ConfigureScreenMedia(*surface,widget,projectRoot,document.envelope.projectId);
             surface->SetShadowRadius(0.0f);
             if (widget.kind == bridge::ScreenWidgetKind::Progress)
@@ -1125,7 +1137,7 @@ namespace renegade::screen
                 surface->resources.emplace(interaction, std::move(resource));
             }
 
-            if (widget.kind == bridge::ScreenWidgetKind::Text ||
+            if (widget.navigation || widget.kind == bridge::ScreenWidgetKind::Text ||
                 bridge::IsScreenInteractive(widget.kind))
             {
                 if (widget.style.text.fontResource == bridge::BuiltinScreenFont)
@@ -1472,17 +1484,21 @@ namespace renegade::screen
     {
         const auto found = impl_->byId.find(widgetId);
         if (found == impl_->byId.end()) return;
-        if(found->second->authored.visible!=visible ||
+        if(found->second->authored.navigation)impl_->navigationBindingVisibility[widgetId]=visible;
+        const auto navVisible=impl_->navigationVisibility.find(widgetId);
+        const bool effectiveVisible=visible&&(navVisible==impl_->navigationVisibility.end()||navVisible->second);
+
+        if(found->second->authored.visible!=effectiveVisible ||
            found->second->authored.enabled!=enabled)impl_->layoutDirty=true;
         // This document is the renderer instance's transient layout source.
         // Keep it in sync, or ApplyLayout re-disables initially-disabled UP
         // buttons every frame and destroys their release-click state.
         for(auto& widget:impl_->document.widgets)if(widget.id==widgetId) {
-            widget.visible=visible;widget.enabled=enabled;break;
+            widget.visible=effectiveVisible;widget.enabled=enabled;break;
         }
-        found->second->authored.visible = visible;
+        found->second->authored.visible = effectiveVisible;
         found->second->authored.enabled = enabled;
-        found->second->SetVisible(visible);
+        found->second->SetVisible(effectiveVisible);
         found->second->SetEnabled(
             impl_->inputEnabled &&
             bridge::IsScreenInteractive(found->second->authored.kind) &&
@@ -1783,6 +1799,8 @@ namespace renegade::screen
         impl_->feedAttempted=false;
         impl_->surfaces.clear();
         impl_->byId.clear();
+        impl_->navigationVisibility.clear();impl_->navigationBindingVisibility.clear();
+        impl_->navigationOriginal.clear();impl_->navigationDynamic.clear();impl_->navigationRevision=UINT64_MAX;
         impl_->logicalRects.clear();
         impl_->scrollThumbs.clear();
         impl_->activateSink = {};
@@ -1806,5 +1824,128 @@ namespace renegade::screen
     bool ScreenRenderer::IsLoaded() const noexcept
     {
         return impl_->loaded;
+    }
+}
+
+namespace renegade::screen
+{
+    bool ScreenRenderer::PreviewNavigationDraft(const bridge::StableId& id,const bridge::ScreenNavigation& config,
+        float heading,std::string& error,const bridge::ScreenWidget* appearance)
+    {
+        const auto found=impl_->byId.find(id);
+        if(found==impl_->byId.end()||!found->second->authored.navigation||!bridge::ValidateScreenNavigation(config,error))return false;
+        auto& surface=*found->second;const auto before=surface.authored;
+        if(appearance){surface.authored.style=appearance->style;surface.authored.resourcePath=appearance->resourcePath;}
+        surface.authored.navigation=config;
+        if(!surface.LoadNavigationArtwork(impl_->projectRoot,error)){surface.authored=before;return false;}
+        if(appearance)
+        {
+            if(surface.authored.style.text.fontResource==bridge::BuiltinScreenFont)surface.fontStyle=0;
+            else {std::string absolute;if(!bridge::ResolveScreenResourcePath(impl_->projectRoot,surface.authored.style.text.fontResource,absolute,error)){surface.authored=before;return false;}surface.fontStyle=wi::font::AddFontStyle(absolute);}
+            std::map<ScreenInteractionState,wi::Resource> loaded;
+            for(auto interaction:{ScreenInteractionState::Normal,ScreenInteractionState::Hover,ScreenInteractionState::Pressed,ScreenInteractionState::Focused,ScreenInteractionState::Disabled})
+            {
+                const auto& visual=SelectVisual(surface.authored.style,interaction);const auto& path=visual.imageResourcePath.empty()?surface.authored.resourcePath:visual.imageResourcePath;wi::Resource resource;
+                if(!path.empty()){std::string absolute;if(!bridge::ResolveScreenResourcePath(impl_->projectRoot,path,absolute,error)){surface.authored=before;return false;}resource=wi::resourcemanager::Load(absolute);
+                    if(!resource.IsValid()||!resource.GetTexture().IsValid()){surface.authored=before;error="Cannot preview navigation backing.";return false;}}
+                loaded.emplace(interaction,std::move(resource));
+            }
+            surface.resources.clear();for(auto& item:loaded)surface.resources.emplace(item.first,std::move(item.second));
+        }
+        if(config.headingSource==bridge::NavigationHeadingSource::Manual)surface.authored.navigation->manualHeading=heading;
+        auto state=std::make_shared<bridge::WorldNavigationSnapshot>();
+        state->camera={true,{},heading};state->player=state->camera;
+        if(config.targets.empty())state->targets={{"sample-quest","Quest","quest","",{15,0,40},10,true},{"sample-town","Town","town","",{-25,0,60},0,true}};
+        surface.navigationSnapshot=std::move(state);surface.navigationPreview=true;error.clear();return true;
+    }
+    bool ScreenRenderer::SetNavigationState(const bridge::WorldNavigationSnapshot& state,bool includeCreated,std::string& error)
+    {
+        if(!impl_->loaded)return true;
+        if(impl_->navigationRevision!=state.revision)
+        {
+            std::map<bridge::StableId,std::unique_ptr<ScreenSurface>> prepared;
+            for(const auto& [id,view]:state.views)
+            {
+                const auto old=impl_->byId.find(id);
+                if(view.authored&&old==impl_->byId.end())continue;
+                if(!view.authored&&!includeCreated)continue;
+                auto surface=std::make_unique<ScreenSurface>();surface->Create(view.widget.name+"#"+id);
+                surface->authored=view.widget;surface->SetVisible(view.widget.visible);surface->SetEnabled(false);surface->SetShadowRadius(0);
+                bool reuse=old!=impl_->byId.end()&&old->second->authored.navigation.has_value();
+                if(reuse)
+                {
+                    const auto& a=old->second->authored;const auto& b=view.widget;
+                    reuse=a.resourcePath==b.resourcePath&&a.style.text.fontResource==b.style.text.fontResource&&
+                        a.navigation->bearingStrip==b.navigation->bearingStrip&&a.navigation->pointerImage==b.navigation->pointerImage&&a.navigation->icons==b.navigation->icons&&
+                        a.style.normal.imageResourcePath==b.style.normal.imageResourcePath&&a.style.hover.imageResourcePath==b.style.hover.imageResourcePath&&
+                        a.style.pressed.imageResourcePath==b.style.pressed.imageResourcePath&&a.style.focused.imageResourcePath==b.style.focused.imageResourcePath&&a.style.disabled.imageResourcePath==b.style.disabled.imageResourcePath;
+                }
+                if(reuse){surface->navigationArtwork=old->second->navigationArtwork;surface->resources=old->second->resources;surface->fontStyle=old->second->fontStyle;}
+                else
+                {
+                if(!surface->LoadNavigationArtwork(impl_->projectRoot,error))return false;
+                for(auto interaction:{ScreenInteractionState::Normal,ScreenInteractionState::Hover,ScreenInteractionState::Pressed,ScreenInteractionState::Focused,ScreenInteractionState::Disabled})
+                {
+                    const auto& visual=SelectVisual(view.widget.style,interaction);const auto& path=visual.imageResourcePath.empty()?view.widget.resourcePath:visual.imageResourcePath;
+                    wi::Resource resource;if(!path.empty()){std::string absolute;if(!bridge::ResolveScreenResourcePath(impl_->projectRoot,path,absolute,error))return false;
+                        resource=wi::resourcemanager::Load(absolute);if(!resource.IsValid()||!resource.GetTexture().IsValid()){error="Cannot load navigation background.";return false;}}
+                    surface->resources.emplace(interaction,std::move(resource));
+                }
+                if(view.widget.style.text.fontResource!=bridge::BuiltinScreenFont)
+                {std::string absolute;if(!bridge::ResolveScreenResourcePath(impl_->projectRoot,view.widget.style.text.fontResource,absolute,error))return false;
+                    surface->fontStyle=wi::font::AddFontStyle(absolute);if(surface->fontStyle<0){error="Cannot load navigation font.";return false;}}
+                }
+                prepared.emplace(id,std::move(surface));
+            }
+            std::vector<bridge::StableId> removed;
+            for(const auto& id:impl_->navigationDynamic)if(!prepared.count(id))removed.push_back(id);
+            for(const auto& id:removed)
+            {
+                auto* ptr=impl_->byId.at(id);auto& roots=impl_->root.surfaces;roots.erase(std::remove(roots.begin(),roots.end(),ptr),roots.end());
+                impl_->surfaces.erase(std::remove_if(impl_->surfaces.begin(),impl_->surfaces.end(),[&](const auto& p){return p.get()==ptr;}),impl_->surfaces.end());
+                auto& widgets=impl_->document.widgets;widgets.erase(std::remove_if(widgets.begin(),widgets.end(),[&](const auto& w){return w.id==id;}),widgets.end());
+                impl_->byId.erase(id);impl_->logicalRects.erase(id);impl_->navigationDynamic.erase(id);
+            }
+            for(auto& [id,surface]:prepared)
+            {
+                const auto old=impl_->byId.find(id);
+                if(old!=impl_->byId.end())
+                {
+                    old->second->authored=surface->authored;old->second->resources=std::move(surface->resources);
+                    old->second->navigationArtwork=std::move(surface->navigationArtwork);old->second->fontStyle=surface->fontStyle;
+                    for(auto& w:impl_->document.widgets)if(w.id==id){w=old->second->authored;break;}
+                }
+                else
+                {
+                    impl_->document.widgets.push_back(surface->authored);auto* ptr=surface.get();
+                    impl_->root.surfaces.push_back(ptr);impl_->byId[id]=ptr;impl_->navigationDynamic.insert(id);
+                    impl_->surfaces.push_back(std::move(surface));
+                }
+            }
+            impl_->navigationVisibility.clear();
+            for(const auto& [id,view]:state.views)if(impl_->byId.count(id))impl_->navigationVisibility[id]=view.widget.visible;
+            impl_->navigationRevision=state.revision;impl_->layoutDirty=true;
+        }
+        auto snapshot=std::make_shared<bridge::WorldNavigationSnapshot>(state);snapshot->views.clear();
+        for(auto& surface:impl_->surfaces)if(surface->authored.navigation)
+        {
+            surface->navigationSnapshot=snapshot;surface->navigationPreview=false;
+            const auto view=state.views.find(surface->authored.id);if(view==state.views.end())continue;
+            const auto& id=surface->authored.id;
+            const auto binding=impl_->navigationBindingVisibility.find(id);
+            const bool visible=view->second.widget.visible&&(!view->second.authored||binding==impl_->navigationBindingVisibility.end()||binding->second);
+            if(surface->authored.visible!=visible){surface->authored.visible=visible;for(auto& w:impl_->document.widgets)if(w.id==id){w.visible=visible;break;}impl_->layoutDirty=true;}
+            surface->SetVisible(visible);
+        }
+        error.clear();return true;
+    }
+}
+
+namespace renegade::screen
+{
+    const bridge::ScreenWidget* ScreenRenderer::NavigationPrototype(const bridge::StableId& id)const
+    {
+        const auto found=impl_->navigationOriginal.find(id);
+        return found==impl_->navigationOriginal.end()?nullptr:&found->second;
     }
 }

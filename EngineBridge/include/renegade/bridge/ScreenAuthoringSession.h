@@ -408,6 +408,9 @@ namespace renegade::bridge
             return CommitMutation(std::move(candidate),error);
         }
 
+        bool ConfigureNavigationComponent(const StableId&,const ScreenWidget&,std::string& error);
+        bool ConfigureNavigation(const StableId&,std::optional<ScreenNavigation>,std::string& error);
+        bool ApplyNavigationAppearance(const StableId&,const ScreenWidget& appearance,std::string& error);
         [[nodiscard]] bool ConfigureProgressFill(const StableId& id,
             std::optional<ScreenLiquid> liquid, ScreenColor colour,
             std::vector<ScreenBinding> bindings, ScreenFillDirection direction, std::string& error);

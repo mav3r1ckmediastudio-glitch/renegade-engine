@@ -2269,3 +2269,10 @@ target_include_directories(RenegadeScreenHealthPrefabTests PRIVATE ${PROJECT_SOU
 add_test(NAME RenegadeScreenHealthPrefabTests COMMAND RenegadeScreenHealthPrefabTests)
 set_tests_properties(RenegadeScreenHealthPrefabTests PROPERTIES TIMEOUT 30)
 add_dependencies(RenegadeBridgeTests RenegadeScreenHealthPrefabTests)
+
+add_executable(RenegadeWorldNavigationTests WorldNavigationTests.cpp)
+target_link_libraries(RenegadeWorldNavigationTests PRIVATE Renegade::RuntimeBootstrap)
+target_compile_options(RenegadeWorldNavigationTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+add_test(NAME RenegadeWorldNavigationTests COMMAND RenegadeWorldNavigationTests)
+set_tests_properties(RenegadeWorldNavigationTests PROPERTIES TIMEOUT 30)
+add_dependencies(RenegadeBridgeTests RenegadeWorldNavigationTests)

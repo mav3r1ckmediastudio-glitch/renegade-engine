@@ -489,4 +489,6 @@ add_custom_command(TARGET RenegadeStudio POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/examples"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/UI/Examples"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/docs/SCREEN_LIQUID_FILL_AUTHORING.md"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/UI/Examples/Readme.md" VERBATIM)
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/UI/Examples/Readme.md"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/docs/UI_WORLD_NAVIGATION_AUTHORING.md"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/UI/Examples/NavigationReadme.md" VERBATIM)

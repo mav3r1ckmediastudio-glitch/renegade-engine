@@ -1463,3 +1463,41 @@ namespace renegade::bridge
         return CommitMutation(std::move(candidate),error);
     }
 }
+
+namespace renegade::bridge
+{
+    bool ScreenAuthoringSession::ConfigureNavigation(const StableId& id,std::optional<ScreenNavigation> config,std::string& error)
+    {
+        if(!loaded_){error="No Screen is open.";return false;}
+        auto d=Document();auto w=std::find_if(d.widgets.begin(),d.widgets.end(),[&](const auto& item){return item.id==id;});
+        if(w==d.widgets.end()||w->kind!=ScreenWidgetKind::Image){error="Select a navigation Image layer.";return false;}
+        w->navigation=std::move(config);if(w->component)w->component->overrides|=512;
+        if(d.schemaVersion<3){d.migratedFromVersion=d.schemaVersion;d.schemaVersion=3;}
+        return CommitMutation(std::move(d),error);
+    }
+    bool ScreenAuthoringSession::ApplyNavigationAppearance(const StableId& id,const ScreenWidget& appearance,std::string& error)
+    {
+        if(!loaded_||!appearance.navigation){error="Choose a navigation appearance.";return false;}
+        auto d=Document();auto w=std::find_if(d.widgets.begin(),d.widgets.end(),[&](const auto& item){return item.id==id;});
+        if(w==d.widgets.end()||!w->navigation){error="Select a navigation layer.";return false;}
+        w->resourcePath=appearance.resourcePath;w->style=appearance.style;w->themeOverrides=63;
+        w->navigation->bearingStrip=appearance.navigation->bearingStrip;w->navigation->pointerImage=appearance.navigation->pointerImage;
+        w->navigation->icons=appearance.navigation->icons;if(w->component)w->component->overrides|=63|512;
+        return CommitMutation(std::move(d),error);
+    }
+}
+
+namespace renegade::bridge
+{
+    bool ScreenAuthoringSession::ConfigureNavigationComponent(const StableId& id,const ScreenWidget& draft,std::string& error)
+    {
+        if(!loaded_){error="No Screen is open.";return false;}
+        auto d=Document();auto w=std::find_if(d.widgets.begin(),d.widgets.end(),[&](const auto& item){return item.id==id;});
+        if(w==d.widgets.end()||w->kind!=ScreenWidgetKind::Image||!draft.navigation)
+        {error="Select a navigation Image layer.";return false;}
+        w->navigation=draft.navigation;w->resourcePath=draft.resourcePath;w->style=draft.style;w->themeOverrides=63;
+        if(w->component)w->component->overrides|=63|512;
+        if(d.schemaVersion<3){d.migratedFromVersion=d.schemaVersion;d.schemaVersion=3;}
+        return CommitMutation(std::move(d),error);
+    }
+}

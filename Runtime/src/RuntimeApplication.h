@@ -231,6 +231,7 @@ namespace renegade::runtime
         RuntimePropModelResidency propModels_;
         void RefreshUiBindingSources();
         void UpdateUiBindings();
+        void UpdateWorldNavigation();
         void UpdateLiveDiagnostics();
         std::uint64_t lastDiagnosticSampleMs_ = 0;
         std::uint64_t lastDiagnosticProjectileLaunched_ = 0;

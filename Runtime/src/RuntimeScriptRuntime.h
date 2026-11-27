@@ -1,3 +1,4 @@
+#include "renegade/bridge/WorldNavigationService.h"
 #pragma once
 
 #include "renegade/bridge/ScriptDocumentService.h"
@@ -71,6 +72,9 @@ namespace renegade::runtime
         // Bind the live gameplay state owned by RuntimeApplication. Creator
         // scripts read this state through governed player/input namespaces;
         // they never poll Wicked's global input or receive raw ECS handles.
+        bridge::WorldNavigationService& Navigation();
+        void ResolveNavigationEntities();
+
         void SetGameplayState(
             const bridge::RuntimePlayerState* player,
             const bridge::GameplayInputFrame* input) noexcept;

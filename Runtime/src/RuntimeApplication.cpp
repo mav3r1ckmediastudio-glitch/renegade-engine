@@ -1,3 +1,4 @@
+#include <set>
 #include "renegade/bridge/TerrainPropCollisionWorld.h"
 #include "renegade/bridge/ParticleEffectService.h"
 #include "../../EngineBridge/src/PlaceableWaterfallAuthoring.h"
@@ -1116,6 +1117,7 @@ namespace renegade::runtime
         }
         const auto bindingStart=std::chrono::steady_clock::now();
         UpdateUiBindings();
+        UpdateWorldNavigation();
         if(screenPresenter_->IsLoaded()||hudSession_.IsLoaded())
         {
             const auto elapsed=std::chrono::duration_cast<std::chrono::microseconds>(
@@ -1527,6 +1529,45 @@ namespace renegade::runtime
             attributeDiagnostic_=error;return;
         }
         attributeDiagnostic_.clear();
+    }
+
+    void RuntimeApplication::UpdateWorldNavigation()
+    {
+        std::string error;
+        auto& navigation=creatorScripts_.Navigation();
+        std::set<bridge::StableId> activeNavigationViews;
+        const auto collectNavigation=[&](const RuntimeScreenController& controller){for(const auto& w:controller.AuthoredDocument().widgets)if(w.navigation)activeNavigationViews.insert(w.id);};
+        if(screenPresenter_->IsLoaded())collectNavigation(*screenController_);
+        if(hudSession_.IsLoaded())collectNavigation(*hudSession_.Controller());
+        navigation.RetainAuthoredViews(activeNavigationViews);
+        bridge::NavigationObserver navCamera,navPlayer;
+        if(renderer_.camera)
+        {
+            const auto& eye=renderer_.camera->Eye;const auto& at=renderer_.camera->At;
+            navCamera={true,{eye.x,eye.y,eye.z},float(std::atan2(at.x,at.z)*180/3.141592653589793)};
+        }
+        if(player_.IsSpawned())
+            if(const auto* transform=scenes_.GetScene().transforms.GetComponent(player_.entity))
+            {const auto p=transform->GetPosition();navPlayer={true,{p.x,p.y,p.z},float(player_.yaw*180/3.141592653589793)};}
+        navigation.SetObservers(navCamera,navPlayer);
+        creatorScripts_.ResolveNavigationEntities();
+        const auto apply=[&](RuntimeScreenController& controller,RuntimeScreenPresenter& presenter)
+        {
+            bridge::ScreenDocument navigationPrototypes;
+            for(const auto& w:controller.AuthoredDocument().widgets)if(w.navigation&&!navigation.View(w.id))
+            {
+                const auto* prototype=presenter.NavigationPrototype(w.id);
+                auto copy=prototype?*prototype:w;copy.visible=w.visible;copy.enabled=w.enabled;
+                navigationPrototypes.widgets.push_back(std::move(copy));
+            }
+            if(!navigation.ObserveDocument(navigationPrototypes,error)||
+                !presenter.SetNavigationState(navigation.Snapshot(),controller.AuthoredDocument().usage==bridge::ScreenUsage::Hud,error))
+            {return false;}
+            return true;
+        };
+        if ((screenPresenter_->IsLoaded()&&!apply(*screenController_,*screenPresenter_)) ||
+            (hudSession_.IsLoaded()&&uiComposition_.IsHudVisible()&&!apply(*hudSession_.Controller(),*hudSession_.Presenter())))
+            wi::backlog::post("Renegade Runtime navigation: "+error,wi::backlog::LogLevel::Warning);
     }
 
     void RuntimeApplication::UpdateUiBindings()

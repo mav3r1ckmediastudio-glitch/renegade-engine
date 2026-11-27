@@ -1,3 +1,4 @@
+#include "renegade/bridge/WorldNavigationService.h"
 #pragma once
 
 #include "renegade/bridge/ScreenService.h"
@@ -164,6 +165,9 @@ namespace renegade::screen
         // accessible layout pass as all authored widgets. No persisted edits.
         void SetScrollbarThumb(const bridge::StableId& thumbId,
             const bridge::StableId& trackId,float position,float fraction);
+        const bridge::ScreenWidget* NavigationPrototype(const bridge::StableId&)const;
+        bool PreviewNavigationDraft(const bridge::StableId&,const bridge::ScreenNavigation&,float heading,std::string& error,const bridge::ScreenWidget* appearance=nullptr);
+        bool SetNavigationState(const bridge::WorldNavigationSnapshot&,bool includeCreated,std::string& error);
         void SetWidgetFill(const bridge::StableId& widgetId, float fill);
         // Local editor audition only; the owning Screen document stays unchanged.
         void PreviewLiquidWidget(const bridge::StableId& widgetId,bridge::ScreenColor colour,float fill);

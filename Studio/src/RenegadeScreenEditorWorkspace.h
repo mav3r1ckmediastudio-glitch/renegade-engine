@@ -27,6 +27,7 @@ namespace renegade::studio
 {
     class ScreenCarouselEditor;
     class ScreenLiquidEditor;
+    class ScreenNavigationEditor;
     // Native Screen authoring workspace. Gate 8C established selection,
     // Inspector editing and shared Runtime preview; Gate 8D adds creator-level
     // element transactions while keeping ScreenAuthoringSession authoritative.
@@ -156,7 +157,7 @@ namespace renegade::studio
         void SetOverlayInputBlocked(bool blocked) noexcept { overlayInputBlocked_ = blocked; }
         [[nodiscard]] bool HasOpenPopup() const noexcept
         {
-            return liquidEditorOpen_ || carouselEditorOpen_ || screenSettingsPicker_.IsOpen() || basicActionPicker_.IsOpen() ||
+            return navigationEditorOpen_ || liquidEditorOpen_ || carouselEditorOpen_ || screenSettingsPicker_.IsOpen() || basicActionPicker_.IsOpen() ||
                 destinationPicker_.IsOpen();
         }
         [[nodiscard]] bool IsFocusCanvas() const noexcept
@@ -360,13 +361,16 @@ namespace renegade::studio
         RenegadeTextInputField toolboxSearchInput_;
         std::shared_ptr<ScreenCarouselEditor> carouselEditor_;
         bool carouselEditorOpen_=false;
+        std::shared_ptr<ScreenNavigationEditor> navigationEditor_;
+        bool navigationEditorOpen_=false;
+        void OpenNavigationEditor();
         std::shared_ptr<ScreenLiquidEditor> liquidEditor_;
         bool liquidEditorOpen_=false;
         const bridge::ScreenWidget* FindSelectedLiquid() const;
         void OpenLiquidEditor();
         void SaveSelectedUiPrefab();
         void ChooseUiPrefab();
-        void InsertUiPrefab(const std::string& package);
+        void InsertUiPrefab(const std::string& package,bool top=false);
         void ChooseExternalUiPrefab();
         RenegadeButton imageAssetButton_;
         RenegadeButton progressFrameButton_;

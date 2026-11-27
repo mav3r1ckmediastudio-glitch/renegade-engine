@@ -1,0 +1,123 @@
+{
+  "entry_id": "21d3d0c2-f3d6-4515-9b3d-9f134c506262",
+  "entry_path": "Content/UI/Prefab.renegade-screen",
+  "files": [
+    {
+      "bytes": 3827,
+      "class": "runtime_screen_document",
+      "path": "Content/UI/Prefab.renegade-screen",
+      "sha256": "c55524c47403a09cd9151c48cffbb8e925f14a6847a69154e31d898fa6b99fcd"
+    },
+    {
+      "bytes": 85799,
+      "class": "texture",
+      "path": "Content/UI/Assets/5.png",
+      "sha256": "bbb17afe0a50d6d3e0e255a75c1ff826309c1bfca7ea570c870032b5c7d725cd"
+    },
+    {
+      "bytes": 10715,
+      "class": "texture",
+      "path": "Content/UI/Assets/1.png",
+      "sha256": "bba26ba268fd9db288606e1b2adf5ff188a07ddbfca2cfb79cdab97ddd315543"
+    },
+    {
+      "bytes": 1856,
+      "class": "texture",
+      "path": "Content/UI/Assets/10.png",
+      "sha256": "ccfa3a7c31a86671627f4b807e3e6b28568390b7c24e0cccf41853d7fa691ed2"
+    },
+    {
+      "bytes": 4614,
+      "class": "texture",
+      "path": "Content/UI/Assets/0.png",
+      "sha256": "f5ce74b16036ff07483cee15652a6d9edb5d83a026485355e6c7c1481e80dbb0"
+    },
+    {
+      "bytes": 3222,
+      "class": "texture",
+      "path": "Content/UI/Assets/2.png",
+      "sha256": "91429b5d5cf06ab57f732e605d86d9fa56501677dfecab5826eff84be7315148"
+    },
+    {
+      "bytes": 4539,
+      "class": "texture",
+      "path": "Content/UI/Assets/3.png",
+      "sha256": "fc2f2a15686872cf29ba3f8ebb2a960b72f8afa6b58a7dd50810adbec4c640b9"
+    },
+    {
+      "bytes": 4541,
+      "class": "texture",
+      "path": "Content/UI/Assets/4.png",
+      "sha256": "eb9adb58c8fd2a6481a777db11902cf56030117e33634952b15ee2960323faf9"
+    },
+    {
+      "bytes": 5279,
+      "class": "texture",
+      "path": "Content/UI/Assets/6.png",
+      "sha256": "011e1cf736c76fec14fa0ecae9ee327eda1e4b61892becb45744cde8746e4a02"
+    },
+    {
+      "bytes": 5367,
+      "class": "texture",
+      "path": "Content/UI/Assets/7.png",
+      "sha256": "f173d85a8e46fb89b381b4c8176371e1cab7f4654455c4c4cf6996cefbb0b442"
+    },
+    {
+      "bytes": 5898,
+      "class": "texture",
+      "path": "Content/UI/Assets/8.png",
+      "sha256": "88be59c4440356a1f9fe072fcf4b3768ec1bf75f880c850c033a883d1c0b868a"
+    },
+    {
+      "bytes": 4330,
+      "class": "texture",
+      "path": "Content/UI/Assets/9.png",
+      "sha256": "c80c342c088e9272b1ea10caf3bb08eb5a029952fedac71c39b1825ba3a423c2"
+    },
+    {
+      "bytes": 3894,
+      "class": "texture",
+      "path": "Content/UI/Assets/11.png",
+      "sha256": "dbbea0505cef150b4e1b1376e8789702b2db21710907457bfa89ca828f562cdd"
+    },
+    {
+      "bytes": 5479,
+      "class": "texture",
+      "path": "Content/UI/Assets/12.png",
+      "sha256": "ce28fc50f7d737feec0393d381fbc8e7c177e38a679093052454558e3d182aaf"
+    },
+    {
+      "bytes": 3968,
+      "class": "texture",
+      "path": "Content/UI/Assets/13.png",
+      "sha256": "b14d84242e9a003a25464ac0a932090e95e06e63502072d7e015b48b9c5c4910"
+    },
+    {
+      "bytes": 4536,
+      "class": "texture",
+      "path": "Content/UI/Assets/14.png",
+      "sha256": "9cc84c90035940961f5781ff63998535e868bc31c4810c0327411db6d97e975e"
+    },
+    {
+      "bytes": 5148,
+      "class": "texture",
+      "path": "Content/UI/Assets/15.png",
+      "sha256": "6d86f0d8f1af5c6eac4ef8ac5008b5442ae9c3bcd879a8f8650e924865e00ecf"
+    },
+    {
+      "bytes": 3206,
+      "class": "texture",
+      "path": "Content/UI/Assets/16.png",
+      "sha256": "0a9ee3275c177276233d2e2e42e01ad6721cb11998faff317be7c45b1f7d1441"
+    },
+    {
+      "bytes": 2540,
+      "class": "texture",
+      "path": "Content/UI/Assets/17.png",
+      "sha256": "5a1e17de3af42ec0612baee9da26e496643b2cfd58f954711e7ee765be22aeb9"
+    }
+  ],
+  "project_id": "6a66fd90-357d-43f0-8de7-3359ab7583ce",
+  "schema": "renegade-ui-package",
+  "version": 1
+}

@@ -1,0 +1,15 @@
+{
+  "entry_id": "82a9ca7e-275b-41fb-bea4-ebb78038b45a",
+  "entry_path": "Content/UI/Prefab.renegade-screen",
+  "files": [
+    {
+      "bytes": 2658,
+      "class": "runtime_screen_document",
+      "path": "Content/UI/Prefab.renegade-screen",
+      "sha256": "5bfa222f882a1f38838be1d44446946f85ae4771d4ec4ae04fda84ea47bc75bf"
+    }
+  ],
+  "project_id": "030acb7f-ba7d-4a72-b041-ed02c1ab651a",
+  "schema": "renegade-ui-package",
+  "version": 1
+}

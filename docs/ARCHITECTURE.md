@@ -5,9 +5,15 @@
 ScreenLayoutMode::Manual gives a child explicit parent-relative geometry while preserving its identity, parent and reserved automatic-layout slot. EngineBridge's shared resolver applies it to rendering and pointer geometry; sibling allocations retain the same count/order. Creator-directed UpdateWidgetManually atomically changes the mode and rectangle only on a geometry edit. Ordinary managed-content edits remain automatic. The basic Studio Inspector and resize gestures opt into this service, and coalesced history restores both geometry and layout authority on Undo. New Title templates use a normal free Continue button. See SCREEN_MANUAL_GEOMETRY.md for verification and limits. Interactive Preview return is an explicit presentation lifecycle change: invalidate the editor viewport cache on reattachment, restore clip/layout, finish input gestures and wait for Preview input release before resuming authoring.
 
 
-## Generic world navigation requirement (27 November 2026)
+## Generic world navigation (27 November 2026)
 
-One generic RPG world navigation bar separates heading/target behaviour from interchangeable appearance presets. The four owner-supplied launch UI sets supply named artwork/font/icon slots, not separate navigation implementations. Appearance changes preserve marker identity, bindings and script handles. C++/Lua access and editor authoring share governed capabilities. This is a recorded implementation requirement, not completed Runtime navigation. See UI_WORLD_NAVIGATION_REQUIREMENTS.md.
+EngineBridge owns optional versioned ScreenNavigation data on ordinary Image widgets, pure bearing/projection/declutter functions, atomic ScreenAuthoringSession edits, portable resource remapping and the WorldNavigationService live registry. Appearance fields remain separate from target identity, heading/filter behaviour and geometry. Neutral and the available supplied fantasy example use the same component. The four full launch-set appearances remain a content/acceptance requirement.
+
+Studio supplies the shared native World navigation settings modal, ordinary palette/Inspector placement, owned artwork/font import and a private sample preview using the same ScreenRenderer. RuntimeScriptRuntime exposes the same service through C++ Navigation() and governed renegade.navigation Lua. Opaque EntityRef inputs resolve only against live-generation indexed native transforms; missing/deleted entities hide their markers. Registered entity IDs are cached; navigation does not discover targets by walking all scene entities every frame.
+
+RuntimeApplication::UpdateWorldNavigation publishes camera/player observers independently of UI binding-source availability, registers theme-resolved authored view prototypes and passes snapshots to the existing ScreenRenderer. Script-created views enter only the active HUD presenter. Configuration revisions preflight resources and reuse unchanged image/font handles; position/heading updates share one coherent snapshot per presenter. Level stop resets targets, views and handles. Navigation retains ordinary authored grouping and visibility binding semantics.
+
+See UI_WORLD_NAVIGATION_AUTHORING.md, UI_WORLD_NAVIGATION_REQUIREMENTS.md and evidence/world-navigation-2026-11-27. Local Windows x64 DX12 Release evidence does not imply four-set completeness, exported-game acceptance or independent release validation.
 
 ## UI scripting access requirement (27 November 2026)
 
