@@ -1,3 +1,4 @@
+#include "RuntimeScriptRuntime.h"
 #include "RuntimeBootstrap.h"
 #include "RuntimeFlow.h"
 #include "renegade/bridge/ProjectService.h"
@@ -227,16 +228,46 @@ int main(int argc,char** argv)
             auto panel=*std::find_if(menu.widgets.begin(),menu.widgets.end(),
                 [&](const auto& w){return bridge::IsScreenBackground(menu,w);});
             panel.imageFit=bridge::ScreenImageFit::Cover;
+            const auto cameraId=bridge::GenerateStableId();
+            const auto levelId=bridge::GenerateStableId();
+            panel.cameraSource=bridge::ScreenCameraSource{levelId,"Content/Scenes/Starter.wiscene",cameraId,"Overlook",true};
             check(bridge::CopyScreenBackgrounds(metadata.rootPath,menu,panel,targets,error),"Copy selected backgrounds: "+error);
             for(const auto& [id,path]:targets)
             {
                 bridge::ScreenDocument saved;
                 check(bridge::ReadScreenDocument((root/path).generic_u8string(),metadata.projectId,saved,error)
                     && !saved.widgets.empty() && saved.widgets.front().backgroundPanel
+                    && saved.widgets.front().cameraSource
+                    && saved.widgets.front().cameraSource->cameraId==cameraId
+                    && saved.widgets.front().cameraSource->levelId==levelId
+                    && saved.widgets.front().cameraSource->slowPan
                     && saved.widgets.front().id==previousIds.at(id)
                     && saved.widgets.front().imageFit==bridge::ScreenImageFit::Cover,
                     "Reopen independent back layer, retaining target identity");
             }
+            // Run the public Lua surface through the normal project script VM.
+            const auto screenPath=targets.begin()->second;
+            const std::string scriptPath="Content/Scripts/CameraModeTest.lua";
+            fs::create_directories((root/scriptPath).parent_path());
+            std::ofstream(root/scriptPath)
+                << "return {on_start=function() local camera=renegade.ui.background_camera; local screen='"
+                << screenPath << "'; local mode,level,id=camera(screen); assert(mode=='pan' and id=='"
+                << cameraId << "'); assert(camera(screen,'fixed')=='fixed'); assert(camera(screen)=='fixed');"
+                << "assert(camera(screen,'image')=='image'); assert(camera(screen,'authored')=='pan'); end}";
+            auto scripts=bridge::CreateScriptDocument(metadata.projectId,bridge::GenerateStableId(),
+                "Content/Scenes/Starter.wiscene","camera-test");
+            bridge::ScriptSourceBinding binding;
+            binding.sourceId=bridge::GenerateStableId();binding.sourcePath=scriptPath;
+            binding.presentation=bridge::ScriptPresentation::GlobalScript;
+            binding.apiVersion=runtime::RuntimeScriptRuntime::ApiVersion;
+            binding.provenance.kind=bridge::ScriptProvenanceKind::Project;
+            binding.provenance.contentHash="camera-mode-test";
+            wi::scene::Scene privateScene;
+            runtime::RuntimeScriptRuntime vm;
+            check(bridge::AddScriptAttachment(scripts,bridge::CreateScriptAttachment(bridge::ScriptScope::Level,{},binding),error)
+                && vm.StartScene(scripts,privateScene,metadata.rootPath,error)
+                && vm.DisabledInstanceCount()==0 && vm.Diagnostics().empty(),"Camera modes through project Lua: "+error);
+            vm.StopScene();
             auto second=std::next(targets.begin());
             const auto secondBefore=readBytes(root/second->second);
             panel.imageFit=bridge::ScreenImageFit::Contain;

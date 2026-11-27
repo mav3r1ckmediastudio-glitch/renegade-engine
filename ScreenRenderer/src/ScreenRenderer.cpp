@@ -1,3 +1,4 @@
+#include "ScreenCameraFeed.h"
 #include <optional>
 #include "renegade/bridge/ScreenClickSound.h"
 #include "renegade/screen/ScreenRenderer.h"
@@ -142,6 +143,7 @@ namespace
     public:
         renegade::bridge::ScreenWidget authored;
         std::unordered_map<ScreenInteractionState, wi::Resource> resources;
+        const wi::graphics::Texture* cameraTexture=nullptr;
         wi::Resource progressFrameImage;
         wi::Resource progressFillImage;
         int fontStyle = 0;
@@ -338,7 +340,16 @@ namespace
                 const auto& desc=image->GetTexture().GetDesc();
                 imageRect=renegade::bridge::FitScreenImage(imageRect,float(desc.width),float(desc.height),authored.imageFit);
             }
-            DrawSurface(image,imageRect.x,imageRect.y,imageRect.width,imageRect.height,
+            if(cameraTexture && cameraTexture->IsValid())
+            {
+                const auto rect=renegade::bridge::FitScreenImage(
+                    {translation.x+border,translation.y+border,scale.x-border*2,scale.y-border*2},
+                    float(cameraTexture->GetDesc().width),float(cameraTexture->GetDesc().height),authored.imageFit);
+                wi::image::Params params(rect.x,rect.y,rect.width,rect.height,ToWickedColor(visual.imageTint,style.opacity));
+                ApplyRounding(params,std::max(0.f,radius-border));
+                wi::image::Draw(cameraTexture,params,cmd);
+            }
+            else DrawSurface(image,imageRect.x,imageRect.y,imageRect.width,imageRect.height,
                 std::max(0.0f,radius-border),ToWickedColor(surfaceColor,style.opacity),cmd);
 
             if (authored.kind == renegade::bridge::ScreenWidgetKind::Progress)
@@ -778,6 +789,10 @@ namespace renegade::screen
         ControlSink controlSink;
         DragSink dragSink;
         ScreenInstanceRoot root;
+        std::unique_ptr<ScreenCameraFeed> feed;
+        ScreenSurface* cameraSurface=nullptr;
+        bool feedAttempted=false;
+        std::uint64_t cameraRevision=0;
         bool attached=false;
         wi::gui::Window* embeddedParent=nullptr;
         std::vector<std::unique_ptr<ScreenSurface>> surfaces;
@@ -995,6 +1010,7 @@ namespace renegade::screen
 
             auto* raw = surface.get();
             impl_->root.surfaces.push_back(raw);
+            if(widget.cameraSource && widget.visible) impl_->cameraSurface=raw;
             impl_->byId.emplace(widget.id, raw);
             impl_->surfaces.push_back(std::move(surface));
         }
@@ -1342,11 +1358,45 @@ namespace renegade::screen
         error.clear();return true;
     }
 
+    std::uint64_t ScreenRenderer::BackgroundCameraRevision() const {return impl_->cameraRevision;}
+
+    void ScreenRenderer::SetBackgroundCamera(const bridge::StableId& widget,std::optional<bridge::ScreenCameraSource> source,std::uint64_t revision)
+    {
+        impl_->cameraRevision=revision;
+        const auto found=impl_->byId.find(widget);
+        if(found==impl_->byId.end())return;
+        if(impl_->cameraSurface)impl_->cameraSurface->cameraTexture=nullptr;
+        impl_->feed.reset();
+        impl_->feedAttempted=false;
+        auto* surface=found->second;
+        surface->authored.cameraSource=std::move(source);
+        impl_->cameraSurface=surface->authored.cameraSource && surface->authored.visible ? surface : nullptr;
+    }
+
+    void ScreenRenderer::UpdateCameraFeed(float dt)
+    {
+        auto* target=impl_->cameraSurface;
+        if(!target || !impl_->root.IsVisible())return;
+        if(!impl_->feedAttempted)
+        {
+            impl_->feedAttempted=true;
+            auto feed=std::make_unique<ScreenCameraFeed>();
+            std::string error;
+            if(feed->Open(impl_->projectRoot,impl_->document.envelope.projectId,*target->authored.cameraSource,error))
+                impl_->feed=std::move(feed);
+            else wi::backlog::post("Screen camera background: "+error,wi::backlog::LogLevel::Warning);
+        }
+        if(impl_->feed)target->cameraTexture=impl_->feed->Tick(dt);
+    }
+
     void ScreenRenderer::Reset(wi::RenderPath2D& renderPath) noexcept
     {
         DetachPresentation(renderPath);
         for(auto& surface:impl_->surfaces)surface->CancelInteraction();
         impl_->root.surfaces.clear();
+        impl_->cameraSurface=nullptr;
+        impl_->feed.reset();
+        impl_->feedAttempted=false;
         impl_->surfaces.clear();
         impl_->byId.clear();
         impl_->logicalRects.clear();
@@ -1354,6 +1404,7 @@ namespace renegade::screen
         impl_->activateSink = {};
         impl_->controlSink={};
         impl_->dragSink={};
+        impl_->cameraRevision=0;
         impl_->document = {};
         impl_->projectRoot.clear();
         impl_->loaded = false;

@@ -121,6 +121,9 @@ namespace renegade::screen
         // central canvas. Runtime leaves this unset and continues to use the
         // full RenderPath logical extent.
         void SetViewport(const bridge::ScreenRect& viewport) noexcept;
+        void SetBackgroundCamera(const bridge::StableId& widget,std::optional<bridge::ScreenCameraSource> source,std::uint64_t revision);
+        std::uint64_t BackgroundCameraRevision() const;
+        void UpdateCameraFeed(float dt);
         void ClearViewport() noexcept;
         // Optional editor clip is independent of the projected document viewport.
         // Runtime leaves this unset; authored geometry is never modified.

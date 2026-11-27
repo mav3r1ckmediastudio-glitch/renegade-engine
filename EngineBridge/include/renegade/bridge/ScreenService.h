@@ -253,6 +253,15 @@ namespace renegade::bridge
 
     enum class ScreenImageFit { Stretch, Contain, Cover };
 
+    struct ScreenCameraSource
+    {
+        StableId levelId;
+        std::string levelPathHint;
+        StableId cameraId;
+        std::string cameraName;
+        bool slowPan = false;
+    };
+
     struct ScreenWidget
     {
         StableId id;
@@ -298,6 +307,7 @@ namespace renegade::bridge
         // Optional v3 native image presentation; absent legacy field stretches artwork.
         ScreenImageFit imageFit=ScreenImageFit::Stretch;
         bool backgroundPanel=false;
+        std::optional<ScreenCameraSource> cameraSource;
 
     };
 

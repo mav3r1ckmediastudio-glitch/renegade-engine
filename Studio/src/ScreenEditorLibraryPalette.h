@@ -31,6 +31,7 @@ namespace renegade::studio
         bool available = true;
         bool enabledInGame = true;
         std::string diagnostic;
+        std::string cameraLevelId, cameraLevelPath;
     };
 
     inline std::vector<std::pair<std::string,std::string>> ScreenDestinationChoices(const std::vector<ScreenEditorLibraryScreen>& entries)

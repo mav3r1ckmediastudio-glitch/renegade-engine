@@ -236,6 +236,7 @@ namespace renegade::studio
             advancedInspector_.ApplySimulationPreview(renderer_);
             advancedInspector_.TickAnimationPreview(dt);
             renderer_.SetAnimationPreview(advancedInspector_.AnimationPreview());
+            renderer_.UpdateCameraFeed(dt);
             renderer_.SetTransitionFrame(advancedInspector_.TransitionPreview());
             renderer_.ApplyLayout(*this);
             // A dismissal/selection click belongs to the popup for its whole

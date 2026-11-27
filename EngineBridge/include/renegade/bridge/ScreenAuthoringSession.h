@@ -332,6 +332,23 @@ namespace renegade::bridge
             return CommitMutation(std::move(candidate),error);
         }
 
+        [[nodiscard]] bool SetBackgroundCamera(const StableId& id,
+            std::optional<ScreenCameraSource> source,std::string& error)
+        {
+            if(!loaded_){error="No screen is open.";return false;}
+            auto candidate=Document();
+            for(auto& widget:candidate.widgets)
+            {
+                if(widget.id!=id || widget.kind!=ScreenWidgetKind::Image || !widget.parentId.empty())continue;
+                widget.backgroundPanel=true;
+                widget.cameraSource=std::move(source);
+                if(candidate.schemaVersion<3)
+                {candidate.migratedFromVersion=candidate.schemaVersion;candidate.schemaVersion=3;}
+                return CommitMutation(std::move(candidate),error);
+            }
+            error="Select a background panel.";return false;
+        }
+
         [[nodiscard]] bool UpdateWidgetAnimations(const StableId& id,
             std::vector<ScreenAnimationTrack> tracks,std::string& error)
         {

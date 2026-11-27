@@ -1,3 +1,5 @@
+#include "RuntimeScreenCamera.h"
+#include "renegade/bridge/ScreenBackgroundPanel.h"
 #include "RuntimeScreen.h"
 #include <cmath>
 
@@ -449,6 +451,18 @@ namespace renegade::runtime
             return;
         }
 
+        const auto& doc=controller.AuthoredDocument();
+        const auto& overrides=ScreenCameraOverrides();
+        const auto change=overrides.empty() ? overrides.end() : overrides.find({doc.envelope.projectId,doc.envelope.documentId});
+        if(change!=overrides.end() && change->second.revision!=renderer_.BackgroundCameraRevision())
+        {
+            for(const auto& widget:doc.widgets)if(bridge::IsScreenBackground(doc,widget))
+            {
+                renderer_.SetBackgroundCamera(widget.id,change->second.authored ? widget.cameraSource : change->second.source,change->second.revision);
+                break;
+            }
+        }
+        if(presentationVisible_)renderer_.UpdateCameraFeed(uiDeltaTime);
         if(presentationVisible_&&std::isfinite(uiDeltaTime)&&uiDeltaTime>0)
         {animationTime_+=uiDeltaTime;transition_.Tick(uiDeltaTime,reducedMotion_);}
         renderer_.SetTransitionFrame(transition_.Frame());

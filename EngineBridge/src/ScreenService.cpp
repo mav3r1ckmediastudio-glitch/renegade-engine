@@ -879,6 +879,13 @@ namespace renegade::bridge
                 error = "The Runtime screen contains a widget with a malformed stable ID.";
                 return false;
             }
+            if(widget.cameraSource && (!widget.backgroundPanel || !widget.parentId.empty() ||
+                widget.kind!=ScreenWidgetKind::Image || document.schemaVersion<3 ||
+                !IsValidStableId(widget.cameraSource->levelId) || !IsValidStableId(widget.cameraSource->cameraId) ||
+                !IsSafeRelativePath(widget.cameraSource->levelPathHint)))
+            {
+                error="Invalid background camera reference.";return false;
+            }
             if (!widgets.emplace(widget.id, &widget).second)
             {
                 error = "The Runtime screen contains duplicate widget ID: " +
@@ -1381,6 +1388,15 @@ namespace renegade::bridge
                         section.Set("local_only",widget.localOnly);
                         section.Set("image_fit",static_cast<int>(widget.imageFit));
                         if(widget.backgroundPanel)section.Set("background_panel",true);
+                        if(widget.cameraSource)
+                        {
+                            const auto& source=*widget.cameraSource;
+                            section.Set("background_level",source.levelId);
+                            section.Set("background_level_path",source.levelPathHint);
+                            section.Set("background_camera",source.cameraId);
+                            section.Set("background_camera_name",source.cameraName);
+                            section.Set("background_slow_pan",source.slowPan);
+                        }
                         if(widget.transitionOverride)section.Set("transition_override",true);
                     }
                     if(IsScreenValueControl(widget.kind))detail::WriteScreenControl(section,widget);
@@ -1722,6 +1738,16 @@ namespace renegade::bridge
                 widget.enabled = section.GetBool("enabled");
                 widget.text = section.GetText("text");
                 widget.resourcePath = section.GetText("resource");
+                if(sourceSchema>=3 && section.Has("background_level"))
+                {
+                    ScreenCameraSource camera;
+                    camera.levelId=section.GetText("background_level");
+                    camera.levelPathHint=section.GetText("background_level_path");
+                    camera.cameraId=section.GetText("background_camera");
+                    camera.cameraName=section.GetText("background_camera_name");
+                    camera.slowPan=section.GetBool("background_slow_pan");
+                    widget.cameraSource=std::move(camera);
+                }
                 widget.actionId = section.GetText("action");
                 if(sourceSchema>=3&&section.Has("background_panel"))widget.backgroundPanel=section.GetBool("background_panel");
                 if(sourceSchema>=3&&section.Has("image_fit")) {

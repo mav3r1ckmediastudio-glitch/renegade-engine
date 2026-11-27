@@ -270,7 +270,8 @@ namespace renegade::studio
         XMFLOAT2 cameraLastPointer_ = {};
         std::function<void()> previewRequested_;
         RenegadeButton previewButton_;
-        RenegadeButton copyBackgroundButton_;
+        RenegadeButton copyBackgroundButton_,cameraBackgroundButton_,panBackgroundButton_;
+        void ChooseBackgroundCamera();
         void ChooseBackgroundDestinations();
         RenegadeButton fitCanvasButton_;
         RenegadeButton screenSettingsButton_;

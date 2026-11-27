@@ -59,6 +59,7 @@ namespace renegade::bridge
             if(found!=target.widgets.end()){panel=*found;target.widgets.erase(found);}
             else {panel.id=GenerateStableId();panel.name="Background";panel.kind=ScreenWidgetKind::Image;panel.enabled=false;}
             panel.backgroundPanel=true;
+            panel.cameraSource=background.cameraSource;
             panel.layoutMode=ScreenLayoutMode::Anchored;panel.anchors={0,0,1,1,0,0,0,0};
             panel.rect={0,0,target.designWidth,target.designHeight};
             panel.resourcePath=background.resourcePath;panel.imageFit=background.imageFit;

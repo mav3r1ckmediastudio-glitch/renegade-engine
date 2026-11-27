@@ -486,6 +486,7 @@ namespace renegade::studio
                           if(node.kind==bridge::FlowNodeKind::Level){
                               const auto resolved=bridge::StoryFlowLevelReferenceService{}.ResolveLevel(project.rootPath,project.projectId,authoringSession_.Document(),node.id);
                               target.available=resolved.succeeded;target.diagnostic=resolved.message;
+                              target.cameraLevelId=resolved.sceneDocumentId;target.cameraLevelPath=resolved.resolvedPathHint;
                           }
                           screens.push_back(std::move(target)); }
                         continue;

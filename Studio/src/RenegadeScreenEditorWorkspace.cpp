@@ -1,3 +1,5 @@
+#include "renegade/bridge/SceneDocumentService.h"
+#include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/ScreenClickSound.h"
 #include "renegade/bridge/DialogueAssetService.h"
 #include "RenegadeScreenEditorWorkspace.h"
@@ -532,6 +534,20 @@ namespace renegade::studio
         previewButton_.Create("Preview screen");
         previewButton_.SetText("PREVIEW");
         previewButton_.OnClick([this](const wi::gui::EventArgs&){if(previewRequested_)previewRequested_();});
+        cameraBackgroundButton_.Create("Background source");
+        cameraBackgroundButton_.SetTooltip("Choose an image or a saved level camera.");
+        cameraBackgroundButton_.OnClick([this](const wi::gui::EventArgs&){ChooseBackgroundCamera();});
+        panBackgroundButton_.Create("Camera slow pan");
+        panBackgroundButton_.OnClick([this](const wi::gui::EventArgs&){
+            if(!session_)return;
+            const auto* widget=session_->FindWidget(selectedWidgetId_);
+            if(!widget || !widget->cameraSource)return;
+            auto source=*widget->cameraSource;
+            source.slowPan=!source.slowPan;
+            std::string error;
+            if(session_->SetBackgroundCamera(widget->id,source,error)) RefreshAfterMutation("Camera pan updated");
+            else SetStatus(error);
+        });
         copyBackgroundButton_.Create("Copy background to other screens");
         copyBackgroundButton_.SetText("Copy to other screens...");
         copyBackgroundButton_.OnClick([this](const wi::gui::EventArgs&){ChooseBackgroundDestinations();});
@@ -845,6 +861,8 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&fitCanvasButton_),
                 static_cast<wi::gui::Widget*>(&previewButton_),
                 static_cast<wi::gui::Widget*>(&copyBackgroundButton_),
+                static_cast<wi::gui::Widget*>(&cameraBackgroundButton_),
+                static_cast<wi::gui::Widget*>(&panBackgroundButton_),
                 static_cast<wi::gui::Widget*>(&gridVisibleButton_),
                 static_cast<wi::gui::Widget*>(&gridSnapButton_),
                 static_cast<wi::gui::Widget*>(&gridSpacingInput_),
@@ -991,6 +1009,8 @@ namespace renegade::studio
         full(applyButton_, HeaderHeight + 348.0f, 32.0f);
         full(basicActionButton_, HeaderHeight + 423.0f, 32.0f);
         const auto* graphicTarget=session_?session_->FindWidget(selectedWidgetId_):nullptr;
+        full(cameraBackgroundButton_,HeaderHeight+423,32);
+        full(panBackgroundButton_,HeaderHeight+461,32);
         full(copyBackgroundButton_,HeaderHeight+385,32);
         full(imageAssetButton_,HeaderHeight+
             (graphicTarget&&graphicTarget->kind==bridge::ScreenWidgetKind::Image?69.0f:385.0f),
@@ -1125,7 +1145,15 @@ namespace renegade::studio
         }
         const bool background = selectedReady && bridge::IsScreenBackground(session_->Document(),*selected);
         copyBackgroundButton_.SetVisible(background && !focusCanvas_ && !rightCollapsed_ && !inspectorSuppressed_);
-        imageAssetButton_.SetText(background ? "Choose background image..." : "CHANGE GRAPHIC");
+        cameraBackgroundButton_.SetVisible(copyBackgroundButton_.IsVisible());
+        panBackgroundButton_.SetVisible(copyBackgroundButton_.IsVisible() && selected->cameraSource.has_value());
+        if(background)
+        {
+            const auto& source=selected->cameraSource;
+            cameraBackgroundButton_.SetText(source ? "Live camera: "+source->cameraName : "Source: image / choose camera...");
+            if(source)panBackgroundButton_.SetText(source->slowPan ? "Slow pan: on" : "Slow pan: off");
+        }
+        imageAssetButton_.SetText(background && selected->cameraSource ? "Choose fallback image..." : background ? "Choose background image..." : "CHANGE GRAPHIC");
         imageAssetButton_.SetVisible(!button && selectedReady && !focusCanvas_ && !rightCollapsed_ &&
             !inspectorSuppressed_);
         const bool progressArtworkReady = selectedReady &&
@@ -1223,6 +1251,8 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&fitCanvasButton_),
                 static_cast<wi::gui::Widget*>(&previewButton_),
                 static_cast<wi::gui::Widget*>(&copyBackgroundButton_),
+                static_cast<wi::gui::Widget*>(&cameraBackgroundButton_),
+                static_cast<wi::gui::Widget*>(&panBackgroundButton_),
                 static_cast<wi::gui::Widget*>(&gridVisibleButton_),
                 static_cast<wi::gui::Widget*>(&gridSnapButton_),
                 static_cast<wi::gui::Widget*>(&gridSpacingInput_),
@@ -1320,6 +1350,8 @@ namespace renegade::studio
                 static_cast<const wi::gui::Widget*>(&fitCanvasButton_),
                 static_cast<const wi::gui::Widget*>(&previewButton_),
                 static_cast<const wi::gui::Widget*>(&copyBackgroundButton_),
+                static_cast<const wi::gui::Widget*>(&cameraBackgroundButton_),
+                static_cast<const wi::gui::Widget*>(&panBackgroundButton_),
                 static_cast<const wi::gui::Widget*>(&gridVisibleButton_),
                 static_cast<const wi::gui::Widget*>(&gridSnapButton_),
                 static_cast<const wi::gui::Widget*>(&gridSpacingInput_),
@@ -1731,6 +1763,52 @@ namespace renegade::studio
             return;
         }
         RefreshAfterMutation("ENABLED STATE UPDATED // UNSAVED SCREEN CHANGE");
+    }
+
+    void RenegadeScreenEditorWorkspace::ChooseBackgroundCamera()
+    {
+        if(!session_ || !session_->IsLoaded())return;
+        const auto widget=selectedWidgetId_;
+        const auto doc=session_->Document().envelope.documentId;
+        auto apply=[this,widget,doc](std::optional<bridge::ScreenCameraSource> source){
+            if(!session_ || !session_->IsLoaded() || selectedWidgetId_!=widget ||
+                session_->Document().envelope.documentId!=doc)return;
+            std::string error;
+            if(session_->SetBackgroundCamera(widget,std::move(source),error))RefreshAfterMutation("Background source updated");
+            else SetStatus(error);
+        };
+        std::vector<RenegadeScreenChoicePicker::Choice> levels{{"Use image background","@image"}};
+        std::map<std::string,std::string> hints;
+        for(const auto& entry:projectScreens_)
+            if(entry.available && !entry.cameraLevelId.empty() &&
+                hints.emplace(entry.cameraLevelId,entry.cameraLevelPath).second)
+                levels.push_back({"Level: "+entry.name,entry.cameraLevelId});
+        destinationPicker_.Open("BACKGROUND SOURCE / LEVEL",std::move(levels),{},
+            [this,apply,hints](const std::string& level){
+                if(level=="@image"){apply(std::nullopt);return;}
+                std::string path,error;
+                if(!bridge::ResolveSceneDocumentPath(gridProjectRoot_,session_->ProjectId(),level,hints.at(level),path,error))
+                {SetStatus(error);return;}
+                const auto prepared=bridge::PrepareWickedSceneOpen(path);
+                if(!prepared.IsReady()){SetStatus(prepared.Error());return;}
+                const auto& scene=*prepared.ReadOnlyScene();
+                std::vector<RenegadeScreenChoicePicker::Choice> choices;
+                std::map<std::string,std::string> names;
+                for(size_t i=0;i<scene.cameras.GetCount();++i)
+                {
+                    const auto entity=scene.cameras.GetEntity(i);
+                    const auto id=bridge::PersistentEntityId(scene,entity);
+                    if(!bridge::IsValidStableId(id))continue;
+                    const auto* name=scene.names.GetComponent(entity);
+                    names[id]=name && !name->name.empty()?name->name:"Camera";
+                    choices.push_back({names[id],id});
+                }
+                if(choices.empty()){SetStatus("No saved camera. Add a Camera in the Level Editor and save the level.");return;}
+                destinationPicker_.Open("CHOOSE LEVEL CAMERA",std::move(choices),{},
+                    [apply,level,hint=hints.at(level),names](const std::string& id){
+                        apply(bridge::ScreenCameraSource{level,hint,id,names.at(id),false});
+                    });
+            });
     }
 
     void RenegadeScreenEditorWorkspace::ChooseBackgroundDestinations()

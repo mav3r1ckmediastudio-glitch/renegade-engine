@@ -1,3 +1,7 @@
+#include "RuntimeScreenCamera.h"
+#include "renegade/bridge/FlowService.h"
+#include "renegade/bridge/ScreenBackgroundPanel.h"
+#include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/ParticleEffectRuntimeService.h"
 #include <type_traits>
 #include "RuntimeScriptRuntime.h"
@@ -906,6 +910,62 @@ namespace renegade::runtime
             return 1;
         }
 
+        static int UiBackgroundCameraLua(lua_State* state)
+        {
+            auto* self=FromUpvalue(state);
+            if(!self || self->projectRoot.empty())return PushNilError(state,"No active project.");
+            const std::string hint=luaL_checkstring(state,1);
+            std::string path,error;
+            bridge::DocumentEnvelope envelope;
+            bridge::ScreenDocument doc;
+            if(!bridge::ResolveScreenResourcePath(self->projectRoot,hint,path,error) ||
+                !bridge::ReadDocumentEnvelope(path,envelope,error) ||
+                !bridge::ReadScreenDocument(path,envelope.projectId,doc,error))return PushNilError(state,error);
+            const auto widget=std::find_if(doc.widgets.begin(),doc.widgets.end(),
+                [&](const auto& w){return bridge::IsScreenBackground(doc,w);});
+            if(widget==doc.widgets.end())return PushNilError(state,"Screen has no background panel.");
+            auto& setting=ScreenCameraOverrides()[{doc.envelope.projectId,doc.envelope.documentId}];
+            if(lua_gettop(state)>=2)
+            {
+                const std::string mode=luaL_checkstring(state,2);
+                auto source=setting.authored ? widget->cameraSource : setting.source;
+                if(mode=="image" || mode=="authored")source.reset();
+                else if(mode=="fixed" || mode=="pan")
+                {
+                    if(lua_gettop(state)>2)
+                    {
+                        const std::string level=luaL_checkstring(state,3),camera=luaL_checkstring(state,4);
+                        std::string scenePath;
+                        bridge::DocumentEnvelope sceneEnvelope;
+                        if(!bridge::ResolveScreenResourcePath(self->projectRoot,level,scenePath,error) ||
+                            !bridge::ReadDocumentEnvelope(scenePath+".rmeta",sceneEnvelope,error) ||
+                            !bridge::ResolveSceneDocumentPath(self->projectRoot,doc.envelope.projectId,
+                                sceneEnvelope.documentId,level,scenePath,error)) return PushNilError(state,error);
+                        const auto prepared=bridge::PrepareWickedSceneOpen(scenePath);
+                        if(!prepared.IsReady())return PushNilError(state,prepared.Error());
+                        const auto& scene=*prepared.ReadOnlyScene();
+                        bridge::EntityIdentityIndex index;
+                        if(!index.Build(scene,error))return PushNilError(state,error);
+                        const auto entity=index.Resolve(camera);
+                        if(!scene.cameras.Contains(entity))return PushNilError(state,"Camera ID missing from level.");
+                        const auto* name=scene.names.GetComponent(entity);
+                        source=bridge::ScreenCameraSource{sceneEnvelope.documentId,level,camera,name?name->name:"Camera",false};
+                    }
+                    if(!source)return PushNilError(state,"Supply a level path and a saved camera ID.");
+                    source->slowPan=mode=="pan";
+                }
+                else return PushNilError(state,"Expected image, fixed, pan or authored.");
+                setting.authored=mode=="authored";
+                setting.source=std::move(source);
+                ++setting.revision;
+            }
+            const auto& source=setting.authored ? widget->cameraSource : setting.source;
+            lua_pushstring(state,source ? (source->slowPan?"pan":"fixed") : "image");
+            lua_pushstring(state,source ? source->levelPathHint.c_str() : "");
+            lua_pushstring(state,source ? source->cameraId.c_str() : "");
+            return 3;
+        }
+
         static int UiClickSoundLua(lua_State* state)
         {
             auto* self=FromUpvalue(state);
@@ -1699,6 +1759,7 @@ namespace renegade::runtime
             lua_pushlightuserdata(lua, this);
             lua_pushcclosure(lua, UiShowPromptLua, 1);
             lua_setfield(lua, -2, "show_prompt");
+            lua_pushlightuserdata(lua,this); lua_pushcclosure(lua,UiBackgroundCameraLua,1); lua_setfield(lua,-2,"background_camera");
             lua_pushlightuserdata(lua,this); lua_pushcclosure(lua,UiClickSoundLua,1); lua_setfield(lua,-2,"button_click_sound");
             lua_setfield(lua, -2, "ui");
 
