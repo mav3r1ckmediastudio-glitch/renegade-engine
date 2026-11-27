@@ -15,7 +15,7 @@ namespace renegade::studio
 
     enum class ScreenToolboxAction : std::uint8_t
     {
-        None, StoryFlow, Text, Button, Image, Video, Background,
+        None, StoryFlow, Text, Button, Image, Video, Carousel, Background,
         Panel, Heading, Duplicate, Grid, Snap, Progress, GlobalHud, ProjectInventory,
         Icon, Divider, Spacer, Counter, PlayerHealthBar, PlayerHealthText, PlayerAmmoText, Group, HorizontalStack, VerticalStack, LayoutGrid, Toggle, Slider, Selector, TextInput, GameplayAttributes, PublishUiPackage, AdoptUiPackage, UiBudgets
     };
@@ -85,6 +85,7 @@ namespace renegade::studio
             {"BASIC", "Heading", ScreenToolboxAction::Heading},
             {"BASIC", "Image", ScreenToolboxAction::Image},
             {"BASIC", "Video", ScreenToolboxAction::Video},
+            {"BASIC", "Carousel", ScreenToolboxAction::Carousel},
             {"BASIC", "Progress Bar", ScreenToolboxAction::Progress},
             {"BASIC", "Add background panel", ScreenToolboxAction::Background},
             {"BASIC", "Icon", ScreenToolboxAction::Icon}, {"BASIC", "Divider", ScreenToolboxAction::Divider}, {"BASIC", "Spacer", ScreenToolboxAction::Spacer},

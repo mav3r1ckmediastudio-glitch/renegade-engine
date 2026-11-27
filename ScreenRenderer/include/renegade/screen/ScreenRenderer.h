@@ -126,6 +126,9 @@ namespace renegade::screen
         std::string VideoInfo(const bridge::StableId& id) const;
         std::uint64_t BackgroundCameraRevision() const;
         void UpdateCameraFeed(float dt);
+        // Transient authoring preview, never mutates the Screen asset.
+        bool PreviewCarouselEntry(const bridge::StableId& id,size_t entry);
+        void RefreshCarouselPresentation();
         void ClearViewport() noexcept;
         // Optional editor clip is independent of the projected document viewport.
         // Runtime leaves this unset; authored geometry is never modified.

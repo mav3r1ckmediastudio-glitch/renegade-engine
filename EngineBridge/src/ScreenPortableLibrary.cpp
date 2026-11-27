@@ -272,6 +272,11 @@ bool AdoptPortableScreenPackage(const std::string& projectRoot,const StableId& p
                         unassign(binding.source);
                         if(binding.operation==ScreenBindingOperation::Ratio)unassign(binding.denominator);
                     }
+                    if(w.carousel)for(auto& slide:w.carousel->entries)
+                    {
+                        slide.id=GenerateStableId();
+                        if(!resource(slide.image)){fs::remove_all(stage);return false;}
+                    }
                     if(!resource(w.resourcePath)||!resource(w.style.text.fontResource))
                     {fs::remove_all(stage);return false;}
                     for(auto* visual:{&w.style.normal,&w.style.hover,&w.style.pressed,&w.style.focused,&w.style.disabled})

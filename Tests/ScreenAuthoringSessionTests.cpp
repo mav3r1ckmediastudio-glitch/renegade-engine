@@ -2082,6 +2082,75 @@ int main()
             return Fail("incomplete transition pair silently accepted");
     }
 
+
+    {
+        const TemporaryDirectory temp{fs::temp_directory_path()/fs::u8path("renegade-carousel-"+GenerateStableId())};
+        fs::create_directories(temp.path/"Content/UI");
+        const auto path=temp.path/"Content/UI/Carousel.renegade-screen";
+        auto doc=MakeDocument(projectId);doc.schemaVersion=2;
+        doc.envelope.pathHint="Content/UI/Carousel.renegade-screen";
+        if(!WriteScreenDocument(path.generic_u8string(),doc,error))return Fail(error);
+        ScreenAuthoringSession session;
+        if(!session.Open(path.generic_u8string(),projectId,error))return Fail(error);
+        ScreenWidget carousel;carousel.id=GenerateStableId();carousel.kind=ScreenWidgetKind::Image;
+        carousel.name="Narrative";carousel.rect={100,100,480,270};carousel.enabled=false;
+        carousel.style=MakeScreenWidgetStyleTemplate(carousel.kind,270);
+        carousel.carousel=ScreenCarousel{};
+        const auto id=carousel.id;
+        StableId created;
+        if(!session.CreateWidget(carousel,false,created,error)||session.Document().schemaVersion!=3||
+            session.Document().widgets.size()!=doc.widgets.size()+2)
+            return Fail("carousel and caption creation/upgrading failed: "+error);
+        const auto captionId=session.Document().widgets.back().id;
+        if(!session.FindWidget(captionId)->carouselCaption ||
+            session.FindWidget(captionId)->parentId!=id ||
+            !session.Undo(error)||session.FindWidget(id)||session.FindWidget(captionId)||
+            session.Document().schemaVersion!=2 || !session.Redo(error))
+            return Fail("carousel/caption must be a single undo operation: "+error);
+        ScreenCarousel deck;
+        deck.seconds=1.5f;deck.shuffle=true;
+        const std::string narrative="  Story #1; [text] = quoted \"value\"\nSecond line \xE2\x80\x94 caf\xC3\xA9  ";
+        deck.entries={{GenerateStableId(),"Content/UI/first.png",narrative},
+            {GenerateStableId(),"Content/UI/second.png",""}};
+        if(!session.SetCarousel(id,deck,error)||!session.Undo(error)||
+            !session.FindWidget(id)->carousel->entries.empty()||!session.Redo(error)||
+            !session.Save(error)||!session.Reload(error))
+            return Fail("carousel edit/history/save/reopen failed: "+error);
+        const auto& saved=*session.FindWidget(id)->carousel;
+        if(saved.entries.size()!=2||saved.entries[0].caption!=narrative||
+            saved.entries[1].caption!=""||saved.entries[1].image!="Content/UI/second.png"||
+            saved.entries[0].id!=deck.entries[0].id||saved.seconds!=1.5f||!saved.shuffle)
+            return Fail("carousel image/caption identities or free text changed on reopen");
+        RuntimeScreenDependencyDocument dependencies;
+        if(!MakeRuntimeScreenDependencyReader(projectId)(path.generic_u8string(),dependencies,error) ||
+            std::find(dependencies.imagePaths.begin(),dependencies.imagePaths.end(),
+                "Content/UI/second.png")==dependencies.imagePaths.end())
+            return Fail("carousel image missing from package dependency projection");
+        const auto history=session.UndoCount();
+        auto invalid=deck;invalid.entries[1].id=invalid.entries[0].id;
+        if(session.SetCarousel(id,invalid,error)||session.UndoCount()!=history)
+            return Fail("duplicate slide identity changed authoring history");
+        invalid=deck;invalid.entries[0].image="../outside.png";
+        if(session.SetCarousel(id,invalid,error))return Fail("carousel accepted an external image");
+        invalid=deck;invalid.seconds=0;
+        if(session.SetCarousel(id,invalid,error))return Fail("carousel accepted zero playback duration");
+        invalid=deck;invalid.entries[0].caption=std::string(16385,'x');
+        if(session.SetCarousel(id,invalid,error))return Fail("carousel accepted unbounded caption");
+        ScreenWidgetClipboard copied;std::vector<StableId> pasted;
+        if(!session.CopyWidgets({id},copied,error)||!session.PasteWidgets(copied,20,20,pasted,error))
+            return Fail("carousel copy/paste failed: "+error);
+        const ScreenWidget* copy=nullptr;
+        for(const auto& w:session.Document().widgets)if(w.carousel && w.id!=id)copy=&w;
+        if(!copy)return Fail("copied carousel missing");
+        const auto copyId=copy->id;
+        bool child=false;for(const auto& w:session.Document().widgets)
+            if(w.carouselCaption && w.parentId==copyId)child=true;
+        if(!child)return Fail("carousel copy lost its caption child");
+        if(!session.DeleteWidgets({id},error)||session.FindWidget(captionId)||
+            !session.Undo(error)||!session.FindWidget(captionId))
+            return Fail("delete/undo orphaned carousel caption");
+    }
+
     std::cout << "PASS: Gate 8D Screen authoring preserves basic and advanced edits, creator transactions, style states, typography, parent/layout geometry, action/focus identity, reusable component remapping, history and transactional Save/Open\n";
     return 0;
 }

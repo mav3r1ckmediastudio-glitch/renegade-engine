@@ -4,6 +4,7 @@
 #include "renegade/bridge/DialogueAssetService.h"
 #include "RenegadeScreenEditorWorkspace.h"
 #include "ScreenHintEditor.h"
+#include "ScreenCarouselEditor.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
 #include "renegade/bridge/CreatorVideoWorkflowService.h"
 #include "renegade/bridge/VideoAssetService.h"
@@ -765,7 +766,18 @@ namespace renegade::studio
         imageAssetButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             const auto* selected=session_ ? session_->FindWidget(selectedWidgetId_) : nullptr;
-            if (selected && selected->kind==bridge::ScreenWidgetKind::Text) ChooseHintList();
+            if (selected && selected->carousel)
+            {
+                auto deck=*selected->carousel;
+                auto id=selected->id;
+                if (EditScreenCarousel(deck,gridProjectRoot_,session_->ProjectId()))
+                {
+                    std::string error;
+                    if (session_->SetCarousel(id,std::move(deck),error)) RefreshAfterMutation("Carousel saved");
+                    else SetStatus(error);
+                }
+            }
+            else if (selected && selected->kind==bridge::ScreenWidgetKind::Text) ChooseHintList();
             else if (selected && (selected->video || bridge::IsScreenBackground(session_->Document(),*selected))) ChooseScreenMedia();
             else if (graphicRequested_) graphicRequested_(false);
         });
@@ -1185,8 +1197,8 @@ namespace renegade::studio
             cameraBackgroundButton_.SetText(source ? "Live camera: "+source->cameraName : selected->video ? "Source: video / choose camera..." : "Source: image / choose camera...");
             if(source)panBackgroundButton_.SetText(source->slowPan ? "Slow pan: on" : "Slow pan: off");
         }
-        imageAssetButton_.SetText(selectedReady && selected->kind==bridge::ScreenWidgetKind::Text ? "Hint list..." : background ? "Add file..." : selectedReady && selected->video ? "Choose video..." : "CHANGE GRAPHIC");
-        imageAssetButton_.SetVisible(!button && selectedReady && !focusCanvas_ && !rightCollapsed_ &&
+        imageAssetButton_.SetText(selectedReady && selected->kind==bridge::ScreenWidgetKind::Text ? "Hint list..." : selectedReady && selected->carousel ? "Edit carousel..." : background ? "Add file..." : selectedReady && selected->video ? "Choose video..." : "CHANGE GRAPHIC");
+        imageAssetButton_.SetVisible(!button && selectedReady && !selected->carouselCaption && !focusCanvas_ && !rightCollapsed_ &&
             !inspectorSuppressed_);
         const bool progressArtworkReady = selectedReady &&
             selected->kind == bridge::ScreenWidgetKind::Progress &&
@@ -2040,7 +2052,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::CreateElement(
         const bridge::ScreenWidgetKind kind,
-        const bool background, const XMFLOAT4* drop, bool video, const bridge::StableId& videoId)
+        const bool background, const XMFLOAT4* drop, bool video, const bridge::StableId& videoId, bool carousel)
     {
         if (!session_ || !session_->IsLoaded()) return;
         const auto& document = session_->Document();
@@ -2111,7 +2123,8 @@ namespace renegade::studio
         }
         else
         {
-            widget.name = video ? "Video" : "Image";
+            widget.name = carousel ? "Carousel" : video ? "Video" : "Image";
+            if (carousel) {widget.carousel.emplace();widget.imageFit=bridge::ScreenImageFit::Contain;}
             if (video) widget.video.emplace().assetId=videoId;
             widget.rect.width = std::min(480.0f, document.designWidth - 40.0f);
             widget.rect.height = std::min(270.0f, document.designHeight - 40.0f);
@@ -2136,6 +2149,13 @@ namespace renegade::studio
             widget.rect.y = std::clamp((drop->y-view.y)*document.designHeight/view.height-widget.rect.height/2, 0.0f, document.designHeight-widget.rect.height);
             if (gridSnapEnabled_ && !wi::input::Down(wi::input::KEYBOARD_BUTTON_ALT) && !wi::input::Down(wi::input::KEYBOARD_BUTTON_ALTGR))
                 widget.rect = SnapScreenGridRect(widget.rect, ScreenGridGesture::Move, static_cast<float>(gridSpacing_), document.designWidth, document.designHeight);
+        }
+        if(carousel)
+        {
+            // The linked caption begins eight pixels below the image.
+            // Keep the entire newly created pair on the design canvas.
+            widget.rect.height=std::min(widget.rect.height,std::max(1.0f,document.designHeight-88.0f));
+            widget.rect.y=std::clamp(widget.rect.y,0.0f,std::max(0.0f,document.designHeight-widget.rect.height-88.0f));
         }
         const bool createdOk = kind == bridge::ScreenWidgetKind::Button
             ? session_->CreateButtonWithUniqueAction(
@@ -2431,9 +2451,9 @@ namespace renegade::studio
             {
                 paletteButtonPending_ = false;
                 if (Contains(PreviewBounds(), pointer) && Contains(PreviewViewport(), pointer) && !Contains(MinimapBounds(), pointer))
-                    CreateElement(paletteVideo_ ? bridge::ScreenWidgetKind::Image : bridge::ScreenWidgetKind::Button, false, &pointer, paletteVideo_);
+                    CreateElement((paletteVideo_ || paletteCarousel_) ? bridge::ScreenWidgetKind::Image : bridge::ScreenWidgetKind::Button, false, &pointer, paletteVideo_,{},paletteCarousel_);
                 else if (std::abs(pointer.x-palettePress_.x)<5 && std::abs(pointer.y-palettePress_.y)<5)
-                    CreateElement(paletteVideo_ ? bridge::ScreenWidgetKind::Image : bridge::ScreenWidgetKind::Button, false, nullptr, paletteVideo_);
+                    CreateElement((paletteVideo_ || paletteCarousel_) ? bridge::ScreenWidgetKind::Image : bridge::ScreenWidgetKind::Button, false, nullptr, paletteVideo_,{},paletteCarousel_);
             }
             return;
         }
@@ -2601,7 +2621,7 @@ namespace renegade::studio
             if (!focusCanvas_ && !rightCollapsed_ && !InventoryInspectorActive() && !inspectorSuppressed_) if (const auto* widget = session_->FindWidget(selectedWidgetId_))
             {
                 const float inspectorX = width_ - panels_.right + 14.0f;
-                if(!InventoryAvailable()) Label(widget->video ? "Video" : bridge::ScreenWidgetKindName(widget->kind), inspectorX,
+                if(!InventoryAvailable()) Label(widget->carousel ? "Carousel" : widget->video ? "Video" : bridge::ScreenWidgetKindName(widget->kind), inspectorX,
                     HeaderHeight + 42.0f, 10, Orange, cmd);
                 Label("NAME", inspectorX, HeaderHeight + (widget->kind == bridge::ScreenWidgetKind::Image ? 121.0f : 57.0f), 9, Muted, cmd);
                 if (widget->kind == bridge::ScreenWidgetKind::Progress || widget->kind == bridge::ScreenWidgetKind::Text || bridge::IsScreenInteractive(widget->kind))
@@ -3007,8 +3027,10 @@ namespace renegade::studio
                 CreateElement(bridge::ScreenWidgetKind::Progress, false); break;
             case ScreenToolboxAction::Text:
                 CreateElement(bridge::ScreenWidgetKind::Text, false); break;
+            case ScreenToolboxAction::Carousel:
             case ScreenToolboxAction::Video:
             case ScreenToolboxAction::Button:
+                paletteCarousel_=item->action==ScreenToolboxAction::Carousel;
                 paletteVideo_=item->action==ScreenToolboxAction::Video;
                 paletteButtonPending_ = true;
                 palettePress_ = pointer;
@@ -3262,7 +3284,7 @@ namespace renegade::studio
             Label(Shorten(widget.name, left < 280.0f ? 17 : 24),
                 38.0f, y + 6.0f, 10,
                 selectedWidgetIds_.count(widget.id) ? Text : Muted, cmd);
-            Label(widget.video ? "Video" : bridge::ScreenWidgetKindName(widget.kind),
+            Label(widget.carousel ? "Carousel" : widget.video ? "Video" : bridge::ScreenWidgetKindName(widget.kind),
                 left - 64.0f, y + 7.0f, 8, Muted, cmd);
         }
     }

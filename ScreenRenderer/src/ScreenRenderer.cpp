@@ -179,6 +179,13 @@ namespace
         std::string displayedHint;
         std::string videoDetails;
         float hintSeconds=0;
+        std::vector<wi::Resource> carouselImages;
+        std::vector<size_t> carouselOrder;
+        size_t carouselPosition=0;
+        float carouselSeconds=0;
+        std::mt19937 carouselRandom{std::random_device{}()};
+        bool emptyCarouselCaption=false;
+        std::optional<std::string> carouselCaptionText;
 
         wi::Resource progressFrameImage;
         wi::Resource progressFillImage;
@@ -336,7 +343,7 @@ namespace
             const wi::graphics::CommandList cmd) const override
         {
             wi::gui::Widget::Render(canvas, cmd);
-            if (!IsVisible()) return;
+            if (!IsVisible() || emptyCarouselCaption) return;
 
             auto clipped = scissorRect;
             if (hasClip)
@@ -471,7 +478,8 @@ namespace
                     (text.verticalAlignment == ScreenVerticalAlignment::Bottom ?
                         top + height : top);
                 params.h_wrap = text.wrap ? width : -1.0f;
-                std::string display=displayedHint.empty() ? authored.text : displayedHint;
+                std::string display=carouselCaptionText ? *carouselCaptionText :
+                    (displayedHint.empty() ? authored.text : displayedHint);
                 if(renegade::bridge::IsScreenValueControl(authored.kind))
                 {
                     using namespace renegade::bridge;
@@ -1018,6 +1026,18 @@ namespace renegade::screen
                 { Reset(renderPath); return false; }
             }
 
+            if(widget.carousel)
+            {
+                for(const auto& slide:widget.carousel->entries)
+                {
+                    wi::Resource image;
+                    if(!loadResource(slide.image,image)){Reset(renderPath);return false;}
+                    surface->carouselOrder.push_back(surface->carouselImages.size());
+                    surface->carouselImages.push_back(std::move(image));
+                }
+                if(widget.carousel->shuffle)
+                    std::shuffle(surface->carouselOrder.begin(),surface->carouselOrder.end(),surface->carouselRandom);
+            }
             std::string primary = widget.style.normal.imageResourcePath;
             if (primary.empty() && widget.kind == bridge::ScreenWidgetKind::Image)
                 primary = widget.resourcePath;
@@ -1147,6 +1167,7 @@ namespace renegade::screen
         impl_->root.priority_change=false;
         impl_->loaded = true;
         AttachPresentation(renderPath);
+        RefreshCarouselPresentation();
         ApplyLayout(renderPath);
         error.clear();
         return true;
@@ -1506,11 +1527,65 @@ namespace renegade::screen
         impl_->cameraSurface=surface->authored.cameraSource && surface->authored.visible ? surface : nullptr;
     }
 
+    void ScreenRenderer::RefreshCarouselPresentation()
+    {
+        for(const auto& surface:impl_->surfaces) if(surface->authored.carousel)
+        {
+            const auto& deck=*surface->authored.carousel;
+            const bool hasEntry=!surface->carouselOrder.empty();
+            const size_t index=hasEntry?surface->carouselOrder[surface->carouselPosition]:0;
+            if(hasEntry)
+                for(auto& state:surface->resources) state.second=surface->carouselImages[index];
+            for(const auto& child:impl_->surfaces)
+                if(child->authored.carouselCaption && child->authored.parentId==surface->authored.id)
+                {
+                    // The normal controller refresh restores authored Text each frame.
+                    // Carousel content is transient media, independent of that baseline.
+                    child->carouselCaptionText=hasEntry?deck.entries[index].caption:std::string{};
+                    child->emptyCarouselCaption=child->carouselCaptionText->find_first_not_of(" \t\r\n")==std::string::npos;
+                }
+        }
+    }
+
+    bool ScreenRenderer::PreviewCarouselEntry(const bridge::StableId& id,size_t entry)
+    {
+        const auto it=impl_->byId.find(id);
+        if(it==impl_->byId.end() || entry>=it->second->carouselOrder.size())return false;
+        auto& surface=*it->second;
+        const auto found=std::find(surface.carouselOrder.begin(),surface.carouselOrder.end(),entry);
+        surface.carouselPosition=static_cast<size_t>(found-surface.carouselOrder.begin());
+        surface.carouselSeconds=0;
+        RefreshCarouselPresentation();
+        return true;
+    }
+
     void ScreenRenderer::UpdateCameraFeed(float dt)
     {
         if (!impl_->root.IsVisible()) return;
         for (const auto& surface : impl_->surfaces)
         {
+            if(surface->IsVisible() && surface->authored.carousel && surface->carouselOrder.size()>1 &&
+                std::isfinite(dt) && dt>0)
+            {
+                surface->carouselSeconds+=dt;
+                const auto& deck=*surface->authored.carousel;
+                if(surface->carouselSeconds>=deck.seconds)
+                {
+                    surface->carouselSeconds=std::fmod(surface->carouselSeconds,deck.seconds);
+                    const auto last=surface->carouselOrder[surface->carouselPosition];
+                    if(++surface->carouselPosition==surface->carouselOrder.size())
+                    {
+                        surface->carouselPosition=0;
+                        if(deck.shuffle)
+                        {
+                            std::shuffle(surface->carouselOrder.begin(),surface->carouselOrder.end(),surface->carouselRandom);
+                            if(surface->carouselOrder.front()==last)
+                                std::swap(surface->carouselOrder.front(),surface->carouselOrder.back());
+                        }
+                    }
+                    RefreshCarouselPresentation();
+                }
+            }
             if (surface->IsVisible() && surface->hintDeck && surface->hintDeck->original.size()>1)
             {
                 surface->hintSeconds+=dt;

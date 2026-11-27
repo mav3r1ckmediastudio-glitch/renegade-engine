@@ -255,6 +255,20 @@ namespace renegade::bridge
 
     enum class VideoTransparency : unsigned char { Auto, Opaque, RemoveBlack, SoftSmoke };
 
+    struct CarouselEntry
+    {
+        StableId id;
+        std::string image;
+        std::string caption;
+    };
+
+    struct ScreenCarousel
+    {
+        std::vector<CarouselEntry> entries;
+        bool shuffle=false;
+        float seconds=6;
+    };
+
     struct ScreenVideoPanel
     {
         StableId assetId;
@@ -320,6 +334,8 @@ namespace renegade::bridge
         bool backgroundPanel=false;
         std::optional<ScreenCameraSource> cameraSource;
         std::optional<ScreenVideoPanel> video;
+        std::optional<ScreenCarousel> carousel;
+        bool carouselCaption=false;
         std::string hintListPath;
 
     };

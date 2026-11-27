@@ -229,6 +229,30 @@ namespace
         return true;
     }
 
+    std::string CarouselCaptionHex(const std::string& text)
+    {
+        static constexpr char digits[]="0123456789abcdef";
+        std::string result;result.reserve(text.size()*2);
+        for(unsigned char c:text){result+=digits[c>>4];result+=digits[c&15];}
+        return result;
+    }
+    bool ReadCarouselCaption(const std::string& hex,std::string& text)
+    {
+        if(hex.size()%2 || hex.size()>32768)return false;
+        auto digit=[](char c)->int {
+            if(c>='0'&&c<='9')return c-'0';
+            if(c>='a'&&c<='f')return c-'a'+10;
+            if(c>='A'&&c<='F')return c-'A'+10;
+            return -1;
+        };
+        for(size_t i=0;i<hex.size();i+=2){
+            int a=digit(hex[i]),b=digit(hex[i+1]);
+            if(a<0||b<0)return false;
+            text+=char((a<<4)|b);
+        }
+        return true;
+    }
+
     std::string ColorText(const renegade::bridge::ScreenColor& color)
     {
         std::ostringstream text;
@@ -423,6 +447,7 @@ namespace renegade::bridge
                 if (widget.kind == ScreenWidgetKind::Image &&
                     !widget.resourcePath.empty())
                     addUnique(document.imagePaths, widget.resourcePath);
+                if (widget.carousel) for (const auto& entry:widget.carousel->entries) addUnique(document.imagePaths,entry.image);
                 const ScreenVisualState* states[] = {
                     &widget.style.normal, &widget.style.hover,
                     &widget.style.pressed, &widget.style.focused,
@@ -1077,6 +1102,18 @@ namespace renegade::bridge
                 { error = "Fill binding requires a Progress element."; return false; }
             }
 
+            if (widget.carousel)
+            {
+                const auto& deck=*widget.carousel;
+                if (document.schemaVersion<3 || widget.kind!=ScreenWidgetKind::Image || widget.video || widget.cameraSource || deck.entries.size()>256 ||
+                    !std::isfinite(deck.seconds) || deck.seconds<0.5f || deck.seconds>3600)
+                {error="Invalid carousel playback settings.";return false;}
+                std::unordered_set<StableId> ids;
+                for (const auto& slide:deck.entries)
+                    if (!IsValidStableId(slide.id) || !ids.insert(slide.id).second || !IsContentRelativePath(slide.image) ||
+                        slide.caption.size()>16384 || slide.caption.find('\0')!=std::string::npos)
+                    {error="A carousel entry needs an image, unique ID and caption of at most 16384 bytes.";return false;}
+            }
             if(static_cast<int>(widget.imageFit)<0||static_cast<int>(widget.imageFit)>2)
             {error="Screen image fitting is invalid.";return false;}
             if(widget.localOnly&&(document.schemaVersion<3||widget.kind!=ScreenWidgetKind::Button))
@@ -1115,7 +1152,7 @@ namespace renegade::bridge
                 break;
 
             case ScreenWidgetKind::Text:
-                if (widget.text.empty() || !widget.resourcePath.empty() ||
+                if ((widget.text.empty() && !widget.carouselCaption) || !widget.resourcePath.empty() ||
                     !widget.actionId.empty())
                 {
                     error = "Runtime screen text '" + widget.name +
@@ -1142,6 +1179,16 @@ namespace renegade::bridge
                 error = "Screen element kind is unsupported.";
                 return false;
             }
+        }
+
+        std::unordered_set<StableId> captionParents;
+        for(const auto& widget:document.widgets) if(widget.carouselCaption)
+        {
+            const auto parent=widgets.find(widget.parentId);
+            if(document.schemaVersion<3 || widget.kind!=ScreenWidgetKind::Text ||
+                !widget.hintListPath.empty() || parent==widgets.end() || !parent->second->carousel ||
+                !captionParents.insert(widget.parentId).second)
+            {error="A carousel caption must be a single Text child of its carousel.";return false;}
         }
 
         if (needsControl && buttonCount == 0)
@@ -1412,6 +1459,21 @@ namespace renegade::bridge
                     section.Set("text", widget.text);
                     section.Set("resource", widget.resourcePath);
                     section.Set("action", widget.actionId);
+                    if (widget.carouselCaption) section.Set("carousel_caption",true);
+                    if (widget.carousel)
+                    {
+                        const auto& deck=*widget.carousel;
+                        section.Set("carousel_count",static_cast<int>(deck.entries.size()));
+                        section.Set("carousel_seconds",deck.seconds);
+                        section.Set("carousel_shuffle",deck.shuffle);
+                        for (size_t i=0;i<deck.entries.size();++i)
+                        {
+                            const auto key="slide_"+std::to_string(i);
+                            section.Set((key+"_id").c_str(),deck.entries[i].id);
+                            section.Set((key+"_image").c_str(),deck.entries[i].image);
+                            section.Set((key+"_caption_hex").c_str(),CarouselCaptionHex(deck.entries[i].caption));
+                        }
+                    }
                     if(document.schemaVersion>=3)
                     {
                         section.Set("local_only",widget.localOnly);
@@ -1777,6 +1839,23 @@ namespace renegade::bridge
                 widget.text = section.GetText("text");
                 widget.resourcePath = section.GetText("resource");
                 if (sourceSchema>=3) widget.hintListPath=section.GetText("hint_list");
+                widget.carouselCaption=section.Has("carousel_caption") && section.GetBool("carousel_caption");
+                if (section.Has("carousel_count"))
+                {
+                    auto& deck=widget.carousel.emplace();
+                    const int count=section.GetInt("carousel_count");
+                    if (count<0 || count>256) {error="Invalid carousel entry count.";return false;}
+                    deck.shuffle=section.GetBool("carousel_shuffle");
+                    deck.seconds=section.GetFloat("carousel_seconds");
+                    for (int i=0;i<count;++i)
+                    {
+                        const auto key="slide_"+std::to_string(i);
+                        CarouselEntry entry{section.GetText((key+"_id").c_str()),section.GetText((key+"_image").c_str()),{}};
+                        if(!ReadCarouselCaption(section.GetText((key+"_caption_hex").c_str()),entry.caption))
+                        {error="Invalid carousel caption encoding.";return false;}
+                        deck.entries.push_back(std::move(entry));
+                    }
+                }
                 if (sourceSchema >= 3 && section.Has("video_asset"))
                     widget.video = ScreenVideoPanel{section.GetText("video_asset"),section.GetBool("video_loop"),
                         section.GetBool("video_mute"),section.GetBool("video_additive"),

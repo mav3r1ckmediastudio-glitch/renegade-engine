@@ -345,6 +345,18 @@ namespace renegade::bridge
             error="Select a Text element.";return false;
         }
 
+        [[nodiscard]] bool SetCarousel(const StableId& id,ScreenCarousel deck,std::string& error)
+        {
+            if (!loaded_) {error="No screen is open.";return false;}
+            auto next=Document();
+            for (auto& w:next.widgets) if (w.id==id && w.carousel)
+            {
+                w.carousel=std::move(deck);
+                return CommitMutation(std::move(next),error);
+            }
+            error="Select a carousel first.";
+            return false;
+        }
         [[nodiscard]] bool SetVideoPanel(const StableId& id, ScreenVideoPanel video, std::string& error)
         {
             if (!loaded_) { error="No screen is open."; return false; }

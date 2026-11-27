@@ -290,7 +290,7 @@ namespace renegade::bridge
         }
 
         ScreenDocument candidate = Document();
-        if ((widget.video || widget.kind == ScreenWidgetKind::Progress || IsScreenValueControl(widget.kind) || !widget.bindings.empty() || !widget.animations.empty() || widget.container.mode != ScreenChildLayout::Free || widget.container.compactBelowWidth>0) && candidate.schemaVersion < 3)
+        if ((widget.carousel || widget.video || widget.kind == ScreenWidgetKind::Progress || IsScreenValueControl(widget.kind) || !widget.bindings.empty() || !widget.animations.empty() || widget.container.mode != ScreenChildLayout::Free || widget.container.compactBelowWidth>0) && candidate.schemaVersion < 3)
         {
             candidate.migratedFromVersion = candidate.schemaVersion;
             candidate.schemaVersion = 3;
@@ -313,11 +313,30 @@ namespace renegade::bridge
         }
 
         const StableId newId = widget.id;
+        std::optional<ScreenWidget> caption;
+        if (widget.carousel)
+        {
+            auto& child=caption.emplace();
+            child.id=GenerateStableId();
+            child.parentId=newId;
+            child.carouselCaption=true;
+            child.name="Carousel caption";
+            child.kind=ScreenWidgetKind::Text;
+            child.enabled=false;
+            child.rect={0,widget.rect.height+8,widget.rect.width,80};
+            child.layoutMode=ScreenLayoutMode::Anchored;
+            child.anchors={0,1,1,1,0,8,0,88};
+            child.style=MakeScreenWidgetStyleTemplate(child.kind,24);
+            child.style.text.fontSize=24;
+            child.style.text.wrap=true;
+            child.style.text.horizontalAlignment=ScreenHorizontalAlignment::Center;
+        }
         if (insertAtBack)
             candidate.widgets.insert(candidate.widgets.begin(), std::move(widget));
         else
             candidate.widgets.push_back(std::move(widget));
 
+        if (caption) candidate.widgets.push_back(std::move(*caption));
         const auto* created = [&candidate, &newId]() -> const ScreenWidget*
         {
             const auto found = std::find_if(

@@ -221,7 +221,7 @@ namespace renegade::studio
         void RedoScreen();
         void ToggleVisible();
         void ToggleEnabled();
-        void CreateElement(bridge::ScreenWidgetKind kind, bool background, const XMFLOAT4* drop = nullptr, bool video = false, const bridge::StableId& videoId = {});
+        void CreateElement(bridge::ScreenWidgetKind kind, bool background, const XMFLOAT4* drop = nullptr, bool video = false, const bridge::StableId& videoId = {}, bool carousel=false);
         void DuplicateSelectedWidget();
         void DeleteSelectedWidget();
         void MoveSelectedWidgetToBack();
@@ -359,6 +359,7 @@ namespace renegade::studio
         RenegadeButton progressFillButton_;
         bool paletteButtonPending_ = false;
         bool paletteVideo_ = false;
+        bool paletteCarousel_ = false;
         void ChooseScreenMedia();
         bool chooseImageSource_=false;
         void ChooseHintList();
