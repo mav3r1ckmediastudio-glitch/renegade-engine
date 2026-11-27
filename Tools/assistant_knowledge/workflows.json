@@ -1932,7 +1932,7 @@
         {
           "path": "Studio/src/RenegadeStudioChrome.cpp",
           "needle": "{\"IMPORT MODEL...\", true}",
-          "sha256": "e514834c0fc522cf2549e1a1b799c63b5f2bcfddda6948c4fec78b33e43175d2"
+          "sha256": "b37370545668f42b12702bf7922712d60c4d675d7f037d198e04563f943ce488"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",

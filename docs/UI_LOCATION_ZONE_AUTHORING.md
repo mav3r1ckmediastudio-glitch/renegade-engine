@@ -31,7 +31,7 @@ The compass editor starts in Basic mode, showing presentation and range settings
 
 C++ uses WorldLocationService and the same LocationProfile / LocationAnnouncementSettings as native zones. Native zone creation and settings use zones::Create and zones::Edit; their metadata persists in WISCENE. The renderer samples LocationAnnouncementFrame through SampleLocationText.
 
-Governed Lua exposes renegade.locations (contract version 1). Use a native Location Zone entity's stable ID to get/configure its registered location. Native locations are registered before on_start callbacks. Later transform updates follow the native anchor while preserving Lua overrides; a new authored profile/name reapplies authored settings.
+Governed Lua exposes renegade.locations (contract version 1). Use a native Location Zone entity's stable ID or its live EntityRef to get/configure its registered location. An attached script can pass self.entity directly. Native locations are registered before on_start callbacks. Later transform updates follow the native anchor while preserving Lua overrides; a new authored profile/name reapplies authored settings.
 
 ~~~lua
 local locations = renegade.locations

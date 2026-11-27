@@ -540,7 +540,7 @@ namespace renegade::studio
         for(auto& control:locationNumbers_)control.SetVisible(show);
         if(!show)return;
         auto place=[&](wi::gui::Widget& w){w.SetPos({12,y});w.SetSize({width,26});y+=35;};
-        auto check=[&](wi::gui::CheckBox& w){w.SetPos({12,y});w.SetSize({20,20});y+=35;};
+        auto check=[&](wi::gui::CheckBox& w){w.SetPos({12+width-20,y});w.SetSize({20,20});y+=35;};
         locationType_.SetValue(z.location.type);place(locationType_);place(locationIcon_);
         locationIcon_.SetText(z.location.icon.empty()?"CHOOSE LOCATION ICON...":"CHANGE LOCATION ICON...");
         locationAnnounce_.SetCheck(z.location.announcement.enabled);check(locationAnnounce_);

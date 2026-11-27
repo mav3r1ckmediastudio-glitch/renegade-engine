@@ -134,6 +134,17 @@ return {
     auto scripts=CreateScriptDocument(doc.envelope.projectId,GenerateStableId(),"Content/Scenes/Proof.wiscene","locations");
     ScriptSourceBinding binding;binding.sourceId=GenerateStableId();binding.sourcePath="Content/Scripts/locations.lua";binding.apiVersion=1;
     scripts.attachments.push_back(CreateScriptAttachment(ScriptScope::Entity,ownerId,binding));
+    std::ofstream(temp/"Content/Scripts/native-location.lua")<<R"LUA(
+return {on_start=function(self)
+ local l=renegade.locations
+ assert(l.get(self.entity).name=="New location")
+ assert(l.configure(self.entity,{duration=9}))
+ assert(l.state(self.entity)~=nil)
+ assert(l.discover(self.entity))
+end}
+)LUA";
+    auto nativeBinding=binding;nativeBinding.sourceId=GenerateStableId();nativeBinding.sourcePath="Content/Scripts/native-location.lua";
+    scripts.attachments.push_back(CreateScriptAttachment(ScriptScope::Entity,identity,nativeBinding));
     RuntimeScriptRuntime lua;Check(lua.StartScene(scripts,scene,temp.generic_u8string(),error),"start governed locations script");
     for(const auto& diagnostic:lua.Diagnostics())std::cerr<<diagnostic.message<<'\n';
     Check(lua.DisabledInstanceCount()==0&&lua.Locations().All().size()==2&&lua.Locations().Get(identity)->location.profile.announcement.duration==9&&lua.Locations().Announcement().has_value(),"Lua locations parity");

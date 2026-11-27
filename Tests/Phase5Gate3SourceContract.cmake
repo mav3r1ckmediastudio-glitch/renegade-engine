@@ -96,7 +96,7 @@ foreach(token IN ITEMS
     "ENVIRONMENT PROBE"
     "Action::CreateDecal"
     "Action::CreateEnvironmentProbe"
-    "5, 9, 13, 4, 1, 4"
+    "5, 9, 14, 4, 1, 4"
     "menu == 2 && item >= 0 && item < 14"
     "std::array<Action, 14>"
     "Action::CreateZone"

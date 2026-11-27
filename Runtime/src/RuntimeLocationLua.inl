@@ -1,4 +1,10 @@
 // Included inside the governed RuntimeScriptRuntime::Impl.
+std::string LocationId(lua_State* l,int at) const
+{
+    if(lua_type(l,at)==LUA_TSTRING)return NavString(l,at);
+    const auto* reference=static_cast<EntityRefPayload*>(luaL_testudata(l,at,EntityRefMetatable));
+    return reference&&reference->owner==this&&IsLiveEntityRef(*reference)?reference->stableId:std::string{};
+}
 bool LocationPatch(lua_State* l,int at,bridge::WorldLocation& item,std::string& error)
 {
     if(!lua_istable(l,at)){error="Pass location settings as a table.";return false;}at=lua_absindex(l,at);
@@ -46,7 +52,7 @@ static int LocationPutLua(lua_State* l)
 }
 static int LocationConfigureLua(lua_State* l)
 {
-    auto* self=FromUpvalue(l);const auto* v=self?self->locations.Get(NavString(l,1)):nullptr;
+    auto* self=FromUpvalue(l);const auto* v=self?self->locations.Get(self->LocationId(l,1)):nullptr;
     if(!v)return PushFalseError(l,"Location is no longer active.");
     auto item=v->location;std::string error;
     if(!self->LocationPatch(l,2,item,error)||!self->locations.Put(std::move(item),error))return PushFalseError(l,error);
@@ -54,7 +60,7 @@ static int LocationConfigureLua(lua_State* l)
 }
 static int LocationGetLua(lua_State* l)
 {
-    auto* self=FromUpvalue(l);const auto* v=self?self->locations.Get(NavString(l,1)):nullptr;
+    auto* self=FromUpvalue(l);const auto* v=self?self->locations.Get(self->LocationId(l,1)):nullptr;
     if(!v)return PushNilError(l,"Location is no longer active.");const auto& item=v->location;const auto& p=item.profile;const auto& a=p.announcement;
     lua_newtable(l);
     const auto str=[&](const char* key,const std::string& value){lua_pushlstring(l,value.data(),value.size());lua_setfield(l,-2,key);};
@@ -70,7 +76,7 @@ static int LocationGetLua(lua_State* l)
 static int LocationActionLua(lua_State* l)
 {
     auto* self=FromUpvalue(l);if(!self||!self->running)return PushFalseError(l,"Locations require an active Level.");
-    const auto op=lua_tointeger(l,lua_upvalueindex(2));const auto id=NavString(l,1);std::string error;
+    const auto op=lua_tointeger(l,lua_upvalueindex(2));const auto id=self->LocationId(l,1);std::string error;
     if(op==3){self->locations.HideAnnouncement();lua_pushboolean(l,1);return 1;}
     const bool ok=op==0?self->locations.Remove(id,error):op==1?self->locations.Discover(id,error):self->locations.Announce(id,error);
     if(!ok)return PushFalseError(l,error);lua_pushboolean(l,1);return 1;
@@ -78,7 +84,7 @@ static int LocationActionLua(lua_State* l)
 static int LocationStateLua(lua_State* l)
 {
     auto* self=FromUpvalue(l);if(!self)return PushNilError(l,"Locations unavailable.");
-    const auto* v=self->locations.Get(NavString(l,1));if(!v)return PushNilError(l,"Location is no longer active.");
+    const auto* v=self->locations.Get(self->LocationId(l,1));if(!v)return PushNilError(l,"Location is no longer active.");
     lua_newtable(l);lua_pushboolean(l,v->withinRange);lua_setfield(l,-2,"near");lua_pushboolean(l,v->discovered);lua_setfield(l,-2,"discovered");
     lua_pushboolean(l,v->fired);lua_setfield(l,-2,"announced");return 1;
 }

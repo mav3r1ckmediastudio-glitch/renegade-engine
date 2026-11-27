@@ -1612,6 +1612,17 @@ namespace renegade::studio
             activeMenu_=-1;activeViewportMenu_=-1;
             pointerConsumed_=true;Deactivate();return;
         }
+        // A popup owns its item press before splitters or hierarchy tracks below it.
+        if (HasOpenMenuPopup() && wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            const int item=HitMenuItem(wi::input::GetPointer());
+            if(item>=0 && !(item/32==5 && item%32<2))
+            {
+                menuGesture_.Begin(item);
+                pointerConsumed_=true;
+                return;
+            }
+        }
         const XMFLOAT4 layoutPointer = wi::input::GetPointer();
         const float inspectorEdge = width_ - inspectorWidth_ - assistantDockWidth_;
         const float bottomTabsEdge =
@@ -1970,7 +1981,7 @@ namespace renegade::studio
                 constexpr float itemHeight = 30.0f;
                 const float popupX = menuPositions[activeMenu_] - 8.0f;
                 constexpr std::array<int, 6> popupItemCounts = {
-                    5, 9, 13, 4, 1, 4};
+                    5, 9, 14, 4, 1, 4};
                 const int item = static_cast<int>(
                     (y - TopBarHeight) / itemHeight);
                 const bool inPopup = x >= popupX &&
@@ -3260,7 +3271,7 @@ namespace renegade::studio
         }
         if(activeMenu_<0 || activeMenu_>=6) return -1;
         constexpr const char* names[]={"FILE","EDIT","ADD","VIEW","BUILD","WINDOW"};
-        constexpr int counts[]={5,9,13,4,1,4};
+        constexpr int counts[]={5,9,14,4,1,4};
         float x=214;
         for(int i=0;i<activeMenu_;++i)x+=std::string(names[i]).size()*8.0f+25.0f;
         if(p.x<x || p.x>=x+226 || p.y<TopBarHeight ||
