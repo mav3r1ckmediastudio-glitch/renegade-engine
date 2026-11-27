@@ -448,6 +448,8 @@ namespace renegade::bridge
                     !widget.resourcePath.empty())
                     addUnique(document.imagePaths, widget.resourcePath);
                 if (widget.carousel) for (const auto& entry:widget.carousel->entries) addUnique(document.imagePaths,entry.image);
+                if (!widget.progressFrameResourcePath.empty()) addUnique(document.imagePaths,widget.progressFrameResourcePath);
+                if (!widget.progressFillResourcePath.empty()) addUnique(document.imagePaths,widget.progressFillResourcePath);
                 const ScreenVisualState* states[] = {
                     &widget.style.normal, &widget.style.hover,
                     &widget.style.pressed, &widget.style.focused,
