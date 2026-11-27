@@ -191,6 +191,8 @@ namespace
         std::optional<std::string> carouselCaptionText;
 
         #include "ScreenNavigationDrawing.inl"
+        std::optional<renegade::bridge::LocationAnnouncementFrame> locationFrame;
+        bool locationReducedMotion=false;
 
         wi::Resource liquidSound;
         wi::audio::SoundInstance liquidVoice;
@@ -401,6 +403,8 @@ namespace
         {
             wi::gui::Widget::Render(canvas, cmd);
             if (!IsVisible() || emptyCarouselCaption) return;
+            const auto locationSample=locationFrame?renegade::bridge::SampleLocationText(*locationFrame,locationReducedMotion):renegade::bridge::LocationTextSample{};
+            if(locationFrame&&!locationSample.visible)return;
 
             auto clipped = scissorRect;
             if (hasClip)
@@ -412,7 +416,8 @@ namespace
             }
             ApplyScissor(canvas, clipped, cmd);
             const auto interaction = Interaction();
-            const auto style = renegade::bridge::ResolveAccessibleScreenStyle(authored.style,authored.kind,accessibility);
+            auto style = renegade::bridge::ResolveAccessibleScreenStyle(authored.style,authored.kind,accessibility);
+            if(locationFrame)style.opacity*=locationSample.opacity;
             const auto& visual = SelectVisual(style, interaction);
             const float geometryScale = std::min(scaleX, scaleY);
             const float border = std::clamp(
@@ -549,6 +554,10 @@ namespace
                 params.h_wrap = text.wrap ? width : -1.0f;
                 std::string display=carouselCaptionText ? *carouselCaptionText :
                     (displayedHint.empty() ? authored.text : displayedHint);
+                if(locationFrame){
+                    display=locationFrame->text;
+                    params.posX+=locationSample.x*geometryScale;params.posY+=locationSample.y*geometryScale;
+                }
                 if(renegade::bridge::IsScreenValueControl(authored.kind))
                 {
                     using namespace renegade::bridge;
@@ -917,6 +926,7 @@ namespace renegade::screen
         std::map<bridge::StableId,bridge::ScreenWidget> navigationOriginal;
         std::map<bridge::StableId,bool> navigationVisibility,navigationBindingVisibility;
         std::set<bridge::StableId> navigationDynamic;
+        std::set<std::string> navigationGlobalArtwork;
         std::uint64_t navigationRevision=UINT64_MAX;
 
         std::unordered_map<bridge::StableId, bridge::ScreenRect> logicalRects;
@@ -1800,7 +1810,7 @@ namespace renegade::screen
         impl_->surfaces.clear();
         impl_->byId.clear();
         impl_->navigationVisibility.clear();impl_->navigationBindingVisibility.clear();
-        impl_->navigationOriginal.clear();impl_->navigationDynamic.clear();impl_->navigationRevision=UINT64_MAX;
+        impl_->navigationOriginal.clear();impl_->navigationDynamic.clear();impl_->navigationGlobalArtwork.clear();impl_->navigationRevision=UINT64_MAX;
         impl_->logicalRects.clear();
         impl_->scrollThumbs.clear();
         impl_->activateSink = {};
@@ -1863,6 +1873,7 @@ namespace renegade::screen
         if(!impl_->loaded)return true;
         if(impl_->navigationRevision!=state.revision)
         {
+            std::set<std::string> liveArtwork;for(const auto& t:state.targets)if(!t.icon.empty())liveArtwork.insert(t.icon);
             std::map<bridge::StableId,std::unique_ptr<ScreenSurface>> prepared;
             for(const auto& [id,view]:state.views)
             {
@@ -1871,7 +1882,7 @@ namespace renegade::screen
                 if(!view.authored&&!includeCreated)continue;
                 auto surface=std::make_unique<ScreenSurface>();surface->Create(view.widget.name+"#"+id);
                 surface->authored=view.widget;surface->SetVisible(view.widget.visible);surface->SetEnabled(false);surface->SetShadowRadius(0);
-                bool reuse=old!=impl_->byId.end()&&old->second->authored.navigation.has_value();
+                bool reuse=old!=impl_->byId.end()&&old->second->authored.navigation.has_value()&&liveArtwork==impl_->navigationGlobalArtwork;
                 if(reuse)
                 {
                     const auto& a=old->second->authored;const auto& b=view.widget;
@@ -1883,7 +1894,7 @@ namespace renegade::screen
                 if(reuse){surface->navigationArtwork=old->second->navigationArtwork;surface->resources=old->second->resources;surface->fontStyle=old->second->fontStyle;}
                 else
                 {
-                if(!surface->LoadNavigationArtwork(impl_->projectRoot,error))return false;
+                if(!surface->LoadNavigationArtwork(impl_->projectRoot,error,&state.targets))return false;
                 for(auto interaction:{ScreenInteractionState::Normal,ScreenInteractionState::Hover,ScreenInteractionState::Pressed,ScreenInteractionState::Focused,ScreenInteractionState::Disabled})
                 {
                     const auto& visual=SelectVisual(view.widget.style,interaction);const auto& path=visual.imageResourcePath.empty()?view.widget.resourcePath:visual.imageResourcePath;
@@ -1924,7 +1935,7 @@ namespace renegade::screen
             }
             impl_->navigationVisibility.clear();
             for(const auto& [id,view]:state.views)if(impl_->byId.count(id))impl_->navigationVisibility[id]=view.widget.visible;
-            impl_->navigationRevision=state.revision;impl_->layoutDirty=true;
+            impl_->navigationGlobalArtwork=std::move(liveArtwork);impl_->navigationRevision=state.revision;impl_->layoutDirty=true;
         }
         auto snapshot=std::make_shared<bridge::WorldNavigationSnapshot>(state);snapshot->views.clear();
         for(auto& surface:impl_->surfaces)if(surface->authored.navigation)
@@ -1947,5 +1958,26 @@ namespace renegade::screen
     {
         const auto found=impl_->navigationOriginal.find(id);
         return found==impl_->navigationOriginal.end()?nullptr:&found->second;
+    }
+}
+
+namespace renegade::screen
+{
+    void ScreenRenderer::SetLocationAnnouncement(const std::optional<bridge::LocationAnnouncementFrame>& frame)
+    {
+        if(!impl_->loaded)return;
+        bool found=false;
+        for(auto& surface:impl_->surfaces)if(surface->authored.locationAnnouncement){
+            surface->locationFrame=frame.value_or(bridge::LocationAnnouncementFrame{});surface->locationReducedMotion=impl_->animation.reducedMotion;found=true;
+        }
+        if(found||!frame)return;
+        auto widget=bridge::MakeLocationAnnouncementWidget();
+        widget.rect.x=impl_->document.designWidth*.125f;widget.rect.y=impl_->document.designHeight*.21f;
+        widget.rect.width=impl_->document.designWidth*.75f;widget.rect.height=impl_->document.designHeight*.14f;
+        auto surface=std::make_unique<ScreenSurface>();surface->Create(widget.name+"#"+widget.id);
+        surface->authored=widget;surface->SetText(widget.text);surface->SetEnabled(false);surface->SetShadowRadius(0);
+        surface->locationFrame=*frame;
+        impl_->document.widgets.push_back(widget);impl_->root.surfaces.push_back(surface.get());impl_->byId[widget.id]=surface.get();
+        impl_->surfaces.push_back(std::move(surface));impl_->layoutDirty=true;
     }
 }

@@ -23,8 +23,8 @@ bool NavTarget(lua_State* l,int at,bridge::NavigationTarget& t,std::string& erro
     lua_pushnil(l);while(lua_next(l,at))
     {
         const auto key=NavString(l,-2);bool ok=true;
-        if(key=="id"||key=="label"||key=="category")
-        {if(lua_type(l,-1)!=LUA_TSTRING)ok=false;else(key=="id"?t.id:key=="label"?t.label:t.category)=NavString(l,-1);}
+        if(key=="id"||key=="label"||key=="category"||key=="icon")
+        {if(lua_type(l,-1)!=LUA_TSTRING)ok=false;else(key=="id"?t.id:key=="label"?t.label:key=="icon"?t.icon:t.category)=NavString(l,-1);if(ok&&key=="icon")ok=NavPath(t.icon,false,error);}
         else if(key=="position"){XMFLOAT3 p;if(!ReadVector3Table(l,-1,p,error))ok=false;else t.position={p.x,p.y,p.z};}
         else if(key=="entity")
         {RuntimeScriptEntityReference ref;XMFLOAT3 p;if(!scene||!ReadEntityReferenceForApi(l,-1,ref,error))ok=false;
@@ -149,7 +149,7 @@ static int NavigationGetLua(lua_State* l)
     for(const auto& t:c.targets)
     {
         lua_newtable(l);const auto put=[&](const char* k,const std::string& v){lua_pushlstring(l,v.data(),v.size());lua_setfield(l,-2,k);};
-        put("id",t.id);put("label",t.label);put("category",t.category);
+        put("id",t.id);put("label",t.label);put("category",t.category);put("icon",t.icon);
         lua_pushboolean(l,t.visible);lua_setfield(l,-2,"visible");lua_pushinteger(l,t.priority);lua_setfield(l,-2,"priority");
         lua_newtable(l);lua_pushnumber(l,t.position.x);lua_setfield(l,-2,"x");lua_pushnumber(l,t.position.y);lua_setfield(l,-2,"y");lua_pushnumber(l,t.position.z);lua_setfield(l,-2,"z");lua_setfield(l,-2,"position");
         if(!t.entityId.empty()){self->PushEntityRef(t.entityId);lua_setfield(l,-2,"entity");}

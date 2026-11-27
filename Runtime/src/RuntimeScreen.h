@@ -137,6 +137,7 @@ namespace renegade::runtime
             bridge::ScreenRect& track,bridge::ScreenRect& thumb) const;
         void SetPagedScrollbar(std::size_t panel,float position,float fraction);
         const bridge::ScreenWidget* NavigationPrototype(const bridge::StableId& id)const{return renderer_.NavigationPrototype(id);}
+        void SetLocationAnnouncement(const std::optional<bridge::LocationAnnouncementFrame>& frame){renderer_.SetLocationAnnouncement(frame);}
         bool SetNavigationState(const bridge::WorldNavigationSnapshot& state,bool includeCreated,std::string& error){return renderer_.SetNavigationState(state,includeCreated,error);}
         bool SetVisualImageResource(const bridge::StableId& widgetId,
             const std::string& resourcePath,std::string& error);

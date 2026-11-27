@@ -343,6 +343,7 @@ namespace renegade::bridge
         std::optional<ScreenVideoPanel> video;
         std::optional<ScreenCarousel> carousel;
         bool carouselCaption=false;
+        bool locationAnnouncement=false;
         std::string hintListPath;
 
     };

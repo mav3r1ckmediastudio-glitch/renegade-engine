@@ -62,6 +62,17 @@ namespace renegade::bridge
         {
             document.references.clear();
             document.embeddedGeneratedData.clear();
+            // Location artwork is an authored, project-owned texture reference,
+            // despite not being a material slot or a visible world mesh.
+            for(size_t i=0;i<scene.metadatas.GetCount();++i){
+                const auto& metadata=scene.metadatas[i];
+                if(metadata.int_values.has("renegade.zone.version")&&metadata.int_values.get("renegade.zone.version")==1&&
+                    metadata.int_values.has("zone.behaviour")&&metadata.int_values.get("zone.behaviour")==13&&
+                    metadata.string_values.has("location.icon"))
+                    AppendWisceneReference(document,metadata.string_values.get("location.icon"),DependencyClass::Texture,
+                        "wiscene.location["+std::to_string(i)+"].icon");
+            }
+
 
             for (std::size_t component = 0;
                 component < scene.materials.GetCount(); ++component)

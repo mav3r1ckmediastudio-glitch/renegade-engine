@@ -1,3 +1,4 @@
+#include "renegade/bridge/ZoneService.h"
 #include "renegade/bridge/WorldNavigationService.h"
 #include "RuntimeScreenCamera.h"
 #include "renegade/bridge/FlowService.h"
@@ -208,6 +209,7 @@ namespace renegade::runtime
         };
 
         bridge::WorldNavigationService navigation;
+        bridge::WorldLocationService locations;
         std::unique_ptr<bridge::ParticleEffectRuntimeService> particles;
         lua_State* lua = nullptr;
         MemoryBudget memory;
@@ -220,6 +222,7 @@ namespace renegade::runtime
         bool running = false;
         bool paused = false;
         std::vector<Instance> instances;
+        std::unordered_multimap<std::string, bridge::StableId> entityOwnersBySource;
         std::unordered_map<bridge::StableId, wi::ecs::Entity> entitiesById;
         std::vector<RuntimeScriptDiagnostic> diagnostics;
         bridge::GameplayEventService gameplayEvents;
@@ -844,6 +847,7 @@ namespace renegade::runtime
 
         #include "RuntimeParticleLua.inl"
         #include "RuntimeNavigationLua.inl"
+        #include "RuntimeLocationLua.inl"
 
         bool IsScriptedFlightPilot(lua_State* state)
         {
@@ -1792,7 +1796,7 @@ namespace renegade::runtime
             lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,LightSetStateLua,1);lua_setfield(lua,-2,"set_state");
             lua_setfield(lua,-2,"light");
             RegisterParticleLua();
-            RegisterNavigationLua();
+            RegisterNavigationLua();RegisterLocationLua();
 
             lua_newtable(lua);
             lua_pushlightuserdata(lua, this);
@@ -2507,6 +2511,23 @@ namespace renegade::runtime
                 projectRoot.clear();
                 return false;
             }
+            // Native locations must exist before entity and Level on_start callbacks.
+            // One metadata pass at scene start; subsequent updates use cached contacts.
+            for (size_t i=0;i<activeScene.metadatas.GetCount();++i)
+            {
+                const auto entity=activeScene.metadatas.GetEntity(i);
+                bridge::zones::Definition zone;
+                const auto* transform=activeScene.transforms.GetComponent(entity);
+                if (!transform || !bridge::zones::Read(activeScene,entity,zone) ||
+                    zone.behaviour!=bridge::zones::Behaviour::Location) continue;
+                const auto* name=activeScene.names.GetComponent(entity);
+                const auto position=transform->GetPosition();
+                bridge::WorldLocation location{bridge::PersistentEntityId(activeScene,entity),
+                    name?name->name:"Location",{position.x,position.y,position.z},zone.location};
+                if (!locations.SyncNative(std::move(location),error)) {
+                    locations.Reset();scene=nullptr;projectRoot.clear();return false;
+                }
+            }
             running = true;
             paused = false;
             error.clear();
@@ -2533,6 +2554,8 @@ namespace renegade::runtime
             ordered.reserve(document.attachments.size());
             for (const auto& attachment : document.attachments)
             {
+                if (attachment.scope == bridge::ScriptScope::Entity)
+                    entityOwnersBySource.emplace(attachment.sourcePath, attachment.ownerEntityId);
                 if (attachment.enabled)
                     ordered.push_back(attachment);
             }
@@ -2577,6 +2600,7 @@ namespace renegade::runtime
         void StopScene() noexcept
         {
 
+            entityOwnersBySource.clear();
             weatherTransition = bridge::WeatherTransitionController{};
             weatherTargetPreset.clear();
             weatherCompletionPending = false;
@@ -2591,7 +2615,7 @@ namespace renegade::runtime
                 projectRoot.clear();
                 running = false;
                 paused = false;
-                navigation.Reset();
+                navigation.Reset();locations.Reset();
                 return;
             }
             if (running)
@@ -2616,7 +2640,7 @@ namespace renegade::runtime
                 ++generation;
             running = false;
             paused = false;
-            navigation.Reset();
+            navigation.Reset();locations.Reset();
         }
 
         void Shutdown() noexcept
@@ -2783,6 +2807,15 @@ namespace renegade::runtime
             return false;
         }
         return impl_->gameplayEvents.Enqueue(std::move(event), error);
+    }
+
+    std::vector<bridge::StableId> RuntimeScriptRuntime::EntityOwnersForSource(const std::string& path) const
+    {
+        std::vector<bridge::StableId> owners;
+        const auto range = impl_->entityOwnersBySource.equal_range(path);
+        for (auto it = range.first; it != range.second; ++it)
+            owners.push_back(it->second);
+        return owners;
     }
 
     void RuntimeScriptRuntime::SetGameplayEventObserver(
@@ -2987,4 +3020,9 @@ namespace renegade::runtime
             return bridge::NavigationPoint{p.x,p.y,p.z};
         });
     }
+}
+
+namespace renegade::runtime
+{
+    bridge::WorldLocationService& RuntimeScriptRuntime::Locations(){return impl_->locations;}
 }

@@ -67,6 +67,7 @@ set(expected_marker_icons
     script_entity.png
     trigger_zone.png
     waypoint.png
+    zone_presets.png
 )
 
 file(GLOB actual_marker_icons RELATIVE "${marker_asset_root}" "${marker_asset_root}/*.png")

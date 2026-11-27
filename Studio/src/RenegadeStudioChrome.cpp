@@ -57,7 +57,7 @@ namespace
     using HierarchyCategory =
         renegade::studio::RenegadeStudioChrome::HierarchyCategory;
 
-    constexpr std::array<HierarchyCategory, 8> HierarchyCategoryOrder = {
+    constexpr std::array<HierarchyCategory, 9> HierarchyCategoryOrder = {
         HierarchyCategory::Lights,
         HierarchyCategory::Models,
         HierarchyCategory::Characters,
@@ -65,6 +65,7 @@ namespace
         HierarchyCategory::Terrain,
         HierarchyCategory::Effects,
         HierarchyCategory::Audio,
+        HierarchyCategory::Zones,
         HierarchyCategory::Other,
     };
 
@@ -87,6 +88,7 @@ namespace
             return "EFFECTS";
         case HierarchyCategory::Audio:
             return "AUDIO";
+        case HierarchyCategory::Zones: return "ZONES";
         case HierarchyCategory::Other:
         default:
             return "SCENE OBJECTS";
@@ -1355,7 +1357,7 @@ namespace renegade::studio
                     matchingRows.push_back(index);
                 }
             }
-            if (matchingRows.empty())
+            if (matchingRows.empty() && (category != HierarchyCategory::Zones || !hierarchyFilter_.empty()))
             {
                 continue;
             }
@@ -1968,7 +1970,7 @@ namespace renegade::studio
                 constexpr float itemHeight = 30.0f;
                 const float popupX = menuPositions[activeMenu_] - 8.0f;
                 constexpr std::array<int, 6> popupItemCounts = {
-                    5, 9, 12, 4, 1, 4};
+                    5, 9, 13, 4, 1, 4};
                 const int item = static_cast<int>(
                     (y - TopBarHeight) / itemHeight);
                 const bool inPopup = x >= popupX &&
@@ -2032,6 +2034,13 @@ namespace renegade::studio
                 if (visibleIndex < visibleHierarchyRows_.size())
                 {
                     const auto item = visibleHierarchyRows_[visibleIndex];
+                    if (item.header && item.category == HierarchyCategory::Zones &&
+                        x >= hierarchyWidth_ - 72 && x < hierarchyWidth_ - 40)
+                    {
+                        if (action_) action_(Action::CreateZone);
+                        pointerConsumed_ = true;
+                        return;
+                    }
                     if (item.header)
                     {
                         const auto categoryIndex =
@@ -2789,6 +2798,8 @@ namespace renegade::studio
                     cmd,
                     1.0f,
                     0.16f);
+                if (item.category == HierarchyCategory::Zones)
+                    DrawText("+", hierarchyWidth_ - 60, rowY + 7, SceneChromeStandardTextSize, Forge, cmd);
                 DrawText(
                     std::to_string(itemCount),
                     hierarchyWidth_ - 35.0f,
@@ -3242,14 +3253,14 @@ namespace renegade::studio
         {
             const float x = hierarchyWidth_ + 12.0f;
             const float y = TopBarHeight + SceneTabsHeight + 42.0f;
-            if (p.x < x || p.x >= x + 226 || p.y < y || p.y >= y + 150)
+            if (p.x < x || p.x >= x + 226 || p.y < y || p.y >= y + 180)
                 return -1;
             const int row = int((p.y - y) / 30);
             return row == 1 ? -1 : 6 * 32 + row; // View Mode heading.
         }
         if(activeMenu_<0 || activeMenu_>=6) return -1;
         constexpr const char* names[]={"FILE","EDIT","ADD","VIEW","BUILD","WINDOW"};
-        constexpr int counts[]={5,9,12,4,1,4};
+        constexpr int counts[]={5,9,13,4,1,4};
         float x=214;
         for(int i=0;i<activeMenu_;++i)x+=std::string(names[i]).size()*8.0f+25.0f;
         if(p.x<x || p.x>=x+226 || p.y<TopBarHeight ||
@@ -3272,6 +3283,7 @@ namespace renegade::studio
                         else if (item == 2) invoke(Action::ViewShaded);
                         else if (item == 3) invoke(Action::ViewWireframe);
                         else if (item == 4) invoke(Action::ViewWireframeOverlay);
+                        else if (item == 5) showZones_ = !showZones_;
                     }
                     else if (menu == 0 && item >= 0 && item < 5)
                     {
@@ -3288,9 +3300,9 @@ namespace renegade::studio
                             Action::SaveGroupPrefab,Action::UnpackGroup};
                         invoke(actions[item]);
                     }
-                    else if (menu == 2 && item >= 0 && item < 12)
+                    else if (menu == 2 && item >= 0 && item < 14)
                     {
-                        constexpr std::array<Action, 12> actions = {
+                        constexpr std::array<Action, 14> actions = {
                             Action::CreatePointLight,
                             Action::CreateSpotLight,
                             Action::CreateDirectionalLight,
@@ -3299,7 +3311,7 @@ namespace renegade::studio
                             Action::CreateDecal,
                             Action::CreateEnvironmentProbe,
                             Action::ImportStaticGlb, Action::CreateProjectile, Action::OpenDialogue,
-                            Action::CreateParticleEffect,Action::CreateNavigationGrid};
+                            Action::CreateParticleEffect,Action::CreateNavigationGrid,Action::CreateZone,Action::CreateLocationZone};
                         invoke(actions[item]);
                     }
                     else if (menu == 3 && item >= 0 && item < 4)
@@ -3405,7 +3417,7 @@ namespace renegade::studio
                     {"DIRECTIONAL LIGHT", true}, {"RECTANGLE LIGHT", true},
                     {"CAMERA", true}, {"DECAL", true},
                     {"ENVIRONMENT PROBE", true}, {"IMPORT MODEL...", true}, {"PROJECTILE...", true}, {"DIALOGUE EDITOR...", true},
-                    {"PARTICLE EMITTER", true}, {"NAVIGATION GRID", true}};
+                    {"PARTICLE EMITTER", true}, {"NAVIGATION GRID", true}, {"GAMEPLAY ZONE", true},{"LOCATION ZONE",true}};
             }
             else if (activeMenu_ == 3)
             {
@@ -3455,7 +3467,8 @@ namespace renegade::studio
                         {"VIEW MODE", false},
                         {viewportViewMode_ == 0 ? "[x] SHADED" : "[ ] SHADED", true},
                         {viewportViewMode_ == 1 ? "[x] WIREFRAME" : "[ ] WIREFRAME", true},
-                        {viewportViewMode_ == 2 ? "[x] SHADED + WIREFRAME" : "[ ] SHADED + WIREFRAME", true}});
+                        {viewportViewMode_ == 2 ? "[x] SHADED + WIREFRAME" : "[ ] SHADED + WIREFRAME", true},
+                        {showZones_ ? "[x] ZONES" : "[ ] ZONES", true}});
             }
         }
 

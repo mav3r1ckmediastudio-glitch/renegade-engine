@@ -17,6 +17,7 @@ namespace renegade::bridge
     {
         WorldNavigationSnapshot state_;
         std::map<std::string,NavigationTarget> targets_;
+        std::map<std::string,size_t> targetIndices_;
         std::set<std::string> entityIds_;
         bool entityIndexDirty_=true;
     public:
@@ -29,6 +30,7 @@ namespace renegade::bridge
         bool Remove(const StableId&,std::string& error);
         bool PutTarget(NavigationTarget,std::string& error);
         bool RemoveTarget(const std::string&,std::string& error);
+        const NavigationTarget* Target(const std::string& id)const {const auto i=targets_.find(id);return i==targets_.end()?nullptr:&i->second;}
         const NavigationView* View(const StableId& id)const;
         void SetObservers(NavigationObserver camera,NavigationObserver player);
         void ResolveEntities(const std::function<std::optional<NavigationPoint>(const std::string&)>& resolver);

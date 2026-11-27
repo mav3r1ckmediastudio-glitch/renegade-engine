@@ -57,12 +57,17 @@ namespace
         if(!ValidateNavigationTarget(t,error))return false;
         if(!targets_.count(t.id)&&targets_.size()>=MaximumTargets){error="Navigation target limit reached.";return false;}
         const auto before=targets_.find(t.id);if(before==targets_.end()||before->second.entityId!=t.entityId)entityIndexDirty_=true;
-        targets_[t.id]=std::move(t);state_.targets.clear();for(const auto& item:targets_)state_.targets.push_back(item.second);error.clear();return true;
+        const auto id=t.id;
+        if(before==targets_.end()){targetIndices_[id]=state_.targets.size();state_.targets.push_back(t);++state_.revision;}
+        else {if(before->second.icon!=t.icon)++state_.revision;state_.targets.at(targetIndices_.at(id))=t;}
+        targets_[id]=std::move(t);error.clear();return true;
     }
     bool WorldNavigationService::RemoveTarget(const std::string& id,std::string& error)
     {
-        if(!targets_.erase(id)){error="Unknown navigation target.";return false;}
-        entityIndexDirty_=true;state_.targets.clear();for(const auto& item:targets_)state_.targets.push_back(item.second);error.clear();return true;
+        const auto found=targetIndices_.find(id);if(found==targetIndices_.end()){error="Unknown navigation target.";return false;}
+        const auto index=found->second;
+        if(index+1<state_.targets.size()){state_.targets[index]=std::move(state_.targets.back());targetIndices_[state_.targets[index].id]=index;}
+        state_.targets.pop_back();targetIndices_.erase(found);targets_.erase(id);++state_.revision;entityIndexDirty_=true;error.clear();return true;
     }
     const NavigationView* WorldNavigationService::View(const StableId& id)const
     {const auto found=state_.views.find(id);return found==state_.views.end()?nullptr:&found->second;}
@@ -77,7 +82,7 @@ namespace
         }
         state_.entities.clear();for(const auto& id:entityIds_)if(const auto p=resolver(id))state_.entities.emplace(id,*p);
     }
-    void WorldNavigationService::Reset(){const auto revision=state_.revision+1;state_={};state_.revision=revision;targets_.clear();entityIds_.clear();entityIndexDirty_=false;}
+    void WorldNavigationService::Reset(){const auto revision=state_.revision+1;state_={};state_.revision=revision;targets_.clear();targetIndices_.clear();entityIds_.clear();entityIndexDirty_=false;}
 }
 
 namespace renegade::bridge

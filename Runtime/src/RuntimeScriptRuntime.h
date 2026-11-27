@@ -1,3 +1,4 @@
+#include "renegade/bridge/WorldLocationService.h"
 #include "renegade/bridge/WorldNavigationService.h"
 #pragma once
 
@@ -73,6 +74,7 @@ namespace renegade::runtime
         // scripts read this state through governed player/input namespaces;
         // they never poll Wicked's global input or receive raw ECS handles.
         bridge::WorldNavigationService& Navigation();
+        bridge::WorldLocationService& Locations();
         void ResolveNavigationEntities();
 
         void SetGameplayState(
@@ -102,6 +104,7 @@ namespace renegade::runtime
         // Read-only observer at the governed, accepted event consumer. It is
         // invoked once per event before creator on_event callbacks, never on
         // a rejected producer event. No second gameplay event queue.
+        [[nodiscard]] std::vector<bridge::StableId> EntityOwnersForSource(const std::string& path) const;
         void SetGameplayEventObserver(
             std::function<void(const bridge::GameplayEvent&)> observer);
 

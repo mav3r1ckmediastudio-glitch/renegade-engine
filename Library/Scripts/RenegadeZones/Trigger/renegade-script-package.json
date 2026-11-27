@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.trigger",
+  "package_version": "1.0.0",
+  "display_name": "Custom Trigger",
+  "files": [
+    {
+      "path": "TriggerZone.lua",
+      "content_hash": "fnv1a64:1a38b74f4ee8fb25",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "TriggerZone.lua"
+  ]
+}

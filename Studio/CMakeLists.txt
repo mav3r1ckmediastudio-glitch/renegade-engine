@@ -72,6 +72,7 @@ endif()
 
 add_executable(RenegadeStudio WIN32
     src/DialogueEditorWindow.cpp
+    src/ZoneStudio.cpp
     src/WaterfallStudioIntegration.cpp
     src/WaterfallTransparentStudio.cpp
     src/RiverFlowStudioIntegration.cpp

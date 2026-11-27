@@ -68,3 +68,8 @@ No implementation, application rebuild, UI takeover, GitHub push, merge or relea
 ## Location Zone simplification direction, 27 November 2026
 
 Use the owner's proposed Location Zone to author world navigation targets in the Level: placing it opens its Inspector for Name, Type and Icon. Reuse gameplay zones. Basic compass authoring should consume those registered locations and concentrate on presentation; move manual targets and internal details to Advanced. Keep custom per-location icons independent of semantic type, preserve shared C++/Lua access and avoid a second authoritative target list. The detailed requirement and remaining discovery decisions are in UI_WORLD_NAVIGATION_REQUIREMENTS.md. This is recorded direction, not completed Location Zone implementation.
+
+
+## Location implementation checkpoint, 27 November 2026
+
+The preceding planned-direction paragraphs are superseded by the current local implementation: existing gameplay zones are integrated, Location is appended as preset 13, its Inspector owns Name/Type/Icon and proximity announcement settings, and the compass Basic panel consumes live locations. None/Fade/Glitch/Wobble effects, repeat-on-return, explicit zone-entry discovery and matching governed Lua controls are implemented. Discovery defaults to visible-before-entry and is remembered only for this Level visit. Native locations exist before script on_start callbacks. See UI_LOCATION_ZONE_AUTHORING.md for defaults, scripting and limits. Focused contracts pass; native authoring/standalone visual acceptance remains pending.

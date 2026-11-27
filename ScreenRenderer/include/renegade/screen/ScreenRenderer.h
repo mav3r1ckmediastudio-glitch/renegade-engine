@@ -1,4 +1,5 @@
 #include "renegade/bridge/WorldNavigationService.h"
+#include "renegade/bridge/WorldLocationService.h"
 #pragma once
 
 #include "renegade/bridge/ScreenService.h"
@@ -167,6 +168,7 @@ namespace renegade::screen
             const bridge::StableId& trackId,float position,float fraction);
         const bridge::ScreenWidget* NavigationPrototype(const bridge::StableId&)const;
         bool PreviewNavigationDraft(const bridge::StableId&,const bridge::ScreenNavigation&,float heading,std::string& error,const bridge::ScreenWidget* appearance=nullptr);
+        void SetLocationAnnouncement(const std::optional<bridge::LocationAnnouncementFrame>&);
         bool SetNavigationState(const bridge::WorldNavigationSnapshot&,bool includeCreated,std::string& error);
         void SetWidgetFill(const bridge::StableId& widgetId, float fill);
         // Local editor audition only; the owning Screen document stays unchanged.

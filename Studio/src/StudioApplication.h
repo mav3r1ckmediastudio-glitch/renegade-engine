@@ -1,6 +1,7 @@
 #pragma once
 #include "DialogueEditorWindow.h"
 #include "StudioUiPolicy.h"
+#include "renegade/bridge/ZoneService.h"
 #include "renegade/bridge/SceneAssemblyService.h"
 #include "renegade/bridge/PlaceableWaterfallRenderer.h"
 #include "renegade/bridge/RiverFlowRenderer.h"
@@ -275,8 +276,10 @@ namespace renegade::studio
             }
 
             if (!projectHubVisible_ && !renderWorkspaceActive_)
-                inspectorPanel_.wi::gui::Widget::SetVisible(!waterfallInspector_.IsVisible());
+                inspectorPanel_.wi::gui::Widget::SetVisible(!waterfallInspector_.IsVisible() && !zoneInspector_.IsVisible());
         }
+
+        void DrawZoneLabels(wi::graphics::CommandList cmd) const;
 
         [[nodiscard]] XMFLOAT4 StoryFlowWorkspaceBounds() const noexcept
         {
@@ -913,6 +916,38 @@ namespace renegade::studio
         wi::gui::Label waterfallStatus_,waterfallPlacement_,waterfallWater_,waterfallSpray_;
         std::array<SceneInspectorSlider,6> waterfallSliders_;
         bool waterfallControlsCreated_=false;std::string waterfallUiError_;
+        wi::gui::Window zoneInspector_;
+        SceneInspectorComboBox zonePreset_, zoneTarget_;
+        std::array<SceneInspectorComboBox, 3> zoneOptions_;
+        std::array<SceneInspectorSlider, 3> zoneNumbers_;
+        SceneInspectorButton zoneScript_;
+        SceneInspectorButton locationIcon_,locationAdvanced_;
+        SceneInspectorTextInputField locationType_;
+        SceneInspectorComboBox locationEffect_,locationVisibility_;
+        std::array<SceneInspectorSlider,6> locationNumbers_;
+        wi::gui::CheckBox locationAnnounce_,locationRepeat_,locationCompass_;
+        bool locationAdvancedOpen_=false;
+        bridge::zones::Behaviour zonePlacementPreset_=bridge::zones::Behaviour::Trigger;
+        void CreateLocationControls();
+        void LayoutLocationControls(const bridge::zones::Definition&,float width,float& y);
+        void ChooseLocationIcon();
+
+        void OpenSelectedZoneScript();
+        std::array<SceneInspectorSlider, 3> zoneSizes_;
+        SceneInspectorTextInputField zoneName_;
+        std::array<SceneInspectorTextInputField, 2> zoneEvents_;
+        std::vector<std::string> zoneTargetIds_;
+        std::vector<wi::ecs::Entity> editorZones_;
+        bool zonePlacing_ = false;
+        int zoneFace_ = -1;
+        wi::ecs::Entity zoneDragEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::zones::Definition zoneStart_, zonePreview_;
+        XMFLOAT2 zonePointerStart_{}, zonePixelsPerMetre_{};
+        void CreateZoneControls();
+        bool LayoutZoneInspector();
+        void EditSelectedZone(const std::function<void(bridge::zones::Definition&)>& change);
+        void DrawZones();
+        bool HandleZonePointer(const XMFLOAT4& pointer);
         void CreateWaterfallControls();
         void TickWaterfallStudioProof();
         bool waterfallReviewConfigured_=false;int waterfallProofFrame_=0;

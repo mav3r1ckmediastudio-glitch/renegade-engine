@@ -26,7 +26,9 @@ class ScreenNavigationEditor final:public StudioModalWindow,public std::enable_s
     RenegadeButton font_,textColour_,backingColour_;
     RenegadeTextInputField fontSize_,targetPriority_;
     RenegadeCheckBox targetVisible_,keepIcons_;
-    RenegadeButton selectedIcon_;
+    RenegadeButton selectedIcon_,advancedButton_;
+    bool advancedMode_=false;
+    std::map<wi::gui::Widget*,XMFLOAT2> originalPositions_;
     RenegadeButton source_,neutral_,fantasy_,appearance_,backing_,strip_,pointer_,clearArt_,icon_,clearIcon_,add_,remove_,save_,cancel_;
     RenegadeTextInputField span_,heading_,size_,gap_,range_,filter_,iconCategory_,targetName_,targetCategory_,targetX_,targetY_,targetZ_,targetEntity_;
     RenegadeCheckBox names_,distances_,ticks_;
@@ -34,7 +36,7 @@ class ScreenNavigationEditor final:public StudioModalWindow,public std::enable_s
     wi::gui::TreeList targets_;
     std::vector<wi::gui::Widget*> controls_;
     int selected_=-1,pending_=-1;
-    void Add(wi::gui::Widget& w,float x,float y,float width,float height){w.SetPos({x,y});w.SetSize({width,height});w.SetShadowRadius(0);AddWidget(&w);controls_.push_back(&w);}
+    void Add(wi::gui::Widget& w,float x,float y,float width,float height){w.SetPos({x,y});w.SetSize({width,height});w.SetShadowRadius(0);AddWidget(&w);controls_.push_back(&w);originalPositions_[&w]={x,y};}
     void Button(RenegadeButton& b,const char* text,float x,float y,float width,const char* help)
     {b.Create(text);b.SetText(text);b.SetRenderTextSize(14);b.SetAccentOutlineStyle(true);b.SetTooltip(help);Add(b,x,y,width,32);}
     void Field(RenegadeTextInputField& f,const char* name,float x,float y,float width,const char* help)
@@ -91,10 +93,22 @@ class ScreenNavigationEditor final:public StudioModalWindow,public std::enable_s
     void UpdatePreview(const wi::Canvas& canvas,float dt)
     {
         if(!previewLoaded_)return;const auto o=ContentOrigin();
-        previewRenderer_.SetViewport({o.x+520,o.y+722,492,138.375f});
+        previewRenderer_.SetViewport(advancedMode_?bridge::ScreenRect{o.x+520,o.y+722,492,138.375f}:bridge::ScreenRect{o.x+372,o.y+432,640,180});
         auto clip=scissorRect;clip.top=std::max(clip.top,int(GetPos().y+38));clip.bottom=std::min(clip.bottom,int(GetPos().y+GetSize().y-76));
         previewRenderer_.SetClipViewport({float(clip.left),float(clip.top),float(clip.right-clip.left),float(clip.bottom-clip.top)});
         previewRenderer_.ApplyLayout(previewPath_);previewPath_.GetGUI().Update(canvas,dt);
+    }
+    void SetAdvanced(bool advanced)
+    {
+        advancedMode_=advanced;SetSize({1040,advanced?920.f:660.f});
+        for(const auto& [w,pos]:originalPositions_)if(w!=&save_&&w!=&cancel_)w->SetPos(pos);
+        for(wi::gui::Widget* w:std::vector<wi::gui::Widget*>{&source_,&span_,&heading_,&filter_,&iconCategory_,&icon_,&clearIcon_,&targets_,&add_,&remove_,&selectedIcon_,&targetPriority_,&targetVisible_,&targetName_,&targetCategory_,&targetX_,&targetY_,&targetZ_,&targetEntity_,&previewHeading_})w->SetVisible(advanced);
+        if(!advanced){
+            size_.SetPos({28,112});gap_.SetPos({266,112});range_.SetPos({28,174});
+            names_.SetPos({28,236});distances_.SetPos({185,236});ticks_.SetPos({325,236});
+            advancedButton_.SetPos({28,432});
+        }
+        advancedButton_.SetText(advanced?"BASIC SETTINGS":"ADVANCED...");
     }
     void Source(){const char* names[]={"Follow camera","Follow player","Manual heading"};source_.SetText(names[int(widget_.navigation->headingSource)]);}
     void ChooseFont()
@@ -211,6 +225,8 @@ public:
         Field(targetEntity_,"Follow entity ID (advanced)",520,596,492,"Optional persistent entity ID in this Level. Leave blank for fixed world coordinates; scripts can safely supply an EntityRef. Cross-project imports explicitly unassign this reference.");
         Field(targetPriority_,"Target priority",520,656,148,"Higher priority targets are retained when markers overlap; range-1000 to1000.");
         targetVisible_.Create("Show target");targetVisible_.SetRenderTextSize(14);targetVisible_.SetTooltip("Show or hide this authored target without deleting its settings.");Add(targetVisible_,692,656,20,24);targetVisible_.OnClick([this](const auto&){Preview();});
+        Button(advancedButton_,"ADVANCED...",28,398,300,"Show manual targets, heading source and specialist filters. Ordinary locations come from Location Zones in the Level.");
+        advancedButton_.OnClick([this](const auto&){Drafts();SetAdvanced(!advancedMode_);});
         targetName_.OnInputAccepted([this](const auto&){Preview();List();});
         targetCategory_.OnInputAccepted([this](const auto&){iconCategory_.SetValue(targetCategory_.GetValue());Preview();});
         Button(selectedIcon_,"Choose selected target icon...",28,770,444,"Assign an image to the selected target's category. All targets in that category share it; custom categories are supported.");
@@ -229,7 +245,7 @@ public:
         Close();widget_=std::move(widget);root_=std::move(root);project_=std::move(project);accept_=std::move(accept);closed_=std::move(closed);preview_=std::move(preview);
         fontSize_.SetValue(widget_.style.text.fontSize);auto& c=*widget_.navigation;span_.SetValue(c.fieldOfView);heading_.SetValue(c.manualHeading);size_.SetValue(c.markerSize);gap_.SetValue(c.markerGap);range_.SetValue(c.maxDistance);filter_.SetValue(c.categoryFilter);
         names_.SetCheck(c.showNames);distances_.SetCheck(c.showDistance);ticks_.SetCheck(c.showTicks);previewHeading_.SetValue(bridge::WrapNavigationHeading(c.manualHeading));iconCategory_.SetValue("quest");
-        keepIcons_.SetCheck(true);selected_=c.targets.empty()?-1:0;pending_=-1;List();TargetFields();Source();status_="EDITOR SAMPLE: preview heading and demonstration targets never change gameplay.";SetVisible(true);Preview();
+        keepIcons_.SetCheck(true);selected_=c.targets.empty()?-1:0;pending_=-1;List();TargetFields();Source();status_="EDITOR SAMPLE: preview heading and demonstration targets never change gameplay.";SetVisible(true);SetAdvanced(false);Preview();
     }
     void Close()
     {++generation_;previewRenderer_.Reset(previewPath_);previewLoaded_=false;colourPicker_.Close();for(auto* f:Fields())f->Deactivate();SetVisible(false);accept_={};preview_={};if(closed_){auto cb=std::move(closed_);cb();}}
@@ -250,18 +266,24 @@ public:
         theme::ButtonRect(p.x+1,p.y+1,s.x-2,38,theme::Panel,cmd,6);Label("WORLD NAVIGATION",p.x+18,p.y+9,18,theme::Text,cmd);
         auto clip=scissorRect;clip.top=std::max(clip.top,int(p.y+38));clip.bottom=std::min(clip.bottom,int(p.y+s.y-76));ApplyScissor(canvas,clip,cmd);const auto o=ContentOrigin();
         const auto label=[&](const char* text,float x,float y){Label(text,o.x+x,o.y+y,14,theme::Accent,cmd);};
-        label("BEHAVIOUR",28,16);label("APPEARANCE",520,16);label("VISIBLE SPAN (DEGREES)",28,88);label("MANUAL HEADING (DEGREES)",266,88);
-        label("MARKER SIZE (PX)",28,150);label("MARKER SPACING (PX)",266,150);label("MAX DISTANCE (0 = UNLIMITED)",28,212);label("CATEGORIES (BLANK = ALL)",266,212);
-        label("CATEGORY TO RESTYLE",520,212);label("EDITOR SAMPLE HEADING",28,326);label("AUTHORED WORLD TARGETS",28,426);label("TARGET NAME",520,426);label("CATEGORY",776,426);
-        label("WORLD X",520,502);label("WORLD Y",692,502);label("WORLD Z",864,502);label("FOLLOW ENTITY ID (OPTIONAL / ADVANCED)",520,572);
-        label("FONT SIZE (DESIGN PX)",520,368);
-        label("TARGET PRIORITY",520,632);
+        if(advancedMode_){
+            label("BEHAVIOUR",28,16);label("VISIBLE SPAN (DEGREES)",28,88);label("MANUAL HEADING (DEGREES)",266,88);
+            label("MARKER SIZE (PX)",28,150);label("MARKER SPACING (PX)",266,150);label("MAX DISTANCE (0 = UNLIMITED)",28,212);label("CATEGORIES (BLANK = ALL)",266,212);
+            label("CATEGORY TO RESTYLE",520,212);label("EDITOR SAMPLE HEADING",28,326);label("AUTHORED WORLD TARGETS",28,426);label("TARGET NAME",520,426);label("CATEGORY",776,426);
+            label("WORLD X",520,502);label("WORLD Y",692,502);label("WORLD Z",864,502);label("FOLLOW ENTITY ID (OPTIONAL / ADVANCED)",520,572);label("TARGET PRIORITY",520,632);
+        }else{
+            label("LOCATION ZONES SUPPLY TARGETS",28,16);
+            Label("Place Location Zones in the Level to name locations",o.x+28,o.y+48,14,theme::Muted,cmd);
+            Label("and choose their icons. No manual target list is needed.",o.x+28,o.y+70,14,theme::Muted,cmd);
+            label("MARKER SIZE (PX)",28,88);label("MARKER SPACING (PX)",266,88);label("MAX DISTANCE (0 = UNLIMITED)",28,150);
+        }
+        label("APPEARANCE",520,16);label("FONT SIZE (DESIGN PX)",520,368);
         for(auto* w:controls_){ApplyScissor(canvas,w==&save_||w==&cancel_?scissorRect:clip,cmd);w->Render(canvas,cmd);}
         const auto& category=iconCategoryValue_;
         const auto icon=widget_.navigation->icons.find(category);
         const bool mapped=icon!=widget_.navigation->icons.end()&&!icon->second.empty();
-        Label(mapped?"Icon assigned to "+category:"No icon assigned: fallback dot",o.x+520,o.y+278,12,mapped?theme::Muted:theme::Accent,cmd);
-        label("PREVIEW / SAMPLE DATA",520,700);
+        if(advancedMode_)Label(mapped?"Icon assigned to "+category:"No icon assigned: fallback dot",o.x+520,o.y+278,12,mapped?theme::Muted:theme::Accent,cmd);
+        label("PREVIEW / SAMPLE DATA",advancedMode_?520.f:372.f,advancedMode_?700.f:410.f);
         if(previewLoaded_)previewPath_.GetGUI().Render(canvas,cmd);
         ApplyScissor(canvas,scissorRect,cmd);auto message=status_;if(message.size()>130)message=message.substr(0,127)+"...";Label(message,p.x+18,p.y+s.y-24,12,theme::Muted,cmd);
         const auto cp=closeButton.GetPos(),cs=closeButton.GetSize();theme::DrawButton(cp.x,cp.y,cs.x,cs.y,"X",{true,closeButton.GetState()==wi::gui::FOCUS,false},14,cmd);

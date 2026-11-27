@@ -1,3 +1,5 @@
+#include <filesystem>
+#include "renegade/bridge/ScreenService.h"
 #include "renegade/bridge/ScreenNavigation.h"
 #include <algorithm>
 #include <set>
@@ -10,11 +12,19 @@ namespace
     {return (empty||!s.empty())&&s.size()<=max&&std::none_of(s.begin(),s.end(),[](unsigned char c){return c<32||c==127;});}
     bool point(NavigationPoint p){return std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z)&&std::abs(p.x)<=1e7&&std::abs(p.y)<=1e7&&std::abs(p.z)<=1e7;}
 }
+    bool IsNavigationIconPath(const std::string& value)
+    {
+        if(value.empty()||value.size()>512||std::any_of(value.begin(),value.end(),[](unsigned char c){return c<32||c==127||c==':';}))return false;
+        const auto path=std::filesystem::u8path(value);
+        if(path.is_absolute()||path.has_root_name()||path.begin()==path.end()||*path.begin()!="Content")return false;
+        for(const auto& part:path)if(part=="."||part==".."||part.empty())return false;
+        return true;
+    }
     float WrapNavigationHeading(float a) noexcept {if(!std::isfinite(a))return 0;return std::fmod(std::fmod(a,360.f)+360.f,360.f);}
     float NavigationBearingDelta(float a,float h) noexcept {return WrapNavigationHeading(a-h+180)-180;}
     bool ValidateNavigationTarget(const NavigationTarget& t,std::string& error)
     {
-        if(!text(t.id,120,false)||!text(t.label,160)||!text(t.category,48,false)||!text(t.entityId,120)||!point(t.position)||t.priority< -1000||t.priority>1000)
+        if((!t.icon.empty()&&!IsNavigationIconPath(t.icon))||!text(t.id,120,false)||!text(t.label,160)||!text(t.category,48,false)||!text(t.entityId,120)||!point(t.position)||t.priority< -1000||t.priority>1000)
         {error="Invalid navigation target identity, label, category, position or priority.";return false;}
         error.clear();return true;
     }
@@ -52,7 +62,7 @@ namespace
             const float distance=float(std::hypot(dx,dz));if(distance<.0001f||(c.maxDistance>0&&distance>c.maxDistance))return;
             const float delta=NavigationBearingDelta(float(std::atan2(dx,dz)*180/3.141592653589793),frame.heading);
             if(std::abs(delta)>c.fieldOfView*.5f)return;
-            frame.markers.push_back({target.id,target.label,target.category,.5f+delta/c.fieldOfView,distance,target.priority});
+            frame.markers.push_back({target.id,target.label,target.category,.5f+delta/c.fieldOfView,distance,target.priority,target.icon});
         };
         for(const auto& t:c.targets)add(t);for(const auto& t:targets)add(t);
         std::stable_sort(frame.markers.begin(),frame.markers.end(),[](const auto& a,const auto& b){

@@ -14,6 +14,7 @@ namespace renegade::bridge
         NavigationPoint position;
         int priority=0;
         bool visible=true;
+        std::string icon;
     };
     enum class NavigationHeadingSource {Camera,Player,Manual};
     struct ScreenNavigation
@@ -26,7 +27,7 @@ namespace renegade::bridge
         std::vector<NavigationTarget> targets;
     };
     struct NavigationObserver {bool available=false;NavigationPoint position;float heading=0;};
-    struct NavigationMarker {std::string id,label,category;float fraction=0,distance=0;int priority=0;};
+    struct NavigationMarker {std::string id,label,category;float fraction=0,distance=0;int priority=0;std::string icon;};
     struct NavigationFrame
     {
         bool available=false;
@@ -34,8 +35,9 @@ namespace renegade::bridge
         std::vector<NavigationMarker> markers;
     };
     inline std::vector<std::string*> NavigationResources(ScreenNavigation& c)
-    {std::vector<std::string*> paths={&c.bearingStrip,&c.pointerImage};for(auto& i:c.icons)paths.push_back(&i.second);return paths;}
+    {std::vector<std::string*> paths={&c.bearingStrip,&c.pointerImage};for(auto& i:c.icons)paths.push_back(&i.second);for(auto& t:c.targets)paths.push_back(&t.icon);return paths;}
     bool ValidateScreenNavigation(const ScreenNavigation&,std::string& error);
+    bool IsNavigationIconPath(const std::string&);
     bool ValidateNavigationTarget(const NavigationTarget&,std::string& error);
     bool NavigationCategoryVisible(const std::string& filter,const std::string& category);
     float WrapNavigationHeading(float degrees) noexcept;

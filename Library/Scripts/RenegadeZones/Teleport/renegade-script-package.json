@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.teleport",
+  "package_version": "1.0.0",
+  "display_name": "Teleport",
+  "files": [
+    {
+      "path": "TeleportZone.lua",
+      "content_hash": "fnv1a64:881306e3f8c50c30",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "TeleportZone.lua"
+  ]
+}

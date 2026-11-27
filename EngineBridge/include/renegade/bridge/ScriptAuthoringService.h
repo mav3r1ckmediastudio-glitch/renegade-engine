@@ -49,6 +49,9 @@ namespace renegade::bridge
         // Lazily bind to the active saved Scene. A new unsaved Scene has no
         // stable document identity yet and therefore cannot own .rscripts.
         [[nodiscard]] bool EnsureCurrent(std::string& error);
+        // Gameplay-zone placement can precede the first Save As. The normal save
+        // then binds the draft companion to the real scene ID and path.
+        [[nodiscard]] bool EnsureZoneDocument(std::string& error);
         void Invalidate() noexcept;
 
         [[nodiscard]] bool IsLoaded() const noexcept

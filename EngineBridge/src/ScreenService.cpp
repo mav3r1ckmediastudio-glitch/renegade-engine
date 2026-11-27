@@ -1119,6 +1119,8 @@ namespace renegade::bridge
                 { error = "Fill binding requires a Progress element."; return false; }
             }
 
+            if(widget.locationAnnouncement&&(widget.kind!=ScreenWidgetKind::Text||document.schemaVersion<3))
+            {error="Location announcements require a schema3 Text layer.";return false;}
             if(widget.navigation)
             {
                 if(document.schemaVersion<3||widget.kind!=ScreenWidgetKind::Image||!ValidateScreenNavigation(*widget.navigation,error))
@@ -1492,6 +1494,7 @@ namespace renegade::bridge
                     section.Set("resource", widget.resourcePath);
                     section.Set("action", widget.actionId);
                     if (widget.carouselCaption) section.Set("carousel_caption",true);
+                    if(widget.locationAnnouncement)section.Set("location_announcement",true);
                 if(widget.navigation)detail::WriteNavigation(section,*widget.navigation);
                 if(widget.liquid)
                 {
@@ -1878,6 +1881,7 @@ namespace renegade::bridge
                 widget.visible = section.GetBool("visible");
                 widget.enabled = section.GetBool("enabled");
                 widget.text = section.GetText("text");
+                widget.locationAnnouncement=section.Has("location_announcement")&&section.GetBool("location_announcement");
                 widget.resourcePath = section.GetText("resource");
                 if (sourceSchema>=3) widget.hintListPath=section.GetText("hint_list");
                 if(section.Has("navigation_version"))

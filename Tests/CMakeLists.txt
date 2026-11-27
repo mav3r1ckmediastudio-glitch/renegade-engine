@@ -1880,6 +1880,10 @@ endif()
 
 # G13D: authored scene-bound waterfall definition, persistent native metadata,
 # bounded stable identity, and exact Undo/Redo. Rendering remains G13C owner-approved.
+add_executable(RenegadeGameplayZoneTests GameplayZoneTests.cpp)
+target_link_libraries(RenegadeGameplayZoneTests PRIVATE Renegade::RuntimeBootstrap)
+add_test(NAME RenegadeGameplayZoneTests COMMAND RenegadeGameplayZoneTests)
+
 add_executable(RenegadePlaceableWaterfallAuthoringTests PlaceableWaterfallAuthoringTests.cpp)
 target_link_libraries(RenegadePlaceableWaterfallAuthoringTests PRIVATE Renegade::EngineBridge)
 add_test(NAME RenegadePlaceableWaterfallAuthoringTests COMMAND RenegadePlaceableWaterfallAuthoringTests)
@@ -2276,3 +2280,10 @@ target_compile_options(RenegadeWorldNavigationTests PRIVATE "$<$<CXX_COMPILER_ID
 add_test(NAME RenegadeWorldNavigationTests COMMAND RenegadeWorldNavigationTests)
 set_tests_properties(RenegadeWorldNavigationTests PROPERTIES TIMEOUT 30)
 add_dependencies(RenegadeBridgeTests RenegadeWorldNavigationTests)
+
+add_executable(RenegadeWorldLocationTests WorldLocationTests.cpp)
+target_link_libraries(RenegadeWorldLocationTests PRIVATE Renegade::RuntimeBootstrap)
+target_compile_options(RenegadeWorldLocationTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+add_test(NAME RenegadeWorldLocationTests COMMAND RenegadeWorldLocationTests)
+set_tests_properties(RenegadeWorldLocationTests PROPERTIES TIMEOUT 30)
+add_dependencies(RenegadeBridgeTests RenegadeWorldLocationTests)

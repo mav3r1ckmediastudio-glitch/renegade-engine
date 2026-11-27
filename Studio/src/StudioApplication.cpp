@@ -2896,6 +2896,7 @@ namespace renegade::studio
         terrainStrokeDiagnostic_.SetText("LAST STROKE // READY");
         inspectorPanel_.AddWidget(&terrainStrokeDiagnostic_);
 
+        CreateZoneControls();
         CreateWaterfallControls();
         createSectionLabel(terrainRiverLabel_, "Terrain River Section",
             "WATER // DRAG TO DRAW RIVER");
@@ -3345,6 +3346,23 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::CreateRectangleLight:
                 pendingLightType_ = wi::scene::LightComponent::RECTANGLE;
                 RequestDiagnosticAction(EditorAction::CreateLight);
+                break;
+            case RenegadeStudioChrome::Action::CreateZone:
+            case RenegadeStudioChrome::Action::CreateLocationZone:
+                if (session_ && !testLevelRuntime_.IsActive() && !projectHubVisible_)
+                {
+                    SetEnvironmentWorkspaceActive(false);
+                    SetTerrainWorkspaceActive(false);
+                    SetRenderWorkspaceActive(false);
+                    CancelLightPlacement();
+                    particlePlacementActive_ = false;
+                    DisableWd01VegetationBrush();
+                    DisableTerrainPropBrush();
+                    studioChrome_.PrepareViewportPlacement();
+                    zonePlacementPreset_=action==RenegadeStudioChrome::Action::CreateLocationZone?bridge::zones::Behaviour::Location:bridge::zones::Behaviour::Trigger;
+                    zonePlacing_ = true;
+                    studioChrome_.SetStatusText("ZONE // CLICK GROUND TO PLACE // RIGHT CLICK TO CANCEL");
+                }
                 break;
             case RenegadeStudioChrome::Action::CreatePlayerStart:
                 RequestDiagnosticAction(EditorAction::CreatePlayerStart);
@@ -4331,6 +4349,7 @@ namespace renegade::studio
         if (session_ != nullptr)
         {
             ScopedCPUProfiling("Studio weather authoring");
+            DrawZones();
             TickWeatherPresetTransition(dt);
             bridge::RefreshPrecipitationVisual(session_->Scenes().GetScene());
         }
@@ -4647,6 +4666,7 @@ namespace renegade::studio
             return;
         }
 
+        if (HandleZonePointer(pointer)) return;
         if(HandleParticlePlacement(pointer))return;
         if (HandleLightPlacement(pointer))
         {
@@ -5564,6 +5584,7 @@ namespace renegade::studio
 
     void StudioRenderPath::RefreshHierarchy()
     {
+        editorZones_.clear();
         hierarchyTree_.ClearItems();
         std::vector<RenegadeStudioChrome::HierarchyRow> chromeRows;
         if (session_ == nullptr)
@@ -5595,13 +5616,15 @@ namespace renegade::studio
             item.open = true;
             item.selected = session_->Selection().Contains(entity.entity);
             hierarchyTree_.AddItem(item);
+            const bool zone = bridge::zones::IsZone(scene, entity.entity);
+            if (zone) editorZones_.push_back(entity.entity);
             chromeRows.push_back({
                 entity.name,
                 entity.depth,
                 session_->Selection().Contains(entity.entity),
                 static_cast<std::uint64_t>(entity.entity),
                 entity.logicalAsset,
-                ToHierarchyCategory(entity.category),
+                zone ? RenegadeStudioChrome::HierarchyCategory::Zones : ToHierarchyCategory(entity.category),
             });
         }
         studioChrome_.SetHierarchyRows(std::move(chromeRows));
@@ -5673,6 +5696,7 @@ namespace renegade::studio
 
     void StudioRenderPath::RefreshInspector()
     {
+        if (LayoutZoneInspector()) return;
         // Standalone waterfall selection owns a dedicated panel, not the generic component inspector.
         if(session_ && session_->Selection().Entities().size()<2 && LayoutWaterfallInspector())return;
         if(!projectHubVisible_&&!renderWorkspaceActive_)inspectorPanel_.SetVisible(true);
@@ -9917,7 +9941,26 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 !wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT)))return false;
         if(PickWaterfallHandles(pointer))return true;
         const auto ray=wi::renderer::GetPickRay(static_cast<long>(pointer.x),static_cast<long>(pointer.y),*this,*camera);
-        auto hit=wi::scene::Pick(ray,wi::enums::FILTER_OBJECT_ALL,~0u,scene).entity;
+        const auto objectHit=wi::scene::Pick(ray,wi::enums::FILTER_OBJECT_ALL,~0u,scene);
+        auto hit=objectHit.entity;
+        if (studioChrome_.IsSceneWorkspaceActive() && !studioChrome_.IsPhysicsLabActive() && !studioChrome_.IsAudioWorkspaceActive())
+        {
+            float nearest = hit == wi::ecs::INVALID_ENTITY ? ray.TMax : objectHit.distance;
+            for (auto id : editorZones_)
+            {
+                if (!studioChrome_.ShowZones() && !session_->Selection().Contains(id)) continue;
+                const auto* transform = scene.transforms.GetComponent(id);
+                bridge::zones::Definition bounds;
+                float distance;
+                if (transform && bridge::zones::Read(scene,id,bounds) &&
+                    bridge::zones::HitDistance(bounds,XMLoadFloat4x4(&transform->world),ray,distance) &&
+                    distance <= nearest)
+                {
+                    nearest = distance;
+                    hit = id;
+                }
+            }
+        }
         if(waterfallRenderer_.Owns(hit))hit=waterfallRenderer_.Owner(hit);
         const bool add=wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) || wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT);
         environmentWorkspaceActive_=false;terrainWorkspaceActive_=false;
@@ -13617,6 +13660,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
         gizmoSelectionRevision_=session_->Selection().Revision();
         selectionTransformsBefore_.clear();
+        // A single zone has six face handles. Editing its local bounds keeps the
+        // placement transform and the aspect ratio of any attached artwork intact.
+        if (gizmo_.isScalator && session_->Selection().Entities().size() == 1 &&
+            bridge::zones::IsZone(scene, entity))
+            return;
         gizmo_.scene=&scene;
         for(auto e:bridge::SelectionRoots(scene,session_->Selection().Entities())) {
             wi::scene::PickResult selected;selected.entity=e;

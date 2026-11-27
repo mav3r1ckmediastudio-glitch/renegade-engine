@@ -181,7 +181,8 @@ try {
             "player_start.png",
             "script_entity.png",
             "trigger_zone.png",
-            "waypoint.png"
+            "waypoint.png",
+            "zone_presets.png"
         )
         $builtMarkerIconRoot = Join-Path $studioDirectory "Content\editor\markericons"
         $packagedMarkerIconRoot = Join-Path $packageRoot "Content\editor\markericons"
@@ -212,6 +213,15 @@ try {
         )
         if ($stockActionFiles.Count -ne 6) {
             throw "S7 packaged Studio must contain exactly six stock Lua Actions."
+        }
+
+        foreach ($zone in @("Trigger", "Win", "Message", "Objective", "Checkpoint", "Transition", "Teleport", "Health", "Kill", "Encounter", "Dialogue", "Ambience", "Environment")) {
+            $zonePackage = Join-Path $packageRoot "Content\ScriptLibrary\RenegadeZones\$zone"
+            foreach ($file in @("renegade-script-package.json", "${zone}Zone.lua")) {
+                if (-not (Test-Path (Join-Path $zonePackage $file) -PathType Leaf)) {
+                    throw "Packaged Studio is missing the $zone zone script package file $file."
+                }
+            }
         }
 
         # The owner audit must travel with the exact executable it validates.

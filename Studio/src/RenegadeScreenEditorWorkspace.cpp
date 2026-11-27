@@ -1,3 +1,4 @@
+#include "renegade/bridge/WorldLocationService.h"
 #include "ScreenNavigationEditor.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/FlowService.h"
@@ -3059,6 +3060,14 @@ namespace renegade::studio
             {
             case ScreenToolboxAction::SaveUiPrefab: SaveSelectedUiPrefab();break;
             case ScreenToolboxAction::InsertUiPrefab: ChooseUiPrefab();break;
+            case ScreenToolboxAction::LocationAnnouncement:
+            {
+                auto widget=bridge::MakeLocationAnnouncementWidget();bridge::StableId created;std::string error;
+                widget.rect.x=session_->Document().designWidth*.125f;widget.rect.y=session_->Document().designHeight*.21f;
+                widget.rect.width=session_->Document().designWidth*.75f;
+                if(!session_->CreateWidget(std::move(widget),false,created,error)){SetStatus(error);break;}
+                SelectWidget(created);RefreshAfterMutation("LOCATION NAME CREATED // EDIT FONT, COLOUR AND POSITION");break;
+            }
             case ScreenToolboxAction::WorldNavigation:
                 InsertUiPrefab((std::filesystem::u8path(wi::helper::GetExecutablePath()).parent_path()/"Content/UI/Prefabs/WorldNavigation").generic_u8string(),true);break;
             case ScreenToolboxAction::LiquidFill:

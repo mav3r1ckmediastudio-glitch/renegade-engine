@@ -17,7 +17,7 @@ namespace renegade::studio
     {
         None, StoryFlow, Text, Button, Image, Video, Carousel, Background,
         Panel, Heading, Duplicate, Grid, Snap, Progress, GlobalHud, ProjectInventory,
-        Icon, Divider, Spacer, Counter, PlayerHealthBar, PlayerHealthText, PlayerAmmoText, Group, HorizontalStack, VerticalStack, LayoutGrid, Toggle, Slider, Selector, TextInput, GameplayAttributes, PublishUiPackage, AdoptUiPackage, UiBudgets, SaveUiPrefab, InsertUiPrefab, AnimatedVial, LiquidFill, WorldNavigation
+        Icon, Divider, Spacer, Counter, PlayerHealthBar, PlayerHealthText, PlayerAmmoText, Group, HorizontalStack, VerticalStack, LayoutGrid, Toggle, Slider, Selector, TextInput, GameplayAttributes, PublishUiPackage, AdoptUiPackage, UiBudgets, SaveUiPrefab, InsertUiPrefab, AnimatedVial, LiquidFill, WorldNavigation, LocationAnnouncement
     };
 
     struct ScreenEditorLibraryScreen
@@ -89,6 +89,7 @@ namespace renegade::studio
             {"BASIC", "Progress Bar", ScreenToolboxAction::Progress},
             {"BASIC", "Liquid Fill", ScreenToolboxAction::LiquidFill},
             {"BASIC", "World navigation", ScreenToolboxAction::WorldNavigation},
+            {"BASIC", "Location name", ScreenToolboxAction::LocationAnnouncement},
             {"BASIC", "Add background panel", ScreenToolboxAction::Background},
             {"BASIC", "Icon", ScreenToolboxAction::Icon}, {"BASIC", "Divider", ScreenToolboxAction::Divider}, {"BASIC", "Spacer", ScreenToolboxAction::Spacer},
             {"LAYOUT", "Group", ScreenToolboxAction::Group}, {"LAYOUT", "Horizontal Stack", ScreenToolboxAction::HorizontalStack},

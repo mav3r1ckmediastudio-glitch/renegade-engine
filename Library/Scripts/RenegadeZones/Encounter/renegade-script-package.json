@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.encounter",
+  "package_version": "1.0.0",
+  "display_name": "Encounter / Spawn",
+  "files": [
+    {
+      "path": "EncounterZone.lua",
+      "content_hash": "fnv1a64:aa1b0b0eee749d88",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "EncounterZone.lua"
+  ]
+}

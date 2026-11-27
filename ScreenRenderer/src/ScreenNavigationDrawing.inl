@@ -2,11 +2,13 @@
 std::shared_ptr<const renegade::bridge::WorldNavigationSnapshot> navigationSnapshot;
 std::map<std::string,wi::Resource> navigationArtwork;
 bool navigationPreview=false;
-bool LoadNavigationArtwork(const std::string& root,std::string& error)
+bool LoadNavigationArtwork(const std::string& root,std::string& error,const std::vector<renegade::bridge::NavigationTarget>* liveTargets=nullptr)
 {
     if(!authored.navigation){navigationArtwork.clear();return true;}
     auto config=*authored.navigation;std::map<std::string,wi::Resource> loaded;
-    for(const auto* path:renegade::bridge::NavigationResources(config))if(!path->empty())
+    std::vector<const std::string*> paths;for(const auto* path:renegade::bridge::NavigationResources(config))paths.push_back(path);
+    if(liveTargets)for(const auto& t:*liveTargets)paths.push_back(&t.icon);
+    for(const auto* path:paths)if(!path->empty())
     {
         std::string absolute;if(!renegade::bridge::ResolveScreenResourcePath(root,*path,absolute,error))return false;
         auto resource=wi::resourcemanager::Load(absolute);
@@ -63,7 +65,7 @@ void DrawNavigation(const wi::Canvas& canvas,wi::graphics::CommandList cmd,
     {
         const float px=x+marker.fraction*w,size=config.markerSize*unit,my=y+h*.49f;
         auto icon=config.icons.find(marker.category);if(icon==config.icons.end())icon=config.icons.find("default");
-        const auto* image=icon==config.icons.end()?nullptr:artwork(icon->second);
+        const auto* image=!marker.icon.empty()?artwork(marker.icon):icon==config.icons.end()?nullptr:artwork(icon->second);
         if(image){const auto& desc=image->GetTexture().GetDesc();const auto rect=FitScreenImage({px-size*.5f,my,size,size},float(desc.width),float(desc.height),ScreenImageFit::Contain);
             DrawSurface(image,rect.x,rect.y,rect.width,rect.height,0,wi::Color(255,255,255,uint8_t(255*style.opacity)),cmd);}
         else DrawSurface(nullptr,px-size*.18f,my+size*.20f,size*.36f,size*.36f,size*.18f,colour,cmd);

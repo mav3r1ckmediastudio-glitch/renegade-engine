@@ -24,7 +24,7 @@ namespace renegade::bridge::detail
         for(const auto& [category,path]:c.icons){const auto k="nav_icon_"+std::to_string(i++);s.Set((k+"_category").c_str(),category);s.Set((k+"_path").c_str(),path);}
         s.Set("nav_target_count",int(c.targets.size()));i=0;
         for(const auto& t:c.targets){const auto k="nav_target_"+std::to_string(i++);
-            s.Set((k+"_id").c_str(),t.id);s.Set((k+"_label").c_str(),t.label);s.Set((k+"_category").c_str(),t.category);s.Set((k+"_entity").c_str(),t.entityId);
+            s.Set((k+"_id").c_str(),t.id);if(!t.icon.empty())s.Set((k+"_icon").c_str(),t.icon);s.Set((k+"_label").c_str(),t.label);s.Set((k+"_category").c_str(),t.category);s.Set((k+"_entity").c_str(),t.entityId);
             s.Set((k+"_x").c_str(),t.position.x);s.Set((k+"_y").c_str(),t.position.y);s.Set((k+"_z").c_str(),t.position.z);s.Set((k+"_priority").c_str(),t.priority);s.Set((k+"_visible").c_str(),t.visible);}
     }
     template<class S> bool ReadNavigation(const S& s,ScreenNavigation& c)
@@ -41,7 +41,7 @@ namespace renegade::bridge::detail
         c.headingSource=static_cast<NavigationHeadingSource>(source);c.bearingStrip=s.GetText("nav_strip");c.pointerImage=s.GetText("nav_pointer");c.categoryFilter=s.GetText("nav_filter");
         for(int i=0;i<icons;++i){const auto k="nav_icon_"+std::to_string(i);if(!c.icons.emplace(s.GetText((k+"_category").c_str()),s.GetText((k+"_path").c_str())).second)return false;}
         for(int i=0;i<targets;++i){const auto k="nav_target_"+std::to_string(i);NavigationTarget t;
-            t.id=s.GetText((k+"_id").c_str());t.label=s.GetText((k+"_label").c_str());t.category=s.GetText((k+"_category").c_str());t.entityId=s.GetText((k+"_entity").c_str());
+            t.id=s.GetText((k+"_id").c_str());t.icon=s.GetText((k+"_icon").c_str());t.label=s.GetText((k+"_label").c_str());t.category=s.GetText((k+"_category").c_str());t.entityId=s.GetText((k+"_entity").c_str());
             if(!NavigationScalar(s,(k+"_x").c_str(),t.position.x)||!NavigationScalar(s,(k+"_y").c_str(),t.position.y)||!NavigationScalar(s,(k+"_z").c_str(),t.position.z)||
                 !NavigationScalar(s,(k+"_priority").c_str(),t.priority)||!NavigationBool(s,(k+"_visible").c_str(),t.visible))return false;
             c.targets.push_back(std::move(t));}

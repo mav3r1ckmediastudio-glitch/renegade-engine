@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.kill",
+  "package_version": "1.0.0",
+  "display_name": "Kill / Out of Bounds",
+  "files": [
+    {
+      "path": "KillZone.lua",
+      "content_hash": "fnv1a64:d15792e0c274bb72",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "KillZone.lua"
+  ]
+}

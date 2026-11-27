@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.environment",
+  "package_version": "1.0.0",
+  "display_name": "Environment",
+  "files": [
+    {
+      "path": "EnvironmentZone.lua",
+      "content_hash": "fnv1a64:e6e7c8c275075cd2",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "EnvironmentZone.lua"
+  ]
+}

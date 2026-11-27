@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.zones.ambience",
+  "package_version": "1.0.0",
+  "display_name": "Audio / Ambience",
+  "files": [
+    {
+      "path": "AmbienceZone.lua",
+      "content_hash": "fnv1a64:02c2883fc310e046",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "AmbienceZone.lua"
+  ]
+}
