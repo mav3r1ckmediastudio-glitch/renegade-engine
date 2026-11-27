@@ -1,3 +1,22 @@
+# UI Designer loading screens and video, 27 November 2026
+
+Source commit `585e326e5562b19809357517da96f4c882d92de1` on `feature/ui-loading-media`. Run `git show --stat 585e326` for the complete file list. EngineBridge owns screen authoring, hints, video assets and scene preparation. Studio owns the Basic palette, native hint list editor and two stock MP4s. ScreenRenderer owns visual playback and optional Windows Media Foundation audio. Runtime owns Story Flow transitions and Lua access.
+
+Open **Story Flow ? Loading**. Select **Turning compass** or **Rising smoke** in Layers, then **Choose video?**. Drag **Elements ? Basic ? Video** onto the canvas to add a layer. **Loop**, **Mute** and **Blend** are per layer. For a full background choose **Background ? Add file? ? Import video?**. Return to the plain background using the source picker and **Use image background**. Select **Hint text ? Hint list? ? Edit selected list?**, enter one hint per line, and open **Preview**. Hints shuffle and cycle. The media importer accepts AVC MP4 and single-slice Annex B .h264. Raw playback uses the pinned engine's 60 fps convention. The existing creator import ceiling is 4 GiB per file.
+
+Lua exposes `renegade.ui.screen_media(screenPath, widgetId)` for inspection. Pass a third table with `asset` (governed asset ID), `loop`, `mute` or `additive` for a Video element, or `hints` (project .txt path) for Text. Pass `"authored"` to restore the saved settings.
+
+Windows x64 DX12 Release on DESIGN. For the final incremental verification, used MSBuild on EngineBridge, ScreenRenderer, RuntimeBootstrap, Studio, Runtime, RuntimeScreenTests and ProjectUiScaffoldTests in dependency order with `/p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false /p:CL_MPCount=3 /m:1`. Both stock clips were staged in Studio. Ran:
+
+```
+ctest --test-dir BUILD/creator -C Release -R "^(RenegadeProjectUiScaffoldTests|RenegadeRuntimeScreenTests)$" --output-on-failure
+BUILD/creator/Studio/Release/RenegadeStudioUiPolicyTests.exe
+```
+
+Both CTest suites and the Studio UI policy executable passed. The scaffold suite includes screen round-trip, stock media and public Lua overrides. Independently exercised the controls in the application. Dragged a Video layer, imported raw H.264 and MP4, used video as the background, changed the hint list through the native editor, restarted Studio, confirmed the saved hints and a clean Story Flow validation, and launched the forest review scene through Test Game ? Continue ? New Game ? Start. The compass, smoke and authored hint appeared during loading, then the forest and gameplay HUD appeared. MP4 mute was measured using the Studio process audio-session meter (0.130 unmuted, zero muted). The final raw stream displayed its advancing timecode and 224 ? 160 / 60 fps information. Captures are in `docs/evidence/loading-media-2026-11-27/`.
+
+The async path covers Story Flow screen-to-level transitions. Final scene adoption is on the main thread. Direct boot and save-game restore are separate paths. Exported-package playback, Explorer drag-and-drop and near-limit media still need independent testing. Local feature review only.
+
 # UI Designer live level-camera backgrounds, 27 November 2026
 
 Source commit `0aceb4d238c7a086ece51b3aa97b903c670a52f1` on `feature/ui-live-camera-background`. See `git show --stat 0aceb4d` for the file list. The change covers EngineBridge screen data and authoring, the Studio inspector and Story Flow level picker, the shared screen renderer, Runtime presentation and the governed Lua API.
