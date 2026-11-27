@@ -1,3 +1,9 @@
+# Loading video transparency, 27 November 2026
+
+Source `79e052f9958452dc53fea93a88ee988aa721b458`. The original compass and smoke assets now get alpha at playback by content identity. Other video layers can select Automatic, Opaque, Remove black or Soft smoke through Choose video ? Transparency. Lua exposes the same selection through `renegade.ui.screen_media` with `transparency` values `auto`, `opaque`, `remove_black` and `soft_smoke`. Removing black also affects dark detail in custom footage. Full-screen video is opaque by default for other clips.
+
+Built Windows x64 DX12 Release using the MSBuild targets documented below. Ran the two CTest suites, including the Lua transparency change and reset. Viewed the older project in Studio Preview and the standalone Runtime loading transition using a contrasting checkerboard in a separate project copy. Returned the review Studio to the original black-background project and verified Preview again. Screenshots are in `docs/evidence/loading-media-2026-11-27/transparent-*.jpg`. The initial diagnostic build failed on shader creation due to a missing embedded root signature. Confirmed the corrected shader bytes in the linked Studio executable and exercised it on screen. No exported-package test in this pass.
+
 # UI Designer loading screens and video, 27 November 2026
 
 Source commit `585e326e5562b19809357517da96f4c882d92de1` on `feature/ui-loading-media`. Run `git show --stat 585e326` for the complete file list. EngineBridge owns screen authoring, hints, video assets and scene preparation. Studio owns the Basic palette, native hint list editor and two stock MP4s. ScreenRenderer owns visual playback and optional Windows Media Foundation audio. Runtime owns Story Flow transitions and Lua access.
