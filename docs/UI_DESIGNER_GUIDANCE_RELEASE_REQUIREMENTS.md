@@ -64,3 +64,7 @@ Use a consistent brief format: purpose first, then one useful consequence, examp
 - Record exact source/build/test/native receipts and obtain owner/independent acceptance before marking the release requirement complete.
 
 No implementation, application rebuild, UI takeover, GitHub push, merge or release is part of this documentation checkpoint. Generic authoring gaps should be addressed before wizard implementation; the remaining controls can receive tooltip coverage as their interfaces settle.
+
+## Location Zone simplification direction, 27 November 2026
+
+Use the owner's proposed Location Zone to author world navigation targets in the Level: placing it opens its Inspector for Name, Type and Icon. Reuse gameplay zones. Basic compass authoring should consume those registered locations and concentrate on presentation; move manual targets and internal details to Advanced. Keep custom per-location icons independent of semantic type, preserve shared C++/Lua access and avoid a second authoritative target list. The detailed requirement and remaining discovery decisions are in UI_WORLD_NAVIGATION_REQUIREMENTS.md. This is recorded direction, not completed Location Zone implementation.
