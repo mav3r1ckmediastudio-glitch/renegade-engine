@@ -11,13 +11,14 @@ bool LocationPatch(lua_State* l,int at,bridge::WorldLocation& item,std::string& 
     auto& p=item.profile;auto& a=p.announcement;
     lua_pushnil(l);while(lua_next(l,at)){
         const auto key=NavString(l,-2);bool ok=true;
-        if(key=="id"||key=="name"||key=="type"||key=="icon"||key=="animation"){
+        if(key=="id"||key=="name"||key=="type"||key=="icon"||key=="font"||key=="animation"){
             if(lua_type(l,-1)!=LUA_TSTRING)ok=false;
             else{
                 const auto v=NavString(l,-1);
                 if(key=="id"){if(!item.id.empty()&&item.id!=v){error="Location ID is read-only.";ok=false;}else item.id=v;}
                 else if(key=="name")item.name=v;else if(key=="type")p.type=v;
                 else if(key=="icon"){if(!NavPath(v,false,error))ok=false;else p.icon=v;}
+                else if(key=="font"){if(!NavPath(v,true,error))ok=false;else a.font=v;}
                 else if(v=="none")a.effect=bridge::LocationTextEffect::None;
                 else if(v=="fade")a.effect=bridge::LocationTextEffect::Fade;
                 else if(v=="glitch")a.effect=bridge::LocationTextEffect::Glitch;
@@ -66,7 +67,7 @@ static int LocationGetLua(lua_State* l)
     const auto str=[&](const char* key,const std::string& value){lua_pushlstring(l,value.data(),value.size());lua_setfield(l,-2,key);};
     const auto num=[&](const char* key,float value){lua_pushnumber(l,value);lua_setfield(l,-2,key);};
     const auto flag=[&](const char* key,bool value){lua_pushboolean(l,value);lua_setfield(l,-2,key);};
-    str("id",item.id);str("name",item.name);str("type",p.type);str("icon",p.icon);
+    str("id",item.id);str("name",item.name);str("type",p.type);str("icon",p.icon);str("font",a.font);
     const char* effects[]={"none","fade","glitch","wobble"};str("animation",effects[int(a.effect)]);
     num("range",a.range);num("duration",a.duration);num("fade_in",a.fadeIn);num("fade_out",a.fadeOut);num("strength",a.strength);num("speed",a.speed);
     flag("announcement",a.enabled);flag("repeat_on_return",a.repeatOnReturn);flag("show_on_compass",p.showOnCompass);flag("after_discovery",p.onlyAfterDiscovery);

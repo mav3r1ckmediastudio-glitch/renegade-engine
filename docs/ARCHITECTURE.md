@@ -2626,3 +2626,10 @@ Choosing a stock preset changes only the brush. New versioned stock layers have 
 ## Location Zone / announcement integration, 27 November 2026
 
 Location (stable preset 13) extends the existing zone metadata and command/history model. WorldLocationService owns bounded per-Level targets and a serial announcement queue. Native locations are seeded before governed Lua starts, then refreshed through cached zone contacts and direct component lookup. WorldNavigationService projects these targets with per-target icon overrides independent of type and indexed target mutation. Location-name Text roles persist in screen schema 3 and use ScreenRenderer, including its fallback HUD layer. LocationProfile settings are exposed through C++ and renegade.locations. DependencyService includes location.icon metadata in explicit scene resource walks. Discovery is per-Level only; gameplay minimap and persistent discovery remain separate.
+
+
+### Location announcement font and rendering correction
+
+LocationAnnouncementSettings carries an optional project-owned TrueType font path; empty inherits the authored HUD Text family. Zone metadata uses location.font and the explicit scene dependency walk reports it as a Font resource. Native font choices reuse the governed UI font catalogue/import service; Lua register/configure/get exposes the same font value. Font styles are cached per announcement surface and leave the Text layer's size/colour/alignment authoritative.
+
+Wrapped location text applies motion to the aligned line origins. Glitch uses bounded short horizontal cuts with colour separation, sharing the same font/wrap layout as clean text; fade opacity uses smooth easing. Reduced motion removes spatial distortion and retains the fade. Captured native Runtime and native picker evidence is in evidence/location-text-effects-2026-11-27.

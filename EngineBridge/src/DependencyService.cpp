@@ -71,6 +71,13 @@ namespace renegade::bridge
                     metadata.string_values.has("location.icon"))
                     AppendWisceneReference(document,metadata.string_values.get("location.icon"),DependencyClass::Texture,
                         "wiscene.location["+std::to_string(i)+"].icon");
+                if(metadata.int_values.has("renegade.zone.version")&&metadata.int_values.get("renegade.zone.version")==1&&
+                    metadata.int_values.has("zone.behaviour")&&metadata.int_values.get("zone.behaviour")==13&&
+                    metadata.string_values.has("location.font")){
+                    const auto& font=metadata.string_values.get("location.font");
+                    if(font.rfind("Content/",0)==0)AppendWisceneReference(document,font,DependencyClass::Font,
+                        "wiscene.location["+std::to_string(i)+"].font");
+                }
             }
 
 

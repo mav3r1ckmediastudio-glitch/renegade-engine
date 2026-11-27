@@ -117,6 +117,7 @@ namespace renegade::bridge::zones
             auto& l=zone.location;auto& a=l.announcement;
             if(m.string_values.has("location.type"))l.type=m.string_values.get("location.type");
             if(m.string_values.has("location.icon"))l.icon=m.string_values.get("location.icon");
+            if(m.string_values.has("location.font"))a.font=m.string_values.get("location.font");
             if(m.int_values.has("location.compass"))l.showOnCompass=m.int_values.get("location.compass")!=0;
             if(m.int_values.has("location.discovered_only"))l.onlyAfterDiscovery=m.int_values.get("location.discovered_only")!=0;
             if(m.int_values.has("location.announce"))a.enabled=m.int_values.get("location.announce")!=0;
@@ -155,7 +156,7 @@ namespace renegade::bridge::zones
         m.string_values.set("zone.target", zone.target);
         if(zone.behaviour==Behaviour::Location){
             const auto& l=zone.location;const auto& a=l.announcement;
-            m.string_values.set("location.type",l.type);m.string_values.set("location.icon",l.icon);
+            m.string_values.set("location.type",l.type);m.string_values.set("location.icon",l.icon);m.string_values.set("location.font",a.font);
             m.int_values.set("location.compass",l.showOnCompass);m.int_values.set("location.discovered_only",l.onlyAfterDiscovery);
             m.int_values.set("location.announce",a.enabled);m.int_values.set("location.repeat",a.repeatOnReturn);m.int_values.set("location.effect",int(a.effect));
             m.float_values.set("location.range",a.range);m.float_values.set("location.duration",a.duration);

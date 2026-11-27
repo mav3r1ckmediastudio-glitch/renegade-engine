@@ -1,3 +1,5 @@
+#include "renegade/bridge/ProjectService.h"
+#include "renegade/bridge/CreatorScreenFontImportService.h"
 #include "renegade/bridge/DependencyService.h"
 #include "renegade/bridge/WorldLocationService.h"
 #include "renegade/bridge/WorldNavigationService.h"
@@ -13,8 +15,47 @@ using namespace renegade::runtime;
 namespace fs=std::filesystem;
 int failures=0;
 void Check(bool ok,const char* why){if(!ok){++failures;std::cerr<<"FAIL: "<<why<<'\n';}}
-int main()
+int main(int argc,char** argv)
 {
+    if(argc==4&&std::string(argv[1])=="--fx-review"){
+        ProjectService projects;ProjectMetadata project;std::string error;
+        if(!projects.InspectProject(argv[2],project,error)){std::cerr<<error;return 2;}
+        const auto root=fs::u8path(project.rootPath);
+        if(root.filename()!="Location FX Review"){std::cerr<<"Use only the isolated FX review project.";return 3;}
+        const auto font=CreatorScreenFontImportService::Import(project.rootPath,project.projectId,argv[3]);
+        if(!font.succeeded){std::cerr<<font.error;return 4;}
+        const auto scene=root/"Content/Scenes/Starter.wiscene";
+        DocumentEnvelope envelope;if(!ReadDocumentEnvelope(scene.generic_u8string()+".rmeta",envelope,error)){std::cerr<<error;return 5;}
+        fs::create_directories(root/"Content/Scripts");
+        std::ofstream(root/"Content/Scripts/location_fx_review.lua")<<"local custom_font = \"" <<font.runtimePath<<"\"\n" <<R"LUA(
+local l=renegade.locations
+return {
+ on_start=function(self)
+  self.time=0;self.phase=0
+  self.id=assert(l.register{id="fx-review",name="Ravenwood",type="town",position={x=0,y=0,z=0},
+   font=custom_font,duration=4,range=1000000,announcement=false,animation="wobble",strength=12,speed=1.2,fade_in=.5,fade_out=.7})
+  assert(l.hide_announcement());assert(l.announce(self.id))
+ end,
+ on_update=function(self,dt)
+  self.time=self.time+dt
+  local phase=math.floor(self.time/5)
+  if phase>self.phase then
+   self.phase=phase
+   assert(l.hide_announcement())
+   if phase<3 then
+    assert(l.configure(self.id,{animation=phase==1 and "glitch" or "fade",speed=2}))
+    assert(l.announce(self.id))
+   end
+  end
+ end
+}
+)LUA";
+        auto scripts=CreateScriptDocument(project.projectId,envelope.documentId,"Content/Scenes/Starter.wiscene","location-fx-review");
+        ScriptSourceBinding binding;binding.sourceId=GenerateStableId();binding.sourcePath="Content/Scripts/location_fx_review.lua";binding.apiVersion=1;
+        auto attachment=CreateScriptAttachment(ScriptScope::Level,{},binding);attachment.presentation=ScriptPresentation::GlobalScript;scripts.attachments.push_back(attachment);
+        if(!WriteScriptDocument(ScriptDocumentPathForScene(scene.generic_u8string()),scripts,error)){std::cerr<<error;return 6;}
+        std::cout<<"FX review ready; project-owned font "<<font.runtimePath;return 0;
+    }
     const auto temp=fs::temp_directory_path()/("RenegadeLocations-"+GenerateStableId());fs::create_directories(temp/"Content/UI");
     struct Cleanup {fs::path root;~Cleanup(){std::error_code error;fs::remove_all(root,error);}} cleanup{temp};
     std::string error;
@@ -23,6 +64,8 @@ int main()
     auto bad=profile;bad.announcement.range=std::numeric_limits<float>::quiet_NaN();
     Check(!ValidateLocationProfile(bad,error),"reject NaN range");
     bad=profile;bad.icon="../external.png";Check(!ValidateLocationProfile(bad,error),"reject escaping icon");
+    bad=profile;bad.announcement.font="../bad.ttf";Check(!ValidateLocationProfile(bad,error),"reject escaping font");
+    bad=profile;bad.announcement.font="Content/UI/not-font.png";Check(!ValidateLocationProfile(bad,error),"reject non-TTF font");
     bad=profile;bad.announcement.duration=0;Check(!ValidateLocationProfile(bad,error),"reject zero lifetime");
     Check(int(zones::Behaviour::Location)==13&&int(zones::Behaviour::Environment)==12&&int(zones::Behaviour::Win)==1,"legacy zone codes unchanged");
     wi::scene::Scene scene;
@@ -30,7 +73,7 @@ int main()
     const auto identity=create.PersistentId();zones::Definition definition;
     Check(zones::Read(scene,create.Id(),definition)&&definition.behaviour==zones::Behaviour::Location,"native Location preset");
     definition.location.type="custom.cave";definition.location.icon="Content/UI/icon.png";
-    definition.location.announcement.range=75;definition.location.announcement.duration=6;
+    definition.location.announcement.font="Content/UI/title.ttf";definition.location.announcement.range=75;definition.location.announcement.duration=6;
     definition.location.announcement.effect=LocationTextEffect::Glitch;
     zones::Edit edit(scene,create.Id(),definition);Check(edit.Execute(),"atomic location settings");
     edit.Undo();zones::Definition restored;
@@ -40,11 +83,12 @@ int main()
     wi::scene::Scene reopened;reopened.Serialize(archive);
     Check(zones::Read(reopened,reopened.metadatas.GetEntity(0),restored)&&
         restored.location.type=="custom.cave"&&restored.location.icon=="Content/UI/icon.png"&&
-        restored.location.announcement.range==75&&restored.location.announcement.duration==6&&
+        restored.location.announcement.font=="Content/UI/title.ttf"&&restored.location.announcement.range==75&&restored.location.announcement.duration==6&&
         restored.location.announcement.effect==LocationTextEffect::Glitch&&
         PersistentEntityId(reopened,reopened.metadatas.GetEntity(0))==identity,"WISCENE roundtrip settings and identity");
     WisceneDependencyDocument dependencies;InspectWisceneDependencies(reopened,dependencies);
     Check(std::any_of(dependencies.references.begin(),dependencies.references.end(),[](const auto& ref){return ref.declaredPath=="Content/UI/icon.png"&&ref.dependencyClass==DependencyClass::Texture;}),"location icon is a typed scene dependency");
+    Check(std::any_of(dependencies.references.begin(),dependencies.references.end(),[](const auto& ref){return ref.declaredPath=="Content/UI/title.ttf"&&ref.dependencyClass==DependencyClass::Font;}),"location font is a typed scene dependency");
     WorldLocationService locations;
     WorldLocation a{"town","Ravenwood",{},profile};a.profile.announcement.range=50;
     Check(locations.Put(a,error),"register location");
@@ -63,12 +107,19 @@ int main()
     locations.Tick(0,NavigationPoint{100,0,0});locations.Tick(0,NavigationPoint{0,0,0});
     Check(locations.Announcement().has_value(),"re-entry triggers when enabled");
     Check(locations.Discover("town",error)&&locations.Get("town")->discovered,"explicit zone-entry discovery");
-    frame=*locations.Announcement();frame.elapsed=1.125;frame.settings.strength=8;frame.settings.speed=1;
+    frame=*locations.Announcement();frame.elapsed=.5;frame.settings.strength=8;frame.settings.speed=1;
     frame.settings.effect=LocationTextEffect::Wobble;auto sample=SampleLocationText(frame);
     Check(sample.visible&&std::abs(sample.y)>5&&sample.x==0,"wobble moves text");
     sample=SampleLocationText(frame,true);Check(sample.y==0&&sample.x==0&&sample.opacity==1,"reduced motion");
-    frame.settings.effect=LocationTextEffect::Glitch;frame.elapsed=0.01;
-    sample=SampleLocationText(frame);Check(sample.x!=0&&sample.opacity<1,"glitch flicker and displacement");
+    frame.settings.effect=LocationTextEffect::Glitch;frame.elapsed=.60;
+    sample=SampleLocationText(frame);
+    auto glitch=SampleLocationGlitch(frame);
+    Check(glitch.active&&glitch.bands[0].offsetX*glitch.bands[1].offsetX<0&&glitch.separation>0,"glitch has opposing short distortion bands");
+    Check(sample.x==0&&sample.y==0&&sample.opacity==1,"glitch keeps the whole name readable");
+    Check(!SampleLocationGlitch(frame,true).active,"reduced motion suppresses glitch cuts");
+    frame.elapsed=1.0;Check(!SampleLocationGlitch(frame).active,"clean intervals between glitch bursts");
+    frame.settings.effect=LocationTextEffect::Fade;frame.settings.fadeIn=1;frame.elapsed=.25;
+    Check(std::abs(SampleLocationText(frame).opacity-.15625f)<.0001f,"fade uses smooth easing");
     frame.settings.effect=LocationTextEffect::None;sample=SampleLocationText(frame);
     Check(sample.opacity==1&&sample.x==0&&sample.y==0,"none removes all effects");
     frame.settings.effect=LocationTextEffect::Fade;frame.elapsed=3.9;frame.settings.duration=4;
@@ -117,8 +168,8 @@ return {
   assert(l.configure(native,{duration=9}))
   id=assert(l.register{name="Old Mine",type="custom.dungeon",position={x=1,y=0,z=3},range=80,duration=5,animation="wobble"})
   assert(l.get(id).name=="Old Mine" and l.get(id).animation=="wobble")
-  assert(l.configure(id,{duration=6,fade_in=.2,fade_out=.4,strength=3,speed=2,repeat_on_return=true}))
-  assert(l.get(id).duration==6)
+  assert(l.configure(id,{font="",duration=6,fade_in=.2,fade_out=.4,strength=3,speed=2,repeat_on_return=true}))
+  assert(l.get(id).duration==6 and l.get(id).font=="")
   local settings=l.get(id)
   assert(l.configure(id,settings))
   assert(not l.configure(id,{duration=0}) and l.get(id).duration==6)

@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
+#include <filesystem>
+#include <cctype>
 namespace renegade::bridge
 {
 namespace {
@@ -13,8 +15,12 @@ namespace {
     bool ValidateLocationProfile(const LocationProfile& p,std::string& error)
     {
         const auto& a=p.announcement;
+        auto extension=std::filesystem::u8path(a.font).extension().generic_u8string();
+        std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return char(std::tolower(c));});
         const auto number=[](float v,float lo,float hi){return std::isfinite(v)&&v>=lo&&v<=hi;};
         if(!text(p.type,48)||(!p.icon.empty()&&!IsNavigationIconPath(p.icon))||
+            (!a.font.empty()&&a.font!=BuiltinScreenFont&&(!IsNavigationIconPath(a.font)||
+                extension!=".ttf"))||
             !number(a.range,0,1e7)||!number(a.duration,.1f,600)||!number(a.fadeIn,0,60)||!number(a.fadeOut,0,60)||
             !number(a.strength,0,128)||!number(a.speed,.1f,30)||int(a.effect)<0||int(a.effect)>3)
         {error="Invalid location type, icon or announcement settings.";return false;}
@@ -23,7 +29,7 @@ namespace {
     std::string LocationProfileKey(const LocationProfile& p)
     {
         const auto& a=p.announcement;std::ostringstream out;out.imbue(std::locale::classic());out<<std::setprecision(9);
-        out<<p.type<<'\n'<<p.icon<<'\n'<<p.showOnCompass<<p.onlyAfterDiscovery<<a.enabled<<a.repeatOnReturn
+        out<<p.type<<'\n'<<p.icon<<'\n'<<a.font<<'\n'<<p.showOnCompass<<p.onlyAfterDiscovery<<a.enabled<<a.repeatOnReturn
             <<' '<<a.range<<' '<<a.duration<<' '<<a.fadeIn<<' '<<a.fadeOut<<' '<<a.strength<<' '<<a.speed<<' '<<int(a.effect);
         return out.str();
     }
@@ -35,14 +41,28 @@ namespace {
         if(a.effect==LocationTextEffect::None)return s;
         const float t=float(f.elapsed),remaining=a.duration-t;
         const float fadeIn=std::min(a.fadeIn,a.duration*.5f),fadeOut=std::min(a.fadeOut,a.duration*.5f);
-        s.opacity=std::clamp(std::min(fadeIn>0?t/fadeIn:1.f,fadeOut>0?remaining/fadeOut:1.f),0.f,1.f);
+        const float envelope=std::clamp(std::min(fadeIn>0?t/fadeIn:1.f,fadeOut>0?remaining/fadeOut:1.f),0.f,1.f);
+        s.opacity=envelope*envelope*(3.f-2.f*envelope);
         if(reducedMotion)return s;
-        if(a.effect==LocationTextEffect::Wobble)s.y=std::sin(t*a.speed*6.2831853f)*a.strength;
-        if(a.effect==LocationTextEffect::Glitch){
-            const auto step=uint64_t(t*a.speed*12);
-            if(step%11<2){s.x=(step%2?1.f:-1.f)*a.strength;s.opacity*=.25f;}
-            if(step%17==3)s.y=a.strength*.25f;
-        }
+        if(a.effect==LocationTextEffect::Wobble)
+            s.y=std::sin(t*a.speed*3.14159265f)*a.strength;
+        return s;
+    }
+    LocationGlitchSample SampleLocationGlitch(const LocationAnnouncementFrame& f,bool reducedMotion)
+    {
+        LocationGlitchSample s;
+        if(reducedMotion||!SampleLocationText(f).visible||f.settings.effect!=LocationTextEffect::Glitch||
+            f.settings.strength<=0||f.elapsed<.25)return s;
+        const double clock=(f.elapsed-.25)*f.settings.speed;
+        const double phase=std::fmod(clock,1.8);
+        // Two brief cuts separated by clean, readable text. Never blank the whole name.
+        if(!((phase>=.32&&phase<.44)||(phase>=.52&&phase<.58)))return s;
+        const auto burst=uint64_t(clock/1.8);
+        const float sign=burst%2?1.f:-1.f;
+        s.active=true;
+        s.separation=std::clamp(f.settings.strength*.3f,1.f,4.f);
+        s.bands={{{.22f,.13f,sign*f.settings.strength},
+                  {.63f,.10f,-sign*f.settings.strength*.7f}}};
         return s;
     }
     bool WorldLocationService::Put(WorldLocation l,std::string& error)

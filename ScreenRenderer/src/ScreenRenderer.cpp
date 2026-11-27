@@ -249,6 +249,8 @@ namespace
         wi::Resource progressFrameImage;
         wi::Resource progressFillImage;
         int fontStyle = 0;
+        int locationFontStyle = -1;
+        std::string locationFontResource;
         float scaleX = 1.0f;
         float scaleY = 1.0f;
         bool keyboardFocused = false;
@@ -270,7 +272,7 @@ namespace
             const renegade::bridge::ScreenRect& content,
             renegade::bridge::ScreenHorizontalAlignment horizontal,
             renegade::bridge::ScreenVerticalAlignment vertical,
-            wi::graphics::CommandList cmd) const
+            wi::graphics::CommandList cmd,bool measureOnly=false) const
         {
             params.h_wrap=-1;params.h_align=wi::font::WIFALIGN_LEFT;
             params.v_align=wi::font::WIFALIGN_TOP;
@@ -296,7 +298,7 @@ namespace
                     wrappedLines[i].width,height,float(i)*advance,horizontal,vertical);
                 if(origin.y>=content.y+content.height)break;
                 params.posX=origin.x;params.posY=origin.y;
-                wi::font::Draw(wrappedLines[i].text,params,cmd);
+                if(!measureOnly)wi::font::Draw(wrappedLines[i].text,params,cmd);
             }
         }
         void Update(const wi::Canvas& canvas,float dt) override
@@ -524,7 +526,7 @@ namespace
                 const auto& text = style.text;
                 params.size = std::max(1, static_cast<int>(std::round(
                     text.fontSize * geometryScale)));
-                params.style = fontStyle;
+                params.style = locationFontStyle>=0?locationFontStyle:fontStyle;
                 params.spacingX = text.characterSpacing * geometryScale;
                 params.spacingY = text.lineSpacing * geometryScale;
                 params.softness = text.softness;
@@ -575,12 +577,58 @@ namespace
                 textClip.right=std::min(textClip.right,static_cast<int32_t>(std::floor(left+width)));
                 textClip.bottom=std::min(textClip.bottom,static_cast<int32_t>(std::floor(top+height)));
                 ApplyScissor(canvas,textClip,cmd);
+                const auto drawText=[&](wi::font::Params pass,float dx,float dy) {
+                    pass.posX+=dx;pass.posY+=dy;
+                    if(text.wrap&&authored.kind!=renegade::bridge::ScreenWidgetKind::TextInput)
+                        DrawWrappedText(display,pass,{left+dx,top+dy,width,height},
+                            text.horizontalAlignment,text.verticalAlignment,cmd);
+                    else wi::font::Draw(display,pass,cmd);
+                };
+                const float offsetX=locationFrame?locationSample.x*geometryScale:0.f;
+                const float offsetY=locationFrame?locationSample.y*geometryScale:0.f;
+                // params already contains the unwrapped offset. Give both paths one origin.
+                params.posX-=offsetX;params.posY-=offsetY;
+                const auto glitch=locationFrame?renegade::bridge::SampleLocationGlitch(*locationFrame,locationReducedMotion):
+                    renegade::bridge::LocationGlitchSample{};
                 if(authored.kind==renegade::bridge::ScreenWidgetKind::TextInput&&input.GetState()==wi::gui::ACTIVE)
                     const_cast<ScreenSurface*>(this)->input.RenderEditor(canvas,cmd,params,textClip);
-                else if(text.wrap&&authored.kind!=renegade::bridge::ScreenWidgetKind::TextInput)
-                    DrawWrappedText(display,params,{left,top,width,height},
-                        text.horizontalAlignment,text.verticalAlignment,cmd);
-                else wi::font::Draw(display, params, cmd);
+                else if(!glitch.active)drawText(params,offsetX,offsetY);
+                else {
+                    // Prime the same wrapped layout used to draw the label. No alternate font layout.
+                    if(text.wrap)DrawWrappedText(display,params,{left,top,width,height},
+                        text.horizontalAlignment,text.verticalAlignment,cmd,true);
+                    const float blockHeight=text.wrap?
+                        std::max(1.f,float(params.size)+params.spacingY)*float(wrappedLines.size()):
+                        wi::font::TextSize(display,params).y;
+                    const float blockTop=text.verticalAlignment==ScreenVerticalAlignment::Center?top+(height-blockHeight)*.5f:
+                        text.verticalAlignment==ScreenVerticalAlignment::Bottom?top+height-blockHeight:top;
+                    struct Cut {int top,bottom;float shift;};
+                    std::array<Cut,2> cuts;
+                    for(size_t i=0;i<cuts.size();++i){
+                        const auto& band=glitch.bands[i];
+                        cuts[i]={std::clamp(int(std::floor(blockTop+band.start*blockHeight)),textClip.top,textClip.bottom),
+                            std::clamp(int(std::ceil(blockTop+(band.start+band.height)*blockHeight)),textClip.top,textClip.bottom),
+                            band.offsetX*geometryScale};
+                    }
+                    auto segment=textClip;
+                    for(const auto& cut:cuts){
+                        segment.bottom=cut.top;
+                        if(segment.bottom>segment.top){ApplyScissor(canvas,segment,cmd);drawText(params,0,0);}
+                        segment.top=cut.bottom;
+                    }
+                    segment.bottom=textClip.bottom;
+                    if(segment.bottom>segment.top){ApplyScissor(canvas,segment,cmd);drawText(params,0,0);}
+                    for(const auto& cut:cuts)if(cut.bottom>cut.top){
+                        auto bandClip=textClip;bandClip.top=cut.top;bandClip.bottom=cut.bottom;ApplyScissor(canvas,bandClip,cmd);
+                        auto ghost=params;ghost.shadowColor=wi::Color(0,0,0,0);
+                        const auto alpha=uint8_t(float(params.color.getA())*.65f);
+                        ghost.color=wi::Color(255,65,125,alpha);
+                        drawText(ghost,cut.shift-glitch.separation*geometryScale,0);
+                        ghost.color=wi::Color(55,220,255,alpha);
+                        drawText(ghost,cut.shift+glitch.separation*geometryScale,0);
+                        drawText(params,cut.shift,0);
+                    }
+                }
                 ApplyScissor(canvas,clipped,cmd);
                 if(!controlDiagnostic.empty())
                 {
@@ -1966,18 +2014,30 @@ namespace renegade::screen
     void ScreenRenderer::SetLocationAnnouncement(const std::optional<bridge::LocationAnnouncementFrame>& frame)
     {
         if(!impl_->loaded)return;
-        bool found=false;
-        for(auto& surface:impl_->surfaces)if(surface->authored.locationAnnouncement){
-            surface->locationFrame=frame.value_or(bridge::LocationAnnouncementFrame{});surface->locationReducedMotion=impl_->animation.reducedMotion;found=true;
+        const bool found=std::any_of(impl_->surfaces.begin(),impl_->surfaces.end(),
+            [](const auto& surface){return surface->authored.locationAnnouncement;});
+        if(!found&&frame){
+            auto widget=bridge::MakeLocationAnnouncementWidget();
+            widget.rect.x=impl_->document.designWidth*.125f;widget.rect.y=impl_->document.designHeight*.21f;
+            widget.rect.width=impl_->document.designWidth*.75f;widget.rect.height=impl_->document.designHeight*.14f;
+            auto surface=std::make_unique<ScreenSurface>();surface->Create(widget.name+"#"+widget.id);
+            surface->authored=widget;surface->SetText(widget.text);surface->SetEnabled(false);surface->SetShadowRadius(0);
+            impl_->document.widgets.push_back(widget);impl_->root.surfaces.push_back(surface.get());impl_->byId[widget.id]=surface.get();
+            impl_->surfaces.push_back(std::move(surface));impl_->layoutDirty=true;
         }
-        if(found||!frame)return;
-        auto widget=bridge::MakeLocationAnnouncementWidget();
-        widget.rect.x=impl_->document.designWidth*.125f;widget.rect.y=impl_->document.designHeight*.21f;
-        widget.rect.width=impl_->document.designWidth*.75f;widget.rect.height=impl_->document.designHeight*.14f;
-        auto surface=std::make_unique<ScreenSurface>();surface->Create(widget.name+"#"+widget.id);
-        surface->authored=widget;surface->SetText(widget.text);surface->SetEnabled(false);surface->SetShadowRadius(0);
-        surface->locationFrame=*frame;
-        impl_->document.widgets.push_back(widget);impl_->root.surfaces.push_back(surface.get());impl_->byId[widget.id]=surface.get();
-        impl_->surfaces.push_back(std::move(surface));impl_->layoutDirty=true;
+        for(auto& surface:impl_->surfaces)if(surface->authored.locationAnnouncement){
+            surface->locationFrame=frame.value_or(bridge::LocationAnnouncementFrame{});
+            surface->locationReducedMotion=impl_->animation.reducedMotion;
+            const auto font=frame?frame->settings.font:std::string{};
+            if(surface->locationFontResource!=font){
+                surface->locationFontResource=font;surface->locationFontStyle=-1;
+                if(font==bridge::BuiltinScreenFont)surface->locationFontStyle=0;
+                else if(!font.empty()){
+                    std::string absolute,error;
+                    if(bridge::ResolveScreenResourcePath(impl_->projectRoot,font,absolute,error))
+                        surface->locationFontStyle=wi::font::AddFontStyle(absolute);
+                }
+            }
+        }
     }
 }

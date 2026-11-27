@@ -1601,7 +1601,7 @@ namespace renegade::runtime
                 doc.widgets={bridge::MakeLocationAnnouncementWidget()};
                 locationOverlay_.Load(doc,startupResult_.project.rootPath,renderer_,{},error);
             }
-            if(locationOverlay_.IsLoaded()){locationOverlay_.SetLocationAnnouncement(frame);locationOverlay_.ApplyLayout(renderer_);}
+            if(locationOverlay_.IsLoaded()){locationOverlay_.SetAnimationPreview({false,false,uiAccessibility_.reducedMotion,0});locationOverlay_.SetLocationAnnouncement(frame);locationOverlay_.ApplyLayout(renderer_);}
         }
         if ((screenPresenter_->IsLoaded()&&!apply(*screenController_,*screenPresenter_)) ||
             (hudSession_.IsLoaded()&&uiComposition_.IsHudVisible()&&!apply(*hudSession_.Controller(),*hudSession_.Presenter())))

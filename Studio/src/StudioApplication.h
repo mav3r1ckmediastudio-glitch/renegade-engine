@@ -923,7 +923,10 @@ namespace renegade::studio
         SceneInspectorButton zoneScript_;
         SceneInspectorButton locationIcon_,locationAdvanced_;
         SceneInspectorTextInputField locationType_;
-        SceneInspectorComboBox locationEffect_,locationVisibility_;
+        SceneInspectorComboBox locationEffect_,locationVisibility_,locationFont_;
+        std::vector<std::string> locationFontPaths_;
+        std::string locationFontRoot_;
+        bool locationFontsDirty_=true;
         std::array<SceneInspectorSlider,6> locationNumbers_;
         wi::gui::CheckBox locationAnnounce_,locationRepeat_,locationCompass_;
         bool locationAdvancedOpen_=false;
@@ -931,6 +934,8 @@ namespace renegade::studio
         void CreateLocationControls();
         void LayoutLocationControls(const bridge::zones::Definition&,float width,float& y);
         void ChooseLocationIcon();
+        void RefreshLocationFonts();
+        void ImportLocationFont();
 
         void OpenSelectedZoneScript();
         std::array<SceneInspectorSlider, 3> zoneSizes_;
