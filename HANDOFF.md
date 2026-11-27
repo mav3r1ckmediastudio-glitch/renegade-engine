@@ -1,3 +1,9 @@
+# Animated health prefab resumed: artwork portability prerequisite, 27 November 2026
+
+Source 80449c9775a6842663f700425d1c1fb13b539866 on feature/ui-loading-media. Added progress frame/fill typed dependencies and destination remapping in portable UI adoption. Built EngineBridge and ScreenLibraryTests Release x64; the full ScreenLibraryTests executable passed including cross-project adoption with source artwork/package offline, exact frame/fill bytes, fresh widget identity and retained animation. git diff --check passed. See docs/UI_ANIMATED_HEALTH_PREFAB_2026-11-27.md for files, commands, recovered requirements and limits.
+
+The owner is locating the intended animated vial asset. No vial assembly, new artwork, animation-format choice or SFX implementation is claimed. Next: use the intended artwork, retain separate liquid and glass/frame styling, finish the reusable UI prefab workflow and test health/red plus mana/blue instances independently in another project Preview. Studio/Runtime are not yet relinked for this bridge-only prerequisite. No push/CI/merge/release; accepted carousel Studio remains open.
+
 # Carousel editor uses shared Studio UI, 27 November 2026
 
 Source checkpoint: c6afbd307e85218598376fc1088c4a2bc0c8dda4 on feature/ui-loading-media. Use git show --stat for the exact implementation file list. This supersedes the separate Windows carousel dialog and the intermediate recolour. The original carousel data/playback implementation remains 1821e38918bb4369593a7cd55944091d559de63b.
