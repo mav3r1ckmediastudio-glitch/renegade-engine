@@ -430,6 +430,7 @@ namespace renegade::runtime
             requestSink_ = {};
             return false;
         }
+        mediaRevisions_.clear();
         animationTime_=0;presentationVisible_=true;
         transitionPolicy_=document.transitions;
         if(!transition_.Start(transitionPolicy_,reducedMotion_,error))
@@ -452,13 +453,23 @@ namespace renegade::runtime
         }
 
         const auto& doc=controller.AuthoredDocument();
+        const auto& media=ScreenMediaOverrides();
+        const auto changes=media.find({doc.envelope.projectId,doc.envelope.documentId});
+        if (changes!=media.end()) for (const auto& [id,source]:changes->second)
+        {
+            if (mediaRevisions_[id]==source.revision) continue;
+            const auto* widget=controller.FindWidget(id);
+            if (widget) renderer_.SetWidgetMedia(id,source.authored?widget->video:source.video,
+                source.authored?widget->hintListPath:source.hints);
+            mediaRevisions_[id]=source.revision;
+        }
         const auto& overrides=ScreenCameraOverrides();
         const auto change=overrides.empty() ? overrides.end() : overrides.find({doc.envelope.projectId,doc.envelope.documentId});
         if(change!=overrides.end() && change->second.revision!=renderer_.BackgroundCameraRevision())
         {
             for(const auto& widget:doc.widgets)if(bridge::IsScreenBackground(doc,widget))
             {
-                renderer_.SetBackgroundCamera(widget.id,change->second.authored ? widget.cameraSource : change->second.source,change->second.revision);
+                renderer_.SetBackgroundCamera(widget.id,change->second.authored ? widget.cameraSource : change->second.source,change->second.revision,change->second.authored);
                 break;
             }
         }
@@ -620,6 +631,7 @@ namespace renegade::runtime
         requestSink_ = {};
         controller_ = nullptr;
         nextSequence_ = 1;
+        mediaRevisions_.clear();
         animationTime_=0;presentationVisible_=true;requestedInput_=true;
         transition_.Reset();transitionPolicy_={};
     }

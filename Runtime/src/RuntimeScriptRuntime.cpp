@@ -910,6 +910,76 @@ namespace renegade::runtime
             return 1;
         }
 
+        // ui.screen_media(screen path, widget ID [, table or "authored"]).
+        static int UiScreenMediaLua(lua_State* state)
+        {
+            auto* self=FromUpvalue(state);
+            if (!self || self->projectRoot.empty()) return PushNilError(state,"No active project.");
+            std::string path,error;
+            bridge::DocumentEnvelope envelope;
+            bridge::ScreenDocument doc;
+            if (!bridge::ResolveScreenResourcePath(self->projectRoot,luaL_checkstring(state,1),path,error) ||
+                !bridge::ReadDocumentEnvelope(path,envelope,error) ||
+                !bridge::ReadScreenDocument(path,envelope.projectId,doc,error)) return PushNilError(state,error);
+            const std::string id=luaL_checkstring(state,2);
+            auto it=std::find_if(doc.widgets.begin(),doc.widgets.end(),[&](const auto& w){return w.id==id;});
+            if (it==doc.widgets.end() || (!it->video && it->kind!=bridge::ScreenWidgetKind::Text))
+                return PushNilError(state,"Choose a Video or Text element.");
+            auto& changes=ScreenMediaOverrides()[{envelope.projectId,doc.envelope.documentId}];
+            auto found=changes.find(id);
+            ScreenMediaOverride value;
+            if (found!=changes.end()) value=found->second;
+            if (value.authored) {value.video=it->video;value.hints=it->hintListPath;}
+            if (lua_gettop(state)>2)
+            {
+                if (lua_type(state,3)==LUA_TSTRING && std::string(lua_tostring(state,3))=="authored")
+                {value.authored=true;value.video=it->video;value.hints=it->hintListPath;}
+                else
+                {
+                    luaL_checktype(state,3,LUA_TTABLE);
+                    value.authored=false;
+                    if (value.video)
+                    {
+                        lua_getfield(state,3,"asset");
+                        if (!lua_isnil(state,-1))
+                        {
+                            std::string asset=luaL_checkstring(state,-1);
+                            if (!bridge::IsValidStableId(asset)) return PushNilError(state,"Invalid video asset ID.");
+                            value.video->assetId=asset;
+                        }
+                        lua_pop(state,1);
+                        for (auto [key,field]:{std::pair<const char*,bool*>{"loop",&value.video->loop},
+                            {"mute",&value.video->mute},{"additive",&value.video->additive}})
+                        {
+                            lua_getfield(state,3,key);
+                            if (!lua_isnil(state,-1)) {
+                                if (!lua_isboolean(state,-1)) return PushNilError(state,"Video switches require booleans.");
+                                *field=lua_toboolean(state,-1)!=0;
+                            }
+                            lua_pop(state,1);
+                        }
+                    }
+                    else
+                    {
+                        lua_getfield(state,3,"hints");value.hints=luaL_checkstring(state,-1);lua_pop(state,1);
+                        if (!bridge::ResolveScreenResourcePath(self->projectRoot,value.hints,path,error) ||
+                            std::filesystem::u8path(path).extension()!=".txt") return PushNilError(state,"Choose a project text file.");
+                    }
+                }
+                ++value.revision;changes[id]=value;
+            }
+            lua_newtable(state);
+            if (value.video)
+            {
+                lua_pushstring(state,value.video->assetId.c_str());lua_setfield(state,-2,"asset");
+                lua_pushboolean(state,value.video->mute);lua_setfield(state,-2,"mute");
+                lua_pushboolean(state,value.video->loop);lua_setfield(state,-2,"loop");
+                lua_pushboolean(state,value.video->additive);lua_setfield(state,-2,"additive");
+            }
+            else {lua_pushstring(state,value.hints.c_str());lua_setfield(state,-2,"hints");}
+            return 1;
+        }
+
         static int UiBackgroundCameraLua(lua_State* state)
         {
             auto* self=FromUpvalue(state);
@@ -960,7 +1030,7 @@ namespace renegade::runtime
                 ++setting.revision;
             }
             const auto& source=setting.authored ? widget->cameraSource : setting.source;
-            lua_pushstring(state,source ? (source->slowPan?"pan":"fixed") : "image");
+            lua_pushstring(state,source ? (source->slowPan?"pan":"fixed") : (setting.authored && widget->video ? "video" : "image"));
             lua_pushstring(state,source ? source->levelPathHint.c_str() : "");
             lua_pushstring(state,source ? source->cameraId.c_str() : "");
             return 3;
@@ -1759,6 +1829,7 @@ namespace renegade::runtime
             lua_pushlightuserdata(lua, this);
             lua_pushcclosure(lua, UiShowPromptLua, 1);
             lua_setfield(lua, -2, "show_prompt");
+            lua_pushlightuserdata(lua,this); lua_pushcclosure(lua,UiScreenMediaLua,1); lua_setfield(lua,-2,"screen_media");
             lua_pushlightuserdata(lua,this); lua_pushcclosure(lua,UiBackgroundCameraLua,1); lua_setfield(lua,-2,"background_camera");
             lua_pushlightuserdata(lua,this); lua_pushcclosure(lua,UiClickSoundLua,1); lua_setfield(lua,-2,"button_click_sound");
             lua_setfield(lua, -2, "ui");

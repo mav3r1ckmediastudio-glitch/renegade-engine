@@ -516,11 +516,11 @@ namespace renegade::studio
                 });
         }
 
-        void ChangeGraphicForSelection(bool allSlots) {
+        void ChangeGraphicForSelection(bool allSlots,bool useImageSource=false) {
             if(!session_||!workspace_)return;
             selectedId_=workspace_->SelectedWidgetId();
             RefreshFromSelection(true);
-            OpenComputerImage(false,0,true,allSlots);
+            OpenComputerImage(false,0,true,allSlots,useImageSource);
         }
         void OpenImageForSelection()
         {
@@ -1157,7 +1157,7 @@ namespace renegade::studio
         // Import through Renegade's actual governed texture pipeline, not a
         // stale absolute file path. The result becomes a project source asset
         // and a registered LP08 product that Build Game can resolve.
-        void OpenComputerImage(const bool stateImage, const int progressSlot = 0, const bool directGraphic = false, const bool allSlots = false)
+        void OpenComputerImage(const bool stateImage, const int progressSlot = 0, const bool directGraphic = false, const bool allSlots = false,const bool useImageSource=false)
         {
             if (!session_ || !session_->IsLoaded() ||
                 !Selected() || projectRoot_.empty()) return;
@@ -1173,13 +1173,13 @@ namespace renegade::studio
                                  "bmp", "dds", "hdr"};
             wi::helper::FileDialog(dialog,
                 [this, projectId, screenId, widgetId, root, stateImage,
-                 requestedVisualState, progressSlot, directGraphic, allSlots](const std::string& path)
+                 requestedVisualState, progressSlot, directGraphic, allSlots,useImageSource](const std::string& path)
                 {
                     if (path.empty()) return;
                     wi::eventhandler::Subscribe_Once(
                         wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                         [this, projectId, screenId, widgetId, root,
-                         stateImage, requestedVisualState, progressSlot, path, directGraphic, allSlots](std::uint64_t)
+                         stateImage, requestedVisualState, progressSlot, path, directGraphic, allSlots,useImageSource](std::uint64_t)
                         {
                             const auto report=[this,directGraphic](const std::string& message) {
                                 status_=message;
@@ -1288,7 +1288,7 @@ namespace renegade::studio
                             if (!widget) return;
                             if(directGraphic) {
                                 std::string graphicError;
-                                if(!session_->ChangeWidgetGraphic(widgetId,runtimeImage,allSlots,graphicError)) {
+                                if(!session_->ChangeWidgetGraphic(widgetId,runtimeImage,allSlots,graphicError,useImageSource)) {
                                     report(graphicError);return;
                                 }
                                 if(documentChanged_)documentChanged_();

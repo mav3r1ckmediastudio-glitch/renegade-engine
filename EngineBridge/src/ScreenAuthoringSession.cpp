@@ -290,7 +290,7 @@ namespace renegade::bridge
         }
 
         ScreenDocument candidate = Document();
-        if ((widget.kind == ScreenWidgetKind::Progress || IsScreenValueControl(widget.kind) || !widget.bindings.empty() || !widget.animations.empty() || widget.container.mode != ScreenChildLayout::Free || widget.container.compactBelowWidth>0) && candidate.schemaVersion < 3)
+        if ((widget.video || widget.kind == ScreenWidgetKind::Progress || IsScreenValueControl(widget.kind) || !widget.bindings.empty() || !widget.animations.empty() || widget.container.mode != ScreenChildLayout::Free || widget.container.compactBelowWidth>0) && candidate.schemaVersion < 3)
         {
             candidate.migratedFromVersion = candidate.schemaVersion;
             candidate.schemaVersion = 3;

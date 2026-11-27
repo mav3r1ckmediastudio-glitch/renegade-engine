@@ -253,6 +253,14 @@ namespace renegade::bridge
 
     enum class ScreenImageFit { Stretch, Contain, Cover };
 
+    struct ScreenVideoPanel
+    {
+        StableId assetId;
+        bool loop = true;
+        bool mute = true;
+        bool additive = false;
+    };
+
     struct ScreenCameraSource
     {
         StableId levelId;
@@ -308,6 +316,8 @@ namespace renegade::bridge
         ScreenImageFit imageFit=ScreenImageFit::Stretch;
         bool backgroundPanel=false;
         std::optional<ScreenCameraSource> cameraSource;
+        std::optional<ScreenVideoPanel> video;
+        std::string hintListPath;
 
     };
 

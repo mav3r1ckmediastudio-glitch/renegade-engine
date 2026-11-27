@@ -802,6 +802,7 @@ namespace renegade::runtime
 
     void RuntimeApplication::Update(const float dt)
     {
+        if (pendingLevelLoad_) { UpdateLoadingScreen(dt); return; }
         SyncPlayerForScene();
         static RuntimeVehicleTrial vehicleTrial;
         vehicleTrial.RestoreCockpitProjection(renderer_.camera);
@@ -4342,6 +4343,47 @@ namespace renegade::runtime
         pendingActions_.push_back(std::move(request));
     }
 
+    void RuntimeApplication::UpdateLoadingScreen(float dt)
+    {
+        auto& load=*pendingLevelLoad_;
+        pendingActions_.clear();
+        screenPresenter_->UpdateInput(renderer_,*screenController_,false,dt);
+        wi::Application::Update(0);
+        if (++load.frames==1) return;
+        if (load.prepared.wait_for(std::chrono::seconds(0))!=std::future_status::ready) return;
+        RuntimeActionResult result;
+        result.request=load.request;
+        auto next=startupResult_;
+        std::string error;
+        try
+        {
+            auto prepared=load.prepared.get();
+            result.succeeded=load.nextFlow.ApplyStep(scenes_,next,load.step,error,&prepared);
+        }
+        catch (const std::exception& failure) { error=failure.what(); }
+        if (result.succeeded)
+        {
+            startupResult_=std::move(next);
+            flow_=std::move(load.nextFlow);
+            screenPresenter_->Reset(renderer_);
+            uiComposition_.ClearPrimary();
+            pendingEnterOverride_.reset();
+            result.code=RuntimeActionCode::Success;
+            result.message="Loaded "+startupResult_.flowNodeName;
+            wi::backlog::post("Loading screen: "+std::to_string(load.frames)+" updates before level handoff.");
+        }
+        else
+        {
+            result.code=RuntimeActionCode::FlowStartFailed;
+            result.message=error;
+            CancelScreenExit();
+            std::string restoreError;
+            if (!LoadCurrentFlowScreen(restoreError)) result.message+="; "+restoreError;
+        }
+        pendingLevelLoad_.reset();
+        RecordAction(result);
+    }
+
     void RuntimeApplication::ProcessPendingActions()
     {
         bool completedExit=false;
@@ -4385,6 +4427,27 @@ namespace renegade::runtime
                 RuntimeActionResult result;result.request=request;
                 auto step=flow_.EmitOutcome(request.actionId);
                 std::string error;
+                if (step.succeeded && step.currentNodeKind==bridge::FlowNodeKind::Level &&
+                    step.destinationEntry!="renegade.ui.resume")
+                {
+                    const auto& project=startupResult_.project;
+                    std::string loadingPath,scenePath;
+                    bridge::ScreenDocument loading;
+                    if (bridge::ResolveScreenResourcePath(project.rootPath,"Content/Screens/Loading.renegade-screen",loadingPath,error) &&
+                        bridge::ReadScreenDocument(loadingPath,project.projectId,loading,error) && loading.enabledInGame &&
+                        bridge::ResolveSceneDocumentPath(project.rootPath,project.projectId,step.sceneAssetId,step.scenePathHint,scenePath,error) &&
+                        LoadPrimaryScreenDocument(loading,error))
+                    {
+                        PendingLevelLoad load;
+                        load.nextFlow=flow_;
+                        flow_=oldFlow;
+                        load.step=step;
+                        load.request=request;
+                        load.prepared=std::async(std::launch::async,[scenePath] { return bridge::PrepareWickedSceneOpen(scenePath); });
+                        pendingLevelLoad_.emplace(std::move(load));
+                        return;
+                    }
+                }
                 if(!step.succeeded||!flow_.ApplyStep(scenes_,startupResult_,step,error))
                 {
                     flow_=oldFlow;startupResult_=oldBootstrap;CancelScreenExit();

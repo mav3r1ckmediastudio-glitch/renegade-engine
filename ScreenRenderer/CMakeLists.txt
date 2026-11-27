@@ -1,4 +1,5 @@
 add_library(RenegadeScreenRenderer STATIC
+    src/ScreenVideoAudio.cpp
     src/DialoguePanel.cpp
     include/renegade/screen/ScreenRenderer.h
     src/ScreenRenderer.cpp
@@ -14,6 +15,7 @@ target_include_directories(RenegadeScreenRenderer
 target_link_libraries(RenegadeScreenRenderer
     PUBLIC
         Renegade::EngineBridge
+    PRIVATE mfplat mfuuid shlwapi oleaut32 ole32
 )
 
 target_compile_options(RenegadeScreenRenderer

@@ -1377,6 +1377,10 @@ target_include_directories(RenegadeScreenLibraryTests PRIVATE ${PROJECT_SOURCE_D
 
 # Default creator scaffold: real Flow/Level, assets, optional capabilities and retained resume.
 add_executable(RenegadeProjectUiScaffoldTests ProjectUiScaffoldTests.cpp)
+add_custom_command(TARGET RenegadeProjectUiScaffoldTests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/Studio/assets/ui/loading"
+        "$<TARGET_FILE_DIR:RenegadeProjectUiScaffoldTests>/Content/UI/Loading" VERBATIM)
+
 target_link_libraries(RenegadeProjectUiScaffoldTests PRIVATE Renegade::EngineBridge Renegade::RuntimeBootstrap)
 target_compile_options(RenegadeProjectUiScaffoldTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 add_dependencies(RenegadeBridgeTests RenegadeProjectUiScaffoldTests)

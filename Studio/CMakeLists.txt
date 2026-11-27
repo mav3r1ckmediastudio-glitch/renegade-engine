@@ -142,6 +142,7 @@ add_executable(RenegadeStudio WIN32
     src/StudioUserPreferences.h
     src/WindowsGameBuildController.cpp
     src/WindowsGameBuildController.h
+    src/ScreenHintEditor.rc
     src/main_Windows.cpp
 )
 
@@ -475,3 +476,6 @@ add_custom_command(TARGET RenegadeStudio POST_BUILD
 target_sources(RenegadeStudio PRIVATE src/StudioModalWindow.cpp src/StudioModalWindow.h src/StudioNumericControl.h src/StudioNumericControl.cpp)
 
 target_sources(RenegadeStudio PRIVATE src/TerrainPropPalette.cpp)
+add_custom_command(TARGET RenegadeStudio POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/loading"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/UI/Loading" VERBATIM)

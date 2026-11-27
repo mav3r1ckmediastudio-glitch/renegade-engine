@@ -37,6 +37,12 @@ namespace renegade::studio
             }
         }
 
+        void DropVideo(const std::string& file,float x,float y)
+        {
+            if (open_ && !interactive_)
+                workspace_.DropScreenVideo(file,{x/GetDPIScaling(),y/GetDPIScaling(),0,0});
+        }
+
         void EnsureLoaded()
         {
             if (loaded_) return;
@@ -71,7 +77,7 @@ namespace renegade::studio
             });
             workspace_.OnGraphicRequested([this](bool allSlots)
             {
-                advancedInspector_.ChangeGraphicForSelection(allSlots);
+                advancedInspector_.ChangeGraphicForSelection(allSlots,workspace_.ChoosingImageSource());
             });
             workspace_.OnImageAssetRequested([this]()
             {

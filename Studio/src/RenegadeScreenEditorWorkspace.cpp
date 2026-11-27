@@ -3,6 +3,11 @@
 #include "renegade/bridge/ScreenClickSound.h"
 #include "renegade/bridge/DialogueAssetService.h"
 #include "RenegadeScreenEditorWorkspace.h"
+#include "ScreenHintEditor.h"
+#include "renegade/bridge/ProjectDocumentTransaction.h"
+#include "renegade/bridge/CreatorVideoWorkflowService.h"
+#include "renegade/bridge/VideoAssetService.h"
+#include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/ScreenBackgroundPanel.h"
 #include <cstdio>
 #include "StudioTheme.h"
@@ -537,6 +542,19 @@ namespace renegade::studio
         cameraBackgroundButton_.Create("Background source");
         cameraBackgroundButton_.SetTooltip("Choose an image or a saved level camera.");
         cameraBackgroundButton_.OnClick([this](const wi::gui::EventArgs&){ChooseBackgroundCamera();});
+        videoLoop_.Create("Loop video");
+        videoMute_.Create("Mute video");
+        const auto toggleVideo=[this](bool loop) {
+            const auto* widget=session_?session_->FindWidget(selectedWidgetId_):nullptr;
+            if (!widget || !widget->video) return;
+            auto video=*widget->video;
+            if (loop) video.loop=!video.loop; else video.mute=!video.mute;
+            std::string error;
+            if (session_->SetVideoPanel(widget->id,video,error)) RefreshAfterMutation("Video playback updated");
+            else SetStatus(error);
+        };
+        videoLoop_.OnClick([toggleVideo](const wi::gui::EventArgs&){toggleVideo(true);});
+        videoMute_.OnClick([toggleVideo](const wi::gui::EventArgs&){toggleVideo(false);});
         panBackgroundButton_.Create("Camera slow pan");
         panBackgroundButton_.OnClick([this](const wi::gui::EventArgs&){
             if(!session_)return;
@@ -746,7 +764,10 @@ namespace renegade::studio
             "Choose an imported project image or browse this computer.");
         imageAssetButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            if (graphicRequested_) graphicRequested_(false);
+            const auto* selected=session_ ? session_->FindWidget(selectedWidgetId_) : nullptr;
+            if (selected && selected->kind==bridge::ScreenWidgetKind::Text) ChooseHintList();
+            else if (selected && (selected->video || bridge::IsScreenBackground(session_->Document(),*selected))) ChooseScreenMedia();
+            else if (graphicRequested_) graphicRequested_(false);
         });
         progressFrameButton_.Create("Progress Frame Image");
         progressFrameButton_.SetAccentOutlineStyle(true);
@@ -863,6 +884,8 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&copyBackgroundButton_),
                 static_cast<wi::gui::Widget*>(&cameraBackgroundButton_),
                 static_cast<wi::gui::Widget*>(&panBackgroundButton_),
+                static_cast<wi::gui::Widget*>(&videoLoop_),
+                static_cast<wi::gui::Widget*>(&videoMute_),
                 static_cast<wi::gui::Widget*>(&gridVisibleButton_),
                 static_cast<wi::gui::Widget*>(&gridSnapButton_),
                 static_cast<wi::gui::Widget*>(&gridSpacingInput_),
@@ -1011,6 +1034,7 @@ namespace renegade::studio
         const auto* graphicTarget=session_?session_->FindWidget(selectedWidgetId_):nullptr;
         full(cameraBackgroundButton_,HeaderHeight+423,32);
         full(panBackgroundButton_,HeaderHeight+461,32);
+        pair(videoLoop_,videoMute_,HeaderHeight+461);
         full(copyBackgroundButton_,HeaderHeight+385,32);
         full(imageAssetButton_,HeaderHeight+
             (graphicTarget&&graphicTarget->kind==bridge::ScreenWidgetKind::Image?69.0f:385.0f),
@@ -1147,13 +1171,21 @@ namespace renegade::studio
         copyBackgroundButton_.SetVisible(background && !focusCanvas_ && !rightCollapsed_ && !inspectorSuppressed_);
         cameraBackgroundButton_.SetVisible(copyBackgroundButton_.IsVisible());
         panBackgroundButton_.SetVisible(copyBackgroundButton_.IsVisible() && selected->cameraSource.has_value());
+        const bool showVideo=selectedReady && selected->video && !focusCanvas_ && !rightCollapsed_ && !inspectorSuppressed_;
+        videoLoop_.SetVisible(showVideo);
+        videoMute_.SetVisible(showVideo);
+        if (showVideo)
+        {
+            videoLoop_.SetText(selected->video->loop ? "Loop: on" : "Loop: off");
+            videoMute_.SetText(selected->video->mute ? "Mute: on" : "Mute: off");
+        }
         if(background)
         {
             const auto& source=selected->cameraSource;
-            cameraBackgroundButton_.SetText(source ? "Live camera: "+source->cameraName : "Source: image / choose camera...");
+            cameraBackgroundButton_.SetText(source ? "Live camera: "+source->cameraName : selected->video ? "Source: video / choose camera..." : "Source: image / choose camera...");
             if(source)panBackgroundButton_.SetText(source->slowPan ? "Slow pan: on" : "Slow pan: off");
         }
-        imageAssetButton_.SetText(background && selected->cameraSource ? "Choose fallback image..." : background ? "Choose background image..." : "CHANGE GRAPHIC");
+        imageAssetButton_.SetText(selectedReady && selected->kind==bridge::ScreenWidgetKind::Text ? "Hint list..." : background ? "Add file..." : selectedReady && selected->video ? "Choose video..." : "CHANGE GRAPHIC");
         imageAssetButton_.SetVisible(!button && selectedReady && !focusCanvas_ && !rightCollapsed_ &&
             !inspectorSuppressed_);
         const bool progressArtworkReady = selectedReady &&
@@ -1253,6 +1285,8 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&copyBackgroundButton_),
                 static_cast<wi::gui::Widget*>(&cameraBackgroundButton_),
                 static_cast<wi::gui::Widget*>(&panBackgroundButton_),
+                static_cast<wi::gui::Widget*>(&videoLoop_),
+                static_cast<wi::gui::Widget*>(&videoMute_),
                 static_cast<wi::gui::Widget*>(&gridVisibleButton_),
                 static_cast<wi::gui::Widget*>(&gridSnapButton_),
                 static_cast<wi::gui::Widget*>(&gridSpacingInput_),
@@ -1352,6 +1386,8 @@ namespace renegade::studio
                 static_cast<const wi::gui::Widget*>(&copyBackgroundButton_),
                 static_cast<const wi::gui::Widget*>(&cameraBackgroundButton_),
                 static_cast<const wi::gui::Widget*>(&panBackgroundButton_),
+                static_cast<const wi::gui::Widget*>(&videoLoop_),
+                static_cast<const wi::gui::Widget*>(&videoMute_),
                 static_cast<const wi::gui::Widget*>(&gridVisibleButton_),
                 static_cast<const wi::gui::Widget*>(&gridSnapButton_),
                 static_cast<const wi::gui::Widget*>(&gridSpacingInput_),
@@ -1765,6 +1801,154 @@ namespace renegade::studio
         RefreshAfterMutation("ENABLED STATE UPDATED // UNSAVED SCREEN CHANGE");
     }
 
+    void RenegadeScreenEditorWorkspace::ChooseHintList()
+    {
+        namespace fs=std::filesystem;
+        const auto* selected=session_?session_->FindWidget(selectedWidgetId_):nullptr;
+        if (!selected) return;
+        const auto root=gridProjectRoot_,doc=session_->Document().envelope.documentId,id=selected->id,old=selected->hintListPath;
+        const auto valid=[this,root,doc,id] {return session_ && session_->IsLoaded() && gridProjectRoot_==root &&
+            session_->Document().envelope.documentId==doc && selectedWidgetId_==id;};
+        auto apply=[this,id,valid](const std::string& hint) {
+            if (!valid()) return;
+            std::string error;
+            if (session_->SetHintList(id,hint,error)) RefreshAfterMutation("Hint list updated");
+            else SetStatus(error);
+        };
+        auto write=[this,root,valid,apply](const std::string& path,const std::string& contents) {
+            if (!valid()) return;
+            bridge::ProjectDocumentWrite file;
+            file.destinationPath=(fs::u8path(root)/fs::u8path(path)).generic_u8string();
+            file.content.assign(contents.begin(),contents.end());
+            bridge::ProjectDocumentTransactionOptions options;
+            options.allowedRoot=root;options.journalDirectory=(fs::u8path(root)/"Saved/Transactions").generic_u8string();
+            const auto result=bridge::ProjectDocumentTransaction().Execute({std::move(file)},options);
+            if (result.success) apply(path); else SetStatus(result.message);
+        };
+        std::vector<RenegadeScreenChoicePicker::Choice> choices{{"New hint list...","@new"},{"Import text file...","@import"},
+            {"Use displayed text","@none"}};
+        if (!old.empty()) choices.insert(choices.begin(),{"Edit selected list...","@edit"});
+        std::error_code ec;
+        auto folder=fs::u8path(root)/"Content/UI/Hints";
+        for (fs::directory_iterator it(folder,ec),end;!ec && it!=end;it.increment(ec))
+            if (it->is_regular_file(ec) && it->path().extension()==".txt")
+                choices.push_back({it->path().stem().u8string(),it->path().lexically_relative(fs::u8path(root)).generic_u8string()});
+        destinationPicker_.Open("HINT LIST",std::move(choices),old,
+            [this,valid,apply,write,root,old](const std::string& choice) {
+                if (!valid()) return;
+                if (choice=="@import")
+                {
+                    wi::helper::FileDialogParams dialog;
+                    dialog.type=wi::helper::FileDialogParams::OPEN;dialog.description="Import one hint per line";dialog.extensions={"txt"};
+                    wi::helper::FileDialog(dialog,[this,valid,write](const std::string& path){
+                        if (path.empty()) return;
+                        wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,valid,write,path](uint64_t){
+                            if (!valid()) return;
+                            std::ifstream in(fs::u8path(path),std::ios::binary);
+                            if (!in) {SetStatus("Could not read hint list.");return;}
+                            std::string content{std::istreambuf_iterator<char>(in),{}};
+                            write("Content/UI/Hints/"+fs::u8path(path).stem().u8string()+"-"+bridge::GenerateStableId()+".txt",content);
+                        });
+                    });
+                }
+                else if (choice=="@edit" || choice=="@new")
+                {
+                    std::string value,absolute,error;
+                    if (choice=="@edit" && bridge::ResolveScreenResourcePath(root,old,absolute,error))
+                    {
+                        std::ifstream in(fs::u8path(absolute),std::ios::binary);
+                        value.assign(std::istreambuf_iterator<char>(in),{});
+                    }
+                    if (EditHintText(value)) write(choice=="@edit"?old:"Content/UI/Hints/Hints-"+bridge::GenerateStableId()+".txt",value);
+                }
+                else apply(choice=="@none"?"":choice);
+            });
+    }
+
+    void RenegadeScreenEditorWorkspace::DropScreenVideo(const std::string& path,const XMFLOAT4& point)
+    {
+        if (!session_ || !session_->IsLoaded() || !Contains(PreviewViewport(),point) || Contains(MinimapBounds(),point)) return;
+        const auto format=bridge::DetectResourceSourceFormat(path);
+        if (bridge::ClassifyResourceSourceFormat(format)!=bridge::ResourceClass::Video) return;
+        std::string error;
+        if (!bridge::ValidateScreenVideoFile(path,error)) {SetStatus(error);return;}
+        const auto result=bridge::CreatorVideoWorkflowService().ImportVideo(gridProjectRoot_,session_->ProjectId(),path);
+        if (!result.succeeded) {SetStatus(result.error);return;}
+        CreateElement(bridge::ScreenWidgetKind::Image,false,&point,true,result.assetId);
+    }
+
+    void RenegadeScreenEditorWorkspace::ChooseScreenMedia()
+    {
+        if (!session_ || !session_->IsLoaded()) return;
+        const auto* selected=session_->FindWidget(selectedWidgetId_);
+        if (!selected) return;
+        const auto widget=selected->id;
+        const auto document=session_->Document().envelope.documentId;
+        const auto project=session_->ProjectId();
+        const auto root=gridProjectRoot_;
+        auto current=selected->video.value_or(bridge::ScreenVideoPanel{});
+        const auto valid=[this,widget,document,root] {
+            return session_ && session_->IsLoaded() && gridProjectRoot_==root &&
+                session_->Document().envelope.documentId==document && selectedWidgetId_==widget;
+        };
+        auto apply=[this,valid,widget](bridge::ScreenVideoPanel panel) {
+            if (!valid()) return;
+            std::string error;
+            if (session_->SetVideoPanel(widget,std::move(panel),error)) RefreshAfterMutation("Video panel updated");
+            else SetStatus(error);
+        };
+        std::vector<RenegadeScreenChoicePicker::Choice> choices;
+        if (bridge::IsScreenBackground(session_->Document(),*selected))
+        {
+            choices.push_back({"Choose image...","@image"});
+            if (selected->cameraSource || selected->video) choices.push_back({"Change fallback image...","@fallback"});
+        }
+        choices.push_back({"Import video...","@import"});
+        if (selected->video)
+        {
+            choices.push_back({current.additive ? "Blend: additive" : "Blend: normal","@blend"});
+        }
+        bridge::AssetRegistry registry;
+        std::string error;
+        if (bridge::ReadAssetRegistry(root,project,registry,error))
+            for (const auto& item:registry.records)
+                if (item.dependencyClass==bridge::DependencyClass::Video && item.provider=="lp08.rasset" && item.sourceAvailable)
+                    choices.push_back({std::filesystem::u8path(item.projectRelativePath).stem().u8string(),item.assetId});
+        const auto details=renderer_ ? renderer_->VideoInfo(widget) : std::string{};
+        destinationPicker_.Open(details.empty() ? "SCREEN MEDIA" : details,std::move(choices),current.assetId,
+            [this,project,root,valid,apply,current](const std::string& choice) mutable {
+                if (!valid()) return;
+                if (choice=="@image" || choice=="@fallback")
+                {
+                    chooseImageSource_=choice=="@image";
+                    if (graphicRequested_) graphicRequested_(false);
+                    chooseImageSource_=false;
+                    return;
+                }
+                if (choice=="@blend") { current.additive=!current.additive; apply(current); return; }
+                if (choice!="@import") { current.assetId=choice; apply(current); return; }
+                wi::helper::FileDialogParams dialog;
+                dialog.type=wi::helper::FileDialogParams::OPEN;
+                dialog.description="Import H.264 video";
+                for (const auto& extension:wi::resourcemanager::GetSupportedVideoExtensions())
+                    dialog.extensions.push_back(extension);
+                wi::helper::FileDialog(dialog,[this,project,root,valid,apply,current](const std::string& path) {
+                    if (path.empty()) return;
+                    wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                        [this,project,root,valid,apply,current,path](std::uint64_t) mutable {
+                            if (!valid()) return;
+                            std::string error;
+                            if (!bridge::ValidateScreenVideoFile(path,error)) {SetStatus(error);return;}
+                            const auto result=bridge::CreatorVideoWorkflowService().ImportVideo(root,project,path);
+                            if (!result.succeeded) { SetStatus(result.error); return; }
+                            auto panel=current;
+                            panel.assetId=result.assetId;
+                            apply(panel);
+                        });
+                });
+            });
+    }
+
     void RenegadeScreenEditorWorkspace::ChooseBackgroundCamera()
     {
         if(!session_ || !session_->IsLoaded())return;
@@ -1842,7 +2026,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::CreateElement(
         const bridge::ScreenWidgetKind kind,
-        const bool background, const XMFLOAT4* drop)
+        const bool background, const XMFLOAT4* drop, bool video, const bridge::StableId& videoId)
     {
         if (!session_ || !session_->IsLoaded()) return;
         const auto& document = session_->Document();
@@ -1913,7 +2097,8 @@ namespace renegade::studio
         }
         else
         {
-            widget.name = "Image";
+            widget.name = video ? "Video" : "Image";
+            if (video) widget.video.emplace().assetId=videoId;
             widget.rect.width = std::min(480.0f, document.designWidth - 40.0f);
             widget.rect.height = std::min(270.0f, document.designHeight - 40.0f);
             widget.rect.x = (document.designWidth - widget.rect.width) * 0.5f;
@@ -2232,9 +2417,9 @@ namespace renegade::studio
             {
                 paletteButtonPending_ = false;
                 if (Contains(PreviewBounds(), pointer) && Contains(PreviewViewport(), pointer) && !Contains(MinimapBounds(), pointer))
-                    CreateElement(bridge::ScreenWidgetKind::Button, false, &pointer);
+                    CreateElement(paletteVideo_ ? bridge::ScreenWidgetKind::Image : bridge::ScreenWidgetKind::Button, false, &pointer, paletteVideo_);
                 else if (std::abs(pointer.x-palettePress_.x)<5 && std::abs(pointer.y-palettePress_.y)<5)
-                    CreateElement(bridge::ScreenWidgetKind::Button, false);
+                    CreateElement(paletteVideo_ ? bridge::ScreenWidgetKind::Image : bridge::ScreenWidgetKind::Button, false, nullptr, paletteVideo_);
             }
             return;
         }
@@ -2402,7 +2587,7 @@ namespace renegade::studio
             if (!focusCanvas_ && !rightCollapsed_ && !InventoryInspectorActive() && !inspectorSuppressed_) if (const auto* widget = session_->FindWidget(selectedWidgetId_))
             {
                 const float inspectorX = width_ - panels_.right + 14.0f;
-                if(!InventoryAvailable()) Label(bridge::ScreenWidgetKindName(widget->kind), inspectorX,
+                if(!InventoryAvailable()) Label(widget->video ? "Video" : bridge::ScreenWidgetKindName(widget->kind), inspectorX,
                     HeaderHeight + 42.0f, 10, Orange, cmd);
                 Label("NAME", inspectorX, HeaderHeight + (widget->kind == bridge::ScreenWidgetKind::Image ? 121.0f : 57.0f), 9, Muted, cmd);
                 if (widget->kind == bridge::ScreenWidgetKind::Progress || widget->kind == bridge::ScreenWidgetKind::Text || bridge::IsScreenInteractive(widget->kind))
@@ -2808,7 +2993,9 @@ namespace renegade::studio
                 CreateElement(bridge::ScreenWidgetKind::Progress, false); break;
             case ScreenToolboxAction::Text:
                 CreateElement(bridge::ScreenWidgetKind::Text, false); break;
+            case ScreenToolboxAction::Video:
             case ScreenToolboxAction::Button:
+                paletteVideo_=item->action==ScreenToolboxAction::Video;
                 paletteButtonPending_ = true;
                 palettePress_ = pointer;
                 break;
@@ -3061,7 +3248,7 @@ namespace renegade::studio
             Label(Shorten(widget.name, left < 280.0f ? 17 : 24),
                 38.0f, y + 6.0f, 10,
                 selectedWidgetIds_.count(widget.id) ? Text : Muted, cmd);
-            Label(bridge::ScreenWidgetKindName(widget.kind),
+            Label(widget.video ? "Video" : bridge::ScreenWidgetKindName(widget.kind),
                 left - 64.0f, y + 7.0f, 8, Muted, cmd);
         }
     }

@@ -913,6 +913,10 @@ namespace renegade::bridge
         }
         RuntimeScreenDependencyDocument document;
         if (!reader_(path, document, error)) return false;
+        for (const auto& video:document.videoPaths)
+            EmitPath(emit,video,DependencyClass::Video,"runtime_screen.video");
+        for (const auto& hints:document.hintPaths)
+            EmitPath(emit,hints,DependencyClass::Data,"runtime_screen.hint_list");
         for (std::size_t index = 0; index < document.imagePaths.size(); ++index)
             EmitPath(emit, document.imagePaths[index], DependencyClass::Texture,
                 "runtime_screen.image[" + std::to_string(index) + "].resource");

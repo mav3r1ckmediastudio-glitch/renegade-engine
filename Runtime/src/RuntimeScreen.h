@@ -150,6 +150,7 @@ namespace renegade::runtime
         RequestSink requestSink_;
         bool inventoryHost_=false;
         screen::ScreenRenderer renderer_;
+        std::unordered_map<bridge::StableId,std::uint64_t> mediaRevisions_;
         std::uint64_t nextSequence_ = 1;
         double animationTime_=0;
         bool presentationVisible_=true;

@@ -178,7 +178,8 @@ namespace renegade::bridge
             // Passive HUD overlays have no Flow routes by design. They are
             // authorable, not unreachable gameplay screens.
             if (!reachable && !(node->kind==FlowNodeKind::Screen &&
-                node->screenPathHint=="Content/Screens/HUD.renegade-screen"))
+                (node->screenPathHint=="Content/Screens/HUD.renegade-screen" ||
+                 node->screenPathHint=="Content/Screens/Loading.renegade-screen")))
             {
                 diagnostics_.push_back({
                     StoryFlowDiagnosticSeverity::Warning,

@@ -332,6 +332,36 @@ namespace renegade::bridge
             return CommitMutation(std::move(candidate),error);
         }
 
+        [[nodiscard]] bool SetHintList(const StableId& id,const std::string& path,std::string& error)
+        {
+            if (!loaded_) {error="Open a screen first.";return false;}
+            auto candidate=Document();
+            for (auto& widget:candidate.widgets) if (widget.id==id && widget.kind==ScreenWidgetKind::Text)
+            {
+                widget.hintListPath=path;
+                if (candidate.schemaVersion<3) {candidate.migratedFromVersion=candidate.schemaVersion;candidate.schemaVersion=3;}
+                return CommitMutation(std::move(candidate),error);
+            }
+            error="Select a Text element.";return false;
+        }
+
+        [[nodiscard]] bool SetVideoPanel(const StableId& id, ScreenVideoPanel video, std::string& error)
+        {
+            if (!loaded_) { error="No screen is open."; return false; }
+            auto candidate=Document();
+            for (auto& widget : candidate.widgets)
+            {
+                if (widget.id!=id || widget.kind!=ScreenWidgetKind::Image) continue;
+                widget.video=std::move(video);
+                widget.cameraSource.reset();
+                if (candidate.schemaVersion<3)
+                { candidate.migratedFromVersion=candidate.schemaVersion; candidate.schemaVersion=3; }
+                return CommitMutation(std::move(candidate),error);
+            }
+            error="Select a video or background panel.";
+            return false;
+        }
+
         [[nodiscard]] bool SetBackgroundCamera(const StableId& id,
             std::optional<ScreenCameraSource> source,std::string& error)
         {
@@ -341,6 +371,7 @@ namespace renegade::bridge
             {
                 if(widget.id!=id || widget.kind!=ScreenWidgetKind::Image || !widget.parentId.empty())continue;
                 widget.backgroundPanel=true;
+                widget.video.reset();
                 widget.cameraSource=std::move(source);
                 if(candidate.schemaVersion<3)
                 {candidate.migratedFromVersion=candidate.schemaVersion;candidate.schemaVersion=3;}
@@ -545,6 +576,9 @@ namespace renegade::bridge
                 if(found->resourcePath!=edit.resourcePath)found->component->overrides|=8;
             }
             if(found->resourcePath!=edit.resourcePath)found->themeOverrides|=8;
+            if (found->video && (found->resourcePath!=edit.resourcePath ||
+                found->style.normal.imageResourcePath!=edit.style.normal.imageResourcePath))
+                found->video.reset();
             found->resourcePath = std::move(edit.resourcePath);
             found->actionId = std::move(edit.actionId);
             found->parentId = std::move(edit.parentId);
@@ -945,7 +979,7 @@ namespace renegade::bridge
         // Replace only artwork; retain geometry, actions, text, bindings and identity.
         // Bulk scope is restricted to recognised inventory slot buttons.
         [[nodiscard]] bool ChangeWidgetGraphic(const StableId& source,
-            const std::string& resource,bool allInventorySlots,std::string& error);
+            const std::string& resource,bool allInventorySlots,std::string& error,bool useImageSource=false);
         [[nodiscard]] bool ApplyPagedInventoryAppearance(
             const StableId& source,std::string& error);
         [[nodiscard]] bool ResizePagedInventoryGrid(

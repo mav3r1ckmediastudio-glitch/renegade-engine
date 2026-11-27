@@ -1,5 +1,6 @@
 #include "renegade/bridge/ScreenService.h"
 #include "ScreenBindingPersistence.h"
+#include "renegade/bridge/AssetRegistryService.h"
 #include "ScreenAnimationPersistence.h"
 #include "ScreenTransitionPersistence.h"
 #include "ScreenControlPersistence.h"
@@ -367,6 +368,8 @@ namespace renegade::bridge
             if (!ReadScreenDocument(path, projectId, screen, error))
                 return false;
             document.projectId = screen.envelope.projectId;
+            document.videoPaths.clear();
+            document.hintPaths.clear();
             document.imagePaths.clear();
             document.fontPaths.clear();
             document.screenPaths.clear();
@@ -398,8 +401,25 @@ namespace renegade::bridge
                 if (std::find(paths.begin(), paths.end(), path) == paths.end())
                     paths.push_back(path);
             };
+            std::optional<AssetRegistry> videoRegistry;
             for (const auto& widget : screen.widgets)
             {
+                if (!widget.hintListPath.empty()) addUnique(document.hintPaths,widget.hintListPath);
+                if (widget.video && !widget.video->assetId.empty())
+                {
+                    if (!videoRegistry)
+                    {
+                        auto dir=fs::u8path(path).parent_path();
+                        while (!dir.empty() && dir.filename()!="Content" && dir!=dir.parent_path()) dir=dir.parent_path();
+                        if (dir.filename()!="Content") {error="No Content root for screen video.";return false;}
+                        videoRegistry.emplace();
+                        if (!ReadAssetRegistry(dir.parent_path().generic_u8string(),projectId,*videoRegistry,error)) return false;
+                    }
+                    auto record=std::find_if(videoRegistry->records.begin(),videoRegistry->records.end(),
+                        [&](const auto& r){return r.assetId==widget.video->assetId && r.dependencyClass==DependencyClass::Video;});
+                    if (record==videoRegistry->records.end()) {error="Missing screen video asset: "+widget.video->assetId;return false;}
+                    addUnique(document.videoPaths,record->projectRelativePath);
+                }
                 if (widget.kind == ScreenWidgetKind::Image &&
                     !widget.resourcePath.empty())
                     addUnique(document.imagePaths, widget.resourcePath);
@@ -877,6 +897,15 @@ namespace renegade::bridge
             if (!IsValidStableId(widget.id))
             {
                 error = "The Runtime screen contains a widget with a malformed stable ID.";
+                return false;
+            }
+            if (!widget.hintListPath.empty() && (document.schemaVersion<3 ||
+                widget.kind!=ScreenWidgetKind::Text || !IsContentRelativePath(widget.hintListPath)))
+            { error="A hint list requires a project text file and a Text element."; return false; }
+            if (widget.video && (document.schemaVersion < 3 || widget.kind != ScreenWidgetKind::Image ||
+                widget.cameraSource || (!widget.video->assetId.empty() && !IsValidStableId(widget.video->assetId))))
+            {
+                error = "Invalid screen video panel.";
                 return false;
             }
             if(widget.cameraSource && (!widget.backgroundPanel || !widget.parentId.empty() ||
@@ -1387,6 +1416,14 @@ namespace renegade::bridge
                     {
                         section.Set("local_only",widget.localOnly);
                         section.Set("image_fit",static_cast<int>(widget.imageFit));
+                        if (!widget.hintListPath.empty()) section.Set("hint_list",widget.hintListPath);
+                        if (widget.video)
+                        {
+                            section.Set("video_asset", widget.video->assetId);
+                            section.Set("video_loop", widget.video->loop);
+                            section.Set("video_mute", widget.video->mute);
+                            section.Set("video_additive", widget.video->additive);
+                        }
                         if(widget.backgroundPanel)section.Set("background_panel",true);
                         if(widget.cameraSource)
                         {
@@ -1738,6 +1775,10 @@ namespace renegade::bridge
                 widget.enabled = section.GetBool("enabled");
                 widget.text = section.GetText("text");
                 widget.resourcePath = section.GetText("resource");
+                if (sourceSchema>=3) widget.hintListPath=section.GetText("hint_list");
+                if (sourceSchema >= 3 && section.Has("video_asset"))
+                    widget.video = ScreenVideoPanel{section.GetText("video_asset"),section.GetBool("video_loop"),
+                        section.GetBool("video_mute"),section.GetBool("video_additive")};
                 if(sourceSchema>=3 && section.Has("background_level"))
                 {
                     ScreenCameraSource camera;

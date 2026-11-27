@@ -27,7 +27,7 @@ namespace renegade::runtime
             bridge::SceneService& scenes,
             RuntimeBootstrapResult& bootstrap,
             const bridge::FlowStepResult& step,
-            std::string& error);
+            std::string& error, bridge::PreparedSceneOpen* prepared=nullptr);
 
         [[nodiscard]] const std::vector<std::string>& Trace() const noexcept;
         [[nodiscard]] const bridge::FlowDocument& Document() const noexcept;

@@ -15,7 +15,7 @@ namespace renegade::studio
 
     enum class ScreenToolboxAction : std::uint8_t
     {
-        None, StoryFlow, Text, Button, Image, Background,
+        None, StoryFlow, Text, Button, Image, Video, Background,
         Panel, Heading, Duplicate, Grid, Snap, Progress, GlobalHud, ProjectInventory,
         Icon, Divider, Spacer, Counter, PlayerHealthBar, PlayerHealthText, PlayerAmmoText, Group, HorizontalStack, VerticalStack, LayoutGrid, Toggle, Slider, Selector, TextInput, GameplayAttributes, PublishUiPackage, AdoptUiPackage, UiBudgets
     };
@@ -84,6 +84,7 @@ namespace renegade::studio
             {"BASIC", "Text", ScreenToolboxAction::Text},
             {"BASIC", "Heading", ScreenToolboxAction::Heading},
             {"BASIC", "Image", ScreenToolboxAction::Image},
+            {"BASIC", "Video", ScreenToolboxAction::Video},
             {"BASIC", "Progress Bar", ScreenToolboxAction::Progress},
             {"BASIC", "Add background panel", ScreenToolboxAction::Background},
             {"BASIC", "Icon", ScreenToolboxAction::Icon}, {"BASIC", "Divider", ScreenToolboxAction::Divider}, {"BASIC", "Spacer", ScreenToolboxAction::Spacer},
@@ -91,7 +92,7 @@ namespace renegade::studio
             {"LAYOUT", "Vertical Stack", ScreenToolboxAction::VerticalStack},
             {"LAYOUT", "Grid", ScreenToolboxAction::LayoutGrid}, {"LAYOUT", "Tabs"},
             {"LAYOUT", "Scroll Area"}, {"LAYOUT", "Window"},
-            {"MEDIA", "Video"}, {"MEDIA", "Animated Image"},
+            {"MEDIA", "Animated Image"},
             {"MEDIA", "Animation Player"}, {"MEDIA", "Sequence"},
             {"DATA", "Radial"},
             {"DATA", "Segmented"}, {"DATA", "Counter text - bind in Inspector", ScreenToolboxAction::Counter},

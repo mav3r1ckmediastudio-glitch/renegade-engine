@@ -31,6 +31,7 @@ namespace renegade::studio
     {
     public:
         void Create();
+        void DropScreenVideo(const std::string& path,const XMFLOAT4& point);
         screen::ScreenInteractionState BasicPreviewState() const noexcept
         {
             if (stateOwner_ != selectedWidgetId_ || inspectorSuppressed_) return screen::ScreenInteractionState::Normal;
@@ -129,6 +130,7 @@ namespace renegade::studio
             bridge::ScreenAuthoringSession&, std::string&)>;
         void OnCoordinatedSave(CoordinatedSaveCallback callback);
         void OnImageAssetRequested(std::function<void()> callback);
+        bool ChoosingImageSource() const {return chooseImageSource_;}
         void OnGraphicRequested(std::function<void(bool)> callback){graphicRequested_=std::move(callback);}
         void ReportGraphicStatus(std::string message,bool error) {
             SetStatus(message);inventoryInspector_.ReportGraphicStatus(std::move(message),error);
@@ -219,7 +221,7 @@ namespace renegade::studio
         void RedoScreen();
         void ToggleVisible();
         void ToggleEnabled();
-        void CreateElement(bridge::ScreenWidgetKind kind, bool background, const XMFLOAT4* drop = nullptr);
+        void CreateElement(bridge::ScreenWidgetKind kind, bool background, const XMFLOAT4* drop = nullptr, bool video = false, const bridge::StableId& videoId = {});
         void DuplicateSelectedWidget();
         void DeleteSelectedWidget();
         void MoveSelectedWidgetToBack();
@@ -270,7 +272,7 @@ namespace renegade::studio
         XMFLOAT2 cameraLastPointer_ = {};
         std::function<void()> previewRequested_;
         RenegadeButton previewButton_;
-        RenegadeButton copyBackgroundButton_,cameraBackgroundButton_,panBackgroundButton_;
+        RenegadeButton copyBackgroundButton_,cameraBackgroundButton_,panBackgroundButton_,videoLoop_,videoMute_;
         void ChooseBackgroundCamera();
         void ChooseBackgroundDestinations();
         RenegadeButton fitCanvasButton_;
@@ -356,6 +358,10 @@ namespace renegade::studio
         RenegadeButton progressFrameButton_;
         RenegadeButton progressFillButton_;
         bool paletteButtonPending_ = false;
+        bool paletteVideo_ = false;
+        void ChooseScreenMedia();
+        bool chooseImageSource_=false;
+        void ChooseHintList();
         XMFLOAT4 palettePress_ = {};
         RenegadeButton appearanceButton_;
         RenegadeButton stateTabs_[3];

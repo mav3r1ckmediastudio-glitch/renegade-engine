@@ -124,6 +124,14 @@ int main(int argc,char** argv)
         const auto audit=references.AuditScreenOutcomes(metadata.rootPath,metadata.projectId,flow,node.id);
         check(audit.succeeded,node.name+": "+audit.message);
     }
+    bridge::ScreenDocument loading;
+    const std::string loadingPath="Content/Screens/Loading.renegade-screen";
+    const bool loadingReady=bridge::ReadScreenDocument((root/loadingPath).generic_u8string(),metadata.projectId,loading,error);
+    check(loadingReady && loading.usage==bridge::ScreenUsage::Overlay && loading.widgets.size()==4 &&
+        loading.widgets[0].backgroundPanel && loading.widgets[1].video && loading.widgets[2].video &&
+        !loading.widgets[1].video->assetId.empty() && !loading.widgets[2].video->assetId.empty() &&
+        loading.widgets[2].video->additive && fs::is_regular_file(root/loading.widgets.back().hintListPath),
+        "Loading template reopens with two independent governed clips and hint list: "+error);
     int optionalCount=0;std::set<std::string> identities;
     for(const auto& item:fs::recursive_directory_iterator(root/"Content/Screens"))
     {
@@ -133,14 +141,14 @@ int main(int argc,char** argv)
         {check(false,error);continue;}
         check(identities.insert(screen.envelope.documentId).second,"Unique Screen document identity");
         if(!screen.enabledInGame)++optionalCount;
-        if(screen.usage!=bridge::ScreenUsage::Hud&&screen.enabledInGame)
+        if((screen.usage==bridge::ScreenUsage::Menu || screen.usage==bridge::ScreenUsage::Modal) && screen.enabledInGame)
             check(!screen.focusOrder.empty(),"Every enabled menu has an eligible control");
     }
     check(optionalCount==8,"Eight optional modules retained as disabled editable assets");
-    check(identities.size()==25,"Full editable Screen catalogue written");
+    check(identities.size()==26,"Full editable Screen catalogue written");
     // The same catalogue recreates every standard Screen, including disabled
     // optional capabilities, without copying project identities or widget IDs.
-    check(bridge::ProjectUiScaffoldTemplateNames().size()==25,"Complete reusable starter catalogue");
+    check(bridge::ProjectUiScaffoldTemplateNames().size()==26,"Complete reusable starter catalogue");
     for(const auto& name:bridge::ProjectUiScaffoldTemplateNames())
     {
         bridge::ScreenDocument restored,second;
@@ -253,7 +261,11 @@ int main(int argc,char** argv)
                 << "return {on_start=function() local camera=renegade.ui.background_camera; local screen='"
                 << screenPath << "'; local mode,level,id=camera(screen); assert(mode=='pan' and id=='"
                 << cameraId << "'); assert(camera(screen,'fixed')=='fixed'); assert(camera(screen)=='fixed');"
-                << "assert(camera(screen,'image')=='image'); assert(camera(screen,'authored')=='pan'); end}";
+                << "assert(camera(screen,'image')=='image'); assert(camera(screen,'authored')=='pan');"
+                << "local media=renegade.ui.screen_media; local loading='" << loadingPath
+                << "'; local panel='" << (loading.widgets.size()>1?loading.widgets[1].id:"") << "';"
+                << "assert(media(loading,panel).loop); assert(media(loading,panel,{loop=false,mute=false}).loop==false);"
+                << "assert(media(loading,panel,'authored').mute);end}";
             auto scripts=bridge::CreateScriptDocument(metadata.projectId,bridge::GenerateStableId(),
                 "Content/Scenes/Starter.wiscene","camera-test");
             bridge::ScriptSourceBinding binding;

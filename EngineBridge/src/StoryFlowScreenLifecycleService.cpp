@@ -498,6 +498,10 @@ namespace renegade::bridge
                 screenHint,
                 screenName,
                 request.screenTemplate);
+            if (!adoptExisting && std::any_of(screen.widgets.begin(),screen.widgets.end(),
+                [](const ScreenWidget& widget){return widget.hintListPath=="Content/UI/Hints/Loading.txt";}) &&
+                !PopulateLoadingScreenMedia(request.projectRoot,request.projectId,screen,error))
+                return Failure(StoryFlowScreenCreateCode::RenderFailed,error);
             bool existingFlowNode = false;
             if (adoptExisting)
             {

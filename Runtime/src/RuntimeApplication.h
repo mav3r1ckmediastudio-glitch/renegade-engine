@@ -1,5 +1,7 @@
 #include "RuntimeGameplayAttributeWorld.h"
 #pragma once
+#include <future>
+#include "renegade/bridge/SceneDocumentService.h"
 
 #include <optional>
 #include "RuntimeDialogue.h"
@@ -237,6 +239,16 @@ namespace renegade::runtime
         RuntimeUiTimingWindow uiBindingCpuTiming_;
         bridge::ScreenPerformanceBudget uiBudget_;
         std::string uiBudgetDiagnostic_;
+        struct PendingLevelLoad
+        {
+            RuntimeActionRequest request;
+            RuntimeFlowController nextFlow;
+            bridge::FlowStepResult step;
+            std::future<bridge::PreparedSceneOpen> prepared;
+            std::uint64_t frames=0;
+        };
+        std::optional<PendingLevelLoad> pendingLevelLoad_;
+        void UpdateLoadingScreen(float dt);
         RuntimeFlowController flow_;
         RuntimeRenderPath renderer_;
         // Heap-stable instances allow transactional prepare/commit without

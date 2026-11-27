@@ -1,4 +1,8 @@
+#include <fstream>
+#include <random>
 #include "ScreenCameraFeed.h"
+#include "ScreenVideoAudio.h"
+#include "renegade/bridge/VideoAssetService.h"
 #include <optional>
 #include "renegade/bridge/ScreenClickSound.h"
 #include "renegade/screen/ScreenRenderer.h"
@@ -144,6 +148,34 @@ namespace
         renegade::bridge::ScreenWidget authored;
         std::unordered_map<ScreenInteractionState, wi::Resource> resources;
         const wi::graphics::Texture* cameraTexture=nullptr;
+        wi::Resource videoResource;
+        wi::video::VideoInstance videoInstance;
+        std::unique_ptr<renegade::screen::ScreenVideoAudio> videoAudio;
+        wi::graphics::Texture videoFrame;
+        bool hideVideoForCameraOverride=false;
+        struct HintDeck
+        {
+            std::vector<std::string> original, shuffled;
+            size_t index=0;
+            std::string last;
+            std::string Next()
+            {
+                if (index==shuffled.size())
+                {
+                    shuffled=original;
+                    static thread_local std::mt19937 rng{std::random_device{}()};
+                    std::shuffle(shuffled.begin(),shuffled.end(),rng);
+                    if (shuffled.size()>1 && shuffled.front()==last) std::swap(shuffled.front(),shuffled.back());
+                    index=0;
+                }
+                return last=shuffled[index++];
+            }
+        };
+        std::shared_ptr<HintDeck> hintDeck;
+        std::string displayedHint;
+        std::string videoDetails;
+        float hintSeconds=0;
+
         wi::Resource progressFrameImage;
         wi::Resource progressFillImage;
         int fontStyle = 0;
@@ -340,14 +372,17 @@ namespace
                 const auto& desc=image->GetTexture().GetDesc();
                 imageRect=renegade::bridge::FitScreenImage(imageRect,float(desc.width),float(desc.height),authored.imageFit);
             }
-            if(cameraTexture && cameraTexture->IsValid())
+            const auto* mediaTexture = !hideVideoForCameraOverride && videoFrame.IsValid() ? &videoFrame : cameraTexture;
+            if(mediaTexture && mediaTexture->IsValid())
             {
                 const auto rect=renegade::bridge::FitScreenImage(
                     {translation.x+border,translation.y+border,scale.x-border*2,scale.y-border*2},
-                    float(cameraTexture->GetDesc().width),float(cameraTexture->GetDesc().height),authored.imageFit);
+                    float(mediaTexture->GetDesc().width),float(mediaTexture->GetDesc().height),authored.imageFit);
                 wi::image::Params params(rect.x,rect.y,rect.width,rect.height,ToWickedColor(visual.imageTint,style.opacity));
                 ApplyRounding(params,std::max(0.f,radius-border));
-                wi::image::Draw(cameraTexture,params,cmd);
+                if (authored.video && authored.video->additive)
+                    params.blendFlag=wi::enums::BLENDMODE_ADDITIVE;
+                wi::image::Draw(mediaTexture,params,cmd);
             }
             else DrawSurface(image,imageRect.x,imageRect.y,imageRect.width,imageRect.height,
                 std::max(0.0f,radius-border),ToWickedColor(surfaceColor,style.opacity),cmd);
@@ -432,7 +467,7 @@ namespace
                     (text.verticalAlignment == ScreenVerticalAlignment::Bottom ?
                         top + height : top);
                 params.h_wrap = text.wrap ? width : -1.0f;
-                std::string display=authored.text;
+                std::string display=displayedHint.empty() ? authored.text : displayedHint;
                 if(renegade::bridge::IsScreenValueControl(authored.kind))
                 {
                     using namespace renegade::bridge;
@@ -820,6 +855,80 @@ namespace renegade::screen
     ScreenRenderer::ScreenRenderer(ScreenRenderer&&) noexcept = default;
     ScreenRenderer& ScreenRenderer::operator=(ScreenRenderer&&) noexcept = default;
 
+    static void ConfigureScreenMedia(ScreenSurface& surface,const bridge::ScreenWidget& widget,
+        const std::string& projectRoot,const bridge::StableId& projectId)
+    {
+        surface.videoAudio.reset();
+        surface.videoFrame={};
+        surface.videoInstance={};
+        surface.videoResource={};
+        surface.hintDeck.reset();
+        surface.displayedHint.clear();
+        surface.hintSeconds=0;
+        surface.videoDetails.clear();
+            if (!widget.hintListPath.empty())
+            {
+                std::string file,diagnostic;
+                if (bridge::ResolveScreenResourcePath(projectRoot,widget.hintListPath,file,diagnostic))
+                {
+                    std::ifstream input(std::filesystem::u8path(file));
+                    std::vector<std::string> hints;
+                    for (std::string line;std::getline(input,line);)
+                    {
+                        if (!line.empty() && line.back()=='\r') line.pop_back();
+                        if (line.find_first_not_of(" \t")!=std::string::npos) hints.push_back(line);
+                    }
+                    if (!hints.empty())
+                    {
+                        static std::map<std::string,std::shared_ptr<ScreenSurface::HintDeck>> decks;
+                        auto& deck=decks[file];
+                        if (!deck || deck->original!=hints)
+                        {
+                            deck=std::make_shared<ScreenSurface::HintDeck>();
+                            deck->original=std::move(hints);
+                        }
+                        surface.hintDeck=deck;
+                        surface.displayedHint=deck->Next();
+                    }
+                }
+            }
+            if (widget.video && !widget.video->assetId.empty())
+            {
+                bridge::PreparedVideoAsset prepared;
+                std::string diagnostic;
+                if (bridge::PrepareVideoAsset(projectRoot,projectId,widget.video->assetId,prepared,diagnostic) ||
+                    bridge::PreparePackagedVideo(projectRoot,projectId,widget.video->assetId,prepared,diagnostic))
+                    surface.videoResource=bridge::LoadPreparedVideoAsset(prepared,diagnostic);
+                if (surface.videoResource.IsValid() && wi::video::CreateVideoInstance(
+                    &surface.videoResource.GetVideo(), &surface.videoInstance))
+                {
+                    const auto& video=surface.videoResource.GetVideo();
+                    surface.videoDetails=std::to_string(video.width)+" x "+std::to_string(video.height)+" / "+
+                        std::to_string(static_cast<int>(std::round(video.average_frames_per_second)))+" fps / "+
+                        std::to_string((prepared.payload.size()+1023)/1024)+" KiB";
+                    surface.videoInstance.flags |= wi::video::VideoInstance::Flags::Playing;
+                    if (!widget.video->mute && prepared.sourceFormat==bridge::ResourceSourceFormat::Mp4)
+                    {
+                        surface.videoAudio=std::make_unique<ScreenVideoAudio>();
+                        if (!surface.videoAudio->Open(prepared.payload)) surface.videoAudio.reset();
+                    }
+                    if (widget.video->loop) surface.videoInstance.flags |= wi::video::VideoInstance::Flags::Looped;
+                }
+                else wi::backlog::post("Screen video unavailable: "+diagnostic,wi::backlog::LogLevel::Warning);
+            }
+    }
+
+    void ScreenRenderer::SetWidgetMedia(const bridge::StableId& id,
+        const std::optional<bridge::ScreenVideoPanel>& video,const std::string& hints)
+    {
+        const auto it=impl_->byId.find(id);
+        if (it==impl_->byId.end()) return;
+        auto& surface=*it->second;
+        surface.authored.video=video;
+        surface.authored.hintListPath=hints;
+        ConfigureScreenMedia(surface,surface.authored,impl_->projectRoot,impl_->document.envelope.projectId);
+    }
+
     bool ScreenRenderer::Load(
         const bridge::ScreenDocument& authoredDocument,
         const std::string& projectRoot,
@@ -884,6 +993,7 @@ namespace renegade::screen
                 impl_->inputEnabled &&
                 bridge::IsScreenInteractive(widget.kind) && widget.enabled);
             surface->SetText(widget.text);
+            ConfigureScreenMedia(*surface,widget,projectRoot,document.envelope.projectId);
             surface->SetShadowRadius(0.0f);
             if (widget.kind == bridge::ScreenWidgetKind::Progress)
             {
@@ -1199,7 +1309,7 @@ namespace renegade::screen
         if(impl_->root.IsVisible()==visible)return;
         impl_->root.SetVisible(visible);
         if(!visible)for(auto* surface:impl_->root.surfaces)
-        {surface->CancelInteraction();}
+        {surface->CancelInteraction(); if (surface->videoAudio) surface->videoAudio->Update(0,false);}
     }
     void ScreenRenderer::AttachPresentation(wi::RenderPath2D& renderPath)
     {
@@ -1358,9 +1468,15 @@ namespace renegade::screen
         error.clear();return true;
     }
 
+    std::string ScreenRenderer::VideoInfo(const bridge::StableId& id) const
+    {
+        const auto found=impl_->byId.find(id);
+        return found==impl_->byId.end() ? std::string{} : found->second->videoDetails;
+    }
+
     std::uint64_t ScreenRenderer::BackgroundCameraRevision() const {return impl_->cameraRevision;}
 
-    void ScreenRenderer::SetBackgroundCamera(const bridge::StableId& widget,std::optional<bridge::ScreenCameraSource> source,std::uint64_t revision)
+    void ScreenRenderer::SetBackgroundCamera(const bridge::StableId& widget,std::optional<bridge::ScreenCameraSource> source,std::uint64_t revision,bool useAuthoredMedia)
     {
         impl_->cameraRevision=revision;
         const auto found=impl_->byId.find(widget);
@@ -1369,12 +1485,42 @@ namespace renegade::screen
         impl_->feed.reset();
         impl_->feedAttempted=false;
         auto* surface=found->second;
+        surface->hideVideoForCameraOverride=!useAuthoredMedia;
         surface->authored.cameraSource=std::move(source);
         impl_->cameraSurface=surface->authored.cameraSource && surface->authored.visible ? surface : nullptr;
     }
 
     void ScreenRenderer::UpdateCameraFeed(float dt)
     {
+        if (!impl_->root.IsVisible()) return;
+        for (const auto& surface : impl_->surfaces)
+        {
+            if (surface->IsVisible() && surface->hintDeck && surface->hintDeck->original.size()>1)
+            {
+                surface->hintSeconds+=dt;
+                if (surface->hintSeconds>=7)
+                {
+                    surface->hintSeconds=0;
+                    surface->displayedHint=surface->hintDeck->Next();
+                }
+            }
+            auto& instance=surface->videoInstance;
+            if (surface->videoAudio)
+                surface->videoAudio->Update(instance.current_time,!surface->hideVideoForCameraOverride && surface->IsVisible() &&
+                    has_flag(instance.flags,wi::video::VideoInstance::Flags::Playing));
+            if (!instance.IsValid() || !surface->IsVisible() || surface->hideVideoForCameraOverride) continue;
+            wi::video::UpdateVideo(&instance,dt);
+            if (wi::video::IsDecodingRequired(&instance))
+            {
+                auto* device=wi::graphics::GetDevice();
+                auto decode=device->BeginCommandList(wi::graphics::QUEUE_VIDEO_DECODE);
+                wi::video::DecodeVideo(&instance,decode);
+                auto resolve=device->BeginCommandList();
+                device->WaitCommandList(resolve,decode);
+                wi::video::ResolveVideoToRGB(&instance,resolve);
+            }
+            surface->videoFrame=instance.GetCurrentFrameTexture();
+        }
         auto* target=impl_->cameraSurface;
         if(!target || !impl_->root.IsVisible())return;
         if(!impl_->feedAttempted)

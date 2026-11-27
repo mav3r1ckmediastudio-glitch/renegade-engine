@@ -1811,6 +1811,10 @@ namespace renegade::studio
     {
     public:
         void SetStartupScene(std::string filePath);
+        void DropScreenVideo(const std::string& file,float x,float y)
+        {
+            if (GetActivePath()==&screenEditorRenderer_) screenEditorRenderer_.DropVideo(file,x,y);
+        }
         void SetExitRequestHandler(std::function<void()> handler);
         void RequestExit();
         void Initialize() override;
