@@ -5,6 +5,10 @@
 ScreenLayoutMode::Manual gives a child explicit parent-relative geometry while preserving its identity, parent and reserved automatic-layout slot. EngineBridge's shared resolver applies it to rendering and pointer geometry; sibling allocations retain the same count/order. Creator-directed UpdateWidgetManually atomically changes the mode and rectangle only on a geometry edit. Ordinary managed-content edits remain automatic. The basic Studio Inspector and resize gestures opt into this service, and coalesced history restores both geometry and layout authority on Undo. New Title templates use a normal free Continue button. See SCREEN_MANUAL_GEOMETRY.md for verification and limits. Interactive Preview return is an explicit presentation lifecycle change: invalidate the editor viewport cache on reattachment, restore clip/layout, finish input gestures and wait for Preview input release before resuming authoring.
 
 
+## Generic world navigation requirement (27 November 2026)
+
+One generic RPG world navigation bar separates heading/target behaviour from interchangeable appearance presets. The four owner-supplied launch UI sets supply named artwork/font/icon slots, not separate navigation implementations. Appearance changes preserve marker identity, bindings and script handles. C++/Lua access and editor authoring share governed capabilities. This is a recorded implementation requirement, not completed Runtime navigation. See UI_WORLD_NAVIGATION_REQUIREMENTS.md.
+
 ## UI scripting access requirement (27 November 2026)
 
 Every new UI capability must expose supported C++ and Lua access. Basic/Advanced controls and wizard-generated compositions use the same bridge-owned widget/layer/binding/state/effect capabilities available to scripts. Editor authoring preserves validation, project ownership and history; Runtime scripting updates live instances through documented contexts and lifecycle-safe identities/events. Scripting parity, examples and validation belong to feature acceptance. This records a requirement, not verified parity for existing or planned features. See UI_DESIGNER_GUIDANCE_RELEASE_REQUIREMENTS.md.

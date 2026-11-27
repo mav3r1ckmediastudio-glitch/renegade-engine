@@ -21,6 +21,10 @@ Provide Back, Cancel and a way to skip guidance for experienced users. Reopening
 
 Expose generic layer, mask/fill, appearance/state, animation, binding and prefab controls before making a wizard that depends on them. Generic Liquid Fill creation and Progress effect/mask editing are now exposed; see SCREEN_LIQUID_FILL_AUTHORING.md. Broader appearance thresholds and animation/state authoring remain prerequisites for the corresponding wizard pages. The supplied glass/cork/metal PNG is one flattened artwork layer; the guidance must accurately describe combined artwork instead of presenting imaginary editable sublayers.
 
+## Generic navigation and launch appearances
+
+The RPG top-of-screen world navigation bar must be a generic capability with a neutral starter appearance. The owner will supply four full UI sets for launch; provide interchangeable editable visual presets over shared navigation behaviour and C++/Lua controls. See UI_WORLD_NAVIGATION_REQUIREMENTS.md.
+
 ## Required C++ and Lua access
 
 Owner requirement, 27 November 2026: every new UI capability must also be accessible through scripting. Basic/Advanced controls and the wizard are convenience interfaces over shared capabilities, not exclusive ways to create or change UI.
