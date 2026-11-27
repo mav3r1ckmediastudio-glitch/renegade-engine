@@ -1,3 +1,37 @@
+# Basic UI carousel and paired captions, 27 November 2026
+
+Implementation commit: 1821e38918bb4369593a7cd55944091d559de63b on feature/ui-loading-media, based on b300333. Use git show --stat 1821e38918bb4369593a7cd55944091d559de63b for the exact changed-file list. The Wicked gitlink and pre-existing generated upstream changes were not included.
+
+Elements > Basic > Carousel now creates an image carousel and linked Carousel caption Text child in one history operation. Edit carousel opens the native image/optional-caption editor with picture preview, import/replace/remove, reorder, Previous/Next, duration and shuffle. Blank or whitespace-only captions draw nothing. Normal Text controls style and position the linked caption. Captions and images advance together in Studio Preview and Runtime. See docs/SCREEN_CAROUSEL.md.
+
+The implementation retains schema 3 with optional carousel data and caption role. Stable slide identities own each image/caption pair. Captions are stored as hexadecimal UTF-8 to preserve config punctuation, whitespace and line breaks. Typed Screen dependencies include all slide images, and portable UI adoption remaps slide resources and identities. ScreenRenderer retains image handles and uses separate transient caption content so ordinary controller Text refresh does not erase the active caption.
+
+## Commands and results
+
+Windows x64 DX12 Release on DESIGN. Built these existing MSBuild projects in dependency order: EngineBridge/RenegadeEngineBridge, ScreenRenderer/RenegadeScreenRenderer, Runtime/RenegadeRuntimeBootstrap, Tests/RenegadeScreenAuthoringSessionTests, Tests/RenegadeScreenRendererTests, Tests/RenegadeRuntimeScreenTests, Tests/RenegadeProjectUiScaffoldTests, Runtime/RenegadeRuntime and Studio/RenegadeStudio. Used Configuration=Release, Platform=x64, BuildProjectReferences=false, CL_MPCount=3, /m:1 and /v:minimal. All passed. Rebuilt the renderer and freshly linked Runtime/renderer tests after the transient-caption correction. Rebuilt Studio again after the bounded canvas-placement and reorder-button corrections.
+
+Ran:
+
+    ctest --test-dir BUILD/creator -C Release -R "^(RenegadeScreenAuthoringSessionTests|RenegadeScreenRendererTests|RenegadeRuntimeScreenTests|RenegadeProjectUiScaffoldTests)$" --output-on-failure
+    BUILD/creator/Tests/Release/RenegadeScreenAuthoringCompletionTests.exe
+    BUILD/creator/Studio/Release/RenegadeStudioUiPolicyTests.exe
+
+The four CTest suites passed after correction, authoring completion reported zero failures and Studio UI policy passed. The extended authoring test verifies creation/schema upgrade/history, deck edits, UTF-8 multiline and punctuation round-trip, empty captions, typed image dependencies, rejected invalid IDs/paths/durations/oversized captions, copying and deletion/Undo.
+
+## Native review and fixes
+
+A fresh project was created using ProjectUiScaffoldTests --fixture. Standalone Runtime showed A with caption A, B with caption B and C with no caption. Screenshots are under docs/evidence/carousel-2026-11-27. The review Continue button was moved below the captions. Studio Preview displayed the correct paired caption.
+
+Opened Title via Story Flow in Studio, exercised row preview, Previous/Next, reordering, external PNG import, removal and Save. Reopening retained every image/caption pair. Cancel preserved the Screen bytes exactly. Basic palette creation produced both widgets; Undo removed both, Redo restored both and final Undo restored the original review document. Dropping a new carousel at the bottom-right succeeded with image (800,362,480,270) and its caption ending at the 720-pixel canvas edge. Move up is disabled for the first entry and Move down for the last; navigation still cycles. Studio is left with the entry editor open for owner review.
+
+The first visual pass exposed ordinary Text refresh overwriting the caption; this is fixed through a separate transient presentation value. A separate review-fixture mistake inherited a grid container; the corrected review uses the same free child layout and bottom caption anchors as new carousels.
+
+## Build caveat and remaining scope
+
+This reused incremental build had missing project-header dependency records and skipped some executable relinks. Earlier mixed-layout binaries crashed or retained old validation. Explicitly recompiled every source transitively including the changed Screen headers and freshly linked the affected tests/applications before final results. Do not reuse stale objects as exact-source evidence. The configured Hub revision label can still predate the current source; this commit and compilation/link receipts identify the reviewed implementation.
+
+Exported-package playback, Debug, hosted CI and independent release verification were not performed. No GitHub push, merge or release was made. Next task is owner review of the carousel controls, then any requested alpha-audit continuation and the retained loading-media package checks.
+
 # Loading video transparency, 27 November 2026
 
 Source `79e052f9958452dc53fea93a88ee988aa721b458`. The original compass and smoke assets now get alpha at playback by content identity. Other video layers can select Automatic, Opaque, Remove black or Soft smoke through Choose video ? Transparency. Lua exposes the same selection through `renegade.ui.screen_media` with `transparency` values `auto`, `opaque`, `remove_black` and `soft_smoke`. Removing black also affects dark detail in custom footage. Full-screen video is opaque by default for other clips.
