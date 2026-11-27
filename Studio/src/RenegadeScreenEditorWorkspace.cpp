@@ -115,6 +115,8 @@ namespace renegade::studio
 {
     void RenegadeScreenEditorWorkspace::Create()
     {
+        carouselEditor_=std::make_shared<ScreenCarouselEditor>();
+        carouselEditor_->Create();
         SetName("Renegade Screen Editor workspace");
         SetShadowRadius(0.0f);
         CreateControls();
@@ -163,6 +165,8 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::Clear() noexcept
     {
+        if(carouselEditor_)carouselEditor_->Close();
+        carouselEditorOpen_=false;
         session_ = nullptr;
         renderer_ = nullptr;
         selectedWidgetId_.clear();
@@ -768,14 +772,16 @@ namespace renegade::studio
             const auto* selected=session_ ? session_->FindWidget(selectedWidgetId_) : nullptr;
             if (selected && selected->carousel)
             {
-                auto deck=*selected->carousel;
-                auto id=selected->id;
-                if (EditScreenCarousel(deck,gridProjectRoot_,session_->ProjectId()))
-                {
-                    std::string error;
-                    if (session_->SetCarousel(id,std::move(deck),error)) RefreshAfterMutation("Carousel saved");
-                    else SetStatus(error);
-                }
+                const auto id=selected->id,document=session_->Document().envelope.documentId,root=gridProjectRoot_;
+                carouselEditor_->Open(*selected->carousel,root,session_->ProjectId(),
+                    [this,id,document,root](bridge::ScreenCarousel deck,std::string& error){
+                        if(!session_||!session_->IsLoaded()||gridProjectRoot_!=root||
+                            session_->Document().envelope.documentId!=document)
+                        {error="The original screen is no longer open.";return false;}
+                        if(!session_->SetCarousel(id,std::move(deck),error))return false;
+                        RefreshAfterMutation("Carousel saved");return true;
+                    },[this]{carouselEditorOpen_=false;});
+                carouselEditorOpen_=true;
             }
             else if (selected && selected->kind==bridge::ScreenWidgetKind::Text) ChooseHintList();
             else if (selected && (selected->video || bridge::IsScreenBackground(session_->Document(),*selected))) ChooseScreenMedia();
@@ -1634,6 +1640,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::HandleUndoRedoShortcuts()
     {
+        if(carouselEditorOpen_)return;
         if (!session_ || !session_->IsLoaded() ||
             directManipulationMode_ != DirectManipulationMode::None ||
             panelDrag_ != PanelDrag::None)
@@ -1661,6 +1668,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::HandleDeleteShortcut()
     {
+        if(carouselEditorOpen_)return;
         if (!session_ || !session_->IsLoaded() ||
             session_->FindWidget(selectedWidgetId_) == nullptr ||
             directManipulationMode_ != DirectManipulationMode::None ||
@@ -1675,6 +1683,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::HandleLayerOrderShortcuts()
     {
+        if(carouselEditorOpen_)return;
 #if defined(_WIN32)
         if (!session_ || !session_->IsLoaded() ||
             session_->FindWidget(selectedWidgetId_) == nullptr ||
@@ -2417,8 +2426,11 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::Update(const wi::Canvas& canvas,const float dt)
     {
-        if (!IsVisible() || !IsEnabled()) return;
+        if (!IsVisible() || !IsEnabled())
+        {if(carouselEditor_&&carouselEditorOpen_)carouselEditor_->Close();return;}
         Widget::Update(canvas,dt);
+        if(carouselEditor_&&carouselEditor_->IsVisible())
+        {carouselEditor_->Update(canvas,dt);return;}
         if (overlayInputBlocked_) return;
         // Modal pickers own input before underlying Inspector widgets update.
         // Updating widgets first can replace the picker and callback under its click.
@@ -2426,6 +2438,8 @@ namespace renegade::studio
         if (basicActionPicker_.IsOpen()) { basicActionPicker_.Update(); return; }
         if (destinationPicker_.IsOpen()) { destinationPicker_.Update(); return; }
         UpdateControls(canvas,dt);
+        if(carouselEditor_&&carouselEditor_->IsVisible())
+        {carouselEditor_->Update(canvas,dt);return;}
         toolboxFilter_ = toolboxSearchInput_.GetValue();
         if (screenSettingsPicker_.IsOpen())
         {
@@ -2836,6 +2850,7 @@ namespace renegade::studio
         screenSettingsPicker_.Render(cmd);
         basicActionPicker_.Render(cmd);
         destinationPicker_.Render(cmd);
+        if(carouselEditor_&&carouselEditor_->IsVisible())carouselEditor_->Render(canvas,cmd);
     }
 }
 
@@ -3530,6 +3545,7 @@ namespace renegade::studio
     }
     void RenegadeScreenEditorWorkspace::HandleSelectionShortcuts()
     {
+        if(carouselEditorOpen_)return;
         if(!session_||!session_->IsLoaded()||directManipulationMode_!=DirectManipulationMode::None||
             panelDrag_!=PanelDrag::None||!layerDragId_.empty())return;
         const bool ctrl=wi::input::Down(wi::input::KEYBOARD_BUTTON_LCONTROL)||

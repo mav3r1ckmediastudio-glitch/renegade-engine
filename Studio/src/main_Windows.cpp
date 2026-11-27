@@ -1,4 +1,5 @@
 #include "StudioApplication.h"
+#include "StudioMultilineInputRoute.h"
 #include "StartupIdentityHandshake.h"
 #include "StartupIrisTransition.h"
 #include "StartupIdentityPrompt.h"
@@ -260,6 +261,7 @@ namespace
             {
                 return 0;
             }
+            if(renegade::studio::RouteStudioMultilineCharacter(static_cast<wchar_t>(wParam)))return 0;
             if (wParam == VK_BACK)
             {
                 wi::gui::TextInputField::DeleteFromInput();

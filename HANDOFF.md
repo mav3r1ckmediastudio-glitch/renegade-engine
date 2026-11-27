@@ -1,3 +1,17 @@
+# Carousel editor uses shared Studio UI, 27 November 2026
+
+Source checkpoint: pending local commit in this correction; the exact source commit is recorded in the follow-up checkpoint below. This supersedes the separate Windows carousel dialog and the intermediate recolour. The original carousel data/playback implementation remains 1821e38918bb4369593a7cd55944091d559de63b.
+
+Replaced the dialog with a shared StudioModalWindow, shared accent-outline Renegade buttons, native list/preview, numeric duration, shuffle and a native multiline caption widget. The modal blocks underlying Screen operations and preserves native text-input ownership. File picker callbacks return through the GUI safe point with weak ownership and generation checks. Removed only the obsolete carousel dialog resource; hint editing is unchanged. The body scrolls and footer actions remain pinned.
+
+Changed Studio/src/ScreenCarouselEditor.h, RenegadeScreenEditorWorkspace.h/.cpp, main_Windows.cpp, ScreenHintEditor.rc and added StudioMultilineTextInput.h and StudioMultilineInputRoute.h. Updated docs/SCREEN_CAROUSEL.md, docs/FEATURE_MATRIX.csv and docs/evidence/carousel-2026-11-27/README.md plus editor.jpg. No Wicked files or gitlink changes were included.
+
+Built Studio Release x64 with the configured VS18 MSBuild: /t:Build /p:Configuration=Release /p:Platform=x64 /p:BuildProjectReferences=false /p:CL_MPCount=3 /m:1 /v:minimal /nologo and CL=/MP3. Explicitly rebuilt the 40 transitive Studio sources after the workspace-header layout change; freshly linked Studio. Final incremental compile/link after numeric draft handling passed. Ran BUILD/creator/Studio/Release/RenegadeStudioUiPolicyTests.exe: passed. git diff --check passed. The already recorded carousel bridge/renderer/runtime tests are unaffected by this Studio-only correction.
+
+Actual Studio checks passed: row changes and paired reordering, Unicode multiline entry, clipboard, local text Undo/Redo, duration/shuffle, Save/reopen, external image import/removal, Escape/Cancel preserving saved bytes, and a single Screen Undo restoring the whole deck edit. Saving after Undo returned the disposable review Screen byte for byte to its original baseline. The accepted outline-button window is left open for owner review. See the final native-modal section of the evidence receipt for details.
+
+No GitHub push, CI, merge or release; exported-package playback, Debug and independent release verification remain pending. Next: owner feedback and remaining loading-media package checks. Pre-existing Wicked dirt and root log.txt remain excluded.
+
 # Basic UI carousel and paired captions, 27 November 2026
 
 Implementation commit: 1821e38918bb4369593a7cd55944091d559de63b on feature/ui-loading-media, based on b300333. Use git show --stat 1821e38918bb4369593a7cd55944091d559de63b for the exact changed-file list. The Wicked gitlink and pre-existing generated upstream changes were not included.

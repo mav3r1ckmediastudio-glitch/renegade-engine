@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -24,6 +25,7 @@
 
 namespace renegade::studio
 {
+    class ScreenCarouselEditor;
     // Native Screen authoring workspace. Gate 8C established selection,
     // Inspector editing and shared Runtime preview; Gate 8D adds creator-level
     // element transactions while keeping ScreenAuthoringSession authoritative.
@@ -152,7 +154,7 @@ namespace renegade::studio
         void SetOverlayInputBlocked(bool blocked) noexcept { overlayInputBlocked_ = blocked; }
         [[nodiscard]] bool HasOpenPopup() const noexcept
         {
-            return screenSettingsPicker_.IsOpen() || basicActionPicker_.IsOpen() ||
+            return carouselEditorOpen_ || screenSettingsPicker_.IsOpen() || basicActionPicker_.IsOpen() ||
                 destinationPicker_.IsOpen();
         }
         [[nodiscard]] bool IsFocusCanvas() const noexcept
@@ -354,6 +356,8 @@ namespace renegade::studio
         RenegadeButton undoButton_;
         RenegadeButton redoButton_;
         RenegadeTextInputField toolboxSearchInput_;
+        std::shared_ptr<ScreenCarouselEditor> carouselEditor_;
+        bool carouselEditorOpen_=false;
         RenegadeButton imageAssetButton_;
         RenegadeButton progressFrameButton_;
         RenegadeButton progressFillButton_;

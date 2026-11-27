@@ -2,10 +2,10 @@
 
 Add **Elements > Basic > Carousel** in the Screen Designer. Drag it onto the canvas or click the palette entry to create one.
 
-Select the Carousel layer and choose **Edit carousel...**:
+Select the Carousel layer and choose **Edit carousel...**. This opens an in-editor Studio modal using the shared Renegade window, outline buttons, numeric field and checkbox. Its content scrolls when space is limited while Save and Cancel stay in the footer:
 
 - Add or replace images using the file picker. External images use the existing governed texture importer and get a runtime image under project Content.
-- Each image has its own optional caption. Enter text in the caption box; line breaks are supported. Empty or whitespace-only captions draw nothing.
+- Each image has its own optional caption. Enter text in the caption box; line breaks, Unicode, selection, clipboard and local text Undo/Redo are supported. Empty or whitespace-only captions draw nothing.
 - Select an image, or use Previous and Next, to review its picture and caption.
 - Move up and Move down reorder the complete image/caption pair.
 - Set Seconds per image and optionally enable Shuffle images. Save applies the complete edit as one Screen Undo/Redo operation; Cancel discards the entry edits. Imported image assets remain available in the project.
