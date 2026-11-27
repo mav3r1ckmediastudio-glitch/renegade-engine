@@ -483,3 +483,10 @@ add_custom_command(TARGET RenegadeStudio POST_BUILD
 add_custom_command(TARGET RenegadeStudio POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/prefabs"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/UI/Prefabs" VERBATIM)
+
+# Technical masks and a reproducible ordinary-layer authoring example.
+add_custom_command(TARGET RenegadeStudio POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/examples"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/UI/Examples"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/docs/SCREEN_LIQUID_FILL_AUTHORING.md"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/UI/Examples/Readme.md" VERBATIM)

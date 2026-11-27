@@ -1209,11 +1209,12 @@ namespace renegade::studio
             if(source)panBackgroundButton_.SetText(source->slowPan ? "Slow pan: on" : "Slow pan: off");
         }
         imageAssetButton_.SetText(selectedReady && selected->kind==bridge::ScreenWidgetKind::Text ? "Hint list..." : selectedReady && selected->carousel ? "Edit carousel..." : background ? "Add file..." : selectedReady && selected->video ? "Choose video..." : "CHANGE GRAPHIC");
-        if(FindSelectedLiquid())imageAssetButton_.SetText("Edit vial...");
+        if(FindSelectedLiquid()){imageAssetButton_.SetText("Fill settings...");imageAssetButton_.SetTooltip("Edit this Progress layer: mask, fill direction, colour, animation, sounds and gameplay binding.");}
+        else imageAssetButton_.SetTooltip("Choose content or settings for this selected layer.");
         imageAssetButton_.SetVisible(!button && selectedReady && !selected->carouselCaption && !focusCanvas_ && !rightCollapsed_ &&
             !inspectorSuppressed_);
         const bool progressArtworkReady = selectedReady &&
-            selected->kind == bridge::ScreenWidgetKind::Progress &&
+            selected->kind == bridge::ScreenWidgetKind::Progress && !selected->liquid &&
             !focusCanvas_ && !rightCollapsed_ && !inspectorSuppressed_;
         progressFrameButton_.SetVisible(progressArtworkReady);
         progressFillButton_.SetVisible(progressArtworkReady);
@@ -3048,6 +3049,8 @@ namespace renegade::studio
             {
             case ScreenToolboxAction::SaveUiPrefab: SaveSelectedUiPrefab();break;
             case ScreenToolboxAction::InsertUiPrefab: ChooseUiPrefab();break;
+            case ScreenToolboxAction::LiquidFill:
+                InsertUiPrefab((std::filesystem::u8path(wi::helper::GetExecutablePath()).parent_path()/"Content/UI/Prefabs/LiquidFill").generic_u8string());break;
             case ScreenToolboxAction::AnimatedVial:
                 InsertUiPrefab((std::filesystem::u8path(wi::helper::GetExecutablePath()).parent_path()/"Content/UI/Prefabs/AnimatedVial").generic_u8string());break;
             case ScreenToolboxAction::UiBudgets: if(uiBudgetsRequested_)uiBudgetsRequested_();break;
@@ -3680,28 +3683,32 @@ namespace renegade::studio
     const bridge::ScreenWidget* RenegadeScreenEditorWorkspace::FindSelectedLiquid() const
     {
         if(!session_||!session_->IsLoaded())return nullptr;
+        const auto* selected=session_->FindWidget(selectedWidgetId_);
+        if(selected&&selected->kind==bridge::ScreenWidgetKind::Progress)return selected;
+        const bridge::ScreenWidget* found=nullptr;
         for(const auto& w:session_->Document().widgets)if(w.liquid)
         {
             const auto* item=&w;size_t remaining=session_->Document().widgets.size();
             while(item&&remaining--)
-            {if(item->id==selectedWidgetId_)return &w;item=session_->FindWidget(item->parentId);}
+            {if(item->id==selectedWidgetId_){if(found)return nullptr;found=&w;break;}item=session_->FindWidget(item->parentId);}
         }
-        return nullptr;
+        return found;
     }
     void RenegadeScreenEditorWorkspace::OpenLiquidEditor()
     {
         const auto* selected=FindSelectedLiquid();if(!selected)return;
         const auto id=selected->id,document=session_->Document().envelope.documentId,root=gridProjectRoot_;
-        liquidEditor_->Open(*selected,root,[this,id,document,root](bridge::ScreenLiquid liquid,bridge::ScreenColor colour,
-            std::vector<bridge::ScreenBinding> bindings,std::string& error){
+        liquidEditor_->Open(*selected,root,session_->ProjectId(),[this,id,document,root](std::optional<bridge::ScreenLiquid> liquid,bridge::ScreenColor colour,
+            std::vector<bridge::ScreenBinding> bindings,bridge::ScreenFillDirection direction,std::string& error){
             if(!session_||!session_->IsLoaded()||gridProjectRoot_!=root||session_->Document().envelope.documentId!=document)
             {error="The original Screen is no longer open.";return false;}
-            if(!session_->ConfigureLiquidWidget(id,std::move(liquid),colour,std::move(bindings),error))return false;
-            RefreshAfterMutation("Liquid prefab settings saved");return true;
+            if(!session_->ConfigureProgressFill(id,std::move(liquid),colour,std::move(bindings),direction,error))return false;
+            RefreshAfterMutation("Fill layer settings saved");return true;
         },[this]{liquidEditorOpen_=false;if(documentChanged_)documentChanged_();},
-            [this,id,document,root](bridge::ScreenColor colour,float fill){
+            [this,id,document,root](const std::optional<bridge::ScreenLiquid>& liquid,bridge::ScreenFillDirection direction,bridge::ScreenColor colour,float fill,std::string& error){
                 if(renderer_&&session_&&session_->IsLoaded()&&root==gridProjectRoot_&&document==session_->Document().envelope.documentId)
-                    renderer_->PreviewLiquidWidget(id,colour,fill);
+                    return renderer_->PreviewLiquidDraft(id,liquid,direction,colour,fill,error);
+                error="The original Screen is no longer open.";return false;
             });liquidEditorOpen_=true;
     }
     static std::filesystem::path PersonalUiPrefabs()
@@ -3725,11 +3732,17 @@ namespace renegade::studio
     {
         if(!session_||!session_->IsLoaded())return;
         std::vector<bridge::StableId> created;std::string error;
-        const auto x=std::max(0.f,session_->Document().designWidth*.5f-144),y=std::max(0.f,session_->Document().designHeight*.5f-288);
+        bridge::ScreenDocument entry;
+        if(!bridge::InspectPortableScreenPackage(package,entry,error)){SetStatus(error);return;}
+        const auto root=std::find_if(entry.widgets.begin(),entry.widgets.end(),[](const auto& w){return w.parentId.empty();});
+        if(root==entry.widgets.end()){SetStatus("This prefab has no root layer.");return;}
+        bridge::ScreenRect bounds;
+        if(!bridge::ResolveScreenWidgetRect(entry,root->id,bounds,error)){SetStatus(error);return;}
+        const auto x=std::max(0.f,(session_->Document().designWidth-bounds.width)*.5f),y=std::max(0.f,(session_->Document().designHeight-bounds.height)*.5f);
         if(!bridge::InsertScreenWidgetPrefab(gridProjectRoot_,*session_,package,x,y,created,error))
         {SetStatus(error);return;}
         if(!created.empty())SelectWidget(created.front());
-        RefreshAfterMutation("UI prefab inserted. Edit vial to choose this instance's colour and value binding.");
+        RefreshAfterMutation("UI prefab inserted. Expand its layers to edit each part; Fill settings controls a Progress layer.");
     }
     void RenegadeScreenEditorWorkspace::ChooseExternalUiPrefab()
     {

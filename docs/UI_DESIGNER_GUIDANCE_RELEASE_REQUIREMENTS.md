@@ -19,7 +19,7 @@ The workflow below is a proposed implementation brief. The owner has requested a
 
 Provide Back, Cancel and a way to skip guidance for experienced users. Reopening the guidance should explain the selected composition or offer another example without overwriting existing work. A worked example should make it clear how to reproduce a composition starting from a blank group. The wizard generates the same documents, bindings and layers as normal authoring through existing bridge services and history; it introduces no exclusive Runtime object or private authoring format.
 
-Expose generic layer, mask/fill, appearance/state, animation, binding and prefab controls before making a wizard that depends on them. Currently the vial liquid is separately configurable, but adding that effect and replacing its mask through ordinary authoring remains a gap. The supplied glass/cork/metal PNG is one flattened artwork layer; the guidance must accurately describe combined artwork instead of presenting imaginary editable sublayers.
+Expose generic layer, mask/fill, appearance/state, animation, binding and prefab controls before making a wizard that depends on them. Generic Liquid Fill creation and Progress effect/mask editing are now exposed; see SCREEN_LIQUID_FILL_AUTHORING.md. Broader appearance thresholds and animation/state authoring remain prerequisites for the corresponding wizard pages. The supplied glass/cork/metal PNG is one flattened artwork layer; the guidance must accurately describe combined artwork instead of presenting imaginary editable sublayers.
 
 ## Tooltip coverage
 

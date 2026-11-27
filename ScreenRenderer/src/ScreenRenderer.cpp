@@ -230,7 +230,7 @@ namespace
             }
             const float settings[]={liquid.left,liquid.right,liquid.top,liquid.bottom,authored.fill,
                 tick/24.f,reducedMotion||!liquid.animated?0:liquid.wavePixels,
-                reducedMotion||!liquid.animated?0.f:float(liquid.bubbles)};
+                float((reducedMotion||!liquid.animated?0:liquid.bubbles)+64*static_cast<int>(authored.fillDirection))};
             auto cmd=device->BeginCommandList();
             auto barrier=GPUBarrier::Image(&liquidFrame,ResourceState::SHADER_RESOURCE,ResourceState::UNORDERED_ACCESS);
             device->Barrier(&barrier,1,cmd);device->BindComputeShader(&shader,cmd);
@@ -1534,6 +1534,31 @@ namespace renegade::screen
         auto& style=found->second->authored.style;
         for(auto* v:{&style.normal,&style.hover,&style.pressed,&style.focused,&style.disabled})v->imageTint=colour;
         SetWidgetFill(id,fill);
+    }
+
+    bool ScreenRenderer::PreviewLiquidDraft(const bridge::StableId& id,
+        const std::optional<bridge::ScreenLiquid>& liquid,bridge::ScreenFillDirection direction,
+        bridge::ScreenColor colour,float fill,std::string& error)
+    {
+        const auto found=impl_->byId.find(id);
+        if(found==impl_->byId.end()||found->second->authored.kind!=bridge::ScreenWidgetKind::Progress)
+        {error="Choose a Progress layer.";return false;}
+        auto& surface=*found->second;
+        if(liquid)
+        {
+            if(!bridge::ValidateScreenLiquidNumbers(*liquid)){error="Invalid liquid area or animation values.";return false;}
+            if(!surface.authored.liquid||surface.authored.liquid->mask!=liquid->mask)
+            {
+                std::string absolute;if(!bridge::ResolveScreenResourcePath(impl_->projectRoot,liquid->mask,absolute,error))return false;
+                auto mask=wi::resourcemanager::Load(absolute);
+                if(!mask.IsValid()||!mask.GetTexture().IsValid()){error="Cannot preview this mask image.";return false;}
+                surface.liquidMask=std::move(mask);surface.liquidFrame={};
+            }
+        }
+        surface.authored.liquid=liquid;surface.authored.fillDirection=direction;surface.liquidTick=-1;
+        for(auto* v:{&surface.authored.style.normal,&surface.authored.style.hover,&surface.authored.style.pressed,
+            &surface.authored.style.focused,&surface.authored.style.disabled})v->imageTint=colour;
+        SetWidgetFill(id,fill);impl_->layoutDirty=true;error.clear();return true;
     }
 
     void ScreenRenderer::SetWidgetText(const bridge::StableId& widgetId, const std::string& text)

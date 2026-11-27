@@ -1,5 +1,8 @@
 #include "renegade/bridge/ScreenPrefabService.h"
 #include "renegade/bridge/ScreenSimulation.h"
+#include "renegade/bridge/ScreenLiquidMaskService.h"
+#include "renegade/bridge/ProjectService.h"
+#include "renegade/bridge/PlayerService.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -31,6 +34,45 @@ int main(int argc,char** argv)
     const auto source=temp/"Source";fs::create_directories(source/"Content/UI/Vial");
     auto doc=Vial(GenerateStableId());std::string error;int failures=0;
     const auto check=[&](bool ok,const char* why){if(!ok){++failures;std::cerr<<why<<": "<<error<<'\n';}};
+    if(argc==3&&std::string(argv[1])=="--hud-review")
+    {
+        const auto parent=fs::u8path(argv[2]);
+        if(fs::exists(parent)){std::cerr<<"Use a new disposable fixture directory.";return 2;}
+        fs::create_directories(parent);
+        ProjectService projects;
+        if(!projects.CreateStoryFlowProject(parent.generic_u8string(),"HUD Components Review"))
+        {std::cerr<<projects.LastError();return 3;}
+        const auto project=projects.CurrentProject();const auto root=fs::u8path(project.rootPath);
+        const auto scenePath=(root/"Content/Scenes/Starter.wiscene").generic_u8string();
+        wi::scene::Scene scene;
+        {wi::Archive archive(scenePath,true,false);if(!archive.IsOpen())return 4;scene.Serialize(archive);}
+        TransformState start;start.translation={0,2,0};CreatePlayerStartCommand player(scene,start);
+        if(!player.Execute())return 5;
+        const auto cube=[&](const char* name,XMFLOAT3 position,XMFLOAT3 half,XMFLOAT4 colour)
+        {
+            const auto material=scene.Entity_CreateMaterial(std::string(name)+" material");
+            auto* surface=scene.materials.GetComponent(material);surface->baseColor=colour;surface->roughness=.85f;
+            const auto meshId=wi::ecs::CreateEntity();auto& mesh=scene.meshes.Create(meshId);
+            mesh.vertex_positions={{-half.x,-half.y,-half.z},{half.x,-half.y,-half.z},{half.x,half.y,-half.z},{-half.x,half.y,-half.z},
+                {-half.x,-half.y,half.z},{half.x,-half.y,half.z},{half.x,half.y,half.z},{-half.x,half.y,half.z}};
+            mesh.vertex_normals.resize(8,{0,1,0});
+            mesh.indices={0,2,1,0,3,2,4,5,6,4,6,7,0,1,5,0,5,4,3,7,6,3,6,2,0,4,7,0,7,3,1,2,6,1,6,5};
+            mesh.subsets.resize(1);mesh.subsets[0].materialID=material;mesh.subsets[0].indexOffset=0;mesh.subsets[0].indexCount=36;
+            const auto object=scene.Entity_CreateObject(name);scene.objects.GetComponent(object)->meshID=meshId;
+            auto* transform=scene.transforms.GetComponent(object);transform->Translate(position);transform->UpdateTransform();
+            auto& body=scene.rigidbodies.Create(object);body.mass=0;body.shape=wi::scene::RigidBodyPhysicsComponent::BOX;body.box.halfextents=half;
+            return AssignNewPersistentEntityId(scene,object,error);
+        };
+        if(!cube("HUD review floor",{0,-.1f,0},{20,.1f,20},{.18f,.23f,.28f,1})||
+            !cube("HUD review marker",{0,1,8},{1,1,1},{.8f,.3f,.08f,1}))return 6;
+        {wi::Archive archive(scenePath,false,false);scene.Serialize(archive);if(!archive.SaveFile(scenePath))return 7;}
+        ScreenDocument hud;
+        if(!ReadScreenDocument((root/fs::u8path(project.defaultHud)).generic_u8string(),project.projectId,hud,error))return 8;
+        hud.widgets.erase(std::remove_if(hud.widgets.begin(),hud.widgets.end(),[](const auto& w){return w.kind==ScreenWidgetKind::Progress||w.name.find(" Label")!=std::string::npos;}),hud.widgets.end());
+        for(auto& w:hud.widgets)if(w.name=="Pause Hint")w.anchors={.7f,.03f,.96f,.07f,0,0,0,0};
+        if(!WriteScreenDocument((root/fs::u8path(project.defaultHud)).generic_u8string(),hud,error))return 9;
+        std::cout<<"HUD_REVIEW_READY "<<project.descriptorPath<<'\n';return 0;
+    }
     if(argc==4&&std::string(argv[1])=="--author-vial")
     {
         const auto art=fs::u8path(argv[2]);
@@ -114,6 +156,21 @@ int main(int argc,char** argv)
         }
     }
     check(session.Save(error)&&session.Reload(error),"Retain validated liquid settings after rejected edits");
+    const auto sourceTree=fs::path(__FILE__).parent_path().parent_path();
+    fs::copy_file(sourceTree/"Tests/assets/ui/liquid/alpha-mask.png",target/"Content/UI/alpha-mask.png");
+    fs::copy_file(sourceTree/"Tests/assets/ui/liquid/empty-mask.png",target/"Content/UI/empty-mask.png");
+    ScreenLiquid generic;generic.wavePixels=2;generic.bubbles=0;
+    check(InspectScreenLiquidMask(target.generic_u8string(),"Content/UI/alpha-mask.png",generic,error)&&
+        generic.left==.25f&&generic.top==.25f&&generic.right==.75f&&generic.bottom==.75f,"Transparent mask auto-bounds");
+    const auto fitted=generic;
+    check(!InspectScreenLiquidMask(target.generic_u8string(),"Content/UI/empty-mask.png",generic,error)&&generic.mask==fitted.mask&&generic.left==fitted.left,"Empty mask rejected without mutation");
+    check(!InspectScreenLiquidMask(target.generic_u8string(),"../escape.png",generic,error),"Unsafe mask path rejected");
+    check(session.ConfigureProgressFill(healthLiquid,fitted,{40,220,80,255},{},ScreenFillDirection::LeftToRight,error),"Convert ordinary fill with a custom mask and no gameplay binding");
+    check(session.FindWidget(healthLiquid)->bindings.empty()&&session.Undo(error)&&session.Redo(error)&&session.Save(error)&&session.Reload(error),"Generic fill history/save/reload");
+    check(session.FindWidget(healthLiquid)->liquid&&session.FindWidget(healthLiquid)->fillDirection==ScreenFillDirection::LeftToRight&&session.FindWidget(healthLiquid)->bindings.empty(),"Generic masked fill persisted");
+    check(session.ConfigureProgressFill(healthLiquid,std::nullopt,{255,255,255,255},{},ScreenFillDirection::TopToBottom,error)&&!session.FindWidget(healthLiquid)->liquid&&session.Undo(error)&&session.FindWidget(healthLiquid)->liquid,"Remove liquid effect and Undo");
+    ScreenDocument stock;
+    check(InspectPortableScreenPackage((sourceTree/"Studio/assets/ui/prefabs/LiquidFill").generic_u8string(),stock,error)&&stock.widgets.size()==1&&stock.widgets.front().liquid&&stock.widgets.front().bindings.empty(),"Stock generic Liquid Fill is an editable unbound Progress layer");
     if(!failures)std::cout<<"PASS: layered health/mana prefab portability, parameters, independent Preview, history and invalid settings\n";
     return failures?1:0;
 }

@@ -1,4 +1,5 @@
 add_library(RenegadeEngineBridge STATIC
+    src/ScreenLiquidMaskService.cpp
     src/DialogueService.cpp
     src/DialogueAssetService.cpp
     src/DialogueDisplayService.cpp

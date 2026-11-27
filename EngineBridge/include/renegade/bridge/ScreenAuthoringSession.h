@@ -408,6 +408,10 @@ namespace renegade::bridge
             return CommitMutation(std::move(candidate),error);
         }
 
+        [[nodiscard]] bool ConfigureProgressFill(const StableId& id,
+            std::optional<ScreenLiquid> liquid, ScreenColor colour,
+            std::vector<ScreenBinding> bindings, ScreenFillDirection direction, std::string& error);
+
         [[nodiscard]] bool ConfigureLiquidWidget(const StableId& id,ScreenLiquid liquid,
             ScreenColor colour,std::vector<ScreenBinding> bindings,std::string& error)
         {
