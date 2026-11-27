@@ -479,3 +479,7 @@ target_sources(RenegadeStudio PRIVATE src/TerrainPropPalette.cpp)
 add_custom_command(TARGET RenegadeStudio POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/loading"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/UI/Loading" VERBATIM)
+
+add_custom_command(TARGET RenegadeStudio POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/prefabs"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/UI/Prefabs" VERBATIM)

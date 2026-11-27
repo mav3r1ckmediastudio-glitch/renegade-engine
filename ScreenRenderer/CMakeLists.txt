@@ -8,7 +8,14 @@ add_custom_command(OUTPUT "${screen_matte_header}"
         -Fh "${screen_matte_header}" -Vn kScreenVideoMatte
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ScreenVideoMatteCS.hlsl"
     DEPENDS src/ScreenVideoMatteCS.hlsl VERBATIM)
+set(screen_liquid_header "${CMAKE_CURRENT_BINARY_DIR}/ScreenLiquidCS.generated.h")
+add_custom_command(OUTPUT "${screen_liquid_header}"
+    COMMAND "${RENEGADE_SCREEN_DXC}" -T cs_6_0 -E main -O3 -Qstrip_debug
+        -Fh "${screen_liquid_header}" -Vn kScreenLiquid
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ScreenLiquidCS.hlsl"
+    DEPENDS src/ScreenLiquidCS.hlsl VERBATIM)
 add_library(RenegadeScreenRenderer STATIC
+    "${screen_liquid_header}"
     "${screen_matte_header}"
     src/ScreenVideoAudio.cpp
     src/DialoguePanel.cpp

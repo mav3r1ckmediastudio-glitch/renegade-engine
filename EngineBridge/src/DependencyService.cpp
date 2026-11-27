@@ -913,6 +913,8 @@ namespace renegade::bridge
         }
         RuntimeScreenDependencyDocument document;
         if (!reader_(path, document, error)) return false;
+        for (const auto& audio:document.audioPaths)
+            EmitPath(emit,audio,DependencyClass::Audio,"runtime_screen.liquid_sound");
         for (const auto& video:document.videoPaths)
             EmitPath(emit,video,DependencyClass::Video,"runtime_screen.video");
         for (const auto& hints:document.hintPaths)

@@ -192,6 +192,7 @@ namespace renegade::bridge
         std::vector<std::string> screenPaths;
         std::vector<std::string> videoPaths;
         std::vector<std::string> hintPaths;
+        std::vector<std::string> audioPaths;
     };
 
     struct WisceneDependencyDocument

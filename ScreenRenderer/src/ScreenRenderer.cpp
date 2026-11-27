@@ -12,6 +12,7 @@
 #include <WickedEngine.h>
 
 #include "ScreenVideoMatteCS.generated.h"
+#include "ScreenLiquidCS.generated.h"
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -187,6 +188,58 @@ namespace
         bool emptyCarouselCaption=false;
         std::optional<std::string> carouselCaptionText;
 
+        wi::Resource liquidSound;
+        wi::audio::SoundInstance liquidVoice;
+        std::string liquidSoundPath;
+        bool PlayLiquidSound(const std::string& root,const std::string& clip,std::string& error)
+        {
+            std::string path;if(!renegade::bridge::ResolveScreenResourcePath(root,clip,path,error))return false;
+            if(path!=liquidSoundPath||!liquidSound.IsValid())
+            {
+                if(!renegade::bridge::ValidateAudioAssetForWicked(path,error))return false;
+                auto resource=wi::resourcemanager::Load(path);
+                if(!resource.IsValid()||!resource.GetSound().IsValid()){error="Cannot load liquid sound.";return false;}
+                liquidSound=std::move(resource);liquidSoundPath=path;
+            }
+            wi::audio::SoundInstance voice;voice.type=wi::audio::SUBMIX_TYPE_SOUNDEFFECT;voice.SetLooped(false);
+            if(!wi::audio::CreateSoundInstance(&liquidSound.GetSound(),&voice)){error="Cannot play liquid sound.";return false;}
+            liquidVoice=std::move(voice);wi::audio::Play(&liquidVoice);return true;
+        }
+        wi::Resource liquidMask;
+        wi::graphics::Texture liquidFrame;
+        float liquidSeconds=0,liquidLastFill=-1,soundCooldown=0;
+        int liquidTick=-1;
+        bool fillSampleReceived=false,liquidReduced=false;
+        void UpdateLiquid(wi::graphics::Shader& shader,float dt,bool reducedMotion)
+        {
+            if(!authored.liquid||!IsVisible()||!liquidMask.IsValid())return;
+            using namespace wi::graphics;
+            const auto& liquid=*authored.liquid;
+            soundCooldown=std::max(0.f,soundCooldown-std::max(0.f,dt));
+            if(liquid.animated&&!reducedMotion)liquidSeconds=std::fmod(liquidSeconds+std::max(0.f,dt),4.f);
+            const int tick=int(liquidSeconds*24);
+            if(liquidTick==tick&&liquidLastFill==authored.fill&&liquidReduced==reducedMotion&&liquidFrame.IsValid())return;
+            auto* device=GetDevice();
+            if(!shader.IsValid()&&!device->CreateShader(ShaderStage::CS,kScreenLiquid,sizeof(kScreenLiquid),&shader))return;
+            const auto& mask=liquidMask.GetTexture();
+            if(!liquidFrame.IsValid())
+            {
+                TextureDesc desc;desc.width=mask.GetDesc().width;desc.height=mask.GetDesc().height;
+                desc.format=Format::R8G8B8A8_UNORM;desc.bind_flags=BindFlag::SHADER_RESOURCE|BindFlag::UNORDERED_ACCESS;
+                if(!device->CreateTexture(&desc,nullptr,&liquidFrame))return;
+            }
+            const float settings[]={liquid.left,liquid.right,liquid.top,liquid.bottom,authored.fill,
+                tick/24.f,reducedMotion||!liquid.animated?0:liquid.wavePixels,
+                reducedMotion||!liquid.animated?0.f:float(liquid.bubbles)};
+            auto cmd=device->BeginCommandList();
+            auto barrier=GPUBarrier::Image(&liquidFrame,ResourceState::SHADER_RESOURCE,ResourceState::UNORDERED_ACCESS);
+            device->Barrier(&barrier,1,cmd);device->BindComputeShader(&shader,cmd);
+            device->BindResource(&mask,0,cmd);device->BindUAV(&liquidFrame,0,cmd);
+            device->PushConstants(settings,sizeof(settings),cmd);
+            device->Dispatch((liquidFrame.GetDesc().width+7)/8,(liquidFrame.GetDesc().height+7)/8,1,cmd);
+            barrier=GPUBarrier::Image(&liquidFrame,ResourceState::UNORDERED_ACCESS,ResourceState::SHADER_RESOURCE);
+            device->Barrier(&barrier,1,cmd);liquidTick=tick;liquidLastFill=authored.fill;liquidReduced=reducedMotion;
+        }
         wi::Resource progressFrameImage;
         wi::Resource progressFillImage;
         int fontStyle = 0;
@@ -403,7 +456,17 @@ namespace
                 const auto fillRect = renegade::bridge::ResolveScreenFillRect(
                     {translation.x, translation.y, scale.x, scale.y},
                     authored.fill, authored.fillDirection, border);
-                if (progressFillImage.IsValid())
+                if(authored.liquid)
+                {
+                    if(liquidFrame.IsValid())
+                    {
+                        wi::image::Params params(translation.x,translation.y,scale.x,scale.y,
+                            ToWickedColor(visual.imageTint,style.opacity));
+                        params.blendFlag=wi::enums::BLENDMODE_ALPHA;
+                        wi::image::Draw(&liquidFrame,params,cmd);
+                    }
+                }
+                else if (progressFillImage.IsValid())
                 {
                     // Clip a full-width textured bar instead of shrinking the artwork.
                     auto fillClip = clipped;
@@ -836,7 +899,7 @@ namespace renegade::screen
         ControlSink controlSink;
         DragSink dragSink;
         ScreenInstanceRoot root;
-        wi::graphics::Shader videoMatteShader;
+        wi::graphics::Shader videoMatteShader,liquidShader;
         std::unique_ptr<ScreenCameraFeed> feed;
         ScreenSurface* cameraSurface=nullptr;
         bool feedAttempted=false;
@@ -1026,6 +1089,8 @@ namespace renegade::screen
                 { Reset(renderPath); return false; }
             }
 
+            if(widget.liquid&&!loadResource(widget.liquid->mask,surface->liquidMask))
+            {Reset(renderPath);return false;}
             if(widget.carousel)
             {
                 for(const auto& slide:widget.carousel->entries)
@@ -1442,10 +1507,33 @@ namespace renegade::screen
         if (found == impl_->byId.end() ||
             found->second->authored.kind != bridge::ScreenWidgetKind::Progress) return;
         const float value = std::clamp(fill, 0.0f, 1.0f);
+        auto& surface=*found->second;
+        if(surface.authored.liquid&&surface.fillSampleReceived&&surface.authored.fill!=value&&
+            surface.soundCooldown<=0&&surface.IsVisible()&&impl_->root.IsVisible())
+        {
+            const auto& liquid=*surface.authored.liquid;
+            const auto& clip=value<surface.authored.fill?liquid.decreaseSound:liquid.increaseSound;
+            std::string error;
+            if(!clip.empty())
+            {
+                surface.PlayLiquidSound(impl_->projectRoot,clip,error);surface.soundCooldown=.15f;
+                if(!error.empty())wi::backlog::post("Liquid sound: "+error,wi::backlog::LogLevel::Warning);
+            }
+        }
+        surface.fillSampleReceived=true;
         if(found->second->authored.fill!=value)impl_->layoutDirty=true;
         if(!impl_->animation.active)found->second->authored.fill = value;
         for (auto& widget : impl_->document.widgets)
             if (widget.id == widgetId) { widget.fill = value; break; }
+    }
+
+    void ScreenRenderer::PreviewLiquidWidget(const bridge::StableId& id,bridge::ScreenColor colour,float fill)
+    {
+        const auto found=impl_->byId.find(id);
+        if(found==impl_->byId.end()||!found->second->authored.liquid)return;
+        auto& style=found->second->authored.style;
+        for(auto* v:{&style.normal,&style.hover,&style.pressed,&style.focused,&style.disabled})v->imageTint=colour;
+        SetWidgetFill(id,fill);
     }
 
     void ScreenRenderer::SetWidgetText(const bridge::StableId& widgetId, const std::string& text)
@@ -1564,6 +1652,7 @@ namespace renegade::screen
         if (!impl_->root.IsVisible()) return;
         for (const auto& surface : impl_->surfaces)
         {
+            surface->UpdateLiquid(impl_->liquidShader,dt,impl_->animation.reducedMotion);
             if(surface->IsVisible() && surface->authored.carousel && surface->carouselOrder.size()>1 &&
                 std::isfinite(dt) && dt>0)
             {

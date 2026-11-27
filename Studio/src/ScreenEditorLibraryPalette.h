@@ -17,7 +17,7 @@ namespace renegade::studio
     {
         None, StoryFlow, Text, Button, Image, Video, Carousel, Background,
         Panel, Heading, Duplicate, Grid, Snap, Progress, GlobalHud, ProjectInventory,
-        Icon, Divider, Spacer, Counter, PlayerHealthBar, PlayerHealthText, PlayerAmmoText, Group, HorizontalStack, VerticalStack, LayoutGrid, Toggle, Slider, Selector, TextInput, GameplayAttributes, PublishUiPackage, AdoptUiPackage, UiBudgets
+        Icon, Divider, Spacer, Counter, PlayerHealthBar, PlayerHealthText, PlayerAmmoText, Group, HorizontalStack, VerticalStack, LayoutGrid, Toggle, Slider, Selector, TextInput, GameplayAttributes, PublishUiPackage, AdoptUiPackage, UiBudgets, SaveUiPrefab, InsertUiPrefab, AnimatedVial
     };
 
     struct ScreenEditorLibraryScreen
@@ -104,6 +104,7 @@ namespace renegade::studio
             {"INPUT", "Radio"},
             {"NAVIGATION", "Menu List"}, {"NAVIGATION", "Tab Bar"},
             {"NAVIGATION", "Breadcrumbs"}, {"NAVIGATION", "Pagination"},
+            {"GAMEPLAY", "Animated vial", ScreenToolboxAction::AnimatedVial},
             {"GAMEPLAY", "Health bar - current Player", ScreenToolboxAction::PlayerHealthBar},
             {"GAMEPLAY", "Health text - current Player", ScreenToolboxAction::PlayerHealthText},
             {"GAMEPLAY", "Loaded ammo - current Player", ScreenToolboxAction::PlayerAmmoText},
@@ -112,7 +113,8 @@ namespace renegade::studio
             {"FEEDBACK", "Tooltip"}, {"FEEDBACK", "Notification"},
             {"FEEDBACK", "Popup"}, {"FEEDBACK", "Modal"},
             {"FEEDBACK", "Loading"},
-            {"REUSABLE", "Linked Component"}, {"REUSABLE", "Saved Component"}
+            {"REUSABLE", "Linked Component"}, {"REUSABLE", "Saved UI prefabs...", ScreenToolboxAction::InsertUiPrefab},
+            {"REUSABLE", "Save selected as UI prefab", ScreenToolboxAction::SaveUiPrefab}
         };
         static const std::vector<ScreenToolboxEntry> globals = {
             {"CANVAS", "Toggle Grid", ScreenToolboxAction::Grid},

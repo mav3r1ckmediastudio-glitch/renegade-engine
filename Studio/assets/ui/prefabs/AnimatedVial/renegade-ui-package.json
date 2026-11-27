@@ -1,0 +1,27 @@
+{
+  "entry_id": "f9cae318-9f41-45b5-ac7e-e89e01cdeaf6",
+  "entry_path": "Content/UI/Prefab.renegade-screen",
+  "files": [
+    {
+      "bytes": 6634,
+      "class": "runtime_screen_document",
+      "path": "Content/UI/Prefab.renegade-screen",
+      "sha256": "0b5caf118a2fea0dd5e3e726b67ed37ebf4dab67c06d0576c46ede787afd876d"
+    },
+    {
+      "bytes": 1356,
+      "class": "texture",
+      "path": "Content/UI/Vial/interior_mask.png",
+      "sha256": "76bf54390d404aff8f703887c0d73f167afb749daf3fe336219bfd2c7a11bcf5"
+    },
+    {
+      "bytes": 98979,
+      "class": "texture",
+      "path": "Content/UI/Vial/static_art.png",
+      "sha256": "253b1dc7f3128ca9d30e195c249cc5380a2b4324b41ee1142f0d5e0084687029"
+    }
+  ],
+  "project_id": "2cde05d4-c118-48a3-a425-15c4b2e40ef4",
+  "schema": "renegade-ui-package",
+  "version": 1
+}

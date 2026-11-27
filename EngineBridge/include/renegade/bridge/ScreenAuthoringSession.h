@@ -408,6 +408,21 @@ namespace renegade::bridge
             return CommitMutation(std::move(candidate),error);
         }
 
+        [[nodiscard]] bool ConfigureLiquidWidget(const StableId& id,ScreenLiquid liquid,
+            ScreenColor colour,std::vector<ScreenBinding> bindings,std::string& error)
+        {
+            if(!loaded_){error="No Screen is open.";return false;}
+            auto candidate=Document();
+            const auto w=std::find_if(candidate.widgets.begin(),candidate.widgets.end(),[&](const auto& item){return item.id==id;});
+            if(w==candidate.widgets.end()||w->kind!=ScreenWidgetKind::Progress)
+            {error="Select a liquid Progress layer.";return false;}
+            w->liquid=std::move(liquid);w->bindings=std::move(bindings);w->themeOverrides|=1;
+            for(auto* v:{&w->style.normal,&w->style.hover,&w->style.pressed,&w->style.focused,&w->style.disabled})v->imageTint=colour;
+            if(w->component)w->component->overrides|=1|256|512;
+            if(candidate.schemaVersion<3){candidate.migratedFromVersion=candidate.schemaVersion;candidate.schemaVersion=3;}
+            return CommitMutation(std::move(candidate),error);
+        }
+
         [[nodiscard]] bool UpdateWidgetFill(const StableId& widgetId, float fill,
             ScreenFillDirection direction, std::string& error)
         {

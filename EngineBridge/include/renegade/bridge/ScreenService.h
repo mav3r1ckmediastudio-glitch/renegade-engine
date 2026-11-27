@@ -3,6 +3,7 @@
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ScreenBinding.h"
 #include "renegade/bridge/ScreenAnimation.h"
+#include "renegade/bridge/ScreenLiquid.h"
 #include "renegade/bridge/ScreenTransition.h"
 #include "renegade/bridge/ScreenControl.h"
 #include "renegade/bridge/ScreenInteraction.h"
@@ -314,6 +315,7 @@ namespace renegade::bridge
         // Optional project-contained artwork; empty keeps the legacy solid-colour progress bar.
         std::string progressFrameResourcePath;
         std::string progressFillResourcePath;
+        std::optional<ScreenLiquid> liquid;
         // Additive v3 contract. Free preserves existing absolute/anchor semantics.
         // Flow containers allocate equal cells to immediate children in paint order.
         ScreenContainerLayout container;

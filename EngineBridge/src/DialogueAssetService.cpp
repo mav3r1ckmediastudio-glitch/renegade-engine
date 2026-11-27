@@ -2,6 +2,7 @@
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
 #include "renegade/bridge/AudioService.h"
+#include "PcmWaveImport.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -13,14 +14,20 @@ static bool ImportProjectAudio(const std::string &root, const std::string &sourc
 {
     relative.clear();
     error.clear();
-    if (source.empty() || !ValidateAudioAssetForWicked(source, error)) return false;
+    if(source.empty())return false;
+    std::vector<std::uint8_t> normalised;
+    if(!ValidateAudioAssetForWicked(source,error))
+    {
+        if(std::string(folder)!="Content/Audio/UI/"||!detail::NormaliseUiPcmWave(source,normalised))return false;
+        error.clear();
+    }
     std::error_code ec;
     const auto base = fs::weakly_canonical(fs::u8path(root), ec);
     if (ec || root.empty()) { error = "Open a project before importing a voice clip."; return false; }
     const auto file = fs::canonical(fs::u8path(source), ec);
     if (ec) { error = "Could not read the selected voice clip."; return false; }
     const auto existing = file.lexically_relative(base).generic_u8string();
-    if (existing.rfind("Content/Audio/", 0) == 0 && IsDialogueVoicePath(existing))
+    if (normalised.empty() && existing.rfind("Content/Audio/", 0) == 0 && IsDialogueVoicePath(existing))
     {
         relative = existing;
         return true;
@@ -38,9 +45,13 @@ static bool ImportProjectAudio(const std::string &root, const std::string &sourc
     std::ifstream in(file, std::ios::binary);
     ProjectDocumentWrite write;
     write.destinationPath = (base / fs::u8path(path)).generic_u8string();
-    write.content.resize(size_t(size));
-    if (!in.read(reinterpret_cast<char *>(write.content.data()), std::streamsize(size)))
-    { error = "Could not read the complete voice clip."; return false; }
+    if(!normalised.empty())write.content=std::move(normalised);
+    else
+    {
+        write.content.resize(size_t(size));
+        if (!in.read(reinterpret_cast<char *>(write.content.data()), std::streamsize(size)))
+        { error = "Could not read the complete voice clip."; return false; }
+    }
     ProjectDocumentTransactionOptions options;
     options.allowedRoot = root;
     options.journalDirectory = (base / "Saved/Transactions").generic_u8string();

@@ -165,6 +165,8 @@ namespace renegade::screen
         void SetScrollbarThumb(const bridge::StableId& thumbId,
             const bridge::StableId& trackId,float position,float fraction);
         void SetWidgetFill(const bridge::StableId& widgetId, float fill);
+        // Local editor audition only; the owning Screen document stays unchanged.
+        void PreviewLiquidWidget(const bridge::StableId& widgetId,bridge::ScreenColor colour,float fill);
         void SetWidgetText(const bridge::StableId& widgetId, const std::string& text);
         // Transient image for UI-bound icon widgets. Only project-contained
         // Image resources may be loaded, never an arbitrary filesystem path.

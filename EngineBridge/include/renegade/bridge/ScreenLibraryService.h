@@ -22,6 +22,10 @@ namespace renegade::bridge
         const std::string& packageRoot,ScreenPortableAdoptionResult& result,std::string& error,
         ProjectDocumentTransactionHook operationHook={});
 
+    // Validated metadata for browsing personal UI prefabs; no per-frame disk scan.
+    [[nodiscard]] bool InspectPortableScreenPackage(const std::string& packageRoot,
+        ScreenDocument& entry,std::string& error);
+
     struct ScreenLibraryEntry
     {
         StableId documentId;

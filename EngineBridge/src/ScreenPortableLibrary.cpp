@@ -73,7 +73,7 @@ namespace
                 UiPackageFile file;file.path=f.at("path");const std::string type=f.at("class");
                 if(!TryParseDependencyClassName(type,file.type)||
                     (file.type!=DependencyClass::RuntimeScreenDocument&&file.type!=DependencyClass::Texture&&
-                     file.type!=DependencyClass::Font))
+                     file.type!=DependencyClass::Font&&file.type!=DependencyClass::Audio))
                 {error="UI package contains an unsupported dependency class.";return false;}
                 const auto registration=paths.Register("ui-package",file.path);
                 if(!registration.inserted||!registration.diagnostics.empty())
@@ -149,7 +149,7 @@ bool PublishPortableScreenPackage(const std::string& projectRoot,const StableId&
         for(const auto& node:graph.nodes)
         {
             if(node.dependencyClass!=DependencyClass::RuntimeScreenDocument&&node.dependencyClass!=DependencyClass::Texture&&
-                node.dependencyClass!=DependencyClass::Font)
+                node.dependencyClass!=DependencyClass::Font&&node.dependencyClass!=DependencyClass::Audio)
             {error="This UI package has an unsupported dependency class.";fs::remove_all(stage);return false;}
             std::string source;WindowsGamePackageFileDigest digest;
             if(!PackagePath(projectRoot,node.projectRelativePath,source,error)||
@@ -277,6 +277,8 @@ bool AdoptPortableScreenPackage(const std::string& projectRoot,const StableId& p
                         slide.id=GenerateStableId();
                         if(!resource(slide.image)){fs::remove_all(stage);return false;}
                     }
+                    if(w.liquid&&(!resource(w.liquid->mask)||!resource(w.liquid->decreaseSound)||!resource(w.liquid->increaseSound)))
+                    {fs::remove_all(stage);return false;}
                     if(!resource(w.resourcePath)||!resource(w.style.text.fontResource)||
                         !resource(w.progressFrameResourcePath)||!resource(w.progressFillResourcePath))
                     {fs::remove_all(stage);return false;}
@@ -337,4 +339,14 @@ bool AdoptPortableScreenPackage(const std::string& projectRoot,const StableId& p
     catch(const std::exception& e)
     {if(!stage.empty()){std::error_code ec;fs::remove_all(stage,ec);}error=std::string("UI adoption rejected: ")+e.what();return false;}
 }
+}
+
+namespace renegade::bridge
+{
+    bool InspectPortableScreenPackage(const std::string& root,ScreenDocument& entry,std::string& error)
+    {
+        UiPackage package;if(!LoadUiPackage(std::filesystem::u8path(root),package,error))return false;
+        return ReadScreenDocument((std::filesystem::u8path(root)/std::filesystem::u8path(package.entryPath)).generic_u8string(),
+            package.projectId,entry,error);
+    }
 }

@@ -5,6 +5,8 @@
 #include "RenegadeScreenEditorWorkspace.h"
 #include "ScreenHintEditor.h"
 #include "ScreenCarouselEditor.h"
+#include "ScreenLiquidEditor.h"
+#include "renegade/bridge/ScreenPrefabService.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
 #include "renegade/bridge/CreatorVideoWorkflowService.h"
 #include "renegade/bridge/VideoAssetService.h"
@@ -117,6 +119,7 @@ namespace renegade::studio
     {
         carouselEditor_=std::make_shared<ScreenCarouselEditor>();
         carouselEditor_->Create();
+        liquidEditor_=std::make_shared<ScreenLiquidEditor>();liquidEditor_->Create();
         SetName("Renegade Screen Editor workspace");
         SetShadowRadius(0.0f);
         CreateControls();
@@ -166,6 +169,7 @@ namespace renegade::studio
     void RenegadeScreenEditorWorkspace::Clear() noexcept
     {
         if(carouselEditor_)carouselEditor_->Close();
+        if(liquidEditor_)liquidEditor_->Close();liquidEditorOpen_=false;
         carouselEditorOpen_=false;
         session_ = nullptr;
         renderer_ = nullptr;
@@ -770,6 +774,7 @@ namespace renegade::studio
         imageAssetButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             const auto* selected=session_ ? session_->FindWidget(selectedWidgetId_) : nullptr;
+            if(FindSelectedLiquid()){OpenLiquidEditor();return;}
             if (selected && selected->carousel)
             {
                 const auto id=selected->id,document=session_->Document().envelope.documentId,root=gridProjectRoot_;
@@ -1204,6 +1209,7 @@ namespace renegade::studio
             if(source)panBackgroundButton_.SetText(source->slowPan ? "Slow pan: on" : "Slow pan: off");
         }
         imageAssetButton_.SetText(selectedReady && selected->kind==bridge::ScreenWidgetKind::Text ? "Hint list..." : selectedReady && selected->carousel ? "Edit carousel..." : background ? "Add file..." : selectedReady && selected->video ? "Choose video..." : "CHANGE GRAPHIC");
+        if(FindSelectedLiquid())imageAssetButton_.SetText("Edit vial...");
         imageAssetButton_.SetVisible(!button && selectedReady && !selected->carouselCaption && !focusCanvas_ && !rightCollapsed_ &&
             !inspectorSuppressed_);
         const bool progressArtworkReady = selectedReady &&
@@ -1640,7 +1646,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::HandleUndoRedoShortcuts()
     {
-        if(carouselEditorOpen_)return;
+        if(carouselEditorOpen_||liquidEditorOpen_)return;
         if (!session_ || !session_->IsLoaded() ||
             directManipulationMode_ != DirectManipulationMode::None ||
             panelDrag_ != PanelDrag::None)
@@ -1668,7 +1674,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::HandleDeleteShortcut()
     {
-        if(carouselEditorOpen_)return;
+        if(carouselEditorOpen_||liquidEditorOpen_)return;
         if (!session_ || !session_->IsLoaded() ||
             session_->FindWidget(selectedWidgetId_) == nullptr ||
             directManipulationMode_ != DirectManipulationMode::None ||
@@ -1683,7 +1689,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::HandleLayerOrderShortcuts()
     {
-        if(carouselEditorOpen_)return;
+        if(carouselEditorOpen_||liquidEditorOpen_)return;
 #if defined(_WIN32)
         if (!session_ || !session_->IsLoaded() ||
             session_->FindWidget(selectedWidgetId_) == nullptr ||
@@ -2427,8 +2433,10 @@ namespace renegade::studio
     void RenegadeScreenEditorWorkspace::Update(const wi::Canvas& canvas,const float dt)
     {
         if (!IsVisible() || !IsEnabled())
-        {if(carouselEditor_&&carouselEditorOpen_)carouselEditor_->Close();return;}
+        {if(carouselEditor_&&carouselEditorOpen_)carouselEditor_->Close();if(liquidEditor_&&liquidEditorOpen_)liquidEditor_->Close();return;}
         Widget::Update(canvas,dt);
+        if(liquidEditor_&&liquidEditor_->IsVisible())
+        {liquidEditor_->Update(canvas,dt);return;}
         if(carouselEditor_&&carouselEditor_->IsVisible())
         {carouselEditor_->Update(canvas,dt);return;}
         if (overlayInputBlocked_) return;
@@ -2438,6 +2446,8 @@ namespace renegade::studio
         if (basicActionPicker_.IsOpen()) { basicActionPicker_.Update(); return; }
         if (destinationPicker_.IsOpen()) { destinationPicker_.Update(); return; }
         UpdateControls(canvas,dt);
+        if(liquidEditor_&&liquidEditor_->IsVisible())
+        {liquidEditor_->Update(canvas,dt);return;}
         if(carouselEditor_&&carouselEditor_->IsVisible())
         {carouselEditor_->Update(canvas,dt);return;}
         toolboxFilter_ = toolboxSearchInput_.GetValue();
@@ -2851,6 +2861,7 @@ namespace renegade::studio
         basicActionPicker_.Render(cmd);
         destinationPicker_.Render(cmd);
         if(carouselEditor_&&carouselEditor_->IsVisible())carouselEditor_->Render(canvas,cmd);
+        if(liquidEditor_&&liquidEditor_->IsVisible())liquidEditor_->Render(canvas,cmd);
     }
 }
 
@@ -3031,6 +3042,10 @@ namespace renegade::studio
             if (!item) return;
             switch (item->action)
             {
+            case ScreenToolboxAction::SaveUiPrefab: SaveSelectedUiPrefab();break;
+            case ScreenToolboxAction::InsertUiPrefab: ChooseUiPrefab();break;
+            case ScreenToolboxAction::AnimatedVial:
+                InsertUiPrefab((std::filesystem::u8path(wi::helper::GetExecutablePath()).parent_path()/"Content/UI/Prefabs/AnimatedVial").generic_u8string());break;
             case ScreenToolboxAction::UiBudgets: if(uiBudgetsRequested_)uiBudgetsRequested_();break;
             case ScreenToolboxAction::PublishUiPackage: if(portableLibraryRequested_)portableLibraryRequested_(true);break;
             case ScreenToolboxAction::AdoptUiPackage: if(portableLibraryRequested_)portableLibraryRequested_(false);break;
@@ -3545,7 +3560,7 @@ namespace renegade::studio
     }
     void RenegadeScreenEditorWorkspace::HandleSelectionShortcuts()
     {
-        if(carouselEditorOpen_)return;
+        if(carouselEditorOpen_||liquidEditorOpen_)return;
         if(!session_||!session_->IsLoaded()||directManipulationMode_!=DirectManipulationMode::None||
             panelDrag_!=PanelDrag::None||!layerDragId_.empty())return;
         const bool ctrl=wi::input::Down(wi::input::KEYBOARD_BUTTON_LCONTROL)||
@@ -3654,4 +3669,95 @@ namespace renegade::studio {
     else{if(!rightCollapsed_)preferredRight_=panels_.right;rightCollapsed_=!rightCollapsed_;panels_.right=rightCollapsed_?0:preferredRight_;}
     LayoutControls();if(panelLayoutChanged_)panelLayoutChanged_();NotifyPreferencesChanged();
  }
+}
+
+namespace renegade::studio
+{
+    const bridge::ScreenWidget* RenegadeScreenEditorWorkspace::FindSelectedLiquid() const
+    {
+        if(!session_||!session_->IsLoaded())return nullptr;
+        for(const auto& w:session_->Document().widgets)if(w.liquid)
+        {
+            const auto* item=&w;size_t remaining=session_->Document().widgets.size();
+            while(item&&remaining--)
+            {if(item->id==selectedWidgetId_)return &w;item=session_->FindWidget(item->parentId);}
+        }
+        return nullptr;
+    }
+    void RenegadeScreenEditorWorkspace::OpenLiquidEditor()
+    {
+        const auto* selected=FindSelectedLiquid();if(!selected)return;
+        const auto id=selected->id,document=session_->Document().envelope.documentId,root=gridProjectRoot_;
+        liquidEditor_->Open(*selected,root,[this,id,document,root](bridge::ScreenLiquid liquid,bridge::ScreenColor colour,
+            std::vector<bridge::ScreenBinding> bindings,std::string& error){
+            if(!session_||!session_->IsLoaded()||gridProjectRoot_!=root||session_->Document().envelope.documentId!=document)
+            {error="The original Screen is no longer open.";return false;}
+            if(!session_->ConfigureLiquidWidget(id,std::move(liquid),colour,std::move(bindings),error))return false;
+            RefreshAfterMutation("Liquid prefab settings saved");return true;
+        },[this]{liquidEditorOpen_=false;if(documentChanged_)documentChanged_();},
+            [this,id,document,root](bridge::ScreenColor colour,float fill){
+                if(renderer_&&session_&&session_->IsLoaded()&&root==gridProjectRoot_&&document==session_->Document().envelope.documentId)
+                    renderer_->PreviewLiquidWidget(id,colour,fill);
+            });liquidEditorOpen_=true;
+    }
+    static std::filesystem::path PersonalUiPrefabs()
+    {
+        const auto* local=std::getenv("LOCALAPPDATA");
+        return local?std::filesystem::u8path(local)/"RenegadeStudio/UILibrary/Prefabs":std::filesystem::path{};
+    }
+    void RenegadeScreenEditorWorkspace::SaveSelectedUiPrefab()
+    {
+        if(!session_||!session_->IsLoaded()||selectedWidgetId_.empty())return;
+        const auto library=PersonalUiPrefabs();std::error_code ec;
+        if(library.empty()){SetStatus("Personal UI prefab location unavailable.");return;}
+        std::filesystem::create_directories(library,ec);if(ec){SetStatus(ec.message());return;}
+        std::string error;
+        if(!bridge::PublishScreenWidgetPrefab(gridProjectRoot_,*session_,selectedWidgetId_,
+            (library/std::filesystem::u8path(bridge::GenerateStableId())).generic_u8string(),error))
+        {SetStatus(error);return;}
+        SetStatus("UI prefab saved with its hierarchy, animation, colours, sounds and binding slots.");
+    }
+    void RenegadeScreenEditorWorkspace::InsertUiPrefab(const std::string& package)
+    {
+        if(!session_||!session_->IsLoaded())return;
+        std::vector<bridge::StableId> created;std::string error;
+        const auto x=std::max(0.f,session_->Document().designWidth*.5f-144),y=std::max(0.f,session_->Document().designHeight*.5f-288);
+        if(!bridge::InsertScreenWidgetPrefab(gridProjectRoot_,*session_,package,x,y,created,error))
+        {SetStatus(error);return;}
+        if(!created.empty())SelectWidget(created.front());
+        RefreshAfterMutation("UI prefab inserted. Edit vial to choose this instance's colour and value binding.");
+    }
+    void RenegadeScreenEditorWorkspace::ChooseExternalUiPrefab()
+    {
+        if(!session_||!session_->IsLoaded())return;
+        const auto root=gridProjectRoot_,document=session_->Document().envelope.documentId;
+        wi::helper::FileDialogParams dialog;dialog.type=wi::helper::FileDialogParams::OPEN;
+        dialog.description="Choose UI prefab renegade-ui-package.json";dialog.extensions={"json"};
+        wi::helper::FileDialog(dialog,[this,root,document](const std::string& file){
+            if(file.empty())return;
+            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,root,document,file](std::uint64_t){
+                if(!session_||!session_->IsLoaded()||root!=gridProjectRoot_||document!=session_->Document().envelope.documentId)return;
+                const auto path=std::filesystem::u8path(file);
+                if(path.filename()!="renegade-ui-package.json"){SetStatus("Choose renegade-ui-package.json.");return;}
+                InsertUiPrefab(path.parent_path().generic_u8string());
+            });
+        });
+    }
+    void RenegadeScreenEditorWorkspace::ChooseUiPrefab()
+    {
+        std::vector<RenegadeScreenChoicePicker::Choice> choices;
+        const auto library=PersonalUiPrefabs();std::error_code ec;
+        if(!library.empty()&&std::filesystem::is_directory(library,ec))
+            for(const auto& directory:std::filesystem::directory_iterator(library,ec))
+            {
+                if(!directory.is_directory())continue;
+                bridge::ScreenDocument doc;std::string error;
+                if(bridge::InspectPortableScreenPackage(directory.path().generic_u8string(),doc,error)&&!doc.widgets.empty())
+                    choices.push_back({doc.widgets.front().name,directory.path().generic_u8string()});
+            }
+        choices.push_back({"Import UI prefab from file...","@import"});
+        destinationPicker_.Open("SAVED UI PREFABS",std::move(choices),"",[this](const std::string& value){
+            if(value=="@import")ChooseExternalUiPrefab();else InsertUiPrefab(value);
+        });
+    }
 }

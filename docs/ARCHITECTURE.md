@@ -1,5 +1,12 @@
 # Architecture
 
+## Animated liquid Screen prefabs (27 November 2026)
+
+Optional schema-3 ScreenLiquid belongs to EngineBridge's existing Screen document. The mask is a typed texture dependency and per-instance value-change cues are typed audio dependencies. Authoring changes colour, binding and effect settings in one history operation. ScreenPrefabService bakes a selected hierarchy and publishes the existing validated portable Screen package; compact resource paths keep repeated adoption bounded. Cross-project imports own their resources and expose unresolved gameplay slots rather than guessing gameplay identity.
+
+ScreenRenderer uses a per-widget compute output, animation clock and sound instance. A masked procedural bottom-up surface and bubbles respond to resolved progress fractions; an independent ordinary Image preserves the supplied glass/frame tint. The native Studio modal auditions only renderer state and resets it on close. Runtime consumes the same data and renderer. UI-only PCM recontainerization lives in EngineBridge import and preserves samples while keeping incompatible extended WAV headers away from Wicked's unchanged loader. See UI_ANIMATED_HEALTH_PREFAB_2026-11-27.md for verification and limits.
+
+
 ## Gameplay physics adapter
 
 The Physics Lab samples counts and timings from the native scene through EngineBridge. Diagnostic requests and queued paused steps belong to the scene's physics state and the contact sample shares the native listener. A paused step feeds back the resulting pose without interpolation. Diagnostics do not need a subscription to the gameplay event queue.

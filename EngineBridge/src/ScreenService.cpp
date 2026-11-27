@@ -393,6 +393,7 @@ namespace renegade::bridge
                 return false;
             document.projectId = screen.envelope.projectId;
             document.videoPaths.clear();
+            document.audioPaths.clear();
             document.hintPaths.clear();
             document.imagePaths.clear();
             document.fontPaths.clear();
@@ -448,6 +449,12 @@ namespace renegade::bridge
                     !widget.resourcePath.empty())
                     addUnique(document.imagePaths, widget.resourcePath);
                 if (widget.carousel) for (const auto& entry:widget.carousel->entries) addUnique(document.imagePaths,entry.image);
+                if(widget.liquid)
+                {
+                    addUnique(document.imagePaths,widget.liquid->mask);
+                    if(!widget.liquid->decreaseSound.empty())addUnique(document.audioPaths,widget.liquid->decreaseSound);
+                    if(!widget.liquid->increaseSound.empty())addUnique(document.audioPaths,widget.liquid->increaseSound);
+                }
                 if (!widget.progressFrameResourcePath.empty()) addUnique(document.imagePaths,widget.progressFrameResourcePath);
                 if (!widget.progressFillResourcePath.empty()) addUnique(document.imagePaths,widget.progressFillResourcePath);
                 const ScreenVisualState* states[] = {
@@ -1104,6 +1111,15 @@ namespace renegade::bridge
                 { error = "Fill binding requires a Progress element."; return false; }
             }
 
+            if(widget.liquid)
+            {
+                const auto& l=*widget.liquid;
+                if(document.schemaVersion<3||widget.kind!=ScreenWidgetKind::Progress||
+                    !IsContentRelativePath(l.mask)||!ValidateScreenLiquidNumbers(l)||
+                    (!l.decreaseSound.empty()&&!IsContentRelativePath(l.decreaseSound))||
+                    (!l.increaseSound.empty()&&!IsContentRelativePath(l.increaseSound)))
+                {error="Invalid animated liquid settings or resources.";return false;}
+            }
             if (widget.carousel)
             {
                 const auto& deck=*widget.carousel;
@@ -1462,8 +1478,16 @@ namespace renegade::bridge
                     section.Set("resource", widget.resourcePath);
                     section.Set("action", widget.actionId);
                     if (widget.carouselCaption) section.Set("carousel_caption",true);
-                    if (widget.carousel)
-                    {
+                if(widget.liquid)
+                {
+                    const auto& l=*widget.liquid;
+                    section.Set("liquid_mask",l.mask);section.Set("liquid_left",l.left);section.Set("liquid_right",l.right);
+                    section.Set("liquid_top",l.top);section.Set("liquid_bottom",l.bottom);section.Set("liquid_wave",l.wavePixels);
+                    section.Set("liquid_bubbles",l.bubbles);section.Set("liquid_animated",l.animated);
+                    section.Set("liquid_decrease_sound",l.decreaseSound);section.Set("liquid_increase_sound",l.increaseSound);
+                }
+                if (widget.carousel)
+                {
                         const auto& deck=*widget.carousel;
                         section.Set("carousel_count",static_cast<int>(deck.entries.size()));
                         section.Set("carousel_seconds",deck.seconds);
@@ -1841,6 +1865,21 @@ namespace renegade::bridge
                 widget.text = section.GetText("text");
                 widget.resourcePath = section.GetText("resource");
                 if (sourceSchema>=3) widget.hintListPath=section.GetText("hint_list");
+                if(section.Has("liquid_mask"))
+                {
+                    if(sourceSchema<3){error="Liquid requires Screen schema 3.";return false;}
+                    auto& l=widget.liquid.emplace();l.mask=section.GetText("liquid_mask");
+                    if(!detail::ReadAnimationScalar(section,"liquid_left",l.left)||
+                        !detail::ReadAnimationScalar(section,"liquid_right",l.right)||
+                        !detail::ReadAnimationScalar(section,"liquid_top",l.top)||
+                        !detail::ReadAnimationScalar(section,"liquid_bottom",l.bottom)||
+                        !detail::ReadAnimationScalar(section,"liquid_wave",l.wavePixels)||
+                        !detail::ReadAnimationScalar(section,"liquid_bubbles",l.bubbles)||
+                        (section.GetText("liquid_animated")!="true"&&section.GetText("liquid_animated")!="false"))
+                    {error="Malformed animated liquid settings.";return false;}
+                    l.animated=section.GetBool("liquid_animated");
+                    l.decreaseSound=section.GetText("liquid_decrease_sound");l.increaseSound=section.GetText("liquid_increase_sound");
+                }
                 widget.carouselCaption=section.Has("carousel_caption") && section.GetBool("carousel_caption");
                 if (section.Has("carousel_count"))
                 {
