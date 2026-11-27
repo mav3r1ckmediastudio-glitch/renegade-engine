@@ -17,7 +17,7 @@ class ScreenNavigationEditor final:public StudioModalWindow,public std::enable_s
     screen::ScreenRenderer previewRenderer_;
     bool previewLoaded_=false;
     bridge::ScreenWidget widget_;
-    std::string root_,status_;bridge::StableId project_;
+    std::string root_,status_,iconCategoryValue_="quest";bridge::StableId project_;
     std::uint64_t generation_=0;
     std::function<bool(bridge::ScreenWidget,std::string&)> accept_;
     std::function<bool(const bridge::ScreenWidget&,float,std::string&)> preview_;
@@ -25,7 +25,8 @@ class ScreenNavigationEditor final:public StudioModalWindow,public std::enable_s
     RenegadeScreenColorPicker colourPicker_;
     RenegadeButton font_,textColour_,backingColour_;
     RenegadeTextInputField fontSize_,targetPriority_;
-    RenegadeCheckBox targetVisible_;
+    RenegadeCheckBox targetVisible_,keepIcons_;
+    RenegadeButton selectedIcon_;
     RenegadeButton source_,neutral_,fantasy_,appearance_,backing_,strip_,pointer_,clearArt_,icon_,clearIcon_,add_,remove_,save_,cancel_;
     RenegadeTextInputField span_,heading_,size_,gap_,range_,filter_,iconCategory_,targetName_,targetCategory_,targetX_,targetY_,targetZ_,targetEntity_;
     RenegadeCheckBox names_,distances_,ticks_;
@@ -45,9 +46,9 @@ class ScreenNavigationEditor final:public StudioModalWindow,public std::enable_s
     {
         const bool valid=selected_>=0&&selected_<int(widget_.navigation->targets.size());
         for(auto* f:{&targetPriority_,&targetName_,&targetCategory_,&targetX_,&targetY_,&targetZ_,&targetEntity_})f->SetEnabled(valid);
-        remove_.SetEnabled(valid);targetVisible_.SetEnabled(valid);
+        remove_.SetEnabled(valid);targetVisible_.SetEnabled(valid);selectedIcon_.SetEnabled(valid);
         if(!valid){for(auto* f:{&targetPriority_,&targetName_,&targetCategory_,&targetX_,&targetY_,&targetZ_,&targetEntity_})f->SetValue("");return;}
-        const auto& t=widget_.navigation->targets[selected_];targetName_.SetValue(t.label);targetCategory_.SetValue(t.category);
+        const auto& t=widget_.navigation->targets[selected_];iconCategory_.SetValue(t.category);targetName_.SetValue(t.label);targetCategory_.SetValue(t.category);
         targetX_.SetValue(t.position.x);targetY_.SetValue(t.position.y);targetZ_.SetValue(t.position.z);targetEntity_.SetValue(t.entityId);targetPriority_.SetValue(t.priority);targetVisible_.SetCheck(t.visible);
     }
     void List()
@@ -74,6 +75,7 @@ class ScreenNavigationEditor final:public StudioModalWindow,public std::enable_s
     }
     void Preview()
     {
+        iconCategoryValue_=iconCategory_.GetValue();
         if(!preview_||!Capture())return;std::string error;
         if(!preview_(widget_,previewHeading_.GetValue(),error)){status_=error;return;}
         if(!previewLoaded_)
@@ -141,9 +143,9 @@ class ScreenNavigationEditor final:public StudioModalWindow,public std::enable_s
         bridge::ScreenDocument doc;if(!bridge::ReadScreenDocument((std::filesystem::u8path(root_)/std::filesystem::u8path(adopted.pathHint)).generic_u8string(),project_,doc,error)){status_=error;return;}
         const auto source=std::find_if(doc.widgets.begin(),doc.widgets.end(),[](const auto& w){return w.navigation.has_value();});
         if(source==doc.widgets.end()){status_="Choose a portable UI package containing a navigation component.";return;}
-        widget_.resourcePath=source->resourcePath;widget_.style=source->style;widget_.themeOverrides=63;fontSize_.SetValue(widget_.style.text.fontSize);
-        auto& c=*widget_.navigation;c.bearingStrip=source->navigation->bearingStrip;c.pointerImage=source->navigation->pointerImage;c.icons=source->navigation->icons;
-        Preview();status_="Appearance changed. Targets, heading settings and placement are retained.";
+        if(!bridge::ApplyNavigationAppearanceDraft(widget_,*source,error,keepIcons_.GetCheck())){status_=error;return;}
+        fontSize_.SetValue(widget_.style.text.fontSize);
+        Preview();status_=keepIcons_.GetCheck()?"Appearance changed; assigned category icons were kept.":"Appearance changed; category icons were explicitly replaced.";
     }
     void ChooseAppearance()
     {
@@ -182,6 +184,9 @@ public:
         Button(fantasy_,"Fantasy example",676,42,148,"Use the supplied fantasy artwork as an interchangeable example appearance.");
         fantasy_.OnClick([this](const auto&){ApplyAppearance((std::filesystem::u8path(wi::helper::GetExecutablePath()).parent_path()/"Content/UI/Prefabs/WorldNavigationFantasy").generic_u8string());});
         Button(appearance_,"Import appearance...",840,42,172,"Choose a portable navigation UI package; appearance changes keep existing targets and placement.");appearance_.OnClick([this](const auto&){ChooseAppearance();});
+        keepIcons_.Create("Keep assigned icons");keepIcons_.SetRenderTextSize(14);keepIcons_.SetCheck(true);
+        keepIcons_.SetTooltip("Keep all current category icon assignments when changing appearances, including custom icons. Turn off to explicitly replace them with the appearance's icons.");
+        Add(keepIcons_,520,80,20,20);
         Button(backing_,"Change backing...",520,104,232,"Replace only this navigation layer's backing artwork.");backing_.OnClick([this](const auto&){ChooseImage(0);});
         Button(strip_,"Change direction strip...",776,104,236,"Optional 360-degree bearing strip, north at both ends. Clear artwork uses editable font-based directions.");strip_.OnClick([this](const auto&){ChooseImage(1);});
         Button(pointer_,"Change centre pointer...",520,154,232,"Replace the fixed centre pointer independently of the backing and icons.");pointer_.OnClick([this](const auto&){ChooseImage(2);});
@@ -207,6 +212,10 @@ public:
         Field(targetPriority_,"Target priority",520,656,148,"Higher priority targets are retained when markers overlap; range-1000 to1000.");
         targetVisible_.Create("Show target");targetVisible_.SetRenderTextSize(14);targetVisible_.SetTooltip("Show or hide this authored target without deleting its settings.");Add(targetVisible_,692,656,20,24);targetVisible_.OnClick([this](const auto&){Preview();});
         targetName_.OnInputAccepted([this](const auto&){Preview();List();});
+        targetCategory_.OnInputAccepted([this](const auto&){iconCategory_.SetValue(targetCategory_.GetValue());Preview();});
+        Button(selectedIcon_,"Choose selected target icon...",28,770,444,"Assign an image to the selected target's category. All targets in that category share it; custom categories are supported.");
+        selectedIcon_.OnClick([this](const auto&){Drafts();if(!Capture()||selected_<0)return;iconCategory_.SetValue(widget_.navigation->targets[selected_].category);ChooseImage(3);});
+
         Button(save_,"Save",0,0,116,"Apply navigation settings as one Undo operation.");PinFooter(save_,260,12,true);
         save_.OnClick([this](const auto&){Drafts();if(!Capture())return;std::string error;if(widget_.component)widget_.component->overrides|=63|512;
             if(accept_&&accept_(widget_,error))Close();else status_=error;});
@@ -220,7 +229,7 @@ public:
         Close();widget_=std::move(widget);root_=std::move(root);project_=std::move(project);accept_=std::move(accept);closed_=std::move(closed);preview_=std::move(preview);
         fontSize_.SetValue(widget_.style.text.fontSize);auto& c=*widget_.navigation;span_.SetValue(c.fieldOfView);heading_.SetValue(c.manualHeading);size_.SetValue(c.markerSize);gap_.SetValue(c.markerGap);range_.SetValue(c.maxDistance);filter_.SetValue(c.categoryFilter);
         names_.SetCheck(c.showNames);distances_.SetCheck(c.showDistance);ticks_.SetCheck(c.showTicks);previewHeading_.SetValue(bridge::WrapNavigationHeading(c.manualHeading));iconCategory_.SetValue("quest");
-        selected_=c.targets.empty()?-1:0;pending_=-1;List();TargetFields();Source();status_="EDITOR SAMPLE: preview heading and demonstration targets never change gameplay.";SetVisible(true);Preview();
+        keepIcons_.SetCheck(true);selected_=c.targets.empty()?-1:0;pending_=-1;List();TargetFields();Source();status_="EDITOR SAMPLE: preview heading and demonstration targets never change gameplay.";SetVisible(true);Preview();
     }
     void Close()
     {++generation_;previewRenderer_.Reset(previewPath_);previewLoaded_=false;colourPicker_.Close();for(auto* f:Fields())f->Deactivate();SetVisible(false);accept_={};preview_={};if(closed_){auto cb=std::move(closed_);cb();}}
@@ -248,6 +257,10 @@ public:
         label("FONT SIZE (DESIGN PX)",520,368);
         label("TARGET PRIORITY",520,632);
         for(auto* w:controls_){ApplyScissor(canvas,w==&save_||w==&cancel_?scissorRect:clip,cmd);w->Render(canvas,cmd);}
+        const auto& category=iconCategoryValue_;
+        const auto icon=widget_.navigation->icons.find(category);
+        const bool mapped=icon!=widget_.navigation->icons.end()&&!icon->second.empty();
+        Label(mapped?"Icon assigned to "+category:"No icon assigned: fallback dot",o.x+520,o.y+278,12,mapped?theme::Muted:theme::Accent,cmd);
         label("PREVIEW / SAMPLE DATA",520,700);
         if(previewLoaded_)previewPath_.GetGUI().Render(canvas,cmd);
         ApplyScissor(canvas,scissorRect,cmd);auto message=status_;if(message.size()>130)message=message.substr(0,127)+"...";Label(message,p.x+18,p.y+s.y-24,12,theme::Muted,cmd);

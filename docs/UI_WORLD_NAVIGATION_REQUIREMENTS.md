@@ -31,3 +31,10 @@ Inspected the supplied fantasy set's navigation_registry.json and gui/1x/world_c
 7. Record builds/tests and native evidence before marking implementation complete.
 
 Minimap rendering is a separate capability that may share target registration/categories and appearance conventions. The existing editor overview is not evidence of a gameplay minimap.
+
+
+## World-target authoring gap raised by owner, 27 November 2026
+
+The current compass presents registered fixed positions or entity references. It does not infer towns, castles, caves or bosses from geometry, names or artwork. The Level editor does not yet expose a complete world-target placement/tagging workflow, and gameplay minimap rendering is not implemented.
+
+The proposed next authoring workflow is a reusable World target on a selected entity or a standalone invisible point marker, with name/category/icon and explicit visibility/discovery rules. Targets should enter the same shared registry for compass, future minimap and C++/Lua. A moving entity target follows its transform; deletion/scene transitions retire it. Proximity, reveal-on-entry and quest/script-driven disclosure must be explicit rules rather than assumed recognition. Exact discovery defaults and UI remain design work; this section does not claim an approved or implemented discovery system.

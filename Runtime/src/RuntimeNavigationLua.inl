@@ -104,6 +104,22 @@ static int NavigationConfigureLua(lua_State* l)
     if(!self->NavPatch(l,2,w,error)||!self->navigation.Configure(id,std::move(w),error))return PushFalseError(l,error);
     lua_pushboolean(l,1);return 1;
 }
+static int NavigationAppearanceLua(lua_State* l)
+{
+    auto* self=FromUpvalue(l);const auto id=NavString(l,1);const auto* view=self?self->navigation.View(id):nullptr;
+    if(!view)return PushFalseError(l,"Navigation view is no longer active.");
+    if(!lua_istable(l,2))return PushFalseError(l,"Pass an appearance settings table.");
+    bool keep=true;
+    if(!lua_isnoneornil(l,3)){if(lua_type(l,3)!=LUA_TBOOLEAN)return PushFalseError(l,"keep_icons must be a boolean.");keep=lua_toboolean(l,3)!=0;}
+    const std::set<std::string> allowed={"icons","strip","pointer","background","font","font_size","text_colour","background_colour","backing_colour","image_tint","border_colour","border_width","opacity"};
+    lua_pushnil(l);while(lua_next(l,2)){
+        const auto key=NavString(l,-2);lua_pop(l,1);
+        if(!allowed.count(key)){lua_pop(l,1);return PushFalseError(l,"Not an appearance setting: "+key);}
+    }
+    auto appearance=view->widget;appearance.navigation->icons.clear();std::string error;
+    if(!self->NavPatch(l,2,appearance,error)||!self->navigation.ApplyAppearance(id,appearance,error,keep))return PushFalseError(l,error);
+    lua_pushboolean(l,1);return 1;
+}
 static int NavigationRemoveLua(lua_State* l)
 {
     auto* self=FromUpvalue(l);std::string error;if(!self||!self->navigation.Remove(NavString(l,1),error))return PushFalseError(l,error.empty()?"Navigation unavailable.":error);lua_pushboolean(l,1);return 1;
@@ -152,7 +168,7 @@ static int NavigationViewsLua(lua_State* l)
 void RegisterNavigationLua()
 {
     lua_newtable(lua);lua_pushinteger(lua,1);lua_setfield(lua,-2,"contract_version");
-    struct F{const char* name;lua_CFunction function;};const F funcs[]={{"create",NavigationCreateLua},{"configure",NavigationConfigureLua},{"get",NavigationGetLua},{"views",NavigationViewsLua},{"remove",NavigationRemoveLua}};
+    struct F{const char* name;lua_CFunction function;};const F funcs[]={{"create",NavigationCreateLua},{"configure",NavigationConfigureLua},{"apply_appearance",NavigationAppearanceLua},{"get",NavigationGetLua},{"views",NavigationViewsLua},{"remove",NavigationRemoveLua}};
     for(const auto& f:funcs){lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,f.function,1);lua_setfield(lua,-2,f.name);}
     for(int i=0;i<2;++i){lua_pushlightuserdata(lua,this);lua_pushboolean(lua,i);lua_pushcclosure(lua,NavigationTargetsLua,2);lua_setfield(lua,-2,i?"remove_target":"put_target");}
     lua_setfield(lua,-2,"navigation");

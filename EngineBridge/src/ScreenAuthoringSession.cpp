@@ -1,3 +1,4 @@
+#include "renegade/bridge/WorldNavigationService.h"
 #include "renegade/bridge/ScreenAuthoringSession.h"
 #include "renegade/bridge/InventoryPagedScreenAdapter.h"
 #include "renegade/bridge/ScreenThemeResolver.h"
@@ -1475,14 +1476,12 @@ namespace renegade::bridge
         if(d.schemaVersion<3){d.migratedFromVersion=d.schemaVersion;d.schemaVersion=3;}
         return CommitMutation(std::move(d),error);
     }
-    bool ScreenAuthoringSession::ApplyNavigationAppearance(const StableId& id,const ScreenWidget& appearance,std::string& error)
+    bool ScreenAuthoringSession::ApplyNavigationAppearance(const StableId& id,const ScreenWidget& appearance,std::string& error,bool keepAssignedIcons)
     {
         if(!loaded_||!appearance.navigation){error="Choose a navigation appearance.";return false;}
         auto d=Document();auto w=std::find_if(d.widgets.begin(),d.widgets.end(),[&](const auto& item){return item.id==id;});
         if(w==d.widgets.end()||!w->navigation){error="Select a navigation layer.";return false;}
-        w->resourcePath=appearance.resourcePath;w->style=appearance.style;w->themeOverrides=63;
-        w->navigation->bearingStrip=appearance.navigation->bearingStrip;w->navigation->pointerImage=appearance.navigation->pointerImage;
-        w->navigation->icons=appearance.navigation->icons;if(w->component)w->component->overrides|=63|512;
+        if(!ApplyNavigationAppearanceDraft(*w,appearance,error,keepAssignedIcons))return false;
         return CommitMutation(std::move(d),error);
     }
 }

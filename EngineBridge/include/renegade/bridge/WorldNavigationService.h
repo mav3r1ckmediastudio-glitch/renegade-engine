@@ -25,6 +25,7 @@ namespace renegade::bridge
         bool ObserveDocument(const ScreenDocument&,std::string& error);
         bool Create(ScreenWidget widget,StableId& id,std::string& error);
         bool Configure(const StableId&,ScreenWidget widget,std::string& error);
+        bool ApplyAppearance(const StableId&,const ScreenWidget&,std::string& error,bool keepAssignedIcons=true);
         bool Remove(const StableId&,std::string& error);
         bool PutTarget(NavigationTarget,std::string& error);
         bool RemoveTarget(const std::string&,std::string& error);
@@ -34,6 +35,9 @@ namespace renegade::bridge
         const WorldNavigationSnapshot& Snapshot()const{return state_;}
         void Reset();
     };
+    // Appearance is independent of gameplay identity. Existing category assignments
+    // win by default; replacing them is an explicit caller policy.
+    bool ApplyNavigationAppearanceDraft(ScreenWidget& target,const ScreenWidget& appearance,std::string& error,bool keepAssignedIcons=true);
     bool ImportScreenNavigationImage(const std::string& root,const StableId& project,const std::string& source,std::string& output,std::string& error);
     ScreenWidget MakeWorldNavigationWidget(std::string name="World navigation");
 }

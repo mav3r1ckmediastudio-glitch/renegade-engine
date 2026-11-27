@@ -108,3 +108,30 @@ namespace renegade::bridge
             if(it->second.authored&&!active.count(it->first)){it=state_.views.erase(it);++state_.revision;entityIndexDirty_=true;}else ++it;
     }
 }
+
+
+namespace renegade::bridge
+{
+    bool ApplyNavigationAppearanceDraft(ScreenWidget& target,const ScreenWidget& appearance,std::string& error,bool keepAssignedIcons)
+    {
+        if(target.kind!=ScreenWidgetKind::Image||!target.navigation||appearance.kind!=ScreenWidgetKind::Image||!appearance.navigation)
+        {error="Choose a navigation layer and appearance.";return false;}
+        auto candidate=target;
+        candidate.resourcePath=appearance.resourcePath;candidate.style=appearance.style;candidate.themeOverrides=63;
+        auto icons=appearance.navigation->icons;
+        if(keepAssignedIcons)for(const auto& [category,path]:target.navigation->icons)icons[category]=path;
+        candidate.navigation->icons=std::move(icons);
+        candidate.navigation->bearingStrip=appearance.navigation->bearingStrip;
+        candidate.navigation->pointerImage=appearance.navigation->pointerImage;
+        if(candidate.component)candidate.component->overrides|=63|512;
+        if(!valid(candidate,error))return false;
+        target=std::move(candidate);error.clear();return true;
+    }
+    bool WorldNavigationService::ApplyAppearance(const StableId& id,const ScreenWidget& appearance,std::string& error,bool keepAssignedIcons)
+    {
+        const auto* view=View(id);
+        if(!view){error="Navigation view is no longer active.";return false;}
+        auto candidate=view->widget;
+        return ApplyNavigationAppearanceDraft(candidate,appearance,error,keepAssignedIcons)&&Configure(id,std::move(candidate),error);
+    }
+}

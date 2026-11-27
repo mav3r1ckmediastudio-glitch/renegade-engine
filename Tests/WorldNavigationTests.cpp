@@ -86,14 +86,33 @@ int main(int argc,char** argv)
     Check(session.Save(error),"save authoring");
     const auto image=temp/"Content/UI/test.png";fs::copy_file(fs::path(__FILE__).parent_path()/"assets/ui/liquid/alpha-mask.png",image);
     auto withArt=*session.FindWidget(w.id);withArt.resourcePath="Content/UI/test.png";withArt.navigation->pointerImage=withArt.resourcePath;withArt.navigation->icons["town"]=withArt.resourcePath;
-    Check(session.ConfigureNavigationComponent(w.id,withArt,error),"set owned appearance");const auto package=temp/"Package";
+    withArt.navigation->icons["tower"]="Content/UI/test.png";
+    Check(session.ConfigureNavigationComponent(w.id,withArt,error),"set owned appearance");
+    auto alternate=MakeWorldNavigationWidget("Alternate theme");alternate.navigation->pointerImage=withArt.navigation->pointerImage;
+    alternate.navigation->icons={{"town","Content/UI/alternate.png"},{"quest","Content/UI/test.png"}};
+    const auto customTargetId=session.FindWidget(w.id)->navigation->targets[0].id;
+    Check(session.ApplyNavigationAppearance(w.id,alternate,error)&&
+        session.FindWidget(w.id)->navigation->icons.at("tower")=="Content/UI/test.png"&&
+        session.FindWidget(w.id)->navigation->icons.at("town")=="Content/UI/test.png"&&
+        session.FindWidget(w.id)->navigation->icons.count("quest")&&
+        session.FindWidget(w.id)->navigation->targets[0].id==customTargetId,"appearance keeps custom and same-category assignments; adds new categories");
+    Check(session.ApplyNavigationAppearance(w.id,alternate,error,false)&&
+        !session.FindWidget(w.id)->navigation->icons.count("tower")&&
+        session.FindWidget(w.id)->navigation->icons.at("town")=="Content/UI/alternate.png","explicit replacement accepts preset icon set");
+    Check(session.Undo(error)&&session.FindWidget(w.id)->navigation->icons.count("tower"),"one Undo restores custom icon assignment");
+    Check(session.Save(error)&&ReadScreenDocument(file.generic_u8string(),d.envelope.projectId,reopened,error)&&
+        reopened.widgets[0].navigation->icons.at("tower")=="Content/UI/test.png","custom icon survives save/reopen");
+    auto overflow=*session.FindWidget(w.id);auto tooMany=alternate;
+    for(int i=0;i<64;++i)tooMany.navigation->icons["extra"+std::to_string(i)]="Content/UI/test.png";
+    Check(!ApplyNavigationAppearanceDraft(overflow,tooMany,error)&&overflow.navigation->icons.count("tower"),"failed merge preserves caller assignment");
+    const auto package=temp/"Package";
     Check(PublishScreenWidgetPrefab(temp.generic_u8string(),session,w.id,package.generic_u8string(),error),"portable nav publication: "+error);
     const auto target=temp/"Target";fs::create_directories(target/"Content/UI");ScreenDocument targetDoc;targetDoc.usage=ScreenUsage::Hud;
     targetDoc.envelope=CreateDocumentEnvelope(GenerateStableId(),RuntimeScreenDocumentType,"Content/UI/Hud.renegade-screen","nav-adopt");
     Check(WriteScreenDocument((target/targetDoc.envelope.pathHint).generic_u8string(),targetDoc,error),"target document");
     ScreenAuthoringSession receiving;Check(receiving.Open((target/targetDoc.envelope.pathHint).generic_u8string(),targetDoc.envelope.projectId,error),"target session");
     std::vector<StableId> created;Check(InsertScreenWidgetPrefab(target.generic_u8string(),receiving,package.generic_u8string(),50,50,created,error),"portable nav insertion: "+error);
-    fs::remove(image);Check(!created.empty()&&receiving.FindWidget(created[0])->navigation->icons.count("town"),"destination owns separate navigation art");
+    fs::remove(image);Check(!created.empty()&&receiving.FindWidget(created[0])->navigation->icons.count("town")&&receiving.FindWidget(created[0])->navigation->icons.count("tower"),"destination owns separate navigation art");
     if(!created.empty()){std::string path;Check(ResolveScreenResourcePath(target.generic_u8string(),receiving.FindWidget(created[0])->navigation->pointerImage,path,error)&&fs::exists(fs::u8path(path)),"pointer survives source removal");}
     WorldNavigationService service;StableId first,second;Check(service.Create(w,first,error)&&service.Create(w,second,error),"C++ independent creation");
     if(!service.View(first)||!service.View(second)){std::cerr<<error;return 1;}
@@ -127,6 +146,15 @@ return {
   assert(n.get(a).image_tint=="aabbccdd")
   assert(n.configure(a,{background="",backing_colour="10203080"}))
   assert(n.get(a).background_colour=="10203080")
+  assert(n.apply_appearance(a,{icons={tower="Content/UI/lua.png"}}))
+  assert(n.apply_appearance(a,{icons={quest="Content/UI/lua.png"}}))
+  assert(n.get(a).icons.tower=="Content/UI/lua.png" and n.get(a).icons.quest=="Content/UI/lua.png")
+  assert(n.get(a).heading==1 and n.get(a).categories=="quest,town")
+  assert(not n.apply_appearance(a,{heading=120}))
+  assert(not n.apply_appearance(a,{icons={tower="../../unsafe.png"}}))
+  assert(not n.apply_appearance(a,{},1))
+  assert(n.apply_appearance(a,{icons={quest="Content/UI/lua.png"}},false))
+  assert(n.get(a).icons.tower==nil and n.get(a).icons.quest~=nil)
   local settings=n.get(a)
   assert(settings.text_colour=="ffaa00ff" and settings.background_colour=="10203080" and settings.font_size==22)
   settings.span=150

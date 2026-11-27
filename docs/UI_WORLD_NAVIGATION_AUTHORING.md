@@ -24,7 +24,7 @@ Save applies settings and appearance together as one Undo operation. Cancel rest
 
 Neutral selects the generic appearance. Fantasy example adopts the supplied artwork. Import appearance accepts a portable Renegade UI package manifest containing a navigation component. Raw artwork-pack registries are reference inputs, not that native package format.
 
-Appearance selection changes art/font/style, retaining placement, heading source/span, target identities, filters and bindings. Individual images and category icons can be replaced independently. Clear artwork returns to procedural ticks/markers while retaining font/colour settings. Labels baked into a direction-strip PNG change by replacing that PNG; generated directions and marker labels use the editable font.
+Appearance selection changes art/font/style, retaining placement, heading source/span, target identities, filters and bindings. Keep assigned icons is enabled by default: existing category assignments win, including custom images for standard categories, while new preset categories are added. Turn it off before choosing an appearance to explicitly replace the icon set. Selecting a target fills Category to restyle; Choose selected target icon imports directly for that category. The editor reports when a category has no assigned icon and will use the fallback dot. Individual images and category icons can be replaced independently. Clear artwork returns to procedural ticks/markers while retaining font/colour settings. Labels baked into a direction-strip PNG change by replacing that PNG; generated directions and marker labels use the editable font.
 
 Select the layer or its composition root and use Save selected as UI prefab to publish a reusable package. Receiving projects own their art/fonts. Cross-project entity-following references are explicitly unassigned until the receiving project chooses appropriate entities. Preview samples and transient script-created bars/targets are not saved into prefabs.
 
@@ -54,6 +54,8 @@ The governed namespace is renegade.navigation, contract_version 1. An active HUD
     -- nav.remove_target("quest.river")
     -- nav.remove(bar)
 
+apply_appearance(id, appearance_settings, keep_icons=true) changes appearance through the same shared merge policy as Studio, preserving heading, targets and geometry. Its table accepts only appearance fields (images, icons, font, colours and style). Existing category assignments win by default; pass false to explicitly replace the icon set. configure(...,{icons=...}) remains an explicit full-map replacement.
+
 create(settings) makes an independent live bar. configure(id, settings) atomically patches a view; get(id) returns its settings; views() lists view IDs/names; remove(id) removes a created view or hides an authored one. Re-enable an authored view with configure(id,{visible=true}). Visibility also respects ordinary live Screen bindings.
 
 put_target(table) registers or replaces a Level-wide target; remove_target(id) unregisters it. Target fields are id, label, category, position={x,y,z}, optional opaque entity=EntityRef, priority and visible. Authored per-view targets use the same fields through configure(...,{targets={...}}). Category filters let independent bars show different subsets.
@@ -64,7 +66,7 @@ The included Content/UI/Examples/navigation_example.lua demonstrates a world tar
 
 ## C++
 
-EngineBridge WorldNavigationService exposes MakeWorldNavigationWidget, Create, Configure, Remove, View, ObserveDocument, RetainAuthoredViews, PutTarget, RemoveTarget, SetObservers, ResolveEntities, Snapshot and Reset. RuntimeScriptRuntime::Navigation() returns the same service used by the Lua closures.
+EngineBridge WorldNavigationService exposes MakeWorldNavigationWidget, Create, Configure, ApplyAppearance, Remove, View, ObserveDocument, RetainAuthoredViews, PutTarget, RemoveTarget, SetObservers, ResolveEntities, Snapshot and Reset. RuntimeScriptRuntime::Navigation() returns the same service used by the Lua closures.
 
     auto widget = renegade::bridge::MakeWorldNavigationWidget("Custom compass");
     widget.navigation->fieldOfView=150;
@@ -72,7 +74,7 @@ EngineBridge WorldNavigationService exposes MakeWorldNavigationWidget, Create, C
     if (!service.Create(widget,id,error)) { /* report error */ }
     service.PutTarget({"quest.river","Bridge","quest","",{25,0,70},100,true},error);
 
-Authoring uses ScreenAuthoringSession::ConfigureNavigation, ConfigureNavigationComponent and ApplyNavigationAppearance with ordinary validation/history. Runtime mutations are transient. Hosts register theme-resolved navigation prototypes, publish coherent camera/player observers, resolve registered entity IDs through native indexed lookups, and pass Snapshot to the shared ScreenRenderer. Native Runtime already provides this wiring.
+Authoring uses ScreenAuthoringSession::ConfigureNavigation, ConfigureNavigationComponent and ApplyNavigationAppearance with ordinary validation/history. ApplyNavigationAppearance and WorldNavigationService::ApplyAppearance accept keepAssignedIcons=true by default; ApplyNavigationAppearanceDraft is the common validated merge operation. Runtime mutations are transient. Hosts register theme-resolved navigation prototypes, publish coherent camera/player observers, resolve registered entity IDs through native indexed lookups, and pass Snapshot to the shared ScreenRenderer. Native Runtime already provides this wiring.
 
 Limits: 32 registered views and 512 Level-wide targets; each authored view supports 64 local targets and 64 icon categories. Structural registration and resource loading are separated from live bearing/position updates. No whole-scene per-frame target discovery is used.
 
@@ -81,3 +83,7 @@ Limits: 32 registered views and 512 Level-wide targets; each authored view suppo
 Windows x64 DX12 Release. New CPU/service/Lua checks cover wrap/projection, sources, filtering/range, priority, missing/deleted entity following, history, save/reopen, portable artwork, independent instances, invalid input, scene reset and authored-group preservation. Existing Screen and governed scripting regressions are rerun. Native receipts and exact source are recorded in HANDOFF.md and docs/evidence/world-navigation-2026-11-27. The plain HUD fixture deliberately has no ordinary binding sources; navigation works independently.
 
 Debug, Vulkan, exported-game packaging, small-window/DPI usability, all-four-set content completion and independent release acceptance are not implied.
+
+### Custom icon follow-up verification
+
+The icon-preserving appearance policy and selected-target import affordance are implemented. Shared C++/Lua, authoring/history, save/reopen and portable custom-category regressions pass. Windows x64 DX12 Release Bridge, RuntimeBootstrap, Studio and Runtime builds pass. Native inspection of the new controls and standalone replay of this follow-up are pending: the owner intentionally closed Studio and asked to leave it closed. Earlier native navigation evidence is not a visual receipt for these new controls.
