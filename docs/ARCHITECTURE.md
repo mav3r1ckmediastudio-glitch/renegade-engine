@@ -1,5 +1,10 @@
 # Architecture
 
+## Per-element manual Screen geometry (27 November 2026)
+
+ScreenLayoutMode::Manual gives a child explicit parent-relative geometry while preserving its identity, parent and reserved automatic-layout slot. EngineBridge's shared resolver applies it to rendering and pointer geometry; sibling allocations retain the same count/order. Creator-directed UpdateWidgetManually atomically changes the mode and rectangle only on a geometry edit. Ordinary managed-content edits remain automatic. The basic Studio Inspector and resize gestures opt into this service, and coalesced history restores both geometry and layout authority on Undo. New Title templates use a normal free Continue button. See SCREEN_MANUAL_GEOMETRY.md for verification and limits. Interactive Preview return is an explicit presentation lifecycle change: invalidate the editor viewport cache on reattachment, restore clip/layout, finish input gestures and wait for Preview input release before resuming authoring.
+
+
 ## Animated liquid Screen prefabs (27 November 2026)
 
 Optional schema-3 ScreenLiquid belongs to EngineBridge's existing Screen document. The mask is a typed texture dependency and per-instance value-change cues are typed audio dependencies. Authoring changes colour, binding and effect settings in one history operation. ScreenPrefabService bakes a selected hierarchy and publishes the existing validated portable Screen package; compact resource paths keep repeated adoption bounded. Cross-project imports own their resources and expose unresolved gameplay slots rather than guessing gameplay identity.

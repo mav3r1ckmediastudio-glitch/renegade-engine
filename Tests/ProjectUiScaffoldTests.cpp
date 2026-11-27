@@ -124,6 +124,14 @@ int main(int argc,char** argv)
         const auto audit=references.AuditScreenOutcomes(metadata.rootPath,metadata.projectId,flow,node.id);
         check(audit.succeeded,node.name+": "+audit.message);
     }
+    bridge::ScreenDocument title;
+    check(bridge::MakeProjectUiScaffoldTemplate(metadata.projectId,"Title",title,error),"Build editable Title");
+    const auto next=std::find_if(title.widgets.begin(),title.widgets.end(),[](const auto& w){return w.kind==bridge::ScreenWidgetKind::Button;});
+    bridge::ScreenRect titleButton;
+    check(next!=title.widgets.end()&&next->parentId.empty()&&
+        bridge::ResolveScreenWidgetRect(title,next->id,titleButton,error)&&
+        titleButton.width==360&&titleButton.height==64&&titleButton.x==460&&titleButton.y==592,
+        "Starter Continue is a normal-size freely editable button");
     bridge::ScreenDocument loading;
     const std::string loadingPath="Content/Screens/Loading.renegade-screen";
     const bool loadingReady=bridge::ReadScreenDocument((root/loadingPath).generic_u8string(),metadata.projectId,loading,error);

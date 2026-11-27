@@ -299,10 +299,12 @@ namespace renegade::studio
             {
                 draftLayout_ = draftLayout_ == bridge::ScreenLayoutMode::Absolute
                     ? bridge::ScreenLayoutMode::Anchored
-                    : bridge::ScreenLayoutMode::Absolute;
+                    : draftLayout_ == bridge::ScreenLayoutMode::Anchored
+                        ? bridge::ScreenLayoutMode::Manual : bridge::ScreenLayoutMode::Absolute;
                 layoutButton_.SetText(
                     draftLayout_ == bridge::ScreenLayoutMode::Absolute
-                        ? "LAYOUT: ABSOLUTE" : "LAYOUT: ANCHORED");
+                        ? "LAYOUT: ABSOLUTE" : draftLayout_ == bridge::ScreenLayoutMode::Manual
+                        ? "LAYOUT: MANUAL" : "LAYOUT: ANCHORED");
             });
             ConfigureInput(anchorMinXInput_, "Screen Anchor Min X", "ANCHOR MIN X");
             ConfigureInput(anchorMinYInput_, "Screen Anchor Min Y", "ANCHOR MIN Y");
@@ -972,7 +974,8 @@ namespace renegade::studio
             parentButton_.SetText("PARENT: " + ParentLabel(draftParent_));
             layoutButton_.SetText(
                 draftLayout_ == bridge::ScreenLayoutMode::Absolute
-                    ? "LAYOUT: ABSOLUTE" : "LAYOUT: ANCHORED");
+                    ? "LAYOUT: ABSOLUTE" : draftLayout_ == bridge::ScreenLayoutMode::Manual
+                        ? "LAYOUT: MANUAL" : "LAYOUT: ANCHORED");
             anchorMinXInput_.SetValue(Number(draftAnchors_.minimumX));
             anchorMinYInput_.SetValue(Number(draftAnchors_.minimumY));
             anchorMaxXInput_.SetValue(Number(draftAnchors_.maximumX));

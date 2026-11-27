@@ -480,6 +480,11 @@ namespace renegade::bridge
             ScreenWidgetAuthoringEdit edit,
             std::string& error);
 
+        // Creator-requested geometry may override one automatic cell without
+        // changing its parent, siblings, action identity or inherited state.
+        [[nodiscard]] bool UpdateWidgetManually(const StableId& widgetId,
+            ScreenWidgetAuthoringEdit edit, std::string& error);
+
         bool UpdateDialogueRole(const StableId& id, std::string role, std::string& error)
         {
             auto candidate = Document();
@@ -610,6 +615,8 @@ namespace renegade::bridge
             found->actionId = std::move(edit.actionId);
             found->parentId = std::move(edit.parentId);
             found->layoutMode = edit.layoutMode;
+            if(found->layoutMode==ScreenLayoutMode::Manual&&candidate.schemaVersion<3)
+            {candidate.migratedFromVersion=candidate.schemaVersion;candidate.schemaVersion=3;}
             found->anchors = edit.anchors;
             found->themeOverrides|=ScreenStyleChangedGroups(found->style,edit.style);
             found->style = std::move(edit.style);
@@ -624,7 +631,7 @@ namespace renegade::bridge
             }
             const float relativeX = resolvedBefore.x - parentRect.x;
             const float relativeY = resolvedBefore.y - parentRect.y;
-            if (found->layoutMode == ScreenLayoutMode::Absolute)
+            if (found->layoutMode != ScreenLayoutMode::Anchored)
             {
                 found->rect = {
                     relativeX,
@@ -1031,6 +1038,8 @@ namespace renegade::bridge
         [[nodiscard]] const StableId& ProjectId() const noexcept;
 
     private:
+        bool UpdateWidgetGeometry(const StableId& widgetId,
+            ScreenWidgetAuthoringEdit edit, bool manualOverride, std::string& error);
         friend class ScreenFlowAtomicSaveService;
         [[nodiscard]] bool MoveWidgetLayer(
             const StableId& widgetId, int direction, bool toBoundary,

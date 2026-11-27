@@ -114,6 +114,9 @@ namespace renegade::bridge
     {
         Absolute,
         Anchored,
+        // Explicit local geometry inside an automatic parent. The original
+        // layout slot stays reserved so sibling allocations do not jump.
+        Manual,
     };
 
     struct ScreenTextStyle

@@ -41,6 +41,7 @@ namespace renegade::studio
             return static_cast<screen::ScreenInteractionState>(basicState_);
         }
         void SetLayout(float width, float height);
+        void FinishEditingGesture();
         void Bind(
             bridge::ScreenAuthoringSession* session,
             screen::ScreenRenderer* renderer);

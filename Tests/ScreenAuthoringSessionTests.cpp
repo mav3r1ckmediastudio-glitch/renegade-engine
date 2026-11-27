@@ -1398,6 +1398,61 @@ int main()
     if(!layouts.UpdateWidget(cellIds[0],textEdit,error)||
        layouts.FindWidget(cellIds[0])->rect.x!=20||layouts.FindWidget(cellIds[0])->rect.width!=100)
         return Fail("managed content editing drifted fallback geometry: "+error);
+    // A deliberate basic-inspector/handle edit releases only the selected cell.
+    // Its reserved slot, parent identity and siblings remain unchanged.
+    {
+        const auto manualPath=layoutPath.parent_path()/"ManualLayout.renegade-screen";
+        auto manualDoc=layouts.Document();
+        manualDoc.envelope.pathHint="Content/UI/ManualLayout.renegade-screen";
+        if(!WriteScreenDocument(manualPath.generic_u8string(),manualDoc,error))return Fail(error);
+        ScreenAuthoringSession manual;
+        if(!manual.Open(manualPath.generic_u8string(),projectId,error))return Fail(error);
+        std::vector<ScreenRect> before;
+        for(const auto& id:cellIds){ScreenRect rect;if(!ResolveScreenWidgetRect(manual.Document(),id,rect,error))return Fail(error);before.push_back(rect);}
+        const auto* automatic=manual.FindWidget(cellIds[0]);
+        ScreenWidgetAuthoringEdit contentOnly{automatic->name,"Basic text edit",before[0],automatic->visible,automatic->enabled};
+        if(!manual.UpdateWidgetManually(cellIds[0],contentOnly,error)||
+            manual.FindWidget(cellIds[0])->layoutMode!=ScreenLayoutMode::Absolute)
+            return Fail("content-only basic edit disabled automatic layout");
+        const auto* cell=manual.FindWidget(cellIds[0]);
+        ScreenWidgetAuthoringEdit resize{cell->name,cell->text,{150,90,180,56},cell->visible,cell->enabled};
+        const auto undo=manual.UndoCount();
+        if(manual.UpdateWidget(cellIds[0],resize,error)||manual.UndoCount()!=undo)
+            return Fail("non-explicit cell geometry override accepted");
+        manual.BeginCoalescedEdit();
+        if(!manual.UpdateWidgetManually(cellIds[0],resize,error))return Fail(error);
+        resize.resolvedRect={160,100,200,64};
+        if(!manual.UpdateWidgetManually(cellIds[0],resize,error))return Fail(error);
+        manual.EndCoalescedEdit();
+        if(manual.UndoCount()!=undo+1||manual.FindWidget(cellIds[0])->layoutMode!=ScreenLayoutMode::Manual||
+            manual.FindWidget(cellIds[0])->parentId!=container.id)
+            return Fail("manual resize did not preserve parent or coalesce layout override");
+        ScreenRect actual;
+        if(!ResolveScreenWidgetRect(manual.Document(),cellIds[0],actual,error)||
+            !nearlyEqual(actual.x,160)||!nearlyEqual(actual.y,100)||!nearlyEqual(actual.width,200)||!nearlyEqual(actual.height,64))
+            return Fail("automatic layout overrode requested geometry");
+        for(size_t n=1;n<cellIds.size();++n)
+        {
+            if(!ResolveScreenWidgetRect(manual.Document(),cellIds[n],actual,error)||
+                !nearlyEqual(actual.x,before[n].x)||!nearlyEqual(actual.y,before[n].y)||
+                !nearlyEqual(actual.width,before[n].width)||!nearlyEqual(actual.height,before[n].height))
+                return Fail("manual resize changed another layout cell");
+        }
+        if(!manual.Undo(error)||manual.FindWidget(cellIds[0])->layoutMode!=ScreenLayoutMode::Absolute||
+            !ResolveScreenWidgetRect(manual.Document(),cellIds[0],actual,error)||!nearlyEqual(actual.width,before[0].width)||
+            !manual.Redo(error)||!manual.Save(error)||!manual.Reload(error)||
+            manual.FindWidget(cellIds[0])->layoutMode!=ScreenLayoutMode::Manual||
+            !ResolveScreenWidgetRect(manual.Document(),cellIds[0],actual,error)||!nearlyEqual(actual.width,200))
+            return Fail("manual layout resize history/save/reload: "+error);
+        if(!manual.TranslateWidgets({cellIds[0]},5,6,error)||
+            !ResolveScreenWidgetRect(manual.Document(),cellIds[0],actual,error)||
+            !nearlyEqual(actual.x,165)||!nearlyEqual(actual.y,106))return Fail("manual cell move: "+error);
+        auto incompatible=manual.Document();incompatible.schemaVersion=2;
+        if(ValidateScreenDocument(incompatible,projectId,error))return Fail("legacy schema accepted manual layout");
+        ScreenAuthoringSession::GeometryCapture capture;ScreenRect bounds;
+        if(!manual.CaptureGeometry({cellIds[0]},capture,bounds,error)||
+            !manual.TransformGeometry(capture,bounds,{170,110,220,70},error))return Fail("manual cell batch geometry: "+error);
+    }
     if(!layouts.MoveWidgetsLayer({cellIds[0]},1,true,error)||
        !ResolveScreenWidgetRect(layouts.Document(),cellIds[0],cellRect,error)||
        !nearlyEqual(cellRect.x,405)||!nearlyEqual(cellRect.y,255))

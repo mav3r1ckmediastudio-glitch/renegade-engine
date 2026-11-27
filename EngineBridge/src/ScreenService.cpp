@@ -214,6 +214,7 @@ namespace
         {
         case ScreenLayoutMode::Absolute: return "absolute";
         case ScreenLayoutMode::Anchored: return "anchored";
+        case ScreenLayoutMode::Manual: return "manual";
         default: return "unknown";
         }
     }
@@ -225,6 +226,7 @@ namespace
         using renegade::bridge::ScreenLayoutMode;
         if (value == "absolute") result = ScreenLayoutMode::Absolute;
         else if (value == "anchored") result = ScreenLayoutMode::Anchored;
+        else if (value == "manual") result = ScreenLayoutMode::Manual;
         else return false;
         return true;
     }
@@ -701,7 +703,7 @@ namespace renegade::bridge
             auto layout=parentWidget!=widgets.end()?parentWidget->second->container:ScreenContainerLayout{};
             if(layout.compactBelowWidth>0&&layoutWidth<layout.compactBelowWidth)
             {layout.mode=layout.compactMode;layout.columns=layout.compactColumns;}
-            if(parentWidget!=widgets.end()&&layout.mode!=ScreenChildLayout::Free)
+            if(parentWidget!=widgets.end()&&layout.mode!=ScreenChildLayout::Free&&widget.layoutMode!=ScreenLayoutMode::Manual)
             {
                 if(!ValidateScreenContainerLayout(layout,error)){resolving.erase(id);return false;}
                 const std::size_t count=childCounts.at(widget.parentId);
@@ -722,7 +724,7 @@ namespace renegade::bridge
                 if(index/columns==rows-1)output.height=parent.y+parent.height-layout.padding-output.y;
 
             }
-            else if (widget.layoutMode == ScreenLayoutMode::Absolute)
+            else if (widget.layoutMode != ScreenLayoutMode::Anchored)
             {
                 output = {
                     parent.x + widget.rect.x,
@@ -989,7 +991,11 @@ namespace renegade::bridge
                     "' has invalid anchors.";
                 return false;
             }
-            if(widget.layoutMode==ScreenLayoutMode::Absolute&&
+            if(widget.layoutMode!=ScreenLayoutMode::Absolute&&widget.layoutMode!=ScreenLayoutMode::Anchored&&widget.layoutMode!=ScreenLayoutMode::Manual)
+            {error="Invalid Screen widget layout mode.";return false;}
+            if(widget.layoutMode==ScreenLayoutMode::Manual&&document.schemaVersion<3)
+            {error="Manual layout requires Screen v3.";return false;}
+            if(widget.layoutMode!=ScreenLayoutMode::Anchored&&
                 (!std::isfinite(widget.rect.x)||!std::isfinite(widget.rect.y)||
                  !std::isfinite(widget.rect.width)||!std::isfinite(widget.rect.height)||
                  widget.rect.width<=0||widget.rect.height<=0))

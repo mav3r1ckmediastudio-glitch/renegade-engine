@@ -207,6 +207,19 @@ namespace renegade::studio
                 return;
             }
             LayoutWorkspace();
+            if(resumeAfterRelease_)
+            {
+                // A preview close click/key belongs to Preview for its whole
+                // gesture. Do not let a held button begin an editor transform.
+                workspace_.SetEnabled(false);
+                const bool held=wi::input::Down(wi::input::MOUSE_BUTTON_LEFT)||
+                    wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT)||
+                    wi::input::Down(wi::input::MOUSE_BUTTON_MIDDLE)||
+                    wi::input::Down(wi::input::KEYBOARD_BUTTON_ESCAPE);
+                wi::RenderPath2D::Update(dt);
+                if(!held){resumeAfterRelease_=false;workspace_.SetEnabled(open_);}
+                return;
+            }
             SyncAdvancedInspectorMode();
             advancedInspector_.SetVisible(open_ && (!workspace_.IsFocusCanvas()||advancedInspector_.HasGameplayAttributeEditor()));
             advancedInspector_.SetEnabled(open_ && (!workspace_.IsFocusCanvas()||advancedInspector_.HasGameplayAttributeEditor()));
@@ -575,7 +588,7 @@ namespace renegade::studio
         std::string previewNode_, authorNode_, previewAction_, previewWidget_;
         std::optional<bridge::ScreenDocument> nextPreview_;
         std::optional<bridge::ScreenTransitionPair> previewOverride_;
-        bool interactive_=false, startRequested_=false, closeRequested_=false;
+        bool interactive_=false, startRequested_=false, closeRequested_=false, resumeAfterRelease_=false;
 
         void EndInteractivePreview()
         {
@@ -590,15 +603,24 @@ namespace renegade::studio
             interactive_=false;
             renderer_.AttachPresentation(*this);
             renderer_.SetPresentationVisible(true);
+            workspace_.FinishEditingGesture();
             workspace_.SetVisible(open_);
-            workspace_.SetEnabled(open_);
+            workspace_.SetEnabled(false);
+            resumeAfterRelease_=true;
+            // Reattachment is a layout lifecycle change even when the native
+            // window dimensions match the cached pre-preview dimensions.
+            lastWidth_=lastHeight_=-1;
             LayoutWorkspace();
+            renderer_.SetViewport(workspace_.PreviewViewport());
+            renderer_.SetClipViewport(workspace_.PreviewBounds());
+            renderer_.ApplyLayout(*this);
         }
 
         void LoadInteractiveScreen(const bridge::ScreenDocument& authored)
         {
             bridge::ScreenDocument screen;
             std::string error;
+            if(!interactive_)workspace_.FinishEditingGesture();
             if(interactive_)GetGUI().RemoveWidget(&closePreview_);
             livePresenter_.Reset(*this);
             GetGUI().AddWidget(&closePreview_);

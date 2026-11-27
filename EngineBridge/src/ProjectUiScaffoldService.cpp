@@ -58,7 +58,7 @@ namespace
             group.anchors={.06f,choices.size()<=2?.72f:.36f,.94f,.94f,0,0,0,0};
             group.container.mode=ScreenChildLayout::Grid;group.container.columns=2;
             group.container.padding=4;group.container.gap=12;
-            const bool freePause = name == "Pause";
+            const bool freePause = name == "Pause" || name == "Title";
             const auto parent=group.id;
             if (!freePause) d.widgets.push_back(group);
             size_t index = 0;
@@ -73,7 +73,7 @@ namespace
                 {
                     button.parentId.clear();
                     button.rect = {(d.designWidth - 360.0f) * 0.5f,
-                        256.0f + static_cast<float>(index++) * 80.0f, 360.0f, 64.0f};
+                        (name == "Title" ? 592.0f : 256.0f) + static_cast<float>(index++) * 80.0f, 360.0f, 64.0f};
                 }
                 button.style=MakeScreenWidgetStyleTemplate(button.kind,64);
                 button.style.text.fontSize=20;button.style.text.wrap=true;

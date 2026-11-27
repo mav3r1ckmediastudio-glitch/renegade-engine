@@ -1285,10 +1285,8 @@ namespace renegade::studio
             widget->SetVisible(selectedReady && !focusCanvas_ && !rightCollapsed_ &&
                 !inspectorSuppressed_);
         }
-        const auto* layoutParent=selectedReady?session_->FindWidget(selected->parentId):nullptr;
-        const bool managedGeometry=layoutParent&&bridge::EffectiveScreenChildLayout(layoutParent->container,session_->Document().designWidth)!=bridge::ScreenChildLayout::Free;
         for(auto* input:{&positionXInput_,&positionYInput_,&sizeWidthInput_,&sizeHeightInput_})
-            input->SetEnabled(selectedReady&&!inspectorSuppressed_&&!managedGeometry);
+            input->SetEnabled(selectedReady&&!inspectorSuppressed_);
         const bool progressReady = selectedReady && selected->kind == bridge::ScreenWidgetKind::Progress;
         textInput_.SetVisible(selectedReady && !progressReady && (selected->kind == bridge::ScreenWidgetKind::Text || bridge::IsScreenInteractive(selected->kind)) && !focusCanvas_ && !rightCollapsed_ && !inspectorSuppressed_);
         textInput_.SetEnabled(selectedReady &&
@@ -1568,7 +1566,7 @@ namespace renegade::studio
             {SetStatus("BATCH EDIT REJECTED // "+error);RefreshInspector();return;}
             RefreshAfterMutation("SELECTION GEOMETRY UPDATED");return;
         }
-        if (!session_->UpdateWidget(selectedWidgetId_, std::move(edit), error))
+        if (!session_->UpdateWidgetManually(selectedWidgetId_, std::move(edit), error))
         {
             SetStatus("EDIT REJECTED // " + error);
             RefreshInspector();
@@ -2311,11 +2309,9 @@ namespace renegade::studio
     RenegadeScreenEditorWorkspace::DirectManipulationMode RenegadeScreenEditorWorkspace::HitResizeHandle(const XMFLOAT4& pointer) const noexcept
     {
         if (!renderer_ || selectedWidgetId_.empty()) return DirectManipulationMode::None;
-        const auto* w=session_?session_->FindWidget(selectedWidgetId_):nullptr;
-        const auto* parent=w?session_->FindWidget(w->parentId):nullptr;
         if(selectedWidgetIds_.size()>1){bridge::ScreenAuthoringSession::GeometryCapture capture;bridge::ScreenRect bounds;std::string error;
             if(!session_->CaptureGeometry(SelectedIds(),capture,bounds,error))return DirectManipulationMode::None;
-        }else if(parent&&bridge::EffectiveScreenChildLayout(parent->container,session_->Document().designWidth)!=bridge::ScreenChildLayout::Free)return DirectManipulationMode::None;
+        }
         bridge::ScreenRect box; if(!SelectionBounds(box,true))return DirectManipulationMode::None; const auto* r=&box;
         const float h=ResizeHandleSize*0.5f; const auto hit=[&](float x,float y){return pointer.x>=x-h&&pointer.x<=x+h&&pointer.y>=y-h&&pointer.y<=y+h;};
         if(hit(r->x,r->y))return DirectManipulationMode::ResizeTopLeft; if(hit(r->x+r->width,r->y))return DirectManipulationMode::ResizeTopRight; if(hit(r->x,r->y+r->height))return DirectManipulationMode::ResizeBottomLeft; if(hit(r->x+r->width,r->y+r->height))return DirectManipulationMode::ResizeBottomRight; return DirectManipulationMode::None;
@@ -2324,10 +2320,6 @@ namespace renegade::studio
     {
         if(!session_||!renderer_||selectedWidgetId_.empty()||mode==DirectManipulationMode::None)return; const auto* logical=renderer_->LogicalRect(selectedWidgetId_); bridge::ScreenRect resolved; std::string error;
         if(!logical||!bridge::ResolveScreenWidgetRect(session_->Document(),selectedWidgetId_,resolved,error)||resolved.width<=0||resolved.height<=0||logical->width<=0||logical->height<=0){SetStatus("DIRECT EDIT REJECTED // COULD NOT RESOLVE ELEMENT GEOMETRY");return;}
-        const auto* element=session_->FindWidget(selectedWidgetId_);
-        const auto* owner=element?session_->FindWidget(element->parentId):nullptr;
-        if(selectedWidgetIds_.size()<=1&&owner&&bridge::EffectiveScreenChildLayout(owner->container,session_->Document().designWidth)!=bridge::ScreenChildLayout::Free)
-        {SetStatus("LAYOUT-MANAGED ELEMENT // RESIZE PARENT OR REORDER LAYERS");return;}
         if(selectedWidgetIds_.size()>1){
             bridge::ScreenRect box;
             if(!SelectionBounds(box,true)||!session_->CaptureGeometry(SelectedIds(),geometryCapture_,resolved,error))
@@ -2421,7 +2413,7 @@ namespace renegade::studio
         else
         {
             bridge::ScreenWidgetAuthoringEdit e{w->name,w->text,n,w->visible,w->enabled};
-            if(!session_->UpdateWidget(selectedWidgetId_,std::move(e),error))
+            if(!session_->UpdateWidgetManually(selectedWidgetId_,std::move(e),error))
             {SetStatus("DIRECT EDIT REJECTED // "+error);return;}
         }
         directManipulationChanged_=true;
@@ -2429,6 +2421,19 @@ namespace renegade::studio
         RefreshInspector();if(documentChanged_)documentChanged_();
     }
     void RenegadeScreenEditorWorkspace::EndDirectManipulation(){alignmentGuideX_=false;alignmentGuideY_=false;if(session_)session_->EndCoalescedEdit();if(directManipulationMode_!=DirectManipulationMode::None)SetStatus(directManipulationChanged_?"DIRECT GEOMETRY UPDATED // UNSAVED SCREEN CHANGE":"ELEMENT SELECTED // DRAG TO MOVE OR RESIZE");directManipulationMode_=DirectManipulationMode::None;directManipulationChanged_=false;}
+
+    void RenegadeScreenEditorWorkspace::FinishEditingGesture()
+    {
+        EndDirectManipulation();
+        cameraPanning_=false;
+        panelDrag_=PanelDrag::None;
+        layerDragId_.clear();
+        paletteButtonPending_=false;
+        wi::gui::TextInputField* fields[]={&toolboxSearchInput_,&gridSpacingInput_,
+            &nameInput_,&textInput_,&positionXInput_,&positionYInput_,
+            &sizeWidthInput_,&sizeHeightInput_,&fillInput_};
+        for(auto* field:fields)field->Deactivate();
+    }
 
     void RenegadeScreenEditorWorkspace::Update(const wi::Canvas& canvas,const float dt)
     {
@@ -2657,7 +2662,9 @@ namespace renegade::studio
                     HeaderHeight + 229.0f, 9, Muted, cmd);
                 Label(widget->layoutMode == bridge::ScreenLayoutMode::Anchored
                     ? "ANCHORED // ADVANCED LAYOUT"
-                    : "ABSOLUTE // DRAG OR EDIT NUMERIC VALUES",
+                    : widget->layoutMode == bridge::ScreenLayoutMode::Manual
+                        ? "MANUAL // DRAG OR EDIT NUMERIC VALUES"
+                        : "ABSOLUTE // DRAG OR EDIT NUMERIC VALUES",
                     inspectorX, HeaderHeight + 285.0f, 9, Muted, cmd);
                 if (widget->kind == bridge::ScreenWidgetKind::Progress)
                     Label("FILL DIRECTION", inspectorX,
@@ -2771,10 +2778,7 @@ namespace renegade::studio
                     Cyan, 2.0f, cmd);
       const float half = ResizeHandleSize * 0.5f;
       const float corners[][2] = {{selected->x, selected->y}, {selected->x + selected->width, selected->y}, {selected->x, selected->y + selected->height}, {selected->x + selected->width, selected->y + selected->height}};
-      const auto* element=session_?session_->FindWidget(selectedId):nullptr;
-      const auto* owner=element?session_->FindWidget(element->parentId):nullptr;
-      const bool managed=owner&&bridge::EffectiveScreenChildLayout(owner->container,session_->Document().designWidth)!=bridge::ScreenChildLayout::Free;
-      if(selectedWidgetIds_.size()==1&&!managed) for (const auto& corner : corners) { Rect(corner[0]-half, corner[1]-half, ResizeHandleSize, ResizeHandleSize, Cyan, cmd); Outline(corner[0]-half, corner[1]-half, ResizeHandleSize, ResizeHandleSize, Text, 1.0f, cmd); }
+      if(selectedWidgetIds_.size()==1) for (const auto& corner : corners) { Rect(corner[0]-half, corner[1]-half, ResizeHandleSize, ResizeHandleSize, Cyan, cmd); Outline(corner[0]-half, corner[1]-half, ResizeHandleSize, ResizeHandleSize, Text, 1.0f, cmd); }
             }
         }
 
