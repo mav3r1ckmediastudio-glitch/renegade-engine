@@ -1380,6 +1380,7 @@ namespace renegade::bridge
                     {
                         section.Set("local_only",widget.localOnly);
                         section.Set("image_fit",static_cast<int>(widget.imageFit));
+                        if(widget.backgroundPanel)section.Set("background_panel",true);
                         if(widget.transitionOverride)section.Set("transition_override",true);
                     }
                     if(IsScreenValueControl(widget.kind))detail::WriteScreenControl(section,widget);
@@ -1722,6 +1723,7 @@ namespace renegade::bridge
                 widget.text = section.GetText("text");
                 widget.resourcePath = section.GetText("resource");
                 widget.actionId = section.GetText("action");
+                if(sourceSchema>=3&&section.Has("background_panel"))widget.backgroundPanel=section.GetBool("background_panel");
                 if(sourceSchema>=3&&section.Has("image_fit")) {
                     const int fit=section.GetInt("image_fit");
                     if(fit<0||fit>2){error="Screen image fitting is invalid.";return false;}

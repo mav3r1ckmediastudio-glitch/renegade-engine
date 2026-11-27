@@ -84,7 +84,7 @@ namespace renegade::studio
             {"BASIC", "Heading", ScreenToolboxAction::Heading},
             {"BASIC", "Image", ScreenToolboxAction::Image},
             {"BASIC", "Progress Bar", ScreenToolboxAction::Progress},
-            {"BASIC", "Background", ScreenToolboxAction::Background},
+            {"BASIC", "Add background panel", ScreenToolboxAction::Background},
             {"BASIC", "Icon", ScreenToolboxAction::Icon}, {"BASIC", "Divider", ScreenToolboxAction::Divider}, {"BASIC", "Spacer", ScreenToolboxAction::Spacer},
             {"LAYOUT", "Group", ScreenToolboxAction::Group}, {"LAYOUT", "Horizontal Stack", ScreenToolboxAction::HorizontalStack},
             {"LAYOUT", "Vertical Stack", ScreenToolboxAction::VerticalStack},

@@ -4,6 +4,7 @@
 #include "renegade/bridge/ProjectUiScaffoldService.h"
 #include "renegade/bridge/StoryFlowScreenLifecycleService.h"
 #include "renegade/bridge/ScreenService.h"
+#include "renegade/bridge/ScreenBackgroundPanel.h"
 #include "renegade/bridge/ScreenLibraryService.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
 #include "renegade/bridge/StoryFlowAuthoringModel.h"
@@ -197,6 +198,60 @@ int main(int argc,char** argv)
     check(!orphan.ApplyStep(noSession,fresh,resume,error)&&noSession.CurrentPath().empty(),"Missing retained session fails explicitly");
     if(!fixture)
     {
+        std::map<std::string,std::string> targets;
+        bridge::ScreenDocument menu;
+        std::map<std::string,std::string> previousIds;
+        auto readBytes=[](const fs::path& path){
+            std::ifstream in(path,std::ios::binary);
+            return std::string(std::istreambuf_iterator<char>(in),{});
+        };
+        const auto hudBefore=readBytes(root/metadata.defaultHud);
+        for(const auto& node:flow.nodes)
+        {
+            if(node.kind!=bridge::FlowNodeKind::Screen || node.screenDocumentId==metadata.defaultHudId)continue;
+            bridge::ScreenDocument document;
+            if(!bridge::ReadScreenDocument((root/node.screenPathHint).generic_u8string(),metadata.projectId,document,error))continue;
+            const auto panel=std::find_if(document.widgets.begin(),document.widgets.end(),
+                [&](const auto& w){return bridge::IsScreenBackground(document,w);});
+            if(panel==document.widgets.end())continue;
+            if(menu.widgets.empty()){menu=document;continue;}
+            if(node.screenDocumentId!=menu.envelope.documentId && targets.size()<2)
+            {
+                targets.emplace(node.screenDocumentId,node.screenPathHint);
+                previousIds.emplace(node.screenDocumentId,panel->id);
+            }
+        }
+        check(!menu.widgets.empty() && targets.size()==2,"Stock screen backgrounds recognised");
+        if(!menu.widgets.empty() && targets.size()==2)
+        {
+            auto panel=*std::find_if(menu.widgets.begin(),menu.widgets.end(),
+                [&](const auto& w){return bridge::IsScreenBackground(menu,w);});
+            panel.imageFit=bridge::ScreenImageFit::Cover;
+            check(bridge::CopyScreenBackgrounds(metadata.rootPath,menu,panel,targets,error),"Copy selected backgrounds: "+error);
+            for(const auto& [id,path]:targets)
+            {
+                bridge::ScreenDocument saved;
+                check(bridge::ReadScreenDocument((root/path).generic_u8string(),metadata.projectId,saved,error)
+                    && !saved.widgets.empty() && saved.widgets.front().backgroundPanel
+                    && saved.widgets.front().id==previousIds.at(id)
+                    && saved.widgets.front().imageFit==bridge::ScreenImageFit::Cover,
+                    "Reopen independent back layer, retaining target identity");
+            }
+            auto second=std::next(targets.begin());
+            const auto secondBefore=readBytes(root/second->second);
+            panel.imageFit=bridge::ScreenImageFit::Contain;
+            const auto first=targets.begin();
+            check(bridge::CopyScreenBackgrounds(metadata.rootPath,menu,panel,
+                {{first->first,first->second}},error),"Replace one copied panel");
+            check(readBytes(root/second->second)==secondBefore,"Sibling copy retains its previous artwork settings");
+            const auto firstBefore=readBytes(root/first->second);
+            auto invalid=targets;
+            invalid.emplace(bridge::GenerateStableId(),"Content/Screens/Missing.renegade-screen");
+            check(!bridge::CopyScreenBackgrounds(metadata.rootPath,menu,panel,invalid,error)
+                && readBytes(root/first->second)==firstBefore && readBytes(root/second->second)==secondBefore,
+                "Invalid batch preserves all selected screen files");
+            check(readBytes(root/metadata.defaultHud)==hudBefore,"Unselected HUD byte-identical");
+        }
         bridge::StoryFlowNewScreenRequest request;request.projectRoot=metadata.rootPath;
         request.projectId=metadata.projectId;request.flowPath=(root/fs::u8path(metadata.startupFlow)).generic_u8string();
         request.flow=flow;request.screenName="Restored Graphics";request.screenPathHint="Content/Screens/RestoredGraphics.renegade-screen";

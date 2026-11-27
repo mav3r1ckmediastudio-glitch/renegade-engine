@@ -16,6 +16,7 @@
 #include "RenegadeScreenEditorAdvancedInspector.h"
 #include "RenegadeScreenEditorWorkspace.h"
 #include "StoryFlowScreenEditorHandoff.h"
+#include "../../Runtime/src/RuntimeScreen.h"
 
 namespace renegade::studio
 {
@@ -30,6 +31,7 @@ namespace renegade::studio
         {
             if (loaded_)
             {
+                EndInteractivePreview();
                 renderer_.Reset(*this);
                 GetGUI().RemoveWidget(&workspace_);
             }
@@ -44,6 +46,11 @@ namespace renegade::studio
             advancedInspector_.SetEnabled(false);
 
             workspace_.Create();
+            closePreview_.Create("Close interactive preview");
+            closePreview_.SetText("Close preview (Esc)");
+            closePreview_.SetSize(XMFLOAT2(160,32));
+            closePreview_.OnClick([this](const wi::gui::EventArgs&){closeRequested_=true;});
+            workspace_.OnPreviewRequested([this](){startRequested_=true;});
             workspace_.OnUiBudgetsRequested([this](){advancedInspector_.OpenUiBudgets();advancedExpanded_=true;workspace_.SetInspectorSuppressed(true);});
             workspace_.OnPortableLibraryRequested([this](bool publish){PortableLibrary(publish);});
             workspace_.OnGameplayAttributesRequested([this](){advancedInspector_.OpenGameplayAttributes();advancedExpanded_=true;workspace_.SetInspectorSuppressed(true);});
@@ -143,6 +150,7 @@ namespace renegade::studio
         void Stop() override
         {
             if (!loaded_) return;
+            EndInteractivePreview();
             workspace_.SetInspectorSuppressed(false);
             workspace_.SetVisible(false);
             workspace_.SetEnabled(false);
@@ -160,6 +168,38 @@ namespace renegade::studio
         void Update(const float dt) override
         {
             EnsureLoaded();
+            if (startRequested_)
+            {
+                startRequested_=false;
+                previewNode_=workspace_.PreviewRouteContext();
+                if(previewNode_.empty())previewNode_=authorNode_;
+                LoadInteractiveScreen(session_.Document());
+                return;
+            }
+            if (interactive_)
+            {
+                closePreview_.SetPos(XMFLOAT2(std::max(0.f,GetLogicalWidth()-168.f),8));
+                if(closeRequested_ || wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
+                {EndInteractivePreview();return;}
+                wi::RenderPath2D::Update(dt);
+                if(closeRequested_){EndInteractivePreview();return;}
+                livePresenter_.UpdateInput(*this,liveController_,true,dt);
+                if(!previewAction_.empty())FollowPreviewRoute();
+                if(nextPreview_ && livePresenter_.ExitComplete())
+                {
+                    auto next=std::move(*nextPreview_);
+                    nextPreview_.reset();
+                    LoadInteractiveScreen(next);
+                    if(interactive_ && previewOverride_)
+                    {
+                        std::string error;
+                        if(!livePresenter_.OverrideEnterTransition(previewOverride_->enter,*this,error))
+                        {EndInteractivePreview();workspace_.ReportLibraryStatus(error);}
+                    }
+                    previewOverride_.reset();
+                }
+                return;
+            }
             LayoutWorkspace();
             SyncAdvancedInspectorMode();
             advancedInspector_.SetVisible(open_ && (!workspace_.IsFocusCanvas()||advancedInspector_.HasGameplayAttributeEditor()));
@@ -264,6 +304,7 @@ namespace renegade::studio
 
             session_ = std::move(candidate);
             standaloneEditing_ = handoff.screenNodeId.empty();
+            authorNode_=handoff.screenNodeId;
             projectRoot_ = projectRoot;
             open_ = true;
             advancedExpanded_ = false;
@@ -312,6 +353,7 @@ namespace renegade::studio
 
         void Clear() noexcept
         {
+            EndInteractivePreview();
             advancedInspector_.ResetAnimationPreview();
             if (loaded_) renderer_.Reset(*this);
             session_.Clear();
@@ -361,6 +403,9 @@ namespace renegade::studio
             workspace_.OnOpenProjectScreen(std::move(callback));
         }
 
+        using PreviewRoute = std::function<bool(const std::string&,const std::string&,
+            StoryFlowScreenEditorHandoff&,std::string&)>;
+        void OnPreviewRoute(PreviewRoute resolve){previewRoute_=std::move(resolve);}
         void OnDestinationName(std::function<std::string(const std::string&)> callback) {
             workspace_.OnDestinationName(std::move(callback));
         }
@@ -516,6 +561,87 @@ namespace renegade::studio
         }
 
         bridge::ScreenAuthoringSession session_;
+        runtime::RuntimeScreenController liveController_;
+        runtime::RuntimeScreenPresenter livePresenter_;
+        RenegadeButton closePreview_;
+        PreviewRoute previewRoute_;
+        std::string previewNode_, authorNode_, previewAction_, previewWidget_;
+        std::optional<bridge::ScreenDocument> nextPreview_;
+        std::optional<bridge::ScreenTransitionPair> previewOverride_;
+        bool interactive_=false, startRequested_=false, closeRequested_=false;
+
+        void EndInteractivePreview()
+        {
+            startRequested_=false;
+            closeRequested_=false;
+            nextPreview_.reset();
+            previewOverride_.reset();
+            previewAction_.clear();
+            if(!interactive_)return;
+            GetGUI().RemoveWidget(&closePreview_);
+            livePresenter_.Reset(*this);
+            interactive_=false;
+            renderer_.SetPresentationVisible(true);
+            workspace_.SetVisible(open_);
+            workspace_.SetEnabled(open_);
+            LayoutWorkspace();
+        }
+
+        void LoadInteractiveScreen(const bridge::ScreenDocument& authored)
+        {
+            bridge::ScreenDocument screen;
+            std::string error;
+            if(interactive_)GetGUI().RemoveWidget(&closePreview_);
+            livePresenter_.Reset(*this);
+            GetGUI().AddWidget(&closePreview_);
+            interactive_=true;
+            workspace_.SetVisible(false);
+            workspace_.SetEnabled(false);
+            advancedInspector_.SetVisible(false);
+            advancedInspector_.SetEnabled(false);
+            renderer_.SetPresentationVisible(false);
+            if(bridge::ResolveScreenTheme(projectRoot_,authored,screen,error))
+            {
+                screen.enabledInGame=true;
+                if(liveController_.Initialize(screen,error) &&
+                    livePresenter_.Load(screen,projectRoot_,*this,liveController_,
+                    [this](runtime::RuntimeActionRequest event){previewAction_=event.actionId;previewWidget_=event.widgetId;},error))
+                {
+                    closePreview_.SetText("Close preview (Esc)");
+                    closePreview_.priority_change=true;
+                    return;
+                }
+            }
+            EndInteractivePreview();
+            workspace_.ReportLibraryStatus("Preview: "+error);
+        }
+
+        void FollowPreviewRoute()
+        {
+            const auto action=std::exchange(previewAction_,{});
+            StoryFlowScreenEditorHandoff next;
+            std::string error;
+            if(!previewRoute_ || !previewRoute_(previewNode_,action,next,error))
+            {
+                closePreview_.SetTooltip(error.empty() ? action : error);
+                closePreview_.SetText(error.find("Test Game")!=std::string::npos ? "Test Game only | Close" : "No screen route | Close");
+                return;
+            }
+            bridge::ScreenDocument screen;
+            if(next.screenDocumentId==session_.Document().envelope.documentId)screen=session_.Document();
+            else if(!bridge::ReadScreenDocument(next.resolvedPath,session_.ProjectId(),screen,error))
+            {
+                EndInteractivePreview();
+                workspace_.ReportLibraryStatus(error);
+                return;
+            }
+            const auto* button=liveController_.FindWidget(previewWidget_);
+            previewOverride_=button ? button->transitionOverride : std::nullopt;
+            if(!livePresenter_.BeginExit(previewOverride_ ? &previewOverride_->exit : nullptr,error))
+            {EndInteractivePreview();workspace_.ReportLibraryStatus(error);return;}
+            previewNode_=next.screenNodeId;
+            nextPreview_=std::move(screen);
+        }
         screen::ScreenRenderer renderer_;
         RenegadeScreenEditorAdvancedInspector advancedInspector_;
         RenegadeScreenEditorWorkspace workspace_;

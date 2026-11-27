@@ -1,6 +1,7 @@
 #include "renegade/bridge/ScreenClickSound.h"
 #include "renegade/bridge/DialogueAssetService.h"
 #include "RenegadeScreenEditorWorkspace.h"
+#include "renegade/bridge/ScreenBackgroundPanel.h"
 #include <cstdio>
 #include "StudioTheme.h"
 #include "StoryFlowOverviewPolicy.h"
@@ -528,6 +529,12 @@ namespace renegade::studio
                     else RefreshAfterMutation("SCREEN SETTINGS UPDATED");
                 });
         });
+        previewButton_.Create("Preview screen");
+        previewButton_.SetText("PREVIEW");
+        previewButton_.OnClick([this](const wi::gui::EventArgs&){if(previewRequested_)previewRequested_();});
+        copyBackgroundButton_.Create("Copy background to other screens");
+        copyBackgroundButton_.SetText("Copy to other screens...");
+        copyBackgroundButton_.OnClick([this](const wi::gui::EventArgs&){ChooseBackgroundDestinations();});
         fitCanvasButton_.Create("Screen Canvas Fit");
         fitCanvasButton_.SetText("FIT");
         fitCanvasButton_.SetTooltip("Fit the design canvas. Wheel zooms at the cursor; middle mouse pans; minimap click/drag recentres; double-click returns to StoryFlow.");
@@ -836,6 +843,8 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&focusButton_),
                 static_cast<wi::gui::Widget*>(&screenSettingsButton_),
                 static_cast<wi::gui::Widget*>(&fitCanvasButton_),
+                static_cast<wi::gui::Widget*>(&previewButton_),
+                static_cast<wi::gui::Widget*>(&copyBackgroundButton_),
                 static_cast<wi::gui::Widget*>(&gridVisibleButton_),
                 static_cast<wi::gui::Widget*>(&gridSnapButton_),
                 static_cast<wi::gui::Widget*>(&gridSpacingInput_),
@@ -907,6 +916,8 @@ namespace renegade::studio
         gridSpacingInput_.SetSize(XMFLOAT2(64.0f, 32.0f));
         focusButton_.SetPos(XMFLOAT2(gridToolbarX + 260.0f, 14.0f));
         focusButton_.SetSize(XMFLOAT2(94.0f, 32.0f));
+        previewButton_.SetPos(XMFLOAT2(gridToolbarX+544,14));
+        previewButton_.SetSize(XMFLOAT2(78,32));
         fitCanvasButton_.SetPos(XMFLOAT2(gridToolbarX + 360.0f, 14.0f));
         fitCanvasButton_.SetSize(XMFLOAT2(50.0f, 32.0f));
         screenSettingsButton_.SetPos(XMFLOAT2(gridToolbarX + 416.0f, 14.0f));
@@ -980,6 +991,7 @@ namespace renegade::studio
         full(applyButton_, HeaderHeight + 348.0f, 32.0f);
         full(basicActionButton_, HeaderHeight + 423.0f, 32.0f);
         const auto* graphicTarget=session_?session_->FindWidget(selectedWidgetId_):nullptr;
+        full(copyBackgroundButton_,HeaderHeight+385,32);
         full(imageAssetButton_,HeaderHeight+
             (graphicTarget&&graphicTarget->kind==bridge::ScreenWidgetKind::Image?69.0f:385.0f),
             graphicTarget&&graphicTarget->kind==bridge::ScreenWidgetKind::Image?43.0f:30.0f);
@@ -1050,6 +1062,7 @@ namespace renegade::studio
             screenSettingsButton_.SetText(std::string(bridge::ScreenUsageName(
                 session_->Document().usage)) +
                 (session_->Document().enabledInGame ? " // ON" : " // OFF"));
+        previewButton_.SetVisible(loaded);
         fitCanvasButton_.SetVisible(loaded);
         fitCanvasButton_.SetEnabled(loaded);
         gridVisibleButton_.SetVisible(loaded);
@@ -1110,6 +1123,9 @@ namespace renegade::studio
             stateImage_.SetText(v.imageResourcePath.empty() ? "Choose image..." : "Change image...");
             stateColour_.SetText("Colour");
         }
+        const bool background = selectedReady && bridge::IsScreenBackground(session_->Document(),*selected);
+        copyBackgroundButton_.SetVisible(background && !focusCanvas_ && !rightCollapsed_ && !inspectorSuppressed_);
+        imageAssetButton_.SetText(background ? "Choose background image..." : "CHANGE GRAPHIC");
         imageAssetButton_.SetVisible(!button && selectedReady && !focusCanvas_ && !rightCollapsed_ &&
             !inspectorSuppressed_);
         const bool progressArtworkReady = selectedReady &&
@@ -1205,6 +1221,8 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&focusButton_),
                 static_cast<wi::gui::Widget*>(&screenSettingsButton_),
                 static_cast<wi::gui::Widget*>(&fitCanvasButton_),
+                static_cast<wi::gui::Widget*>(&previewButton_),
+                static_cast<wi::gui::Widget*>(&copyBackgroundButton_),
                 static_cast<wi::gui::Widget*>(&gridVisibleButton_),
                 static_cast<wi::gui::Widget*>(&gridSnapButton_),
                 static_cast<wi::gui::Widget*>(&gridSpacingInput_),
@@ -1300,6 +1318,8 @@ namespace renegade::studio
                 static_cast<const wi::gui::Widget*>(&focusButton_),
                 static_cast<const wi::gui::Widget*>(&screenSettingsButton_),
                 static_cast<const wi::gui::Widget*>(&fitCanvasButton_),
+                static_cast<const wi::gui::Widget*>(&previewButton_),
+                static_cast<const wi::gui::Widget*>(&copyBackgroundButton_),
                 static_cast<const wi::gui::Widget*>(&gridVisibleButton_),
                 static_cast<const wi::gui::Widget*>(&gridSnapButton_),
                 static_cast<const wi::gui::Widget*>(&gridSpacingInput_),
@@ -1713,6 +1733,35 @@ namespace renegade::studio
         RefreshAfterMutation("ENABLED STATE UPDATED // UNSAVED SCREEN CHANGE");
     }
 
+    void RenegadeScreenEditorWorkspace::ChooseBackgroundDestinations()
+    {
+        if (!session_ || !session_->IsLoaded()) return;
+        const auto sourceId=session_->Document().envelope.documentId;
+        const auto widgetId=selectedWidgetId_;
+        std::map<std::string,std::string> hints;
+        std::vector<RenegadeScreenChoicePicker::Choice> choices;
+        for(const auto& screen:projectScreens_)
+            if(screen.available && screen.documentId!=sourceId && !screen.documentId.empty() &&
+                hints.emplace(screen.documentId,screen.pathHint).second)
+                choices.push_back({screen.name,screen.documentId});
+        destinationPicker_.OpenChecklist("COPY BACKGROUND TO SCREENS",std::move(choices),
+            [this,sourceId,widgetId,hints](const auto& checked){
+                if(!session_ || !session_->IsLoaded() || session_->Document().envelope.documentId!=sourceId ||
+                    selectedWidgetId_!=widgetId || !SavePendingBeforeNavigation())return;
+                std::map<std::string,std::string> targets;
+                for(const auto& id:checked)targets.emplace(id,hints.at(id));
+                std::string error;
+                const auto& doc=session_->Document();
+                for(const auto& panel:doc.widgets)if(panel.id==widgetId)
+                {
+                    if(bridge::CopyScreenBackgrounds(gridProjectRoot_,doc,panel,targets,error))
+                        SetStatus("Background copied to "+std::to_string(targets.size())+" screen(s)");
+                    else SetStatus(error);
+                    break;
+                }
+            });
+    }
+
     void RenegadeScreenEditorWorkspace::CreateElement(
         const bridge::ScreenWidgetKind kind,
         const bool background, const XMFLOAT4* drop)
@@ -1727,6 +1776,16 @@ namespace renegade::studio
 
         if (background)
         {
+            for(const auto& existing:document.widgets)
+                if(bridge::IsScreenBackground(document,existing))
+                {
+                    SelectWidget(existing.id);
+                    SetStatus("Background panel selected");
+                    return;
+                }
+            widget.backgroundPanel=true;
+            widget.layoutMode=bridge::ScreenLayoutMode::Anchored;
+            widget.anchors={0,0,1,1,0,0,0,0};
             widget.name = "Background";
             widget.rect = {0.0f, 0.0f, document.designWidth, document.designHeight};
             widget.enabled = false;
@@ -2061,6 +2120,7 @@ namespace renegade::studio
 
     void RenegadeScreenEditorWorkspace::Update(const wi::Canvas& canvas,const float dt)
     {
+        if (!IsVisible() || !IsEnabled()) return;
         Widget::Update(canvas,dt);
         if (overlayInputBlocked_) return;
         // Modal pickers own input before underlying Inspector widgets update.
@@ -2085,7 +2145,6 @@ namespace renegade::studio
             destinationPicker_.Update();
             return;
         }
-        if (!IsVisible() || !IsEnabled()) return;
         const XMFLOAT4 pointer = wi::input::GetPointer();
         const bool holdingLeft = wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
         if (paletteButtonPending_)

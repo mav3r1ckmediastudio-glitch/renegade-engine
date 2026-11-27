@@ -89,6 +89,8 @@ namespace renegade::studio
             });
         }
 
+        const bridge::StableId& PreviewRouteContext() const {return routeContext_;}
+        void OnPreviewRequested(std::function<void()> callback){previewRequested_=std::move(callback);}
         void OnUiBudgetsRequested(std::function<void()> callback){uiBudgetsRequested_=std::move(callback);}
         void OnPortableLibraryRequested(std::function<void(bool)> callback){portableLibraryRequested_=std::move(callback);}
         void ReportLibraryStatus(std::string message){SetStatus(std::move(message));}
@@ -266,6 +268,10 @@ namespace renegade::studio
         bool minimapSuppressDrag_ = false;
         bool cameraPanning_ = false;
         XMFLOAT2 cameraLastPointer_ = {};
+        std::function<void()> previewRequested_;
+        RenegadeButton previewButton_;
+        RenegadeButton copyBackgroundButton_;
+        void ChooseBackgroundDestinations();
         RenegadeButton fitCanvasButton_;
         RenegadeButton screenSettingsButton_;
         RenegadeScreenChoicePicker screenSettingsPicker_;

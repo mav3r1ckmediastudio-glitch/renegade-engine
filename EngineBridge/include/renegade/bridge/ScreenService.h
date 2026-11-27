@@ -297,6 +297,7 @@ namespace renegade::bridge
         std::optional<ScreenTransitionPair> transitionOverride;
         // Optional v3 native image presentation; absent legacy field stretches artwork.
         ScreenImageFit imageFit=ScreenImageFit::Stretch;
+        bool backgroundPanel=false;
 
     };
 

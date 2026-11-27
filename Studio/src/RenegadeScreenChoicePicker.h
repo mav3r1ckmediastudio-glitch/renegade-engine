@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <functional>
 #include <string>
 #include <utility>
@@ -26,6 +27,7 @@ namespace renegade::studio
             std::string currentValue,
             std::function<void(const std::string&)> selected)
         {
+            Close();
             title_ = std::move(title);
             choices_ = std::move(choices);
             currentValue_ = std::move(currentValue);
@@ -35,8 +37,18 @@ namespace renegade::studio
             openingPointerDown_ = wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
         }
 
+        using Checked = std::set<std::string>;
+        void OpenChecklist(std::string title, std::vector<Choice> choices,
+            std::function<void(const Checked&)> accept)
+        {
+            Open(std::move(title), std::move(choices), {}, {});
+            accept_ = std::move(accept);
+        }
+
         void Close() noexcept
         {
+            checked_.clear();
+            accept_ = {};
             open_ = false;
             choices_.clear();
             currentValue_.clear();
@@ -94,12 +106,26 @@ namespace renegade::studio
                 Close();
                 return;
             }
+            if (accept_ && pointer.y >= y_ + height_ - RowHeight)
+            {
+                if (checked_.empty()) return;
+                auto accept = accept_;
+                auto values = checked_;
+                Close();
+                accept(values);
+                return;
+            }
             const std::size_t row = static_cast<std::size_t>(
                 std::floor((pointer.y - rowsTop) / RowHeight));
             if (row >= visible) return;
             const std::size_t index = scroll_ + row;
             if (index >= choices_.size()) return;
             const std::string value = choices_[index].value;
+            if (accept_)
+            {
+                if (!checked_.erase(value)) checked_.insert(value);
+                return;
+            }
             auto callback = selected_;
             Close();
             if (callback) callback(value);
@@ -129,12 +155,15 @@ namespace renegade::studio
                     DrawRect(x_ + 7.0f, rowY + 2.0f, width_ - 14.0f,
                         RowHeight - 4.0f, wi::Color(13, 35, 45, 255), cmd);
                 }
-                DrawLabel(Short(choice.label, 46), x_ + 12.0f, rowY + 7.0f,
+                DrawLabel(Short((accept_ ? (checked_.count(choice.value) ? "[x] " : "[ ] ") : "") + choice.label, 46), x_ + 12.0f, rowY + 7.0f,
                     10, choice.value == currentValue_
                         ? wi::Color(244, 244, 244, 255)
                         : wi::Color(170, 185, 193, 255), cmd);
             }
 
+            if (accept_)
+                DrawLabel("COPY TO SELECTED (" + std::to_string(checked_.size()) + ")",
+                    x_ + 12, y_ + height_ - 23, 11, wi::Color(235,139,61,255), cmd);
             if (choices_.empty())
             {
                 DrawLabel("NO CHOICES AVAILABLE",
@@ -144,6 +173,8 @@ namespace renegade::studio
         }
 
     private:
+        Checked checked_;
+        std::function<void(const Checked&)> accept_;
         static constexpr float HeaderHeight = 48.0f;
         static constexpr float RowHeight = 30.0f;
 
@@ -156,7 +187,7 @@ namespace renegade::studio
         [[nodiscard]] std::size_t VisibleRows() const noexcept
         {
             return static_cast<std::size_t>(std::max(
-                1.0f, std::floor((height_ - HeaderHeight) / RowHeight)));
+                1.0f, std::floor((height_ - HeaderHeight - (accept_ ? RowHeight : 0)) / RowHeight)));
         }
 
         static std::string Short(const std::string& value, const std::size_t limit)
