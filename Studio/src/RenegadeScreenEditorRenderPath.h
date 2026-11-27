@@ -581,6 +581,7 @@ namespace renegade::studio
             GetGUI().RemoveWidget(&closePreview_);
             livePresenter_.Reset(*this);
             interactive_=false;
+            renderer_.AttachPresentation(*this);
             renderer_.SetPresentationVisible(true);
             workspace_.SetVisible(open_);
             workspace_.SetEnabled(open_);
@@ -600,6 +601,7 @@ namespace renegade::studio
             advancedInspector_.SetVisible(false);
             advancedInspector_.SetEnabled(false);
             renderer_.SetPresentationVisible(false);
+            renderer_.DetachPresentation(*this);
             if(bridge::ResolveScreenTheme(projectRoot_,authored,screen,error))
             {
                 screen.enabledInGame=true;
