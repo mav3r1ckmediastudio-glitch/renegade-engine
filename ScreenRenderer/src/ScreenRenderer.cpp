@@ -11,6 +11,7 @@
 
 #include <WickedEngine.h>
 
+#include "ScreenVideoMatteCS.generated.h"
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -152,6 +153,9 @@ namespace
         wi::video::VideoInstance videoInstance;
         std::unique_ptr<renegade::screen::ScreenVideoAudio> videoAudio;
         wi::graphics::Texture videoFrame;
+        wi::graphics::Texture matteFrame;
+        renegade::bridge::VideoTransparency transparency=renegade::bridge::VideoTransparency::Opaque;
+        int matteDisplayOrder=-1;
         bool hideVideoForCameraOverride=false;
         struct HintDeck
         {
@@ -384,7 +388,7 @@ namespace
                     params.blendFlag=wi::enums::BLENDMODE_ADDITIVE;
                 wi::image::Draw(mediaTexture,params,cmd);
             }
-            else DrawSurface(image,imageRect.x,imageRect.y,imageRect.width,imageRect.height,
+            else if (!authored.video || hideVideoForCameraOverride || transparency==renegade::bridge::VideoTransparency::Opaque) DrawSurface(image,imageRect.x,imageRect.y,imageRect.width,imageRect.height,
                 std::max(0.0f,radius-border),ToWickedColor(surfaceColor,style.opacity),cmd);
 
             if (authored.kind == renegade::bridge::ScreenWidgetKind::Progress)
@@ -824,6 +828,7 @@ namespace renegade::screen
         ControlSink controlSink;
         DragSink dragSink;
         ScreenInstanceRoot root;
+        wi::graphics::Shader videoMatteShader;
         std::unique_ptr<ScreenCameraFeed> feed;
         ScreenSurface* cameraSurface=nullptr;
         bool feedAttempted=false;
@@ -860,6 +865,9 @@ namespace renegade::screen
     {
         surface.videoAudio.reset();
         surface.videoFrame={};
+        surface.matteFrame={};
+        surface.matteDisplayOrder=-1;
+        surface.transparency=bridge::VideoTransparency::Opaque;
         surface.videoInstance={};
         surface.videoResource={};
         surface.hintDeck.reset();
@@ -902,6 +910,14 @@ namespace renegade::screen
                 if (surface.videoResource.IsValid() && wi::video::CreateVideoInstance(
                     &surface.videoResource.GetVideo(), &surface.videoInstance))
                 {
+                    surface.transparency=widget.video->transparency;
+                    if (surface.transparency==bridge::VideoTransparency::Auto)
+                    {
+                        // Content identity also recognises previously imported stock clips.
+                        if (prepared.payloadHash=="fnv1a64:b01c7fbba36f62e0") surface.transparency=bridge::VideoTransparency::RemoveBlack;
+                        else if (prepared.payloadHash=="fnv1a64:d4a973200ee74894") surface.transparency=bridge::VideoTransparency::SoftSmoke;
+                        else surface.transparency=bridge::VideoTransparency::Opaque;
+                    }
                     const auto& video=surface.videoResource.GetVideo();
                     surface.videoDetails=std::to_string(video.width)+" x "+std::to_string(video.height)+" / "+
                         std::to_string(static_cast<int>(std::round(video.average_frames_per_second)))+" fps / "+
@@ -1519,7 +1535,40 @@ namespace renegade::screen
                 device->WaitCommandList(resolve,decode);
                 wi::video::ResolveVideoToRGB(&instance,resolve);
             }
-            surface->videoFrame=instance.GetCurrentFrameTexture();
+            const auto source=instance.GetCurrentFrameTexture();
+            if (!source.IsValid() || surface->transparency==bridge::VideoTransparency::Opaque)
+            {
+                surface->videoFrame=source;
+                continue;
+            }
+            if (surface->matteDisplayOrder==instance.output.display_order && surface->matteFrame.IsValid()) continue;
+            using namespace wi::graphics;
+            auto* device=GetDevice();
+            if (!impl_->videoMatteShader.IsValid() && !device->CreateShader(ShaderStage::CS,kScreenVideoMatte,
+                sizeof(kScreenVideoMatte),&impl_->videoMatteShader)) continue;
+            if (!surface->matteFrame.IsValid())
+            {
+                TextureDesc desc;
+                desc.width=source.GetDesc().width;
+                desc.height=source.GetDesc().height;
+                desc.format=Format::R8G8B8A8_UNORM;
+                desc.bind_flags=BindFlag::SHADER_RESOURCE|BindFlag::UNORDERED_ACCESS;
+                if (!device->CreateTexture(&desc,nullptr,&surface->matteFrame)) continue;
+            }
+            auto cmd=device->BeginCommandList();
+            auto& target=surface->matteFrame;
+            auto barrier=GPUBarrier::Image(&target,ResourceState::SHADER_RESOURCE,ResourceState::UNORDERED_ACCESS);
+            device->Barrier(&barrier,1,cmd);
+            device->BindComputeShader(&impl_->videoMatteShader,cmd);
+            device->BindResource(&source,0,cmd);
+            device->BindUAV(&target,0,cmd);
+            const uint32_t soft=surface->transparency==bridge::VideoTransparency::SoftSmoke;
+            device->PushConstants(&soft,sizeof(soft),cmd);
+            device->Dispatch((target.GetDesc().width+7)/8,(target.GetDesc().height+7)/8,1,cmd);
+            barrier=GPUBarrier::Image(&target,ResourceState::UNORDERED_ACCESS,ResourceState::SHADER_RESOURCE);
+            device->Barrier(&barrier,1,cmd);
+            surface->matteDisplayOrder=instance.output.display_order;
+            surface->videoFrame=target;
         }
         auto* target=impl_->cameraSurface;
         if(!target || !impl_->root.IsVisible())return;

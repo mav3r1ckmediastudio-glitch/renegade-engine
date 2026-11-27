@@ -1423,6 +1423,7 @@ namespace renegade::bridge
                             section.Set("video_loop", widget.video->loop);
                             section.Set("video_mute", widget.video->mute);
                             section.Set("video_additive", widget.video->additive);
+                            section.Set("video_transparency",static_cast<int>(widget.video->transparency));
                         }
                         if(widget.backgroundPanel)section.Set("background_panel",true);
                         if(widget.cameraSource)
@@ -1778,7 +1779,8 @@ namespace renegade::bridge
                 if (sourceSchema>=3) widget.hintListPath=section.GetText("hint_list");
                 if (sourceSchema >= 3 && section.Has("video_asset"))
                     widget.video = ScreenVideoPanel{section.GetText("video_asset"),section.GetBool("video_loop"),
-                        section.GetBool("video_mute"),section.GetBool("video_additive")};
+                        section.GetBool("video_mute"),section.GetBool("video_additive"),
+                        static_cast<VideoTransparency>(section.Has("video_transparency") ? std::clamp(section.GetInt("video_transparency"),0,3) : 0)};
                 if(sourceSchema>=3 && section.Has("background_level"))
                 {
                     ScreenCameraSource camera;

@@ -253,12 +253,15 @@ namespace renegade::bridge
 
     enum class ScreenImageFit { Stretch, Contain, Cover };
 
+    enum class VideoTransparency : unsigned char { Auto, Opaque, RemoveBlack, SoftSmoke };
+
     struct ScreenVideoPanel
     {
         StableId assetId;
         bool loop = true;
         bool mute = true;
         bool additive = false;
+        VideoTransparency transparency=VideoTransparency::Auto;
     };
 
     struct ScreenCameraSource

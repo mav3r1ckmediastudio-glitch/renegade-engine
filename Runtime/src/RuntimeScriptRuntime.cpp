@@ -948,6 +948,17 @@ namespace renegade::runtime
                             value.video->assetId=asset;
                         }
                         lua_pop(state,1);
+                        lua_getfield(state,3,"transparency");
+                        if (!lua_isnil(state,-1))
+                        {
+                            const std::string mode=luaL_checkstring(state,-1);
+                            if (mode=="auto") value.video->transparency=bridge::VideoTransparency::Auto;
+                            else if (mode=="opaque") value.video->transparency=bridge::VideoTransparency::Opaque;
+                            else if (mode=="remove_black") value.video->transparency=bridge::VideoTransparency::RemoveBlack;
+                            else if (mode=="soft_smoke") value.video->transparency=bridge::VideoTransparency::SoftSmoke;
+                            else return PushNilError(state,"Unknown video transparency mode.");
+                        }
+                        lua_pop(state,1);
                         for (auto [key,field]:{std::pair<const char*,bool*>{"loop",&value.video->loop},
                             {"mute",&value.video->mute},{"additive",&value.video->additive}})
                         {
@@ -975,6 +986,8 @@ namespace renegade::runtime
                 lua_pushboolean(state,value.video->mute);lua_setfield(state,-2,"mute");
                 lua_pushboolean(state,value.video->loop);lua_setfield(state,-2,"loop");
                 lua_pushboolean(state,value.video->additive);lua_setfield(state,-2,"additive");
+                constexpr const char* modes[]={"auto","opaque","remove_black","soft_smoke"};
+                lua_pushstring(state,modes[static_cast<unsigned>(value.video->transparency)]);lua_setfield(state,-2,"transparency");
             }
             else {lua_pushstring(state,value.hints.c_str());lua_setfield(state,-2,"hints");}
             return 1;

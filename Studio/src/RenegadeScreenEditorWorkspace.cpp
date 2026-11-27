@@ -1906,6 +1906,8 @@ namespace renegade::studio
         choices.push_back({"Import video...","@import"});
         if (selected->video)
         {
+            constexpr const char* transparencyNames[]={"Automatic","Opaque","Remove black","Soft smoke"};
+            choices.push_back({std::string("Transparency: ")+transparencyNames[static_cast<unsigned>(current.transparency)],"@transparency"});
             choices.push_back({current.additive ? "Blend: additive" : "Blend: normal","@blend"});
         }
         bridge::AssetRegistry registry;
@@ -1923,6 +1925,18 @@ namespace renegade::studio
                     chooseImageSource_=choice=="@image";
                     if (graphicRequested_) graphicRequested_(false);
                     chooseImageSource_=false;
+                    return;
+                }
+                if (choice=="@transparency")
+                {
+                    destinationPicker_.Open("VIDEO TRANSPARENCY",{{"Automatic (stock artwork)","0"},{"Opaque","1"},
+                        {"Remove black background","2"},{"Soft smoke (feather edges)","3"}},
+                        std::to_string(static_cast<int>(current.transparency)),
+                        [current,apply,valid](const std::string& mode) mutable {
+                            if (!valid() || mode.size()!=1 || mode[0]<'0' || mode[0]>'3') return;
+                            current.transparency=static_cast<bridge::VideoTransparency>(mode[0]-'0');
+                            apply(current);
+                        });
                     return;
                 }
                 if (choice=="@blend") { current.additive=!current.additive; apply(current); return; }

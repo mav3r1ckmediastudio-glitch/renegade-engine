@@ -1,4 +1,15 @@
+find_program(RENEGADE_SCREEN_DXC dxc HINTS
+    "$ENV{WindowsSdkDir}/bin/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/x64"
+    "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows Kits\\Installed Roots;KitsRoot10]/bin/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/x64"
+    REQUIRED)
+set(screen_matte_header "${CMAKE_CURRENT_BINARY_DIR}/ScreenVideoMatteCS.generated.h")
+add_custom_command(OUTPUT "${screen_matte_header}"
+    COMMAND "${RENEGADE_SCREEN_DXC}" -T cs_6_0 -E main -O3 -Qstrip_debug
+        -Fh "${screen_matte_header}" -Vn kScreenVideoMatte
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ScreenVideoMatteCS.hlsl"
+    DEPENDS src/ScreenVideoMatteCS.hlsl VERBATIM)
 add_library(RenegadeScreenRenderer STATIC
+    "${screen_matte_header}"
     src/ScreenVideoAudio.cpp
     src/DialoguePanel.cpp
     include/renegade/screen/ScreenRenderer.h
@@ -8,6 +19,7 @@ add_library(RenegadeScreenRenderer STATIC
 add_library(Renegade::ScreenRenderer ALIAS RenegadeScreenRenderer)
 
 target_include_directories(RenegadeScreenRenderer
+    PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )

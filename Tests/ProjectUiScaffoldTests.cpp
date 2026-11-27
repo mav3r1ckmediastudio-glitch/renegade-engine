@@ -265,7 +265,7 @@ int main(int argc,char** argv)
                 << "local media=renegade.ui.screen_media; local loading='" << loadingPath
                 << "'; local panel='" << (loading.widgets.size()>1?loading.widgets[1].id:"") << "';"
                 << "assert(media(loading,panel).loop); assert(media(loading,panel,{loop=false,mute=false}).loop==false);"
-                << "assert(media(loading,panel,'authored').mute);end}";
+                << "assert(media(loading,panel,{transparency='soft_smoke'}).transparency=='soft_smoke');assert(media(loading,panel,'authored').transparency=='auto');assert(media(loading,panel,'authored').mute);end}";
             auto scripts=bridge::CreateScriptDocument(metadata.projectId,bridge::GenerateStableId(),
                 "Content/Scenes/Starter.wiscene","camera-test");
             bridge::ScriptSourceBinding binding;
