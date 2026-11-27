@@ -1,3 +1,25 @@
+# Location Zone native check follow-up, 27 November 2026
+
+Source b324c0142d12dc8260eb2315ec7c96754299a2a2. Owner authorised reopening Studio and asked to leave it open. Studio is currently open with the isolated Location Zone Review project's Starter scene and Ravenwood Location Zone selected. Do not discard its current unsaved edits or close it without preserving them.
+
+Native checks found and corrected:
+- Startup crash: CreatorAssetStudioChrome inherited the changed RenegadeStudioChrome layout but old dependent object files remained. A debugger dump identified ComboBox::AddItem in CreateCreatorAssetControls. Explicitly recompiled all 60 Studio sources consuming Chrome/StudioApplication headers, then verified Studio opens successfully. Windows Release cache was configured with /MAP /DEBUG for the diagnosis. No vendor edits.
+- Location Zone was drawn as the fourteenth Add item but both pointer bounds still counted thirteen. Both counts and the source contract now include fourteen.
+- A popup item overlapping the hierarchy splitter lost its press to resizing. Popup item presses now take precedence over splitters/tracks. Temporary tracing used for diagnosis has been removed from source.
+- The native checkbox label drew to the left of a left-aligned checkbox and clipped. Location checkbox placement is now right-aligned inside the Inspector.
+- The local no-project-reference build skipped the RenegadeZoneScriptLibrary copy dependency. Explicitly built that target; native placement then succeeded and automatically opened the Location Inspector. The normal full Studio target already depends on it. Packaging validation now checks Location along with the other thirteen packages.
+- Governed location get/configure/state/actions accept live EntityRef as well as string ID, so an attached script can use self.entity. Fresh rebuilt WorldLocationTests passes this actual Lua path. Force recompiled RuntimeScriptRuntime and relinked consumers by touching their sources because the local no-reference MSBuild run also failed to notice the changed static library.
+
+Observed native authoring: Add > Location Zone entered placement, clicking the scene created it and opened its Inspector. Renamed it Ravenwood; edited type town, range and display duration. During the check further effects/timing/Inspector/camera/Test Game changes continued between our actions, including Wobble, duration 5 and a moved zone. The owner first agreed to idle input; a second coordination question asking whether another chat/tool was controlling DESIGN is pending. Mouse automation was paused to avoid conflicting with those edits.
+
+Verification: latest RenegadeStudioNavigationReview.exe rebuild passes with the popup/checkbox corrections; normal running RenegadeStudio.exe predates those final two source changes and must be updated/restarted before claiming they are visually verified. Runtime and actual attached-EntityRef WorldLocationTests build/pass. Phase5Gate3, StudioUiPolicy and the complete AssistantWorkflowSuite pass after canonical source hash refresh. Earlier focused tests remain recorded below. No hosted CI/push.
+
+NOT COMPLETE: standalone location-name playback, native save/reopen, custom icon picker, Undo/Redo and final corrected checkbox/popup visual checks. A separate direct-Level Runtime launch rendered the existing compass correctly at 75 FPS and exited cleanly, but did not prove the name: the on-disk Starter scene was still its original 74650 bytes while the Location Zone existed in the open unsaved scene. The attempted Save did not update it during competing input. Do not call this a save/reload pass or an announcement failure. The separate Location Announcement Check descriptor was prepared only inside the ignored review fixture; the original owner project is unchanged.
+
+Next: coordinate exclusive controls; preserve/save the current isolated scene, install/reopen the final normal executable, verify the corrected checkbox and popup input, choose a per-location icon, reopen the saved scene, and run the direct-Level descriptor to inspect name timing/effects. Keep Studio open at the end as requested. Existing vendor dirt and root log.txt remain excluded.
+
+---
+
 # Location Zones and animated arrival names, 27 November 2026
 
 Implementation checkpoint 61382ed586dc5db95ca62eba3537e1f31597986a on feature/ui-loading-media. Integrated the existing feature/gameplay-zones foundation locally (ba4bdaf) rather than duplicating the zone framework; no hosted merge or push. Existing zone IDs 0-12 stay unchanged, Location is appended as 13. New Add > Location Zone selects its Inspector, with name/type/per-location icon, proximity name range and total duration, None/Fade/Glitch/Wobble, advanced fades/strength/speed/repeat/compass/discovery and editable project Lua. Native positions feed the existing navigation registry automatically; Basic compass settings hide manual targets under Advanced. Optional Location name Text layer remains editable in the UI Designer; the shared renderer supplies a default if absent, including direct levels without a HUD.
