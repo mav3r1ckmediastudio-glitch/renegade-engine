@@ -1,3 +1,15 @@
+# UI Designer live level-camera backgrounds, 27 November 2026
+
+Source commit `0aceb4d238c7a086ece51b3aa97b903c670a52f1` on `feature/ui-live-camera-background`. See `git show --stat 0aceb4d` for the file list. The change covers EngineBridge screen data and authoring, the Studio inspector and Story Flow level picker, the shared screen renderer, Runtime presentation and the governed Lua API.
+
+In Basic, select Background under Layers. Choose **Source: image / choose camera...**, a Story Flow level and its named camera. Toggle **Slow pan** and use **Preview**. **Choose fallback image...** sets the image drawn when the camera cannot be loaded. **Copy to other screens...** writes independent copies including the camera and pan setting.
+
+The feed loads a private copy of the saved level, keeps native animation and disables gameplay scripts, sound, video and physics components. It renders at 640 x 360 with a 30 Hz cap. Runtime Lua uses `renegade.ui.background_camera(screenPath [, mode [, levelPath, cameraId]])`. Query returns mode, level path and persistent camera ID. Runtime overrides support image, fixed, pan and authored (restore).
+
+Built on DESIGN with `cmake --build BUILD/feed --config Release --target RenegadeStudio RenegadeRuntime -- /m:1 /p:CL_MPCount=3` after a higher-parallelism build hit MSVC C1001. Both Release executables ran. `ctest --test-dir BUILD/feed -C Release -R "RenegadeProjectUiScaffoldTests|RenegadeRuntimeScreenTests" --output-on-failure` passed both tests. The scaffold suite also passed after adding Lua query and override coverage.
+
+On screen, used the Basic inspector to assign Gallery overlook from Starter Level, observed the centre pier changing height with pan off, enabled Slow pan, copied to Title and Options and navigated Main Menu to Options in Preview. Closed Studio, reopened the review project through the Hub and ran Test Game. Title to Main Menu to Options retained the moving background. Reopened the Main Menu inspector and confirmed the named camera and pan setting. Screenshots are in `docs/evidence/live-camera-2026-11-27/`. Geometry, looping animation and named camera were supplied in a prepared review fixture. Camera authoring, complex populated levels, packaged distribution and independent verification remain open.
+
 # UI Designer backgrounds and interactive Preview, 27 November 2026
 
 Source commit `e32a955f214716e59e5df758769944f21ebbf441` on `feature/ui-background-preview`, based on the reviewed button-audio branch at `22ef694`. The combined importer and weapons PR #205 is merged. This review used a separate checkout and a new project.
