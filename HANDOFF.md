@@ -1,3 +1,9 @@
+# Hurt overlay viewport correction | 28 November 2026
+
+Owner rejected the uncovered screen edges after 5a4e94580e81de25a7656ebed79baa1f8a4b24be. The overlay inherited Fit canvas margins. ScreenRenderer/src/ScreenRenderer.cpp now stretches hurt component geometry proportionally to the actual viewport while preserving ordinary HUD layout and editable partial hurt regions. Tests/ScreenRendererTests.cpp covers five mismatched aspects plus embedded origins across Fit/Fill/Stretch.
+
+Release ScreenRenderer and Runtime rebuilt; ScreenRendererTests and HurtFeedbackTests passed. Native solid-flash and vignette checks at three actual client sizes changed all four edges and all four corners; screenshots and 48 pixel checks are in docs/evidence/player-hurt-bounds-2026-11-28. Normal Studio is relinked with the fix. Owner review project/settings preserved; diagnostic tests use a separate copy. No push/CI; prior broad visual verification is superseded for edge coverage by this correction.
+
 # Player hurt feedback | DESIGN | 28 November 2026
 
 Implementation checkpoint: b4a1cfaea02eeac18e44a42ba4427585805a54a6, branch feature/ui-loading-media; based on accepted minimap 36901594b949edbf2840747183a97398fd83ccb6. Documentation/evidence follow in a separate local commit. No push or hosted CI.

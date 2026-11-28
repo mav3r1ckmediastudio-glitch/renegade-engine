@@ -10,7 +10,7 @@ Use Front / Left / Right / Behind / Zone to try a hit without starting a game. L
 
 Choose separate hit, edge, direction and low-health artwork. Alpha PNG is useful for overlays. Hit/direction and low-health have independent tint pickers; white preserves the artwork's original colours. Use generic visuals clears the four artwork overrides. Clear sounds clears both clips.
 
-Opacity, hold/fade times, icon size/radius, threshold, pulse rate, volume/cooldown and shake strength/duration are editable. Overall intensity scales all channels. The component is a normal movable/resizable Image layer with ordinary opacity. Duplicate it and enable different channels if they need independent layout or tint. It does not intercept gameplay clicks.
+Opacity, hold/fade times, icon size/radius, threshold, pulse rate, volume/cooldown and shake strength/duration are editable. Overall intensity scales all channels. The component is a normal movable/resizable Image layer with ordinary opacity. Its geometry maps proportionally across the actual gameplay viewport: a full-design rectangle reaches every screen edge regardless of the HUD Fit/Fill/Stretch setting or window aspect ratio. Duplicate it and enable different channels if they need independent layout or tint. It does not intercept gameplay clicks.
 
 Save applies one Screen history operation; Cancel discards the settings draft. Imported resources are copied into project Content. Screen save/reopen and portable package publishing/adoption retain/remap all six image/audio dependencies. Adding the prefab to a legacy Screen upgrades its optional schema atomically with insertion.
 

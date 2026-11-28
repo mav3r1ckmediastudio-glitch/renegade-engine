@@ -714,14 +714,22 @@ namespace renegade::screen
             ScreenRenderItem item;
             item.widgetId = widget.id;
             item.kind = widget.kind;
+            // Hurt effects cover the gameplay viewport, including the bands
+            // left by a fitted HUD design. Keep authored partial rectangles
+            // editable as proportional viewport regions; ordinary HUD widgets
+            // retain their selected Fit/Fill/Stretch transform.
+            const float scaleX=widget.hurt?outputWidth/document.designWidth:canvas.scaleX;
+            const float scaleY=widget.hurt?outputHeight/document.designHeight:canvas.scaleY;
+            const float offsetX=widget.hurt?0:canvas.offsetX;
+            const float offsetY=widget.hurt?0:canvas.offsetY;
             item.logicalRect = {
-                canvas.offsetX + designRect.x * canvas.scaleX,
-                canvas.offsetY + designRect.y * canvas.scaleY,
-                designRect.width * canvas.scaleX,
-                designRect.height * canvas.scaleY,
+                offsetX + designRect.x * scaleX,
+                offsetY + designRect.y * scaleY,
+                designRect.width * scaleX,
+                designRect.height * scaleY,
             };
-            item.scaleX = canvas.scaleX;
-            item.scaleY = canvas.scaleY;
+            item.scaleX = scaleX;
+            item.scaleY = scaleY;
             item.interaction = interaction;
             item.visual = SelectVisual(widget.style, interaction);
             item.borderColor = widget.style.borderColor;

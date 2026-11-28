@@ -1,0 +1,158 @@
+{
+  "original": {
+    "client_size": [
+      1264,
+      681
+    ],
+    "effects": {
+      "flash": {
+        "edge_pixel_changes": {
+          "left": 124.0,
+          "right": 114.36,
+          "top": 106.68,
+          "bottom": 108.24,
+          "top_left": 97.2,
+          "top_right": 99.12,
+          "bottom_left": 108.24,
+          "bottom_right": 108.36
+        },
+        "state": {
+          "alive": true,
+          "available": true,
+          "health_fraction": "1.000000",
+          "hit_sequence": 1,
+          "last_hit_age": "0.360065",
+          "paused": false,
+          "seconds": "7.763851",
+          "shake": "0.000000"
+        }
+      },
+      "vignette": {
+        "edge_pixel_changes": {
+          "left": 52.76,
+          "right": 48.96,
+          "top": 44.24,
+          "bottom": 44.76,
+          "top_left": 123.68,
+          "top_right": 126.12,
+          "bottom_left": 137.36,
+          "bottom_right": 137.44
+        },
+        "state": {
+          "alive": true,
+          "available": true,
+          "health_fraction": "1.000000",
+          "hit_sequence": 2,
+          "last_hit_age": "0.413196",
+          "paused": false,
+          "seconds": "10.097911",
+          "shake": "0.000000"
+        }
+      }
+    }
+  },
+  "wide": {
+    "client_size": [
+      1604,
+      711
+    ],
+    "effects": {
+      "flash": {
+        "edge_pixel_changes": {
+          "left": 124.0,
+          "right": 114.4,
+          "top": 106.8,
+          "bottom": 108.12,
+          "top_left": 96.32,
+          "top_right": 97.92,
+          "bottom_left": 108.24,
+          "bottom_right": 108.36
+        },
+        "state": {
+          "alive": true,
+          "available": true,
+          "health_fraction": "1.000000",
+          "hit_sequence": 3,
+          "last_hit_age": "0.386426",
+          "paused": false,
+          "seconds": "14.992821",
+          "shake": "0.000000"
+        }
+      },
+      "vignette": {
+        "edge_pixel_changes": {
+          "left": 53.12,
+          "right": 49.4,
+          "top": 44.32,
+          "bottom": 44.72,
+          "top_left": 122.36,
+          "top_right": 124.6,
+          "bottom_left": 137.36,
+          "bottom_right": 137.44
+        },
+        "state": {
+          "alive": true,
+          "available": true,
+          "health_fraction": "1.000000",
+          "hit_sequence": 4,
+          "last_hit_age": "0.413898",
+          "paused": false,
+          "seconds": "17.327253",
+          "shake": "0.000000"
+        }
+      }
+    }
+  },
+  "tall": {
+    "client_size": [
+      1024,
+      891
+    ],
+    "effects": {
+      "flash": {
+        "edge_pixel_changes": {
+          "left": 114.4,
+          "right": 114.48,
+          "top": 106.68,
+          "bottom": 108.24,
+          "top_left": 100.52,
+          "top_right": 102.36,
+          "bottom_left": 108.36,
+          "bottom_right": 108.36
+        },
+        "state": {
+          "alive": true,
+          "available": true,
+          "health_fraction": "1.000000",
+          "hit_sequence": 5,
+          "last_hit_age": "0.360086",
+          "paused": false,
+          "seconds": "22.182144",
+          "shake": "0.000000"
+        }
+      },
+      "vignette": {
+        "edge_pixel_changes": {
+          "left": 48.56,
+          "right": 48.68,
+          "top": 45.28,
+          "bottom": 45.76,
+          "top_left": 127.96,
+          "top_right": 130.36,
+          "bottom_left": 137.52,
+          "bottom_right": 137.44
+        },
+        "state": {
+          "alive": true,
+          "available": true,
+          "health_fraction": "1.000000",
+          "hit_sequence": 6,
+          "last_hit_age": "0.398898",
+          "paused": false,
+          "seconds": "24.489735",
+          "shake": "0.000000"
+        }
+      }
+    }
+  }
+}
