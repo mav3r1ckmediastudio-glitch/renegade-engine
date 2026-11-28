@@ -1,5 +1,6 @@
 #include "renegade/bridge/HumanoidRetargetService.h"
 #include "ModelImporter.h"
+#include "renegade/bridge/RetargetJointKey.h"
 
 #include <algorithm>
 #include <cctype>
@@ -103,6 +104,8 @@ namespace
         const std::string token = Normalize(candidate == nullptr ? "" : candidate);
         if (name.empty() || token.empty())
             return -1;
+        if (candidate && renegade::bridge::RetargetJointKey(entityName) == renegade::bridge::RetargetJointKey(candidate))
+            return 29000 + static_cast<int>(token.size()) + (name == token ? 2000 : 0);
         if (name == token)
             return 30000 + static_cast<int>(token.size());
         if (name.size() >= token.size() &&
@@ -259,14 +262,22 @@ namespace renegade::bridge
             result.error = "Selected character has no native Wicked ArmatureComponent.";
             return result;
         }
+        return BuildAutoHumanoidMapping(scene,armature->boneCollection);
+    }
+
+    HumanoidAutoMapResult BuildAutoHumanoidMapping(const wi::scene::Scene& scene,
+        const wi::vector<wi::ecs::Entity>& joints)
+    {
+        HumanoidAutoMapResult result;
+        result.mapping.componentExists = true;
         struct NamedBone
         {
             Entity entity = wi::ecs::INVALID_ENTITY;
             std::string name;
         };
         std::vector<NamedBone> namedBones;
-        namedBones.reserve(armature->boneCollection.size());
-        for (const auto entity : armature->boneCollection)
+        namedBones.reserve(joints.size());
+        for (const auto entity : joints)
         {
             const auto* name = scene.names.GetComponent(entity);
             if (entity != wi::ecs::INVALID_ENTITY && name != nullptr && !name->name.empty())
@@ -329,6 +340,13 @@ namespace renegade::bridge
         for (std::size_t i = 0; i < scene.humanoids.GetCount(); ++i)
             if (scene.humanoids[i].IsValid())
                 ++usableRigs;
+        // FBX can attach the native humanoid to the file root instead of the armature.
+        if (usableRigs == 1 && scene.armatures.GetCount() == 1)
+        {
+            (void)DisableDefaultHumanoidLookAt(scene);
+            error.clear();
+            return true;
+        }
         for (std::size_t i = 0; i < scene.armatures.GetCount(); ++i)
         {
             const auto rig = scene.armatures.GetEntity(i);

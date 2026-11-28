@@ -52,6 +52,9 @@ namespace renegade::bridge
         return true;
     }
 
+    // Encode an authored TGA as a portable glTF image without GPU readback.
+    bool EncodeMaterialTgaAsPng(const uint8_t* data, size_t size, std::vector<uint8_t>& png);
+
     bool ValidateMaterialTextureProduct(const std::vector<std::uint8_t>& bytes,
         TextureSemantic semantic, std::string& error);
 

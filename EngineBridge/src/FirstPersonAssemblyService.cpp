@@ -132,6 +132,7 @@ bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
   "MeleeRightCharge","MeleeRightHold","MeleeRightRelease",
   "MeleeDownCharge","MeleeDownHold","MeleeDownRelease",
   "MeleeStabCharge","MeleeStabHold","MeleeStabRelease"};
+ const std::set<std::string> integratedActions={"Attack2","Attack3","BlockIn","BlockHold","BlockOut","FireStart","FireStop"};
  unsigned directionalCount=0;
  for(const auto& p:s.pairs)directionalCount+=directionalActions.count(p.action)!=0;
  if(directionalCount!=0 && directionalCount!=12){e="Map all twelve directional Charge/Hold/Release slots, or NONE for all.";return false;}
@@ -160,7 +161,7 @@ bool Valid(const FirstPersonAssemblySettings& s,std::string& e) {
  std::set<std::string> actions;
  for(const auto& p:s.pairs) {
  if(std::none_of(FirstPersonAssemblyActions.begin(),FirstPersonAssemblyActions.end(),
- [&](const char* action){return p.action==action;}) && !(s.IndependentHands() && directionalActions.count(p.action))) {
+ [&](const char* action){return p.action==action;}) && !(s.integratedWeaponPresentation && integratedActions.count(p.action)) && !(s.IndependentHands() && directionalActions.count(p.action))) {
  e="Unknown assembly action.";return false;}
  if(!actions.insert(p.action).second && !(s.IndependentHands() && p.action=="Attack")){e="Each assembly action needs one explicit pair except independent Attack variants.";return false;}
  }

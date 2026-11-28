@@ -22,6 +22,31 @@ namespace renegade::runtime
         std::vector<Drop> drops;
         std::vector<Stain> stains;
         unsigned stainSerial=0;
+        std::vector<wi::ecs::Entity> characterObjects;
+
+        struct CollisionFilterScope
+        {
+            struct Saved { wi::ecs::Entity entity; uint32_t authored, dynamic; };
+            wi::scene::Scene& scene;
+            std::vector<Saved> saved;
+            explicit CollisionFilterScope(wi::scene::Scene& value) : scene(value) {}
+            void Exclude(wi::ecs::Entity entity)
+            {
+                auto* object=scene.objects.GetComponent(entity);
+                if(!object || object->GetFilterMask()==0)return;
+                saved.push_back({entity,object->filterMask,object->filterMaskDynamic});
+                object->filterMask=object->filterMaskDynamic=0;
+            }
+            ~CollisionFilterScope()
+            {
+                for(const auto& item:saved)
+                    if(auto* object=scene.objects.GetComponent(item.entity))
+                    {
+                        object->filterMask=item.authored;
+                        object->filterMaskDynamic=item.dynamic;
+                    }
+            }
+        };
         static const wi::graphics::Texture& StainSurface(float dry)
         {
             static std::array<wi::graphics::Texture,16> textures;
@@ -120,7 +145,7 @@ namespace renegade::runtime
             if(mesh!=wi::ecs::INVALID_ENTITY && scene.meshes.Contains(mesh))return;
             mesh=scene.Entity_CreateTransform("Blood droplet resource");
             auto& material=scene.materials.Create(mesh);
-            material.baseColor={.26f,.012f,.018f,1};material.SetRoughness(.18f);
+            material.baseColor={.20f,.006f,.012f,1};material.SetRoughness(.38f);
             material.SetReflectance(.04f);material.SetCastShadow(false);material.emissiveColor={0,0,0,0};
             auto& geometry=scene.meshes.Create(mesh);
             constexpr unsigned lat=12,lon=24;
@@ -142,6 +167,15 @@ namespace renegade::runtime
         void Spawn(wi::scene::Scene& scene,const XMFLOAT3& point,const XMFLOAT3& direction,
             wi::ecs::Entity source,float strength,unsigned seed)
         {
+            // Refresh on a hit, when new cosmetic objects are being created.
+            characterObjects.clear();
+            for(size_t oi=0;oi<scene.objects.GetCount();++oi)
+            {
+                const auto entity=scene.objects.GetEntity(oi);
+                for(size_t ci=0;ci<scene.characters.GetCount();++ci)
+                    if(Belongs(scene,entity,scene.characters.GetEntity(ci)))
+                    {characterObjects.push_back(entity);break;}
+            }
             PrepareMesh(scene);
             const unsigned count=std::max(18u,unsigned(60*strength));
             const auto axis=XMVector3Normalize(XMLoadFloat3(&direction));
@@ -156,7 +190,7 @@ namespace renegade::runtime
                 const float angle=float(i)*2.399963f+float(seed%31);
                 const float spread=.35f+.35f*float(i%3);
                 Drop drop;drop.entity=entity;drop.source=source;
-                drop.radius=.003f+.007f*Variation(seed*59u+i*101u+7u);
+                drop.radius=.0012f+.0028f*Variation(seed*59u+i*101u+7u);
                 drop.position={point.x+direction.x*.035f,point.y+direction.y*.035f,point.z+direction.z*.035f};
                 drop.velocity={direction.x*(1.1f+strength)+std::cos(angle)*spread,
                     direction.y*(1.1f+strength)+.35f+float(i%4)*.12f,
@@ -180,8 +214,16 @@ namespace renegade::runtime
             {
                 const float visible=1.f-.75f*std::clamp((drop.age-.35f)/.85f,0.f,1.f);
                 const float radius=drop.radius*visible;
-                t->ClearTransform();t->Scale(XMFLOAT3{radius,radius*1.4f,radius});
-                t->Translate(drop.position);t->UpdateTransform();
+                // Align a thin liquid streak with travel instead of a round bead.
+                auto axis=XMLoadFloat3(&drop.velocity);
+                const float speed=XMVectorGetX(XMVector3Length(axis));
+                axis=speed>.0001f?axis/speed:XMVectorSet(0,1,0,0);
+                const auto up=std::abs(XMVectorGetY(axis))>.95f?XMVectorSet(1,0,0,0):XMVectorSet(0,1,0,0);
+                const auto facing=XMMatrixInverse(nullptr,XMMatrixLookToLH(XMVectorZero(),axis,up));
+                const float length=radius*1.5f+std::min(.010f,speed*.0012f);
+                t->ClearTransform();t->MatrixTransform(XMMatrixScaling(radius*.65f,radius*.65f,length)*facing*
+                    XMMatrixTranslation(drop.position.x,drop.position.y,drop.position.z));
+                t->UpdateTransform();
             }
         }
         void Mark(wi::scene::Scene& scene,const XMFLOAT3& point,const XMFLOAT3& normal,
@@ -217,6 +259,15 @@ namespace renegade::runtime
         {
             if(dt<=0)return;
             liquidSheets.Update(scene,dt);
+            // Queries finish before Scene::Update. Restore by entity because
+            // expiry can compact the native object component array below.
+            CollisionFilterScope collisionFilters(scene);
+            for(const auto& drop:drops)collisionFilters.Exclude(drop.entity);
+            for(const auto& sheet:liquidSheets.sheets)collisionFilters.Exclude(sheet.entity);
+            for(const auto entity:characterObjects)
+                for(size_t ci=0;ci<scene.characters.GetCount();++ci)
+                    if(Belongs(scene,entity,scene.characters.GetEntity(ci)))
+                    {collisionFilters.Exclude(entity);break;}
             for(auto it=drops.begin();it!=drops.end();)
             {
                 // Bound query work even after a long hitch; presentation ages still expire normally.
@@ -277,7 +328,7 @@ namespace renegade::runtime
             liquidSheets.Reset(scene);
             for(const auto& d:drops)scene.Entity_Remove(d.entity);
             for(const auto& s:stains)scene.Entity_Remove(s.entity);
-            drops.clear();stains.clear();stainSerial=0;hitSerial=0;
+            drops.clear();stains.clear();characterObjects.clear();stainSerial=0;hitSerial=0;
             if(mesh!=wi::ecs::INVALID_ENTITY)scene.Entity_Remove(mesh);
             mesh=wi::ecs::INVALID_ENTITY;
         }

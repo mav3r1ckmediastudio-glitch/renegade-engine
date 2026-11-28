@@ -1,5 +1,6 @@
 #include "StudioApplication.h"
 #include "StudioMultilineInputRoute.h"
+#include "WeaponEditor/WeaponWorkspace.h"
 #include "StartupIdentityHandshake.h"
 #include "StartupIrisTransition.h"
 #include "StartupIdentityPrompt.h"
@@ -272,6 +273,9 @@ namespace
             }
             return 0;
 
+        case WM_MOUSEWHEEL:
+            if(renegade::studio::weapons::Wheel(window,wParam,lParam))return 0;
+            return DefWindowProcW(window,message,wParam,lParam);
         case WM_INPUT:
             wi::input::rawinput::ParseMessage(reinterpret_cast<void*>(lParam));
             return 0;
@@ -834,9 +838,10 @@ int APIENTRY wWinMain(
         }
         else
         {
-            application->Run();
+            if(!renegade::studio::weapons::Run(*application))application->Run();
         }
     }
+    renegade::studio::weapons::Close(*application);
 
     LogGate2D("PROCESS_EXIT");
     LogGate2C("PROCESS_EXIT");

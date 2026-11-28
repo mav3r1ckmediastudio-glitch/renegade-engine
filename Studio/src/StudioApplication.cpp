@@ -1,3 +1,4 @@
+#include "renegade/bridge/RetargetJointKey.h"
 #include "renegade/bridge/GroundPaint.h"
 #include <cfloat>
 #include <cstring>
@@ -11,6 +12,8 @@
 #include "shaders/ShaderInterop_Renderer.h"
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
+#include "WeaponEditor/WeaponWorkspace.h"
+#include "renegade/bridge/MatchingRigAnimationService.h"
 #include "StudioTheme.h"
 #include "MarkerIconOverlay.h"
 #include "CreatorAssetFrameBoundary.h"
@@ -26,6 +29,11 @@
 #include "renegade/bridge/RiverTerrainLayerService.h"
 #include "renegade/bridge/RiverbedMaterialService.h"
 #include "renegade/bridge/SpecialistComponentService.h"
+#ifdef _WIN32
+#include <Windows.h>
+#include <commdlg.h>
+#pragma comment(lib,"comdlg32.lib")
+#endif
 #include <cctype>
 #include "StudioUserPreferences.h"
 
@@ -42,6 +50,9 @@
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/FlightVehicleService.h"
 #include "renegade/bridge/HumanoidRetargetService.h"
+#include "renegade/bridge/ModelImporterFailureAdapter.h"
+#include <ModelImporter.h>
+#include "Utility/stb_image.h"
 #include "renegade/bridge/AnimationService.h"
 #include <algorithm>
 #include <array>
@@ -71,6 +82,31 @@ namespace
         if(!device)return renegade::bridge::ResolvePlayerStart(scene);
         static thread_local renegade::studio::PlayerStartFrameCache cache;
         return cache.Resolve(scene,device->GetFrameCount(),sceneRevision,commandRevision);
+    }
+
+    std::string SuggestImportedCharacterAction(std::string name)
+    {
+        const auto marker = name.find_last_of('@');
+        if (marker != std::string::npos) name.erase(0, marker + 1);
+        std::string key;
+        for (const unsigned char ch : name) if (std::isalnum(ch)) key += char(std::tolower(ch));
+        if (key.rfind("thirdperson", 0) == 0) key.erase(0, 11);
+        if (key == "idle" || key == "idleunarmed") return "Idle";
+        if (key == "walk" || key == "walkforward" || key == "walkforwardunarmed") return "Walk";
+        if (key == "run" || key == "runforward" || key == "runforwardunarmed") return "Run";
+        if (key.rfind("attack", 0) == 0) return "Attack";
+        if (key == "death" || key == "reload" || key == "hit") {
+            key.front() = char(std::toupper(static_cast<unsigned char>(key.front())));
+            return key;
+        }
+        return "Unassigned";
+    }
+
+    std::string CharacterIdleHint(const std::vector<std::string>& actions)
+    {
+        return std::find(actions.begin(),actions.end(),"Idle")==actions.end()
+            ? "Add or assign an Idle clip for playback while standing in Test Game."
+            : "Idle assigned for Test Game.";
     }
 
     constexpr std::uint8_t SelectionStencilReference = 0x0F;
@@ -299,6 +335,7 @@ namespace
 
 namespace renegade::studio
 {
+    #include "ImportMaterials.inc"
     struct StudioRenderPath::ProjectLoadOperation
     {
         std::string descriptorPath;
@@ -925,6 +962,8 @@ namespace renegade::studio
             // Private previews stay shaded; restore the scene preference immediately.
             const auto savedMode=wi::renderer::GetWireframeMode();
             wi::renderer::SetWireframeMode(static_cast<wi::renderer::WIREFRAME_MODE>(0));
+            if (modelImportPanel_.IsVisible() && modelImportPreview_ && modelImportPreview_->NeedsRender())
+                modelImportPreview_->PreRender();
             lightPicker_.PreRenderPreview();particlePicker_.PreRenderPreview();
             wi::renderer::SetWireframeMode(savedMode);
             wi::RenderPath2D::PreRender();
@@ -959,6 +998,8 @@ namespace renegade::studio
             // Private previews stay shaded; restore the scene preference immediately.
             const auto savedMode=wi::renderer::GetWireframeMode();
             wi::renderer::SetWireframeMode(static_cast<wi::renderer::WIREFRAME_MODE>(0));
+            if (modelImportPanel_.IsVisible() && modelImportPreview_ && modelImportPreview_->NeedsRender())
+                modelImportPreview_->Render();
             lightPicker_.RenderPreview();particlePicker_.RenderPreview();
             wi::renderer::SetWireframeMode(savedMode);
             wi::RenderPath2D::Render();
@@ -3379,6 +3420,10 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::CreateProjectile:
                 OpenProjectileAssetEditor();
                 break;
+            case RenegadeStudioChrome::Action::OpenWeaponEditor:
+                if(session_ && session_->Projects().HasProject() && !testLevelRuntime_.IsActive())
+                    weapons::Choose(session_->Projects().CurrentProject().rootPath);
+                break;
             case RenegadeStudioChrome::Action::ImportStaticGlb:
                 OpenStaticModelImporter();
                 break;
@@ -3512,7 +3557,7 @@ namespace renegade::studio
         GetGUI().RemoveWidget(&inspectorPanel_);
         GetGUI().AddWidget(&studioChrome_.AudioWorkspace());
         GetGUI().AddWidget(&inspectorPanel_);
-        modelImportPanel_.Create("Import Model");
+        modelImportPanel_.Create("Model Importer");
         modelImportPanel_.SetSize(XMFLOAT2(560.0f, 610.0f));
         modelImportPreviewImage_.Create("Rendered Model Preview");
         modelImportPreviewImage_.SetText("");
@@ -3520,6 +3565,9 @@ namespace renegade::studio
         modelImportPreviewImage_.SetPos(XMFLOAT2(20.0f, 35.0f));
         modelImportPreviewImage_.SetSize(XMFLOAT2(512.0f, 320.0f));
         modelImportPanel_.AddWidget(&modelImportPreviewImage_);
+        importNavigationHint_.Create("Preview navigation");
+        importNavigationHint_.SetText("RMB orbit   |   MMB pan   |   Wheel zoom   |   Shift for precision");
+        modelImportPanel_.AddWidget(&importNavigationHint_);
         modelImportRotateLeft_.Create("Rotate Preview Left");
         modelImportRotateLeft_.SetText("ROTATE LEFT");
         modelImportRotateLeft_.SetPos(XMFLOAT2(20.0f, 365.0f));
@@ -3546,6 +3594,7 @@ namespace renegade::studio
         modelImportMaterial_.SetPos({650,45}); modelImportMaterial_.SetSize({355,30});
         modelImportMaterial_.OnSelect([this](const wi::gui::EventArgs&) { RefreshModelImportTextureInfo(); });
         modelImportPanel_.AddWidget(&modelImportMaterial_);
+        importMaterials_=std::make_shared<ImportMaterials>(*this);
         modelImportMapSlot_.Create("Material map slot");
         modelImportMapSlot_.SetText("Map: ");
         modelImportMapSlot_.SetPos({650,95}); modelImportMapSlot_.SetSize({355,30});
@@ -3579,20 +3628,16 @@ namespace renegade::studio
             const bool selected = args.iValue > 0 && size_t(args.iValue) <= clips.size();
             modelImportPlay_.SetEnabled(selected);
             modelImportRestart_.SetEnabled(selected);
+            for (auto& step : importStep_) step.SetEnabled(selected);
             modelImportTime_.SetEnabled(selected);
             modelImportSpeed_.SetEnabled(selected);
-            modelImportAction_.SetEnabled(selected);
-            if (selected && size_t(args.iValue - 1) < modelImportActions_.size()) {
-                const std::vector<std::string> actions = {"Unassigned", "Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death"};
-                const auto found = std::find(actions.begin(), actions.end(), modelImportActions_[args.iValue - 1]);
-                modelImportAction_.SetSelected(int(found - actions.begin()));
-            }
             if (selected) {
                 const auto& clip = clips[args.iValue - 1];
                 modelImportTime_.SetRange(clip.start, std::max(clip.end, clip.start + 0.001f));
                 modelImportTime_.SetValue(clip.start);
                 modelImportSpeed_.SetValue(clip.speed);
             }
+            if(modelImportCandidate_)LayoutImportWorkspace();
         });
         modelImportPanel_.AddWidget(&modelImportClip_);
         modelImportPlay_.Create("Preview Play Pause");
@@ -3629,20 +3674,61 @@ namespace renegade::studio
             if (modelImportPreview_) modelImportPreview_->SetSpeed(args.fValue);
         });
         modelImportPanel_.AddWidget(&modelImportSpeed_);
-        modelImportAction_.Create("Gameplay action");
-        modelImportAction_.SetPos(XMFLOAT2(160.0f, 645.0f));
-        modelImportAction_.SetSize(XMFLOAT2(350.0f, 30.0f));
-        for (const auto* action : {"Unassigned", "Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death"})
-            modelImportAction_.AddItem(action);
-        modelImportAction_.OnSelect([this](const wi::gui::EventArgs& args) {
-            const int clip = modelImportClip_.GetSelected() - 1;
-            const std::vector<std::string> actions = {"Unassigned", "Idle", "Walk", "Run", "Attack", "Reload", "Hit", "Death"};
-            if (clip >= 0 && size_t(clip) < modelImportActions_.size() && args.iValue >= 0 && size_t(args.iValue) < actions.size())
-                modelImportActions_[clip] = actions[args.iValue];
+        actionTable_.Create("Animation entries", wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        modelImportPanel_.AddWidget(&actionTable_);
+        auto entryButton=[this](wi::gui::Button& button,const char* caption,auto callback) {
+            button.Create(caption);
+            button.OnClick([callback](const wi::gui::EventArgs&){callback();});
+            modelImportPanel_.AddWidget(&button);
+        };
+        sourceHeading_.Create("Animation clips");
+        entriesHeading_.Create("Action entries");
+        modelImportPanel_.AddWidget(&sourceHeading_);
+        modelImportPanel_.AddWidget(&entriesHeading_);
+        const char* columns[]={"Name","Action","Source clip","Start","End","Speed"};
+        for(int c=0;c<6;++c) {
+            entryHeaders_[c].Create(columns[c]);
+            modelImportPanel_.AddWidget(&entryHeaders_[c]);
+        }
+        actionSources_.Create("Source clips", wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        modelImportPanel_.AddWidget(&actionSources_);
+        entryButton(referencePose_,"Preview reference pose",[this]{SelectActionEntry(-1);});
+        entryButton(removeEntry_,"Remove",[this]{
+            const int row=actionEntries_.selected;
+            if(row<0 || row>=int(actionEntries_.rows.size())) return;
+            RememberActionEdit();
+            actionEntries_.rows.erase(actionEntries_.rows.begin()+row);
+            SelectActionEntry(std::min(row,int(actionEntries_.rows.size())-1));
         });
-        modelImportPanel_.AddWidget(&modelImportAction_);
+        entryButton(addEntry_,"+ Add entry",[this]{
+            if(!actionSourceCount_) return;
+            RememberActionEdit();
+            bridge::CreatorAnimationImportRecipe entry;
+            if(actionEntries_.selected>=0) entry=actionEntries_.rows[actionEntries_.selected];
+            else {
+                const int sourceIndex=std::max(0,modelImportClip_.GetSelected()-1);
+                entry.sourceAnimationIndex=uint32_t(sourceIndex);
+                const auto clip=modelImportPreview_->Clips()[sourceIndex];
+                const auto& source=modelImportCandidate_->PeekScene()->animations[sourceIndex];
+                entry.name=clip.name; entry.start=source.start; entry.end=source.end; entry.speed=source.speed;
+                entry.action="Unassigned";
+            }
+            entry.modelStart=bridge::ModelClipStart::Wait;
+            const auto base=entry.name;
+            for(int suffix=2;std::any_of(actionEntries_.rows.begin(),actionEntries_.rows.end(),
+                [&](const auto& other){return other.name==entry.name;});++suffix)
+                entry.name=base+" "+std::to_string(suffix);
+            actionEntries_.rows.push_back(entry);
+            SelectActionEntry(int(actionEntries_.rows.size())-1);
+            actionTable_.scrollbar_vertical.SetOffset(-float(actionEntries_.rows.size()*34));
+        });
+        entryButton(entryUndo_,"Undo",[this]{UndoActionEdit(false);});
+        entryButton(entryRedo_,"Redo",[this]{UndoActionEdit(true);});
+        entryHint_.Create("Add to Library saves these entries with the character.");
+        modelImportPanel_.AddWidget(&entryHint_);
         modelImportAddAnimation_.Create("Add External Animation FBX");
-        modelImportAddAnimation_.SetText("ADD ANIMATION FBX");
+        modelImportAddAnimation_.SetText("Add animation clips...");
+        modelImportAddAnimation_.SetTooltip("Select one or more FBX files with Ctrl or Shift. Use Retargeting for manual overrides.");
         modelImportAddAnimation_.SetPos(XMFLOAT2(20.0f, 685.0f));
         modelImportAddAnimation_.SetSize(XMFLOAT2(510.0f, 30.0f));
         modelImportAddAnimation_.OnClick([this](const wi::gui::EventArgs&) { AppendModelImportAnimations(); });
@@ -3670,14 +3756,23 @@ namespace renegade::studio
         modelImportRole_.Create("Asset role");
         modelImportRole_.SetText("Asset role: ");
         modelImportRole_.SetSize({390,26});
-        modelImportRole_.AddItem("General model");modelImportRole_.AddItem("Player arms");modelImportRole_.AddItem("Weapon");
+        modelImportRole_.AddItem("Choose asset role...");modelImportRole_.AddItem("Player arms");modelImportRole_.AddItem("Weapon model");modelImportRole_.AddItem("Assembled arms and weapon");
+        modelImportRole_.OnSelect([this](const wi::gui::EventArgs& a) {
+            if (importWorkflow_ != ImportWorkflow::Player) return;
+            const std::string folder = a.iValue>=2 ? "Content/Player/Weapons" :
+                a.iValue==1 ? "Content/Player/Arms" : "Content/Models";
+            modelImportFolder_.SetValue(folder);
+            for(int i=0;i<int(modelImportFolderChoices_.GetItemCount());++i)
+                if(modelImportFolderChoices_.GetItemText(i)==folder)modelImportFolderChoices_.SetSelectedWithoutCallback(i);
+            LayoutImportWorkspace();
+        });
         modelImportPanel_.AddWidget(&modelImportRole_);
         modelImportTags_.Create("Import tags");modelImportTags_.SetDescription("Tags: ");
         modelImportTags_.SetCancelInputEnabled(false);modelImportTags_.SetSize({390,26});
         modelImportTags_.SetTooltip("Optional comma-separated search labels. Tags do not choose the destination.");
         modelImportPanel_.AddWidget(&modelImportTags_);
         modelImportCommit_.Create("Commit Model Asset");
-        modelImportCommit_.SetText("IMPORT ASSET");
+        modelImportCommit_.SetText("Add to Library");
         modelImportCommit_.SetPos(XMFLOAT2(20.0f, 550.0f));
         modelImportCommit_.SetSize(XMFLOAT2(220.0f, 32.0f));
         modelImportCommit_.OnClick([this](const wi::gui::EventArgs&)
@@ -3705,6 +3800,8 @@ namespace renegade::studio
             }
         });
         modelImportPanel_.AddWidget(&modelImportCancel_);
+        CreateImportWorkspace();
+        modelImportPreviewImage_.SetColor(wi::Color::White());
         modelImportPanel_.SetVisible(false);
         CreateHandGripEditor();
         CreatePickupEditor();
@@ -3715,7 +3812,7 @@ namespace renegade::studio
         GetGUI().AddWidget(&lightPicker_);
         particlePicker_.Create();GetGUI().AddWidget(&particlePicker_);GetGUI().AddWidget(&particlePicker_.TextureBrowserWidget());
         studioChrome_.SetParticlePickerAction([this](bool edit){OpenParticlePicker(edit);});
-        GetGUI().AddWidget(&modelImportPanel_);
+        dialogueGui_.AddWidget(&modelImportPanel_);
 
         assistantDock_.Create();
         assistantDock_.OnOpenChanged([this](const bool open)
@@ -3977,33 +4074,42 @@ namespace renegade::studio
         theme.tooltip_shadow_color = HologramBorder;
 
         auto& gui = GetGUI();
-        gui.SetTheme(theme);
-        gui.SetColor(HologramIdle, wi::gui::IDLE);
-        gui.SetColor(HologramFocus, wi::gui::FOCUS);
-        gui.SetColor(HologramActive, wi::gui::ACTIVE);
-        gui.SetColor(HologramFocus, wi::gui::DEACTIVATING);
-        gui.SetColor(HologramPanel, wi::gui::WIDGET_ID_WINDOW_BASE);
-        // Dropdown lists have their own colour; ordinary widget states do not
-        // replace Wicked's translucent default menu surface.
-        gui.SetColor(wi::Color(33,35,37,255), wi::gui::WIDGET_ID_COMBO_DROPDOWN);
-        gui.SetColor(
-            wi::Color(7, 10, 12, 255),
-            wi::gui::WIDGET_ID_TEXTINPUTFIELD_IDLE);
-        gui.SetColor(
-            HologramFocus,
-            wi::gui::WIDGET_ID_TEXTINPUTFIELD_FOCUS);
-        gui.SetColor(
-            HologramActive,
-            wi::gui::WIDGET_ID_TEXTINPUTFIELD_ACTIVE);
-        gui.SetColor(
-            wi::Color(2, 12, 20, 245),
-            wi::gui::WIDGET_ID_SCROLLBAR_BASE_IDLE);
-        gui.SetColor(
-            HologramFocus,
-            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_HOVER);
-        gui.SetColor(
-            HologramActive,
-            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
+        auto applyWorkspaceTheme = [&](auto& surface) {
+            surface.SetTheme(theme);
+            surface.SetColor(HologramIdle, wi::gui::IDLE);
+            surface.SetColor(HologramFocus, wi::gui::FOCUS);
+            surface.SetColor(HologramActive, wi::gui::ACTIVE);
+            surface.SetColor(HologramFocus, wi::gui::DEACTIVATING);
+            surface.SetColor(HologramPanel, wi::gui::WIDGET_ID_WINDOW_BASE);
+            // Dropdown lists have their own colour; ordinary widget states do not
+            // replace Wicked's translucent default menu surface.
+            surface.SetColor(wi::Color(33,35,37,255), wi::gui::WIDGET_ID_COMBO_DROPDOWN);
+            surface.SetColor(
+                wi::Color(7, 10, 12, 255),
+                wi::gui::WIDGET_ID_TEXTINPUTFIELD_IDLE);
+            surface.SetColor(
+                HologramFocus,
+                wi::gui::WIDGET_ID_TEXTINPUTFIELD_FOCUS);
+            surface.SetColor(
+                HologramActive,
+                wi::gui::WIDGET_ID_TEXTINPUTFIELD_ACTIVE);
+            surface.SetColor(
+                wi::Color(2, 12, 20, 245),
+                wi::gui::WIDGET_ID_SCROLLBAR_BASE_IDLE);
+            surface.SetColor(
+                HologramFocus,
+                wi::gui::WIDGET_ID_SCROLLBAR_KNOB_HOVER);
+            surface.SetColor(
+                HologramActive,
+                wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
+        };
+        applyWorkspaceTheme(gui);
+        for(auto& corner:theme.image.corners_rounding) corner.radius=3.f;
+        theme.shadow=1.f;
+        theme.shadow_color=wi::Color(65,73,79,255);
+        applyWorkspaceTheme(modelImportPanel_);
+        modelImportPanel_.SetColor(wi::Color(15,18,20,255),wi::gui::WIDGET_ID_WINDOW_BASE);
+        modelImportPreviewImage_.SetColor(wi::Color::White());
 
         // Rendered pixels need an untinted image; the global GUI theme uses
         // dark sprite colours and background blur for ordinary controls.
@@ -4234,7 +4340,7 @@ namespace renegade::studio
         std::string displayId,displayPath;
         if(dialogueEditor_.TakeDisplayEditorRequest(displayId,displayPath) && dialogueDisplayEditor_)
             dialogueDisplayEditor_(displayId,displayPath);
-        dialogueFrameSuspended_=dialogueEditor_.IsVisible();
+        dialogueFrameSuspended_=dialogueEditor_.IsVisible() || modelImportPanel_.IsVisible();
         if(dialogueFrameSuspended_&&!dialogueGuiActive_){dialogueSavedGuiVisibility_=GetGUI().IsVisible();dialogueGuiActive_=true;}
         if(dialogueFrameSuspended_)GetGUI().SetVisible(false);
         else if(dialogueGuiActive_){GetGUI().SetVisible(dialogueSavedGuiVisibility_);dialogueGuiActive_=false;}
@@ -4320,7 +4426,52 @@ namespace renegade::studio
             // A separate native GUI owns the modal. Background chrome never
             // receives clicks or shortcuts while a conversation is being edited.
             wi::RenderPath2D::Update(dt);
+            // Wicked discards the active text buffer on a click outside its field.
+            // Commit the draft before the GUI dispatches that click (including Save).
+            if (modelImportPanel_.IsVisible() && importPage_ == ImportPage::Model &&
+                (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) || wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))) {
+                const auto pointer = wi::input::GetPointer();
+                for (auto& field : importTransformFields_) {
+                    if (!field.IsVisible() || field.GetState() != wi::gui::ACTIVE) continue;
+                    const auto pos = field.GetPos(), size = field.GetSize();
+                    if (pointer.x >= pos.x && pointer.x < pos.x+size.x &&
+                        pointer.y >= pos.y && pointer.y < pos.y+size.y) break;
+                    field.SetValue(field.GetCurrentInputValue());
+                    ApplyImportTransform();
+                    break;
+                }
+            }
             dialogueGui_.Update(*this,dt);
+            if (modelImportPanel_.IsVisible() && modelImportPreview_ && !NavigateImportViewport() && RigEditingVisible())
+                UpdateImportRigInput();
+            if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_)
+            {
+                importMaterials_->held.update();
+                importMaterials_->hover();
+                const auto viewport = modelImportPreviewImage_.GetSize();
+                const float dpi = GetPhysicalWidth() / std::max(1.f, GetLogicalWidth());
+                modelImportPreview_->SetViewportSize(
+                    std::max(1, int(viewport.x * dpi)), std::max(1, int(viewport.y * dpi)));
+                if (modelImportPreview_->NeedsRender())
+                {
+                    modelImportPreview_->PreUpdate();
+                    modelImportPreview_->Update(dt);
+                    if(mapEditingClip_ && importPage_==ImportPage::Pose && rigDrag_==RigHandle::None &&
+                       displayedPoseTime_!=modelImportPreview_->ClipTime()){
+                        displayedPoseTime_=modelImportPreview_->ClipTime();
+                        RefreshPoseFields();
+                    }
+                }
+                importMaterials_->parts.update();
+                wi::Resource image;
+                image.SetTexture(modelImportPreview_->GetRenderResult3D());
+                modelImportPreviewImage_.SetImage(image);
+                modelImportCommit_.SetEnabled(modelImportPreview_->IsReady() && importWorkflow_ != ImportWorkflow::None && (importWorkflow_ != ImportWorkflow::Player || modelImportRole_.GetSelected()>0));
+                modelImportPlay_.SetText(modelImportPreview_->IsPlaying() ? "PAUSE" : "PLAY");
+                if (modelImportPreview_->HasClip())
+                    modelImportTime_.SetValue(modelImportPreview_->ClipTime());
+            }
+
             if(session_)dialogueEditor_.Tick(*session_,*this);
             wi::input::HidePointer(false);
             pendingAction_=EditorAction::None;
@@ -4504,22 +4655,6 @@ namespace renegade::studio
             pendingAction_=EditorAction::None;
             return;
         }
-        if (modelImportPanel_.IsVisible() && modelImportCandidate_ && modelImportPreview_)
-        {
-            if (modelImportPreview_->NeedsRender())
-            {
-                modelImportPreview_->PreUpdate();
-                modelImportPreview_->Update(dt);
-            }
-            wi::Resource image;
-            image.SetTexture(modelImportPreview_->GetRenderResult3D());
-            modelImportPreviewImage_.SetImage(image);
-            modelImportCommit_.SetEnabled(modelImportPreview_->IsReady());
-            modelImportPlay_.SetText(modelImportPreview_->IsPlaying() ? "PAUSE" : "PLAY");
-            if (modelImportPreview_->HasClip())
-                modelImportTime_.SetValue(modelImportPreview_->ClipTime());
-        }
-
         UpdateProjectilePreview(dt);
         if (projectileCreatePanel_.IsVisible()) {
             diagnosticInput.StopAt("projectile_editor");detail::ClearCreatorAssetDragPreview();
@@ -4872,8 +5007,13 @@ namespace renegade::studio
             wi::image::Params backdrop(0,0,float(GetLogicalWidth()),float(GetLogicalHeight()),HologramPanel);
             wi::image::Draw(nullptr,backdrop,cmd);
             wi::RenderPath2D::Compose(cmd);
-            if(dialogueFrameSuspended_)dialogueGui_.Render(*this,cmd);
-            ComposeUiForeground(cmd);
+            if(dialogueFrameSuspended_) {
+                dialogueGui_.Render(*this,cmd);
+                if(modelImportPanel_.IsVisible() && importMaterials_){importMaterials_->render(cmd);importMaterials_->held.draw(cmd);importMaterials_->parts.draw(cmd);}
+                if (RigEditingVisible()) DrawImportRig(cmd);
+                if (modelImportPanel_.IsVisible() && importPage_==ImportPage::Retarget && rtScene_.IsValid()) DrawRetargetSource(cmd);
+            }
+            else ComposeUiForeground(cmd);
             return;
         }
         if (testLevelFrameSuspended_ || testLevelRuntime_.IsActive())
@@ -5104,9 +5244,7 @@ namespace renegade::studio
         const bool sideBySide=assemblyHandPanel_.IsVisible() && width>=1840;
         assemblyPanel_.SetPos(XMFLOAT2(sideBySide?20.0f:std::max(0.0f,(width-1080)*0.5f),std::max(0.0f,(height-810)*0.5f)));
         assemblyHandPanel_.SetPos(XMFLOAT2(sideBySide?1120.0f:std::max(0.0f,(width-730)*0.5f),std::max(0.0f,(height-780)*0.5f)));
-        modelImportPanel_.SetPos(XMFLOAT2(
-            std::max(0.0f, (width - modelImportPanel_.GetSize().x) * 0.5f),
-            std::max(0.0f, (height - modelImportPanel_.GetSize().y) * 0.5f)));
+        ResizeImportWorkspace(width, height);
         pickupPanel_.SetPos(XMFLOAT2(
             std::max(0.0f, (width - 560.0f) * 0.5f),
             std::max(30.0f, (height - 740.0f) * 0.5f)));
@@ -7290,9 +7428,25 @@ namespace renegade::studio
         }
     }
 
+    #include "ImportRigOverlay.inc"
+    #include "ImportRigWorkspace.inc"
+    static XMMATRIX ImportRigToObject(const wi::scene::Scene&);
+#include "RetargetWorkspace.inc"
+#include "RetargetTable.inc"
+    #include "RetargetRigOverlay.inc"
+    #include "UnifiedImportWorkspace.inc"
+
     void StudioRenderPath::OpenStaticModelImporter(bool fromProjectile)
     {
         ++modelImportGeneration_;
+        modelImportAddAnimation_.SetEnabled(true);
+        mappedTakes_.clear();mapHistory_.clear();mapCursor_=0;mapEditingClip_=mapDirty_=false;mapKept_.clear();sourceScreenPoints_.clear();rtScene_ = {}; rtFile_.clear(); rtPairs_.clear(); rtSourcePose_.clear();
+        rtSourceNames_.clear(); rtTargetNames_.clear();
+        rtSource_.ClearItems(); rtTarget_.ClearItems(); rtClip_.ClearItems();
+        importCameraDrag_ = ImportCameraDrag::None;
+        rigDrag_ = RigHandle::None;
+        importPoseRotations_.clear();
+        importBones_.clear();
         if (session_ == nullptr || !session_->Projects().HasProject())
             return;
         assemblyPanel_.SetVisible(false); assemblyImage_.SetImage({}); assemblyPreview_.reset();
@@ -7329,12 +7483,6 @@ namespace renegade::studio
                         }
                         const bool character = candidate->Evidence().skinnedMeshes != 0 &&
                             candidate->Evidence().armatureBones != 0;
-                        if (!character && candidate->Evidence().HasRigOrAnimationPayload())
-                        {
-                            ShowStudioMessageBox(
-                                "Animated import currently requires a skinned mesh and skeleton.", "Import Model");
-                            return;
-                        }
                         auto preview = std::make_unique<ModelImportPreview>();
                         std::string previewError;
                         if (!preview->Prepare(*candidate->PeekMutableScene(), previewError))
@@ -7342,17 +7490,10 @@ namespace renegade::studio
                             ShowStudioMessageBox(previewError, "Model Preview");
                             return;
                         }
+                        preview->AddImportFloor();
                         modelImportPreview_ = std::move(preview);
-                        modelImportPanel_.SetSize(XMFLOAT2(1040.0f, character ? 990.0f : 750.0f));
-                        modelImportSummary_.SetSize(XMFLOAT2(480.0f, character ? 55.0f : 85.0f));
-                        modelImportName_.SetPos(XMFLOAT2(110.0f, character ? 740.0f : 500.0f));
-                        const float destinationY = character ? 775.0f : 535.0f;
-                        modelImportFolderChoices_.SetPos({110,destinationY});
-                        modelImportFolder_.SetPos({110,destinationY+32});
-                        modelImportRole_.SetPos({110,destinationY+64});
-                        modelImportTags_.SetPos({110,destinationY+96});
                         modelImportFolderChoices_.ClearItems();
-                        std::vector<std::string> folders={"Content","Content/Models","Content/Player/Arms","Content/Player/Weapons"};
+                        std::vector<std::string> folders={"Content","Content/Models","Content/Characters","Content/Player/Arms","Content/Player/Weapons"};
                         std::error_code folderError;
                         const auto content=fs::u8path(session_->Projects().CurrentProject().rootPath)/"Content";
                         for(fs::recursive_directory_iterator it(content,fs::directory_options::skip_permission_denied,folderError),end;
@@ -7367,12 +7508,11 @@ namespace renegade::studio
                             assetBrowserCurrentFolder_,resolvedFolder,folderValidation)?assetBrowserCurrentFolder_:"Content/Models");
                         for(size_t i=0;i<modelImportFolderChoices_.GetItemCount();++i)
                             if(modelImportFolderChoices_.GetItemText(int(i))==modelImportFolder_.GetValue())modelImportFolderChoices_.SetSelected(int(i));
-                        modelImportRole_.SetSelected(0);modelImportTags_.SetValue("");
-                        modelImportCommit_.SetPos(XMFLOAT2(20.0f, character ? 925.0f : 685.0f));
-                        modelImportCancel_.SetPos(XMFLOAT2(260.0f, character ? 925.0f : 685.0f));
-                        modelImportActions_.assign(candidate->Summary().animations, "Unassigned");
-                        modelImportAction_.SetVisible(character);
-                        modelImportAction_.SetEnabled(false);
+                        modelImportRole_.SetSelectedWithoutCallback(0);modelImportTags_.SetValue("");
+                        modelImportActions_.clear();
+                        for(const auto& clip:modelImportPreview_->Clips())modelImportActions_.push_back(SuggestImportedCharacterAction(clip.name));
+                        for(auto& button : sourceClipButtons_) actionSources_.RemoveWidget(button.get());
+                        sourceClipButtons_.clear(); actionEntries_={}; actionSourceCount_=0; for(auto& row:actionWidgets_) row->source.ClearItems(); entryUndoStack_.clear(); entryRedoStack_.clear();
                         modelImportAddAnimation_.SetVisible(character);
                         modelImportClip_.SetVisible(character);
                         modelImportPlay_.SetVisible(character);
@@ -7392,12 +7532,12 @@ namespace renegade::studio
                         const auto& summary = candidate->Summary();
                         modelImportSummary_.SetText(
                             "SOURCE // " + fs::u8path(path).filename().generic_u8string() +
-                            "\n" + std::string(character ? "CHARACTER " : "STATIC ") + std::string(bridge::ImportService::ModelSourceFormatName(candidate->SourceFormat())) + " // " + std::to_string(summary.meshes) +
+                            "\n" + std::string(bridge::ImportService::ModelSourceFormatName(candidate->SourceFormat())) + " // " + std::to_string(summary.meshes) +
                             " meshes / " + std::to_string(summary.materials) +
                             " materials / " + std::to_string(summary.objects) + " objects" +
                             (character ? " / " + std::to_string(candidate->Evidence().armatureBones) + " bones / " +
                                 std::to_string(summary.animations) + " clips" : "") +
-                            (character ? "\nSelect a clip to assign its gameplay action." : "\nPreview controls do not change the imported asset."));
+                            "\nChoose a workflow above to configure this model.");
                         modelImportMaterial_.ClearItems();
                         for (size_t i = 0; i < candidate->PeekScene()->materials.GetCount(); ++i)
                         {
@@ -7407,6 +7547,7 @@ namespace renegade::studio
                                 (materialName ? materialName->name : "Material"));
                         }
                         modelImportCandidate_ = std::move(candidate);
+                        importMaterials_->reset();
                         // Selection callbacks read the active candidate: install it first
                         // so the initial review shows this source's maps and warnings.
                         modelImportMaterial_.SetSelected(0);
@@ -7417,12 +7558,12 @@ namespace renegade::studio
                             projectileCreatePanel_.SetVisible(false);
                         }
                         modelImportPanel_.SetVisible(true);
-                        // Native Window visibility propagates to children: restore the role-specific controls last.
-                        for(wi::gui::Widget* widget : {
-                            static_cast<wi::gui::Widget*>(&modelImportAction_),static_cast<wi::gui::Widget*>(&modelImportAddAnimation_),
-                            static_cast<wi::gui::Widget*>(&modelImportClip_),static_cast<wi::gui::Widget*>(&modelImportPlay_),
-                            static_cast<wi::gui::Widget*>(&modelImportRestart_),static_cast<wi::gui::Widget*>(&modelImportTime_),
-                            static_cast<wi::gui::Widget*>(&modelImportSpeed_)})widget->SetVisible(character);
+                        importTransform_ = {};
+                        for (size_t i = 0; i < importTransformFields_.size(); ++i)
+                            importTransformFields_[i].SetValue(i == 6 ? "1" : "0");
+                        modelImportPanel_.SetText("Model Importer   /   " + fs::u8path(path).filename().generic_u8string());
+                        SelectImportWorkflow(fromProjectile ? ImportWorkflow::Static : ImportWorkflow::None);
+                        ResizeLayout();
                         studioChrome_.SetStatusText("MODEL IMPORT // REVIEW AND IMPORT ASSET");
                     });
             });
@@ -7439,10 +7580,17 @@ namespace renegade::studio
         if (valid)
         {
             const auto& texture = scene->materials[material].textures[slot];
-            modelImportMapInfo_.SetText(texture.name.empty()
+            const auto& mat = scene->materials[material];
+            std::string shader = "Standard PBR";
+            if (mat.customShaderID >= 0) shader = "Custom " + std::to_string(mat.customShaderID);
+            else if (mat.shaderType != wi::scene::MaterialComponent::SHADERTYPE_PBR) {
+                shader.clear();
+                for (const auto& define : mat.shaderTypeDefines[mat.shaderType]) shader += define + " ";
+            }
+            modelImportMapInfo_.SetText("Shader: " + shader + "\n" + (texture.name.empty()
                 ? "No map assigned. The model can still be imported.\nChoose a map to preview it on this material."
                 : "Assigned: " + fs::u8path(texture.name).filename().generic_u8string() +
-                    "\nChanges appear in the preview and are saved with the asset.");
+                    "\nChanges appear in the preview and are saved with the asset."));
         }
         std::string warnings = "Missing maps do not block model import.\nSelect a material and map above to assign replacements.";
         if (!modelImportCandidate_->Warnings().empty())
@@ -7455,6 +7603,7 @@ namespace renegade::studio
                 warnings += "\nAdditional source maps are unavailable; inspect each material slot.";
         }
         modelImportWarnings_.SetText(warnings);
+        if(importMaterials_) importMaterials_->refresh();
     }
 
     void StudioRenderPath::AssignModelImportTexture()
@@ -7488,29 +7637,83 @@ namespace renegade::studio
         });
     }
 
+static bool AppendCharacterAnimationFile(bridge::ModelImportCandidate& candidate,const std::string& path,std::string& error)
+{
+    bridge::ModelImportCandidateService importer;
+    if(importer.AppendExternalAnimations(candidate,path,error))return true;
+    ImportRetargetSource source;
+    if(!PrepareImportRetargetSource(path,*candidate.PeekMutableScene(),source,error))return false;
+    if(!source.bodyAligned || source.scene->animations.GetCount()!=1){
+        error="Open this source in Retargeting to review its skeleton and clips.";return false;
+    }
+    for(size_t i=0;i<source.pairs.size();++i){
+        if(source.pairs[i]!=-2)continue;
+        const auto key=RetargetJointKey(source.sourceNames[i]);
+        if(key.empty() || key.find("ponytail")!=std::string::npos || key.find("attachment")!=std::string::npos){
+            source.pairs[i]=-1;continue;
+        }
+        error="Review unmatched joint "+source.sourceNames[i]+" in Retargeting.";return false;
+    }
+    return importer.AppendMappedClip(candidate,*source.scene,0,source.pairs,{},{},fs::u8path(path).stem().u8string(),error);
+}
+
+static void ChooseAnimationFiles(bool objectClip,std::function<void(std::vector<std::string>)> selected)
+{
+#ifdef _WIN32
+    std::vector<wchar_t> names(65536);
+    OPENFILENAMEW dialog{};
+    dialog.lStructSize=sizeof(dialog);dialog.hwndOwner=GetActiveWindow();
+    dialog.lpstrTitle=L"Add animation clips (Ctrl or Shift to select multiple)";
+    dialog.lpstrFilter=objectClip ? L"Object animation (*.fbx;*.glb)\0*.fbx;*.glb\0" : L"Animation FBX (*.fbx)\0*.fbx\0";
+    dialog.lpstrFile=names.data();dialog.nMaxFile=DWORD(names.size());
+    dialog.Flags=OFN_EXPLORER|OFN_ALLOWMULTISELECT|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR;
+    if(!GetOpenFileNameW(&dialog)){
+        if(CommDlgExtendedError())MessageBoxW(dialog.hwndOwner,L"The file picker could not read the selection. Try a smaller group.",L"Add animations",MB_OK);
+        return;
+    }
+    fs::path first(names.data());
+    const wchar_t* file=names.data()+wcslen(names.data())+1;
+    std::vector<std::string> paths;
+    if(!*file)paths.push_back(first.u8string());
+    else while(*file){paths.push_back((first/file).u8string());file+=wcslen(file)+1;}
+    selected(std::move(paths));
+#else
+    wi::helper::FileDialogParams params;
+    params.type=wi::helper::FileDialogParams::OPEN;params.description="Add animation";params.extensions={"fbx"};if(objectClip)params.extensions.push_back("glb");
+    wi::helper::FileDialog(params,[selected](const std::string& file){if(!file.empty())selected({file});});
+#endif
+}
+
     void StudioRenderPath::AppendModelImportAnimations()
     {
-        if (!modelImportCandidate_ || !modelImportPanel_.IsVisible()) return;
-        const auto projectId = modelImportProjectId_;
-        const auto modelSource = modelImportCandidate_->SourcePath();
-        wi::helper::FileDialogParams params;
-        params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "Select matching-rig or humanoid animation FBX";
-        params.extensions = {"fbx"};
-        wi::helper::FileDialog(params, [this, projectId, modelSource](const std::string& path) {
-            wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                [this, projectId, modelSource, path](std::uint64_t) {
-                    if (path.empty() || !modelImportCandidate_ || !modelImportPanel_.IsVisible() ||
-                        session_ == nullptr || !session_->Projects().HasProject() ||
-                        session_->Projects().CurrentProject().projectId != projectId ||
-                        modelImportCandidate_->SourcePath() != modelSource) return;
+        if(!modelImportCandidate_ || !modelImportPanel_.IsVisible())return;
+        const auto generation=modelImportGeneration_;
+        ChooseAnimationFiles(importWorkflow_==ImportWorkflow::Animated,[this,generation](std::vector<std::string> files){
+            if(files.empty())return;
+            struct Batch {
+                std::vector<std::string> files;
+                size_t index=0, added=0;
+                std::string failures;
+            };
+            auto batch=std::make_shared<Batch>();
+            batch->files=std::move(files);
+            auto advance=[this,generation,batch](auto self)->void {
+                wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,[this,generation,batch,self](uint64_t){
+                    if(generation!=modelImportGeneration_ || !modelImportCandidate_ || !modelImportPanel_.IsVisible() ||
+                       !session_ || !session_->Projects().HasProject() || session_->Projects().CurrentProject().projectId!=modelImportProjectId_)return;
+                    modelImportAddAnimation_.SetEnabled(false);
+                    const auto& file=batch->files[batch->index++];
                     std::string error;
-                    if (!bridge::ModelImportCandidateService().AppendExternalAnimations(*modelImportCandidate_, path, error)) {
-                        ShowStudioMessageBox(error, "Add Animation");
-                        return;
+                    if(importWorkflow_==ImportWorkflow::Animated ? bridge::ModelImportCandidateService().AppendExternalAnimations(*modelImportCandidate_,file,error,true) : AppendCharacterAnimationFile(*modelImportCandidate_,file,error))++batch->added;
+                    else batch->failures+=fs::u8path(file).filename().u8string()+" - "+error+"\n";
+                    if(batch->index<batch->files.size()){
+                        modelImportSummary_.SetText("Adding animations "+std::to_string(batch->index)+" / "+std::to_string(batch->files.size()));
+                        self(self);return;
                     }
+                    modelImportAddAnimation_.SetEnabled(true);
+                    if(!batch->added){ShowStudioMessageBox(batch->failures,"Animations requiring review");return;}
                     auto preview = std::make_unique<ModelImportPreview>();
-                    if (!preview->Prepare(*modelImportCandidate_->PeekMutableScene(), error)) {
+                    if (!preview->Prepare(*modelImportCandidate_->PeekMutableScene(), error, importTransform_, modelImportProjectId_)) {
                         modelImportCandidate_.reset();
                         modelImportPreview_.reset();
                         modelImportPreviewImage_.SetImage({});
@@ -7518,24 +7721,29 @@ namespace renegade::studio
                         ShowStudioMessageBox(error, "Animation Preview");
                         return;
                     }
+                    preview->AddImportFloor();
                     modelImportPreview_ = std::move(preview);
                     modelImportPreviewImage_.SetImage({});
                     modelImportCommit_.SetEnabled(false);
-                    modelImportActions_.resize(modelImportCandidate_->Summary().animations, "Unassigned");
+                    const auto reviewedClips=modelImportPreview_->Clips();
+                    while(modelImportActions_.size()<reviewedClips.size())modelImportActions_.push_back(SuggestImportedCharacterAction(reviewedClips[modelImportActions_.size()].name));
                     modelImportClip_.ClearItems();
                     modelImportClip_.AddItem("REFERENCE POSE");
                     for (const auto& clip : modelImportPreview_->Clips())
                         modelImportClip_.AddItem(clip.name + " (" + std::to_string(clip.end - clip.start) + " s)");
-                    modelImportClip_.SetSelected(0);
-                    modelImportSummary_.SetText("CHARACTER // " +
-                        std::to_string(modelImportCandidate_->Summary().animations) +
-                        " clips\nSelect a clip and assign its gameplay action.");
-                    studioChrome_.SetStatusText("MODEL IMPORT // ANIMATION ADDED");
+                    modelImportClip_.SetSelected(int(modelImportCandidate_->ExternalAnimations().back().firstAnimationIndex + 1));
+                    modelImportSummary_.SetText(std::to_string(batch->added)+" animation file(s) added. "+(importWorkflow_==ImportWorkflow::Character ? CharacterIdleHint(modelImportActions_) : "Select a clip to preview it."));
+                    studioChrome_.SetStatusText("MODEL IMPORT // ANIMATIONS ADDED");
+                    if(!batch->failures.empty())ShowStudioMessageBox(batch->failures,"Remaining animations requiring review");
                 });
+            };
+            advance(advance);
         });
     }
 
-    void StudioRenderPath::CommitStaticModelImporter()
+    void StudioRenderPath::CommitStaticModelImporter(){CommitStaticModelImporter(false);}
+
+    void StudioRenderPath::CommitStaticModelImporter(bool openWeaponEditor)
     {
         if (!modelImportCandidate_ || session_ == nullptr ||
             !session_->Projects().HasProject() ||
@@ -7543,13 +7751,14 @@ namespace renegade::studio
             return;
         const std::string name = modelImportName_.GetValue();
         const std::string folder = modelImportFolder_.GetValue();
-        const int role = modelImportRole_.GetSelected();
+        const int role = importWorkflow_ == ImportWorkflow::Player ? modelImportRole_.GetSelected() : 0;
+        if(importWorkflow_==ImportWorkflow::Player && role<=0)return;
         std::vector<std::string> tags;
         std::stringstream tagStream(modelImportTags_.GetValue());std::string tag;
         while(std::getline(tagStream,tag,','))if(!tag.empty())tags.push_back(tag);
         wi::eventhandler::Subscribe_Once(
             wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-            [this, name, folder, role, tags, projectId = modelImportProjectId_](std::uint64_t)
+            [this, name, folder, role, tags, openWeaponEditor, projectId = modelImportProjectId_](std::uint64_t)
             {
                 if (!modelImportCandidate_ || session_ == nullptr ||
                     !session_->Projects().HasProject() ||
@@ -7561,12 +7770,10 @@ namespace renegade::studio
                 request.assetName = name;
                 request.destinationFolder = folder;
                 request.creatorTags = tags;
-                request.playerRole = role == 1 ? "arms" : role == 2 ? "weapon" : "";
-                if (modelImportCandidate_->Evidence().skinnedMeshes != 0)
-                    request.animationActions = modelImportActions_;
-                request.characterAsset = modelImportCandidate_ &&
-                    modelImportCandidate_->Evidence().skinnedMeshes != 0 &&
-                    modelImportCandidate_->Evidence().armatureBones != 0;
+                request.playerRole = role == 1 ? "arms" : role >= 2 ? "weapon" : "";
+                const bool saveClipEntries = importWorkflow_ == ImportWorkflow::Character || importWorkflow_ == ImportWorkflow::Animated;
+                if (saveClipEntries) SyncActionSources();
+                request.characterAsset = importWorkflow_ == ImportWorkflow::Character;
                 std::string thumbnailError;
                 if (!modelImportPreview_ ||
                     !modelImportPreview_->CapturePng(request.thumbnailPng, thumbnailError))
@@ -7574,8 +7781,12 @@ namespace renegade::studio
                     ShowStudioMessageBox(thumbnailError, "Model Thumbnail");
                     return;
                 }
+                auto materialCandidate=modelImportCandidate_->CaptureBakeState();
+                if(!importMaterials_->retain(materialCandidate,thumbnailError)){ShowStudioMessageBox(thumbnailError,"Save material");return;}
+                if(request.characterAsset && !importMaterials_->held.save(materialCandidate,thumbnailError)){ShowStudioMessageBox(thumbnailError,"Held item");return;}
                 const auto result = bridge::ModelImportCommitService().CommitModel(
-                    request, *modelImportCandidate_);
+                    request, materialCandidate, importTransform_, importWorkflow_ == ImportWorkflow::Animated || importWorkflow_ == ImportWorkflow::Player,
+                    saveClipEntries ? &actionEntries_.rows : nullptr);
                 if (!result.succeeded)
                 {
                     studioChrome_.SetStatusText("MODEL IMPORT // " + result.error);
@@ -7624,6 +7835,7 @@ namespace renegade::studio
                 studioChrome_.SetStatusText(
                     "MODEL IMPORT // ASSET REGISTERED // " +
                     result.assetProjectRelativePath);
+                if(openWeaponEditor)weapons::Choose(request.projectRoot,fs::u8path(request.projectRoot)/fs::u8path(result.assetProjectRelativePath),role==1,role==3);
             });
     }
 

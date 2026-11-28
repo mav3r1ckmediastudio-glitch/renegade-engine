@@ -15,6 +15,8 @@
 #include <limits>
 #include <string>
 #include <utility>
+#include <string_view>
+#include <wiRandom.h>
 #include <vector>
 
 namespace renegade::runtime
@@ -72,7 +74,7 @@ namespace renegade::runtime
         CharacterAnimationSemantic activeSemantic = CharacterAnimationSemantic::Idle;
         std::string resolvedClipName;
         std::string lastRequest;
-        std::uint64_t variantSequence = 0;
+        wi::ecs::Entity lastAttackClip = wi::ecs::INVALID_ENTITY;
         std::uint64_t observedShots = 0;
         std::uint64_t observedReloads = 0;
         std::uint64_t observedDamage = 0;
@@ -327,7 +329,7 @@ namespace renegade::runtime
                     if (action == "Idle") semantic = CharacterAnimationSemantic::Idle;
                     else if (action == "Walk") semantic = CharacterAnimationSemantic::Locomotion;
                     else if (action == "Run") semantic = CharacterAnimationSemantic::Run;
-                    else if (action == "Attack") semantic = CharacterAnimationSemantic::Attack;
+                    else if (action == "Attack" || action == "Melee" || action == "Fire" || action == "Cast") semantic = CharacterAnimationSemantic::Attack;
                     else if (action == "Reload") semantic = CharacterAnimationSemantic::Reload;
                     else if (action == "Hit") semantic = CharacterAnimationSemantic::Hit;
                     else if (action == "Death") semantic = CharacterAnimationSemantic::Death;
@@ -511,7 +513,8 @@ namespace renegade::runtime
         RuntimeCharacterAnimationRecord& record,
         const CharacterAnimationSemantic semantic,
         const bool forceTransition = false,
-        const wi::ecs::Entity preferredClip = wi::ecs::INVALID_ENTITY) noexcept
+        const wi::ecs::Entity preferredClip = wi::ecs::INVALID_ENTITY,
+        std::string_view attackType = "Attack") noexcept
     {
         record.lastRequest = CharacterAnimationSemanticName(semantic);
         auto* active = scene.animations.GetComponent(record.activeClip);
@@ -545,8 +548,31 @@ namespace renegade::runtime
             semantic == CharacterAnimationSemantic::Idle ? record.baseIdle : wi::ecs::INVALID_ENTITY;
         const auto selected = std::find_if(variants->begin(), variants->end(),
             [preferred](const auto& clip) { return clip.entity == preferred; });
-        const RuntimeAnimationClip next = selected != variants->end() ? *selected :
-            (*variants)[record.variantSequence++ % variants->size()];
+        auto pick=selected;
+        if(semantic==CharacterAnimationSemantic::Attack) {
+            // Explicit style pools take priority. Legacy and generic Attack entries
+            // are usable when the active weapon has no dedicated entries.
+            auto type=[&](const RuntimeAnimationClip& clip)->std::string {
+                const auto* m=scene.metadatas.GetComponent(clip.entity);
+                return m && m->string_values.has(bridge::CreatorCharacterAnimationActionMetadataKey)
+                    ? m->string_values.get(bridge::CreatorCharacterAnimationActionMetadataKey) : "Attack";
+            };
+            if(std::none_of(variants->begin(),variants->end(),[&](const auto& clip){return type(clip)==attackType;}))
+                attackType="Attack";
+            unsigned seen=0;
+            auto previous=variants->end();
+            pick=variants->end();
+            for(auto it=variants->begin();it!=variants->end();++it) {
+                if(type(*it)!=attackType) continue;
+                if(it->entity==preferredClip) {pick=it;break;}
+                if(it->entity==record.lastAttackClip) {previous=it;continue;}
+                if(wi::random::GetRandom(1u,++seen)==1u) pick=it;
+            }
+            if(pick==variants->end()) pick=previous;
+            if(pick==variants->end()) {++record.missingRequests;++state.missingRequests;return false;}
+            record.lastAttackClip=pick->entity;
+        } else if(pick==variants->end()) pick=variants->begin()+record.playbackRequests%variants->size();
+        const RuntimeAnimationClip next=*pick;
         if (!forceTransition && record.activeClip == next.entity && active != nullptr && active->IsPlaying())
         {
             // Optional Run falls back to the same Walk without restarting it.
@@ -667,7 +693,7 @@ namespace renegade::runtime
             {
                 requested = CharacterAnimationSemantic::Attack;
                 requestPlayback = true;
-                forceTransition = combatRecord->weapon.style == bridge::WeaponAiStyle::Melee;
+                forceTransition = true;
             }
             else if (combatRecord->reloads != record->observedReloads)
             {
@@ -772,7 +798,9 @@ namespace renegade::runtime
                 requestPlayback = false;
             }
             if (requestPlayback)
-                (void)RequestCharacterAnimation(scene, state, *record, requested, forceTransition, preferredClip);
+                (void)RequestCharacterAnimation(scene, state, *record, requested, forceTransition, preferredClip,
+                    combatRecord->weapon.style==bridge::WeaponAiStyle::Melee ? "Melee" :
+                    combatRecord->weapon.style==bridge::WeaponAiStyle::Ranged ? "Fire" : "Attack");
 
             AdvanceCharacterAnimationBlend(scene, *record, dt);
             record->observedShots = combatRecord->shotsFired;

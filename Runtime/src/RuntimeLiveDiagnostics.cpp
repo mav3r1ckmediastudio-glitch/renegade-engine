@@ -252,6 +252,9 @@ namespace renegade::runtime
                 }
                 return accepted;
             };
+            combatState_.playerMeleeGuard=renderer_.camera && playerViewAnimation_.meleeWeapon &&
+                playerViewAnimation_.equipped && playerViewAnimation_.activeAction==PlayerViewAction::BlockHold;
+            if(combatState_.playerMeleeGuard)combatState_.guardFacing=renderer_.camera->At;
             UpdateRuntimeCombatDecision(
                 scenes_.GetScene(),
                 characterAiState_,

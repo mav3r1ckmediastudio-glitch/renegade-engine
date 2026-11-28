@@ -18,6 +18,8 @@ bool LoadEquipmentAsset(const std::string& root,const StableId& project,const St
     EquipmentAssetDocument&,std::string&);
 EquipmentAssetSaveResult SaveEquipmentAsset(const std::string& root,const StableId& project,
     EquipmentDefinition,ProjectDocumentTransactionHook hook={});
+EquipmentAssetSaveResult UpdateEquipmentAsset(const std::string& root,const StableId& project,
+    EquipmentDefinition item,const std::string& expectedHash,std::vector<ProjectDocumentWrite> accompanying={});
 std::vector<EquipmentAssetDocument> ListEquipmentAssets(const std::string& root,
     const StableId& project,std::string&);
 // Copies supported semantic actions and native paired durations, without changing the assembly.

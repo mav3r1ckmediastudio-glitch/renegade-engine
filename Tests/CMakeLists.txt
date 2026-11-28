@@ -1995,6 +1995,7 @@ if(WIN32)
         ../Runtime/src/RuntimeLiveDiagnostics.cpp
         ../Runtime/src/RuntimeImpactDustResource.cpp
         ../Runtime/src/WaterfallTransparentRuntime.cpp)
+    target_include_directories(RenegadeRuntimeSceneTransitionTests PRIVATE "${CMAKE_SOURCE_DIR}/WickedEngine/Editor")
     target_link_libraries(RenegadeRuntimeSceneTransitionTests PRIVATE Renegade::RuntimeBootstrap)
     target_compile_definitions(RenegadeRuntimeSceneTransitionTests PRIVATE
         UNICODE _UNICODE
@@ -2287,3 +2288,9 @@ target_compile_options(RenegadeWorldLocationTests PRIVATE "$<$<CXX_COMPILER_ID:M
 add_test(NAME RenegadeWorldLocationTests COMMAND RenegadeWorldLocationTests)
 set_tests_properties(RenegadeWorldLocationTests PROPERTIES TIMEOUT 30)
 add_dependencies(RenegadeBridgeTests RenegadeWorldLocationTests)
+
+add_executable(RenegadeScreenAmmoPrefabTests ScreenAmmoPrefabTests.cpp)
+target_link_libraries(RenegadeScreenAmmoPrefabTests PRIVATE Renegade::RuntimeBootstrap)
+add_test(NAME RenegadeScreenAmmoPrefabTests COMMAND RenegadeScreenAmmoPrefabTests)
+set_tests_properties(RenegadeScreenAmmoPrefabTests PROPERTIES TIMEOUT 30)
+add_dependencies(RenegadeBridgeTests RenegadeScreenAmmoPrefabTests)

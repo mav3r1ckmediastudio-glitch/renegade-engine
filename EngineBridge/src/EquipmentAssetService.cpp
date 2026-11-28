@@ -269,13 +269,19 @@ bool LoadEquipmentAsset(const std::string& root,const StableId& project,const St
        !ProjectilesAvailable(root,project,d.equipment,error))return false;
     out=std::move(d);error.clear();return true;
 }
-EquipmentAssetSaveResult SaveEquipmentAsset(const std::string& root,const StableId& project,
-    EquipmentDefinition item,ProjectDocumentTransactionHook hook) {
+static EquipmentAssetSaveResult WriteEquipmentAsset(const std::string& root,const StableId& project,
+    EquipmentDefinition item,ProjectDocumentTransactionHook hook,const std::string& expected,std::vector<ProjectDocumentWrite> writes) {
     EquipmentAssetSaveResult r;AssetRegistry registry;
     if(!ReadAssetRegistry(root,project,registry,r.error)||
        !PresentationAvailable(root,registry,item.presentationAssetId,r.error)||
        !ProjectilesAvailable(root,project,item,r.error))return r;
-    item.assetId=GenerateStableId();r.document={project,std::move(item)};
+    if(expected.empty())item.assetId=GenerateStableId();
+    else {
+        auto current=Find(registry,item.assetId);
+        if(!current||current->contentHash!=expected){r.error="Equipment changed. Reopen it before saving.";return r;}
+        EquipmentAssetDocument persisted;if(!LoadEquipmentAsset(root,project,item.assetId,persisted,r.error))return r;
+    }
+    r.document={project,std::move(item)};
     std::string text;if(!SerializeEquipmentAsset(r.document,text,r.error))return r;
     r.projectRelativePath="Content/Player/Equipment/"+r.document.equipment.assetId+EquipmentAssetExtension;
     std::error_code ec;const auto canonical=fs::weakly_canonical(fs::u8path(root),ec);
@@ -289,7 +295,7 @@ EquipmentAssetSaveResult SaveEquipmentAsset(const std::string& root,const Stable
     record.dependencyNodeId="equipment:"+record.assetId;record.projectRelativePath=r.projectRelativePath;
     record.provider="renegade.equipment";record.contentHash=Hash(text);
     record.dependencyAssetIds=EquipmentDependencies(r.document.equipment);
-    registry.records.push_back(record);
+    if(expected.empty())registry.records.push_back(record);else *std::find_if(registry.records.begin(),registry.records.end(),[&](auto& v){return v.assetId==record.assetId;})=record;
     std::string registryText,registryPath;
     if(!SerializeAssetRegistry(registry,registryText,r.error)||
        !ResolveAssetRegistryDocumentPath(canonical.generic_u8string(),registryPath,r.error))return r;
@@ -306,8 +312,17 @@ EquipmentAssetSaveResult SaveEquipmentAsset(const std::string& root,const Stable
         }};
     ProjectDocumentTransactionOptions options;options.allowedRoot=canonical.generic_u8string();
     options.journalDirectory=(canonical/"Intermediate/Transactions").generic_u8string();options.operationHook=std::move(hook);
-    r.transaction=ProjectDocumentTransaction().Execute({std::move(asset),std::move(index)},options);
+    writes.push_back(std::move(asset));writes.push_back(std::move(index));r.transaction=ProjectDocumentTransaction().Execute(std::move(writes),options);
     r.succeeded=r.transaction.success;if(!r.succeeded)r.error=r.transaction.message;return r;
+}
+EquipmentAssetSaveResult SaveEquipmentAsset(const std::string& root,const StableId& project,
+    EquipmentDefinition item,ProjectDocumentTransactionHook hook){
+    return WriteEquipmentAsset(root,project,std::move(item),std::move(hook),{},{});
+}
+EquipmentAssetSaveResult UpdateEquipmentAsset(const std::string& root,const StableId& project,
+    EquipmentDefinition item,const std::string& expected,std::vector<ProjectDocumentWrite> writes){
+    if(expected.empty()){EquipmentAssetSaveResult r;r.error="Missing equipment revision.";return r;}
+    return WriteEquipmentAsset(root,project,std::move(item),{},expected,std::move(writes));
 }
 std::vector<EquipmentAssetDocument> ListEquipmentAssets(const std::string& root,const StableId& project,std::string& error) {
     AssetRegistry registry;std::vector<EquipmentAssetDocument> result;

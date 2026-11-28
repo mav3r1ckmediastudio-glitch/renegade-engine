@@ -51,6 +51,8 @@ namespace renegade::runtime
 
     struct RuntimeCombatState
     {
+        bool playerMeleeGuard=false;
+        XMFLOAT3 guardFacing={};
         std::vector<CharacterCombatRecord> characters;
         float playerMaxHealth = 100.0f;
         float playerHealth = 100.0f;
@@ -471,6 +473,11 @@ namespace renegade::runtime
         if (!result.hit)
             return true;
 
+        if (state.playerMeleeGuard && combat.weapon.style==bridge::WeaponAiStyle::Melee &&
+            dx*state.guardFacing.x+dz*state.guardFacing.z<0) {
+            (void)EmitCombatGameplayEvent(state,emitter,{0,"melee.blocked",firedPayload,combat.characterId,{}});
+            return true;
+        }
         result.damage = combat.weapon.damage;
         bool died = false;
         if (ApplyCombatDamage(

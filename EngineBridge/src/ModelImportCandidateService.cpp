@@ -4,10 +4,12 @@
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ModelImporterFailureAdapter.h"
 #include <ModelImporter.h>
+#include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/MatchingRigAnimationService.h"
 #define UFBX_REAL_TYPE float
 #include <ufbx.h>
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <exception>
 #include <fstream>
@@ -38,6 +40,48 @@ namespace
         return std::mismatch(root.begin(), root.end(), path.begin(), path.end()).first == root.end();
     }
     std::string String(ufbx_string value) { return std::string(value.data, value.length); }
+    bool RepairInvalidSkinWeights(wi::scene::Scene& scene, std::vector<std::string>& warnings,
+        std::string& error)
+    {
+        for (size_t i = 0; i < scene.meshes.GetCount(); ++i)
+        {
+            auto& mesh = scene.meshes[i];
+            size_t repaired = 0;
+            for (size_t v = 0; v < mesh.vertex_boneweights.size(); ++v)
+            {
+                auto& primary = mesh.vertex_boneweights[v];
+                auto* secondary = v < mesh.vertex_boneweights2.size() ? &mesh.vertex_boneweights2[v] : nullptr;
+                float* weights[] = { &primary.x, &primary.y, &primary.z, &primary.w,
+                    secondary ? &secondary->x : nullptr, secondary ? &secondary->y : nullptr,
+                    secondary ? &secondary->z : nullptr, secondary ? &secondary->w : nullptr };
+                bool invalid = false;
+                double total = 0;
+                for (auto* weight : weights)
+                {
+                    if (!weight) continue;
+                    if (!std::isfinite(*weight) || *weight < 0) invalid = true;
+                    else total += *weight;
+                }
+                if (!invalid) continue;
+                if (total == 0)
+                {
+                    error = "Mesh " + std::to_string(i + 1) + ", vertex " + std::to_string(v) +
+                        " has invalid skin weights and no usable bone influence. Repair the weights in the source model.";
+                    return false;
+                }
+                for (auto* weight : weights)
+                    if (weight) *weight = std::isfinite(*weight) && *weight > 0 ? float(*weight / total) : 0;
+                ++repaired;
+            }
+            if (repaired)
+            {
+                mesh.CreateRenderData();
+                warnings.push_back("Mesh " + std::to_string(i + 1) + ": recovered skin weights on " +
+                    std::to_string(repaired) + " vertices using their remaining bone influences.");
+            }
+        }
+        return true;
+    }
     bool SnapshotFbxTextures(const fs::path& source,
         std::vector<renegade::bridge::ModelImportDependency>& dependencies,
         std::string& error, std::vector<std::string>& warnings, const std::set<std::string>* required = nullptr)
@@ -115,16 +159,23 @@ namespace
 
 namespace renegade::bridge
 {
+#include "MappedClipBake.inc"
     bool ModelImportCandidateService::AppendExternalAnimations(
         ModelImportCandidate& candidate, const std::string& sourcePath,
         std::string& error) const
     {
+        return AppendExternalAnimations(candidate,sourcePath,error,false);
+    }
+
+    bool ModelImportCandidateService::AppendExternalAnimations(ModelImportCandidate& candidate,
+        const std::string& sourcePath, std::string& error, bool objectClip) const
+    {
         error.clear();
-        if (!candidate.IsReady() || candidate.evidence_.skinnedMeshes == 0 ||
-            candidate.evidence_.armatureBones == 0)
+        if (!candidate.IsReady() || (!objectClip && (candidate.evidence_.skinnedMeshes == 0 ||
+            candidate.evidence_.armatureBones == 0)))
         { error = "External animations require a ready rigged Character."; return false; }
         const auto sourceKind = ClassifyHumanoidAnimationSource(sourcePath);
-        if (sourceKind != HumanoidAnimationSourceFormat::Fbx)
+        if (sourceKind != HumanoidAnimationSourceFormat::Fbx && !(objectClip && ImportService::ClassifyModelSourceFormat(sourcePath)==ModelSourceFormat::Glb))
         { error = "External animation import currently accepts FBX only."; return false; }
         std::vector<std::uint8_t> before, after;
         if (!ReadBytes(fs::u8path(sourcePath), before) || before.empty())
@@ -139,6 +190,7 @@ namespace renegade::bridge
             const auto first = prepared->animations.GetCount();
             std::vector<wi::ecs::Entity> created;
             const bool matchingRig=ImportMatchingRigAnimations(*prepared,sourcePath,created,error);
+            if(!matchingRig && objectClip) return false;
             if(!matchingRig) {
             bool alreadyMapped = false;
             for (std::size_t i = 0; i < prepared->humanoids.GetCount(); ++i)
@@ -171,6 +223,14 @@ namespace renegade::bridge
             { error = "External animation source changed during conversion."; return false; }
             (void)DisableDefaultHumanoidLookAt(*prepared);
             PauseImportedModelAnimations(*prepared);
+            // FBX exporters often call every clip "Unreal Take". Retain the
+            // source file identity in the authored clip name and reimport recipe.
+            const auto sourceName = fs::u8path(sourcePath).stem().generic_u8string();
+            for (auto entity : created) {
+                auto* name = prepared->names.GetComponent(entity);
+                if (!name) name = &prepared->names.Create(entity);
+                name->name = created.size() == 1 ? sourceName : sourceName + " / " + name->name;
+            }
             ModelImportDependency source;
             source.sourcePath = fs::absolute(fs::u8path(sourcePath)).generic_u8string();
             source.retainedRelativePath = GenerateStableId() + "/" +
@@ -191,6 +251,107 @@ namespace renegade::bridge
         catch (const std::exception& exception) { error = exception.what(); }
         catch (...) { error = "External animation conversion failed."; }
         return false;
+    }
+
+    bool ModelImportCandidateService::ExportStaticPose(const ModelImportCandidate& candidate,
+        int clipIndex, float time, const CreatorModelTransformRecipe& transform, const StableId& projectId, const std::string& outputPath, std::string& error) const
+    {
+        const auto target = fs::u8path(outputPath);
+        if (ImportService::ClassifyModelSourceFormat(outputPath)!=ModelSourceFormat::Glb ||
+            !candidate.IsReady() || fs::absolute(target).lexically_normal()==
+                fs::absolute(fs::u8path(candidate.SourcePath())).lexically_normal()) {
+            error="Choose a new GLB file for the static pose.";return false;
+        }
+        const auto temporary=target.parent_path()/fs::u8path(GenerateStableId()+".glb");
+        struct Cleanup { fs::path path; ~Cleanup(){std::error_code ec;fs::remove(path,ec);} } cleanup{temporary};
+        try {
+            std::error_code ec;
+            if (fs::exists(target,ec)) {error="Choose a new filename to keep the original asset.";return false;}
+            auto original=candidate.CaptureBakeState();
+            wi::Archive snapshot;
+            {
+                wi::scene::Scene scene;
+                wi::Archive archive;
+                original.PeekMutableScene()->Serialize(archive);
+                archive.SetReadModeAndResetPos(true);
+                scene.Serialize(archive);
+                for (size_t m=0;m<scene.materials.GetCount();++m)
+                    for (size_t slot=0;slot<wi::scene::MaterialComponent::TEXTURESLOT_COUNT;++slot)
+                        scene.materials[m].textures[slot]=original.PeekScene()->materials[m].textures[slot];
+                CreatorModelImportRecipe correction;
+                correction.transform=transform;
+                if (!ApplyCreatorModelImportRecipe(scene,{},projectId,correction,error)) return false;
+                ModelAnimationPreviewService pose;
+                pose.Prepare(scene);
+                if (!pose.Select(clipIndex) || (clipIndex>=0 && !pose.Scrub(time))) {
+                    error="Select a source pose or an animation frame first.";return false;
+                }
+                scene.Update(0);
+                for (size_t i=0;i<scene.meshes.GetCount();++i) {
+                    auto& mesh=scene.meshes[i];
+                    const bool morphed=!mesh.morph_targets.empty();
+                    for (const auto& morph : mesh.morph_targets) {
+                        if (morph.weight==0) continue;
+                        auto accumulate=[&](auto& vertices,const auto& deltas,const auto& indices) {
+                            if (!indices.empty() && indices.size()!=deltas.size()) return false;
+                            for (size_t n=0;n<deltas.size();++n) {
+                                const auto v=indices.empty()?n:size_t(indices[n]);
+                                if (v>=vertices.size()) return false;
+                                XMStoreFloat3(&vertices[v],XMVectorMultiplyAdd(XMLoadFloat3(&deltas[n]),
+                                    XMVectorReplicate(morph.weight),XMLoadFloat3(&vertices[v])));
+                            }
+                            return true;
+                        };
+                        if (!accumulate(mesh.vertex_positions,morph.vertex_positions,morph.sparse_indices_positions) ||
+                            !accumulate(mesh.vertex_normals,morph.vertex_normals,morph.sparse_indices_normals)) {
+                            error="The mesh contains an invalid morph target.";return false;
+                        }
+                    }
+                    mesh.morph_targets.clear();
+                    if (!mesh.IsSkinned()) {
+                        if (morphed) {
+                            for (auto& normal : mesh.vertex_normals)
+                                XMStoreFloat3(&normal,XMVector3Normalize(XMLoadFloat3(&normal)));
+                            mesh.vertex_tangents.clear();
+                        }
+                        continue;
+                    }
+                    const auto* rig=scene.armatures.GetComponent(mesh.armatureID);
+                    if (!rig || rig->boneData.empty()) {error="The mesh has no evaluated skeleton.";return false;}
+                    const bool normals=mesh.vertex_normals.size()==mesh.vertex_positions.size();
+                    for(size_t v=0;v<mesh.vertex_positions.size();++v) {
+                        XMVECTOR n;
+                        const auto point=wi::scene::SkinVertex(mesh,*rig,uint32_t(v),normals?&n:nullptr);
+                        XMStoreFloat3(&mesh.vertex_positions[v],point);
+                        if(normals) XMStoreFloat3(&mesh.vertex_normals[v],n);
+                    }
+                    mesh.armatureID=wi::ecs::INVALID_ENTITY;
+                    mesh.vertex_boneindices.clear();mesh.vertex_boneweights.clear();
+                    mesh.vertex_boneindices2.clear();mesh.vertex_boneweights2.clear();
+                    mesh.vertex_tangents.clear();
+                }
+                scene.animations.Clear();scene.animation_datas.Clear();scene.armatures.Clear();scene.humanoids.Clear();
+                scene.Serialize(snapshot);
+            }
+            {
+                // Recreate render resources from the baked geometry. A mesh that
+                // was sampled with morphs or skinning now has static vertex data.
+                wi::scene::Scene frozen;
+                snapshot.SetReadModeAndResetPos(true);
+                frozen.Serialize(snapshot);
+                for (size_t m=0;m<frozen.materials.GetCount();++m)
+                    for (size_t slot=0;slot<wi::scene::MaterialComponent::TEXTURESLOT_COUNT;++slot)
+                        frozen.materials[m].textures[slot]=original.PeekScene()->materials[m].textures[slot];
+                ExportModel_GLTF(temporary.u8string(),frozen);
+            }
+            auto reopened=PrepareGlb(temporary.u8string());
+            if(!reopened.IsReady() || reopened.Evidence().HasRigOrAnimationPayload() ||
+                reopened.Summary().objects!=candidate.Summary().objects) {
+                error="The extracted pose did not reopen as a complete static model.";return false;
+            }
+            fs::copy_file(temporary,target,fs::copy_options::none);
+            return true;
+        } catch(const std::exception& ex) {error=ex.what();return false;}
     }
 
     ModelImportCandidate ModelImportCandidateService::PrepareModel(const std::string& sourcePath) const
@@ -333,9 +494,30 @@ namespace renegade::bridge
         try
         {
             if (candidate.sourceFormat_ == ModelSourceFormat::Fbx)
-                ImportModel_FBX(candidate.sourcePath_, *candidate.scene_);
+                {
+                auto& scene=*candidate.scene_;
+                ImportModel_FBX(candidate.sourcePath_,scene);
+                // FBX camera nodes look along local +X. Wicked cameras look along +Z.
+                // Keep the authored transform and animation targets on the parent.
+                std::vector<wi::ecs::Entity> nodes;
+                for(size_t i=0;i<scene.cameras.GetCount();++i)nodes.push_back(scene.cameras.GetEntity(i));
+                for(auto parent:nodes){
+                    const auto lens=*scene.cameras.GetComponent(parent);
+                    scene.cameras.Remove(parent);
+                    auto child=scene.Entity_CreateTransform("FBX camera lens");
+                    scene.transforms.GetComponent(child)->RotateRollPitchYaw(DirectX::XMFLOAT3{0,DirectX::XM_PIDIV2,0});
+                    scene.Component_Attach(child,parent,true);
+                    scene.cameras.Create(child)=lens;
+                }
+            }
             else if (candidate.sourceFormat_ == ModelSourceFormat::Obj) ImportModel_OBJ(candidate.sourcePath_, *candidate.scene_);
             else ImportModel_GLTF(candidate.sourcePath_, *candidate.scene_);
+            (void)DisableDefaultHumanoidLookAt(*candidate.scene_);
+            if (!RepairInvalidSkinWeights(*candidate.scene_, candidate.warnings_, candidate.error_))
+            {
+                candidate.scene_.reset();
+                return candidate;
+            }
             // Unique cache keys force the preview to use the exact snapshotted
             // bytes, even when a previous import cached the original filename.
             for (size_t i = 0; i < candidate.scene_->materials.GetCount(); ++i)
@@ -416,7 +598,9 @@ namespace renegade::bridge
         candidate.evidence_ = ImportService::SummarizeModelEvidence(*candidate.scene_);
         if (candidate.summary_.meshes == 0 || candidate.summary_.objects == 0)
         {
-            candidate.error_ = "Model conversion produced no mesh and object content.";
+            candidate.error_ = candidate.summary_.meshes == 0 && candidate.summary_.animations != 0
+                ? "This file contains animation clips and no mesh. Open the character model first, then use Add Animation FBX."
+                : "Model conversion produced no mesh and object content.";
             candidate.scene_.reset();
         }
         return candidate;

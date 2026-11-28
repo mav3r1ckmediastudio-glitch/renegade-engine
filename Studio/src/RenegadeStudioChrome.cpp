@@ -10,6 +10,7 @@
 
 namespace
 {
+    constexpr std::array<int,6> popupItemCounts = {5,9,15,4,1,4};
     constexpr float TopBarHeight = 64.0f;
     constexpr float SceneTabsHeight = 34.0f;
     constexpr float BottomTabsHeight = 32.0f;
@@ -1544,12 +1545,13 @@ namespace renegade::studio
         c.push_back({5,"redo",{792,16,32,32},true,false,"Redo (Ctrl+Y)"});
         c.push_back({6,"save",{828,16,32,32},true,false,"Save (Ctrl+S)"});
         }
-        const float start=width_-232.f;
+        const float start=width_-268.f;
         c.push_back({7,testLevelState_==TestLevelState::Running?"stop":"play",{start-44,16,32,32},testLevelState_!=TestLevelState::Starting,false,
             testLevelState_==TestLevelState::Starting?"Starting Test Game":testLevelState_==TestLevelState::Running?"Stop Test Game":"Test Game"});
         const char* modes[]={"scene","environment","terrain","vegetation","render","physics"};
         const bool active[]={IsSceneWorkspaceActive()&&!physicsWorkspaceActive_,environmentWorkspaceActive_,terrainWorkspaceActive_ && !vegetationWorkspace_,terrainWorkspaceActive_ && vegetationWorkspace_,renderWorkspaceActive_,physicsWorkspaceActive_};
         for(int i=0;i<6;++i)c.push_back({8+i,modes[i],{start+i*36.f,16,32,32},true,active[i]});
+        c.push_back({14,"link",{start+216.f,16,32,32},testLevelState_==TestLevelState::Idle,false,"Weapon Editor"});
         return c;
     }
 
@@ -1580,7 +1582,7 @@ namespace renegade::studio
                     const Action actions[]={Action::Undo,Action::Redo,Action::Save,
                         testLevelState_==TestLevelState::Running?Action::TestLevelStop:Action::TestLevelPlay,
                         Action::SceneWorkspace,Action::EnvironmentWorkspace,Action::TerrainWorkspace,Action::VegetationWorkspace,
-                        Action::RenderWorkspace,Action::PhysicsWorkspace};
+                        Action::RenderWorkspace,Action::PhysicsWorkspace,Action::OpenWeaponEditor};
                     action_(actions[toolbarCommand-4]);
                 }
             }
@@ -1980,8 +1982,6 @@ namespace renegade::studio
                 constexpr float popupWidth = 226.0f;
                 constexpr float itemHeight = 30.0f;
                 const float popupX = menuPositions[activeMenu_] - 8.0f;
-                constexpr std::array<int, 6> popupItemCounts = {
-                    5, 9, 14, 4, 1, 4};
                 const int item = static_cast<int>(
                     (y - TopBarHeight) / itemHeight);
                 const bool inPopup = x >= popupX &&
@@ -3271,11 +3271,10 @@ namespace renegade::studio
         }
         if(activeMenu_<0 || activeMenu_>=6) return -1;
         constexpr const char* names[]={"FILE","EDIT","ADD","VIEW","BUILD","WINDOW"};
-        constexpr int counts[]={5,9,14,4,1,4};
         float x=214;
         for(int i=0;i<activeMenu_;++i)x+=std::string(names[i]).size()*8.0f+25.0f;
         if(p.x<x || p.x>=x+226 || p.y<TopBarHeight ||
-            p.y>=TopBarHeight+counts[activeMenu_]*30) return -1;
+            p.y>=TopBarHeight+popupItemCounts[activeMenu_]*30) return -1;
         return activeMenu_*32+int((p.y-TopBarHeight)/30);
     }
 
@@ -3311,9 +3310,9 @@ namespace renegade::studio
                             Action::SaveGroupPrefab,Action::UnpackGroup};
                         invoke(actions[item]);
                     }
-                    else if (menu == 2 && item >= 0 && item < 14)
+                    else if (menu == 2 && item >= 0 && item < 15)
                     {
-                        constexpr std::array<Action, 14> actions = {
+                        constexpr std::array<Action, 15> actions = {
                             Action::CreatePointLight,
                             Action::CreateSpotLight,
                             Action::CreateDirectionalLight,
@@ -3322,7 +3321,7 @@ namespace renegade::studio
                             Action::CreateDecal,
                             Action::CreateEnvironmentProbe,
                             Action::ImportStaticGlb, Action::CreateProjectile, Action::OpenDialogue,
-                            Action::CreateParticleEffect,Action::CreateNavigationGrid,Action::CreateZone,Action::CreateLocationZone};
+                            Action::CreateParticleEffect,Action::CreateNavigationGrid,Action::CreateZone,Action::CreateLocationZone,Action::OpenWeaponEditor};
                         invoke(actions[item]);
                     }
                     else if (menu == 3 && item >= 0 && item < 4)
@@ -3428,7 +3427,7 @@ namespace renegade::studio
                     {"DIRECTIONAL LIGHT", true}, {"RECTANGLE LIGHT", true},
                     {"CAMERA", true}, {"DECAL", true},
                     {"ENVIRONMENT PROBE", true}, {"IMPORT MODEL...", true}, {"PROJECTILE...", true}, {"DIALOGUE EDITOR...", true},
-                    {"PARTICLE EMITTER", true}, {"NAVIGATION GRID", true}, {"GAMEPLAY ZONE", true},{"LOCATION ZONE",true}};
+                    {"PARTICLE EMITTER", true}, {"NAVIGATION GRID", true}, {"GAMEPLAY ZONE", true},{"LOCATION ZONE",true}, {"WEAPON EDITOR...",true}};
             }
             else if (activeMenu_ == 3)
             {

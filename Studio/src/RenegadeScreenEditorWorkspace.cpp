@@ -1,3 +1,4 @@
+#include "renegade/bridge/ScreenAmmoCounter.h"
 #include "renegade/bridge/WorldLocationService.h"
 #include "ScreenNavigationEditor.h"
 #include "renegade/bridge/SceneDocumentService.h"
@@ -3072,6 +3073,14 @@ namespace renegade::studio
                 InsertUiPrefab((std::filesystem::u8path(wi::helper::GetExecutablePath()).parent_path()/"Content/UI/Prefabs/WorldNavigation").generic_u8string(),true);break;
             case ScreenToolboxAction::LiquidFill:
                 InsertUiPrefab((std::filesystem::u8path(wi::helper::GetExecutablePath()).parent_path()/"Content/UI/Prefabs/LiquidFill").generic_u8string());break;
+            case ScreenToolboxAction::AmmoCounter:
+            {
+                std::vector<bridge::StableId> created;std::string error;
+                if(!bridge::InsertAmmoCounterPrefab(*session_,session_->Document().designWidth*.6f,
+                    session_->Document().designHeight*.7f,created,error)){SetStatus(error);break;}
+                if(!created.empty())SelectWidget(created.front());
+                RefreshAfterMutation("AMMO COUNTER CREATED // FOLLOWS EQUIPPED WEAPON IN SLOTS 1-9");break;
+            }
             case ScreenToolboxAction::AnimatedVial:
                 InsertUiPrefab((std::filesystem::u8path(wi::helper::GetExecutablePath()).parent_path()/"Content/UI/Prefabs/AnimatedVial").generic_u8string());break;
             case ScreenToolboxAction::UiBudgets: if(uiBudgetsRequested_)uiBudgetsRequested_();break;

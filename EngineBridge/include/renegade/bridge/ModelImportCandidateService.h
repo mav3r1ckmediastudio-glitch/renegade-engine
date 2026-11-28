@@ -1,4 +1,8 @@
 #pragma once
+#include "renegade/bridge/IdentityService.h"
+#include <map>
+#include <set>
+#include "renegade/bridge/ClipJointPin.h"
 
 #include "renegade/bridge/ImportService.h"
 
@@ -8,6 +12,7 @@
 
 namespace renegade::bridge
 {
+    struct CreatorModelTransformRecipe;
     struct ModelImportTextureRelink
     {
         std::uint32_t materialIndex = 0;
@@ -46,6 +51,25 @@ namespace renegade::bridge
         ModelImportCandidate(const ModelImportCandidate&) = delete;
         ModelImportCandidate& operator=(const ModelImportCandidate&) = delete;
 
+        // Mapped-clip baking replaces the scene atomically. Keep its previous
+        // scene and retained sources available for importer-local Undo.
+        ModelImportCandidate CaptureBakeState() const {
+            ModelImportCandidate state;
+            state.scene_=scene_;state.sourcePath_=sourcePath_;state.error_=error_;state.warnings_=warnings_;
+            state.sourceBytes_=sourceBytes_;state.sourceFingerprint_=sourceFingerprint_;state.sourceFormat_=sourceFormat_;
+            state.dependencies_=dependencies_;state.externalAnimations_=externalAnimations_;
+            state.summary_=summary_;state.evidence_=evidence_;return state;
+        }
+        void SetComposedScene(wi::allocator::shared_ptr<wi::scene::Scene> scene) {
+            scene_=std::move(scene);
+            summary_=ImportService::Summarize(*scene_);
+            evidence_=ImportService::SummarizeModelEvidence(*scene_);
+        }
+        // Preserve authored input images and cooked ORM in the same transaction as the model.
+        void RetainMaterialInput(ModelImportDependency input) {
+            for(const auto& dependency:dependencies_) if(dependency.previewResourceName==input.previewResourceName) return;
+            dependencies_.push_back(std::move(input));
+        }
         [[nodiscard]] bool IsReady() const noexcept
         {
             return scene_.IsValid() && error_.empty();
@@ -88,10 +112,31 @@ namespace renegade::bridge
         ImportedModelEvidence evidence_;
     };
 
+    enum class RetargetPoseScope { Frame, Hold, Offset };
+    struct RetargetPoseKey {
+        std::string bone;
+        float time = 0;
+        XMFLOAT4 rotation{};
+        RetargetPoseScope scope = RetargetPoseScope::Frame;
+    };
+
     class ModelImportCandidateService
     {
     public:
+        bool AppendMappedClip(ModelImportCandidate&, const wi::scene::Scene&, size_t clipIndex,
+            const std::vector<int>& targets, const std::map<std::string,XMFLOAT4>& sourcePose,
+            const std::map<std::string,XMFLOAT4>& targetPose, const std::string& label, std::string& error) const;
+        bool EditMappedClip(ModelImportCandidate&, const wi::scene::Scene&, size_t clipIndex,
+            const std::vector<int>& targets, const std::map<std::string,XMFLOAT4>& sourcePose,
+            const std::map<std::string,XMFLOAT4>& targetPose, const std::string& label, std::string& error, int replaceIndex, const std::vector<RetargetPoseKey>& edits,
+            const std::set<int>& heldTargets = {}) const;
+        bool MeasureClipFloor(wi::scene::Scene&,int clipIndex,ClipJointPin&,std::string& error) const;
+        bool PinBakedClip(ModelImportCandidate&, int clipIndex, const ClipJointPin&, std::string& error) const;
         // Failure leaves the candidate unchanged. Only baked native clips join it.
+        [[nodiscard]] bool ExportStaticPose(const ModelImportCandidate& candidate, int clipIndex,
+            float time, const CreatorModelTransformRecipe& transform, const StableId& projectId, const std::string& outputPath, std::string& error) const;
+        [[nodiscard]] bool AppendExternalAnimations(ModelImportCandidate& candidate,
+            const std::string& sourcePath, std::string& error, bool objectClip) const;
         [[nodiscard]] bool AppendExternalAnimations(ModelImportCandidate& candidate,
             const std::string& sourcePath, std::string& error) const;
         [[nodiscard]] ModelImportCandidate PrepareModel(const std::string& sourcePath) const;
@@ -104,6 +149,7 @@ namespace renegade::bridge
         [[nodiscard]] ModelImportCandidate PrepareStaticModel(
             const std::string& sourcePath) const;
     private:
+        bool CommitBakedSkeleton(ModelImportCandidate&, wi::scene::Scene&, int replaceIndex, std::string&) const;
         static void PruneUnusedTextureDependencies(ModelImportCandidate& candidate);
         [[nodiscard]] ModelImportCandidate PrepareWithRelinks(const std::string& sourcePath,
             const std::vector<ModelImportTextureRelink>& relinks) const;

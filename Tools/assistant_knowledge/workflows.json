@@ -46,7 +46,7 @@
         {
           "path": "docs/ARCHITECTURE.md",
           "needle": "Creator steps: select an object; choose Surface Type directly in its Inspector.",
-          "sha256": "5f77e6d9762a04df798b991e31b7d51dac0b34031d83a1cdc84de2ccfa38e4b0"
+          "sha256": "08071257abd29a0a1b8c160e5f1ab040b9ac750b30566fb257b13f9acb7d54f5"
         },
         {
           "path": "Tools/assistant_knowledge/projectile_workflows_guide.json",
@@ -80,11 +80,11 @@
       ],
       "prerequisites": "A ready rigged Character in the open Import Model review window, plus an animation FBX. A matching rig or one usable complete destination humanoid mapping is required. This guide is new-import authoring, not editing a previously saved Character.",
       "steps": [
-        "In the Character import review, click **ADD ANIMATION FBX**.",
+        "In the Character importer, open **Actions** and click **Add animation clips...**.",
         "Select the animation FBX. The service tries matching-rig transport or supported humanoid retargeting; wait for its result.",
         "Select the newly added clip in **Animation clip** and preview/scrub it. Confirm pose, scale and motion.",
-        "Choose its **Gameplay action** if appropriate. Repeat ADD ANIMATION FBX for other required files.",
-        "After the refreshed preview is ready, finish the name/folder review and click **IMPORT ASSET**."
+        "Choose its **Gameplay action** if appropriate. Repeat Add animation clips... for other required files.",
+        "After the refreshed preview is ready, finish the name/folder review and click **Add to Library**."
       ],
       "follow_up": "Place the saved Character, save the scene and test its intended actions. Preview speed/time are not gameplay authoring.",
       "expected_result": "The candidate retains added clips and explicit action assignments when imported. Incompatible source additions fail rather than silently inventing movement.",
@@ -98,18 +98,18 @@
       "evidence": [
         {
           "path": "Studio/src/StudioApplication.cpp",
-          "needle": "modelImportAddAnimation_.SetText(\"ADD ANIMATION FBX\");",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "needle": "modelImportAddAnimation_.SetText(\"Add animation clips...\");",
+          "sha256": "9b7b7c6365bd494a5d6fc43a1a2ffedfdcab6787bf2218487d7b2af516474e5c"
         },
         {
           "path": "EngineBridge/src/ModelImportCandidateService.cpp",
           "needle": "External animation import currently accepts FBX only.",
-          "sha256": "e0c4dbf4b79ba4bf7c829cc37e293b11d4cc4b88faf001ff2a547076e352dfe0"
+          "sha256": "a66f5e002c095ca9eb185cf07414f88527e0f19ad6fc75a713b3bf617a715aad"
         },
         {
           "path": "EngineBridge/src/ModelImportCandidateService.cpp",
           "needle": "External animation import requires exactly one humanoid rig.",
-          "sha256": "e0c4dbf4b79ba4bf7c829cc37e293b11d4cc4b88faf001ff2a547076e352dfe0"
+          "sha256": "a66f5e002c095ca9eb185cf07414f88527e0f19ad6fc75a713b3bf617a715aad"
         },
         {
           "path": "docs/MODEL_IMPORTER_REBUILD.md",
@@ -119,7 +119,7 @@
         {
           "path": "Tools/assistant_knowledge/character_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "640a65358d5369cdd0b3ee3e556dfaeffc01b973c648a9ed3eb8bf8193e8fdba"
+          "sha256": "69827f2309f3ba0929a7963ea17ddc28c9707896106a3134cd93e07373d27246"
         },
         {
           "path": "Tools/assistant_knowledge/CHARACTER_WORKFLOWS_VERIFICATION.md",
@@ -155,11 +155,11 @@
       ],
       "prerequisites": "A Character candidate open in Import Model with the needed clips already present. These controls describe per-clip semantic actions during import.",
       "steps": [
-        "Select the desired take from **Animation clip**, not **REFERENCE POSE**.",
+        "In **Actions**, select the row for the clip you want to assign.",
         "Preview it with **PLAY** or scrub **Preview time (seconds)** to confirm which motion it contains.",
         "Set **Gameplay action** to **Idle**, **Walk**, **Run**, **Attack**, **Reload**, **Hit**, **Death** or **Unassigned**, according to the actual clip.",
         "Repeat for the other clips. Several clips may share an action; missing actions do not create replacement clips.",
-        "Click **IMPORT ASSET** after the preview is ready, then place/test the saved Character and save the scene."
+        "Click **Add to Library** after the preview is ready, then place/test the saved Character and save the scene."
       ],
       "follow_up": "Test the appropriate behaviour in PLAY. If the motion is wrong, verify the clip/action pairing and rig.",
       "expected_result": "Explicit semantic assignments persist with the imported Character. Reference pose, preview playback speed and scrubbing are not gameplay actions.",
@@ -171,14 +171,14 @@
       "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
       "evidence": [
         {
-          "path": "Studio/src/StudioApplication.cpp",
-          "needle": "modelImportAction_.Create(\"Gameplay action\");",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "path": "Studio/src/CharacterActionEntries.inc",
+          "needle": "if(valid) updated.action=entryTypes[choice];",
+          "sha256": "c888c452fe552418c71cc858192bc1227f11104048e497b0be9ea6ed494cbde2"
         },
         {
-          "path": "Studio/src/StudioApplication.cpp",
-          "needle": "{\"Unassigned\", \"Idle\", \"Walk\", \"Run\", \"Attack\", \"Reload\", \"Hit\", \"Death\"}",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "path": "Studio/src/CharacterActionEntries.inc",
+          "needle": "constexpr const char* entryTypes[]=",
+          "sha256": "c888c452fe552418c71cc858192bc1227f11104048e497b0be9ea6ed494cbde2"
         },
         {
           "path": "docs/MODEL_IMPORTER_REBUILD.md",
@@ -188,7 +188,7 @@
         {
           "path": "Tools/assistant_knowledge/character_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "640a65358d5369cdd0b3ee3e556dfaeffc01b973c648a9ed3eb8bf8193e8fdba"
+          "sha256": "69827f2309f3ba0929a7963ea17ddc28c9707896106a3134cd93e07373d27246"
         },
         {
           "path": "Tools/assistant_knowledge/CHARACTER_WORKFLOWS_VERIFICATION.md",
@@ -403,7 +403,7 @@
         {
           "path": "Tools/assistant_knowledge/character_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "640a65358d5369cdd0b3ee3e556dfaeffc01b973c648a9ed3eb8bf8193e8fdba"
+          "sha256": "69827f2309f3ba0929a7963ea17ddc28c9707896106a3134cd93e07373d27246"
         },
         {
           "path": "Tools/assistant_knowledge/CHARACTER_WORKFLOWS_VERIFICATION.md",
@@ -1076,10 +1076,10 @@
       "prerequisites": "An open project and a GLB/FBX with a skinned mesh and skeleton. Inspect scale and textures; a static mesh is not a rigged Character.",
       "steps": [
         "Open **ADD** → **IMPORT MODEL...** and select the rigged GLB or FBX.",
-        "Check that the summary identifies **CHARACTER**, bones and clips. If it reports STATIC, review the source skin/skeleton.",
+        "Choose **Character** and check the available bones and clips. If it reports STATIC, review the source skin/skeleton.",
         "Choose a clip from **Animation clip** and use **PLAY**, **RESTART** or **Preview time (seconds)** to inspect it; **REFERENCE POSE** is a preview mode.",
-        "Set **Asset name** and a valid **Import to** Content folder. For a general NPC, keep **Asset role** as **General model**.",
-        "Assign any available clip's **Gameplay action** as needed, then click **IMPORT ASSET** after the preview is ready.",
+        "Set **Asset name** and a valid **Import to** Content folder. Use the **Character** workflow for an NPC.",
+        "Assign any available clip's **Gameplay action** as needed, then click **Add to Library** after the preview is ready.",
         "Drag the imported Character card from the **Asset Browser** into the level, position it and save with **Ctrl+S**."
       ],
       "follow_up": "Select the placed Character and inspect CHARACTER settings. Test with PLAY after providing collision/navigation and appropriate actions.",
@@ -1087,24 +1087,24 @@
       "troubleshooting": [
         "If no bones or skinned mesh are detected, check that the model was exported with its skeleton and skin weights.",
         "Check unfamiliar FBX scale/poses in preview; arbitrary exporter combinations are not guaranteed.",
-        "Missing gameplay clips: use the separate ADD ANIMATION FBX workflow while the import candidate is open."
+        "Missing gameplay clips: use the separate Add animation clips... workflow while the import candidate is open."
       ],
       "limit": "Current controls are source-checked and relevant native service/proof tests passed. A fresh beginner mouse-driven editor walkthrough remains pending. I cannot inspect or change your scene.",
       "evidence": [
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "params.extensions = {\"glb\", \"fbx\", \"obj\"};",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "sha256": "9b7b7c6365bd494a5d6fc43a1a2ffedfdcab6787bf2218487d7b2af516474e5c"
         },
         {
-          "path": "Studio/src/StudioApplication.cpp",
-          "needle": "\"Animated import currently requires a skinned mesh and skeleton.\"",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "path": "Studio/src/UnifiedImportWorkspace.inc",
+          "needle": "i==2 ? evidence.skinnedMeshes && evidence.armatureBones",
+          "sha256": "5073d9785c06a4333b3550cd2c5ad22454c0d88bafc7bd09119eb7098af81469"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportClip_.AddItem(\"REFERENCE POSE\");",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "sha256": "9b7b7c6365bd494a5d6fc43a1a2ffedfdcab6787bf2218487d7b2af516474e5c"
         },
         {
           "path": "docs/CHARACTER_WORKFLOW_PROGRESS.md",
@@ -1114,7 +1114,7 @@
         {
           "path": "Tools/assistant_knowledge/character_workflows_guide.json",
           "needle": "source_checked_native_service_tests_passed_ui_pending",
-          "sha256": "640a65358d5369cdd0b3ee3e556dfaeffc01b973c648a9ed3eb8bf8193e8fdba"
+          "sha256": "69827f2309f3ba0929a7963ea17ddc28c9707896106a3134cd93e07373d27246"
         },
         {
           "path": "Tools/assistant_knowledge/CHARACTER_WORKFLOWS_VERIFICATION.md",
@@ -1620,7 +1620,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerPrefabSave_.SetText(\"SAVE AS PLAYER PREFAB\")",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "sha256": "9b7b7c6365bd494a5d6fc43a1a2ffedfdcab6787bf2218487d7b2af516474e5c"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
@@ -1686,7 +1686,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerPrefabReset_.SetText(\"RESET TO PREFAB\")",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "sha256": "9b7b7c6365bd494a5d6fc43a1a2ffedfdcab6787bf2218487d7b2af516474e5c"
         },
         {
           "path": "Studio/src/PlayerPrefabEditor.cpp",
@@ -1767,7 +1767,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerEquipment_.SetText(\"STARTING EQUIPMENT\")",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "sha256": "9b7b7c6365bd494a5d6fc43a1a2ffedfdcab6787bf2218487d7b2af516474e5c"
         },
         {
           "path": "Studio/src/PlayerEquipmentEditor.cpp",
@@ -1777,7 +1777,7 @@
         {
           "path": "EngineBridge/src/EquipmentAssetService.cpp",
           "needle": "FirstPersonAssemblyService().ReadSettings(root,project,presentation,settings,error)",
-          "sha256": "ebe6506bfe1b26337d7b55a688eb2d3dbd360239a8bfdb026a1367759b7104b2"
+          "sha256": "3b0f074885ca525e7075c607011bb2450cbab5c9a62c9f3e2610daeb74d87b3b"
         },
         {
           "path": "Tools/assistant_knowledge/equipment_guide.json",
@@ -1852,17 +1852,17 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "playerEquipment_.SetText(\"STARTING EQUIPMENT\")",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "sha256": "9b7b7c6365bd494a5d6fc43a1a2ffedfdcab6787bf2218487d7b2af516474e5c"
         },
         {
           "path": "EngineBridge/src/EquipmentAssetService.cpp",
           "needle": "error=\"Two-handed/support equipment reserves both hands.\"",
-          "sha256": "ebe6506bfe1b26337d7b55a688eb2d3dbd360239a8bfdb026a1367759b7104b2"
+          "sha256": "3b0f074885ca525e7075c607011bb2450cbab5c9a62c9f3e2610daeb74d87b3b"
         },
         {
           "path": "EngineBridge/src/EquipmentAssetService.cpp",
           "needle": "error=\"Off-hand slot requires OffHandOnly or EitherHand.\"",
-          "sha256": "ebe6506bfe1b26337d7b55a688eb2d3dbd360239a8bfdb026a1367759b7104b2"
+          "sha256": "3b0f074885ca525e7075c607011bb2450cbab5c9a62c9f3e2610daeb74d87b3b"
         },
         {
           "path": "Studio/src/PlayerEquipmentEditor.cpp",
@@ -1913,14 +1913,14 @@
         "Wait for the rendered preview. Check the model and textures; use **ROTATE LEFT** or **ROTATE RIGHT** to inspect it. Preview rotation does not change the imported asset.",
         "Enter a readable **Asset name**.",
         "Choose **Folder**, or type a project-relative folder in **Import to**, such as **Content/Models/Props**. A valid new Content folder is created during import. Do not enter a Windows absolute path.",
-        "For an ordinary prop, leave **Asset role** as **General model**. Optional comma-separated **Tags** help searching; they do not choose the folder or turn a model into equipment.",
-        "Click **IMPORT ASSET** when the preview is ready. Check the registered-asset confirmation and the revealed **Asset Browser** card.",
+        "Choose **Static Model** for an ordinary prop. Optional comma-separated **Tags** help searching; they do not choose the folder or turn a model into equipment.",
+        "Click **Add to Library** when the preview is ready. Check the registered-asset confirmation and the revealed **Asset Browser** card.",
         "Drag that imported card into the scene viewport, position it with the gizmo, then save the level with **Ctrl+S**."
       ],
       "follow_up": "Reopen the saved scene and check the placed model. Importing creates a reusable asset; placing it and saving the scene are separate steps.",
       "expected_result": "The model is registered in your chosen Content folder and its placed instance is retained in the saved level. This does not automatically add collision, NPC behaviour or weapon gameplay.",
       "troubleshooting": [
-        "If IMPORT ASSET is disabled, wait for the preview; if conversion fails, read the reported error rather than assuming an asset was saved.",
+        "If Add to Library is disabled, wait for the preview; if conversion fails, read the reported error rather than assuming an asset was saved.",
         "For OBJ/FBX, missing or changed textures appear as source warnings. Keep images with the exported source; use material/map selection and **CHOOSE / REPLACE MAP**. A source changed after preview can require reopening the importer.",
         "A GLB filename does not guarantee embedded textures. External image references are not supported by this import path; export a self-contained GLB.",
         "If the status says COMMITTED; REVEAL FAILED, browse the chosen Content folder. Do not import again merely because the card was not revealed.",
@@ -1932,27 +1932,27 @@
         {
           "path": "Studio/src/RenegadeStudioChrome.cpp",
           "needle": "{\"IMPORT MODEL...\", true}",
-          "sha256": "b37370545668f42b12702bf7922712d60c4d675d7f037d198e04563f943ce488"
+          "sha256": "26112d70da2ae2426939806223ce0b04a34224abb998f514f1a92422f144f981"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "params.extensions = {\"glb\", \"fbx\", \"obj\"};",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "sha256": "9b7b7c6365bd494a5d6fc43a1a2ffedfdcab6787bf2218487d7b2af516474e5c"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportName_.SetDescription(\"Asset name: \");",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "sha256": "9b7b7c6365bd494a5d6fc43a1a2ffedfdcab6787bf2218487d7b2af516474e5c"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "modelImportFolder_.SetDescription(\"Import to: \");",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "sha256": "9b7b7c6365bd494a5d6fc43a1a2ffedfdcab6787bf2218487d7b2af516474e5c"
         },
         {
           "path": "Studio/src/StudioApplication.cpp",
-          "needle": "modelImportCommit_.SetText(\"IMPORT ASSET\");",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "needle": "modelImportCommit_.SetText(\"Add to Library\");",
+          "sha256": "9b7b7c6365bd494a5d6fc43a1a2ffedfdcab6787bf2218487d7b2af516474e5c"
         },
         {
           "path": "docs/MODEL_IMPORT_DESTINATIONS.md",
@@ -1967,7 +1967,7 @@
         {
           "path": "Studio/src/StudioApplication.cpp",
           "needle": "could not be revealed. Do not import it again.",
-          "sha256": "cbc0ca80ff35bc804a644255e1aa636ffd92adbc44fdc94ec73a4bdd13b9d853"
+          "sha256": "9b7b7c6365bd494a5d6fc43a1a2ffedfdcab6787bf2218487d7b2af516474e5c"
         },
         {
           "path": "Tests/ModelImporterRebuildGraphicsProof.cpp",
@@ -1982,7 +1982,7 @@
         {
           "path": "Tools/assistant_knowledge/static_model_guide.json",
           "needle": "source_checked_prior_owner_checkpoint_native_service_pass",
-          "sha256": "84042664d53cdfb17980e1e1a62fbd975c0b0d2926fa8c803c000cd931ecd879"
+          "sha256": "8493cb8f5b220ffe4bb25702e0b3fe42c66441815f06f659b0734b9bf7ddad7a"
         },
         {
           "path": "Tools/assistant_knowledge/STATIC_IMPORT_VERIFICATION.md",

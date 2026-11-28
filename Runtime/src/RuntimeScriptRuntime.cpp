@@ -230,6 +230,7 @@ namespace renegade::runtime
         std::function<bridge::InventoryGameplayGateway*(
             const bridge::StableId&, const bridge::StableId&)> inventoryGatewayProvider;
         RuntimeDialogueScriptApi dialogueApi;
+        std::function<bridge::PlayerWeaponAmmo()> weaponAmmoProvider;
         std::uint64_t dispatchedEventCount = 0;
         std::uint64_t eventDeliveryAttemptCount = 0;
         std::uint64_t lastEventSequence = 0;
@@ -1317,6 +1318,24 @@ namespace renegade::runtime
             return 1;
         }
 
+        static int PlayerWeaponAmmoLua(lua_State* state)
+        {
+            auto* owner=FromUpvalue(state);
+            if(lua_gettop(state)!=0)return luaL_error(state,"player.weapon_ammo expects no arguments");
+            const auto ammo=owner&&owner->weaponAmmoProvider?owner->weaponAmmoProvider():bridge::PlayerWeaponAmmo{};
+            lua_newtable(state);
+            lua_pushboolean(state,ammo.available);lua_setfield(state,-2,"available");
+            lua_pushboolean(state,ammo.equipped);lua_setfield(state,-2,"equipped");
+            if(ammo.slot){lua_pushinteger(state,ammo.slot);lua_setfield(state,-2,"slot");}
+            if(!ammo.name.empty()){lua_pushlstring(state,ammo.name.data(),ammo.name.size());lua_setfield(state,-2,"name");}
+            if(ammo.available){
+                lua_pushinteger(state,ammo.loaded);lua_setfield(state,-2,"loaded");
+                lua_pushinteger(state,ammo.capacity);lua_setfield(state,-2,"capacity");
+                lua_pushboolean(state,ammo.reloading);lua_setfield(state,-2,"reloading");
+            }
+            return 1;
+        }
+
         static int PlayerGetPositionLua(lua_State* state)
         {
             auto* owner = FromUpvalue(state);
@@ -1828,6 +1847,7 @@ namespace renegade::runtime
             lua_pushlightuserdata(lua, this);
             lua_pushcclosure(lua, PlayerGetPitchLua, 1);
             lua_setfield(lua, -2, "get_pitch");
+            lua_pushlightuserdata(lua,this);lua_pushcclosure(lua,PlayerWeaponAmmoLua,1);lua_setfield(lua,-2,"weapon_ammo");
             lua_setfield(lua, -2, "player");
 
             lua_newtable(lua);
@@ -2766,6 +2786,9 @@ namespace renegade::runtime
             std::move(projectRoot),
             error);
     }
+
+    void RuntimeScriptRuntime::SetWeaponAmmoProvider(std::function<bridge::PlayerWeaponAmmo()> provider)
+    { impl_->weaponAmmoProvider=std::move(provider); }
 
     void RuntimeScriptRuntime::SetGameplayState(
         const bridge::RuntimePlayerState* player,

@@ -20,27 +20,27 @@
     {
       "question": "How do I add animation FBX?",
       "expected_workflow": "animation-add-v1",
-      "required": "In the Character import review, click **ADD ANIMATION FBX**."
+      "required": "In the Character importer, open **Actions** and click **Add animation clips...**."
     },
     {
       "question": "How do I import external animations?",
       "expected_workflow": "animation-add-v1",
-      "required": "In the Character import review, click **ADD ANIMATION FBX**."
+      "required": "In the Character importer, open **Actions** and click **Add animation clips...**."
     },
     {
       "question": "How do I retarget an animation during character import?",
       "expected_workflow": "animation-add-v1",
-      "required": "In the Character import review, click **ADD ANIMATION FBX**."
+      "required": "In the Character importer, open **Actions** and click **Add animation clips...**."
     },
     {
       "question": "How do I assign gameplay actions to character clips?",
       "expected_workflow": "animation-action-v1",
-      "required": "Select the desired take from **Animation clip**, not **REFERENCE POSE**."
+      "required": "In **Actions**, select the row for the clip you want to assign."
     },
     {
       "question": "How do I map animation clips to Idle and Walk?",
       "expected_workflow": "animation-action-v1",
-      "required": "Select the desired take from **Animation clip**, not **REFERENCE POSE**."
+      "required": "In **Actions**, select the row for the clip you want to assign."
     },
     {
       "question": "How do I configure an NPC?",

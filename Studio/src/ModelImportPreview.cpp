@@ -12,14 +12,26 @@ namespace renegade::studio
         {
             for (size_t slot = 0; slot < wi::scene::MaterialComponent::TEXTURESLOT_COUNT; ++slot)
                 previewScene_->materials[i].textures[slot] = source.materials[i].textures[slot];
-            previewScene_->materials[i].normalMapStrength = source.materials[i].normalMapStrength;
-            previewScene_->materials[i].SetOcclusionEnabled_Secondary(source.materials[i].IsOcclusionEnabled_Secondary());
+            auto& dst=previewScene_->materials[i];
+            const auto& src=source.materials[i];
+            dst.roughness=src.roughness; dst.metalness=src.metalness; dst.reflectance=src.reflectance;
+            dst.normalMapStrength=src.normalMapStrength; dst.emissiveColor=src.emissiveColor;
+            dst.alphaRef=src.alphaRef; dst.userBlendMode=src.userBlendMode; dst.shaderType=src.shaderType; dst.customShaderID=src.customShaderID;
+            dst.SetDoubleSided(src.IsDoubleSided());
+            dst.SetOcclusionEnabled_Primary(src.IsOcclusionEnabled_Primary());
+            dst.SetOcclusionEnabled_Secondary(src.IsOcclusionEnabled_Secondary());
             previewScene_->materials[i].SetDirty();
         }
         renderedFrames_ = 0;
     }
 
     bool ModelImportPreview::Prepare(wi::scene::Scene& source, std::string& error)
+    {
+        return Prepare(source, error, {}, {});
+    }
+
+    bool ModelImportPreview::Prepare(wi::scene::Scene& source, std::string& error,
+        const bridge::CreatorModelTransformRecipe& correction, const bridge::StableId& projectId)
     {
         paired_ = pairedPlaying_ = false;assemblyHands_={};assemblyShieldHeld_=false;
         previewScene_ = wi::allocator::make_shared<wi::scene::Scene>();
@@ -32,6 +44,13 @@ namespace renegade::studio
             for (size_t slot = 0; slot < wi::scene::MaterialComponent::TEXTURESLOT_COUNT; ++slot)
                 scene->materials[i].textures[slot] = source.materials[i].textures[slot];
             scene->materials[i].SetDirty();
+        }
+        if (correction.authored)
+        {
+            bridge::CreatorModelImportRecipe recipe;
+            recipe.transform = correction;
+            if (!bridge::ApplyCreatorModelImportRecipe(*scene, {}, projectId, recipe, error))
+                return false;
         }
         camera = &previewCamera_;
         animationPreview_.Prepare(*scene);
@@ -192,10 +211,59 @@ namespace renegade::studio
         XMStoreFloat3(&pan_,XMLoadFloat3(&pan_) + span*(-horizontal*right + vertical*up));
         FitCamera(); renderedFrames_ = 0;
     }
+    void ModelImportPreview::SetViewportSize(unsigned width, unsigned height)
+    {
+        if (GetPhysicalWidth() == width && GetPhysicalHeight() == height) return;
+        init(width, height, 96);
+        previewCamera_.CreatePerspective(float(width), float(height),
+            std::max(0.00001f, radius_ * 0.001f), radius_ * 20.f, XM_PI / 4.f);
+        FitCamera();
+        ResizeBuffers();
+        renderedFrames_ = 0;
+    }
+
+    void ModelImportPreview::AddImportFloor()
+    {
+        // This scene is a private copy. Keep the zero plane independent of the
+        // model correction so moving the model shows actual ground clearance.
+        const auto floor = scene->Entity_CreateObject("Import preview floor");
+        const auto meshID = wi::ecs::CreateEntity();
+        auto& mesh = scene->meshes.Create(meshID);
+        const float spacing = std::pow(10.f, std::floor(std::log10(std::max(radius_, 0.001f)))) * 0.5f;
+        for (int shade = 0; shade < 2; ++shade)
+        {
+            const auto materialID = wi::ecs::CreateEntity();
+            auto& material = scene->materials.Create(materialID);
+            material.shaderType = wi::scene::MaterialComponent::SHADERTYPE_UNLIT;
+            material.SetDoubleSided(true);
+            const float tone = shade ? 0.095f : 0.075f;
+            material.SetBaseColor({tone, tone + 0.004f, tone + 0.01f, 1});
+            wi::scene::MeshComponent::MeshSubset subset;
+            subset.materialID = materialID;
+            subset.indexOffset = unsigned(mesh.indices.size());
+            for (int z = -20; z < 20; ++z)
+                for (int x = -20; x < 20; ++x)
+                {
+                    if (((x + z + 40) % 2) != shade) continue;
+                    const unsigned first = unsigned(mesh.vertex_positions.size());
+                    const float l = x * spacing, r = (x + 1) * spacing;
+                    const float n = z * spacing, f = (z + 1) * spacing;
+                    mesh.vertex_positions.insert(mesh.vertex_positions.end(), {{l,0,n},{l,0,f},{r,0,f},{r,0,n}});
+                    mesh.indices.insert(mesh.indices.end(), {first,first+1,first+2,first,first+2,first+3});
+                }
+            subset.indexCount = unsigned(mesh.indices.size()) - subset.indexOffset;
+            mesh.subsets.push_back(subset);
+        }
+        mesh.vertex_normals.resize(mesh.vertex_positions.size(), {0,1,0});
+        mesh.CreateRenderData();
+        scene->objects.GetComponent(floor)->meshID = meshID;
+        renderedFrames_ = 0;
+    }
+
     void ModelImportPreview::FitModel()
     {
         radius_ = sourceRadius_ * appearanceScale_; zoom_ = 1; pan_ = {};
-        previewCamera_.CreatePerspective(512,320,std::max(0.00001f,radius_*0.001f),
+        previewCamera_.CreatePerspective(float(GetPhysicalWidth()),float(GetPhysicalHeight()),std::max(0.00001f,radius_*0.001f),
             radius_*20.0f,XM_PI/4.0f);
         FitCamera(); renderedFrames_ = 0;
     }
@@ -364,7 +432,32 @@ namespace renegade::studio
             return false;
         }
         wi::vector<std::uint8_t> bytes;
-        if (!wi::helper::saveTextureToMemoryFile(GetRenderResult3D(), "PNG", bytes))
+        const auto& texture=GetRenderResult3D();
+        auto desc=texture.GetDesc();
+        constexpr uint32_t width=512, height=320;
+        wi::vector<uint8_t> pixels;
+        if(!wi::helper::saveTextureToMemory(texture,pixels)) {
+            error="Could not read the model preview.";return false;
+        }
+        const size_t stride=wi::graphics::GetFormatStride(desc.format);
+        if(!stride || !desc.width || !desc.height || pixels.size()<size_t(desc.width)*desc.height*stride) {
+            error="Unexpected thumbnail pixel layout.";return false;
+        }
+        // Preserve the full camera framing in the fixed-size asset catalogue card.
+        const double fit=std::min(double(width)/desc.width,double(height)/desc.height);
+        const uint32_t w=std::clamp(uint32_t(std::lround(desc.width*fit)),1u,width);
+        const uint32_t h=std::clamp(uint32_t(std::lround(desc.height*fit)),1u,height);
+        wi::vector<uint8_t> card(size_t(width)*height*stride,0);
+        for(uint32_t y=0;y<h;++y) {
+            const uint32_t sy=uint32_t((uint64_t(2*y+1)*desc.height)/(2*h));
+            for(uint32_t x=0;x<w;++x) {
+                const uint32_t sx=uint32_t((uint64_t(2*x+1)*desc.width)/(2*w));
+                const size_t out=(size_t(y+(height-h)/2)*width+x+(width-w)/2)*stride;
+                std::copy_n(pixels.data()+(size_t(sy)*desc.width+sx)*stride,stride,card.data()+out);
+            }
+        }
+        desc.width=width;desc.height=height;
+        if (!wi::helper::saveTextureToMemoryFile(card,desc,"PNG",bytes))
         {
             error = "Could not capture the rendered model thumbnail.";
             return false;
